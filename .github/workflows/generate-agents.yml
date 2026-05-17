@@ -1,0 +1,42 @@
+name: Generate agent instructions
+
+on:
+  schedule:
+    # 03:00 JST every Sunday.
+    - cron: "0 18 * * 6"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Install APM CLI
+        run: pip install apm-cli
+
+      - name: Compile agent instructions
+        run: apm compile
+
+      - name: Commit generated instructions if changed
+        run: |
+          if git diff --quiet -- CLAUDE.md AGENTS.md; then
+            echo "CLAUDE.md and AGENTS.md are already up to date."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add CLAUDE.md AGENTS.md
+          git commit -m "chore: regenerate agent instructions"
+          git push
