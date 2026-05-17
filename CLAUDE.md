@@ -22,22 +22,16 @@ Before implementing:
 
 Build an effective harness before you scale.
 
-- Keep changes in git, proposals and issues in issues, and apply implementation through pull requests.
-- Resolve deterministic problems with hooks, pre-commit, and CI/CD; if no such mechanism exists, establish the environment first.
-- Assemble expert AI agents at a single point in the workflow; piecemeal gathering leads to lower quality and inconsistency.
-- Manage modules declaratively to prevent environment drift and defend against supply chain attacks; actively use nix, uv, and microsoft/apm.
+- Keep changes in git, proposals and issues in issues, and apply implementation through PRs.
+- Resolve deterministic problems with hooks, pre-commit, and CI/CD; if missing, build the environment first.
+- Concentrate expert agents at one workflow point; piecemeal gathering degrades quality and creates inconsistency.
+- Manage modules declaratively to prevent drift and defend against supply-chain attacks; actively use nix, uv, and microsoft/apm.
 - After each PR is merged, do a retrospective and self-improvement.
 
 Deterministic examples:
 
-- Formatting
-- Linting
-- Type checking
-- Unit tests
-- Build steps
 - Dependency resolution
 - Code generation from templates or schemas
-- Static analysis
 - File renaming or moving based on explicit rules
 - Secret scanning
 
@@ -73,8 +67,8 @@ When your changes create orphans:
 When delegating to sub-agents:
 
 - Delegate verbose operations to sub-agents. Tests, logs, and broad searches should return summaries to the main context, not raw output.
-- Use Skills, not sub-agents, when codifying procedures. Sub-agents define roles with isolated context; Skills are workflows that run in the main conversation.
-- Split implementation and verification across separate agents. Never let the same agent review or test what it wrote.
+- Use Skills (main-context workflows) for procedures, not sub-agents (isolated roles).
+- Split implementation and verification across separate agents. Never let one agent review or test what it wrote.
 - Keep exploration agents read-only. Reserve write-capable agents for the implementation step.
 
 The test: every changed line must trace directly to the user’s request.
@@ -86,4 +80,4 @@ Encourage people to go beyond human limitations.
 - Show the procedure, set an example, and provide case studies for reviewers.
 - Visualize the workflow so people can notice anomalies by intuition.
 - Don’t settle for "LGTM." If users are expecting it, stop and require real understanding.
-- Explain the trade-offs clearly so users can keep up with the reasoning.
+- Explain trade-offs so users follow the reasoning.
