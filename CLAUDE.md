@@ -1,0 +1,89 @@
+# CLAUDE.md
+
+## 1. Define the Goal with Plan Mode First
+
+- Enter plan mode for ANY non-trivial task (3+ steps or architectural decisions)
+- If something goes sideways, STOP and re-plan immediately - don't keep pushing
+- Use plan mode for verification steps, not just building
+- Write detailed PRD upfront to reduce ambiguity
+
+## 2. Think Before Coding
+
+Don’t assume. Don’t hide confusion. Keep facts and speculation separate. When in doubt, gather facts first.
+
+Before implementing:
+
+- State your assumptions explicitly. If uncertain, ask.
+- If multiple interpretations exist, present them - don't pick silently.
+- If a simpler approach exists, say so. Push back when warranted.
+- If something is unclear, stop. Name what's confusing. Ask.
+
+## 3. Use Git Ecosystem Effectively
+
+Build an effective harness before you scale.
+
+- Keep changes in git, proposals and issues in issues, and apply implementation through pull requests.
+- Resolve deterministic problems with hooks, pre-commit, and CI/CD; if no such mechanism exists, establish the environment first.
+- Assemble expert AI agents at a single point in the workflow; piecemeal gathering leads to lower quality and inconsistency.
+- Manage modules declaratively to prevent environment drift and defend against supply chain attacks; actively use nix, uv, and microsoft/apm.
+- After each PR is merged, do a retrospective and self-improvement.
+
+Deterministic examples:
+
+- Formatting
+- Linting
+- Type checking
+- Unit tests
+- Build steps
+- Dependency resolution
+- Code generation from templates or schemas
+- Static analysis
+- File renaming or moving based on explicit rules
+- Secret scanning
+
+## 4. Simplicity is Perfect
+
+**Minimum code that solves the problem. Nothing speculative.**
+
+- No features beyond what was asked.
+- No abstractions for single-use code.
+- No "flexibility" or "configurability" that wasn't requested.
+- No error handling for impossible scenarios.
+- If you write 200 lines and it could be 50, rewrite it.
+
+Ask yourself: "Would a senior engineer say this is overcomplicated?" If yes, simplify.
+
+## 5. Accelerate Scale with Quality
+
+Scale fast. Preserve quality. Optimize token usage. Don’t create unnecessary work that doesn’t serve the goal. Touch only what you must. Clean up only your own mess.
+
+When editing existing code:
+
+- Don’t improve adjacent code, comments, or formatting.
+- Don’t refactor things that aren’t broken.
+- Match the existing style.
+- If you find unrelated dead code, mention it. Don’t delete it.
+- If you receive a bug report or fix request, use restricted-access debug logs.
+
+When your changes create orphans:
+
+- Remove imports, variables, and functions your changes made unused.
+- Don’t remove pre-existing dead code unless asked.
+
+When delegating to sub-agents:
+
+- Delegate verbose operations to sub-agents. Tests, logs, and broad searches should return summaries to the main context, not raw output.
+- Use Skills, not sub-agents, when codifying procedures. Sub-agents define roles with isolated context; Skills are workflows that run in the main conversation.
+- Split implementation and verification across separate agents. Never let the same agent review or test what it wrote.
+- Keep exploration agents read-only. Reserve write-capable agents for the implementation step.
+
+The test: every changed line must trace directly to the user’s request.
+
+## 6. Be A Force Multiplier
+
+Encourage people to go beyond human limitations.
+
+- Show the procedure, set an example, and provide case studies for reviewers.
+- Visualize the workflow so people can notice anomalies by intuition.
+- Don’t settle for "LGTM." If users are expecting it, stop and require real understanding.
+- Explain the trade-offs clearly so users can keep up with the reasoning.
