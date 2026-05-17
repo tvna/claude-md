@@ -1,0 +1,6 @@
+name: claude-md
+version: 1.0.0
+description: Personal universal agent instructions compiled for Claude and Codex.
+target:
+  - claude
+  - codex

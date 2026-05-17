@@ -1,12 +1,13 @@
 # claude-md
 
-Master repository for a personally tuned [`CLAUDE.md`](./CLAUDE.md), designed to be referenced from other projects.
+Master repository for personally tuned agent instructions, compiled with [`microsoft/apm`](https://github.com/microsoft/apm) into [`CLAUDE.md`](./CLAUDE.md) and [`AGENTS.md`](./AGENTS.md) for other projects.
 
 ## Purpose
 
-- Centralize the principles I use with Claude Code so that every project stays consistent.
+- Centralize the principles I use with AI coding agents so that every project stays consistent.
 - Keep only **universal, individual-level guidelines** here — never project-specific rules.
-- Each project's local `CLAUDE.md` references this master and only adds its own delta.
+- Use APM as the source-of-truth harness: edit `.apm/instructions/`, then compile `CLAUDE.md` and `AGENTS.md`.
+- Each project's local agent instructions reference this master and only add their own delta.
 
 ## The Six Principles
 
@@ -19,7 +20,18 @@ Master repository for a personally tuned [`CLAUDE.md`](./CLAUDE.md), designed to
 | 5 | Accelerate Scale with Quality | Touch only what you must; split implementation, verification, and exploration across separate agents. |
 | 6 | Be a Force Multiplier | Don't settle for "LGTM" — make trade-offs explicit so others can follow the reasoning. |
 
-See [`CLAUDE.md`](./CLAUDE.md) for the full text.
+See [`CLAUDE.md`](./CLAUDE.md) or [`AGENTS.md`](./AGENTS.md) for the compiled full text.
+
+## Building
+
+Install APM, then compile the local instructions:
+
+```bash
+pip install apm-cli
+apm compile
+```
+
+APM reads `.apm/instructions/*.instructions.md` and, based on `apm.yml`, writes both `CLAUDE.md` and `AGENTS.md`.
 
 ## Using This From Another Project
 
@@ -31,9 +43,15 @@ git submodule add https://github.com/tvna/claude-md .claude-md-master
 ln -s .claude-md-master/CLAUDE.md CLAUDE.md
 ```
 
+For Codex or other tools that read `AGENTS.md`:
+
+```bash
+ln -s .claude-md-master/AGENTS.md AGENTS.md
+```
+
 ### 2. Add project-specific rules
 
-Create a `CLAUDE.local.md` in the parent project and `@import` the master at the top, then list only the project-specific delta below.
+Create a local project instructions file in the parent project and import the master at the top, then list only the project-specific delta below.
 
 ```markdown
 @.claude-md-master/CLAUDE.md
@@ -58,7 +76,7 @@ git submodule update --remote .claude-md-master
 
 ## 日本語版（概要）
 
-個人用に最適化された [`CLAUDE.md`](./CLAUDE.md) のマスターリポジトリ。他プロジェクトから参照する前提で運用する。ここに置くのは **どのプロジェクトでも成り立つ普遍ルール** のみで、プロジェクト固有の差分は個別 `CLAUDE.md` 側に書く。
+個人用に最適化されたエージェント指示のマスターリポジトリ。`microsoft/apm` で [`CLAUDE.md`](./CLAUDE.md) と [`AGENTS.md`](./AGENTS.md) にコンパイルし、他プロジェクトから参照する前提で運用する。ここに置くのは **どのプロジェクトでも成り立つ普遍ルール** のみで、プロジェクト固有の差分は個別のローカル指示ファイル側に書く。
 
 | # | 原則 | 要旨 |
 |---|------|------|
