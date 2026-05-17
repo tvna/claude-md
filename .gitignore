@@ -1,0 +1,15 @@
+# OS/editor
+.DS_Store
+.idea/
+.vscode/
+
+# Python/local tooling
+.venv/
+__pycache__/
+*.py[cod]
+
+# APM dependencies/cache output
+apm_modules/
+
+# Claude local state
+.claude/settings.local.json
