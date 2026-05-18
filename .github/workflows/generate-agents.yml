@@ -38,7 +38,7 @@ jobs:
         run: uv sync --locked
 
       - name: Compile agent instructions
-        run: uv run --with "apm-cli==${APM_CLI_VERSION}" --exclude-newer "14 days" apm compile
+        run: uv run --with "apm-cli==${APM_CLI_VERSION}" apm compile
 
       - name: Open pull request if generated instructions changed
         env:
