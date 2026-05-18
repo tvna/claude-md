@@ -1,0 +1,25 @@
+name: Verify agent instructions
+
+on:
+  pull_request:
+    paths:
+      - '.apm/**'
+      - 'apm.yml'
+      - 'pyproject.toml'
+      - 'uv.lock'
+      - 'CLAUDE.md'
+      - 'AGENTS.md'
+      - '.github/workflows/generate-agents.yml'
+      - '.github/workflows/verify-agents.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    uses: ./.github/workflows/generate-agents.yml
+    with:
+      mode: verify
+    permissions:
+      contents: read
+      pull-requests: read
