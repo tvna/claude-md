@@ -29,7 +29,7 @@ Build an effective harness before you scale.
 
 - Keep changes in git, proposals and issues in issues, and apply implementation through PRs.
 - Resolve deterministic problems with hooks, pre-commit, and CI/CD; if missing, build the environment first.
-- Concentrate expert agents at one workflow point; piecemeal gathering degrades quality and creates inconsistency.
+- Concentrate expert agents at one workflow point, after the deterministic gates above pass — agents handle only what determinism cannot. Piecemeal gathering degrades quality and creates inconsistency.
 - Manage modules declaratively to prevent drift and defend against supply-chain attacks; actively use nix, uv, and microsoft/apm.
 - After each PR is merged, do a retrospective and self-improvement.
 
