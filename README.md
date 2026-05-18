@@ -24,14 +24,14 @@ See [`CLAUDE.md`](./CLAUDE.md) or [`AGENTS.md`](./AGENTS.md) for the compiled fu
 
 ## Building
 
-Install APM, then compile the local instructions:
+Sync the locked uv environment, then compile the local instructions:
 
 ```bash
-pip install apm-cli
-apm compile
+uv sync --locked
+uv run --with "apm-cli==0.12.1" --exclude-newer "14 days" apm compile
 ```
 
-APM reads `.apm/instructions/*.instructions.md` and, based on `apm.yml`, writes both `CLAUDE.md` and `AGENTS.md`.
+APM reads `.apm/instructions/*.instructions.md` and, based on `apm.yml`, writes both `CLAUDE.md` and `AGENTS.md`. The uv configuration applies a 14-day `exclude-newer` delay for dependency resolution.
 
 ## Using This From Another Project
 
