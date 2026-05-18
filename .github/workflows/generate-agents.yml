@@ -59,7 +59,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           PR_BRANCH: chore/regenerate-agent-instructions
-          PR_TITLE: "chore: regenerate agent instructions"
+          PR_TITLE: "chore: regenerate agent instructions (#18)"
         run: |
           if git diff --quiet -- CLAUDE.md AGENTS.md; then
             echo "CLAUDE.md and AGENTS.md are already up to date."
