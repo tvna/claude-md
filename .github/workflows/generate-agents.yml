@@ -5,6 +5,12 @@ on:
     # 03:00 JST every Sunday.
     - cron: "0 18 * * 6"
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      mode:
+        description: 'generate (default) opens a PR on diff; verify fails on diff (used by PR drift gate)'
+        type: string
+        default: generate
 
 permissions:
   contents: write
@@ -38,9 +44,18 @@ jobs:
         run: uv sync --locked
 
       - name: Compile agent instructions
-        run: uv run --with "apm-cli==${APM_CLI_VERSION}" --exclude-newer "14 days" apm compile
+        run: uv run --with "apm-cli==${APM_CLI_VERSION}" apm compile
+
+      - name: Fail if generated instructions drifted (verify mode)
+        if: ${{ inputs.mode == 'verify' }}
+        run: |
+          if ! git diff --exit-code -- CLAUDE.md AGENTS.md; then
+            echo "::error::CLAUDE.md or AGENTS.md is out of date. Run 'uv sync --locked && uv run --with \"apm-cli==${APM_CLI_VERSION}\" apm compile' and commit the result."
+            exit 1
+          fi
 
       - name: Open pull request if generated instructions changed
+        if: ${{ inputs.mode != 'verify' }}
         env:
           GH_TOKEN: ${{ github.token }}
           PR_BRANCH: chore/regenerate-agent-instructions
