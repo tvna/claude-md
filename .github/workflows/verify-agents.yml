@@ -2,24 +2,61 @@ name: Verify agent instructions
 
 on:
   pull_request:
-    paths:
-      - '.apm/**'
-      - 'apm.yml'
-      - 'pyproject.toml'
-      - 'uv.lock'
-      - 'CLAUDE.md'
-      - 'AGENTS.md'
-      - '.github/workflows/generate-agents.yml'
-      - '.github/workflows/verify-agents.yml'
 
 permissions:
   contents: read
 
 jobs:
+  detect:
+    runs-on: ubuntu-latest
+    outputs:
+      relevant: ${{ steps.diff.outputs.relevant }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+      - name: Detect relevant changes
+        id: diff
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          git fetch origin "$BASE_REF" --depth=50
+          if git diff --name-only "origin/$BASE_REF...HEAD" \
+            | grep -Eq '^(\.apm/|apm\.yml$|pyproject\.toml$|uv\.lock$|CLAUDE\.md$|AGENTS\.md$|\.github/workflows/(generate-agents|verify-agents)\.yml$)'; then
+            echo "relevant=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "relevant=false" >> "$GITHUB_OUTPUT"
+            echo "No APM-relevant changes; skipping drift verification."
+          fi
+
   verify:
+    needs: detect
+    if: needs.detect.outputs.relevant == 'true'
     uses: ./.github/workflows/generate-agents.yml
     with:
       mode: verify
     permissions:
       contents: read
       pull-requests: read
+
+  gate:
+    needs: [detect, verify]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Aggregate verification result
+        env:
+          RELEVANT: ${{ needs.detect.outputs.relevant }}
+          VERIFY_RESULT: ${{ needs.verify.result }}
+        run: |
+          if [ "$RELEVANT" != 'true' ]; then
+            echo "No APM-relevant changes; verification skipped (success)."
+            exit 0
+          fi
+          if [ "$VERIFY_RESULT" = 'success' ]; then
+            echo "APM drift verification passed."
+            exit 0
+          fi
+          echo "::error::APM drift verification result=${VERIFY_RESULT} (expected 'success')."
+          exit 1
