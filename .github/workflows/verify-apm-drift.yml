@@ -1,0 +1,57 @@
+name: Verify APM artifact drift
+
+on:
+  pull_request:
+    paths:
+      - ".apm/**"
+      - "CLAUDE.md"
+      - "AGENTS.md"
+      - "apm.yml"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/workflows/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verify-apm-drift-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  APM_CLI_VERSION: "0.12.1"
+  UV_VERSION: "0.11.11"
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install uv
+        run: |
+          curl -LsSf "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/uv-x86_64-unknown-linux-gnu.tar.gz" -o /tmp/uv.tar.gz
+          tar -xzf /tmp/uv.tar.gz -C /tmp
+          mkdir -p "$HOME/.local/bin"
+          install -m 0755 /tmp/uv-x86_64-unknown-linux-gnu/uv "$HOME/.local/bin/uv"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          uv --version
+
+      - name: Install Python
+        run: uv python install
+
+      - name: Sync locked project environment
+        run: uv sync --locked
+
+      - name: Compile agent instructions
+        run: uv run --with "apm-cli==${APM_CLI_VERSION}" --exclude-newer "14 days" apm compile
+
+      - name: Verify CLAUDE.md / AGENTS.md drift
+        run: |
+          if ! git diff --exit-code -- CLAUDE.md AGENTS.md; then
+            echo "::error::CLAUDE.md / AGENTS.md drift detected vs .apm/instructions/master.instructions.md."
+            echo "Run 'uv run --with \"apm-cli==${APM_CLI_VERSION}\" --exclude-newer \"14 days\" apm compile' locally and commit the result."
+            exit 1
+          fi
