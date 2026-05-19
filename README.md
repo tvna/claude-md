@@ -16,7 +16,7 @@ Master repository for personally tuned agent instructions, compiled with [`micro
 | 1 | Define the Goal with Plan Mode First | Enter plan mode for any task that takes 3+ steps or touches architecture. |
 | 2 | Think Before Coding | State assumptions, surface ambiguity, and ask before guessing. |
 | 3 | Use Git Ecosystem Effectively | Build the harness — hooks, CI/CD, declarative deps — before you scale. |
-| 4 | Simplicity is Perfect | Minimum code that solves the problem; nothing speculative. |
+| 4 | Simplicity, Bounded by Safety | Minimum code that solves the problem — never at the cost of safety. |
 | 5 | Accelerate Scale with Quality | Touch only what you must; split implementation, verification, and exploration across separate agents. |
 | 6 | Be a Force Multiplier | Don't settle for "LGTM" — make trade-offs explicit so others can follow the reasoning. |
 
@@ -83,7 +83,7 @@ git submodule update --remote .claude-md-master
 | 1 | Define the Goal with Plan Mode First | 3 ステップ以上の作業は必ず plan mode から入る |
 | 2 | Think Before Coding | 仮定を明示し、不明点は実装前に解消する |
 | 3 | Use Git Ecosystem Effectively | hooks / CI / 宣言的依存管理でハーネスを先に整える |
-| 4 | Simplicity is Perfect | 要求された最小コードのみ。投機的な抽象化は禁止 |
+| 4 | Simplicity, Bounded by Safety | 要求された最小コードのみ。ただし安全装置は削らない |
 | 5 | Accelerate Scale with Quality | 自分の散らかしのみ掃除、実装/検証/探索でエージェントを分ける |
 | 6 | Be a Force Multiplier | "LGTM" で終わらせず、トレードオフを言語化する |
 
