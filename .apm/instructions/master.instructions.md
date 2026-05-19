@@ -9,8 +9,7 @@ applyTo: "**/*"
 
 - Enter plan mode for ANY non-trivial task (3+ steps or architectural decisions)
 - If something goes sideways, STOP and re-plan immediately - don't keep pushing
-- In plan mode, design how you will verify the change, not just how you will build it. The execution of those verification steps belongs to a separate agent (see §5).
-- For architectural decisions or multi-PR scope, write a detailed PRD upfront. For smaller plan-mode tasks, a concise spec is enough — match the document weight to the blast radius.
+- Design verification in the plan (execution belongs to a separate agent — see §5), and match the document weight to the blast radius: detailed PRD for architectural / multi-PR work, concise spec otherwise.
 
 ## 2. Think Before Coding
 
@@ -29,29 +28,18 @@ Before implementing:
 Build an effective harness before you scale.
 
 - Open a GitHub issue BEFORE creating a branch, commit, or PR, and reference its number in every commit message and PR description. No exceptions — typos, docs, and hotfixes included.
-- Resolve deterministic problems with hooks, pre-commit, and CI/CD; if missing, build the environment first.
+- Resolve deterministic problems with hooks, pre-commit, and CI/CD (e.g. dependency resolution, code generation, file ops, secret scanning); if missing, build the environment first.
 - Concentrate expert agents at one workflow point, after the deterministic gates above pass — agents handle only what determinism cannot. Piecemeal gathering degrades quality and creates inconsistency.
 - Manage modules declaratively to prevent drift and defend against supply-chain attacks; actively use nix, uv, and microsoft/apm.
 - When CI fails on your branch, fix it without being told how. The failure message and logs are the spec — read them, reproduce locally, and push the fix.
 - After each PR is merged, do a retrospective and self-improvement.
-- Issue-first and the gates above are harness overhead by design; they do not violate §4's minimum-code rule, which scopes the change itself, not the process around it.
-
-Deterministic examples:
-
-- Dependency resolution
-- Code generation from templates or schemas
-- File renaming or moving based on explicit rules
-- Secret scanning
+- Issue-first and CI gates are process overhead, not artifact code — they don't violate §4's minimum-code rule.
 
 ## 4. Simplicity, Bounded by Safety
 
-**Minimum code that solves the problem. Nothing speculative — but never strip what prevents harm.**
+**Minimum code that solves the problem. Nothing speculative — but never strip what prevents harm.** Assess blast radius and reversibility first; when the cost of being wrong is high, lines of code are cheap.
 
-Before simplifying, run a quick risk assessment: what is the blast radius, and is the action reversible? When the cost of being wrong is high, lines of code are cheap.
-
-- No features beyond what was asked.
-- No abstractions for single-use code.
-- No "flexibility" or "configurability" that wasn't requested.
+- No features, abstractions, or configurability beyond what was asked.
 - First decide whether a check is needed: no error handling for impossible scenarios — but "impossible" means physically impossible, not "I cannot currently imagine it". If a human could plausibly cause it, handle it.
 - If you write 200 lines and it could be 50, rewrite it.
 - Keep confirmations and dry-runs for destructive or irreversible operations (deletes, force-push, sends, payments, schema migrations). Make wrong actions hard, right actions easy.
@@ -61,7 +49,7 @@ Ask yourself: "Would a senior engineer say this is overcomplicated — or unsafe
 
 ## 5. Accelerate Scale with Quality
 
-Scale fast. Preserve quality. Optimize token usage. Don't create unnecessary work that doesn't serve the goal. Touch only what you must. Clean up only your own mess.
+Scale fast, preserve quality, and optimize token usage. Touch only what you must; clean up only your own mess.
 
 When editing existing code:
 
@@ -78,17 +66,10 @@ When your changes create orphans:
 
 When delegating to sub-agents:
 
-- Choose by what the main context needs: if only the conclusion matters, delegate to a sub-agent (tests, logs, broad searches — return summaries, not raw output); if the main context must follow the steps itself, use a Skill.
-- Sub-agents isolate verbose or noisy work; Skills encode procedures the main context executes in-line.
-- Split implementation and verification across separate agents. Never let one agent review or test what it wrote.
-- Keep exploration agents read-only. Reserve write-capable agents for the implementation step.
+- Sub-agents when only the conclusion matters (isolation of verbose work — tests, logs, broad searches; return summaries, not raw output). Skills when the main context must follow each step in-line (procedural fidelity).
+- Split implementation and verification across separate agents (never let one agent review or test what it wrote); keep exploration agents read-only, reserve write-capable agents for implementation.
 
-The test: every changed line must trace directly to the user's request.
-
-Before declaring a task complete:
-
-- Prove it works. Type checks and linters verify code shape, not behavior — run the tests, check the logs, demonstrate the change actually does what was asked.
-- If the surface is UI, exercise the flow. If the surface is a script or API, run it end-to-end. If you cannot run it in the current environment, say so explicitly — never claim success on indirect signals alone.
+Before declaring a task complete, every changed line must trace directly to the user's request — and you must prove it works. Type checks and linters verify code shape, not behavior: run the tests, check the logs, exercise UI flows, run scripts/APIs end-to-end. If you cannot run it in the current environment, say so explicitly — never claim success on indirect signals alone.
 
 ## 6. Be A Force Multiplier
 
