@@ -40,17 +40,21 @@ Deterministic examples:
 - File renaming or moving based on explicit rules
 - Secret scanning
 
-## 4. Simplicity is Perfect
+## 4. Simplicity, Bounded by Safety
 
-**Minimum code that solves the problem. Nothing speculative.**
+**Minimum code that solves the problem. Nothing speculative — but never strip what prevents harm.**
+
+Before simplifying, run a quick risk assessment: what is the blast radius, and is the action reversible? When the cost of being wrong is high, lines of code are cheap.
 
 - No features beyond what was asked.
 - No abstractions for single-use code.
 - No "flexibility" or "configurability" that wasn't requested.
-- No error handling for impossible scenarios.
+- No error handling for impossible scenarios — but "impossible" means physically impossible, not "I cannot currently imagine it". If a human could plausibly cause it, handle it.
 - If you write 200 lines and it could be 50, rewrite it.
+- Keep confirmations and dry-runs for destructive or irreversible operations (deletes, force-push, sends, payments, schema migrations). Make wrong actions hard, right actions easy.
+- Fail loudly. Never simplify a check into an empty `catch` or a silent default — surface what went wrong so a human can react.
 
-Ask yourself: "Would a senior engineer say this is overcomplicated?" If yes, simplify.
+Ask yourself: "Would a senior engineer say this is overcomplicated — or unsafe?" If either, fix it.
 
 ## 5. Accelerate Scale with Quality
 
