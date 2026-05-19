@@ -2,13 +2,13 @@
 
 This document is the operator-facing runbook for the `agent:*` label set that gates AI agent involvement on every issue. The labels themselves are the deterministic routing signal; this document describes how to push them to GitHub, verify them, and roll them back.
 
-The label taxonomy is introduced incrementally per the phased rollout in [#34](https://github.com/tvna/claude-md/issues/34). The JSON SoT file (`.github/labels.json`) is **not yet committed** — it lands in Phase 2 (separate sub-issue). This Phase 1 PR adds the runbook only. Per [CLAUDE.md §3](../blob/main/CLAUDE.md), agents must be concentrated at one workflow point *after* deterministic gates pass — the `agent:*` label is that gate, and per §5 it exists to avoid wasting tokens on issues the agent should not read in full.
+The label taxonomy is introduced incrementally per the phased rollout in [#34](https://github.com/tvna/claude-md/issues/34). The JSON SoT lives at `.github/labels.json`; the values in the Apply section below MUST match it byte-for-byte. Per [CLAUDE.md §3](../blob/main/CLAUDE.md), agents must be concentrated at one workflow point *after* deterministic gates pass — the `agent:*` label is that gate, and per §5 it exists to avoid wasting tokens on issues the agent should not read in full.
 
 ## SoT layout
 
 | File | Target | Purpose |
 |---|---|---|
-| `.github/labels.json` *(Phase 2 — not yet committed)* | `/repos/tvna/claude-md/labels` | JSON source of truth for the `agent:*` labels |
+| `.github/labels.json` | `/repos/tvna/claude-md/labels` | JSON source of truth for the `agent:*` labels |
 | `docs/ai-triage-routing.md` *(this file)* | — | Runbook |
 
 ## Label taxonomy
@@ -24,9 +24,7 @@ Default for every newly opened issue is `agent:triage-needed`. Exactly one `agen
 
 ## Apply (first-time `POST`)
 
-Apply one label at a time. Each call returns the created label object; labels are addressed by name (no id is required for later updates).
-
-Colour choices follow a traffic-light intuition over the GitHub default palette: green = safe to auto-act, blue = informational, grey = stay out, yellow = needs sorting.
+Apply one label at a time. Each call returns the created label object; labels are addressed by name (no id is required for later updates). The `-f color=` / `-f description=` values below are byte-for-byte mirrors of `.github/labels.json` — if either side changes, update both in the same PR.
 
 ```sh
 gh api \
@@ -36,7 +34,7 @@ gh api \
   /repos/tvna/claude-md/labels \
   -f name='agent:auto-fix' \
   -f color='0e8a16' \
-  -f description='機械的に対処可能 — agent autonomous PR'
+  -f description='Machine-actionable. Agent may open a PR autonomously.'
 
 gh api \
   --method POST \
@@ -44,8 +42,8 @@ gh api \
   -H "X-GitHub-Api-Version: 2022-11-28" \
   /repos/tvna/claude-md/labels \
   -f name='agent:investigate' \
-  -f color='1d76db' \
-  -f description='調査・設計判断要 — agent は plan 提案まで、実装は人承認後'
+  -f color='fbca04' \
+  -f description='Requires investigation. Agent proposes a plan; implementation awaits approval.'
 
 gh api \
   --method POST \
@@ -53,8 +51,8 @@ gh api \
   -H "X-GitHub-Api-Version: 2022-11-28" \
   /repos/tvna/claude-md/labels \
   -f name='agent:no-action' \
-  -f color='bfbfbf' \
-  -f description='人間判断専用 — agent は関与しない (title のみ確認)'
+  -f color='b60205' \
+  -f description='Human judgment only. Agent does not engage.'
 
 gh api \
   --method POST \
@@ -62,8 +60,8 @@ gh api \
   -H "X-GitHub-Api-Version: 2022-11-28" \
   /repos/tvna/claude-md/labels \
   -f name='agent:triage-needed' \
-  -f color='fbca04' \
-  -f description='未分類 (新規 issue 既定値) — title だけ読んで再分類'
+  -f color='bfdadc' \
+  -f description='Uncategorized (default for new issues). Re-classify by title.'
 ```
 
 ## Update (re-apply with `PATCH`)
@@ -77,7 +75,7 @@ gh api \
   -H "X-GitHub-Api-Version: 2022-11-28" \
   /repos/tvna/claude-md/labels/agent:auto-fix \
   -f color='0e8a16' \
-  -f description='機械的に対処可能 — agent autonomous PR'
+  -f description='Machine-actionable. Agent may open a PR autonomously.'
 ```
 
 ## Verify
