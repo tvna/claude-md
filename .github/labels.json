@@ -1,0 +1,22 @@
+[
+  {
+    "name": "agent:auto-fix",
+    "description": "Machine-actionable. Agent may open a PR autonomously.",
+    "color": "0e8a16"
+  },
+  {
+    "name": "agent:investigate",
+    "description": "Requires investigation. Agent proposes a plan; implementation awaits approval.",
+    "color": "fbca04"
+  },
+  {
+    "name": "agent:no-action",
+    "description": "Human judgment only. Agent does not engage.",
+    "color": "b60205"
+  },
+  {
+    "name": "agent:triage-needed",
+    "description": "Uncategorized (default for new issues). Re-classify by title.",
+    "color": "bfdadc"
+  }
+]
