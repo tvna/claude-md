@@ -48,6 +48,7 @@ Build the harness before you scale.
 - First decide whether a check is needed: no error handling for impossible scenarios — but "impossible" means physically impossible, not "I cannot currently imagine it". If a human could plausibly cause it, handle it.
 - If you write 200 lines and it could be 50, rewrite it.
 - Keep confirmations and dry-runs for destructive or irreversible operations (deletes, force-push, sends, payments, schema migrations). Make wrong actions hard, right actions easy.
+- Treat debug instrumentation as an attack surface. Redact credentials, tokens, and PII before logging, and route diagnostic output to an access-controlled sink — never widen exposure to chase a bug.
 - When a check IS warranted, fail loudly. Never simplify it into an empty `catch` or a silent default — surface what went wrong so a human can react.
 
 Ask yourself: "Would a senior engineer say this is overcomplicated — or unsafe?" If either, fix it.
@@ -64,7 +65,6 @@ When editing existing code:
 - Don't refactor things that aren't broken.
 - Match the existing style.
 - If you find unrelated dead code, mention it. Don't delete it.
-- If you receive a bug report or fix request, use restricted-access debug logs.
 
 When your changes create orphans:
 
