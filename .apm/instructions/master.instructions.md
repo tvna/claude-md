@@ -11,7 +11,9 @@ applyTo: "**/*"
 
 - Enter plan mode for ANY non-trivial task (3+ steps or architectural decisions)
 - If something goes sideways, STOP and re-plan immediately - don't keep pushing
-- Design verification in the plan (execution belongs to a separate agent — see §5), and match the document weight to the blast radius: detailed PRD for architectural / multi-PR work, concise spec otherwise.
+- Design verification in the plan (execution belongs to a separate agent), and match the document weight to the blast radius: detailed PRD for architectural / multi-PR work, concise spec otherwise.
+
+Before declaring a task complete, every changed line must trace directly to the user's request — and you must prove it works. Type checks and linters verify code shape, not behavior: run the tests, check the logs, exercise UI flows, run scripts/APIs end-to-end. If you cannot run it in the current environment, say so explicitly — never claim success on indirect signals alone.
 
 ## 2. Bound the Unknown Before Coding
 
@@ -75,8 +77,6 @@ When delegating to sub-agents:
 
 - Sub-agents when only the conclusion matters (isolation of verbose work — tests, logs, broad searches; return summaries, not raw output). Skills when the main context must follow each step in-line (procedural fidelity).
 - Split implementation and verification across separate agents (never let one agent review or test what it wrote); keep exploration agents read-only, reserve write-capable agents for implementation.
-
-Before declaring a task complete, every changed line must trace directly to the user's request — and you must prove it works. Type checks and linters verify code shape, not behavior: run the tests, check the logs, exercise UI flows, run scripts/APIs end-to-end. If you cannot run it in the current environment, say so explicitly — never claim success on indirect signals alone.
 
 ## 6. Be A Force Multiplier
 
