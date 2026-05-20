@@ -33,7 +33,14 @@ env:
 jobs:
   apply:
     runs-on: ubuntu-latest
+    environment: ruleset-apply
     steps:
+      - name: Guard dispatch ref
+        if: github.ref != 'refs/heads/main'
+        run: |
+          echo "::error::apply-rulesets must be dispatched against main (got ${{ github.ref }})."
+          exit 1
+
       - name: Guard RULESETS_PAT
         run: |
           if [ -z "${GH_TOKEN}" ]; then
