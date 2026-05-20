@@ -13,7 +13,8 @@ on:
         default: generate
 
 permissions:
-  contents: read
+  contents: write
+  pull-requests: write
 
 env:
   APM_CLI_VERSION: "0.12.1"
@@ -22,9 +23,6 @@ env:
 jobs:
   generate:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      pull-requests: write
 
     steps:
       - name: Checkout repository

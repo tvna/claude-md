@@ -37,8 +37,8 @@ jobs:
     with:
       mode: verify
     permissions:
-      contents: read
-      pull-requests: read
+      contents: write
+      pull-requests: write
 
   gate:
     needs: [detect, verify]
