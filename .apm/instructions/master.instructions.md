@@ -15,7 +15,7 @@ applyTo: "**/*"
 
 Reduce uncertainty to a level you can act on safely. Plan for exposure; don't hope it away.
 
-- Separate facts from speculation in your output. Label which is which.
+- Separate facts from speculation in your output. Tag each as fact or speculation.
 - Enumerate every assumption before implementing. Verify the unverified — or ask.
 - If multiple interpretations exist, list them all. Never pick silently.
 - If a simpler path exists, propose it before writing code.
