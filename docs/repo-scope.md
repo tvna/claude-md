@@ -6,8 +6,8 @@ This document is the operator-facing companion to [#58](https://github.com/tvna/
 
 | File | Target | Purpose |
 |---|---|---|
-| `.gitignore` | repo working tree | Canonical exclude list — git refuses to track matched paths |
-| `.claudeignore` | Claude tooling | Mirror of the agent-tool-specific section of `.gitignore` |
+| `.gitignore` | repo working tree | Canonical exclude list — git refuses to track matched paths. **This is the source of truth.** |
+| `.claudeignore` | (no official Claude Code support — see *Note on `.claudeignore`* below) | Forward-looking mirror, kept on speculation. Not authoritative. |
 | `docs/repo-scope.md` *(this file)* | — | Runbook: purpose statement, prohibition list, rationale, update procedure |
 
 ## Declared purpose
@@ -50,6 +50,21 @@ The list is non-exhaustive. When a new tool emerges, follow the *Update procedur
 - **Submodule consumers are tool-agnostic.** Downstream projects pull this repo as a git submodule to get the compiled CLAUDE.md / AGENTS.md. Committing `.cursor/` or `.aider*` would force a tool choice on those consumers.
 - **`apm.yml: target: [claude, codex]`.** The repo explicitly compiles for multiple agent tools. Pinning configuration to one tool contradicts that contract.
 - **Performance measurement bias** (Phases 2-3 of #58). Tool-specific files inject agent behaviour outside the universal master source and would pollute the measurement signal.
+
+## Note on `.claudeignore` — kept as speculation, not as an official primitive
+
+`.claudeignore` is **not** documented as a Claude Code primitive in the official documentation. The only file-ignore mechanism the [Claude Code Settings page](https://code.claude.com/docs/en/settings) describes is the `respectGitignore` option for the `@` file picker, which consults `.gitignore`. There is no claim by Anthropic that Claude Code consults `.claudeignore`.
+
+Independent reporting ([The Register, 2026-01-28](https://www.theregister.com/software/2026/01/28/claude-code-ignores-ignore-rules-meant-to-block-secrets/4336684)) further indicates that even if `.claudeignore` is read in some configurations, it is not reliably honoured — `.env` files have been reported as readable despite a `.claudeignore` entry.
+
+This repo keeps `.claudeignore` anyway for two reasons:
+
+1. **Historical state.** The file pre-dates this runbook (commit `f513b88`, "Add ignore files", 2026-05-18). Removing it would expand the scope of #60 and is deferred to a future cleanup if/when one is opened.
+2. **Forward-looking convention.** If Anthropic ever ships `.claudeignore` as a supported primitive, the entries are already in place.
+
+**`.gitignore` is the canonical enforcement; `.claudeignore` is a courtesy mirror.** Reviews and CI must use `git check-ignore -v` (the *Verify* recipe below) as the source of truth. Do **not** rely on `.claudeignore` to keep secrets or tool-specific config out of Claude Code's view — use `.gitignore` plus, where stricter enforcement is required, `permissions.deny` in `.claude/settings.json` (managed settings).
+
+The history of this acknowledgement: [#58 comment](https://github.com/tvna/claude-md/issues/58#issuecomment-4502888322) records that the original PR #81 treated `.claudeignore` as authoritative without a primary source — i.e. the framing was hallucination-derived. This note exists so future contributors don't relitigate that finding from scratch.
 
 ## Verify
 
@@ -103,3 +118,5 @@ Re-adding a lifted entry later uses the same *Update procedure*.
 - `docs/ai-triage-routing.md` ([#34](https://github.com/tvna/claude-md/issues/34)) — secondary template
 - `apm.yml` — `target: [claude, codex]` evidence for tool-agnostic stance
 - `README.md` — "universal, individual-level guidelines" mandate
+- [Claude Code Settings](https://code.claude.com/docs/en/settings) — primary source for `respectGitignore` (the only documented Claude Code ignore mechanism)
+- [#58 comment](https://github.com/tvna/claude-md/issues/58#issuecomment-4502888322) — record of the `.claudeignore` primary-source review
