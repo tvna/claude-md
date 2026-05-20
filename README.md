@@ -14,7 +14,7 @@ Master repository for personally tuned agent instructions, compiled with [`micro
 | # | Principle | Summary |
 |---|-----------|---------|
 | 1 | Define the Goal with Plan Mode First | Enter plan mode for any task that takes 3+ steps or touches architecture. |
-| 2 | Think Before Coding | State assumptions, surface ambiguity, and ask before guessing. |
+| 2 | Bound the Unknown Before Coding | List assumptions, surface ambiguity, verify or ask — ambiguity earns a question, evidence earns a fix. |
 | 3 | Use Git Ecosystem Effectively | Build the harness — hooks, CI/CD, declarative deps — before you scale. |
 | 4 | Simplicity, Bounded by Safety | Minimum code that solves the problem — never at the cost of safety. |
 | 5 | Accelerate Scale with Quality | Touch only what you must; split implementation, verification, and exploration across separate agents. |
@@ -81,7 +81,7 @@ git submodule update --remote .claude-md-master
 | # | 原則 | 要旨 |
 |---|------|------|
 | 1 | Define the Goal with Plan Mode First | 3 ステップ以上の作業は必ず plan mode から入る |
-| 2 | Think Before Coding | 仮定を明示し、不明点は実装前に解消する |
+| 2 | Bound the Unknown Before Coding | 仮定を列挙し、不明は検証か質問で潰す。曖昧な入力には問い、証拠(ログ・エラー・失敗テスト)には修正で応じる |
 | 3 | Use Git Ecosystem Effectively | hooks / CI / 宣言的依存管理でハーネスを先に整える |
 | 4 | Simplicity, Bounded by Safety | 要求された最小コードのみ。ただし安全装置は削らない |
 | 5 | Accelerate Scale with Quality | 自分の散らかしのみ掃除、実装/検証/探索でエージェントを分ける |
