@@ -6,3 +6,13 @@ __pycache__/
 .DS_Store
 .idea/
 .vscode/
+
+# Agent-tool-specific config (prohibited per docs/repo-scope.md, #58)
+.claude/
+.cursor/
+.cursorrules
+.aider*
+.continue/
+.github/copilot-instructions.md
+.windsurfrules
+.codeium/

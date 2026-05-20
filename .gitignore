@@ -12,4 +12,17 @@ __pycache__/
 apm_modules/
 
 # Claude local state
-.claude/settings.local.json
+# .claude/ is broadly prohibited per docs/repo-scope.md (#58).
+# .claude/settings.local.json is the documented developer-local carve-out —
+# it remains a contributor's local-only file, and the broader directory rule
+# below transitively keeps it out of commits.
+.claude/
+
+# Agent-tool-specific config (prohibited per docs/repo-scope.md, #58)
+.cursor/
+.cursorrules
+.aider*
+.continue/
+.github/copilot-instructions.md
+.windsurfrules
+.codeium/
