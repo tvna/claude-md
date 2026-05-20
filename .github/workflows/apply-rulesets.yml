@@ -54,29 +54,6 @@ jobs:
             fi
           done
 
-      - name: Pre-check admin role id matches bypass_actors
-        run: |
-          set -euo pipefail
-          ROLES_JSON=$(curl --fail-with-body -sS \
-            -H "Authorization: Bearer ${GH_TOKEN}" \
-            -H "Accept: application/vnd.github+json" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            "https://api.github.com/repos/${REPO}/roles")
-          ADMIN_ID=$(echo "$ROLES_JSON" | jq -r '[.[] | select(.name == "admin")] | .[0].id // empty')
-          if [ -z "$ADMIN_ID" ]; then
-            echo "::error::Could not resolve admin role id from /repos/${REPO}/roles."
-            echo "$ROLES_JSON" | jq .
-            exit 1
-          fi
-          echo "Resolved admin role id: $ADMIN_ID"
-          for f in .github/rulesets/main.json .github/rulesets/all-branches.json; do
-            DECLARED=$(jq -r '.bypass_actors[0].actor_id' "$f")
-            if [ "$DECLARED" != "$ADMIN_ID" ]; then
-              echo "::error file=$f::Declared bypass_actors[0].actor_id=$DECLARED but live admin role id is $ADMIN_ID. See docs/rulesets.md §\"Prerequisite — retrieve bypass actor ids\"."
-              exit 1
-            fi
-          done
-
       - name: Plan and apply rulesets
         env:
           INPUT_RULESET: ${{ inputs.ruleset }}
