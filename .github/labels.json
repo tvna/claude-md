@@ -76,7 +76,7 @@
   },
   {
     "name": "severity:non-ascii-content",
-    "description": "Non-ASCII detected in title/body/comment by .github/workflows/scan-non-ascii.yml. Advisory for trusted authors; blocks external contributors. See docs/non-ascii-defense.md.",
+    "description": "Non-ASCII in title/body/comment; advisory for trusted authors, blocks external contributors.",
     "color": "ff7619"
   }
 ]

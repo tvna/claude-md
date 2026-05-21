@@ -42,13 +42,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
 
-      - name: Validate labels.json JSON syntax
+      - name: Validate labels.json
         run: |
           set -euo pipefail
-          if ! jq empty < .github/labels.json; then
-            echo "::error file=.github/labels.json::Invalid JSON syntax."
-            exit 1
-          fi
+          python3 scripts/labels_apply.py validate --sot .github/labels.json
 
       - name: Validate labels.json description length
         run: |
@@ -64,162 +61,13 @@ jobs:
           INPUT_PRUNE: ${{ inputs.prune }}
         run: |
           set -euo pipefail
-
-          curl --fail-with-body -sS \
-            -H "Authorization: Bearer ${GH_TOKEN}" \
-            -H "Accept: application/vnd.github+json" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            "https://api.github.com/repos/${REPO}/labels?per_page=100" \
-            -o /tmp/live-labels.json
-
-          LIVE_COUNT=$(jq 'length' /tmp/live-labels.json)
-          if [ "$LIVE_COUNT" -ge 100 ]; then
-            echo "::error::Live label count is $LIVE_COUNT (>=100); pagination required but not implemented. Update this workflow to paginate before retrying."
-            exit 1
+          COMMAND="apply"
+          if [ "$INPUT_DRY_RUN" = "true" ]; then
+            COMMAND="plan"
           fi
-
-          SOT_COUNT=$(jq 'length' .github/labels.json)
-
-          {
-            echo "## Apply labels — dispatch summary"
-            echo
-            echo "- dry_run: \`$INPUT_DRY_RUN\`"
-            echo "- prune: \`$INPUT_PRUNE\`"
-            echo "- SoT entries: $SOT_COUNT"
-            echo "- Live labels: $LIVE_COUNT"
-            echo
-            echo "| Name | Action | Color changed | Description changed | Result |"
-            echo "|---|---|---|---|---|"
-          } >> "$GITHUB_STEP_SUMMARY"
-
-          apply_call() {
-            # $1=METHOD $2=URL $3=PAYLOAD_OR_EMPTY
-            local METHOD="$1" URL="$2" PAYLOAD="$3"
-            local RESPONSE_FILE LAST_HTTP_CODE STATUS=1
-            RESPONSE_FILE=$(mktemp)
-            LAST_HTTP_CODE="000"
-            local ATTEMPT
-            for ATTEMPT in 1 2 3; do
-              if [ -n "$PAYLOAD" ]; then
-                LAST_HTTP_CODE=$(curl -sS -o "$RESPONSE_FILE" -w '%{http_code}' \
-                  -X "$METHOD" \
-                  -H "Authorization: Bearer ${GH_TOKEN}" \
-                  -H "Accept: application/vnd.github+json" \
-                  -H "X-GitHub-Api-Version: 2022-11-28" \
-                  -H "Content-Type: application/json" \
-                  -d "$PAYLOAD" \
-                  "$URL" || echo "000")
-              else
-                LAST_HTTP_CODE=$(curl -sS -o "$RESPONSE_FILE" -w '%{http_code}' \
-                  -X "$METHOD" \
-                  -H "Authorization: Bearer ${GH_TOKEN}" \
-                  -H "Accept: application/vnd.github+json" \
-                  -H "X-GitHub-Api-Version: 2022-11-28" \
-                  "$URL" || echo "000")
-              fi
-              if [ "$LAST_HTTP_CODE" -ge 200 ] && [ "$LAST_HTTP_CODE" -lt 300 ]; then
-                STATUS=0; break
-              fi
-              echo "Attempt $ATTEMPT: HTTP $LAST_HTTP_CODE for $METHOD $URL"
-              # Retry only on transient 5xx or curl-level failure ("000")
-              if [ "$LAST_HTTP_CODE" != "000" ] && [ "$LAST_HTTP_CODE" -lt 500 ]; then
-                break
-              fi
-              if [ "$ATTEMPT" -lt 3 ]; then
-                sleep $((ATTEMPT * 5))
-              fi
-            done
-            echo "$LAST_HTTP_CODE" > /tmp/last_http_code
-            cat "$RESPONSE_FILE" > /tmp/last_response
-            return $STATUS
-          }
-
-          # Pass 1: reconcile every SoT entry against live state.
-          while read -r SOT_ENTRY; do
-            NAME=$(jq -r '.name' <<<"$SOT_ENTRY")
-            COLOR=$(jq -r '.color' <<<"$SOT_ENTRY")
-            DESC=$(jq -r '.description' <<<"$SOT_ENTRY")
-            NAME_URI=$(jq -rn --arg n "$NAME" '$n|@uri')
-
-            LIVE_ENTRY=$(jq -c --arg n "$NAME" 'map(select(.name == $n)) | .[0] // empty' /tmp/live-labels.json)
-
-            if [ -z "$LIVE_ENTRY" ]; then
-              ACTION="POST"
-              COLOR_CHANGED="—"
-              DESC_CHANGED="—"
-              METHOD="POST"
-              URL="https://api.github.com/repos/${REPO}/labels"
-              PAYLOAD=$(jq -nc --arg n "$NAME" --arg c "$COLOR" --arg d "$DESC" \
-                '{name:$n, color:$c, description:$d}')
-            else
-              LIVE_COLOR=$(jq -r '.color' <<<"$LIVE_ENTRY")
-              LIVE_DESC=$(jq -r '.description // ""' <<<"$LIVE_ENTRY")
-              COLOR_CHANGED="no"
-              DESC_CHANGED="no"
-              [ "$LIVE_COLOR" != "$COLOR" ] && COLOR_CHANGED="yes"
-              [ "$LIVE_DESC" != "$DESC" ] && DESC_CHANGED="yes"
-              if [ "$COLOR_CHANGED" = "no" ] && [ "$DESC_CHANGED" = "no" ]; then
-                echo "| \`$NAME\` | no-op | no | no | unchanged |" >> "$GITHUB_STEP_SUMMARY"
-                continue
-              fi
-              ACTION="PATCH"
-              METHOD="PATCH"
-              URL="https://api.github.com/repos/${REPO}/labels/${NAME_URI}"
-              PAYLOAD=$(jq -nc --arg c "$COLOR" --arg d "$DESC" \
-                '{color:$c, description:$d}')
-            fi
-
-            if [ "$INPUT_DRY_RUN" = "true" ]; then
-              echo "| \`$NAME\` | plan-only ($ACTION) | $COLOR_CHANGED | $DESC_CHANGED | dry-run |" >> "$GITHUB_STEP_SUMMARY"
-              continue
-            fi
-
-            if ! apply_call "$METHOD" "$URL" "$PAYLOAD"; then
-              LAST_HTTP_CODE=$(cat /tmp/last_http_code)
-              echo "::error::Failed to $METHOD label '$NAME' (last HTTP $LAST_HTTP_CODE)."
-              {
-                echo
-                echo "**Error applying \`$NAME\` ($METHOD, HTTP $LAST_HTTP_CODE):**"
-                echo '```'
-                cat /tmp/last_response
-                echo '```'
-              } >> "$GITHUB_STEP_SUMMARY"
-              exit 1
-            fi
-            LAST_HTTP_CODE=$(cat /tmp/last_http_code)
-            echo "| \`$NAME\` | $ACTION applied | $COLOR_CHANGED | $DESC_CHANGED | HTTP $LAST_HTTP_CODE |" >> "$GITHUB_STEP_SUMMARY"
-          done < <(jq -c '.[]' .github/labels.json)
-
-          # Pass 2: labels on live but absent from SoT — report-only or DELETE.
-          while read -r LIVE_NAME; do
-            if jq -e --arg n "$LIVE_NAME" 'any(.[]; .name == $n)' .github/labels.json > /dev/null; then
-              continue
-            fi
-            NAME_URI=$(jq -rn --arg n "$LIVE_NAME" '$n|@uri')
-
-            if [ "$INPUT_PRUNE" != "true" ]; then
-              echo "| \`$LIVE_NAME\` | report-only (not in SoT) | — | — | kept (prune=false) |" >> "$GITHUB_STEP_SUMMARY"
-              continue
-            fi
-
-            if [ "$INPUT_DRY_RUN" = "true" ]; then
-              echo "| \`$LIVE_NAME\` | plan-only (DELETE) | — | — | dry-run |" >> "$GITHUB_STEP_SUMMARY"
-              continue
-            fi
-
-            URL="https://api.github.com/repos/${REPO}/labels/${NAME_URI}"
-            if ! apply_call "DELETE" "$URL" ""; then
-              LAST_HTTP_CODE=$(cat /tmp/last_http_code)
-              echo "::error::Failed to DELETE label '$LIVE_NAME' (last HTTP $LAST_HTTP_CODE)."
-              {
-                echo
-                echo "**Error deleting \`$LIVE_NAME\` (HTTP $LAST_HTTP_CODE):**"
-                echo '```'
-                cat /tmp/last_response
-                echo '```'
-              } >> "$GITHUB_STEP_SUMMARY"
-              exit 1
-            fi
-            LAST_HTTP_CODE=$(cat /tmp/last_http_code)
-            echo "| \`$LIVE_NAME\` | DELETE applied | — | — | HTTP $LAST_HTTP_CODE |" >> "$GITHUB_STEP_SUMMARY"
-          done < <(jq -r '.[].name' /tmp/live-labels.json)
+          python3 scripts/labels_apply.py "$COMMAND" \
+            --repo "$REPO" \
+            --sot .github/labels.json \
+            --prune "$INPUT_PRUNE" \
+            --dry-run "$INPUT_DRY_RUN" \
+            --summary-file "$GITHUB_STEP_SUMMARY"
