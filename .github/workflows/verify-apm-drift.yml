@@ -33,16 +33,7 @@ jobs:
         id: uvpin
         run: |
           set -euo pipefail
-          PIN="$(python3 -c '
-          import sys, tomllib
-          try:
-              v = tomllib.load(open("pyproject.toml","rb"))["tool"]["uv"]["required-version"]
-          except (KeyError, FileNotFoundError, tomllib.TOMLDecodeError) as e:
-              sys.exit(f"cannot read [tool.uv].required-version: {e}")
-          if not v.startswith("=="):
-              sys.exit(f"required-version must be an exact pin (==X.Y.Z), got: {v!r}")
-          print(v[2:])
-          ')"
+          PIN="$(python3 scripts/uv_pin.py read)"
           echo "version=${PIN}" >> "$GITHUB_OUTPUT"
 
       - name: Install uv

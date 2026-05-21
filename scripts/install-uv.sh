@@ -14,20 +14,13 @@ if [ "${CLAUDE_CODE_REMOTE:-}" != "true" ]; then
   exit 0
 fi
 
-# Read the pin from pyproject.toml ([tool.uv].required-version). The field is
-# an exact PEP440 pin (e.g. "==X.Y.Z"); strip the leading "==". tomllib is
-# stdlib on Python 3.11+; the remote env ships 3.11+.
-PYPROJECT="${CLAUDE_PROJECT_DIR:-$(cd "$(dirname "$0")/.." && pwd)}/pyproject.toml"
-UV_VERSION="$(python3 -c 'import sys, tomllib
-try:
-    with open(sys.argv[1], "rb") as f:
-        v = tomllib.load(f)["tool"]["uv"]["required-version"]
-except (KeyError, FileNotFoundError, tomllib.TOMLDecodeError) as e:
-    sys.exit(f"install-uv: cannot read [tool.uv].required-version from {sys.argv[1]}: {e}")
-if not v.startswith("=="):
-    sys.exit(f"install-uv: required-version must be an exact pin (==X.Y.Z), got: {v!r}")
-print(v[2:])
-' "$PYPROJECT")"
+# Read the pin via the shared helper (scripts/uv_pin.py). The helper
+# enforces an exact `==X.Y.Z` PEP440 spec and is unit-tested by
+# tests/test_uv_pin.py. tomllib is stdlib on Python 3.11+; the remote env
+# ships 3.11+.
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PYPROJECT="${CLAUDE_PROJECT_DIR:-$(cd "$SCRIPT_DIR/.." && pwd)}/pyproject.toml"
+UV_VERSION="$(python3 "$SCRIPT_DIR/uv_pin.py" read "$PYPROJECT")"
 INSTALL_DIR="$HOME/.local/bin"
 ARCHIVE_NAME="uv-x86_64-unknown-linux-gnu"
 

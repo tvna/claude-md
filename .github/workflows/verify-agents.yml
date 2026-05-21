@@ -46,60 +46,19 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
 
+      - name: Install pytest
+        run: python3 -m pip install --user 'pytest>=8,<9'
+
+      - name: Run uv_pin.py unit tests
+        run: python3 -m pytest tests/test_uv_pin.py -v
+
       - name: Assert uv pin lives only in pyproject.toml
-        run: |
-          set -euo pipefail
-          PIN="$(python3 -c '
-          import tomllib
-          v = tomllib.load(open("pyproject.toml","rb"))["tool"]["uv"]["required-version"]
-          print(v.lstrip("="))
-          ')"
-          echo "uv pin from pyproject.toml: ${PIN}"
-
-          # (1) Literal-value check: the exact pin must not appear as a fixed
-          # string anywhere outside pyproject.toml. Using a fixed-string match
-          # against the resolved pin avoids false positives on APM_CLI_VERSION
-          # ("0.12.1") and action version-comments ("v5.0.1").
-          if grep -rFn -- "${PIN}" .github/ scripts/ docs/ 2>/dev/null; then
-            echo "::error::uv pin literal ${PIN} appears outside pyproject.toml. Update pyproject.toml and let CI / scripts/install-uv.sh consume it."
-            exit 1
-          fi
-
-          # (2) Symbol check (top-level workflow env): UV_VERSION as a top-level
-          # `env:` value is forbidden — it must be sourced from a step output.
-          if grep -rEn '^\s*UV_VERSION\s*:\s*"' .github/workflows/ 2>/dev/null; then
-            echo "::error::Top-level UV_VERSION literal in workflow env: forbidden. Source it from steps.uvpin.outputs.version instead."
-            exit 1
-          fi
-
-          # (3) Symbol check (docs): UV_VERSION must not appear in docs at all.
-          if grep -rEn '\bUV_VERSION\b' docs/ 2>/dev/null; then
-            echo "::error::UV_VERSION symbol found in docs/. Reference [tool.uv].required-version instead."
-            exit 1
-          fi
-
-          echo "OK: no uv pin drift detected."
+        run: python3 scripts/uv_pin.py drift
 
       - name: Warn if uv pin trails upstream
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          PIN="$(python3 -c '
-          import tomllib
-          v = tomllib.load(open("pyproject.toml","rb"))["tool"]["uv"]["required-version"]
-          print(v.lstrip("="))
-          ')"
-          LATEST="$(gh release view --repo astral-sh/uv --json tagName --jq .tagName || echo '')"
-          if [ -z "${LATEST}" ]; then
-            echo "::warning::could not fetch latest astral-sh/uv release; staleness check skipped"
-            exit 0
-          fi
-          if [ "${PIN}" != "${LATEST}" ]; then
-            echo "::warning::uv pin (${PIN}) trails upstream latest (${LATEST}). Bump [tool.uv].required-version in pyproject.toml."
-          else
-            echo "uv pin matches upstream latest (${PIN})."
-          fi
+        run: python3 scripts/uv_pin.py stale
 
   gate:
     needs: [detect, verify, lint-uv-pin]

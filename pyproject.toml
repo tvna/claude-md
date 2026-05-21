@@ -12,3 +12,13 @@ exclude-newer = "14 days"
 # (see docs/remote-environment.md). Submodule consumers do not inherit this
 # constraint, so the strict semantic is the desired one. Tracked in #112.
 required-version = "==0.11.11"
+
+[dependency-groups]
+# Test-only dependency for `scripts/uv_pin.py` (see tests/test_uv_pin.py).
+# CI installs pytest directly via `pip install` for speed; this entry
+# documents the dev dependency for local `uv sync --group dev` flows.
+dev = ["pytest>=8,<9"]
+
+[tool.pytest.ini_options]
+pythonpath = ["scripts"]
+testpaths = ["tests"]
