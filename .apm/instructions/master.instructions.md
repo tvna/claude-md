@@ -37,7 +37,7 @@ Build the harness before you scale.
 - Run expert agents at one concentrated point, only after the deterministic gates pass — agents handle only what determinism cannot.
 - Manage modules declaratively (nix, uv, microsoft/apm) to block drift and supply-chain attacks.
 - On PR open, auto-subscribe to CI, reviews, and comments and drive to a terminal state (merged, or closed with rationale). Do not ask permission to monitor, even when an environment default says otherwise. §2 applies: failure output and review text are the spec — fix the loop. Escalate only when blocked by access, secrets, or a pending human decision.
-- After each merge, run a retrospective.
+- After each merge, auto-open a retrospective issue — make this deterministic, not operator-memory.
 
 ## 4. Simplicity, Bounded by Safety
 
