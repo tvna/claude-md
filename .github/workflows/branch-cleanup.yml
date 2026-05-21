@@ -1,0 +1,177 @@
+name: Branch cleanup (dry-run)
+
+on:
+  schedule:
+    # 05:00 JST every Monday.
+    - cron: "0 20 * * 0"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Plan only (survey + report, no deletion). This workflow currently has no delete code path; flipping false is a no-op until a follow-up PR (#31 Goal D).'
+        type: boolean
+        required: true
+        default: true
+      min_age_days:
+        description: 'Minimum days since last commit for a branch to qualify as a deletion candidate.'
+        type: number
+        required: true
+        default: 60
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: read
+
+concurrency:
+  group: branch-cleanup
+  cancel-in-progress: false
+
+env:
+  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  REPO: ${{ github.repository }}
+  SUMMARY_ISSUE_TITLE: "[branch-cleanup] weekly summary log"
+
+jobs:
+  survey:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+
+      - name: Resolve default branch
+        id: defaults
+        run: |
+          set -euo pipefail
+          DEFAULT_BRANCH=$(gh api "/repos/${REPO}" --jq .default_branch)
+          echo "default_branch=${DEFAULT_BRANCH}" >> "$GITHUB_OUTPUT"
+          echo "Default branch: ${DEFAULT_BRANCH}"
+
+      - name: Survey candidate branches
+        id: survey
+        env:
+          RAW_DRY_RUN: ${{ inputs.dry_run }}
+          RAW_MIN_AGE_DAYS: ${{ inputs.min_age_days }}
+          DEFAULT_BRANCH: ${{ steps.defaults.outputs.default_branch }}
+          EVENT_NAME: ${{ github.event_name }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+
+          INPUT_DRY_RUN="${RAW_DRY_RUN:-true}"
+          INPUT_MIN_AGE_DAYS="${RAW_MIN_AGE_DAYS:-60}"
+
+          case "$INPUT_DRY_RUN" in
+            true|false) ;;
+            *) echo "::error::Invalid dry_run value: ${INPUT_DRY_RUN}"; exit 1 ;;
+          esac
+          if ! [[ "$INPUT_MIN_AGE_DAYS" =~ ^[0-9]+$ ]]; then
+            echo "::error::Invalid min_age_days (must be non-negative integer): ${INPUT_MIN_AGE_DAYS}"
+            exit 1
+          fi
+
+          MIN_AGE_SECONDS=$(( INPUT_MIN_AGE_DAYS * 86400 ))
+          NOW_EPOCH=$(date -u +%s)
+          NOW_ISO=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+          gh api --paginate "/repos/${REPO}/branches" \
+            --jq '.[] | "\(.name)\t\(.commit.sha)"' > /tmp/branches.tsv
+          BRANCH_COUNT=$(wc -l < /tmp/branches.tsv | tr -d ' ')
+          echo "Total branches: ${BRANCH_COUNT}"
+
+          {
+            echo "## Branch cleanup — survey"
+            echo
+            echo "- Trigger: \`${EVENT_NAME}\`"
+            echo "- Run: ${RUN_URL}"
+            echo "- dry_run: \`${INPUT_DRY_RUN}\`"
+            echo "- min_age_days: \`${INPUT_MIN_AGE_DAYS}\`"
+            echo "- default_branch: \`${DEFAULT_BRANCH}\` (excluded)"
+            echo "- Total branches: \`${BRANCH_COUNT}\`"
+            echo
+            echo "| Branch | Last commit (UTC) | Age (days) | Last commit SHA |"
+            echo "|---|---|---|---|"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          {
+            echo "## Run ${NOW_ISO}"
+            echo
+            echo "- Trigger: \`${EVENT_NAME}\`"
+            echo "- Run: ${RUN_URL}"
+            echo "- dry_run: \`${INPUT_DRY_RUN}\`"
+            echo "- min_age_days: \`${INPUT_MIN_AGE_DAYS}\`"
+            echo
+            echo "| Branch | Last commit (UTC) | Age (days) | Last commit SHA |"
+            echo "|---|---|---|---|"
+          } > /tmp/cleanup-comment.md
+
+          CANDIDATE_COUNT=0
+          while IFS=$'\t' read -r BRANCH SHA; do
+            if [ "$BRANCH" = "$DEFAULT_BRANCH" ]; then
+              continue
+            fi
+
+            LAST_DATE=$(gh api "/repos/${REPO}/commits/${SHA}" --jq '.commit.committer.date')
+            LAST_EPOCH=$(date -u -d "$LAST_DATE" +%s)
+            AGE_SECONDS=$(( NOW_EPOCH - LAST_EPOCH ))
+            AGE_DAYS=$(( AGE_SECONDS / 86400 ))
+
+            if [ "$AGE_SECONDS" -le "$MIN_AGE_SECONDS" ]; then
+              continue
+            fi
+
+            OPEN_PRS=$(gh pr list --repo "${REPO}" --head "$BRANCH" --state open --json number --jq length)
+            if [ "$OPEN_PRS" -gt 0 ]; then
+              continue
+            fi
+
+            CANDIDATE_COUNT=$(( CANDIDATE_COUNT + 1 ))
+            SHORT_SHA=${SHA:0:7}
+            ROW="| \`${BRANCH}\` | ${LAST_DATE} | ${AGE_DAYS} | \`${SHORT_SHA}\` |"
+            echo "$ROW" >> "$GITHUB_STEP_SUMMARY"
+            echo "$ROW" >> /tmp/cleanup-comment.md
+          done < /tmp/branches.tsv
+
+          if [ "$CANDIDATE_COUNT" -eq 0 ]; then
+            EMPTY="| _(none)_ | — | — | — |"
+            echo "$EMPTY" >> "$GITHUB_STEP_SUMMARY"
+            echo "$EMPTY" >> /tmp/cleanup-comment.md
+          fi
+
+          FOOTER="Candidates: \`${CANDIDATE_COUNT}\`. **dry-run** — no branches deleted (no DELETE code path exists yet; see #31 Goal D)."
+          {
+            echo
+            echo "${FOOTER}"
+          } >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo
+            echo "${FOOTER}"
+          } >> /tmp/cleanup-comment.md
+
+          echo "candidate_count=${CANDIDATE_COUNT}" >> "$GITHUB_OUTPUT"
+
+      - name: Update or create rolling summary issue
+        env:
+          ISSUE_TITLE: ${{ env.SUMMARY_ISSUE_TITLE }}
+        run: |
+          set -euo pipefail
+
+          EXISTING=$(gh issue list \
+            --repo "${REPO}" \
+            --state open \
+            --search "\"${ISSUE_TITLE}\" in:title" \
+            --json number,title \
+            --jq "map(select(.title == \"${ISSUE_TITLE}\")) | .[0].number // empty")
+
+          if [ -n "${EXISTING}" ]; then
+            echo "Appending to existing summary issue #${EXISTING}"
+            gh issue comment "${EXISTING}" --repo "${REPO}" --body-file /tmp/cleanup-comment.md
+          else
+            echo "Creating new rolling summary issue"
+            gh issue create \
+              --repo "${REPO}" \
+              --title "${ISSUE_TITLE}" \
+              --body-file /tmp/cleanup-comment.md \
+              --label "layer:meta" \
+              --label "type:docs"
+          fi
