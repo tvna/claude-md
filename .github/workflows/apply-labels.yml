@@ -1,0 +1,71 @@
+name: Apply labels
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Plan only (diff + intent, no live changes)'
+        type: boolean
+        required: true
+        default: true
+      prune:
+        description: 'Also DELETE labels present on GitHub but absent from SoT (destructive on existing issues)'
+        type: boolean
+        required: true
+        default: false
+
+permissions:
+  contents: read
+
+env:
+  GH_TOKEN: ${{ secrets.LABELS_PAT }}
+  REPO: ${{ github.repository }}
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    environment: labels-apply
+    steps:
+      - name: Guard dispatch ref
+        if: github.ref != 'refs/heads/main'
+        run: |
+          echo "::error::apply-labels must be dispatched against main (got ${{ github.ref }})."
+          exit 1
+
+      - name: Guard LABELS_PAT
+        run: |
+          if [ -z "${GH_TOKEN}" ]; then
+            echo "::error::LABELS_PAT secret is not set. See issue #92 for setup steps."
+            exit 1
+          fi
+
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Validate labels.json JSON syntax
+        run: |
+          set -euo pipefail
+          if ! jq empty < .github/labels.json; then
+            echo "::error file=.github/labels.json::Invalid JSON syntax."
+            exit 1
+          fi
+
+      - name: Skeleton (no reconcile yet — tracked in #87)
+        env:
+          INPUT_DRY_RUN: ${{ inputs.dry_run }}
+          INPUT_PRUNE: ${{ inputs.prune }}
+        run: |
+          set -euo pipefail
+          SOT_COUNT=$(jq 'length' .github/labels.json)
+          {
+            echo "## Apply labels — skeleton dispatch"
+            echo
+            echo "- dry_run: \`$INPUT_DRY_RUN\`"
+            echo "- prune: \`$INPUT_PRUNE\`"
+            echo "- SoT entries: $SOT_COUNT"
+            echo
+            echo "This is the bootstrap skeleton landed via #92. It verifies wiring only:"
+            echo "Environment gate, LABELS_PAT presence, checkout, JSON validity. No live"
+            echo "label state is read or modified. Full reconcile logic lands in #87 (PR #91)."
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "skeleton: would reconcile $SOT_COUNT entries (inputs honored: dry_run=$INPUT_DRY_RUN, prune=$INPUT_PRUNE); full logic tracked in #87"
