@@ -57,167 +57,29 @@ jobs:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set -euo pipefail
-
-          INPUT_DRY_RUN="${RAW_DRY_RUN:-true}"
-          INPUT_MIN_AGE_DAYS="${RAW_MIN_AGE_DAYS:-60}"
-
-          case "$INPUT_DRY_RUN" in
-            true|false) ;;
-            *) echo "::error::Invalid dry_run value: ${INPUT_DRY_RUN}"; exit 1 ;;
-          esac
-          if ! [[ "$INPUT_MIN_AGE_DAYS" =~ ^[0-9]+$ ]]; then
-            echo "::error::Invalid min_age_days (must be non-negative integer): ${INPUT_MIN_AGE_DAYS}"
-            exit 1
-          fi
-
-          MIN_AGE_SECONDS=$(( INPUT_MIN_AGE_DAYS * 86400 ))
-          NOW_EPOCH=$(date -u +%s)
-          NOW_ISO=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-
-          gh api --paginate "/repos/${REPO}/branches" \
-            --jq '.[] | "\(.name)\t\(.commit.sha)"' > /tmp/branches.tsv
-          BRANCH_COUNT=$(wc -l < /tmp/branches.tsv | tr -d ' ')
-          echo "Total branches: ${BRANCH_COUNT}"
-
-          {
-            echo "## Branch cleanup — survey"
-            echo
-            echo "- Trigger: \`${EVENT_NAME}\`"
-            echo "- Run: ${RUN_URL}"
-            echo "- dry_run: \`${INPUT_DRY_RUN}\`"
-            echo "- min_age_days: \`${INPUT_MIN_AGE_DAYS}\`"
-            echo "- default_branch: \`${DEFAULT_BRANCH}\` (excluded)"
-            echo "- Total branches: \`${BRANCH_COUNT}\`"
-            echo
-            echo "| Branch | Last commit (UTC) | Age (days) | Last commit SHA |"
-            echo "|---|---|---|---|"
-          } >> "$GITHUB_STEP_SUMMARY"
-
-          {
-            echo "## Run ${NOW_ISO}"
-            echo
-            echo "- Trigger: \`${EVENT_NAME}\`"
-            echo "- Run: ${RUN_URL}"
-            echo "- dry_run: \`${INPUT_DRY_RUN}\`"
-            echo "- min_age_days: \`${INPUT_MIN_AGE_DAYS}\`"
-            echo
-            echo "| Branch | Last commit (UTC) | Age (days) | Last commit SHA |"
-            echo "|---|---|---|---|"
-          } > /tmp/cleanup-comment.md
-
-          CANDIDATE_COUNT=0
-          while IFS=$'\t' read -r BRANCH SHA; do
-            if [ "$BRANCH" = "$DEFAULT_BRANCH" ]; then
-              continue
-            fi
-
-            LAST_DATE=$(gh api "/repos/${REPO}/commits/${SHA}" --jq '.commit.committer.date')
-            LAST_EPOCH=$(date -u -d "$LAST_DATE" +%s)
-            AGE_SECONDS=$(( NOW_EPOCH - LAST_EPOCH ))
-            AGE_DAYS=$(( AGE_SECONDS / 86400 ))
-
-            if [ "$AGE_SECONDS" -le "$MIN_AGE_SECONDS" ]; then
-              continue
-            fi
-
-            OPEN_PRS=$(gh pr list --repo "${REPO}" --head "$BRANCH" --state open --json number --jq length)
-            if [ "$OPEN_PRS" -gt 0 ]; then
-              continue
-            fi
-
-            CANDIDATE_COUNT=$(( CANDIDATE_COUNT + 1 ))
-            SHORT_SHA=${SHA:0:7}
-            ROW="| \`${BRANCH}\` | ${LAST_DATE} | ${AGE_DAYS} | \`${SHORT_SHA}\` |"
-            echo "$ROW" >> "$GITHUB_STEP_SUMMARY"
-            echo "$ROW" >> /tmp/cleanup-comment.md
-          done < /tmp/branches.tsv
-
-          FOOTER="Candidates: \`${CANDIDATE_COUNT}\`. **dry-run** — no branches deleted (no DELETE code path exists yet; see #31 Goal D)."
-
-          if [ "$CANDIDATE_COUNT" -eq 0 ]; then
-            {
-              echo "| _(none)_ | — | — | — |"
-              echo
-              echo "${FOOTER}"
-              echo
-              echo "_Empty run — rolling issue not touched. See \"Maintain rolling summary issue\" step for idle-close behaviour._"
-            } >> "$GITHUB_STEP_SUMMARY"
-            rm -f /tmp/cleanup-comment.md
-          else
-            {
-              echo
-              echo "${FOOTER}"
-            } >> "$GITHUB_STEP_SUMMARY"
-            {
-              echo
-              echo "${FOOTER}"
-            } >> /tmp/cleanup-comment.md
-          fi
-
-          echo "candidate_count=${CANDIDATE_COUNT}" >> "$GITHUB_OUTPUT"
+          python3 scripts/branch_cleanup.py survey \
+            --repo "${REPO}" \
+            --dry-run "${RAW_DRY_RUN:-true}" \
+            --min-age-days "${RAW_MIN_AGE_DAYS:-60}" \
+            --default-branch "${DEFAULT_BRANCH}" \
+            --event-name "${EVENT_NAME}" \
+            --run-url "${RUN_URL}" \
+            --out /tmp/cleanup-comment.md \
+            --github-output "${GITHUB_OUTPUT}" \
+            >> "${GITHUB_STEP_SUMMARY}"
 
       - name: Maintain rolling summary issue
         env:
           ISSUE_TITLE: ${{ env.SUMMARY_ISSUE_TITLE }}
           CANDIDATE_COUNT: ${{ steps.survey.outputs.candidate_count }}
           IDLE_CLOSE_DAYS: "28"
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set -euo pipefail
-
-          EXISTING=$(gh issue list \
+          python3 scripts/branch_cleanup.py reconcile \
             --repo "${REPO}" \
-            --state open \
-            --search "\"${ISSUE_TITLE}\" in:title" \
-            --json number,title \
-            --jq "map(select(.title == \"${ISSUE_TITLE}\")) | .[0].number // empty")
-
-          if [ "${CANDIDATE_COUNT}" -gt 0 ]; then
-            if [ -n "${EXISTING}" ]; then
-              echo "Appending to existing summary issue #${EXISTING}"
-              gh issue comment "${EXISTING}" --repo "${REPO}" --body-file /tmp/cleanup-comment.md
-            else
-              echo "Creating new rolling summary issue (first non-empty run)"
-              gh issue create \
-                --repo "${REPO}" \
-                --title "${ISSUE_TITLE}" \
-                --body-file /tmp/cleanup-comment.md \
-                --label "layer:meta" \
-                --label "type:docs"
-            fi
-            exit 0
-          fi
-
-          # CANDIDATE_COUNT == 0 from here on.
-          if [ -z "${EXISTING}" ]; then
-            echo "Empty run, no open rolling issue. Silent."
-            exit 0
-          fi
-
-          CREATED_AT=$(gh api "/repos/${REPO}/issues/${EXISTING}" --jq '.created_at')
-          LAST_COMMENT_AT=$(gh api --paginate "/repos/${REPO}/issues/${EXISTING}/comments" \
-            --jq '[.[].created_at] | last // ""')
-          LAST_ACTIVITY="${LAST_COMMENT_AT:-$CREATED_AT}"
-
-          NOW_EPOCH=$(date -u +%s)
-          LAST_EPOCH=$(date -u -d "${LAST_ACTIVITY}" +%s)
-          IDLE_SECONDS=$(( NOW_EPOCH - LAST_EPOCH ))
-          IDLE_THRESHOLD=$(( IDLE_CLOSE_DAYS * 86400 ))
-          IDLE_DAYS=$(( IDLE_SECONDS / 86400 ))
-
-          if [ "${IDLE_SECONDS}" -lt "${IDLE_THRESHOLD}" ]; then
-            echo "Issue #${EXISTING} idle for ${IDLE_DAYS}d (< ${IDLE_CLOSE_DAYS}d). No action."
-            exit 0
-          fi
-
-          echo "Issue #${EXISTING} idle for ${IDLE_DAYS}d (>= ${IDLE_CLOSE_DAYS}d). Auto-closing."
-          cat > /tmp/close-comment.md <<EOF
-          Auto-closed: no cleanup candidates for ${IDLE_DAYS} days (last activity: ${LAST_ACTIVITY}; threshold: ${IDLE_CLOSE_DAYS} days).
-
-          The next non-empty survey will open a fresh rolling issue. To reopen this one manually, comment and use **Reopen**; the workflow will resume appending to it on the next non-empty run.
-
-          Closed by [run ${{ github.run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}).
-          EOF
-          gh issue close "${EXISTING}" \
-            --repo "${REPO}" \
-            --reason "completed" \
-            --comment "$(cat /tmp/close-comment.md)"
+            --title "${ISSUE_TITLE}" \
+            --candidate-count "${CANDIDATE_COUNT}" \
+            --comment-file /tmp/cleanup-comment.md \
+            --idle-close-days "${IDLE_CLOSE_DAYS}" \
+            --run-url "${RUN_URL}"

@@ -40,7 +40,7 @@ jobs:
       contents: write
       pull-requests: write
 
-  lint-uv-pin:
+  lint-scripts:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -64,7 +64,7 @@ jobs:
         run: python3 scripts/uv_pin.py stale
 
   gate:
-    needs: [detect, verify, lint-uv-pin]
+    needs: [detect, verify, lint-scripts]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -72,7 +72,7 @@ jobs:
         env:
           RELEVANT: ${{ needs.detect.outputs.relevant }}
           VERIFY_RESULT: ${{ needs.verify.result }}
-          LINT_RESULT: ${{ needs.lint-uv-pin.result }}
+          LINT_RESULT: ${{ needs.lint-scripts.result }}
         run: |
           if [ "$LINT_RESULT" != 'success' ]; then
             echo "::error::uv pin drift gate result=${LINT_RESULT} (expected 'success')."
