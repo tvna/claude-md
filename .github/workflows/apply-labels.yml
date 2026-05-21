@@ -50,6 +50,14 @@ jobs:
             exit 1
           fi
 
+      - name: Validate labels.json description length
+        run: |
+          set -euo pipefail
+          if jq -e '[.[] | select(.description | length > 100)] | length > 0' .github/labels.json > /dev/null; then
+            jq -r '.[] | select(.description | length > 100) | "::error file=.github/labels.json::\(.name) description is \(.description | length) chars (max 100)"' .github/labels.json
+            exit 1
+          fi
+
       - name: Plan and apply labels
         env:
           INPUT_DRY_RUN: ${{ inputs.dry_run }}

@@ -31,7 +31,7 @@
   },
   {
     "name": "layer:meta",
-    "description": "Repo infrastructure governing the meta-document itself (labels, rulesets, workflows). NOT a CLAUDE.md principle.",
+    "description": "Repo infrastructure (labels, rulesets, workflows) for the meta-document. NOT a CLAUDE.md principle.",
     "color": "c5def5"
   },
   {
