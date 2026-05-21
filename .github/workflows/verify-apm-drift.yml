@@ -20,7 +20,6 @@ concurrency:
 
 env:
   APM_CLI_VERSION: "0.12.1"
-  UV_VERSION: "0.11.11"
 
 jobs:
   verify:
@@ -30,7 +29,25 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
 
+      - name: Read uv pin from pyproject.toml
+        id: uvpin
+        run: |
+          set -euo pipefail
+          PIN="$(python3 -c '
+          import sys, tomllib
+          try:
+              v = tomllib.load(open("pyproject.toml","rb"))["tool"]["uv"]["required-version"]
+          except (KeyError, FileNotFoundError, tomllib.TOMLDecodeError) as e:
+              sys.exit(f"cannot read [tool.uv].required-version: {e}")
+          if not v.startswith("=="):
+              sys.exit(f"required-version must be an exact pin (==X.Y.Z), got: {v!r}")
+          print(v[2:])
+          ')"
+          echo "version=${PIN}" >> "$GITHUB_OUTPUT"
+
       - name: Install uv
+        env:
+          UV_VERSION: ${{ steps.uvpin.outputs.version }}
         run: |
           curl -LsSf "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/uv-x86_64-unknown-linux-gnu.tar.gz" -o /tmp/uv.tar.gz
           tar -xzf /tmp/uv.tar.gz -C /tmp

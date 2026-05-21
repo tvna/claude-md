@@ -55,7 +55,7 @@ The `.claude/settings.json` carve-out is conscious risk-acceptance, recorded und
 - **Bounded mitigations.**
   1. Only this one file is carved out — `.claude/hooks/`, `.claude/commands/`, and any other subdir remain prohibited. Hook logic that does not fit inline lives under `scripts/` (already permitted) and is invoked from `settings.json`.
   2. Content remains subject to the *Open Q1 resolution* rule above. `settings.json` content that exists solely for one agent tool's UX (slash-command catalogues, model selection, custom permissions tuning, etc.) is still out of scope — only **deterministic provisioning** (CI parity, dependency install) belongs here.
-  3. PR review enforces 1–2 until a CI lint is added (tracked as a future phase under #58).
+  3. PR review enforces 1–2 until a CI lint is added (tracked as a future phase under #58). The uv-pin drift gate in `.github/workflows/verify-agents.yml` (landed in [#112](https://github.com/tvna/claude-md/issues/112)) is a precedent — a narrow deterministic check that complements PR review without trying to police hook content as a whole.
 
 ## Rationale
 
