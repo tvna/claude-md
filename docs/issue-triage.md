@@ -2,7 +2,7 @@
 
 This document is the operator-facing runbook for the labels that triage every issue in this repository. Three axes plus one severity flag — all readable from the GraphQL `labels.nodes[]` header — let an API/MCP client classify an issue without fetching its body.
 
-The taxonomy is introduced incrementally per the phased rollout in [#84](https://github.com/tvna/claude-md/issues/84), which supersedes the `agent:*` design from [#34](https://github.com/tvna/claude-md/issues/34). The JSON SoT lives at `.github/labels.json`; the values in the Apply section below MUST match it byte-for-byte. Per [CLAUDE.md §3](../blob/main/CLAUDE.md), agents must be concentrated at one workflow point *after* deterministic gates pass — the labels are the gate. Per §5 it exists to avoid wasting tokens on bodies the agent should not read in full.
+The taxonomy is introduced incrementally per the phased rollout in [#84](https://github.com/tvna/claude-md/issues/84), which supersedes the `agent:*` design from [#34](https://github.com/tvna/claude-md/issues/34). The JSON SoT lives at `.github/labels.json`; the `Apply labels` workflow described below reconciles GitHub against it. Per [CLAUDE.md §3](../blob/main/CLAUDE.md), agents must be concentrated at one workflow point *after* deterministic gates pass — the labels are the gate. Per §5 it exists to avoid wasting tokens on bodies the agent should not read in full.
 
 ## SoT layout
 
@@ -77,50 +77,41 @@ Agents read `(type, state, severity)` from the header alone and apply this table
 
 Rows are evaluated top-to-bottom; the first match wins. This table is the routing decision — the labels do not encode the decision themselves.
 
-## Apply (first-time `POST`)
+## Apply
 
-Apply one label at a time. Each call returns the created label object. The `-f color=` / `-f description=` values are byte-for-byte mirrors of `.github/labels.json` — if either side changes, update both in the same PR.
+The `Apply labels` workflow (`.github/workflows/apply-labels.yml`) is the only supported apply path. It reconciles `.github/labels.json` against the live label set on GitHub via `workflow_dispatch`: POSTs missing labels, PATCHes labels whose color/description differs, and (when `prune=true`) DELETEs labels absent from SoT. Color/description changes propagate through the same dispatch — there is no separate update path.
 
-```sh
-gh api \
-  --method POST \
-  -H "Accept: application/vnd.github+json" \
-  -H "X-GitHub-Api-Version: 2022-11-28" \
-  /repos/tvna/claude-md/labels \
-  -f name='layer:p1-goal-plan' \
-  -f color='1d76db' \
-  -f description='CLAUDE.md §1 — Goal & plan structure (what the work is and how it will be verified).'
+### Required secret
 
-# Repeat the same shape for each of the other 14 names. The full byte-for-byte
-# payload list is `jq -c '.[]' .github/labels.json`:
-jq -c '.[]' .github/labels.json | while read -r row; do
-  name=$(jq -r '.name'        <<< "$row")
-  color=$(jq -r '.color'      <<< "$row")
-  desc=$(jq -r '.description' <<< "$row")
-  gh api \
-    --method POST \
-    -H "Accept: application/vnd.github+json" \
-    -H "X-GitHub-Api-Version: 2022-11-28" \
-    /repos/tvna/claude-md/labels \
-    -f name="$name" \
-    -f color="$color" \
-    -f description="$desc"
-done
-```
+`LABELS_PAT` — fine-grained PAT scoped to `tvna/claude-md` with `Repository permissions → Issues: Read and write` (the labels endpoints live under Issues in the new PAT scopes). Stored in the `labels-apply` GitHub Environment, not at the repo level.
 
-## Update (re-apply with `PATCH`)
-
-Use the update path when fixing drift or when adjusting colour / description. Labels are addressed by their current name; pass `-f new_name=` to rename.
+### Dispatch
 
 ```sh
-gh api \
-  --method PATCH \
-  -H "Accept: application/vnd.github+json" \
-  -H "X-GitHub-Api-Version: 2022-11-28" \
-  /repos/tvna/claude-md/labels/layer:p1-goal-plan \
-  -f color='1d76db' \
-  -f description='CLAUDE.md §1 — Goal & plan structure (what the work is and how it will be verified).'
+gh workflow run apply-labels.yml --ref main -f dry_run=true -f prune=false
+gh run watch
 ```
+
+Inputs:
+
+- `dry_run` (default `true`) — plan only; emit a markdown summary, no live mutation.
+- `prune` (default `false`) — when `true` (and `dry_run=false`), DELETE labels present on GitHub but absent from SoT. Destructive on existing issues: GitHub removes the label from every issue and PR it was applied to.
+
+Reconciliation matrix:
+
+| Live state | SoT state | `dry_run=true` | `dry_run=false, prune=false` | `dry_run=false, prune=true` |
+|---|---|---|---|---|
+| missing | present | plan-only (POST) | POST | POST |
+| present (equal) | present | no-op | no-op | no-op |
+| present (differs) | present | plan-only (PATCH) | PATCH | PATCH |
+| present | missing | plan-only (report) | report-only row | DELETE |
+
+Typical sequences:
+
+1. **Add or update labels.** Dispatch with `dry_run=true` → review the summary → re-dispatch with `dry_run=false, prune=false`.
+2. **Retire old labels** (e.g. #84 Phase 4 `agent:*` retirement). Dispatch with `dry_run=true, prune=true` → confirm only the intended names appear under `plan-only (DELETE)` → re-dispatch with `dry_run=false, prune=true`.
+
+If the workflow itself is broken, the recovery path is `git revert` of the workflow change, not a parallel manual recipe.
 
 ## Verify
 
@@ -161,7 +152,7 @@ gh api \
   /repos/tvna/claude-md/labels/<name>
 ```
 
-Deleting a label is **destructive on existing issues** — GitHub removes the label from every issue and PR it was applied to. Re-`POST`ing the same label restores its definition but does **not** restore per-issue assignments; those must be re-applied manually (Phase 3 of #84 is the operation log for that).
+Deleting a label is **destructive on existing issues** — GitHub removes the label from every issue and PR it was applied to. Re-dispatching the `Apply labels` workflow restores the label definition (if it is still listed in SoT) but does **not** restore per-issue assignments; those must be re-applied manually (Phase 3 of #84 is the operation log for that).
 
 ## Drift detection
 
