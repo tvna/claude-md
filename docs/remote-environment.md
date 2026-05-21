@@ -75,7 +75,7 @@ When CI's `UV_VERSION` is bumped:
 3. Open a new session against the PR branch and run the [Verification](#verification) recipe end-to-end.
 4. Record the bump in the retrospective issue for that PR (CLAUDE.md §3).
 
-A future improvement (tracked under #58 phase work) is a CI lint that fails if the three `UV_VERSION` references drift. Until that lands, the three-file edit is operator discipline.
+The three `UV_VERSION` references — two CI workflows and `scripts/install-uv.sh` — must currently be bumped together by hand. This drift surface is tracked as [#112](https://github.com/tvna/claude-md/issues/112), which folds in: a single source of truth in `pyproject.toml`'s `[tool.uv].required-version`, a CI lint that fails on any version literal outside that source, and a Renovate config for automated upstream bumps. Until #112 lands, the three-file edit is operator discipline.
 
 ## Risks
 
