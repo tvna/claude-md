@@ -8,7 +8,10 @@ __pycache__/
 .vscode/
 
 # Agent-tool-specific config (prohibited per docs/repo-scope.md, #58)
-.claude/
+# .claude/settings.json is the narrow file-level carve-out from #109
+# (deterministic SessionStart provisioning hooks only).
+.claude/*
+!.claude/settings.json
 .cursor/
 .cursorrules
 .aider*

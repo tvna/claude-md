@@ -44,6 +44,18 @@ The list is non-exhaustive. When a new tool emerges, follow the *Update procedur
 | `docs/` | Operator runbooks. Subject to the *Open Q1 resolution* rule above. |
 | `claude-md.code-workspace` ([#49](https://github.com/tvna/claude-md/issues/49)) | VS Code multi-root workspace pointer. Editor metadata, not agent config. |
 | `.claude/settings.local.json` | Documented developer-local file. The broader `.claude/` directory rule transitively keeps it out of commits — the historical entry remains documented here so future contributors understand it predated the broader rule. |
+| `.claude/settings.json` ([#109](https://github.com/tvna/claude-md/issues/109)) | **Narrow file-level carve-out** to host deterministic `SessionStart` provisioning hooks. The broader `.claude/` directory rule still applies to every other path under `.claude/` (e.g. `.claude/hooks/`, `.claude/commands/`). See *Security tradeoff* below. |
+
+### Security tradeoff for `.claude/settings.json`
+
+The `.claude/settings.json` carve-out is conscious risk-acceptance, recorded under CLAUDE.md §4 ("Simplicity, **bounded by safety**"):
+
+- **Risk accepted.** A committed hook can run arbitrary shell at session start; `permissions` / `model` / `apiKeyHelper` keys carry their own security surface. A misconfigured or malicious change here would execute before the operator types a single command.
+- **Why we accept it.** The alternative — provisioning via the Claude Code on the Web UI's setup script — moves the same shell *outside* code review entirely. The Web UI is not under git history, not diffable against CI, and not reproducible when an environment is recreated. Treating an in-repo `settings.json` as the trigger pulls the hook surface back under PR review.
+- **Bounded mitigations.**
+  1. Only this one file is carved out — `.claude/hooks/`, `.claude/commands/`, and any other subdir remain prohibited. Hook logic that does not fit inline lives under `scripts/` (already permitted) and is invoked from `settings.json`.
+  2. Content remains subject to the *Open Q1 resolution* rule above. `settings.json` content that exists solely for one agent tool's UX (slash-command catalogues, model selection, custom permissions tuning, etc.) is still out of scope — only **deterministic provisioning** (CI parity, dependency install) belongs here.
+  3. PR review enforces 1–2 until a CI lint is added (tracked as a future phase under #58).
 
 ## Rationale
 
