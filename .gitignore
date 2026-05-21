@@ -16,7 +16,10 @@ apm_modules/
 # .claude/settings.local.json is the documented developer-local carve-out —
 # it remains a contributor's local-only file, and the broader directory rule
 # below transitively keeps it out of commits.
-.claude/
+# .claude/settings.json is the narrow file-level carve-out from #109,
+# permitted only to host deterministic SessionStart provisioning hooks.
+.claude/*
+!.claude/settings.json
 
 # Agent-tool-specific config (prohibited per docs/repo-scope.md, #58)
 .cursor/
