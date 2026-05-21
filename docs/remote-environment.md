@@ -1,6 +1,6 @@
 # Remote Execution Environment — uv Provisioning Runbook
 
-This document is the operator-facing runbook for keeping the remote execution environment's `uv` aligned with what CI uses. It is the companion to [#106](https://github.com/tvna/claude-md/issues/106).
+This document is the operator-facing runbook for keeping the remote execution environment's `uv` aligned with what CI uses. Original problem and decision record: [#106](https://github.com/tvna/claude-md/issues/106). The `.claude/settings.json` governance carve-out that enables the in-repo hook below: [#109](https://github.com/tvna/claude-md/issues/109).
 
 The Claude Code on the Web remote environment ships with a stale `uv` (`0.8.17`) that does not satisfy `pyproject.toml`'s `required-version = ">=0.11.8"`. Sessions need a working `uv` from the first command, without manual reinstall.
 
@@ -10,54 +10,41 @@ The Claude Code on the Web remote environment ships with a stale `uv` (`0.8.17`)
 |---|---|---|
 | `.github/workflows/generate-agents.yml` env `UV_VERSION` (line 21) | CI | **Single source of truth for the pinned uv version.** |
 | `.github/workflows/verify-apm-drift.yml` env `UV_VERSION` (line 23) | CI | Must equal the value above; kept in lockstep. |
-| Claude Code on the Web → Environment → setup script | Remote session | Provisions `uv` at container creation time. Mirrors the CI `UV_VERSION`. |
-| `docs/remote-environment.md` *(this file)* | — | Runbook: script body, sync rule, verification, update procedure. |
+| `scripts/install-uv.sh` | Remote session | Pins `uv` to `UV_VERSION` at SessionStart. Mirrors the CI install pattern. |
+| `.claude/settings.json` | Remote session | Registers `scripts/install-uv.sh` as the `SessionStart` hook. Permitted under the [#109](https://github.com/tvna/claude-md/issues/109) carve-out in `docs/repo-scope.md`. |
+| `docs/remote-environment.md` *(this file)* | — | Runbook: how the hook works, how to keep `UV_VERSION` in sync with CI, verification, update procedure. |
 
-## Why no `.claude/settings.json` hook
+## How it works
 
-`docs/repo-scope.md` (per [#58](https://github.com/tvna/claude-md/issues/58)) forbids committing anything under `.claude/`. A `SessionStart` hook would have to live there, so the trigger must live outside the repo. The Web UI's environment setup script is the only place that runs before the user's first command without violating the repo-scope rule.
+1. Every new Claude Code on the Web session triggers the `SessionStart` hook registered in `.claude/settings.json`.
+2. The hook invokes `scripts/install-uv.sh`, which is a no-op when `CLAUDE_CODE_REMOTE` is not set (so local dev sessions are unaffected).
+3. In the remote environment, the script compares the installed `uv` against the pinned `UV_VERSION`. If it differs (default container ships `0.8.17`), it downloads and installs the pinned version to `$HOME/.local/bin/uv`, overwriting the stock binary at the same path.
+4. It exports `$HOME/.local/bin` on `$PATH` for the rest of the session (via `$CLAUDE_ENV_FILE` when present).
+5. Finally, `uv sync --locked` warms the project venv against the locked dependencies.
+
+The script is idempotent: when a container is reused and `uv` is already at the pinned version, the install is skipped and only `uv sync --locked` runs.
+
+## Why not the Web UI setup script
+
+An earlier draft of this runbook ([#107](https://github.com/tvna/claude-md/pull/107)) proposed registering the same shell in the Claude Code on the Web Environment setup-script field instead of an in-repo hook. That approach was rejected once [#109](https://github.com/tvna/claude-md/issues/109) carved out `.claude/settings.json`:
+
+- The Web UI configuration is not under git history — it cannot be code-reviewed, diffed, or reproduced when the environment is recreated.
+- Drift between the Web UI value and the CI `UV_VERSION` is invisible to the repo.
+- The same shell-execution risk that motivated the broad `.claude/` ban applies *more* to the Web UI script, because it sits entirely outside change control.
+
+The carve-out for `.claude/settings.json` pulls the hook surface back under PR review. See `docs/repo-scope.md` § "Security tradeoff for `.claude/settings.json`" for the recorded risk-acceptance.
 
 ## Why not nix
 
-Considered and rejected for this case:
+- Nix is not pre-installed in the remote environment; installing it adds 60–90 s to every container creation just to deliver one binary.
+- `nixpkgs.uv` trails upstream uv releases by up to several days, working against the "always current" goal.
+- A `flake.nix` for a single binary conflicts with CLAUDE.md §4 ("minimum code that solves the problem").
 
-- `nix` is not pre-installed in the remote environment. Installing it adds 60–90 s to every container creation just to deliver one binary.
-- `nixpkgs.uv` trails upstream uv releases by up to several days. Using nix for "always current" uv works against the goal.
-- A `flake.nix` for a single binary contradicts CLAUDE.md §4 ("minimum code that solves the problem").
-
-The decision record is in [#106](https://github.com/tvna/claude-md/issues/106).
-
-## Setup script body
-
-Paste this into **Claude Code on the Web → Environment → setup script**. Keep the `UV_VERSION` value in lockstep with `.github/workflows/generate-agents.yml`'s `UV_VERSION`.
-
-```sh
-set -euo pipefail
-UV_VERSION="0.11.11"
-
-current="$(uv --version 2>/dev/null | awk '{print $2}' || true)"
-if [ "${current}" != "${UV_VERSION}" ]; then
-  curl -LsSf "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/uv-x86_64-unknown-linux-gnu.tar.gz" -o /tmp/uv.tar.gz
-  tar -xzf /tmp/uv.tar.gz -C /tmp
-  mkdir -p "$HOME/.local/bin"
-  install -m 0755 /tmp/uv-x86_64-unknown-linux-gnu/uv "$HOME/.local/bin/uv"
-fi
-
-case ":$PATH:" in *":$HOME/.local/bin:"*) ;; *) export PATH="$HOME/.local/bin:$PATH" ;; esac
-
-uv --version
-uv sync --locked
-```
-
-Design notes:
-
-- **Idempotent.** If the installed version already matches `UV_VERSION`, the download and install are skipped — fast on container reuse.
-- **Overwrites the stock uv at the same path.** The default remote uv lives at `~/.local/bin/uv`; `install -m 0755` replaces it in-place.
-- **No `|| true` on `uv sync --locked`.** A failure must surface at session start, not be hidden — see CLAUDE.md §4 ("when a check is warranted, fail loudly").
+Decision recorded in [#106](https://github.com/tvna/claude-md/issues/106).
 
 ## Verification
 
-Run these in a fresh session to confirm the setup script took effect:
+In a fresh remote session:
 
 ```sh
 uv --version                                           # must print: uv 0.11.11
@@ -69,30 +56,38 @@ git diff --exit-code -- CLAUDE.md AGENTS.md            # must exit 0 (no drift v
 
 The final two commands match the CI `verify-apm-drift.yml` gate. If they pass locally, the remote session is functionally equivalent to CI.
 
+Direct script test (any environment, no session needed):
+
+```sh
+CLAUDE_CODE_REMOTE=true scripts/install-uv.sh         # full install + uv sync
+env -u CLAUDE_CODE_REMOTE scripts/install-uv.sh        # no-op, exits 0 silently
+```
+
 ## Update procedure
 
 When CI's `UV_VERSION` is bumped:
 
 1. Note the new version (e.g. `0.11.12`).
-2. Edit **both** CI workflows in the same PR:
+2. In the **same PR**, edit:
    - `.github/workflows/generate-agents.yml` — `env.UV_VERSION`
    - `.github/workflows/verify-apm-drift.yml` — `env.UV_VERSION`
-3. Update the **setup script in the Web UI** to the same version. (This step is outside git — done manually in the Claude Code on the Web Environment settings.)
-4. Open a new session and run the [Verification](#verification) recipe end-to-end.
-5. Record the bump in the retrospective issue for that PR (CLAUDE.md §3).
+   - `scripts/install-uv.sh` — the `UV_VERSION="..."` line
+3. Open a new session against the PR branch and run the [Verification](#verification) recipe end-to-end.
+4. Record the bump in the retrospective issue for that PR (CLAUDE.md §3).
 
-The setup script does not need to be re-pasted on every CI bump — only the `UV_VERSION="..."` line changes.
+The three `UV_VERSION` references — two CI workflows and `scripts/install-uv.sh` — must currently be bumped together by hand. This drift surface is tracked as [#112](https://github.com/tvna/claude-md/issues/112), which folds in: a single source of truth in `pyproject.toml`'s `[tool.uv].required-version`, a CI lint that fails on any version literal outside that source, and a Renovate config for automated upstream bumps. Until #112 lands, the three-file edit is operator discipline.
 
 ## Risks
 
-- **Drift between Web UI and CI.** The Web UI configuration is outside git; there is no automated gate that catches a missed update. Mitigation: the retrospective-issue checklist (step 5 above) plus the verification recipe.
-- **Outbound network policy.** The setup script fetches from `github.com/astral-sh/uv/releases`. If the environment's network policy denies that, the script fails at container creation. Confirm policy before first use; see https://code.claude.com/docs/en/claude-code-on-the-web for policy options.
+- **Outbound network policy.** The hook fetches from `github.com/astral-sh/uv/releases`. If the environment's network policy denies that, the hook fails at session start. Confirm policy before first use; see https://code.claude.com/docs/en/claude-code-on-the-web for policy options.
+- **Hook execution mode is synchronous.** The session does not become interactive until `uv sync --locked` completes (typically <10 s on a warm container, longer on a fresh one). This is intentional — it guarantees the first command sees the pinned `uv` and the locked venv. If startup latency becomes a problem, the script can switch to the async pattern (`{"async": true, "asyncTimeout": 300000}`) at the cost of a race window where early commands may see stale `uv`.
 
 ## References
 
-- [#106](https://github.com/tvna/claude-md/issues/106) — parent issue for this runbook.
-- [#58](https://github.com/tvna/claude-md/issues/58) — repo-scope policy; rationale for not using `.claude/` hooks.
-- `docs/repo-scope.md` — operator runbook governance (this file falls under the "operator runbooks" carve-out).
+- [#106](https://github.com/tvna/claude-md/issues/106) — original problem (stale default uv) and decision record.
+- [#109](https://github.com/tvna/claude-md/issues/109) — `.claude/settings.json` carve-out that enables the in-repo hook.
+- [#58](https://github.com/tvna/claude-md/issues/58) — parent governance issue for the `.claude/` prohibition.
+- `docs/repo-scope.md` § "Security tradeoff for `.claude/settings.json`" — risk-acceptance record.
 - `.github/workflows/generate-agents.yml`, `.github/workflows/verify-apm-drift.yml` — canonical `UV_VERSION` source.
 - `pyproject.toml` — declares `required-version = ">=0.11.8"`.
 - https://code.claude.com/docs/en/claude-code-on-the-web — environment / network policy documentation.
