@@ -40,8 +40,31 @@ jobs:
       contents: write
       pull-requests: write
 
+  lint-uv-pin:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+
+      - name: Install pytest
+        run: python3 -m pip install --user 'pytest>=8,<9'
+
+      - name: Run script unit tests
+        run: python3 -m pytest -v
+
+      - name: Run scan_non_ascii.py unit tests
+        run: python3 -m pytest tests/test_scan_non_ascii.py -v
+
+      - name: Assert uv pin lives only in pyproject.toml
+        run: python3 scripts/uv_pin.py drift
+
+      - name: Warn if uv pin trails upstream
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/uv_pin.py stale
+
   gate:
-    needs: [detect, verify, lint-scripts]
+    needs: [detect, verify, lint-uv-pin]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -49,26 +72,19 @@ jobs:
         env:
           RELEVANT: ${{ needs.detect.outputs.relevant }}
           VERIFY_RESULT: ${{ needs.verify.result }}
+          LINT_RESULT: ${{ needs.lint-uv-pin.result }}
         run: |
+          if [ "$LINT_RESULT" != 'success' ]; then
+            echo "::error::uv pin drift gate result=${LINT_RESULT} (expected 'success')."
+            exit 1
+          fi
           if [ "$RELEVANT" != 'true' ]; then
-            echo "No APM-relevant changes; verification skipped (success)."
+            echo "No APM-relevant changes; APM verification skipped (success). uv pin drift gate passed."
             exit 0
           fi
           if [ "$VERIFY_RESULT" = 'success' ]; then
-            echo "APM drift verification passed."
+            echo "APM drift verification passed. uv pin drift gate passed."
             exit 0
           fi
           echo "::error::APM drift verification result=${VERIFY_RESULT} (expected 'success')."
           exit 1
-
-  lint-scripts:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
-      - name: Install uv
-        uses: astral-sh/setup-uv@c7f87aa956e4c323abf06d5dec078e358f6b4d04 # v6.0.0
-        with:
-          enable-cache: true
-      - name: Run script tests
-        run: uv run --group dev pytest tests/test_labels_apply.py tests/test_github_api.py -v

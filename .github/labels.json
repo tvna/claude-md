@@ -31,7 +31,7 @@
   },
   {
     "name": "layer:meta",
-    "description": "Repo infrastructure for labels, rulesets, and workflows; not a CLAUDE.md principle.",
+    "description": "Repo infrastructure (labels, rulesets, workflows) for the meta-document. NOT a CLAUDE.md principle.",
     "color": "c5def5"
   },
   {
@@ -73,5 +73,10 @@
     "name": "severity:security",
     "description": "Security-sensitive; overrides agent routing toward investigate.",
     "color": "ee0701"
+  },
+  {
+    "name": "severity:non-ascii-content",
+    "description": "Non-ASCII in title/body/comment; advisory for trusted authors, blocks external contributors.",
+    "color": "ff7619"
   }
 ]
