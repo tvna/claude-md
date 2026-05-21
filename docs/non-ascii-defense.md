@@ -6,7 +6,9 @@ This document is the operator-facing companion to [#102](https://github.com/tvna
 
 | File | Target | Purpose |
 |---|---|---|
-| `.github/workflows/scan-non-ascii.yml` | GitHub Actions | Write-side detection; labels and (for external authors) blocks new non-ASCII submissions |
+| `.github/workflows/scan-non-ascii.yml` | GitHub Actions | Write-side trigger; marshals env vars and shells out to the Python entry point below |
+| `scripts/scan_non_ascii.py` | repo working tree | All Layer 2 logic (extract / classify / label / advisory / block). Per the refactor strategy in [#123](https://github.com/tvna/claude-md/issues/123) — mirrors `scripts/uv_pin.py` |
+| `tests/test_scan_non_ascii.py` | repo working tree | pytest coverage for the above; runs in `verify-agents.yml` on every PR |
 | `.github/labels.json` entry `severity:non-ascii-content` | repo labels | Applied by the workflow above; surfaces hits in triage filters |
 | `scripts/translations.json` *(P3, future PR)* | repo working tree | JA->EN mapping for past sanitization; the operator-reviewable audit trail |
 | `scripts/sanitize-history.sh` *(P5, future PR)* | local invocation | Applies the mapping above to live issues/PRs via `gh api`; mirrors `apply-labels.yml` |
@@ -71,7 +73,9 @@ The file is committed (same exposure reasoning as the backup) and lands in a rev
 - `PATCH /repos/tvna/claude-md/issues/comments/{comment_id}` — issue comments
 - `PATCH /repos/tvna/claude-md/pulls/{number}` — PR title/body (PRs use a separate body endpoint)
 
-## Layer 2 — Write-side detection (`scan-non-ascii.yml`)
+## Layer 2 — Write-side detection (`scan-non-ascii.yml` + `scripts/scan_non_ascii.py`)
+
+**Implementation split.** The YAML workflow only marshals env vars and invokes `python3 scripts/scan_non_ascii.py run`. All logic — event extraction, classification, escaping, label/comment/block side effects — lives in `scripts/scan_non_ascii.py` and is covered by `tests/test_scan_non_ascii.py`. Pattern per [#123](https://github.com/tvna/claude-md/issues/123) (mirrors [#112](https://github.com/tvna/claude-md/issues/112) / [#122](https://github.com/tvna/claude-md/pull/122)).
 
 **Trigger surface:**
 
@@ -83,11 +87,11 @@ on:
   pull_request_review_comment: { types: [created, edited] }
 ```
 
-`pull_request_target` (not `pull_request`) is used so the workflow has write permissions against external-fork PRs. The workflow never checks out the PR head — it only calls `gh api` + `jq` against the event payload — so the well-known `pull_request_target` risk does not apply.
+`pull_request_target` (not `pull_request`) is used so the workflow has write permissions against external-fork PRs. The workflow checks out the SoT branch (not the PR head) so it can run `scripts/scan_non_ascii.py`; the Python module only consumes the event payload via `gh api`, so the well-known `pull_request_target` risk does not apply.
 
 **Permissions:** `issues: write`, `pull-requests: write`, `contents: read`. Uses the auto-issued `GITHUB_TOKEN` — no new PAT to rotate.
 
-**Detection:** `LC_ALL=C grep -P '[^\x00-\x7F]'` over the concatenated title + body (or comment body alone for comment events).
+**Detection:** `scripts/scan_non_ascii.py::detect_non_ascii` — a `re.search(r'[^\x00-\x7F]', text)` over the concatenated title + body (or comment body alone for comment events). `escape_for_comment` uses `json.dumps(..., ensure_ascii=True)` to produce the `\uXXXX` form (UTF-16 surrogate pairs for non-BMP codepoints), matching what `jq -Rsa` would emit.
 
 **Behavior table:**
 
@@ -216,7 +220,10 @@ gh issue list --state all --json title,body \
 ## References
 
 - [#102](https://github.com/tvna/claude-md/issues/102) — umbrella tracking issue
+- [#123](https://github.com/tvna/claude-md/issues/123) — refactor strategy that splits inline YAML shell into `scripts/*.py` + `tests/test_*.py`. Layer 2 follows it from day one.
+- [`scripts/scan_non_ascii.py`](../scripts/scan_non_ascii.py) and [`tests/test_scan_non_ascii.py`](../tests/test_scan_non_ascii.py) — Layer 2 implementation + pytest coverage
+- [`scripts/uv_pin.py`](../scripts/uv_pin.py) — the precedent the module follows (#112 / #122)
 - [`docs/rulesets.md` lines 48-51](./rulesets.md) — original prompt-injection note (links here as "See also")
 - [`docs/repo-scope.md`](./repo-scope.md) — `.claude/` prohibition justifying the out-of-tree hook
-- [`.github/workflows/apply-labels.yml`](../.github/workflows/apply-labels.yml) — template the `scan-non-ascii.yml` workflow inherits (`apply_call` retry helper, `GITHUB_STEP_SUMMARY` pattern)
+- [`.github/workflows/apply-labels.yml`](../.github/workflows/apply-labels.yml) — sibling reconciler workflow (one of #123's remaining sub-issues)
 - CLAUDE.md §3 (delivery harness), §4 (simplicity bounded by safety), §5 (split implementation/verification across agents)
