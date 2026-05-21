@@ -170,6 +170,34 @@ class TestIssueExists:
         monkeypatch.setattr(subprocess, "run", _raise)
         assert issue_link.issue_exists("owner/repo", 42) is False
 
+
+class TestVerifyRefExists:
+    def test_runner_success_returns_true(self) -> None:
+        captured: dict = {}
+
+        def _run(cmd, **kwargs):
+            captured["cmd"] = cmd
+            captured["kwargs"] = kwargs
+
+        assert (
+            issue_link.verify_ref_exists("owner/repo", 42, runner=_run)
+            is True
+        )
+        assert captured["cmd"] == [
+            "gh", "api", "/repos/owner/repo/issues/42", "--silent",
+        ]
+        assert captured["kwargs"].get("check") is True
+        assert captured["kwargs"].get("timeout") == 30
+
+    def test_runner_failure_returns_false(self) -> None:
+        def _run(*_a, **_k):
+            raise subprocess.CalledProcessError(1, "gh")
+
+        assert (
+            issue_link.verify_ref_exists("owner/repo", 42, runner=_run)
+            is False
+        )
+
     def test_gh_nonzero_exit_returns_false(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -250,6 +278,30 @@ class TestCLI:
         exit_code = issue_link.main(["verify", "--repo", "owner/repo"])
         assert exit_code == 1
         assert "no issue reference" in capsys.readouterr().out
+
+    def test_body_file_is_used(
+        self,
+        tmp_path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture,
+    ) -> None:
+        monkeypatch.setenv("PR_BODY", "Refs #999\n")
+        body_file = tmp_path / "pr-body.md"
+        body_file.write_text("Refs #42\n", encoding="utf-8")
+        monkeypatch.setattr(issue_link, "issue_exists", lambda *_a: True)
+
+        exit_code = issue_link.main([
+            "verify",
+            "--repo",
+            "owner/repo",
+            "--body-file",
+            str(body_file),
+        ])
+
+        assert exit_code == 0
+        out = capsys.readouterr().out
+        assert "#42" in out
+        assert "#999" not in out
 
     def test_one_missing_ref_among_resolvable(
         self,
