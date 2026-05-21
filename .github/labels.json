@@ -73,5 +73,10 @@
     "name": "severity:security",
     "description": "Security-sensitive; overrides agent routing toward investigate.",
     "color": "ee0701"
+  },
+  {
+    "name": "severity:non-ascii-content",
+    "description": "Non-ASCII detected in title/body/comment by .github/workflows/scan-non-ascii.yml. Advisory for trusted authors; blocks external contributors. See docs/non-ascii-defense.md.",
+    "color": "ff7619"
   }
 ]
