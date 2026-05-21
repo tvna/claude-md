@@ -7,7 +7,7 @@ on:
 permissions:
   pull-requests: read
   issues: read
-  contents: none
+  contents: read
 
 jobs:
   gate:
@@ -17,35 +17,7 @@ jobs:
       REPO: ${{ github.repository }}
       PR_BODY: ${{ github.event.pull_request.body }}
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
       - name: Extract and validate issue references
-        run: |
-          set -euo pipefail
-
-          body=$(printf '%s' "$PR_BODY" | tr -d '\r')
-          body=$(printf '%s' "$body" | perl -0777 -pe 's/<!--.*?-->//gs')
-
-          mapfile -t refs < <(
-            printf '%s\n' "$body" \
-              | grep -Eio '^[[:space:]]*(Refs|Closes|Fixes|Resolves)[[:space:]]+#[0-9]+' \
-              | grep -Eo '#[0-9]+' \
-              | tr -d '#' \
-              | sort -u \
-              || true
-          )
-
-          if [ "${#refs[@]}" -eq 0 ]; then
-            echo "::error::PR body has no issue reference. Add a line like 'Refs #<num>' or 'Closes #<num>' (case-insensitive keywords: Refs, Closes, Fixes, Resolves). See CLAUDE.md §3."
-            exit 1
-          fi
-
-          fail=0
-          for n in "${refs[@]}"; do
-            if gh api "/repos/${REPO}/issues/${n}" --silent >/dev/null 2>&1; then
-              echo "OK: #${n} resolves in ${REPO}."
-            else
-              echo "::error::Referenced #${n} does not exist in ${REPO}."
-              fail=1
-            fi
-          done
-
-          exit "$fail"
+        run: python3 scripts/issue_link.py verify --repo "$REPO"
