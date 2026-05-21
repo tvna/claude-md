@@ -9,10 +9,12 @@ The Claude Code on the Web remote environment ships with a stale `uv` (`0.8.17`)
 | Location | Target | Purpose |
 |---|---|---|
 | `pyproject.toml` `[tool.uv].required-version` | All | **Single source of truth for the pinned uv version.** Exact `==X.Y.Z` pin (see [#112](https://github.com/tvna/claude-md/issues/112) for the tradeoff). |
-| `.github/workflows/generate-agents.yml`, `.github/workflows/verify-apm-drift.yml` | CI | Read the pin from `pyproject.toml` via inline `tomllib`; install via the existing `curl` flow. No version literal lives here. |
-| `scripts/install-uv.sh` | Remote session | Reads `[tool.uv].required-version` from `pyproject.toml` (stripping `==`), then pins `uv` to that value at SessionStart. |
+| `scripts/uv_pin.py` | All | Pin reader / drift checker / upstream-staleness checker. Single implementation consumed by CI, the SessionStart hook, and `tests/test_uv_pin.py`. |
+| `tests/test_uv_pin.py` | CI | Pytest suite for `scripts/uv_pin.py` (run by the `lint-uv-pin` job before the drift check). |
+| `.github/workflows/generate-agents.yml`, `.github/workflows/verify-apm-drift.yml` | CI | Call `scripts/uv_pin.py read` to derive the version, then install via the existing `curl` flow. No version literal lives here. |
+| `scripts/install-uv.sh` | Remote session | Calls `scripts/uv_pin.py read` to derive the pin, then installs `uv` at SessionStart. |
 | `.claude/settings.json` | Remote session | Registers `scripts/install-uv.sh` as the `SessionStart` hook. Permitted under the [#109](https://github.com/tvna/claude-md/issues/109) carve-out in `docs/repo-scope.md`. |
-| `.github/workflows/verify-agents.yml` (`lint-uv-pin` job) | CI | Drift gate — fails any PR that re-introduces a uv version literal outside `pyproject.toml`. See [#112](https://github.com/tvna/claude-md/issues/112). |
+| `.github/workflows/verify-agents.yml` (`lint-uv-pin` job) | CI | Drift gate — runs `pytest tests/test_uv_pin.py` then `scripts/uv_pin.py drift`. Fails any PR that re-introduces a uv version literal outside `pyproject.toml`. See [#112](https://github.com/tvna/claude-md/issues/112). |
 | `.github/dependabot.yml` | CI | Bumps GitHub Actions SHAs and `uv.lock` entries weekly. The uv binary pin itself is bumped manually (see *Update procedure* below). |
 | `docs/remote-environment.md` *(this file)* | — | Runbook: how the hook works, how the SoT propagates, verification, update procedure. |
 
