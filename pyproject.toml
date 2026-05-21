@@ -8,3 +8,8 @@ dependencies = []
 package = false
 exclude-newer = "14 days"
 required-version = ">=0.11.8"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+]
