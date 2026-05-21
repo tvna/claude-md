@@ -49,22 +49,39 @@ A branch qualifies as a deletion candidate iff **all** of the following hold:
 
 ## Summary issue convention
 
-The workflow creates and maintains **one rolling issue**:
+The workflow maintains **at most one open rolling issue**, but creates and writes to it **only when there are candidates**. The steady state with zero stale branches is silent — no issue, no comments.
 
 - **Title:** `[branch-cleanup] weekly summary log` (exact match).
 - **Labels:** `layer:meta`, `type:docs`.
 - **Owner:** `github-actions[bot]` (created via `GITHUB_TOKEN`).
-- **Lookup:** by exact title + `state: open`. If found, the workflow appends a new comment; if not, it opens a new issue.
+- **Lookup:** by exact title + `state: open`.
 
-Each comment contains:
+### Per-run behaviour
+
+| Candidates | Open rolling issue exists | Action |
+|---|---|---|
+| 0 | no | Silent. `$GITHUB_STEP_SUMMARY` records proof-of-life only. |
+| 0 | yes, idle < 28 days | Silent. `$GITHUB_STEP_SUMMARY` records proof-of-life only. |
+| 0 | yes, idle ≥ 28 days | **Auto-close** with a final comment naming the run and the idle window. |
+| > 0 | no | **Create** a new rolling issue with the candidate table as body. |
+| > 0 | yes | **Append a comment** with the candidate table to the existing issue. |
+
+"Idle" = seconds since the more recent of `issue.created_at` or the latest comment `created_at`. The 28-day threshold ≈ 4 consecutive empty weekly runs.
+
+Each created issue / appended comment contains:
 
 - Run metadata (trigger, run URL, dry_run state, min_age_days).
-- A Markdown table of candidate branches (or a single `_(none)_` row if zero).
+- A Markdown table of candidate branches.
 - A footer with the candidate count and the dry-run disclaimer.
 
 ### Resetting the log
 
-If the rolling issue grows too long, **close it**. The next scheduled run will not find an open issue with the matching title and will open a fresh one.
+- **Automatic:** after 4 consecutive empty weeks the workflow closes the issue itself; the next non-empty survey opens a fresh one.
+- **Manual:** close the rolling issue whenever. The next non-empty run opens a new one with a fresh history; if the next run is empty, nothing happens.
+
+### Operator note: the rolling issue is **not** authoritative
+
+`$GITHUB_STEP_SUMMARY` on every workflow run is the durable per-run audit trail (preserved in the Actions log retention window). The rolling issue is a convenience surface for "things needing a human eye". Empty weeks intentionally produce no issue activity.
 
 ## Rollback
 
