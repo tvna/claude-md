@@ -49,8 +49,8 @@ jobs:
       - name: Install pytest
         run: python3 -m pip install --user 'pytest>=8,<9'
 
-      - name: Run uv_pin.py unit tests
-        run: python3 -m pytest tests/test_uv_pin.py -v
+      - name: Run script unit tests
+        run: python3 -m pytest -v
 
       - name: Assert uv pin lives only in pyproject.toml
         run: python3 scripts/uv_pin.py drift
