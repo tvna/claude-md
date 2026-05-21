@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Pin `uv` to the CI UV_VERSION at session start.
+# Pin `uv` at session start to the version declared in pyproject.toml.
 #
 # Invoked by the SessionStart hook registered in `.claude/settings.json`.
-# Keep UV_VERSION below in lockstep with `.github/workflows/generate-agents.yml`
-# (and `.github/workflows/verify-apm-drift.yml`). See `docs/remote-environment.md`
-# for the update procedure and rationale.
+# Reads `[tool.uv].required-version` (an exact `==X.Y.Z` pin per #112) from
+# `$CLAUDE_PROJECT_DIR/pyproject.toml`. See `docs/remote-environment.md`
+# for the rationale and update procedure.
 
 set -euo pipefail
 
@@ -14,7 +14,20 @@ if [ "${CLAUDE_CODE_REMOTE:-}" != "true" ]; then
   exit 0
 fi
 
-UV_VERSION="0.11.11"
+# Read the pin from pyproject.toml ([tool.uv].required-version). The field is
+# an exact PEP440 pin (e.g. "==X.Y.Z"); strip the leading "==". tomllib is
+# stdlib on Python 3.11+; the remote env ships 3.11+.
+PYPROJECT="${CLAUDE_PROJECT_DIR:-$(cd "$(dirname "$0")/.." && pwd)}/pyproject.toml"
+UV_VERSION="$(python3 -c 'import sys, tomllib
+try:
+    with open(sys.argv[1], "rb") as f:
+        v = tomllib.load(f)["tool"]["uv"]["required-version"]
+except (KeyError, FileNotFoundError, tomllib.TOMLDecodeError) as e:
+    sys.exit(f"install-uv: cannot read [tool.uv].required-version from {sys.argv[1]}: {e}")
+if not v.startswith("=="):
+    sys.exit(f"install-uv: required-version must be an exact pin (==X.Y.Z), got: {v!r}")
+print(v[2:])
+' "$PYPROJECT")"
 INSTALL_DIR="$HOME/.local/bin"
 ARCHIVE_NAME="uv-x86_64-unknown-linux-gnu"
 
