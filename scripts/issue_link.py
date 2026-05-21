@@ -4,8 +4,8 @@
 The workflow ``.github/workflows/verify-issue-link.yml`` shells out to
 this module. The contract is:
 
-* Read the PR body from the ``PR_BODY`` env var (matches the workflow's
-  pre-existing convention).
+* Read the PR body from ``--body-file`` when supplied, otherwise from
+  the ``PR_BODY`` env var for compatibility.
 * Strip HTML comments before parsing, so ``<!-- Refs #1 -->`` is ignored.
 * Extract case-insensitive line-anchored references of the form
   ``(Refs|Closes|Fixes|Resolves) #N``.
@@ -21,7 +21,9 @@ Tested by ``tests/test_issue_link.py``. CLAUDE.md section 3
 from __future__ import annotations
 
 import argparse
+from collections.abc import Callable
 import os
+from pathlib import Path
 import re
 import subprocess
 import sys
@@ -65,7 +67,12 @@ def extract_refs(body: str) -> list[int]:
     return sorted(found)
 
 
-def issue_exists(repo: str, number: int) -> bool:
+def verify_ref_exists(
+    repo: str,
+    number: int,
+    *,
+    runner: Callable[..., object] | None = None,
+) -> bool:
     """Return True iff ``gh api /repos/<repo>/issues/<number>`` succeeds.
 
     Returns False on any subprocess failure (missing ``gh``, auth error,
@@ -73,8 +80,11 @@ def issue_exists(repo: str, number: int) -> bool:
     use ``subprocess.run`` directly; this function collapses "exists"
     into a single bool to match the workflow's behaviour.
     """
+    if runner is None:
+        runner = subprocess.run
+
     try:
-        subprocess.run(
+        runner(
             [
                 "gh", "api",
                 f"/repos/{repo}/issues/{number}",
@@ -87,6 +97,11 @@ def issue_exists(repo: str, number: int) -> bool:
     except (subprocess.SubprocessError, FileNotFoundError, OSError):
         return False
     return True
+
+
+def issue_exists(repo: str, number: int) -> bool:
+    """Backward-compatible wrapper for older callers/tests."""
+    return verify_ref_exists(repo, number)
 
 
 def _verify(repo: str, body: str) -> int:
@@ -108,7 +123,10 @@ def _verify(repo: str, body: str) -> int:
 
 
 def _cmd_verify(args: argparse.Namespace) -> int:
-    body = os.environ.get("PR_BODY", "")
+    if args.body_file is None:
+        body = os.environ.get("PR_BODY", "")
+    else:
+        body = Path(args.body_file).read_text(encoding="utf-8")
     return _verify(args.repo, body)
 
 
@@ -124,6 +142,13 @@ def main(argv: list[str] | None = None) -> int:
         "--repo",
         required=True,
         help="Repository slug, e.g. 'owner/name'.",
+    )
+    p_verify.add_argument(
+        "--body-file",
+        help=(
+            "Path to a file containing the PR body. Falls back to PR_BODY "
+            "when omitted."
+        ),
     )
     p_verify.set_defaults(func=_cmd_verify)
 
