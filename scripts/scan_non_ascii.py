@@ -26,15 +26,10 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from _trusted_bots import _TRUSTED_BOT_LOGINS
+
 # Trust classification per author_association.
 _TRUSTED_ASSOC = frozenset({"OWNER", "MEMBER", "COLLABORATOR"})
-
-# Bot logins that GitHub reports as `author_association: NONE` but whose
-# content we trust enough to demote `block` -> `advisory`. The scan still
-# runs and the advisory comment is still posted; only the destructive
-# action (request-changes / close) is suppressed. See issue #137 / #136.
-# Exact-match only; no wildcards. Extend deliberately, one entry at a time.
-_TRUSTED_BOT_LOGINS: frozenset[str] = frozenset({"dependabot[bot]"})
 
 # Markers held byte-for-byte identical to v1 of the prior YAML workflow so
 # that idempotency keys keep matching across the refactor.
