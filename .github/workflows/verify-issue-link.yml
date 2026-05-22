@@ -16,6 +16,7 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       REPO: ${{ github.repository }}
       PR_BODY: ${{ github.event.pull_request.body }}
+      PR_AUTHOR: ${{ github.event.pull_request.user.login }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
@@ -23,4 +24,4 @@ jobs:
         run: |
           body_file="$(mktemp)"
           printf '%s' "$PR_BODY" > "$body_file"
-          python3 scripts/issue_link.py verify --repo "$REPO" --body-file "$body_file"
+          python3 scripts/issue_link.py verify --repo "$REPO" --body-file "$body_file" --author "$PR_AUTHOR"

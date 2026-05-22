@@ -363,3 +363,144 @@ class TestCLI:
     ) -> None:
         with pytest.raises(SystemExit):
             issue_link.main(["bogus"])
+
+
+# ---------------------------------------------------------------------------
+# Trusted-bot allowlist (issue #139)
+# ---------------------------------------------------------------------------
+
+
+class TestTrustedBotAllowlist:
+    """The verify gate must exempt trusted bot authors from the Refs check.
+
+    Issue #139 carves an exception out of the gate so that Dependabot PRs,
+    which never carry a ``Refs #N`` reference, do not become unmergeable
+    under the required status check.
+    """
+
+    def test_dependabot_no_refs_exits_zero_with_skip_note(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture,
+    ) -> None:
+        monkeypatch.setenv("PR_BODY", "Bumps foo from 1.0 to 1.1.\n")
+        exit_code = issue_link.main([
+            "verify",
+            "--repo",
+            "owner/repo",
+            "--author",
+            "dependabot[bot]",
+        ])
+        assert exit_code == 0
+        out = capsys.readouterr().out
+        assert "skipped" in out
+        assert "dependabot[bot]" in out
+
+    def test_non_bot_no_refs_still_fails(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture,
+    ) -> None:
+        monkeypatch.setenv("PR_BODY", "Body with no refs at all.\n")
+        exit_code = issue_link.main([
+            "verify",
+            "--repo",
+            "owner/repo",
+            "--author",
+            "tvna",
+        ])
+        assert exit_code == 1
+        assert "no issue reference" in capsys.readouterr().out
+
+    def test_non_bot_with_refs_still_passes(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture,
+    ) -> None:
+        monkeypatch.setenv("PR_BODY", "Refs #136\n")
+        monkeypatch.setattr(issue_link, "issue_exists", lambda *_a: True)
+        exit_code = issue_link.main([
+            "verify",
+            "--repo",
+            "owner/repo",
+            "--author",
+            "tvna",
+        ])
+        assert exit_code == 0
+        out = capsys.readouterr().out
+        assert "OK: #136 resolves in owner/repo." in out
+
+    def test_unknown_bot_no_refs_still_fails(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture,
+    ) -> None:
+        """Allowlist is exact-match: an unrecognized bot login is not exempt."""
+        monkeypatch.setenv("PR_BODY", "Bumps foo.\n")
+        exit_code = issue_link.main([
+            "verify",
+            "--repo",
+            "owner/repo",
+            "--author",
+            "renovate[bot]",
+        ])
+        assert exit_code == 1
+        out = capsys.readouterr().out
+        assert "no issue reference" in out
+        assert "skipped" not in out
+
+    def test_author_from_env_var(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture,
+    ) -> None:
+        """``--author`` falls back to $PR_AUTHOR (mirrors PR_BODY contract)."""
+        monkeypatch.setenv("PR_BODY", "Bumps foo from 1.0 to 1.1.\n")
+        monkeypatch.setenv("PR_AUTHOR", "dependabot[bot]")
+        exit_code = issue_link.main(["verify", "--repo", "owner/repo"])
+        assert exit_code == 0
+        assert "skipped" in capsys.readouterr().out
+
+    def test_empty_author_falls_through(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture,
+    ) -> None:
+        """An empty author string must NOT be treated as the allowlist entry."""
+        monkeypatch.setenv("PR_BODY", "Body with no refs.\n")
+        exit_code = issue_link.main([
+            "verify",
+            "--repo",
+            "owner/repo",
+            "--author",
+            "",
+        ])
+        assert exit_code == 1
+        assert "no issue reference" in capsys.readouterr().out
+
+    def test_bot_author_does_not_resolve_unverifiable_refs(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture,
+    ) -> None:
+        """Trusted-bot skip short-circuits even when the body has dangling refs.
+
+        Dependabot bodies may contain mid-line ``#N`` mentions like
+        ``Bumps foo from 1.0 to 1.1`` plus changelog text with stray
+        keyword-like tokens. The skip must not call ``gh api`` at all.
+        """
+        monkeypatch.setenv("PR_BODY", "Refs #999999\n")
+
+        def _fail(*_a, **_k):
+            raise AssertionError("gh api must not be called for trusted bots")
+
+        monkeypatch.setattr(issue_link, "issue_exists", _fail)
+        exit_code = issue_link.main([
+            "verify",
+            "--repo",
+            "owner/repo",
+            "--author",
+            "dependabot[bot]",
+        ])
+        assert exit_code == 0
+        assert "skipped" in capsys.readouterr().out
