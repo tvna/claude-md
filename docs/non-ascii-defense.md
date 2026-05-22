@@ -9,6 +9,9 @@ This document is the operator-facing companion to [#102](https://github.com/tvna
 | `.github/workflows/scan-non-ascii.yml` | GitHub Actions | Write-side trigger; marshals env vars and shells out to the Python entry point below |
 | `scripts/scan_non_ascii.py` | repo working tree | All Layer 2 logic (extract / classify / label / advisory / block). Per the refactor strategy in [#123](https://github.com/tvna/claude-md/issues/123) — mirrors `scripts/uv_pin.py` |
 | `tests/test_scan_non_ascii.py` | repo working tree | pytest coverage for the above; runs in `verify-agents.yml` on every PR |
+| `.github/workflows/verify-title-policy.yml` | GitHub Actions | Title-boundary gate for ASCII-only issue and PR titles ([#155](https://github.com/tvna/claude-md/issues/155)) |
+| `scripts/title_policy.py` | repo working tree | Pure title policy validator used by the workflow above |
+| `tests/test_title_policy.py` | repo working tree | pytest coverage for Japanese, emoji, zero-width, RTL, and fullwidth title rejection |
 | `.github/labels.json` entry `severity:non-ascii-content` | repo labels | Applied by the workflow above; surfaces hits in triage filters |
 | `scripts/translations.json` *(P3, future PR)* | repo working tree | JA->EN mapping for past sanitization; the operator-reviewable audit trail |
 | `scripts/sanitize-history.sh` *(P5, future PR)* | local invocation | Applies the mapping above to live issues/PRs via `gh api`; mirrors `apply-labels.yml` |
@@ -74,6 +77,10 @@ The file is committed (same exposure reasoning as the backup) and lands in a rev
 - `PATCH /repos/tvna/claude-md/pulls/{number}` — PR title/body (PRs use a separate body endpoint)
 
 ## Layer 2 — Write-side detection (`scan-non-ascii.yml` + `scripts/scan_non_ascii.py`)
+
+### Title boundary (`verify-title-policy.yml` + `scripts/title_policy.py`)
+
+Titles are stricter than bodies and comments. They must be ASCII-only because issue and PR titles are header-level metadata read by notifications, project boards, triage lists, and agents before body context or opt-out markers can be inspected. The `Verify title policy / gate` workflow rejects any non-ASCII code point in issue and PR titles, including Japanese text, emoji, zero-width marks, RTL controls, fullwidth homoglyphs, and other multi-byte control surfaces. The PR-side check is required by `.github/rulesets/main.json`.
 
 **Implementation split.** The YAML workflow only marshals env vars and invokes `python3 scripts/scan_non_ascii.py run`. All logic — event extraction, classification, escaping, label/comment/block side effects — lives in `scripts/scan_non_ascii.py` and is covered by `tests/test_scan_non_ascii.py`. Pattern per [#123](https://github.com/tvna/claude-md/issues/123) (mirrors [#112](https://github.com/tvna/claude-md/issues/112) / [#122](https://github.com/tvna/claude-md/pull/122)).
 
@@ -201,6 +208,13 @@ gh issue list --state all --json title,body \
 2. Within ~60 s, the `Scan non-ASCII content` workflow run succeeds; `gh issue view <new>` shows label `severity:non-ascii-content` and exactly one advisory comment containing `日本語`.
 3. From a sock-puppet fork account, open a PR with non-ASCII in the body — the workflow opens a request-changes review.
 4. Close/delete test artifacts; record the workflow run URLs in [#102](https://github.com/tvna/claude-md/issues/102).
+
+**Title boundary (after merging #155):**
+
+1. Open a draft PR with Japanese, emoji, zero-width, RTL, or fullwidth characters in the title.
+2. Confirm `Verify title policy / gate` fails and reports the offending code point in the annotation.
+3. Edit the PR title to ASCII-only and confirm the check passes.
+4. Confirm branch protection blocks merge while the failing required check is present.
 
 **L3 — Read-side hook (after install on the operator's machine):**
 
