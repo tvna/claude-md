@@ -12,6 +12,9 @@ This document is the operator-facing companion to [#102](https://github.com/tvna
 | `.github/labels.json` entry `severity:non-ascii-content` | repo labels | Applied by the workflow above; surfaces hits in triage filters |
 | `scripts/translations.json` *(P3, future PR)* | repo working tree | JA->EN mapping for past sanitization; the operator-reviewable audit trail |
 | `scripts/sanitize-history.sh` *(P5, future PR)* | local invocation | Applies the mapping above to live issues/PRs via `gh api`; mirrors `apply-labels.yml` |
+| `scripts/preflight_non_ascii.py` | repo working tree | Layer 2.5 `PreToolUse` hook: denies non-ASCII GitHub MCP write-tool calls client-side before they reach Layer 2 |
+| `tests/test_preflight_non_ascii.py` | repo working tree | pytest coverage for Layer 2.5; runs in `verify-agents.yml` |
+| `.claude/settings.json` entry `PreToolUse` | Claude Code harness (in-tree) | Registers Layer 2.5; carve-out per `docs/repo-scope.md` lines 46-48 |
 | `~/.claude/settings.json` (developer-local) | Claude Code harness | Registers the `PostToolUse` hook below |
 | `~/.claude/hooks/sanitize-github-response.sh` (developer-local) | Claude Code harness | Escapes non-ASCII in `mcp__github__*` responses before Claude consumes them |
 | `docs/non-ascii-defense.md` *(this file)* | — | Runbook |
@@ -107,6 +110,35 @@ on:
 **Loop prevention:** the job skips when `github.actor == 'github-actions[bot]'` so the workflow's own advisory comment cannot retrigger itself.
 
 **Label provisioning:** `severity:non-ascii-content` lives in `.github/labels.json`; apply it via `Actions → Apply labels → Run workflow` (`dry_run=false`) before merging this layer.
+
+## Layer 2.5 — Client-side preflight (`scripts/preflight_non_ascii.py`)
+
+Layer 2 catches non-ASCII *after* it reaches GitHub: every Japanese issue still triggers a workflow run, a label, and an advisory comment — even for the OWNER. From a Claude Code session, that loop fires on every post. Layer 2.5 short-circuits it at the client.
+
+**Mechanism.** A `PreToolUse` hook registered in `.claude/settings.json` (the documented carve-out per [`docs/repo-scope.md`](./repo-scope.md) lines 46-48) intercepts the GitHub MCP write tools:
+
+```
+mcp__github__(issue_write|add_issue_comment|create_pull_request|update_pull_request|
+              add_reply_to_pull_request_comment|pull_request_review_write|
+              add_comment_to_pending_review)
+```
+
+The script reuses `scan_non_ascii.detect_non_ascii`, `has_ack_marker`, and `escape_for_comment` so the two layers cannot drift. When the `title` or `body` of the tool input contains non-ASCII and the body lacks `<!-- non-ascii-ack -->`, the hook emits:
+
+```json
+{"hookSpecificOutput": {"hookEventName": "PreToolUse",
+                        "permissionDecision": "deny",
+                        "permissionDecisionReason": "..."}}
+```
+
+The reason text gives Claude two explicit options, in order:
+
+1. Translate the offending field to English.
+2. Append `\n\n<!-- non-ascii-ack -->` to the body — the documented OWNER opt-out. This keeps non-ASCII intact and makes `classify_action` return `skip` on the server, so Layer 2 emits no label or advisory.
+
+**Honest scope.** This layer only sees calls *from this Claude Code session*. Issues posted via the web UI, `gh` CLI, or other clients still flow through Layer 2 unchanged — that workflow remains the authoritative enforcement point. The hook also fails open (`::error::` to stderr, no decision JSON) on malformed input so a hook bug cannot wedge the session; Layer 2 backstops anything that slips through.
+
+**Install.** Ships with the repo via `.claude/settings.json`; no developer-local install needed. Refs [#146](https://github.com/tvna/claude-md/issues/146) and umbrella [#102](https://github.com/tvna/claude-md/issues/102).
 
 ## Layer 3 — Read-side `PostToolUse` hook (out-of-tree)
 
