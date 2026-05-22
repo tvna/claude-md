@@ -26,6 +26,7 @@ apm_modules/
 .cursorrules
 .aider*
 .continue/
+.codex/
 .github/copilot-instructions.md
 .windsurfrules
 .codeium/
