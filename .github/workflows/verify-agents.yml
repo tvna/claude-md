@@ -55,6 +55,9 @@ jobs:
       - name: Run scan_non_ascii.py unit tests
         run: python3 -m pytest tests/test_scan_non_ascii.py -v
 
+      - name: Run ruleset_drift.py unit tests
+        run: python3 -m pytest tests/test_ruleset_drift.py -v
+
       - name: Assert uv pin lives only in pyproject.toml
         run: python3 scripts/uv_pin.py drift
 
