@@ -1,0 +1,23 @@
+name: Verify title policy
+
+on:
+  issues:
+    types: [opened, edited, reopened]
+  pull_request_target:
+    types: [opened, edited, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    env:
+      TITLE: ${{ github.event.issue.title || github.event.pull_request.title }}
+      KIND: ${{ github.event_name == 'issues' && 'issue' || 'pull_request' }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+
+      - name: Validate title boundary
+        run: python3 scripts/title_policy.py verify --kind "$KIND"
