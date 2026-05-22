@@ -9,7 +9,8 @@ The rulesets are introduced incrementally per the phased rollout in [#18](https:
 | File | Target | Purpose |
 |---|---|---|
 | `.github/rulesets/main.json` | `~DEFAULT_BRANCH` | Strict `main` protection (PR-only, squash-only, required status check, linear history) |
-| `.github/rulesets/all-branches.json` | `~ALL` except `~DEFAULT_BRANCH` | `non_fast_forward` only (deletion intentionally omitted; see [#18 comment 2](https://github.com/tvna/claude-md/issues/18#issuecomment-4482555311)) |
+| `.github/rulesets/all-branches.json` | `~ALL` except `~DEFAULT_BRANCH` and `refs/heads/dependabot/*` | `non_fast_forward` only (deletion intentionally omitted; see [#18 comment 2](https://github.com/tvna/claude-md/issues/18#issuecomment-4482555311)) |
+| `.github/rulesets/dependabot.json` | `refs/heads/dependabot/*` | `non_fast_forward` with `dependabot[bot]` (Integration id `49699333`) bypass so `@dependabot rebase` works on protected branches ([#140](https://github.com/tvna/claude-md/issues/140)) |
 | `docs/rulesets.md` *(this file)* | — | Runbook |
 
 ## Phase mapping
@@ -21,6 +22,7 @@ The apply step is split across phases so that the strictest rule (`commit_messag
 | **2-A** ([#27](https://github.com/tvna/claude-md/issues/27)) | `all-branches.json` | `ruleset=all-branches`, `dry_run=false`, `enable_auto_delete=true` |
 | **3-A** ([#41](https://github.com/tvna/claude-md/issues/41)) | `main.json` (incl. `require_code_owner_review: true`¹; without `commit_message_pattern`) | `ruleset=main`, `dry_run=false`, `enable_auto_delete=false` |
 | **3-B** ([#42](https://github.com/tvna/claude-md/issues/42)) | `main.json` (after adding `commit_message_pattern`) | `ruleset=main`, `dry_run=false`, `enable_auto_delete=false` (PUT path, ≥7 days after 3-A) |
+| **P4-dependabot** ([#140](https://github.com/tvna/claude-md/issues/140)) | `all-branches.json` (PUT: adds `refs/heads/dependabot/*` to `exclude`) + `dependabot.json` (POST) | `ruleset=all-branches`, then `ruleset=dependabot`, both `dry_run=false`, `enable_auto_delete=false` |
 
 ¹ Phase 3-A applies `main.json` as committed — including `require_code_owner_review: true` ([#56](https://github.com/tvna/claude-md/issues/56) P1-b). No separate dispatch is needed to activate code-owner enforcement; it ships in the same PUT as the rest of `main.json`.
 

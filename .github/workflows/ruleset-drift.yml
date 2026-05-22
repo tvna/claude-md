@@ -36,7 +36,7 @@ jobs:
       - name: Validate ruleset JSON syntax
         run: |
           set -euo pipefail
-          for f in .github/rulesets/main.json .github/rulesets/all-branches.json; do
+          for f in .github/rulesets/main.json .github/rulesets/all-branches.json .github/rulesets/dependabot.json; do
             if ! jq empty < "$f"; then
               echo "::error file=$f::Invalid JSON syntax."
               exit 1
@@ -63,7 +63,7 @@ jobs:
           RUN_DATE=$(date -u +%Y-%m-%d)
           echo "run_date=${RUN_DATE}" >> "$GITHUB_OUTPUT"
 
-          declare -a SOT_FILES=("main.json" "all-branches.json")
+          declare -a SOT_FILES=("main.json" "all-branches.json" "dependabot.json")
 
           # Track SoT names so we can compute unknown-on-live below.
           SOT_NAMES_JSON="[]"
