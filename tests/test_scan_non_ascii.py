@@ -33,6 +33,7 @@ class TestExtractEvent:
                 "title": "Hello",
                 "body": "Body",
                 "author_association": "OWNER",
+                "user": {"login": "alice"},
             }
         }
         out = san.extract_event(event, "issues")
@@ -42,7 +43,39 @@ class TestExtractEvent:
             "title": "Hello",
             "body": "Body",
             "association": "OWNER",
+            "login": "alice",
         }
+
+    def test_login_extracted_from_pull_request(self) -> None:
+        event = {
+            "pull_request": {
+                "number": 7,
+                "title": "T",
+                "body": "B",
+                "author_association": "NONE",
+                "user": {"login": "dependabot[bot]"},
+            }
+        }
+        out = san.extract_event(event, "pull_request_target")
+        assert out["login"] == "dependabot[bot]"
+
+    def test_login_extracted_from_comment(self) -> None:
+        event = {
+            "issue": {"number": 9, "pull_request": {"url": "..."}},
+            "comment": {
+                "body": "hi",
+                "author_association": "NONE",
+                "user": {"login": "dependabot[bot]"},
+            },
+        }
+        out = san.extract_event(event, "issue_comment")
+        assert out["login"] == "dependabot[bot]"
+
+    def test_missing_user_yields_none_login(self) -> None:
+        """A payload without `.issue.user` keeps `login=None` (no crash)."""
+        event = {"issue": {"number": 1, "title": "x", "body": "y"}}
+        out = san.extract_event(event, "issues")
+        assert out["login"] is None
 
     def test_pull_request_target(self) -> None:
         event = {
@@ -202,6 +235,29 @@ class TestClassifyAction:
     def test_unknown_assoc_blocks_fail_closed(self) -> None:
         assert san.classify_action(True, False, None) == "block"
         assert san.classify_action(True, False, "WHO_IS_THIS") == "block"
+
+    def test_trusted_bot_non_ascii_is_advisory_not_block(self) -> None:
+        """dependabot[bot] reports assoc=NONE but is on the trusted-bot
+        allowlist (#137). A would-be block demotes to advisory; the scan
+        and the advisory comment still happen."""
+        assert (
+            san.classify_action(True, False, "NONE", "dependabot[bot]")
+            == "advisory"
+        )
+
+    def test_trusted_bot_ascii_only_is_none(self) -> None:
+        """No non-ASCII -> none regardless of login (cheap-exit guard)."""
+        assert (
+            san.classify_action(False, False, "NONE", "dependabot[bot]")
+            == "none"
+        )
+
+    def test_unknown_bot_still_blocks(self) -> None:
+        """The allowlist is exact-match; renovate[bot] is not on it."""
+        assert (
+            san.classify_action(True, False, "NONE", "renovate[bot]")
+            == "block"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -648,6 +704,49 @@ class TestRun:
         text = summary.read_text(encoding="utf-8")
         assert "## scan-non-ascii summary" in text
         assert "`action`" in text or "`none`" in text
+
+    def test_trusted_bot_pr_advises_does_not_block(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """End-to-end (#137): dependabot[bot] PR with non-ASCII content gets
+        the advisory comment and label but no REQUEST_CHANGES review."""
+        seen = _capture_gh_api(monkeypatch)
+        event = {
+            "pull_request": {
+                "number": 119,
+                "title": "ci(actions): bump actions/checkout v5.0.0 -> v5.0.1",
+                "body": "Release notes mention @user with a zero-width​space.",
+                "author_association": "NONE",
+                "user": {"login": "dependabot[bot]"},
+            }
+        }
+        assert san.run(event, "pull_request_target", "o/r") == 0
+        methods_paths = [(c[0], c[1]) for c in seen]
+        # Advisory path: label + comment.
+        assert ("POST", "/repos/o/r/issues/119/labels") in methods_paths
+        assert ("POST", "/repos/o/r/issues/119/comments") in methods_paths
+        # Block path must NOT fire: no REQUEST_CHANGES review.
+        assert all(
+            path != "/repos/o/r/pulls/119/reviews" for _, path in methods_paths
+        )
+
+    def test_unknown_bot_pr_still_blocks(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A bot not on the allowlist (renovate[bot]) keeps the block path."""
+        seen = _capture_gh_api(monkeypatch)
+        event = {
+            "pull_request": {
+                "number": 120,
+                "title": "あ",
+                "body": "",
+                "author_association": "NONE",
+                "user": {"login": "renovate[bot]"},
+            }
+        }
+        assert san.run(event, "pull_request_target", "o/r") == 0
+        methods_paths = [(c[0], c[1]) for c in seen]
+        assert ("POST", "/repos/o/r/pulls/120/reviews") in methods_paths
 
     def test_advisory_updates_existing_comment(
         self, monkeypatch: pytest.MonkeyPatch

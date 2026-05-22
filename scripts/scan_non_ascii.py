@@ -29,6 +29,13 @@ from typing import Any
 # Trust classification per author_association.
 _TRUSTED_ASSOC = frozenset({"OWNER", "MEMBER", "COLLABORATOR"})
 
+# Bot logins that GitHub reports as `author_association: NONE` but whose
+# content we trust enough to demote `block` -> `advisory`. The scan still
+# runs and the advisory comment is still posted; only the destructive
+# action (request-changes / close) is suppressed. See issue #137 / #136.
+# Exact-match only; no wildcards. Extend deliberately, one entry at a time.
+_TRUSTED_BOT_LOGINS: frozenset[str] = frozenset({"dependabot[bot]"})
+
 # Markers held byte-for-byte identical to v1 of the prior YAML workflow so
 # that idempotency keys keep matching across the refactor.
 COMMENT_MARKER = "<!-- scan-non-ascii.yml v1 -->"
@@ -47,32 +54,41 @@ _NON_ASCII_RE = re.compile(r"[^\x00-\x7F]")
 
 
 def extract_event(event: dict[str, Any], event_name: str) -> dict[str, Any]:
-    """Return ``{kind, number, title, body, association}`` for *event_name*.
+    """Return ``{kind, number, title, body, association, login}`` for *event_name*.
+
+    ``login`` is the GitHub login of the author of the scanned content
+    (``issue.user.login`` / ``pull_request.user.login`` / ``comment.user.login``).
+    It feeds the trusted-bot allowlist in :func:`classify_action`.
 
     Raises :class:`ValueError` on an unsupported event name so the failure
     is loud (CLAUDE.md §4) rather than silently producing an empty advisory.
     """
     if event_name == "issues":
         issue = event.get("issue") or {}
+        user = issue.get("user") or {}
         return {
             "kind": "issue",
             "number": issue.get("number"),
             "title": issue.get("title") or "",
             "body": issue.get("body") or "",
             "association": issue.get("author_association"),
+            "login": user.get("login"),
         }
     if event_name == "pull_request_target":
         pr = event.get("pull_request") or {}
+        user = pr.get("user") or {}
         return {
             "kind": "pull_request",
             "number": pr.get("number"),
             "title": pr.get("title") or "",
             "body": pr.get("body") or "",
             "association": pr.get("author_association"),
+            "login": user.get("login"),
         }
     if event_name == "issue_comment":
         issue = event.get("issue") or {}
         comment = event.get("comment") or {}
+        user = comment.get("user") or {}
         kind = "pr_comment" if issue.get("pull_request") else "issue_comment"
         return {
             "kind": kind,
@@ -80,16 +96,19 @@ def extract_event(event: dict[str, Any], event_name: str) -> dict[str, Any]:
             "title": "",
             "body": comment.get("body") or "",
             "association": comment.get("author_association"),
+            "login": user.get("login"),
         }
     if event_name == "pull_request_review_comment":
         pr = event.get("pull_request") or {}
         comment = event.get("comment") or {}
+        user = comment.get("user") or {}
         return {
             "kind": "pr_review_comment",
             "number": pr.get("number"),
             "title": "",
             "body": comment.get("body") or "",
             "association": comment.get("author_association"),
+            "login": user.get("login"),
         }
     raise ValueError(f"unsupported event name: {event_name!r}")
 
@@ -116,7 +135,10 @@ def trust_class(association: str | None) -> str:
 
 
 def classify_action(
-    has_non_ascii: bool, has_ack: bool, association: str | None
+    has_non_ascii: bool,
+    has_ack: bool,
+    association: str | None,
+    login: str | None = None,
 ) -> str:
     """Decide the action: ``none`` / ``skip`` / ``advisory`` / ``block``.
 
@@ -126,6 +148,11 @@ def classify_action(
     - trusted + ack -> skip (operator-reviewed)
     - trusted -> advisory
     - external -> block (ack ignored)
+
+    Exception (issue #137): when *login* is in :data:`_TRUSTED_BOT_LOGINS`,
+    a would-be ``block`` is demoted to ``advisory``. The scan still runs
+    and the advisory comment is still posted; only the destructive action
+    is suppressed.
     """
     if not has_non_ascii:
         return "none"
@@ -133,6 +160,8 @@ def classify_action(
     if trust == "trusted" and has_ack:
         return "skip"
     if trust == "trusted":
+        return "advisory"
+    if login is not None and login in _TRUSTED_BOT_LOGINS:
         return "advisory"
     return "block"
 
@@ -367,11 +396,12 @@ def run(event: dict[str, Any], event_name: str, repo: str) -> int:
     title = extracted["title"]
     body = extracted["body"]
     association = extracted["association"]
+    login = extracted["login"]
 
     has_non_ascii = detect_non_ascii(f"{title}\n{body}")
     has_ack = has_ack_marker(body)
     trust = trust_class(association)
-    action = classify_action(has_non_ascii, has_ack, association)
+    action = classify_action(has_non_ascii, has_ack, association, login)
 
     _append_summary(
         build_summary(
