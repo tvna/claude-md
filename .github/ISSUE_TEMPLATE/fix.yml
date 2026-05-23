@@ -1,0 +1,98 @@
+name: Fix
+description: Defect -- contradiction, broken workflow, wrong doc. Use when something existing is wrong.
+title: "fix(<scope>): <summary>"
+labels:
+  - "type:fix"
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Titles must be ASCII-only and match `type(scope): summary` (scope optional).
+        See `scripts/title_policy.py` and CLAUDE.md sections 1 and 2.
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: One paragraph naming the defect surface and what is in/out of scope to fix.
+    validations:
+      required: true
+  - type: textarea
+    id: facts
+    attributes:
+      label: Facts
+      description: |
+        Observable evidence only -- the defect itself: log line, error message,
+        file path, command output. No speculation here. Per CLAUDE.md section 2.
+      value: "- Fact: "
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction_steps
+    attributes:
+      label: Reproduction steps
+      description: Concrete steps to reproduce. Include the exact command run, expected vs. actual.
+      value: |
+        1.
+        2.
+        Expected:
+        Actual:
+    validations:
+      required: true
+  - type: textarea
+    id: assumptions
+    attributes:
+      label: Assumptions / Speculation
+      description: |
+        Tag each line `Speculation:` when it is a guess about root cause rather than evidence.
+        Per CLAUDE.md section 2.
+      value: "- Speculation: "
+    validations:
+      required: false
+  - type: textarea
+    id: proposed_work
+    attributes:
+      label: Proposed work
+    validations:
+      required: true
+  - type: textarea
+    id: verification
+    attributes:
+      label: Verification
+      description: |
+        How completion is proven -- the original symptom no longer reproduces.
+        Name the exact reproduction command from the section above.
+        Per CLAUDE.md section 1.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance_criteria
+    attributes:
+      label: Acceptance criteria
+      value: |
+        - [ ] The original symptom no longer reproduces
+        - [ ]
+    validations:
+      required: true
+  - type: dropdown
+    id: layer
+    attributes:
+      label: Layer
+      description: Which CLAUDE.md layer this issue lives in. Multi-select.
+      multiple: true
+      options:
+        - "layer:p1-goal-plan"
+        - "layer:p2-precode"
+        - "layer:p3-harness"
+        - "layer:p4-artifact"
+        - "layer:p5-scope-split"
+        - "layer:p6-handoff"
+        - "layer:meta"
+    validations:
+      required: true
+  - type: input
+    id: parent
+    attributes:
+      label: Parent / related issue
+      description: "Format: #NNN. Leave blank if standalone."
+    validations:
+      required: false

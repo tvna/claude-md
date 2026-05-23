@@ -1,0 +1,85 @@
+name: Other (build / ci / perf / test / revert / style)
+description: Catch-all for title-policy types without a dedicated form. Use this only if none of the dedicated forms fits.
+title: "<type>(<scope>): <summary>"
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this form only when none of the dedicated forms (feat / fix / refactor /
+        docs / tracking / chore) fits. Valid title types here are
+        `build`, `ci`, `perf`, `test`, `revert`, `style` (see `scripts/title_policy.py`).
+        Titles must be ASCII-only and match `type(scope): summary` (scope optional).
+        No `type:*` label is pre-applied -- a maintainer applies it during triage.
+        See CLAUDE.md sections 1 and 2.
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: One paragraph naming what is in and out of scope.
+    validations:
+      required: true
+  - type: textarea
+    id: facts
+    attributes:
+      label: Facts
+      description: |
+        Observable evidence only -- diffs, logs, file paths, command output.
+        No speculation here. Per CLAUDE.md section 2.
+      value: "- Fact: "
+    validations:
+      required: true
+  - type: textarea
+    id: assumptions
+    attributes:
+      label: Assumptions / Speculation
+      description: |
+        Tag each line `Speculation:` when it is a guess rather than evidence.
+        Per CLAUDE.md section 2.
+      value: "- Speculation: "
+    validations:
+      required: false
+  - type: textarea
+    id: proposed_work
+    attributes:
+      label: Proposed work
+    validations:
+      required: true
+  - type: textarea
+    id: verification
+    attributes:
+      label: Verification
+      description: |
+        How completion is proven -- tests, commands, observable workflow runs.
+        Per CLAUDE.md section 1.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance_criteria
+    attributes:
+      label: Acceptance criteria
+      value: "- [ ] "
+    validations:
+      required: true
+  - type: dropdown
+    id: layer
+    attributes:
+      label: Layer
+      description: Which CLAUDE.md layer this issue lives in. Multi-select.
+      multiple: true
+      options:
+        - "layer:p1-goal-plan"
+        - "layer:p2-precode"
+        - "layer:p3-harness"
+        - "layer:p4-artifact"
+        - "layer:p5-scope-split"
+        - "layer:p6-handoff"
+        - "layer:meta"
+    validations:
+      required: true
+  - type: input
+    id: parent
+    attributes:
+      label: Parent / related issue
+      description: "Format: #NNN. Leave blank if standalone."
+    validations:
+      required: false

@@ -1,0 +1,88 @@
+name: Docs
+description: Operator runbooks, README, contributor guides. Use when adding or revising documentation.
+title: "docs(<scope>): <summary>"
+labels:
+  - "type:docs"
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Titles and document content must be ASCII-only -- non-ASCII characters trip
+        `scripts/scan_non_ascii.py` and the prompt-injection defense. See
+        `docs/non-ascii-defense.md`. Titles must match `type(scope): summary`
+        (scope optional). See CLAUDE.md sections 1 and 2.
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: Name the document path(s) being added or revised (e.g. `docs/issue-triage.md`, `README.md`).
+    validations:
+      required: true
+  - type: textarea
+    id: facts
+    attributes:
+      label: Facts
+      description: |
+        Observable evidence only -- what is missing or wrong in current docs,
+        with file paths and line numbers. Per CLAUDE.md section 2.
+      value: "- Fact: "
+    validations:
+      required: true
+  - type: textarea
+    id: assumptions
+    attributes:
+      label: Assumptions / Speculation
+      description: |
+        Tag each line `Speculation:` when it is a guess about reader need rather than evidence.
+        Per CLAUDE.md section 2.
+      value: "- Speculation: "
+    validations:
+      required: false
+  - type: textarea
+    id: proposed_work
+    attributes:
+      label: Proposed work
+    validations:
+      required: true
+  - type: textarea
+    id: verification
+    attributes:
+      label: Verification
+      description: |
+        How completion is proven -- file exists, section X present, links resolve.
+        Per CLAUDE.md section 1.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance_criteria
+    attributes:
+      label: Acceptance criteria
+      value: |
+        - [ ] Document(s) named above exist at the cited path(s)
+        - [ ] Content is ASCII-only
+        - [ ]
+    validations:
+      required: true
+  - type: dropdown
+    id: layer
+    attributes:
+      label: Layer
+      description: Which CLAUDE.md layer this issue lives in. Multi-select.
+      multiple: true
+      options:
+        - "layer:p1-goal-plan"
+        - "layer:p2-precode"
+        - "layer:p3-harness"
+        - "layer:p4-artifact"
+        - "layer:p5-scope-split"
+        - "layer:p6-handoff"
+        - "layer:meta"
+    validations:
+      required: true
+  - type: input
+    id: parent
+    attributes:
+      label: Parent / related issue
+      description: "Format: #NNN. Leave blank if standalone."
+    validations:
+      required: false
