@@ -127,7 +127,7 @@ Layer 2 catches non-ASCII *after* it reaches GitHub: every Japanese issue still 
 ```
 mcp__github__(issue_write|add_issue_comment|create_pull_request|update_pull_request|
               add_reply_to_pull_request_comment|pull_request_review_write|
-              add_comment_to_pending_review)
+              add_comment_to_pending_review|sub_issue_write)
 ```
 
 The script reuses `scan_non_ascii.detect_non_ascii`, `has_ack_marker`, and `escape_for_comment` so the two layers cannot drift. When the `title` or `body` of the tool input contains non-ASCII and the body lacks `<!-- non-ascii-ack -->`, the hook emits:

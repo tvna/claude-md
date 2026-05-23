@@ -42,6 +42,7 @@ _TARGET_TOOLS: frozenset[str] = frozenset({
     "mcp__github__add_reply_to_pull_request_comment",
     "mcp__github__pull_request_review_write",
     "mcp__github__add_comment_to_pending_review",
+    "mcp__github__sub_issue_write",
 })
 
 

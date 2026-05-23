@@ -158,6 +158,17 @@ class TestDecide:
         reason = out["hookSpecificOutput"]["permissionDecisionReason"]
         assert "title and body" in reason
 
+    def test_sub_issue_body_denies(self) -> None:
+        out = pna.decide(
+            "mcp__github__sub_issue_write",
+            {"body": "日本語"},
+        )
+        assert out is not None
+        assert out["hookSpecificOutput"]["permissionDecision"] == "deny"
+        reason = out["hookSpecificOutput"]["permissionDecisionReason"]
+        assert "body" in reason
+        assert "mcp__github__sub_issue_write" in reason
+
     @pytest.mark.parametrize(
         "tool_name",
         [
@@ -182,6 +193,7 @@ class TestDecide:
             "mcp__github__add_reply_to_pull_request_comment",
             "mcp__github__pull_request_review_write",
             "mcp__github__add_comment_to_pending_review",
+            "mcp__github__sub_issue_write",
         ],
     )
     def test_every_targeted_tool_is_gated(self, tool_name: str) -> None:
