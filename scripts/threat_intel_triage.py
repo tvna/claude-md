@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
-"""Classify whether an issue/PR needs threat intelligence handling.
+"""Collect threat intelligence and classify repository response needs.
 
-The rule is intentionally deterministic and local: it reads title, body,
-and labels, then decides whether to add:
+The primary rule collects external intelligence from OSV.dev and CISA KEV,
+correlates it with this repository's locked dependencies, and decides
+whether to add:
 
 * ``threat:intel-needed`` -- collect threat intelligence before routing.
 * ``threat:response-needed`` -- security response is required; do not
   create an autonomous fix without investigation.
 
-No external feeds are queried here. The workflow boundary can add richer
-collection later, but this gate stays fast, testable, and dependency-free.
+The older metadata classifier remains as a helper for issue/PR text, but the
+workflow uses ``scan`` so triage is driven by external sources.
 """
 
 from __future__ import annotations
@@ -18,6 +19,9 @@ import argparse
 import json
 import os
 import re
+import tomllib
+import urllib.parse
+import urllib.request
 from pathlib import Path
 from typing import NamedTuple
 
@@ -26,11 +30,29 @@ INTEL_LABEL = "threat:intel-needed"
 RESPONSE_LABEL = "threat:response-needed"
 SECURITY_LABEL = "severity:security"
 THREAT_LABELS = {INTEL_LABEL, RESPONSE_LABEL}
+OSV_QUERYBATCH_URL = "https://api.osv.dev/v1/querybatch"
+OSV_VULN_URL = "https://api.osv.dev/v1/vulns/{id}"
+CISA_KEV_URL = "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"
 
 
 class Indicator(NamedTuple):
     name: str
     pattern: re.Pattern[str]
+
+
+class Dependency(NamedTuple):
+    name: str
+    version: str
+    ecosystem: str
+    source: str
+
+
+class Finding(NamedTuple):
+    dependency: Dependency
+    vuln_id: str
+    aliases: tuple[str, ...]
+    source: str
+    known_exploited: bool
 
 
 INTEL_INDICATORS = (
@@ -70,6 +92,221 @@ def parse_labels(raw: str | list[str] | tuple[str, ...]) -> set[str]:
         for item in raw:
             chunks.extend(re.split(r"[,\n]", item))
     return {chunk.strip() for chunk in chunks if chunk.strip()}
+
+
+def discover_dependencies(repo_root: Path) -> list[Dependency]:
+    """Return version-pinned dependencies from lockfiles in *repo_root*."""
+    by_key: dict[tuple[str, str, str], Dependency] = {}
+    for dep in parse_uv_lock(repo_root / "uv.lock"):
+        by_key[(dep.ecosystem, dep.name, dep.version)] = dep
+    for dep in parse_pyproject_pinned_dependencies(repo_root / "pyproject.toml"):
+        by_key.setdefault((dep.ecosystem, dep.name, dep.version), dep)
+    return sorted(by_key.values(), key=lambda dep: (dep.ecosystem, dep.name, dep.version))
+
+
+def parse_uv_lock(path: Path) -> list[Dependency]:
+    """Parse PyPI packages from a uv.lock file."""
+    if not path.is_file():
+        return []
+    data = tomllib.loads(path.read_text(encoding="utf-8"))
+    packages = data.get("package", [])
+    deps: list[Dependency] = []
+    if not isinstance(packages, list):
+        return deps
+    for package in packages:
+        if not isinstance(package, dict):
+            continue
+        name = package.get("name")
+        version = package.get("version")
+        if isinstance(name, str) and isinstance(version, str):
+            deps.append(Dependency(name=name, version=version, ecosystem="PyPI", source=str(path)))
+    return deps
+
+
+def parse_pyproject_pinned_dependencies(path: Path) -> list[Dependency]:
+    """Parse exact PyPI pins from pyproject.toml.
+
+    Versionless or range-based declarations are ignored because OSV checks
+    without a resolved version are too noisy for an automated response gate.
+    """
+    if not path.is_file():
+        return []
+    data = tomllib.loads(path.read_text(encoding="utf-8"))
+    raw_deps: list[str] = []
+    project = data.get("project", {})
+    if isinstance(project, dict):
+        raw_deps.extend(_string_list(project.get("dependencies")))
+    dependency_groups = data.get("dependency-groups", {})
+    if isinstance(dependency_groups, dict):
+        for value in dependency_groups.values():
+            raw_deps.extend(_string_list(value))
+
+    deps: list[Dependency] = []
+    for dep in raw_deps:
+        parsed = parse_exact_python_requirement(dep)
+        if parsed is not None:
+            name, version = parsed
+            deps.append(Dependency(name=name, version=version, ecosystem="PyPI", source=str(path)))
+    return deps
+
+
+def parse_exact_python_requirement(requirement: str) -> tuple[str, str] | None:
+    """Return ``(name, version)`` for simple exact pins such as ``pytest==8``."""
+    match = re.match(r"^\s*([A-Za-z0-9_.-]+)(?:\[[^\]]+\])?\s*==\s*([^,;\s]+)", requirement)
+    if match is None:
+        return None
+    return match.group(1), match.group(2)
+
+
+def fetch_external_findings(
+    dependencies: list[Dependency],
+    *,
+    osv_file: Path | None = None,
+    kev_file: Path | None = None,
+) -> list[Finding]:
+    """Collect OSV and CISA KEV intelligence for *dependencies*."""
+    if not dependencies:
+        return []
+
+    osv_batch = load_json(osv_file) if osv_file is not None else query_osv_batch(dependencies)
+    kev_catalog = load_json(kev_file) if kev_file is not None else fetch_cisa_kev()
+    kev_cves = parse_kev_cves(kev_catalog)
+
+    vuln_ids_by_dep = parse_osv_batch_results(dependencies, osv_batch)
+    vuln_details = fetch_osv_details(vuln_ids_by_dep, osv_file=osv_file)
+
+    findings: list[Finding] = []
+    for dep, vuln_ids in vuln_ids_by_dep:
+        for vuln_id in vuln_ids:
+            details = vuln_details.get(vuln_id, {})
+            aliases = tuple(str(alias) for alias in details.get("aliases", []) if isinstance(alias, str))
+            cve_ids = {vuln_id, *aliases}
+            known_exploited = bool(cve_ids & kev_cves)
+            findings.append(
+                Finding(
+                    dependency=dep,
+                    vuln_id=vuln_id,
+                    aliases=aliases,
+                    source="OSV.dev",
+                    known_exploited=known_exploited,
+                )
+            )
+    return sorted(findings, key=lambda f: (f.dependency.name, f.vuln_id))
+
+
+def query_osv_batch(dependencies: list[Dependency]) -> dict[str, object]:
+    queries = [
+        {
+            "version": dep.version,
+            "package": {"name": dep.name, "ecosystem": dep.ecosystem},
+        }
+        for dep in dependencies
+    ]
+    return request_json(OSV_QUERYBATCH_URL, payload={"queries": queries})
+
+
+def fetch_cisa_kev() -> dict[str, object]:
+    return request_json(CISA_KEV_URL)
+
+
+def fetch_osv_details(
+    vuln_ids_by_dep: list[tuple[Dependency, list[str]]],
+    *,
+    osv_file: Path | None = None,
+) -> dict[str, dict[str, object]]:
+    if osv_file is not None:
+        data = load_json(osv_file)
+        details = data.get("details", {}) if isinstance(data, dict) else {}
+        if isinstance(details, dict):
+            return {str(key): value for key, value in details.items() if isinstance(value, dict)}
+        return {}
+
+    vuln_ids = sorted({vuln_id for _, vuln_ids in vuln_ids_by_dep for vuln_id in vuln_ids})
+    details: dict[str, dict[str, object]] = {}
+    for vuln_id in vuln_ids:
+        data = request_json(OSV_VULN_URL.format(id=urllib.parse.quote(vuln_id, safe="")))
+        if isinstance(data, dict):
+            details[vuln_id] = data
+    return details
+
+
+def parse_osv_batch_results(
+    dependencies: list[Dependency],
+    data: dict[str, object],
+) -> list[tuple[Dependency, list[str]]]:
+    results = data.get("results", [])
+    if not isinstance(results, list):
+        raise ValueError("OSV querybatch response missing results array")
+
+    parsed: list[tuple[Dependency, list[str]]] = []
+    for dep, result in zip(dependencies, results):
+        if not isinstance(result, dict):
+            parsed.append((dep, []))
+            continue
+        vulns = result.get("vulns", [])
+        if not isinstance(vulns, list):
+            parsed.append((dep, []))
+            continue
+        ids = sorted(
+            {
+                str(vuln["id"])
+                for vuln in vulns
+                if isinstance(vuln, dict) and isinstance(vuln.get("id"), str)
+            }
+        )
+        parsed.append((dep, ids))
+    return parsed
+
+
+def parse_kev_cves(data: dict[str, object]) -> set[str]:
+    vulnerabilities = data.get("vulnerabilities", [])
+    if not isinstance(vulnerabilities, list):
+        raise ValueError("CISA KEV response missing vulnerabilities array")
+    cves: set[str] = set()
+    for vulnerability in vulnerabilities:
+        if not isinstance(vulnerability, dict):
+            continue
+        cve_id = vulnerability.get("cveID")
+        if isinstance(cve_id, str):
+            cves.add(cve_id)
+    return cves
+
+
+def classify_findings(findings: list[Finding], labels: set[str]) -> dict[str, object]:
+    intel_needed = bool(findings)
+    response_needed = any(finding.known_exploited for finding in findings)
+
+    recommended_labels: list[str] = []
+    if intel_needed:
+        recommended_labels.append(INTEL_LABEL)
+    if response_needed:
+        recommended_labels.append(RESPONSE_LABEL)
+    remove_labels = sorted((labels & THREAT_LABELS) - set(recommended_labels))
+
+    return {
+        "intel_needed": intel_needed,
+        "response_needed": response_needed,
+        "recommended_labels": recommended_labels,
+        "remove_labels": remove_labels,
+        "finding_count": len(findings),
+        "known_exploited_count": sum(1 for finding in findings if finding.known_exploited),
+        "findings": [finding_to_dict(finding) for finding in findings],
+    }
+
+
+def finding_to_dict(finding: Finding) -> dict[str, object]:
+    return {
+        "dependency": {
+            "name": finding.dependency.name,
+            "version": finding.dependency.version,
+            "ecosystem": finding.dependency.ecosystem,
+            "source": finding.dependency.source,
+        },
+        "vuln_id": finding.vuln_id,
+        "aliases": list(finding.aliases),
+        "source": finding.source,
+        "known_exploited": finding.known_exploited,
+    }
 
 
 def find_indicators(text: str, indicators: tuple[Indicator, ...]) -> list[str]:
@@ -128,6 +365,62 @@ def _cmd_classify(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_scan(args: argparse.Namespace) -> int:
+    repo_root = Path(args.repo_root)
+    labels = parse_labels(args.labels or os.environ.get("LABELS", ""))
+    dependencies = discover_dependencies(repo_root)
+    findings = fetch_external_findings(
+        dependencies,
+        osv_file=args.osv_file,
+        kev_file=args.kev_file,
+    )
+    result = classify_findings(findings, labels)
+
+    if args.summary_file:
+        write_summary(Path(args.summary_file), dependencies, findings, result)
+    if args.github_output:
+        _write_github_output(Path(args.github_output), result)
+
+    if args.format == "json":
+        print(json.dumps(result, sort_keys=True))
+        return 0
+
+    print(f"dependencies={len(dependencies)}")
+    print(f"findings={result['finding_count']}")
+    print(f"known_exploited={result['known_exploited_count']}")
+    print(f"intel_needed={_bool(result['intel_needed'])}")
+    print(f"response_needed={_bool(result['response_needed'])}")
+    print(f"recommended_labels={','.join(result['recommended_labels'])}")
+    print(f"remove_labels={','.join(result['remove_labels'])}")
+    return 0
+
+
+def write_summary(
+    path: Path,
+    dependencies: list[Dependency],
+    findings: list[Finding],
+    result: dict[str, object],
+) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write("## Threat intelligence triage\n\n")
+        handle.write("- Sources: OSV.dev, CISA KEV\n")
+        handle.write(f"- Dependencies checked: {len(dependencies)}\n")
+        handle.write(f"- Findings: {result['finding_count']}\n")
+        handle.write(f"- Known exploited findings: {result['known_exploited_count']}\n")
+        handle.write(f"- Recommended labels: `{','.join(result['recommended_labels'])}`\n\n")
+        if not findings:
+            handle.write("No external threat-intelligence findings matched locked dependencies.\n")
+            return
+        handle.write("| Dependency | Version | Vulnerability | Known exploited |\n")
+        handle.write("|---|---:|---|---|\n")
+        for finding in findings:
+            handle.write(
+                f"| `{finding.dependency.name}` | `{finding.dependency.version}` | "
+                f"`{finding.vuln_id}` | {_bool(finding.known_exploited)} |\n"
+            )
+
+
 def _write_github_output(path: Path, result: dict[str, object]) -> None:
     with path.open("a", encoding="utf-8") as handle:
         handle.write(f"intel_needed={_bool(result['intel_needed'])}\n")
@@ -138,6 +431,33 @@ def _write_github_output(path: Path, result: dict[str, object]) -> None:
 
 def _bool(value: object) -> str:
     return "true" if bool(value) else "false"
+
+
+def _string_list(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [item for item in value if isinstance(item, str)]
+
+
+def load_json(path: Path) -> dict[str, object]:
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        raise ValueError(f"{path} must contain a JSON object")
+    return data
+
+
+def request_json(url: str, payload: dict[str, object] | None = None) -> dict[str, object]:
+    data = None
+    headers = {"Accept": "application/json"}
+    if payload is not None:
+        data = json.dumps(payload).encode("utf-8")
+        headers["Content-Type"] = "application/json"
+    request = urllib.request.Request(url, data=data, headers=headers, method="POST" if payload is not None else "GET")
+    with urllib.request.urlopen(request, timeout=30) as response:
+        parsed = json.loads(response.read().decode("utf-8"))
+    if not isinstance(parsed, dict):
+        raise ValueError(f"{url} returned a non-object JSON response")
+    return parsed
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -168,8 +488,48 @@ def main(argv: list[str] | None = None) -> int:
     )
     p_classify.set_defaults(func=_cmd_classify)
 
+    p_scan = sub.add_parser(
+        "scan",
+        help="Collect OSV.dev and CISA KEV intelligence for repository dependencies.",
+    )
+    p_scan.add_argument("--repo-root", type=Path, default=Path("."))
+    p_scan.add_argument(
+        "--labels",
+        action="append",
+        help="Comma or newline separated label names. Defaults to $LABELS.",
+    )
+    p_scan.add_argument(
+        "--format",
+        choices=("text", "json"),
+        default="text",
+        help="Output format.",
+    )
+    p_scan.add_argument(
+        "--github-output",
+        help="Append GitHub Actions outputs to this file.",
+    )
+    p_scan.add_argument(
+        "--summary-file",
+        help="Append a markdown summary to this file.",
+    )
+    p_scan.add_argument(
+        "--osv-file",
+        type=Path,
+        help="Fixture file containing an OSV querybatch-shaped response.",
+    )
+    p_scan.add_argument(
+        "--kev-file",
+        type=Path,
+        help="Fixture file containing a CISA KEV-shaped response.",
+    )
+    p_scan.set_defaults(func=_cmd_scan)
+
     args = parser.parse_args(argv)
-    return args.func(args)
+    try:
+        return args.func(args)
+    except (OSError, ValueError, json.JSONDecodeError) as error:
+        print(f"::error::{error}")
+        return 1
 
 
 if __name__ == "__main__":

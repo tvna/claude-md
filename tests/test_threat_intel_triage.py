@@ -103,6 +103,117 @@ class TestClassify:
         assert result["remove_labels"] == [triage.RESPONSE_LABEL]
 
 
+class TestDependencyDiscovery:
+    def test_parse_uv_lock(self, tmp_path: Path) -> None:
+        lock = tmp_path / "uv.lock"
+        lock.write_text(
+            '[[package]]\nname = "pytest"\nversion = "8.3.5"\n\n'
+            '[[package]]\nname = "pluggy"\nversion = "1.5.0"\n',
+            encoding="utf-8",
+        )
+
+        assert triage.parse_uv_lock(lock) == [
+            triage.Dependency("pytest", "8.3.5", "PyPI", str(lock)),
+            triage.Dependency("pluggy", "1.5.0", "PyPI", str(lock)),
+        ]
+
+    def test_pyproject_only_uses_exact_pins(self, tmp_path: Path) -> None:
+        pyproject = tmp_path / "pyproject.toml"
+        pyproject.write_text(
+            "[project]\n"
+            'dependencies = ["requests==2.31.0", "pytest>=8,<9"]\n'
+            "\n[dependency-groups]\n"
+            'dev = ["pluggy==1.5.0"]\n',
+            encoding="utf-8",
+        )
+
+        assert triage.parse_pyproject_pinned_dependencies(pyproject) == [
+            triage.Dependency("requests", "2.31.0", "PyPI", str(pyproject)),
+            triage.Dependency("pluggy", "1.5.0", "PyPI", str(pyproject)),
+        ]
+
+    def test_discover_dependencies_deduplicates(self, tmp_path: Path) -> None:
+        (tmp_path / "uv.lock").write_text(
+            '[[package]]\nname = "pytest"\nversion = "8.3.5"\n',
+            encoding="utf-8",
+        )
+        (tmp_path / "pyproject.toml").write_text(
+            "[project]\n"
+            'dependencies = ["pytest==8.3.5"]\n',
+            encoding="utf-8",
+        )
+
+        assert triage.discover_dependencies(tmp_path) == [
+            triage.Dependency("pytest", "8.3.5", "PyPI", str(tmp_path / "uv.lock")),
+        ]
+
+
+class TestExternalFindings:
+    def test_parse_kev_cves(self) -> None:
+        assert triage.parse_kev_cves(
+            {"vulnerabilities": [{"cveID": "CVE-2026-1111"}, {"cveID": "CVE-2026-2222"}]}
+        ) == {"CVE-2026-1111", "CVE-2026-2222"}
+
+    def test_osv_finding_requires_intel(self, tmp_path: Path) -> None:
+        osv = tmp_path / "osv.json"
+        kev = tmp_path / "kev.json"
+        osv.write_text(
+            json.dumps(
+                {
+                    "results": [{"vulns": [{"id": "GHSA-abcd-1234-wxyz"}]}],
+                    "details": {"GHSA-abcd-1234-wxyz": {"aliases": ["CVE-2026-1111"]}},
+                }
+            ),
+            encoding="utf-8",
+        )
+        kev.write_text(json.dumps({"vulnerabilities": []}), encoding="utf-8")
+
+        findings = triage.fetch_external_findings(
+            [triage.Dependency("demo", "1.0.0", "PyPI", "uv.lock")],
+            osv_file=osv,
+            kev_file=kev,
+        )
+        result = triage.classify_findings(findings, set())
+
+        assert result["intel_needed"] is True
+        assert result["response_needed"] is False
+        assert result["recommended_labels"] == [triage.INTEL_LABEL]
+        assert result["finding_count"] == 1
+
+    def test_cisa_kev_alias_requires_response(self, tmp_path: Path) -> None:
+        osv = tmp_path / "osv.json"
+        kev = tmp_path / "kev.json"
+        osv.write_text(
+            json.dumps(
+                {
+                    "results": [{"vulns": [{"id": "GHSA-abcd-1234-wxyz"}]}],
+                    "details": {"GHSA-abcd-1234-wxyz": {"aliases": ["CVE-2026-1111"]}},
+                }
+            ),
+            encoding="utf-8",
+        )
+        kev.write_text(
+            json.dumps({"vulnerabilities": [{"cveID": "CVE-2026-1111"}]}),
+            encoding="utf-8",
+        )
+
+        findings = triage.fetch_external_findings(
+            [triage.Dependency("demo", "1.0.0", "PyPI", "uv.lock")],
+            osv_file=osv,
+            kev_file=kev,
+        )
+        result = triage.classify_findings(findings, {triage.INTEL_LABEL})
+
+        assert findings[0].known_exploited is True
+        assert result["intel_needed"] is True
+        assert result["response_needed"] is True
+        assert result["recommended_labels"] == [
+            triage.INTEL_LABEL,
+            triage.RESPONSE_LABEL,
+        ]
+        assert result["remove_labels"] == []
+
+
 class TestCli:
     def test_json_output(self, capsys) -> None:
         rc = triage.main(
@@ -144,3 +255,56 @@ class TestCli:
             "recommended_labels=threat:intel-needed,threat:response-needed",
             "remove_labels=",
         ]
+
+    def test_scan_uses_external_fixtures(self, tmp_path: Path, capsys) -> None:
+        (tmp_path / "uv.lock").write_text(
+            '[[package]]\nname = "demo"\nversion = "1.0.0"\n',
+            encoding="utf-8",
+        )
+        osv = tmp_path / "osv.json"
+        kev = tmp_path / "kev.json"
+        out = tmp_path / "github_output"
+        summary = tmp_path / "summary.md"
+        osv.write_text(
+            json.dumps(
+                {
+                    "results": [{"vulns": [{"id": "GHSA-abcd-1234-wxyz"}]}],
+                    "details": {"GHSA-abcd-1234-wxyz": {"aliases": ["CVE-2026-1111"]}},
+                }
+            ),
+            encoding="utf-8",
+        )
+        kev.write_text(
+            json.dumps({"vulnerabilities": [{"cveID": "CVE-2026-1111"}]}),
+            encoding="utf-8",
+        )
+
+        rc = triage.main(
+            [
+                "scan",
+                "--repo-root",
+                str(tmp_path),
+                "--osv-file",
+                str(osv),
+                "--kev-file",
+                str(kev),
+                "--github-output",
+                str(out),
+                "--summary-file",
+                str(summary),
+                "--format",
+                "json",
+            ]
+        )
+        captured = capsys.readouterr()
+        result = json.loads(captured.out)
+
+        assert rc == 0
+        assert result["response_needed"] is True
+        assert out.read_text(encoding="utf-8").splitlines() == [
+            "intel_needed=true",
+            "response_needed=true",
+            "recommended_labels=threat:intel-needed,threat:response-needed",
+            "remove_labels=",
+        ]
+        assert "Sources: OSV.dev, CISA KEV" in summary.read_text(encoding="utf-8")

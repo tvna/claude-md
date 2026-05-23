@@ -64,14 +64,14 @@ Maps 1:1 to the Conventional Commit prefixes used in this repo (`docs(...)`, `fi
 
 ### `threat:*` (0 to 2)
 
-These labels are applied by the `Threat intelligence triage` workflow. They do not replace `severity:security`; they record whether the issue/PR metadata contains enough concrete security signal to require threat-intelligence handling.
+These labels are applied by the `Threat intelligence triage` workflow. They do not replace `severity:security`; they record whether external threat-intelligence collection found repository-relevant vulnerability information.
 
 | Label | Meaning |
 |---|---|
 | `threat:intel-needed` | Collect threat intelligence before routing or implementation. |
 | `threat:response-needed` | Security response is required; do not open an autonomous PR before investigation. |
 
-The deterministic rule lives in `scripts/threat_intel_triage.py` and reads only title, body, and labels. `severity:security` always adds both threat labels. CVE/GHSA/OSV/advisory/vulnerability/exploit/malware/supply-chain/secret-leak/compromise/IOC signals add `threat:intel-needed`. Active exploitation, public exploit availability, RCE, critical impact, malicious package, secret/credential exposure, compromise, or rotate/revoke language also add `threat:response-needed`.
+The deterministic rule lives in `scripts/threat_intel_triage.py`. The workflow extracts locked PyPI dependencies from `uv.lock` (plus exact pins in `pyproject.toml`), queries OSV.dev for vulnerabilities that affect those package versions, fetches CISA KEV, and marks any OSV finding whose ID or aliases appear in KEV as known exploited. Any external finding adds `threat:intel-needed`; any KEV-correlated finding also adds `threat:response-needed`. Fixture inputs (`--osv-file`, `--kev-file`) exist for tests so CI can verify the routing logic without live network access.
 
 ## Agent routing
 
