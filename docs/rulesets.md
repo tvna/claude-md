@@ -185,8 +185,8 @@ Deleting a ruleset is non-destructive — the JSON file in git remains, and re-r
 The scheduled workflow `.github/workflows/ruleset-drift.yml` ([#30](https://github.com/tvna/claude-md/issues/30)) diffs each live ruleset returned by `GET /repos/{owner}/{repo}/rulesets` against the matching `.github/rulesets/*.json` SoT file and writes the result to the job summary.
 
 - Schedule: Mondays at 06:00 JST (`cron: "0 21 * * 0"`); also dispatchable manually from the Actions tab. Read-only — no inputs.
-- On SoT-vs-live drift: opens a new issue titled `[ruleset-drift] SoT vs live drift detected (YYYY-MM-DD)` with the unified diff in a collapsible block; labels `layer:meta`, `type:fix`; body cites `#30` as the parent.
-- On a live ruleset that has no SoT file (`unknown_ruleset`): opens a separate issue titled `[ruleset-drift] unknown ruleset detected (YYYY-MM-DD)` with the same labels.
+- On SoT-vs-live drift: opens a new issue titled `fix(ruleset-drift): SoT vs live drift detected (YYYY-MM-DD)` with the unified diff in a collapsible block; labels `layer:meta`, `type:fix`; body cites `#30` as the parent.
+- On a live ruleset that has no SoT file (`unknown_ruleset`): opens a separate issue titled `fix(ruleset-drift): unknown ruleset detected (YYYY-MM-DD)` with the same labels.
 - New issue per drift run — no deduplication, no auto-close. Resolve by re-dispatching `Apply rulesets` (drift) or by adding/removing the SoT file (unknown), then close the issue manually.
 - Reuses the `RULESETS_PAT` secret read-only; uses `GITHUB_TOKEN` (`issues: write`) for filing the alert issues.
 

@@ -299,7 +299,7 @@ class TestFileIssue:
 
         ruleset_drift.file_issue(
             "owner/repo",
-            "[ruleset-drift] SoT vs live drift detected (2026-05-22)",
+            "fix(ruleset-drift): SoT vs live drift detected (2026-05-22)",
             Path("/tmp/x.md"),
             runner=runner,
         )
@@ -312,7 +312,7 @@ class TestFileIssue:
                 "--repo",
                 "owner/repo",
                 "--title",
-                "[ruleset-drift] SoT vs live drift detected (2026-05-22)",
+                "fix(ruleset-drift): SoT vs live drift detected (2026-05-22)",
                 "--body-file",
                 "/tmp/x.md",
                 "--label",
@@ -571,7 +571,7 @@ class TestCli:
         assert calls == [
             {
                 "repo": "owner/repo",
-                "title": "[ruleset-drift] SoT vs live drift detected (2026-05-22)",
+                "title": "fix(ruleset-drift): SoT vs live drift detected (2026-05-22)",
                 "body_file": body,
             }
         ]
@@ -603,4 +603,6 @@ class TestCli:
         )
 
         assert rc == 0
-        assert captured == ["[ruleset-drift] unknown ruleset detected (2026-05-22)"]
+        assert captured == [
+            "fix(ruleset-drift): unknown ruleset detected (2026-05-22)"
+        ]

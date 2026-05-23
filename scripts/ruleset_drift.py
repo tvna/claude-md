@@ -433,7 +433,7 @@ def _cmd_detect(args: argparse.Namespace) -> int:
 def _cmd_file_sot_issue(args: argparse.Namespace) -> int:
     file_issue(
         args.repo,
-        f"[ruleset-drift] SoT vs live drift detected ({args.run_date})",
+        f"fix(ruleset-drift): SoT vs live drift detected ({args.run_date})",
         Path(args.body_file),
     )
     return 0
@@ -442,7 +442,7 @@ def _cmd_file_sot_issue(args: argparse.Namespace) -> int:
 def _cmd_file_unknown_issue(args: argparse.Namespace) -> int:
     file_issue(
         args.repo,
-        f"[ruleset-drift] unknown ruleset detected ({args.run_date})",
+        f"fix(ruleset-drift): unknown ruleset detected ({args.run_date})",
         Path(args.body_file),
     )
     return 0
