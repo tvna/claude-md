@@ -239,7 +239,7 @@ class TestCLI:
         monkeypatch: pytest.MonkeyPatch,
         capsys: pytest.CaptureFixture,
     ) -> None:
-        monkeypatch.setenv("PR_BODY", "Refs #42\n")
+        monkeypatch.setenv("PR_BODY", "Closes #42\n")
         monkeypatch.setattr(issue_link, "issue_exists", lambda *_a: True)
         exit_code = issue_link.main(["verify", "--repo", "owner/repo"])
         assert exit_code == 0
@@ -285,9 +285,9 @@ class TestCLI:
         monkeypatch: pytest.MonkeyPatch,
         capsys: pytest.CaptureFixture,
     ) -> None:
-        monkeypatch.setenv("PR_BODY", "Refs #999\n")
+        monkeypatch.setenv("PR_BODY", "Closes #999\n")
         body_file = tmp_path / "pr-body.md"
-        body_file.write_text("Refs #42\n", encoding="utf-8")
+        body_file.write_text("Closes #42\n", encoding="utf-8")
         monkeypatch.setattr(issue_link, "issue_exists", lambda *_a: True)
 
         exit_code = issue_link.main([
@@ -326,7 +326,7 @@ class TestCLI:
     ) -> None:
         monkeypatch.setenv(
             "PR_BODY",
-            "<!-- Refs #999 -->\nRefs #1\n",
+            "<!-- Closes #999 -->\nCloses #1\n",
         )
         monkeypatch.setattr(issue_link, "issue_exists", lambda *_a: True)
         exit_code = issue_link.main(["verify", "--repo", "owner/repo"])
@@ -417,7 +417,7 @@ class TestTrustedBotAllowlist:
         monkeypatch: pytest.MonkeyPatch,
         capsys: pytest.CaptureFixture,
     ) -> None:
-        monkeypatch.setenv("PR_BODY", "Refs #136\n")
+        monkeypatch.setenv("PR_BODY", "Closes #136\n")
         monkeypatch.setattr(issue_link, "issue_exists", lambda *_a: True)
         exit_code = issue_link.main([
             "verify",
@@ -504,3 +504,330 @@ class TestTrustedBotAllowlist:
         ])
         assert exit_code == 0
         assert "skipped" in capsys.readouterr().out
+
+
+# ---------------------------------------------------------------------------
+# classify_refs (closing-keyword gate, #216 PR-A)
+# ---------------------------------------------------------------------------
+
+
+class TestClassifyRefs:
+    def test_empty(self) -> None:
+        assert issue_link.classify_refs("") == []
+
+    def test_single_closes(self) -> None:
+        assert issue_link.classify_refs("Closes #42\n") == [("closes", 42)]
+
+    def test_single_refs(self) -> None:
+        assert issue_link.classify_refs("Refs #42\n") == [("refs", 42)]
+
+    def test_each_keyword_lowercased(self) -> None:
+        for kw, expected in (
+            ("Refs", "refs"),
+            ("Closes", "closes"),
+            ("Fixes", "fixes"),
+            ("Resolves", "resolves"),
+            ("REFS", "refs"),
+            ("cLoSeS", "closes"),
+        ):
+            assert issue_link.classify_refs(f"{kw} #7\n") == [(expected, 7)]
+
+    def test_preserves_order_and_dedupes(self) -> None:
+        body = (
+            "Refs #10\n"
+            "Closes #2\n"
+            "Refs #10\n"  # exact duplicate, dropped
+            "Resolves #100\n"
+        )
+        assert issue_link.classify_refs(body) == [
+            ("refs", 10),
+            ("closes", 2),
+            ("resolves", 100),
+        ]
+
+    def test_mid_line_mention_rejected(self) -> None:
+        assert issue_link.classify_refs("see Refs #5 above\n") == []
+
+
+# ---------------------------------------------------------------------------
+# body_has_partial_marker
+# ---------------------------------------------------------------------------
+
+
+class TestBodyHasPartialMarker:
+    @pytest.mark.parametrize(
+        "body",
+        [
+            "<!-- partial -->",
+            "<!--partial-->",
+            "<!--   partial   -->",
+            "<!-- PARTIAL -->",
+            "<!-- Partial -->",
+            "head\n<!-- partial -->\ntail",
+        ],
+    )
+    def test_marker_detected(self, body: str) -> None:
+        assert issue_link.body_has_partial_marker(body) is True
+
+    @pytest.mark.parametrize(
+        "body",
+        [
+            "",
+            "no marker here",
+            "<!-- partials -->",
+            "<!-- partia -->",
+            "partial without comment delimiters",
+            "<!-- partial work -->",
+        ],
+    )
+    def test_marker_absent(self, body: str) -> None:
+        assert issue_link.body_has_partial_marker(body) is False
+
+
+# ---------------------------------------------------------------------------
+# get_issue_labels
+# ---------------------------------------------------------------------------
+
+
+class TestGetIssueLabels:
+    def test_returns_label_list_on_success(self) -> None:
+        captured: dict = {}
+
+        class _Result:
+            stdout = b"type:tracking\nlayer:meta\n"
+            returncode = 0
+
+        def _run(cmd, **kwargs):
+            captured["cmd"] = cmd
+            return _Result()
+
+        assert issue_link.get_issue_labels(
+            "owner/repo", 42, runner=_run
+        ) == ["type:tracking", "layer:meta"]
+        assert captured["cmd"] == [
+            "gh", "api",
+            "/repos/owner/repo/issues/42",
+            "--jq", ".labels[].name",
+        ]
+
+    def test_empty_label_list(self) -> None:
+        class _Result:
+            stdout = b""
+            returncode = 0
+
+        assert issue_link.get_issue_labels(
+            "owner/repo", 42, runner=lambda *_a, **_k: _Result()
+        ) == []
+
+    def test_strips_blank_lines(self) -> None:
+        class _Result:
+            stdout = b"  type:fix  \n\n  layer:p3-harness  \n"
+            returncode = 0
+
+        assert issue_link.get_issue_labels(
+            "owner/repo", 42, runner=lambda *_a, **_k: _Result()
+        ) == ["type:fix", "layer:p3-harness"]
+
+    def test_returns_none_on_subprocess_error(self) -> None:
+        def _raise(*_a, **_k):
+            raise subprocess.CalledProcessError(1, "gh")
+
+        assert (
+            issue_link.get_issue_labels("owner/repo", 42, runner=_raise)
+            is None
+        )
+
+    def test_returns_none_on_missing_gh(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        def _raise(*_a, **_k):
+            raise FileNotFoundError("gh not found")
+
+        monkeypatch.setattr(subprocess, "run", _raise)
+        assert issue_link.get_issue_labels("owner/repo", 42) is None
+
+    def test_returns_none_on_timeout(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        def _raise(*_a, **_k):
+            raise subprocess.TimeoutExpired(cmd="gh", timeout=30)
+
+        monkeypatch.setattr(subprocess, "run", _raise)
+        assert issue_link.get_issue_labels("owner/repo", 42) is None
+
+
+# ---------------------------------------------------------------------------
+# Closing-keyword gate (end-to-end via _verify / main)
+# ---------------------------------------------------------------------------
+
+
+class TestClosingKeywordGate:
+    """The new gate (per #216 PR-A) rejects PRs that:
+
+    * cite only ``Refs`` references (no closing keyword), AND
+    * none of those referenced issues carry the ``type:tracking`` label, AND
+    * the raw body lacks a ``<!-- partial -->`` opt-out marker.
+    """
+
+    def _setup_mocks(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        *,
+        labels_for: dict[int, list[str] | None] | None = None,
+    ) -> None:
+        monkeypatch.setattr(issue_link, "issue_exists", lambda *_a: True)
+        labels_for = labels_for or {}
+
+        def _labels(repo: str, n: int, **_k):
+            return labels_for.get(n, [])
+
+        monkeypatch.setattr(issue_link, "get_issue_labels", _labels)
+
+    def test_closes_keyword_passes(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture,
+    ) -> None:
+        self._setup_mocks(monkeypatch)
+        monkeypatch.setenv("PR_BODY", "Closes #1\n")
+        assert (
+            issue_link.main(["verify", "--repo", "owner/repo"]) == 0
+        )
+
+    def test_fixes_keyword_passes(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture,
+    ) -> None:
+        self._setup_mocks(monkeypatch)
+        monkeypatch.setenv("PR_BODY", "Fixes #1\n")
+        assert (
+            issue_link.main(["verify", "--repo", "owner/repo"]) == 0
+        )
+
+    def test_resolves_keyword_passes(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture,
+    ) -> None:
+        self._setup_mocks(monkeypatch)
+        monkeypatch.setenv("PR_BODY", "Resolves #1\n")
+        assert (
+            issue_link.main(["verify", "--repo", "owner/repo"]) == 0
+        )
+
+    def test_mixed_refs_and_closes_passes(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture,
+    ) -> None:
+        self._setup_mocks(monkeypatch)
+        monkeypatch.setenv("PR_BODY", "Refs #1\nCloses #2\n")
+        assert (
+            issue_link.main(["verify", "--repo", "owner/repo"]) == 0
+        )
+
+    def test_refs_to_tracking_umbrella_passes_with_note(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture,
+    ) -> None:
+        self._setup_mocks(
+            monkeypatch,
+            labels_for={216: ["type:tracking", "layer:meta"]},
+        )
+        monkeypatch.setenv("PR_BODY", "Refs #216\n")
+        assert (
+            issue_link.main(["verify", "--repo", "owner/repo"]) == 0
+        )
+        out = capsys.readouterr().out
+        assert "tracking umbrellas" in out
+        assert "#216" in out
+
+    def test_refs_to_non_tracking_fails_with_new_error(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture,
+    ) -> None:
+        self._setup_mocks(
+            monkeypatch,
+            labels_for={214: ["type:fix", "layer:p3-harness"]},
+        )
+        monkeypatch.setenv("PR_BODY", "Refs #214\n")
+        assert (
+            issue_link.main(["verify", "--repo", "owner/repo"]) == 1
+        )
+        out = capsys.readouterr().out
+        assert "::error::PR body uses only 'Refs' for #214" in out
+        assert "'type:tracking' label" in out
+        assert "'<!-- partial -->'" in out
+        assert "See #216." in out
+
+    def test_refs_to_mixed_tracking_and_non_tracking_fails(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture,
+    ) -> None:
+        self._setup_mocks(
+            monkeypatch,
+            labels_for={
+                216: ["type:tracking"],
+                214: ["type:fix"],  # not tracking -> sinks the whole set
+            },
+        )
+        monkeypatch.setenv("PR_BODY", "Refs #216\nRefs #214\n")
+        assert (
+            issue_link.main(["verify", "--repo", "owner/repo"]) == 1
+        )
+        out = capsys.readouterr().out
+        assert "::error::" in out
+
+    def test_partial_marker_opts_out(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture,
+    ) -> None:
+        # No tracking label, but the marker opts out of the gate.
+        self._setup_mocks(monkeypatch, labels_for={214: ["type:fix"]})
+        monkeypatch.setenv(
+            "PR_BODY",
+            "Refs #214\n\n<!-- partial -->\n",
+        )
+        assert (
+            issue_link.main(["verify", "--repo", "owner/repo"]) == 0
+        )
+        out = capsys.readouterr().out
+        assert "'<!-- partial -->' marker" in out
+
+    def test_get_issue_labels_failure_treated_as_not_tracking(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture,
+    ) -> None:
+        # Simulate gh api flake / network failure -> labels=None -> fail.
+        self._setup_mocks(monkeypatch, labels_for={214: None})
+        monkeypatch.setenv("PR_BODY", "Refs #214\n")
+        assert (
+            issue_link.main(["verify", "--repo", "owner/repo"]) == 1
+        )
+        assert "::error::" in capsys.readouterr().out
+
+    def test_existence_failure_short_circuits_before_gate(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture,
+    ) -> None:
+        # If a Refs target does not exist, the existence error fires
+        # first; the new closing-keyword gate is never reached and
+        # ``get_issue_labels`` must not be called.
+        monkeypatch.setattr(issue_link, "issue_exists", lambda *_a: False)
+
+        def _fail(*_a, **_k):
+            raise AssertionError("get_issue_labels must not run when existence fails")
+
+        monkeypatch.setattr(issue_link, "get_issue_labels", _fail)
+        monkeypatch.setenv("PR_BODY", "Refs #999999\n")
+        assert (
+            issue_link.main(["verify", "--repo", "owner/repo"]) == 1
+        )
+        assert "does not exist" in capsys.readouterr().out
