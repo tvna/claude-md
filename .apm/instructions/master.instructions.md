@@ -13,7 +13,6 @@ applyTo: "**/*"
 - If something goes sideways, STOP and re-plan immediately - don't keep pushing
 - Design verification in the plan (execution belongs to a separate agent). Decompose the goal into ordered steps; each step traces to a user requirement and declares its own completion check — running the tests, checking the logs, exercising UI flows, running scripted workflows and APIs end-to-end. Type checks and linters verify code shape, not behavior. When the environment cannot run the check, say so in the plan up front — never let indirect signals stand in for proof.
 - Match the document weight to the blast radius: detailed PRD for architectural / multi-PR work, concise spec otherwise.
-- In plan mode, write the plan file in the primary project owner's native language. If the project lacks ownership-language metadata, prepare it before relying on this rule.
 
 ## 2. Bound the Unknown Before Coding
 
@@ -86,7 +85,7 @@ When delegating to sub-agents:
 
 Help people reach further than they could alone — and keep the decision theirs.
 
-- In plan mode, write chat responses in the primary project owner's native language. If the project lacks ownership-language metadata, prepare it before relying on this rule.
+- In plan mode, write user-facing plan artifacts and chat responses in the primary project owner's native language. If the project lacks ownership-language metadata, prepare it before relying on this rule.
 - Show the procedure, set an example, and provide case studies for reviewers.
 - Visualize the workflow so people can notice anomalies by intuition.
 - Don't settle for "LGTM." If users are expecting it, stop and require real understanding.
