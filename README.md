@@ -73,5 +73,6 @@ git submodule update --remote .claude-md-master
 - All edits land through a PR. Run a retrospective after merge (Principle 3).
 - Only **rules that hold across every project** belong here. Project-specific rules live in each project's own `CLAUDE.md`.
 - Prefer removing words over adding them (Principle 4).
+- New or modified workflow-called scripts under `scripts/` must meet the [workflow script quality standard](./docs/workflow-script-quality.md).
 
 ---
