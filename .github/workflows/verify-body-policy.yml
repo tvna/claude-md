@@ -1,0 +1,38 @@
+name: Verify body policy
+
+on:
+  issues:
+    types: [opened, edited, reopened]
+  pull_request:
+    types: [opened, edited, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    env:
+      KIND: ${{ github.event_name == 'issues' && 'issue' || 'pull_request' }}
+      ISSUE_BODY: ${{ github.event.issue.body }}
+      PR_BODY: ${{ github.event.pull_request.body }}
+      ISSUE_AUTHOR: ${{ github.event.issue.user.login }}
+      PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+      ISSUE_CREATED_AT: ${{ github.event.issue.created_at }}
+      PR_CREATED_AT: ${{ github.event.pull_request.created_at }}
+      BODY_POLICY_CUTOFF: "2026-05-23T00:00:00Z"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+
+      - name: Validate body section structure
+        run: |
+          body_file="$(mktemp)"
+          if [ "$KIND" = "issue" ]; then
+            printf '%s' "$ISSUE_BODY" > "$body_file"
+          else
+            printf '%s' "$PR_BODY" > "$body_file"
+          fi
+          python3 scripts/body_policy.py verify \
+            --kind "$KIND" \
+            --body-file "$body_file"
