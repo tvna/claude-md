@@ -10,6 +10,7 @@ The taxonomy is introduced incrementally per the phased rollout in [#84](https:/
 |---|---|---|
 | `.github/labels.json` | `/repos/tvna/claude-md/labels` | JSON source of truth for repository labels |
 | `docs/issue-triage.md` *(this file)* | — | Runbook |
+| `docs/issue-pr-body-standard.md` | — | Sibling runbook for issue/PR body shape (read after labels route an issue) |
 
 ## Axes
 
