@@ -1,6 +1,6 @@
-# Issue Triage — Three-Axis Label Taxonomy & Routing Runbook
+# Issue Triage — Label Taxonomy & Routing Runbook
 
-This document is the operator-facing runbook for the labels that triage every issue in this repository. Three axes plus one severity flag — all readable from the GraphQL `labels.nodes[]` header — let an API/MCP client classify an issue without fetching its body.
+This document is the operator-facing runbook for the labels that triage every issue in this repository. The core axes, severity flag, and automated threat flags are all readable from the GraphQL `labels.nodes[]` header, letting an API/MCP client route an issue without fetching its body.
 
 The taxonomy is introduced incrementally per the phased rollout in [#84](https://github.com/tvna/claude-md/issues/84), which supersedes the `agent:*` design from [#34](https://github.com/tvna/claude-md/issues/34). The JSON SoT lives at `.github/labels.json`; the `Apply labels` workflow described below reconciles GitHub against it. Per [CLAUDE.md §3](../blob/main/CLAUDE.md), agents must be concentrated at one workflow point *after* deterministic gates pass — the labels are the gate. Per §5 it exists to avoid wasting tokens on bodies the agent should not read in full.
 
@@ -8,7 +8,7 @@ The taxonomy is introduced incrementally per the phased rollout in [#84](https:/
 
 | File | Target | Purpose |
 |---|---|---|
-| `.github/labels.json` | `/repos/tvna/claude-md/labels` | JSON source of truth for the 15 labels |
+| `.github/labels.json` | `/repos/tvna/claude-md/labels` | JSON source of truth for repository labels |
 | `docs/issue-triage.md` *(this file)* | — | Runbook |
 
 ## Axes
@@ -19,6 +19,7 @@ Every issue receives:
 - **Exactly 1 `type:*` label** — purpose of the change
 - **0 or 1 `state:*` label** — lifecycle position; absent means active
 - **0 or 1 `severity:security` label** — security-sensitive flag
+- **0 to 2 `threat:*` labels** — automated threat-intelligence and response routing flags
 
 ### `layer:*` (multi-valued, ≥1)
 
@@ -61,14 +62,27 @@ Maps 1:1 to the Conventional Commit prefixes used in this repo (`docs(...)`, `fi
 |---|---|
 | `severity:security` | Security-sensitive. Overrides agent routing toward `investigate` regardless of `type:*`. |
 
+### `threat:*` (0 to 2)
+
+These labels are applied by the `Threat intelligence triage` workflow. They do not replace `severity:security`; they record whether the issue/PR metadata contains enough concrete security signal to require threat-intelligence handling.
+
+| Label | Meaning |
+|---|---|
+| `threat:intel-needed` | Collect threat intelligence before routing or implementation. |
+| `threat:response-needed` | Security response is required; do not open an autonomous PR before investigation. |
+
+The deterministic rule lives in `scripts/threat_intel_triage.py` and reads only title, body, and labels. `severity:security` always adds both threat labels. CVE/GHSA/OSV/advisory/vulnerability/exploit/malware/supply-chain/secret-leak/compromise/IOC signals add `threat:intel-needed`. Active exploitation, public exploit availability, RCE, critical impact, malicious package, secret/credential exposure, compromise, or rotate/revoke language also add `threat:response-needed`.
+
 ## Agent routing
 
-Agents read `(type, state, severity)` from the header alone and apply this table — **no body fetch is required for routing**:
+Agents read `(type, state, severity, threat)` from the header alone and apply this table — **no body fetch is required for routing**:
 
 | Condition | Agent action | Body read? |
 |---|---|---|
 | `state:rfc` OR `state:parked` | no-action | no |
 | `type:tracking` | no-action on umbrella; act on sub-issues only | no |
+| `threat:response-needed` | investigate + response planning (no autonomous PR) | yes |
+| `threat:intel-needed` | collect threat intelligence, then re-route | yes |
 | `severity:security` (regardless of other labels) | investigate (no autonomous PR) | yes |
 | `type:fix` AND NOT `severity:security` | auto-fix candidate (mechanical PR allowed) | yes |
 | `type:docs` | auto-fix candidate | yes |
@@ -137,7 +151,8 @@ gh api -X GET /repos/tvna/claude-md/issues --paginate -f state=all \
         | select((.labels | map(.name) | any(startswith("layer:")) | not) or
                  (.labels | map(.name) | map(select(startswith("type:"))) | length != 1) or
                  (.labels | map(.name) | map(select(startswith("state:"))) | length > 1) or
-                 (.labels | map(.name) | map(select(. == "severity:security")) | length > 1))
+                 (.labels | map(.name) | map(select(. == "severity:security")) | length > 1) or
+                 (.labels | map(.name) | map(select(startswith("threat:"))) | length > 2))
         | .number'
 # Must print nothing once Phase 3 is complete.
 ```
@@ -156,7 +171,7 @@ Deleting a label is **destructive on existing issues** — GitHub removes the la
 
 ## Drift detection
 
-A scheduled workflow that diffs the live labels returned by `gh api` against `.github/labels.json` **and** verifies issue coverage (every open issue has ≥1 `layer:*`, exactly 1 `type:*`, ≤1 `state:*`, ≤1 `severity:*`) is planned as Phase 5 of [#84](https://github.com/tvna/claude-md/issues/84) (parked). Until it lands, drift is detected only by manual review during retrospectives.
+A scheduled workflow that diffs the live labels returned by `gh api` against `.github/labels.json` **and** verifies issue coverage (every open issue has ≥1 `layer:*`, exactly 1 `type:*`, ≤1 `state:*`, ≤1 `severity:*`, ≤2 `threat:*`) is planned as Phase 5 of [#84](https://github.com/tvna/claude-md/issues/84) (parked). Until it lands, drift is detected only by manual review during retrospectives.
 
 ## Migration from the `agent:*` design (#34)
 

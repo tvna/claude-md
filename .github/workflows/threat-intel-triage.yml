@@ -1,0 +1,57 @@
+name: Threat intelligence triage
+
+on:
+  issues:
+    types: [opened, edited, labeled, unlabeled, reopened]
+  pull_request_target:
+    types: [opened, edited, synchronize, labeled, unlabeled, reopened, ready_for_review]
+
+permissions:
+  issues: write
+  pull-requests: read
+  contents: read
+
+jobs:
+  triage:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      TITLE: ${{ github.event.issue.title || github.event.pull_request.title }}
+      BODY: ${{ github.event.issue.body || github.event.pull_request.body }}
+      NUMBER: ${{ github.event.issue.number || github.event.pull_request.number }}
+      LABELS_JSON: ${{ toJSON(github.event.issue.labels || github.event.pull_request.labels) }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+
+      - name: Classify threat intelligence need
+        id: triage
+        run: |
+          body_file="$(mktemp)"
+          labels_file="$(mktemp)"
+          printf '%s' "$BODY" > "$body_file"
+          printf '%s' "$LABELS_JSON" > "$labels_file"
+          labels="$(
+            python3 - "$labels_file" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as handle:
+    labels = json.load(handle)
+print(",".join(label.get("name", "") for label in labels if isinstance(label, dict)))
+PY
+          )"
+          python3 scripts/threat_intel_triage.py classify \
+            --title "$TITLE" \
+            --body-file "$body_file" \
+            --labels "$labels" \
+            --github-output "$GITHUB_OUTPUT"
+
+      - name: Apply threat labels
+        if: steps.triage.outputs.recommended_labels != ''
+        run: gh issue edit "$NUMBER" --repo "$REPO" --add-label "${{ steps.triage.outputs.recommended_labels }}"
+
+      - name: Remove stale threat labels
+        if: steps.triage.outputs.remove_labels != ''
+        run: gh issue edit "$NUMBER" --repo "$REPO" --remove-label "${{ steps.triage.outputs.remove_labels }}"

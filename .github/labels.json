@@ -80,6 +80,16 @@
     "color": "ff7619"
   },
   {
+    "name": "threat:intel-needed",
+    "description": "Threat intelligence collection is required before routing or implementation.",
+    "color": "b4a7d6"
+  },
+  {
+    "name": "threat:response-needed",
+    "description": "Security response is required; no autonomous PR before investigation.",
+    "color": "cc0000"
+  },
+  {
     "name": "dependencies",
     "description": "Dependency bump (Dependabot or manual).",
     "color": "0366d6"
