@@ -88,7 +88,7 @@ class TestFollowsNamingConvention:
         [
             "Notify title policy violations",
             "fix(non-ascii):",
-            "[ruleset-drift] SoT vs live drift detected (2026-05-23)",
+            "[legacy] title format",
         ],
     )
     def test_issue_titles_fail(self, title: str) -> None:
