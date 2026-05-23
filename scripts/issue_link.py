@@ -41,9 +41,26 @@ _REF_LINE = re.compile(
     re.IGNORECASE | re.MULTILINE,
 )
 
+# Per #216 PR-A, capture the keyword too so we can classify each reference
+# as closing vs non-closing. GitHub's auto-close keyword set is
+# Closes/Fixes/Resolves (and conjugations); ``Refs`` does NOT auto-close.
+_REF_LINE_KEYWORD = re.compile(
+    r"^[ \t]*(Refs|Closes|Fixes|Resolves)[ \t]+#(\d+)",
+    re.IGNORECASE | re.MULTILINE,
+)
+_CLOSING_KEYWORDS = frozenset({"closes", "fixes", "resolves"})
+_TRACKING_LABEL = "type:tracking"
+
+# Authors who want to use ``Refs #N`` against a non-tracking issue opt
+# out of the closing-keyword gate by including this literal marker. The
+# marker is itself an HTML comment, so it is invisible in rendered
+# Markdown -- but it must be detected from the *raw* body before
+# :func:`strip_html_comments` runs.
+_PARTIAL_MARKER_RE = re.compile(r"<!--\s*partial\s*-->", re.IGNORECASE)
+
 _NO_REFS_MSG = (
     "::error::PR body has no issue reference. Add a line like "
-    "'Refs #<num>' or 'Closes #<num>' (case-insensitive keywords: "
+    "'Closes #<num>' or 'Refs #<num>' (case-insensitive keywords: "
     "Refs, Closes, Fixes, Resolves). See CLAUDE.md §3."
 )
 
@@ -67,6 +84,36 @@ def extract_refs(body: str) -> list[int]:
     """
     found = {int(m.group(1)) for m in _REF_LINE.finditer(body)}
     return sorted(found)
+
+
+def classify_refs(body: str) -> list[tuple[str, int]]:
+    """Return [(keyword_lowercase, number)] for each reference in *body*.
+
+    Preserves insertion order, de-duplicated on the (keyword, number)
+    pair. Same line-anchored matching contract as :func:`extract_refs`,
+    but exposes the keyword so callers can distinguish closing keywords
+    (`Closes`, `Fixes`, `Resolves`) from the non-closing `Refs`.
+    """
+    out: list[tuple[str, int]] = []
+    seen: set[tuple[str, int]] = set()
+    for m in _REF_LINE_KEYWORD.finditer(body):
+        key = (m.group(1).lower(), int(m.group(2)))
+        if key not in seen:
+            seen.add(key)
+            out.append(key)
+    return out
+
+
+def body_has_partial_marker(raw_body: str) -> bool:
+    """Return True if *raw_body* contains a ``<!-- partial -->`` marker.
+
+    Checked against the raw body BEFORE :func:`strip_html_comments`,
+    because the marker itself is an HTML comment that would otherwise be
+    removed. The marker opts the PR out of the closing-keyword gate
+    (per #216 PR-A) for legitimate partial work against a non-umbrella
+    issue.
+    """
+    return _PARTIAL_MARKER_RE.search(raw_body) is not None
 
 
 def verify_ref_exists(
@@ -106,12 +153,62 @@ def issue_exists(repo: str, number: int) -> bool:
     return verify_ref_exists(repo, number)
 
 
+def get_issue_labels(
+    repo: str,
+    number: int,
+    *,
+    runner: Callable[..., object] | None = None,
+) -> list[str] | None:
+    """Return label names on issue/PR <number>, or ``None`` on failure.
+
+    Uses ``gh api ... --jq '.labels[].name'`` so the output is one label
+    per line and no JSON parsing is needed. ``None`` means "could not
+    determine" -- callers should fail-safe (treat as not tracking) so
+    flaky API calls cannot silently unlock the closing-keyword gate.
+    """
+    if runner is None:
+        runner = subprocess.run
+
+    try:
+        result = runner(
+            [
+                "gh", "api",
+                f"/repos/{repo}/issues/{number}",
+                "--jq", ".labels[].name",
+            ],
+            capture_output=True,
+            timeout=30,
+            check=True,
+        )
+    except (subprocess.SubprocessError, FileNotFoundError, OSError):
+        return None
+
+    raw = getattr(result, "stdout", b"") or b""
+    if isinstance(raw, bytes):
+        raw = raw.decode("utf-8", errors="replace")
+    return [line.strip() for line in raw.splitlines() if line.strip()]
+
+
+def _format_no_closing_keyword_msg(numbers: list[int]) -> str:
+    joined = ", ".join(f"#{n}" for n in numbers)
+    return (
+        f"::error::PR body uses only 'Refs' for {joined}, but none of "
+        f"those issues carry the '{_TRACKING_LABEL}' label and the body "
+        "lacks a '<!-- partial -->' opt-out marker. If this PR fully "
+        "resolves the issue, replace 'Refs' with 'Closes', 'Fixes', or "
+        "'Resolves' so GitHub auto-closes it on merge. If this is "
+        "partial work against a non-umbrella issue, add a literal "
+        "'<!-- partial -->' line to the body. See #216."
+    )
+
+
 def _verify(repo: str, body: str, author: str | None = None) -> int:
     if author is not None and author in _TRUSTED_BOT_LOGINS:
         print(f"skipped: trusted bot author ({author})")
         return 0
 
-    cleaned = strip_html_comments(body.replace("\r", ""))
+    raw_body = body.replace("\r", "")
+    cleaned = strip_html_comments(raw_body)
     refs = extract_refs(cleaned)
 
     if not refs:
@@ -125,7 +222,36 @@ def _verify(repo: str, body: str, author: str | None = None) -> int:
         else:
             print(f"::error::Referenced #{n} does not exist in {repo}.")
             fail = 1
-    return fail
+    if fail:
+        return 1
+
+    # Closing-keyword gate (per #216 PR-A): if at least one reference is
+    # a closing keyword, the PR will auto-close its issue on merge -- pass.
+    classified = classify_refs(cleaned)
+    if any(kw in _CLOSING_KEYWORDS for kw, _ in classified):
+        return 0
+
+    # All references are non-closing 'Refs'. Allow opt-out via marker.
+    if body_has_partial_marker(raw_body):
+        print(
+            "note: PR body has '<!-- partial -->' marker; "
+            "closing-keyword check skipped."
+        )
+        return 0
+
+    # Otherwise require every Refs target to be a tracking umbrella.
+    refs_only = sorted({n for kw, n in classified if kw == "refs"})
+    for n in refs_only:
+        labels = get_issue_labels(repo, n)
+        if labels is None or _TRACKING_LABEL not in labels:
+            print(_format_no_closing_keyword_msg(refs_only))
+            return 1
+    print(
+        f"note: PR body references only tracking umbrellas "
+        f"({', '.join(f'#{n}' for n in refs_only)}); "
+        "closing-keyword check passes."
+    )
+    return 0
 
 
 def _cmd_verify(args: argparse.Namespace) -> int:
