@@ -5,6 +5,12 @@ applyTo: "**/*"
 
 # Agent Instructions
 
+Treat the numbered sections as bounded contexts: each owns one domain of
+responsibility, vocabulary, and verification. When changing these instructions,
+place the rule in the layer that owns the behavior being governed; translate
+cross-layer evidence into that layer's policy language instead of letting
+examples, hooks, or repo mechanics leak into unrelated responsibilities.
+
 ## 1. Define the Goal with Plan Mode First
 
 *Layer: goal & plan structure — what the work is and how it will be verified.*
