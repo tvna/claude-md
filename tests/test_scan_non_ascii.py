@@ -222,6 +222,17 @@ class TestClassifyAction:
     def test_trusted_with_ack_skips(self) -> None:
         assert san.classify_action(True, True, "OWNER") == "skip"
 
+    def test_trusted_title_violation_with_ack_still_advises(self) -> None:
+        assert (
+            san.classify_action(
+                True,
+                True,
+                "OWNER",
+                has_title_violation=True,
+            )
+            == "advisory"
+        )
+
     def test_trusted_without_ack_is_advisory(self) -> None:
         assert san.classify_action(True, False, "MEMBER") == "advisory"
 
@@ -327,6 +338,18 @@ class TestBuildAdvisoryComment:
         assert san.ACK_MARKER in body
         assert r"🎯" in body
 
+    def test_title_violation_notice(self) -> None:
+        body = san.build_advisory_comment(
+            action="advisory",
+            association="OWNER",
+            kind="issue",
+            escaped=r"\u3042",
+            has_title_violation=True,
+        )
+        assert "Title policy violation" in body
+        assert "must be ASCII-only" in body
+        assert "does not dismiss a non-ASCII title" in body
+
 
 # ---------------------------------------------------------------------------
 # build_summary
@@ -342,6 +365,7 @@ class TestBuildSummary:
             association="OWNER",
             trust="trusted",
             has_non_ascii=True,
+            has_title_violation=True,
             has_ack=False,
             action="advisory",
         )
@@ -353,6 +377,7 @@ class TestBuildSummary:
         assert "`trusted`" in out
         assert "`true`" in out
         assert "`false`" in out
+        assert "| Title violation | `true` |" in out
         assert "`advisory`" in out
 
     def test_handles_missing_number_and_assoc(self) -> None:
@@ -363,6 +388,7 @@ class TestBuildSummary:
             association=None,
             trust="external",
             has_non_ascii=False,
+            has_title_violation=False,
             has_ack=False,
             action="none",
         )
@@ -600,13 +626,37 @@ class TestRun:
         event = {
             "issue": {
                 "number": 1,
+                "title": "ascii title",
+                "body": "日本 " + san.ACK_MARKER,
+                "author_association": "OWNER",
+            }
+        }
+        assert san.run(event, "issues", "o/r") == 0
+        assert seen == []
+
+    def test_title_violation_with_ack_still_comments(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        seen = _capture_gh_api(monkeypatch)
+        event = {
+            "issue": {
+                "number": 10,
                 "title": "日本",
                 "body": "ok " + san.ACK_MARKER,
                 "author_association": "OWNER",
             }
         }
         assert san.run(event, "issues", "o/r") == 0
-        assert seen == []
+        methods_paths = [(c[0], c[1]) for c in seen]
+        assert ("POST", "/repos/o/r/issues/10/labels") in methods_paths
+        assert ("POST", "/repos/o/r/issues/10/comments") in methods_paths
+        comment = next(
+            c[2]["body"]
+            for c in seen
+            if c[0] == "POST" and c[1] == "/repos/o/r/issues/10/comments"
+        )
+        assert "Title policy violation" in comment
+        assert "does not dismiss a non-ASCII title" in comment
 
     def test_action_advisory_labels_and_comments(
         self, monkeypatch: pytest.MonkeyPatch
