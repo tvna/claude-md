@@ -1,17 +1,22 @@
 {
-  "name": "all-branches-no-force-push",
+  "name": "dependabot-branches",
   "target": "branch",
   "enforcement": "active",
   "conditions": {
     "ref_name": {
-      "include": ["~ALL"],
-      "exclude": ["~DEFAULT_BRANCH", "refs/heads/dependabot/*"]
+      "include": ["refs/heads/dependabot/*"],
+      "exclude": []
     }
   },
   "bypass_actors": [
     {
       "actor_id": 5,
       "actor_type": "RepositoryRole",
+      "bypass_mode": "always"
+    },
+    {
+      "actor_id": 49699333,
+      "actor_type": "Integration",
       "bypass_mode": "always"
     }
   ],

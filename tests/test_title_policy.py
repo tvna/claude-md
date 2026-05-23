@@ -38,9 +38,10 @@ class TestFollowsNamingConvention:
     @pytest.mark.parametrize(
         "title",
         [
-            "fix(non-ascii): notify title policy violations (#163)",
-            "chore: regenerate agent instructions (#18)",
-            "docs(rulesets): update smoke tests (#155)",
+            "fix(non-ascii): notify title policy violations",
+            "chore: regenerate agent instructions",
+            "docs(rulesets): update smoke tests",
+            "fix(ruleset-drift): align issue titles with policy",
         ],
     )
     def test_pr_titles_pass(self, title: str) -> None:
@@ -56,9 +57,8 @@ class TestFollowsNamingConvention:
         "title",
         [
             "Notify title policy violations from non-ASCII scan #163",
-            "fix(non-ascii): notify title policy violations",
             "fix(non_ascii): notify title policy violations (#163)",
-            "fix(non-ascii): notify title policy violations #163",
+            "fix(non-ascii):",
         ],
     )
     def test_pr_titles_fail(self, title: str) -> None:
@@ -127,10 +127,9 @@ class TestVerifyTitle:
         ) == 1
         out = capsys.readouterr().out
         assert "::error::pull_request title must be ASCII-only" in out
-        assert "must follow repository naming convention" in out
         assert "U+200B" in out
 
-    def test_pr_without_issue_number_exits_one(
+    def test_pr_without_issue_number_exits_zero(
         self, capsys: pytest.CaptureFixture[str]
     ) -> None:
         assert (
@@ -138,11 +137,13 @@ class TestVerifyTitle:
                 "fix(non-ascii): notify title policy violations",
                 kind="pull_request",
             )
-            == 1
+            == 0
         )
         out = capsys.readouterr().out
-        assert "::error::pull_request title must follow repository naming convention" in out
-        assert "`type(scope): summary (#issue)`" in out
+        assert (
+            "OK: pull_request title is ASCII-only and follows naming convention."
+            in out
+        )
 
 
 class TestCLI:
@@ -151,7 +152,7 @@ class TestCLI:
         monkeypatch: pytest.MonkeyPatch,
         capsys: pytest.CaptureFixture[str],
     ) -> None:
-        monkeypatch.setenv("TITLE", "ci: ascii only (#1)")
+        monkeypatch.setenv("TITLE", "ci: ascii only")
         assert title_policy.main(["verify", "--kind", "pull_request"]) == 0
         assert (
             "OK: pull_request title is ASCII-only and follows naming convention."

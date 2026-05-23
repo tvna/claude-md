@@ -37,10 +37,6 @@ _TYPE_PATTERN = "|".join(_CONVENTIONAL_TYPES)
 _CONVENTIONAL_TITLE_RE = re.compile(
     rf"^(?:{_TYPE_PATTERN})(?:\([a-z0-9][a-z0-9-]*\))?: .+"
 )
-_PR_TITLE_RE = re.compile(
-    rf"^(?:{_TYPE_PATTERN})(?:\([a-z0-9][a-z0-9-]*\))?: .+ \(#\d+\)$"
-)
-
 
 def is_ascii_title(title: str) -> bool:
     """Return True if *title* contains only ASCII code points."""
@@ -49,18 +45,14 @@ def is_ascii_title(title: str) -> bool:
 
 def follows_naming_convention(title: str, *, kind: str) -> bool:
     """Return True if *title* follows this repo's title convention."""
-    if kind == "pull_request":
-        return _PR_TITLE_RE.fullmatch(title) is not None
-    if kind == "issue":
+    if kind in {"issue", "pull_request"}:
         return _CONVENTIONAL_TITLE_RE.fullmatch(title) is not None
     raise ValueError(f"unsupported title kind: {kind!r}")
 
 
 def naming_convention_hint(kind: str) -> str:
     """Return the operator-facing expected title shape for *kind*."""
-    if kind == "pull_request":
-        return "`type(scope): summary (#issue)`"
-    if kind == "issue":
+    if kind in {"issue", "pull_request"}:
         return "`type(scope): summary`"
     raise ValueError(f"unsupported title kind: {kind!r}")
 

@@ -7,11 +7,12 @@ on:
         description: 'Which ruleset(s) to apply'
         type: choice
         required: true
-        default: 'both'
+        default: 'all'
         options:
           - all-branches
+          - dependabot
           - main
-          - both
+          - all
       dry_run:
         description: 'Plan only (diff + intent, no live changes)'
         type: boolean
@@ -54,7 +55,7 @@ jobs:
       - name: Validate ruleset JSON syntax
         run: |
           set -euo pipefail
-          for f in .github/rulesets/main.json .github/rulesets/all-branches.json; do
+          for f in .github/rulesets/main.json .github/rulesets/all-branches.json .github/rulesets/dependabot.json; do
             if ! jq empty < "$f"; then
               echo "::error file=$f::Invalid JSON syntax."
               exit 1

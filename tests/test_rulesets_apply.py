@@ -49,9 +49,11 @@ def write_sot(path: Path, name: str) -> Path:
 class TestSelectTargets:
     def test_each_valid_choice(self) -> None:
         assert ra.select_targets("all-branches") == ["all-branches.json"]
+        assert ra.select_targets("dependabot") == ["dependabot.json"]
         assert ra.select_targets("main") == ["main.json"]
-        assert ra.select_targets("both") == [
+        assert ra.select_targets("all") == [
             "all-branches.json",
+            "dependabot.json",
             "main.json",
         ]
 
@@ -271,6 +273,7 @@ class TestCliFlows:
         sot_dir = tmp_path / "rulesets"
         sot_dir.mkdir()
         write_sot(sot_dir / "all-branches.json", "all")
+        write_sot(sot_dir / "dependabot.json", "dependabot")
         write_sot(sot_dir / "main.json", "main")
         summary = tmp_path / "summary.md"
         monkeypatch.setenv("GH_TOKEN", "tok")
@@ -287,7 +290,7 @@ class TestCliFlows:
                     "--sot-dir",
                     str(sot_dir),
                     "--choice",
-                    "both",
+                    "all",
                     "--summary-file",
                     str(summary),
                 ]
@@ -296,6 +299,10 @@ class TestCliFlows:
         )
         text = summary.read_text(encoding="utf-8")
         assert "| all-branches.json | all | 0 | plan-only (POST) | \u2014 |" in text
+        assert (
+            "| dependabot.json | dependabot | 0 | plan-only (POST) | \u2014 |"
+            in text
+        )
         assert "| main.json | main | 0 | plan-only (POST) | \u2014 |" in text
 
     def test_plan_ambiguous_exits_nonzero(
