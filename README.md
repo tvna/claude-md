@@ -1,5 +1,7 @@
 # claude-md
 
+English | [Japanese](./README.ja.md) | [Simplified Chinese](./README.zh.md)
+
 Master repository for personally tuned agent instructions, compiled with [`microsoft/apm`](https://github.com/microsoft/apm) into [`CLAUDE.md`](./CLAUDE.md) and [`AGENTS.md`](./AGENTS.md) for other projects.
 
 ## Purpose
@@ -73,18 +75,3 @@ git submodule update --remote .claude-md-master
 - Prefer removing words over adding them (Principle 4).
 
 ---
-
-## 日本語版（概要）
-
-個人用に最適化されたエージェント指示のマスターリポジトリ。`microsoft/apm` で [`CLAUDE.md`](./CLAUDE.md) と [`AGENTS.md`](./AGENTS.md) にコンパイルし、他プロジェクトから参照する前提で運用する。ここに置くのは **どのプロジェクトでも成り立つ普遍ルール** のみで、プロジェクト固有の差分は個別のローカル指示ファイル側に書く。
-
-| # | 原則 | レイヤー | 要旨 |
-|---|------|----------|------|
-| 1 | Define the Goal with Plan Mode First | ゴールとプラン構造 | 3 ステップ以上の作業は必ず plan mode から入る |
-| 2 | Bound the Unknown Before Coding | 実装前の認識整理 | 仮定を列挙し、不明は検証か質問で潰す。曖昧な入力には問い、証拠(ログ・エラー・失敗テスト)には修正で応じる |
-| 3 | Use Git Ecosystem Effectively | デリバリ・ハーネス | hooks / CI / 宣言的依存管理でハーネスを先に整える |
-| 4 | Simplicity, Bounded by Safety | アーティファクト・コード | 要求された最小コードのみ。ただし安全装置は削らない |
-| 5 | Accelerate Scale with Quality | 変更スコープと役割分担 | 自分の散らかしのみ掃除、実装/検証/探索でエージェントを分ける |
-| 6 | Be a Force Multiplier | 引き渡しと伝達 | "LGTM" で終わらせず、トレードオフを言語化する |
-
-詳細は英語本文と [`CLAUDE.md`](./CLAUDE.md) を参照。
