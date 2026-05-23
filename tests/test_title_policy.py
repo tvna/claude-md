@@ -34,6 +34,70 @@ class TestIsAsciiTitle:
         assert title_policy.is_ascii_title(title) is False
 
 
+class TestFollowsNamingConvention:
+    @pytest.mark.parametrize(
+        "title",
+        [
+            "fix(non-ascii): notify title policy violations (#163)",
+            "chore: regenerate agent instructions (#18)",
+            "docs(rulesets): update smoke tests (#155)",
+        ],
+    )
+    def test_pr_titles_pass(self, title: str) -> None:
+        assert (
+            title_policy.follows_naming_convention(
+                title,
+                kind="pull_request",
+            )
+            is True
+        )
+
+    @pytest.mark.parametrize(
+        "title",
+        [
+            "Notify title policy violations from non-ASCII scan #163",
+            "fix(non-ascii): notify title policy violations",
+            "fix(non_ascii): notify title policy violations (#163)",
+            "fix(non-ascii): notify title policy violations #163",
+        ],
+    )
+    def test_pr_titles_fail(self, title: str) -> None:
+        assert (
+            title_policy.follows_naming_convention(
+                title,
+                kind="pull_request",
+            )
+            is False
+        )
+
+    @pytest.mark.parametrize(
+        "title",
+        [
+            "fix(non-ascii): notify title policy violations",
+            "tracking: coordinate non-ascii defense",
+        ],
+    )
+    def test_issue_titles_pass(self, title: str) -> None:
+        assert (
+            title_policy.follows_naming_convention(title, kind="issue")
+            is True
+        )
+
+    @pytest.mark.parametrize(
+        "title",
+        [
+            "Notify title policy violations",
+            "fix(non-ascii):",
+            "[ruleset-drift] SoT vs live drift detected (2026-05-23)",
+        ],
+    )
+    def test_issue_titles_fail(self, title: str) -> None:
+        assert (
+            title_policy.follows_naming_convention(title, kind="issue")
+            is False
+        )
+
+
 class TestDescribeNonAscii:
     def test_reports_codepoint_positions(self) -> None:
         assert title_policy.describe_non_ascii("A\u200bB\u202e") == [
@@ -52,7 +116,7 @@ class TestVerifyTitle:
     def test_ascii_exit_zero(self, capsys: pytest.CaptureFixture[str]) -> None:
         assert title_policy.verify_title("docs: update", kind="issue") == 0
         out = capsys.readouterr().out
-        assert "OK: issue title is ASCII-only." in out
+        assert "OK: issue title is ASCII-only and follows naming convention." in out
 
     def test_non_ascii_exit_one(
         self, capsys: pytest.CaptureFixture[str]
@@ -63,7 +127,22 @@ class TestVerifyTitle:
         ) == 1
         out = capsys.readouterr().out
         assert "::error::pull_request title must be ASCII-only" in out
+        assert "must follow repository naming convention" in out
         assert "U+200B" in out
+
+    def test_pr_without_issue_number_exits_one(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        assert (
+            title_policy.verify_title(
+                "fix(non-ascii): notify title policy violations",
+                kind="pull_request",
+            )
+            == 1
+        )
+        out = capsys.readouterr().out
+        assert "::error::pull_request title must follow repository naming convention" in out
+        assert "`type(scope): summary (#issue)`" in out
 
 
 class TestCLI:
@@ -72,9 +151,12 @@ class TestCLI:
         monkeypatch: pytest.MonkeyPatch,
         capsys: pytest.CaptureFixture[str],
     ) -> None:
-        monkeypatch.setenv("TITLE", "ci: ascii only")
+        monkeypatch.setenv("TITLE", "ci: ascii only (#1)")
         assert title_policy.main(["verify", "--kind", "pull_request"]) == 0
-        assert "OK: pull_request title is ASCII-only." in capsys.readouterr().out
+        assert (
+            "OK: pull_request title is ASCII-only and follows naming convention."
+            in capsys.readouterr().out
+        )
 
     def test_title_arg_overrides_env(
         self,

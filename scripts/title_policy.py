@@ -15,14 +15,54 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import sys
 
 _DEFAULT_MAX_FINDINGS = 10
+_CONVENTIONAL_TYPES = (
+    "build",
+    "chore",
+    "ci",
+    "docs",
+    "feat",
+    "fix",
+    "perf",
+    "refactor",
+    "revert",
+    "style",
+    "test",
+    "tracking",
+)
+_TYPE_PATTERN = "|".join(_CONVENTIONAL_TYPES)
+_CONVENTIONAL_TITLE_RE = re.compile(
+    rf"^(?:{_TYPE_PATTERN})(?:\([a-z0-9][a-z0-9-]*\))?: .+"
+)
+_PR_TITLE_RE = re.compile(
+    rf"^(?:{_TYPE_PATTERN})(?:\([a-z0-9][a-z0-9-]*\))?: .+ \(#\d+\)$"
+)
 
 
 def is_ascii_title(title: str) -> bool:
     """Return True if *title* contains only ASCII code points."""
     return title.isascii()
+
+
+def follows_naming_convention(title: str, *, kind: str) -> bool:
+    """Return True if *title* follows this repo's title convention."""
+    if kind == "pull_request":
+        return _PR_TITLE_RE.fullmatch(title) is not None
+    if kind == "issue":
+        return _CONVENTIONAL_TITLE_RE.fullmatch(title) is not None
+    raise ValueError(f"unsupported title kind: {kind!r}")
+
+
+def naming_convention_hint(kind: str) -> str:
+    """Return the operator-facing expected title shape for *kind*."""
+    if kind == "pull_request":
+        return "`type(scope): summary (#issue)`"
+    if kind == "issue":
+        return "`type(scope): summary`"
+    raise ValueError(f"unsupported title kind: {kind!r}")
 
 
 def describe_non_ascii(title: str, limit: int = _DEFAULT_MAX_FINDINGS) -> list[str]:
@@ -39,18 +79,29 @@ def describe_non_ascii(title: str, limit: int = _DEFAULT_MAX_FINDINGS) -> list[s
 
 def verify_title(title: str, *, kind: str) -> int:
     """Print a GitHub Actions annotation and return a process exit code."""
-    if is_ascii_title(title):
-        print(f"OK: {kind} title is ASCII-only.")
-        return 0
+    fail = 0
+    if not is_ascii_title(title):
+        details = ", ".join(describe_non_ascii(title))
+        if details:
+            details = f" Non-ASCII code points: {details}."
+        print(
+            f"::error::{kind} title must be ASCII-only for prompt-injection "
+            f"defense.{details}"
+        )
+        fail = 1
 
-    details = ", ".join(describe_non_ascii(title))
-    if details:
-        details = f" Non-ASCII code points: {details}."
-    print(
-        f"::error::{kind} title must be ASCII-only for prompt-injection "
-        f"defense.{details}"
-    )
-    return 1
+    if not follows_naming_convention(title, kind=kind):
+        print(
+            f"::error::{kind} title must follow repository naming convention: "
+            f"{naming_convention_hint(kind)}."
+        )
+        fail = 1
+
+    if fail:
+        return 1
+
+    print(f"OK: {kind} title is ASCII-only and follows naming convention.")
+    return 0
 
 
 def _cmd_verify(args: argparse.Namespace) -> int:
