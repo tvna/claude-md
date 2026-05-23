@@ -98,6 +98,33 @@ class TestFollowsNamingConvention:
         )
 
 
+class TestPrTitleHasIssueRef:
+    @pytest.mark.parametrize(
+        "title",
+        [
+            "fix(x): summary (#1)",
+            "fix(x): summary (#42)",
+            "fix(x): summary (#203) (#213)",
+            "feat: drop (#999) anywhere in the line",
+        ],
+    )
+    def test_titles_with_issue_ref_detected(self, title: str) -> None:
+        assert title_policy.pr_title_has_issue_ref(title) is True
+
+    @pytest.mark.parametrize(
+        "title",
+        [
+            "fix(x): summary",
+            "feat(harness): add Issue Forms aligned with triage axes",
+            "docs: mention #167 in body text (no parens)",
+            "ci: empty parens () should not match",
+            "ci: (#abc) is not a digit ref",
+        ],
+    )
+    def test_titles_without_issue_ref_pass(self, title: str) -> None:
+        assert title_policy.pr_title_has_issue_ref(title) is False
+
+
 class TestDescribeNonAscii:
     def test_reports_codepoint_positions(self) -> None:
         assert title_policy.describe_non_ascii("A\u200bB\u202e") == [
@@ -144,6 +171,35 @@ class TestVerifyTitle:
             "OK: pull_request title is ASCII-only and follows naming convention."
             in out
         )
+
+    def test_pr_with_issue_ref_in_title_exits_one(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        assert (
+            title_policy.verify_title(
+                "fix(harness): summary (#203)",
+                kind="pull_request",
+            )
+            == 1
+        )
+        out = capsys.readouterr().out
+        assert (
+            "::error::pull_request title must not contain issue references "
+            "like (#NNN)" in out
+        )
+
+    def test_issue_with_issue_ref_in_title_still_passes(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        assert (
+            title_policy.verify_title(
+                "fix(harness): summary (#203)",
+                kind="issue",
+            )
+            == 0
+        )
+        out = capsys.readouterr().out
+        assert "OK: issue title is ASCII-only and follows naming convention." in out
 
 
 class TestCLI:
