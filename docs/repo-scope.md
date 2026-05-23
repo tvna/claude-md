@@ -26,6 +26,7 @@ Agent-tool-specific configuration files and directories MUST NOT be committed to
 | `.cursor/`, `.cursorrules` | Cursor |
 | `.aider*` (e.g. `.aider.conf.yml`, `.aider.chat.history.md`) | Aider |
 | `.continue/` | Continue |
+| `.codex/` | Codex |
 | `.github/copilot-instructions.md` | GitHub Copilot |
 | `.windsurfrules` | Windsurf |
 | `.codeium/` | Codeium |
@@ -45,6 +46,16 @@ The list is non-exhaustive. When a new tool emerges, follow the *Update procedur
 | `claude-md.code-workspace` ([#49](https://github.com/tvna/claude-md/issues/49)) | VS Code multi-root workspace pointer. Editor metadata, not agent config. |
 | `.claude/settings.local.json` | Documented developer-local file. The broader `.claude/` directory rule transitively keeps it out of commits — the historical entry remains documented here so future contributors understand it predated the broader rule. |
 | `.claude/settings.json` ([#109](https://github.com/tvna/claude-md/issues/109)) | **Narrow file-level carve-out** to host deterministic `SessionStart` provisioning hooks. The broader `.claude/` directory rule still applies to every other path under `.claude/` (e.g. `.claude/hooks/`, `.claude/commands/`). See *Security tradeoff* below. |
+
+### Codex import of the `.claude/settings.json` guard
+
+Codex inherits the same governance principle, but not the same runtime primitive:
+
+- **Fact.** This repository already targets Codex through the compiled `AGENTS.md` surface (`apm.yml: target: [claude, codex]`).
+- **Fact.** `.claude/settings.json` is allowed only because it is a reviewed, deterministic provisioning trigger for Claude Code remote sessions.
+- **Fact.** No repo-local Codex startup-hook file is currently carved out here.
+- **Rule.** `.codex/` remains prohibited unless a future issue records a Codex primitive with the same properties that justified `.claude/settings.json`: deterministic provisioning only, reviewable in git, narrower than general tool UX configuration, and backed by verification.
+- **Implication.** Codex-specific preferences, local credentials, prompts, model choices, or UI configuration stay outside the repo. Universal behavior continues to flow through `.apm/instructions/master.instructions.md` and the generated `AGENTS.md`.
 
 ### Security tradeoff for `.claude/settings.json`
 

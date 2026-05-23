@@ -13,7 +13,7 @@ jobs:
       relevant: ${{ steps.diff.outputs.relevant }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 0
       - name: Detect relevant changes
@@ -44,7 +44,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Install pytest
         run: python3 -m pip install --user 'pytest>=8,<9'
@@ -54,6 +54,12 @@ jobs:
 
       - name: Run scan_non_ascii.py unit tests
         run: python3 -m pytest tests/test_scan_non_ascii.py -v
+
+      - name: Run ruleset_drift.py unit tests
+        run: python3 -m pytest tests/test_ruleset_drift.py -v
+
+      - name: Run rulesets_apply.py unit tests
+        run: python3 -m pytest tests/test_rulesets_apply.py -v
 
       - name: Assert uv pin lives only in pyproject.toml
         run: python3 scripts/uv_pin.py drift
@@ -75,15 +81,15 @@ jobs:
           LINT_RESULT: ${{ needs.lint-scripts.result }}
         run: |
           if [ "$LINT_RESULT" != 'success' ]; then
-            echo "::error::uv pin drift gate result=${LINT_RESULT} (expected 'success')."
+            echo "::error::script lint gate result=${LINT_RESULT} (expected 'success')."
             exit 1
           fi
           if [ "$RELEVANT" != 'true' ]; then
-            echo "No APM-relevant changes; APM verification skipped (success). uv pin drift gate passed."
+            echo "No APM-relevant changes; APM verification skipped (success). script lint gate passed."
             exit 0
           fi
           if [ "$VERIFY_RESULT" = 'success' ]; then
-            echo "APM drift verification passed. uv pin drift gate passed."
+            echo "APM drift verification passed. script lint gate passed."
             exit 0
           fi
           echo "::error::APM drift verification result=${VERIFY_RESULT} (expected 'success')."

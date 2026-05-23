@@ -28,6 +28,8 @@ import re
 import subprocess
 import sys
 
+from _trusted_bots import _TRUSTED_BOT_LOGINS
+
 _HTML_COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
 
 # Match a line that begins (after optional indentation) with one of the
@@ -104,7 +106,11 @@ def issue_exists(repo: str, number: int) -> bool:
     return verify_ref_exists(repo, number)
 
 
-def _verify(repo: str, body: str) -> int:
+def _verify(repo: str, body: str, author: str | None = None) -> int:
+    if author is not None and author in _TRUSTED_BOT_LOGINS:
+        print(f"skipped: trusted bot author ({author})")
+        return 0
+
     cleaned = strip_html_comments(body.replace("\r", ""))
     refs = extract_refs(cleaned)
 
@@ -127,7 +133,8 @@ def _cmd_verify(args: argparse.Namespace) -> int:
         body = os.environ.get("PR_BODY", "")
     else:
         body = Path(args.body_file).read_text(encoding="utf-8")
-    return _verify(args.repo, body)
+    author = args.author if args.author is not None else os.environ.get("PR_AUTHOR")
+    return _verify(args.repo, body, author=author or None)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -148,6 +155,14 @@ def main(argv: list[str] | None = None) -> int:
         help=(
             "Path to a file containing the PR body. Falls back to PR_BODY "
             "when omitted."
+        ),
+    )
+    p_verify.add_argument(
+        "--author",
+        help=(
+            "PR author login (e.g. 'dependabot[bot]'). When the login is in "
+            "the trusted-bot allowlist, the Refs check is skipped. Falls back "
+            "to $PR_AUTHOR when omitted."
         ),
     )
     p_verify.set_defaults(func=_cmd_verify)

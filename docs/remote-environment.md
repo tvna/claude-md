@@ -38,6 +38,12 @@ An earlier draft of this runbook ([#107](https://github.com/tvna/claude-md/pull/
 
 The carve-out for `.claude/settings.json` pulls the hook surface back under PR review. See `docs/repo-scope.md` § "Security tradeoff for `.claude/settings.json`" for the recorded risk-acceptance.
 
+## Codex boundary
+
+Codex consumes this repository's universal instruction surface through `AGENTS.md`; it does not currently have an in-repo startup hook carved out here. The `.claude/settings.json` guard is therefore imported as a governance rule, not as a copied file shape: Codex-specific configuration such as `.codex/` remains prohibited unless a future issue establishes a narrow deterministic-provisioning carve-out with review and verification equivalent to the Claude Code hook.
+
+When a Codex remote environment needs the same dependency state, use the verification commands below as the contract. Do not add a Codex-specific settings file solely to mirror Claude Code's `SessionStart` mechanism.
+
 ## Why not nix
 
 - Nix is not pre-installed in the remote environment; installing it adds 60–90 s to every container creation just to deliver one binary.

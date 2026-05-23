@@ -143,7 +143,20 @@ Smoke tests for the live behaviour (from [#18 §Verification](https://github.com
 2. `git push --force origin <any-branch>` is rejected.
 3. A PR whose squash commit subject lacks `#\d+` is blocked at merge (after Phase 3-B).
 4. A PR where `Verify agent instructions / gate` is failing is blocked at merge (after Phase 3-A).
-5. The PR merge UI exposes only the "Squash and merge" button.
+5. A PR whose title contains Japanese, emoji, zero-width, RTL, fullwidth, or any other non-ASCII code point is blocked by `Verify title policy / gate` (after [#155](https://github.com/tvna/claude-md/issues/155)).
+6. The PR merge UI exposes only the "Squash and merge" button.
+
+### Title policy boundary
+
+Issue and PR titles are metadata surfaces: they appear in notifications, project views, triage lists, and agent summaries before body-level context is inspected. The title boundary is therefore stricter than the body/comment non-ASCII workflow. Titles must be ASCII-only; Japanese text, emoji, zero-width marks, RTL controls, fullwidth homoglyphs, and other multi-byte control surfaces are rejected by `.github/workflows/verify-title-policy.yml`. The same gate enforces repository naming convention: issues use `type(scope): summary`, and PRs use `type(scope): summary (#issue)`.
+
+Ruleset smoke test for the required status check:
+
+1. Open a draft PR with a title such as `ci: reject zero-width U+200B` where the real title contains an embedded zero-width space.
+2. Confirm `Verify title policy / gate` fails and the job annotation reports the non-ASCII code point.
+3. Edit the title to ASCII-only but omit the trailing `(#issue)` and confirm the same check still fails.
+4. Edit the title to `fix(scope): summary (#issue)` and confirm the same check passes.
+5. Confirm the merge box remains blocked while the failing required check is present.
 
 ### Post-apply audit log review
 

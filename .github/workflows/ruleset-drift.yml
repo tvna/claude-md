@@ -31,7 +31,7 @@ jobs:
           fi
 
       - name: Checkout repository
-        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Validate ruleset JSON syntax
         run: |
@@ -43,187 +43,20 @@ jobs:
             fi
           done
 
-      - name: Fetch live rulesets
-        run: |
-          set -euo pipefail
-          curl --fail-with-body -sS \
-            -H "Authorization: Bearer ${GH_TOKEN_API}" \
-            -H "Accept: application/vnd.github+json" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            "https://api.github.com/repos/${REPO}/rulesets" \
-            -o /tmp/live-rulesets.json
-
-      - name: Diff SoT vs live and detect unknown rulesets
+      - name: Detect ruleset drift
         id: diff
         env:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set -euo pipefail
-
-          RUN_DATE=$(date -u +%Y-%m-%d)
-          echo "run_date=${RUN_DATE}" >> "$GITHUB_OUTPUT"
-
-          declare -a SOT_FILES=("main.json" "all-branches.json" "dependabot.json")
-
-          # Track SoT names so we can compute unknown-on-live below.
-          SOT_NAMES_JSON="[]"
-          for FILE in "${SOT_FILES[@]}"; do
-            NAME=$(jq -r '.name' ".github/rulesets/${FILE}")
-            SOT_NAMES_JSON=$(jq --arg n "$NAME" '. + [$n]' <<< "$SOT_NAMES_JSON")
-          done
-
-          # Job summary header.
-          {
-            echo "## Ruleset drift detection — run ${RUN_DATE}"
-            echo
-            echo "- Run: ${RUN_URL}"
-            echo
-            echo "| File | Ruleset name | Live id | Status |"
-            echo "|---|---|---|---|"
-          } >> "$GITHUB_STEP_SUMMARY"
-
-          # Issue body header for SoT-vs-live drift (only flushed if drift > 0).
-          {
-            echo "Parent: #30"
-            echo
-            echo "Drift detected between \`.github/rulesets/*.json\` (SoT) and the live rulesets returned by \`GET /repos/${REPO}/rulesets\`."
-            echo
-            echo "- Run: ${RUN_URL}"
-            echo "- Detected at: ${RUN_DATE}"
-            echo
-            echo "## Affected rulesets"
-            echo
-            echo "| File | Ruleset name | Live id | Status |"
-            echo "|---|---|---|---|"
-          } > /tmp/drift-sot-issue.md
-
-          DRIFT_COUNT=0
-          DIFF_DETAILS=""
-
-          for FILE in "${SOT_FILES[@]}"; do
-            FPATH=".github/rulesets/${FILE}"
-            NAME=$(jq -r '.name' "$FPATH")
-            MATCHES=$(jq --arg n "$NAME" '[.[] | select(.name == $n)] | length' /tmp/live-rulesets.json)
-
-            if [ "$MATCHES" -gt 1 ]; then
-              echo "::error::Multiple existing rulesets named '$NAME' ($MATCHES). Refusing to guess; resolve manually."
-              echo "| $FILE | $NAME | — | ambiguous |" >> "$GITHUB_STEP_SUMMARY"
-              exit 1
-            fi
-
-            if [ "$MATCHES" -eq 0 ]; then
-              ROW="| \`${FILE}\` | \`${NAME}\` | — | missing-on-live |"
-              echo "$ROW" >> "$GITHUB_STEP_SUMMARY"
-              echo "$ROW" >> /tmp/drift-sot-issue.md
-              DRIFT_COUNT=$(( DRIFT_COUNT + 1 ))
-              continue
-            fi
-
-            LIVE_ID=$(jq -r --arg n "$NAME" '[.[] | select(.name == $n)] | .[0].id' /tmp/live-rulesets.json)
-            curl --fail-with-body -sS \
-              -H "Authorization: Bearer ${GH_TOKEN_API}" \
-              -H "Accept: application/vnd.github+json" \
-              -H "X-GitHub-Api-Version: 2022-11-28" \
-              "https://api.github.com/repos/${REPO}/rulesets/${LIVE_ID}" \
-              -o "/tmp/live-${FILE}"
-
-            DIFF_FILE=$(mktemp)
-            set +e
-            diff -u \
-              <(jq -S '{name, target, enforcement, conditions, bypass_actors, rules}' "/tmp/live-${FILE}") \
-              <(jq -S '{name, target, enforcement, conditions, bypass_actors, rules}' "$FPATH") \
-              > "$DIFF_FILE"
-            DIFF_RC=$?
-            set -e
-
-            if [ "$DIFF_RC" -eq 0 ]; then
-              echo "| \`${FILE}\` | \`${NAME}\` | ${LIVE_ID} | in-sync |" >> "$GITHUB_STEP_SUMMARY"
-            else
-              ROW="| \`${FILE}\` | \`${NAME}\` | ${LIVE_ID} | drift |"
-              echo "$ROW" >> "$GITHUB_STEP_SUMMARY"
-              echo "$ROW" >> /tmp/drift-sot-issue.md
-              DRIFT_COUNT=$(( DRIFT_COUNT + 1 ))
-
-              DETAIL=$(mktemp)
-              {
-                echo
-                echo "<details><summary>Diff for <code>${NAME}</code> (id ${LIVE_ID})</summary>"
-                echo
-                echo '```diff'
-                cat "$DIFF_FILE"
-                echo '```'
-                echo "</details>"
-              } > "$DETAIL"
-              cat "$DETAIL" >> "$GITHUB_STEP_SUMMARY"
-              DIFF_DETAILS="${DIFF_DETAILS}${DETAIL}"$'\n'
-            fi
-          done
-
-          # Append per-ruleset diff blocks to the SoT-drift issue body, if any.
-          if [ "$DRIFT_COUNT" -gt 0 ]; then
-            {
-              echo
-              echo "## Diffs"
-            } >> /tmp/drift-sot-issue.md
-            while IFS= read -r DETAIL; do
-              [ -z "$DETAIL" ] && continue
-              cat "$DETAIL" >> /tmp/drift-sot-issue.md
-            done <<< "$DIFF_DETAILS"
-            {
-              echo
-              echo "## Remediation"
-              echo
-              echo "Re-dispatch the \`Apply rulesets\` workflow with \`dry_run=false\` once the SoT change has been reviewed (see \`docs/rulesets.md\`)."
-            } >> /tmp/drift-sot-issue.md
-          fi
-
-          # Detect unknown rulesets (live name not present in SoT name set).
-          UNKNOWN_JSON=$(jq --argjson sot "$SOT_NAMES_JSON" \
-            '[.[] | select((.name as $n | $sot | index($n)) | not) | {id, name, target, enforcement}]' \
-            /tmp/live-rulesets.json)
-          UNKNOWN_COUNT=$(jq 'length' <<< "$UNKNOWN_JSON")
-
-          {
-            echo
-            echo "### Unknown rulesets (live but not in SoT)"
-            echo
-          } >> "$GITHUB_STEP_SUMMARY"
-
-          if [ "$UNKNOWN_COUNT" -eq 0 ]; then
-            echo "_None._" >> "$GITHUB_STEP_SUMMARY"
-          else
-            {
-              echo "| Live id | Name | Target | Enforcement |"
-              echo "|---|---|---|---|"
-            } >> "$GITHUB_STEP_SUMMARY"
-            jq -r '.[] | "| \(.id) | `\(.name)` | \(.target) | \(.enforcement) |"' <<< "$UNKNOWN_JSON" \
-              >> "$GITHUB_STEP_SUMMARY"
-
-            {
-              echo "Parent: #30"
-              echo
-              echo "One or more rulesets exist live but have no corresponding file in \`.github/rulesets/\`."
-              echo
-              echo "- Run: ${RUN_URL}"
-              echo "- Detected at: ${RUN_DATE}"
-              echo
-              echo "## Unknown rulesets"
-              echo
-              echo "| Live id | Name | Target | Enforcement |"
-              echo "|---|---|---|---|"
-            } > /tmp/drift-unknown-issue.md
-            jq -r '.[] | "| \(.id) | `\(.name)` | \(.target) | \(.enforcement) |"' <<< "$UNKNOWN_JSON" \
-              >> /tmp/drift-unknown-issue.md
-            {
-              echo
-              echo "## Remediation"
-              echo
-              echo "Either (a) commit the live ruleset as a new \`.github/rulesets/<name>.json\` SoT file, or (b) delete it via \`gh api -X DELETE /repos/${REPO}/rulesets/<id>\` (see \`docs/rulesets.md\` §\"Rollback\")."
-            } >> /tmp/drift-unknown-issue.md
-          fi
-
-          echo "drift_count=${DRIFT_COUNT}" >> "$GITHUB_OUTPUT"
-          echo "unknown_count=${UNKNOWN_COUNT}" >> "$GITHUB_OUTPUT"
+          python3 scripts/ruleset_drift.py detect \
+            --repo "${REPO}" \
+            --sot-dir .github/rulesets \
+            --run-url "${RUN_URL}" \
+            --summary-file "${GITHUB_STEP_SUMMARY}" \
+            --sot-body-file /tmp/drift-sot-issue.md \
+            --unknown-body-file /tmp/drift-unknown-issue.md \
+            >> "$GITHUB_OUTPUT"
 
       - name: File SoT-vs-live drift issue
         if: steps.diff.outputs.drift_count != '0'
@@ -231,12 +64,10 @@ jobs:
           RUN_DATE: ${{ steps.diff.outputs.run_date }}
         run: |
           set -euo pipefail
-          gh issue create \
+          python3 scripts/ruleset_drift.py file-sot-issue \
             --repo "${REPO}" \
-            --title "[ruleset-drift] SoT vs live drift detected (${RUN_DATE})" \
-            --body-file /tmp/drift-sot-issue.md \
-            --label "layer:meta" \
-            --label "type:fix"
+            --run-date "${RUN_DATE}" \
+            --body-file /tmp/drift-sot-issue.md
 
       - name: File unknown-ruleset issue
         if: steps.diff.outputs.unknown_count != '0'
@@ -244,9 +75,7 @@ jobs:
           RUN_DATE: ${{ steps.diff.outputs.run_date }}
         run: |
           set -euo pipefail
-          gh issue create \
+          python3 scripts/ruleset_drift.py file-unknown-issue \
             --repo "${REPO}" \
-            --title "[ruleset-drift] unknown ruleset detected (${RUN_DATE})" \
-            --body-file /tmp/drift-unknown-issue.md \
-            --label "layer:meta" \
-            --label "type:fix"
+            --run-date "${RUN_DATE}" \
+            --body-file /tmp/drift-unknown-issue.md

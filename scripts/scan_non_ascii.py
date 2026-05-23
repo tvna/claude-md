@@ -26,15 +26,10 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from _trusted_bots import _TRUSTED_BOT_LOGINS
+
 # Trust classification per author_association.
 _TRUSTED_ASSOC = frozenset({"OWNER", "MEMBER", "COLLABORATOR"})
-
-# Bot logins that GitHub reports as `author_association: NONE` but whose
-# content we trust enough to demote `block` -> `advisory`. The scan still
-# runs and the advisory comment is still posted; only the destructive
-# action (request-changes / close) is suppressed. See issue #137 / #136.
-# Exact-match only; no wildcards. Extend deliberately, one entry at a time.
-_TRUSTED_BOT_LOGINS: frozenset[str] = frozenset({"dependabot[bot]"})
 
 # Markers held byte-for-byte identical to v1 of the prior YAML workflow so
 # that idempotency keys keep matching across the refactor.
@@ -139,13 +134,15 @@ def classify_action(
     has_ack: bool,
     association: str | None,
     login: str | None = None,
+    has_title_violation: bool = False,
 ) -> str:
     """Decide the action: ``none`` / ``skip`` / ``advisory`` / ``block``.
 
     Mirrors the truth table in ``docs/non-ascii-defense.md`` (Layer 2):
 
     - no non-ASCII -> none
-    - trusted + ack -> skip (operator-reviewed)
+    - trusted + ack -> skip (operator-reviewed), unless the title violates
+      the ASCII-only title boundary
     - trusted -> advisory
     - external -> block (ack ignored)
 
@@ -157,7 +154,7 @@ def classify_action(
     if not has_non_ascii:
         return "none"
     trust = trust_class(association)
-    if trust == "trusted" and has_ack:
+    if trust == "trusted" and has_ack and not has_title_violation:
         return "skip"
     if trust == "trusted":
         return "advisory"
@@ -188,6 +185,7 @@ def build_advisory_comment(
     association: str,
     kind: str,
     escaped: str,
+    has_title_violation: bool = False,
     marker: str = COMMENT_MARKER,
     label: str = NON_ASCII_LABEL,
     ack_marker: str = ACK_MARKER,
@@ -205,10 +203,21 @@ def build_advisory_comment(
             "re-submission with ASCII-only content. The opt-out marker "
             f"`{ack_marker}` does not apply to external contributors."
         )
+    title_notice = ""
+    if has_title_violation:
+        title_notice = (
+            "\n"
+            "**Title policy violation.** Issue and PR titles are "
+            "header-level metadata and must be ASCII-only. The "
+            f"`{ack_marker}` opt-out applies only after body/comment "
+            "review; it does not dismiss a non-ASCII title.\n"
+        )
+
     return (
         f"{marker}\n"
         "\n"
         f"Non-ASCII content detected in this `{kind}`.\n"
+        f"{title_notice}"
         "\n"
         "**Why this matters.** `subscribe_pr_activity` ingests this text "
         "into Claude sessions. Non-ASCII characters (Japanese, emoji, "
@@ -236,6 +245,7 @@ def build_summary(
     association: str | None,
     trust: str,
     has_non_ascii: bool,
+    has_title_violation: bool,
     has_ack: bool,
     action: str,
 ) -> str:
@@ -252,6 +262,7 @@ def build_summary(
         f"| Author association | `{assoc_str}` |\n"
         f"| Trust class | `{trust}` |\n"
         f"| Has non-ASCII | `{str(has_non_ascii).lower()}` |\n"
+        f"| Title violation | `{str(has_title_violation).lower()}` |\n"
         f"| Has ack marker | `{str(has_ack).lower()}` |\n"
         f"| Action | `{action}` |\n"
     )
@@ -398,10 +409,17 @@ def run(event: dict[str, Any], event_name: str, repo: str) -> int:
     association = extracted["association"]
     login = extracted["login"]
 
+    has_title_violation = kind in {"issue", "pull_request"} and detect_non_ascii(title)
     has_non_ascii = detect_non_ascii(f"{title}\n{body}")
     has_ack = has_ack_marker(body)
     trust = trust_class(association)
-    action = classify_action(has_non_ascii, has_ack, association, login)
+    action = classify_action(
+        has_non_ascii,
+        has_ack,
+        association,
+        login,
+        has_title_violation=has_title_violation,
+    )
 
     _append_summary(
         build_summary(
@@ -411,6 +429,7 @@ def run(event: dict[str, Any], event_name: str, repo: str) -> int:
             association=association,
             trust=trust,
             has_non_ascii=has_non_ascii,
+            has_title_violation=has_title_violation,
             has_ack=has_ack,
             action=action,
         )
@@ -419,7 +438,9 @@ def run(event: dict[str, Any], event_name: str, repo: str) -> int:
     print(
         f"event={event_name} kind={kind} number={number} "
         f"assoc={association} trust={trust} "
-        f"has_non_ascii={has_non_ascii} has_ack={has_ack} action={action}"
+        f"has_non_ascii={has_non_ascii} "
+        f"has_title_violation={has_title_violation} "
+        f"has_ack={has_ack} action={action}"
     )
 
     if action in {"none", "skip"}:
@@ -435,6 +456,7 @@ def run(event: dict[str, Any], event_name: str, repo: str) -> int:
         association=association or "",
         kind=kind,
         escaped=escaped,
+        has_title_violation=has_title_violation,
     )
 
     apply_label(repo, number)
