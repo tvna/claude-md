@@ -30,13 +30,14 @@ PROJECTION_KEYS = (
 )
 TARGETS = {
     "all-branches": ["all-branches.json"],
+    "dependabot": ["dependabot.json"],
     "main": ["main.json"],
-    "both": ["all-branches.json", "main.json"],
+    "all": ["all-branches.json", "dependabot.json", "main.json"],
 }
 
 
 def select_targets(
-    choice: Literal["all-branches", "main", "both"],
+    choice: Literal["all-branches", "dependabot", "main", "all"],
 ) -> list[str]:
     try:
         return list(TARGETS[choice])
