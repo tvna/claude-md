@@ -149,6 +149,13 @@ class TestIsRetroPr:
             "retro(feat-harness): review PR #234 repair loops",
             "retro: ad-hoc retrospective",
             "  RETRO(scope): leading space + uppercase",
+            # (retro) scope on a non-retro Conventional Commit type --
+            # covers retro-closing PRs that title policy forces to use
+            # docs/feat/fix/etc. as the primary type.
+            "docs(retro): record PR 235 repair-free merge",
+            "feat(retro): broaden auto-retro skip rule",
+            "fix(retro): edge case",
+            "  Docs(Retro): leading space + mixed case",
         ],
     )
     def test_matches(self, title: str) -> None:
@@ -161,6 +168,13 @@ class TestIsRetroPr:
             "fix: also not",
             "retrospect: close but no",
             "",
+            # Precision guards: tokens that contain "retro" without
+            # being a literal (retro) scope must not match.
+            "docs(retrospective): foo",
+            "chore(retro-bot): foo",
+            # Description text mentions (retro) but it is NOT inside the
+            # type(scope) token.
+            "fix(harness): broaden auto-retro skip rule to cover docs(retro) PRs",
         ],
     )
     def test_non_matches(self, title: str) -> None:
@@ -212,6 +226,13 @@ class TestShouldSkip:
         assert skip is True
         assert "recursion" in reason
 
+    def test_skip_when_pr_has_retro_scope(self) -> None:
+        """docs(retro): ... is a retro-closing PR; must skip to avoid recursion."""
+        pr = _make_pr(title="docs(retro): record PR 235 repair-free merge")
+        skip, reason = ar.should_skip(pr)
+        assert skip is True
+        assert "recursion" in reason
+
     def test_unknown_bot_does_not_skip(self) -> None:
         """The allowlist is exact-match; renovate[bot] is not on it."""
         pr = _make_pr(merged_by_login="renovate[bot]")
@@ -225,12 +246,24 @@ class TestShouldSkip:
 
 
 class TestBuildRetroTitle:
-    def test_with_type_scope(self) -> None:
+    def test_with_type_scope_strips_scope(self) -> None:
+        """Source type(scope) must yield retro(type), not retro(type(scope))."""
         pr = _make_pr(number=42, title="feat(harness): do a thing")
         assert (
             ar.build_retro_title(pr)
-            == "retro(feat(harness)): review PR #42 repair loops"
+            == "retro(feat): review PR #42 repair loops"
         )
+
+    def test_with_retro_scope_avoids_nested_parens(self) -> None:
+        """The motivating regression: docs(retro): ... must not nest into
+        retro(docs(retro)): ... . See issue #245."""
+        pr = _make_pr(number=240, title="docs(retro): record PR 235 repair-free merge")
+        title = ar.build_retro_title(pr)
+        assert title == "retro(docs): review PR #240 repair loops"
+        # Hard regression guard: no double-open / double-close parens
+        # in the generated title regardless of source PR shape.
+        assert "((" not in title
+        assert "))" not in title
 
     def test_without_scope(self) -> None:
         pr = _make_pr(number=7, title="chore: bump deps")
@@ -241,6 +274,28 @@ class TestBuildRetroTitle:
         assert (
             ar.build_retro_title(pr) == "retro(retro): review PR #9 repair loops"
         )
+
+    @pytest.mark.parametrize(
+        "source_title",
+        [
+            "feat(harness): foo",
+            "docs(retro): bar",
+            "chore(agent-rules): baz",
+            "fix: no scope",
+            "Freeform title",
+            "",
+        ],
+    )
+    def test_never_emits_nested_parens(self, source_title: str) -> None:
+        """For any source title shape, the generated retro title contains
+        exactly one (...) group -- never nested."""
+        pr = _make_pr(number=1, title=source_title)
+        title = ar.build_retro_title(pr)
+        assert "((" not in title
+        assert "))" not in title
+        # Exactly one open and one close paren.
+        assert title.count("(") == 1
+        assert title.count(")") == 1
 
 
 class TestBuildRetroBody:
@@ -636,7 +691,7 @@ class TestRun:
         assert len(post_calls) == 1
         _, _, payload = post_calls[0]
         assert payload["title"] == (
-            "retro(feat(harness)): review PR #42 repair loops"
+            "retro(feat): review PR #42 repair loops"
         )
         assert "feat(harness): step one" in payload["body"]
         assert "fix(harness): step two" in payload["body"]

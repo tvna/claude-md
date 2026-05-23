@@ -16,8 +16,12 @@ bottom, monkeypatched in tests.
 
 Skip conditions:
 
-* the merged PR is itself a retrospective (title starts with ``retro(``
-  or ``retro:``) -- avoid recursion
+* the merged PR is itself a retrospective. Detected when the title
+  starts with ``retro(`` or ``retro:``, OR when the title's
+  ``type(scope)`` token contains the literal ``(retro)`` scope (e.g.
+  ``docs(retro):``, ``feat(retro):``). The second branch covers
+  retro-closing PRs that the title policy forces to use a non-``retro``
+  Conventional Commit type. Avoids recursion.
 * the merged PR was authored or merged by a login in
   ``_trusted_bots._TRUSTED_BOT_LOGINS``
 * a retro issue already exists for the source PR (open or closed)
@@ -125,9 +129,19 @@ def extract_type_scope(pr_title: str) -> str:
 
 
 def is_retro_pr(pr_title: str) -> bool:
-    """True if the PR is itself a retrospective (skip to avoid recursion)."""
+    """True if the PR is itself a retrospective (skip to avoid recursion).
+
+    Matches in two ways: (a) title starts with ``retro(`` or ``retro:``
+    (case-insensitive, leading whitespace stripped); (b) the title's
+    ``type(scope)`` token literally contains ``(retro)``. The second
+    branch covers retro-closing PRs like ``docs(retro): ...`` that the
+    title policy forces to use a non-``retro`` Conventional Commit type.
+    """
     stripped = pr_title.lstrip().lower()
-    return stripped.startswith("retro(") or stripped.startswith("retro:")
+    if stripped.startswith("retro(") or stripped.startswith("retro:"):
+        return True
+    token = extract_type_scope(stripped) or ""
+    return "(retro)" in token
 
 
 def should_skip(
@@ -144,9 +158,17 @@ def should_skip(
 
 
 def build_retro_title(pr: MergedPR) -> str:
-    """``retro(<type-scope>): review PR #<N> repair loops``."""
+    """``retro(<type>): review PR #<N> repair loops``.
+
+    Strips the optional ``(scope)`` from the source ``type(scope)`` token
+    to keep the generated title at a single nesting level. Without this,
+    a source PR titled ``docs(retro): ...`` would produce
+    ``retro(docs(retro)): ...`` -- nested parens that break the
+    Conventional Commit shape of the auto-opened retro title.
+    """
     token = extract_type_scope(pr.title) or FALLBACK_TYPE_SCOPE
-    return f"retro({token}): review PR #{pr.number} repair loops"
+    type_only = token.split("(", 1)[0]
+    return f"retro({type_only}): review PR #{pr.number} repair loops"
 
 
 def build_retro_body(pr: MergedPR, commit_subjects: list[str]) -> str:
