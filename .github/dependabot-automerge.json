@@ -1,0 +1,16 @@
+{
+  "enabled": false,
+  "merge_method": "squash",
+  "allow": [
+    {
+      "ecosystem": "github-actions",
+      "update_types": ["patch", "minor"],
+      "paths": [".github/workflows/*"]
+    },
+    {
+      "ecosystem": "uv",
+      "update_types": ["patch"],
+      "paths": ["pyproject.toml", "uv.lock"]
+    }
+  ]
+}
