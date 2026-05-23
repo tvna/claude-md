@@ -49,7 +49,8 @@ def test_workflow_validates_issue_and_pr_titles() -> None:
     text = WORKFLOW.read_text()
 
     assert "issues:" in text
-    assert "pull_request_target:" in text
+    assert "pull_request:" in text
+    assert "pull_request_target:" not in text
     assert "TITLE:" in text
     assert "github.event.issue.title" in text
     assert "github.event.pull_request.title" in text

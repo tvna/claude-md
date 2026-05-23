@@ -83,7 +83,7 @@ The file is committed (same exposure reasoning as the backup) and lands in a rev
 
 ### Title boundary (`verify-title-policy.yml` + `scripts/title_policy.py`)
 
-Titles are stricter than bodies and comments. They must be ASCII-only because issue and PR titles are header-level metadata read by notifications, project boards, triage lists, and agents before body context or opt-out markers can be inspected. The `Verify title policy / gate` workflow rejects any non-ASCII code point in issue and PR titles, including Japanese text, emoji, zero-width marks, RTL controls, fullwidth homoglyphs, and other multi-byte control surfaces. The PR-side check is required by `.github/rulesets/main.json`.
+Titles are stricter than bodies and comments. They must be ASCII-only because issue and PR titles are header-level metadata read by notifications, project boards, triage lists, and agents before body context or opt-out markers can be inspected. The `Verify title policy / gate` workflow rejects any non-ASCII code point in issue and PR titles, including Japanese text, emoji, zero-width marks, RTL controls, fullwidth homoglyphs, and other multi-byte control surfaces. The issue-side check runs on `issues`; the PR-side check runs on `pull_request` and is required by `.github/rulesets/main.json`. The `Scan non-ASCII content` workflow also posts the normal label/advisory notification for issue/PR title violations, and the body-level `<!-- non-ascii-ack -->` opt-out does not dismiss a non-ASCII title.
 
 **Implementation split.** The YAML workflow only marshals env vars and invokes `python3 scripts/scan_non_ascii.py run`. All logic — event extraction, classification, escaping, label/comment/block side effects — lives in `scripts/scan_non_ascii.py` and is covered by `tests/test_scan_non_ascii.py`. Pattern per [#123](https://github.com/tvna/claude-md/issues/123) (mirrors [#112](https://github.com/tvna/claude-md/issues/112) / [#122](https://github.com/tvna/claude-md/pull/122)).
 
@@ -110,7 +110,7 @@ on:
 | `OWNER` / `MEMBER` / `COLLABORATOR` | Apply label `severity:non-ascii-content`. Post one advisory comment with the `\uXXXX`-escaped form. **No block.** |
 | Everything else (`CONTRIBUTOR`, `FIRST_TIME_CONTRIBUTOR`, `FIRST_TIMER`, `NONE`, `MANNEQUIN`, unknown) | Same labelling **plus** request-changes review (PR) or close with `state_reason: not_planned` (issue). Fail-closed on unknown association. |
 
-**Opt-out marker:** trusted authors can append `<!-- non-ascii-ack -->` to the body after operator review to dismiss the workflow's actions on subsequent `edited` events. The marker is **ignored** for external authors.
+**Opt-out marker:** trusted authors can append `<!-- non-ascii-ack -->` to the body after operator review to dismiss the workflow's body/comment actions on subsequent `edited` events. The marker is **ignored** for external authors and for issue/PR title violations.
 
 **Idempotency:** the advisory comment starts with `<!-- scan-non-ascii.yml v1 -->`. On `edited` events the workflow finds and updates the existing comment rather than posting a new one.
 
