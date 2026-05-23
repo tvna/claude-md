@@ -1,10 +1,19 @@
 <!--
 Per CLAUDE.md §3, every PR must reference its issue (`#<number>`).
-The `Refs #<number>` line below is validated by
-.github/workflows/verify-issue-link.yml on every `pull_request` event
-and enforced as a required status check on `main`
-(see .github/rulesets/main.json). Accepted keywords (case-insensitive):
-Refs, Closes, Fixes, Resolves.
+The line below is validated by .github/workflows/verify-issue-link.yml
+on every `pull_request` event and enforced as a required status check
+on `main` (see .github/rulesets/main.json).
+
+Default: `Closes #<number>` so the linked issue auto-closes on merge.
+GitHub auto-closes on: Closes, Closed, Fixes, Fixed, Resolves, Resolved
+(case-insensitive, including conjugations).
+
+Use `Refs #<number>` instead ONLY when this PR is partial work whose
+merge must NOT close the linked issue, AND one of the following holds:
+  - the linked issue carries the `type:tracking` label (umbrella issue
+    that lives on while children land), OR
+  - add a literal `<!-- partial -->` line below to opt out of the
+    closing-keyword gate (see scripts/issue_link.py and #216).
 -->
 
 ## Summary
@@ -12,7 +21,7 @@ Refs, Closes, Fixes, Resolves.
 
 ## Related Issue
 
-Refs #
+Closes #
 
 <!--
 Facts -- CLAUDE.md section 2.
@@ -61,7 +70,7 @@ command a responder would run.
 
 ## Checklist
 
-- [ ] Issue number recorded on the `Refs #` line above
+- [ ] Issue number recorded on the `Closes #` line above (or `Refs #` with rationale per the template comment)
 - [ ] Facts vs. Assumptions split is honest (no speculation lurking in Facts)
 - [ ] Risk & blast radius assessed; Rollback steps are runnable
 - [ ] CLAUDE.md / AGENTS.md regenerated if applicable
