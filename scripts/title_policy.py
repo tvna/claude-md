@@ -37,6 +37,10 @@ _TYPE_PATTERN = "|".join(_CONVENTIONAL_TYPES)
 _CONVENTIONAL_TITLE_RE = re.compile(
     rf"^(?:{_TYPE_PATTERN})(?:\([a-z0-9][a-z0-9-]*\))?: .+"
 )
+# Per #167 and #214, PR subject lines must not carry issue refs like (#NNN);
+# `.github/workflows/verify-issue-link.yml` already validates `Refs #NNN` in
+# the PR body, so the title is redundant when it duplicates that link.
+_PR_ISSUE_REF_RE = re.compile(r"\(#\d+\)")
 
 def is_ascii_title(title: str) -> bool:
     """Return True if *title* contains only ASCII code points."""
@@ -48,6 +52,11 @@ def follows_naming_convention(title: str, *, kind: str) -> bool:
     if kind in {"issue", "pull_request"}:
         return _CONVENTIONAL_TITLE_RE.fullmatch(title) is not None
     raise ValueError(f"unsupported title kind: {kind!r}")
+
+
+def pr_title_has_issue_ref(title: str) -> bool:
+    """Return True if *title* contains a `(#NNN)` issue-ref token."""
+    return _PR_ISSUE_REF_RE.search(title) is not None
 
 
 def naming_convention_hint(kind: str) -> str:
@@ -86,6 +95,13 @@ def verify_title(title: str, *, kind: str) -> int:
         print(
             f"::error::{kind} title must follow repository naming convention: "
             f"{naming_convention_hint(kind)}."
+        )
+        fail = 1
+
+    if kind == "pull_request" and pr_title_has_issue_ref(title):
+        print(
+            "::error::pull_request title must not contain issue references "
+            "like (#NNN). Put `Refs #NNN` in the PR body instead. See #167."
         )
         fail = 1
 
