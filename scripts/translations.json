@@ -6,7 +6,7 @@
     "excluded_prs": [
       275,
       278,
-      279
+      285
     ],
     "generator": "scripts/build_translations_oneshot (PR #102 P3)",
     "skipped_items_with_japanese": 13,
