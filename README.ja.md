@@ -18,7 +18,7 @@
 | 1 | Define the Goal with Plan Mode First | ゴールとプラン構造 | 3 ステップ以上の作業や設計判断を含む作業は plan mode から始める。 |
 | 2 | Bound the Unknown Before Coding | 実装前の認識整理 | 仮定を列挙し、曖昧さを表に出し、検証するか質問する。曖昧な入力には問い、証拠には修正で応じる。 |
 | 3 | Use Git Ecosystem Effectively | デリバリーハーネス | スケールさせる前に、hooks、CI/CD、宣言的依存管理などのハーネスを整える。 |
-| 4 | Simplicity, Bounded by Safety | アーティファクトコード | 要求を満たす最小限のコードにする。ただし安全性を犠牲にしない。 |
+| 4 | Simplicity, Bounded by Safety | 安全境界 | 要求を満たす最小限のコードにする。ただし安全性を犠牲にしない。 |
 | 5 | Accelerate Scale with Quality | 変更スコープと役割分担 | 必要な箇所だけ触り、実装・検証・探索を別エージェントに分ける。 |
 | 6 | Be a Force Multiplier | 引き渡しと伝達 | "LGTM" で終わらせず、トレードオフを明示して他者が判断を追えるようにする。 |
 
