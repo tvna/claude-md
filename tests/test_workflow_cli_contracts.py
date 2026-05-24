@@ -23,6 +23,7 @@ import pytest
 import ruleset_drift
 import rulesets_apply
 import scan_apm_portability
+import scan_design_philosophy_drift
 import scan_non_ascii
 import security_drift_report
 import threat_intel_triage
@@ -54,6 +55,7 @@ def test_workflow_python_script_inventory_is_pinned() -> None:
         "ruleset_drift.py",
         "rulesets_apply.py",
         "scan_apm_portability.py",
+        "scan_design_philosophy_drift.py",
         "scan_non_ascii.py",
         "security_drift_report.py",
         "threat_intel_triage.py",
@@ -380,6 +382,28 @@ def test_scan_apm_portability_verify_matches_workflow_paths(tmp_path: Path) -> N
 
     assert scan_apm_portability.main(
         ["verify", "--path", str(path), "--path", str(path), "--path", str(path)]
+    ) == 0
+
+
+def test_scan_design_philosophy_drift_verify_matches_workflow_paths(
+    tmp_path: Path,
+) -> None:
+    master = tmp_path / "master.md"
+    doc = tmp_path / "doc.md"
+    master.write_text(
+        "## 1. A\n## 2. B\n",
+        encoding="utf-8",
+    )
+    doc.write_text(
+        "## 3. Matrix\n"
+        "two principles by four lanes.\n"
+        "| P1 - a | x |\n"
+        "| P2 - b | y |\n"
+        "## 4. Next\n",
+        encoding="utf-8",
+    )
+    assert scan_design_philosophy_drift.main(
+        ["verify", "--master", str(master), "--doc", str(doc)]
     ) == 0
 
 
