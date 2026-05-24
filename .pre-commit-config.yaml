@@ -1,0 +1,25 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+        args: [--unsafe]
+        exclude: ^\.github/workflows/
+      - id: check-merge-conflict
+
+  - repo: local
+    hooks:
+      - id: uv-pin-drift
+        name: uv pin drift (scripts/uv_pin.py drift)
+        entry: uv run python scripts/uv_pin.py drift
+        language: system
+        pass_filenames: false
+        files: ^pyproject\.toml$
+      - id: scan-workflow-pip
+        name: scan workflow pip (scripts/scan_workflow_pip.py verify)
+        entry: uv run python scripts/scan_workflow_pip.py verify
+        language: system
+        pass_filenames: false
+        files: ^\.github/workflows/.*\.ya?ml$
