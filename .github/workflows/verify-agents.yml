@@ -70,6 +70,7 @@ jobs:
         run: python3 scripts/uv_pin.py stale
 
   gate:
+    name: "Verify agent instructions / gate"
     needs: [detect, verify, lint-scripts]
     if: always()
     runs-on: ubuntu-latest
