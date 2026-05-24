@@ -35,6 +35,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+
 def load_sot_contexts(sot_path: Path) -> list[str]:
     """Return the list of required_status_check context strings declared in *sot_path*.
 

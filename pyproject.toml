@@ -23,6 +23,12 @@ required-version = "==0.11.11"
 dev = [
     "pytest>=8,<9",
     "pytest-cov>=6,<7",
+    # Lint gate (#192). Bounded major to avoid silent rule churn on upgrade.
+    "ruff>=0.7,<0.9",
+    # Type gate (#192). 1.x line is stable; cap on 2.x for the same reason.
+    "mypy>=1.11,<2",
+    # mypy needs stubs for pyyaml (used by scripts/plan_language_context.py).
+    "types-PyYAML>=6,<7",
 ]
 
 [tool.pytest.ini_options]
@@ -37,3 +43,97 @@ fail_under = 92.71
 show_missing = true
 # No scripts are omitted: the initial threshold is the measured baseline from
 # the full test suite, so every runtime script remains visible in CI output.
+
+[tool.ruff]
+# Lint gate (#192). Scope is intentional: only the Python we ship and its
+# tests. target-version matches the project's requires-python lower bound.
+target-version = "py310"
+line-length = 120
+extend-exclude = [
+    # Data file (#102 P3 snapshot of past issue/PR bodies), not Python source.
+    "scripts/translations.json",
+]
+
+[tool.ruff.lint]
+# Narrow, high-signal rule families. Each family is justified inline so the
+# selection survives later review per #192 acceptance criteria.
+select = [
+    "F",    # pyflakes: unused imports (F401), undefined names, redefinitions.
+    "E",    # pycodestyle errors: includes E722 bare-except (CLAUDE.md s4).
+    "W",    # pycodestyle warnings: trailing whitespace, mixed line endings.
+    "I",    # isort: import order plus duplicate-import detection.
+    "B",    # flake8-bugbear: mutable defaults, raise-from chain, etc.
+    "A",    # flake8-builtins: shadowed builtins (id, type, list).
+    "UP",   # pyupgrade: keep PEP 585 generics consistent across the repo.
+    "SIM",  # flake8-simplify: catch redundant conditionals.
+    "RET",  # flake8-return: explicit and consistent return statements.
+    "PTH",  # flake8-use-pathlib: prefer Path over os.path (matches house style).
+    "RUF",  # ruff-specific: catches noqa misuse, ambiguous unicode, etc.
+]
+ignore = [
+    # E501: line length is enforced by ruff's own `line-length` setting.
+    "E501",
+    # SIM108: ternary rewrites hurt readability in argparse branches.
+    "SIM108",
+    # RET504: pre-return variable assignment is used for breakpoint
+    # readability across several scripts; not worth a churn pass here.
+    "RET504",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests use pytest idioms (pytest.raises(Exception), assertRaises) that
+# legitimately trigger B011/B017.
+"tests/*" = ["B011", "B017"]
+# These tests assert behaviour against ambiguous Unicode by construction
+# (scan_non_ascii detects them; title_policy enforces ASCII titles), so the
+# fixtures must contain the very codepoints RUF001 would flag.
+"tests/test_scan_non_ascii.py" = ["B011", "B017", "RUF001"]
+"tests/test_title_policy.py" = ["B011", "B017", "RUF001"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["scripts"]
+
+[tool.mypy]
+# Type gate (#192) first-pass floor. `python_version` is pinned to 3.11
+# to match the stdlib surface actually used by scripts (`datetime.UTC`,
+# `tomllib`), not the project's `requires-python = ">=3.10"` floor.
+# Tightening the requires-python pin is tracked separately.
+python_version = "3.11"
+files = ["scripts", "tests"]
+# Intentionally minimal flag set. Issue #192 asks for a high-signal,
+# narrow gate without repo-wide churn. The two flags below catch real
+# defects (dead suppressions and PEP 484 implicit Optional) while
+# leaving pre-existing untyped helpers, `dict[str, object]` JSON-shape
+# narrowing, and urllib stub mismatches as documented follow-up work
+# (each of those clusters has a distinct root cause and warrants its
+# own scoped PR rather than gating this one).
+warn_unused_ignores = true
+no_implicit_optional = true
+pretty = true
+show_error_codes = true
+
+[[tool.mypy.overrides]]
+# Deferred type-debt clusters. Each entry corresponds to a distinct
+# root cause that warrants its own scoped follow-up PR, not gating
+# this one:
+#   - threat_intel_triage: `json.loads` returns `object`; the script
+#     uses ad hoc isinstance narrowing that mypy cannot follow through
+#     `.get()` chains. Proper fix is a TypedDict or pydantic model
+#     (tracked under issue #191's pydantic-boundary scope).
+#   - test_threat_intel_triage: inherits the same `object` shape from
+#     the import; fixed alongside the script above.
+#   - test_github_api / test_sanitize_history / test_rulesets_apply /
+#     test_pr_body_close_keyword_gate: construct `urllib.error.HTTPError`
+#     with duck-typed test fakes that the urllib stubs do not model
+#     (Message[str, str] vs dict, IO[bytes] vs custom Response class).
+#     Proper fix is a shared `_make_http_error` helper or migration to
+#     `responses`/`requests-mock`.
+module = [
+    "threat_intel_triage",
+    "test_threat_intel_triage",
+    "test_github_api",
+    "test_sanitize_history",
+    "test_rulesets_apply",
+    "test_pr_body_close_keyword_gate",
+]
+ignore_errors = true

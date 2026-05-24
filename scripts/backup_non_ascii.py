@@ -25,9 +25,10 @@ import json
 import os
 import subprocess
 import sys
+from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 SCHEMA_VERSION = 1
 

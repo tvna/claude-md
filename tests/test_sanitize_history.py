@@ -17,9 +17,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-
 import sanitize_history as sh
-
 
 FIXTURE_MIN = Path(__file__).parent / "fixtures" / "translations_min.json"
 
@@ -34,7 +32,7 @@ class _FakeResponse:
         self.status = status
         self._body = body.encode("utf-8")
 
-    def __enter__(self) -> "_FakeResponse":
+    def __enter__(self) -> _FakeResponse:
         return self
 
     def __exit__(self, *args: object) -> None:

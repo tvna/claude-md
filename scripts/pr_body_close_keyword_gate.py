@@ -31,7 +31,8 @@ from __future__ import annotations
 import json
 import os
 import sys
-from typing import Any, Callable, Literal
+from collections.abc import Callable
+from typing import Any, Literal
 
 from _github_api import apply_call
 from _ref_classifier import (
@@ -41,7 +42,6 @@ from _ref_classifier import (
     format_no_closing_keyword_msg,
     strip_html_comments,
 )
-
 
 _TARGET_TOOLS: frozenset[str] = frozenset({
     "mcp__github__create_pull_request",
@@ -107,7 +107,7 @@ def fetch_labels(
             token=token,
             **kwargs,
         )
-    except Exception:  # noqa: BLE001 -- hook must not propagate
+    except Exception:
         return None
     if not (200 <= status < 300):
         return None
@@ -133,10 +133,7 @@ def all_tracking(labels_by_number: dict[int, list[str] | None]) -> bool:
     """True iff every number has labels and every list contains the carve-out."""
     if not labels_by_number:
         return False
-    for labels in labels_by_number.values():
-        if labels is None or TRACKING_LABEL not in labels:
-            return False
-    return True
+    return all(labels is not None and TRACKING_LABEL in labels for labels in labels_by_number.values())
 
 
 def _build_deny_reason(

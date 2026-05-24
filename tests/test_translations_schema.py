@@ -17,7 +17,6 @@ from typing import Any
 
 import pytest
 
-
 TRANSLATIONS_PATH = (
     Path(__file__).resolve().parent.parent / "scripts" / "translations.json"
 )

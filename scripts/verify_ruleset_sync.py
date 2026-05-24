@@ -29,10 +29,10 @@ import os
 import sys
 import urllib.error
 import urllib.request
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from _github_api import API_VERSION
-
 
 API_ROOT = "https://api.github.com"
 DEFAULT_DOCS_URL = (

@@ -364,7 +364,7 @@ def gh_api(
     cmd = ["gh", "api", "--method", method, path]
     if json_body is not None:
         result = subprocess.run(
-            cmd + ["--input", "-"],
+            [*cmd, "--input", "-"],
             input=json.dumps(json_body),
             capture_output=True,
             text=True,
@@ -440,7 +440,7 @@ def _append_summary(text: str) -> None:
     path = os.environ.get("GITHUB_STEP_SUMMARY")
     if not path:
         return
-    with open(path, "a", encoding="utf-8") as fp:
+    with Path(path).open("a", encoding="utf-8") as fp:
         fp.write(text)
 
 

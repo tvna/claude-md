@@ -15,10 +15,8 @@ import json
 import urllib.error
 from typing import Any
 
-import pytest
-
 import pr_body_close_keyword_gate as gate
-
+import pytest
 
 # ---------------------------------------------------------------------------
 # classify_action
@@ -111,7 +109,7 @@ class _FakeResponse:
         self.status = status
         self._body = body
 
-    def __enter__(self) -> "_FakeResponse":
+    def __enter__(self) -> _FakeResponse:
         return self
 
     def __exit__(self, *_a: Any) -> None:

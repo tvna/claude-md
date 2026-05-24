@@ -36,8 +36,9 @@ import os
 import sys
 import urllib.error
 import urllib.request
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from _github_api import apply_call
 
@@ -420,7 +421,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "restore":
         return cmd_restore(args)
     parser.error(f"unknown command: {args.command!r}")
-    return 2
+    return 2  # unreachable; parser.error exits
 
 
 if __name__ == "__main__":

@@ -6,7 +6,6 @@ import json
 from pathlib import Path
 
 import pytest
-
 import verify_required_check_contexts as mod
 
 

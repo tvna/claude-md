@@ -27,7 +27,6 @@ from __future__ import annotations
 
 import re
 
-
 HTML_COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
 
 REF_LINE_KEYWORD_RE = re.compile(

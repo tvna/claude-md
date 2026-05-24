@@ -7,11 +7,12 @@ import re
 import sys
 import urllib.parse
 import urllib.request
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable, Literal
+from typing import Any, Literal
 
-from _github_api import API_VERSION, apply_call as github_apply_call
-
+from _github_api import API_VERSION
+from _github_api import apply_call as github_apply_call
 
 HEX_COLOR_RE = re.compile(r"^[0-9a-fA-F]{6}$")
 API_ROOT = "https://api.github.com"
