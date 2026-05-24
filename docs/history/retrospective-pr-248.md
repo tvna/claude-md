@@ -71,5 +71,5 @@ For the next PR that follows the same shape as #248 (net-new docs file under `do
 - Closed issue: [#246](https://github.com/tvna/claude-md/issues/246).
 - Parent tracker: [#226](https://github.com/tvna/claude-md/issues/226).
 - Framework: CLAUDE.md section 3, codified in commit `daa5179` (#225).
-- Sibling retrospectives: `docs/retrospective-pr-229.md`, `docs/retrospective-pr-235.md`, `docs/retrospective-pr-237.md`.
+- Sibling retrospectives: `retrospective-pr-229.md`, `retrospective-pr-235.md`, `retrospective-pr-237.md`.
 - Auto-retrospective workflow: `.github/workflows/auto-retro.yml`, shipped by PR [#237](https://github.com/tvna/claude-md/pull/237) and hardened against retro-on-retro recursion by PR [#247](https://github.com/tvna/claude-md/pull/247).
