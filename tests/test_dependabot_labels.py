@@ -132,6 +132,18 @@ class TestLoadSotLabelNames:
     def test_empty_array(self) -> None:
         assert dl.load_sot_label_names("[]") == set()
 
+    def test_load_sot_labels_returns_typed_models(self) -> None:
+        src = json.dumps(
+            [{"name": "dependencies", "color": "0366d6", "description": "x"}]
+        )
+        assert dl.load_sot_labels(src) == [
+            dl.LabelDefinition(
+                name="dependencies",
+                color="0366d6",
+                description="x",
+            )
+        ]
+
     def test_single_entry(self) -> None:
         src = json.dumps([{"name": "dependencies", "color": "0366d6", "description": "x"}])
         assert dl.load_sot_label_names(src) == {"dependencies"}
@@ -150,16 +162,68 @@ class TestLoadSotLabelNames:
             dl.load_sot_label_names('{"name": "x"}')
 
     def test_entry_missing_name_raises(self) -> None:
-        with pytest.raises(ValueError, match="missing non-empty 'name'"):
-            dl.load_sot_label_names('[{"color": "000000"}]')
+        with pytest.raises(
+            ValueError,
+            match=r"labels\.json\[0\] missing required field\(s\): name",
+        ):
+            dl.load_sot_label_names('[{"color": "000000", "description": "x"}]')
 
     def test_entry_empty_name_raises(self) -> None:
-        with pytest.raises(ValueError, match="missing non-empty 'name'"):
-            dl.load_sot_label_names('[{"name": ""}]')
+        with pytest.raises(
+            ValueError,
+            match=r"labels\.json\[0\]\.name must be a non-empty string",
+        ):
+            dl.load_sot_label_names(
+                '[{"name": "", "color": "000000", "description": "x"}]'
+            )
 
     def test_entry_not_object_raises(self) -> None:
-        with pytest.raises(ValueError, match="must be objects"):
+        with pytest.raises(ValueError, match=r"labels\.json\[0\] must be an object"):
             dl.load_sot_label_names('["just-a-string"]')
+
+    def test_entry_missing_multiple_fields_raises(self) -> None:
+        with pytest.raises(
+            ValueError,
+            match=r"labels\.json\[0\] missing required field\(s\): color, description",
+        ):
+            dl.load_sot_label_names('[{"name": "dependencies"}]')
+
+    def test_entry_unexpected_field_raises(self) -> None:
+        src = json.dumps(
+            [
+                {
+                    "name": "dependencies",
+                    "color": "0366d6",
+                    "description": "x",
+                    "aliases": [],
+                }
+            ]
+        )
+        with pytest.raises(
+            ValueError,
+            match=r"labels\.json\[0\] has unsupported field\(s\): aliases",
+        ):
+            dl.load_sot_label_names(src)
+
+    def test_entry_invalid_color_raises(self) -> None:
+        src = json.dumps(
+            [{"name": "dependencies", "color": "not-hex", "description": "x"}]
+        )
+        with pytest.raises(
+            ValueError,
+            match=r"labels\.json\[0\]\.color must be exactly six hexadecimal digits",
+        ):
+            dl.load_sot_label_names(src)
+
+    def test_entry_non_string_description_raises(self) -> None:
+        src = json.dumps(
+            [{"name": "dependencies", "color": "0366d6", "description": None}]
+        )
+        with pytest.raises(
+            ValueError,
+            match=r"labels\.json\[0\]\.description must be a string",
+        ):
+            dl.load_sot_label_names(src)
 
 
 # ---------------------------------------------------------------------------
@@ -323,3 +387,33 @@ class TestVerifyCli:
         )
         assert rc == 1
         assert "::error::" in capsys.readouterr().out
+
+    def test_invalid_labels_schema_returns_1_with_clear_message(
+        self,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        dep = tmp_path / "dependabot.yml"
+        dep.write_text("", encoding="utf-8")
+        labels = tmp_path / "labels.json"
+        labels.write_text(
+            json.dumps(
+                [{"name": "dependencies", "color": "not-hex", "description": "x"}]
+            ),
+            encoding="utf-8",
+        )
+        rc = dl.main(
+            [
+                "verify",
+                "--dependabot",
+                str(dep),
+                "--labels",
+                str(labels),
+            ]
+        )
+        assert rc == 1
+        out = capsys.readouterr().out
+        assert (
+            "::error::labels.json[0].color must be exactly six hexadecimal digits"
+            in out
+        )
