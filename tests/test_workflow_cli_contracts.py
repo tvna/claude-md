@@ -209,7 +209,12 @@ def test_dependabot_labels_verify_matches_workflow_paths(tmp_path: Path) -> None
     dependabot = tmp_path / "dependabot.yml"
     labels = tmp_path / "labels.json"
     dependabot.write_text("updates:\n  - labels:\n      - dependencies\n", encoding="utf-8")
-    labels.write_text(json.dumps([{"name": "dependencies"}]), encoding="utf-8")
+    labels.write_text(
+        json.dumps(
+            [{"name": "dependencies", "color": "0366d6", "description": ""}]
+        ),
+        encoding="utf-8",
+    )
 
     assert dependabot_labels.main(
         ["verify", "--dependabot", str(dependabot), "--labels", str(labels)]
