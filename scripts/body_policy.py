@@ -39,6 +39,7 @@ from issue_link import strip_html_comments
 
 _HEADING_RE = re.compile(r"^(#{2,3})[ \t]+(.+?)[ \t]*$", re.MULTILINE)
 _TRAILING_COLON_RE = re.compile(r":+\s*$")
+_AMPERSAND_RE = re.compile(r"\s*&\s*")
 _TRACKING_MARKER = "Initial child issues"
 
 _PR_REQUIRED: tuple[str, ...] = (
@@ -93,13 +94,36 @@ def required_sections(kind: str, *, body: str) -> tuple[str, ...]:
     raise ValueError(f"unsupported body kind: {kind!r}")
 
 
+def _normalize_heading(text: str) -> str:
+    """Return a form that treats ``&`` and ``and`` as interchangeable.
+
+    The single substitution makes the canonical required-section name
+    ``Risk & blast radius`` match a prose form ``Risk and blast radius``
+    without changing letter case or other whitespace inside the heading.
+    Refs #332: AI agents render the heading in prose form on first
+    attempt, and forcing the literal ``&`` glyph creates an avoidable
+    body-policy gate failure.
+    """
+    return _AMPERSAND_RE.sub(" and ", text).strip()
+
+
 def missing_sections(
     required: tuple[str, ...] | list[str],
     headings: list[tuple[int, str]],
 ) -> list[str]:
-    """Return required entries not present in *headings* (case-sensitive)."""
-    present = {text for _, text in headings}
-    return [name for name in required if name not in present]
+    """Return required entries not present in *headings*.
+
+    Matching is case-sensitive (so ``facts`` still does not satisfy
+    ``Facts``), but ``&`` and ``and`` are treated as equivalent: a body
+    that writes ``## Risk and blast radius`` satisfies the canonical
+    ``Risk & blast radius`` slot, and vice versa.
+    """
+    present = {_normalize_heading(text) for _, text in headings}
+    return [
+        name
+        for name in required
+        if _normalize_heading(name) not in present
+    ]
 
 
 def _parse_iso(value: str) -> datetime | None:
