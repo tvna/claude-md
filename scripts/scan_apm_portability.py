@@ -34,8 +34,8 @@ from __future__ import annotations
 
 import argparse
 import sys
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Iterable
 
 # Lines containing this marker bypass the scan. Mirrors the precedent
 # set by ``scripts/scan_non_ascii.py`` ACK_MARKER.

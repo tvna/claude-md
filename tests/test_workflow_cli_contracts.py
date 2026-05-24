@@ -12,8 +12,6 @@ import re
 from pathlib import Path
 from typing import Any
 
-import pytest
-
 import auto_retro
 import body_policy
 import branch_cleanup
@@ -21,16 +19,18 @@ import dependabot_automerge
 import dependabot_labels
 import issue_link
 import labels_apply
+import pytest
 import ruleset_drift
 import rulesets_apply
 import scan_apm_portability
+import scan_design_philosophy_drift
 import scan_non_ascii
 import security_drift_report
 import threat_intel_triage
 import title_policy
 import uv_pin
+import verify_required_check_contexts
 import verify_ruleset_sync
-
 
 REPO = "owner/repo"
 
@@ -55,11 +55,13 @@ def test_workflow_python_script_inventory_is_pinned() -> None:
         "ruleset_drift.py",
         "rulesets_apply.py",
         "scan_apm_portability.py",
+        "scan_design_philosophy_drift.py",
         "scan_non_ascii.py",
         "security_drift_report.py",
         "threat_intel_triage.py",
         "title_policy.py",
         "uv_pin.py",
+        "verify_required_check_contexts.py",
         "verify_ruleset_sync.py",
     }
 
@@ -383,6 +385,28 @@ def test_scan_apm_portability_verify_matches_workflow_paths(tmp_path: Path) -> N
     ) == 0
 
 
+def test_scan_design_philosophy_drift_verify_matches_workflow_paths(
+    tmp_path: Path,
+) -> None:
+    master = tmp_path / "master.md"
+    doc = tmp_path / "doc.md"
+    master.write_text(
+        "## 1. A\n## 2. B\n",
+        encoding="utf-8",
+    )
+    doc.write_text(
+        "## 3. Matrix\n"
+        "two principles by four lanes.\n"
+        "| P1 - a | x |\n"
+        "| P2 - b | y |\n"
+        "## 4. Next\n",
+        encoding="utf-8",
+    )
+    assert scan_design_philosophy_drift.main(
+        ["verify", "--master", str(master), "--doc", str(doc)]
+    ) == 0
+
+
 def test_scan_non_ascii_run_matches_workflow_env(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -541,6 +565,20 @@ def test_verify_ruleset_sync_matches_workflow_args(
             ".github/rulesets/main.json",
             "--ruleset-name",
             "main-protection",
+        ]
+    ) == 0
+
+
+def test_verify_required_check_contexts_matches_workflow_args() -> None:
+    """Mirrors the `Verify required-check contexts match workflow job names`
+    step in `.github/workflows/verify-ruleset-sync.yml`."""
+    assert verify_required_check_contexts.main(
+        [
+            "verify",
+            "--sot-path",
+            ".github/rulesets/main.json",
+            "--workflows-dir",
+            ".github/workflows",
         ]
     ) == 0
 

@@ -374,7 +374,7 @@ def _cmd_survey(args: argparse.Namespace) -> int:
     print(summary, end="")
     print(f"candidate_count={candidate_count}", file=sys.stderr)
     if args.github_output:
-        with open(args.github_output, "a", encoding="utf-8") as fp:
+        with Path(args.github_output).open("a", encoding="utf-8") as fp:
             fp.write(f"candidate_count={candidate_count}\n")
     out = Path(args.out)
     if comment is None:

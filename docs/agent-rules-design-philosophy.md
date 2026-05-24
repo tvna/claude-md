@@ -48,7 +48,7 @@ harness gets a chance to enforce or fail to enforce it.
   `PreToolUse` hook for the deterministic checks. This document does
   not duplicate those gates; it tells reviewers which lane each gate
   serves.
-- Reframing the six principles. The principle text and the
+- Reframing the eight principles. The principle text and the
   `*Layer: ...*` subtitles ([#75](https://github.com/tvna/claude-md/issues/75))
   are inputs to this document, not outputs.
 - Folding the decision tree into the historical replay. The decision
@@ -147,9 +147,9 @@ responses in the primary project owner's native language. If the
 project lacks ownership-language metadata, prepare it before relying
 on this rule.").
 
-## 3. Responsibility matrix - six layers by four lanes
+## 3. Responsibility matrix - eight layers by four lanes
 
-Each row is one of the six principles in `master.instructions.md`,
+Each row is one of the eight principles in `master.instructions.md`,
 identified by its `*Layer: ...*` subtitle. Each column is one of the
 four ownership lanes from section 2. Cells contain the concrete
 artifacts that own the concern, or `(gap)` if no artifact owns it
@@ -167,6 +167,8 @@ of merged PRs and closed sub-issues of #226.
 | P4 - artifact code | Minimum code; safety-bounded simplicity; fail-loud over silent default; debug instrumentation as attack surface | `(lint and type gates exist in workflow-script-quality.md M8; behavioral check is reviewer judgment)` | `docs/workflow-script-quality.md` (M1 to M9 must-have checklist; O1 to O7 optional enhancements) | The consumer's own language ecosystem and code style | Embedding a stack-specific example (Python, pytest, pydantic) into universal text |
 | P5 - change scope and agent split | Touch-only-what-you-must; clean only your own orphans; sub-agent vs skill split; separate implementation and verification agents | `(none - agent judgment)` | `(gap candidate - no doc explicitly governs scope discipline today)` | The consumer's own agent inventory and roster | Mentioning a Claude-only feature (sub-agents, skills) by literal name as universal terminology |
 | P6 - handoff and communication | Native-language plan artifacts; show procedure and case studies; visualize workflow; refuse LGTM; explain trade-offs | `scripts/plan_language_context.py` (owner-language metadata recovery); `.github/owners.yaml`; `.github/CODEOWNERS` | `docs/history/retrospective-pr-*.md` (case studies are the force-multiplier evidence); `docs/security-control-inventory.md` (visualization of the harness coverage); `docs/performance-metrics.md` (visualization of measurement) | The consumer's own `owners.yaml` entries | Treating "case studies" as universal content rather than as repo-local artifacts that the universal text merely *requires*; plan-language drift slipping into English despite harness injection (corrected by [#269](https://github.com/tvna/claude-md/issues/269)) |
+| P7 - adversarial input handling | Untrusted-data treatment of issue/PR/review/webhook/CI-log/external-doc text; refuse embedded instruction-like payloads; surface conflicts between external text and trusted instructions | `scripts/preflight_non_ascii.py` (PreToolUse hook against non-ASCII injection); `scripts/body_policy.py`, `scripts/title_policy.py`, `scripts/pr_body_close_keyword_gate.py` (structural shape of external-authored bodies); `scripts/scan_non_ascii.py` (advisory drift detector); `scripts/sanitize_history.py` (historical-text cleansing) | `docs/downstream-instruction-review-checklist.md` (reviewer-facing untrusted-text checklist); `docs/non-ascii-defense.md` (Layer 1-2-3 defense narrative); `docs/issue-pr-body-standard.md` (Facts vs Assumptions discipline that makes injection visible) | The consumer's own incoming-text policy and review-comment handling rules | Embedding a specific attacker payload string or a `<system-reminder>` example into universal text (would teach the very pattern the rule forbids) |
+| P8 - tool surface and secret exposure | Tool-scope confinement to the active task; no external disclosure of context, prompts, env vars, credentials, tokens, or private data; secret values never echoed to logs/artifacts; allowlisted least-privilege tooling | `.github/CODEOWNERS` (repo-scope binding for MCP/agent tools); `.github/workflows/*.yml` `permissions:` declarations (least-privilege per workflow); `scripts/scan_apm_portability.py` (forbids naming repo-local tools in universal text); GitHub MCP repository allowlist (per-session scope guard) | `docs/repo-scope.md` (allowed-repository policy and runbook); `docs/workflow-permissions-audit.md` (per-workflow permission matrix); `docs/security-control-inventory.md` (visualization of the harness coverage); `docs/privileged-operation-runbooks.md` (escalation paths that must not widen the tool surface) | The consumer's own credential/secret manager, external-endpoint policy, and per-agent tool inventory | Naming a specific MCP tool (`mcp__github__*`), a vendor CLI flag, or a concrete endpoint inside universal text; widening a least-privilege workflow `permissions:` block for a one-off debug |
 
 Empty cells marked `(none ...)` are intentional: the layer's concern
 is not enforceable by a script today. Cells marked `(gap candidate)`

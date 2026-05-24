@@ -10,7 +10,6 @@ import subprocess
 from pathlib import Path
 
 import pytest
-
 import uv_pin
 
 REPO_ROOT = Path(__file__).resolve().parents[1]

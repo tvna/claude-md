@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 import dependabot_automerge as da
-
+import pytest
 
 POLICY = {
     "enabled": False,
@@ -97,7 +97,7 @@ def test_non_dependabot_author_blocks() -> None:
     assert "author is not trusted: octocat" in result.reasons
 
 
-def test_cli_writes_summary_and_outputs(tmp_path: Path, capsys) -> None:  # type: ignore[no-untyped-def]
+def test_cli_writes_summary_and_outputs(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     event_path = tmp_path / "event.json"
     policy_path = tmp_path / "policy.json"
     changed_files_path = tmp_path / "changed-files.txt"

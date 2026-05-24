@@ -17,10 +17,8 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-import pytest
-
 import backup_non_ascii as backup
-
+import pytest
 
 # ---------------------------------------------------------------------------
 # Fakes for the runner boundary
@@ -266,7 +264,7 @@ class TestCmdCapture:
         monkeypatch.setenv("GH_TOKEN", "fake-token")
         monkeypatch.setenv("BACKUP_CAPTURED_AT", "2026-05-24T00:00:00Z")
 
-        pages = {
+        pages: dict[str, list[list[dict[str, Any]]]] = {
             "/repos/x/y/issues?state=all&per_page=100": [[
                 {"id": 1, "number": 1, "title": "T", "body": "B",
                  "user": {"login": "a"}, "state": "open",

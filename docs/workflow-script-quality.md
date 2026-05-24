@@ -170,10 +170,15 @@ coverage gates when those gates land. Concretely:
 - Pure functions are individually testable so coverage threshold gates
   can be met without integration tests.
 
-The repository currently runs `pytest` as the only Python gate. Issue
-#192 tracks adding static lint and type checks; issue #188 tracks
-adding a coverage threshold. New scripts should be written so neither
-of those follow-ups requires reworking the script.
+The repository runs `pytest` with `pytest-cov` (#188, threshold in
+`[tool.coverage.report]`), `ruff check` (#192, lint rules in
+`[tool.ruff.lint]`), and `mypy` (#192, type rules in `[tool.mypy]`)
+as the Python gates in CI. New scripts must pass all three on first
+commit; the configuration of record is `pyproject.toml`. A subset of
+pre-existing files is listed under `[[tool.mypy.overrides]]` with
+`ignore_errors = true` and an inline rationale; those entries are
+deferred type-debt and must be removed (not extended) as follow-up
+PRs clean each cluster.
 
 ### M9. Fail-loud vs fail-open policy
 

@@ -9,10 +9,8 @@ from __future__ import annotations
 
 import subprocess
 
-import pytest
-
 import issue_link
-
+import pytest
 
 # ---------------------------------------------------------------------------
 # strip_html_comments

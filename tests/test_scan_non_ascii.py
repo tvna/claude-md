@@ -16,9 +16,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-
 import scan_non_ascii as san
-
 
 # ---------------------------------------------------------------------------
 # extract_event
@@ -411,7 +409,7 @@ def _fake_run_capture():
             self.returncode = returncode
             self.stderr = ""
 
-    def fake_run(cmd, **kwargs):  # noqa: ANN001 — match subprocess.run signature
+    def fake_run(cmd, **kwargs):
         calls.append({"cmd": cmd, **kwargs})
         return _Result(stdout="OK")
 

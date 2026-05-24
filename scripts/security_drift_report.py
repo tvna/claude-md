@@ -35,11 +35,10 @@ import dataclasses
 import datetime as _dt
 import os
 import sys
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 from _github_api import apply_call as github_apply_call
-
 
 API_ROOT = "https://api.github.com"
 DEFAULT_TRACKING_ISSUE = 178
@@ -114,10 +113,7 @@ def labels_plan_has_drift(summary_text: str) -> bool:
     or `report-only`. No-op rows contain `no-op`. The detector matrix
     treats any non-empty plan as drift.
     """
-    for line in summary_text.splitlines():
-        if "plan-only" in line or "report-only" in line:
-            return True
-    return False
+    return any("plan-only" in line or "report-only" in line for line in summary_text.splitlines())
 
 
 def uv_stale_has_warning(stale_text: str) -> bool:

@@ -12,12 +12,11 @@ Tracked by #185.
 from __future__ import annotations
 
 import argparse
-from dataclasses import dataclass
 import fnmatch
 import json
-from pathlib import Path
 import re
-import sys
+from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from _trusted_bots import _TRUSTED_BOT_LOGINS
@@ -80,7 +79,8 @@ def audit(
     reasons: list[str] = []
     author = _nested_str(pr, "user", "login")
     head_ref = _nested_str(pr, "head", "ref")
-    title = pr.get("title") if isinstance(pr.get("title"), str) else ""
+    raw_title = pr.get("title")
+    title: str = raw_title if isinstance(raw_title, str) else ""
     labels = _label_names(pr)
     draft = bool(pr.get("draft", False))
 

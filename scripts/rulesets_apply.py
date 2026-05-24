@@ -512,6 +512,8 @@ def _response_status(response: Any) -> int:
     status = getattr(response, "status", None) or getattr(response, "code", None)
     if status is None and hasattr(response, "getcode"):
         status = response.getcode()
+    if status is None:
+        return 0
     return int(status)
 
 

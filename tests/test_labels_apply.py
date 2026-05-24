@@ -17,7 +17,7 @@ class Response:
         self.payload = json.dumps(payload).encode()
         self.status = 200
 
-    def __enter__(self) -> "Response":
+    def __enter__(self) -> Response:
         return self
 
     def __exit__(self, *args: object) -> None:
@@ -30,7 +30,7 @@ class Response:
         return None
 
 
-VALID_SOT = [{"name": "type:fix", "color": "d73a4a", "description": "Bug fix"}]
+VALID_SOT: list[dict[str, object]] = [{"name": "type:fix", "color": "d73a4a", "description": "Bug fix"}]
 
 
 def write_sot(tmp_path: Path, entries: list[dict[str, object]]) -> Path:

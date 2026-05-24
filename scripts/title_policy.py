@@ -16,7 +16,6 @@ from __future__ import annotations
 import argparse
 import os
 import re
-import sys
 
 _DEFAULT_MAX_FINDINGS = 10
 _CONVENTIONAL_TYPES = (

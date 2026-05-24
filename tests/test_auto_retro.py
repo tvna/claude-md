@@ -15,11 +15,9 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-import pytest
-
 import auto_retro as ar
 import body_policy as bp
-
+import pytest
 
 # ---------------------------------------------------------------------------
 # Alignment: required sections must match body_policy
@@ -453,7 +451,7 @@ def _fake_run_capture():
             self.returncode = returncode
             self.stderr = ""
 
-    def fake_run(cmd, **kwargs):  # noqa: ANN001 — mirror subprocess.run
+    def fake_run(cmd, **kwargs):
         calls.append({"cmd": cmd, **kwargs})
         return _Result(stdout="OK")
 
@@ -836,6 +834,167 @@ class TestRun:
         text = summary.read_text(encoding="utf-8")
         assert "## auto-retro summary" in text
         assert "`skip`" in text
+
+
+# ---------------------------------------------------------------------------
+# Repair-signal aggregate (issue #298)
+# ---------------------------------------------------------------------------
+
+
+class TestComputeRepairSignals:
+    def _pr(self, **overrides: Any) -> ar.MergedPR:
+        defaults: dict[str, Any] = {
+            "number": 1,
+            "title": "feat(x): y",
+            "merged": True,
+            "merged_at": "2026-05-24T00:00:00Z",
+            "merged_by_login": "tvna",
+            "user_login": "tvna",
+            "layer_labels": (),
+            "html_url": "https://example/pr/1",
+            "body": "",
+            "commits": 0,
+        }
+        defaults.update(overrides)
+        return ar.MergedPR(**defaults)
+
+    def test_only_inline_comments_signal_fires(self) -> None:
+        out = ar.compute_repair_signals(self._pr(), has_inline_comments=True)
+        assert out == {
+            "inline_review_comments": True,
+            "body_cites_refs": False,
+            "fix_typed_title": False,
+            "multi_commit_pr": False,
+        }
+
+    def test_body_refs_signal_fires_for_refs(self) -> None:
+        out = ar.compute_repair_signals(
+            self._pr(body="Refs #287\nRefs #298"), has_inline_comments=False
+        )
+        assert out["body_cites_refs"] is True
+
+    def test_body_refs_signal_fires_for_closes_fixes_resolves(self) -> None:
+        for keyword in ["Closes", "Fixes", "Resolves"]:
+            out = ar.compute_repair_signals(
+                self._pr(body=f"{keyword} #1"), has_inline_comments=False
+            )
+            assert out["body_cites_refs"] is True, keyword
+
+    def test_body_refs_ignores_html_commented_refs(self) -> None:
+        out = ar.compute_repair_signals(
+            self._pr(body="<!-- Refs #999 -->\nplain text"),
+            has_inline_comments=False,
+        )
+        assert out["body_cites_refs"] is False
+
+    def test_fix_typed_title_signal_fires(self) -> None:
+        out = ar.compute_repair_signals(
+            self._pr(title="fix(harness): qualify gate names"),
+            has_inline_comments=False,
+        )
+        assert out["fix_typed_title"] is True
+
+    def test_fix_typed_title_case_insensitive(self) -> None:
+        out = ar.compute_repair_signals(
+            self._pr(title="FIX(harness): caps"), has_inline_comments=False
+        )
+        assert out["fix_typed_title"] is True
+
+    def test_fix_typed_title_does_not_fire_for_other_types(self) -> None:
+        for title in ["feat(x): y", "docs(x): y", "chore: y", "ci: y"]:
+            out = ar.compute_repair_signals(
+                self._pr(title=title), has_inline_comments=False
+            )
+            assert out["fix_typed_title"] is False, title
+
+    def test_multi_commit_signal_fires_for_two_commits(self) -> None:
+        out = ar.compute_repair_signals(
+            self._pr(commits=2), has_inline_comments=False
+        )
+        assert out["multi_commit_pr"] is True
+
+    def test_multi_commit_signal_does_not_fire_for_one_commit(self) -> None:
+        out = ar.compute_repair_signals(
+            self._pr(commits=1), has_inline_comments=False
+        )
+        assert out["multi_commit_pr"] is False
+
+    def test_all_signals_false_when_pr_is_a_clean_one_liner(self) -> None:
+        out = ar.compute_repair_signals(
+            self._pr(title="docs: tweak", body="", commits=1),
+            has_inline_comments=False,
+        )
+        assert not any(out.values())
+
+
+class TestRenderRepairSignals:
+    def test_renders_each_signal(self) -> None:
+        text = ar.render_repair_signals(
+            {"inline_review_comments": True, "body_cites_refs": False}
+        )
+        assert "inline_review_comments=true" in text
+        assert "body_cites_refs=false" in text
+
+
+class TestRunAggregateSignals:
+    """Coverage for the issue #298 aggregate-gate behavior on top of TestRun."""
+
+    def test_creates_retro_when_zero_comments_but_body_has_refs(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        seen = _orchestrator_recorder(monkeypatch, review_comments=[])
+        event = _merged_event(number=300, body="Refs #287\nRefs #298")
+        assert ar.run(event, "o/r") == 0
+        assert any(
+            m == "POST" and p == "/repos/o/r/issues" for m, p, _ in seen
+        )
+
+    def test_creates_retro_when_zero_comments_but_fix_typed(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        seen = _orchestrator_recorder(monkeypatch, review_comments=[])
+        event = _merged_event(
+            number=301, title="fix(harness): qualify gate names"
+        )
+        assert ar.run(event, "o/r") == 0
+        assert any(
+            m == "POST" and p == "/repos/o/r/issues" for m, p, _ in seen
+        )
+
+    def test_creates_retro_when_zero_comments_but_multi_commit(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        seen = _orchestrator_recorder(monkeypatch, review_comments=[])
+        event = _merged_event(number=302, commits=3)
+        assert ar.run(event, "o/r") == 0
+        assert any(
+            m == "POST" and p == "/repos/o/r/issues" for m, p, _ in seen
+        )
+
+    def test_skips_with_detailed_reason_when_no_signal_fires(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        summary = tmp_path / "summary.md"
+        monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(summary))
+        seen = _orchestrator_recorder(monkeypatch, review_comments=[])
+        event = _merged_event(
+            number=303, title="docs: tweak", body="", commits=1
+        )
+        assert ar.run(event, "o/r") == 0
+        assert not any(
+            m == "POST" and p == "/repos/o/r/issues" for m, p, _ in seen
+        )
+        printed = capsys.readouterr().out
+        assert "no repair signal fired" in printed
+        assert "inline_review_comments=false" in printed
+        assert "body_cites_refs=false" in printed
+        assert "fix_typed_title=false" in printed
+        assert "multi_commit_pr=false" in printed
+        # Step summary also carries the same reason for the audit trail.
+        assert "no repair signal fired" in summary.read_text(encoding="utf-8")
 
 
 # ---------------------------------------------------------------------------

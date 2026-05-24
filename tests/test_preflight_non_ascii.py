@@ -16,11 +16,9 @@ from __future__ import annotations
 import io
 import json
 
-import pytest
-
 import preflight_non_ascii as pna
+import pytest
 from scan_non_ascii import ACK_MARKER
-
 
 # ---------------------------------------------------------------------------
 # extract_text_fields

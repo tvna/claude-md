@@ -209,7 +209,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     try:
-        import yaml  # noqa: F401 - probed here so YAMLError is catchable below
+        import yaml
     except ImportError as exc:
         print(
             f"::error::plan_language_context: PyYAML not installed: {exc}",
