@@ -69,7 +69,7 @@ Notes:
 |---|---|---|---|---|---|
 | `main.json` | IA, Persist, Impact | Default-branch ruleset: 3 required status checks (`Verify agent instructions / gate`, `Verify issue link / gate`, `Verify title policy / gate`); blocks force-push; requires PR + linear history + resolved threads + code-owner review; squash-only merge; blocks deletion. | `docs/rulesets.md`, `ruleset-drift.yml`, #18, #27, #120 | partially covered | #120 (required-checks-vs-ruleset live sync) |
 | `all-branches.json` | IA, Impact | Non-default branch ruleset: blocks force-push on every branch except the default branch; deletion intentionally NOT blocked (relies on `delete_branch_on_merge: true`). | `docs/rulesets.md`, `docs/branch-cleanup.md`, #27, #59 | covered | — |
-| `dependabot.json` | IA, RD | `dependabot/*` ruleset: blocks force-push; bypass actor `Dependabot` (Integration id 49699333). | `docs/rulesets.md`, #18 | covered | — |
+| `dependabot.json` | IA, RD | `dependabot/*` ruleset: blocks force-push; admin-only bypass. (Originally granted Dependabot Integration `actor_id: 49699333` a bypass per #140, but GitHub deprecated the standalone Dependabot GitHub App and the Rulesets API rejects that bypass actor — see #273.) | `docs/rulesets.md`, #18, #273 | partially covered | #273 (no automation can rebase `dependabot/*` branches; Dependabot falls back to close + reopen) |
 
 Notes:
 
