@@ -37,6 +37,15 @@
             "command": "python3 $CLAUDE_PROJECT_DIR/scripts/pr_body_close_keyword_gate.py"
           }
         ]
+      },
+      {
+        "matcher": "mcp__github__(create_pull_request|update_pull_request)",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 $CLAUDE_PROJECT_DIR/scripts/preflight_pr_title_issue_ref.py"
+          }
+        ]
       }
     ]
   }
