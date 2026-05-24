@@ -16,7 +16,8 @@ This document is the operator-facing companion to [#102](https://github.com/tvna
 | `tests/test_title_policy.py` | repo working tree | pytest coverage for Japanese, emoji, zero-width, RTL, and fullwidth title rejection |
 | `.github/labels.json` entry `severity:non-ascii-content` | repo labels | Applied by the workflow above; surfaces hits in triage filters |
 | `scripts/translations.json` *(P3, future PR)* | repo working tree | JA->EN mapping for past sanitization; the operator-reviewable audit trail |
-| `scripts/sanitize-history.sh` *(P5, future PR)* | local invocation | Applies the mapping above to live issues/PRs via `gh api`; mirrors `apply-labels.yml` |
+| `scripts/sanitize_history.py` | local invocation | P5 apply tool; reuses `_github_api.apply_call` for retry/backoff and pytest-covers drift/idempotency/restore |
+| `tests/test_sanitize_history.py` | repo working tree | pytest coverage for the above; runs in `verify-agents.yml` on every PR |
 | `scripts/preflight_non_ascii.py` | repo working tree | Layer 2.5 `PreToolUse` hook: denies non-ASCII GitHub MCP write-tool calls client-side before they reach Layer 2 |
 | `tests/test_preflight_non_ascii.py` | repo working tree | pytest coverage for Layer 2.5; runs in `verify-agents.yml` |
 | `.claude/settings.json` entry `PreToolUse` | Claude Code harness (in-tree) | Registers Layer 2.5; carve-out per `docs/repo-scope.md` lines 46-48 |
@@ -75,7 +76,7 @@ The file is committed (same exposure reasoning as the backup) and lands in a rev
 3. All `confidence: low` items.
 4. Every item labelled `severity:security`.
 
-**Apply (P5):** `scripts/sanitize-history.sh --dry-run` first, then `--batch-size 10` interactively. The script mirrors `.github/workflows/apply-labels.yml`'s `apply_call()` retry helper, computes `sha256(current_body)` before each `PATCH`, and aborts loudly on drift (`::error::`) rather than overwriting silently. API endpoints:
+**Apply (P5):** `python3 scripts/sanitize_history.py plan --in scripts/translations.json` to print the intended diff with no API calls, then `apply --in scripts/translations.json --batch-size 10 --dry-run` to walk through with GETs only, then drop `--dry-run` to mutate. The script reuses `scripts/_github_api.py::apply_call` for retry/backoff and surrogate-safe decode, computes `sha256(live_body)` before each `PATCH`, and aborts loudly on drift (`::error::`) rather than overwriting silently. `--exclude-pr 275,276,277` (the three rollout PRs themselves) prevents self-mutation of in-flight review threads. The implementation language deviates from the original bash + jq sketch so the retry helper is not duplicated and the drift/idempotency logic is pytest-covered. API endpoints:
 
 - `PATCH /repos/tvna/claude-md/issues/{number}` — issue title/body
 - `PATCH /repos/tvna/claude-md/issues/comments/{comment_id}` — issue comments
@@ -262,7 +263,7 @@ gh issue list --state all --json title,body \
 
 | Layer | Path |
 |---|---|
-| 1 — past sanitization | `scripts/sanitize-history.sh --restore originals-YYYYMMDD.json.gz`. The SHA-256 idempotency check makes restore safe even if some items were not yet patched. |
+| 1 — past sanitization | `python3 scripts/sanitize_history.py restore --backup originals-YYYYMMDD.json.gz`. The SHA-256 idempotency check makes restore safe even if some items were not yet patched. |
 | 2 — write-side workflow | Revert the PR that added `.github/workflows/scan-non-ascii.yml`. The `severity:non-ascii-content` label remains harmless without the workflow; delete it via `Apply labels` (`prune=true`) if desired. |
 | 3 — read-side hook | Remove the `PostToolUse` entry from `~/.claude/settings.json` (or rename `~/.claude/hooks/sanitize-github-response.sh` to disable). No repo change. |
 
