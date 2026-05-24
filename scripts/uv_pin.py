@@ -24,6 +24,13 @@ from pathlib import Path
 DRIFT_SUBDIRS: tuple[str, ...] = (".github", "scripts", "docs")
 WORKFLOW_SUBDIR = ".github/workflows"
 DOCS_SUBDIR = "docs"
+# Historical snapshots of issue/PR text legitimately quote the pin in
+# context (e.g. `uv-cli==X.Y.Z` recorded in past discussions). The drift
+# gate protects against parallel pins drifting from pyproject.toml, not
+# against the historical record naming the pin.
+DRIFT_EXCLUDE_RELPATHS: frozenset[str] = frozenset({
+    "scripts/translations.json",  # #102 P3 snapshot of past issue/PR bodies
+})
 
 # Matches a YAML key assignment `UV_VERSION:` followed by a literal value
 # (anything that is not a GitHub `${{ ... }}` expression).
@@ -77,9 +84,11 @@ def find_drift(repo_root: Path, pin: str) -> list[str]:
 
     # (1) Literal-value check.
     for path in _iter_files(repo_root, DRIFT_SUBDIRS):
+        rel = path.relative_to(repo_root)
+        if rel.as_posix() in DRIFT_EXCLUDE_RELPATHS:
+            continue
         for line_num, line in _read_lines(path):
             if pin in line:
-                rel = path.relative_to(repo_root)
                 errors.append(
                     f"{rel}:{line_num}: uv pin literal {pin!r} appears "
                     f"outside pyproject.toml"
