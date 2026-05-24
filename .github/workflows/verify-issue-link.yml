@@ -11,6 +11,7 @@ permissions:
 
 jobs:
   gate:
+    name: "Verify issue link / gate"
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}

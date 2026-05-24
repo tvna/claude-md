@@ -11,6 +11,7 @@ permissions:
 
 jobs:
   gate:
+    name: "Verify title policy / gate"
     runs-on: ubuntu-latest
     env:
       TITLE: ${{ github.event.issue.title || github.event.pull_request.title }}
