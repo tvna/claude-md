@@ -18,11 +18,22 @@ exclude-newer = "14 days"
 required-version = "==0.11.11"
 
 [dependency-groups]
-# Test-only dependency for `scripts/uv_pin.py` (see tests/test_uv_pin.py).
-# CI installs pytest directly via `pip install` for speed; this entry
-# documents the dev dependency for local `uv sync --group dev` flows.
-dev = ["pytest>=8,<9"]
+# Test-only dependencies for scripts and coverage gates.
+# CI and local development both resolve these through uv and uv.lock.
+dev = [
+    "pytest>=8,<9",
+    "pytest-cov>=6,<7",
+]
 
 [tool.pytest.ini_options]
 pythonpath = ["scripts"]
 testpaths = ["tests"]
+
+[tool.coverage.run]
+source = ["scripts"]
+
+[tool.coverage.report]
+fail_under = 92.71
+show_missing = true
+# No scripts are omitted: the initial threshold is the measured baseline from
+# the full test suite, so every runtime script remains visible in CI output.
