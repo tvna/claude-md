@@ -258,6 +258,63 @@ class TestMissingSections:
         headings = [(3, "Scope")]
         assert body_policy.missing_sections(("Scope",), headings) == []
 
+    def test_and_heading_satisfies_ampersand_required(self) -> None:
+        # "Risk and blast radius" (the AI agent default) satisfies the
+        # canonical "Risk & blast radius" required slot. Refs #332.
+        headings = [(2, "Risk and blast radius")]
+        assert body_policy.missing_sections(
+            ("Risk & blast radius",), headings
+        ) == []
+
+    def test_ampersand_heading_satisfies_and_required(self) -> None:
+        # The reverse direction also matches (defensive symmetry).
+        headings = [(2, "Risk & blast radius")]
+        assert body_policy.missing_sections(
+            ("Risk and blast radius",), headings
+        ) == []
+
+    def test_ampersand_normalization_preserves_case(self) -> None:
+        # Case sensitivity is still enforced after & normalization.
+        headings = [(2, "risk and blast radius")]
+        assert body_policy.missing_sections(
+            ("Risk & blast radius",), headings
+        ) == ["Risk & blast radius"]
+
+
+# ---------------------------------------------------------------------------
+# _normalize_heading
+# ---------------------------------------------------------------------------
+
+
+class TestNormalizeHeading:
+    def test_replaces_ampersand_with_and(self) -> None:
+        assert (
+            body_policy._normalize_heading("Risk & blast radius")
+            == "Risk and blast radius"
+        )
+
+    def test_handles_missing_whitespace_around_ampersand(self) -> None:
+        assert (
+            body_policy._normalize_heading("Risk&blast radius")
+            == "Risk and blast radius"
+        )
+
+    def test_preserves_case(self) -> None:
+        assert body_policy._normalize_heading("Facts") == "Facts"
+
+    def test_leaves_unrelated_text_unchanged(self) -> None:
+        assert (
+            body_policy._normalize_heading("Verification")
+            == "Verification"
+        )
+
+    def test_idempotent_on_and_form(self) -> None:
+        # Already in the "and" form: no change.
+        assert (
+            body_policy._normalize_heading("Risk and blast radius")
+            == "Risk and blast radius"
+        )
+
 
 # ---------------------------------------------------------------------------
 # is_within_gate_window
@@ -322,6 +379,20 @@ class TestVerifyPRBody:
         out = capsys.readouterr().out
         assert (
             "OK: pull_request body contains all required sections." in out
+        )
+
+    def test_and_form_heading_passes(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        # PR body that writes "## Risk and blast radius" instead of
+        # "## Risk & blast radius" still satisfies the gate. Refs #332.
+        body = _CANONICAL_PR_BODY.replace(
+            "## Risk & blast radius", "## Risk and blast radius"
+        )
+        assert body_policy._verify("pull_request", body) == 0
+        assert (
+            "OK: pull_request body contains all required sections."
+            in capsys.readouterr().out
         )
 
     @pytest.mark.parametrize("drop", list(body_policy._PR_REQUIRED))
