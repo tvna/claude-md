@@ -71,17 +71,10 @@ jobs:
         run: uv sync --locked
 
       - name: Run ruff lint gate
-        run: |
-          set -x
-          uv run python --version
-          uv run ruff --version
-          uv run ruff check scripts tests --output-format=github
+        run: uv run ruff check scripts tests
 
       - name: Run mypy type gate
-        run: |
-          set -x
-          uv run mypy --version
-          uv run mypy scripts tests
+        run: uv run mypy scripts tests
 
       - name: Run script unit tests with coverage
         run: uv run python -m pytest --cov --cov-report=term-missing --cov-report=xml --cov-fail-under=92.71 -v

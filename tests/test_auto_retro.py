@@ -843,7 +843,7 @@ class TestRun:
 
 class TestComputeRepairSignals:
     def _pr(self, **overrides: Any) -> ar.MergedPR:
-        defaults = {
+        defaults: dict[str, Any] = {
             "number": 1,
             "title": "feat(x): y",
             "merged": True,
