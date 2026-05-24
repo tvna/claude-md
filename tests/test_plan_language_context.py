@@ -165,6 +165,19 @@ class TestBuildContextMessage:
         assert "ASCII" in msg
         assert "preflight_non_ascii.py" in msg
 
+    def test_contains_normative_must(self) -> None:
+        # Refs #269: descriptive "write ... in" wording let agents drift
+        # back to English; the message must read as binding.
+        msg = plc.build_context_message("@tvna", "ja")
+        assert "MUST" in msg
+
+    def test_contains_self_correction_rule(self) -> None:
+        # Refs #269: mid-output drift must trigger a STOP-and-re-emit,
+        # not a silent continuation in the wrong language.
+        msg = plc.build_context_message("@tvna", "ja")
+        assert "STOP" in msg
+        assert "drift" in msg
+
 
 # ---------------------------------------------------------------------------
 # decide
