@@ -124,7 +124,7 @@ jobs:
         run: uv sync --locked
 
       - name: Run prek (j178/prek) against all files
-        run: uvx prek run --all-files --show-diff-on-failure
+        run: uv tool run prek run --all-files --show-diff-on-failure
 
   gate:
     name: "Verify agent instructions / gate"
