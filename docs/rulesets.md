@@ -199,8 +199,15 @@ The PR-blocking workflow `.github/workflows/verify-ruleset-sync.yml` ([#120](htt
 - Trigger: `pull_request` (`opened`, `edited`, `synchronize`, `reopened`, `ready_for_review`); no `paths:` filter so a PR that does not itself edit the SoT still surfaces pre-existing dispatch debt.
 - Scope: only `required_status_checks[].context` in the lagging-behind direction (live missing what SoT declares). The opposite direction (live ahead of SoT) is full ruleset drift; `ruleset-drift.yml` owns it.
 - Base-ref SoT, not PR HEAD: fetched via `GET /repos/{repo}/contents/.github/rulesets/main.json?ref=${base_ref}`. A PR that introduces a new context therefore does not self-fail — but every PR opened **after** that one merges will fail until `Apply rulesets` is dispatched.
-- Secret: reuses `RULESETS_PAT` read-only, bound as `GH_TOKEN_API` (same as `ruleset-drift.yml`).
+- Secret: reuses `RULESETS_PAT` read-only, bound as `GH_TOKEN_API`. The `gate` job is scoped to the `ruleset-verify` GitHub Environment so the secret is reachable from `pull_request` events; the Environment must be configured **without** required-reviewer approval so the gate runs unattended on every PR.
 - Required status check: `Verify ruleset sync / gate` is listed in `main.json`'s `required_status_checks` so the gate blocks merge once it is itself applied to live.
+
+One-time setup for the `ruleset-verify` Environment (per [#120](https://github.com/tvna/claude-md/issues/120) PR review):
+
+1. **Settings → Environments → New environment**, name it `ruleset-verify`.
+2. Leave "Required reviewers" unchecked. The gate runs unattended; an approval gate would block every PR on manual review.
+3. Leave "Deployment branches and tags" set to "All branches" so the gate runs for any PR branch.
+4. Add an environment secret named `RULESETS_PAT` with the same fine-grained PAT used by `ruleset-apply` (read access to Administration is sufficient for this gate; reusing the existing token avoids a second rotation cadence).
 
 Resolution when the gate is red:
 

@@ -15,11 +15,12 @@ env:
 jobs:
   gate:
     runs-on: ubuntu-latest
+    environment: ruleset-verify
     steps:
       - name: Guard RULESETS_PAT
         run: |
           if [ -z "${GH_TOKEN_API}" ]; then
-            echo "::error::RULESETS_PAT secret is not set. See docs/rulesets.md \"Required secret\"."
+            echo "::error::RULESETS_PAT secret is not set. Configure the 'ruleset-verify' environment with the RULESETS_PAT secret. See docs/rulesets.md \"Required secret\" and \"PR-time required-checks sync gate\"."
             exit 1
           fi
 
