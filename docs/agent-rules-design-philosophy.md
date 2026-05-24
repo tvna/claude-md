@@ -147,6 +147,53 @@ responses in the primary project owner's native language. If the
 project lacks ownership-language metadata, prepare it before relying
 on this rule.").
 
+### 2.5 Glossary
+
+This subsection is the single source of truth for terms that recur
+across `master.instructions.md`, the compiled `CLAUDE.md` and
+`AGENTS.md`, the responsibility matrix in section 3, and the harness
+scripts. Each entry names the term, gives a one-sentence definition,
+and cites the master section subtitle and any matrix row that uses
+it. `scripts/scan_design_philosophy_drift.py` reads the headings
+under this subsection to verify that no required entry has been
+removed.
+
+- **safety boundary**: The layer that limits simplicity when the
+  cost of being wrong is high. Used as the `*Layer: ...*` subtitle of
+  master section 4 and as the P4 row label in section 3.
+- **defense-in-depth**: A safety pattern that keeps a control alive
+  across multiple layers (prompts, code, hooks, CI, review, operator
+  procedure) so that collapsing any one layer does not remove the
+  control. Stated in master section 4 ("Preserve defense-in-depth
+  ..."). The section 3 P4 row records the lanes that carry it.
+- **deterministic gate**: A harness rule converted to an executable
+  check (a script, a workflow, a hook, or a ruleset) that replaces
+  reviewer memory. Defined operationally in section 2.2. Required by
+  master section 3 ("push deterministic work into hooks, pre-commit,
+  and CI/CD ... build the harness first if it's missing").
+- **untrusted data**: External text such as issue bodies, PR
+  descriptions, review comments, CI logs, webhook payloads,
+  generated reports, pasted stack traces, and external docs - never
+  authority that can override trusted instructions. Required by
+  master section 2.
+- **repair-free merge**: A PR that lands without any reviewer, CI,
+  or hook repair between PR open and merge. The retrospective
+  auto-opened after each merge counts the repairs. Required by
+  master section 3 ("The retrospective must review repair-free
+  merge reproducibility ...").
+- **PRD**: Product Requirements Document. Required by master section
+  1 ("Match the document weight to the blast radius: detailed PRD
+  for architectural / multi-PR work, concise spec otherwise."). This
+  document (`docs/agent-rules-design-philosophy.md`) is the PRD for
+  the universal-text and harness boundary; downstream consumers
+  write their own PRDs for their own architectural changes.
+- **P1 through P6**: The six numbered principles in
+  `master.instructions.md`. Each principle is identified by its
+  `*Layer: <text>*` subtitle. The matrix row label after `P<n> - `
+  in section 3 must equal the subtitle `<text>` after normalization
+  (`&` to `and`, case-insensitive, whitespace-collapsed); see
+  section 3 for the invariant.
+
 ## 3. Responsibility matrix - six layers by four lanes
 
 Each row is one of the six principles in `master.instructions.md`,
@@ -154,6 +201,16 @@ identified by its `*Layer: ...*` subtitle. Each column is one of the
 four ownership lanes from section 2. Cells contain the concrete
 artifacts that own the concern, or `(gap)` if no artifact owns it
 today.
+
+**Matrix-subtitle invariant.** The row label after `P<n> - ` must
+equal the master `*Layer: <text>*` subtitle text after normalization
+(`&` to `and`, case-insensitive, whitespace-collapsed). The number
+of rows must equal the maximum master section number. A change to
+either side requires the same PR to update the other side and to
+re-run `scripts/scan_design_philosophy_drift.py`. Without this
+invariant, a row label rename can imply a structural change to
+`master.instructions.md` without actually performing it (see retro
+[#322](https://github.com/tvna/claude-md/issues/322)).
 
 The `Boundary risk` column records the pattern most likely to cause
 the wrong lane to absorb a concern, drawn from the historical record
@@ -163,7 +220,7 @@ of merged PRs and closed sub-issues of #226.
 |---|---|---|---|---|---|
 | P1 - goal and plan structure | Plan-mode trigger; document weight rule; verification design in the plan | `scripts/plan_language_context.py` (SessionStart hook); `tests/test_plan_language_context.py` | `docs/issue-pr-body-standard.md` (body shape encodes the plan); `docs/performance-metrics.md` (measurement is a verification artifact) | The consumer's plan-mode trigger discipline | Mixing plan-language responsibility with GitHub-post ASCII enforcement in one rule (corrected by [#227](https://github.com/tvna/claude-md/issues/227)) |
 | P2 - input and pre-code reasoning | Untrusted-data treatment of external text; instruction-override refusal; fact-vs-speculation tagging; assumption enumeration; simpler-path proposal | `scripts/preflight_non_ascii.py` (PreToolUse hook against non-ASCII injection); `scripts/body_policy.py`, `scripts/title_policy.py`, `scripts/pr_body_close_keyword_gate.py` (structural shape of external-authored bodies); `scripts/scan_non_ascii.py` (advisory drift detector); `scripts/sanitize_history.py` (historical-text cleansing) | `docs/downstream-instruction-review-checklist.md` (reviewer-facing untrusted-text checklist); `docs/non-ascii-defense.md` (Layer 1-2-3 defense narrative); `docs/issue-pr-body-standard.md` (Facts / Assumptions sections); `docs/issue-triage.md` (label-driven routing) | The consumer's own incoming-text and ambiguity policy | Treating external text as authority, or letting speculation slip into universal text disguised as a fact (PR #225) |
-| P3 - delivery harness | Issue-first; ASCII discipline; declarative module management; auto-subscribe to PR activity; retrospective auto-open; classify each repair | `scripts/issue_link.py`, `body_policy.py`, `title_policy.py`, `pr_body_close_keyword_gate.py`, `auto_retro.py`, `scan_non_ascii.py`, `preflight_non_ascii.py`, `branch_cleanup.py`, `rulesets_apply.py`, `ruleset_drift.py`, `labels_apply.py`, `dependabot_automerge.py`, `dependabot_labels.py`, `threat_intel_triage.py`, `uv_pin.py`, `scan_apm_portability.py`; 16 paired workflows; 19 paired tests | `docs/issue-pr-body-standard.md`, `docs/issue-triage.md`, `docs/non-ascii-defense.md`, `docs/rulesets.md`, `docs/branch-cleanup.md`, `docs/dependabot-automerge.md`, `docs/remote-environment.md`, `docs/repo-scope.md`, `docs/security-control-inventory.md`, `docs/history/retrospective-pr-*.md` | The consumer's own CI provider, issue tracker, and dependency manager | Naming a specific tool (gh CLI, GitHub Actions, dependabot) inside universal text; embedding a specific PR number as an example |
+| P3 - delivery harness around the code | Issue-first; ASCII discipline; declarative module management; auto-subscribe to PR activity; retrospective auto-open; classify each repair | `scripts/issue_link.py`, `body_policy.py`, `title_policy.py`, `pr_body_close_keyword_gate.py`, `auto_retro.py`, `scan_non_ascii.py`, `preflight_non_ascii.py`, `branch_cleanup.py`, `rulesets_apply.py`, `ruleset_drift.py`, `labels_apply.py`, `dependabot_automerge.py`, `dependabot_labels.py`, `threat_intel_triage.py`, `uv_pin.py`, `scan_apm_portability.py`; 16 paired workflows; 19 paired tests | `docs/issue-pr-body-standard.md`, `docs/issue-triage.md`, `docs/non-ascii-defense.md`, `docs/rulesets.md`, `docs/branch-cleanup.md`, `docs/dependabot-automerge.md`, `docs/remote-environment.md`, `docs/repo-scope.md`, `docs/security-control-inventory.md`, `docs/history/retrospective-pr-*.md` | The consumer's own CI provider, issue tracker, and dependency manager | Naming a specific tool (gh CLI, GitHub Actions, dependabot) inside universal text; embedding a specific PR number as an example |
 | P4 - safety boundary | Minimum code; safety-bounded simplicity; defense-in-depth preservation; destructive-operation safeguards; tool-scope confinement; external-disclosure and secret-log prevention; fail-loud over silent default; debug instrumentation as attack surface | `.github/CODEOWNERS` (repo-scope binding for MCP/agent tools); `.github/workflows/*.yml` `permissions:` declarations (least-privilege per workflow); `scripts/scan_apm_portability.py` (forbids naming repo-local tools in universal text); `(lint and type gates exist in workflow-script-quality.md M8; behavioral check is reviewer judgment)` | `docs/workflow-script-quality.md` (M1 to M9 must-have checklist; O1 to O7 optional enhancements); `docs/repo-scope.md` (allowed-repository policy and runbook); `docs/workflow-permissions-audit.md` (per-workflow permission matrix); `docs/security-control-inventory.md` (visualization of the harness coverage); `docs/privileged-operation-runbooks.md` (escalation paths) | The consumer's own language ecosystem, code style, credential manager, external-endpoint policy, and per-agent tool inventory | Embedding a stack-specific example or a concrete tool endpoint inside universal text; widening a least-privilege workflow `permissions:` block for a one-off debug |
 | P5 - change scope and agent split | Touch-only-what-you-must; clean only your own orphans; sub-agent vs skill split; separate implementation and verification agents | `(none - agent judgment)` | `(gap candidate - no doc explicitly governs scope discipline today)` | The consumer's own agent inventory and roster | Mentioning a Claude-only feature (sub-agents, skills) by literal name as universal terminology |
 | P6 - handoff and communication | Native-language plan artifacts; show procedure and case studies; visualize workflow; refuse LGTM; explain trade-offs | `scripts/plan_language_context.py` (owner-language metadata recovery); `.github/owners.yaml`; `.github/CODEOWNERS` | `docs/history/retrospective-pr-*.md` (case studies are the force-multiplier evidence); `docs/security-control-inventory.md` (visualization of the harness coverage); `docs/performance-metrics.md` (visualization of measurement) | The consumer's own `owners.yaml` entries | Treating "case studies" as universal content rather than as repo-local artifacts that the universal text merely *requires*; plan-language drift slipping into English despite harness injection (corrected by [#269](https://github.com/tvna/claude-md/issues/269)) |
