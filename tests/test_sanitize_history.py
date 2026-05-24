@@ -396,3 +396,207 @@ class TestArgparse:
         with pytest.raises(SystemExit) as excinfo:
             sh.main(["nonsense"])
         assert excinfo.value.code != 0
+
+
+# ---------------------------------------------------------------------------
+# load_backup: gzip + plain JSON paths
+# ---------------------------------------------------------------------------
+
+
+class TestLoadBackup:
+    def test_loads_gzip_backup(self, tmp_path) -> None:
+        import gzip
+        path = tmp_path / "snap.json.gz"
+        payload = {"items": [{"type": "issue", "id": 1}]}
+        path.write_bytes(gzip.compress(json.dumps(payload).encode("utf-8")))
+        out = sh.load_backup(path)
+        assert out == payload
+
+    def test_loads_plain_json(self, tmp_path) -> None:
+        path = tmp_path / "snap.json"
+        payload = {"items": []}
+        path.write_text(json.dumps(payload), encoding="utf-8")
+        out = sh.load_backup(path)
+        assert out == payload
+
+
+# ---------------------------------------------------------------------------
+# index_backup guard: items missing kind/id are skipped silently
+# ---------------------------------------------------------------------------
+
+
+class TestIndexBackupGuards:
+    def test_items_missing_kind_or_id_are_skipped(self) -> None:
+        backup = {"items": [
+            {"type": None, "id": 1, "title": "T", "body": "B"},
+            {"type": "issue", "id": None, "title": "T", "body": "B"},
+            {"type": "issue", "id": 5, "title": "T", "body": "B"},
+        ]}
+        idx = sh.index_backup(backup)
+        # Only the third item lands in the index.
+        assert set(idx) == {("issue", 5, None, "title"), ("issue", 5, None, "body")}
+
+
+# ---------------------------------------------------------------------------
+# item_endpoint: pr_review_comment without comment_id raises
+# ---------------------------------------------------------------------------
+
+
+class TestItemEndpointMissingPrReviewCommentId:
+    def test_raises(self) -> None:
+        with pytest.raises(ValueError, match="missing comment_id"):
+            sh.item_endpoint(
+                "x/y",
+                {"type": "pr_review_comment", "comment_id": None, "id": 7},
+            )
+
+
+# ---------------------------------------------------------------------------
+# fetch_live_field / patch_field non-2xx error paths
+# ---------------------------------------------------------------------------
+
+
+class TestFetchLiveFieldError:
+    def test_non_2xx_raises_runtime_error(self) -> None:
+        opener = _OpenerLog([_http_error(404, '{"message":"not found"}')])
+        with pytest.raises(RuntimeError, match="HTTP 404"):
+            sh.fetch_live_field(
+                url="https://api.github.com/repos/x/y/issues/9",
+                field="body",
+                token="t",
+                opener=opener,
+                sleeper=lambda _s: None,
+            )
+
+
+class TestPatchFieldError:
+    def test_non_2xx_raises_runtime_error(self) -> None:
+        opener = _OpenerLog([_http_error(422, '{"message":"validation"}')])
+        with pytest.raises(RuntimeError, match="HTTP 422"):
+            sh.patch_field(
+                url="https://api.github.com/repos/x/y/issues/9",
+                field="body",
+                new_value="new",
+                token="t",
+                opener=opener,
+                sleeper=lambda _s: None,
+            )
+
+
+# ---------------------------------------------------------------------------
+# cmd_restore: backup -> PATCH originals back
+# ---------------------------------------------------------------------------
+
+
+def _write_gzip_backup(path, items) -> None:
+    import gzip
+    payload = {
+        "schema_version": 1,
+        "captured_at": "2026-05-24T00:00:00Z",
+        "repo": "x/y",
+        "items": items,
+    }
+    path.write_bytes(gzip.compress(json.dumps(payload).encode("utf-8")))
+
+
+class TestCmdRestore:
+    def test_dry_run_lists_intended_patches_without_calling_api(
+        self,
+        tmp_path,
+        monkeypatch,
+        capsys,
+    ) -> None:
+        backup_path = tmp_path / "snap.json.gz"
+        _write_gzip_backup(backup_path, [
+            {"type": "issue", "id": 1, "number": 1, "comment_id": None,
+             "title": "T", "body": "B"},
+        ])
+        monkeypatch.setenv("REPO", "x/y")
+        monkeypatch.setenv("GH_TOKEN", "fake")
+        # Patch fetch_live_field / patch_field paths -- dry-run must not
+        # invoke either, so we replace patch_field with a tripwire.
+        called: list[object] = []
+        monkeypatch.setattr(
+            sh, "patch_field",
+            lambda **kw: called.append(kw),
+        )
+        rc = sh.main(["restore", "--backup", str(backup_path), "--dry-run"])
+        assert rc == 0
+        out = capsys.readouterr().out
+        assert "plan PATCH" in out
+        # Two fields in the index (title + body) -> two plan lines.
+        assert out.count("plan PATCH") == 2
+        # patch_field never invoked in dry-run.
+        assert called == []
+
+    def test_real_run_invokes_patch_field_per_indexed_field(
+        self,
+        tmp_path,
+        monkeypatch,
+    ) -> None:
+        backup_path = tmp_path / "snap.json.gz"
+        _write_gzip_backup(backup_path, [
+            {"type": "issue", "id": 1, "number": 1, "comment_id": None,
+             "title": "T", "body": "B"},
+        ])
+        monkeypatch.setenv("REPO", "x/y")
+        monkeypatch.setenv("GH_TOKEN", "fake")
+        called: list[dict] = []
+        monkeypatch.setattr(
+            sh, "patch_field",
+            lambda **kw: called.append(kw),
+        )
+        rc = sh.main(["restore", "--backup", str(backup_path)])
+        assert rc == 0
+        # Two index entries -> two PATCH calls.
+        assert len(called) == 2
+        assert {c["field"] for c in called} == {"title", "body"}
+        assert all(c["new_value"] in {"T", "B"} for c in called)
+
+    def test_missing_repo_returns_2(
+        self, tmp_path, monkeypatch
+    ) -> None:
+        backup_path = tmp_path / "snap.json.gz"
+        _write_gzip_backup(backup_path, [])
+        monkeypatch.delenv("REPO", raising=False)
+        monkeypatch.setenv("GH_TOKEN", "fake")
+        rc = sh.main(["restore", "--backup", str(backup_path)])
+        assert rc == 2
+
+    def test_missing_token_returns_2(
+        self, tmp_path, monkeypatch
+    ) -> None:
+        backup_path = tmp_path / "snap.json.gz"
+        _write_gzip_backup(backup_path, [])
+        monkeypatch.setenv("REPO", "x/y")
+        monkeypatch.delenv("GH_TOKEN", raising=False)
+        rc = sh.main(["restore", "--backup", str(backup_path)])
+        assert rc == 2
+
+    def test_unknown_type_in_backup_is_silently_skipped(
+        self,
+        tmp_path,
+        monkeypatch,
+    ) -> None:
+        """An entry with an unsupported `type` triggers item_endpoint's
+        ValueError, which the restore loop catches and continues past."""
+        backup_path = tmp_path / "snap.json.gz"
+        _write_gzip_backup(backup_path, [
+            {"type": "bogus", "id": 99, "number": 99, "comment_id": None,
+             "title": "T", "body": "B"},
+            {"type": "issue", "id": 1, "number": 1, "comment_id": None,
+             "title": "", "body": "B"},
+        ])
+        monkeypatch.setenv("REPO", "x/y")
+        monkeypatch.setenv("GH_TOKEN", "fake")
+        called: list[dict] = []
+        monkeypatch.setattr(
+            sh, "patch_field",
+            lambda **kw: called.append(kw),
+        )
+        rc = sh.main(["restore", "--backup", str(backup_path)])
+        assert rc == 0
+        # Only the well-formed issue's body gets restored (title was empty
+        # and index_backup skips empty titles).
+        assert len(called) == 1
+        assert called[0]["field"] == "body"
