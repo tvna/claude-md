@@ -47,6 +47,7 @@ This file is the deliverable for [#179](https://github.com/tvna/claude-md/issues
 | `generate-agents.yml` | Persist, LM | Scheduled + dispatch compile; drift check via `git diff --exit-code` on `CLAUDE.md` / `AGENTS.md`; opens PR rather than push direct. | `.apm/instructions/master.instructions.md`, `verify-apm-drift.yml`, #112 | partially covered | #183 (downstream review checklist) |
 | `ruleset-drift.yml` | Persist, IA | Weekly + dispatch drift detection vs `.github/rulesets/`; opens an issue when drift is detected. | `scripts/ruleset_drift.py`, `tests/test_ruleset_drift.py`, `docs/rulesets.md` | covered | #120 (required-checks-vs-ruleset sync, separate scope) |
 | `scan-non-ascii.yml` | DE, Coll, Persist | Write-side scan of issues / PRs / comments; closes / requests-changes / labels; excludes trusted bots. | `docs/non-ascii-defense.md`, `scripts/scan_non_ascii.py`, `tests/test_scan_non_ascii.py`, #102 | covered | — |
+| `security-control-drift-report.yml` | Persist, Impact | Weekly + dispatch aggregator: reuses each per-family detector in read-only mode (`ruleset_drift.py detect`, `labels_apply.py plan`, `apm compile` + diff, `uv_pin.py drift` / `stale`) and posts a rolling comment on parent #178. Never opens new issues. | `scripts/security_drift_report.py`, `tests/test_security_drift_report.py`, `docs/security-control-drift-report.md`, #180 | covered | — |
 | `threat-intel-triage.yml` | Coll, Recon | Deterministic OSV + CISA KEV lookup; routes labels (`threat:intel-needed`, `threat:response-needed`) before any agent. | `scripts/threat_intel_triage.py`, `tests/test_threat_intel_triage.py`, `docs/issue-triage.md`, #170 | partially covered | #170 (sustained ops), #63 (agent-boundary review) |
 | `verify-agents.yml` | RD, Persist, Exec | PR gate: APM compile drift, `lint-uv-pin` (drift + upstream staleness), aggregated required check for ruleset. | `scripts/uv_pin.py`, `tests/test_uv_pin.py`, `docs/remote-environment.md`, #112 | covered | — |
 | `verify-apm-drift.yml` | Persist, LM | PR gate: recompiles APM and diffs `CLAUDE.md` / `AGENTS.md` byte-for-byte; `--exclude-newer "14 days"` prevents transient package noise. | `.apm/instructions/master.instructions.md`, `CLAUDE.md`, `AGENTS.md` | partially covered | #183 (downstream review checklist) |
@@ -71,13 +72,13 @@ Notes:
 Notes:
 
 - `RepositoryRole` admin bypass (id 5) is present on all three rulesets. That is documented in `docs/rulesets.md`; #182 covers the "destructive-operation runbook" path for any future apply that touches bypass actors.
-- The drift gate is `ruleset-drift.yml`; #180 wires that drift output into #178 as evidence rather than duplicating the detector.
+- The drift gate is `ruleset-drift.yml`; the cross-family aggregator `security-control-drift-report.yml` (#180) wires that drift output into #178 as evidence rather than duplicating the detector.
 
 ## 3. Label source of truth (`.github/labels.json`)
 
 | Surface | ATT&CK | Existing defense | Evidence | Status | Gap |
 |---|---|---|---|---|---|
-| `.github/labels.json` | Persist, IA, Coll | JSON SoT; mutated only via `apply-labels.yml` with `dry_run` default; `verify-dependabot-labels.yml` ensures Dependabot label references stay resolvable. | `docs/issue-triage.md`, `apply-labels.yml`, `verify-dependabot-labels.yml`, #84 | partially covered | #180 (scheduled drift), #84 Phase 5 (label drift + coverage check) |
+| `.github/labels.json` | Persist, IA, Coll | JSON SoT; mutated only via `apply-labels.yml` with `dry_run` default; `verify-dependabot-labels.yml` ensures Dependabot label references stay resolvable; scheduled drift surfaced by `security-control-drift-report.yml` (#180). | `docs/issue-triage.md`, `apply-labels.yml`, `verify-dependabot-labels.yml`, `security-control-drift-report.yml`, #84 | partially covered | #84 Phase 5 (label drift + coverage check) |
 
 ## 4. APM source and compiled instructions
 
@@ -114,6 +115,7 @@ Notes:
 | `ruleset_drift.py` | Persist, IA | Compares live rulesets to SoT JSON; files an issue when drift is detected; reads `GH_TOKEN_API`. | `tests/test_ruleset_drift.py`, `ruleset-drift.yml`, `docs/rulesets.md` | covered | — |
 | `rulesets_apply.py` | PrivEsc, IA, Impact | Plan / dry-run / apply tri-state; PAT scoped to `ruleset-apply` Environment; opt-in `enable_auto_delete`; outputs ruleset-by-ruleset diff. | `tests/test_rulesets_apply.py`, `apply-rulesets.yml`, `docs/rulesets.md` | partially covered | #56, #181, #182 |
 | `scan_non_ascii.py` | DE, Coll, Persist, Cred | Write-side scanner; closes / requests-changes / labels; trusted-bot allowlist; respects body section boundaries. | `tests/test_scan_non_ascii.py`, `scan-non-ascii.yml`, `docs/non-ascii-defense.md`, #102 | covered | — |
+| `security_drift_report.py` | Persist, Impact | Aggregator: parses captured exit codes / outputs of the per-family detectors and emits a single Markdown report; posts / updates a rolling comment on parent #178 via `_github_api.apply_call`. Never opens new issues; never mutates per-family state. | `tests/test_security_drift_report.py`, `security-control-drift-report.yml`, `docs/security-control-drift-report.md`, #180 | covered | — |
 | `threat_intel_triage.py` | Coll, Recon, RD | Deterministic OSV.dev + CISA KEV lookup; fixture inputs for offline tests; applies / removes labels only. | `tests/test_threat_intel_triage.py`, `threat-intel-triage.yml`, `docs/issue-triage.md`, #170 | partially covered | #170 |
 | `title_policy.py` | DE, RD | ASCII / format validator for issue and PR titles; pure function. | `tests/test_title_policy.py`, `verify-title-policy.yml`, `docs/non-ascii-defense.md` | covered | — |
 | `uv_pin.py` | RD, Exec, C2 | Single source of truth for the `uv` pin; drift + upstream-staleness check; emits annotations rather than mutating files. | `tests/test_uv_pin.py`, `verify-agents.yml`, `docs/remote-environment.md`, #112 | covered | — |
@@ -131,6 +133,7 @@ Notes:
 | `docs/remote-environment.md` | Exec, C2, Persist | Documents SessionStart hook, uv pin propagation, verification commands, rollback procedure, outbound-network expectations. | `scripts/install-uv.sh`, `.claude/settings.json`, `scripts/uv_pin.py`, #106, #109, #112 | covered | — |
 | `docs/repo-scope.md` | LM, Exec | Documents the `.claude/settings.json` carve-out and the prohibition on per-agent tool config (`.codex/`, etc.). | `docs/remote-environment.md`, #109 | covered | — |
 | `docs/rulesets.md` | PrivEsc, IA, Impact, Disc | Documents `RULESETS_PAT` scope, ruleset apply / verify / rollback orchestration, dispatch authorization, audit-log expectations. | `apply-rulesets.yml`, `ruleset-drift.yml`, `scripts/rulesets_apply.py`, #18, #27, #56 | partially covered | #56, #182 |
+| `docs/security-control-drift-report.md` | Persist, Impact | Documents the scheduled aggregator (#180): trigger, families covered, families pending, rolling-comment marker, dry-run preview, per-row investigation steps, rollback. | `security-control-drift-report.yml`, `scripts/security_drift_report.py`, #178, #180 | covered | — |
 
 ## Cross-reference: ATT&CK tactic → surface coverage
 
@@ -142,7 +145,7 @@ This table answers, for each row of #178's coverage table: which surfaces in thi
 | RD | `verify-title-policy.yml`, `scan-non-ascii.yml`, `verify-body-policy.yml`, `.github/dependabot.yml`, `uv.lock`, `pyproject.toml`, `dependabot.json` ruleset | covered | — |
 | IA | `main.json`, `all-branches.json`, `dependabot.json`, `verify-issue-link.yml`, `ruleset-drift.yml` | partially covered | #120 |
 | Exec | `verify-agents.yml`, `verify-apm-drift.yml`, `install-uv.sh`, `pyproject.toml`, `uv.lock`, `.claude/settings.json` carve-out | partially covered | #181 (workflow `permissions:` audit) |
-| Persist | `verify-apm-drift.yml`, `ruleset-drift.yml`, `apply-labels.yml`, `apply-rulesets.yml`, `verify-body-policy.yml`, `verify-title-policy.yml` | partially covered | #180 (scheduled label drift) |
+| Persist | `verify-apm-drift.yml`, `ruleset-drift.yml`, `apply-labels.yml`, `apply-rulesets.yml`, `verify-body-policy.yml`, `verify-title-policy.yml`, `security-control-drift-report.yml` | covered | — |
 | PrivEsc | `apply-labels.yml`, `apply-rulesets.yml`, `ruleset-drift.yml`, `docs/issue-triage.md`, `docs/rulesets.md` | partially covered | #56, #181 |
 | DE | `verify-title-policy.yml`, `scan-non-ascii.yml`, `verify-apm-drift.yml`, `verify-body-policy.yml`, `preflight_non_ascii.py`, `verify-issue-link.yml` | covered | — |
 | Cred | `scan-non-ascii.yml`, `preflight_non_ascii.py`, `docs/rulesets.md`, `docs/issue-triage.md` (Environment-scoped PATs) | partially covered | #181 (log redaction audit) |
@@ -164,7 +167,7 @@ Follow-up issues this inventory references:
 | #102 | Multi-byte / non-ASCII prompt-injection hardening |
 | #120 | Required-checks vs live ruleset synchronization |
 | #170 | Sustained external threat-intelligence triage operations |
-| #180 | Scheduled drift reporting across control families |
+| #180 | Scheduled drift reporting across control families (closed by `security-control-drift-report.yml`) |
 | #181 | Workflow permissions and PAT audit (least privilege matrix) |
 | #182 | Privileged-operation runbook checklist (dry-run / authorization / rollback / audit) |
 | #183 | Downstream instruction review checklist |
@@ -192,9 +195,9 @@ Expected behavior:
 
 Reviewers should also confirm:
 
-- `ls .github/workflows/` matches the 14 rows in section 1.
+- `ls .github/workflows/` matches the 15 rows in section 1.
 - `ls .github/rulesets/` matches the 3 rows in section 2.
-- `ls scripts/` matches the 18 rows in section 6 (`__pycache__` is excluded; not security-relevant).
-- `ls docs/` matches the 9 rows in section 7.
+- `ls scripts/` matches the 19 rows in section 6 (`__pycache__` is excluded; not security-relevant).
+- `ls docs/` matches the 10 rows in section 7.
 
 Closes #179.
