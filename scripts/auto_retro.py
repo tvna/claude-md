@@ -264,17 +264,19 @@ def find_existing_retro(
     """Return the matching retro issue number from search results, or None.
 
     Match heuristic: title begins with ``retro(`` or ``retro:`` (case-
-    insensitive after lstrip) AND contains the literal ``PR #<N>``. The
-    second condition guards against matching an unrelated retro that
+    insensitive after lstrip) AND contains ``PR #<N>`` not followed by
+    another digit. The trailing ``(?!\\d)`` lookahead prevents PR-number
+    prefix collisions (e.g. a lookup for #249 must not match a retro for
+    #2490). The prefix guard avoids matching an unrelated retro that
     happens to share a type-scope token.
     """
-    needle = f"PR #{pr_number}"
+    needle = re.compile(rf"PR #{pr_number}(?!\d)")
     for item in search_items:
         title = item.get("title") or ""
         stripped = title.lstrip().lower()
         if not (stripped.startswith("retro(") or stripped.startswith("retro:")):
             continue
-        if needle in title:
+        if needle.search(title):
             return item.get("number")
     return None
 
