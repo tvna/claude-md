@@ -34,7 +34,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 $CLAUDE_PROJECT_DIR/scripts/pr_body_close_keyword_advisory.py"
+            "command": "python3 $CLAUDE_PROJECT_DIR/scripts/pr_body_close_keyword_gate.py"
           }
         ]
       }

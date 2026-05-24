@@ -28,35 +28,27 @@ import re
 import subprocess
 import sys
 
+from _ref_classifier import (
+    CLOSING_KEYWORDS as _CLOSING_KEYWORDS,
+    HTML_COMMENT_RE as _HTML_COMMENT,
+    PARTIAL_MARKER_RE as _PARTIAL_MARKER_RE,
+    REF_LINE_KEYWORD_RE as _REF_LINE_KEYWORD,
+    TRACKING_LABEL as _TRACKING_LABEL,
+    body_has_partial_marker as _shared_body_has_partial_marker,
+    classify_refs as _shared_classify_refs,
+    format_no_closing_keyword_msg as _shared_format_no_closing_keyword_msg,
+    strip_html_comments as _shared_strip_html_comments,
+)
 from _trusted_bots import _TRUSTED_BOT_LOGINS
 
-_HTML_COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
-
-# Match a line that begins (after optional indentation) with one of the
-# GitHub-recognized issue keywords followed by ``#N``. Anchored to the
-# start of the line so a passing mention like "see Refs #5 above" is
-# ignored, matching the original ``grep -E '^[[:space:]]*...'``.
+# ``_REF_LINE`` is the keyword-non-capturing variant used only by
+# :func:`extract_refs`. The keyword-capturing form lives in
+# ``_ref_classifier`` (shared with the client-side hook) -- this regex
+# is local because no other module needs the bare number-only view.
 _REF_LINE = re.compile(
     r"^[ \t]*(?:Refs|Closes|Fixes|Resolves)[ \t]+#(\d+)",
     re.IGNORECASE | re.MULTILINE,
 )
-
-# Per #216 PR-A, capture the keyword too so we can classify each reference
-# as closing vs non-closing. GitHub's auto-close keyword set is
-# Closes/Fixes/Resolves (and conjugations); ``Refs`` does NOT auto-close.
-_REF_LINE_KEYWORD = re.compile(
-    r"^[ \t]*(Refs|Closes|Fixes|Resolves)[ \t]+#(\d+)",
-    re.IGNORECASE | re.MULTILINE,
-)
-_CLOSING_KEYWORDS = frozenset({"closes", "fixes", "resolves"})
-_TRACKING_LABEL = "type:tracking"
-
-# Authors who want to use ``Refs #N`` against a non-tracking issue opt
-# out of the closing-keyword gate by including this literal marker. The
-# marker is itself an HTML comment, so it is invisible in rendered
-# Markdown -- but it must be detected from the *raw* body before
-# :func:`strip_html_comments` runs.
-_PARTIAL_MARKER_RE = re.compile(r"<!--\s*partial\s*-->", re.IGNORECASE)
 
 _NO_REFS_MSG = (
     "::error::PR body has no issue reference. Add a line like "
@@ -71,7 +63,7 @@ def strip_html_comments(body: str) -> str:
     Equivalent to ``perl -0777 -pe 's/<!--.*?-->//gs'``: non-greedy so
     sequential comments are stripped independently.
     """
-    return _HTML_COMMENT.sub("", body)
+    return _shared_strip_html_comments(body)
 
 
 def extract_refs(body: str) -> list[int]:
@@ -94,14 +86,7 @@ def classify_refs(body: str) -> list[tuple[str, int]]:
     but exposes the keyword so callers can distinguish closing keywords
     (`Closes`, `Fixes`, `Resolves`) from the non-closing `Refs`.
     """
-    out: list[tuple[str, int]] = []
-    seen: set[tuple[str, int]] = set()
-    for m in _REF_LINE_KEYWORD.finditer(body):
-        key = (m.group(1).lower(), int(m.group(2)))
-        if key not in seen:
-            seen.add(key)
-            out.append(key)
-    return out
+    return _shared_classify_refs(body)
 
 
 def body_has_partial_marker(raw_body: str) -> bool:
@@ -113,7 +98,7 @@ def body_has_partial_marker(raw_body: str) -> bool:
     (per #216 PR-A) for legitimate partial work against a non-umbrella
     issue.
     """
-    return _PARTIAL_MARKER_RE.search(raw_body) is not None
+    return _shared_body_has_partial_marker(raw_body)
 
 
 def verify_ref_exists(
@@ -190,16 +175,7 @@ def get_issue_labels(
 
 
 def _format_no_closing_keyword_msg(numbers: list[int]) -> str:
-    joined = ", ".join(f"#{n}" for n in numbers)
-    return (
-        f"::error::PR body uses only 'Refs' for {joined}, but none of "
-        f"those issues carry the '{_TRACKING_LABEL}' label and the body "
-        "lacks a '<!-- partial -->' opt-out marker. If this PR fully "
-        "resolves the issue, replace 'Refs' with 'Closes', 'Fixes', or "
-        "'Resolves' so GitHub auto-closes it on merge. If this is "
-        "partial work against a non-umbrella issue, add a literal "
-        "'<!-- partial -->' line to the body. See #216."
-    )
+    return _shared_format_no_closing_keyword_msg(numbers, prefix="::error::")
 
 
 def _verify(repo: str, body: str, author: str | None = None) -> int:
