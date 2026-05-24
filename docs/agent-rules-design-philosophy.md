@@ -51,16 +51,16 @@ harness gets a chance to enforce or fail to enforce it.
 - Reframing the six principles. The principle text and the
   `*Layer: ...*` subtitles ([#75](https://github.com/tvna/claude-md/issues/75))
   are inputs to this document, not outputs.
-- Extracting reusable examples into a separate examples document.
-  The decision tree (section 4) and the worked examples (section 5)
-  cross-reference each other on every trace; splitting them would
-  force every change to update two docs and would expand the drift
-  sweep (section 6.3) without a measurable navigability gain at the
-  current document length. The repo-local retrospective docs
-  (`docs/retrospective-pr-*.md`) already serve as the open-ended
-  examples corpus that lives outside this document, and section 6.4
-  governs how those retrospectives feed back into instruction
-  changes.
+- Folding the decision tree into the historical replay. The decision
+  tree (section 4) stays in this document because it is the live rule
+  used on every PR; the historical replay (formerly section 5, now
+  `docs/history/decision-tree-replay.md`) is extracted because it is
+  append-only calibration evidence that does not change when section
+  4 changes. The repo-local retrospective docs
+  (`docs/history/retrospective-pr-*.md`) continue to serve as the
+  open-ended examples corpus that lives outside this document, and
+  section 6.4 governs how those retrospectives feed back into
+  instruction changes.
 
 ## 2. Vocabulary - the four ownership lanes
 
@@ -124,7 +124,7 @@ includes:
   `workflow-script-quality.md`).
 - Inventories of repository surfaces
   (`security-control-inventory.md`, `repo-scope.md`).
-- Retrospective case studies (`retrospective-pr-*.md`).
+- Retrospective case studies (`history/retrospective-pr-*.md`).
 - Measurement frameworks (`performance-metrics.md`).
 
 A repo-local doc is allowed to name specific files, scripts, issues,
@@ -163,10 +163,10 @@ of merged PRs and closed sub-issues of #226.
 |---|---|---|---|---|---|
 | P1 - goal and plan structure | Plan-mode trigger; document weight rule; verification design in the plan | `scripts/plan_language_context.py` (SessionStart hook); `tests/test_plan_language_context.py` | `docs/issue-pr-body-standard.md` (body shape encodes the plan); `docs/performance-metrics.md` (measurement is a verification artifact) | The consumer's plan-mode trigger discipline | Mixing plan-language responsibility with GitHub-post ASCII enforcement in one rule (corrected by [#227](https://github.com/tvna/claude-md/issues/227)) |
 | P2 - pre-code reasoning | Fact-vs-speculation tagging; assumption enumeration; simpler-path proposal | `(none - agent judgment, not deterministic)` | `docs/issue-pr-body-standard.md` (Facts / Assumptions sections); `docs/issue-triage.md` (label-driven routing) | The consumer's own ambiguity policy | Speculation slipping into universal text disguised as a fact (PR #225) |
-| P3 - delivery harness | Issue-first; ASCII discipline; declarative module management; auto-subscribe to PR activity; retrospective auto-open; classify each repair | `scripts/issue_link.py`, `body_policy.py`, `title_policy.py`, `pr_body_close_keyword_gate.py`, `auto_retro.py`, `scan_non_ascii.py`, `preflight_non_ascii.py`, `branch_cleanup.py`, `rulesets_apply.py`, `ruleset_drift.py`, `labels_apply.py`, `dependabot_automerge.py`, `dependabot_labels.py`, `threat_intel_triage.py`, `uv_pin.py`, `scan_apm_portability.py`; 16 paired workflows; 19 paired tests | `docs/issue-pr-body-standard.md`, `docs/issue-triage.md`, `docs/non-ascii-defense.md`, `docs/rulesets.md`, `docs/branch-cleanup.md`, `docs/dependabot-automerge.md`, `docs/remote-environment.md`, `docs/repo-scope.md`, `docs/security-control-inventory.md`, `docs/retrospective-pr-*.md` | The consumer's own CI provider, issue tracker, and dependency manager | Naming a specific tool (gh CLI, GitHub Actions, dependabot) inside universal text; embedding a specific PR number as an example |
+| P3 - delivery harness | Issue-first; ASCII discipline; declarative module management; auto-subscribe to PR activity; retrospective auto-open; classify each repair | `scripts/issue_link.py`, `body_policy.py`, `title_policy.py`, `pr_body_close_keyword_gate.py`, `auto_retro.py`, `scan_non_ascii.py`, `preflight_non_ascii.py`, `branch_cleanup.py`, `rulesets_apply.py`, `ruleset_drift.py`, `labels_apply.py`, `dependabot_automerge.py`, `dependabot_labels.py`, `threat_intel_triage.py`, `uv_pin.py`, `scan_apm_portability.py`; 16 paired workflows; 19 paired tests | `docs/issue-pr-body-standard.md`, `docs/issue-triage.md`, `docs/non-ascii-defense.md`, `docs/rulesets.md`, `docs/branch-cleanup.md`, `docs/dependabot-automerge.md`, `docs/remote-environment.md`, `docs/repo-scope.md`, `docs/security-control-inventory.md`, `docs/history/retrospective-pr-*.md` | The consumer's own CI provider, issue tracker, and dependency manager | Naming a specific tool (gh CLI, GitHub Actions, dependabot) inside universal text; embedding a specific PR number as an example |
 | P4 - artifact code | Minimum code; safety-bounded simplicity; fail-loud over silent default; debug instrumentation as attack surface | `(lint and type gates exist in workflow-script-quality.md M8; behavioral check is reviewer judgment)` | `docs/workflow-script-quality.md` (M1 to M9 must-have checklist; O1 to O7 optional enhancements) | The consumer's own language ecosystem and code style | Embedding a stack-specific example (Python, pytest, pydantic) into universal text |
 | P5 - change scope and agent split | Touch-only-what-you-must; clean only your own orphans; sub-agent vs skill split; separate implementation and verification agents | `(none - agent judgment)` | `(gap candidate - no doc explicitly governs scope discipline today)` | The consumer's own agent inventory and roster | Mentioning a Claude-only feature (sub-agents, skills) by literal name as universal terminology |
-| P6 - handoff and communication | Native-language plan artifacts; show procedure and case studies; visualize workflow; refuse LGTM; explain trade-offs | `scripts/plan_language_context.py` (owner-language metadata recovery); `.github/owners.yaml`; `.github/CODEOWNERS` | `docs/retrospective-pr-*.md` (case studies are the force-multiplier evidence); `docs/security-control-inventory.md` (visualization of the harness coverage); `docs/performance-metrics.md` (visualization of measurement) | The consumer's own `owners.yaml` entries | Treating "case studies" as universal content rather than as repo-local artifacts that the universal text merely *requires* |
+| P6 - handoff and communication | Native-language plan artifacts; show procedure and case studies; visualize workflow; refuse LGTM; explain trade-offs | `scripts/plan_language_context.py` (owner-language metadata recovery); `.github/owners.yaml`; `.github/CODEOWNERS` | `docs/history/retrospective-pr-*.md` (case studies are the force-multiplier evidence); `docs/security-control-inventory.md` (visualization of the harness coverage); `docs/performance-metrics.md` (visualization of measurement) | The consumer's own `owners.yaml` entries | Treating "case studies" as universal content rather than as repo-local artifacts that the universal text merely *requires* |
 
 Empty cells marked `(none ...)` are intentional: the layer's concern
 is not enforceable by a script today. Cells marked `(gap candidate)`
@@ -245,8 +245,8 @@ Q4. Does the rule need a repository-specific noun (a file path, a
 Q5. Is the rule a description of a past event (a retrospective, a
     repaired wording, an audit finding)?
 
-    Yes -> Repo-local doc lane: docs/retrospective-pr-<N>.md or a
-           new case-study doc. Case studies are explicitly required
+    Yes -> Repo-local doc lane: docs/history/retrospective-pr-<N>.md
+           or a new case-study doc. Case studies are explicitly required
            by P6 to exist somewhere, but they must not be embedded
            in the universal text.
 
@@ -269,130 +269,7 @@ Q5. Is the rule a description of a past event (a retrospective, a
 
 ## 5. Boundary patterns and worked examples
 
-This section traces concrete cases through the decision tree. Each
-trace shows which question fired, why, and which lane the rule
-landed in. The traces are not normative; they are evidence that the
-tree reproduces this repository's historical decisions.
-
-### 5.1 PR #225 - repository-specific wording in a universal sentence
-
-**What happened.** A universal instruction sentence was edited to
-include wording that named a repository-specific concept, then the
-wording was removed before merge.
-
-**Decision tree trace.**
-
-- Q1: Is the rule tool-agnostic? Yes (the underlying rule was about
-  retrospective contracts, not about any tool).
-- Q2: Can it be enforced deterministically? No - the contract is
-  about how a human or agent should write retrospective issues.
-- Q3: Does it require agent judgment and apply to every downstream
-  consumer? Yes.
-- Q4: Does the wording need a repository-specific noun? Yes - the
-  added wording referenced repository-internal artifacts.
-- **Lane: repo-local doc (demoted).** The abstract rule belongs in
-  the universal text; the concrete repository-specific elaboration
-  belongs in a repo-local doc (a retrospective or a runbook). The
-  outcome of PR #225 is consistent with this trace.
-
-### 5.2 #75 - per-principle Layer subtitles
-
-**What happened.** Each principle gained a `*Layer: ...*` subtitle
-to make cross-section conflicts structurally impossible.
-
-**Decision tree trace.**
-
-- Q1: Tool-agnostic? Yes.
-- Q2: Deterministic? No - the rule is about how to organize the
-  universal text itself.
-- Q3: Agent judgment plus universal? Yes.
-- Q4: Needs a repository-specific noun? No - "layer" is an abstract
-  concept.
-- **Lane: universal text.** Consistent with the historical outcome
-  (the subtitles landed in `master.instructions.md`).
-
-### 5.3 #227 - corrected layer responsibility boundaries
-
-**What happened.** A bullet that mixed plan-language responsibility
-and GitHub-post ASCII enforcement was split so each concern lived in
-its owning section.
-
-**Decision tree trace.**
-
-- Q1: Tool-agnostic? Yes.
-- Q2: Deterministic? Partially - the ASCII discipline is enforced by
-  `scan-non-ascii.yml` and `preflight_non_ascii.py`. The plan-
-  language rule is enforced by `plan_language_context.py`.
-- Q3: Agent judgment and universal? Yes for the split decision
-  itself.
-- Q4: Needs a repository-specific noun? No - "the GitHub post
-  boundary" and "the plan artifact boundary" are abstract.
-- **Lane: universal text (a structural correction to existing
-  universal text).** Consistent with the historical outcome.
-
-### 5.4 #43 - integrate ownership-and-proof concepts
-
-**What happened.** Concepts from an external CLAUDE.md (Boris) were
-integrated into the universal text without embedding the source.
-
-**Decision tree trace.**
-
-- Q1: Tool-agnostic? Yes (the integrated concepts were abstract).
-- Q2: Deterministic? Some derivative gates exist (issue-first), but
-  the concepts themselves are agent judgment.
-- Q3 and Q4: Universal and abstract.
-- **Lane: universal text.** Consistent.
-
-### 5.5 #45 - resolve principle contradictions
-
-**What happened.** Pairwise contradictions between principles were
-resolved through reordering and rewording, not by adding cross-
-references.
-
-**Decision tree trace.**
-
-- Q1: Tool-agnostic? Yes.
-- Q2: Deterministic? No - it is a structural edit of the universal
-  text.
-- Q3 and Q4: Universal and abstract.
-- **Lane: universal text.** Consistent.
-
-### 5.6 #47 - compress source by approximately 25%
-
-**What happened.** The source was compressed while preserving the
-disambiguations from #45.
-
-**Decision tree trace.** Same lane as #45.
-
-- **Lane: universal text.** Consistent.
-
-### 5.7 #73 - reframe uncertainty control
-
-**What happened.** Section 2 was reframed to make ambiguity-vs-
-evidence the central distinction.
-
-**Decision tree trace.** Same lane as #45 and #47 (structural edit
-of universal text, abstract wording, agent judgment).
-
-- **Lane: universal text.** Consistent.
-
-### 5.8 #77 - move debug logging safety rule
-
-**What happened.** A bullet about debug instrumentation as attack
-surface was moved into section 4 (artifact code, safety).
-
-**Decision tree trace.** Same lane as #227 (a structural correction
-of which section owns the concern).
-
-- **Lane: universal text.** Consistent.
-
-### 5.9 Replay summary
-
-Seven closed sub-issues replayed; all seven resolved to the lane the
-repository historically used. The decision tree reproduces the
-historical record without exception. This is the calibration check
-that the tree is fit for use; it does not prove that the tree will
-classify every future case correctly.
+Replayed in [`docs/history/decision-tree-replay.md`](history/decision-tree-replay.md). The replay is a calibration check that section 4's decision tree reproduces the historical record; it is not normative.
 
 ## 6. Gap analysis procedure
 
@@ -467,14 +344,20 @@ example lands.
 
 | Retrospective category | Primary lane | Typical secondary lane | Field example |
 |---|---|---|---|
-| Missing deterministic gate | Harness | Universal text (only if the gate enforces a new universal principle) | `docs/retrospective-pr-229.md` records a body-policy preflight gap surfaced between PR open and merge; the durable fix was a new `scripts/` preflight, not a universal-text edit |
-| Unclear agent instruction | Universal text | Repo-local doc (a worked example or runbook clarification) | `docs/retrospective-pr-235.md` records an auto-retro skip-rule ambiguity; the durable fix was a wording tightening in the harness rule plus a clarifying note in the repo-local retrospective doc |
-| External or human decision | Project-local | Repo-local doc (an escalation note describing the unresolved item) | `docs/retrospective-pr-237.md` records a no-repair merge where outstanding follow-up items required human judgment; nothing landed in universal text or harness |
+| Missing deterministic gate | Harness | Universal text (only if the gate enforces a new universal principle) | `docs/history/retrospective-pr-229.md` records a body-policy preflight gap surfaced between PR open and merge; the durable fix was a new `scripts/` preflight, not a universal-text edit |
+| Unclear agent instruction | Universal text | Repo-local doc (a worked example or runbook clarification) | `docs/history/retrospective-pr-235.md` records an auto-retro skip-rule ambiguity; the durable fix was a wording tightening in the harness rule plus a clarifying note in the repo-local retrospective doc |
+| External or human decision | Project-local | Repo-local doc (an escalation note describing the unresolved item) | `docs/history/retrospective-pr-237.md` records a no-repair merge where outstanding follow-up items required human judgment; nothing landed in universal text or harness |
 
 The mapping is a router, not a deterministic gate: it tells the
 contributor which lane to draft into first. The decision tree in
 section 4 then validates whether that draft lane is the correct
 final destination.
+
+Hand-authored retrospective `.md` files land under
+`docs/history/retrospective-pr-<N>.md`. The auto-retro harness
+(`scripts/auto_retro.py`) only opens the GitHub issue; the durable
+write to disk happens when a contributor lands the retrospective doc
+in the next PR, and that PR puts the file in `docs/history/`.
 
 ### 6.5 Cadence
 
@@ -581,7 +464,7 @@ If any of the three conditions fails, request changes.
 ### 7.5 Worked case: PR #225
 
 The repair loop on PR #225 (replayed in
-[section 5.1](#51-pr-225---repository-specific-wording-in-a-universal-sentence))
+[section 5.1 of `docs/history/decision-tree-replay.md`](history/decision-tree-replay.md#51-pr-225---repository-specific-wording-in-a-universal-sentence))
 is the canonical example for this section. A reviewer running the
 criteria above on that PR's pre-repair state would have observed
 Q4 = yes in the diff (the wording needed a repository-specific
@@ -595,7 +478,7 @@ catch reproducible.
 This document is valid only if:
 
 - **Replay calibration.** Each of the seven closed sub-issues
-  replayed in [section 5](#5-boundary-patterns-and-worked-examples)
+  replayed in [`docs/history/decision-tree-replay.md`](history/decision-tree-replay.md)
   resolves through the decision tree to the lane the repository
   historically used. Today: seven of seven match.
 - **Inverted self-consistency.** Each existing bullet of
@@ -630,8 +513,9 @@ boundary risk):
    `docs/issue-pr-body-standard.md`, `docs/non-ascii-defense.md`,
    and `docs/workflow-script-quality.md`.
 3. Re-run the validation strategy in section 8. The replay table in
-   section 5 must remain at 100 percent match; if a new closed sub-
-   issue is added to the replay set, trace it explicitly.
+   `docs/history/decision-tree-replay.md` must remain at 100 percent
+   match; if a new closed sub-issue is added to the replay set, trace
+   it explicitly in that file.
 4. Reference the parent #226 on the `Refs #` line of the PR body.
 
 To roll back an addition: open a sub-issue of #226 explaining why
@@ -650,7 +534,8 @@ flow, not this update flow.
 - [#246](https://github.com/tvna/claude-md/issues/246) - sub-issue
   that this document is the deliverable for.
 - [#225](https://github.com/tvna/claude-md/pull/225) - the PR whose
-  repaired wording motivated #226 and is replayed in section 5.1.
+  repaired wording motivated #226 and is replayed in
+  `docs/history/decision-tree-replay.md` section 5.1.
 - [#75](https://github.com/tvna/claude-md/issues/75) - per-principle
   `*Layer: ...*` subtitles.
 - [#227](https://github.com/tvna/claude-md/issues/227) - corrected
@@ -662,7 +547,7 @@ flow, not this update flow.
   [#47](https://github.com/tvna/claude-md/issues/47),
   [#73](https://github.com/tvna/claude-md/issues/73),
   [#77](https://github.com/tvna/claude-md/issues/77) - additional
-  closed sub-issues replayed in section 5.
+  closed sub-issues replayed in `docs/history/decision-tree-replay.md`.
 - [#79](https://github.com/tvna/claude-md/issues/79) - currently
   open structural sub-issue; out of scope for this document.
 - `.apm/instructions/master.instructions.md` - the universal text
@@ -678,7 +563,11 @@ flow, not this update flow.
 - `docs/workflow-script-quality.md` - the must-have checklist for
   harness scripts; the closest thing this repo has to a P4 quality
   gate beyond reviewer judgment.
-- `docs/retrospective-pr-*.md` - case-study lane precedent for P6;
+- `docs/history/decision-tree-replay.md` - the historical replay
+  (formerly section 5 of this document) showing that the decision
+  tree in section 4 reproduces this repository's past lane
+  assignments.
+- `docs/history/retrospective-pr-*.md` - case-study lane precedent for P6;
   individual retrospectives (PR #229, #235, #237) supply the field
   examples cited in section 6.4.
 - `scripts/auto_retro.py` - retrospective harness whose

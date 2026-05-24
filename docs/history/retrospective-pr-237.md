@@ -63,4 +63,4 @@ PR #237 is itself the canonical reproduction path for the family "net-new script
 - Source PR: [#237](https://github.com/tvna/claude-md/pull/237) (merge commit `4fa1b0a`).
 - Parent issue: [#234](https://github.com/tvna/claude-md/issues/234) -- auto-open retrospective issue on merge (Part 2 still pending).
 - Framework: CLAUDE.md section 3, codified in commit `daa5179` (#225).
-- Sibling retrospective: `docs/retrospective-pr-229.md`.
+- Sibling retrospective: `retrospective-pr-229.md`.
