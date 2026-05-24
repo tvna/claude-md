@@ -8,6 +8,13 @@
 __pycache__/
 *.py[cod]
 
+# Coverage gate artefacts (#277). pytest-cov writes .coverage and the XML
+# report under repo root when verify-agents.yml's `Run script unit tests
+# with coverage` step runs; these are build outputs, not source.
+.coverage
+coverage.xml
+htmlcov/
+
 # APM dependencies/cache output
 apm_modules/
 
