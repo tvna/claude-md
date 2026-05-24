@@ -12,8 +12,6 @@ import re
 from pathlib import Path
 from typing import Any
 
-import pytest
-
 import auto_retro
 import body_policy
 import branch_cleanup
@@ -21,6 +19,7 @@ import dependabot_automerge
 import dependabot_labels
 import issue_link
 import labels_apply
+import pytest
 import ruleset_drift
 import rulesets_apply
 import scan_apm_portability
@@ -30,7 +29,6 @@ import threat_intel_triage
 import title_policy
 import uv_pin
 import verify_ruleset_sync
-
 
 REPO = "owner/repo"
 

@@ -15,10 +15,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import pytest
-
 import dependabot_labels as dl
-
+import pytest
 
 # ---------------------------------------------------------------------------
 # parse_dependabot_labels

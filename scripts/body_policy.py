@@ -28,11 +28,11 @@ Tested by ``tests/test_body_policy.py``. Refs #205.
 from __future__ import annotations
 
 import argparse
-from datetime import datetime, timezone
 import os
-from pathlib import Path
 import re
 import sys
+from datetime import datetime, timezone
+from pathlib import Path
 
 from _trusted_bots import _TRUSTED_BOT_LOGINS
 from issue_link import strip_html_comments

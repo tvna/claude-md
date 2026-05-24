@@ -16,9 +16,10 @@ import argparse
 import re
 import subprocess
 import sys
-import tomllib
 from collections.abc import Iterable, Iterator
 from pathlib import Path
+
+import tomllib
 
 # Subdirectories the literal-value drift check inspects.
 DRIFT_SUBDIRS: tuple[str, ...] = (".github", "scripts", "docs")
@@ -47,7 +48,7 @@ def read_pin(pyproject_path: Path) -> str:
     should let that surface so failures are loud.
     """
     try:
-        with open(pyproject_path, "rb") as fp:
+        with pyproject_path.open("rb") as fp:
             data = tomllib.load(fp)
     except FileNotFoundError as exc:
         raise ValueError(f"cannot read {pyproject_path}: {exc}") from exc
@@ -166,8 +167,7 @@ def _read_lines(path: Path) -> Iterator[tuple[int, str]]:
         content = path.read_text(encoding="utf-8", errors="ignore")
     except OSError:
         return
-    for line_num, line in enumerate(content.splitlines(), 1):
-        yield line_num, line
+    yield from enumerate(content.splitlines(), 1)
 
 
 def _cmd_read(args: argparse.Namespace) -> int:

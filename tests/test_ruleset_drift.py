@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import subprocess
 import sys
 import urllib.request
 from pathlib import Path
@@ -14,7 +13,6 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 
 import ruleset_drift
-
 
 SOT_MAIN: dict[str, Any] = {
     "name": "main-protection",
@@ -45,7 +43,7 @@ class Response:
         self.payload = json.dumps(payload).encode("utf-8")
         self.status = status
 
-    def __enter__(self) -> "Response":
+    def __enter__(self) -> Response:
         return self
 
     def __exit__(self, *args: object) -> None:

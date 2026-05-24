@@ -21,22 +21,29 @@ Tested by ``tests/test_issue_link.py``. CLAUDE.md section 3
 from __future__ import annotations
 
 import argparse
-from collections.abc import Callable
 import os
-from pathlib import Path
 import re
 import subprocess
 import sys
+from collections.abc import Callable
+from pathlib import Path
 
 from _ref_classifier import (
     CLOSING_KEYWORDS as _CLOSING_KEYWORDS,
-    HTML_COMMENT_RE as _HTML_COMMENT,
-    PARTIAL_MARKER_RE as _PARTIAL_MARKER_RE,
-    REF_LINE_KEYWORD_RE as _REF_LINE_KEYWORD,
+)
+from _ref_classifier import (
     TRACKING_LABEL as _TRACKING_LABEL,
+)
+from _ref_classifier import (
     body_has_partial_marker as _shared_body_has_partial_marker,
+)
+from _ref_classifier import (
     classify_refs as _shared_classify_refs,
+)
+from _ref_classifier import (
     format_no_closing_keyword_msg as _shared_format_no_closing_keyword_msg,
+)
+from _ref_classifier import (
     strip_html_comments as _shared_strip_html_comments,
 )
 from _trusted_bots import _TRUSTED_BOT_LOGINS

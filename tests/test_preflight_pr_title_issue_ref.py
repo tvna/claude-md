@@ -18,10 +18,8 @@ from __future__ import annotations
 import io
 import json
 
-import pytest
-
 import preflight_pr_title_issue_ref as preflight
-
+import pytest
 
 # ---------------------------------------------------------------------------
 # extract_title

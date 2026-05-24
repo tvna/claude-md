@@ -15,11 +15,9 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-import pytest
-
 import auto_retro as ar
 import body_policy as bp
-
+import pytest
 
 # ---------------------------------------------------------------------------
 # Alignment: required sections must match body_policy
@@ -453,7 +451,7 @@ def _fake_run_capture():
             self.returncode = returncode
             self.stderr = ""
 
-    def fake_run(cmd, **kwargs):  # noqa: ANN001 — mirror subprocess.run
+    def fake_run(cmd, **kwargs):
         calls.append({"cmd": cmd, **kwargs})
         return _Result(stdout="OK")
 

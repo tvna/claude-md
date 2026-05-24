@@ -19,11 +19,11 @@ import os
 import subprocess
 import sys
 import urllib.request
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from _github_api import API_VERSION
-
 
 API_ROOT = "https://api.github.com"
 SOT_PROJECTION_KEYS = ("name", "target", "enforcement", "conditions", "bypass_actors", "rules")

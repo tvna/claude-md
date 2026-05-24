@@ -17,10 +17,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import pytest
-
 import plan_language_context as plc
-
+import pytest
 
 # ---------------------------------------------------------------------------
 # parse_codeowners

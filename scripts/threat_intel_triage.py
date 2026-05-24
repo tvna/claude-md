@@ -19,12 +19,12 @@ import argparse
 import json
 import os
 import re
-import tomllib
 import urllib.parse
 import urllib.request
 from pathlib import Path
 from typing import NamedTuple
 
+import tomllib
 
 INTEL_LABEL = "threat:intel-needed"
 RESPONSE_LABEL = "threat:response-needed"
@@ -239,7 +239,7 @@ def parse_osv_batch_results(
         raise ValueError("OSV querybatch response missing results array")
 
     parsed: list[tuple[Dependency, list[str]]] = []
-    for dep, result in zip(dependencies, results):
+    for dep, result in zip(dependencies, results, strict=False):
         if not isinstance(result, dict):
             parsed.append((dep, []))
             continue
@@ -492,7 +492,7 @@ def main(argv: list[str] | None = None) -> int:
         "scan",
         help="Collect OSV.dev and CISA KEV intelligence for repository dependencies.",
     )
-    p_scan.add_argument("--repo-root", type=Path, default=Path("."))
+    p_scan.add_argument("--repo-root", type=Path, default=Path())
     p_scan.add_argument(
         "--labels",
         action="append",
