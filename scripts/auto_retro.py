@@ -25,6 +25,10 @@ Skip conditions:
 * the merged PR was authored or merged by a login in
   ``_trusted_bots._TRUSTED_BOT_LOGINS``
 * a retro issue already exists for the source PR (open or closed)
+* the merged PR has zero inline review comments (positive-control
+  merge: no observable repair history to record). Falls back to
+  creating the retro when the comments lookup raises, so transient
+  API errors preserve the audit trail.
 
 Issue shape mirrors ``body_policy._ISSUE_COMMON_REQUIRED`` so the
 auto-opened issue passes ``verify-body-policy``. The script does not
@@ -347,6 +351,23 @@ def search_retro_issues(repo: str, pr_number: int) -> list[dict[str, Any]]:
     return list(data.get("items") or [])
 
 
+def has_review_comments(repo: str, pr_number: int) -> bool:
+    """True iff the PR has at least one inline review (diff) comment.
+
+    Used as a zero-repair signal: an empty list from
+    ``/repos/{repo}/pulls/{pr_number}/comments`` means no reviewer left
+    an inline comment, so the merge has no observable repair history to
+    record. The orchestrator (:func:`run`) treats any exception from
+    this call as fail-safe (proceeds to open the retro) so a transient
+    API error never silently swallows the audit trail.
+    """
+    raw = gh_api(
+        "GET", f"/repos/{repo}/pulls/{pr_number}/comments?per_page=1"
+    )
+    items = json.loads(raw) if raw.strip() else []
+    return bool(items)
+
+
 def create_issue(
     repo: str, title: str, body: str, labels: list[str]
 ) -> dict[str, Any]:
@@ -406,6 +427,24 @@ def run(event: dict[str, Any], repo: str) -> int:
     existing = find_existing_retro(existing_items, pr.number)
     if existing is not None:
         msg = f"existing retro issue #{existing} for PR #{pr.number}"
+        print(f"skip: {msg}")
+        _append_summary(_build_summary(pr, "skip", msg))
+        return 0
+
+    try:
+        has_repairs = has_review_comments(repo, pr.number)
+    except subprocess.CalledProcessError as exc:
+        # Fail-safe: a transient comments-endpoint failure must NOT
+        # silently swallow the retro creation. Surface the warning and
+        # proceed as if repairs were present.
+        print(
+            f"::warning::has_review_comments failed "
+            f"(exit {exc.returncode}); proceeding to open retro",
+            file=sys.stderr,
+        )
+        has_repairs = True
+    if not has_repairs:
+        msg = "zero review comments (positive-control merge)"
         print(f"skip: {msg}")
         _append_summary(_build_summary(pr, "skip", msg))
         return 0

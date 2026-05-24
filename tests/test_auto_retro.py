@@ -472,7 +472,8 @@ class TestGhApi:
 
 
 # ---------------------------------------------------------------------------
-# search_retro_issues / fetch_pr_commits / create_issue (API wrappers)
+# search_retro_issues / has_review_comments / fetch_pr_commits / create_issue
+# (API wrappers)
 # ---------------------------------------------------------------------------
 
 
@@ -511,6 +512,49 @@ class TestSearchRetroIssues:
     ) -> None:
         monkeypatch.setattr(ar, "gh_api", lambda *_a, **_kw: "")
         assert ar.search_retro_issues("o/r", 42) == []
+
+
+class TestHasReviewComments:
+    def test_empty_list_returns_false(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Zero-repair signal: empty review-comments list -> False."""
+        monkeypatch.setattr(ar, "gh_api", lambda *_a, **_kw: json.dumps([]))
+        assert ar.has_review_comments("o/r", 1) is False
+
+    def test_non_empty_list_returns_true(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            ar,
+            "gh_api",
+            lambda *_a, **_kw: json.dumps(
+                [{"id": 1, "body": "needs fix", "path": "a.py"}]
+            ),
+        )
+        assert ar.has_review_comments("o/r", 1) is True
+
+    def test_empty_response_returns_false(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Blank/empty body from gh api is treated as zero comments."""
+        monkeypatch.setattr(ar, "gh_api", lambda *_a, **_kw: "")
+        assert ar.has_review_comments("o/r", 1) is False
+
+    def test_calls_correct_endpoint(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        seen: list[tuple] = []
+
+        def fake_api(method, path, body=None, **_kw):
+            seen.append((method, path, body))
+            return json.dumps([])
+
+        monkeypatch.setattr(ar, "gh_api", fake_api)
+        ar.has_review_comments("owner/repo", 42)
+        method, path, _ = seen[0]
+        assert method == "GET"
+        assert path == "/repos/owner/repo/pulls/42/comments?per_page=1"
 
 
 class TestFetchPrCommits:
@@ -572,12 +616,24 @@ def _orchestrator_recorder(
     *,
     existing: list[dict[str, Any]] | None = None,
     commits: list[dict[str, Any]] | None = None,
+    review_comments: list[dict[str, Any]] | None = None,
     created_response: dict[str, Any] | None = None,
+    comments_error: bool = False,
 ) -> list[tuple]:
-    """Replace ar.gh_api with a recorder that returns canned data per path."""
+    """Replace ar.gh_api with a recorder that returns canned data per path.
+
+    Defaults ``review_comments`` to a single non-empty entry so existing
+    happy-path tests still reach the issue-creation branch. New tests
+    that exercise the zero-review-comments skip pass ``review_comments=[]``.
+    Set ``comments_error=True`` to make the comments endpoint raise the
+    same ``CalledProcessError`` that gh_api raises in production -- used
+    to test the fail-safe fallback in run().
+    """
     seen: list[tuple] = []
     existing = existing or []
     commits = commits or []
+    if review_comments is None:
+        review_comments = [{"id": 1, "body": "default repair signal"}]
     created_response = created_response or {
         "number": 999,
         "html_url": "https://x/i/999",
@@ -587,6 +643,12 @@ def _orchestrator_recorder(
         seen.append((method, path, body))
         if method == "GET" and path.startswith("/search/issues"):
             return json.dumps({"items": existing})
+        if method == "GET" and "/pulls/" in path and "/comments" in path:
+            if comments_error:
+                raise subprocess.CalledProcessError(
+                    1, "gh", stderr="comments endpoint boom"
+                )
+            return json.dumps(review_comments)
         if method == "GET" and "/pulls/" in path and "/commits" in path:
             return json.dumps(commits)
         if method == "POST" and path.endswith("/issues"):
@@ -659,6 +721,40 @@ class TestRun:
         )
         assert ar.run(_merged_event(number=42), "o/r") == 0
         assert not any(
+            method == "POST" and path == "/repos/o/r/issues"
+            for method, path, _ in seen
+        )
+
+    def test_skip_when_zero_review_comments(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Positive-control merge: no inline review comments -> no retro."""
+        seen = _orchestrator_recorder(monkeypatch, review_comments=[])
+        assert ar.run(_merged_event(number=42), "o/r") == 0
+        # Comments endpoint must have been queried.
+        assert any(
+            method == "GET" and "/comments" in path
+            for method, path, _ in seen
+        )
+        # No commits fetch, no issue creation.
+        assert not any(
+            method == "GET" and "/commits" in path
+            for method, path, _ in seen
+        )
+        assert not any(
+            method == "POST" and path == "/repos/o/r/issues"
+            for method, path, _ in seen
+        )
+
+    def test_fail_safe_creates_when_comments_endpoint_errors(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Transient API failure on the comments lookup must NOT silently
+        skip the retro. Fall back to creating the issue."""
+        seen = _orchestrator_recorder(monkeypatch, comments_error=True)
+        assert ar.run(_merged_event(number=42), "o/r") == 0
+        # Issue creation must still happen (fail-safe path).
+        assert any(
             method == "POST" and path == "/repos/o/r/issues"
             for method, path, _ in seen
         )
