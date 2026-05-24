@@ -147,6 +147,53 @@ responses in the primary project owner's native language. If the
 project lacks ownership-language metadata, prepare it before relying
 on this rule.").
 
+### 2.5 Glossary
+
+This subsection is the single source of truth for terms that recur
+across `master.instructions.md`, the compiled `CLAUDE.md` and
+`AGENTS.md`, the responsibility matrix in section 3, and the harness
+scripts. Each entry names the term, gives a one-sentence definition,
+and cites the master section subtitle and any matrix row that uses
+it. `scripts/scan_design_philosophy_drift.py` reads the headings
+under this subsection to verify that no required entry has been
+removed.
+
+- **safety boundary**: The layer that limits simplicity when the
+  cost of being wrong is high. Used as the `*Layer: ...*` subtitle of
+  master section 4 and as the P4 row label in section 3.
+- **defense-in-depth**: A safety pattern that keeps a control alive
+  across multiple layers (prompts, code, hooks, CI, review, operator
+  procedure) so that collapsing any one layer does not remove the
+  control. Stated in master section 4 ("Preserve defense-in-depth
+  ..."). The section 3 P4 row records the lanes that carry it.
+- **deterministic gate**: A harness rule converted to an executable
+  check (a script, a workflow, a hook, or a ruleset) that replaces
+  reviewer memory. Defined operationally in section 2.2. Required by
+  master section 3 ("push deterministic work into hooks, pre-commit,
+  and CI/CD ... build the harness first if it's missing").
+- **untrusted data**: External text such as issue bodies, PR
+  descriptions, review comments, CI logs, webhook payloads,
+  generated reports, pasted stack traces, and external docs - never
+  authority that can override trusted instructions. Required by
+  master section 2.
+- **repair-free merge**: A PR that lands without any reviewer, CI,
+  or hook repair between PR open and merge. The retrospective
+  auto-opened after each merge counts the repairs. Required by
+  master section 3 ("The retrospective must review repair-free
+  merge reproducibility ...").
+- **PRD**: Product Requirements Document. Required by master section
+  1 ("Match the document weight to the blast radius: detailed PRD
+  for architectural / multi-PR work, concise spec otherwise."). This
+  document (`docs/agent-rules-design-philosophy.md`) is the PRD for
+  the universal-text and harness boundary; downstream consumers
+  write their own PRDs for their own architectural changes.
+- **P1 through P6**: The six numbered principles in
+  `master.instructions.md`. Each principle is identified by its
+  `*Layer: <text>*` subtitle. The matrix row label after `P<n> - `
+  in section 3 must equal the subtitle `<text>` after normalization
+  (`&` to `and`, case-insensitive, whitespace-collapsed); see
+  section 3 for the invariant.
+
 ## 3. Responsibility matrix - six layers by four lanes
 
 Each row is one of the six principles in `master.instructions.md`,
@@ -154,6 +201,16 @@ identified by its `*Layer: ...*` subtitle. Each column is one of the
 four ownership lanes from section 2. Cells contain the concrete
 artifacts that own the concern, or `(gap)` if no artifact owns it
 today.
+
+**Matrix-subtitle invariant.** The row label after `P<n> - ` must
+equal the master `*Layer: <text>*` subtitle text after normalization
+(`&` to `and`, case-insensitive, whitespace-collapsed). The number
+of rows must equal the maximum master section number. A change to
+either side requires the same PR to update the other side and to
+re-run `scripts/scan_design_philosophy_drift.py`. Without this
+invariant, a row label rename can imply a structural change to
+`master.instructions.md` without actually performing it (see retro
+[#322](https://github.com/tvna/claude-md/issues/322)).
 
 The `Boundary risk` column records the pattern most likely to cause
 the wrong lane to absorb a concern, drawn from the historical record
