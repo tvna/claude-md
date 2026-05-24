@@ -15,6 +15,8 @@ This document is the operator-facing companion to [#102](https://github.com/tvna
 | `scripts/title_policy.py` | repo working tree | Pure title policy validator used by the workflow above |
 | `tests/test_title_policy.py` | repo working tree | pytest coverage for Japanese, emoji, zero-width, RTL, and fullwidth title rejection |
 | `.github/labels.json` entry `severity:non-ascii-content` | repo labels | Applied by the workflow above; surfaces hits in triage filters |
+| `scripts/backup_non_ascii.py` | repo working tree | P1 reproducible capture + SHA-256 emitter; operator runs `capture` before the release asset upload |
+| `tests/test_backup_non_ascii.py` | repo working tree | pytest coverage for the above; runs in `verify-agents.yml` on every PR |
 | `scripts/translations.json` *(P3, future PR)* | repo working tree | JA->EN mapping for past sanitization; the operator-reviewable audit trail |
 | `scripts/sanitize-history.sh` *(P5, future PR)* | local invocation | Applies the mapping above to live issues/PRs via `gh api`; mirrors `apply-labels.yml` |
 | `scripts/preflight_non_ascii.py` | repo working tree | Layer 2.5 `PreToolUse` hook: denies non-ASCII GitHub MCP write-tool calls client-side before they reach Layer 2 |
@@ -51,6 +53,16 @@ gh release create backup-non-ascii-YYYYMMDD originals-YYYYMMDD-HHMMZ.json.gz \
 ```
 
 Record the release tag and SHA-256 in the [#102](https://github.com/tvna/claude-md/issues/102) tracking-issue body (the "Backup record" slot).
+
+**Repro (`scripts/backup_non_ascii.py`).** The ad-hoc `gh + jq + sha256sum` chain above is captured as a pytest-covered CLI so the snapshot is bit-for-bit reproducible (deterministic JSON sort + `gzip mtime=0`) and the same SHA-256 falls out of two consecutive runs against an unchanged repo:
+
+```sh
+GH_TOKEN=$(gh auth token) REPO=tvna/claude-md \
+  python3 scripts/backup_non_ascii.py capture --out originals-YYYYMMDD-HHMMZ.json.gz
+python3 scripts/backup_non_ascii.py sha256 --in originals-YYYYMMDD-HHMMZ.json.gz
+```
+
+`scripts/translations.json::source_sha256` (P3) and the drift check in `sanitize_history.py` (P5) both anchor on this digest.
 
 **Translation (P3):** a read-only sub-agent consumes the backup and produces `scripts/translations.json`. Schema:
 
