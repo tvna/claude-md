@@ -1,0 +1,35 @@
+name: Verify ruleset sync
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+
+env:
+  GH_TOKEN_API: ${{ secrets.RULESETS_PAT }}
+  REPO: ${{ github.repository }}
+  BASE_REF: ${{ github.event.pull_request.base.ref }}
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Guard RULESETS_PAT
+        run: |
+          if [ -z "${GH_TOKEN_API}" ]; then
+            echo "::error::RULESETS_PAT secret is not set. See docs/rulesets.md \"Required secret\"."
+            exit 1
+          fi
+
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Verify ruleset sync
+        run: |
+          python3 scripts/verify_ruleset_sync.py verify \
+            --repo "${REPO}" \
+            --base-ref "${BASE_REF}" \
+            --sot-path .github/rulesets/main.json \
+            --ruleset-name main-protection
