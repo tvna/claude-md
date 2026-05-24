@@ -51,6 +51,16 @@ harness gets a chance to enforce or fail to enforce it.
 - Reframing the six principles. The principle text and the
   `*Layer: ...*` subtitles ([#75](https://github.com/tvna/claude-md/issues/75))
   are inputs to this document, not outputs.
+- Extracting reusable examples into a separate examples document.
+  The decision tree (section 4) and the worked examples (section 5)
+  cross-reference each other on every trace; splitting them would
+  force every change to update two docs and would expand the drift
+  sweep (section 6.3) without a measurable navigability gain at the
+  current document length. The repo-local retrospective docs
+  (`docs/retrospective-pr-*.md`) already serve as the open-ended
+  examples corpus that lives outside this document, and section 6.4
+  governs how those retrospectives feed back into instruction
+  changes.
 
 ## 2. Vocabulary - the four ownership lanes
 
@@ -447,7 +457,26 @@ The fix for a drift hit is to keep the abstract form in the
 universal text, keep the concrete form in exactly one lower lane,
 and update the other lane to reference the canonical form.
 
-### 6.4 Cadence
+### 6.4 Retrospective classification to action lane mapping
+
+The retrospective harness (`scripts/auto_retro.py`) classifies each
+repair found between PR open and merge into one of three taxonomy
+categories. Each category maps onto a primary ownership lane; the
+secondary lane is where the corresponding documentation or worked
+example lands.
+
+| Retrospective category | Primary lane | Typical secondary lane | Field example |
+|---|---|---|---|
+| Missing deterministic gate | Harness | Universal text (only if the gate enforces a new universal principle) | `docs/retrospective-pr-229.md` records a body-policy preflight gap surfaced between PR open and merge; the durable fix was a new `scripts/` preflight, not a universal-text edit |
+| Unclear agent instruction | Universal text | Repo-local doc (a worked example or runbook clarification) | `docs/retrospective-pr-235.md` records an auto-retro skip-rule ambiguity; the durable fix was a wording tightening in the harness rule plus a clarifying note in the repo-local retrospective doc |
+| External or human decision | Project-local | Repo-local doc (an escalation note describing the unresolved item) | `docs/retrospective-pr-237.md` records a no-repair merge where outstanding follow-up items required human judgment; nothing landed in universal text or harness |
+
+The mapping is a router, not a deterministic gate: it tells the
+contributor which lane to draft into first. The decision tree in
+section 4 then validates whether that draft lane is the correct
+final destination.
+
+### 6.5 Cadence
 
 Run all three sweeps at least once per merge that touches
 `master.instructions.md`, `scripts/`, or `docs/`. The retrospective
@@ -456,7 +485,112 @@ record the sweep result; if a retrospective is not auto-opened (as
 discussed in #226), the contributor of the touching PR runs the
 sweeps manually.
 
-## 7. Validation strategy
+## 7. Instruction-PR review criteria
+
+Reviewers apply this section when a PR touches the universal source
+or its compiled artifacts. The criteria below complement, but do not
+replace, the deterministic gates listed in the project's PR template
+and in section 7.2.
+
+### 7.1 Applicability
+
+A PR is in scope for this section if and only if its diff includes
+at least one of:
+
+- `.apm/instructions/master.instructions.md` (the universal source).
+- `CLAUDE.md` (the compiled artifact; should change only as the
+  verbatim output of `apm compile`).
+- `AGENTS.md` (the compiled artifact; same constraint).
+
+PRs that touch only `docs/`, `scripts/`, `tests/`, or
+`.github/workflows/` fall outside this section; they have their own
+review surface (`docs/workflow-script-quality.md` for harness PRs,
+the body and title policies for every PR).
+
+### 7.2 Deterministic gates the reviewer can rely on
+
+Before any manual review begins, confirm the following automated
+gates are green on the PR head commit:
+
+- `verify-apm-drift.yml` confirms that `CLAUDE.md` and `AGENTS.md`
+  are the verbatim output of `apm compile` for the current
+  `.apm/instructions/master.instructions.md`.
+- `verify-apm-portability.yml` runs
+  `scripts/scan_apm_portability.py` and blocks repository-specific
+  references (`#NNN` issue numbers, `docs/<name>.md` paths, script
+  names, tool product names) inside universal text unless an
+  explicit `portability-ack:` marker on the same line cites the
+  authorizing sub-issue.
+- `verify-body-policy.yml` and `verify-title-policy.yml` confirm
+  the PR body and title follow `docs/issue-pr-body-standard.md`.
+- `scan-non-ascii.yml` confirms no non-ASCII characters slipped
+  into files that must remain ASCII.
+
+A red light on any of the above is a hard block; do not advance to
+the manual review questions in section 7.3 until the deterministic
+gates pass. If a gate is missing for a category of risk that the
+reviewer must still check, that gap itself is a candidate for the
+gap analysis procedure in section 6.
+
+### 7.3 Manual reviewer questions
+
+For each non-trivial wording change in the PR diff, walk the
+decision tree from [section 4](#4-decision-tree) (Q1 through Q5).
+The source of truth for the questions is section 4; this subsection
+does not re-derive them. The reviewer states the answer to each
+question explicitly in a PR comment or review thread whenever the
+answer is not obvious from the diff itself.
+
+The three lane outcomes for a universal-text edit are:
+
+- **Universal text** (Q1 yes, Q2 no, Q3 yes, Q4 no). Approve if the
+  edit keeps the abstract form and avoids repository nouns.
+- **Repo-local doc** (Q4 yes). Request changes; the concrete
+  wording belongs in `docs/`, not in the universal text.
+- **Harness** (Q2 yes). Request changes; the rule belongs in a
+  script and workflow pair, not in agent prompt text.
+
+If the diff touches `CLAUDE.md` or `AGENTS.md` directly without a
+corresponding `.apm/instructions/master.instructions.md` change, the
+review is also a hard block: those files are compiled artifacts and
+the source of truth must move first.
+
+### 7.4 Portability-ack escape hatch policy
+
+`scripts/scan_apm_portability.py` recognizes a
+`portability-ack: refs #<N>` marker that allows a single line of
+otherwise-banned wording (a vendor name, a specific PR number, a
+file path) inside universal text. The escape hatch exists because a
+small amount of bootstrap text must name the repository it ships
+from in order to be self-locating.
+
+When the diff introduces or modifies a `portability-ack:` marker:
+
+- The marker must cite a sub-issue of #226 (or its successor
+  tracking issue) that explicitly authorizes the exception.
+- The cited sub-issue must explain why the deterministic
+  alternative (abstract wording, harness check, or repo-local doc)
+  was rejected.
+- The marker must not be used to bypass the section 7.3 Q4
+  outcome; "wording needs a repository-specific noun" is the
+  signal that the wording belongs in `docs/`, not the signal that
+  an exception should be granted.
+
+If any of the three conditions fails, request changes.
+
+### 7.5 Worked case: PR #225
+
+The repair loop on PR #225 (replayed in
+[section 5.1](#51-pr-225---repository-specific-wording-in-a-universal-sentence))
+is the canonical example for this section. A reviewer running the
+criteria above on that PR's pre-repair state would have observed
+Q4 = yes in the diff (the wording needed a repository-specific
+noun) and would have requested the demotion to a repo-local doc
+before merge, instead of allowing the repair to happen between PR
+open and merge. The criteria in section 7 are designed to make that
+catch reproducible.
+
+## 8. Validation strategy
 
 This document is valid only if:
 
@@ -481,7 +615,7 @@ This document is valid only if:
 If any of the four conditions starts failing, this document is the
 problem, not the source it describes.
 
-## 8. Update procedure and rollback
+## 9. Update procedure and rollback
 
 To update this document (add a row, add a worked example, fix a
 boundary risk):
@@ -495,7 +629,7 @@ boundary risk):
    `docs/repo-scope.md`, `docs/security-control-inventory.md`,
    `docs/issue-pr-body-standard.md`, `docs/non-ascii-defense.md`,
    and `docs/workflow-script-quality.md`.
-3. Re-run the validation strategy in section 7. The replay table in
+3. Re-run the validation strategy in section 8. The replay table in
    section 5 must remain at 100 percent match; if a new closed sub-
    issue is added to the replay set, trace it explicitly.
 4. Reference the parent #226 on the `Refs #` line of the PR body.
@@ -509,7 +643,7 @@ This document does not modify `.apm/instructions/master.instructions.md`,
 would require such a change goes through the universal-text update
 flow, not this update flow.
 
-## 9. References
+## 10. References
 
 - [#226](https://github.com/tvna/claude-md/issues/226) - parent
   tracking issue for `CLAUDE.md` evolution policy.
@@ -544,4 +678,14 @@ flow, not this update flow.
 - `docs/workflow-script-quality.md` - the must-have checklist for
   harness scripts; the closest thing this repo has to a P4 quality
   gate beyond reviewer judgment.
-- `docs/retrospective-pr-*.md` - case-study lane precedent for P6.
+- `docs/retrospective-pr-*.md` - case-study lane precedent for P6;
+  individual retrospectives (PR #229, #235, #237) supply the field
+  examples cited in section 6.4.
+- `scripts/auto_retro.py` - retrospective harness whose
+  three-category taxonomy (missing deterministic gate, unclear
+  agent instruction, external or human decision) drives the
+  section 6.4 mapping.
+- `scripts/scan_apm_portability.py` - the portability gate cited by
+  section 7.2 and section 7.4; rejects repository-specific
+  references inside universal text and recognizes the
+  `portability-ack:` marker.

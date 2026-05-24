@@ -74,4 +74,5 @@ command a responder would run.
 - [ ] Facts vs. Assumptions split is honest (no speculation lurking in Facts)
 - [ ] Risk & blast radius assessed; Rollback steps are runnable
 - [ ] CLAUDE.md / AGENTS.md regenerated if applicable
+- [ ] If this PR touches `.apm/instructions/**`, `CLAUDE.md`, or `AGENTS.md`: reviewer applied `docs/agent-rules-design-philosophy.md` section 7 (no repository-specific references in universal text; `verify-apm-portability.yml` green; any `portability-ack:` marker cites its authorizing sub-issue)
 - [ ] CI green
