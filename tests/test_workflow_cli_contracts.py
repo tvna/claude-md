@@ -394,7 +394,13 @@ def test_scan_design_philosophy_drift_verify_matches_workflow_paths(
         "## 1. A\n## 2. B\n",
         encoding="utf-8",
     )
+    glossary_lines = "".join(
+        f"- **{term}**: definition.\n"
+        for term in scan_design_philosophy_drift.REQUIRED_GLOSSARY_ENTRIES
+    )
     doc.write_text(
+        "### 2.5 Glossary\n"
+        f"{glossary_lines}"
         "## 3. Matrix\n"
         "two principles by four lanes.\n"
         "| P1 - a | x |\n"
