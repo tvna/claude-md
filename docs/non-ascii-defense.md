@@ -1,5 +1,7 @@
 # Non-ASCII Defense — Multi-Byte Prompt-Injection Hardening
 
+> Design rationale: see [`docs/agent-rules-design-philosophy.md`](./agent-rules-design-philosophy.md). This runbook is the concrete three-layer ASCII discipline that enforces principle P3 at the GitHub-post boundary.
+
 This document is the operator-facing companion to [#102](https://github.com/tvna/claude-md/issues/102) — the umbrella for hardening this repo against prompt injection delivered via non-ASCII content in issue/PR titles, bodies, and comments. The procedural warning at `docs/rulesets.md` lines 48-51 is the prior art; this runbook converts it into defense-in-depth across three layers.
 
 ## SoT layout

@@ -1,5 +1,7 @@
 # Repo Scope — Purpose Statement and Tool-Specific Config Prohibition
 
+> Design rationale: see [`docs/agent-rules-design-philosophy.md`](./agent-rules-design-philosophy.md). This document is the concrete content-based prohibition that grounds the Q1 disqualifier in the meta-doc's decision tree.
+
 This document is the operator-facing companion to [#58](https://github.com/tvna/claude-md/issues/58) — the governance decision that declares this repo's purpose and forbids agent-tool-specific configuration files. The deterministic enforcement (CI gate) is parked as Phase 4 of #58; until it lands, this runbook plus the widened `.gitignore` / `.claudeignore` are the enforcement.
 
 ## SoT layout

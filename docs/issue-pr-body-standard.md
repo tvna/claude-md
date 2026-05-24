@@ -1,5 +1,7 @@
 # Issue/PR Body Standard - Contributor Runbook
 
+> Design rationale: see [`docs/agent-rules-design-philosophy.md`](./agent-rules-design-philosophy.md). This runbook is the concrete body shape that carries the Facts / Assumptions discipline (principle P2) and the issue-citation discipline (principle P3) referenced by the meta-doc.
+
 This document is the contributor- and agent-facing runbook for the body shape
 of every issue and pull request in this repository. The label taxonomy in
 [`docs/issue-triage.md`](./issue-triage.md) tells an agent **how to route**

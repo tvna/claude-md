@@ -1,5 +1,7 @@
 # Workflow Script Quality Standard
 
+> Design rationale: see [`docs/agent-rules-design-philosophy.md`](./agent-rules-design-philosophy.md). This standard is the closest thing this repository has to a deterministic principle-P4 quality gate; the meta-doc cites it as the carrier of harness-lane quality for the artifact-code layer.
+
 This document is the contributor- and agent-facing standard for Python
 scripts under `scripts/` that are invoked from GitHub Actions workflows
 under `.github/workflows/`. It defines the minimum quality gates every

@@ -1,5 +1,7 @@
 # Security Control Inventory
 
+> Design rationale: see [`docs/agent-rules-design-philosophy.md`](./agent-rules-design-philosophy.md). This inventory supplies the concrete harness-lane evidence that the meta-doc's responsibility matrix references for principle P3.
+
 Baseline inventory of security-relevant repository surfaces, mapped to the MITRE ATT&CK coverage table in [#178](https://github.com/tvna/claude-md/issues/178). For each surface this document records the existing defense, the evidence that proves the defense is operational, a coverage status, and the follow-up issue tracking any gap.
 
 This file is the deliverable for [#179](https://github.com/tvna/claude-md/issues/179). It is intended to be re-read whenever a new workflow, script, ruleset, or runbook lands so the coverage table in #178 stays accurate. Re-verification command is at the bottom of the file.
