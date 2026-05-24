@@ -74,5 +74,6 @@ git submodule update --remote .claude-md-master
 - Only **rules that hold across every project** belong here. Project-specific rules live in each project's own `CLAUDE.md`.
 - Prefer removing words over adding them (Principle 4).
 - New or modified workflow-called scripts under `scripts/` must meet the [workflow script quality standard](./docs/workflow-script-quality.md).
+- PRs that touch `.apm/instructions/**`, `CLAUDE.md`, or `AGENTS.md` must pass the [downstream instruction review checklist](./docs/downstream-instruction-review-checklist.md) (security-focused review applied after the deterministic gates are green).
 
 ---

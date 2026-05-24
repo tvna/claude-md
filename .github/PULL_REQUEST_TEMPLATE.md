@@ -75,4 +75,5 @@ command a responder would run.
 - [ ] Risk & blast radius assessed; Rollback steps are runnable
 - [ ] CLAUDE.md / AGENTS.md regenerated if applicable
 - [ ] If this PR touches `.apm/instructions/**`, `CLAUDE.md`, or `AGENTS.md`: reviewer applied `docs/agent-rules-design-philosophy.md` section 7 (no repository-specific references in universal text; `verify-apm-portability.yml` green; any `portability-ack:` marker cites its authorizing sub-issue)
+- [ ] If this PR touches `.apm/instructions/**`, `CLAUDE.md`, or `AGENTS.md`: reviewer applied `docs/downstream-instruction-review-checklist.md` (unsafe agent behavior, downstream update note, security-sensitive change evidence; `verify-apm-drift.yml` and `verify-apm-portability.yml` green)
 - [ ] CI green
