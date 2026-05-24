@@ -194,6 +194,22 @@ class TestFindDrift:
         errors = uv_pin.find_drift(repo, "1.2.3")
         assert not any("pyproject.toml" in e for e in errors)
 
+    def test_translations_json_is_excluded(self, tmp_path: Path) -> None:
+        """`scripts/translations.json` is a historical snapshot of issue/PR
+        bodies that legitimately quote past pin literals; the drift gate
+        must skip it. Refs #102 P3.
+        """
+        repo = _make_repo(tmp_path, pin="1.2.3")
+        (repo / "scripts/translations.json").write_text(
+            '{"items": [{"original": "see uv 1.2.3"}]}\n'
+        )
+        # A sibling unrelated file with the literal MUST still fail, so
+        # this exclusion is precisely scoped.
+        (repo / "scripts/other.py").write_text('PIN = "1.2.3"\n')
+        errors = uv_pin.find_drift(repo, "1.2.3")
+        assert all("translations.json" not in e for e in errors)
+        assert any("other.py" in e for e in errors)
+
     def test_real_repo_has_no_drift(self) -> None:
         """The checked-in repo must pass the drift gate end-to-end."""
         pin = uv_pin.read_pin(REPO_ROOT / "pyproject.toml")
