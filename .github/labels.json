@@ -6,7 +6,7 @@
   },
   {
     "name": "layer:p2-precode",
-    "description": "CLAUDE.md §2 — Pre-code reasoning (fact vs. speculation, assumptions, ambiguity).",
+    "description": "CLAUDE.md §2 — Input and pre-code reasoning (untrusted text, facts, assumptions).",
     "color": "5319e7"
   },
   {
@@ -16,7 +16,7 @@
   },
   {
     "name": "layer:p4-artifact",
-    "description": "CLAUDE.md §4 — Artifact code (simplicity bounded by safety).",
+    "description": "CLAUDE.md §4 — Safety boundary (simplicity, tool scope, secret exposure).",
     "color": "fbca04"
   },
   {

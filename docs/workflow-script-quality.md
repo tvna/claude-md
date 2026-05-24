@@ -379,7 +379,7 @@ class TestMainExitCode:
 | M4 input validation | section 2, section 4 | Reject unverified input at the boundary; never let ambiguous input drive a mutation |
 | M5 GitHub contracts | section 3 | Deterministic output the harness can read without ad-hoc parsing |
 | M6 dry-run | section 4 | Reversible default; mutation requires explicit `dry_run=false` |
-| M7 secret handling | section 4 | Bounded blast radius; secrets never reach logs or process listings |
+| M7 secret handling | section 4 | Bounded tool surface; secrets never reach logs or process listings |
 | M8 lint/type/coverage | section 3 | Deterministic gates close the loop before merge |
 | M9 fail policy | section 4 | Loud failure on gates; explicit fail-open only where a wedged hook would be worse |
 
