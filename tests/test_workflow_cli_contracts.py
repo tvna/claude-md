@@ -28,6 +28,7 @@ import security_drift_report
 import threat_intel_triage
 import title_policy
 import uv_pin
+import verify_required_check_contexts
 import verify_ruleset_sync
 
 REPO = "owner/repo"
@@ -58,6 +59,7 @@ def test_workflow_python_script_inventory_is_pinned() -> None:
         "threat_intel_triage.py",
         "title_policy.py",
         "uv_pin.py",
+        "verify_required_check_contexts.py",
         "verify_ruleset_sync.py",
     }
 
@@ -539,6 +541,20 @@ def test_verify_ruleset_sync_matches_workflow_args(
             ".github/rulesets/main.json",
             "--ruleset-name",
             "main-protection",
+        ]
+    ) == 0
+
+
+def test_verify_required_check_contexts_matches_workflow_args() -> None:
+    """Mirrors the `Verify required-check contexts match workflow job names`
+    step in `.github/workflows/verify-ruleset-sync.yml`."""
+    assert verify_required_check_contexts.main(
+        [
+            "verify",
+            "--sot-path",
+            ".github/rulesets/main.json",
+            "--workflows-dir",
+            ".github/workflows",
         ]
     ) == 0
 

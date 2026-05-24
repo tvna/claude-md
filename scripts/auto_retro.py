@@ -50,6 +50,7 @@ from typing import Any
 from urllib.parse import quote
 
 from _trusted_bots import _TRUSTED_BOT_LOGINS
+from issue_link import extract_refs, strip_html_comments
 
 FALLBACK_TYPE_SCOPE = "retro"
 
@@ -80,6 +81,8 @@ class MergedPR:
     user_login: str | None
     layer_labels: tuple[str, ...]
     html_url: str
+    body: str = ""
+    commits: int = 0
 
 
 # ---------------------------------------------------------------------------
@@ -117,6 +120,8 @@ def parse_event(event: dict[str, Any]) -> MergedPR:
         user_login=user.get("login"),
         layer_labels=layer_labels,
         html_url=str(pr.get("html_url") or ""),
+        body=str(pr.get("body") or ""),
+        commits=int(pr.get("commits") or 0),
     )
 
 
@@ -159,6 +164,50 @@ def should_skip(
     if is_retro_pr(pr.title):
         return True, "PR is itself a retrospective (avoid recursion)"
     return False, ""
+
+
+def compute_repair_signals(
+    pr: MergedPR, has_inline_comments: bool
+) -> dict[str, bool]:
+    """Return a dict of `signal_name -> fired` describing observable repair
+    evidence on the merged PR. Used by :func:`run` to decide whether to open
+    a retrospective issue.
+
+    Each signal is independently weak; their logical OR is the gate. The
+    historical signal (`has_inline_comments`) is retained verbatim; the
+    remaining heuristics catch repair loops captured outside the PR's
+    review thread -- in sibling issues, in fix-typed titles, or in
+    fix-up commits squashed at merge. See issue #298 for the reproducer:
+    PR #275 and PR #288 merged with zero inline review comments yet
+    carried substantial repair history in issues #287 and #273.
+
+    Signals returned:
+
+    - ``inline_review_comments``: at least one comment on the PR's
+      review thread (the legacy gate).
+    - ``body_cites_refs``: PR body has at least one line-anchored
+      ``Refs|Closes|Fixes|Resolves #N``. Reuses
+      :func:`issue_link.extract_refs`.
+    - ``fix_typed_title``: PR title starts with ``fix(`` (Conventional
+      Commit `fix` type).
+    - ``multi_commit_pr``: source branch had more than one commit before
+      the merge (squash-merge collapses these but the commit count is
+      still reported on the closed event payload).
+    """
+    body_without_comments = strip_html_comments(pr.body or "")
+    refs = extract_refs(body_without_comments)
+    fix_typed = pr.title.lstrip().lower().startswith("fix(")
+    return {
+        "inline_review_comments": bool(has_inline_comments),
+        "body_cites_refs": len(refs) > 0,
+        "fix_typed_title": fix_typed,
+        "multi_commit_pr": pr.commits > 1,
+    }
+
+
+def render_repair_signals(signals: dict[str, bool]) -> str:
+    """Render a one-line summary of the signal aggregate for log/summary use."""
+    return ", ".join(f"{name}={str(fired).lower()}" for name, fired in signals.items())
 
 
 def build_retro_title(pr: MergedPR) -> str:
@@ -434,19 +483,22 @@ def run(event: dict[str, Any], repo: str) -> int:
         return 0
 
     try:
-        has_repairs = has_review_comments(repo, pr.number)
+        has_inline_comments = has_review_comments(repo, pr.number)
     except subprocess.CalledProcessError as exc:
         # Fail-safe: a transient comments-endpoint failure must NOT
         # silently swallow the retro creation. Surface the warning and
-        # proceed as if repairs were present.
+        # proceed as if comments were present.
         print(
             f"::warning::has_review_comments failed "
             f"(exit {exc.returncode}); proceeding to open retro",
             file=sys.stderr,
         )
-        has_repairs = True
-    if not has_repairs:
-        msg = "zero review comments (positive-control merge)"
+        has_inline_comments = True
+
+    signals = compute_repair_signals(pr, has_inline_comments)
+    signal_summary = render_repair_signals(signals)
+    if not any(signals.values()):
+        msg = f"no repair signal fired ({signal_summary})"
         print(f"skip: {msg}")
         _append_summary(_build_summary(pr, "skip", msg))
         return 0
