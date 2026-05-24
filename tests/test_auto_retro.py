@@ -402,6 +402,25 @@ class TestFindExistingRetro:
         ]
         assert ar.find_existing_retro(items, 42) == 7
 
+    def test_matches_retro_colon_variant(self) -> None:
+        """Success path for the ``retro:`` (no-scope) prefix variant."""
+        items = [{"number": 3, "title": "retro: review PR #42 repair loops"}]
+        assert ar.find_existing_retro(items, 42) == 3
+
+    def test_rejects_pr_number_substring_collision(self) -> None:
+        """A retro for #2490 must not be returned when looking up #249."""
+        items = [
+            {"number": 8, "title": "retro(fix): review PR #2490 repair loops"}
+        ]
+        assert ar.find_existing_retro(items, 249) is None
+
+    def test_matches_case_insensitive_prefix(self) -> None:
+        """``Retro(Fix):`` (mixed case) must still match -- prefix is lowered."""
+        items = [
+            {"number": 12, "title": "Retro(Fix): review PR #42 repair loops"}
+        ]
+        assert ar.find_existing_retro(items, 42) == 12
+
 
 class TestIssueLabels:
     def test_no_inherited_labels(self) -> None:
