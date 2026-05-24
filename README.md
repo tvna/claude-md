@@ -18,7 +18,7 @@ Master repository for personally tuned agent instructions, compiled with [`micro
 | 1 | Define the Goal with Plan Mode First | goal & plan structure | Enter plan mode for any task that takes 3+ steps or touches architecture. |
 | 2 | Bound the Unknown Before Coding | pre-code reasoning | List assumptions, surface ambiguity, verify or ask — ambiguity earns a question, evidence earns a fix. |
 | 3 | Use Git Ecosystem Effectively | delivery harness | Build the harness — hooks, CI/CD, declarative deps — before you scale. |
-| 4 | Simplicity, Bounded by Safety | artifact code | Minimum code that solves the problem — never at the cost of safety. |
+| 4 | Simplicity, Bounded by Safety | safety boundary | Minimum code that solves the problem — never at the cost of safety. |
 | 5 | Accelerate Scale with Quality | change scope & agent split | Touch only what you must; split implementation, verification, and exploration across separate agents. |
 | 6 | Be a Force Multiplier | handoff & communication | Don't settle for "LGTM" — make trade-offs explicit so others can follow the reasoning. |
 
