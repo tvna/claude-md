@@ -9,6 +9,12 @@ adding the corresponding row to the Section 3 responsibility matrix in
 source-to-compiled-artifact equivalence and repo-local-noun absence
 respectively, but neither inspects the design-philosophy doc.
 
+Issue #329 retrospective for #322 extends this scan with two checks:
+row label parity (each ``| P<n> - <label> |`` row must equal the master
+``*Layer: <label> ...*`` subtitle after ``&``/``and`` normalization),
+and glossary presence (section 2.5 of the doc must list every term the
+section 3 invariant relies on).
+
 Invoked from ``.github/workflows/verify-design-philosophy.yml`` as
 ``python3 scripts/scan_design_philosophy_drift.py verify --master <path>
 --doc <path>``.
@@ -17,22 +23,35 @@ The contract is:
 
 * ``--master`` is the APM source file. Its top-level numbered sections
   are enumerated as ``^## (\\d+)\\. ``. The maximum section number N
-  determines the expected principle count.
+  determines the expected principle count. Each section's subtitle
+  ``*Layer: <text> -- ...*`` (em-dash separator) yields the layer name
+  for label-parity checking.
 * ``--doc`` is the design-philosophy doc. Its Section 3 responsibility
   matrix is extracted (everything between the ``## 3. `` heading and
-  the next ``## ``) and the row labels ``| P(\\d+) -`` are enumerated.
+  the next ``## ``) and the row labels ``| P(\\d+) - <label>`` are
+  enumerated. Its Section 2.5 glossary is extracted (everything between
+  ``### 2.5 Glossary`` and the next heading) and the bolded entry
+  names ``- **<term>**:`` are enumerated.
 * The script fails when the master section set ``{1, ..., N}`` differs
   from the doc row label set ``{P1, ..., PN}``.
+* The script also fails when a row label and its master subtitle do
+  not agree after normalization (lowercase, ``&`` to ``and``,
+  whitespace collapsed). When either side is missing the subtitle or
+  the row, this specific check is skipped because the row-count check
+  above already surfaces the structural gap.
 * The script also fails when the doc contains a free-text count of the
   form ``<word> (principles|layers)`` whose numeric value does not
   match N. Supported words are ``one``..``twelve`` (case-insensitive)
   and any bare integer.
+* The script also fails when section 2.5 is missing any entry named
+  in :data:`REQUIRED_GLOSSARY_ENTRIES`.
 * Exit 0 when the doc tracks the master; exit 1 on any drift; the
   argparse layer returns 2 on missing ``--master`` or ``--doc``. Each
   hit emits ``::error file=<path>,line=<n>::...`` on stderr so the
   GitHub Actions UI surfaces individual violations.
 
-Tested by ``tests/test_scan_design_philosophy_drift.py``. Refs #308.
+Tested by ``tests/test_scan_design_philosophy_drift.py``. Refs #308,
+#322, #329.
 """
 
 from __future__ import annotations
@@ -43,14 +62,20 @@ import sys
 from pathlib import Path
 
 MASTER_SECTION_RE = re.compile(r"^## (\d+)\. ")
+MASTER_SUBTITLE_RE = re.compile(r"^\*Layer:\s*([^—]+?)\s*—")
 DOC_SECTION_3_HEADING_RE = re.compile(r"^## 3\. ")
 DOC_NEXT_SECTION_RE = re.compile(r"^## \d+\. ")
 DOC_MATRIX_ROW_RE = re.compile(r"^\|\s*P(\d+)\s*-")
+DOC_ROW_LABEL_RE = re.compile(r"^\|\s*P(\d+)\s*-\s*([^|]+?)\s*\|")
+DOC_GLOSSARY_HEADING_RE = re.compile(r"^### 2\.5 Glossary\s*$")
+DOC_GLOSSARY_ENTRY_RE = re.compile(r"^- \*\*(.+?)\*\*:")
+DOC_HEADING_RE = re.compile(r"^#{1,3} ")
 DOC_WORDING_RE = re.compile(
     r"\b(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|\d+)"
     r"\s+(principles|layers)\b",
     re.IGNORECASE,
 )
+_NORMALIZE_WS_RE = re.compile(r"\s+")
 
 WORD_TO_INT: dict[str, int] = {
     "one": 1,
@@ -66,6 +91,27 @@ WORD_TO_INT: dict[str, int] = {
     "eleven": 11,
     "twelve": 12,
 }
+
+REQUIRED_GLOSSARY_ENTRIES: tuple[str, ...] = (
+    "safety boundary",
+    "defense-in-depth",
+    "deterministic gate",
+    "untrusted data",
+    "repair-free merge",
+    "PRD",
+    "P1 through P6",
+)
+
+
+def normalize_label(text: str) -> str:
+    """Return a comparable form of a layer label.
+
+    Lowercases the text, replaces ``&`` with ``and``, and collapses any
+    run of whitespace to a single space. Trailing and leading whitespace
+    is stripped. The function is the basis for the label-parity check.
+    """
+    text = text.lower().replace("&", "and")
+    return _NORMALIZE_WS_RE.sub(" ", text).strip()
 
 
 def parse_master_sections(text: str) -> set[int]:
@@ -107,6 +153,68 @@ def parse_doc_matrix_rows(section_lines: list[str]) -> set[int]:
         int(match.group(1))
         for line in section_lines
         if (match := DOC_MATRIX_ROW_RE.match(line)) is not None
+    }
+
+
+def parse_master_subtitles(text: str) -> dict[int, str]:
+    """Return ``{section_number: subtitle_text}`` for each numbered section.
+
+    The subtitle is the first line after a ``## <n>. ...`` heading that
+    matches :data:`MASTER_SUBTITLE_RE`. Sections without a matching
+    subtitle are omitted. The captured ``<text>`` excludes the em-dash
+    separator and the description that follows it.
+    """
+    result: dict[int, str] = {}
+    pending: int | None = None
+    for line in text.splitlines():
+        section_match = MASTER_SECTION_RE.match(line)
+        if section_match:
+            pending = int(section_match.group(1))
+            continue
+        if pending is None:
+            continue
+        subtitle_match = MASTER_SUBTITLE_RE.match(line)
+        if subtitle_match:
+            result[pending] = subtitle_match.group(1)
+            pending = None
+    return result
+
+
+def parse_doc_row_labels(section_lines: list[str]) -> dict[int, str]:
+    """Return ``{n: label_text}`` for each ``P<n> - <label>`` row."""
+    return {
+        int(match.group(1)): match.group(2)
+        for line in section_lines
+        if (match := DOC_ROW_LABEL_RE.match(line)) is not None
+    }
+
+
+def parse_glossary_entries(text: str) -> set[str]:
+    """Return bolded entry names under the ``### 2.5 Glossary`` heading.
+
+    The slice begins at the heading (exclusive) and ends before the
+    next ``#``, ``##``, or ``###`` heading. Each entry line of the form
+    ``- **<term>**: ...`` contributes ``<term>`` to the result. Returns
+    an empty set when the glossary heading is absent.
+    """
+    lines = text.splitlines()
+    start: int | None = None
+    end: int | None = None
+    for i, line in enumerate(lines):
+        if DOC_GLOSSARY_HEADING_RE.match(line):
+            start = i + 1
+            continue
+        if start is not None and DOC_HEADING_RE.match(line):
+            end = i
+            break
+    if start is None:
+        return set()
+    if end is None:
+        end = len(lines)
+    return {
+        match.group(1)
+        for line in lines[start:end]
+        if (match := DOC_GLOSSARY_ENTRY_RE.match(line)) is not None
     }
 
 
@@ -214,6 +322,39 @@ def _verify(master_path: Path, doc_path: Path) -> int:
                 file=sys.stderr,
             )
             failures += 1
+
+    master_subtitles = parse_master_subtitles(master_text)
+    doc_row_labels = parse_doc_row_labels(section_lines)
+    for n in sorted(master_sections & matrix_rows):
+        sub_text = master_subtitles.get(n)
+        label_text = doc_row_labels.get(n)
+        if sub_text is None or label_text is None:
+            continue
+        if normalize_label(sub_text) != normalize_label(label_text):
+            print(
+                f"::error file={doc_path},line={section_offset}::"
+                f"P{n} row label '{label_text}' does not match master "
+                f"section {n} subtitle '{sub_text}' (after &/and "
+                f"normalization). Rename one side to match the other "
+                f"so the matrix row and the master subtitle agree.",
+                file=sys.stderr,
+            )
+            failures += 1
+
+    glossary_entries = parse_glossary_entries(doc_text)
+    missing_glossary = sorted(
+        set(REQUIRED_GLOSSARY_ENTRIES) - glossary_entries
+    )
+    if missing_glossary:
+        labels = ", ".join(missing_glossary)
+        print(
+            f"::error file={doc_path}::section 2.5 glossary is missing "
+            f"required entries: {labels}. Add '- **<term>**: ...' lines "
+            f"under '### 2.5 Glossary' so terms used in master and in "
+            f"the section 3 invariant have a single source of truth.",
+            file=sys.stderr,
+        )
+        failures += 1
 
     if failures:
         print(
