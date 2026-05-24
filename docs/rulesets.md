@@ -10,7 +10,7 @@ The rulesets are introduced incrementally per the phased rollout in [#18](https:
 |---|---|---|
 | `.github/rulesets/main.json` | `~DEFAULT_BRANCH` | Strict `main` protection (PR-only, squash-only, required status check, linear history) |
 | `.github/rulesets/all-branches.json` | `~ALL` except `~DEFAULT_BRANCH` and `refs/heads/dependabot/*` | `non_fast_forward` only (deletion intentionally omitted; see [#18 comment 2](https://github.com/tvna/claude-md/issues/18#issuecomment-4482555311)) |
-| `.github/rulesets/dependabot.json` | `refs/heads/dependabot/*` | `non_fast_forward` with `dependabot[bot]` (Integration id `49699333`) bypass so `@dependabot rebase` works on protected branches ([#140](https://github.com/tvna/claude-md/issues/140)) |
+| `.github/rulesets/dependabot.json` | `refs/heads/dependabot/*` | `non_fast_forward` with admin-only bypass (originally granted the Dependabot Integration `actor_id: 49699333` a bypass per [#140](https://github.com/tvna/claude-md/issues/140), but GitHub deprecated the standalone Dependabot GitHub App and the Rulesets API now returns HTTP 422 for that bypass actor — see [#273](https://github.com/tvna/claude-md/issues/273); `@dependabot rebase` is therefore blocked and Dependabot falls back to closing + reopening the PR with a freshly rebased branch) |
 | `docs/rulesets.md` *(this file)* | — | Runbook |
 
 ## Phase mapping
