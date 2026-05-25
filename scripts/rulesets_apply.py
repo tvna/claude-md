@@ -493,7 +493,10 @@ def _request(
     }
     if data is not None:
         headers["Content-Type"] = "application/json"
-    request = urllib.request.Request(
+    # `url` is built from API_ROOT (https://api.github.com) + workflow-supplied
+    # repo and ruleset_id values; opener is injectable for tests but defaults
+    # to urllib.request.urlopen on the fixed https endpoint.
+    request = urllib.request.Request(  # noqa: S310 — fixed https endpoint
         url,
         data=data,
         headers=headers,

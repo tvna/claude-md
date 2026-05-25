@@ -180,6 +180,21 @@ pre-existing files is listed under `[[tool.mypy.overrides]]` with
 deferred type-debt and must be removed (not extended) as follow-up
 PRs clean each cluster.
 
+`ruff check` includes the `S` (flake8-bandit) rule family (#190) so the
+same gate also acts as a static security check for workflow-called
+scripts: `subprocess` invocations, `urllib` HTTP boundaries, hardcoded
+`/tmp` paths, and assertions in production code are flagged. When a
+finding cannot be safely refactored away, suppress it inline with
+`# noqa: S<NNN>` followed by a single-sentence justification on the
+preceding comment line (search the tree for `# S310 justification:` or
+`# S603 justification:` for the established phrasing). Test fixtures
+that legitimately require the suppressed patterns (`assert`, dummy
+token strings, `/tmp` labels) are covered by the file-scoped entries
+under `[tool.ruff.lint.per-file-ignores]` rather than individual
+`# noqa` lines. The self-test in `tests/test_ruff_security_gate.py`
+pins this configuration and verifies that the gate still rejects a
+deliberately unsafe sample.
+
 ### M9. Fail-loud vs fail-open policy
 
 Each script declares in its module docstring whether it is a gate

@@ -100,6 +100,19 @@ Notes:
 
 ## 6. Scripts (`scripts/`)
 
+**Cross-cutting static security gate (#190).** Every script in this section
+is covered by the `S` (flake8-bandit) rule family in `[tool.ruff.lint]`,
+run by the `lint-scripts` job in `.github/workflows/verify-agents.yml`
+as part of the existing `ruff check scripts tests` step. The gate
+flags `subprocess` shell injection, hardcoded `/tmp` paths, `urllib`
+opens against attacker-controllable schemes, and assertions used as
+production guards. Suppressions are inline (`# noqa: S<NNN>`) with a
+one-line justification on the preceding comment; test-suite-wide
+patterns (`assert`, dummy tokens) are scoped via
+`[tool.ruff.lint.per-file-ignores]`. Pinned by
+`tests/test_ruff_security_gate.py`, which also verifies the gate
+rejects a deliberately unsafe sample.
+
 | Surface | ATT&CK | Existing defense | Evidence | Status | Gap |
 |---|---|---|---|---|---|
 | `_github_api.py` | Cred, Exec | Shared HTTP wrapper; token passed as parameter (never logged); retry with jitter. | `tests/test_github_api.py` | covered | — |

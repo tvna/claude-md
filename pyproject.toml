@@ -69,6 +69,11 @@ select = [
     "RET",  # flake8-return: explicit and consistent return statements.
     "PTH",  # flake8-use-pathlib: prefer Path over os.path (matches house style).
     "RUF",  # ruff-specific: catches noqa misuse, ambiguous unicode, etc.
+    "S",    # flake8-bandit: subprocess injection, hardcoded secrets,
+            # insecure /tmp use, weak crypto. Workflow-called scripts handle
+            # GITHUB_TOKEN/PAT and pull_request_target payloads, so a static
+            # security gate is the deterministic counterpart to the runtime
+            # secret-handling rules in CLAUDE.md s2 and s4. Tracked in #190.
 ]
 ignore = [
     # E501: line length is enforced by ruff's own `line-length` setting.
@@ -82,13 +87,31 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 # Tests use pytest idioms (pytest.raises(Exception), assertRaises) that
-# legitimately trigger B011/B017.
-"tests/*" = ["B011", "B017"]
+# legitimately trigger B011/B017. The flake8-bandit (S) family flags
+# patterns that are intrinsic to a unit-test suite and are not
+# security defects when scoped to tests/:
+#   S101 — assert is the pytest assertion primitive.
+#   S105/S106 — fixture token strings are dummy literals, not secrets.
+#   S108 — /tmp paths appear in fixtures that verify workflow-supplied
+#          absolute paths; tmp_path is preferred but a few legacy
+#          fixtures still string-construct under /tmp by design.
+#   S404/S603/S607 — tests import subprocess and monkeypatch runners to
+#          verify the production scripts' fixed-argv call shape.
+"tests/*" = [
+    "B011", "B017",
+    "S101", "S105", "S106", "S108", "S404", "S603", "S607",
+]
 # These tests assert behaviour against ambiguous Unicode by construction
 # (scan_non_ascii detects them; title_policy enforces ASCII titles), so the
 # fixtures must contain the very codepoints RUF001 would flag.
-"tests/test_scan_non_ascii.py" = ["B011", "B017", "RUF001"]
-"tests/test_title_policy.py" = ["B011", "B017", "RUF001"]
+"tests/test_scan_non_ascii.py" = [
+    "B011", "B017", "RUF001",
+    "S101", "S105", "S106", "S108", "S404", "S603", "S607",
+]
+"tests/test_title_policy.py" = [
+    "B011", "B017", "RUF001",
+    "S101", "S105", "S106", "S108", "S404", "S603", "S607",
+]
 
 [tool.ruff.lint.isort]
 known-first-party = ["scripts"]

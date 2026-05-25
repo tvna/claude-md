@@ -235,7 +235,9 @@ def fetch_live_rulesets_list(
     *,
     opener: Callable[[urllib.request.Request], Any] = urllib.request.urlopen,
 ) -> list[dict[str, Any]]:
-    request = urllib.request.Request(f"{API_ROOT}/repos/{repo}/rulesets")
+    # API_ROOT is the constant https://api.github.com endpoint; `repo` is sourced
+    # from workflow `github.repository`. opener is injectable for tests.
+    request = urllib.request.Request(f"{API_ROOT}/repos/{repo}/rulesets")  # noqa: S310 — fixed https endpoint
     request.add_header("Authorization", f"Bearer {token}")
     request.add_header("Accept", "application/vnd.github+json")
     request.add_header("X-GitHub-Api-Version", API_VERSION)
@@ -250,7 +252,9 @@ def fetch_live_ruleset(
     *,
     opener: Callable[[urllib.request.Request], Any] = urllib.request.urlopen,
 ) -> dict[str, Any]:
-    request = urllib.request.Request(f"{API_ROOT}/repos/{repo}/rulesets/{ruleset_id}")
+    # API_ROOT is the constant https://api.github.com endpoint; `ruleset_id` is
+    # an int narrowed upstream. opener is injectable for tests.
+    request = urllib.request.Request(f"{API_ROOT}/repos/{repo}/rulesets/{ruleset_id}")  # noqa: S310 — fixed https endpoint
     request.add_header("Authorization", f"Bearer {token}")
     request.add_header("Accept", "application/vnd.github+json")
     request.add_header("X-GitHub-Api-Version", API_VERSION)
@@ -355,7 +359,10 @@ def detect(
             sot=sot_entry,
             live=live_entry,
             sot_path=f".github/rulesets/{filename}",
-            live_path=f"/tmp/live-{filename}",
+            # live_path is a label that appears only inside the diff header
+            # rendered into the drift issue body; nothing is read from or
+            # written to this path.
+            live_path=f"/tmp/live-{filename}",  # noqa: S108 — diff label only, no fs access
         )
         if not diff_text:
             summary_chunks.append(
@@ -482,12 +489,15 @@ def main(argv: list[str] | None = None) -> int:
     p_detect.add_argument(
         "--sot-body-file",
         type=Path,
-        default=Path("/tmp/drift-sot-issue.md"),
+        # CLI default for the detect subcommand. The workflow always passes an
+        # explicit --sot-body-file under the runner home directory; this default
+        # is for local one-shot debugging on a single-tenant runner.
+        default=Path("/tmp/drift-sot-issue.md"),  # noqa: S108 — workflow-supplied override expected in CI
     )
     p_detect.add_argument(
         "--unknown-body-file",
         type=Path,
-        default=Path("/tmp/drift-unknown-issue.md"),
+        default=Path("/tmp/drift-unknown-issue.md"),  # noqa: S108 — workflow-supplied override expected in CI
     )
     p_detect.set_defaults(func=_cmd_detect)
 
