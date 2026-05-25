@@ -434,6 +434,22 @@ _CHECK_RUN_FAIL_CONCLUSIONS: frozenset[str] = frozenset(
     {"failure", "timed_out", "cancelled", "action_required"}
 )
 
+# Bound the rendered Repair history table: emit at most this many failed
+# check_run rows, then a single overflow row summarising the remainder.
+# Keeps the retro issue body well under GitHub's 65,536-char limit even
+# with a CI explosion. Refs issue #381.
+_CHECK_RUN_DISPLAY_CAP: int = 20
+
+# Per-row cap on the truncated annotation summary string, so a verbose
+# annotation message cannot inflate the retro body unbounded. Refs #381.
+_ANNOTATION_SUMMARY_MAX: int = 200
+
+# Annotations fetched per failed check_run. Small ceiling so the
+# auto-retro orchestrator stays well within GitHub REST rate limits even
+# on a CI fanout; we only need to land on the first ``failure``-level
+# entry. Refs #381.
+_ANNOTATION_FETCH_LIMIT: int = 5
+
 
 def _escape_table_cell(text: str) -> str:
     """Escape a string for safe placement inside one markdown-table cell.
@@ -466,18 +482,39 @@ def _build_repair_history_table(
     """
     rows: list[tuple[str, str]] = []
 
+    rendered_failed = 0
+    total_failed = 0
     for entry in check_runs or []:
         conclusion = str(entry.get("conclusion") or "")
         if conclusion not in _CHECK_RUN_FAIL_CONCLUSIONS:
             continue
+        total_failed += 1
+        if rendered_failed >= _CHECK_RUN_DISPLAY_CAP:
+            continue
+        rendered_failed += 1
         name = str(entry.get("name") or "(unnamed)")
         completed = str(entry.get("completed_at") or "(no completed_at)")
+        html_url = str(entry.get("html_url") or "").strip()
+        summary_raw = entry.get("_annotation_summary")
+        summary = str(summary_raw).strip() if summary_raw else ""
+        parts = [f"conclusion={conclusion} at {completed}"]
+        if html_url:
+            parts.append(f"logs: {html_url}")
+        if summary:
+            parts.append(f"annotation: {summary}")
         rows.append(
             (
                 _escape_table_cell(f"CI fail: {name}"),
-                _escape_table_cell(
-                    f"conclusion={conclusion} at {completed}"
-                ),
+                _escape_table_cell("; ".join(parts)),
+            )
+        )
+
+    overflow = total_failed - _CHECK_RUN_DISPLAY_CAP
+    if overflow > 0:
+        rows.append(
+            (
+                _escape_table_cell(f"CI fail: + {overflow} more failures"),
+                _escape_table_cell("see PR check-run list (truncated)"),
             )
         )
 
@@ -854,6 +891,13 @@ def fetch_check_runs(repo: str, pr_number: int) -> list[dict[str, Any]]:
     :data:`_CHECK_RUN_FAIL_CONCLUSIONS`. The ``per_page=100`` cap is
     sufficient for this repo today (each PR runs <30 checks); overflow
     is treated as best-effort and is not paginated. Refs issue #343.
+
+    Each returned entry is enriched with a string-or-None
+    ``_annotation_summary`` field carrying a truncated single-line
+    summary of the first ``failure``-level annotation (or ``None`` when
+    no annotation is available, when ``id`` is missing on the entry,
+    when the annotation API fails, or beyond the
+    :data:`_CHECK_RUN_DISPLAY_CAP` enrichment ceiling). Refs issue #381.
     """
     raw = gh_api("GET", f"/repos/{repo}/pulls/{pr_number}")
     pr_detail = json.loads(raw) if raw.strip() else {}
@@ -866,11 +910,100 @@ def fetch_check_runs(repo: str, pr_number: int) -> list[dict[str, Any]]:
     )
     payload = json.loads(raw) if raw.strip() else {}
     all_runs = list(payload.get("check_runs") or [])
-    return [
+    failed_runs = [
         run
         for run in all_runs
         if str(run.get("conclusion") or "") in _CHECK_RUN_FAIL_CONCLUSIONS
     ]
+    # Enrich the first _CHECK_RUN_DISPLAY_CAP runs with an annotation
+    # summary so the retro Repair history rows carry recoverable context
+    # after Actions log retention expires. Beyond the cap we leave the
+    # field None: the overflow row in _build_repair_history_table
+    # already signals truncation. Refs issue #381.
+    for index, run in enumerate(failed_runs):
+        run["_annotation_summary"] = None
+        if index >= _CHECK_RUN_DISPLAY_CAP:
+            continue
+        run_id = run.get("id")
+        if not isinstance(run_id, int):
+            continue
+        try:
+            annotations = fetch_check_run_annotations(
+                repo, run_id, limit=_ANNOTATION_FETCH_LIMIT
+            )
+        except subprocess.CalledProcessError as exc:
+            # Fail-soft per acceptance criterion 3 of issue #381: a
+            # single annotation lookup failure must not block the other
+            # rows. The base "conclusion + completed_at" cell still
+            # carries the audit signal.
+            print(
+                f"::warning::fetch_check_run_annotations failed for "
+                f"check_run id={run_id} (exit {exc.returncode}); falling "
+                "back to summary-less row",
+                file=sys.stderr,
+            )
+            continue
+        run["_annotation_summary"] = _summarize_annotations(annotations)
+    return failed_runs
+
+
+def fetch_check_run_annotations(
+    repo: str, check_run_id: int, *, limit: int = _ANNOTATION_FETCH_LIMIT
+) -> list[dict[str, Any]]:
+    """Return annotations for a check_run via the REST API.
+
+    Thin :func:`gh_api` wrapper around
+    ``GET /repos/{repo}/check-runs/{id}/annotations?per_page={limit}``.
+    Returns ``[]`` when the response is empty or not a JSON list. The
+    caller (:func:`fetch_check_runs`) translates
+    :class:`subprocess.CalledProcessError` into a fail-soft summary-less
+    row; do not swallow it here so unexpected failures stay observable.
+    Refs issue #381.
+    """
+    raw = gh_api(
+        "GET",
+        f"/repos/{repo}/check-runs/{check_run_id}/annotations?per_page={limit}",
+    )
+    if not raw.strip():
+        return []
+    parsed = json.loads(raw)
+    if not isinstance(parsed, list):
+        return []
+    return parsed
+
+
+def _summarize_annotations(
+    annotations: list[dict[str, Any]],
+) -> str | None:
+    """Return a single-line summary of the first failure-level annotation.
+
+    Picks the first entry whose ``annotation_level == "failure"`` (skips
+    ``notice`` / ``warning`` since those are not the repair signal).
+    Joins ``title`` and the first line of ``message`` with ``": "``;
+    truncates the result to :data:`_ANNOTATION_SUMMARY_MAX` chars with a
+    trailing ellipsis when the source is longer. Returns ``None`` when
+    no failure-level entry is present, or when both ``title`` and
+    ``message`` are empty. Refs issue #381.
+    """
+    for entry in annotations:
+        level = str(entry.get("annotation_level") or "")
+        if level != "failure":
+            continue
+        title = str(entry.get("title") or "").strip()
+        message = str(entry.get("message") or "").strip()
+        first_line = message.split("\n", 1)[0].strip() if message else ""
+        if title and first_line:
+            summary = f"{title}: {first_line}"
+        elif title:
+            summary = title
+        elif first_line:
+            summary = first_line
+        else:
+            return None
+        if len(summary) > _ANNOTATION_SUMMARY_MAX:
+            summary = summary[: _ANNOTATION_SUMMARY_MAX - 3] + "..."
+        return summary
+    return None
 
 
 def search_retro_issues(repo: str, pr_number: int) -> list[dict[str, Any]]:
