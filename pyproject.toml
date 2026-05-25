@@ -2,9 +2,161 @@
 name = "claude-md"
 version = "1.0.0"
 requires-python = ">=3.10"
-dependencies = []
+# PyYAML powers scripts/plan_language_context.py (SessionStart hook, #211)
+# which parses .github/owners.yaml. Declared so uv-managed envs (CI,
+# tests) have the loader available; the hook itself fails open on
+# ImportError so legacy environments without it still start.
+dependencies = ["pyyaml>=6,<7"]
 
 [tool.uv]
 package = false
 exclude-newer = "14 days"
-required-version = ">=0.11.8"
+# Exact pin (==) instead of the usual >= lower bound. This file is the single
+# source of truth for the uv version used by CI and the SessionStart hook
+# (see docs/remote-environment.md). Submodule consumers do not inherit this
+# constraint, so the strict semantic is the desired one. Tracked in #112.
+required-version = "==0.11.11"
+
+[dependency-groups]
+# Test-only dependencies for scripts and coverage gates.
+# CI and local development both resolve these through uv and uv.lock.
+dev = [
+    "pytest>=8,<9",
+    "pytest-cov>=6,<7",
+    # Lint gate (#192). Bounded major to avoid silent rule churn on upgrade.
+    "ruff>=0.7,<0.9",
+    # Type gate (#192). 1.x line is stable; cap on 2.x for the same reason.
+    "mypy>=1.11,<2",
+    # mypy needs stubs for pyyaml (used by scripts/plan_language_context.py).
+    "types-PyYAML>=6,<7",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["scripts"]
+testpaths = ["tests"]
+
+[tool.coverage.run]
+source = ["scripts"]
+
+[tool.coverage.report]
+fail_under = 92.71
+show_missing = true
+# No scripts are omitted: the initial threshold is the measured baseline from
+# the full test suite, so every runtime script remains visible in CI output.
+
+[tool.ruff]
+# Lint gate (#192). Scope is intentional: only the Python we ship and its
+# tests. target-version matches the project's requires-python lower bound.
+target-version = "py310"
+line-length = 120
+extend-exclude = [
+    # Data file (#102 P3 snapshot of past issue/PR bodies), not Python source.
+    "scripts/translations.json",
+]
+
+[tool.ruff.lint]
+# Narrow, high-signal rule families. Each family is justified inline so the
+# selection survives later review per #192 acceptance criteria.
+select = [
+    "F",    # pyflakes: unused imports (F401), undefined names, redefinitions.
+    "E",    # pycodestyle errors: includes E722 bare-except (CLAUDE.md s4).
+    "W",    # pycodestyle warnings: trailing whitespace, mixed line endings.
+    "I",    # isort: import order plus duplicate-import detection.
+    "B",    # flake8-bugbear: mutable defaults, raise-from chain, etc.
+    "A",    # flake8-builtins: shadowed builtins (id, type, list).
+    "UP",   # pyupgrade: keep PEP 585 generics consistent across the repo.
+    "SIM",  # flake8-simplify: catch redundant conditionals.
+    "RET",  # flake8-return: explicit and consistent return statements.
+    "PTH",  # flake8-use-pathlib: prefer Path over os.path (matches house style).
+    "RUF",  # ruff-specific: catches noqa misuse, ambiguous unicode, etc.
+    "S",    # flake8-bandit: subprocess injection, hardcoded secrets,
+            # insecure /tmp use, weak crypto. Workflow-called scripts handle
+            # GITHUB_TOKEN/PAT and pull_request_target payloads, so a static
+            # security gate is the deterministic counterpart to the runtime
+            # secret-handling rules in CLAUDE.md s2 and s4. Tracked in #190.
+]
+ignore = [
+    # E501: line length is enforced by ruff's own `line-length` setting.
+    "E501",
+    # SIM108: ternary rewrites hurt readability in argparse branches.
+    "SIM108",
+    # RET504: pre-return variable assignment is used for breakpoint
+    # readability across several scripts; not worth a churn pass here.
+    "RET504",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests use pytest idioms (pytest.raises(Exception), assertRaises) that
+# legitimately trigger B011/B017. The flake8-bandit (S) family flags
+# patterns that are intrinsic to a unit-test suite and are not
+# security defects when scoped to tests/:
+#   S101 — assert is the pytest assertion primitive.
+#   S105/S106 — fixture token strings are dummy literals, not secrets.
+#   S108 — /tmp paths appear in fixtures that verify workflow-supplied
+#          absolute paths; tmp_path is preferred but a few legacy
+#          fixtures still string-construct under /tmp by design.
+#   S404/S603/S607 — tests import subprocess and monkeypatch runners to
+#          verify the production scripts' fixed-argv call shape.
+"tests/*" = [
+    "B011", "B017",
+    "S101", "S105", "S106", "S108", "S404", "S603", "S607",
+]
+# These tests assert behaviour against ambiguous Unicode by construction
+# (scan_non_ascii detects them; title_policy enforces ASCII titles), so the
+# fixtures must contain the very codepoints RUF001 would flag.
+"tests/test_scan_non_ascii.py" = [
+    "B011", "B017", "RUF001",
+    "S101", "S105", "S106", "S108", "S404", "S603", "S607",
+]
+"tests/test_title_policy.py" = [
+    "B011", "B017", "RUF001",
+    "S101", "S105", "S106", "S108", "S404", "S603", "S607",
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["scripts"]
+
+[tool.mypy]
+# Type gate (#192) first-pass floor. `python_version` is pinned to 3.11
+# to match the stdlib surface actually used by scripts (`datetime.UTC`,
+# `tomllib`), not the project's `requires-python = ">=3.10"` floor.
+# Tightening the requires-python pin is tracked separately.
+python_version = "3.11"
+files = ["scripts", "tests"]
+# Intentionally minimal flag set. Issue #192 asks for a high-signal,
+# narrow gate without repo-wide churn. The two flags below catch real
+# defects (dead suppressions and PEP 484 implicit Optional) while
+# leaving pre-existing untyped helpers, `dict[str, object]` JSON-shape
+# narrowing, and urllib stub mismatches as documented follow-up work
+# (each of those clusters has a distinct root cause and warrants its
+# own scoped PR rather than gating this one).
+warn_unused_ignores = true
+no_implicit_optional = true
+pretty = true
+show_error_codes = true
+
+[[tool.mypy.overrides]]
+# Deferred type-debt clusters. Each entry corresponds to a distinct
+# root cause that warrants its own scoped follow-up PR, not gating
+# this one:
+#   - threat_intel_triage: `json.loads` returns `object`; the script
+#     uses ad hoc isinstance narrowing that mypy cannot follow through
+#     `.get()` chains. Proper fix is a TypedDict or pydantic model
+#     (tracked under issue #191's pydantic-boundary scope).
+#   - test_threat_intel_triage: inherits the same `object` shape from
+#     the import; fixed alongside the script above.
+#   - test_github_api / test_sanitize_history / test_rulesets_apply /
+#     test_pr_body_close_keyword_gate: construct `urllib.error.HTTPError`
+#     with duck-typed test fakes that the urllib stubs do not model
+#     (Message[str, str] vs dict, IO[bytes] vs custom Response class).
+#     Proper fix is a shared `_make_http_error` helper or migration to
+#     `responses`/`requests-mock`.
+module = [
+    "threat_intel_triage",
+    "test_threat_intel_triage",
+    "test_github_api",
+    "test_sanitize_history",
+    "test_rulesets_apply",
+    "test_pr_body_close_keyword_gate",
+]
+ignore_errors = true

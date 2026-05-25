@@ -1,22 +1,97 @@
 [
   {
-    "name": "agent:auto-fix",
-    "description": "Machine-actionable. Agent may open a PR autonomously.",
+    "name": "layer:p1-goal-plan",
+    "description": "CLAUDE.md §1 — Goal & plan structure (what the work is and how it will be verified).",
+    "color": "1d76db"
+  },
+  {
+    "name": "layer:p2-precode",
+    "description": "CLAUDE.md §2 — Input and pre-code reasoning (untrusted text, facts, assumptions).",
+    "color": "5319e7"
+  },
+  {
+    "name": "layer:p3-harness",
+    "description": "CLAUDE.md §3 — Delivery harness (issues, CI, hooks, deps, PR loop).",
     "color": "0e8a16"
   },
   {
-    "name": "agent:investigate",
-    "description": "Requires investigation. Agent proposes a plan; implementation awaits approval.",
+    "name": "layer:p4-artifact",
+    "description": "CLAUDE.md §4 — Safety boundary (simplicity, tool scope, secret exposure).",
     "color": "fbca04"
   },
   {
-    "name": "agent:no-action",
-    "description": "Human judgment only. Agent does not engage.",
+    "name": "layer:p5-scope-split",
+    "description": "CLAUDE.md §5 — Change scope & agent split.",
+    "color": "d93f0b"
+  },
+  {
+    "name": "layer:p6-handoff",
+    "description": "CLAUDE.md §6 — Handoff & communication.",
     "color": "b60205"
   },
   {
-    "name": "agent:triage-needed",
-    "description": "Uncategorized (default for new issues). Re-classify by title.",
-    "color": "bfdadc"
+    "name": "layer:meta",
+    "description": "Repo infrastructure (labels, rulesets, workflows) for the meta-document. NOT a CLAUDE.md principle.",
+    "color": "c5def5"
+  },
+  {
+    "name": "type:feat",
+    "description": "New behaviour or rule added to the meta-document or repo.",
+    "color": "a2eeef"
+  },
+  {
+    "name": "type:fix",
+    "description": "Defect: contradiction, broken workflow, wrong doc.",
+    "color": "d73a4a"
+  },
+  {
+    "name": "type:refactor",
+    "description": "Restructure without behaviour change.",
+    "color": "f9d0c4"
+  },
+  {
+    "name": "type:docs",
+    "description": "Operator runbooks / README (not the meta-document itself).",
+    "color": "0075ca"
+  },
+  {
+    "name": "type:tracking",
+    "description": "Umbrella issue coordinating phased sub-issues.",
+    "color": "e4e669"
+  },
+  {
+    "name": "state:rfc",
+    "description": "Open but unactioned per §2; agent must not pre-empt.",
+    "color": "bfd4f2"
+  },
+  {
+    "name": "state:parked",
+    "description": "Explicitly deferred; requires evidence to revive.",
+    "color": "cfd3d7"
+  },
+  {
+    "name": "severity:security",
+    "description": "Security-sensitive; overrides agent routing toward investigate.",
+    "color": "ee0701"
+  },
+  {
+    "name": "severity:non-ascii-content",
+    "description": "Non-ASCII in title/body/comment; advisory for trusted authors, blocks external contributors.",
+    "color": "ff7619"
+  },
+  {
+    "name": "threat:intel-needed",
+    "description": "Threat intelligence collection is required before routing or implementation.",
+    "color": "b4a7d6"
+  },
+  {
+    "name": "threat:response-needed",
+    "description": "Security response is required; no autonomous PR before investigation.",
+    "color": "cc0000"
+  },
+  {
+    "name": "dependencies",
+    "description": "Dependency bump (Dependabot or manual).",
+    "color": "0366d6"
   }
 ]

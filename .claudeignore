@@ -6,3 +6,17 @@ __pycache__/
 .DS_Store
 .idea/
 .vscode/
+
+# Agent-tool-specific config (prohibited per docs/repo-scope.md, #58)
+# .claude/settings.json is the narrow file-level carve-out from #109
+# (deterministic SessionStart provisioning hooks only).
+.claude/*
+!.claude/settings.json
+.cursor/
+.cursorrules
+.aider*
+.continue/
+.codex/
+.github/copilot-instructions.md
+.windsurfrules
+.codeium/

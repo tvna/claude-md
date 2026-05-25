@@ -1,0 +1,76 @@
+name: Tracking
+description: Umbrella issue coordinating phased sub-issues. The umbrella itself does not get implementation work -- it tracks completion of its children.
+title: "tracking(<scope>): <summary>"
+labels:
+  - "type:tracking"
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Tracking issues are umbrellas. Per `docs/issue-triage.md`, agents do NOT
+        read tracking-issue bodies for autonomous action -- they act on the sub-issues.
+        Titles must be ASCII-only and match `type(scope): summary` (scope optional).
+        See CLAUDE.md sections 1 and 2.
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: One paragraph naming the umbrella concern and what shape "done" takes across the children.
+    validations:
+      required: true
+  - type: textarea
+    id: facts
+    attributes:
+      label: Facts
+      description: |
+        Observable evidence only -- why this umbrella exists now, what state of the
+        repo or process prompted it. Per CLAUDE.md section 2.
+      value: "- Fact: "
+    validations:
+      required: true
+  - type: textarea
+    id: assumptions
+    attributes:
+      label: Assumptions / Speculation
+      description: |
+        Tag each line `Speculation:` when it is a guess rather than evidence.
+        Per CLAUDE.md section 2.
+      value: "- Speculation: "
+    validations:
+      required: false
+  - type: textarea
+    id: initial_children
+    attributes:
+      label: Initial child issues
+      description: |
+        Bulleted list of `#NNN` references to the first sub-issues. New children
+        can be added later as the umbrella evolves.
+      value: |
+        -
+    validations:
+      required: true
+  - type: textarea
+    id: completion_criteria
+    attributes:
+      label: Completion criteria
+      value: |
+        - [ ] No open child issues remain
+        - [ ]
+    validations:
+      required: true
+  - type: dropdown
+    id: layer
+    attributes:
+      label: Layer
+      description: Which CLAUDE.md layer this umbrella spans. Multi-select.
+      multiple: true
+      options:
+        - "layer:p1-goal-plan"
+        - "layer:p2-precode"
+        - "layer:p3-harness"
+        - "layer:p4-artifact"
+        - "layer:p5-scope-split"
+        - "layer:p6-handoff"
+        - "layer:meta"
+    validations:
+      required: true

@@ -1,0 +1,48 @@
+name: Dependabot auto-merge audit
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, ready_for_review, labeled, unlabeled]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: dependabot-automerge-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  audit:
+    if: github.event.pull_request.user.login == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+
+      - name: Collect changed files
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+        run: |
+          gh pr diff "$PR_URL" --name-only > changed-files.txt
+
+      - name: Audit policy
+        id: audit
+        run: |
+          python3 scripts/dependabot_automerge.py audit \
+            --event "$GITHUB_EVENT_PATH" \
+            --policy .github/dependabot-automerge.json \
+            --changed-files changed-files.txt \
+            --summary-file "$GITHUB_STEP_SUMMARY" \
+            --output "$GITHUB_OUTPUT"
+
+      - name: Request GitHub auto-merge
+        if: steps.audit.outputs.should_enable == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+        run: |
+          gh pr merge "$PR_URL" --auto --squash

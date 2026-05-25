@@ -1,0 +1,146 @@
+from __future__ import annotations
+
+import json
+import sys
+import urllib.error
+import urllib.request
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+
+from _github_api import apply_call
+
+
+class Response:
+    def __init__(self, status: int, body: str = "") -> None:
+        self.status = status
+        self.body = body.encode()
+
+    def __enter__(self) -> Response:
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        return None
+
+    def read(self) -> bytes:
+        return self.body
+
+    def close(self) -> None:
+        return None
+
+
+def http_error(code: int, body: str = "") -> urllib.error.HTTPError:
+    return urllib.error.HTTPError("https://example.test", code, "err", {}, Response(code, body))
+
+
+def test_apply_call_happy_2xx_single_attempt() -> None:
+    requests: list[urllib.request.Request] = []
+    sleeps: list[float] = []
+
+    def opener(request: urllib.request.Request) -> Response:
+        requests.append(request)
+        return Response(201, '{"ok":true}')
+
+    code, body = apply_call(
+        method="POST",
+        url="https://example.test/labels",
+        payload={"name": "bug"},
+        token="token",
+        opener=opener,
+        sleeper=sleeps.append,
+    )
+
+    assert code == 201
+    assert body == '{"ok":true}'
+    assert sleeps == []
+    assert requests[0].method == "POST"
+    assert json.loads(requests[0].data.decode()) == {"name": "bug"}
+    assert requests[0].headers["Authorization"] == "Bearer token"
+
+
+def test_apply_call_retries_5xx_then_succeeds() -> None:
+    responses = [http_error(503, "one"), http_error(502, "two"), Response(200, "ok")]
+    sleeps: list[float] = []
+
+    def opener(request: urllib.request.Request) -> Response:
+        response = responses.pop(0)
+        if isinstance(response, urllib.error.HTTPError):
+            raise response
+        return response
+
+    code, body = apply_call(
+        method="PATCH",
+        url="https://example.test/labels/x",
+        payload={"color": "ffffff"},
+        token="token",
+        opener=opener,
+        sleeper=sleeps.append,
+    )
+
+    assert code == 200
+    assert body == "ok"
+    assert sleeps == [5, 10]
+
+
+def test_apply_call_breaks_on_4xx() -> None:
+    calls = 0
+    sleeps: list[float] = []
+
+    def opener(request: urllib.request.Request) -> Response:
+        nonlocal calls
+        calls += 1
+        raise http_error(422, "bad")
+
+    code, body = apply_call(
+        method="PATCH",
+        url="https://example.test/labels/x",
+        payload={"color": "ffffff"},
+        token="token",
+        opener=opener,
+        sleeper=sleeps.append,
+    )
+
+    assert code == 422
+    assert body == "bad"
+    assert calls == 1
+    assert sleeps == []
+
+
+def test_apply_call_curl_level_000_retries_three_times() -> None:
+    sleeps: list[float] = []
+
+    def opener(request: urllib.request.Request) -> Response:
+        raise urllib.error.URLError("socket down")
+
+    code, body = apply_call(
+        method="DELETE",
+        url="https://example.test/labels/x",
+        payload=None,
+        token="token",
+        opener=opener,
+        sleeper=sleeps.append,
+    )
+
+    assert code == 0
+    assert body == "socket down"
+    assert sleeps == [5, 10]
+
+
+def test_apply_call_payload_none_has_no_body_or_content_type() -> None:
+    requests: list[urllib.request.Request] = []
+
+    def opener(request: urllib.request.Request) -> Response:
+        requests.append(request)
+        return Response(204, "")
+
+    code, _ = apply_call(
+        method="DELETE",
+        url="https://example.test/labels/x",
+        payload=None,
+        token="token",
+        opener=opener,
+    )
+
+    assert code == 204
+    assert requests[0].data is None
+    assert "Content-type" not in requests[0].headers

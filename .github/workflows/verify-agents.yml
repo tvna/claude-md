@@ -7,56 +7,131 @@ permissions:
   contents: read
 
 jobs:
-  detect:
-    runs-on: ubuntu-latest
-    outputs:
-      relevant: ${{ steps.diff.outputs.relevant }}
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-        with:
-          fetch-depth: 0
-      - name: Detect relevant changes
-        id: diff
-        env:
-          BASE_REF: ${{ github.base_ref }}
-        run: |
-          git fetch origin "$BASE_REF" --depth=50
-          if git diff --name-only "origin/$BASE_REF...HEAD" \
-            | grep -Eq '^(\.apm/|apm\.yml$|pyproject\.toml$|uv\.lock$|CLAUDE\.md$|AGENTS\.md$|\.github/workflows/(generate-agents|verify-agents)\.yml$)'; then
-            echo "relevant=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "relevant=false" >> "$GITHUB_OUTPUT"
-            echo "No APM-relevant changes; skipping drift verification."
-          fi
-
   verify:
-    needs: detect
-    if: needs.detect.outputs.relevant == 'true'
     uses: ./.github/workflows/generate-agents.yml
     with:
       mode: verify
     permissions:
-      contents: read
-      pull-requests: read
+      contents: write
+      pull-requests: write
+
+  lint-scripts:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Read uv pin from pyproject.toml
+        id: uvpin
+        run: |
+          set -euo pipefail
+          PIN="$(python3 scripts/uv_pin.py read)"
+          echo "version=${PIN}" >> "$GITHUB_OUTPUT"
+
+      - name: Install uv
+        env:
+          UV_VERSION: ${{ steps.uvpin.outputs.version }}
+        run: |
+          curl -LsSf "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/uv-x86_64-unknown-linux-gnu.tar.gz" -o /tmp/uv.tar.gz
+          tar -xzf /tmp/uv.tar.gz -C /tmp
+          mkdir -p "$HOME/.local/bin"
+          install -m 0755 /tmp/uv-x86_64-unknown-linux-gnu/uv "$HOME/.local/bin/uv"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          uv --version
+
+      - name: Install Python
+        run: uv python install
+
+      - name: Sync locked project environment
+        run: uv sync --locked
+
+      - name: Run ruff lint gate
+        run: uv run ruff check scripts tests
+
+      - name: Run mypy type gate
+        run: uv run mypy scripts tests
+
+      - name: Run script unit tests with coverage
+        run: uv run python -m pytest --cov --cov-report=term-missing --cov-report=xml --cov-fail-under=92.71 -v
+
+      - name: Run scan_non_ascii.py unit tests
+        run: uv run python -m pytest tests/test_scan_non_ascii.py -v
+
+      - name: Run ruleset_drift.py unit tests
+        run: uv run python -m pytest tests/test_ruleset_drift.py -v
+
+      - name: Run rulesets_apply.py unit tests
+        run: uv run python -m pytest tests/test_rulesets_apply.py -v
+
+      - name: Assert uv pin lives only in pyproject.toml
+        run: uv run python scripts/uv_pin.py drift
+
+      - name: Assert workflows install Python deps via uv only
+        run: uv run python scripts/scan_workflow_pip.py verify
+
+      - name: Assert workflows pin actions to SHA + tag comment
+        run: uv run python scripts/scan_workflow_action_pins.py verify
+
+      - name: Warn if uv pin trails upstream
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: uv run python scripts/uv_pin.py stale
+
+  prek:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Read uv pin from pyproject.toml
+        id: uvpin
+        run: |
+          set -euo pipefail
+          PIN="$(python3 scripts/uv_pin.py read)"
+          echo "version=${PIN}" >> "$GITHUB_OUTPUT"
+
+      - name: Install uv
+        env:
+          UV_VERSION: ${{ steps.uvpin.outputs.version }}
+        run: |
+          curl -LsSf "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/uv-x86_64-unknown-linux-gnu.tar.gz" -o /tmp/uv.tar.gz
+          tar -xzf /tmp/uv.tar.gz -C /tmp
+          mkdir -p "$HOME/.local/bin"
+          install -m 0755 /tmp/uv-x86_64-unknown-linux-gnu/uv "$HOME/.local/bin/uv"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          uv --version
+
+      - name: Install Python
+        run: uv python install
+
+      - name: Sync locked project environment
+        run: uv sync --locked
+
+      - name: Run prek (j178/prek) against all files
+        run: uv tool run prek run --all-files --show-diff-on-failure
 
   gate:
-    needs: [detect, verify]
+    name: "Verify agent instructions / gate"
+    needs: [verify, lint-scripts, prek]
     if: always()
     runs-on: ubuntu-latest
     steps:
       - name: Aggregate verification result
         env:
-          RELEVANT: ${{ needs.detect.outputs.relevant }}
           VERIFY_RESULT: ${{ needs.verify.result }}
+          LINT_RESULT: ${{ needs.lint-scripts.result }}
+          PREK_RESULT: ${{ needs.prek.result }}
         run: |
-          if [ "$RELEVANT" != 'true' ]; then
-            echo "No APM-relevant changes; verification skipped (success)."
-            exit 0
+          if [ "$LINT_RESULT" != 'success' ]; then
+            echo "::error::script lint gate result=${LINT_RESULT} (expected 'success')."
+            exit 1
           fi
-          if [ "$VERIFY_RESULT" = 'success' ]; then
-            echo "APM drift verification passed."
-            exit 0
+          if [ "$PREK_RESULT" != 'success' ]; then
+            echo "::error::prek gate result=${PREK_RESULT} (expected 'success')."
+            exit 1
           fi
-          echo "::error::APM drift verification result=${VERIFY_RESULT} (expected 'success')."
-          exit 1
+          if [ "$VERIFY_RESULT" != 'success' ]; then
+            echo "::error::APM drift verification result=${VERIFY_RESULT} (expected 'success')."
+            exit 1
+          fi
+          echo "APM drift verification passed. script lint gate passed. prek gate passed."
