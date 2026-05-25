@@ -2,11 +2,6 @@ name: Verify dependabot labels
 
 on:
   pull_request:
-    paths:
-      - ".github/dependabot.yml"
-      - ".github/labels.json"
-      - "scripts/dependabot_labels.py"
-      - ".github/workflows/verify-dependabot-labels.yml"
 
 permissions:
   contents: read
@@ -17,6 +12,7 @@ concurrency:
 
 jobs:
   verify:
+    name: "Verify dependabot labels / verify"
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository

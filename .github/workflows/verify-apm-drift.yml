@@ -2,14 +2,6 @@ name: Verify APM artifact drift
 
 on:
   pull_request:
-    paths:
-      - ".apm/**"
-      - "CLAUDE.md"
-      - "AGENTS.md"
-      - "apm.yml"
-      - "pyproject.toml"
-      - "uv.lock"
-      - ".github/workflows/**"
 
 permissions:
   contents: read
@@ -23,6 +15,7 @@ env:
 
 jobs:
   verify:
+    name: "Verify APM artifact drift / verify"
     runs-on: ubuntu-latest
 
     steps:
