@@ -224,8 +224,124 @@ def build_retro_title(pr: MergedPR) -> str:
     return f"retro({type_only}): review PR #{pr.number} repair loops"
 
 
-def build_retro_body(pr: MergedPR, commit_subjects: list[str]) -> str:
-    """Return the markdown body. Contains every section in :data:`_REQUIRED_SECTIONS`."""
+# check_run conclusion values that count as a repair signal. Excludes
+# success / neutral / skipped (no repair to record).
+_CHECK_RUN_FAIL_CONCLUSIONS: frozenset[str] = frozenset(
+    {"failure", "timed_out", "cancelled", "action_required"}
+)
+
+
+def _escape_table_cell(text: str) -> str:
+    """Escape a string for safe placement inside one markdown-table cell.
+
+    Replaces ``|`` with ``\\|`` (so a commit subject containing a pipe
+    does not split the row) and collapses any embedded newline or
+    carriage return to a single space (so a multi-line value does not
+    break out of the cell).
+    """
+    return text.replace("|", "\\|").replace("\r", " ").replace("\n", " ")
+
+
+def _build_repair_history_table(
+    check_runs: list[dict[str, Any]] | None,
+    commit_subjects: list[str],
+    pr_commit_count: int,
+) -> str:
+    """Render the Repair history markdown table (header + rows, no surrounds).
+
+    Walks four deterministic signal classes in fixed order: CI failures,
+    fix-up commits, merge-from-main commits, multi-commit summary. Emits
+    a sentinel row only when all four classes produced zero rows.
+
+    Cells are run through :func:`_escape_table_cell` so commit subjects
+    containing ``|`` cannot break the table. The shape mirrors the
+    canonical hand-rewrites of #305, #307, #317, #333, #334, #336 on
+    2026-05-25. Refs issue #343.
+    """
+    rows: list[tuple[str, str]] = []
+
+    for entry in check_runs or []:
+        conclusion = str(entry.get("conclusion") or "")
+        if conclusion not in _CHECK_RUN_FAIL_CONCLUSIONS:
+            continue
+        name = str(entry.get("name") or "(unnamed)")
+        completed = str(entry.get("completed_at") or "(no completed_at)")
+        rows.append(
+            (
+                _escape_table_cell(f"CI fail: {name}"),
+                _escape_table_cell(
+                    f"conclusion={conclusion} at {completed}"
+                ),
+            )
+        )
+
+    for subject in commit_subjects:
+        stripped = subject.strip()
+        if (
+            stripped.startswith("fix(")
+            or stripped.startswith("fixup!")
+            or stripped.startswith("squash!")
+        ):
+            rows.append(
+                (
+                    _escape_table_cell("Iteration commit"),
+                    _escape_table_cell(
+                        f"`{subject}` -- signals an earlier silent failure"
+                    ),
+                )
+            )
+
+    for subject in commit_subjects:
+        stripped = subject.strip()
+        if stripped.startswith("Merge branch 'main'") or stripped.startswith(
+            "Merge remote-tracking branch 'origin/main'"
+        ):
+            rows.append(
+                (
+                    _escape_table_cell("Merge from main"),
+                    _escape_table_cell(
+                        f"`{subject}` -- rebase debt before merge"
+                    ),
+                )
+            )
+
+    if pr_commit_count > 1:
+        rows.append(
+            (
+                _escape_table_cell("Multi-commit PR"),
+                _escape_table_cell(f"{pr_commit_count} commits squash-merged"),
+            )
+        )
+
+    header = (
+        "| # | Repair | What the reviewer / gate caught |\n"
+        "|---|--------|----------------------------------|\n"
+    )
+    if not rows:
+        return (
+            header
+            + "| -- | (no automated repair signals detected) "
+            "| operator: investigate manually or mark `(none)` |\n"
+        )
+    body_rows = "".join(
+        f"| {idx} | {left} | {right} |\n"
+        for idx, (left, right) in enumerate(rows, start=1)
+    )
+    return header + body_rows
+
+
+def build_retro_body(
+    pr: MergedPR,
+    commit_subjects: list[str],
+    check_runs: list[dict[str, Any]] | None = None,
+) -> str:
+    """Return the markdown body. Contains every section in :data:`_REQUIRED_SECTIONS`.
+
+    ``check_runs`` defaults to ``None`` so legacy two-arg callers keep
+    working; in that case the Repair history table falls back to
+    commit-subject signals only (and emits the sentinel row when those
+    are also empty).
+    """
     type_scope = extract_type_scope(pr.title)
     fallback_note = ""
     if not type_scope:
@@ -242,6 +358,13 @@ def build_retro_body(pr: MergedPR, commit_subjects: list[str]) -> str:
         if commit_subjects
         else "  - (no commit subjects fetched)"
     )
+    repair_table = _build_repair_history_table(
+        check_runs, commit_subjects, pr.commits
+    )
+    # Idempotent date stamp: derive from pr.merged_at (already an ISO
+    # 8601 string from the event payload) rather than datetime.now() so
+    # the body is byte-identical on re-run of the same event.
+    triage_date = pr.merged_at[:10] if pr.merged_at else "YYYY-MM-DD"
     return (
         "## Scope\n"
         "\n"
@@ -265,20 +388,25 @@ def build_retro_body(pr: MergedPR, commit_subjects: list[str]) -> str:
         "\n"
         "## Proposed work\n"
         "\n"
-        "1. Repair history -- list every reviewer / CI / hook repair "
-        "between PR open and merge as a table "
-        "`| # | Repair | What the reviewer caught |`.\n"
-        "2. Classification -- tag each repair with one of: "
+        "<!-- auto-filled:repair-history -->\n"
+        "1. Repair history -- the table below is pre-filled from "
+        "check_runs + commit subjects. Edit only to add missed repairs.\n"
+        "\n"
+        f"{repair_table}"
+        "<!-- /auto-filled:repair-history -->\n"
+        "\n"
+        "<!-- operator-fill:remaining-steps -->\n"
+        "2. Classification -- (operator) tag each repair above as one of: "
         "`missing deterministic gate` / `unclear agent instruction` / "
         "`external or human decision that cannot be automated`.\n"
-        "3. Earliest prevention point -- per repair, name the "
+        "3. Earliest prevention point -- (operator) per repair, name the "
         "deterministic gate that should have caught it (workflow, hook, "
         "ruleset, label, preflight).\n"
-        "4. No-repair reproduction path -- numbered steps the next "
+        "4. No-repair reproduction path -- (operator) numbered steps the next "
         "similar PR should follow to land in one shot.\n"
-        "5. `## Follow-up issues` -- list deferred gates as "
-        "`- [ ] type(scope): <title> -- <rationale>` so a future "
-        "extractor (issue #234 Part 2) can convert them into sub-issues.\n"
+        "5. Follow-up issues -- (operator) list deferred gates as "
+        "`- [ ] type(scope): TITLE -- RATIONALE` or write `(none)`.\n"
+        "<!-- /operator-fill:remaining-steps -->\n"
         "\n"
         "## Verification\n"
         "\n"
@@ -303,7 +431,11 @@ def build_retro_body(pr: MergedPR, commit_subjects: list[str]) -> str:
         "Refs CLAUDE.md section 3 (\"After each merge, auto-open a "
         f"retrospective issue\"). Source PR: #{pr.number}.\n"
         "\n"
-        "_Opened automatically by `.github/workflows/auto-retro.yml`._\n"
+        "_Opened automatically by `.github/workflows/auto-retro.yml`. "
+        f"Proposed work pre-filled by retro triage {triage_date} "
+        "(auto-filled rows: check_runs + commit subjects; operator-filled "
+        "rows: classification, prevention point, no-repair path, "
+        "follow-ups)._\n"
     )
 
 
@@ -391,6 +523,41 @@ def fetch_pr_commits(repo: str, pr_number: int) -> list[str]:
         message = ((entry.get("commit") or {}).get("message") or "")
         subjects.append(message.split("\n", 1)[0].strip())
     return subjects
+
+
+def fetch_check_runs(repo: str, pr_number: int) -> list[dict[str, Any]]:
+    """Return failed check_run entries for the PR's merge commit.
+
+    Two-step fetch:
+
+    1. ``GET /repos/{repo}/pulls/{pr_number}`` to read
+       ``merge_commit_sha``. Short-circuits to ``[]`` if the SHA is null
+       (GitHub may not have computed it yet on
+       ``pull_request_target.closed``).
+    2. ``GET /repos/{repo}/commits/{sha}/check-runs?per_page=100`` to
+       enumerate runs against that SHA.
+
+    Returns only entries whose ``conclusion`` is in
+    :data:`_CHECK_RUN_FAIL_CONCLUSIONS`. The ``per_page=100`` cap is
+    sufficient for this repo today (each PR runs <30 checks); overflow
+    is treated as best-effort and is not paginated. Refs issue #343.
+    """
+    raw = gh_api("GET", f"/repos/{repo}/pulls/{pr_number}")
+    pr_detail = json.loads(raw) if raw.strip() else {}
+    sha = pr_detail.get("merge_commit_sha")
+    if not sha:
+        return []
+    raw = gh_api(
+        "GET",
+        f"/repos/{repo}/commits/{sha}/check-runs?per_page=100",
+    )
+    payload = json.loads(raw) if raw.strip() else {}
+    all_runs = list(payload.get("check_runs") or [])
+    return [
+        run
+        for run in all_runs
+        if str(run.get("conclusion") or "") in _CHECK_RUN_FAIL_CONCLUSIONS
+    ]
 
 
 def search_retro_issues(repo: str, pr_number: int) -> list[dict[str, Any]]:
@@ -504,8 +671,21 @@ def run(event: dict[str, Any], repo: str) -> int:
         return 0
 
     commit_subjects = fetch_pr_commits(repo, pr.number)
+    try:
+        check_runs = fetch_check_runs(repo, pr.number)
+    except subprocess.CalledProcessError as exc:
+        # Fail-soft: check-runs is an augmenting signal for the Repair
+        # history table. A transient API failure here must NOT block the
+        # retro -- the commit-subject signals still carry it. fetch_pr_commits
+        # remains fail-loud because its data is required for the body.
+        print(
+            f"::warning::fetch_check_runs failed (exit {exc.returncode}); "
+            "Repair history table will use commit-subject signals only",
+            file=sys.stderr,
+        )
+        check_runs = []
     title = build_retro_title(pr)
-    body = build_retro_body(pr, commit_subjects)
+    body = build_retro_body(pr, commit_subjects, check_runs)
     labels = issue_labels(pr.layer_labels)
 
     created = create_issue(repo, title, body, labels)
