@@ -240,6 +240,25 @@ The fix for either failure is to add or correct the `Refs #<number>` line
 in the `Related Issue` section of the PR body, then push a new commit (or
 edit the PR description, which re-runs the workflow).
 
+### Enforcement surfaces for issue-number existence checks
+
+Per [#314](https://github.com/tvna/claude-md/issues/314), the existence
+check on `#N` references is enforced on exactly one surface and
+intentionally not enforced on the others. The decision and its rationale
+are recorded here so future contributors do not need to re-derive them.
+
+| Surface | Status | Rationale |
+|---|---|---|
+| PR body | Enforced. | `verify-issue-link.yml` runs `scripts/issue_link.py verify`, which calls `gh api /repos/<repo>/issues/<N>` per ref and fails with `Referenced #N does not exist in <repo>.` for unresolved numbers. |
+| PR title | Inversely enforced. | `scripts/preflight_pr_title_issue_ref.py` (Layer 2.5) and `scripts/title_policy.py` (`verify-title-policy.yml`) deny any `(#NNN)` token in the title per [#167](https://github.com/tvna/claude-md/issues/167) / [#214](https://github.com/tvna/claude-md/issues/214). With the token forbidden, no number reaches the title to existence-check. |
+| Squash commit subject | Transitively covered. | GitHub's squash-merge default forms the subject as `<PR title> (#<PR-number>)`. The PR title is already gated, and `(#<PR-number>)` is the merge-event-issued PR number for this repository, so a separate existence check would be redundant. |
+| Individual commit message | Intentionally not enforced. | Only one commit lands on `main` per PR (squash merge), and that commit carries a PR body that has already passed `verify-issue-link.yml`. Gating every intermediate commit would (a) force a `Refs #N` line into commits whose link is already covered transitively, and (b) duplicate a check that the squash step makes structurally guaranteed. |
+
+If the squash-merge default on `main` is ever loosened (for example,
+allowing merge commits or rebase merges), the "transitively covered" and
+"intentionally not enforced" rows no longer hold and the table must be
+re-evaluated.
+
 ### Adjacent gates
 
 `scripts/title_policy.py` enforces ASCII-only titles and the Conventional
@@ -315,3 +334,6 @@ python scripts/body_policy.py verify \
   issue for both standards.
 - [#206](https://github.com/tvna/claude-md/issues/206) - the issue this
   runbook closes.
+- [#314](https://github.com/tvna/claude-md/issues/314) - decision to
+  enforce `#N` existence on the PR body surface only and document the
+  other surfaces as intentionally non-enforced.
