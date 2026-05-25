@@ -94,6 +94,9 @@ jobs:
       - name: Assert workflows install Python deps via uv only
         run: uv run python scripts/scan_workflow_pip.py verify
 
+      - name: Assert workflows pin actions to SHA + tag comment
+        run: uv run python scripts/scan_workflow_action_pins.py verify
+
       - name: Warn if uv pin trails upstream
         env:
           GH_TOKEN: ${{ github.token }}
