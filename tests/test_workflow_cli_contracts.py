@@ -503,7 +503,7 @@ def test_threat_intel_scan_matches_workflow_args(
     monkeypatch.setattr(
         threat_intel_triage,
         "fetch_external_findings",
-        lambda dependencies, osv_file=None, kev_file=None: [],
+        lambda dependencies, **kwargs: [],
     )
 
     assert threat_intel_triage.main(
@@ -513,6 +513,7 @@ def test_threat_intel_scan_matches_workflow_args(
             ".",
             "--labels",
             "type:fix",
+            "--ghsa-live",
             "--github-output",
             str(tmp_path / "output"),
             "--summary-file",
