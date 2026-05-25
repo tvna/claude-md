@@ -1522,6 +1522,58 @@ class TestPostBackLinkComment:
 
 
 # ---------------------------------------------------------------------------
+# apply_terminal_label
+# ---------------------------------------------------------------------------
+
+
+class TestApplyTerminalLabel:
+    def test_posts_terminal_label(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        seen: list[tuple] = []
+
+        def fake_api(method, path, body=None, **_kw):
+            seen.append((method, path, body))
+            return ""
+
+        monkeypatch.setattr(ar, "gh_api", fake_api)
+        ar.apply_terminal_label("o/r", 42)
+        assert seen == [
+            (
+                "POST",
+                "/repos/o/r/issues/42/labels",
+                {"labels": [ar._TERMINAL_LABEL]},
+            )
+        ]
+
+    def test_loud_failure_on_post_error(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """gh_api raises CalledProcessError; apply_terminal_label must
+        propagate so the orchestrator can decide its fail-soft policy."""
+        def fake_api(method, path, body=None, **_kw):
+            raise subprocess.CalledProcessError(1, "gh", stderr="boom")
+
+        monkeypatch.setattr(ar, "gh_api", fake_api)
+        with pytest.raises(subprocess.CalledProcessError):
+            ar.apply_terminal_label("o/r", 42)
+
+
+def test_terminal_label_aligned_with_labels_json() -> None:
+    """``_TERMINAL_LABEL`` must exist as a ``name`` entry in the declarative
+    ``.github/labels.json`` SoT so ``apply-labels.yml`` reconciles it onto
+    the repository before any merge fires ``apply_terminal_label``.
+    """
+    repo_root = Path(__file__).resolve().parent.parent
+    sot = json.loads(
+        (repo_root / ".github" / "labels.json").read_text(encoding="utf-8")
+    )
+    assert any(entry.get("name") == ar._TERMINAL_LABEL for entry in sot), (
+        f"_TERMINAL_LABEL {ar._TERMINAL_LABEL!r} missing from .github/labels.json"
+    )
+
+
+# ---------------------------------------------------------------------------
 # run (orchestrator)
 # ---------------------------------------------------------------------------
 
@@ -1539,6 +1591,7 @@ def _orchestrator_recorder(
     check_runs_error: bool = False,
     back_link_comments: list[dict[str, Any]] | None = None,
     back_link_post_error: bool = False,
+    terminal_label_post_error: bool = False,
 ) -> list[tuple]:
     """Replace ar.gh_api with a recorder that returns canned data per path.
 
@@ -1605,6 +1658,16 @@ def _orchestrator_recorder(
             if back_link_post_error:
                 raise subprocess.CalledProcessError(
                     1, "gh", stderr="back-link post boom"
+                )
+            return ""
+        if (
+            method == "POST"
+            and "/issues/" in path
+            and path.endswith("/labels")
+        ):
+            if terminal_label_post_error:
+                raise subprocess.CalledProcessError(
+                    1, "gh", stderr="terminal-label post boom"
                 )
             return ""
         if method == "PATCH" and "/issues/comments/" in path:
@@ -1881,6 +1944,54 @@ class TestRun:
         # No POST to /issues/{n}/comments when patching.
         assert not any(
             m == "POST" and p.endswith("/issues/42/comments")
+            for m, p, _b in seen
+        )
+
+    def test_terminal_label_applied_after_back_link(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """run() must POST the terminal label to the source PR after the
+        back-link comment lands. Ordering matters: a subscribed session
+        consumes the labeled webhook as the terminal-state signal, so the
+        back-link comment (the human-visible reverse pointer) must already
+        be in place by the time the label fires."""
+        seen = _orchestrator_recorder(
+            monkeypatch,
+            created_response={"number": 777, "html_url": "https://x/i/777"},
+        )
+        assert ar.run(_merged_event(number=42), "o/r") == 0
+        back_link_idx = next(
+            i for i, (m, p, _b) in enumerate(seen)
+            if m == "POST" and p == "/repos/o/r/issues/42/comments"
+        )
+        label_idx = next(
+            i for i, (m, p, _b) in enumerate(seen)
+            if m == "POST" and p == "/repos/o/r/issues/42/labels"
+        )
+        assert back_link_idx < label_idx, (
+            "terminal label must be POSTed after the back-link comment"
+        )
+        assert seen[label_idx][2] == {"labels": [ar._TERMINAL_LABEL]}
+
+    def test_terminal_label_failure_does_not_abort_retro(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """If the label POST fails, run() must still return 0 -- the retro
+        issue and back-link comment are already in place; the label is a
+        secondary signal and must not roll back the audit trail."""
+        seen = _orchestrator_recorder(
+            monkeypatch,
+            created_response={"number": 777, "html_url": "https://x/i/777"},
+            terminal_label_post_error=True,
+        )
+        assert ar.run(_merged_event(number=42), "o/r") == 0
+        # Retro creation and back-link both landed before the failing label.
+        assert any(
+            m == "POST" and p == "/repos/o/r/issues"
+            for m, p, _b in seen
+        )
+        assert any(
+            m == "POST" and p == "/repos/o/r/issues/42/comments"
             for m, p, _b in seen
         )
 
