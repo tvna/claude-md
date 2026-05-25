@@ -20,7 +20,8 @@ jobs:
       PR_AUTHOR: ${{ github.event.pull_request.user.login }}
       ISSUE_CREATED_AT: ${{ github.event.issue.created_at }}
       PR_CREATED_AT: ${{ github.event.pull_request.created_at }}
-      BODY_POLICY_CUTOFF: "2026-05-23T00:00:00Z"
+      BODY_POLICY_CUTOFF: "2026-05-26T00:00:00Z"
+      BODY_POLICY_SHAPE_CUTOFF: "2026-05-26T00:00:00Z"
     steps:
       - name: Checkout repository
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1

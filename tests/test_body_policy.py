@@ -647,6 +647,348 @@ class TestCLI:
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# Post-2026-05-26 PR shape: Verification command/result pairs
+# ---------------------------------------------------------------------------
+
+
+_NEW_SHAPE_VERIFICATION_OK = """## Verification
+
+- command: `pytest -q`
+  result: `exit 0 (684 passed)`
+- command: `python3 scripts/body_policy.py verify --kind pull_request`
+  result: `OK: pull_request body contains all required sections.`
+"""
+
+_NEW_SHAPE_CHECKLIST_OK = """## Checklist
+
+### Bootstrap
+
+- [ ] Facts vs Assumptions split is honest
+- [ ] Risk assessed; Rollback runnable
+
+### After-merge (CI)
+
+- [ ] `pytest -q` exits 0 (paired in Verification above)
+- [ ] CI green on the merge commit
+
+### Post-merge (auto-retro signal)
+
+- [ ] Linked issue closed by the merge
+- [ ] auto-retro issue opened
+"""
+
+
+_NEW_SHAPE_PR_BODY = """## Summary
+
+- one-liner
+
+## Related Issue
+
+Refs #205
+
+## Facts
+
+- one fact
+
+## Assumptions
+
+- one assumption
+
+## Risk & blast radius
+
+- isolated
+
+## Rollback
+
+- git revert <sha>
+
+""" + _NEW_SHAPE_VERIFICATION_OK + "\n" + _NEW_SHAPE_CHECKLIST_OK
+
+
+class TestExtractSectionBody:
+    def test_returns_empty_when_heading_absent(self) -> None:
+        assert body_policy.extract_section_body("## Other\n", "Missing") == ""
+
+    def test_slices_to_next_h2(self) -> None:
+        body = "## A\n\nalpha\n\n## B\n\nbeta\n"
+        assert "alpha" in body_policy.extract_section_body(body, "A")
+        assert "beta" not in body_policy.extract_section_body(body, "A")
+
+    def test_includes_h3_subsections(self) -> None:
+        body = "## Checklist\n\n### Bootstrap\n\n- [ ] x\n\n## Next\n"
+        slice_ = body_policy.extract_section_body(body, "Checklist")
+        assert "### Bootstrap" in slice_
+        assert "- [ ] x" in slice_
+
+    def test_case_insensitive(self) -> None:
+        body = "## verification\n\n- command: `c`\n  result: `r`\n"
+        slice_ = body_policy.extract_section_body(body, "Verification")
+        assert "command:" in slice_
+
+    def test_ignores_html_commented_heading(self) -> None:
+        body = "<!-- ## Verification -->\n## Verification\n\n- x\n"
+        slice_ = body_policy.extract_section_body(body, "Verification")
+        assert "- x" in slice_
+
+    def test_handles_crlf(self) -> None:
+        body = "## A\r\n\r\nalpha\r\n## B\r\n"
+        slice_ = body_policy.extract_section_body(body, "A")
+        assert "alpha" in slice_
+
+
+class TestVerifyPrVerificationPairs:
+    def test_well_formed_single_pair(self) -> None:
+        body = "## Verification\n\n- command: `pytest -q`\n  result: `exit 0`\n"
+        assert body_policy.verify_pr_verification_pairs(body) == []
+
+    def test_well_formed_two_pairs(self) -> None:
+        assert (
+            body_policy.verify_pr_verification_pairs(
+                _NEW_SHAPE_VERIFICATION_OK
+            )
+            == []
+        )
+
+    def test_missing_section_fails(self) -> None:
+        errors = body_policy.verify_pr_verification_pairs("## Other\n")
+        assert errors
+        assert "empty" in errors[0]
+
+    def test_command_without_result_fails(self) -> None:
+        body = "## Verification\n\n- command: `pytest`\n"
+        errors = body_policy.verify_pr_verification_pairs(body)
+        assert any("not followed by" in e for e in errors)
+
+    def test_command_followed_by_blank_line_fails(self) -> None:
+        body = "## Verification\n\n- command: `pytest`\n\n  result: `exit 0`\n"
+        errors = body_policy.verify_pr_verification_pairs(body)
+        assert any("not followed by" in e for e in errors)
+
+    def test_result_without_command_fails(self) -> None:
+        body = "## Verification\n\n  result: `orphan`\n"
+        errors = body_policy.verify_pr_verification_pairs(body)
+        assert any("without a preceding" in e for e in errors)
+
+    def test_command_without_backticks_fails(self) -> None:
+        body = "## Verification\n\n- command: pytest\n  result: `exit 0`\n"
+        errors = body_policy.verify_pr_verification_pairs(body)
+        assert errors
+
+    def test_result_with_wrong_indent_fails(self) -> None:
+        body = "## Verification\n\n- command: `pytest`\nresult: `exit 0`\n"
+        errors = body_policy.verify_pr_verification_pairs(body)
+        assert errors
+
+    def test_html_commented_content_ignored(self) -> None:
+        body = (
+            "## Verification\n\n"
+            "<!-- - command: `fake`\n  result: `fake` -->\n"
+            "- command: `pytest`\n  result: `exit 0`\n"
+        )
+        assert body_policy.verify_pr_verification_pairs(body) == []
+
+
+class TestVerifyPrChecklistSubsections:
+    def test_well_formed_passes(self) -> None:
+        assert (
+            body_policy.verify_pr_checklist_subsections(
+                _NEW_SHAPE_CHECKLIST_OK
+            )
+            == []
+        )
+
+    @pytest.mark.parametrize(
+        "drop",
+        list(body_policy._CHECKLIST_SUBSECTIONS),
+    )
+    def test_each_subsection_missing(self, drop: str) -> None:
+        broken = _NEW_SHAPE_CHECKLIST_OK.replace(
+            f"### {drop}", f"### NOT-{drop}"
+        )
+        errors = body_policy.verify_pr_checklist_subsections(broken)
+        assert any(f"### {drop}" in e for e in errors)
+
+    def test_subsection_without_items_fails(self) -> None:
+        body = """## Checklist
+
+### Bootstrap
+
+(no items)
+
+### After-merge
+
+- [ ] x
+
+### Post-merge
+
+- [ ] y
+"""
+        errors = body_policy.verify_pr_checklist_subsections(body)
+        assert any("Bootstrap" in e and "no" in e for e in errors)
+
+    def test_empty_section_fails(self) -> None:
+        errors = body_policy.verify_pr_checklist_subsections("## Other\n")
+        assert errors
+        assert "empty" in errors[0]
+
+    def test_clarifier_in_heading_tolerated(self) -> None:
+        # "After-merge (CI)" matches as After-merge.
+        assert (
+            body_policy.verify_pr_checklist_subsections(
+                _NEW_SHAPE_CHECKLIST_OK
+            )
+            == []
+        )
+
+    def test_checked_items_count(self) -> None:
+        body = """## Checklist
+
+### Bootstrap
+
+- [x] done
+
+### After-merge
+
+- [x] CI green
+
+### Post-merge
+
+- [x] auto-retro opened
+"""
+        assert body_policy.verify_pr_checklist_subsections(body) == []
+
+
+class TestShapeCutoffWindow:
+    def test_before_shape_cutoff_skipped(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        # An old-shape PR created before the shape cutoff still passes
+        # because the baseline (H2) check is satisfied by _CANONICAL_PR_BODY.
+        assert (
+            body_policy._verify(
+                "pull_request",
+                _CANONICAL_PR_BODY,
+                created_at="2026-05-22T00:00:00Z",
+                shape_cutoff="2026-05-26T00:00:00Z",
+            )
+            == 0
+        )
+        assert (
+            "OK: pull_request body contains all required sections."
+            in capsys.readouterr().out
+        )
+
+    def test_after_shape_cutoff_old_shape_fails(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        # Old-shape body with checkbox in Verification fails when the
+        # shape gate is enabled for a PR created after the cutoff.
+        assert (
+            body_policy._verify(
+                "pull_request",
+                _CANONICAL_PR_BODY,
+                created_at="2026-05-27T00:00:00Z",
+                shape_cutoff="2026-05-26T00:00:00Z",
+            )
+            == 1
+        )
+        out = capsys.readouterr().out
+        assert "::error::" in out
+
+    def test_after_shape_cutoff_new_shape_passes(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        assert (
+            body_policy._verify(
+                "pull_request",
+                _NEW_SHAPE_PR_BODY,
+                created_at="2026-05-27T00:00:00Z",
+                shape_cutoff="2026-05-26T00:00:00Z",
+            )
+            == 0
+        )
+        assert (
+            "OK: pull_request body contains all required sections."
+            in capsys.readouterr().out
+        )
+
+    def test_empty_shape_cutoff_disables_gate(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        # Without shape_cutoff, the new gate is off (back-compat for the
+        # original baseline-only callers).
+        assert (
+            body_policy._verify(
+                "pull_request",
+                _CANONICAL_PR_BODY,
+                shape_cutoff="",
+            )
+            == 0
+        )
+
+    def test_shape_cutoff_does_not_apply_to_issues(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        # Shape gate is PR-only; issues are unaffected even when the
+        # cutoff is set.
+        assert (
+            body_policy._verify(
+                "issue",
+                _CANONICAL_ISSUE_BODY_H2,
+                created_at="2026-05-27T00:00:00Z",
+                shape_cutoff="2026-05-26T00:00:00Z",
+            )
+            == 0
+        )
+
+
+class TestShapeCutoffCLI:
+    def test_shape_cutoff_env_var(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        monkeypatch.setenv("PR_BODY", _CANONICAL_PR_BODY)
+        monkeypatch.setenv("PR_CREATED_AT", "2026-05-27T00:00:00Z")
+        monkeypatch.setenv("BODY_POLICY_SHAPE_CUTOFF", "2026-05-26T00:00:00Z")
+        monkeypatch.delenv("BODY_POLICY_CUTOFF", raising=False)
+        assert (
+            body_policy.main(["verify", "--kind", "pull_request"]) == 1
+        )
+
+    def test_shape_cutoff_flag_overrides_env(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        monkeypatch.setenv("BODY_POLICY_SHAPE_CUTOFF", "2026-01-01T00:00:00Z")
+        body_file = tmp_path / "body.md"
+        body_file.write_text(_NEW_SHAPE_PR_BODY, encoding="utf-8")
+        assert (
+            body_policy.main(
+                [
+                    "verify",
+                    "--kind",
+                    "pull_request",
+                    "--body-file",
+                    str(body_file),
+                    "--shape-cutoff",
+                    "2026-05-26T00:00:00Z",
+                    "--created-at",
+                    "2026-05-27T00:00:00Z",
+                ]
+            )
+            == 0
+        )
+
+
+# ---------------------------------------------------------------------------
+# ASCII contract
+# ---------------------------------------------------------------------------
+
+
 class TestASCIIContract:
     def test_success_output_is_ascii(
         self, capsys: pytest.CaptureFixture[str]
