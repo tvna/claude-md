@@ -13,7 +13,9 @@ on:
 permissions:
   contents: read
   issues: write
-  pull-requests: read
+  # write needed for posting the PR -> retro back-link comment after the
+  # retro issue is created. See scripts/auto_retro.py post_back_link_comment.
+  pull-requests: write
 
 concurrency:
   # Idempotency in the script is the authoritative defence against
