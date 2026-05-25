@@ -2,12 +2,6 @@ name: Verify APM portability
 
 on:
   pull_request:
-    paths:
-      - ".apm/**"
-      - "CLAUDE.md"
-      - "AGENTS.md"
-      - "scripts/scan_apm_portability.py"
-      - ".github/workflows/verify-apm-portability.yml"
 
 permissions:
   contents: read
@@ -18,6 +12,7 @@ concurrency:
 
 jobs:
   verify:
+    name: "Verify APM portability / verify"
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
