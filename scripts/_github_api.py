@@ -27,7 +27,10 @@ def apply_call(
         if payload is not None:
             data = json.dumps(payload, separators=(",", ":")).encode("utf-8")
 
-        request = urllib.request.Request(url, data=data, method=method)
+        # S310 justification: callers construct `url` from `API_ROOT` (https://api.github.com)
+        # + repo/path segments built from trusted env vars; opener is injectable for tests
+        # but defaults to urllib.request.urlopen on the fixed https endpoint.
+        request = urllib.request.Request(url, data=data, method=method)  # noqa: S310 — fixed https://api.github.com endpoint
         request.add_header("Authorization", f"Bearer {token}")
         request.add_header("Accept", "application/vnd.github+json")
         request.add_header("X-GitHub-Api-Version", API_VERSION)

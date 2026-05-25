@@ -289,7 +289,9 @@ def gh_api(
     """
     cmd = ["gh", "api", "--method", method, path]
     if json_body is not None:
-        result = subprocess.run(
+        # S603 justification: fixed argv (no shell); `gh` provisioned by the runner;
+        # `path` is built from int IDs narrowed upstream. Mirrors auto_retro.py.
+        result = subprocess.run(  # noqa: S603 — fixed argv, shell=False
             [*cmd, "--input", "-"],
             input=json.dumps(json_body),
             capture_output=True,
@@ -298,7 +300,7 @@ def gh_api(
             check=True,
         )
     else:
-        result = subprocess.run(
+        result = subprocess.run(  # noqa: S603 — fixed argv, shell=False
             cmd,
             capture_output=True,
             text=True,

@@ -106,7 +106,10 @@ def fetch_live_labels(
     *,
     opener: Callable[[urllib.request.Request], Any] = urllib.request.urlopen,
 ) -> list[dict[str, Any]]:
-    request = urllib.request.Request(f"{API_ROOT}/repos/{repo}/labels?per_page=100")
+    # API_ROOT is the constant https://api.github.com endpoint; `repo` is sourced
+    # from workflow `github.repository` and contains no scheme. opener defaults to
+    # urllib.request.urlopen but is injectable for tests.
+    request = urllib.request.Request(f"{API_ROOT}/repos/{repo}/labels?per_page=100")  # noqa: S310 — fixed https endpoint
     request.add_header("Authorization", f"Bearer {token}")
     request.add_header("Accept", "application/vnd.github+json")
     request.add_header("X-GitHub-Api-Version", API_VERSION)

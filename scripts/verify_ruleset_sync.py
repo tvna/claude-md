@@ -105,7 +105,9 @@ def format_error_lines(missing: set[str], docs_url: str) -> list[str]:
 # ---------------------------------------------------------------------------
 
 def _api_request(url: str, token: str) -> urllib.request.Request:
-    request = urllib.request.Request(url)
+    # Callers build `url` from API_ROOT (https://api.github.com) + workflow
+    # `github.repository`. The opener is injected at the call site for tests.
+    request = urllib.request.Request(url)  # noqa: S310 — fixed https endpoint
     request.add_header("Authorization", f"Bearer {token}")
     request.add_header("Accept", "application/vnd.github+json")
     request.add_header("X-GitHub-Api-Version", API_VERSION)

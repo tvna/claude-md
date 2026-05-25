@@ -452,8 +452,11 @@ def request_json(url: str, payload: dict[str, object] | None = None) -> dict[str
     if payload is not None:
         data = json.dumps(payload).encode("utf-8")
         headers["Content-Type"] = "application/json"
-    request = urllib.request.Request(url, data=data, headers=headers, method="POST" if payload is not None else "GET")
-    with urllib.request.urlopen(request, timeout=30) as response:
+    # All callers pass one of the module-level https endpoints
+    # (OSV_QUERYBATCH_URL, OSV_VULN_URL, CISA_KEV_URL). vuln_id segments
+    # are urllib.parse.quote'd at the call site (see line 227).
+    request = urllib.request.Request(url, data=data, headers=headers, method="POST" if payload is not None else "GET")  # noqa: S310 — fixed https OSV/CISA endpoints
+    with urllib.request.urlopen(request, timeout=30) as response:  # noqa: S310 — paired with the Request above
         parsed = json.loads(response.read().decode("utf-8"))
     if not isinstance(parsed, dict):
         raise ValueError(f"{url} returned a non-object JSON response")

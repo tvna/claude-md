@@ -134,8 +134,11 @@ def fetch_latest_uv_release() -> str | None:
     None as "skip the check" rather than as drift.
     """
     try:
-        result = subprocess.run(
-            [
+        # S603/S607 justification: fixed argv (no shell, no caller-supplied input);
+        # `gh` is provisioned on the GitHub Actions runner via setup-gh.
+        # FileNotFoundError below covers the local-dev case where gh is absent.
+        result = subprocess.run(  # noqa: S603 — fixed argv, shell=False
+            [  # noqa: S607 — `gh` resolved via runner PATH; FileNotFoundError handled below
                 "gh", "release", "view",
                 "--repo", "astral-sh/uv",
                 "--json", "tagName",
