@@ -9,8 +9,8 @@ Pure functions get parametrize cases; the stdin/stdout boundary in
 ``monkeypatch`` over ``sys.stdin`` and ``capsys`` over
 ``sys.stdout``/``sys.stderr``.
 
-Refs #292; builds on #167 / #214 (server-side title rule) and #146
-(Layer 2.5 precedent).
+Refs #292; builds on #167 / #214 (server-side title rule), #146
+(Layer 2.5 precedent), and #348 (ASCII + conventional-type extension).
 """
 
 from __future__ import annotations
@@ -92,13 +92,95 @@ class TestSuggestFix:
 
 
 # ---------------------------------------------------------------------------
-# build_deny_reason
+# find_non_ascii_codepoints
 # ---------------------------------------------------------------------------
 
 
-class TestBuildDenyReason:
+class TestFindNonAsciiCodepoints:
+    @pytest.mark.parametrize(
+        ("title", "expected_empty"),
+        [
+            ("feat: clean", True),
+            ("fix(scope): plain ascii body", True),
+            ("", True),
+        ],
+    )
+    def test_ascii_returns_empty(self, title: str, expected_empty: bool) -> None:
+        assert (preflight.find_non_ascii_codepoints(title) == []) is expected_empty
+
+    def test_non_ascii_reports_codepoint(self) -> None:
+        # U+30C6 KATAKANA LETTER TE
+        result = preflight.find_non_ascii_codepoints("feat: テst")
+        assert result, "expected at least one finding for non-ASCII title"
+        assert any("U+30C6" in entry for entry in result)
+
+    def test_zero_width_joiner_reported(self) -> None:
+        # U+200D ZERO WIDTH JOINER -- the prompt-injection class #155 cites.
+        result = preflight.find_non_ascii_codepoints("feat: x‍y")
+        assert any("U+200D" in entry for entry in result)
+
+
+# ---------------------------------------------------------------------------
+# find_invalid_type
+# ---------------------------------------------------------------------------
+
+
+class TestFindInvalidType:
+    @pytest.mark.parametrize(
+        "title",
+        [
+            "feat: add thing",
+            "fix(scope): bug",
+            "feat(scripts): add ruff S security gate for workflow scripts",
+            "chore: housekeeping",
+            "ci(workflows): tighten gate",
+            "docs(agent): rewrite section",
+            "perf: shave allocations",
+            "refactor(api): rename module",
+            "revert: undo prior change",
+            "style: format",
+            "test: add coverage",
+            "tracking: umbrella",
+            "build: pin dep",
+        ],
+    )
+    def test_known_type_returns_none(self, title: str) -> None:
+        assert preflight.find_invalid_type(title) is None
+
+    @pytest.mark.parametrize(
+        ("title", "expected_prefix"),
+        [
+            # The repair from PR #346 -> retro #347 -> #348.
+            ("security(scripts): enable ruff S rules", "security"),
+            # Bare unknown type, no scope.
+            ("hotfix: emergency", "hotfix"),
+            # Capitalized type does not match the lowercase _CONVENTIONAL_TYPES.
+            ("Feat: shouted", "Feat"),
+            # Missing the required ": " separator.
+            ("featx add thing", "featx add thing"),
+            # Scope present but type unknown.
+            ("wip(scope): in progress", "wip"),
+        ],
+    )
+    def test_unknown_type_returns_offending_prefix(
+        self, title: str, expected_prefix: str
+    ) -> None:
+        assert preflight.find_invalid_type(title) == expected_prefix
+
+    def test_empty_title_returns_empty_prefix(self) -> None:
+        # Empty input is the empty-title branch -- decide() short-circuits
+        # before calling this helper, but the helper itself must not crash.
+        assert preflight.find_invalid_type("") == ""
+
+
+# ---------------------------------------------------------------------------
+# build_issue_ref_deny_reason
+# ---------------------------------------------------------------------------
+
+
+class TestBuildIssueRefDenyReason:
     def test_lists_every_offending_token(self) -> None:
-        reason = preflight.build_deny_reason(
+        reason = preflight.build_issue_ref_deny_reason(
             "mcp__github__create_pull_request",
             "chore: a (#1) and b (#22)",
             ["(#1)", "(#22)"],
@@ -107,7 +189,7 @@ class TestBuildDenyReason:
         assert "(#22)" in reason
 
     def test_references_server_side_rule(self) -> None:
-        reason = preflight.build_deny_reason(
+        reason = preflight.build_issue_ref_deny_reason(
             "mcp__github__create_pull_request",
             "feat: x (#1)",
             ["(#1)"],
@@ -120,7 +202,7 @@ class TestBuildDenyReason:
         assert "verify-issue-link.yml" in reason
 
     def test_shows_suggested_fix(self) -> None:
-        reason = preflight.build_deny_reason(
+        reason = preflight.build_issue_ref_deny_reason(
             "mcp__github__update_pull_request",
             "feat: x (#1)",
             ["(#1)"],
@@ -128,12 +210,84 @@ class TestBuildDenyReason:
         assert "'feat: x'" in reason
 
     def test_includes_tool_name(self) -> None:
-        reason = preflight.build_deny_reason(
+        reason = preflight.build_issue_ref_deny_reason(
             "mcp__github__update_pull_request",
             "feat: x (#1)",
             ["(#1)"],
         )
         assert "mcp__github__update_pull_request" in reason
+
+
+# ---------------------------------------------------------------------------
+# build_non_ascii_deny_reason
+# ---------------------------------------------------------------------------
+
+
+class TestBuildNonAsciiDenyReason:
+    def test_quotes_findings_and_title(self) -> None:
+        reason = preflight.build_non_ascii_deny_reason(
+            "mcp__github__create_pull_request",
+            "feat: テst",
+            ["index 6: U+30C6"],
+        )
+        assert "U+30C6" in reason
+        assert "'feat: テst'" in reason
+
+    def test_cites_server_side_authority(self) -> None:
+        reason = preflight.build_non_ascii_deny_reason(
+            "mcp__github__create_pull_request",
+            "feat: x‍y",
+            ["index 7: U+200D"],
+        )
+        assert "title_policy.py" in reason
+        assert "#155" in reason
+
+    def test_includes_tool_name(self) -> None:
+        reason = preflight.build_non_ascii_deny_reason(
+            "mcp__github__update_pull_request",
+            "feat: x‍y",
+            ["index 7: U+200D"],
+        )
+        assert "mcp__github__update_pull_request" in reason
+
+
+# ---------------------------------------------------------------------------
+# build_invalid_type_deny_reason
+# ---------------------------------------------------------------------------
+
+
+class TestBuildInvalidTypeDenyReason:
+    def test_names_offending_prefix_and_expected_shape(self) -> None:
+        reason = preflight.build_invalid_type_deny_reason(
+            "mcp__github__create_pull_request",
+            "security(scripts): enable ruff S rules",
+            "security",
+        )
+        assert "'security'" in reason
+        # Expected shape hint from title_policy.naming_convention_hint.
+        assert "type(scope): summary" in reason
+        # Full allowed-type list so the agent does not need to re-read
+        # title_policy.py to recover.
+        assert "feat" in reason
+        assert "tracking" in reason
+
+    def test_cites_server_side_authority(self) -> None:
+        reason = preflight.build_invalid_type_deny_reason(
+            "mcp__github__create_pull_request",
+            "wip(scope): something",
+            "wip",
+        )
+        assert "title_policy.py" in reason
+        assert "verify-title-policy.yml" in reason
+
+    def test_offers_likely_alternative_for_security_titles(self) -> None:
+        reason = preflight.build_invalid_type_deny_reason(
+            "mcp__github__create_pull_request",
+            "security(scripts): enable ruff S rules",
+            "security",
+        )
+        # Concrete remediation: PR #346 retro #347 names this exact path.
+        assert "feat(" in reason or "ci(" in reason
 
 
 # ---------------------------------------------------------------------------
@@ -245,6 +399,97 @@ class TestDecide:
             out["hookSpecificOutput"]["permissionDecision"] == "deny"
         )
 
+    # -- conventional-type rule (#348) --------------------------------------
+
+    def test_unknown_type_denies(self) -> None:
+        # The exact title that triggered the title-policy failure on
+        # PR #346 and the retro that produced #348.
+        out = preflight.decide(
+            "mcp__github__create_pull_request",
+            {"title": "security(scripts): enable ruff S rules for workflow scripts"},
+        )
+        assert out is not None
+        hook = out["hookSpecificOutput"]
+        assert hook["permissionDecision"] == "deny"
+        reason = hook["permissionDecisionReason"]
+        assert "'security'" in reason
+        assert "type(scope): summary" in reason
+
+    def test_known_type_with_scope_allows(self) -> None:
+        out = preflight.decide(
+            "mcp__github__create_pull_request",
+            {"title": "feat(scripts): add ruff S security gate for workflow scripts"},
+        )
+        assert out is None
+
+    @pytest.mark.parametrize(
+        "title",
+        [
+            "feat: bare type",
+            "fix(scope): with scope",
+            "ci(workflows): tighten gate",
+            "tracking: umbrella issue",
+        ],
+    )
+    def test_clean_conventional_title_allows(self, title: str) -> None:
+        out = preflight.decide(
+            "mcp__github__create_pull_request", {"title": title}
+        )
+        assert out is None
+
+    # -- ASCII rule (#348) --------------------------------------------------
+
+    def test_non_ascii_title_denies(self) -> None:
+        # KATAKANA TE: a real Japanese character that title_policy.py
+        # rejects per #155 (prompt-injection defense).
+        out = preflight.decide(
+            "mcp__github__create_pull_request",
+            {"title": "feat: テst"},
+        )
+        assert out is not None
+        hook = out["hookSpecificOutput"]
+        assert hook["permissionDecision"] == "deny"
+        reason = hook["permissionDecisionReason"]
+        assert "U+30C6" in reason
+        assert "#155" in reason
+
+    def test_zero_width_joiner_denies(self) -> None:
+        # The class of homoglyph attack the ASCII rule defends against.
+        out = preflight.decide(
+            "mcp__github__create_pull_request",
+            {"title": "feat: x‍y"},
+        )
+        assert out is not None
+        reason = out["hookSpecificOutput"]["permissionDecisionReason"]
+        assert "U+200D" in reason
+
+    # -- rule precedence ----------------------------------------------------
+
+    def test_non_ascii_wins_over_type_and_ref(self) -> None:
+        # All three rules fire; non-ASCII takes precedence per decide()
+        # order so the operator sees the most fundamental issue first.
+        out = preflight.decide(
+            "mcp__github__create_pull_request",
+            {"title": "unknownt: テst (#1)"},
+        )
+        assert out is not None
+        reason = out["hookSpecificOutput"]["permissionDecisionReason"]
+        assert "non-ASCII" in reason
+        # Issue-ref deny reason text would mention "issue-reference"; assert it does not.
+        assert "issue-reference" not in reason
+
+    def test_invalid_type_wins_over_issue_ref(self) -> None:
+        out = preflight.decide(
+            "mcp__github__create_pull_request",
+            {"title": "unknownt: clean (#1)"},
+        )
+        assert out is not None
+        reason = out["hookSpecificOutput"]["permissionDecisionReason"]
+        # Conventional-type reason names the type prefix.
+        assert "'unknownt'" in reason
+        # Issue-ref reason would say "issue-reference"; assert it does not.
+        assert "issue-reference" not in reason
+
 
 # ---------------------------------------------------------------------------
 # main (stdin/stdout boundary)
@@ -341,3 +586,40 @@ class TestMain:
         assert out == ""
         # Empty stdin -> event is {} -> missing tool_name -> error log.
         assert "::error::" in err
+
+    def test_unknown_type_event_emits_deny_json(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        event = {
+            "tool_name": "mcp__github__create_pull_request",
+            "tool_input": {
+                "title": "security(scripts): enable ruff S rules",
+                "body": "Closes #190",
+            },
+        }
+        rc, out, err = self._run(monkeypatch, capsys, json.dumps(event))
+        assert rc == 0
+        decision = json.loads(out)
+        hook = decision["hookSpecificOutput"]
+        assert hook["permissionDecision"] == "deny"
+        assert "'security'" in hook["permissionDecisionReason"]
+        assert err == ""
+
+    def test_non_ascii_event_emits_deny_json(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        event = {
+            "tool_name": "mcp__github__update_pull_request",
+            "tool_input": {"title": "feat: テst"},
+        }
+        rc, out, err = self._run(monkeypatch, capsys, json.dumps(event))
+        assert rc == 0
+        decision = json.loads(out)
+        hook = decision["hookSpecificOutput"]
+        assert hook["permissionDecision"] == "deny"
+        assert "U+30C6" in hook["permissionDecisionReason"]
+        assert err == ""
