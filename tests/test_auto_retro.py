@@ -364,6 +364,209 @@ class TestBuildRetroBody:
 
 
 # ---------------------------------------------------------------------------
+# _build_repair_history_table / build_retro_body table-and-marker contract
+# (issue #343)
+# ---------------------------------------------------------------------------
+
+
+class TestRepairHistoryTable:
+    def test_ci_failure_row_from_check_runs(self) -> None:
+        check_runs = [
+            {
+                "name": "verify-body-policy",
+                "conclusion": "failure",
+                "completed_at": "2026-05-24T14:36:21Z",
+            }
+        ]
+        table = ar._build_repair_history_table(check_runs, [], 1)
+        assert "CI fail: verify-body-policy" in table
+        assert "conclusion=failure" in table
+        assert "2026-05-24T14:36:21Z" in table
+
+    def test_check_runs_completed_at_null_uses_placeholder(self) -> None:
+        check_runs = [
+            {
+                "name": "in-progress-check",
+                "conclusion": "cancelled",
+                "completed_at": None,
+            }
+        ]
+        table = ar._build_repair_history_table(check_runs, [], 1)
+        assert "(no completed_at)" in table
+
+    def test_check_runs_success_conclusions_are_dropped(self) -> None:
+        """Only failure-class conclusions count as repair signals."""
+        check_runs = [
+            {"name": "pytest", "conclusion": "success", "completed_at": "x"},
+            {"name": "ruff", "conclusion": "neutral", "completed_at": "x"},
+            {"name": "mypy", "conclusion": "skipped", "completed_at": "x"},
+        ]
+        table = ar._build_repair_history_table(check_runs, [], 1)
+        assert "CI fail:" not in table
+        # No other signals -> sentinel row.
+        assert "(no automated repair signals detected)" in table
+
+    def test_fixup_commit_rows(self) -> None:
+        commits = [
+            "fix(scripts): retry timeout",
+            "fixup! feat(harness): earlier subject",
+            "squash! fix typo",
+            "feat(harness): unrelated",
+        ]
+        table = ar._build_repair_history_table(None, commits, len(commits))
+        # Three iteration-commit rows from the three repair-prefix subjects.
+        assert table.count("| Iteration commit |") == 3
+        assert "fix(scripts): retry timeout" in table
+        assert "fixup! feat(harness): earlier subject" in table
+        assert "squash! fix typo" in table
+
+    def test_merge_from_main_rows_both_prefix_variants(self) -> None:
+        commits = [
+            "Merge branch 'main' into feature",
+            "Merge remote-tracking branch 'origin/main' into feature",
+        ]
+        table = ar._build_repair_history_table(None, commits, len(commits))
+        assert table.count("| Merge from main |") == 2
+
+    def test_multi_commit_summary_row(self) -> None:
+        table = ar._build_repair_history_table(None, ["feat: a", "feat: b"], 4)
+        assert "Multi-commit PR" in table
+        assert "4 commits squash-merged" in table
+
+    def test_multi_commit_single_commit_omits_summary(self) -> None:
+        table = ar._build_repair_history_table(None, ["feat: only"], 1)
+        assert "Multi-commit PR" not in table
+
+    def test_sentinel_when_no_signals(self) -> None:
+        table = ar._build_repair_history_table(None, ["feat(harness): plain"], 1)
+        assert "(no automated repair signals detected)" in table
+        assert "operator: investigate manually" in table
+        # No numbered rows: only the "| -- |" sentinel.
+        assert "| 1 |" not in table
+
+    def test_sentinel_absent_when_any_signal_fires(self) -> None:
+        table = ar._build_repair_history_table(None, ["fix(x): a"], 1)
+        assert "(no automated repair signals detected)" not in table
+
+    def test_pipe_in_commit_subject_is_escaped(self) -> None:
+        """A '|' in a commit subject must be backslash-escaped so the
+        table structure stays a 3-column grid."""
+        table = ar._build_repair_history_table(
+            None, ["fix(x): rename a|b to c"], 1
+        )
+        # The escaped pipe must appear, AND the rendered row line must
+        # contain exactly 4 unescaped '|' characters (the 3 column
+        # delimiters plus opening/closing).
+        assert "a\\|b" in table
+        row_line = next(
+            line for line in table.splitlines() if "Iteration commit" in line
+        )
+        unescaped_pipes = row_line.replace("\\|", "")
+        assert unescaped_pipes.count("|") == 4
+
+    def test_table_uses_canonical_header(self) -> None:
+        table = ar._build_repair_history_table(None, [], 1)
+        first_line = table.splitlines()[0]
+        assert first_line == "| # | Repair | What the reviewer / gate caught |"
+
+    def test_row_ordering_is_deterministic(self) -> None:
+        """Rows must appear in: CI failures, fix-ups, merge-from-main,
+        multi-commit summary. Test all four classes at once."""
+        check_runs = [
+            {"name": "ci-job", "conclusion": "failure", "completed_at": "t"}
+        ]
+        commits = [
+            "fix(x): repair",
+            "Merge branch 'main' into f",
+        ]
+        table = ar._build_repair_history_table(check_runs, commits, 4)
+        ci_idx = table.index("CI fail: ci-job")
+        fixup_idx = table.index("Iteration commit")
+        merge_idx = table.index("Merge from main")
+        multi_idx = table.index("Multi-commit PR")
+        assert ci_idx < fixup_idx < merge_idx < multi_idx
+
+
+class TestBuildRetroBodyMarkers:
+    """build_retro_body's marker contract for issue #343."""
+
+    def test_auto_filled_markers_present(self) -> None:
+        body = ar.build_retro_body(_make_pr(), [])
+        assert body.count("<!-- auto-filled:repair-history -->") == 1
+        assert body.count("<!-- /auto-filled:repair-history -->") == 1
+
+    def test_operator_fill_markers_present(self) -> None:
+        body = ar.build_retro_body(_make_pr(), [])
+        assert body.count("<!-- operator-fill:remaining-steps -->") == 1
+        assert body.count("<!-- /operator-fill:remaining-steps -->") == 1
+
+    def test_marker_pairs_are_well_nested(self) -> None:
+        body = ar.build_retro_body(_make_pr(), [])
+        auto_open = body.index("<!-- auto-filled:repair-history -->")
+        auto_close = body.index("<!-- /auto-filled:repair-history -->")
+        op_open = body.index("<!-- operator-fill:remaining-steps -->")
+        op_close = body.index("<!-- /operator-fill:remaining-steps -->")
+        # Auto-filled block closes before operator-fill block opens.
+        assert auto_open < auto_close < op_open < op_close
+
+    def test_table_sits_inside_auto_filled_block(self) -> None:
+        body = ar.build_retro_body(_make_pr(), [])
+        auto_open = body.index("<!-- auto-filled:repair-history -->")
+        auto_close = body.index("<!-- /auto-filled:repair-history -->")
+        table_header = body.index(
+            "| # | Repair | What the reviewer / gate caught |"
+        )
+        assert auto_open < table_header < auto_close
+
+    def test_default_check_runs_none_emits_sentinel(self) -> None:
+        """Backward-compat: legacy two-arg call must produce sentinel row
+        when no commit signals fire."""
+        body = ar.build_retro_body(_make_pr(commits=1), [])
+        assert "(no automated repair signals detected)" in body
+
+    def test_check_runs_argument_is_threaded_into_table(self) -> None:
+        body = ar.build_retro_body(
+            _make_pr(),
+            [],
+            check_runs=[
+                {
+                    "name": "verify-body-policy",
+                    "conclusion": "failure",
+                    "completed_at": "2026-05-24T14:36:21Z",
+                }
+            ],
+        )
+        assert "CI fail: verify-body-policy" in body
+
+    def test_body_passes_body_policy_with_markers_and_table(self) -> None:
+        """Regression: markers + table inside ## Proposed work must not
+        break body_policy section detection. strip_html_comments handles
+        the marker tolerance."""
+        body = ar.build_retro_body(
+            _make_pr(commits=3),
+            ["fix(x): repair", "Merge branch 'main' into f", "feat: a"],
+            check_runs=[
+                {"name": "ci", "conclusion": "failure", "completed_at": "t"}
+            ],
+        )
+        headings = bp.extract_headings(body)
+        missing = bp.missing_sections(bp._ISSUE_COMMON_REQUIRED, headings)
+        assert missing == [], f"verify-body-policy would fail: missing={missing}"
+
+    def test_trailer_includes_merged_at_date(self) -> None:
+        body = ar.build_retro_body(
+            _make_pr(merged_at="2026-05-25T09:00:00Z"), []
+        )
+        assert "retro triage 2026-05-25" in body
+
+    def test_body_is_pure_ascii(self) -> None:
+        """Layer 2 scan-non-ascii.yml is the post-merge backstop; this
+        belt-and-braces test catches non-ASCII drift at unit-test time."""
+        body = ar.build_retro_body(_make_pr(commits=3), ["fix(x): a"])
+        body.encode("ascii")  # raises UnicodeEncodeError on drift
+
+
+# ---------------------------------------------------------------------------
 # find_existing_retro / issue_labels
 # ---------------------------------------------------------------------------
 
@@ -603,6 +806,93 @@ class TestFetchPrCommits:
         assert ar.fetch_pr_commits("o/r", 1) == []
 
 
+class TestFetchCheckRuns:
+    """fetch_check_runs (issue #343): two-step PR -> check-runs lookup."""
+
+    def _staged_api(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        *,
+        merge_commit_sha: str | None,
+        check_runs: list[dict[str, Any]] | None,
+    ) -> list[tuple[str, str]]:
+        seen: list[tuple[str, str]] = []
+
+        def fake_api(method: str, path: str, body: Any = None, **_kw: Any) -> str:
+            seen.append((method, path))
+            if "/check-runs" in path:
+                return json.dumps({"check_runs": check_runs or []})
+            # First call: pull request detail.
+            return json.dumps({"merge_commit_sha": merge_commit_sha})
+
+        monkeypatch.setattr(ar, "gh_api", fake_api)
+        return seen
+
+    def test_happy_path_returns_failed_runs_only(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        seen = self._staged_api(
+            monkeypatch,
+            merge_commit_sha="abc123",
+            check_runs=[
+                {"name": "pytest", "conclusion": "success"},
+                {"name": "ruff", "conclusion": "failure"},
+                {"name": "mypy", "conclusion": "timed_out"},
+                {"name": "preflight", "conclusion": "cancelled"},
+                {"name": "label-gate", "conclusion": "action_required"},
+                {"name": "neutral-check", "conclusion": "neutral"},
+            ],
+        )
+        out = ar.fetch_check_runs("o/r", 42)
+        names = [r["name"] for r in out]
+        assert names == ["ruff", "mypy", "preflight", "label-gate"]
+        # Two API calls in the right order.
+        assert seen[0] == ("GET", "/repos/o/r/pulls/42")
+        assert seen[1] == (
+            "GET",
+            "/repos/o/r/commits/abc123/check-runs?per_page=100",
+        )
+
+    def test_null_merge_commit_sha_short_circuits(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Returns [] without making the second API call."""
+        seen = self._staged_api(
+            monkeypatch, merge_commit_sha=None, check_runs=None
+        )
+        assert ar.fetch_check_runs("o/r", 42) == []
+        # Only the PR detail call must fire.
+        assert len(seen) == 1
+        assert seen[0] == ("GET", "/repos/o/r/pulls/42")
+
+    def test_empty_pr_response_short_circuits(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Empty body from the PR detail endpoint -> no SHA -> []."""
+        seen: list[tuple[str, str]] = []
+
+        def fake_api(method: str, path: str, body: Any = None, **_kw: Any) -> str:
+            seen.append((method, path))
+            return ""
+
+        monkeypatch.setattr(ar, "gh_api", fake_api)
+        assert ar.fetch_check_runs("o/r", 42) == []
+        assert len(seen) == 1
+
+    def test_empty_check_runs_response_returns_empty_list(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """SHA present but check_runs endpoint returns blank -> []."""
+
+        def fake_api(method: str, path: str, body: Any = None, **_kw: Any) -> str:
+            if "/check-runs" in path:
+                return ""
+            return json.dumps({"merge_commit_sha": "deadbeef"})
+
+        monkeypatch.setattr(ar, "gh_api", fake_api)
+        assert ar.fetch_check_runs("o/r", 1) == []
+
+
 class TestCreateIssue:
     def test_posts_title_body_labels(
         self, monkeypatch: pytest.MonkeyPatch
@@ -636,6 +926,9 @@ def _orchestrator_recorder(
     review_comments: list[dict[str, Any]] | None = None,
     created_response: dict[str, Any] | None = None,
     comments_error: bool = False,
+    pr_detail: dict[str, Any] | None = None,
+    check_runs: list[dict[str, Any]] | None = None,
+    check_runs_error: bool = False,
 ) -> list[tuple]:
     """Replace ar.gh_api with a recorder that returns canned data per path.
 
@@ -645,6 +938,13 @@ def _orchestrator_recorder(
     Set ``comments_error=True`` to make the comments endpoint raise the
     same ``CalledProcessError`` that gh_api raises in production -- used
     to test the fail-safe fallback in run().
+
+    ``pr_detail`` controls the response of ``GET /repos/{repo}/pulls/{n}``
+    (used by ``fetch_check_runs`` to read ``merge_commit_sha``); defaults
+    to ``{"merge_commit_sha": None}`` so no check-runs lookup fires and
+    the Repair history table degrades to commit-subject signals only.
+    ``check_runs`` controls the second-call response; ``check_runs_error``
+    makes the PR-detail call raise to exercise the fail-soft path.
     """
     seen: list[tuple] = []
     existing = existing or []
@@ -655,6 +955,9 @@ def _orchestrator_recorder(
         "number": 999,
         "html_url": "https://x/i/999",
     }
+    if pr_detail is None:
+        pr_detail = {"merge_commit_sha": None}
+    check_runs = check_runs or []
 
     def fake_api(method, path, body=None, **_kw):
         seen.append((method, path, body))
@@ -668,6 +971,14 @@ def _orchestrator_recorder(
             return json.dumps(review_comments)
         if method == "GET" and "/pulls/" in path and "/commits" in path:
             return json.dumps(commits)
+        if method == "GET" and "/check-runs" in path:
+            return json.dumps({"check_runs": check_runs})
+        if method == "GET" and "/pulls/" in path:
+            if check_runs_error:
+                raise subprocess.CalledProcessError(
+                    1, "gh", stderr="pulls endpoint boom"
+                )
+            return json.dumps(pr_detail)
         if method == "POST" and path.endswith("/issues"):
             return json.dumps(created_response)
         return ""
@@ -834,6 +1145,46 @@ class TestRun:
         text = summary.read_text(encoding="utf-8")
         assert "## auto-retro summary" in text
         assert "`skip`" in text
+
+    def test_fail_soft_creates_when_check_runs_endpoint_errors(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Transient API failure on the check-runs lookup must NOT block
+        retro creation. Issue #343 fail-soft contract."""
+        seen = _orchestrator_recorder(monkeypatch, check_runs_error=True)
+        assert ar.run(_merged_event(number=42), "o/r") == 0
+        # Issue creation must still happen.
+        assert any(
+            method == "POST" and path == "/repos/o/r/issues"
+            for method, path, _ in seen
+        )
+
+    def test_check_runs_threaded_into_body_when_present(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """End-to-end: a failing check_run on the merge SHA produces a
+        ``CI fail:`` row inside the created issue body."""
+        seen = _orchestrator_recorder(
+            monkeypatch,
+            pr_detail={"merge_commit_sha": "deadbeef"},
+            check_runs=[
+                {
+                    "name": "verify-body-policy",
+                    "conclusion": "failure",
+                    "completed_at": "2026-05-24T14:36:21Z",
+                }
+            ],
+        )
+        assert ar.run(_merged_event(number=42), "o/r") == 0
+        post_calls = [
+            (m, p, b)
+            for m, p, b in seen
+            if m == "POST" and p == "/repos/o/r/issues"
+        ]
+        assert len(post_calls) == 1
+        body = post_calls[0][2]["body"]
+        assert "CI fail: verify-body-policy" in body
+        assert "<!-- auto-filled:repair-history -->" in body
 
 
 # ---------------------------------------------------------------------------
