@@ -72,7 +72,13 @@ These labels are applied by the `Threat intelligence triage` workflow. They do n
 | `threat:intel-needed` | Collect threat intelligence before routing or implementation. |
 | `threat:response-needed` | Security response is required; do not open an autonomous PR before investigation. |
 
-The deterministic rule lives in `scripts/threat_intel_triage.py`. The workflow extracts locked PyPI dependencies from `uv.lock` (plus exact pins in `pyproject.toml`), queries OSV.dev for vulnerabilities that affect those package versions, fetches CISA KEV, and marks any OSV finding whose ID or aliases appear in KEV as known exploited. Any external finding adds `threat:intel-needed`; any KEV-correlated finding also adds `threat:response-needed`. Fixture inputs (`--osv-file`, `--kev-file`) exist for tests so CI can verify the routing logic without live network access.
+The deterministic rule lives in `scripts/threat_intel_triage.py`. The workflow extracts locked PyPI dependencies from `uv.lock` (plus exact pins in `pyproject.toml`) and consults three external sources:
+
+- **OSV.dev** — aggregator queried for vulnerabilities that affect each package version.
+- **GitHub Advisory Database** — queried directly via `api.github.com/advisories` (`--ghsa-live`) so reviewed, unreviewed, and malware advisories preserve source attribution alongside OSV. GitHub Actions enumeration is deferred to [#176](https://github.com/tvna/claude-md/issues/176).
+- **CISA KEV** — fetched to correlate any OSV or GHSA finding whose ID or aliases appear in the known-exploited catalog.
+
+Any external finding adds `threat:intel-needed`. Any KEV-correlated finding *or* any GHSA advisory whose `type` is `malware` also adds `threat:response-needed`. Fixture inputs (`--osv-file`, `--kev-file`, `--ghsa-file`) exist for tests so CI can verify the routing logic without live network access. The triage summary lists which sources actually surfaced findings and tags each row with its source string (e.g. `OSV.dev, GitHub Advisory`).
 
 ## Agent routing
 
