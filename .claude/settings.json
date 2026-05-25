@@ -52,6 +52,15 @@
         "hooks": [
           {
             "type": "command",
+            "command": "python3 $CLAUDE_PROJECT_DIR/scripts/preflight_pr_body_required_sections.py"
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__github__(create_pull_request|update_pull_request)",
+        "hooks": [
+          {
+            "type": "command",
             "command": "python3 $CLAUDE_PROJECT_DIR/scripts/preflight_pr_template_shape.py"
           }
         ]
