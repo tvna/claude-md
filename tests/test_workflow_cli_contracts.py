@@ -2,6 +2,23 @@
 
 These tests pin the argv/env/file shapes used by ``.github/workflows`` so
 script-level unit tests cannot pass while an Actions invocation drifts.
+
+Drift guard (issue #193):
+
+* ``_iter_workflow_invocations()`` parses every workflow YAML
+  structurally with ``yaml.safe_load`` and walks
+  ``jobs.<job>.steps[*].run``. Each ``python3 scripts/foo.py bar`` or
+  ``uv run python scripts/foo.py bar`` invocation -- including command
+  substitutions like ``$(python3 scripts/uv_pin.py read)`` -- is
+  emitted as a :class:`WorkflowInvocation`.
+* ``CONTRACT_REGISTRY`` maps each ``(script, subcommand)`` pair seen in
+  workflows to the contract test function name that exercises it.
+* ``test_every_workflow_invocation_has_contract_test`` parametrizes
+  over the inventory: a new workflow invocation without a registry
+  entry fails the gate loudly, with a remediation message that names
+  the file to edit and the registry key to add.
+* ``test_contract_registry_has_no_stale_entries`` rejects orphan
+  entries so the registry stays a true mirror of the workflow surface.
 """
 
 from __future__ import annotations
@@ -10,7 +27,7 @@ import base64
 import json
 import re
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 import auto_retro
 import body_policy
@@ -25,45 +42,222 @@ import rulesets_apply
 import scan_apm_portability
 import scan_design_philosophy_drift
 import scan_non_ascii
+import scan_workflow_action_pins
+import scan_workflow_pip
 import security_drift_report
 import threat_intel_triage
 import title_policy
 import uv_pin
 import verify_required_check_contexts
 import verify_ruleset_sync
+import yaml
 
 REPO = "owner/repo"
 
+_WORKFLOWS_DIR = Path(".github/workflows")
 
-def test_workflow_python_script_inventory_is_pinned() -> None:
-    workflows = Path(".github/workflows")
-    pattern = re.compile(r"python3\s+scripts/([A-Za-z0-9_-]+\.py)")
-    found = {
-        match.group(1)
-        for path in workflows.glob("*.yml")
-        for match in pattern.finditer(path.read_text(encoding="utf-8"))
-    }
+# Matches ``python[3] scripts/<name>.py [<sub>]`` and
+# ``uv run python scripts/<name>.py [<sub>]``. The negative lookbehind
+# ``(?<!run\s)`` prevents the bare ``python3?`` alternative from
+# double-matching the ``python`` inside ``uv run python``.
+_PYTHON_SCRIPT_INVOCATION = re.compile(
+    r"(?:(?<!run\s)python3?|uv\s+run\s+python)"
+    r"\s+scripts/([A-Za-z_][\w-]*\.py)"
+    r"(?:\s+(\S+))?"
+)
 
-    assert found == {
-        "auto_retro.py",
-        "body_policy.py",
-        "branch_cleanup.py",
-        "dependabot_automerge.py",
-        "dependabot_labels.py",
-        "issue_link.py",
-        "labels_apply.py",
-        "ruleset_drift.py",
-        "rulesets_apply.py",
-        "scan_apm_portability.py",
-        "scan_design_philosophy_drift.py",
-        "scan_non_ascii.py",
-        "security_drift_report.py",
-        "threat_intel_triage.py",
-        "title_policy.py",
-        "uv_pin.py",
-        "verify_required_check_contexts.py",
-        "verify_ruleset_sync.py",
-    }
+
+class WorkflowInvocation(NamedTuple):
+    """A single ``python ... scripts/<name>.py [<sub>]`` call in a workflow."""
+
+    workflow: str
+    job: str
+    step: str
+    script: str
+    subcommand: str | None
+
+
+# (script, subcommand) -> contract test function name. ``subcommand`` is
+# the literal first non-flag token after the script, with outer shell
+# punctuation stripped; shell variables like ``"$MODE"`` are stored as
+# ``$MODE``. ``None`` means the workflow invokes the script with only
+# flags (no subcommand). Keys must mirror what
+# ``_iter_workflow_invocations`` observes -- the two drift tests below
+# enforce that in both directions.
+CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
+    ("auto_retro.py", "run"): "test_auto_retro_run_matches_workflow_env",
+    ("body_policy.py", "verify"): "test_body_policy_verify_matches_workflow_body_file",
+    ("branch_cleanup.py", "reconcile"): "test_branch_cleanup_reconcile_matches_workflow_args",
+    ("branch_cleanup.py", "survey"): "test_branch_cleanup_survey_matches_workflow_args",
+    ("dependabot_automerge.py", "audit"): "test_dependabot_automerge_audit_matches_workflow_files",
+    ("dependabot_labels.py", "verify"): "test_dependabot_labels_verify_matches_workflow_paths",
+    ("issue_link.py", "verify"): "test_issue_link_verify_matches_workflow_body_file_and_author",
+    ("labels_apply.py", "$COMMAND"): "test_labels_apply_validate_and_plan_match_workflow_args",
+    ("labels_apply.py", "plan"): "test_labels_apply_validate_and_plan_match_workflow_args",
+    ("labels_apply.py", "validate"): "test_labels_apply_validate_and_plan_match_workflow_args",
+    ("ruleset_drift.py", "detect"): "test_ruleset_drift_detect_and_file_issue_match_workflow_args",
+    ("ruleset_drift.py", "file-sot-issue"): "test_ruleset_drift_detect_and_file_issue_match_workflow_args",
+    ("ruleset_drift.py", "file-unknown-issue"): "test_ruleset_drift_detect_and_file_issue_match_workflow_args",
+    ("rulesets_apply.py", "$MODE"): "test_rulesets_apply_plan_and_auto_delete_match_workflow_args",
+    ("rulesets_apply.py", "auto-delete"): "test_rulesets_apply_plan_and_auto_delete_match_workflow_args",
+    ("scan_apm_portability.py", "verify"): "test_scan_apm_portability_verify_matches_workflow_paths",
+    ("scan_design_philosophy_drift.py", "verify"): "test_scan_design_philosophy_drift_verify_matches_workflow_paths",
+    ("scan_non_ascii.py", "run"): "test_scan_non_ascii_run_matches_workflow_env",
+    ("scan_workflow_action_pins.py", "verify"): "test_scan_workflow_action_pins_verify_matches_workflow_args",
+    ("scan_workflow_pip.py", "verify"): "test_scan_workflow_pip_verify_matches_workflow_args",
+    ("security_drift_report.py", "aggregate"): "test_security_drift_report_aggregate_and_post_comment_match_workflow_args",
+    ("security_drift_report.py", "post-comment"): "test_security_drift_report_aggregate_and_post_comment_match_workflow_args",
+    ("threat_intel_triage.py", "scan"): "test_threat_intel_scan_matches_workflow_args",
+    ("title_policy.py", "verify"): "test_title_policy_verify_matches_workflow_kind_env",
+    ("uv_pin.py", "drift"): "test_uv_pin_workflow_subcommands_match_ci_usage",
+    ("uv_pin.py", "read"): "test_uv_pin_workflow_subcommands_match_ci_usage",
+    ("uv_pin.py", "stale"): "test_uv_pin_workflow_subcommands_match_ci_usage",
+    ("verify_required_check_contexts.py", "verify"): "test_verify_required_check_contexts_matches_workflow_args",
+    ("verify_ruleset_sync.py", "verify"): "test_verify_ruleset_sync_matches_workflow_args",
+}
+
+
+def _flatten_shell_continuations(text: str) -> list[str]:
+    """Join backslash-continued shell lines into single logical lines."""
+    out: list[str] = []
+    buf = ""
+    for raw_line in text.split("\n"):
+        stripped = raw_line.rstrip()
+        if stripped.endswith("\\"):
+            buf += stripped[:-1].rstrip() + " "
+        else:
+            out.append(buf + stripped)
+            buf = ""
+    if buf:
+        out.append(buf)
+    return out
+
+
+def _normalize_subcommand(raw: str | None) -> str | None:
+    """Strip shell punctuation around the first token after the script."""
+    if raw is None:
+        return None
+    cleaned = raw.strip("\"'`)(};|&")
+    if not cleaned or cleaned.startswith("-"):
+        return None
+    return cleaned
+
+
+def _emit_invocations_from_run(
+    workflow: str, job: str, step: str, run_text: str
+) -> list[WorkflowInvocation]:
+    out: list[WorkflowInvocation] = []
+    for line in _flatten_shell_continuations(run_text):
+        for match in _PYTHON_SCRIPT_INVOCATION.finditer(line):
+            out.append(
+                WorkflowInvocation(
+                    workflow=workflow,
+                    job=job,
+                    step=step,
+                    script=match.group(1),
+                    subcommand=_normalize_subcommand(match.group(2)),
+                )
+            )
+    return out
+
+
+def _iter_workflow_invocations() -> list[WorkflowInvocation]:
+    """Inventory every Python script invocation in ``.github/workflows/*.yml``.
+
+    Walks each workflow structurally via ``yaml.safe_load`` and emits one
+    :class:`WorkflowInvocation` per matched ``run:`` line. The .github
+    workflow YAML accepts GitHub Actions extensions (e.g. POSIX heredocs
+    whose body dedents past the block scalar indent) that strict YAML
+    parsers reject; ``.pre-commit-config.yaml`` already excludes
+    ``.github/workflows/`` from ``check-yaml`` for the same reason. When
+    structured parsing fails, fall back to scanning the raw text so the
+    affected workflow still contributes to the inventory -- structured
+    walk is preferred but cannot be the only path.
+    """
+    found: list[WorkflowInvocation] = []
+    for path in sorted(_WORKFLOWS_DIR.glob("*.yml")):
+        workflow = str(path)
+        raw = path.read_text(encoding="utf-8")
+        document: object | None
+        try:
+            document = yaml.safe_load(raw)
+        except yaml.YAMLError:
+            document = None
+        if isinstance(document, dict) and isinstance(document.get("jobs"), dict):
+            for job_name, job in document["jobs"].items():
+                if not isinstance(job, dict):
+                    continue
+                steps = job.get("steps")
+                if not isinstance(steps, list):
+                    continue
+                for step in steps:
+                    if not isinstance(step, dict):
+                        continue
+                    run_text = step.get("run")
+                    if not isinstance(run_text, str):
+                        continue
+                    step_name = str(step.get("name", "<unnamed>"))
+                    found.extend(
+                        _emit_invocations_from_run(
+                            workflow, str(job_name), step_name, run_text
+                        )
+                    )
+        else:
+            found.extend(
+                _emit_invocations_from_run(
+                    workflow, "<unparseable>", "<unparseable>", raw
+                )
+            )
+    return found
+
+
+_INVENTORY = _iter_workflow_invocations()
+
+
+def test_workflow_invocation_inventory_is_nonempty() -> None:
+    """Guard against the parser silently returning an empty list."""
+    assert _INVENTORY, (
+        "Workflow invocation inventory is empty. Either "
+        ".github/workflows is missing or _iter_workflow_invocations "
+        "stopped matching the python script invocation pattern."
+    )
+
+
+@pytest.mark.parametrize(
+    "invocation",
+    _INVENTORY,
+    ids=lambda inv: f"{Path(inv.workflow).name}::{inv.script}::{inv.subcommand or '<none>'}",
+)
+def test_every_workflow_invocation_has_contract_test(
+    invocation: WorkflowInvocation,
+) -> None:
+    key = (invocation.script, invocation.subcommand)
+    if key in CONTRACT_REGISTRY:
+        return
+    module_name = invocation.script.removesuffix(".py")
+    sub_repr = invocation.subcommand if invocation.subcommand else "<no-subcommand>"
+    raise AssertionError(
+        f"Workflow {invocation.workflow} job '{invocation.job}' step "
+        f"'{invocation.step}' invokes scripts/{invocation.script} with "
+        f"subcommand {sub_repr!r}, but no CLI contract test is "
+        f"registered for this pair.\n"
+        f"Remediation: in tests/test_workflow_cli_contracts.py, add a "
+        f"test function that calls "
+        f"{module_name}.main([{invocation.subcommand!r}, ...]) with the "
+        f"same argv shape used by the workflow, then add an entry to "
+        f"CONTRACT_REGISTRY: ({invocation.script!r}, "
+        f"{invocation.subcommand!r}): '<test_function_name>'."
+    )
+
+
+def test_contract_registry_has_no_stale_entries() -> None:
+    inventory_keys = {(inv.script, inv.subcommand) for inv in _INVENTORY}
+    stale = sorted(set(CONTRACT_REGISTRY) - inventory_keys)
+    assert not stale, (
+        f"CONTRACT_REGISTRY has {len(stale)} stale entr(y/ies) that no "
+        f"longer appear in .github/workflows: {stale}. Remove them so "
+        f"the registry stays a true mirror of the workflow surface."
+    )
 
 
 def test_auto_retro_run_matches_workflow_env(
@@ -433,6 +627,18 @@ def test_scan_non_ascii_run_matches_workflow_env(
     monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(tmp_path / "summary.md"))
 
     assert scan_non_ascii.main(["run"]) == 0
+
+
+def test_scan_workflow_action_pins_verify_matches_workflow_args() -> None:
+    """Mirrors the ``Assert workflows pin actions to SHA + tag comment``
+    step in ``.github/workflows/verify-agents.yml``."""
+    assert scan_workflow_action_pins.main(["verify", "--repo-root", "."]) == 0
+
+
+def test_scan_workflow_pip_verify_matches_workflow_args() -> None:
+    """Mirrors the ``Assert workflows install Python deps via uv only``
+    step in ``.github/workflows/verify-agents.yml``."""
+    assert scan_workflow_pip.main(["verify", "--repo-root", "."]) == 0
 
 
 def test_security_drift_report_aggregate_and_post_comment_match_workflow_args(
