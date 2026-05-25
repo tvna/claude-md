@@ -70,6 +70,42 @@ _REQUIRED_SECTIONS: tuple[str, ...] = (
 # and the retro body records the fallback in its Facts section.
 _TYPE_SCOPE_RE = re.compile(r"^([a-z][a-z0-9-]*(?:\([a-z0-9-]+\))?)\s*:")
 
+# Patterns for reading the post-2026-05-26 PR shape. Kept literally
+# aligned with scripts/body_policy.py to make the hook + server gate +
+# retro reader share one truth. tests/test_auto_retro.py contains an
+# alignment test (test_verification_regex_align_with_body_policy) that
+# fails on drift.
+_VERIFICATION_COMMAND_RE = re.compile(
+    r"^-[ \t]+command:[ \t]*`[^`\n]+`[ \t]*$",
+    re.MULTILINE,
+)
+_VERIFICATION_RESULT_RE = re.compile(
+    r"^[ \t]{2}result:[ \t]*\S.*$",
+    re.MULTILINE,
+)
+
+_RESULT_PASSING_PREFIXES: tuple[str, ...] = (
+    "exit 0",
+    "ok",
+    "ok:",
+    "pass",
+    "passed",
+    "success",
+)
+
+# Append-to-existing-retro markers used by append_repair_history_row.
+_AUTO_FILLED_OPEN = "<!-- auto-filled:repair-history -->"
+_AUTO_FILLED_CLOSE = "<!-- /auto-filled:repair-history -->"
+_APPENDED_OPEN = "<!-- appended-follow-up-fixes -->"
+_APPENDED_CLOSE = "<!-- /appended-follow-up-fixes -->"
+
+
+@dataclass(frozen=True)
+class VerificationPair:
+    command: str
+    result: str
+    passed: bool
+
 
 @dataclass(frozen=True)
 class MergedPR:
@@ -195,6 +231,125 @@ def _count_merge_from_main(subjects: list[str]) -> int:
     )
 
 
+def _slice_section(body: str, heading: str) -> str:
+    """Return the slice of ``body`` under ``## heading`` up to the next H2.
+
+    HTML comments are stripped first so a commented heading does not
+    pretend to terminate the range. Case-insensitive match on the
+    heading text. Returns ``""`` when the heading is absent.
+    """
+    cleaned = strip_html_comments((body or "").replace("\r", ""))
+    lines = cleaned.splitlines()
+    target = heading.strip().casefold()
+    h2_pattern = re.compile(r"^##[ \t]+(.+?)[ \t]*$")
+    start: int | None = None
+    end = len(lines)
+    for i, line in enumerate(lines):
+        match = h2_pattern.match(line)
+        if match is None:
+            # H3+ inside an active section is part of the slice.
+            continue
+        text = match.group(1).rstrip(":").strip()
+        if start is None:
+            if text.casefold() == target:
+                start = i + 1
+            continue
+        end = i
+        break
+    if start is None:
+        return ""
+    return "\n".join(lines[start:end])
+
+
+def _result_is_passing(result: str) -> bool:
+    """Return True if a Verification result line text looks like a pass.
+
+    Strips surrounding backticks and leading whitespace, then matches a
+    small allowlist of pass markers (``exit 0``, ``OK:``, ``pass``,
+    ``passed``, ``success``, ``ok``). Anything else (including ``exit
+    1``, ``failed``, prose) is treated as a failure signal.
+    """
+    text = result.strip()
+    if text.startswith("`") and text.endswith("`") and len(text) >= 2:
+        text = text[1:-1].strip()
+    lower = text.lower()
+    return any(lower.startswith(prefix) for prefix in _RESULT_PASSING_PREFIXES)
+
+
+def extract_verification_pairs(body: str) -> list[VerificationPair]:
+    """Parse ``## Verification`` from a PR body into command/result pairs.
+
+    Returns an empty list when the section is absent or empty. Pairing
+    is order-dependent (command line followed immediately by a result
+    line on the next physical line) so a stray ``command:`` or
+    ``result:`` does not produce a half pair.
+    """
+    section = _slice_section(body, "Verification")
+    if not section.strip():
+        return []
+    lines = section.splitlines()
+    pairs: list[VerificationPair] = []
+    i = 0
+    while i < len(lines):
+        cmd_match = _VERIFICATION_COMMAND_RE.fullmatch(lines[i])
+        if cmd_match is not None and i + 1 < len(lines):
+            res_match = _VERIFICATION_RESULT_RE.fullmatch(lines[i + 1])
+            if res_match is not None:
+                cmd_text = lines[i].split("command:", 1)[1].strip()
+                res_text = lines[i + 1].split("result:", 1)[1].strip()
+                pairs.append(
+                    VerificationPair(
+                        command=cmd_text,
+                        result=res_text,
+                        passed=_result_is_passing(res_text),
+                    )
+                )
+                i += 2
+                continue
+        i += 1
+    return pairs
+
+
+def extract_post_merge_checklist(body: str) -> list[tuple[str, bool]]:
+    """Parse ``## Checklist > ### Post-merge`` into ``[(item, checked)]``.
+
+    Returns ``[]`` when the Checklist section or its Post-merge H3 is
+    absent. ``After-merge`` and ``Bootstrap`` siblings are not included.
+    The subsection match is case-insensitive and tolerates a trailing
+    parenthetic clarifier (``### Post-merge (auto-retro signal)``).
+    """
+    section = _slice_section(body, "Checklist")
+    if not section.strip():
+        return []
+    lines = section.splitlines()
+    h3_pattern = re.compile(r"^###[ \t]+(.+?)[ \t]*$")
+    item_pattern = re.compile(r"^[ \t]*-[ \t]+\[([ xX])\][ \t]+(.+?)\s*$")
+    start: int | None = None
+    end = len(lines)
+    for i, line in enumerate(lines):
+        match = h3_pattern.match(line)
+        if match is None:
+            continue
+        text = match.group(1).rstrip(":").strip()
+        base = text.split("(", 1)[0].strip().casefold()
+        if start is None:
+            if base == "post-merge":
+                start = i + 1
+            continue
+        end = i
+        break
+    if start is None:
+        return []
+    items: list[tuple[str, bool]] = []
+    for line in lines[start:end]:
+        m = item_pattern.match(line)
+        if m is None:
+            continue
+        checked = m.group(1).lower() == "x"
+        items.append((m.group(2).strip(), checked))
+    return items
+
+
 def compute_repair_signals(
     pr: MergedPR,
     has_inline_comments: bool,
@@ -238,11 +393,19 @@ def compute_repair_signals(
     else:
         pure_commits = pr.commits - _count_merge_from_main(commit_subjects)
         multi_commit = pure_commits > 1
+    verification_pairs = extract_verification_pairs(pr.body or "")
+    post_merge_items = extract_post_merge_checklist(pr.body or "")
     return {
         "inline_review_comments": bool(has_inline_comments),
         "body_cites_refs": len(refs) > 0,
         "fix_typed_title": fix_typed,
         "multi_commit_pr": multi_commit,
+        "verification_pairs_failed": any(
+            not p.passed for p in verification_pairs
+        ),
+        "post_merge_unchecked": any(
+            not checked for _, checked in post_merge_items
+        ),
     }
 
 
@@ -287,6 +450,8 @@ def _build_repair_history_table(
     check_runs: list[dict[str, Any]] | None,
     commit_subjects: list[str],
     pr_commit_count: int,
+    verification_pairs: list[VerificationPair] | None = None,
+    post_merge_items: list[tuple[str, bool]] | None = None,
 ) -> str:
     """Render the Repair history markdown table (header + rows, no surrounds).
 
@@ -354,6 +519,26 @@ def _build_repair_history_table(
             )
         )
 
+    for pair in verification_pairs or []:
+        if pair.passed:
+            continue
+        rows.append(
+            (
+                _escape_table_cell(f"Verification fail: {pair.command}"),
+                _escape_table_cell(f"observed: {pair.result}"),
+            )
+        )
+
+    for item, checked in post_merge_items or []:
+        if checked:
+            continue
+        rows.append(
+            (
+                _escape_table_cell("Post-merge gate unchecked"),
+                _escape_table_cell(item),
+            )
+        )
+
     header = (
         "| # | Repair | What the reviewer / gate caught |\n"
         "|---|--------|----------------------------------|\n"
@@ -375,6 +560,8 @@ def build_retro_body(
     pr: MergedPR,
     commit_subjects: list[str],
     check_runs: list[dict[str, Any]] | None = None,
+    verification_pairs: list[VerificationPair] | None = None,
+    post_merge_items: list[tuple[str, bool]] | None = None,
 ) -> str:
     """Return the markdown body. Contains every section in :data:`_REQUIRED_SECTIONS`.
 
@@ -400,7 +587,11 @@ def build_retro_body(
         else "  - (no commit subjects fetched)"
     )
     repair_table = _build_repair_history_table(
-        check_runs, commit_subjects, pr.commits
+        check_runs,
+        commit_subjects,
+        pr.commits,
+        verification_pairs,
+        post_merge_items,
     )
     # Idempotent date stamp: derive from pr.merged_at (already an ISO
     # 8601 string from the event payload) rather than datetime.now() so
@@ -478,6 +669,84 @@ def build_retro_body(
         "rows: classification, prevention point, no-repair path, "
         "follow-ups)._\n"
     )
+
+
+def find_target_retro_from_refs(
+    pr: MergedPR,
+    referenced_titles: dict[int, str],
+) -> int | None:
+    """Return the retro issue number a fix-typed PR is amending, or ``None``.
+
+    Used by :func:`run` to decide whether a freshly merged ``fix(...)``
+    PR should append to an existing retro issue rather than open a new
+    one. The match requires both:
+
+    - the PR title starts with ``fix(`` (Conventional Commit ``fix``
+      type), AND
+    - the PR body has at least one line-anchored ``Refs|Closes|Fixes|
+      Resolves #N`` whose target issue title starts with ``retro(`` or
+      ``retro:`` (case-insensitive after lstrip).
+
+    The first match wins so the body order determines priority. Pure
+    function: callers supply ``referenced_titles`` via :func:`fetch_issue_titles`.
+    """
+    if not pr.title.lstrip().lower().startswith("fix("):
+        return None
+    body_without_comments = strip_html_comments(pr.body or "")
+    refs = extract_refs(body_without_comments)
+    for number in refs:
+        title = referenced_titles.get(number)
+        if title is None:
+            continue
+        stripped = title.lstrip().lower()
+        if stripped.startswith("retro(") or stripped.startswith("retro:"):
+            return number
+    return None
+
+
+def render_appended_row(pr: MergedPR) -> tuple[str, str]:
+    """Render the (left, right) markdown cells for a follow-up fix row."""
+    return (
+        _escape_table_cell(f"Follow-up fix PR: #{pr.number}"),
+        _escape_table_cell(f"`{pr.title}` merged at {pr.merged_at}"),
+    )
+
+
+def _next_table_index(table_text: str) -> int:
+    """Return the next available row index for the auto-filled table.
+
+    Scans existing ``| N | ... |`` rows and returns ``max(N) + 1``,
+    falling back to 1 when no numbered rows exist.
+    """
+    pattern = re.compile(r"^\|\s*(\d+)\s*\|", re.MULTILINE)
+    indexes = [int(m.group(1)) for m in pattern.finditer(table_text)]
+    return max(indexes) + 1 if indexes else 1
+
+
+def _insert_appended_row(
+    body: str, row: tuple[str, str], pr_number: int
+) -> tuple[str, bool]:
+    """Append a row to the retro body's auto-filled block.
+
+    Returns ``(new_body, changed)``. ``changed`` is False when:
+    - the auto-filled markers are missing (caller should fail-soft), or
+    - a row mentioning ``#<pr_number>`` is already present (idempotent).
+
+    The row is inserted as a new line just before the
+    ``<!-- /auto-filled:repair-history -->`` close marker.
+    """
+    open_idx = body.find(_AUTO_FILLED_OPEN)
+    close_idx = body.find(_AUTO_FILLED_CLOSE)
+    if open_idx == -1 or close_idx == -1 or close_idx < open_idx:
+        return body, False
+    block = body[open_idx:close_idx]
+    needle = re.compile(rf"#{pr_number}(?!\d)")
+    if needle.search(block):
+        return body, False
+    next_idx = _next_table_index(block)
+    new_line = f"| {next_idx} | {row[0]} | {row[1]} |\n"
+    new_body = body[:close_idx] + new_line + body[close_idx:]
+    return new_body, True
 
 
 def find_existing_retro(
@@ -630,6 +899,90 @@ def has_review_comments(repo: str, pr_number: int) -> bool:
     return bool(items)
 
 
+def fetch_issue_titles(
+    repo: str, numbers: list[int]
+) -> dict[int, str]:
+    """Return ``{number: title}`` for each issue in *numbers* that resolves.
+
+    Issues that fail to fetch (404, transient error, malformed JSON) are
+    omitted from the returned dict so callers can treat the lookup as
+    best-effort. Used by :func:`find_target_retro_from_refs`.
+    """
+    out: dict[int, str] = {}
+    for number in numbers:
+        try:
+            raw = gh_api("GET", f"/repos/{repo}/issues/{number}")
+        except subprocess.CalledProcessError:
+            continue
+        try:
+            data = json.loads(raw) if raw.strip() else {}
+        except json.JSONDecodeError:
+            continue
+        title = data.get("title")
+        if isinstance(title, str):
+            out[number] = title
+    return out
+
+
+def fetch_issue_body(repo: str, number: int) -> str:
+    """Return the body of issue ``<repo>#<number>`` or ``""`` on failure."""
+    try:
+        raw = gh_api("GET", f"/repos/{repo}/issues/{number}")
+    except subprocess.CalledProcessError:
+        return ""
+    try:
+        data = json.loads(raw) if raw.strip() else {}
+    except json.JSONDecodeError:
+        return ""
+    body = data.get("body")
+    return body if isinstance(body, str) else ""
+
+
+def patch_issue_body(
+    repo: str, number: int, body: str
+) -> dict[str, Any]:
+    """PATCH /repos/{repo}/issues/{number} with the new body and return JSON."""
+    raw = gh_api(
+        "PATCH",
+        f"/repos/{repo}/issues/{number}",
+        {"body": body},
+    )
+    return json.loads(raw) if raw.strip() else {}
+
+
+def append_repair_history_row(
+    repo: str,
+    retro_number: int,
+    pr: MergedPR,
+) -> tuple[bool, str]:
+    """Append a follow-up fix row to ``retro_number``'s auto-filled block.
+
+    Returns ``(changed, detail)``. ``changed`` is False when the retro
+    body lacks the auto-filled markers or when an idempotent skip fires.
+    Caller-friendly *detail* string is suitable for the step summary.
+    """
+    body = fetch_issue_body(repo, retro_number)
+    if not body:
+        return (
+            False,
+            f"could not fetch retro #{retro_number} body (skipping append)",
+        )
+    row = render_appended_row(pr)
+    new_body, changed = _insert_appended_row(body, row, pr.number)
+    if not changed:
+        return (
+            False,
+            f"retro #{retro_number} already records PR #{pr.number} "
+            "(or auto-filled markers absent)",
+        )
+    patch_issue_body(repo, retro_number, new_body)
+    return (
+        True,
+        f"appended follow-up row for PR #{pr.number} to retro "
+        f"#{retro_number}",
+    )
+
+
 def create_issue(
     repo: str, title: str, body: str, labels: list[str]
 ) -> dict[str, Any]:
@@ -749,6 +1102,48 @@ def run(event: dict[str, Any], repo: str) -> int:
         _append_summary(_build_summary(pr, "skip", msg))
         return 0
 
+    # Follow-up fix() PR that references a retro: append a row to the
+    # target retro instead of opening a new one. Idempotent on the
+    # (retro, source PR) pair.
+    if pr.title.lstrip().lower().startswith("fix("):
+        body_without_comments = strip_html_comments(pr.body or "")
+        candidate_refs = extract_refs(body_without_comments)
+        if candidate_refs:
+            try:
+                titles = fetch_issue_titles(repo, candidate_refs)
+            except subprocess.CalledProcessError as exc:
+                print(
+                    f"::warning::fetch_issue_titles failed "
+                    f"(exit {exc.returncode}); proceeding to open new retro",
+                    file=sys.stderr,
+                )
+                titles = {}
+            target = find_target_retro_from_refs(pr, titles)
+            if target is not None:
+                try:
+                    changed, detail = append_repair_history_row(
+                        repo, target, pr
+                    )
+                except subprocess.CalledProcessError as exc:
+                    print(
+                        f"::warning::append_repair_history_row failed "
+                        f"(exit {exc.returncode}); NOT falling back to new "
+                        "retro to avoid duplicates",
+                        file=sys.stderr,
+                    )
+                    _append_summary(
+                        _build_summary(
+                            pr,
+                            "append-failed",
+                            f"PATCH retro #{target} failed; investigate manually",
+                        )
+                    )
+                    return 0
+                action = "appended" if changed else "skip"
+                print(f"{action}: {detail}")
+                _append_summary(_build_summary(pr, action, detail))
+                return 0
+
     try:
         has_inline_comments = has_review_comments(repo, pr.number)
     except subprocess.CalledProcessError as exc:
@@ -805,8 +1200,16 @@ def run(event: dict[str, Any], repo: str) -> int:
             file=sys.stderr,
         )
         check_runs = []
+    verification_pairs = extract_verification_pairs(pr.body or "")
+    post_merge_items = extract_post_merge_checklist(pr.body or "")
     title = build_retro_title(pr)
-    body = build_retro_body(pr, commit_subjects, check_runs)
+    body = build_retro_body(
+        pr,
+        commit_subjects,
+        check_runs,
+        verification_pairs,
+        post_merge_items,
+    )
     labels = issue_labels(pr.layer_labels)
 
     created = create_issue(repo, title, body, labels)

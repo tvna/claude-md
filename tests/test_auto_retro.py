@@ -1429,6 +1429,8 @@ class TestComputeRepairSignals:
             "body_cites_refs": False,
             "fix_typed_title": False,
             "multi_commit_pr": False,
+            "verification_pairs_failed": False,
+            "post_merge_unchecked": False,
         }
 
     def test_body_refs_signal_fires_for_refs(self) -> None:
@@ -1677,6 +1679,502 @@ class TestRunAggregateSignals:
         assert "multi_commit_pr=false" in printed
         # Step summary also carries the same reason for the audit trail.
         assert "no repair signal fired" in summary.read_text(encoding="utf-8")
+
+
+# ---------------------------------------------------------------------------
+# Post-2026-05-26 PR shape readers (issue #fluffy-bubble)
+# ---------------------------------------------------------------------------
+
+
+_NEW_SHAPE_BODY = """## Summary
+
+x
+
+## Verification
+
+- command: `pytest -q`
+  result: `exit 0 (684 passed)`
+- command: `ruff check .`
+  result: `exit 1 (4 errors)`
+
+## Checklist
+
+### Bootstrap
+
+- [x] facts split honest
+- [ ] risk assessed
+
+### After-merge (CI)
+
+- [x] CI green
+
+### Post-merge (auto-retro signal)
+
+- [x] linked issue closed
+- [ ] auto-retro opened
+- [ ] no follow-up fix
+"""
+
+
+class TestVerificationRegexAlign:
+    def test_command_regex_pattern_matches_body_policy(self) -> None:
+        assert (
+            ar._VERIFICATION_COMMAND_RE.pattern
+            == bp._VERIFICATION_COMMAND_RE.pattern
+        )
+
+    def test_result_regex_pattern_matches_body_policy(self) -> None:
+        assert (
+            ar._VERIFICATION_RESULT_RE.pattern
+            == bp._VERIFICATION_RESULT_RE.pattern
+        )
+
+
+class TestExtractVerificationPairs:
+    def test_empty_body_returns_empty(self) -> None:
+        assert ar.extract_verification_pairs("") == []
+
+    def test_missing_section_returns_empty(self) -> None:
+        assert ar.extract_verification_pairs("## Summary\n\n- x\n") == []
+
+    def test_pairs_parsed(self) -> None:
+        pairs = ar.extract_verification_pairs(_NEW_SHAPE_BODY)
+        assert len(pairs) == 2
+        assert pairs[0].command == "`pytest -q`"
+        assert pairs[0].passed is True
+        assert pairs[1].command == "`ruff check .`"
+        assert pairs[1].passed is False
+
+    def test_passed_when_result_starts_with_ok(self) -> None:
+        body = (
+            "## Verification\n\n"
+            "- command: `body_policy verify`\n"
+            "  result: `OK: pull_request body contains all required sections.`\n"
+        )
+        pairs = ar.extract_verification_pairs(body)
+        assert pairs and pairs[0].passed is True
+
+    def test_failed_when_result_is_failure_prose(self) -> None:
+        body = (
+            "## Verification\n\n"
+            "- command: `pytest`\n"
+            "  result: `failed: 3 tests broken`\n"
+        )
+        pairs = ar.extract_verification_pairs(body)
+        assert pairs and pairs[0].passed is False
+
+    def test_orphan_command_does_not_yield_pair(self) -> None:
+        body = "## Verification\n\n- command: `pytest`\nresult: `exit 0`\n"
+        pairs = ar.extract_verification_pairs(body)
+        assert pairs == []
+
+    def test_html_commented_pairs_ignored(self) -> None:
+        body = (
+            "## Verification\n\n"
+            "<!-- - command: `fake`\n  result: `fake` -->\n"
+            "- command: `real`\n  result: `exit 0`\n"
+        )
+        pairs = ar.extract_verification_pairs(body)
+        assert len(pairs) == 1
+        assert pairs[0].command == "`real`"
+
+
+class TestExtractPostMergeChecklist:
+    def test_empty_body_returns_empty(self) -> None:
+        assert ar.extract_post_merge_checklist("") == []
+
+    def test_missing_checklist_returns_empty(self) -> None:
+        assert ar.extract_post_merge_checklist("## Summary\n") == []
+
+    def test_extracts_post_merge_items_only(self) -> None:
+        items = ar.extract_post_merge_checklist(_NEW_SHAPE_BODY)
+        assert items == [
+            ("linked issue closed", True),
+            ("auto-retro opened", False),
+            ("no follow-up fix", False),
+        ]
+        # Sanity: Bootstrap items must NOT leak in.
+        labels = [item for item, _ in items]
+        assert "facts split honest" not in labels
+        assert "CI green" not in labels
+
+    def test_tolerates_clarifier_in_heading(self) -> None:
+        body = """## Checklist
+
+### Post-merge
+
+- [ ] x
+"""
+        assert ar.extract_post_merge_checklist(body) == [("x", False)]
+
+    def test_distinguishes_checked_and_unchecked(self) -> None:
+        body = """## Checklist
+
+### Post-merge
+
+- [x] done
+- [ ] todo
+- [X] also done
+"""
+        items = ar.extract_post_merge_checklist(body)
+        assert items == [
+            ("done", True),
+            ("todo", False),
+            ("also done", True),
+        ]
+
+
+class TestRepairHistoryTableNewRows:
+    def test_verification_fail_row_emitted(self) -> None:
+        pairs = [
+            ar.VerificationPair(
+                command="`pytest -q`",
+                result="`exit 1`",
+                passed=False,
+            ),
+        ]
+        table = ar._build_repair_history_table(
+            None, [], 1, pairs, []
+        )
+        assert "Verification fail" in table
+        assert "`pytest -q`" in table
+        assert "observed: `exit 1`" in table
+
+    def test_passing_verification_pair_not_in_table(self) -> None:
+        pairs = [
+            ar.VerificationPair(
+                command="`pytest -q`",
+                result="`exit 0`",
+                passed=True,
+            ),
+        ]
+        table = ar._build_repair_history_table(
+            None, [], 1, pairs, []
+        )
+        assert "Verification fail" not in table
+
+    def test_post_merge_unchecked_row_emitted(self) -> None:
+        table = ar._build_repair_history_table(
+            None, [], 1, None, [("linked issue closed", False)]
+        )
+        assert "Post-merge gate unchecked" in table
+        assert "linked issue closed" in table
+
+    def test_checked_post_merge_item_not_in_table(self) -> None:
+        table = ar._build_repair_history_table(
+            None, [], 1, None, [("linked issue closed", True)]
+        )
+        assert "Post-merge gate unchecked" not in table
+
+    def test_row_ordering_existing_classes_before_new(self) -> None:
+        pairs = [
+            ar.VerificationPair("`a`", "`exit 1`", False),
+        ]
+        post_merge = [("p", False)]
+        table = ar._build_repair_history_table(
+            None, ["fix(harness): patch"], 2, pairs, post_merge
+        )
+        # Existing class (Iteration commit) appears before new classes.
+        iter_idx = table.find("Iteration commit")
+        verif_idx = table.find("Verification fail")
+        post_idx = table.find("Post-merge gate unchecked")
+        assert 0 < iter_idx < verif_idx < post_idx
+
+    def test_default_args_keep_legacy_callsite(self) -> None:
+        # No new-arg callers still work, no new rows produced.
+        table = ar._build_repair_history_table(None, [], 1)
+        assert "Verification fail" not in table
+        assert "Post-merge gate unchecked" not in table
+
+
+# ---------------------------------------------------------------------------
+# Post-2026-05-26 follow-up fix() append branch
+# ---------------------------------------------------------------------------
+
+
+class TestFindTargetRetroFromRefs:
+    def _pr(self, **overrides: Any) -> ar.MergedPR:
+        defaults: dict[str, Any] = {
+            "number": 50,
+            "title": "fix(harness): follow-up",
+            "merged": True,
+            "merged_at": "2026-05-27T10:00:00Z",
+            "merged_by_login": "tvna",
+            "user_login": "tvna",
+            "layer_labels": (),
+            "html_url": "https://x/pr/50",
+            "body": "Refs #40\n",
+            "commits": 1,
+        }
+        defaults.update(overrides)
+        return ar.MergedPR(**defaults)
+
+    def test_returns_retro_number_when_fix_typed_refs_a_retro(self) -> None:
+        pr = self._pr()
+        titles = {40: "retro(feat): review PR #20 repair loops"}
+        assert ar.find_target_retro_from_refs(pr, titles) == 40
+
+    def test_returns_none_for_non_fix_typed_title(self) -> None:
+        pr = self._pr(title="feat(harness): new thing")
+        titles = {40: "retro(feat): review PR #20 repair loops"}
+        assert ar.find_target_retro_from_refs(pr, titles) is None
+
+    def test_returns_none_when_ref_does_not_resolve_to_retro(self) -> None:
+        pr = self._pr()
+        titles = {40: "feat(harness): not a retro"}
+        assert ar.find_target_retro_from_refs(pr, titles) is None
+
+    def test_returns_first_matching_retro(self) -> None:
+        pr = self._pr(body="Refs #40\nRefs #50\n")
+        titles = {
+            40: "feat: ordinary",
+            50: "retro(feat): review",
+        }
+        assert ar.find_target_retro_from_refs(pr, titles) == 50
+
+    def test_returns_none_when_no_refs(self) -> None:
+        pr = self._pr(body="no refs at all")
+        assert ar.find_target_retro_from_refs(pr, {}) is None
+
+    def test_ignores_html_commented_refs(self) -> None:
+        pr = self._pr(body="<!-- Refs #40 -->\n")
+        titles = {40: "retro(feat): review"}
+        assert ar.find_target_retro_from_refs(pr, titles) is None
+
+
+class TestInsertAppendedRow:
+    _SAMPLE = (
+        "## Proposed work\n"
+        "\n"
+        "<!-- auto-filled:repair-history -->\n"
+        "1. Repair history\n"
+        "\n"
+        "| # | Repair | What |\n"
+        "|---|--------|------|\n"
+        "| 1 | A | B |\n"
+        "<!-- /auto-filled:repair-history -->\n"
+        "\n"
+        "more text\n"
+    )
+
+    def test_appends_row_with_next_index(self) -> None:
+        new_body, changed = ar._insert_appended_row(
+            self._SAMPLE,
+            ("Follow-up fix PR: #50", "`fix(x): y` merged at T"),
+            50,
+        )
+        assert changed is True
+        assert "| 2 |" in new_body
+        assert "Follow-up fix PR: #50" in new_body
+        assert (
+            new_body.index("Follow-up fix PR: #50")
+            < new_body.index("<!-- /auto-filled:repair-history -->")
+        )
+
+    def test_idempotent_when_pr_already_recorded(self) -> None:
+        body = self._SAMPLE.replace("| 1 | A | B |", "| 1 | Follow-up #50 | x |")
+        _, changed = ar._insert_appended_row(body, ("x", "y"), 50)
+        assert changed is False
+
+    def test_no_change_when_markers_missing(self) -> None:
+        body = "## Proposed work\n\nno markers here\n"
+        new_body, changed = ar._insert_appended_row(body, ("x", "y"), 50)
+        assert changed is False
+        assert new_body == body
+
+    def test_next_index_falls_back_to_one_with_empty_table(self) -> None:
+        body = (
+            "<!-- auto-filled:repair-history -->\n"
+            "no rows\n"
+            "<!-- /auto-filled:repair-history -->\n"
+        )
+        new_body, changed = ar._insert_appended_row(body, ("x", "y"), 99)
+        assert changed is True
+        assert "| 1 | x | y |" in new_body
+
+    def test_pr_number_prefix_collision_not_idempotent(self) -> None:
+        body = self._SAMPLE.replace(
+            "| 1 | A | B |", "| 1 | Follow-up #500 | x |"
+        )
+        # PR #50 must NOT match an existing #500 row.
+        _, changed = ar._insert_appended_row(body, ("a", "b"), 50)
+        assert changed is True
+
+
+class TestAppendRepairHistoryRowIntegration:
+    """Tests ar.append_repair_history_row with gh_api monkeypatched."""
+
+    _RETRO_BODY = (
+        "## Scope\n\n"
+        "x\n"
+        "\n"
+        "## Proposed work\n"
+        "\n"
+        "<!-- auto-filled:repair-history -->\n"
+        "| # | Repair | What |\n"
+        "|---|--------|------|\n"
+        "| 1 | CI fail | x |\n"
+        "<!-- /auto-filled:repair-history -->\n"
+    )
+
+    def _pr(self, **overrides: Any) -> ar.MergedPR:
+        defaults: dict[str, Any] = {
+            "number": 77,
+            "title": "fix(harness): patch",
+            "merged": True,
+            "merged_at": "2026-05-27T10:00:00Z",
+            "merged_by_login": "tvna",
+            "user_login": "tvna",
+            "layer_labels": (),
+            "html_url": "https://x/pr/77",
+            "body": "Refs #66\n",
+            "commits": 1,
+        }
+        defaults.update(overrides)
+        return ar.MergedPR(**defaults)
+
+    def test_patches_retro_body_when_marker_present(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        seen: list[tuple] = []
+
+        def fake_api(method, path, body=None, **_kw):
+            seen.append((method, path, body))
+            if method == "GET":
+                return json.dumps({"body": self._RETRO_BODY})
+            if method == "PATCH":
+                return json.dumps({"number": 66})
+            return ""
+
+        monkeypatch.setattr(ar, "gh_api", fake_api)
+        changed, detail = ar.append_repair_history_row("o/r", 66, self._pr())
+        assert changed is True
+        assert "appended" in detail.lower()
+        patches = [s for s in seen if s[0] == "PATCH"]
+        assert len(patches) == 1
+        assert patches[0][1] == "/repos/o/r/issues/66"
+        assert "Follow-up fix PR: #77" in patches[0][2]["body"]
+
+    def test_no_patch_when_markers_missing(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        seen: list[tuple] = []
+
+        def fake_api(method, path, body=None, **_kw):
+            seen.append((method, path, body))
+            if method == "GET":
+                return json.dumps({"body": "## Scope\n\nno markers\n"})
+            return ""
+
+        monkeypatch.setattr(ar, "gh_api", fake_api)
+        changed, detail = ar.append_repair_history_row("o/r", 66, self._pr())
+        assert changed is False
+        assert "markers absent" in detail or "already records" in detail
+        assert not any(s[0] == "PATCH" for s in seen)
+
+    def test_idempotent_when_pr_already_in_block(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        retro_with_pr = self._RETRO_BODY.replace(
+            "| 1 | CI fail | x |",
+            "| 1 | Follow-up fix PR: #77 | x |",
+        )
+
+        def fake_api(method, path, body=None, **_kw):
+            if method == "GET":
+                return json.dumps({"body": retro_with_pr})
+            return ""
+
+        monkeypatch.setattr(ar, "gh_api", fake_api)
+        changed, _ = ar.append_repair_history_row("o/r", 66, self._pr())
+        assert changed is False
+
+
+class TestRunAppendBranch:
+    """Tests run() routing a fix-typed PR to append rather than create."""
+
+    _RETRO_BODY = (
+        "## Scope\n\nx\n"
+        "<!-- auto-filled:repair-history -->\n"
+        "| # | Repair | What |\n"
+        "|---|--------|------|\n"
+        "<!-- /auto-filled:repair-history -->\n"
+    )
+
+    def _setup(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        *,
+        retro_title: str,
+        retro_body: str = "",
+    ) -> list[tuple]:
+        seen: list[tuple] = []
+        retro_body = retro_body or self._RETRO_BODY
+
+        def fake_api(method, path, body=None, **_kw):
+            seen.append((method, path, body))
+            if method == "GET" and path.startswith("/search/issues"):
+                return json.dumps({"items": []})
+            if method == "GET" and path == "/repos/o/r/issues/66":
+                return json.dumps(
+                    {"title": retro_title, "body": retro_body}
+                )
+            if method == "GET" and "/pulls/" in path and "/comments" in path:
+                return json.dumps([])
+            if method == "GET" and "/pulls/" in path and "/commits" in path:
+                return json.dumps([])
+            if method == "GET" and "/check-runs" in path:
+                return json.dumps({"check_runs": []})
+            if method == "GET" and "/pulls/" in path:
+                return json.dumps({"merge_commit_sha": None})
+            if method == "POST" and path.endswith("/issues"):
+                return json.dumps(
+                    {"number": 999, "html_url": "https://x/i/999"}
+                )
+            if method == "PATCH":
+                return json.dumps({"number": 66})
+            return ""
+
+        monkeypatch.setattr(ar, "gh_api", fake_api)
+        return seen
+
+    def test_fix_pr_referencing_retro_triggers_append(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        seen = self._setup(
+            monkeypatch,
+            retro_title="retro(feat): review PR #20 repair loops",
+        )
+        event = _merged_event(
+            number=77,
+            title="fix(harness): patch",
+            body="Refs #66\n",
+        )
+        assert ar.run(event, "o/r") == 0
+        assert any(m == "PATCH" for m, _, _ in seen)
+        assert not any(
+            m == "POST" and p == "/repos/o/r/issues" for m, p, _ in seen
+        )
+
+    def test_fix_pr_referencing_non_retro_creates_normally(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        seen = self._setup(
+            monkeypatch,
+            retro_title="feat(harness): not a retro",
+        )
+        event = _merged_event(
+            number=78,
+            title="fix(harness): patch",
+            body="Refs #66\n",
+        )
+        # Without a retro target, run() falls through to create_issue
+        # via the standard signal aggregate (multi_commit, fix_typed,
+        # etc.). fix_typed_title fires for this title, so an issue is
+        # created.
+        assert ar.run(event, "o/r") == 0
+        # PATCH must NOT fire because no retro was found.
+        assert not any(m == "PATCH" for m, _, _ in seen)
 
 
 # ---------------------------------------------------------------------------

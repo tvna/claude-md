@@ -1,0 +1,253 @@
+"""Tests for ``scripts/preflight_pr_template_shape.py``.
+
+Mirrors the structure of ``tests/test_pr_body_close_keyword_gate.py``:
+pure decision function tested in isolation, then the stdin/stdout
+boundary of :func:`main` with monkeypatched ``sys.stdin``.
+
+The ``scripts/`` directory is on ``sys.path`` via ``pythonpath`` under
+``[tool.pytest.ini_options]`` in ``pyproject.toml``.
+"""
+
+from __future__ import annotations
+
+import io
+import json
+from typing import Any
+
+import preflight_pr_template_shape as shape
+import pytest
+
+# ---------------------------------------------------------------------------
+# Fixture bodies
+# ---------------------------------------------------------------------------
+
+
+_VERIFICATION_OK = """## Verification
+
+- command: `pytest -q`
+  result: `exit 0 (684 passed)`
+"""
+
+_CHECKLIST_OK = """## Checklist
+
+### Bootstrap
+
+- [ ] facts split honest
+
+### After-merge (CI)
+
+- [ ] CI green
+
+### Post-merge (auto-retro signal)
+
+- [ ] linked issue closed
+"""
+
+_GOOD_BODY = _VERIFICATION_OK + "\n" + _CHECKLIST_OK
+
+
+# ---------------------------------------------------------------------------
+# evaluate / decide
+# ---------------------------------------------------------------------------
+
+
+class TestEvaluate:
+    def test_good_body_returns_empty(self) -> None:
+        assert shape.evaluate(_GOOD_BODY) == []
+
+    def test_missing_verification_returns_error(self) -> None:
+        body = _CHECKLIST_OK
+        errors = shape.evaluate(body)
+        assert errors
+        assert any("Verification" in e for e in errors)
+
+    def test_missing_checklist_subsection_returns_error(self) -> None:
+        body = _VERIFICATION_OK + "\n## Checklist\n\n### Bootstrap\n\n- [ ] x\n"
+        errors = shape.evaluate(body)
+        assert any("After-merge" in e for e in errors)
+        assert any("Post-merge" in e for e in errors)
+
+
+class TestDecide:
+    def test_well_formed_body_passes(self) -> None:
+        assert (
+            shape.decide(
+                "mcp__github__create_pull_request",
+                {"body": _GOOD_BODY},
+            )
+            is None
+        )
+
+    def test_off_target_tool_passes(self) -> None:
+        assert (
+            shape.decide(
+                "mcp__github__list_issues", {"body": "anything"}
+            )
+            is None
+        )
+
+    def test_non_string_body_passes(self) -> None:
+        assert (
+            shape.decide(
+                "mcp__github__create_pull_request", {"body": None}
+            )
+            is None
+        )
+
+    def test_missing_body_passes(self) -> None:
+        assert (
+            shape.decide("mcp__github__create_pull_request", {}) is None
+        )
+
+    def test_bad_body_emits_deny(self) -> None:
+        decision = shape.decide(
+            "mcp__github__create_pull_request", {"body": ""}
+        )
+        assert decision is not None
+        spec = decision["hookSpecificOutput"]
+        assert spec["hookEventName"] == "PreToolUse"
+        assert spec["permissionDecision"] == "deny"
+        assert "preflight_pr_template_shape.py" in spec[
+            "permissionDecisionReason"
+        ]
+
+    def test_deny_reason_lists_concrete_errors(self) -> None:
+        # Body missing Verification section: deny reason must say so.
+        body = _CHECKLIST_OK
+        decision = shape.decide(
+            "mcp__github__update_pull_request", {"body": body}
+        )
+        assert decision is not None
+        reason = decision["hookSpecificOutput"]["permissionDecisionReason"]
+        assert "Verification" in reason
+
+
+# ---------------------------------------------------------------------------
+# main: stdin/stdout boundary
+# ---------------------------------------------------------------------------
+
+
+def _run_main(
+    monkeypatch: pytest.MonkeyPatch,
+    event: dict[str, Any] | str,
+    capsys: pytest.CaptureFixture[str],
+) -> tuple[int, str, str]:
+    payload = event if isinstance(event, str) else json.dumps(event)
+    monkeypatch.setattr("sys.stdin", io.StringIO(payload))
+    rc = shape.main([])
+    captured = capsys.readouterr()
+    return rc, captured.out, captured.err
+
+
+class TestMain:
+    def test_good_body_returns_0_silently(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        rc, out, err = _run_main(
+            monkeypatch,
+            {
+                "tool_name": "mcp__github__create_pull_request",
+                "tool_input": {"body": _GOOD_BODY},
+            },
+            capsys,
+        )
+        assert rc == 0
+        assert out == ""
+        assert err == ""
+
+    def test_bad_body_emits_deny_json(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        rc, out, _ = _run_main(
+            monkeypatch,
+            {
+                "tool_name": "mcp__github__create_pull_request",
+                "tool_input": {"body": ""},
+            },
+            capsys,
+        )
+        assert rc == 0
+        decision = json.loads(out)
+        assert (
+            decision["hookSpecificOutput"]["permissionDecision"] == "deny"
+        )
+
+    def test_off_target_tool_passes(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        rc, out, _ = _run_main(
+            monkeypatch,
+            {
+                "tool_name": "mcp__github__add_issue_comment",
+                "tool_input": {"body": ""},
+            },
+            capsys,
+        )
+        assert rc == 0
+        assert out == ""
+
+    def test_non_string_body_passes(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        rc, out, _ = _run_main(
+            monkeypatch,
+            {
+                "tool_name": "mcp__github__create_pull_request",
+                "tool_input": {"body": None},
+            },
+            capsys,
+        )
+        assert rc == 0
+        assert out == ""
+
+    def test_malformed_stdin_logs_and_returns_0(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        rc, out, err = _run_main(monkeypatch, "{not json", capsys)
+        assert rc == 0
+        assert out == ""
+        assert "malformed stdin" in err
+
+    def test_missing_tool_name_logs_and_returns_0(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        rc, out, err = _run_main(monkeypatch, {"tool_input": {}}, capsys)
+        assert rc == 0
+        assert out == ""
+        assert "missing tool_name" in err
+
+    def test_empty_stdin_returns_0(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        rc, out, _ = _run_main(monkeypatch, "", capsys)
+        assert rc == 0
+        assert out == ""
+
+
+# ---------------------------------------------------------------------------
+# ASCII contract (deny reason must be ASCII so server gate can echo it)
+# ---------------------------------------------------------------------------
+
+
+class TestASCIIContract:
+    def test_deny_reason_is_ascii(self) -> None:
+        decision = shape.decide(
+            "mcp__github__create_pull_request", {"body": ""}
+        )
+        assert decision is not None
+        reason = decision["hookSpecificOutput"]["permissionDecisionReason"]
+        assert reason.isascii(), reason

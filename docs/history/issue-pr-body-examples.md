@@ -175,3 +175,75 @@ Refs #206
 - [x] CLAUDE.md / AGENTS.md regenerated if applicable
 - [x] CI green
 ```
+
+### PR body (post-2026-05-26 shape)
+
+PRs created on or after 2026-05-26 UTC must use the shape below.
+`scripts/body_policy.py` (server) and
+`scripts/preflight_pr_template_shape.py` (MCP hook) both enforce it.
+The prior sample remains as a historical record of the pre-cutoff
+shape.
+
+```
+## Summary
+
+Tighten the PR body shape so Verification is recoverable evidence and
+Checklist items map cleanly onto Bootstrap / After-merge / Post-merge
+automation layers.
+
+## Related Issue
+
+Refs #343
+
+## Facts
+
+- scripts/body_policy.py now exposes verify_pr_verification_pairs and
+  verify_pr_checklist_subsections; tests in tests/test_body_policy.py
+  cover both.
+- scripts/auto_retro.py reads extract_verification_pairs and
+  extract_post_merge_checklist; failed pairs and unchecked Post-merge
+  items become rows in the auto-opened retro issue.
+
+## Assumptions
+
+- speculation: BODY_POLICY_SHAPE_CUTOFF set to 2026-05-26T00:00:00Z is
+  far enough in the future to give in-flight PRs time to land before
+  the gate flips.
+
+## Risk & blast radius
+
+- The shape gate fails any PR whose Verification or Checklist is not
+  in the new shape. Back-catalog PRs are exempt via cutoff.
+
+## Rollback
+
+- Revert this PR with `git revert <sha>` and clear
+  BODY_POLICY_SHAPE_CUTOFF in .github/workflows/verify-body-policy.yml.
+
+## Verification
+
+- command: `python3 -m pytest tests/test_body_policy.py tests/test_auto_retro.py tests/test_preflight_pr_template_shape.py -q`
+  result: `exit 0`
+- command: `python3 scripts/body_policy.py verify --kind pull_request --body-file /tmp/pr-body.md --shape-cutoff 2026-05-26T00:00:00Z --created-at 2026-05-27T00:00:00Z`
+  result: `OK: pull_request body contains all required sections.`
+
+## Checklist
+
+### Bootstrap
+
+- [x] Facts vs. Assumptions split is honest
+- [x] Risk & blast radius assessed; Rollback steps are runnable
+- [x] Issue number recorded on the `Refs #` line above
+
+### After-merge (CI)
+
+- [x] `pytest -q` exits 0 (paired in Verification above)
+- [x] CI green on the merge commit
+- [x] CLAUDE.md / AGENTS.md regenerated if applicable
+
+### Post-merge (auto-retro signal)
+
+- [ ] Linked issue closed by the merge
+- [ ] auto-retro issue opened by `.github/workflows/auto-retro.yml`
+- [ ] No follow-up `fix(...)` PR needed within 24h of merge
+```

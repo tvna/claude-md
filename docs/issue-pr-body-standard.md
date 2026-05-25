@@ -118,25 +118,48 @@ on a tracking issue.
 
 ## PR body sections
 
-`.github/PULL_REQUEST_TEMPLATE.md` already defines the required PR body
-shape. The required sections are:
+`.github/PULL_REQUEST_TEMPLATE.md` defines the required PR body shape.
+The required H2 sections, in order, are:
 
 - `## Summary` - one or two sentences that name what the PR changes and
   why. Mirrors the linked issue's `Scope` and `Why`.
-- `## Related Issue` - a single `Refs #<number>` line. Per CLAUDE.md
-  section 3, every PR must cite its issue. The keywords `Refs`,
-  `Closes`, `Fixes`, and `Resolves` are accepted (case-insensitive).
-- `## Changes` - bulleted list of concrete modifications. One bullet
-  per logical change; keep it close to the actual diff so the reviewer
-  does not have to re-derive it.
-- `## Verification` - checklist of evidence that the change works
-  (commands run, files inspected, screenshots taken). Per CLAUDE.md
-  section 1, type checks and linters verify shape, not behaviour; the
-  Verification list should contain at least one behaviour check when
-  behaviour changed.
-- `## Checklist` - the three mandatory checkboxes from the template
-  (issue number recorded, CLAUDE.md/AGENTS.md regenerated if
-  applicable, CI green).
+- `## Related Issue` - a single `Refs #<number>` (or `Closes #<number>`,
+  etc.) line. Per CLAUDE.md section 3, every PR must cite its issue.
+  The keywords `Refs`, `Closes`, `Fixes`, and `Resolves` are accepted
+  (case-insensitive).
+- `## Facts` - observable evidence (diffs, command output, test names,
+  log lines) per CLAUDE.md section 2. No speculation.
+- `## Assumptions` - what the author is trusting but has not verified.
+  Speculation must be tagged with `speculation:`.
+- `## Risk & blast radius` - who or what is affected if the change is
+  wrong, and how reversible it is, per CLAUDE.md section 4.
+- `## Rollback` - the exact steps to revert or disable the change in
+  prod.
+- `## Verification` - one command/result pair per observation, in the
+  shape below. Each entry is one fact about what was actually run.
+  Type checks and linters verify shape, not behaviour; include at
+  least one behaviour check when behaviour changed.
+
+  ```
+  - command: `pytest -q`
+    result: `exit 0 (684 passed)`
+  ```
+
+  PRs created on or after 2026-05-26 UTC are gated by
+  `scripts/body_policy.py:verify_pr_verification_pairs` (see
+  [Body-policy gate](#body-policy-gate) below). A `command:` line
+  must be followed immediately by a `result:` line on the next line;
+  the command value must be a single backticked code span.
+
+- `## Checklist` - three H3 subsections separating items by automation
+  layer. PRs created on or after 2026-05-26 UTC must include all three.
+
+  - `### Bootstrap` - human cognition only; not automatable.
+  - `### After-merge (CI)` - deterministic gates verified by CI;
+    paired with command/result evidence in `## Verification`.
+  - `### Post-merge (auto-retro signal)` - read by
+    `scripts/auto_retro.py`. Unchecked items become repair-history
+    rows in the auto-opened retrospective issue.
 
 The HTML comment at the top of `PULL_REQUEST_TEMPLATE.md` is rendered
 out of the final PR body and does not need to be preserved.
@@ -158,9 +181,36 @@ See [`docs/history/issue-pr-body-examples.md`](history/issue-pr-body-examples.md
 
 ## Body-policy gate
 
-Only one piece of the body-shape contract is enforced today.
+Two layers of the body-shape contract are enforced today.
 
-### Enforced today
+### Enforced today: H2 section presence (baseline gate)
+
+`.github/workflows/verify-body-policy.yml` shells out to
+`scripts/body_policy.py verify` and checks that every required H2 (or
+H3 for Issue Forms) heading from the lists above is present in the
+body. Bodies whose `created_at` predates `BODY_POLICY_CUTOFF`
+(currently `2026-05-26T00:00:00Z`) skip this check so the back-catalog
+stays exempt.
+
+### Enforced today: PR shape gate (post-2026-05-26)
+
+The same workflow runs `verify_pr_verification_pairs` and
+`verify_pr_checklist_subsections` from `scripts/body_policy.py` when
+`BODY_POLICY_SHAPE_CUTOFF` is set (currently
+`2026-05-26T00:00:00Z`). PRs created on or after that moment must:
+
+- contain at least one `- command: \`<inline>\`` line followed
+  immediately by a `  result: <text>` line inside `## Verification`;
+- contain `### Bootstrap`, `### After-merge`, and `### Post-merge`
+  H3 subsections inside `## Checklist`, each with at least one
+  `- [ ]` or `- [x]` item.
+
+The hook `scripts/preflight_pr_template_shape.py` (bound in
+`.claude/settings.json` to MCP PR create/update calls) runs the same
+checks client-side so an operator can fix the body before the API
+call instead of round-tripping through the workflow.
+
+### Enforced today: Refs check
 
 `.github/workflows/verify-issue-link.yml` shells out to
 `scripts/issue_link.py verify`. The script:
@@ -190,12 +240,7 @@ The fix for either failure is to add or correct the `Refs #<number>` line
 in the `Related Issue` section of the PR body, then push a new commit (or
 edit the PR description, which re-runs the workflow).
 
-### Not yet enforced
-
-A gate that parses required H2 section headers in issue and PR bodies and
-fails when one is missing is tracked as a sibling sub-issue under
-[#197](https://github.com/tvna/claude-md/issues/197). Until it lands,
-section completeness is enforced by review, not by CI.
+### Adjacent gates
 
 `scripts/title_policy.py` enforces ASCII-only titles and the Conventional
 Commit naming convention (titles only - it does not read the body). It is
@@ -228,9 +273,6 @@ historical context of the carve-out stays visible.
 
 ## Verify
 
-Until the comprehensive body-policy gate lands, verification of this
-runbook is manual.
-
 ```sh
 # 1. The doc itself is ASCII-only (it must pass scan-non-ascii.yml).
 python -c "import pathlib; \
@@ -241,11 +283,18 @@ printf '## Related Issue\n\nRefs #206\n' > /tmp/pr-body.md
 python scripts/issue_link.py verify --repo tvna/claude-md \
   --body-file /tmp/pr-body.md
 
-# 3. A candidate issue body contains every required H2 section.
-#    (Manual check until the body-policy gate lands.)
-for h in '## Scope' '## Why' '## Proposed work' '## Acceptance criteria'; do
-  grep -q "^$h$" /tmp/issue-body.md || echo "missing: $h"
-done
+# 3. The H2 baseline gate accepts a candidate PR body.
+python scripts/body_policy.py verify \
+  --kind pull_request \
+  --body-file /tmp/pr-body.md
+
+# 4. The post-2026-05-26 shape gate accepts the same body, given a
+#    cutoff and a created-at that exercises the new gate.
+python scripts/body_policy.py verify \
+  --kind pull_request \
+  --body-file /tmp/pr-body.md \
+  --shape-cutoff 2026-05-26T00:00:00Z \
+  --created-at 2026-05-27T00:00:00Z
 ```
 
 ## References

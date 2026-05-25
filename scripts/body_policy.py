@@ -64,6 +64,30 @@ _ISSUE_TRACKING_REQUIRED: tuple[str, ...] = (
     "Completion criteria",
 )
 
+# Shape gate constants (PR template post-2026-05-26). The hook
+# (scripts/preflight_pr_template_shape.py) imports these so the
+# client-side and server-side checks cannot drift.
+_VERIFICATION_HEADING = "Verification"
+_CHECKLIST_HEADING = "Checklist"
+_CHECKLIST_SUBSECTIONS: tuple[str, ...] = (
+    "Bootstrap",
+    "After-merge",
+    "Post-merge",
+)
+
+_VERIFICATION_COMMAND_RE = re.compile(
+    r"^-[ \t]+command:[ \t]*`[^`\n]+`[ \t]*$",
+    re.MULTILINE,
+)
+_VERIFICATION_RESULT_RE = re.compile(
+    r"^[ \t]{2}result:[ \t]*\S.*$",
+    re.MULTILINE,
+)
+_CHECKLIST_ITEM_RE = re.compile(
+    r"^[ \t]*-[ \t]+\[[ xX]\][ \t]+.+$",
+    re.MULTILINE,
+)
+
 
 def extract_headings(body: str) -> list[tuple[int, str]]:
     """Return ``(level, text)`` tuples for every H2/H3 heading in *body*.
@@ -126,6 +150,162 @@ def missing_sections(
     ]
 
 
+def extract_section_body(body: str, heading: str, level: int = 2) -> str:
+    """Return the text between ``<level> heading`` and the next sibling H2.
+
+    The H2 sibling boundary is intentional: a section's H3 subsections
+    are part of the section and are kept in the returned slice. HTML
+    comments are stripped before slicing so a commented heading does not
+    pretend to terminate the range.
+
+    Returns ``""`` when *heading* is absent. Matching is case-insensitive
+    and tolerates trailing colons and whitespace (mirrors
+    :func:`extract_headings`). Heading text comparison is normalized via
+    :func:`_normalize_heading` so ``Risk & blast radius`` and ``Risk and
+    blast radius`` map to the same slot.
+    """
+    cleaned = strip_html_comments(body.replace("\r", ""))
+    target = _normalize_heading(heading).casefold()
+    lines = cleaned.splitlines()
+    start_idx: int | None = None
+    end_idx = len(lines)
+    pattern = re.compile(r"^(#{2,3})[ \t]+(.+?)[ \t]*$")
+    for i, line in enumerate(lines):
+        match = pattern.match(line)
+        if match is None:
+            continue
+        line_level = len(match.group(1))
+        text = _TRAILING_COLON_RE.sub("", match.group(2)).strip()
+        norm = _normalize_heading(text).casefold()
+        if start_idx is None:
+            if line_level == level and norm == target:
+                start_idx = i + 1
+            continue
+        if line_level <= 2:
+            end_idx = i
+            break
+    if start_idx is None:
+        return ""
+    return "\n".join(lines[start_idx:end_idx])
+
+
+def verify_pr_verification_pairs(body: str) -> list[str]:
+    """Return list of ``::error::`` strings for the Verification section.
+
+    The post-2026-05-26 PR shape requires the ``## Verification`` section
+    to contain at least one ``- command: \\`...\\``` line each immediately
+    followed by a ``  result: ...`` line. Pairing is order-dependent: a
+    command without its result on the next line fails, and a result
+    without a preceding command on the previous line fails.
+
+    Returns ``[]`` when the section is well-formed.
+    """
+    section = extract_section_body(body, _VERIFICATION_HEADING)
+    if not section.strip():
+        return [
+            "::error::Verification section is empty. Provide at least "
+            "one '- command: `...`' line paired with '  result: ...' on "
+            "the next line (post-2026-05-26 PR shape)."
+        ]
+    lines = section.splitlines()
+    pairs = 0
+    errors: list[str] = []
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        cmd_match = _VERIFICATION_COMMAND_RE.fullmatch(line)
+        if cmd_match is not None:
+            if i + 1 >= len(lines) or _VERIFICATION_RESULT_RE.fullmatch(
+                lines[i + 1]
+            ) is None:
+                errors.append(
+                    "::error::Verification 'command:' line not followed "
+                    "by a '  result: ...' line (post-2026-05-26 PR shape)."
+                )
+                i += 1
+                continue
+            pairs += 1
+            i += 2
+            continue
+        res_match = _VERIFICATION_RESULT_RE.fullmatch(line)
+        if res_match is not None:
+            errors.append(
+                "::error::Verification 'result:' line without a preceding "
+                "'- command: `...`' line on the previous line "
+                "(post-2026-05-26 PR shape)."
+            )
+        i += 1
+    if pairs == 0 and not errors:
+        errors.append(
+            "::error::Verification section has no command/result pairs. "
+            "Add at least one '- command: `...`' followed by "
+            "'  result: ...' (post-2026-05-26 PR shape)."
+        )
+    return errors
+
+
+def verify_pr_checklist_subsections(body: str) -> list[str]:
+    """Return list of ``::error::`` strings for the Checklist section.
+
+    The post-2026-05-26 PR shape requires the ``## Checklist`` section
+    to contain three H3 subsections (``Bootstrap``, ``After-merge``,
+    ``Post-merge``), each with at least one ``- [ ]`` or ``- [x]`` item.
+    Subsection names are matched case-insensitively after stripping a
+    trailing parenthetic clarifier (``After-merge (CI)`` -> ``After-merge``)
+    so authors can clarify the heading in prose.
+
+    Returns ``[]`` when the structure is well-formed.
+    """
+    section = extract_section_body(body, _CHECKLIST_HEADING)
+    if not section.strip():
+        return [
+            "::error::Checklist section is empty. The post-2026-05-26 PR "
+            "shape requires three H3 subsections: ### Bootstrap, "
+            "### After-merge, ### Post-merge."
+        ]
+    lines = section.splitlines()
+    found: dict[str, int] = {}
+    pattern = re.compile(r"^###[ \t]+(.+?)[ \t]*$")
+    for i, line in enumerate(lines):
+        match = pattern.match(line)
+        if match is None:
+            continue
+        text = _TRAILING_COLON_RE.sub("", match.group(1)).strip()
+        # Drop trailing "(...)" clarifier for prefix-style matching.
+        base = text.split("(", 1)[0].strip()
+        found[base.casefold()] = i
+
+    errors: list[str] = []
+    for name in _CHECKLIST_SUBSECTIONS:
+        if name.casefold() not in found:
+            errors.append(
+                f"::error::Checklist section is missing required H3 "
+                f"subsection: ### {name} (post-2026-05-26 PR shape)."
+            )
+
+    # For each present subsection, ensure at least one item exists between
+    # its H3 and the next H3 / EOF.
+    h3_positions = sorted(found.items(), key=lambda kv: kv[1])
+    for idx, (name_key, start) in enumerate(h3_positions):
+        end = (
+            h3_positions[idx + 1][1]
+            if idx + 1 < len(h3_positions)
+            else len(lines)
+        )
+        chunk = "\n".join(lines[start + 1 : end])
+        if _CHECKLIST_ITEM_RE.search(chunk) is None:
+            # Find the canonical name for the error message.
+            canonical = next(
+                (n for n in _CHECKLIST_SUBSECTIONS if n.casefold() == name_key),
+                name_key,
+            )
+            errors.append(
+                f"::error::Checklist subsection ### {canonical} has no "
+                f"'- [ ]' or '- [x]' items (post-2026-05-26 PR shape)."
+            )
+    return errors
+
+
 def _parse_iso(value: str) -> datetime | None:
     if not value:
         return None
@@ -164,6 +344,7 @@ def _verify(
     author: str | None = None,
     created_at: str = "",
     cutoff: str = "",
+    shape_cutoff: str = "",
 ) -> int:
     if author is not None and author in _TRUSTED_BOT_LOGINS:
         print(f"skipped: trusted bot author ({author})")
@@ -187,6 +368,26 @@ def _verify(
                 f"## {name} (or ### {name})."
             )
         return 1
+
+    # Shape gate: post-2026-05-26 PR template enforces Verification
+    # command/result pairs and Checklist subsections. The gate is
+    # opt-in: callers (workflow / CLI) must pass a non-empty shape_cutoff
+    # to enable it, separating it from the baseline H2 cutoff so the two
+    # can be rolled out independently. Within an enabled gate, bodies
+    # whose created_at predates the cutoff are skipped (back-catalog
+    # exempt). An empty created_at means "no timestamp known, enforce".
+    if (
+        kind == "pull_request"
+        and shape_cutoff
+        and (not created_at or is_within_gate_window(created_at, shape_cutoff))
+    ):
+        shape_errors = verify_pr_verification_pairs(
+            body
+        ) + verify_pr_checklist_subsections(body)
+        if shape_errors:
+            for msg in shape_errors:
+                print(msg)
+            return 1
 
     print(f"OK: {kind} body contains all required sections.")
     return 0
@@ -221,17 +422,25 @@ def _resolve_cutoff(args: argparse.Namespace) -> str:
     return os.environ.get("BODY_POLICY_CUTOFF", "")
 
 
+def _resolve_shape_cutoff(args: argparse.Namespace) -> str:
+    if args.shape_cutoff is not None:
+        return args.shape_cutoff
+    return os.environ.get("BODY_POLICY_SHAPE_CUTOFF", "")
+
+
 def _cmd_verify(args: argparse.Namespace) -> int:
     body = _resolve_body(args)
     author = _resolve_author(args)
     created_at = _resolve_created_at(args)
     cutoff = _resolve_cutoff(args)
+    shape_cutoff = _resolve_shape_cutoff(args)
     return _verify(
         args.kind,
         body,
         author=author,
         created_at=created_at,
         cutoff=cutoff,
+        shape_cutoff=shape_cutoff,
     )
 
 
@@ -277,6 +486,16 @@ def main(argv: list[str] | None = None) -> int:
         help=(
             "ISO-8601 cutoff. Bodies created strictly before this moment are "
             "skipped. Falls back to BODY_POLICY_CUTOFF when omitted."
+        ),
+    )
+    p_verify.add_argument(
+        "--shape-cutoff",
+        help=(
+            "ISO-8601 cutoff for the post-2026-05-26 PR shape gate "
+            "(Verification command/result pairs and Checklist H3 "
+            "subsections). PRs created strictly before this moment skip the "
+            "shape gate while still being subject to the baseline H2 gate. "
+            "Falls back to BODY_POLICY_SHAPE_CUTOFF when omitted."
         ),
     )
     p_verify.set_defaults(func=_cmd_verify)
