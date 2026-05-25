@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
@@ -487,6 +488,130 @@ class TestRepairHistoryTable:
         assert ci_idx < fixup_idx < merge_idx < multi_idx
 
 
+class TestRepairHistoryTableCheckRunContext:
+    """Failed check_run rows must carry html_url + annotation summary.
+
+    Acceptance criterion 1 + 2 of issue #381: an operator must be able to
+    reconstruct a CI failure from the retro body alone after Actions log
+    retention expires, and the body must stay within GitHub's 65,536-char
+    limit even with a CI fanout.
+    """
+
+    def test_html_url_appears_in_row(self) -> None:
+        check_runs = [
+            {
+                "name": "gate",
+                "conclusion": "failure",
+                "completed_at": "2026-05-25T03:48:28Z",
+                "html_url": "https://github.com/o/r/runs/77653399942",
+                "_annotation_summary": None,
+            }
+        ]
+        table = ar._build_repair_history_table(check_runs, [], 1)
+        assert "logs: https://github.com/o/r/runs/77653399942" in table
+
+    def test_annotation_summary_appears_in_row(self) -> None:
+        check_runs = [
+            {
+                "name": "gate",
+                "conclusion": "failure",
+                "completed_at": "t",
+                "html_url": "https://example/run/1",
+                "_annotation_summary": "Process failed: exit code 1",
+            }
+        ]
+        table = ar._build_repair_history_table(check_runs, [], 1)
+        assert "annotation: Process failed: exit code 1" in table
+
+    def test_omits_annotation_section_when_summary_is_none(self) -> None:
+        """Acceptance criterion 3: annotation-less rows still emit the base
+        conclusion / completed_at signal -- no `annotation:` token."""
+        check_runs = [
+            {
+                "name": "gate",
+                "conclusion": "failure",
+                "completed_at": "2026-05-25T03:48:28Z",
+                "html_url": "https://example/run/1",
+                "_annotation_summary": None,
+            }
+        ]
+        table = ar._build_repair_history_table(check_runs, [], 1)
+        assert "conclusion=failure at 2026-05-25T03:48:28Z" in table
+        assert "annotation:" not in table
+
+    def test_omits_logs_section_when_html_url_missing(self) -> None:
+        """Missing html_url -> no `logs:` token (back-compat for legacy
+        check_run shapes that may lack the field)."""
+        check_runs = [
+            {
+                "name": "gate",
+                "conclusion": "failure",
+                "completed_at": "t",
+                "_annotation_summary": "summary text",
+            }
+        ]
+        table = ar._build_repair_history_table(check_runs, [], 1)
+        assert "logs:" not in table
+        assert "annotation: summary text" in table
+
+    def test_overflow_row_emitted_when_more_than_cap_failed(self) -> None:
+        """Body-size defence: more than _CHECK_RUN_DISPLAY_CAP failed runs
+        collapse to the cap + one overflow row."""
+        cap = ar._CHECK_RUN_DISPLAY_CAP
+        check_runs = [
+            {
+                "name": f"job-{i}",
+                "conclusion": "failure",
+                "completed_at": "t",
+                "html_url": f"https://example/{i}",
+                "_annotation_summary": None,
+            }
+            for i in range(cap + 3)
+        ]
+        table = ar._build_repair_history_table(check_runs, [], 1)
+        # cap rows of detail + 1 overflow row.
+        assert table.count("| CI fail: job-") == cap
+        assert "CI fail: + 3 more failures" in table
+        assert "see PR check-run list (truncated)" in table
+
+    def test_overflow_row_absent_when_at_or_below_cap(self) -> None:
+        cap = ar._CHECK_RUN_DISPLAY_CAP
+        check_runs = [
+            {
+                "name": f"job-{i}",
+                "conclusion": "failure",
+                "completed_at": "t",
+                "html_url": f"https://example/{i}",
+                "_annotation_summary": None,
+            }
+            for i in range(cap)
+        ]
+        table = ar._build_repair_history_table(check_runs, [], 1)
+        assert "more failures" not in table
+
+    def test_row_columns_remain_three_when_url_present(self) -> None:
+        """Defence: html_url must be safe inside one markdown-table cell
+        (the URL contains no pipes, but _escape_table_cell is still in the
+        path; this test guards against a future refactor that bypasses it)."""
+        check_runs = [
+            {
+                "name": "gate",
+                "conclusion": "failure",
+                "completed_at": "t",
+                "html_url": "https://example/run/1?x=a|b",
+                "_annotation_summary": "msg|with|pipes",
+            }
+        ]
+        table = ar._build_repair_history_table(check_runs, [], 1)
+        row_line = next(
+            line for line in table.splitlines() if "CI fail: gate" in line
+        )
+        # 4 unescaped '|' delimiters keep the row a 3-column grid even
+        # when the URL/summary contain literal pipes.
+        unescaped = row_line.replace("\\|", "")
+        assert unescaped.count("|") == 4
+
+
 class TestBuildRetroBodyMarkers:
     """build_retro_body's marker contract for issue #343."""
 
@@ -891,6 +1016,366 @@ class TestFetchCheckRuns:
 
         monkeypatch.setattr(ar, "gh_api", fake_api)
         assert ar.fetch_check_runs("o/r", 1) == []
+
+
+class TestFetchCheckRunsAnnotationEnrichment:
+    """fetch_check_runs attaches _annotation_summary to each failed run.
+
+    Refs issue #381. Three behaviours are pinned here:
+
+    * happy path: failure-level annotation summary populates the field
+    * notice / warning entries skipped in favour of the first failure
+    * annotation API error -> _annotation_summary is None, no exception
+    """
+
+    def _stage(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        *,
+        check_runs: list[dict[str, Any]],
+        annotations_by_id: Mapping[int, list[dict[str, Any]] | str],
+        raise_for_ids: tuple[int, ...] = (),
+    ) -> list[tuple[str, str]]:
+        """Stage the three-step API: PR detail -> check-runs -> annotations.
+
+        ``annotations_by_id`` maps each ``check_run.id`` to a list of
+        annotation dicts (returned as JSON) or to the raw string the
+        ``gh_api`` mock should return verbatim (lets a test exercise the
+        ``raw == ""`` / non-list branches of ``fetch_check_run_annotations``).
+
+        ``raise_for_ids`` lists check_run ids that should make the
+        annotation lookup raise :class:`subprocess.CalledProcessError`.
+        """
+        seen: list[tuple[str, str]] = []
+
+        def fake_api(method: str, path: str, body: Any = None, **_kw: Any) -> str:
+            seen.append((method, path))
+            if "/annotations" in path:
+                # /repos/{repo}/check-runs/{id}/annotations?...
+                rest = path.split("/check-runs/", 1)[1]
+                id_str = rest.split("/annotations", 1)[0]
+                run_id = int(id_str)
+                if run_id in raise_for_ids:
+                    raise subprocess.CalledProcessError(
+                        returncode=22,
+                        cmd=["gh", "api", path],
+                        stderr="HTTP 502",
+                    )
+                payload = annotations_by_id.get(run_id, [])
+                if isinstance(payload, str):
+                    return payload
+                return json.dumps(payload)
+            if "/check-runs" in path:
+                return json.dumps({"check_runs": check_runs})
+            return json.dumps({"merge_commit_sha": "abc123"})
+
+        monkeypatch.setattr(ar, "gh_api", fake_api)
+        return seen
+
+    def test_failure_annotation_summary_populates_field(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        check_runs = [
+            {
+                "id": 111,
+                "name": "gate",
+                "conclusion": "failure",
+                "completed_at": "t",
+                "html_url": "https://example/run/111",
+            }
+        ]
+        annotations_by_id = {
+            111: [
+                {
+                    "annotation_level": "failure",
+                    "title": "Process failed",
+                    "message": "exit code 1\nfull log truncated",
+                }
+            ]
+        }
+        self._stage(
+            monkeypatch,
+            check_runs=check_runs,
+            annotations_by_id=annotations_by_id,
+        )
+        out = ar.fetch_check_runs("o/r", 42)
+        assert len(out) == 1
+        assert out[0]["_annotation_summary"] == "Process failed: exit code 1"
+
+    def test_notice_level_annotation_is_skipped(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Notice / warning levels are not repair signals; the first
+        failure-level entry wins."""
+        check_runs = [
+            {
+                "id": 222,
+                "name": "gate",
+                "conclusion": "failure",
+                "completed_at": "t",
+                "html_url": "u",
+            }
+        ]
+        annotations_by_id = {
+            222: [
+                {
+                    "annotation_level": "notice",
+                    "title": "Deprecation",
+                    "message": "ignore me",
+                },
+                {
+                    "annotation_level": "warning",
+                    "title": "Style",
+                    "message": "also ignored",
+                },
+                {
+                    "annotation_level": "failure",
+                    "title": "Real failure",
+                    "message": "this is the cause",
+                },
+            ]
+        }
+        self._stage(
+            monkeypatch,
+            check_runs=check_runs,
+            annotations_by_id=annotations_by_id,
+        )
+        out = ar.fetch_check_runs("o/r", 42)
+        assert out[0]["_annotation_summary"] == "Real failure: this is the cause"
+
+    def test_annotation_fetch_error_degrades_gracefully(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Acceptance criterion 3 of issue #381: a transient annotation API
+        error must not break the retro -- the row falls back to
+        summary-less and other runs still get their summaries."""
+        check_runs = [
+            {
+                "id": 333,
+                "name": "broken",
+                "conclusion": "failure",
+                "completed_at": "t",
+                "html_url": "u",
+            },
+            {
+                "id": 444,
+                "name": "ok",
+                "conclusion": "failure",
+                "completed_at": "t",
+                "html_url": "u",
+            },
+        ]
+        annotations_by_id = {
+            444: [
+                {
+                    "annotation_level": "failure",
+                    "title": "Other",
+                    "message": "still here",
+                }
+            ]
+        }
+        self._stage(
+            monkeypatch,
+            check_runs=check_runs,
+            annotations_by_id=annotations_by_id,
+            raise_for_ids=(333,),
+        )
+        out = ar.fetch_check_runs("o/r", 42)
+        assert len(out) == 2
+        # First run degrades to None; second run still picks up the summary.
+        by_id = {entry["id"]: entry for entry in out}
+        assert by_id[333]["_annotation_summary"] is None
+        assert by_id[444]["_annotation_summary"] == "Other: still here"
+
+    def test_no_failure_level_entry_yields_none_summary(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A check_run with zero failure-level annotations (e.g. timeout)
+        gets _annotation_summary=None and the row stays summary-less."""
+        check_runs = [
+            {
+                "id": 555,
+                "name": "timeout",
+                "conclusion": "timed_out",
+                "completed_at": "t",
+                "html_url": "u",
+            }
+        ]
+        # Only notice-level entries.
+        annotations_by_id: dict[int, list[dict[str, Any]] | str] = {
+            555: [
+                {
+                    "annotation_level": "notice",
+                    "title": "Deprecation",
+                    "message": "ignore",
+                }
+            ]
+        }
+        self._stage(
+            monkeypatch,
+            check_runs=check_runs,
+            annotations_by_id=annotations_by_id,
+        )
+        out = ar.fetch_check_runs("o/r", 42)
+        assert out[0]["_annotation_summary"] is None
+
+    def test_missing_id_skips_annotation_fetch(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Defensive: a check_run without an integer id (legacy / partial
+        payload) must not crash; the row gets _annotation_summary=None."""
+        check_runs = [
+            {
+                "name": "no-id-run",
+                "conclusion": "failure",
+                "completed_at": "t",
+                "html_url": "u",
+            }
+        ]
+        seen = self._stage(
+            monkeypatch,
+            check_runs=check_runs,
+            annotations_by_id={},
+        )
+        out = ar.fetch_check_runs("o/r", 42)
+        assert out[0]["_annotation_summary"] is None
+        # No annotation call should have been issued for this run.
+        assert not any("/annotations" in path for _, path in seen)
+
+    def test_long_annotation_is_truncated(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Body-size defence: a long annotation message is truncated to
+        :data:`_ANNOTATION_SUMMARY_MAX` chars with an ASCII ellipsis."""
+        long_msg = "x" * 1000
+        check_runs = [
+            {
+                "id": 666,
+                "name": "verbose",
+                "conclusion": "failure",
+                "completed_at": "t",
+                "html_url": "u",
+            }
+        ]
+        annotations_by_id = {
+            666: [
+                {
+                    "annotation_level": "failure",
+                    "title": "T",
+                    "message": long_msg,
+                }
+            ]
+        }
+        self._stage(
+            monkeypatch,
+            check_runs=check_runs,
+            annotations_by_id=annotations_by_id,
+        )
+        out = ar.fetch_check_runs("o/r", 42)
+        summary = out[0]["_annotation_summary"]
+        assert isinstance(summary, str)
+        assert len(summary) == ar._ANNOTATION_SUMMARY_MAX
+        assert summary.endswith("...")
+
+    def test_enrichment_capped_to_display_cap(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Annotation fetch is only attempted for the first
+        :data:`_CHECK_RUN_DISPLAY_CAP` failed runs (rate-limit defence).
+        Beyond the cap, _annotation_summary stays None."""
+        cap = ar._CHECK_RUN_DISPLAY_CAP
+        check_runs = [
+            {
+                "id": 1000 + i,
+                "name": f"job-{i}",
+                "conclusion": "failure",
+                "completed_at": "t",
+                "html_url": "u",
+            }
+            for i in range(cap + 3)
+        ]
+        annotations_by_id: dict[int, list[dict[str, Any]] | str] = {
+            1000 + i: [
+                {
+                    "annotation_level": "failure",
+                    "title": f"T{i}",
+                    "message": f"m{i}",
+                }
+            ]
+            for i in range(cap + 3)
+        }
+        seen = self._stage(
+            monkeypatch,
+            check_runs=check_runs,
+            annotations_by_id=annotations_by_id,
+        )
+        out = ar.fetch_check_runs("o/r", 42)
+        # First cap runs enriched, remainder are None.
+        for i in range(cap):
+            assert out[i]["_annotation_summary"] == f"T{i}: m{i}"
+        for i in range(cap, cap + 3):
+            assert out[i]["_annotation_summary"] is None
+        # Exactly cap annotation calls were issued.
+        annotation_calls = [path for _, path in seen if "/annotations" in path]
+        assert len(annotation_calls) == cap
+
+    def test_empty_annotations_response_yields_none(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Blank body from the annotations endpoint -> []
+        -> _annotation_summary=None (no crash)."""
+        check_runs = [
+            {
+                "id": 777,
+                "name": "x",
+                "conclusion": "failure",
+                "completed_at": "t",
+                "html_url": "u",
+            }
+        ]
+        self._stage(
+            monkeypatch,
+            check_runs=check_runs,
+            annotations_by_id={777: ""},
+        )
+        out = ar.fetch_check_runs("o/r", 42)
+        assert out[0]["_annotation_summary"] is None
+
+
+class TestFetchCheckRunAnnotations:
+    """Thin gh_api wrapper. Refs issue #381."""
+
+    def test_returns_parsed_list(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        payload = [{"annotation_level": "failure", "title": "T", "message": "m"}]
+
+        def fake_api(method: str, path: str, body: Any = None, **_kw: Any) -> str:
+            assert (
+                path
+                == "/repos/o/r/check-runs/123/annotations?per_page=5"
+            )
+            return json.dumps(payload)
+
+        monkeypatch.setattr(ar, "gh_api", fake_api)
+        assert ar.fetch_check_run_annotations("o/r", 123, limit=5) == payload
+
+    def test_empty_body_returns_empty_list(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(ar, "gh_api", lambda *_a, **_kw: "")
+        assert ar.fetch_check_run_annotations("o/r", 1) == []
+
+    def test_non_list_payload_returns_empty_list(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A pathological non-list payload must not raise (e.g. an API
+        proxy that wraps the response). Caller still gets [] and the
+        repair row degrades to summary-less."""
+        monkeypatch.setattr(
+            ar, "gh_api", lambda *_a, **_kw: json.dumps({"unexpected": True})
+        )
+        assert ar.fetch_check_run_annotations("o/r", 1) == []
 
 
 class TestCreateIssue:
