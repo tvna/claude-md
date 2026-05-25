@@ -1490,6 +1490,88 @@ class TestComputeRepairSignals:
         )
         assert not any(out.values())
 
+    def test_multi_commit_signal_excludes_merge_branch_main_prefix(
+        self,
+    ) -> None:
+        out = ar.compute_repair_signals(
+            self._pr(commits=2),
+            has_inline_comments=False,
+            commit_subjects=[
+                "Merge branch 'main' into feature",
+                "feat(x): add x",
+            ],
+        )
+        assert out["multi_commit_pr"] is False
+
+    def test_multi_commit_signal_excludes_remote_tracking_main_prefix(
+        self,
+    ) -> None:
+        out = ar.compute_repair_signals(
+            self._pr(commits=2),
+            has_inline_comments=False,
+            commit_subjects=[
+                "Merge remote-tracking branch 'origin/main' into feature",
+                "feat(x): add y",
+            ],
+        )
+        assert out["multi_commit_pr"] is False
+
+    def test_multi_commit_signal_fires_when_pure_commits_exceed_one(
+        self,
+    ) -> None:
+        out = ar.compute_repair_signals(
+            self._pr(commits=3),
+            has_inline_comments=False,
+            commit_subjects=[
+                "Merge branch 'main' into feature",
+                "feat(x): add a",
+                "feat(x): add b",
+            ],
+        )
+        assert out["multi_commit_pr"] is True
+
+    def test_multi_commit_signal_legacy_path_when_subjects_none(self) -> None:
+        out = ar.compute_repair_signals(
+            self._pr(commits=2),
+            has_inline_comments=False,
+            commit_subjects=None,
+        )
+        assert out["multi_commit_pr"] is True
+
+
+class TestCountMergeFromMain:
+    def test_counts_both_prefix_variants(self) -> None:
+        count = ar._count_merge_from_main(
+            [
+                "Merge branch 'main' into feature",
+                "feat(x): add x",
+                "Merge remote-tracking branch 'origin/main' into feature",
+                "fix(scripts): tweak",
+            ]
+        )
+        assert count == 2
+
+    def test_returns_zero_when_no_merge_subjects(self) -> None:
+        count = ar._count_merge_from_main(
+            ["feat(x): a", "fix(y): b", "docs(z): c"]
+        )
+        assert count == 0
+
+    def test_ignores_unrelated_merge_subjects(self) -> None:
+        count = ar._count_merge_from_main(
+            [
+                "Merge branch 'feature-a' into feature-b",
+                "Merge pull request #123 from x/y",
+            ]
+        )
+        assert count == 0
+
+    def test_handles_leading_whitespace(self) -> None:
+        count = ar._count_merge_from_main(
+            ["   Merge branch 'main' into feature"]
+        )
+        assert count == 1
+
 
 class TestRenderRepairSignals:
     def test_renders_each_signal(self) -> None:
@@ -1534,6 +1616,42 @@ class TestRunAggregateSignals:
         assert any(
             m == "POST" and p == "/repos/o/r/issues" for m, p, _ in seen
         )
+
+    def test_skips_when_only_signal_is_rebase_debt_multi_commit(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """multi_commit_pr must not fire on rebase debt alone.
+
+        Event reports ``commits=2`` but the commit list contains one
+        merge-from-main commit plus one real development commit, so
+        ``pure_commits == 1`` and the gate stays False. With no other
+        signal firing, run() must skip without creating a retro.
+        """
+        seen = _orchestrator_recorder(
+            monkeypatch,
+            review_comments=[],
+            commits=[
+                {
+                    "commit": {
+                        "message": "Merge branch 'main' into feature\n"
+                    }
+                },
+                {"commit": {"message": "feat(x): add x"}},
+            ],
+        )
+        event = _merged_event(
+            number=304,
+            title="feat(x): add x",
+            body="",
+            commits=2,
+        )
+        assert ar.run(event, "o/r") == 0
+        assert not any(
+            m == "POST" and p == "/repos/o/r/issues" for m, p, _ in seen
+        )
+        assert "multi_commit_pr=false" in capsys.readouterr().out
 
     def test_skips_with_detailed_reason_when_no_signal_fires(
         self,
