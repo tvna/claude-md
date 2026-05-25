@@ -14,11 +14,13 @@ This workflow ships in **survey-and-report-only** form. It has:
 - No `gh api DELETE /git/refs/heads/...` call anywhere in the YAML.
 - Default `dry_run: true` (the input is a placeholder; flipping it does nothing in this PR).
 
-Flipping to actual deletion is tracked as **Goal D of [#31](https://github.com/tvna/claude-md/issues/31)** and requires a separate PR that:
+Flipping to actual deletion is tracked as **Goal D of [#31](https://github.com/tvna/claude-md/issues/31)** (live tracker: [#375](https://github.com/tvna/claude-md/issues/375)) and requires a separate PR that:
 
 1. Widens permissions to `contents: write`.
 2. Adds the gated `DELETE` call behind `if [ "$INPUT_DRY_RUN" = "false" ]`.
 3. Flips the input default to `false` (or leaves it `true` and requires explicit opt-in per dispatch).
+
+The `Guard dispatch ref` step (rejects `workflow_dispatch` runs from non-`main` refs) is pre-landed as of [#375](https://github.com/tvna/claude-md/issues/375), matching the pattern in `apply-rulesets.yml` / `apply-labels.yml`. The Goal D PR does not need to add it.
 
 Per [#31](https://github.com/tvna/claude-md/issues/31), the deletion path lands only **after 2 weeks of dry-run observation** confirm the candidate list is correct.
 
