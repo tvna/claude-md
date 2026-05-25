@@ -166,8 +166,39 @@ def should_skip(
     return False, ""
 
 
+# Commit-subject prefixes recorded as "rebase debt before merge" in the
+# Repair history table. The squash-only, linear-history merge policy in
+# .github/rulesets/main.json forces branches behind main to rebase or
+# merge main in before merge, so these commits are a structural side
+# effect of the policy rather than evidence of a repair loop.
+_MERGE_FROM_MAIN_PREFIXES: tuple[str, ...] = (
+    "Merge branch 'main'",
+    "Merge remote-tracking branch 'origin/main'",
+)
+
+
+def _count_merge_from_main(subjects: list[str]) -> int:
+    """Return the number of *subjects* that are merge-from-main commits.
+
+    Shared by :func:`compute_repair_signals` (to exempt rebase debt from
+    the ``multi_commit_pr`` gate) and :func:`_build_repair_history_table`
+    (to render the "Merge from main" rows). Matches the prefixes in
+    :data:`_MERGE_FROM_MAIN_PREFIXES`.
+    """
+    return sum(
+        1
+        for subject in subjects
+        if any(
+            subject.strip().startswith(prefix)
+            for prefix in _MERGE_FROM_MAIN_PREFIXES
+        )
+    )
+
+
 def compute_repair_signals(
-    pr: MergedPR, has_inline_comments: bool
+    pr: MergedPR,
+    has_inline_comments: bool,
+    commit_subjects: list[str] | None = None,
 ) -> dict[str, bool]:
     """Return a dict of `signal_name -> fired` describing observable repair
     evidence on the merged PR. Used by :func:`run` to decide whether to open
@@ -191,17 +222,27 @@ def compute_repair_signals(
     - ``fix_typed_title``: PR title starts with ``fix(`` (Conventional
       Commit `fix` type).
     - ``multi_commit_pr``: source branch had more than one commit before
-      the merge (squash-merge collapses these but the commit count is
-      still reported on the closed event payload).
+      the merge. When *commit_subjects* is supplied, merge-from-main
+      commits (see :data:`_MERGE_FROM_MAIN_PREFIXES`) are subtracted
+      from the count so rebase debt created by the squash-only,
+      linear-history merge policy does not fire the gate on its own.
+      When *commit_subjects* is ``None`` (the legacy two-arg call shape,
+      retained for tests that do not exercise the gate ordering in
+      :func:`run`) the gate falls back to ``pr.commits > 1``.
     """
     body_without_comments = strip_html_comments(pr.body or "")
     refs = extract_refs(body_without_comments)
     fix_typed = pr.title.lstrip().lower().startswith("fix(")
+    if commit_subjects is None:
+        multi_commit = pr.commits > 1
+    else:
+        pure_commits = pr.commits - _count_merge_from_main(commit_subjects)
+        multi_commit = pure_commits > 1
     return {
         "inline_review_comments": bool(has_inline_comments),
         "body_cites_refs": len(refs) > 0,
         "fix_typed_title": fix_typed,
-        "multi_commit_pr": pr.commits > 1,
+        "multi_commit_pr": multi_commit,
     }
 
 
@@ -293,8 +334,8 @@ def _build_repair_history_table(
 
     for subject in commit_subjects:
         stripped = subject.strip()
-        if stripped.startswith("Merge branch 'main'") or stripped.startswith(
-            "Merge remote-tracking branch 'origin/main'"
+        if any(
+            stripped.startswith(prefix) for prefix in _MERGE_FROM_MAIN_PREFIXES
         ):
             rows.append(
                 (
@@ -721,7 +762,27 @@ def run(event: dict[str, Any], repo: str) -> int:
         )
         has_inline_comments = True
 
-    signals = compute_repair_signals(pr, has_inline_comments)
+    # Fetch commit subjects ahead of the gate so compute_repair_signals can
+    # exempt merge-from-main commits from the multi_commit_pr count. When
+    # pr.commits <= 1 the gate is False by definition, so skip the API call.
+    commit_subjects: list[str] | None = None
+    if pr.commits > 1:
+        try:
+            commit_subjects = fetch_pr_commits(repo, pr.number)
+        except subprocess.CalledProcessError as exc:
+            # Fail-soft: a transient commits-endpoint failure must NOT
+            # silently swallow the gate evaluation. Fall back to the
+            # legacy pr.commits-only path; the body-building fetch below
+            # will retry and either succeed or surface the error there.
+            print(
+                f"::warning::fetch_pr_commits failed ahead of gate "
+                f"(exit {exc.returncode}); falling back to "
+                "pr.commits-only multi_commit_pr evaluation",
+                file=sys.stderr,
+            )
+            commit_subjects = None
+
+    signals = compute_repair_signals(pr, has_inline_comments, commit_subjects)
     signal_summary = render_repair_signals(signals)
     if not any(signals.values()):
         msg = f"no repair signal fired ({signal_summary})"
@@ -729,7 +790,8 @@ def run(event: dict[str, Any], repo: str) -> int:
         _append_summary(_build_summary(pr, "skip", msg))
         return 0
 
-    commit_subjects = fetch_pr_commits(repo, pr.number)
+    if commit_subjects is None:
+        commit_subjects = fetch_pr_commits(repo, pr.number)
     try:
         check_runs = fetch_check_runs(repo, pr.number)
     except subprocess.CalledProcessError as exc:
