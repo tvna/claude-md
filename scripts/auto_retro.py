@@ -601,6 +601,62 @@ def create_issue(
     return json.loads(raw) if raw.strip() else {}
 
 
+# Marker used to locate a previously-posted back-link comment so the
+# back-link step is idempotent. Same shape as the marker convention in
+# scripts/scan_non_ascii.py (see find_existing_comment_id at
+# scan_non_ascii.py:313-326).
+_BACK_LINK_MARKER = "<!-- auto-retro:back-link -->"
+
+
+def find_existing_back_link_id(
+    repo: str, pr_number: int, marker: str = _BACK_LINK_MARKER
+) -> int | None:
+    """Return the id of a prior back-link comment on *pr_number*, or None.
+
+    Pages once with ``per_page=100``; the back-link is posted exactly
+    once per merge by this script, so the first page is sufficient. The
+    match requires *marker* at the start of the comment body, mirroring
+    the convention in :func:`scripts.scan_non_ascii.find_existing_comment_id`.
+    """
+    raw = gh_api(
+        "GET", f"/repos/{repo}/issues/{pr_number}/comments?per_page=100"
+    )
+    comments = json.loads(raw) if raw.strip() else []
+    for comment in comments:
+        body = comment.get("body") or ""
+        if body.startswith(marker):
+            return comment.get("id")
+    return None
+
+
+def post_back_link_comment(
+    repo: str, pr_number: int, retro_number: int
+) -> str:
+    """PATCH an existing back-link comment, else POST a new one.
+
+    Idempotent via :data:`_BACK_LINK_MARKER`. The comment body is the
+    marker followed by a single line ``Retrospective: #<retro_number>``;
+    this is the PR -> retro reverse pointer that complements the retro
+    body's ``Source PR: #`` line. Returns ``"updated <id>"`` or
+    ``"created"`` for the orchestrator log.
+    """
+    body = f"{_BACK_LINK_MARKER}\nRetrospective: #{retro_number}"
+    existing = find_existing_back_link_id(repo, pr_number)
+    if existing is not None:
+        gh_api(
+            "PATCH",
+            f"/repos/{repo}/issues/comments/{existing}",
+            {"body": body},
+        )
+        return f"updated {existing}"
+    gh_api(
+        "POST",
+        f"/repos/{repo}/issues/{pr_number}/comments",
+        {"body": body},
+    )
+    return "created"
+
+
 # ---------------------------------------------------------------------------
 # Orchestrator + CLI
 # ---------------------------------------------------------------------------
@@ -694,7 +750,28 @@ def run(event: dict[str, Any], repo: str) -> int:
     created = create_issue(repo, title, body, labels)
     new_number = created.get("number")
     new_url = created.get("html_url") or ""
-    msg = f"created retro issue #{new_number} ({new_url})"
+
+    back_link_status = "skipped"
+    if isinstance(new_number, int):
+        try:
+            back_link_status = post_back_link_comment(repo, pr.number, new_number)
+        except subprocess.CalledProcessError as exc:
+            # Fail-soft: the retro issue is already created. A failure to
+            # post the PR-side back-link must NOT roll the retro back --
+            # surface a warning and continue so the audit trail keeps the
+            # retro that did land.
+            print(
+                f"::warning::post_back_link_comment failed "
+                f"(exit {exc.returncode}); retro issue #{new_number} created "
+                "but source PR has no back-link comment",
+                file=sys.stderr,
+            )
+            back_link_status = "failed"
+
+    msg = (
+        f"created retro issue #{new_number} ({new_url}); "
+        f"back-link={back_link_status}"
+    )
     print(msg)
     _append_summary(_build_summary(pr, "created", msg))
     return 0

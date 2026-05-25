@@ -117,6 +117,21 @@ Workflow: [`.github/workflows/threat-intel-triage.yml`](../.github/workflows/thr
 
 Residual: `pull_request_target` runs with write-capable token even on fork PRs; the workflow has no actor filter. Tracked under [#170](https://github.com/tvna/claude-md/issues/170) (sustained ops) and [#181](https://github.com/tvna/claude-md/issues/181) (the over-grant of `pull-requests: read` that the script does not actually use).
 
+## 9. Auto-open retrospective issue on merge
+
+Workflow: [`.github/workflows/auto-retro.yml`](../.github/workflows/auto-retro.yml). Script: [`scripts/auto_retro.py`](../scripts/auto_retro.py). Tests: [`tests/test_auto_retro.py`](../tests/test_auto_retro.py). Tracking: [#149](https://github.com/tvna/claude-md/issues/149).
+
+- **Authorizing issue.** [#149](https://github.com/tvna/claude-md/issues/149) (umbrella) and the per-PR change issues that introduced the workflow ([#234](https://github.com/tvna/claude-md/issues/234)) and the repair-history pre-fill ([#343](https://github.com/tvna/claude-md/issues/343)). The workflow runs automatically on `pull_request_target: closed` events with `github.event.pull_request.merged == true`; no human dispatch exists. The deterministic skip rules in `should_skip` (`scripts/auto_retro.py`) prevent self-recursion (retro-typed PRs), bot-authored merges, and PRs with no repair signal.
+- **Dry-run command.** Not exposed as an input. The pre-merge dry-run-equivalent surface is `tests/test_auto_retro.py`, which mocks the `gh_api` boundary and exercises every branch of `run()`. For a specific event payload, `python3 scripts/auto_retro.py run --event-file <fixture.json> --repo tvna/claude-md` exits without side effects on the read-only paths (skip / existing-retro short-circuit) and surfaces the parse decisions only.
+- **Live apply command.** Automatic on `pull_request_target: closed`. The only mutation is `POST /repos/<owner>/<repo>/issues` to open a new retrospective issue, idempotency-gated by `find_existing_retro`.
+- **Rollback path.** Two surfaces:
+  - **Pause / resume.** `gh workflow disable .github/workflows/auto-retro.yml --ref main` halts further auto-creates without touching existing retro issues; `gh workflow enable .github/workflows/auto-retro.yml --ref main` resumes. Use this for a runaway-issue incident where the cause is still under investigation.
+  - **Revert the implementation.** `git revert <merge-sha>` of the workflow or script PR removes the deterministic trigger. Runaway retro issues are identifiable by label `type:docs + layer:meta` plus title prefix `retro(` or `retro:`; close individually via `gh api --method PATCH /repos/tvna/claude-md/issues/<n> -f state=closed -f state_reason=not_planned`. The retrospective body is recoverable from the workflow run log, so a wrongful close is reversible by re-opening.
+- **Audit / post-apply verification.** Each run writes a one-section table to `$GITHUB_STEP_SUMMARY` recording the source PR, action (`created` / `skip`), and detail (existing retro number on duplicate, repair-signal aggregate on no-signal skip). The durable per-merge cadence trail is `docs/history/retrospective-pr-*.md`; an unexpected gap or burst there is the first symptom of a regression.
+- **Secret-not-logged evidence.** Uses default `GITHUB_TOKEN` only (no PAT). Auto-masked by GitHub Actions. The script never `echo`es the token, and `gh api` reads the token from the environment without printing it.
+
+Residual: `pull_request_target` runs with a write-capable token on every closed PR. The `merged == true` job-level gate plus the `should_skip` bot/retro filter cap the blast radius; further hardening (e.g. an actor-based filter) is tracked under [#181](https://github.com/tvna/claude-md/issues/181).
+
 ## Common pattern: secret-not-logged evidence
 
 All five workflows that use a token (`apply-rulesets.yml`, `apply-labels.yml`, `ruleset-drift.yml`, `security-control-drift-report.yml`, `verify-ruleset-sync.yml`) bind the token only through `env.GH_TOKEN: ${{ secrets.NAME }}` at the workflow or job level. GitHub Actions automatically masks any value passed through `${{ secrets.* }}` from job logs, replacing it with `***`. The repo-wide check is:
@@ -144,7 +159,7 @@ This audit does not open new follow-up issues. Per CLAUDE.md Section 3 (reuse in
 | `pull_request_target` write-capable token without actor filter | Threat-intelligence triage | [#170](https://github.com/tvna/claude-md/issues/170), [#181](https://github.com/tvna/claude-md/issues/181) |
 | `RULESETS_PAT` reused by scheduled read-only workflows without Environment scoping | (Cross-operation) `ruleset-drift.yml`, `security-control-drift-report.yml` | [#56](https://github.com/tvna/claude-md/issues/56), [#181](https://github.com/tvna/claude-md/issues/181) |
 
-Operations that have all six controls today and require no follow-up: apply rulesets, apply labels (non-prune), prune labels, branch cleanup (survey mode), dependency lock / tool bootstrap.
+Operations that have all six controls today and require no follow-up: apply rulesets, apply labels (non-prune), prune labels, branch cleanup (survey mode), dependency lock / tool bootstrap, auto-open retrospective issue on merge.
 
 ## Verification
 
@@ -163,7 +178,7 @@ Expected reviewer behavior:
 
 Reviewers should also confirm:
 
-- Every privileged operation in the issue scope (apply rulesets, apply labels, prune labels, branch cleanup, generated instruction publication, dependency lock / tool bootstrap, threat-intelligence triage) appears as a numbered section above.
+- Every privileged operation in the issue scope (apply rulesets, apply labels, prune labels, branch cleanup, generated instruction publication, dependency lock / tool bootstrap, threat-intelligence triage, auto-open retrospective issue on merge) appears as a numbered section above.
 - Every numbered section names all six controls (authorizing issue, dry-run, live apply, rollback, audit / verification, secret-not-logged evidence) or explicitly records the gap and the existing follow-up issue.
 - The `rg` command in the Common pattern section above returns only the safe matches enumerated there.
 
