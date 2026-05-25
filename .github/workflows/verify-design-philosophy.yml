@@ -2,11 +2,6 @@ name: Verify design philosophy doc
 
 on:
   pull_request:
-    paths:
-      - ".apm/instructions/master.instructions.md"
-      - "docs/agent-rules-design-philosophy.md"
-      - "scripts/scan_design_philosophy_drift.py"
-      - ".github/workflows/verify-design-philosophy.yml"
 
 permissions:
   contents: read
@@ -17,6 +12,7 @@ concurrency:
 
 jobs:
   verify:
+    name: "Verify design philosophy doc / verify"
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
