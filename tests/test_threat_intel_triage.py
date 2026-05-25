@@ -213,6 +213,150 @@ class TestExternalFindings:
         ]
         assert result["remove_labels"] == []
 
+    def test_ghsa_finding_matches_locked_dependency(self, tmp_path: Path) -> None:
+        osv = tmp_path / "osv.json"
+        kev = tmp_path / "kev.json"
+        ghsa = tmp_path / "ghsa.json"
+        osv.write_text(
+            json.dumps({"results": [{"vulns": []}], "details": {}}),
+            encoding="utf-8",
+        )
+        kev.write_text(json.dumps({"vulnerabilities": []}), encoding="utf-8")
+        ghsa.write_text(
+            json.dumps(
+                {
+                    "advisories": [
+                        {
+                            "ghsa_id": "GHSA-aaaa-bbbb-cccc",
+                            "cve_id": "CVE-2026-3333",
+                            "type": "reviewed",
+                            "severity": "high",
+                            "identifiers": [
+                                {"type": "GHSA", "value": "GHSA-aaaa-bbbb-cccc"},
+                                {"type": "CVE", "value": "CVE-2026-3333"},
+                            ],
+                            "vulnerabilities": [
+                                {"package": {"ecosystem": "pip", "name": "demo"}},
+                            ],
+                        }
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        findings = triage.fetch_external_findings(
+            [triage.Dependency("demo", "1.0.0", "PyPI", "uv.lock")],
+            osv_file=osv,
+            kev_file=kev,
+            ghsa_file=ghsa,
+        )
+        result = triage.classify_findings(findings, set())
+
+        assert len(findings) == 1
+        assert findings[0].source == triage.SOURCE_GHSA
+        assert findings[0].vuln_id == "GHSA-aaaa-bbbb-cccc"
+        assert findings[0].advisory_type == "reviewed"
+        assert "CVE-2026-3333" in findings[0].aliases
+        assert result["intel_needed"] is True
+        assert result["response_needed"] is False
+        assert result["recommended_labels"] == [triage.INTEL_LABEL]
+
+    def test_ghsa_malware_advisory_escalates_response(self, tmp_path: Path) -> None:
+        osv = tmp_path / "osv.json"
+        kev = tmp_path / "kev.json"
+        ghsa = tmp_path / "ghsa.json"
+        osv.write_text(
+            json.dumps({"results": [{"vulns": []}], "details": {}}),
+            encoding="utf-8",
+        )
+        kev.write_text(json.dumps({"vulnerabilities": []}), encoding="utf-8")
+        ghsa.write_text(
+            json.dumps(
+                {
+                    "advisories": [
+                        {
+                            "ghsa_id": "GHSA-mmmm-nnnn-oooo",
+                            "cve_id": None,
+                            "type": "malware",
+                            "severity": "critical",
+                            "identifiers": [
+                                {"type": "GHSA", "value": "GHSA-mmmm-nnnn-oooo"}
+                            ],
+                            "vulnerabilities": [
+                                {"package": {"ecosystem": "pip", "name": "demo"}},
+                            ],
+                        }
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        findings = triage.fetch_external_findings(
+            [triage.Dependency("demo", "1.0.0", "PyPI", "uv.lock")],
+            osv_file=osv,
+            kev_file=kev,
+            ghsa_file=ghsa,
+        )
+        result = triage.classify_findings(findings, set())
+
+        assert len(findings) == 1
+        assert findings[0].advisory_type == triage.GHSA_MALWARE_TYPE
+        assert findings[0].known_exploited is False
+        assert result["intel_needed"] is True
+        assert result["response_needed"] is True
+        assert result["recommended_labels"] == [
+            triage.INTEL_LABEL,
+            triage.RESPONSE_LABEL,
+        ]
+
+    def test_ghsa_and_osv_dedupe_preserves_source_attribution(self, tmp_path: Path) -> None:
+        osv = tmp_path / "osv.json"
+        kev = tmp_path / "kev.json"
+        ghsa = tmp_path / "ghsa.json"
+        osv.write_text(
+            json.dumps(
+                {
+                    "results": [{"vulns": [{"id": "GHSA-aaaa-bbbb-cccc"}]}],
+                    "details": {"GHSA-aaaa-bbbb-cccc": {"aliases": ["CVE-2026-3333"]}},
+                }
+            ),
+            encoding="utf-8",
+        )
+        kev.write_text(json.dumps({"vulnerabilities": []}), encoding="utf-8")
+        ghsa.write_text(
+            json.dumps(
+                {
+                    "advisories": [
+                        {
+                            "ghsa_id": "GHSA-aaaa-bbbb-cccc",
+                            "cve_id": "CVE-2026-3333",
+                            "type": "reviewed",
+                            "vulnerabilities": [
+                                {"package": {"ecosystem": "pip", "name": "demo"}},
+                            ],
+                        }
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        findings = triage.fetch_external_findings(
+            [triage.Dependency("demo", "1.0.0", "PyPI", "uv.lock")],
+            osv_file=osv,
+            kev_file=kev,
+            ghsa_file=ghsa,
+        )
+
+        assert len(findings) == 1
+        assert findings[0].vuln_id == "GHSA-aaaa-bbbb-cccc"
+        assert triage.SOURCE_OSV in findings[0].source
+        assert triage.SOURCE_GHSA in findings[0].source
+        assert findings[0].advisory_type == "reviewed"
+        assert "CVE-2026-3333" in findings[0].aliases
+
 
 class TestCli:
     def test_json_output(self, capsys) -> None:
@@ -308,3 +452,61 @@ class TestCli:
             "remove_labels=",
         ]
         assert "Sources: OSV.dev, CISA KEV" in summary.read_text(encoding="utf-8")
+
+    def test_scan_includes_ghsa_source_in_summary(self, tmp_path: Path, capsys) -> None:
+        (tmp_path / "uv.lock").write_text(
+            '[[package]]\nname = "demo"\nversion = "1.0.0"\n',
+            encoding="utf-8",
+        )
+        osv = tmp_path / "osv.json"
+        kev = tmp_path / "kev.json"
+        ghsa = tmp_path / "ghsa.json"
+        summary = tmp_path / "summary.md"
+        osv.write_text(
+            json.dumps({"results": [{"vulns": []}], "details": {}}),
+            encoding="utf-8",
+        )
+        kev.write_text(json.dumps({"vulnerabilities": []}), encoding="utf-8")
+        ghsa.write_text(
+            json.dumps(
+                {
+                    "advisories": [
+                        {
+                            "ghsa_id": "GHSA-mmmm-nnnn-oooo",
+                            "type": "malware",
+                            "vulnerabilities": [
+                                {"package": {"ecosystem": "pip", "name": "demo"}},
+                            ],
+                        }
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        rc = triage.main(
+            [
+                "scan",
+                "--repo-root",
+                str(tmp_path),
+                "--osv-file",
+                str(osv),
+                "--kev-file",
+                str(kev),
+                "--ghsa-file",
+                str(ghsa),
+                "--summary-file",
+                str(summary),
+                "--format",
+                "json",
+            ]
+        )
+        captured = capsys.readouterr()
+        result = json.loads(captured.out)
+
+        assert rc == 0
+        assert result["response_needed"] is True
+        summary_text = summary.read_text(encoding="utf-8")
+        assert "GitHub Advisory" in summary_text
+        assert "CISA KEV" in summary_text
+        assert "| Source |" in summary_text

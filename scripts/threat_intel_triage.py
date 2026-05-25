@@ -33,6 +33,15 @@ THREAT_LABELS = {INTEL_LABEL, RESPONSE_LABEL}
 OSV_QUERYBATCH_URL = "https://api.osv.dev/v1/querybatch"
 OSV_VULN_URL = "https://api.osv.dev/v1/vulns/{id}"
 CISA_KEV_URL = "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"
+GHSA_ADVISORIES_URL = "https://api.github.com/advisories"
+GHSA_MALWARE_TYPE = "malware"
+SOURCE_OSV = "OSV.dev"
+SOURCE_GHSA = "GitHub Advisory"
+
+# Map this module's internal ecosystem labels (taken from OSV) to the
+# values accepted by GitHub's /advisories endpoint. Keep this minimal:
+# only ecosystems actually discovered by ``discover_dependencies``.
+_GHSA_ECOSYSTEM_MAP = {"PyPI": "pip"}
 
 
 class Indicator(NamedTuple):
@@ -53,6 +62,9 @@ class Finding(NamedTuple):
     aliases: tuple[str, ...]
     source: str
     known_exploited: bool
+    # GHSA-only attribute. ``None`` for OSV-only findings; ``"malware"``
+    # escalates ``threat:response-needed`` per #172.
+    advisory_type: str | None = None
 
 
 INTEL_INDICATORS = (
@@ -163,8 +175,17 @@ def fetch_external_findings(
     *,
     osv_file: Path | None = None,
     kev_file: Path | None = None,
+    ghsa_file: Path | None = None,
+    ghsa_live: bool = False,
+    ghsa_token: str | None = None,
 ) -> list[Finding]:
-    """Collect OSV and CISA KEV intelligence for *dependencies*."""
+    """Collect OSV, CISA KEV, and GitHub Advisory intelligence for *dependencies*.
+
+    GHSA is opt-in to keep the existing OSV-only call sites
+    (notably this module's own legacy tests) deterministic without a
+    network call. Pass ``ghsa_file=`` for fixture-driven runs or
+    ``ghsa_live=True`` to query ``api.github.com/advisories`` live.
+    """
     if not dependencies:
         return []
 
@@ -175,23 +196,34 @@ def fetch_external_findings(
     vuln_ids_by_dep = parse_osv_batch_results(dependencies, osv_batch)
     vuln_details = fetch_osv_details(vuln_ids_by_dep, osv_file=osv_file)
 
-    findings: list[Finding] = []
+    osv_findings: list[Finding] = []
     for dep, vuln_ids in vuln_ids_by_dep:
         for vuln_id in vuln_ids:
             details = vuln_details.get(vuln_id, {})
             aliases = tuple(str(alias) for alias in details.get("aliases", []) if isinstance(alias, str))
             cve_ids = {vuln_id, *aliases}
             known_exploited = bool(cve_ids & kev_cves)
-            findings.append(
+            osv_findings.append(
                 Finding(
                     dependency=dep,
                     vuln_id=vuln_id,
                     aliases=aliases,
-                    source="OSV.dev",
+                    source=SOURCE_OSV,
                     known_exploited=known_exploited,
                 )
             )
-    return sorted(findings, key=lambda f: (f.dependency.name, f.vuln_id))
+
+    ghsa_findings: list[Finding] = []
+    if ghsa_file is not None or ghsa_live:
+        ghsa_findings = fetch_ghsa_advisories(
+            dependencies,
+            ghsa_file=ghsa_file,
+            token=ghsa_token,
+            kev_cves=kev_cves,
+        )
+
+    merged = merge_findings(osv_findings + ghsa_findings)
+    return sorted(merged, key=lambda f: (f.dependency.name, f.vuln_id))
 
 
 def query_osv_batch(dependencies: list[Dependency]) -> dict[str, object]:
@@ -272,9 +304,167 @@ def parse_kev_cves(data: dict[str, object]) -> set[str]:
     return cves
 
 
+def fetch_ghsa_advisories(
+    dependencies: list[Dependency],
+    *,
+    ghsa_file: Path | None = None,
+    token: str | None = None,
+    kev_cves: set[str] | None = None,
+) -> list[Finding]:
+    """Collect GitHub Advisory Database findings for *dependencies*.
+
+    Fixture mode (``ghsa_file``) reads a JSON object with an
+    ``"advisories"`` array shaped like GitHub's ``/advisories`` response.
+    Live mode queries ``/advisories?affects=<name>@<ver>&ecosystem=<eco>``
+    per dependency. Ecosystems without a GHSA mapping (see
+    ``_GHSA_ECOSYSTEM_MAP``) are skipped silently; broader coverage is
+    tracked under #176.
+    """
+    if not dependencies:
+        return []
+    kev = kev_cves if kev_cves is not None else set()
+
+    advisories: list[dict[str, object]] = []
+    if ghsa_file is not None:
+        advisories = load_ghsa_advisories(ghsa_file)
+    else:
+        for dep in dependencies:
+            ghsa_eco = _GHSA_ECOSYSTEM_MAP.get(dep.ecosystem)
+            if ghsa_eco is None:
+                continue
+            query = urllib.parse.urlencode(
+                {
+                    "affects": f"{dep.name}@{dep.version}",
+                    "ecosystem": ghsa_eco,
+                    "per_page": "100",
+                }
+            )
+            data = request_json_any(f"{GHSA_ADVISORIES_URL}?{query}", token=token)
+            if isinstance(data, list):
+                advisories.extend(item for item in data if isinstance(item, dict))
+
+    findings: list[Finding] = []
+    for advisory in advisories:
+        vuln_id = _ghsa_primary_id(advisory)
+        if not vuln_id:
+            continue
+        aliases = _ghsa_aliases(advisory, vuln_id)
+        advisory_type = _ghsa_type(advisory)
+        identifiers = {vuln_id, *aliases}
+        known_exploited = bool(identifiers & kev)
+        for dep in dependencies:
+            if not _ghsa_affects_dependency(advisory, dep):
+                continue
+            findings.append(
+                Finding(
+                    dependency=dep,
+                    vuln_id=vuln_id,
+                    aliases=aliases,
+                    source=SOURCE_GHSA,
+                    known_exploited=known_exploited,
+                    advisory_type=advisory_type,
+                )
+            )
+    return findings
+
+
+def load_ghsa_advisories(path: Path) -> list[dict[str, object]]:
+    """Return the list of advisory dicts from a GHSA fixture file."""
+    data = load_json(path)
+    advisories = data.get("advisories", [])
+    if not isinstance(advisories, list):
+        raise ValueError(f"{path} must contain an 'advisories' array")
+    return [item for item in advisories if isinstance(item, dict)]
+
+
+def _ghsa_primary_id(advisory: dict[str, object]) -> str:
+    raw = advisory.get("ghsa_id")
+    return str(raw) if isinstance(raw, str) else ""
+
+
+def _ghsa_aliases(advisory: dict[str, object], primary: str) -> tuple[str, ...]:
+    aliases: list[str] = []
+    cve = advisory.get("cve_id")
+    if isinstance(cve, str) and cve:
+        aliases.append(cve)
+    identifiers = advisory.get("identifiers", [])
+    if isinstance(identifiers, list):
+        for item in identifiers:
+            if not isinstance(item, dict):
+                continue
+            value = item.get("value")
+            if isinstance(value, str) and value and value != primary and value not in aliases:
+                aliases.append(value)
+    return tuple(aliases)
+
+
+def _ghsa_type(advisory: dict[str, object]) -> str | None:
+    raw = advisory.get("type")
+    return str(raw) if isinstance(raw, str) else None
+
+
+def _ghsa_affects_dependency(advisory: dict[str, object], dep: Dependency) -> bool:
+    ghsa_eco = _GHSA_ECOSYSTEM_MAP.get(dep.ecosystem)
+    if ghsa_eco is None:
+        return False
+    vulnerabilities = advisory.get("vulnerabilities", [])
+    if not isinstance(vulnerabilities, list):
+        return False
+    for vuln in vulnerabilities:
+        if not isinstance(vuln, dict):
+            continue
+        package = vuln.get("package")
+        if not isinstance(package, dict):
+            continue
+        if package.get("ecosystem") != ghsa_eco:
+            continue
+        name = package.get("name")
+        if isinstance(name, str) and name.lower() == dep.name.lower():
+            return True
+    return False
+
+
+def merge_findings(findings: list[Finding]) -> list[Finding]:
+    """Dedupe findings sharing (dependency identity, vuln_id) while keeping source attribution.
+
+    Source strings are joined with ", " so a vulnerability surfaced by
+    both OSV.dev and GitHub Advisory keeps both attributions visible in
+    the threat triage summary (#172 scope).
+    """
+    by_key: dict[tuple[str, str, str, str], Finding] = {}
+    for finding in findings:
+        dep = finding.dependency
+        key = (dep.ecosystem, dep.name, dep.version, finding.vuln_id)
+        existing = by_key.get(key)
+        if existing is None:
+            by_key[key] = finding
+            continue
+        sources = [s.strip() for s in existing.source.split(",") if s.strip()]
+        for chunk in finding.source.split(","):
+            src = chunk.strip()
+            if src and src not in sources:
+                sources.append(src)
+        merged_aliases = list(existing.aliases)
+        for alias in finding.aliases:
+            if alias not in merged_aliases:
+                merged_aliases.append(alias)
+        by_key[key] = Finding(
+            dependency=existing.dependency,
+            vuln_id=existing.vuln_id,
+            aliases=tuple(merged_aliases),
+            source=", ".join(sources),
+            known_exploited=existing.known_exploited or finding.known_exploited,
+            advisory_type=existing.advisory_type or finding.advisory_type,
+        )
+    return list(by_key.values())
+
+
 def classify_findings(findings: list[Finding], labels: set[str]) -> dict[str, object]:
     intel_needed = bool(findings)
-    response_needed = any(finding.known_exploited for finding in findings)
+    response_needed = any(
+        finding.known_exploited or finding.advisory_type == GHSA_MALWARE_TYPE
+        for finding in findings
+    )
 
     recommended_labels: list[str] = []
     if intel_needed:
@@ -306,6 +496,7 @@ def finding_to_dict(finding: Finding) -> dict[str, object]:
         "aliases": list(finding.aliases),
         "source": finding.source,
         "known_exploited": finding.known_exploited,
+        "advisory_type": finding.advisory_type,
     }
 
 
@@ -373,6 +564,9 @@ def _cmd_scan(args: argparse.Namespace) -> int:
         dependencies,
         osv_file=args.osv_file,
         kev_file=args.kev_file,
+        ghsa_file=args.ghsa_file,
+        ghsa_live=args.ghsa_live,
+        ghsa_token=os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN"),
     )
     result = classify_findings(findings, labels)
 
@@ -402,9 +596,10 @@ def write_summary(
     result: dict[str, object],
 ) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
+    sources_line = _summary_sources_line(findings)
     with path.open("a", encoding="utf-8") as handle:
         handle.write("## Threat intelligence triage\n\n")
-        handle.write("- Sources: OSV.dev, CISA KEV\n")
+        handle.write(f"- Sources: {sources_line}\n")
         handle.write(f"- Dependencies checked: {len(dependencies)}\n")
         handle.write(f"- Findings: {result['finding_count']}\n")
         handle.write(f"- Known exploited findings: {result['known_exploited_count']}\n")
@@ -412,13 +607,37 @@ def write_summary(
         if not findings:
             handle.write("No external threat-intelligence findings matched locked dependencies.\n")
             return
-        handle.write("| Dependency | Version | Vulnerability | Known exploited |\n")
-        handle.write("|---|---:|---|---|\n")
+        handle.write("| Dependency | Version | Vulnerability | Source | Known exploited |\n")
+        handle.write("|---|---:|---|---|---|\n")
         for finding in findings:
             handle.write(
                 f"| `{finding.dependency.name}` | `{finding.dependency.version}` | "
-                f"`{finding.vuln_id}` | {_bool(finding.known_exploited)} |\n"
+                f"`{finding.vuln_id}` | {finding.source} | {_bool(finding.known_exploited)} |\n"
             )
+
+
+def _summary_sources_line(findings: list[Finding]) -> str:
+    """Return a human-readable list of sources observed across *findings*.
+
+    CISA KEV is always part of the pipeline (used as correlation, not as
+    a primary finding source), so it stays present in the summary even
+    when no findings were KEV-correlated.
+    """
+    seen: list[str] = []
+    for finding in findings:
+        for chunk in finding.source.split(","):
+            src = chunk.strip()
+            if src and src not in seen:
+                seen.append(src)
+    # Stable preferred order so the summary reads the same regardless of
+    # iteration order of the underlying findings.
+    preferred = [SOURCE_OSV, SOURCE_GHSA]
+    ordered = [src for src in preferred if src in seen]
+    ordered.extend(src for src in seen if src not in preferred)
+    if not ordered:
+        ordered = [SOURCE_OSV, SOURCE_GHSA]
+    ordered.append("CISA KEV")
+    return ", ".join(ordered)
 
 
 def _write_github_output(path: Path, result: dict[str, object]) -> None:
@@ -446,21 +665,48 @@ def load_json(path: Path) -> dict[str, object]:
     return data
 
 
-def request_json(url: str, payload: dict[str, object] | None = None) -> dict[str, object]:
+def request_json(
+    url: str,
+    payload: dict[str, object] | None = None,
+    *,
+    token: str | None = None,
+) -> dict[str, object]:
+    parsed = request_json_any(url, payload=payload, token=token)
+    if not isinstance(parsed, dict):
+        raise ValueError(f"{url} returned a non-object JSON response")
+    return parsed
+
+
+def request_json_any(
+    url: str,
+    *,
+    payload: dict[str, object] | None = None,
+    token: str | None = None,
+) -> object:
+    """Issue an HTTP request and return the parsed JSON body unchecked.
+
+    ``token`` adds an ``Authorization`` header (used for the GitHub
+    Advisory endpoint to lift the unauthenticated rate limit). The
+    value is never echoed back into log lines per CLAUDE.md s4.
+    """
     data = None
     headers = {"Accept": "application/json"}
     if payload is not None:
         data = json.dumps(payload).encode("utf-8")
         headers["Content-Type"] = "application/json"
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
     # All callers pass one of the module-level https endpoints
-    # (OSV_QUERYBATCH_URL, OSV_VULN_URL, CISA_KEV_URL). vuln_id segments
-    # are urllib.parse.quote'd at the call site (see line 227).
-    request = urllib.request.Request(url, data=data, headers=headers, method="POST" if payload is not None else "GET")  # noqa: S310 — fixed https OSV/CISA endpoints
-    with urllib.request.urlopen(request, timeout=30) as response:  # noqa: S310 — paired with the Request above
-        parsed = json.loads(response.read().decode("utf-8"))
-    if not isinstance(parsed, dict):
-        raise ValueError(f"{url} returned a non-object JSON response")
-    return parsed
+    # (OSV_QUERYBATCH_URL, OSV_VULN_URL, CISA_KEV_URL, GHSA_ADVISORIES_URL).
+    # vuln_id segments are urllib.parse.quote'd at the call site.
+    request = urllib.request.Request(  # noqa: S310 -- fixed https OSV/CISA/GHSA endpoints
+        url,
+        data=data,
+        headers=headers,
+        method="POST" if payload is not None else "GET",
+    )
+    with urllib.request.urlopen(request, timeout=30) as response:  # noqa: S310 -- paired with the Request above
+        return json.loads(response.read().decode("utf-8"))
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -524,6 +770,19 @@ def main(argv: list[str] | None = None) -> int:
         "--kev-file",
         type=Path,
         help="Fixture file containing a CISA KEV-shaped response.",
+    )
+    p_scan.add_argument(
+        "--ghsa-file",
+        type=Path,
+        help="Fixture file containing a GitHub Advisory-shaped response.",
+    )
+    p_scan.add_argument(
+        "--ghsa-live",
+        action="store_true",
+        help=(
+            "Query api.github.com/advisories live. Uses GH_TOKEN or "
+            "GITHUB_TOKEN if set to lift the unauthenticated rate limit."
+        ),
     )
     p_scan.set_defaults(func=_cmd_scan)
 
