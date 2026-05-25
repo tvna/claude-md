@@ -913,6 +913,129 @@ class TestCreateIssue:
         )
 
 
+class TestFindExistingBackLink:
+    def test_returns_id_when_marker_at_body_start(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        def fake_api(method, path, body=None, **_kw):
+            return json.dumps([
+                {"id": 100, "body": "unrelated comment"},
+                {"id": 101, "body": f"{ar._BACK_LINK_MARKER}\nRetrospective: #5"},
+            ])
+
+        monkeypatch.setattr(ar, "gh_api", fake_api)
+        assert ar.find_existing_back_link_id("o/r", 42) == 101
+
+    def test_returns_none_when_marker_absent(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        def fake_api(method, path, body=None, **_kw):
+            return json.dumps([
+                {"id": 1, "body": "review note"},
+                {"id": 2, "body": "another"},
+            ])
+
+        monkeypatch.setattr(ar, "gh_api", fake_api)
+        assert ar.find_existing_back_link_id("o/r", 42) is None
+
+    def test_marker_must_be_at_body_start(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A marker in the middle of a body must not match: that prevents a
+        review quoting the marker from being treated as the back-link."""
+        def fake_api(method, path, body=None, **_kw):
+            return json.dumps([
+                {"id": 7, "body": f"quoted earlier: {ar._BACK_LINK_MARKER}\n..."},
+            ])
+
+        monkeypatch.setattr(ar, "gh_api", fake_api)
+        assert ar.find_existing_back_link_id("o/r", 42) is None
+
+    def test_empty_response_returns_none(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(ar, "gh_api", lambda *a, **kw: "")
+        assert ar.find_existing_back_link_id("o/r", 42) is None
+
+    def test_calls_correct_endpoint(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        seen: list[tuple] = []
+
+        def fake_api(method, path, body=None, **_kw):
+            seen.append((method, path))
+            return json.dumps([])
+
+        monkeypatch.setattr(ar, "gh_api", fake_api)
+        ar.find_existing_back_link_id("o/r", 42)
+        assert seen == [
+            ("GET", "/repos/o/r/issues/42/comments?per_page=100"),
+        ]
+
+
+class TestPostBackLinkComment:
+    def test_creates_when_no_existing_marker(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        seen: list[tuple] = []
+
+        def fake_api(method, path, body=None, **_kw):
+            seen.append((method, path, body))
+            if method == "GET":
+                return json.dumps([])
+            return ""
+
+        monkeypatch.setattr(ar, "gh_api", fake_api)
+        result = ar.post_back_link_comment("o/r", 42, 99)
+        assert result == "created"
+        assert seen[1] == (
+            "POST",
+            "/repos/o/r/issues/42/comments",
+            {"body": f"{ar._BACK_LINK_MARKER}\nRetrospective: #99"},
+        )
+
+    def test_patches_when_marker_present(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        seen: list[tuple] = []
+
+        def fake_api(method, path, body=None, **_kw):
+            seen.append((method, path, body))
+            if method == "GET":
+                return json.dumps([
+                    {"id": 500, "body": f"{ar._BACK_LINK_MARKER}\nold"},
+                ])
+            return ""
+
+        monkeypatch.setattr(ar, "gh_api", fake_api)
+        result = ar.post_back_link_comment("o/r", 42, 99)
+        assert result == "updated 500"
+        assert seen[1] == (
+            "PATCH",
+            "/repos/o/r/issues/comments/500",
+            {"body": f"{ar._BACK_LINK_MARKER}\nRetrospective: #99"},
+        )
+        # Must not POST a duplicate when patching.
+        assert not any(
+            method == "POST" and path.endswith("/comments")
+            for method, path, _ in seen
+        )
+
+    def test_loud_failure_on_post_error(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """gh_api raises CalledProcessError; post_back_link_comment must
+        propagate so the orchestrator can decide its fail-soft policy."""
+        def fake_api(method, path, body=None, **_kw):
+            if method == "GET":
+                return json.dumps([])
+            raise subprocess.CalledProcessError(1, "gh", stderr="boom")
+
+        monkeypatch.setattr(ar, "gh_api", fake_api)
+        with pytest.raises(subprocess.CalledProcessError):
+            ar.post_back_link_comment("o/r", 42, 99)
+
+
 # ---------------------------------------------------------------------------
 # run (orchestrator)
 # ---------------------------------------------------------------------------
@@ -929,6 +1052,8 @@ def _orchestrator_recorder(
     pr_detail: dict[str, Any] | None = None,
     check_runs: list[dict[str, Any]] | None = None,
     check_runs_error: bool = False,
+    back_link_comments: list[dict[str, Any]] | None = None,
+    back_link_post_error: bool = False,
 ) -> list[tuple]:
     """Replace ar.gh_api with a recorder that returns canned data per path.
 
@@ -958,6 +1083,7 @@ def _orchestrator_recorder(
     if pr_detail is None:
         pr_detail = {"merge_commit_sha": None}
     check_runs = check_runs or []
+    back_link_comments = back_link_comments or []
 
     def fake_api(method, path, body=None, **_kw):
         seen.append((method, path, body))
@@ -979,6 +1105,25 @@ def _orchestrator_recorder(
                     1, "gh", stderr="pulls endpoint boom"
                 )
             return json.dumps(pr_detail)
+        # Back-link search/post on the source PR (issues/{n}/comments).
+        if (
+            method == "GET"
+            and "/issues/" in path
+            and path.split("?", 1)[0].endswith("/comments")
+        ):
+            return json.dumps(back_link_comments)
+        if (
+            method == "POST"
+            and "/issues/" in path
+            and path.endswith("/comments")
+        ):
+            if back_link_post_error:
+                raise subprocess.CalledProcessError(
+                    1, "gh", stderr="back-link post boom"
+                )
+            return ""
+        if method == "PATCH" and "/issues/comments/" in path:
+            return ""
         if method == "POST" and path.endswith("/issues"):
             return json.dumps(created_response)
         return ""
@@ -1186,6 +1331,74 @@ class TestRun:
         assert "CI fail: verify-body-policy" in body
         assert "<!-- auto-filled:repair-history -->" in body
 
+    def test_back_link_comment_posted_after_create(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """run() must POST the back-link comment on the source PR after
+        create_issue returns. Ordering matters: the back-link references
+        the retro number, so the retro must exist first."""
+        seen = _orchestrator_recorder(
+            monkeypatch,
+            created_response={"number": 777, "html_url": "https://x/i/777"},
+        )
+        assert ar.run(_merged_event(number=42), "o/r") == 0
+        create_idx = next(
+            i for i, (m, p, _b) in enumerate(seen)
+            if m == "POST" and p == "/repos/o/r/issues"
+        )
+        back_link_post_idx = next(
+            i for i, (m, p, _b) in enumerate(seen)
+            if m == "POST" and p == "/repos/o/r/issues/42/comments"
+        )
+        assert create_idx < back_link_post_idx, (
+            "back-link must be posted after the retro issue is created"
+        )
+        back_link_call = seen[back_link_post_idx]
+        assert back_link_call[2] == {
+            "body": f"{ar._BACK_LINK_MARKER}\nRetrospective: #777",
+        }
+
+    def test_back_link_failure_does_not_abort_retro(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """If the back-link POST fails, run() must still return 0 -- the
+        retro issue is already created and rolling it back would be
+        worse than a missing back-link."""
+        seen = _orchestrator_recorder(
+            monkeypatch,
+            created_response={"number": 777, "html_url": "https://x/i/777"},
+            back_link_post_error=True,
+        )
+        assert ar.run(_merged_event(number=42), "o/r") == 0
+        # Issue creation happened.
+        assert any(
+            m == "POST" and p == "/repos/o/r/issues"
+            for m, p, _b in seen
+        )
+
+    def test_back_link_patched_when_marker_already_present(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A re-run on the same merged PR finds an existing back-link
+        marker and PATCHes it instead of creating a duplicate."""
+        seen = _orchestrator_recorder(
+            monkeypatch,
+            created_response={"number": 777, "html_url": "https://x/i/777"},
+            back_link_comments=[
+                {"id": 8675309, "body": f"{ar._BACK_LINK_MARKER}\nold"},
+            ],
+        )
+        assert ar.run(_merged_event(number=42), "o/r") == 0
+        assert any(
+            m == "PATCH" and p == "/repos/o/r/issues/comments/8675309"
+            for m, p, _b in seen
+        )
+        # No POST to /issues/{n}/comments when patching.
+        assert not any(
+            m == "POST" and p.endswith("/issues/42/comments")
+            for m, p, _b in seen
+        )
+
 
 # ---------------------------------------------------------------------------
 # Repair-signal aggregate (issue #298)
@@ -1279,6 +1492,88 @@ class TestComputeRepairSignals:
         )
         assert not any(out.values())
 
+    def test_multi_commit_signal_excludes_merge_branch_main_prefix(
+        self,
+    ) -> None:
+        out = ar.compute_repair_signals(
+            self._pr(commits=2),
+            has_inline_comments=False,
+            commit_subjects=[
+                "Merge branch 'main' into feature",
+                "feat(x): add x",
+            ],
+        )
+        assert out["multi_commit_pr"] is False
+
+    def test_multi_commit_signal_excludes_remote_tracking_main_prefix(
+        self,
+    ) -> None:
+        out = ar.compute_repair_signals(
+            self._pr(commits=2),
+            has_inline_comments=False,
+            commit_subjects=[
+                "Merge remote-tracking branch 'origin/main' into feature",
+                "feat(x): add y",
+            ],
+        )
+        assert out["multi_commit_pr"] is False
+
+    def test_multi_commit_signal_fires_when_pure_commits_exceed_one(
+        self,
+    ) -> None:
+        out = ar.compute_repair_signals(
+            self._pr(commits=3),
+            has_inline_comments=False,
+            commit_subjects=[
+                "Merge branch 'main' into feature",
+                "feat(x): add a",
+                "feat(x): add b",
+            ],
+        )
+        assert out["multi_commit_pr"] is True
+
+    def test_multi_commit_signal_legacy_path_when_subjects_none(self) -> None:
+        out = ar.compute_repair_signals(
+            self._pr(commits=2),
+            has_inline_comments=False,
+            commit_subjects=None,
+        )
+        assert out["multi_commit_pr"] is True
+
+
+class TestCountMergeFromMain:
+    def test_counts_both_prefix_variants(self) -> None:
+        count = ar._count_merge_from_main(
+            [
+                "Merge branch 'main' into feature",
+                "feat(x): add x",
+                "Merge remote-tracking branch 'origin/main' into feature",
+                "fix(scripts): tweak",
+            ]
+        )
+        assert count == 2
+
+    def test_returns_zero_when_no_merge_subjects(self) -> None:
+        count = ar._count_merge_from_main(
+            ["feat(x): a", "fix(y): b", "docs(z): c"]
+        )
+        assert count == 0
+
+    def test_ignores_unrelated_merge_subjects(self) -> None:
+        count = ar._count_merge_from_main(
+            [
+                "Merge branch 'feature-a' into feature-b",
+                "Merge pull request #123 from x/y",
+            ]
+        )
+        assert count == 0
+
+    def test_handles_leading_whitespace(self) -> None:
+        count = ar._count_merge_from_main(
+            ["   Merge branch 'main' into feature"]
+        )
+        assert count == 1
+
 
 class TestRenderRepairSignals:
     def test_renders_each_signal(self) -> None:
@@ -1323,6 +1618,42 @@ class TestRunAggregateSignals:
         assert any(
             m == "POST" and p == "/repos/o/r/issues" for m, p, _ in seen
         )
+
+    def test_skips_when_only_signal_is_rebase_debt_multi_commit(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """multi_commit_pr must not fire on rebase debt alone.
+
+        Event reports ``commits=2`` but the commit list contains one
+        merge-from-main commit plus one real development commit, so
+        ``pure_commits == 1`` and the gate stays False. With no other
+        signal firing, run() must skip without creating a retro.
+        """
+        seen = _orchestrator_recorder(
+            monkeypatch,
+            review_comments=[],
+            commits=[
+                {
+                    "commit": {
+                        "message": "Merge branch 'main' into feature\n"
+                    }
+                },
+                {"commit": {"message": "feat(x): add x"}},
+            ],
+        )
+        event = _merged_event(
+            number=304,
+            title="feat(x): add x",
+            body="",
+            commits=2,
+        )
+        assert ar.run(event, "o/r") == 0
+        assert not any(
+            m == "POST" and p == "/repos/o/r/issues" for m, p, _ in seen
+        )
+        assert "multi_commit_pr=false" in capsys.readouterr().out
 
     def test_skips_with_detailed_reason_when_no_signal_fires(
         self,

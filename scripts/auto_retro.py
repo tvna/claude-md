@@ -202,6 +202,35 @@ def should_skip(
     return False, ""
 
 
+# Commit-subject prefixes recorded as "rebase debt before merge" in the
+# Repair history table. The squash-only, linear-history merge policy in
+# .github/rulesets/main.json forces branches behind main to rebase or
+# merge main in before merge, so these commits are a structural side
+# effect of the policy rather than evidence of a repair loop.
+_MERGE_FROM_MAIN_PREFIXES: tuple[str, ...] = (
+    "Merge branch 'main'",
+    "Merge remote-tracking branch 'origin/main'",
+)
+
+
+def _count_merge_from_main(subjects: list[str]) -> int:
+    """Return the number of *subjects* that are merge-from-main commits.
+
+    Shared by :func:`compute_repair_signals` (to exempt rebase debt from
+    the ``multi_commit_pr`` gate) and :func:`_build_repair_history_table`
+    (to render the "Merge from main" rows). Matches the prefixes in
+    :data:`_MERGE_FROM_MAIN_PREFIXES`.
+    """
+    return sum(
+        1
+        for subject in subjects
+        if any(
+            subject.strip().startswith(prefix)
+            for prefix in _MERGE_FROM_MAIN_PREFIXES
+        )
+    )
+
+
 def _slice_section(body: str, heading: str) -> str:
     """Return the slice of ``body`` under ``## heading`` up to the next H2.
 
@@ -322,7 +351,9 @@ def extract_post_merge_checklist(body: str) -> list[tuple[str, bool]]:
 
 
 def compute_repair_signals(
-    pr: MergedPR, has_inline_comments: bool
+    pr: MergedPR,
+    has_inline_comments: bool,
+    commit_subjects: list[str] | None = None,
 ) -> dict[str, bool]:
     """Return a dict of `signal_name -> fired` describing observable repair
     evidence on the merged PR. Used by :func:`run` to decide whether to open
@@ -346,19 +377,29 @@ def compute_repair_signals(
     - ``fix_typed_title``: PR title starts with ``fix(`` (Conventional
       Commit `fix` type).
     - ``multi_commit_pr``: source branch had more than one commit before
-      the merge (squash-merge collapses these but the commit count is
-      still reported on the closed event payload).
+      the merge. When *commit_subjects* is supplied, merge-from-main
+      commits (see :data:`_MERGE_FROM_MAIN_PREFIXES`) are subtracted
+      from the count so rebase debt created by the squash-only,
+      linear-history merge policy does not fire the gate on its own.
+      When *commit_subjects* is ``None`` (the legacy two-arg call shape,
+      retained for tests that do not exercise the gate ordering in
+      :func:`run`) the gate falls back to ``pr.commits > 1``.
     """
     body_without_comments = strip_html_comments(pr.body or "")
     refs = extract_refs(body_without_comments)
     fix_typed = pr.title.lstrip().lower().startswith("fix(")
+    if commit_subjects is None:
+        multi_commit = pr.commits > 1
+    else:
+        pure_commits = pr.commits - _count_merge_from_main(commit_subjects)
+        multi_commit = pure_commits > 1
     verification_pairs = extract_verification_pairs(pr.body or "")
     post_merge_items = extract_post_merge_checklist(pr.body or "")
     return {
         "inline_review_comments": bool(has_inline_comments),
         "body_cites_refs": len(refs) > 0,
         "fix_typed_title": fix_typed,
-        "multi_commit_pr": pr.commits > 1,
+        "multi_commit_pr": multi_commit,
         "verification_pairs_failed": any(
             not p.passed for p in verification_pairs
         ),
@@ -458,8 +499,8 @@ def _build_repair_history_table(
 
     for subject in commit_subjects:
         stripped = subject.strip()
-        if stripped.startswith("Merge branch 'main'") or stripped.startswith(
-            "Merge remote-tracking branch 'origin/main'"
+        if any(
+            stripped.startswith(prefix) for prefix in _MERGE_FROM_MAIN_PREFIXES
         ):
             rows.append(
                 (
@@ -954,6 +995,62 @@ def create_issue(
     return json.loads(raw) if raw.strip() else {}
 
 
+# Marker used to locate a previously-posted back-link comment so the
+# back-link step is idempotent. Same shape as the marker convention in
+# scripts/scan_non_ascii.py (see find_existing_comment_id at
+# scan_non_ascii.py:313-326).
+_BACK_LINK_MARKER = "<!-- auto-retro:back-link -->"
+
+
+def find_existing_back_link_id(
+    repo: str, pr_number: int, marker: str = _BACK_LINK_MARKER
+) -> int | None:
+    """Return the id of a prior back-link comment on *pr_number*, or None.
+
+    Pages once with ``per_page=100``; the back-link is posted exactly
+    once per merge by this script, so the first page is sufficient. The
+    match requires *marker* at the start of the comment body, mirroring
+    the convention in :func:`scripts.scan_non_ascii.find_existing_comment_id`.
+    """
+    raw = gh_api(
+        "GET", f"/repos/{repo}/issues/{pr_number}/comments?per_page=100"
+    )
+    comments = json.loads(raw) if raw.strip() else []
+    for comment in comments:
+        body = comment.get("body") or ""
+        if body.startswith(marker):
+            return comment.get("id")
+    return None
+
+
+def post_back_link_comment(
+    repo: str, pr_number: int, retro_number: int
+) -> str:
+    """PATCH an existing back-link comment, else POST a new one.
+
+    Idempotent via :data:`_BACK_LINK_MARKER`. The comment body is the
+    marker followed by a single line ``Retrospective: #<retro_number>``;
+    this is the PR -> retro reverse pointer that complements the retro
+    body's ``Source PR: #`` line. Returns ``"updated <id>"`` or
+    ``"created"`` for the orchestrator log.
+    """
+    body = f"{_BACK_LINK_MARKER}\nRetrospective: #{retro_number}"
+    existing = find_existing_back_link_id(repo, pr_number)
+    if existing is not None:
+        gh_api(
+            "PATCH",
+            f"/repos/{repo}/issues/comments/{existing}",
+            {"body": body},
+        )
+        return f"updated {existing}"
+    gh_api(
+        "POST",
+        f"/repos/{repo}/issues/{pr_number}/comments",
+        {"body": body},
+    )
+    return "created"
+
+
 # ---------------------------------------------------------------------------
 # Orchestrator + CLI
 # ---------------------------------------------------------------------------
@@ -1060,7 +1157,27 @@ def run(event: dict[str, Any], repo: str) -> int:
         )
         has_inline_comments = True
 
-    signals = compute_repair_signals(pr, has_inline_comments)
+    # Fetch commit subjects ahead of the gate so compute_repair_signals can
+    # exempt merge-from-main commits from the multi_commit_pr count. When
+    # pr.commits <= 1 the gate is False by definition, so skip the API call.
+    commit_subjects: list[str] | None = None
+    if pr.commits > 1:
+        try:
+            commit_subjects = fetch_pr_commits(repo, pr.number)
+        except subprocess.CalledProcessError as exc:
+            # Fail-soft: a transient commits-endpoint failure must NOT
+            # silently swallow the gate evaluation. Fall back to the
+            # legacy pr.commits-only path; the body-building fetch below
+            # will retry and either succeed or surface the error there.
+            print(
+                f"::warning::fetch_pr_commits failed ahead of gate "
+                f"(exit {exc.returncode}); falling back to "
+                "pr.commits-only multi_commit_pr evaluation",
+                file=sys.stderr,
+            )
+            commit_subjects = None
+
+    signals = compute_repair_signals(pr, has_inline_comments, commit_subjects)
     signal_summary = render_repair_signals(signals)
     if not any(signals.values()):
         msg = f"no repair signal fired ({signal_summary})"
@@ -1068,7 +1185,8 @@ def run(event: dict[str, Any], repo: str) -> int:
         _append_summary(_build_summary(pr, "skip", msg))
         return 0
 
-    commit_subjects = fetch_pr_commits(repo, pr.number)
+    if commit_subjects is None:
+        commit_subjects = fetch_pr_commits(repo, pr.number)
     try:
         check_runs = fetch_check_runs(repo, pr.number)
     except subprocess.CalledProcessError as exc:
@@ -1097,7 +1215,28 @@ def run(event: dict[str, Any], repo: str) -> int:
     created = create_issue(repo, title, body, labels)
     new_number = created.get("number")
     new_url = created.get("html_url") or ""
-    msg = f"created retro issue #{new_number} ({new_url})"
+
+    back_link_status = "skipped"
+    if isinstance(new_number, int):
+        try:
+            back_link_status = post_back_link_comment(repo, pr.number, new_number)
+        except subprocess.CalledProcessError as exc:
+            # Fail-soft: the retro issue is already created. A failure to
+            # post the PR-side back-link must NOT roll the retro back --
+            # surface a warning and continue so the audit trail keeps the
+            # retro that did land.
+            print(
+                f"::warning::post_back_link_comment failed "
+                f"(exit {exc.returncode}); retro issue #{new_number} created "
+                "but source PR has no back-link comment",
+                file=sys.stderr,
+            )
+            back_link_status = "failed"
+
+    msg = (
+        f"created retro issue #{new_number} ({new_url}); "
+        f"back-link={back_link_status}"
+    )
     print(msg)
     _append_summary(_build_summary(pr, "created", msg))
     return 0
