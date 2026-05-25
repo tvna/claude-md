@@ -938,16 +938,26 @@ class TestFetchCheckRuns:
         self,
         monkeypatch: pytest.MonkeyPatch,
         *,
-        merge_commit_sha: str | None,
-        check_runs: list[dict[str, Any]] | None,
+        merge_commit_sha: str | None = None,
+        check_runs: list[dict[str, Any]] | None = None,
+        sha_sequence: list[str | None] | None = None,
     ) -> list[tuple[str, str]]:
         seen: list[tuple[str, str]] = []
+        # Index lives in a single-element list so the closure can mutate
+        # it without needing nonlocal -- matches the in-tree pattern for
+        # hand-rolled counters in _orchestrator_recorder.
+        idx = [0]
 
         def fake_api(method: str, path: str, body: Any = None, **_kw: Any) -> str:
             seen.append((method, path))
             if "/check-runs" in path:
                 return json.dumps({"check_runs": check_runs or []})
-            # First call: pull request detail.
+            # First call (and any retry): pull request detail.
+            if sha_sequence is not None:
+                i = idx[0]
+                idx[0] = i + 1
+                sha = sha_sequence[i] if i < len(sha_sequence) else None
+                return json.dumps({"merge_commit_sha": sha})
             return json.dumps({"merge_commit_sha": merge_commit_sha})
 
         monkeypatch.setattr(ar, "gh_api", fake_api)
@@ -979,21 +989,141 @@ class TestFetchCheckRuns:
         )
 
     def test_null_merge_commit_sha_short_circuits(
-        self, monkeypatch: pytest.MonkeyPatch
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
-        """Returns [] without making the second API call."""
+        """All-null SHA path: retries N times, sleeps with backoff,
+        emits a ``::warning::`` line, and returns ``[]`` without ever
+        calling the check-runs endpoint. Refs issue #380.
+        """
+        attempts = ar._MERGE_SHA_RETRY_ATTEMPTS
+        backoff = list(ar._MERGE_SHA_RETRY_BACKOFF)
+        sleeps: list[float] = []
         seen = self._staged_api(
-            monkeypatch, merge_commit_sha=None, check_runs=None
+            monkeypatch,
+            sha_sequence=[None] * attempts,
+            check_runs=None,
         )
-        assert ar.fetch_check_runs("o/r", 42) == []
-        # Only the PR detail call must fire.
-        assert len(seen) == 1
+        result = ar.fetch_check_runs(
+            "o/r", 42, sleeper=sleeps.append
+        )
+        assert result == []
+        # PR-detail call fires exactly `attempts` times; check-runs
+        # endpoint must never be hit when SHA stays null.
+        assert len(seen) == attempts
+        assert all(
+            path == "/repos/o/r/pulls/42" for _, path in seen
+        )
+        assert sleeps == backoff
+        err = capsys.readouterr().err
+        assert "::warning::" in err
+        assert "merge_commit_sha still null" in err
+        assert "issue #380" in err
+
+    def test_sha_resolves_on_second_attempt(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """First PR-detail returns null, second resolves to a SHA.
+        Sleeper fires once with the first backoff value; check-runs
+        endpoint is hit exactly once against the resolved SHA; no
+        warning emitted. Refs issue #380.
+        """
+        sleeps: list[float] = []
+        seen = self._staged_api(
+            monkeypatch,
+            sha_sequence=[None, "abc123"],
+            check_runs=[{"name": "gate", "conclusion": "failure"}],
+        )
+        result = ar.fetch_check_runs(
+            "o/r", 42, sleeper=sleeps.append
+        )
+        names = [r["name"] for r in result]
+        assert names == ["gate"]
+        # Two PR-detail calls plus one check-runs call.
         assert seen[0] == ("GET", "/repos/o/r/pulls/42")
+        assert seen[1] == ("GET", "/repos/o/r/pulls/42")
+        assert seen[2] == (
+            "GET",
+            "/repos/o/r/commits/abc123/check-runs?per_page=100",
+        )
+        assert sleeps == [ar._MERGE_SHA_RETRY_BACKOFF[0]]
+        assert "::warning::" not in capsys.readouterr().err
+
+    def test_sha_resolves_on_final_attempt(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """Null on every attempt except the final one. Full backoff
+        sequence is consumed and the check-runs endpoint is still hit.
+        Refs issue #380.
+        """
+        attempts = ar._MERGE_SHA_RETRY_ATTEMPTS
+        backoff = list(ar._MERGE_SHA_RETRY_BACKOFF)
+        sleeps: list[float] = []
+        sha_sequence: list[str | None] = [None] * (attempts - 1) + [
+            "deadbeef"
+        ]
+        seen = self._staged_api(
+            monkeypatch,
+            sha_sequence=sha_sequence,
+            check_runs=[{"name": "gate", "conclusion": "failure"}],
+        )
+        result = ar.fetch_check_runs(
+            "o/r", 42, sleeper=sleeps.append
+        )
+        names = [r["name"] for r in result]
+        assert names == ["gate"]
+        # `attempts` PR-detail calls + one check-runs call.
+        pr_detail_calls = [
+            path for _, path in seen if "/pulls/" in path
+        ]
+        assert len(pr_detail_calls) == attempts
+        check_runs_calls = [
+            path for _, path in seen if "/check-runs" in path
+        ]
+        assert check_runs_calls == [
+            "/repos/o/r/commits/deadbeef/check-runs?per_page=100"
+        ]
+        assert sleeps == backoff
+        assert "::warning::" not in capsys.readouterr().err
+
+    def test_all_attempts_null_emits_warning_and_returns_empty(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """Exhaustion path duplicates the short-circuit test from the
+        warning-emission angle: stderr names the issue ref and the
+        check-runs endpoint stays untouched. Refs issue #380.
+        """
+        attempts = ar._MERGE_SHA_RETRY_ATTEMPTS
+        sleeps: list[float] = []
+        seen = self._staged_api(
+            monkeypatch,
+            sha_sequence=[None] * attempts,
+            check_runs=[{"name": "gate", "conclusion": "failure"}],
+        )
+        result = ar.fetch_check_runs(
+            "o/r", 42, sleeper=sleeps.append
+        )
+        assert result == []
+        assert not any("/check-runs" in path for _, path in seen)
+        assert len(sleeps) == attempts - 1
+        err = capsys.readouterr().err
+        assert "issue #380" in err
+        assert f"{attempts} attempts" in err
 
     def test_empty_pr_response_short_circuits(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Empty body from the PR detail endpoint -> no SHA -> []."""
+        """Empty body from the PR detail endpoint -> no SHA. Treated
+        identically to a null SHA: the retry loop runs to exhaustion
+        before soft-failing to ``[]``. Refs issue #380.
+        """
         seen: list[tuple[str, str]] = []
 
         def fake_api(method: str, path: str, body: Any = None, **_kw: Any) -> str:
@@ -1001,8 +1131,10 @@ class TestFetchCheckRuns:
             return ""
 
         monkeypatch.setattr(ar, "gh_api", fake_api)
-        assert ar.fetch_check_runs("o/r", 42) == []
-        assert len(seen) == 1
+        sleeps: list[float] = []
+        assert ar.fetch_check_runs("o/r", 42, sleeper=sleeps.append) == []
+        assert len(seen) == ar._MERGE_SHA_RETRY_ATTEMPTS
+        assert not any("/check-runs" in path for _, path in seen)
 
     def test_empty_check_runs_response_returns_empty_list(
         self, monkeypatch: pytest.MonkeyPatch
@@ -1535,6 +1667,7 @@ def _orchestrator_recorder(
     created_response: dict[str, Any] | None = None,
     comments_error: bool = False,
     pr_detail: dict[str, Any] | None = None,
+    pr_detail_sequence: list[dict[str, Any]] | None = None,
     check_runs: list[dict[str, Any]] | None = None,
     check_runs_error: bool = False,
     back_link_comments: list[dict[str, Any]] | None = None,
@@ -1569,6 +1702,11 @@ def _orchestrator_recorder(
         pr_detail = {"merge_commit_sha": None}
     check_runs = check_runs or []
     back_link_comments = back_link_comments or []
+    # Index lives in a single-element list so the closure can mutate it
+    # without requiring nonlocal. Refs issue #380: the
+    # ``pr_detail_sequence`` knob exercises fetch_check_runs's retry
+    # loop end-to-end through the orchestrator.
+    pr_detail_idx = [0]
 
     def fake_api(method, path, body=None, **_kw):
         seen.append((method, path, body))
@@ -1589,6 +1727,12 @@ def _orchestrator_recorder(
                 raise subprocess.CalledProcessError(
                     1, "gh", stderr="pulls endpoint boom"
                 )
+            if pr_detail_sequence is not None:
+                i = pr_detail_idx[0]
+                pr_detail_idx[0] = i + 1
+                if i < len(pr_detail_sequence):
+                    return json.dumps(pr_detail_sequence[i])
+                return json.dumps(pr_detail_sequence[-1])
             return json.dumps(pr_detail)
         # Back-link search/post on the source PR (issues/{n}/comments).
         if (
@@ -1815,6 +1959,54 @@ class TestRun:
         body = post_calls[0][2]["body"]
         assert "CI fail: verify-body-policy" in body
         assert "<!-- auto-filled:repair-history -->" in body
+
+    def test_issue_380_reproducer_null_sha_resolves_after_retry(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Acceptance criterion 3 of issue #380: re-running the retro
+        #345 row 1 scenario must auto-fill the failed ``gate`` check_run
+        instead of degrading to the sentinel. PR-detail returns null on
+        the first attempt and resolves on the second; the resolved SHA
+        feeds the check-runs lookup; the rendered Repair history table
+        names the failed check_run and does NOT carry the
+        ``(no automated repair signals detected)`` sentinel.
+        """
+        monkeypatch.setattr(ar.time, "sleep", lambda *_a, **_kw: None)
+        seen = _orchestrator_recorder(
+            monkeypatch,
+            pr_detail_sequence=[
+                {"merge_commit_sha": None},
+                {"merge_commit_sha": "deadbeef"},
+            ],
+            check_runs=[
+                {
+                    "id": 77653399942,
+                    "name": "gate",
+                    "conclusion": "failure",
+                    "completed_at": "2026-05-25T03:48:28Z",
+                }
+            ],
+        )
+        assert ar.run(_merged_event(number=42), "o/r") == 0
+        # PR-detail endpoint was called twice (one null + one resolve).
+        pr_detail_calls = [
+            (m, p)
+            for m, p, _b in seen
+            if m == "GET" and p == "/repos/o/r/pulls/42"
+        ]
+        assert len(pr_detail_calls) == 2
+        # The created retro issue body carries the gate check_run and
+        # not the sentinel: the regression that motivated issue #380
+        # would re-emerge if either assertion flips.
+        post_calls = [
+            (m, p, b)
+            for m, p, b in seen
+            if m == "POST" and p == "/repos/o/r/issues"
+        ]
+        assert len(post_calls) == 1
+        body = post_calls[0][2]["body"]
+        assert "CI fail: gate" in body
+        assert "(no automated repair signals detected)" not in body
 
     def test_back_link_comment_posted_after_create(
         self, monkeypatch: pytest.MonkeyPatch
