@@ -412,6 +412,16 @@ contributor which lane to draft into first. The decision tree in
 section 4 then validates whether that draft lane is the correct
 final destination.
 
+For the orthogonal concern of spotting noise-commit and flooding
+patterns on a merged PR (high commit count, low-information
+subjects, repeated repair commits, force-update churn, unrelated
+churn), the retrospective writer applies the procedure in
+[`docs/retrospective-noise-flooding-procedure.md`](retrospective-noise-flooding-procedure.md).
+That procedure maps each signal into the same three-category
+taxonomy used here, and keeps any deterministic follow-up as a
+separate sub-issue rather than bundling it into the design-doc
+phase.
+
 Hand-authored retrospective `.md` files land under
 `docs/history/retrospective-pr-<N>.md`. The auto-retro harness
 (`scripts/auto_retro.py`) only opens the GitHub issue; the durable
@@ -629,6 +639,11 @@ flow, not this update flow.
 - `docs/history/retrospective-pr-*.md` - case-study lane precedent for P6;
   individual retrospectives (PR #229, #235, #237) supply the field
   examples cited in section 6.4.
+- `docs/retrospective-noise-flooding-procedure.md` - the Phase 8(D-3)
+  deliverable for #315 (parent #63); applied by retrospective
+  writers alongside the section 6.4 lane mapping to spot
+  noise-commit and flooding patterns and to decide whether a
+  deterministic follow-up gate is warranted.
 - `scripts/auto_retro.py` - retrospective harness whose
   three-category taxonomy (missing deterministic gate, unclear
   agent instruction, external or human decision) drives the
