@@ -90,5 +90,6 @@ git submodule update --remote .claude-md-master
 - Prefer removing words over adding them (Principle 4).
 - New or modified workflow-called scripts under `scripts/` must meet the [workflow script quality standard](./docs/standards/workflow-script-quality.md).
 - PRs that touch `.apm/instructions/**`, `CLAUDE.md`, or `AGENTS.md` must pass the [downstream instruction review checklist](./docs/runbooks/downstream-instruction-review-checklist.md) (security-focused review applied after the deterministic gates are green).
+- For the full map of documents by lane (`prd/`, `standards/`, `runbooks/`, `archive/`) see [`docs/INDEX.md`](./docs/INDEX.md).
 
 ---
