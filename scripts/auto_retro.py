@@ -123,6 +123,21 @@ _RESULT_PASSING_ALL_UNIT_RE = re.compile(
     re.IGNORECASE,
 )
 
+# pytest-style count summary: `246 passed in 198.59s`, `1476 passed,
+# coverage 94.24%`, `22 passed in 0.09s`. Anchored to start so trailing
+# prose (timing, coverage) is tolerated but a leading failure count is
+# not silently swallowed. Refs #453.
+_RESULT_PASSING_COUNT_RE = re.compile(r"^\d+\s+passed\b", re.IGNORECASE)
+
+# Trailing `ok` word marker: `yaml syntax ok`, `config ok.`. Word
+# boundary keeps `not ok` and `lookup` out of the match. Refs #453.
+_RESULT_PASSING_TRAILING_OK_RE = re.compile(r"\bok\b\.?\s*$", re.IGNORECASE)
+
+# Explicit failure-count marker that must NOT be treated as passing even
+# if the rest of the string smells like a pass (`0 passed, 3 failed`).
+# Refs #453.
+_RESULT_FAILING_COUNT_RE = re.compile(r"\b\d+\s+failed\b", re.IGNORECASE)
+
 # Append-to-existing-retro markers used by append_repair_history_row.
 _AUTO_FILLED_OPEN = "<!-- auto-filled:repair-history -->"
 _AUTO_FILLED_CLOSE = "<!-- /auto-filled:repair-history -->"
@@ -309,20 +324,44 @@ def _result_is_passing(result: str) -> bool:
       hooks/checks/tests ...``) is accepted as passing, covering natural
       tool output where a count or qualifier is interpolated between
       ``all`` and the unit noun (refs #411);
+    * pytest-style ``N passed ...`` counts (matched by
+      :data:`_RESULT_PASSING_COUNT_RE`) are accepted as passing;
+    * a string ending in the word ``ok`` (matched by
+      :data:`_RESULT_PASSING_TRAILING_OK_RE`) is accepted as passing;
     * otherwise the lowercased text is matched against the prefix
       allowlist in :data:`_RESULT_PASSING_PREFIXES` (``exit 0``, ``OK:``,
       ``pass``, ``passed``, ``success``, ``ok``, plus common tool
       summaries such as ``all hooks ...``).
 
+    An explicit ``N failed`` token anywhere in the text (matched by
+    :data:`_RESULT_FAILING_COUNT_RE`) forces a failure verdict even if
+    another marker would have accepted it.
+
     Anything else (including ``exit 1``, ``failed``, free-form prose) is
-    treated as a failure signal. Refs #417.
+    treated as a failure signal. Refs #411, #417, #453.
     """
     text = result.strip()
     if text.startswith("`") and text.endswith("`") and len(text) >= 2:
         text = text[1:-1].strip()
+    # Strip a trailing operator-commentary parenthetical so it does not
+    # mask a pass marker on the primary value (e.g.
+    # `\`yaml syntax ok\` (parsed without exception)` --> `\`yaml syntax ok\``,
+    # `1476 passed, coverage 94.24% (gate 92.71%)` --> `1476 passed, ...`).
+    # Re-strip backticks if newly applicable. Refs #453.
+    stripped = re.sub(r"\s*\([^()]*\)\s*$", "", text).strip()
+    if stripped != text:
+        text = stripped
+        if text.startswith("`") and text.endswith("`") and len(text) >= 2:
+            text = text[1:-1].strip()
+    if _RESULT_FAILING_COUNT_RE.search(text):
+        return False
     if _RESULT_PASSING_NUMERIC_RE.match(text):
         return True
     if _RESULT_PASSING_ALL_UNIT_RE.match(text):
+        return True
+    if _RESULT_PASSING_COUNT_RE.match(text):
+        return True
+    if _RESULT_PASSING_TRAILING_OK_RE.search(text):
         return True
     lower = text.lower()
     return any(lower.startswith(prefix) for prefix in _RESULT_PASSING_PREFIXES)
@@ -608,14 +647,17 @@ def _build_repair_history_table(
                 canonical_fix_index = i
             break
 
+    policy_artifact_emitted = False
     for i, subject in enumerate(commit_subjects):
         stripped = subject.strip()
         if i == canonical_fix_index:
+            policy_artifact_emitted = True
             rows.append(
                 (
                     _escape_table_cell("Fix commit"),
                     _escape_table_cell(
-                        f"`{subject}` -- canonical fix commit on fix-typed PR"
+                        f"{_POLICY_ARTIFACT_MARKER} `{subject}` -- "
+                        "canonical fix commit on fix-typed PR"
                     ),
                 )
             )
@@ -625,16 +667,17 @@ def _build_repair_history_table(
             or stripped.startswith("fixup!")
             or stripped.startswith("squash!")
         ):
+            policy_artifact_emitted = True
             rows.append(
                 (
                     _escape_table_cell("Iteration commit"),
                     _escape_table_cell(
-                        f"`{subject}` -- signals an earlier silent failure"
+                        f"{_POLICY_ARTIFACT_MARKER} `{subject}` -- "
+                        "signals an earlier silent failure"
                     ),
                 )
             )
 
-    policy_artifact_emitted = False
     for subject in commit_subjects:
         stripped = subject.strip()
         if any(
@@ -652,10 +695,14 @@ def _build_repair_history_table(
             )
 
     if pr_commit_count > 1:
+        policy_artifact_emitted = True
         rows.append(
             (
                 _escape_table_cell("Multi-commit PR"),
-                _escape_table_cell(f"{pr_commit_count} commits squash-merged"),
+                _escape_table_cell(
+                    f"{_POLICY_ARTIFACT_MARKER} {pr_commit_count} "
+                    "commits squash-merged"
+                ),
             )
         )
 
