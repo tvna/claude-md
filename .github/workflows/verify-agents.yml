@@ -60,6 +60,9 @@ jobs:
       - name: Assert workflows pin actions to SHA + tag comment
         run: uv run python scripts/scan_workflow_action_pins.py verify
 
+      - name: Verify .apm checksum lockfile
+        run: uv run python scripts/verify_apm_checksums.py verify
+
       - name: Warn if uv pin trails upstream
         env:
           GH_TOKEN: ${{ github.token }}

@@ -43,6 +43,7 @@ The append-only policy for `archive/` is documented separately in
 | [workflow-permissions-audit.md](runbooks/workflow-permissions-audit.md) | Least-privilege matrix for every workflow (trigger, token / secret used, minimum permissions vs declared, mismatch follow-up). | #181, #178 | `.github/workflows/*.yml` (audit target); `scripts/scan_workflow_pip.py`; `scripts/scan_workflow_action_pins.py` |
 | [security-control-drift-report.md](runbooks/security-control-drift-report.md) | Aggregator runbook for per-family drift detectors posting a single rolling comment on the MITRE ATT&CK tracker. | #180, #178 | `.github/workflows/security-control-drift-report.yml`; `scripts/security_drift_report.py` |
 | [downstream-instruction-review-checklist.md](runbooks/downstream-instruction-review-checklist.md) | Security-focused review checklist for PRs that change instructions this repository ships to downstream consumers. | #183, #178 | `.github/workflows/verify-apm-portability.yml`; `.github/workflows/verify-apm-drift.yml`; `.github/PULL_REQUEST_TEMPLATE.md` (Bootstrap items) |
+| [agent-provenance.md](runbooks/agent-provenance.md) | Provenance metadata and review criteria for skills, subagents, MCP servers, and comparable agent extensions. | #312, #63 | `docs/prd/security-control-inventory.md`; `docs/runbooks/downstream-instruction-review-checklist.md`; `docs/standards/repo-scope.md` |
 | [retrospective-noise-flooding-procedure.md](runbooks/retrospective-noise-flooding-procedure.md) | Operator procedure for reviewing retrospective and auto-retro flooding signal vs noise. | #315, #63 Phase 8(D-3) | `.github/workflows/auto-retro.yml`; `scripts/auto_retro.py`; `docs/archive/retrospective-pr-*.md` (subject) |
 | [prek.md](runbooks/prek.md) | `j178/prek` install steps, configured hooks, and the CI gate that runs `prek run --all-files` on every PR. | #408 | `.pre-commit-config.yaml`; `.github/workflows/verify-agents.yml` (`prek` job); `scripts/uv_pin.py`; `scripts/scan_workflow_pip.py` |
 
@@ -71,4 +72,5 @@ naming convention and the per-30-entries year-folder cutover.
 ## Navigation aids
 
 - [archive/RETENTION.md](archive/RETENTION.md) -- append-only policy and auto-retro placement convention for `archive/`.
+- [agent-provenance.md](agent-provenance.md) -- compatibility pointer to `runbooks/agent-provenance.md` for the original #312 target path.
 - This INDEX is reviewed whenever a file is added, removed, or moved across lanes. Treat it as a self-describing supplement to `ls docs/`, not a replacement for the folder layout: the lane is visible at the filesystem level; this index just names what each file owns.

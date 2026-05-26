@@ -48,6 +48,7 @@ import security_drift_report
 import threat_intel_triage
 import title_policy
 import uv_pin
+import verify_apm_checksums
 import verify_required_check_contexts
 import verify_ruleset_sync
 import yaml
@@ -65,7 +66,6 @@ _PYTHON_SCRIPT_INVOCATION = re.compile(
     r"\s+scripts/([A-Za-z_][\w-]*\.py)"
     r"(?:\s+(\S+))?"
 )
-
 
 class WorkflowInvocation(NamedTuple):
     """A single ``python ... scripts/<name>.py [<sub>]`` call in a workflow."""
@@ -113,6 +113,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("uv_pin.py", "drift"): "test_uv_pin_workflow_subcommands_match_ci_usage",
     ("uv_pin.py", "read"): "test_uv_pin_workflow_subcommands_match_ci_usage",
     ("uv_pin.py", "stale"): "test_uv_pin_workflow_subcommands_match_ci_usage",
+    ("verify_apm_checksums.py", "verify"): "test_verify_apm_checksums_matches_workflow_args",
     ("verify_required_check_contexts.py", "verify"): "test_verify_required_check_contexts_matches_workflow_args",
     ("verify_ruleset_sync.py", "verify"): "test_verify_ruleset_sync_matches_workflow_args",
 }
@@ -598,6 +599,15 @@ def test_scan_apm_portability_verify_matches_workflow_paths(tmp_path: Path) -> N
     assert scan_apm_portability.main(
         ["verify", "--path", str(path), "--path", str(path), "--path", str(path)]
     ) == 0
+
+
+def test_verify_apm_checksums_matches_workflow_args(tmp_path: Path) -> None:
+    apm_source = tmp_path / ".apm/instructions/master.instructions.md"
+    apm_source.parent.mkdir(parents=True)
+    apm_source.write_text("source\n", encoding="utf-8")
+
+    assert verify_apm_checksums.main(["--root", str(tmp_path), "update"]) == 0
+    assert verify_apm_checksums.main(["--root", str(tmp_path), "verify"]) == 0
 
 
 def test_scan_design_philosophy_drift_verify_matches_workflow_paths(
