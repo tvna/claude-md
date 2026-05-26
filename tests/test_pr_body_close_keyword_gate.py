@@ -189,6 +189,27 @@ class TestFetchLabels:
         )
         assert result is None
 
+    @pytest.mark.parametrize("code", [401, 403, 429])
+    def test_named_4xx_returns_none(self, code: int) -> None:
+        def _opener(request, *_a, **_k):
+            raise urllib.error.HTTPError(
+                url=request.full_url,
+                code=code,
+                msg="error",
+                hdrs=None,
+                fp=io.BytesIO(b'{"message":"err"}'),
+            )
+
+        result = gate.fetch_labels(
+            "owner",
+            "repo",
+            42,
+            token="t",
+            opener=_opener,
+            sleeper=lambda _s: None,
+        )
+        assert result is None
+
     def test_500_returns_none_after_retry(self) -> None:
         calls: list[int] = []
 
