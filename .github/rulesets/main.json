@@ -30,8 +30,7 @@
         "strict_required_status_checks_policy": true,
         "required_status_checks": [
           {"context": "Verify agent instructions / gate"},
-          {"context": "Verify APM artifact drift / verify"},
-          {"context": "Verify APM portability / verify"},
+          {"context": "Verify APM / gate"},
           {"context": "Verify dependabot labels / verify"},
           {"context": "Verify design philosophy doc / verify"},
           {"context": "Verify issue link / gate"},

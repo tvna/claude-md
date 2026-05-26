@@ -3454,3 +3454,642 @@ class TestCLI:
         )
         assert exit_code == 1
         assert "gh api failed" in capsys.readouterr().err
+
+
+# ---------------------------------------------------------------------------
+# Strategy B retro sentinel (issue #414)
+# ---------------------------------------------------------------------------
+
+
+def _retro_body(checked: int = 0) -> str:
+    """Return a retro body with ``checked`` of the 5 acceptance criteria flipped.
+
+    Mirrors the literal section emitted by :func:`auto_retro.build_retro_body`
+    so the slicer reads it the same way it would read a real auto-opened
+    retro. Keeping the section text byte-aligned with the production
+    body protects against drift -- a future template change that breaks
+    the slice would also break these fixtures, surfacing the regression.
+    """
+    boxes = ["[ ]"] * 5
+    for i in range(checked):
+        boxes[i] = "[x]"
+    return (
+        "## Scope\n\nx\n\n"
+        "## Facts\n\n- a\n\n"
+        "## Proposed work\n\n"
+        "<!-- auto-filled:repair-history -->\n"
+        "1. Repair history\n\n"
+        "| # | Repair | What |\n"
+        "|---|--------|------|\n"
+        "| 1 | Iteration commit | x |\n"
+        "<!-- /auto-filled:repair-history -->\n\n"
+        "## Verification\n\n- v\n\n"
+        "## Acceptance criteria\n\n"
+        f"- {boxes[0]} Repair history table complete.\n"
+        f"- {boxes[1]} Each repair classified.\n"
+        f"- {boxes[2]} Each repair has an earliest prevention point.\n"
+        f"- {boxes[3]} No-repair reproduction path stated.\n"
+        f"- {boxes[4]} `## Follow-up issues` filed.\n"
+    )
+
+
+class TestIsRetroUntouched:
+    def test_all_unchecked_and_no_comments_returns_true(self) -> None:
+        assert ar.is_retro_untouched(_retro_body(checked=0), []) is True
+
+    def test_any_checkbox_checked_returns_false(self) -> None:
+        assert ar.is_retro_untouched(_retro_body(checked=1), []) is False
+
+    def test_all_checkboxes_checked_returns_false(self) -> None:
+        assert ar.is_retro_untouched(_retro_body(checked=5), []) is False
+
+    def test_non_bot_comment_returns_false(self) -> None:
+        comments = [{"user": {"login": "tvna"}, "body": "triaged"}]
+        assert ar.is_retro_untouched(_retro_body(checked=0), comments) is False
+
+    def test_dependabot_comment_does_not_count(self) -> None:
+        comments = [{"user": {"login": "dependabot[bot]"}, "body": "x"}]
+        assert ar.is_retro_untouched(_retro_body(checked=0), comments) is True
+
+    def test_github_actions_comment_does_not_count(self) -> None:
+        comments = [{"user": {"login": "github-actions[bot]"}, "body": "x"}]
+        assert ar.is_retro_untouched(_retro_body(checked=0), comments) is True
+
+    def test_mix_of_bot_and_human_returns_false(self) -> None:
+        comments = [
+            {"user": {"login": "github-actions[bot]"}, "body": "x"},
+            {"user": {"login": "tvna"}, "body": "triaged"},
+        ]
+        assert ar.is_retro_untouched(_retro_body(checked=0), comments) is False
+
+    def test_missing_acceptance_section_returns_false(self) -> None:
+        """Defensive: an unparseable body must not be auto-closed."""
+        body = "## Scope\n\nx\n\n## Facts\n\n- a\n"
+        assert ar.is_retro_untouched(body, []) is False
+
+    def test_empty_body_returns_false(self) -> None:
+        assert ar.is_retro_untouched("", []) is False
+
+    def test_acceptance_section_without_checkboxes_returns_false(self) -> None:
+        body = (
+            "## Acceptance criteria\n"
+            "\n"
+            "All criteria are met per the upstream issue.\n"
+        )
+        assert ar.is_retro_untouched(body, []) is False
+
+    def test_comment_without_user_login_does_not_count(self) -> None:
+        """A malformed comment with no login field is treated as no engagement.
+
+        Fail-safe: missing login means we cannot attribute the comment,
+        so we err on the side of letting the sentinel proceed rather than
+        blocking the close on an unreadable comment.
+        """
+        comments = [{"body": "ghost"}]
+        assert ar.is_retro_untouched(_retro_body(checked=0), comments) is True
+
+
+class TestIsRetroAgeExceeded:
+    def test_15_days_old_exceeds_14(self) -> None:
+        assert ar.is_retro_age_exceeded(
+            "2026-05-01T00:00:00Z", "2026-05-16T00:00:00Z", 14
+        ) is True
+
+    def test_14_days_old_does_not_exceed_14(self) -> None:
+        """Boundary: exactly N days old is NOT past the threshold yet."""
+        assert ar.is_retro_age_exceeded(
+            "2026-05-01T00:00:00Z", "2026-05-15T00:00:00Z", 14
+        ) is False
+
+    def test_13_days_old_does_not_exceed_14(self) -> None:
+        assert ar.is_retro_age_exceeded(
+            "2026-05-01T00:00:00Z", "2026-05-14T00:00:00Z", 14
+        ) is False
+
+    def test_custom_days_threshold(self) -> None:
+        assert ar.is_retro_age_exceeded(
+            "2026-05-01T00:00:00Z", "2026-05-08T00:00:00Z", 7
+        ) is False
+        assert ar.is_retro_age_exceeded(
+            "2026-05-01T00:00:00Z", "2026-05-09T00:00:00Z", 7
+        ) is True
+
+    def test_malformed_created_at_returns_false(self) -> None:
+        """Fail-safe: unparseable timestamp must NOT auto-close."""
+        assert ar.is_retro_age_exceeded(
+            "not-a-date", "2026-05-16T00:00:00Z", 14
+        ) is False
+
+    def test_malformed_now_returns_false(self) -> None:
+        assert ar.is_retro_age_exceeded(
+            "2026-05-01T00:00:00Z", "not-a-date", 14
+        ) is False
+
+    def test_naive_timestamp_treated_as_utc(self) -> None:
+        """ISO 8601 without timezone is read as UTC (fail-safe contract).
+
+        GitHub API responses always carry the trailing ``Z``, but a
+        test fixture or operator command might omit it; the sentinel
+        should still produce a deterministic verdict.
+        """
+        assert ar.is_retro_age_exceeded(
+            "2026-05-01T00:00:00", "2026-05-16T00:00:00", 14
+        ) is True
+
+
+class TestHasSentinelMarker:
+    def test_returns_true_when_marker_present(self) -> None:
+        comments = [
+            {"body": f"{ar._SENTINEL_CLOSE_MARKER}\nclosed"},
+        ]
+        assert ar.has_sentinel_marker(comments) is True
+
+    def test_returns_false_when_marker_absent(self) -> None:
+        comments = [{"body": "regular operator comment"}]
+        assert ar.has_sentinel_marker(comments) is False
+
+    def test_returns_false_on_empty_list(self) -> None:
+        assert ar.has_sentinel_marker([]) is False
+
+    def test_marker_in_any_position_matches(self) -> None:
+        comments = [
+            {"body": "operator note"},
+            {"body": f"prefix {ar._SENTINEL_CLOSE_MARKER} suffix"},
+        ]
+        assert ar.has_sentinel_marker(comments) is True
+
+
+def _sentinel_recorder(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    open_retros: list[dict[str, Any]] | None = None,
+    comments_by_number: dict[int, list[dict[str, Any]]] | None = None,
+    search_error: bool = False,
+    comments_error_for: set[int] | None = None,
+    post_error_for: set[int] | None = None,
+    patch_error_for: set[int] | None = None,
+) -> list[tuple]:
+    """Record gh_api calls for sentinel_run tests.
+
+    Mirrors :func:`_orchestrator_recorder` for the run() flow. Each
+    ``*_error_for`` set lists the retro issue numbers whose endpoints
+    should raise :class:`subprocess.CalledProcessError` so the fail-soft
+    contract can be exercised per-retro.
+    """
+    open_retros = open_retros or []
+    comments_by_number = comments_by_number or {}
+    comments_error_for = comments_error_for or set()
+    post_error_for = post_error_for or set()
+    patch_error_for = patch_error_for or set()
+    seen: list[tuple] = []
+
+    def _number_from_path(path: str) -> int:
+        # Paths look like /repos/o/r/issues/123/comments or
+        # /repos/o/r/issues/123 -- split and grab the integer segment.
+        for part in path.split("?", 1)[0].split("/"):
+            if part.isdigit():
+                return int(part)
+        return -1
+
+    def fake_api(method, path, body=None, **_kw):
+        seen.append((method, path, body))
+        if method == "GET" and path.startswith("/search/issues"):
+            if search_error:
+                raise subprocess.CalledProcessError(
+                    1, "gh", stderr="search boom"
+                )
+            return json.dumps({"items": open_retros})
+        if method == "GET" and path.endswith("/comments?per_page=100"):
+            number = _number_from_path(path)
+            if number in comments_error_for:
+                raise subprocess.CalledProcessError(
+                    1, "gh", stderr="comments boom"
+                )
+            return json.dumps(comments_by_number.get(number, []))
+        if method == "POST" and path.endswith("/comments"):
+            number = _number_from_path(path)
+            if number in post_error_for:
+                raise subprocess.CalledProcessError(
+                    1, "gh", stderr="post boom"
+                )
+            return ""
+        if method == "PATCH" and "/issues/" in path:
+            number = _number_from_path(path)
+            if number in patch_error_for:
+                raise subprocess.CalledProcessError(
+                    1, "gh", stderr="patch boom"
+                )
+            return ""
+        return ""
+
+    monkeypatch.setattr(ar, "gh_api", fake_api)
+    return seen
+
+
+def _open_retro(
+    number: int,
+    *,
+    title: str = "retro(feat): review PR #99 repair loops",
+    created_at: str = "2026-05-01T00:00:00Z",
+    body: str | None = None,
+) -> dict[str, Any]:
+    return {
+        "number": number,
+        "title": title,
+        "created_at": created_at,
+        "body": body if body is not None else _retro_body(checked=0),
+    }
+
+
+class TestSentinelRun:
+    def test_closes_untouched_retro_past_threshold(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Acceptance #414 #3: time-based close path on the no-repair fixture."""
+        seen = _sentinel_recorder(
+            monkeypatch,
+            open_retros=[_open_retro(700)],
+            comments_by_number={700: []},
+        )
+        assert ar.sentinel_run("o/r", "2026-05-20T00:00:00Z", 14) == 0
+        # Comment posted, then issue patched closed/not_planned.
+        post = [
+            (m, p, b) for m, p, b in seen
+            if m == "POST" and p == "/repos/o/r/issues/700/comments"
+        ]
+        patch = [
+            (m, p, b) for m, p, b in seen
+            if m == "PATCH" and p == "/repos/o/r/issues/700"
+        ]
+        assert len(post) == 1
+        assert ar._SENTINEL_CLOSE_MARKER in post[0][2]["body"]
+        assert "14 days" in post[0][2]["body"]
+        assert "#414" in post[0][2]["body"]
+        assert len(patch) == 1
+        assert patch[0][2] == {"state": "closed", "state_reason": "not_planned"}
+
+    def test_post_precedes_close(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Sentinel comment must land before the close patch so the
+        operator-visible explanation is in place when the closed
+        webhook fires."""
+        seen = _sentinel_recorder(
+            monkeypatch,
+            open_retros=[_open_retro(701)],
+            comments_by_number={701: []},
+        )
+        ar.sentinel_run("o/r", "2026-05-20T00:00:00Z", 14)
+        post_idx = next(
+            i for i, (m, p, _b) in enumerate(seen)
+            if m == "POST" and p == "/repos/o/r/issues/701/comments"
+        )
+        patch_idx = next(
+            i for i, (m, p, _b) in enumerate(seen)
+            if m == "PATCH" and p == "/repos/o/r/issues/701"
+        )
+        assert post_idx < patch_idx
+
+    def test_skips_retro_inside_window(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        seen = _sentinel_recorder(
+            monkeypatch,
+            open_retros=[
+                _open_retro(702, created_at="2026-05-19T00:00:00Z"),
+            ],
+            comments_by_number={702: []},
+        )
+        ar.sentinel_run("o/r", "2026-05-20T00:00:00Z", 14)
+        # Inside window: never fetched comments, never posted, never patched.
+        assert not any(
+            "/issues/702" in p for _m, p, _b in seen
+        )
+
+    def test_skips_retro_with_operator_checkbox(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Acceptance #414 #2: actionable repair case (operator engaged).
+
+        Mirrors the #399 real-repair fixture pattern: operator has
+        flipped acceptance criteria, so the sentinel must not auto-close.
+        """
+        seen = _sentinel_recorder(
+            monkeypatch,
+            open_retros=[
+                _open_retro(703, body=_retro_body(checked=5)),
+            ],
+            comments_by_number={703: []},
+        )
+        ar.sentinel_run("o/r", "2026-05-20T00:00:00Z", 14)
+        assert not any(
+            m == "PATCH" and p == "/repos/o/r/issues/703"
+            for m, p, _b in seen
+        )
+        assert not any(
+            m == "POST" and p == "/repos/o/r/issues/703/comments"
+            for m, p, _b in seen
+        )
+
+    def test_skips_retro_with_operator_comment(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        seen = _sentinel_recorder(
+            monkeypatch,
+            open_retros=[_open_retro(704)],
+            comments_by_number={
+                704: [{"user": {"login": "tvna"}, "body": "triaged"}]
+            },
+        )
+        ar.sentinel_run("o/r", "2026-05-20T00:00:00Z", 14)
+        assert not any(
+            m == "PATCH" and p == "/repos/o/r/issues/704"
+            for m, p, _b in seen
+        )
+
+    def test_idempotent_when_sentinel_marker_present(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Re-running the cron on an already-closed retro is a no-op.
+
+        The marker check fires before the close PATCH so the sentinel
+        cannot double-close (and the retro state is preserved if it
+        was reopened by the operator after the first close).
+        """
+        seen = _sentinel_recorder(
+            monkeypatch,
+            open_retros=[_open_retro(705)],
+            comments_by_number={
+                705: [
+                    {
+                        "user": {"login": "github-actions[bot]"},
+                        "body": f"{ar._SENTINEL_CLOSE_MARKER}\nold",
+                    }
+                ]
+            },
+        )
+        ar.sentinel_run("o/r", "2026-05-20T00:00:00Z", 14)
+        assert not any(
+            m == "PATCH" and p == "/repos/o/r/issues/705"
+            for m, p, _b in seen
+        )
+        assert not any(
+            m == "POST" and p == "/repos/o/r/issues/705/comments"
+            for m, p, _b in seen
+        )
+
+    def test_one_retro_failure_does_not_block_others(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Fail-soft: a CalledProcessError on retro #706 must NOT stop
+        the sentinel from processing #707 on the same tick."""
+        seen = _sentinel_recorder(
+            monkeypatch,
+            open_retros=[_open_retro(706), _open_retro(707)],
+            comments_by_number={706: [], 707: []},
+            comments_error_for={706},
+        )
+        ar.sentinel_run("o/r", "2026-05-20T00:00:00Z", 14)
+        # #707 still gets posted + patched even though #706's comments fetch raised.
+        assert any(
+            m == "POST" and p == "/repos/o/r/issues/707/comments"
+            for m, p, _b in seen
+        )
+        assert any(
+            m == "PATCH" and p == "/repos/o/r/issues/707"
+            for m, p, _b in seen
+        )
+        # #706 never reached its close PATCH (the failure short-circuited).
+        assert not any(
+            m == "PATCH" and p == "/repos/o/r/issues/706"
+            for m, p, _b in seen
+        )
+
+    def test_close_failure_after_comment_does_not_re_post(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """If the close PATCH fails after the comment landed, the next
+        cron tick must rely on the sentinel marker check to avoid
+        re-posting (no comment double-post on retry).
+        """
+        seen = _sentinel_recorder(
+            monkeypatch,
+            open_retros=[_open_retro(708)],
+            comments_by_number={708: []},
+            patch_error_for={708},
+        )
+        ar.sentinel_run("o/r", "2026-05-20T00:00:00Z", 14)
+        # Comment was posted on this tick; close failed; sentinel logs
+        # but does not crash.
+        post = [
+            (m, p, b) for m, p, b in seen
+            if m == "POST" and p == "/repos/o/r/issues/708/comments"
+        ]
+        assert len(post) == 1
+
+    def test_post_failure_does_not_close(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """If the sentinel comment POST fails, the close must NOT fire
+        (operator would see a silent close without explanation)."""
+        seen = _sentinel_recorder(
+            monkeypatch,
+            open_retros=[_open_retro(709)],
+            comments_by_number={709: []},
+            post_error_for={709},
+        )
+        ar.sentinel_run("o/r", "2026-05-20T00:00:00Z", 14)
+        assert not any(
+            m == "PATCH" and p == "/repos/o/r/issues/709"
+            for m, p, _b in seen
+        )
+
+    def test_search_failure_returns_zero_with_no_calls(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Search-endpoint failure short-circuits the entire tick."""
+        seen = _sentinel_recorder(
+            monkeypatch,
+            open_retros=[_open_retro(710)],
+            search_error=True,
+        )
+        assert ar.sentinel_run("o/r", "2026-05-20T00:00:00Z", 14) == 0
+        # No per-retro endpoints touched.
+        assert not any(
+            "/issues/710" in p for _m, p, _b in seen
+        )
+
+    def test_does_not_touch_source_pr_label(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Acceptance #414 #5: harness:retro-opened label gate preserved.
+
+        The sentinel must never PATCH/POST/DELETE source-PR labels --
+        the label was applied at retro-create time and survives the
+        sentinel close. Verified by asserting no /labels endpoint is
+        hit during the sentinel run.
+        """
+        seen = _sentinel_recorder(
+            monkeypatch,
+            open_retros=[_open_retro(711)],
+            comments_by_number={711: []},
+        )
+        ar.sentinel_run("o/r", "2026-05-20T00:00:00Z", 14)
+        assert not any(p.endswith("/labels") for _m, p, _b in seen)
+
+    def test_non_retro_titled_issue_is_filtered(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Search-filter belt-and-braces: an issue that slips into the
+        search result but does NOT start with retro(/retro: must NOT be
+        processed. The client-side filter inside search_open_retro_issues
+        is the second line of defence after the search query labels.
+        """
+        seen = _sentinel_recorder(
+            monkeypatch,
+            open_retros=[
+                {
+                    "number": 712,
+                    "title": "feat(harness): not a retro at all",
+                    "created_at": "2026-05-01T00:00:00Z",
+                    "body": _retro_body(checked=0),
+                },
+            ],
+            comments_by_number={712: []},
+        )
+        ar.sentinel_run("o/r", "2026-05-20T00:00:00Z", 14)
+        assert not any("/issues/712" in p for _m, p, _b in seen)
+
+    def test_step_summary_written(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+    ) -> None:
+        summary = tmp_path / "summary.md"
+        monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(summary))
+        _sentinel_recorder(
+            monkeypatch,
+            open_retros=[
+                _open_retro(713),
+                _open_retro(714, created_at="2026-05-19T00:00:00Z"),
+            ],
+            comments_by_number={713: [], 714: []},
+        )
+        ar.sentinel_run("o/r", "2026-05-20T00:00:00Z", 14)
+        text = summary.read_text(encoding="utf-8")
+        assert "## auto-retro sentinel summary" in text
+        assert "14 days" in text
+        assert "#713" in text
+        assert "#714" in text
+        assert "inside inactivity window" in text
+
+
+class TestSentinelCli:
+    def test_cli_missing_repo_returns_1(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        monkeypatch.delenv("REPO", raising=False)
+        monkeypatch.delenv("GITHUB_REPOSITORY", raising=False)
+        assert ar.main(["sentinel"]) == 1
+        assert "missing --repo" in capsys.readouterr().err
+
+    def test_cli_invalid_days_returns_1(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        monkeypatch.setenv("REPO", "o/r")
+        monkeypatch.setenv("AUTO_RETRO_SENTINEL_DAYS", "not-a-number")
+        # Avoid the search call by stubbing gh_api.
+        monkeypatch.setattr(ar, "gh_api", lambda *_a, **_kw: "")
+        assert ar.main(["sentinel"]) == 1
+        err = capsys.readouterr().err
+        assert "invalid sentinel days" in err
+
+    def test_cli_zero_days_returns_1(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        monkeypatch.setenv("REPO", "o/r")
+        monkeypatch.setattr(ar, "gh_api", lambda *_a, **_kw: "")
+        assert ar.main(["sentinel", "--days", "0"]) == 1
+        assert "must be positive" in capsys.readouterr().err
+
+    def test_cli_default_days_used_when_unset(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """--days unset + env unset => _DEFAULT_SENTINEL_DAYS."""
+        monkeypatch.setenv("REPO", "o/r")
+        monkeypatch.delenv("AUTO_RETRO_SENTINEL_DAYS", raising=False)
+        captured: dict[str, Any] = {}
+
+        def fake_run(repo: str, now_iso: str, days: int) -> int:
+            captured["days"] = days
+            return 0
+
+        monkeypatch.setattr(ar, "sentinel_run", fake_run)
+        assert ar.main(["sentinel"]) == 0
+        assert captured["days"] == ar._DEFAULT_SENTINEL_DAYS
+
+
+def test_sentinel_workflow_file_exists_and_runs_sentinel_subcommand() -> None:
+    """The schedule workflow that backs sentinel_run must exist and
+    invoke the right CLI subcommand. Drift between the script and the
+    workflow would silently disable the sentinel.
+    """
+    repo_root = Path(__file__).resolve().parent.parent
+    workflow = repo_root / ".github" / "workflows" / "auto-retro-sentinel.yml"
+    assert workflow.exists(), (
+        "Strategy B sentinel needs .github/workflows/auto-retro-sentinel.yml "
+        "(issue #414)"
+    )
+    text = workflow.read_text(encoding="utf-8")
+    assert "python3 scripts/auto_retro.py sentinel" in text
+    assert "schedule:" in text
+    # The label-touching pull-requests permission must NOT be granted:
+    # the sentinel only acts on retro issues and the source-PR label was
+    # already applied by .github/workflows/auto-retro.yml.
+    assert "pull-requests: write" not in text
+
+
+class TestHistoricalRetroFixtures:
+    """Acceptance #414 #4: re-evaluate one historical retro against the harness.
+
+    Uses literal body snippets mirroring the shape of #399 (real
+    repair, operator-triaged) and a generic noise retro (no
+    operator engagement, all-unchecked). The assertion is the
+    binary verdict (touched vs. untouched) the sentinel would compute.
+    """
+
+    def test_real_repair_fixture_is_touched(self) -> None:
+        # Mirrors retro #399 after operator triage: all 5 acceptance
+        # checkboxes flipped, classification table filled. The
+        # sentinel must classify this as touched and therefore skip.
+        body_399_like = (
+            "## Acceptance criteria\n\n"
+            "- [x] Repair history table complete.\n"
+            "- [x] Each repair classified with the section 3 taxonomy.\n"
+            "- [x] Each repair has an earliest prevention point.\n"
+            "- [x] No-repair reproduction path stated.\n"
+            "- [x] `## Follow-up issues` filed (or explicitly stated `(none)`).\n"
+        )
+        assert ar.is_retro_untouched(body_399_like, []) is False
+
+    def test_noise_retro_fixture_is_untouched(self) -> None:
+        # Mirrors a batch-closed noise retro: all 5 acceptance
+        # checkboxes still unchecked, no operator comment landed
+        # before the operator closed it manually. Had the sentinel
+        # been in place, it would have closed this on the next tick.
+        body_noise_like = (
+            "## Acceptance criteria\n\n"
+            "- [ ] Repair history table complete.\n"
+            "- [ ] Each repair classified with the section 3 taxonomy.\n"
+            "- [ ] Each repair has an earliest prevention point.\n"
+            "- [ ] No-repair reproduction path stated.\n"
+            "- [ ] `## Follow-up issues` filed (or explicitly stated `(none)`).\n"
+        )
+        assert ar.is_retro_untouched(body_noise_like, []) is True
