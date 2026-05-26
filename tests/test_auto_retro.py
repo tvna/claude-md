@@ -559,9 +559,13 @@ class TestRepairHistoryTable:
         assert ".github/rulesets/main.json" in table
         assert "CLAUDE.md section 3" in table
 
-    def test_no_marker_or_footnote_on_non_merge_rows(self) -> None:
-        commits = ["fix(x): repair", "feat(harness): unrelated"]
-        table = ar._build_repair_history_table(None, commits, len(commits))
+    def test_no_marker_or_footnote_when_no_synthetic_rows(self) -> None:
+        """Marker and footnote stay out when no squash/linear-history
+        artifact row fires (no merge-from-main, no iteration commit, no
+        canonical fix, no multi-commit summary). Refs #453."""
+        commits = ["feat(harness): unrelated", "feat(harness): another"]
+        # pr_commit_count=1 keeps the Multi-commit PR synthetic row out.
+        table = ar._build_repair_history_table(None, commits, 1)
         assert "[policy-artifact]" not in table
         assert "rows are forced by the squash" not in table
 
@@ -569,6 +573,53 @@ class TestRepairHistoryTable:
         table = ar._build_repair_history_table(None, ["feat(harness): plain"], 1)
         assert "(no automated repair signals detected)" in table
         assert "[policy-artifact]" not in table
+
+    def test_fix_commit_row_carries_policy_artifact_marker(self) -> None:
+        """Refs #453: synthetic Fix commit row must carry the marker."""
+        commits = ["fix(harness): canonical repair"]
+        table = ar._build_repair_history_table(
+            None, commits, len(commits), pr_type="fix"
+        )
+        fix_lines = [
+            line for line in table.splitlines() if "| Fix commit |" in line
+        ]
+        assert len(fix_lines) == 1
+        assert "[policy-artifact]" in fix_lines[0]
+
+    def test_iteration_commit_row_carries_policy_artifact_marker(self) -> None:
+        """Refs #453: synthetic Iteration commit row must carry the marker."""
+        commits = ["fixup! earlier change"]
+        table = ar._build_repair_history_table(None, commits, len(commits))
+        iter_lines = [
+            line
+            for line in table.splitlines()
+            if "| Iteration commit |" in line
+        ]
+        assert len(iter_lines) == 1
+        assert "[policy-artifact]" in iter_lines[0]
+
+    def test_multi_commit_row_carries_policy_artifact_marker(self) -> None:
+        """Refs #453: synthetic Multi-commit PR row must carry the marker."""
+        table = ar._build_repair_history_table(
+            None, ["feat: a", "feat: b"], 3
+        )
+        multi_lines = [
+            line for line in table.splitlines() if "| Multi-commit PR |" in line
+        ]
+        assert len(multi_lines) == 1
+        assert "[policy-artifact]" in multi_lines[0]
+
+    def test_policy_artifact_footnote_for_synthetic_rows_without_merge(
+        self,
+    ) -> None:
+        """Footnote fires even when only synthetic rows (no Merge from
+        main) are present. Refs #453."""
+        # Iteration commit alone with single PR commit -- no merge row,
+        # no multi-commit row, but the synthetic Iteration row exists.
+        table = ar._build_repair_history_table(None, ["fixup! prior"], 1)
+        assert "Iteration commit" in table
+        assert "Merge from main" not in table
+        assert "[policy-artifact] rows are forced by the squash" in table
 
     def test_multi_commit_summary_row(self) -> None:
         table = ar._build_repair_history_table(None, ["feat: a", "feat: b"], 4)
@@ -2790,6 +2841,60 @@ class TestExtractVerificationPairs:
         pairs = ar.extract_verification_pairs(body)
         assert pairs and pairs[0].passed is False
 
+    def test_passed_when_result_is_pytest_count_passed_in_time(self) -> None:
+        """pytest summary `N passed in Ts` is a pass. Refs #453."""
+        body = (
+            "## Verification\n\n"
+            "- command: `uv run pytest tests/test_auto_retro.py -v`\n"
+            "  result: `246 passed in 198.59s`\n"
+        )
+        pairs = ar.extract_verification_pairs(body)
+        assert pairs and pairs[0].passed is True
+
+    def test_passed_when_result_is_pytest_count_with_coverage(self) -> None:
+        """pytest summary `N passed, coverage ...` is a pass. Refs #453."""
+        body = (
+            "## Verification\n\n"
+            "- command: `uv run pytest --cov`\n"
+            "  result: `1476 passed, Total coverage: 94.24% (gate 92.71%)`\n"
+        )
+        pairs = ar.extract_verification_pairs(body)
+        assert pairs and pairs[0].passed is True
+
+    def test_passed_when_trailing_ok_word_inside_backticks_with_paren(
+        self,
+    ) -> None:
+        """Backticked primary + trailing operator-commentary paren
+        (`` `yaml syntax ok` (parsed without exception) ``). Refs #453."""
+        body = (
+            "## Verification\n\n"
+            "- command: `python3 -c 'import yaml'`\n"
+            "  result: `yaml syntax ok` (parsed without exception)\n"
+        )
+        pairs = ar.extract_verification_pairs(body)
+        assert pairs and pairs[0].passed is True
+
+    def test_passed_when_trailing_ok_word_bare(self) -> None:
+        """Bare trailing `ok` word marker is a pass. Refs #453."""
+        body = (
+            "## Verification\n\n"
+            "- command: `lint config`\n"
+            "  result: `config ok`\n"
+        )
+        pairs = ar.extract_verification_pairs(body)
+        assert pairs and pairs[0].passed is True
+
+    def test_failed_when_pytest_count_includes_failed(self) -> None:
+        """`0 passed, 3 failed` must remain a fail even though it
+        contains the pytest pass-count shape. Refs #453."""
+        body = (
+            "## Verification\n\n"
+            "- command: `pytest`\n"
+            "  result: `0 passed, 3 failed in 1.2s`\n"
+        )
+        pairs = ar.extract_verification_pairs(body)
+        assert pairs and pairs[0].passed is False
+
 
 class TestExtractPostMergeChecklist:
     def test_empty_body_returns_empty(self) -> None:
@@ -2888,6 +2993,29 @@ class TestRepairHistoryTableNewRows:
         table = ar._build_repair_history_table(None, [], 1)
         assert "Verification fail" not in table
         assert "Post-merge gate unchecked" not in table
+
+    def test_mixed_pass_fail_pairs_only_fail_row_emitted(self) -> None:
+        """Smoke fixture from issue #453 Verification section: one
+        passing and one failing verification pair. Passing pair must
+        NOT render a `Verification fail:` row; failing pair must."""
+        pairs = [
+            ar.VerificationPair(
+                command="`uv run pytest -v`",
+                result="`246 passed in 198.59s`",
+                passed=True,
+            ),
+            ar.VerificationPair(
+                command="`ruff check .`",
+                result="`exit 1`",
+                passed=False,
+            ),
+        ]
+        table = ar._build_repair_history_table(None, [], 1, pairs)
+        # Failing pair retains the Verification fail: prefix.
+        assert "Verification fail: `ruff check .`" in table
+        # Passing pair leaves no row -- in particular not a fail row.
+        assert "Verification fail: `uv run pytest -v`" not in table
+        assert "246 passed in 198.59s" not in table
 
 
 # ---------------------------------------------------------------------------
