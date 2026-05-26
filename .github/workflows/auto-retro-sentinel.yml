@@ -1,0 +1,59 @@
+name: Auto-close untouched retrospective issues
+
+# Strategy B sentinel for issue #414: an open retro that has stayed
+# untouched (no acceptance-criteria checkbox flipped, no operator
+# comment) beyond the inactivity window is auto-closed with
+# state_reason=not_planned. The audit trail (the retro existed) is
+# preserved; the operator can reopen if a missed repair surfaces.
+#
+# All logic lives in scripts/auto_retro.py (sentinel_run + helpers)
+# and is unit-tested in tests/test_auto_retro.py. The workflow only
+# marshals env vars and shells to the single Python entry point.
+#
+# Companion to .github/workflows/auto-retro.yml: that workflow opens
+# the retro on merge; this one decides when an unattended retro
+# should close. The harness:retro-opened label gate on the source PR
+# is unchanged by either workflow.
+
+on:
+  schedule:
+    # Daily at 03:00 UTC. Cron drift is acceptable here -- the
+    # sentinel only acts on retros already past the inactivity
+    # threshold, so a few hours of lateness has no operator impact.
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+    inputs:
+      days:
+        description: 'Inactivity threshold in days (overrides AUTO_RETRO_SENTINEL_DAYS).'
+        type: number
+        required: false
+
+permissions:
+  contents: read
+  # write needed to PATCH the retro to closed/not_planned and POST the
+  # sentinel comment. pull-requests:write is intentionally NOT granted
+  # -- the sentinel touches retro issues only; source-PR labels were
+  # already applied by .github/workflows/auto-retro.yml.
+  issues: write
+
+concurrency:
+  # One sentinel run at a time across the repo; the script is
+  # idempotent per retro (sentinel marker check) so cancel-in-progress
+  # is unnecessary and would risk leaving a posted comment without
+  # the matching close.
+  group: auto-retro-sentinel
+  cancel-in-progress: false
+
+jobs:
+  scan-and-close:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+
+      - name: Close untouched retrospective issues
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          AUTO_RETRO_SENTINEL_DAYS: ${{ inputs.days }}
+        run: python3 scripts/auto_retro.py sentinel
