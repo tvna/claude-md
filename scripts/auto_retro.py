@@ -111,6 +111,18 @@ _RESULT_PASSING_PREFIXES: tuple[str, ...] = (
 # quantity rather than a status code; treat as passing. Refs #417.
 _RESULT_PASSING_NUMERIC_RE = re.compile(r"^-?\d+(?:\.\d+)?$")
 
+# "all <token> hooks|checks|tests" pattern. Tools like pre-commit, prek,
+# and `gh pr checks` interpolate a count or qualifier between "all" and
+# the unit noun ("all six hooks Passed", "all 3 checks have passed").
+# The literal prefixes in _RESULT_PASSING_PREFIXES only catch the bare
+# "all hooks" / "all checks" / "all tests" forms, so this regex covers
+# the natural-language variants without widening the allowlist into
+# free-form prose. Refs #411.
+_RESULT_PASSING_ALL_UNIT_RE = re.compile(
+    r"^all\s+\S+\s+(?:hooks|checks|tests)\b",
+    re.IGNORECASE,
+)
+
 # Append-to-existing-retro markers used by append_repair_history_row.
 _AUTO_FILLED_OPEN = "<!-- auto-filled:repair-history -->"
 _AUTO_FILLED_CLOSE = "<!-- /auto-filled:repair-history -->"
@@ -293,6 +305,10 @@ def _result_is_passing(result: str) -> bool:
     * a purely numeric result (matched by :data:`_RESULT_PASSING_NUMERIC_RE`)
       is treated as a measured quantity from a count-style verification
       and accepted as passing;
+    * a result matching :data:`_RESULT_PASSING_ALL_UNIT_RE` (``all <N>
+      hooks/checks/tests ...``) is accepted as passing, covering natural
+      tool output where a count or qualifier is interpolated between
+      ``all`` and the unit noun (refs #411);
     * otherwise the lowercased text is matched against the prefix
       allowlist in :data:`_RESULT_PASSING_PREFIXES` (``exit 0``, ``OK:``,
       ``pass``, ``passed``, ``success``, ``ok``, plus common tool
@@ -305,6 +321,8 @@ def _result_is_passing(result: str) -> bool:
     if text.startswith("`") and text.endswith("`") and len(text) >= 2:
         text = text[1:-1].strip()
     if _RESULT_PASSING_NUMERIC_RE.match(text):
+        return True
+    if _RESULT_PASSING_ALL_UNIT_RE.match(text):
         return True
     lower = text.lower()
     return any(lower.startswith(prefix) for prefix in _RESULT_PASSING_PREFIXES)
