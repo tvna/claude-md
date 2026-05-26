@@ -42,6 +42,11 @@ _ESCAPED_MAX_LEN = 4000
 
 _NON_ASCII_RE = re.compile(r"[^\x00-\x7F]")
 
+# Non-ASCII scanner-specific extension: Codecov posts generated PR comments
+# (not PRs) whose UI footer may contain emoji. Keep this separate from the
+# shared author allowlist so issue-link and body-policy gates do not change.
+_NON_ASCII_TRUSTED_BOT_LOGINS = _TRUSTED_BOT_LOGINS | frozenset({"codecov"})
+
 
 # ---------------------------------------------------------------------------
 # Pure functions
@@ -158,7 +163,7 @@ def classify_action(
         return "skip"
     if trust == "trusted":
         return "advisory"
-    if login is not None and login in _TRUSTED_BOT_LOGINS:
+    if login is not None and login in _NON_ASCII_TRUSTED_BOT_LOGINS:
         return "advisory"
     return "block"
 
