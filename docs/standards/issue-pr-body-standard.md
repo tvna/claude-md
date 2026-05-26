@@ -282,7 +282,9 @@ checking for `Refs #N`. The rationale is that `dependabot[bot]` opens
 PRs from `.github/dependabot.yml` configuration on a schedule and
 cannot be made to write a `Refs #N` line; the dependency PRs are
 labelled and reviewed through a separate path (see
-`docs/runbooks/dependabot-automerge.md`).
+`docs/runbooks/dependabot-automerge.md`). `scripts/scan_non_ascii.py`
+has its own scanner-only extension for Codecov-generated PR comments;
+that exception does not apply to the issue-link or body-policy gates.
 
 Extension policy from the module docstring: exact match only, no
 wildcards, extend one entry at a time. Any PR that adds a login to
