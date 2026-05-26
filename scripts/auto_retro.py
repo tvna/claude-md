@@ -100,7 +100,16 @@ _RESULT_PASSING_PREFIXES: tuple[str, ...] = (
     "pass",
     "passed",
     "success",
+    # Common tool-natural-language pass shapes. Refs #417.
+    "all hooks",
+    "all checks",
+    "all tests",
 )
+
+# Pure numeric result (e.g., a count from `grep -c` or `wc -l`). The
+# operator chose count-style verification, so the value is a measured
+# quantity rather than a status code; treat as passing. Refs #417.
+_RESULT_PASSING_NUMERIC_RE = re.compile(r"^-?\d+(?:\.\d+)?$")
 
 # Append-to-existing-retro markers used by append_repair_history_row.
 _AUTO_FILLED_OPEN = "<!-- auto-filled:repair-history -->"
@@ -279,14 +288,24 @@ def _slice_section(body: str, heading: str) -> str:
 def _result_is_passing(result: str) -> bool:
     """Return True if a Verification result line text looks like a pass.
 
-    Strips surrounding backticks and leading whitespace, then matches a
-    small allowlist of pass markers (``exit 0``, ``OK:``, ``pass``,
-    ``passed``, ``success``, ``ok``). Anything else (including ``exit
-    1``, ``failed``, prose) is treated as a failure signal.
+    Strips surrounding backticks and leading whitespace, then:
+
+    * a purely numeric result (matched by :data:`_RESULT_PASSING_NUMERIC_RE`)
+      is treated as a measured quantity from a count-style verification
+      and accepted as passing;
+    * otherwise the lowercased text is matched against the prefix
+      allowlist in :data:`_RESULT_PASSING_PREFIXES` (``exit 0``, ``OK:``,
+      ``pass``, ``passed``, ``success``, ``ok``, plus common tool
+      summaries such as ``all hooks ...``).
+
+    Anything else (including ``exit 1``, ``failed``, free-form prose) is
+    treated as a failure signal. Refs #417.
     """
     text = result.strip()
     if text.startswith("`") and text.endswith("`") and len(text) >= 2:
         text = text[1:-1].strip()
+    if _RESULT_PASSING_NUMERIC_RE.match(text):
+        return True
     lower = text.lower()
     return any(lower.startswith(prefix) for prefix in _RESULT_PASSING_PREFIXES)
 
@@ -332,6 +351,11 @@ def extract_post_merge_checklist(body: str) -> list[tuple[str, bool]]:
     absent. ``After-merge`` and ``Bootstrap`` siblings are not included.
     The subsection match is case-insensitive and tolerates a trailing
     parenthetic clarifier (``### Post-merge (auto-retro signal)``).
+
+    Not called at merge time after #418: the Post-merge subsection is
+    structurally unchecked when auto-retro opens the issue. Retained
+    here for the deferred re-scan workflow tracked in #421, which will
+    revisit the merged PR body after the observation window closes.
     """
     section = _slice_section(body, "Checklist")
     if not section.strip():
@@ -409,7 +433,10 @@ def compute_repair_signals(
         pure_commits = pr.commits - _count_merge_from_main(commit_subjects)
         multi_commit = pure_commits > 1
     verification_pairs = extract_verification_pairs(pr.body or "")
-    post_merge_items = extract_post_merge_checklist(pr.body or "")
+    # `post_merge_unchecked` was removed in #418: the Post-merge subsection
+    # is documented to be checked by the operator AFTER observing the merge,
+    # so it is structurally unchecked at merge time. Re-scanning the subsection
+    # is deferred to the workflow tracked in #421.
     return {
         "inline_review_comments": bool(has_inline_comments),
         "body_cites_refs": len(refs) > 0,
@@ -417,9 +444,6 @@ def compute_repair_signals(
         "multi_commit_pr": multi_commit,
         "verification_pairs_failed": any(
             not p.passed for p in verification_pairs
-        ),
-        "post_merge_unchecked": any(
-            not checked for _, checked in post_merge_items
         ),
     }
 
@@ -482,13 +506,26 @@ def _build_repair_history_table(
     commit_subjects: list[str],
     pr_commit_count: int,
     verification_pairs: list[VerificationPair] | None = None,
-    post_merge_items: list[tuple[str, bool]] | None = None,
+    pr_type: str = "",
 ) -> str:
     """Render the Repair history markdown table (header + rows, no surrounds).
 
-    Walks four deterministic signal classes in fixed order: CI failures,
-    fix-up commits, merge-from-main commits, multi-commit summary. Emits
-    a sentinel row only when all four classes produced zero rows.
+    Walks deterministic signal classes in fixed order: CI failures,
+    fix-up commits (canonical fix exempted on fix-typed PRs as a
+    distinct ``Fix commit`` row -- see #413), merge-from-main commits,
+    multi-commit summary, and failed Verification pairs. Emits a
+    sentinel row only when all classes produced zero rows. The
+    Post-merge checklist class was removed in #418 because its items
+    are unchecked at merge time by design; deferred re-scan is tracked
+    in #421.
+
+    When ``pr_type == "fix"``, the first non-merge-from-main commit
+    subject that itself starts with ``fix(`` is rendered as a
+    ``Fix commit`` row instead of ``Iteration commit``: it is the
+    canonical fix the PR was opened to land, not evidence of an earlier
+    silent failure. ``fixup!`` and ``squash!`` subjects remain
+    unconditional iteration markers regardless of PR type because they
+    are explicit iteration prefixes by convention.
 
     Cells are run through :func:`_escape_table_cell` so commit subjects
     containing ``|`` cannot break the table. The shape mirrors the
@@ -533,8 +570,38 @@ def _build_repair_history_table(
             )
         )
 
-    for subject in commit_subjects:
+    # Issue #413: on a fix-typed PR the first non-merge-from-main commit
+    # that itself starts with `fix(` is the canonical fix the PR landed,
+    # not an iteration on an earlier silent failure. Compute its index
+    # once so the row-emit loop below can split it out as a `Fix commit`
+    # row. Reuses _MERGE_FROM_MAIN_PREFIXES so the "non-merge" definition
+    # stays consistent with _count_merge_from_main and the policy-artifact
+    # rows below.
+    canonical_fix_index: int | None = None
+    if pr_type == "fix":
+        for i, subject in enumerate(commit_subjects):
+            stripped_i = subject.strip()
+            if any(
+                stripped_i.startswith(prefix)
+                for prefix in _MERGE_FROM_MAIN_PREFIXES
+            ):
+                continue
+            if stripped_i.startswith("fix("):
+                canonical_fix_index = i
+            break
+
+    for i, subject in enumerate(commit_subjects):
         stripped = subject.strip()
+        if i == canonical_fix_index:
+            rows.append(
+                (
+                    _escape_table_cell("Fix commit"),
+                    _escape_table_cell(
+                        f"`{subject}` -- canonical fix commit on fix-typed PR"
+                    ),
+                )
+            )
+            continue
         if (
             stripped.startswith("fix(")
             or stripped.startswith("fixup!")
@@ -584,15 +651,9 @@ def _build_repair_history_table(
             )
         )
 
-    for item, checked in post_merge_items or []:
-        if checked:
-            continue
-        rows.append(
-            (
-                _escape_table_cell("Post-merge gate unchecked"),
-                _escape_table_cell(item),
-            )
-        )
+    # Post-merge subsection rows were removed in #418: the items are
+    # checked AFTER the merge by design, so they are always unchecked at
+    # the moment auto-retro runs. Deferred re-scan tracked in #421.
 
     header = (
         "| # | Repair | What the reviewer / gate caught |\n"
@@ -626,7 +687,6 @@ def build_retro_body(
     commit_subjects: list[str],
     check_runs: list[dict[str, Any]] | None = None,
     verification_pairs: list[VerificationPair] | None = None,
-    post_merge_items: list[tuple[str, bool]] | None = None,
 ) -> str:
     """Return the markdown body. Contains every section in :data:`_REQUIRED_SECTIONS`.
 
@@ -636,6 +696,9 @@ def build_retro_body(
     are also empty).
     """
     type_scope = extract_type_scope(pr.title)
+    # Bare type (scope stripped) drives the canonical-fix exemption in
+    # _build_repair_history_table. Mirrors build_retro_title's split.
+    pr_type = type_scope.split("(", 1)[0] if type_scope else ""
     fallback_note = ""
     if not type_scope:
         fallback_note = (
@@ -656,7 +719,7 @@ def build_retro_body(
         commit_subjects,
         pr.commits,
         verification_pairs,
-        post_merge_items,
+        pr_type=pr_type,
     )
     # Idempotent date stamp: derive from pr.merged_at (already an ISO
     # 8601 string from the event payload) rather than datetime.now() so
@@ -1414,14 +1477,12 @@ def run(event: dict[str, Any], repo: str) -> int:
         )
         check_runs = []
     verification_pairs = extract_verification_pairs(pr.body or "")
-    post_merge_items = extract_post_merge_checklist(pr.body or "")
     title = build_retro_title(pr)
     body = build_retro_body(
         pr,
         commit_subjects,
         check_runs,
         verification_pairs,
-        post_merge_items,
     )
     labels = issue_labels(pr.layer_labels)
 

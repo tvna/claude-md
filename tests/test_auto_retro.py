@@ -363,6 +363,33 @@ class TestBuildRetroBody:
         body = ar.build_retro_body(_make_pr(layer_labels=()), [])
         assert "(none on source PR)" in body
 
+    def test_pr_368_historical_canonical_fix_does_not_produce_iteration_row(
+        self,
+    ) -> None:
+        """Issue #413 historical re-render: PR #368 (`fix(ci): close
+        verify skip bypass`) landed one merge-from-main commit and one
+        canonical fix commit. The historical retro mis-flagged that
+        canonical commit as Iteration commit. After the fix the body
+        must render it as Fix commit and not duplicate it into the
+        iteration class."""
+        pr = _make_pr(
+            number=368,
+            title="fix(ci): close verify skip bypass",
+        )
+        commits = [
+            "Merge branch 'main' into fix/verify-skip",
+            "fix(ci): close verify skip bypass (#366)",
+        ]
+        body = ar.build_retro_body(pr, commits)
+        assert "| Fix commit |" in body
+        assert "canonical fix commit on fix-typed PR" in body
+        # The canonical subject must not also appear with the
+        # iteration-commit narration.
+        assert (
+            "`fix(ci): close verify skip bypass (#366)` -- signals"
+            not in body
+        )
+
 
 # ---------------------------------------------------------------------------
 # _build_repair_history_table / build_retro_body table-and-marker contract
@@ -420,6 +447,86 @@ class TestRepairHistoryTable:
         assert "fix(scripts): retry timeout" in table
         assert "fixup! feat(harness): earlier subject" in table
         assert "squash! fix typo" in table
+
+    # Issue #413 regression suite: canonical fix on fix-typed PR must not
+    # be flagged as Iteration commit.
+    def test_canonical_fix_commit_on_fix_typed_pr_emits_fix_commit_row(
+        self,
+    ) -> None:
+        commits = ["fix(ci): close verify skip bypass (#366)"]
+        table = ar._build_repair_history_table(
+            None, commits, len(commits), pr_type="fix"
+        )
+        assert "| Fix commit |" in table
+        assert "| Iteration commit |" not in table
+        assert "canonical fix commit on fix-typed PR" in table
+
+    def test_canonical_fix_skips_leading_merge_from_main(self) -> None:
+        commits = [
+            "Merge branch 'main' into branch",
+            "fix(ci): close verify skip bypass",
+        ]
+        table = ar._build_repair_history_table(
+            None, commits, len(commits), pr_type="fix"
+        )
+        assert "| Fix commit |" in table
+        assert "| Merge from main |" in table
+        assert "| Iteration commit |" not in table
+
+    def test_intermediate_work_before_fix_keeps_iteration_classification(
+        self,
+    ) -> None:
+        commits = [
+            "feat(harness): groundwork",
+            "fix(harness): correct earlier groundwork",
+        ]
+        table = ar._build_repair_history_table(
+            None, commits, len(commits), pr_type="fix"
+        )
+        assert "| Fix commit |" not in table
+        assert table.count("| Iteration commit |") == 1
+
+    def test_multi_fix_pr_only_first_is_canonical(self) -> None:
+        commits = [
+            "fix(a): primary fix",
+            "fix(b): follow-up after CI failure",
+        ]
+        table = ar._build_repair_history_table(
+            None, commits, len(commits), pr_type="fix"
+        )
+        assert table.count("| Fix commit |") == 1
+        assert table.count("| Iteration commit |") == 1
+        assert "fix(a): primary fix" in table
+        assert "fix(b): follow-up after CI failure" in table
+
+    def test_non_fix_typed_pr_keeps_iteration_classification(self) -> None:
+        commits = ["fix(x): emergency fix in a feat PR"]
+        table = ar._build_repair_history_table(
+            None, commits, len(commits), pr_type="feat"
+        )
+        assert "| Fix commit |" not in table
+        assert "| Iteration commit |" in table
+
+    def test_fixup_and_squash_prefixes_unaffected_by_pr_type(self) -> None:
+        commits = [
+            "fixup! feat(x): earlier",
+            "squash! fix typo",
+        ]
+        table = ar._build_repair_history_table(
+            None, commits, len(commits), pr_type="fix"
+        )
+        assert "| Fix commit |" not in table
+        assert table.count("| Iteration commit |") == 2
+
+    def test_unparsed_pr_title_defaults_preserve_iteration_classification(
+        self,
+    ) -> None:
+        commits = ["fix(x): a fix"]
+        table = ar._build_repair_history_table(
+            None, commits, len(commits), pr_type=""
+        )
+        assert "| Fix commit |" not in table
+        assert "| Iteration commit |" in table
 
     def test_merge_from_main_rows_both_prefix_variants(self) -> None:
         commits = [
@@ -2252,8 +2359,24 @@ class TestComputeRepairSignals:
             "fix_typed_title": False,
             "multi_commit_pr": False,
             "verification_pairs_failed": False,
-            "post_merge_unchecked": False,
         }
+
+    def test_post_merge_signal_removed(self) -> None:
+        """Per #418, `post_merge_unchecked` is no longer returned at merge time."""
+        out = ar.compute_repair_signals(self._pr(), has_inline_comments=False)
+        assert "post_merge_unchecked" not in out
+
+    def test_unchecked_post_merge_items_do_not_fire_any_signal(self) -> None:
+        """A body with only unchecked Post-merge items must not fire any signal."""
+        body = (
+            "## Checklist\n\n### Post-merge\n\n"
+            "- [ ] linked issue closed\n"
+            "- [ ] auto-retro opened\n"
+        )
+        out = ar.compute_repair_signals(
+            self._pr(body=body), has_inline_comments=False
+        )
+        assert not any(out.values())
 
     def test_body_refs_signal_fires_for_refs(self) -> None:
         out = ar.compute_repair_signals(
@@ -2600,6 +2723,73 @@ class TestExtractVerificationPairs:
         assert len(pairs) == 1
         assert pairs[0].command == "`real`"
 
+    def test_passed_when_result_is_numeric_count(self) -> None:
+        """Pure numeric result (e.g. `grep -c` output) treated as pass. Refs #417."""
+        body = (
+            "## Verification\n\n"
+            "- command: `grep -c '^foo' file`\n"
+            "  result: `2`\n"
+        )
+        pairs = ar.extract_verification_pairs(body)
+        assert pairs and pairs[0].passed is True
+
+    def test_passed_when_result_is_negative_numeric(self) -> None:
+        body = (
+            "## Verification\n\n"
+            "- command: `echo -1`\n"
+            "  result: `-1`\n"
+        )
+        pairs = ar.extract_verification_pairs(body)
+        assert pairs and pairs[0].passed is True
+
+    def test_passed_when_result_starts_with_all_hooks(self) -> None:
+        """prek-style natural-language pass marker. Refs #417."""
+        body = (
+            "## Verification\n\n"
+            "- command: `uvx prek run --files foo.md`\n"
+            "  result: `all hooks Passed or Skipped`\n"
+        )
+        pairs = ar.extract_verification_pairs(body)
+        assert pairs and pairs[0].passed is True
+
+    def test_passed_when_result_starts_with_all_checks(self) -> None:
+        body = (
+            "## Verification\n\n"
+            "- command: `gh pr checks 1`\n"
+            "  result: `all checks have passed`\n"
+        )
+        pairs = ar.extract_verification_pairs(body)
+        assert pairs and pairs[0].passed is True
+
+    def test_passed_when_result_starts_with_all_tests(self) -> None:
+        body = (
+            "## Verification\n\n"
+            "- command: `pytest`\n"
+            "  result: `all tests passed`\n"
+        )
+        pairs = ar.extract_verification_pairs(body)
+        assert pairs and pairs[0].passed is True
+
+    def test_non_numeric_failure_prose_still_fails(self) -> None:
+        """Free-form text that does not match the allowlist remains a fail."""
+        body = (
+            "## Verification\n\n"
+            "- command: `pytest`\n"
+            "  result: `traceback (most recent call last)`\n"
+        )
+        pairs = ar.extract_verification_pairs(body)
+        assert pairs and pairs[0].passed is False
+
+    def test_partial_numeric_with_suffix_is_not_passing(self) -> None:
+        """`2 failed` should NOT be treated as numeric pass. Refs #417."""
+        body = (
+            "## Verification\n\n"
+            "- command: `pytest`\n"
+            "  result: `2 failed`\n"
+        )
+        pairs = ar.extract_verification_pairs(body)
+        assert pairs and pairs[0].passed is False
+
 
 class TestExtractPostMergeChecklist:
     def test_empty_body_returns_empty(self) -> None:
@@ -2655,9 +2845,7 @@ class TestRepairHistoryTableNewRows:
                 passed=False,
             ),
         ]
-        table = ar._build_repair_history_table(
-            None, [], 1, pairs, []
-        )
+        table = ar._build_repair_history_table(None, [], 1, pairs)
         assert "Verification fail" in table
         assert "`pytest -q`" in table
         assert "observed: `exit 1`" in table
@@ -2670,40 +2858,33 @@ class TestRepairHistoryTableNewRows:
                 passed=True,
             ),
         ]
-        table = ar._build_repair_history_table(
-            None, [], 1, pairs, []
-        )
+        table = ar._build_repair_history_table(None, [], 1, pairs)
         assert "Verification fail" not in table
 
-    def test_post_merge_unchecked_row_emitted(self) -> None:
+    def test_post_merge_rows_never_emitted(self) -> None:
+        """Per #418, Post-merge items are no longer rendered at merge time."""
+        # Even a body-derived list of unchecked Post-merge items cannot reach
+        # the table builder anymore: the parameter was removed. Confirm the
+        # row marker text is absent for a representative call.
         table = ar._build_repair_history_table(
-            None, [], 1, None, [("linked issue closed", False)]
-        )
-        assert "Post-merge gate unchecked" in table
-        assert "linked issue closed" in table
-
-    def test_checked_post_merge_item_not_in_table(self) -> None:
-        table = ar._build_repair_history_table(
-            None, [], 1, None, [("linked issue closed", True)]
+            None, [], 1, [ar.VerificationPair("`x`", "`exit 1`", False)]
         )
         assert "Post-merge gate unchecked" not in table
 
-    def test_row_ordering_existing_classes_before_new(self) -> None:
+    def test_row_ordering_existing_classes_before_verification(self) -> None:
         pairs = [
             ar.VerificationPair("`a`", "`exit 1`", False),
         ]
-        post_merge = [("p", False)]
         table = ar._build_repair_history_table(
-            None, ["fix(harness): patch"], 2, pairs, post_merge
+            None, ["fix(harness): patch"], 2, pairs
         )
-        # Existing class (Iteration commit) appears before new classes.
+        # Iteration commit appears before the trailing Verification row.
         iter_idx = table.find("Iteration commit")
         verif_idx = table.find("Verification fail")
-        post_idx = table.find("Post-merge gate unchecked")
-        assert 0 < iter_idx < verif_idx < post_idx
+        assert 0 < iter_idx < verif_idx
 
     def test_default_args_keep_legacy_callsite(self) -> None:
-        # No new-arg callers still work, no new rows produced.
+        # Legacy three-arg callers still work, no extra rows produced.
         table = ar._build_repair_history_table(None, [], 1)
         assert "Verification fail" not in table
         assert "Post-merge gate unchecked" not in table

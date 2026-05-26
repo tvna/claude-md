@@ -35,21 +35,6 @@ uv run --with "apm-cli==0.12.1" apm compile
 
 APM reads `.apm/instructions/*.instructions.md` and, based on `apm.yml`, writes both `CLAUDE.md` and `AGENTS.md`. The uv configuration applies a 14-day `exclude-newer` delay for dependency resolution.
 
-## Pre-commit hooks (prek)
-
-This repository uses [`j178/prek`](https://github.com/j178/prek), a Rust-based runner fully compatible with `.pre-commit-config.yaml`. CI runs `uvx prek run --all-files` on every PR; install it locally to catch the same violations before committing.
-
-```bash
-# Install once (recommended)
-uv tool install prek
-prek install
-
-# Or run ad-hoc without installing
-uvx prek run --all-files
-```
-
-The hooks include generic hygiene checks (`trailing-whitespace`, `end-of-file-fixer`, `check-yaml`, `check-merge-conflict`) plus repo-local gates that wrap `scripts/uv_pin.py drift` and `scripts/scan_workflow_pip.py verify`.
-
 ## Using This From Another Project
 
 ### 1. Pull it in as a submodule
