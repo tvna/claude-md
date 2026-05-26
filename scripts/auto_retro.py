@@ -111,6 +111,18 @@ _RESULT_PASSING_PREFIXES: tuple[str, ...] = (
 # quantity rather than a status code; treat as passing. Refs #417.
 _RESULT_PASSING_NUMERIC_RE = re.compile(r"^-?\d+(?:\.\d+)?$")
 
+# "all <token> hooks|checks|tests" pattern. Tools like pre-commit, prek,
+# and `gh pr checks` interpolate a count or qualifier between "all" and
+# the unit noun ("all six hooks Passed", "all 3 checks have passed").
+# The literal prefixes in _RESULT_PASSING_PREFIXES only catch the bare
+# "all hooks" / "all checks" / "all tests" forms, so this regex covers
+# the natural-language variants without widening the allowlist into
+# free-form prose. Refs #411.
+_RESULT_PASSING_ALL_UNIT_RE = re.compile(
+    r"^all\s+\S+\s+(?:hooks|checks|tests)\b",
+    re.IGNORECASE,
+)
+
 # pytest-style count summary: `246 passed in 198.59s`, `1476 passed,
 # coverage 94.24%`, `22 passed in 0.09s`. Anchored to start so trailing
 # prose (timing, coverage) is tolerated but a leading failure count is
@@ -308,6 +320,10 @@ def _result_is_passing(result: str) -> bool:
     * a purely numeric result (matched by :data:`_RESULT_PASSING_NUMERIC_RE`)
       is treated as a measured quantity from a count-style verification
       and accepted as passing;
+    * a result matching :data:`_RESULT_PASSING_ALL_UNIT_RE` (``all <N>
+      hooks/checks/tests ...``) is accepted as passing, covering natural
+      tool output where a count or qualifier is interpolated between
+      ``all`` and the unit noun (refs #411);
     * pytest-style ``N passed ...`` counts (matched by
       :data:`_RESULT_PASSING_COUNT_RE`) are accepted as passing;
     * a string ending in the word ``ok`` (matched by
@@ -322,7 +338,7 @@ def _result_is_passing(result: str) -> bool:
     another marker would have accepted it.
 
     Anything else (including ``exit 1``, ``failed``, free-form prose) is
-    treated as a failure signal. Refs #417, #453.
+    treated as a failure signal. Refs #411, #417, #453.
     """
     text = result.strip()
     if text.startswith("`") and text.endswith("`") and len(text) >= 2:
@@ -340,6 +356,8 @@ def _result_is_passing(result: str) -> bool:
     if _RESULT_FAILING_COUNT_RE.search(text):
         return False
     if _RESULT_PASSING_NUMERIC_RE.match(text):
+        return True
+    if _RESULT_PASSING_ALL_UNIT_RE.match(text):
         return True
     if _RESULT_PASSING_COUNT_RE.match(text):
         return True
