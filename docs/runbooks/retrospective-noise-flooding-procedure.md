@@ -1,7 +1,7 @@
 # Retrospective noise and flooding visibility -- procedure
 
 Operator-facing companion to the retrospective documents in
-[`docs/archive/retrospective-pr-*.md`](history/) and the auto-retro
+[`docs/archive/retrospective-pr-*.md`](../archive/) and the auto-retro
 harness in [`scripts/auto_retro.py`](../scripts/auto_retro.py).
 Deliverable for [#315](https://github.com/tvna/claude-md/issues/315);
 part of [#63](https://github.com/tvna/claude-md/issues/63) Phase 8(D-3).

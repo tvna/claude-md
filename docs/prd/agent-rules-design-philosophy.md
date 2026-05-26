@@ -118,14 +118,14 @@ repository but not true about every downstream consumer. This
 includes:
 
 - Operator runbooks for repository-specific workflows
-  (`branch-cleanup.md`, `dependabot-automerge.md`, `rulesets.md`).
+  (`runbooks/branch-cleanup.md`, `runbooks/dependabot-automerge.md`, `runbooks/rulesets.md`).
 - Standards that are repository-wide but not universal
-  (`issue-pr-body-standard.md`, `non-ascii-defense.md`,
-  `workflow-script-quality.md`).
+  (`standards/issue-pr-body-standard.md`, `prd/non-ascii-defense.md`,
+  `standards/workflow-script-quality.md`).
 - Inventories of repository surfaces
-  (`security-control-inventory.md`, `repo-scope.md`).
-- Retrospective case studies (`history/retrospective-pr-*.md`).
-- Measurement frameworks (`performance-metrics.md`).
+  (`prd/security-control-inventory.md`, `standards/repo-scope.md`).
+- Retrospective case studies (`archive/retrospective-pr-*.md`).
+- Measurement frameworks (`standards/performance-metrics.md`).
 
 A repo-local doc is allowed to name specific files, scripts, issues,
 PRs, and tools. That is precisely what disqualifies it from the
