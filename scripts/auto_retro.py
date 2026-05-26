@@ -351,6 +351,11 @@ def extract_post_merge_checklist(body: str) -> list[tuple[str, bool]]:
     absent. ``After-merge`` and ``Bootstrap`` siblings are not included.
     The subsection match is case-insensitive and tolerates a trailing
     parenthetic clarifier (``### Post-merge (auto-retro signal)``).
+
+    Not called at merge time after #418: the Post-merge subsection is
+    structurally unchecked when auto-retro opens the issue. Retained
+    here for the deferred re-scan workflow tracked in #421, which will
+    revisit the merged PR body after the observation window closes.
     """
     section = _slice_section(body, "Checklist")
     if not section.strip():
@@ -428,7 +433,10 @@ def compute_repair_signals(
         pure_commits = pr.commits - _count_merge_from_main(commit_subjects)
         multi_commit = pure_commits > 1
     verification_pairs = extract_verification_pairs(pr.body or "")
-    post_merge_items = extract_post_merge_checklist(pr.body or "")
+    # `post_merge_unchecked` was removed in #418: the Post-merge subsection
+    # is documented to be checked by the operator AFTER observing the merge,
+    # so it is structurally unchecked at merge time. Re-scanning the subsection
+    # is deferred to the workflow tracked in #421.
     return {
         "inline_review_comments": bool(has_inline_comments),
         "body_cites_refs": len(refs) > 0,
@@ -436,9 +444,6 @@ def compute_repair_signals(
         "multi_commit_pr": multi_commit,
         "verification_pairs_failed": any(
             not p.passed for p in verification_pairs
-        ),
-        "post_merge_unchecked": any(
-            not checked for _, checked in post_merge_items
         ),
     }
 
@@ -501,13 +506,15 @@ def _build_repair_history_table(
     commit_subjects: list[str],
     pr_commit_count: int,
     verification_pairs: list[VerificationPair] | None = None,
-    post_merge_items: list[tuple[str, bool]] | None = None,
 ) -> str:
     """Render the Repair history markdown table (header + rows, no surrounds).
 
-    Walks four deterministic signal classes in fixed order: CI failures,
-    fix-up commits, merge-from-main commits, multi-commit summary. Emits
-    a sentinel row only when all four classes produced zero rows.
+    Walks five deterministic signal classes in fixed order: CI failures,
+    fix-up commits, merge-from-main commits, multi-commit summary, and
+    failed Verification pairs. Emits a sentinel row only when all classes
+    produced zero rows. The Post-merge checklist class was removed in
+    #418 because its items are unchecked at merge time by design;
+    deferred re-scan is tracked in #421.
 
     Cells are run through :func:`_escape_table_cell` so commit subjects
     containing ``|`` cannot break the table. The shape mirrors the
@@ -603,15 +610,9 @@ def _build_repair_history_table(
             )
         )
 
-    for item, checked in post_merge_items or []:
-        if checked:
-            continue
-        rows.append(
-            (
-                _escape_table_cell("Post-merge gate unchecked"),
-                _escape_table_cell(item),
-            )
-        )
+    # Post-merge subsection rows were removed in #418: the items are
+    # checked AFTER the merge by design, so they are always unchecked at
+    # the moment auto-retro runs. Deferred re-scan tracked in #421.
 
     header = (
         "| # | Repair | What the reviewer / gate caught |\n"
@@ -645,7 +646,6 @@ def build_retro_body(
     commit_subjects: list[str],
     check_runs: list[dict[str, Any]] | None = None,
     verification_pairs: list[VerificationPair] | None = None,
-    post_merge_items: list[tuple[str, bool]] | None = None,
 ) -> str:
     """Return the markdown body. Contains every section in :data:`_REQUIRED_SECTIONS`.
 
@@ -675,7 +675,6 @@ def build_retro_body(
         commit_subjects,
         pr.commits,
         verification_pairs,
-        post_merge_items,
     )
     # Idempotent date stamp: derive from pr.merged_at (already an ISO
     # 8601 string from the event payload) rather than datetime.now() so
@@ -1433,14 +1432,12 @@ def run(event: dict[str, Any], repo: str) -> int:
         )
         check_runs = []
     verification_pairs = extract_verification_pairs(pr.body or "")
-    post_merge_items = extract_post_merge_checklist(pr.body or "")
     title = build_retro_title(pr)
     body = build_retro_body(
         pr,
         commit_subjects,
         check_runs,
         verification_pairs,
-        post_merge_items,
     )
     labels = issue_labels(pr.layer_labels)
 
