@@ -37,6 +37,13 @@ uv run --with "apm-cli==0.12.1" apm compile
 
 APM reads `.apm/instructions/*.instructions.md` and, based on `apm.yml`, writes both `CLAUDE.md` and `AGENTS.md`. The uv configuration applies a 14-day `exclude-newer` delay for dependency resolution.
 
+When intentionally changing `.apm/` source files, refresh the checksum lockfile:
+
+```bash
+python3 scripts/verify_apm_checksums.py update
+python3 scripts/verify_apm_checksums.py verify
+```
+
 ## Using This From Another Project
 
 ### 1. Pull it in as a submodule
