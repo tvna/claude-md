@@ -10,7 +10,7 @@ The rulesets are introduced incrementally per the phased rollout in [#18](https:
 |---|---|---|
 | `.github/rulesets/main.json` | `~DEFAULT_BRANCH` | Strict `main` protection (PR-only, squash-only, required status check, linear history) |
 | `.github/rulesets/all-branches.json` | `~ALL` except `~DEFAULT_BRANCH` and `refs/heads/dependabot/*` | `non_fast_forward` only (deletion intentionally omitted; see [#18 comment 2](https://github.com/tvna/claude-md/issues/18#issuecomment-4482555311)) |
-| `.github/rulesets/dependabot.json` | `refs/heads/dependabot/*` | `non_fast_forward` with admin-only bypass (originally granted the Dependabot Integration `actor_id: 49699333` a bypass per [#140](https://github.com/tvna/claude-md/issues/140), but GitHub deprecated the standalone Dependabot GitHub App and the Rulesets API now returns HTTP 422 for that bypass actor — see [#273](https://github.com/tvna/claude-md/issues/273); `@dependabot rebase` is therefore blocked and Dependabot falls back to closing + reopening the PR with a freshly rebased branch) |
+| `.github/rulesets/dependabot.json` | `refs/heads/dependabot/*` | `non_fast_forward` with no bypass actors. Originally granted the Dependabot Integration `actor_id: 49699333` a bypass per [#140](https://github.com/tvna/claude-md/issues/140), but GitHub deprecated the standalone Dependabot GitHub App and the Rulesets API now returns HTTP 422 for that bypass actor — see [#273](https://github.com/tvna/claude-md/issues/273); `@dependabot rebase` is therefore blocked and Dependabot falls back to closing + reopening the PR with a freshly rebased branch. The admin `RepositoryRole` bypass was also removed across all three rulesets so the "Merge without waiting for requirements" path is no longer reachable. |
 | `docs/runbooks/rulesets.md` *(this file)* | — | Runbook |
 
 ## Phase mapping
@@ -68,8 +68,9 @@ The workflow performs deterministic safety checks before any state change:
 
 - `RULESETS_PAT` presence
 - `jq empty` JSON syntax check
-- Admin role id reconciliation (`bypass_actors[0].actor_id` in JSON must match the live `admin` role id from `GET /repos/{owner}/{repo}/roles`)
 - Name-collision check (`>1` existing ruleset with the same name → fail; never guess)
+
+`bypass_actors` is `[]` in all three SoT files; no admin role id reconciliation is required. If a future change re-introduces a bypass actor, restore the reconciliation step described under [Prerequisite — retrieve bypass actor ids](#prerequisite--retrieve-bypass-actor-ids) and pre-check the live admin role id against the JSON.
 
 <details>
 <summary>Manual fallback (only if the workflow is unavailable)</summary>
@@ -119,13 +120,13 @@ gh api \
 
 ## Prerequisite — retrieve bypass actor ids
 
-The workflow's "Pre-check admin role id matches bypass_actors" step automates this; the manual recipe below is for ad-hoc inspection.
+`bypass_actors` is currently `[]` across all three rulesets, so this step is **not required for routine apply**. The recipe is retained for the rare case of re-introducing a bypass actor (for example, to grant a service identity time-bounded write access during a migration).
 
 ```sh
 gh api /repos/tvna/claude-md/roles
 ```
 
-If the returned `Admin` role has a different `id` than the `bypass_actors[].actor_id` field in the JSON, open a PR to update the JSON before re-running the workflow.
+If the returned `Admin` role has a different `id` than the `bypass_actors[].actor_id` field in the JSON, open a PR to update the JSON before re-running the workflow. Any PR that re-populates `bypass_actors` MUST cite an authorizing issue per CLAUDE.md §3 and follow the [Emergency disable / re-enable procedure](#emergency-disable--re-enable-procedure) as a less-invasive alternative.
 
 ## Verify
 
@@ -179,6 +180,20 @@ gh api \
 ```
 
 Deleting a ruleset is non-destructive — the JSON file in git remains, and re-running the `Apply rulesets` workflow restores the previous state byte-for-byte (the workflow takes the POST path again once the live id is gone).
+
+## Emergency disable / re-enable procedure
+
+Since `bypass_actors` is `[]`, there is no per-actor escape hatch. To make a single emergency push (for example, to undo a poisoned merge or fix a broken required check that is blocking every PR), temporarily disable enforcement instead of re-introducing a bypass actor. The disable step itself requires admin to dispatch `Apply rulesets`; the ruleset cannot self-prevent its own enforcement flip.
+
+1. **Open a hotfix PR** that flips `enforcement` from `"active"` to `"disabled"` for the target ruleset SoT JSON (usually `main.json`). Link the parent incident issue.
+2. **Dispatch** `Apply rulesets` with `ruleset=<target>, dry_run=true`. Confirm the planned diff is only the `enforcement` field change. Re-dispatch with `dry_run=false`.
+3. **Apply the emergency fix** (the merge, push, or correction the disable was created for). Required checks no longer block.
+4. **Revert the enforcement flip** in a follow-up PR (`"disabled"` → `"active"`).
+5. **Re-dispatch** `Apply rulesets` with the same target, `dry_run=false`.
+6. **Audit log review**: confirm exactly two `repository_ruleset.update` entries (disable → enable) per the [Post-apply audit log review](#post-apply-audit-log-review) procedure, plus the emergency mutation in between. Any extra entry signals tampering.
+7. **Record** the disable window (start/end timestamps), the emergency action taken, and the audit log evidence in the incident issue body.
+
+Prefer this disable / re-enable procedure over re-introducing a bypass actor — it leaves explicit `repository_ruleset.update` events in the audit log and is detected by `ruleset-drift.yml` (cron) if step 4 is forgotten.
 
 ## Drift detection
 
