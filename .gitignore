@@ -19,7 +19,7 @@ htmlcov/
 apm_modules/
 
 # Claude local state
-# .claude/ is broadly prohibited per docs/repo-scope.md (#58).
+# .claude/ is broadly prohibited per docs/standards/repo-scope.md (#58).
 # .claude/settings.local.json is the documented developer-local carve-out —
 # it remains a contributor's local-only file, and the broader directory rule
 # below transitively keeps it out of commits.
@@ -28,7 +28,7 @@ apm_modules/
 .claude/*
 !.claude/settings.json
 
-# Agent-tool-specific config (prohibited per docs/repo-scope.md, #58)
+# Agent-tool-specific config (prohibited per docs/standards/repo-scope.md, #58)
 .cursor/
 .cursorrules
 .aider*

@@ -22,4 +22,4 @@ jobs:
         run: |
           python3 scripts/scan_design_philosophy_drift.py verify \
             --master .apm/instructions/master.instructions.md \
-            --doc docs/agent-rules-design-philosophy.md
+            --doc docs/prd/agent-rules-design-philosophy.md

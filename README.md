@@ -35,21 +35,6 @@ uv run --with "apm-cli==0.12.1" apm compile
 
 APM reads `.apm/instructions/*.instructions.md` and, based on `apm.yml`, writes both `CLAUDE.md` and `AGENTS.md`. The uv configuration applies a 14-day `exclude-newer` delay for dependency resolution.
 
-## Pre-commit hooks (prek)
-
-This repository uses [`j178/prek`](https://github.com/j178/prek), a Rust-based runner fully compatible with `.pre-commit-config.yaml`. CI runs `uvx prek run --all-files` on every PR; install it locally to catch the same violations before committing.
-
-```bash
-# Install once (recommended)
-uv tool install prek
-prek install
-
-# Or run ad-hoc without installing
-uvx prek run --all-files
-```
-
-The hooks include generic hygiene checks (`trailing-whitespace`, `end-of-file-fixer`, `check-yaml`, `check-merge-conflict`) plus repo-local gates that wrap `scripts/uv_pin.py drift` and `scripts/scan_workflow_pip.py verify`.
-
 ## Using This From Another Project
 
 ### 1. Pull it in as a submodule
@@ -88,7 +73,8 @@ git submodule update --remote .claude-md-master
 - All edits land through a PR. Run a retrospective after merge (Principle 3).
 - Only **rules that hold across every project** belong here. Project-specific rules live in each project's own `CLAUDE.md`.
 - Prefer removing words over adding them (Principle 4).
-- New or modified workflow-called scripts under `scripts/` must meet the [workflow script quality standard](./docs/workflow-script-quality.md).
-- PRs that touch `.apm/instructions/**`, `CLAUDE.md`, or `AGENTS.md` must pass the [downstream instruction review checklist](./docs/downstream-instruction-review-checklist.md) (security-focused review applied after the deterministic gates are green).
+- New or modified workflow-called scripts under `scripts/` must meet the [workflow script quality standard](./docs/standards/workflow-script-quality.md).
+- PRs that touch `.apm/instructions/**`, `CLAUDE.md`, or `AGENTS.md` must pass the [downstream instruction review checklist](./docs/runbooks/downstream-instruction-review-checklist.md) (security-focused review applied after the deterministic gates are green).
+- For the full map of documents by lane (`prd/`, `standards/`, `runbooks/`, `archive/`) see [`docs/INDEX.md`](./docs/INDEX.md).
 
 ---

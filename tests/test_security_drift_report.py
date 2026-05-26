@@ -251,7 +251,7 @@ class TestBuildReport:
         assert "drift" in summary
         # Actionable: cites the existing detector workflow + remediation doc.
         assert "ruleset-drift.yml" in summary
-        assert "docs/rulesets.md" in summary
+        assert "docs/runbooks/rulesets.md" in summary
         # Body carries the same payload + the marker.
         assert sdr.DEFAULT_MARKER in body
         assert "2 SoT-vs-live drift row" in body

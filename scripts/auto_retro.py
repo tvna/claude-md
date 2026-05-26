@@ -44,6 +44,8 @@ import os
 import re
 import subprocess
 import sys
+import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -53,6 +55,13 @@ from _trusted_bots import _TRUSTED_BOT_LOGINS
 from issue_link import extract_refs, strip_html_comments
 
 FALLBACK_TYPE_SCOPE = "retro"
+
+# Refs issue #380: GitHub may not finalize merge_commit_sha by the time
+# pull_request_target.closed fires; retry the PR-detail fetch with
+# bounded exponential backoff before falling through to the empty-list
+# soft-fail. Total max wait = sum(_MERGE_SHA_RETRY_BACKOFF) seconds.
+_MERGE_SHA_RETRY_ATTEMPTS: int = 4
+_MERGE_SHA_RETRY_BACKOFF: tuple[float, ...] = (2.0, 4.0, 8.0)
 
 # Section names mirror body_policy._ISSUE_COMMON_REQUIRED so the
 # auto-opened retro issue passes verify-body-policy. Drift between the
@@ -91,7 +100,43 @@ _RESULT_PASSING_PREFIXES: tuple[str, ...] = (
     "pass",
     "passed",
     "success",
+    # Common tool-natural-language pass shapes. Refs #417.
+    "all hooks",
+    "all checks",
+    "all tests",
 )
+
+# Pure numeric result (e.g., a count from `grep -c` or `wc -l`). The
+# operator chose count-style verification, so the value is a measured
+# quantity rather than a status code; treat as passing. Refs #417.
+_RESULT_PASSING_NUMERIC_RE = re.compile(r"^-?\d+(?:\.\d+)?$")
+
+# "all <token> hooks|checks|tests" pattern. Tools like pre-commit, prek,
+# and `gh pr checks` interpolate a count or qualifier between "all" and
+# the unit noun ("all six hooks Passed", "all 3 checks have passed").
+# The literal prefixes in _RESULT_PASSING_PREFIXES only catch the bare
+# "all hooks" / "all checks" / "all tests" forms, so this regex covers
+# the natural-language variants without widening the allowlist into
+# free-form prose. Refs #411.
+_RESULT_PASSING_ALL_UNIT_RE = re.compile(
+    r"^all\s+\S+\s+(?:hooks|checks|tests)\b",
+    re.IGNORECASE,
+)
+
+# pytest-style count summary: `246 passed in 198.59s`, `1476 passed,
+# coverage 94.24%`, `22 passed in 0.09s`. Anchored to start so trailing
+# prose (timing, coverage) is tolerated but a leading failure count is
+# not silently swallowed. Refs #453.
+_RESULT_PASSING_COUNT_RE = re.compile(r"^\d+\s+passed\b", re.IGNORECASE)
+
+# Trailing `ok` word marker: `yaml syntax ok`, `config ok.`. Word
+# boundary keeps `not ok` and `lookup` out of the match. Refs #453.
+_RESULT_PASSING_TRAILING_OK_RE = re.compile(r"\bok\b\.?\s*$", re.IGNORECASE)
+
+# Explicit failure-count marker that must NOT be treated as passing even
+# if the rest of the string smells like a pass (`0 passed, 3 failed`).
+# Refs #453.
+_RESULT_FAILING_COUNT_RE = re.compile(r"\b\d+\s+failed\b", re.IGNORECASE)
 
 # Append-to-existing-retro markers used by append_repair_history_row.
 _AUTO_FILLED_OPEN = "<!-- auto-filled:repair-history -->"
@@ -212,6 +257,12 @@ _MERGE_FROM_MAIN_PREFIXES: tuple[str, ...] = (
     "Merge remote-tracking branch 'origin/main'",
 )
 
+# Leading marker on the right-hand cell of merge-from-main rows. Lets
+# operators skip the row when filling the section 3 classification
+# column: the row is a structural artifact of the squash + linear-history
+# + strict-status-checks ruleset, not a repair loop. Issue #400.
+_POLICY_ARTIFACT_MARKER = "[policy-artifact]"
+
 
 def _count_merge_from_main(subjects: list[str]) -> int:
     """Return the number of *subjects* that are merge-from-main commits.
@@ -264,14 +315,54 @@ def _slice_section(body: str, heading: str) -> str:
 def _result_is_passing(result: str) -> bool:
     """Return True if a Verification result line text looks like a pass.
 
-    Strips surrounding backticks and leading whitespace, then matches a
-    small allowlist of pass markers (``exit 0``, ``OK:``, ``pass``,
-    ``passed``, ``success``, ``ok``). Anything else (including ``exit
-    1``, ``failed``, prose) is treated as a failure signal.
+    Strips surrounding backticks and leading whitespace, then:
+
+    * a purely numeric result (matched by :data:`_RESULT_PASSING_NUMERIC_RE`)
+      is treated as a measured quantity from a count-style verification
+      and accepted as passing;
+    * a result matching :data:`_RESULT_PASSING_ALL_UNIT_RE` (``all <N>
+      hooks/checks/tests ...``) is accepted as passing, covering natural
+      tool output where a count or qualifier is interpolated between
+      ``all`` and the unit noun (refs #411);
+    * pytest-style ``N passed ...`` counts (matched by
+      :data:`_RESULT_PASSING_COUNT_RE`) are accepted as passing;
+    * a string ending in the word ``ok`` (matched by
+      :data:`_RESULT_PASSING_TRAILING_OK_RE`) is accepted as passing;
+    * otherwise the lowercased text is matched against the prefix
+      allowlist in :data:`_RESULT_PASSING_PREFIXES` (``exit 0``, ``OK:``,
+      ``pass``, ``passed``, ``success``, ``ok``, plus common tool
+      summaries such as ``all hooks ...``).
+
+    An explicit ``N failed`` token anywhere in the text (matched by
+    :data:`_RESULT_FAILING_COUNT_RE`) forces a failure verdict even if
+    another marker would have accepted it.
+
+    Anything else (including ``exit 1``, ``failed``, free-form prose) is
+    treated as a failure signal. Refs #411, #417, #453.
     """
     text = result.strip()
     if text.startswith("`") and text.endswith("`") and len(text) >= 2:
         text = text[1:-1].strip()
+    # Strip a trailing operator-commentary parenthetical so it does not
+    # mask a pass marker on the primary value (e.g.
+    # `\`yaml syntax ok\` (parsed without exception)` --> `\`yaml syntax ok\``,
+    # `1476 passed, coverage 94.24% (gate 92.71%)` --> `1476 passed, ...`).
+    # Re-strip backticks if newly applicable. Refs #453.
+    stripped = re.sub(r"\s*\([^()]*\)\s*$", "", text).strip()
+    if stripped != text:
+        text = stripped
+        if text.startswith("`") and text.endswith("`") and len(text) >= 2:
+            text = text[1:-1].strip()
+    if _RESULT_FAILING_COUNT_RE.search(text):
+        return False
+    if _RESULT_PASSING_NUMERIC_RE.match(text):
+        return True
+    if _RESULT_PASSING_ALL_UNIT_RE.match(text):
+        return True
+    if _RESULT_PASSING_COUNT_RE.match(text):
+        return True
+    if _RESULT_PASSING_TRAILING_OK_RE.search(text):
+        return True
     lower = text.lower()
     return any(lower.startswith(prefix) for prefix in _RESULT_PASSING_PREFIXES)
 
@@ -317,6 +408,11 @@ def extract_post_merge_checklist(body: str) -> list[tuple[str, bool]]:
     absent. ``After-merge`` and ``Bootstrap`` siblings are not included.
     The subsection match is case-insensitive and tolerates a trailing
     parenthetic clarifier (``### Post-merge (auto-retro signal)``).
+
+    Not called at merge time after #418: the Post-merge subsection is
+    structurally unchecked when auto-retro opens the issue. Retained
+    here for the deferred re-scan workflow tracked in #421, which will
+    revisit the merged PR body after the observation window closes.
     """
     section = _slice_section(body, "Checklist")
     if not section.strip():
@@ -394,7 +490,10 @@ def compute_repair_signals(
         pure_commits = pr.commits - _count_merge_from_main(commit_subjects)
         multi_commit = pure_commits > 1
     verification_pairs = extract_verification_pairs(pr.body or "")
-    post_merge_items = extract_post_merge_checklist(pr.body or "")
+    # `post_merge_unchecked` was removed in #418: the Post-merge subsection
+    # is documented to be checked by the operator AFTER observing the merge,
+    # so it is structurally unchecked at merge time. Re-scanning the subsection
+    # is deferred to the workflow tracked in #421.
     return {
         "inline_review_comments": bool(has_inline_comments),
         "body_cites_refs": len(refs) > 0,
@@ -402,9 +501,6 @@ def compute_repair_signals(
         "multi_commit_pr": multi_commit,
         "verification_pairs_failed": any(
             not p.passed for p in verification_pairs
-        ),
-        "post_merge_unchecked": any(
-            not checked for _, checked in post_merge_items
         ),
     }
 
@@ -467,13 +563,26 @@ def _build_repair_history_table(
     commit_subjects: list[str],
     pr_commit_count: int,
     verification_pairs: list[VerificationPair] | None = None,
-    post_merge_items: list[tuple[str, bool]] | None = None,
+    pr_type: str = "",
 ) -> str:
     """Render the Repair history markdown table (header + rows, no surrounds).
 
-    Walks four deterministic signal classes in fixed order: CI failures,
-    fix-up commits, merge-from-main commits, multi-commit summary. Emits
-    a sentinel row only when all four classes produced zero rows.
+    Walks deterministic signal classes in fixed order: CI failures,
+    fix-up commits (canonical fix exempted on fix-typed PRs as a
+    distinct ``Fix commit`` row -- see #413), merge-from-main commits,
+    multi-commit summary, and failed Verification pairs. Emits a
+    sentinel row only when all classes produced zero rows. The
+    Post-merge checklist class was removed in #418 because its items
+    are unchecked at merge time by design; deferred re-scan is tracked
+    in #421.
+
+    When ``pr_type == "fix"``, the first non-merge-from-main commit
+    subject that itself starts with ``fix(`` is rendered as a
+    ``Fix commit`` row instead of ``Iteration commit``: it is the
+    canonical fix the PR was opened to land, not evidence of an earlier
+    silent failure. ``fixup!`` and ``squash!`` subjects remain
+    unconditional iteration markers regardless of PR type because they
+    are explicit iteration prefixes by convention.
 
     Cells are run through :func:`_escape_table_cell` so commit subjects
     containing ``|`` cannot break the table. The shape mirrors the
@@ -518,18 +627,53 @@ def _build_repair_history_table(
             )
         )
 
-    for subject in commit_subjects:
+    # Issue #413: on a fix-typed PR the first non-merge-from-main commit
+    # that itself starts with `fix(` is the canonical fix the PR landed,
+    # not an iteration on an earlier silent failure. Compute its index
+    # once so the row-emit loop below can split it out as a `Fix commit`
+    # row. Reuses _MERGE_FROM_MAIN_PREFIXES so the "non-merge" definition
+    # stays consistent with _count_merge_from_main and the policy-artifact
+    # rows below.
+    canonical_fix_index: int | None = None
+    if pr_type == "fix":
+        for i, subject in enumerate(commit_subjects):
+            stripped_i = subject.strip()
+            if any(
+                stripped_i.startswith(prefix)
+                for prefix in _MERGE_FROM_MAIN_PREFIXES
+            ):
+                continue
+            if stripped_i.startswith("fix("):
+                canonical_fix_index = i
+            break
+
+    policy_artifact_emitted = False
+    for i, subject in enumerate(commit_subjects):
         stripped = subject.strip()
+        if i == canonical_fix_index:
+            policy_artifact_emitted = True
+            rows.append(
+                (
+                    _escape_table_cell("Fix commit"),
+                    _escape_table_cell(
+                        f"{_POLICY_ARTIFACT_MARKER} `{subject}` -- "
+                        "canonical fix commit on fix-typed PR"
+                    ),
+                )
+            )
+            continue
         if (
             stripped.startswith("fix(")
             or stripped.startswith("fixup!")
             or stripped.startswith("squash!")
         ):
+            policy_artifact_emitted = True
             rows.append(
                 (
                     _escape_table_cell("Iteration commit"),
                     _escape_table_cell(
-                        f"`{subject}` -- signals an earlier silent failure"
+                        f"{_POLICY_ARTIFACT_MARKER} `{subject}` -- "
+                        "signals an earlier silent failure"
                     ),
                 )
             )
@@ -539,20 +683,26 @@ def _build_repair_history_table(
         if any(
             stripped.startswith(prefix) for prefix in _MERGE_FROM_MAIN_PREFIXES
         ):
+            policy_artifact_emitted = True
             rows.append(
                 (
                     _escape_table_cell("Merge from main"),
                     _escape_table_cell(
-                        f"`{subject}` -- rebase debt before merge"
+                        f"{_POLICY_ARTIFACT_MARKER} `{subject}` -- "
+                        "rebase debt before merge"
                     ),
                 )
             )
 
     if pr_commit_count > 1:
+        policy_artifact_emitted = True
         rows.append(
             (
                 _escape_table_cell("Multi-commit PR"),
-                _escape_table_cell(f"{pr_commit_count} commits squash-merged"),
+                _escape_table_cell(
+                    f"{_POLICY_ARTIFACT_MARKER} {pr_commit_count} "
+                    "commits squash-merged"
+                ),
             )
         )
 
@@ -566,15 +716,9 @@ def _build_repair_history_table(
             )
         )
 
-    for item, checked in post_merge_items or []:
-        if checked:
-            continue
-        rows.append(
-            (
-                _escape_table_cell("Post-merge gate unchecked"),
-                _escape_table_cell(item),
-            )
-        )
+    # Post-merge subsection rows were removed in #418: the items are
+    # checked AFTER the merge by design, so they are always unchecked at
+    # the moment auto-retro runs. Deferred re-scan tracked in #421.
 
     header = (
         "| # | Repair | What the reviewer / gate caught |\n"
@@ -590,7 +734,17 @@ def _build_repair_history_table(
         f"| {idx} | {left} | {right} |\n"
         for idx, (left, right) in enumerate(rows, start=1)
     )
-    return header + body_rows
+    footnote = ""
+    if policy_artifact_emitted:
+        footnote = (
+            "\n"
+            f"_{_POLICY_ARTIFACT_MARKER} rows are forced by the squash + "
+            "linear-history + strict-status-checks policy in "
+            "`.github/rulesets/main.json`. They are exempt from the "
+            "CLAUDE.md section 3 classification taxonomy and may be "
+            "skipped when filling the classification column._\n"
+        )
+    return header + body_rows + footnote
 
 
 def build_retro_body(
@@ -598,7 +752,6 @@ def build_retro_body(
     commit_subjects: list[str],
     check_runs: list[dict[str, Any]] | None = None,
     verification_pairs: list[VerificationPair] | None = None,
-    post_merge_items: list[tuple[str, bool]] | None = None,
 ) -> str:
     """Return the markdown body. Contains every section in :data:`_REQUIRED_SECTIONS`.
 
@@ -608,6 +761,9 @@ def build_retro_body(
     are also empty).
     """
     type_scope = extract_type_scope(pr.title)
+    # Bare type (scope stripped) drives the canonical-fix exemption in
+    # _build_repair_history_table. Mirrors build_retro_title's split.
+    pr_type = type_scope.split("(", 1)[0] if type_scope else ""
     fallback_note = ""
     if not type_scope:
         fallback_note = (
@@ -628,7 +784,7 @@ def build_retro_body(
         commit_subjects,
         pr.commits,
         verification_pairs,
-        post_merge_items,
+        pr_type=pr_type,
     )
     # Idempotent date stamp: derive from pr.merged_at (already an ISO
     # 8601 string from the event payload) rather than datetime.now() so
@@ -875,15 +1031,26 @@ def fetch_pr_commits(repo: str, pr_number: int) -> list[str]:
     return subjects
 
 
-def fetch_check_runs(repo: str, pr_number: int) -> list[dict[str, Any]]:
+def fetch_check_runs(
+    repo: str,
+    pr_number: int,
+    *,
+    sleeper: Callable[[float], None] = time.sleep,
+) -> list[dict[str, Any]]:
     """Return failed check_run entries for the PR's merge commit.
 
     Two-step fetch:
 
     1. ``GET /repos/{repo}/pulls/{pr_number}`` to read
-       ``merge_commit_sha``. Short-circuits to ``[]`` if the SHA is null
-       (GitHub may not have computed it yet on
-       ``pull_request_target.closed``).
+       ``merge_commit_sha``. GitHub may not have finalized the SHA when
+       ``pull_request_target.closed`` fires (refs issue #380), so the
+       PR-detail call is retried up to :data:`_MERGE_SHA_RETRY_ATTEMPTS`
+       times with the :data:`_MERGE_SHA_RETRY_BACKOFF` sequence between
+       attempts. If every attempt still yields ``None``, emit a
+       ``::warning::`` line and soft-fail to ``[]`` -- check_runs is an
+       augmenting signal for the Repair history table, not a correctness
+       invariant. The ``sleeper`` parameter is injectable for tests
+       (mirrors ``scripts/_github_api.py`` ``apply_call`` precedent).
     2. ``GET /repos/{repo}/commits/{sha}/check-runs?per_page=100`` to
        enumerate runs against that SHA.
 
@@ -899,10 +1066,24 @@ def fetch_check_runs(repo: str, pr_number: int) -> list[dict[str, Any]]:
     when the annotation API fails, or beyond the
     :data:`_CHECK_RUN_DISPLAY_CAP` enrichment ceiling). Refs issue #381.
     """
-    raw = gh_api("GET", f"/repos/{repo}/pulls/{pr_number}")
-    pr_detail = json.loads(raw) if raw.strip() else {}
-    sha = pr_detail.get("merge_commit_sha")
+    sha: str | None = None
+    for attempt in range(1, _MERGE_SHA_RETRY_ATTEMPTS + 1):
+        raw = gh_api("GET", f"/repos/{repo}/pulls/{pr_number}")
+        pr_detail = json.loads(raw) if raw.strip() else {}
+        sha = pr_detail.get("merge_commit_sha")
+        if sha:
+            break
+        if attempt < _MERGE_SHA_RETRY_ATTEMPTS:
+            sleeper(_MERGE_SHA_RETRY_BACKOFF[attempt - 1])
     if not sha:
+        print(
+            f"::warning::fetch_check_runs: merge_commit_sha still null "
+            f"for {repo}#{pr_number} after {_MERGE_SHA_RETRY_ATTEMPTS} "
+            f"attempts (backoff {list(_MERGE_SHA_RETRY_BACKOFF)}s); "
+            "Repair history will use commit-subject signals only "
+            "(refs issue #380)",
+            file=sys.stderr,
+        )
         return []
     raw = gh_api(
         "GET",
@@ -1134,6 +1315,15 @@ def create_issue(
 # scan_non_ascii.py:313-326).
 _BACK_LINK_MARKER = "<!-- auto-retro:back-link -->"
 
+# Label applied to the source PR after the retro issue is opened and
+# the back-link comment is posted. Emission is the harness contract --
+# subscribed Claude sessions and operators read it as the signal that
+# the PR has reached terminal state and no further session attention
+# is required. Consumption (e.g. unsubscribe_pr_activity) is platform
+# / session policy and out of scope here. SoT entry lives in
+# .github/labels.json; tests/test_auto_retro.py guards the drift.
+_TERMINAL_LABEL = "harness:retro-opened"
+
 
 def find_existing_back_link_id(
     repo: str, pr_number: int, marker: str = _BACK_LINK_MARKER
@@ -1182,6 +1372,24 @@ def post_back_link_comment(
         {"body": body},
     )
     return "created"
+
+
+def apply_terminal_label(
+    repo: str, pr_number: int, label: str = _TERMINAL_LABEL
+) -> None:
+    """POST *label* to the source PR's labels endpoint.
+
+    GitHub's labels endpoint is naturally idempotent (re-adding an
+    existing label is a no-op), so no pre-check is needed. The orchestrator
+    is responsible for the fail-soft policy: the retro issue is already
+    created by the time this fires, so a failed label add must not roll
+    back the audit trail.
+    """
+    gh_api(
+        "POST",
+        f"/repos/{repo}/issues/{pr_number}/labels",
+        {"labels": [label]},
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1334,14 +1542,12 @@ def run(event: dict[str, Any], repo: str) -> int:
         )
         check_runs = []
     verification_pairs = extract_verification_pairs(pr.body or "")
-    post_merge_items = extract_post_merge_checklist(pr.body or "")
     title = build_retro_title(pr)
     body = build_retro_body(
         pr,
         commit_subjects,
         check_runs,
         verification_pairs,
-        post_merge_items,
     )
     labels = issue_labels(pr.layer_labels)
 
@@ -1350,6 +1556,7 @@ def run(event: dict[str, Any], repo: str) -> int:
     new_url = created.get("html_url") or ""
 
     back_link_status = "skipped"
+    terminal_label_status = "skipped"
     if isinstance(new_number, int):
         try:
             back_link_status = post_back_link_comment(repo, pr.number, new_number)
@@ -1366,9 +1573,26 @@ def run(event: dict[str, Any], repo: str) -> int:
             )
             back_link_status = "failed"
 
+        try:
+            apply_terminal_label(repo, pr.number)
+            terminal_label_status = "applied"
+        except subprocess.CalledProcessError as exc:
+            # Fail-soft: the terminal label is a secondary signal layered on
+            # top of the retro+back-link audit trail. A label-add failure
+            # must NOT roll back the retro -- warn and continue so the
+            # primary outputs remain intact.
+            print(
+                f"::warning::apply_terminal_label failed "
+                f"(exit {exc.returncode}); retro issue #{new_number} created "
+                f"but source PR was not labeled {_TERMINAL_LABEL!r}",
+                file=sys.stderr,
+            )
+            terminal_label_status = "failed"
+
     msg = (
         f"created retro issue #{new_number} ({new_url}); "
-        f"back-link={back_link_status}"
+        f"back-link={back_link_status}; "
+        f"terminal-label={terminal_label_status}"
     )
     print(msg)
     _append_summary(_build_summary(pr, "created", msg))

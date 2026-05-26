@@ -182,7 +182,7 @@ def render_sot_issue_remediation() -> str:
         "\n"
         "## Remediation\n"
         "\n"
-        "Re-dispatch the `Apply rulesets` workflow with `dry_run=false` once the SoT change has been reviewed (see `docs/rulesets.md`).\n"
+        "Re-dispatch the `Apply rulesets` workflow with `dry_run=false` once the SoT change has been reviewed (see `docs/runbooks/rulesets.md`).\n"
     )
 
 
@@ -221,7 +221,7 @@ def render_unknown_issue_remediation(*, repo: str) -> str:
         "\n"
         f"Either (a) commit the live ruleset as a new `.github/rulesets/<name>.json` SoT file, "
         f"or (b) delete it via `gh api -X DELETE /repos/{repo}/rulesets/<id>` "
-        "(see `docs/rulesets.md` §\"Rollback\").\n"
+        "(see `docs/runbooks/rulesets.md` §\"Rollback\").\n"
     )
 
 

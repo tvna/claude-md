@@ -1,7 +1,7 @@
 # Retrospective noise and flooding visibility -- procedure
 
 Operator-facing companion to the retrospective documents in
-[`docs/history/retrospective-pr-*.md`](history/) and the auto-retro
+[`docs/archive/retrospective-pr-*.md`](../archive/) and the auto-retro
 harness in [`scripts/auto_retro.py`](../scripts/auto_retro.py).
 Deliverable for [#315](https://github.com/tvna/claude-md/issues/315);
 part of [#63](https://github.com/tvna/claude-md/issues/63) Phase 8(D-3).
@@ -25,15 +25,17 @@ non-bot, non-retro merge.
 - Replacing the auto-retro repair-history pre-fill. The
   `_build_repair_history_table` function in
   [`scripts/auto_retro.py`](../scripts/auto_retro.py) already detects
-  four signal classes (CI failures, fix-up commits, merge-from-main,
-  multi-commit PR) and writes them into the retro issue body. This
-  procedure layers human judgment on top of those signals; it does
-  not duplicate them.
+  five signal classes (CI failures, fix-up commits with the canonical
+  `fix(...)` commit on a fix-typed PR split out as a separate
+  `Fix commit` row -- see #413, merge-from-main, multi-commit PR, and
+  failed Verification pairs) and writes them into the retro issue
+  body. This procedure layers human judgment on top of those signals;
+  it does not duplicate them.
 - Re-classifying the three repair-taxonomy categories. The taxonomy
   (missing deterministic gate / unclear agent instruction / external
   or human decision that cannot be automated) is owned by CLAUDE.md
   section 3 and mirrored in
-  [`docs/agent-rules-design-philosophy.md`](agent-rules-design-philosophy.md)
+  [`docs/prd/agent-rules-design-philosophy.md`](../prd/agent-rules-design-philosophy.md)
   section 6.4. This procedure consumes the taxonomy, it does not
   extend it.
 
@@ -48,8 +50,8 @@ or `git log` query.
 | # | Signal | Where to read it | What it means |
 |---|--------|------------------|---------------|
 | S1 | High commit count on a single PR | Auto-retro repair-history table `Multi-commit PR` row; or `git log --oneline <base>..<head> | wc -l` | The PR did not squash to a single intent. Either the author iterated in public (legitimate when each commit is a discrete step) or the branch absorbed unrelated work. Note: the `multi_commit_pr` gate that triggers auto-retro creation subtracts merge-from-main commits from the count, so rebase debt forced by the squash-only, linear-history policy does not fire the gate on its own; the repair-history table still records the merge-from-main rows for review visibility. |
-| S2 | Low-information commit subjects | Auto-retro `Iteration commit` row; or scan commit subjects for `wip`, `fix`, `fixup!`, `squash!`, `update`, `more`, `tweak`, generic verbs with no scope | Subjects that do not state intent erase the audit trail. A reviewer cannot reconstruct what each commit changed without diffing it. |
-| S3 | Repeated repair commits | Auto-retro `Iteration commit` row with three or more entries; or `git log --grep='^fix' <base>..<head>` count | Repeated `fix(...)` commits on the same PR indicate the deterministic gates caught defects late. The pattern points at a missing earlier gate or an unclear agent instruction. |
+| S2 | Low-information commit subjects | Auto-retro `Iteration commit` row (the canonical `fix(...)` commit on a fix-typed PR is rendered as `Fix commit` instead and is exempt from this count -- see #413); or scan commit subjects for `wip`, `fix`, `fixup!`, `squash!`, `update`, `more`, `tweak`, generic verbs with no scope | Subjects that do not state intent erase the audit trail. A reviewer cannot reconstruct what each commit changed without diffing it. |
+| S3 | Repeated repair commits | Auto-retro `Iteration commit` row with three or more entries (the canonical `fix(...)` commit on a fix-typed PR is exempt -- see #413); or `git log --grep='^fix' <base>..<head>` count | Repeated `fix(...)` commits on the same PR indicate the deterministic gates caught defects late. The pattern points at a missing earlier gate or an unclear agent instruction. |
 | S4 | Force-update churn | `git reflog show origin/<branch>` from the local checkout if available; or the PR `force-pushed` timeline events visible in the GitHub UI | Force pushes rewrite the audit log. A small number is normal (rebase onto main, fix-up squash before merge). A large number obscures which version a reviewer approved. |
 | S5 | Unrelated churn in the diff | `git diff --stat <base>..<head>` against the PR scope stated in the closing issue | Files outside the PR scope appearing in the diff (e.g. a docs PR that also touches `scripts/`, an APM-source PR that also rewrites `tests/`) widens blast radius beyond what the closing issue authorized. |
 
@@ -60,10 +62,22 @@ pattern. The signals become a noise pattern when **two or more fire
 on the same PR**, because each signal alone has a benign
 interpretation; co-firing collapses the benign explanation.
 
+S1 policy-artifact rows: the auto-retro repair-history table tags
+`Merge from main` rows with a leading `[policy-artifact]` token in the
+"What the reviewer / gate caught" column. Rows carrying this marker
+are structural side-effects of the squash + linear-history +
+strict-status-checks combination in `.github/rulesets/main.json` --
+a branch that falls behind main has no force-push option, so
+merge-from-main is the only safe path. Operators may skip these rows
+when filling the section 3 classification column; the row is recorded
+for review visibility but does not need a `missing deterministic gate`
+/ `unclear agent instruction` / `external or human decision` tag.
+Refs issue #400.
+
 ### 2.1 Severity thresholds (rule of thumb)
 
 The thresholds below are operator rules of thumb derived from the
-existing retrospective corpus (`docs/history/retrospective-pr-229.md`
+existing retrospective corpus (`docs/archive/retrospective-pr-229.md`
 through `retrospective-pr-257.md`). They are not deterministic
 gates; a retrospective writer may override any threshold with a
 recorded rationale.
@@ -98,7 +112,7 @@ classification when the worked evidence on the PR justifies it.
 
 The classification feeds directly into the section 6.4 lane-mapping
 table in
-[`docs/agent-rules-design-philosophy.md`](agent-rules-design-philosophy.md),
+[`docs/prd/agent-rules-design-philosophy.md`](../prd/agent-rules-design-philosophy.md),
 which tells the retrospective writer which ownership lane (harness,
 universal text, or repo-local doc) carries the durable fix.
 
@@ -110,7 +124,7 @@ like under this procedure.
 
 ### 4.1 Worked example -- non-noise (PR #237)
 
-`docs/history/retrospective-pr-237.md` documents PR #237 as a
+`docs/archive/retrospective-pr-237.md` documents PR #237 as a
 single-commit, zero-repair merge. Running the section 2 checklist:
 
 - S1 commit count: 1 commit. Green.
@@ -198,8 +212,8 @@ Q3. Would the deterministic check fire on the historical PR corpus
     Yes -> File a new sub-issue of #63 proposing the gate.
            Reference this section by anchor. The sub-issue follows
            the issue body standard in
-           docs/issue-pr-body-standard.md and the lane-mapping
-           guidance in docs/agent-rules-design-philosophy.md
+           docs/standards/issue-pr-body-standard.md and the lane-mapping
+           guidance in docs/prd/agent-rules-design-philosophy.md
            section 6.4.
 ```
 
@@ -218,7 +232,7 @@ solo-developer themselves in the current repository state).
 
 The procedure has no scheduled cadence outside the per-merge cycle;
 its evidence base grows monotonically with each
-`docs/history/retrospective-pr-*.md` file that lands.
+`docs/archive/retrospective-pr-*.md` file that lands.
 
 ## 7. References
 
@@ -231,13 +245,13 @@ its evidence base grows monotonically with each
   harness; its `_build_repair_history_table` function pre-fills the
   signals consumed by [section 2](#2-signals-to-inspect) (S1, S2,
   S3).
-- [`docs/agent-rules-design-philosophy.md`](agent-rules-design-philosophy.md)
+- [`docs/prd/agent-rules-design-philosophy.md`](../prd/agent-rules-design-philosophy.md)
   section 6.4 -- the retrospective-classification-to-lane mapping
   table consumed by [section 3](#3-classification-mapping).
-- [`docs/issue-pr-body-standard.md`](issue-pr-body-standard.md) --
+- [`docs/standards/issue-pr-body-standard.md`](../standards/issue-pr-body-standard.md) --
   body shape for the follow-up sub-issue produced by
   [section 5](#5-when-to-file-a-follow-up-gate).
-- [`docs/history/retrospective-pr-237.md`](history/retrospective-pr-237.md)
+- [`docs/archive/retrospective-pr-237.md`](../archive/retrospective-pr-237.md)
   -- the non-noise worked example in section 4.1.
 - CLAUDE.md section 3 -- the three-category repair taxonomy
   consumed by section 3.

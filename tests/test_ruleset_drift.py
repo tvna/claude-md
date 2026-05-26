@@ -22,9 +22,7 @@ SOT_MAIN: dict[str, Any] = {
     "target": "branch",
     "enforcement": "active",
     "conditions": {"ref_name": {"include": ["~DEFAULT_BRANCH"], "exclude": []}},
-    "bypass_actors": [
-        {"actor_id": 5, "actor_type": "RepositoryRole", "bypass_mode": "always"}
-    ],
+    "bypass_actors": [],
     "rules": [
         {"type": "deletion"},
         {"type": "non_fast_forward"},
@@ -425,6 +423,25 @@ class TestDetect:
         assert "## Remediation" in sot_body
         assert "<details><summary>Diff for <code>main-protection</code>" in sot_body
         assert unknown_body is None
+
+    def test_drift_when_live_retains_admin_bypass(self, tmp_path: Path) -> None:
+        live_main = {
+            **SOT_MAIN,
+            "bypass_actors": [
+                {"actor_id": 5, "actor_type": "RepositoryRole", "bypass_mode": "always"}
+            ],
+        }
+        drift, _, _, sot_body, _ = _detect(
+            tmp_path,
+            sot_files={"main.json": SOT_MAIN, "all-branches.json": SOT_ALL},
+            live_list=[{"id": 1, **SOT_MAIN}, {"id": 2, **SOT_ALL}],
+            live_by_id={1: live_main, 2: SOT_ALL},
+        )
+
+        assert drift == 1
+        assert sot_body is not None
+        assert "actor_id" in sot_body
+        assert "RepositoryRole" in sot_body
 
     def test_unknown_only(self, tmp_path: Path) -> None:
         ghost = {"id": 99, "name": "ghost", "target": "branch", "enforcement": "active"}
