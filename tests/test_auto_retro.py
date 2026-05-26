@@ -2600,6 +2600,73 @@ class TestExtractVerificationPairs:
         assert len(pairs) == 1
         assert pairs[0].command == "`real`"
 
+    def test_passed_when_result_is_numeric_count(self) -> None:
+        """Pure numeric result (e.g. `grep -c` output) treated as pass. Refs #417."""
+        body = (
+            "## Verification\n\n"
+            "- command: `grep -c '^foo' file`\n"
+            "  result: `2`\n"
+        )
+        pairs = ar.extract_verification_pairs(body)
+        assert pairs and pairs[0].passed is True
+
+    def test_passed_when_result_is_negative_numeric(self) -> None:
+        body = (
+            "## Verification\n\n"
+            "- command: `echo -1`\n"
+            "  result: `-1`\n"
+        )
+        pairs = ar.extract_verification_pairs(body)
+        assert pairs and pairs[0].passed is True
+
+    def test_passed_when_result_starts_with_all_hooks(self) -> None:
+        """prek-style natural-language pass marker. Refs #417."""
+        body = (
+            "## Verification\n\n"
+            "- command: `uvx prek run --files foo.md`\n"
+            "  result: `all hooks Passed or Skipped`\n"
+        )
+        pairs = ar.extract_verification_pairs(body)
+        assert pairs and pairs[0].passed is True
+
+    def test_passed_when_result_starts_with_all_checks(self) -> None:
+        body = (
+            "## Verification\n\n"
+            "- command: `gh pr checks 1`\n"
+            "  result: `all checks have passed`\n"
+        )
+        pairs = ar.extract_verification_pairs(body)
+        assert pairs and pairs[0].passed is True
+
+    def test_passed_when_result_starts_with_all_tests(self) -> None:
+        body = (
+            "## Verification\n\n"
+            "- command: `pytest`\n"
+            "  result: `all tests passed`\n"
+        )
+        pairs = ar.extract_verification_pairs(body)
+        assert pairs and pairs[0].passed is True
+
+    def test_non_numeric_failure_prose_still_fails(self) -> None:
+        """Free-form text that does not match the allowlist remains a fail."""
+        body = (
+            "## Verification\n\n"
+            "- command: `pytest`\n"
+            "  result: `traceback (most recent call last)`\n"
+        )
+        pairs = ar.extract_verification_pairs(body)
+        assert pairs and pairs[0].passed is False
+
+    def test_partial_numeric_with_suffix_is_not_passing(self) -> None:
+        """`2 failed` should NOT be treated as numeric pass. Refs #417."""
+        body = (
+            "## Verification\n\n"
+            "- command: `pytest`\n"
+            "  result: `2 failed`\n"
+        )
+        pairs = ar.extract_verification_pairs(body)
+        assert pairs and pairs[0].passed is False
+
 
 class TestExtractPostMergeChecklist:
     def test_empty_body_returns_empty(self) -> None:
