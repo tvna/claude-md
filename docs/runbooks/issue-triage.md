@@ -19,7 +19,7 @@ Every issue receives:
 - **≥ 1 `layer:*` label** — which CLAUDE.md layer(s) the issue interferes with (multi-valued; no primary/secondary distinction)
 - **Exactly 1 `type:*` label** — purpose of the change
 - **0 or 1 `state:*` label** — lifecycle position; absent means active
-- **0 or 1 `severity:security` label** — security-sensitive flag
+- **0 or 1 `severity:*` label** — sensitivity flag (security or content)
 - **0 to 2 `threat:*` labels** — automated threat-intelligence and response routing flags
 
 ### `layer:*` (multi-valued, ≥1)
@@ -62,6 +62,7 @@ Maps 1:1 to the Conventional Commit prefixes used in this repo (`docs(...)`, `fi
 | Label | Meaning |
 |---|---|
 | `severity:security` | Security-sensitive. Overrides agent routing toward `investigate` regardless of `type:*`. |
+| `severity:non-ascii-content` | Non-ASCII in title/body/comment; advisory for trusted authors, blocks external contributors. |
 
 ### `threat:*` (0 to 2)
 
