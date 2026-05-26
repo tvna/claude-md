@@ -21,7 +21,7 @@ jobs:
       - name: Guard RULESETS_PAT
         run: |
           if [ -z "${GH_TOKEN_API}" ]; then
-            echo "::error::RULESETS_PAT secret is not set. Configure the 'ruleset-verify' environment with the RULESETS_PAT secret. See docs/rulesets.md \"Required secret\" and \"PR-time required-checks sync gate\"."
+            echo "::error::RULESETS_PAT secret is not set. Configure the 'ruleset-verify' environment with the RULESETS_PAT secret. See docs/runbooks/rulesets.md \"Required secret\" and \"PR-time required-checks sync gate\"."
             exit 1
           fi
 

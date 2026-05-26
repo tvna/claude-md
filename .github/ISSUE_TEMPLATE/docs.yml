@@ -9,13 +9,13 @@ body:
       value: |
         Titles and document content must be ASCII-only -- non-ASCII characters trip
         `scripts/scan_non_ascii.py` and the prompt-injection defense. See
-        `docs/non-ascii-defense.md`. Titles must match `type(scope): summary`
+        `docs/prd/non-ascii-defense.md`. Titles must match `type(scope): summary`
         (scope optional). See CLAUDE.md sections 1 and 2.
   - type: textarea
     id: scope
     attributes:
       label: Scope
-      description: Name the document path(s) being added or revised (e.g. `docs/issue-triage.md`, `README.md`).
+      description: Name the document path(s) being added or revised (e.g. `docs/runbooks/issue-triage.md`, `README.md`).
     validations:
       required: true
   - type: textarea

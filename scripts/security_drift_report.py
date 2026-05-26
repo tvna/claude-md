@@ -158,7 +158,7 @@ def classify_rulesets(*, rc: int, detect_output: str) -> FamilyRow:
         evidence=evidence,
         action=(
             f"{'; '.join(parts)} -- see issues filed by ruleset-drift.yml and "
-            "docs/rulesets.md for remediation"
+            "docs/runbooks/rulesets.md for remediation"
         ),
     )
 
@@ -181,7 +181,7 @@ def classify_labels(*, rc: int, summary_text: str) -> FamilyRow:
             evidence=evidence,
             action=(
                 "plan shows POST/PATCH/DELETE or report-only rows -- dispatch "
-                "apply-labels.yml with dry_run=false after review (docs/issue-triage.md)"
+                "apply-labels.yml with dry_run=false after review (docs/runbooks/issue-triage.md)"
             ),
         )
     return FamilyRow(
@@ -243,7 +243,7 @@ def classify_uv_pin_literal(*, rc: int) -> FamilyRow:
             evidence=evidence,
             action=(
                 "uv pin literal appears outside pyproject.toml -- remove the "
-                "offending literal or update pyproject.toml (docs/remote-environment.md)"
+                "offending literal or update pyproject.toml (docs/standards/remote-environment.md)"
             ),
         )
     return FamilyRow(

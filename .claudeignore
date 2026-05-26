@@ -7,7 +7,7 @@ __pycache__/
 .idea/
 .vscode/
 
-# Agent-tool-specific config (prohibited per docs/repo-scope.md, #58)
+# Agent-tool-specific config (prohibited per docs/standards/repo-scope.md, #58)
 # .claude/settings.json is the narrow file-level carve-out from #109
 # (deterministic SessionStart provisioning hooks only).
 .claude/*

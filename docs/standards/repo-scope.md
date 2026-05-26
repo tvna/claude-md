@@ -1,6 +1,6 @@
 # Repo Scope — Purpose Statement and Tool-Specific Config Prohibition
 
-> Design rationale: see [`docs/agent-rules-design-philosophy.md`](./agent-rules-design-philosophy.md). This document is the concrete content-based prohibition that grounds the Q1 disqualifier in the meta-doc's decision tree.
+> Design rationale: see [`docs/prd/agent-rules-design-philosophy.md`](../prd/agent-rules-design-philosophy.md). This document is the concrete content-based prohibition that grounds the Q1 disqualifier in the meta-doc's decision tree.
 
 This document is the operator-facing companion to [#58](https://github.com/tvna/claude-md/issues/58) — the governance decision that declares this repo's purpose and forbids agent-tool-specific configuration files. The deterministic enforcement (CI gate) is parked as Phase 4 of #58; until it lands, this runbook plus the widened `.gitignore` / `.claudeignore` are the enforcement.
 
@@ -10,7 +10,7 @@ This document is the operator-facing companion to [#58](https://github.com/tvna/
 |---|---|---|
 | `.gitignore` | repo working tree | Canonical exclude list — git refuses to track matched paths. **This is the source of truth.** |
 | `.claudeignore` | (no official Claude Code support — see *Note on `.claudeignore`* below) | Forward-looking mirror, kept on speculation. Not authoritative. |
-| `docs/repo-scope.md` *(this file)* | — | Runbook: purpose statement, prohibition list, rationale, update procedure |
+| `docs/standards/repo-scope.md` *(this file)* | — | Runbook: purpose statement, prohibition list, rationale, update procedure |
 
 ## Declared purpose
 
@@ -37,7 +37,7 @@ The list is non-exhaustive. When a new tool emerges, follow the *Update procedur
 
 ### Open Q1 resolution — `docs/` is also covered
 
-`docs/` is a permitted directory for operator runbooks (this file, `docs/rulesets.md`, `docs/ai-triage-routing.md`), but a hypothetical `docs/claude-code-tricks.md` would still violate the prohibition because its **content** is tool-specific. Both the path-based exclusion (the table above) and this content-based rule apply.
+`docs/` is a permitted directory for operator runbooks (this file, `docs/runbooks/rulesets.md`, `docs/ai-triage-routing.md`), but a hypothetical `docs/claude-code-tricks.md` would still violate the prohibition because its **content** is tool-specific. Both the path-based exclusion (the table above) and this content-based rule apply.
 
 ## Existing carve-outs that stay valid
 
@@ -121,7 +121,7 @@ To add a new prohibited path (new agent tool, or newly-discovered tool-specific 
 2. Open a single PR that touches **all three**:
    - `.gitignore` — canonical exclude
    - `.claudeignore` — mirror exactly
-   - `docs/repo-scope.md` (this file) — prohibition table entry
+   - `docs/standards/repo-scope.md` (this file) — prohibition table entry
 3. The *Verify* recipe above must pass for the new pattern.
 4. Reference the parent governance issue (#58) on the `Refs #` line of the PR body.
 
@@ -139,7 +139,7 @@ Re-adding a lifted entry later uses the same *Update procedure*.
 
 - [#58](https://github.com/tvna/claude-md/issues/58) — parent tracking issue (purpose, prohibition, phase plan)
 - [#60](https://github.com/tvna/claude-md/issues/60) — Phase 1 deliverable (this runbook + ignore widening)
-- `docs/rulesets.md` ([#18](https://github.com/tvna/claude-md/issues/18)) — runbook format template
+- `docs/runbooks/rulesets.md` ([#18](https://github.com/tvna/claude-md/issues/18)) — runbook format template
 - `docs/ai-triage-routing.md` ([#34](https://github.com/tvna/claude-md/issues/34)) — secondary template
 - `apm.yml` — `target: [claude, codex]` evidence for tool-agnostic stance
 - `README.md` — "universal, individual-level guidelines" mandate

@@ -44,6 +44,8 @@ import os
 import re
 import subprocess
 import sys
+import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -53,6 +55,13 @@ from _trusted_bots import _TRUSTED_BOT_LOGINS
 from issue_link import extract_refs, strip_html_comments
 
 FALLBACK_TYPE_SCOPE = "retro"
+
+# Refs issue #380: GitHub may not finalize merge_commit_sha by the time
+# pull_request_target.closed fires; retry the PR-detail fetch with
+# bounded exponential backoff before falling through to the empty-list
+# soft-fail. Total max wait = sum(_MERGE_SHA_RETRY_BACKOFF) seconds.
+_MERGE_SHA_RETRY_ATTEMPTS: int = 4
+_MERGE_SHA_RETRY_BACKOFF: tuple[float, ...] = (2.0, 4.0, 8.0)
 
 # Section names mirror body_policy._ISSUE_COMMON_REQUIRED so the
 # auto-opened retro issue passes verify-body-policy. Drift between the
@@ -91,7 +100,16 @@ _RESULT_PASSING_PREFIXES: tuple[str, ...] = (
     "pass",
     "passed",
     "success",
+    # Common tool-natural-language pass shapes. Refs #417.
+    "all hooks",
+    "all checks",
+    "all tests",
 )
+
+# Pure numeric result (e.g., a count from `grep -c` or `wc -l`). The
+# operator chose count-style verification, so the value is a measured
+# quantity rather than a status code; treat as passing. Refs #417.
+_RESULT_PASSING_NUMERIC_RE = re.compile(r"^-?\d+(?:\.\d+)?$")
 
 # Append-to-existing-retro markers used by append_repair_history_row.
 _AUTO_FILLED_OPEN = "<!-- auto-filled:repair-history -->"
@@ -212,6 +230,12 @@ _MERGE_FROM_MAIN_PREFIXES: tuple[str, ...] = (
     "Merge remote-tracking branch 'origin/main'",
 )
 
+# Leading marker on the right-hand cell of merge-from-main rows. Lets
+# operators skip the row when filling the section 3 classification
+# column: the row is a structural artifact of the squash + linear-history
+# + strict-status-checks ruleset, not a repair loop. Issue #400.
+_POLICY_ARTIFACT_MARKER = "[policy-artifact]"
+
 
 def _count_merge_from_main(subjects: list[str]) -> int:
     """Return the number of *subjects* that are merge-from-main commits.
@@ -264,14 +288,24 @@ def _slice_section(body: str, heading: str) -> str:
 def _result_is_passing(result: str) -> bool:
     """Return True if a Verification result line text looks like a pass.
 
-    Strips surrounding backticks and leading whitespace, then matches a
-    small allowlist of pass markers (``exit 0``, ``OK:``, ``pass``,
-    ``passed``, ``success``, ``ok``). Anything else (including ``exit
-    1``, ``failed``, prose) is treated as a failure signal.
+    Strips surrounding backticks and leading whitespace, then:
+
+    * a purely numeric result (matched by :data:`_RESULT_PASSING_NUMERIC_RE`)
+      is treated as a measured quantity from a count-style verification
+      and accepted as passing;
+    * otherwise the lowercased text is matched against the prefix
+      allowlist in :data:`_RESULT_PASSING_PREFIXES` (``exit 0``, ``OK:``,
+      ``pass``, ``passed``, ``success``, ``ok``, plus common tool
+      summaries such as ``all hooks ...``).
+
+    Anything else (including ``exit 1``, ``failed``, free-form prose) is
+    treated as a failure signal. Refs #417.
     """
     text = result.strip()
     if text.startswith("`") and text.endswith("`") and len(text) >= 2:
         text = text[1:-1].strip()
+    if _RESULT_PASSING_NUMERIC_RE.match(text):
+        return True
     lower = text.lower()
     return any(lower.startswith(prefix) for prefix in _RESULT_PASSING_PREFIXES)
 
@@ -317,6 +351,11 @@ def extract_post_merge_checklist(body: str) -> list[tuple[str, bool]]:
     absent. ``After-merge`` and ``Bootstrap`` siblings are not included.
     The subsection match is case-insensitive and tolerates a trailing
     parenthetic clarifier (``### Post-merge (auto-retro signal)``).
+
+    Not called at merge time after #418: the Post-merge subsection is
+    structurally unchecked when auto-retro opens the issue. Retained
+    here for the deferred re-scan workflow tracked in #421, which will
+    revisit the merged PR body after the observation window closes.
     """
     section = _slice_section(body, "Checklist")
     if not section.strip():
@@ -394,7 +433,10 @@ def compute_repair_signals(
         pure_commits = pr.commits - _count_merge_from_main(commit_subjects)
         multi_commit = pure_commits > 1
     verification_pairs = extract_verification_pairs(pr.body or "")
-    post_merge_items = extract_post_merge_checklist(pr.body or "")
+    # `post_merge_unchecked` was removed in #418: the Post-merge subsection
+    # is documented to be checked by the operator AFTER observing the merge,
+    # so it is structurally unchecked at merge time. Re-scanning the subsection
+    # is deferred to the workflow tracked in #421.
     return {
         "inline_review_comments": bool(has_inline_comments),
         "body_cites_refs": len(refs) > 0,
@@ -402,9 +444,6 @@ def compute_repair_signals(
         "multi_commit_pr": multi_commit,
         "verification_pairs_failed": any(
             not p.passed for p in verification_pairs
-        ),
-        "post_merge_unchecked": any(
-            not checked for _, checked in post_merge_items
         ),
     }
 
@@ -434,6 +473,22 @@ _CHECK_RUN_FAIL_CONCLUSIONS: frozenset[str] = frozenset(
     {"failure", "timed_out", "cancelled", "action_required"}
 )
 
+# Bound the rendered Repair history table: emit at most this many failed
+# check_run rows, then a single overflow row summarising the remainder.
+# Keeps the retro issue body well under GitHub's 65,536-char limit even
+# with a CI explosion. Refs issue #381.
+_CHECK_RUN_DISPLAY_CAP: int = 20
+
+# Per-row cap on the truncated annotation summary string, so a verbose
+# annotation message cannot inflate the retro body unbounded. Refs #381.
+_ANNOTATION_SUMMARY_MAX: int = 200
+
+# Annotations fetched per failed check_run. Small ceiling so the
+# auto-retro orchestrator stays well within GitHub REST rate limits even
+# on a CI fanout; we only need to land on the first ``failure``-level
+# entry. Refs #381.
+_ANNOTATION_FETCH_LIMIT: int = 5
+
 
 def _escape_table_cell(text: str) -> str:
     """Escape a string for safe placement inside one markdown-table cell.
@@ -451,13 +506,15 @@ def _build_repair_history_table(
     commit_subjects: list[str],
     pr_commit_count: int,
     verification_pairs: list[VerificationPair] | None = None,
-    post_merge_items: list[tuple[str, bool]] | None = None,
 ) -> str:
     """Render the Repair history markdown table (header + rows, no surrounds).
 
-    Walks four deterministic signal classes in fixed order: CI failures,
-    fix-up commits, merge-from-main commits, multi-commit summary. Emits
-    a sentinel row only when all four classes produced zero rows.
+    Walks five deterministic signal classes in fixed order: CI failures,
+    fix-up commits, merge-from-main commits, multi-commit summary, and
+    failed Verification pairs. Emits a sentinel row only when all classes
+    produced zero rows. The Post-merge checklist class was removed in
+    #418 because its items are unchecked at merge time by design;
+    deferred re-scan is tracked in #421.
 
     Cells are run through :func:`_escape_table_cell` so commit subjects
     containing ``|`` cannot break the table. The shape mirrors the
@@ -466,18 +523,39 @@ def _build_repair_history_table(
     """
     rows: list[tuple[str, str]] = []
 
+    rendered_failed = 0
+    total_failed = 0
     for entry in check_runs or []:
         conclusion = str(entry.get("conclusion") or "")
         if conclusion not in _CHECK_RUN_FAIL_CONCLUSIONS:
             continue
+        total_failed += 1
+        if rendered_failed >= _CHECK_RUN_DISPLAY_CAP:
+            continue
+        rendered_failed += 1
         name = str(entry.get("name") or "(unnamed)")
         completed = str(entry.get("completed_at") or "(no completed_at)")
+        html_url = str(entry.get("html_url") or "").strip()
+        summary_raw = entry.get("_annotation_summary")
+        summary = str(summary_raw).strip() if summary_raw else ""
+        parts = [f"conclusion={conclusion} at {completed}"]
+        if html_url:
+            parts.append(f"logs: {html_url}")
+        if summary:
+            parts.append(f"annotation: {summary}")
         rows.append(
             (
                 _escape_table_cell(f"CI fail: {name}"),
-                _escape_table_cell(
-                    f"conclusion={conclusion} at {completed}"
-                ),
+                _escape_table_cell("; ".join(parts)),
+            )
+        )
+
+    overflow = total_failed - _CHECK_RUN_DISPLAY_CAP
+    if overflow > 0:
+        rows.append(
+            (
+                _escape_table_cell(f"CI fail: + {overflow} more failures"),
+                _escape_table_cell("see PR check-run list (truncated)"),
             )
         )
 
@@ -497,16 +575,19 @@ def _build_repair_history_table(
                 )
             )
 
+    policy_artifact_emitted = False
     for subject in commit_subjects:
         stripped = subject.strip()
         if any(
             stripped.startswith(prefix) for prefix in _MERGE_FROM_MAIN_PREFIXES
         ):
+            policy_artifact_emitted = True
             rows.append(
                 (
                     _escape_table_cell("Merge from main"),
                     _escape_table_cell(
-                        f"`{subject}` -- rebase debt before merge"
+                        f"{_POLICY_ARTIFACT_MARKER} `{subject}` -- "
+                        "rebase debt before merge"
                     ),
                 )
             )
@@ -529,15 +610,9 @@ def _build_repair_history_table(
             )
         )
 
-    for item, checked in post_merge_items or []:
-        if checked:
-            continue
-        rows.append(
-            (
-                _escape_table_cell("Post-merge gate unchecked"),
-                _escape_table_cell(item),
-            )
-        )
+    # Post-merge subsection rows were removed in #418: the items are
+    # checked AFTER the merge by design, so they are always unchecked at
+    # the moment auto-retro runs. Deferred re-scan tracked in #421.
 
     header = (
         "| # | Repair | What the reviewer / gate caught |\n"
@@ -553,7 +628,17 @@ def _build_repair_history_table(
         f"| {idx} | {left} | {right} |\n"
         for idx, (left, right) in enumerate(rows, start=1)
     )
-    return header + body_rows
+    footnote = ""
+    if policy_artifact_emitted:
+        footnote = (
+            "\n"
+            f"_{_POLICY_ARTIFACT_MARKER} rows are forced by the squash + "
+            "linear-history + strict-status-checks policy in "
+            "`.github/rulesets/main.json`. They are exempt from the "
+            "CLAUDE.md section 3 classification taxonomy and may be "
+            "skipped when filling the classification column._\n"
+        )
+    return header + body_rows + footnote
 
 
 def build_retro_body(
@@ -561,7 +646,6 @@ def build_retro_body(
     commit_subjects: list[str],
     check_runs: list[dict[str, Any]] | None = None,
     verification_pairs: list[VerificationPair] | None = None,
-    post_merge_items: list[tuple[str, bool]] | None = None,
 ) -> str:
     """Return the markdown body. Contains every section in :data:`_REQUIRED_SECTIONS`.
 
@@ -591,7 +675,6 @@ def build_retro_body(
         commit_subjects,
         pr.commits,
         verification_pairs,
-        post_merge_items,
     )
     # Idempotent date stamp: derive from pr.merged_at (already an ISO
     # 8601 string from the event payload) rather than datetime.now() so
@@ -838,15 +921,26 @@ def fetch_pr_commits(repo: str, pr_number: int) -> list[str]:
     return subjects
 
 
-def fetch_check_runs(repo: str, pr_number: int) -> list[dict[str, Any]]:
+def fetch_check_runs(
+    repo: str,
+    pr_number: int,
+    *,
+    sleeper: Callable[[float], None] = time.sleep,
+) -> list[dict[str, Any]]:
     """Return failed check_run entries for the PR's merge commit.
 
     Two-step fetch:
 
     1. ``GET /repos/{repo}/pulls/{pr_number}`` to read
-       ``merge_commit_sha``. Short-circuits to ``[]`` if the SHA is null
-       (GitHub may not have computed it yet on
-       ``pull_request_target.closed``).
+       ``merge_commit_sha``. GitHub may not have finalized the SHA when
+       ``pull_request_target.closed`` fires (refs issue #380), so the
+       PR-detail call is retried up to :data:`_MERGE_SHA_RETRY_ATTEMPTS`
+       times with the :data:`_MERGE_SHA_RETRY_BACKOFF` sequence between
+       attempts. If every attempt still yields ``None``, emit a
+       ``::warning::`` line and soft-fail to ``[]`` -- check_runs is an
+       augmenting signal for the Repair history table, not a correctness
+       invariant. The ``sleeper`` parameter is injectable for tests
+       (mirrors ``scripts/_github_api.py`` ``apply_call`` precedent).
     2. ``GET /repos/{repo}/commits/{sha}/check-runs?per_page=100`` to
        enumerate runs against that SHA.
 
@@ -854,11 +948,32 @@ def fetch_check_runs(repo: str, pr_number: int) -> list[dict[str, Any]]:
     :data:`_CHECK_RUN_FAIL_CONCLUSIONS`. The ``per_page=100`` cap is
     sufficient for this repo today (each PR runs <30 checks); overflow
     is treated as best-effort and is not paginated. Refs issue #343.
+
+    Each returned entry is enriched with a string-or-None
+    ``_annotation_summary`` field carrying a truncated single-line
+    summary of the first ``failure``-level annotation (or ``None`` when
+    no annotation is available, when ``id`` is missing on the entry,
+    when the annotation API fails, or beyond the
+    :data:`_CHECK_RUN_DISPLAY_CAP` enrichment ceiling). Refs issue #381.
     """
-    raw = gh_api("GET", f"/repos/{repo}/pulls/{pr_number}")
-    pr_detail = json.loads(raw) if raw.strip() else {}
-    sha = pr_detail.get("merge_commit_sha")
+    sha: str | None = None
+    for attempt in range(1, _MERGE_SHA_RETRY_ATTEMPTS + 1):
+        raw = gh_api("GET", f"/repos/{repo}/pulls/{pr_number}")
+        pr_detail = json.loads(raw) if raw.strip() else {}
+        sha = pr_detail.get("merge_commit_sha")
+        if sha:
+            break
+        if attempt < _MERGE_SHA_RETRY_ATTEMPTS:
+            sleeper(_MERGE_SHA_RETRY_BACKOFF[attempt - 1])
     if not sha:
+        print(
+            f"::warning::fetch_check_runs: merge_commit_sha still null "
+            f"for {repo}#{pr_number} after {_MERGE_SHA_RETRY_ATTEMPTS} "
+            f"attempts (backoff {list(_MERGE_SHA_RETRY_BACKOFF)}s); "
+            "Repair history will use commit-subject signals only "
+            "(refs issue #380)",
+            file=sys.stderr,
+        )
         return []
     raw = gh_api(
         "GET",
@@ -866,11 +981,100 @@ def fetch_check_runs(repo: str, pr_number: int) -> list[dict[str, Any]]:
     )
     payload = json.loads(raw) if raw.strip() else {}
     all_runs = list(payload.get("check_runs") or [])
-    return [
+    failed_runs = [
         run
         for run in all_runs
         if str(run.get("conclusion") or "") in _CHECK_RUN_FAIL_CONCLUSIONS
     ]
+    # Enrich the first _CHECK_RUN_DISPLAY_CAP runs with an annotation
+    # summary so the retro Repair history rows carry recoverable context
+    # after Actions log retention expires. Beyond the cap we leave the
+    # field None: the overflow row in _build_repair_history_table
+    # already signals truncation. Refs issue #381.
+    for index, run in enumerate(failed_runs):
+        run["_annotation_summary"] = None
+        if index >= _CHECK_RUN_DISPLAY_CAP:
+            continue
+        run_id = run.get("id")
+        if not isinstance(run_id, int):
+            continue
+        try:
+            annotations = fetch_check_run_annotations(
+                repo, run_id, limit=_ANNOTATION_FETCH_LIMIT
+            )
+        except subprocess.CalledProcessError as exc:
+            # Fail-soft per acceptance criterion 3 of issue #381: a
+            # single annotation lookup failure must not block the other
+            # rows. The base "conclusion + completed_at" cell still
+            # carries the audit signal.
+            print(
+                f"::warning::fetch_check_run_annotations failed for "
+                f"check_run id={run_id} (exit {exc.returncode}); falling "
+                "back to summary-less row",
+                file=sys.stderr,
+            )
+            continue
+        run["_annotation_summary"] = _summarize_annotations(annotations)
+    return failed_runs
+
+
+def fetch_check_run_annotations(
+    repo: str, check_run_id: int, *, limit: int = _ANNOTATION_FETCH_LIMIT
+) -> list[dict[str, Any]]:
+    """Return annotations for a check_run via the REST API.
+
+    Thin :func:`gh_api` wrapper around
+    ``GET /repos/{repo}/check-runs/{id}/annotations?per_page={limit}``.
+    Returns ``[]`` when the response is empty or not a JSON list. The
+    caller (:func:`fetch_check_runs`) translates
+    :class:`subprocess.CalledProcessError` into a fail-soft summary-less
+    row; do not swallow it here so unexpected failures stay observable.
+    Refs issue #381.
+    """
+    raw = gh_api(
+        "GET",
+        f"/repos/{repo}/check-runs/{check_run_id}/annotations?per_page={limit}",
+    )
+    if not raw.strip():
+        return []
+    parsed = json.loads(raw)
+    if not isinstance(parsed, list):
+        return []
+    return parsed
+
+
+def _summarize_annotations(
+    annotations: list[dict[str, Any]],
+) -> str | None:
+    """Return a single-line summary of the first failure-level annotation.
+
+    Picks the first entry whose ``annotation_level == "failure"`` (skips
+    ``notice`` / ``warning`` since those are not the repair signal).
+    Joins ``title`` and the first line of ``message`` with ``": "``;
+    truncates the result to :data:`_ANNOTATION_SUMMARY_MAX` chars with a
+    trailing ellipsis when the source is longer. Returns ``None`` when
+    no failure-level entry is present, or when both ``title`` and
+    ``message`` are empty. Refs issue #381.
+    """
+    for entry in annotations:
+        level = str(entry.get("annotation_level") or "")
+        if level != "failure":
+            continue
+        title = str(entry.get("title") or "").strip()
+        message = str(entry.get("message") or "").strip()
+        first_line = message.split("\n", 1)[0].strip() if message else ""
+        if title and first_line:
+            summary = f"{title}: {first_line}"
+        elif title:
+            summary = title
+        elif first_line:
+            summary = first_line
+        else:
+            return None
+        if len(summary) > _ANNOTATION_SUMMARY_MAX:
+            summary = summary[: _ANNOTATION_SUMMARY_MAX - 3] + "..."
+        return summary
+    return None
 
 
 def search_retro_issues(repo: str, pr_number: int) -> list[dict[str, Any]]:
@@ -1001,6 +1205,15 @@ def create_issue(
 # scan_non_ascii.py:313-326).
 _BACK_LINK_MARKER = "<!-- auto-retro:back-link -->"
 
+# Label applied to the source PR after the retro issue is opened and
+# the back-link comment is posted. Emission is the harness contract --
+# subscribed Claude sessions and operators read it as the signal that
+# the PR has reached terminal state and no further session attention
+# is required. Consumption (e.g. unsubscribe_pr_activity) is platform
+# / session policy and out of scope here. SoT entry lives in
+# .github/labels.json; tests/test_auto_retro.py guards the drift.
+_TERMINAL_LABEL = "harness:retro-opened"
+
 
 def find_existing_back_link_id(
     repo: str, pr_number: int, marker: str = _BACK_LINK_MARKER
@@ -1049,6 +1262,24 @@ def post_back_link_comment(
         {"body": body},
     )
     return "created"
+
+
+def apply_terminal_label(
+    repo: str, pr_number: int, label: str = _TERMINAL_LABEL
+) -> None:
+    """POST *label* to the source PR's labels endpoint.
+
+    GitHub's labels endpoint is naturally idempotent (re-adding an
+    existing label is a no-op), so no pre-check is needed. The orchestrator
+    is responsible for the fail-soft policy: the retro issue is already
+    created by the time this fires, so a failed label add must not roll
+    back the audit trail.
+    """
+    gh_api(
+        "POST",
+        f"/repos/{repo}/issues/{pr_number}/labels",
+        {"labels": [label]},
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1201,14 +1432,12 @@ def run(event: dict[str, Any], repo: str) -> int:
         )
         check_runs = []
     verification_pairs = extract_verification_pairs(pr.body or "")
-    post_merge_items = extract_post_merge_checklist(pr.body or "")
     title = build_retro_title(pr)
     body = build_retro_body(
         pr,
         commit_subjects,
         check_runs,
         verification_pairs,
-        post_merge_items,
     )
     labels = issue_labels(pr.layer_labels)
 
@@ -1217,6 +1446,7 @@ def run(event: dict[str, Any], repo: str) -> int:
     new_url = created.get("html_url") or ""
 
     back_link_status = "skipped"
+    terminal_label_status = "skipped"
     if isinstance(new_number, int):
         try:
             back_link_status = post_back_link_comment(repo, pr.number, new_number)
@@ -1233,9 +1463,26 @@ def run(event: dict[str, Any], repo: str) -> int:
             )
             back_link_status = "failed"
 
+        try:
+            apply_terminal_label(repo, pr.number)
+            terminal_label_status = "applied"
+        except subprocess.CalledProcessError as exc:
+            # Fail-soft: the terminal label is a secondary signal layered on
+            # top of the retro+back-link audit trail. A label-add failure
+            # must NOT roll back the retro -- warn and continue so the
+            # primary outputs remain intact.
+            print(
+                f"::warning::apply_terminal_label failed "
+                f"(exit {exc.returncode}); retro issue #{new_number} created "
+                f"but source PR was not labeled {_TERMINAL_LABEL!r}",
+                file=sys.stderr,
+            )
+            terminal_label_status = "failed"
+
     msg = (
         f"created retro issue #{new_number} ({new_url}); "
-        f"back-link={back_link_status}"
+        f"back-link={back_link_status}; "
+        f"terminal-label={terminal_label_status}"
     )
     print(msg)
     _append_summary(_build_summary(pr, "created", msg))

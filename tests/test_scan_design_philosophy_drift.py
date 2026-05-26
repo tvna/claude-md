@@ -624,7 +624,7 @@ class TestVerifyGlossary:
 class TestRepositorySelfCheck:
     def test_repository_state_is_clean(self) -> None:
         master = REPO_ROOT / ".apm" / "instructions" / "master.instructions.md"
-        doc = REPO_ROOT / "docs" / "agent-rules-design-philosophy.md"
+        doc = REPO_ROOT / "docs" / "prd" / "agent-rules-design-philosophy.md"
         assert master.exists()
         assert doc.exists()
         rc = sdpd.main(["verify", "--master", str(master), "--doc", str(doc)])

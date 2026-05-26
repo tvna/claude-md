@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
@@ -428,6 +429,40 @@ class TestRepairHistoryTable:
         table = ar._build_repair_history_table(None, commits, len(commits))
         assert table.count("| Merge from main |") == 2
 
+    def test_merge_from_main_rows_carry_policy_artifact_marker(self) -> None:
+        commits = [
+            "Merge branch 'main' into feature",
+            "Merge remote-tracking branch 'origin/main' into feature",
+        ]
+        table = ar._build_repair_history_table(None, commits, len(commits))
+        merge_lines = [
+            line for line in table.splitlines() if "Merge from main" in line
+        ]
+        assert len(merge_lines) == 2
+        for line in merge_lines:
+            assert "[policy-artifact]" in line
+
+    def test_policy_artifact_footnote_emitted_when_merge_row_present(
+        self,
+    ) -> None:
+        table = ar._build_repair_history_table(
+            None, ["Merge branch 'main' into feature"], 1
+        )
+        assert "[policy-artifact] rows are forced by the squash" in table
+        assert ".github/rulesets/main.json" in table
+        assert "CLAUDE.md section 3" in table
+
+    def test_no_marker_or_footnote_on_non_merge_rows(self) -> None:
+        commits = ["fix(x): repair", "feat(harness): unrelated"]
+        table = ar._build_repair_history_table(None, commits, len(commits))
+        assert "[policy-artifact]" not in table
+        assert "rows are forced by the squash" not in table
+
+    def test_no_footnote_on_sentinel_row(self) -> None:
+        table = ar._build_repair_history_table(None, ["feat(harness): plain"], 1)
+        assert "(no automated repair signals detected)" in table
+        assert "[policy-artifact]" not in table
+
     def test_multi_commit_summary_row(self) -> None:
         table = ar._build_repair_history_table(None, ["feat: a", "feat: b"], 4)
         assert "Multi-commit PR" in table
@@ -485,6 +520,130 @@ class TestRepairHistoryTable:
         merge_idx = table.index("Merge from main")
         multi_idx = table.index("Multi-commit PR")
         assert ci_idx < fixup_idx < merge_idx < multi_idx
+
+
+class TestRepairHistoryTableCheckRunContext:
+    """Failed check_run rows must carry html_url + annotation summary.
+
+    Acceptance criterion 1 + 2 of issue #381: an operator must be able to
+    reconstruct a CI failure from the retro body alone after Actions log
+    retention expires, and the body must stay within GitHub's 65,536-char
+    limit even with a CI fanout.
+    """
+
+    def test_html_url_appears_in_row(self) -> None:
+        check_runs = [
+            {
+                "name": "gate",
+                "conclusion": "failure",
+                "completed_at": "2026-05-25T03:48:28Z",
+                "html_url": "https://github.com/o/r/runs/77653399942",
+                "_annotation_summary": None,
+            }
+        ]
+        table = ar._build_repair_history_table(check_runs, [], 1)
+        assert "logs: https://github.com/o/r/runs/77653399942" in table
+
+    def test_annotation_summary_appears_in_row(self) -> None:
+        check_runs = [
+            {
+                "name": "gate",
+                "conclusion": "failure",
+                "completed_at": "t",
+                "html_url": "https://example/run/1",
+                "_annotation_summary": "Process failed: exit code 1",
+            }
+        ]
+        table = ar._build_repair_history_table(check_runs, [], 1)
+        assert "annotation: Process failed: exit code 1" in table
+
+    def test_omits_annotation_section_when_summary_is_none(self) -> None:
+        """Acceptance criterion 3: annotation-less rows still emit the base
+        conclusion / completed_at signal -- no `annotation:` token."""
+        check_runs = [
+            {
+                "name": "gate",
+                "conclusion": "failure",
+                "completed_at": "2026-05-25T03:48:28Z",
+                "html_url": "https://example/run/1",
+                "_annotation_summary": None,
+            }
+        ]
+        table = ar._build_repair_history_table(check_runs, [], 1)
+        assert "conclusion=failure at 2026-05-25T03:48:28Z" in table
+        assert "annotation:" not in table
+
+    def test_omits_logs_section_when_html_url_missing(self) -> None:
+        """Missing html_url -> no `logs:` token (back-compat for legacy
+        check_run shapes that may lack the field)."""
+        check_runs = [
+            {
+                "name": "gate",
+                "conclusion": "failure",
+                "completed_at": "t",
+                "_annotation_summary": "summary text",
+            }
+        ]
+        table = ar._build_repair_history_table(check_runs, [], 1)
+        assert "logs:" not in table
+        assert "annotation: summary text" in table
+
+    def test_overflow_row_emitted_when_more_than_cap_failed(self) -> None:
+        """Body-size defence: more than _CHECK_RUN_DISPLAY_CAP failed runs
+        collapse to the cap + one overflow row."""
+        cap = ar._CHECK_RUN_DISPLAY_CAP
+        check_runs = [
+            {
+                "name": f"job-{i}",
+                "conclusion": "failure",
+                "completed_at": "t",
+                "html_url": f"https://example/{i}",
+                "_annotation_summary": None,
+            }
+            for i in range(cap + 3)
+        ]
+        table = ar._build_repair_history_table(check_runs, [], 1)
+        # cap rows of detail + 1 overflow row.
+        assert table.count("| CI fail: job-") == cap
+        assert "CI fail: + 3 more failures" in table
+        assert "see PR check-run list (truncated)" in table
+
+    def test_overflow_row_absent_when_at_or_below_cap(self) -> None:
+        cap = ar._CHECK_RUN_DISPLAY_CAP
+        check_runs = [
+            {
+                "name": f"job-{i}",
+                "conclusion": "failure",
+                "completed_at": "t",
+                "html_url": f"https://example/{i}",
+                "_annotation_summary": None,
+            }
+            for i in range(cap)
+        ]
+        table = ar._build_repair_history_table(check_runs, [], 1)
+        assert "more failures" not in table
+
+    def test_row_columns_remain_three_when_url_present(self) -> None:
+        """Defence: html_url must be safe inside one markdown-table cell
+        (the URL contains no pipes, but _escape_table_cell is still in the
+        path; this test guards against a future refactor that bypasses it)."""
+        check_runs = [
+            {
+                "name": "gate",
+                "conclusion": "failure",
+                "completed_at": "t",
+                "html_url": "https://example/run/1?x=a|b",
+                "_annotation_summary": "msg|with|pipes",
+            }
+        ]
+        table = ar._build_repair_history_table(check_runs, [], 1)
+        row_line = next(
+            line for line in table.splitlines() if "CI fail: gate" in line
+        )
+        # 4 unescaped '|' delimiters keep the row a 3-column grid even
+        # when the URL/summary contain literal pipes.
+        unescaped = row_line.replace("\\|", "")
+        assert unescaped.count("|") == 4
 
 
 class TestBuildRetroBodyMarkers:
@@ -813,16 +972,26 @@ class TestFetchCheckRuns:
         self,
         monkeypatch: pytest.MonkeyPatch,
         *,
-        merge_commit_sha: str | None,
-        check_runs: list[dict[str, Any]] | None,
+        merge_commit_sha: str | None = None,
+        check_runs: list[dict[str, Any]] | None = None,
+        sha_sequence: list[str | None] | None = None,
     ) -> list[tuple[str, str]]:
         seen: list[tuple[str, str]] = []
+        # Index lives in a single-element list so the closure can mutate
+        # it without needing nonlocal -- matches the in-tree pattern for
+        # hand-rolled counters in _orchestrator_recorder.
+        idx = [0]
 
         def fake_api(method: str, path: str, body: Any = None, **_kw: Any) -> str:
             seen.append((method, path))
             if "/check-runs" in path:
                 return json.dumps({"check_runs": check_runs or []})
-            # First call: pull request detail.
+            # First call (and any retry): pull request detail.
+            if sha_sequence is not None:
+                i = idx[0]
+                idx[0] = i + 1
+                sha = sha_sequence[i] if i < len(sha_sequence) else None
+                return json.dumps({"merge_commit_sha": sha})
             return json.dumps({"merge_commit_sha": merge_commit_sha})
 
         monkeypatch.setattr(ar, "gh_api", fake_api)
@@ -854,21 +1023,141 @@ class TestFetchCheckRuns:
         )
 
     def test_null_merge_commit_sha_short_circuits(
-        self, monkeypatch: pytest.MonkeyPatch
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
-        """Returns [] without making the second API call."""
+        """All-null SHA path: retries N times, sleeps with backoff,
+        emits a ``::warning::`` line, and returns ``[]`` without ever
+        calling the check-runs endpoint. Refs issue #380.
+        """
+        attempts = ar._MERGE_SHA_RETRY_ATTEMPTS
+        backoff = list(ar._MERGE_SHA_RETRY_BACKOFF)
+        sleeps: list[float] = []
         seen = self._staged_api(
-            monkeypatch, merge_commit_sha=None, check_runs=None
+            monkeypatch,
+            sha_sequence=[None] * attempts,
+            check_runs=None,
         )
-        assert ar.fetch_check_runs("o/r", 42) == []
-        # Only the PR detail call must fire.
-        assert len(seen) == 1
+        result = ar.fetch_check_runs(
+            "o/r", 42, sleeper=sleeps.append
+        )
+        assert result == []
+        # PR-detail call fires exactly `attempts` times; check-runs
+        # endpoint must never be hit when SHA stays null.
+        assert len(seen) == attempts
+        assert all(
+            path == "/repos/o/r/pulls/42" for _, path in seen
+        )
+        assert sleeps == backoff
+        err = capsys.readouterr().err
+        assert "::warning::" in err
+        assert "merge_commit_sha still null" in err
+        assert "issue #380" in err
+
+    def test_sha_resolves_on_second_attempt(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """First PR-detail returns null, second resolves to a SHA.
+        Sleeper fires once with the first backoff value; check-runs
+        endpoint is hit exactly once against the resolved SHA; no
+        warning emitted. Refs issue #380.
+        """
+        sleeps: list[float] = []
+        seen = self._staged_api(
+            monkeypatch,
+            sha_sequence=[None, "abc123"],
+            check_runs=[{"name": "gate", "conclusion": "failure"}],
+        )
+        result = ar.fetch_check_runs(
+            "o/r", 42, sleeper=sleeps.append
+        )
+        names = [r["name"] for r in result]
+        assert names == ["gate"]
+        # Two PR-detail calls plus one check-runs call.
         assert seen[0] == ("GET", "/repos/o/r/pulls/42")
+        assert seen[1] == ("GET", "/repos/o/r/pulls/42")
+        assert seen[2] == (
+            "GET",
+            "/repos/o/r/commits/abc123/check-runs?per_page=100",
+        )
+        assert sleeps == [ar._MERGE_SHA_RETRY_BACKOFF[0]]
+        assert "::warning::" not in capsys.readouterr().err
+
+    def test_sha_resolves_on_final_attempt(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """Null on every attempt except the final one. Full backoff
+        sequence is consumed and the check-runs endpoint is still hit.
+        Refs issue #380.
+        """
+        attempts = ar._MERGE_SHA_RETRY_ATTEMPTS
+        backoff = list(ar._MERGE_SHA_RETRY_BACKOFF)
+        sleeps: list[float] = []
+        sha_sequence: list[str | None] = [None] * (attempts - 1) + [
+            "deadbeef"
+        ]
+        seen = self._staged_api(
+            monkeypatch,
+            sha_sequence=sha_sequence,
+            check_runs=[{"name": "gate", "conclusion": "failure"}],
+        )
+        result = ar.fetch_check_runs(
+            "o/r", 42, sleeper=sleeps.append
+        )
+        names = [r["name"] for r in result]
+        assert names == ["gate"]
+        # `attempts` PR-detail calls + one check-runs call.
+        pr_detail_calls = [
+            path for _, path in seen if "/pulls/" in path
+        ]
+        assert len(pr_detail_calls) == attempts
+        check_runs_calls = [
+            path for _, path in seen if "/check-runs" in path
+        ]
+        assert check_runs_calls == [
+            "/repos/o/r/commits/deadbeef/check-runs?per_page=100"
+        ]
+        assert sleeps == backoff
+        assert "::warning::" not in capsys.readouterr().err
+
+    def test_all_attempts_null_emits_warning_and_returns_empty(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """Exhaustion path duplicates the short-circuit test from the
+        warning-emission angle: stderr names the issue ref and the
+        check-runs endpoint stays untouched. Refs issue #380.
+        """
+        attempts = ar._MERGE_SHA_RETRY_ATTEMPTS
+        sleeps: list[float] = []
+        seen = self._staged_api(
+            monkeypatch,
+            sha_sequence=[None] * attempts,
+            check_runs=[{"name": "gate", "conclusion": "failure"}],
+        )
+        result = ar.fetch_check_runs(
+            "o/r", 42, sleeper=sleeps.append
+        )
+        assert result == []
+        assert not any("/check-runs" in path for _, path in seen)
+        assert len(sleeps) == attempts - 1
+        err = capsys.readouterr().err
+        assert "issue #380" in err
+        assert f"{attempts} attempts" in err
 
     def test_empty_pr_response_short_circuits(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Empty body from the PR detail endpoint -> no SHA -> []."""
+        """Empty body from the PR detail endpoint -> no SHA. Treated
+        identically to a null SHA: the retry loop runs to exhaustion
+        before soft-failing to ``[]``. Refs issue #380.
+        """
         seen: list[tuple[str, str]] = []
 
         def fake_api(method: str, path: str, body: Any = None, **_kw: Any) -> str:
@@ -876,8 +1165,10 @@ class TestFetchCheckRuns:
             return ""
 
         monkeypatch.setattr(ar, "gh_api", fake_api)
-        assert ar.fetch_check_runs("o/r", 42) == []
-        assert len(seen) == 1
+        sleeps: list[float] = []
+        assert ar.fetch_check_runs("o/r", 42, sleeper=sleeps.append) == []
+        assert len(seen) == ar._MERGE_SHA_RETRY_ATTEMPTS
+        assert not any("/check-runs" in path for _, path in seen)
 
     def test_empty_check_runs_response_returns_empty_list(
         self, monkeypatch: pytest.MonkeyPatch
@@ -891,6 +1182,366 @@ class TestFetchCheckRuns:
 
         monkeypatch.setattr(ar, "gh_api", fake_api)
         assert ar.fetch_check_runs("o/r", 1) == []
+
+
+class TestFetchCheckRunsAnnotationEnrichment:
+    """fetch_check_runs attaches _annotation_summary to each failed run.
+
+    Refs issue #381. Three behaviours are pinned here:
+
+    * happy path: failure-level annotation summary populates the field
+    * notice / warning entries skipped in favour of the first failure
+    * annotation API error -> _annotation_summary is None, no exception
+    """
+
+    def _stage(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        *,
+        check_runs: list[dict[str, Any]],
+        annotations_by_id: Mapping[int, list[dict[str, Any]] | str],
+        raise_for_ids: tuple[int, ...] = (),
+    ) -> list[tuple[str, str]]:
+        """Stage the three-step API: PR detail -> check-runs -> annotations.
+
+        ``annotations_by_id`` maps each ``check_run.id`` to a list of
+        annotation dicts (returned as JSON) or to the raw string the
+        ``gh_api`` mock should return verbatim (lets a test exercise the
+        ``raw == ""`` / non-list branches of ``fetch_check_run_annotations``).
+
+        ``raise_for_ids`` lists check_run ids that should make the
+        annotation lookup raise :class:`subprocess.CalledProcessError`.
+        """
+        seen: list[tuple[str, str]] = []
+
+        def fake_api(method: str, path: str, body: Any = None, **_kw: Any) -> str:
+            seen.append((method, path))
+            if "/annotations" in path:
+                # /repos/{repo}/check-runs/{id}/annotations?...
+                rest = path.split("/check-runs/", 1)[1]
+                id_str = rest.split("/annotations", 1)[0]
+                run_id = int(id_str)
+                if run_id in raise_for_ids:
+                    raise subprocess.CalledProcessError(
+                        returncode=22,
+                        cmd=["gh", "api", path],
+                        stderr="HTTP 502",
+                    )
+                payload = annotations_by_id.get(run_id, [])
+                if isinstance(payload, str):
+                    return payload
+                return json.dumps(payload)
+            if "/check-runs" in path:
+                return json.dumps({"check_runs": check_runs})
+            return json.dumps({"merge_commit_sha": "abc123"})
+
+        monkeypatch.setattr(ar, "gh_api", fake_api)
+        return seen
+
+    def test_failure_annotation_summary_populates_field(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        check_runs = [
+            {
+                "id": 111,
+                "name": "gate",
+                "conclusion": "failure",
+                "completed_at": "t",
+                "html_url": "https://example/run/111",
+            }
+        ]
+        annotations_by_id = {
+            111: [
+                {
+                    "annotation_level": "failure",
+                    "title": "Process failed",
+                    "message": "exit code 1\nfull log truncated",
+                }
+            ]
+        }
+        self._stage(
+            monkeypatch,
+            check_runs=check_runs,
+            annotations_by_id=annotations_by_id,
+        )
+        out = ar.fetch_check_runs("o/r", 42)
+        assert len(out) == 1
+        assert out[0]["_annotation_summary"] == "Process failed: exit code 1"
+
+    def test_notice_level_annotation_is_skipped(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Notice / warning levels are not repair signals; the first
+        failure-level entry wins."""
+        check_runs = [
+            {
+                "id": 222,
+                "name": "gate",
+                "conclusion": "failure",
+                "completed_at": "t",
+                "html_url": "u",
+            }
+        ]
+        annotations_by_id = {
+            222: [
+                {
+                    "annotation_level": "notice",
+                    "title": "Deprecation",
+                    "message": "ignore me",
+                },
+                {
+                    "annotation_level": "warning",
+                    "title": "Style",
+                    "message": "also ignored",
+                },
+                {
+                    "annotation_level": "failure",
+                    "title": "Real failure",
+                    "message": "this is the cause",
+                },
+            ]
+        }
+        self._stage(
+            monkeypatch,
+            check_runs=check_runs,
+            annotations_by_id=annotations_by_id,
+        )
+        out = ar.fetch_check_runs("o/r", 42)
+        assert out[0]["_annotation_summary"] == "Real failure: this is the cause"
+
+    def test_annotation_fetch_error_degrades_gracefully(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Acceptance criterion 3 of issue #381: a transient annotation API
+        error must not break the retro -- the row falls back to
+        summary-less and other runs still get their summaries."""
+        check_runs = [
+            {
+                "id": 333,
+                "name": "broken",
+                "conclusion": "failure",
+                "completed_at": "t",
+                "html_url": "u",
+            },
+            {
+                "id": 444,
+                "name": "ok",
+                "conclusion": "failure",
+                "completed_at": "t",
+                "html_url": "u",
+            },
+        ]
+        annotations_by_id = {
+            444: [
+                {
+                    "annotation_level": "failure",
+                    "title": "Other",
+                    "message": "still here",
+                }
+            ]
+        }
+        self._stage(
+            monkeypatch,
+            check_runs=check_runs,
+            annotations_by_id=annotations_by_id,
+            raise_for_ids=(333,),
+        )
+        out = ar.fetch_check_runs("o/r", 42)
+        assert len(out) == 2
+        # First run degrades to None; second run still picks up the summary.
+        by_id = {entry["id"]: entry for entry in out}
+        assert by_id[333]["_annotation_summary"] is None
+        assert by_id[444]["_annotation_summary"] == "Other: still here"
+
+    def test_no_failure_level_entry_yields_none_summary(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A check_run with zero failure-level annotations (e.g. timeout)
+        gets _annotation_summary=None and the row stays summary-less."""
+        check_runs = [
+            {
+                "id": 555,
+                "name": "timeout",
+                "conclusion": "timed_out",
+                "completed_at": "t",
+                "html_url": "u",
+            }
+        ]
+        # Only notice-level entries.
+        annotations_by_id: dict[int, list[dict[str, Any]] | str] = {
+            555: [
+                {
+                    "annotation_level": "notice",
+                    "title": "Deprecation",
+                    "message": "ignore",
+                }
+            ]
+        }
+        self._stage(
+            monkeypatch,
+            check_runs=check_runs,
+            annotations_by_id=annotations_by_id,
+        )
+        out = ar.fetch_check_runs("o/r", 42)
+        assert out[0]["_annotation_summary"] is None
+
+    def test_missing_id_skips_annotation_fetch(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Defensive: a check_run without an integer id (legacy / partial
+        payload) must not crash; the row gets _annotation_summary=None."""
+        check_runs = [
+            {
+                "name": "no-id-run",
+                "conclusion": "failure",
+                "completed_at": "t",
+                "html_url": "u",
+            }
+        ]
+        seen = self._stage(
+            monkeypatch,
+            check_runs=check_runs,
+            annotations_by_id={},
+        )
+        out = ar.fetch_check_runs("o/r", 42)
+        assert out[0]["_annotation_summary"] is None
+        # No annotation call should have been issued for this run.
+        assert not any("/annotations" in path for _, path in seen)
+
+    def test_long_annotation_is_truncated(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Body-size defence: a long annotation message is truncated to
+        :data:`_ANNOTATION_SUMMARY_MAX` chars with an ASCII ellipsis."""
+        long_msg = "x" * 1000
+        check_runs = [
+            {
+                "id": 666,
+                "name": "verbose",
+                "conclusion": "failure",
+                "completed_at": "t",
+                "html_url": "u",
+            }
+        ]
+        annotations_by_id = {
+            666: [
+                {
+                    "annotation_level": "failure",
+                    "title": "T",
+                    "message": long_msg,
+                }
+            ]
+        }
+        self._stage(
+            monkeypatch,
+            check_runs=check_runs,
+            annotations_by_id=annotations_by_id,
+        )
+        out = ar.fetch_check_runs("o/r", 42)
+        summary = out[0]["_annotation_summary"]
+        assert isinstance(summary, str)
+        assert len(summary) == ar._ANNOTATION_SUMMARY_MAX
+        assert summary.endswith("...")
+
+    def test_enrichment_capped_to_display_cap(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Annotation fetch is only attempted for the first
+        :data:`_CHECK_RUN_DISPLAY_CAP` failed runs (rate-limit defence).
+        Beyond the cap, _annotation_summary stays None."""
+        cap = ar._CHECK_RUN_DISPLAY_CAP
+        check_runs = [
+            {
+                "id": 1000 + i,
+                "name": f"job-{i}",
+                "conclusion": "failure",
+                "completed_at": "t",
+                "html_url": "u",
+            }
+            for i in range(cap + 3)
+        ]
+        annotations_by_id: dict[int, list[dict[str, Any]] | str] = {
+            1000 + i: [
+                {
+                    "annotation_level": "failure",
+                    "title": f"T{i}",
+                    "message": f"m{i}",
+                }
+            ]
+            for i in range(cap + 3)
+        }
+        seen = self._stage(
+            monkeypatch,
+            check_runs=check_runs,
+            annotations_by_id=annotations_by_id,
+        )
+        out = ar.fetch_check_runs("o/r", 42)
+        # First cap runs enriched, remainder are None.
+        for i in range(cap):
+            assert out[i]["_annotation_summary"] == f"T{i}: m{i}"
+        for i in range(cap, cap + 3):
+            assert out[i]["_annotation_summary"] is None
+        # Exactly cap annotation calls were issued.
+        annotation_calls = [path for _, path in seen if "/annotations" in path]
+        assert len(annotation_calls) == cap
+
+    def test_empty_annotations_response_yields_none(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Blank body from the annotations endpoint -> []
+        -> _annotation_summary=None (no crash)."""
+        check_runs = [
+            {
+                "id": 777,
+                "name": "x",
+                "conclusion": "failure",
+                "completed_at": "t",
+                "html_url": "u",
+            }
+        ]
+        self._stage(
+            monkeypatch,
+            check_runs=check_runs,
+            annotations_by_id={777: ""},
+        )
+        out = ar.fetch_check_runs("o/r", 42)
+        assert out[0]["_annotation_summary"] is None
+
+
+class TestFetchCheckRunAnnotations:
+    """Thin gh_api wrapper. Refs issue #381."""
+
+    def test_returns_parsed_list(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        payload = [{"annotation_level": "failure", "title": "T", "message": "m"}]
+
+        def fake_api(method: str, path: str, body: Any = None, **_kw: Any) -> str:
+            assert (
+                path
+                == "/repos/o/r/check-runs/123/annotations?per_page=5"
+            )
+            return json.dumps(payload)
+
+        monkeypatch.setattr(ar, "gh_api", fake_api)
+        assert ar.fetch_check_run_annotations("o/r", 123, limit=5) == payload
+
+    def test_empty_body_returns_empty_list(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(ar, "gh_api", lambda *_a, **_kw: "")
+        assert ar.fetch_check_run_annotations("o/r", 1) == []
+
+    def test_non_list_payload_returns_empty_list(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A pathological non-list payload must not raise (e.g. an API
+        proxy that wraps the response). Caller still gets [] and the
+        repair row degrades to summary-less."""
+        monkeypatch.setattr(
+            ar, "gh_api", lambda *_a, **_kw: json.dumps({"unexpected": True})
+        )
+        assert ar.fetch_check_run_annotations("o/r", 1) == []
 
 
 class TestCreateIssue:
@@ -1037,6 +1688,58 @@ class TestPostBackLinkComment:
 
 
 # ---------------------------------------------------------------------------
+# apply_terminal_label
+# ---------------------------------------------------------------------------
+
+
+class TestApplyTerminalLabel:
+    def test_posts_terminal_label(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        seen: list[tuple] = []
+
+        def fake_api(method, path, body=None, **_kw):
+            seen.append((method, path, body))
+            return ""
+
+        monkeypatch.setattr(ar, "gh_api", fake_api)
+        ar.apply_terminal_label("o/r", 42)
+        assert seen == [
+            (
+                "POST",
+                "/repos/o/r/issues/42/labels",
+                {"labels": [ar._TERMINAL_LABEL]},
+            )
+        ]
+
+    def test_loud_failure_on_post_error(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """gh_api raises CalledProcessError; apply_terminal_label must
+        propagate so the orchestrator can decide its fail-soft policy."""
+        def fake_api(method, path, body=None, **_kw):
+            raise subprocess.CalledProcessError(1, "gh", stderr="boom")
+
+        monkeypatch.setattr(ar, "gh_api", fake_api)
+        with pytest.raises(subprocess.CalledProcessError):
+            ar.apply_terminal_label("o/r", 42)
+
+
+def test_terminal_label_aligned_with_labels_json() -> None:
+    """``_TERMINAL_LABEL`` must exist as a ``name`` entry in the declarative
+    ``.github/labels.json`` SoT so ``apply-labels.yml`` reconciles it onto
+    the repository before any merge fires ``apply_terminal_label``.
+    """
+    repo_root = Path(__file__).resolve().parent.parent
+    sot = json.loads(
+        (repo_root / ".github" / "labels.json").read_text(encoding="utf-8")
+    )
+    assert any(entry.get("name") == ar._TERMINAL_LABEL for entry in sot), (
+        f"_TERMINAL_LABEL {ar._TERMINAL_LABEL!r} missing from .github/labels.json"
+    )
+
+
+# ---------------------------------------------------------------------------
 # run (orchestrator)
 # ---------------------------------------------------------------------------
 
@@ -1050,10 +1753,12 @@ def _orchestrator_recorder(
     created_response: dict[str, Any] | None = None,
     comments_error: bool = False,
     pr_detail: dict[str, Any] | None = None,
+    pr_detail_sequence: list[dict[str, Any]] | None = None,
     check_runs: list[dict[str, Any]] | None = None,
     check_runs_error: bool = False,
     back_link_comments: list[dict[str, Any]] | None = None,
     back_link_post_error: bool = False,
+    terminal_label_post_error: bool = False,
 ) -> list[tuple]:
     """Replace ar.gh_api with a recorder that returns canned data per path.
 
@@ -1084,6 +1789,11 @@ def _orchestrator_recorder(
         pr_detail = {"merge_commit_sha": None}
     check_runs = check_runs or []
     back_link_comments = back_link_comments or []
+    # Index lives in a single-element list so the closure can mutate it
+    # without requiring nonlocal. Refs issue #380: the
+    # ``pr_detail_sequence`` knob exercises fetch_check_runs's retry
+    # loop end-to-end through the orchestrator.
+    pr_detail_idx = [0]
 
     def fake_api(method, path, body=None, **_kw):
         seen.append((method, path, body))
@@ -1104,6 +1814,12 @@ def _orchestrator_recorder(
                 raise subprocess.CalledProcessError(
                     1, "gh", stderr="pulls endpoint boom"
                 )
+            if pr_detail_sequence is not None:
+                i = pr_detail_idx[0]
+                pr_detail_idx[0] = i + 1
+                if i < len(pr_detail_sequence):
+                    return json.dumps(pr_detail_sequence[i])
+                return json.dumps(pr_detail_sequence[-1])
             return json.dumps(pr_detail)
         # Back-link search/post on the source PR (issues/{n}/comments).
         if (
@@ -1120,6 +1836,16 @@ def _orchestrator_recorder(
             if back_link_post_error:
                 raise subprocess.CalledProcessError(
                     1, "gh", stderr="back-link post boom"
+                )
+            return ""
+        if (
+            method == "POST"
+            and "/issues/" in path
+            and path.endswith("/labels")
+        ):
+            if terminal_label_post_error:
+                raise subprocess.CalledProcessError(
+                    1, "gh", stderr="terminal-label post boom"
                 )
             return ""
         if method == "PATCH" and "/issues/comments/" in path:
@@ -1331,6 +2057,54 @@ class TestRun:
         assert "CI fail: verify-body-policy" in body
         assert "<!-- auto-filled:repair-history -->" in body
 
+    def test_issue_380_reproducer_null_sha_resolves_after_retry(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Acceptance criterion 3 of issue #380: re-running the retro
+        #345 row 1 scenario must auto-fill the failed ``gate`` check_run
+        instead of degrading to the sentinel. PR-detail returns null on
+        the first attempt and resolves on the second; the resolved SHA
+        feeds the check-runs lookup; the rendered Repair history table
+        names the failed check_run and does NOT carry the
+        ``(no automated repair signals detected)`` sentinel.
+        """
+        monkeypatch.setattr(ar.time, "sleep", lambda *_a, **_kw: None)
+        seen = _orchestrator_recorder(
+            monkeypatch,
+            pr_detail_sequence=[
+                {"merge_commit_sha": None},
+                {"merge_commit_sha": "deadbeef"},
+            ],
+            check_runs=[
+                {
+                    "id": 77653399942,
+                    "name": "gate",
+                    "conclusion": "failure",
+                    "completed_at": "2026-05-25T03:48:28Z",
+                }
+            ],
+        )
+        assert ar.run(_merged_event(number=42), "o/r") == 0
+        # PR-detail endpoint was called twice (one null + one resolve).
+        pr_detail_calls = [
+            (m, p)
+            for m, p, _b in seen
+            if m == "GET" and p == "/repos/o/r/pulls/42"
+        ]
+        assert len(pr_detail_calls) == 2
+        # The created retro issue body carries the gate check_run and
+        # not the sentinel: the regression that motivated issue #380
+        # would re-emerge if either assertion flips.
+        post_calls = [
+            (m, p, b)
+            for m, p, b in seen
+            if m == "POST" and p == "/repos/o/r/issues"
+        ]
+        assert len(post_calls) == 1
+        body = post_calls[0][2]["body"]
+        assert "CI fail: gate" in body
+        assert "(no automated repair signals detected)" not in body
+
     def test_back_link_comment_posted_after_create(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -1399,6 +2173,54 @@ class TestRun:
             for m, p, _b in seen
         )
 
+    def test_terminal_label_applied_after_back_link(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """run() must POST the terminal label to the source PR after the
+        back-link comment lands. Ordering matters: a subscribed session
+        consumes the labeled webhook as the terminal-state signal, so the
+        back-link comment (the human-visible reverse pointer) must already
+        be in place by the time the label fires."""
+        seen = _orchestrator_recorder(
+            monkeypatch,
+            created_response={"number": 777, "html_url": "https://x/i/777"},
+        )
+        assert ar.run(_merged_event(number=42), "o/r") == 0
+        back_link_idx = next(
+            i for i, (m, p, _b) in enumerate(seen)
+            if m == "POST" and p == "/repos/o/r/issues/42/comments"
+        )
+        label_idx = next(
+            i for i, (m, p, _b) in enumerate(seen)
+            if m == "POST" and p == "/repos/o/r/issues/42/labels"
+        )
+        assert back_link_idx < label_idx, (
+            "terminal label must be POSTed after the back-link comment"
+        )
+        assert seen[label_idx][2] == {"labels": [ar._TERMINAL_LABEL]}
+
+    def test_terminal_label_failure_does_not_abort_retro(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """If the label POST fails, run() must still return 0 -- the retro
+        issue and back-link comment are already in place; the label is a
+        secondary signal and must not roll back the audit trail."""
+        seen = _orchestrator_recorder(
+            monkeypatch,
+            created_response={"number": 777, "html_url": "https://x/i/777"},
+            terminal_label_post_error=True,
+        )
+        assert ar.run(_merged_event(number=42), "o/r") == 0
+        # Retro creation and back-link both landed before the failing label.
+        assert any(
+            m == "POST" and p == "/repos/o/r/issues"
+            for m, p, _b in seen
+        )
+        assert any(
+            m == "POST" and p == "/repos/o/r/issues/42/comments"
+            for m, p, _b in seen
+        )
+
 
 # ---------------------------------------------------------------------------
 # Repair-signal aggregate (issue #298)
@@ -1430,8 +2252,24 @@ class TestComputeRepairSignals:
             "fix_typed_title": False,
             "multi_commit_pr": False,
             "verification_pairs_failed": False,
-            "post_merge_unchecked": False,
         }
+
+    def test_post_merge_signal_removed(self) -> None:
+        """Per #418, `post_merge_unchecked` is no longer returned at merge time."""
+        out = ar.compute_repair_signals(self._pr(), has_inline_comments=False)
+        assert "post_merge_unchecked" not in out
+
+    def test_unchecked_post_merge_items_do_not_fire_any_signal(self) -> None:
+        """A body with only unchecked Post-merge items must not fire any signal."""
+        body = (
+            "## Checklist\n\n### Post-merge\n\n"
+            "- [ ] linked issue closed\n"
+            "- [ ] auto-retro opened\n"
+        )
+        out = ar.compute_repair_signals(
+            self._pr(body=body), has_inline_comments=False
+        )
+        assert not any(out.values())
 
     def test_body_refs_signal_fires_for_refs(self) -> None:
         out = ar.compute_repair_signals(
@@ -1778,6 +2616,73 @@ class TestExtractVerificationPairs:
         assert len(pairs) == 1
         assert pairs[0].command == "`real`"
 
+    def test_passed_when_result_is_numeric_count(self) -> None:
+        """Pure numeric result (e.g. `grep -c` output) treated as pass. Refs #417."""
+        body = (
+            "## Verification\n\n"
+            "- command: `grep -c '^foo' file`\n"
+            "  result: `2`\n"
+        )
+        pairs = ar.extract_verification_pairs(body)
+        assert pairs and pairs[0].passed is True
+
+    def test_passed_when_result_is_negative_numeric(self) -> None:
+        body = (
+            "## Verification\n\n"
+            "- command: `echo -1`\n"
+            "  result: `-1`\n"
+        )
+        pairs = ar.extract_verification_pairs(body)
+        assert pairs and pairs[0].passed is True
+
+    def test_passed_when_result_starts_with_all_hooks(self) -> None:
+        """prek-style natural-language pass marker. Refs #417."""
+        body = (
+            "## Verification\n\n"
+            "- command: `uvx prek run --files foo.md`\n"
+            "  result: `all hooks Passed or Skipped`\n"
+        )
+        pairs = ar.extract_verification_pairs(body)
+        assert pairs and pairs[0].passed is True
+
+    def test_passed_when_result_starts_with_all_checks(self) -> None:
+        body = (
+            "## Verification\n\n"
+            "- command: `gh pr checks 1`\n"
+            "  result: `all checks have passed`\n"
+        )
+        pairs = ar.extract_verification_pairs(body)
+        assert pairs and pairs[0].passed is True
+
+    def test_passed_when_result_starts_with_all_tests(self) -> None:
+        body = (
+            "## Verification\n\n"
+            "- command: `pytest`\n"
+            "  result: `all tests passed`\n"
+        )
+        pairs = ar.extract_verification_pairs(body)
+        assert pairs and pairs[0].passed is True
+
+    def test_non_numeric_failure_prose_still_fails(self) -> None:
+        """Free-form text that does not match the allowlist remains a fail."""
+        body = (
+            "## Verification\n\n"
+            "- command: `pytest`\n"
+            "  result: `traceback (most recent call last)`\n"
+        )
+        pairs = ar.extract_verification_pairs(body)
+        assert pairs and pairs[0].passed is False
+
+    def test_partial_numeric_with_suffix_is_not_passing(self) -> None:
+        """`2 failed` should NOT be treated as numeric pass. Refs #417."""
+        body = (
+            "## Verification\n\n"
+            "- command: `pytest`\n"
+            "  result: `2 failed`\n"
+        )
+        pairs = ar.extract_verification_pairs(body)
+        assert pairs and pairs[0].passed is False
+
 
 class TestExtractPostMergeChecklist:
     def test_empty_body_returns_empty(self) -> None:
@@ -1833,9 +2738,7 @@ class TestRepairHistoryTableNewRows:
                 passed=False,
             ),
         ]
-        table = ar._build_repair_history_table(
-            None, [], 1, pairs, []
-        )
+        table = ar._build_repair_history_table(None, [], 1, pairs)
         assert "Verification fail" in table
         assert "`pytest -q`" in table
         assert "observed: `exit 1`" in table
@@ -1848,40 +2751,33 @@ class TestRepairHistoryTableNewRows:
                 passed=True,
             ),
         ]
-        table = ar._build_repair_history_table(
-            None, [], 1, pairs, []
-        )
+        table = ar._build_repair_history_table(None, [], 1, pairs)
         assert "Verification fail" not in table
 
-    def test_post_merge_unchecked_row_emitted(self) -> None:
+    def test_post_merge_rows_never_emitted(self) -> None:
+        """Per #418, Post-merge items are no longer rendered at merge time."""
+        # Even a body-derived list of unchecked Post-merge items cannot reach
+        # the table builder anymore: the parameter was removed. Confirm the
+        # row marker text is absent for a representative call.
         table = ar._build_repair_history_table(
-            None, [], 1, None, [("linked issue closed", False)]
-        )
-        assert "Post-merge gate unchecked" in table
-        assert "linked issue closed" in table
-
-    def test_checked_post_merge_item_not_in_table(self) -> None:
-        table = ar._build_repair_history_table(
-            None, [], 1, None, [("linked issue closed", True)]
+            None, [], 1, [ar.VerificationPair("`x`", "`exit 1`", False)]
         )
         assert "Post-merge gate unchecked" not in table
 
-    def test_row_ordering_existing_classes_before_new(self) -> None:
+    def test_row_ordering_existing_classes_before_verification(self) -> None:
         pairs = [
             ar.VerificationPair("`a`", "`exit 1`", False),
         ]
-        post_merge = [("p", False)]
         table = ar._build_repair_history_table(
-            None, ["fix(harness): patch"], 2, pairs, post_merge
+            None, ["fix(harness): patch"], 2, pairs
         )
-        # Existing class (Iteration commit) appears before new classes.
+        # Iteration commit appears before the trailing Verification row.
         iter_idx = table.find("Iteration commit")
         verif_idx = table.find("Verification fail")
-        post_idx = table.find("Post-merge gate unchecked")
-        assert 0 < iter_idx < verif_idx < post_idx
+        assert 0 < iter_idx < verif_idx
 
     def test_default_args_keep_legacy_callsite(self) -> None:
-        # No new-arg callers still work, no new rows produced.
+        # Legacy three-arg callers still work, no extra rows produced.
         table = ar._build_repair_history_table(None, [], 1)
         assert "Verification fail" not in table
         assert "Post-merge gate unchecked" not in table

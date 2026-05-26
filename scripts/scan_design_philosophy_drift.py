@@ -4,7 +4,7 @@
 Issue #308 retrospective for PR #297 and PR #304: each PR added a new
 numbered section to ``.apm/instructions/master.instructions.md`` without
 adding the corresponding row to the Section 3 responsibility matrix in
-``docs/agent-rules-design-philosophy.md``. The existing
+``docs/prd/agent-rules-design-philosophy.md``. The existing
 ``verify-apm-drift`` and ``verify-apm-portability`` gates enforce
 source-to-compiled-artifact equivalence and repo-local-noun absence
 respectively, but neither inspects the design-philosophy doc.
@@ -423,7 +423,7 @@ def main(argv: list[str] | None = None) -> int:
     p_verify.add_argument(
         "--doc",
         required=True,
-        help="Path to docs/agent-rules-design-philosophy.md.",
+        help="Path to docs/prd/agent-rules-design-philosophy.md.",
     )
     p_verify.set_defaults(func=_cmd_verify)
 

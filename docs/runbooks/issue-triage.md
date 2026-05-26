@@ -9,8 +9,8 @@ The taxonomy is introduced incrementally per the phased rollout in [#84](https:/
 | File | Target | Purpose |
 |---|---|---|
 | `.github/labels.json` | `/repos/tvna/claude-md/labels` | JSON source of truth for repository labels |
-| `docs/issue-triage.md` *(this file)* | — | Runbook |
-| `docs/issue-pr-body-standard.md` | — | Sibling runbook for issue/PR body shape (read after labels route an issue) |
+| `docs/runbooks/issue-triage.md` *(this file)* | — | Runbook |
+| `docs/standards/issue-pr-body-standard.md` | — | Sibling runbook for issue/PR body shape (read after labels route an issue) |
 
 ## Axes
 
@@ -182,4 +182,41 @@ A scheduled workflow that diffs the live labels returned by `gh api` against `.g
 
 ## Migration from the `agent:*` design (#34)
 
-The four `agent:*` labels (`auto-fix` / `investigate` / `no-action` / `triage-needed`) are scheduled for deletion in [#84](https://github.com/tvna/claude-md/issues/84) Phase 4 after every issue has been retroactively labeled with the new axes. Until Phase 4 lands, `agent:*` labels may still exist on live issues but are no longer authoritative — the agent routing table above is. The SoT (`.github/labels.json`) no longer lists `agent:*` entries.
+The four `agent:*` labels (`auto-fix` / `investigate` / `no-action` / `triage-needed`) are scheduled for deletion in [#84](https://github.com/tvna/claude-md/issues/84) Phase 4 after every issue has been retroactively labeled with the new axes. The SoT (`.github/labels.json`) no longer lists `agent:*` entries.
+
+### Cleanup pass on 2026-05-26
+
+Sub-issue [#405](https://github.com/tvna/claude-md/issues/405) (Phase 3 operation log) drove a 24-issue back-labeling pass on 2026-05-26 covering three audit findings from #84:
+
+- **A.** Multi-type fix on #18, #34, #87: removed `type:feat`; left `type:tracking` plus `layer:p3-harness`.
+- **B.** `agent:*` residue (9 issues: #58, #60, #61, #62, #63, #72, #88, #89, #90): added `layer:*` and `type:*` per the SoT taxonomy. Five issues received `state:rfc` or `type:tracking` where the body declared an open-question umbrella. `agent:investigate` and `agent:no-action` label definitions remain on those issues until the post-merge prune dispatch removes them from the live catalogue.
+- **C.** `governance` residue (10 closed issues with no `layer:*`: #51, #53, #55, #73, #75, #106, #109, #112, #113, #115): added `layer:p2-precode`, `layer:p3-harness`, or `layer:meta` and the corresponding `type:*`. `governance` and the legacy `fix` label on #53 / #55 remain until the prune dispatch.
+
+After the pass, the four taxonomy queries below all return zero, which is the operator's readiness signal to run the prune dispatch:
+
+```sh
+gh issue list --search 'is:issue label:type:feat label:type:tracking'                                                                   # multi-type
+gh issue list --search 'is:issue label:agent:investigate -label:layer:p1-goal-plan -label:layer:p2-precode -label:layer:p3-harness -label:layer:p4-artifact -label:layer:p5-scope-split -label:layer:p6-handoff -label:layer:meta'
+gh issue list --search 'is:issue label:agent:no-action  -label:layer:p1-goal-plan -label:layer:p2-precode -label:layer:p3-harness -label:layer:p4-artifact -label:layer:p5-scope-split -label:layer:p6-handoff -label:layer:meta'
+gh issue list --search 'is:issue label:governance       -label:layer:p1-goal-plan -label:layer:p2-precode -label:layer:p3-harness -label:layer:p4-artifact -label:layer:p5-scope-split -label:layer:p6-handoff -label:layer:meta'
+```
+
+### Phase 4 prune dispatch (post-merge, operator-side)
+
+Once this PR merges, dispatch `apply-labels.yml` with `prune=true` to delete the now-orphan label definitions from the live catalogue. This is destructive on existing assignments per the warning earlier in this runbook, but the back-labeling pass above has already replaced every classification function before the deletion runs.
+
+```sh
+# Dry-run first; the step summary should list four labels for DELETE: agent:investigate, agent:no-action, governance, fix
+gh workflow run apply-labels.yml --ref main -f dry_run=true -f prune=true
+
+# Apply
+gh workflow run apply-labels.yml --ref main -f dry_run=false -f prune=true
+
+# Verify: live label set matches SoT exactly
+diff <(gh api /repos/tvna/claude-md/labels --jq '.[].name' | sort) <(jq -r '.[].name' .github/labels.json | sort)
+# Expect: no output (the only known divergence after prune is `type:chore` on #338, which is intentionally out of scope per the #84 sub-decision tree)
+```
+
+`agent:auto-fix` and `agent:triage-needed` had zero live assignments before the dispatch, so their deletion is purely catalogue cleanup.
+
+The full before/after issue-by-issue record is preserved in [`docs/archive/label-migration-2026-05-26.md`](../archive/label-migration-2026-05-26.md) per the `docs/archive/RETENTION.md` append-only policy.

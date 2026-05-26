@@ -2,9 +2,9 @@
 
 This file is the deliverable for [#183](https://github.com/tvna/claude-md/issues/183), a sub-issue of parent [#178](https://github.com/tvna/claude-md/issues/178) (MITRE ATT&CK coverage tracking, Lateral Movement row). It is the security-focused review checklist a reviewer applies before merging any PR that changes the instructions this repository ships to downstream consumers.
 
-Companion: [`docs/agent-rules-design-philosophy.md`](./agent-rules-design-philosophy.md) section 7 (instruction-PR review criteria). Section 7 decides whether a change belongs in the universal lane at all (ownership and portability); this document decides whether a change that already belongs in the universal lane is safe to merge (security). The two are independent; both must pass.
+Companion: [`docs/prd/agent-rules-design-philosophy.md`](../prd/agent-rules-design-philosophy.md) section 7 (instruction-PR review criteria). Section 7 decides whether a change belongs in the universal lane at all (ownership and portability); this document decides whether a change that already belongs in the universal lane is safe to merge (security). The two are independent; both must pass.
 
-Related: [#63](https://github.com/tvna/claude-md/issues/63) (residual workflow risks, prompt-injection boundaries, supply-chain gaps), [`docs/security-control-inventory.md`](./security-control-inventory.md), [`docs/privileged-operation-runbooks.md`](./privileged-operation-runbooks.md), [`docs/non-ascii-defense.md`](./non-ascii-defense.md).
+Related: [#63](https://github.com/tvna/claude-md/issues/63) (residual workflow risks, prompt-injection boundaries, supply-chain gaps), [`docs/prd/security-control-inventory.md`](../prd/security-control-inventory.md), [`docs/prd/privileged-operation-runbooks.md`](../prd/privileged-operation-runbooks.md), [`docs/prd/non-ascii-defense.md`](../prd/non-ascii-defense.md).
 
 ## How to read this document
 
@@ -26,14 +26,14 @@ A PR is in scope for this checklist if and only if its diff includes at least on
 - `CLAUDE.md` (the compiled artifact).
 - `AGENTS.md` (the compiled artifact).
 
-PRs that touch only `docs/`, `scripts/`, `tests/`, or `.github/workflows/` are out of scope; they have their own review surfaces (`docs/workflow-script-quality.md` for harness changes; the body and title policies for every PR).
+PRs that touch only `docs/`, `scripts/`, `tests/`, or `.github/workflows/` are out of scope; they have their own review surfaces (`docs/standards/workflow-script-quality.md` for harness changes; the body and title policies for every PR).
 
-If the diff touches `CLAUDE.md` or `AGENTS.md` directly without a corresponding `.apm/instructions/master.instructions.md` change, request changes immediately: those files are compiled artifacts and the source of truth must move first. This is identical to the rule in `docs/agent-rules-design-philosophy.md` section 7.3 and is enforced by `verify-apm-drift.yml`.
+If the diff touches `CLAUDE.md` or `AGENTS.md` directly without a corresponding `.apm/instructions/master.instructions.md` change, request changes immediately: those files are compiled artifacts and the source of truth must move first. This is identical to the rule in `docs/prd/agent-rules-design-philosophy.md` section 7.3 and is enforced by `verify-apm-drift.yml`.
 
 ## 1. Universal vs project-specific
 
 - **Question.** Does the wording in the diff hold for every downstream consumer of this repository, or only for `tvna/claude-md`?
-- **Evidence.** Walk the decision tree (Q1 through Q5) in [`docs/agent-rules-design-philosophy.md` section 4](./agent-rules-design-philosophy.md#4-decision-tree-where-does-a-new-candidate-rule-belong). The `verify-apm-portability.yml` gate (which runs `scripts/scan_apm_portability.py`) automatically blocks the most common repository-specific tokens -- issue numbers, doc paths, script names, tool product names -- but it cannot detect a sentence that names no token yet still encodes a `tvna/claude-md`-only assumption.
+- **Evidence.** Walk the decision tree (Q1 through Q5) in [`docs/prd/agent-rules-design-philosophy.md` section 4](../prd/agent-rules-design-philosophy.md#4-decision-tree-where-does-a-new-candidate-rule-belong). The `verify-apm-portability.yml` gate (which runs `scripts/scan_apm_portability.py`) automatically blocks the most common repository-specific tokens -- issue numbers, doc paths, script names, tool product names -- but it cannot detect a sentence that names no token yet still encodes a `tvna/claude-md`-only assumption.
 - **Hard block.** Q4 = yes in the decision tree, or `verify-apm-portability.yml` red, or any `portability-ack:` marker introduced without the section 7.4 escape-hatch conditions met. Request demotion to a repo-local doc or a harness check.
 
 ## 2. Compiled-output drift
@@ -104,10 +104,10 @@ Doc-only updates to this checklist (without an instruction change) revert via th
 
 - Parent: [#178](https://github.com/tvna/claude-md/issues/178) -- MITRE ATT&CK coverage tracking.
 - Related: [#63](https://github.com/tvna/claude-md/issues/63) -- residual workflow risks, prompt-injection boundaries, supply-chain gaps.
-- Companion: [`docs/agent-rules-design-philosophy.md`](./agent-rules-design-philosophy.md) section 7 -- ownership and portability review criteria.
-- [`docs/security-control-inventory.md`](./security-control-inventory.md) -- repo-wide security surface inventory (Lateral Movement row is the parent of this checklist).
-- [`docs/privileged-operation-runbooks.md`](./privileged-operation-runbooks.md) -- six-control runbook for privileged dispatch operations.
-- [`docs/non-ascii-defense.md`](./non-ascii-defense.md) -- non-ASCII defense layers.
-- [`.github/PULL_REQUEST_TEMPLATE.md`](../.github/PULL_REQUEST_TEMPLATE.md) -- links this checklist in the merge checklist.
+- Companion: [`docs/prd/agent-rules-design-philosophy.md`](../prd/agent-rules-design-philosophy.md) section 7 -- ownership and portability review criteria.
+- [`docs/prd/security-control-inventory.md`](../prd/security-control-inventory.md) -- repo-wide security surface inventory (Lateral Movement row is the parent of this checklist).
+- [`docs/prd/privileged-operation-runbooks.md`](../prd/privileged-operation-runbooks.md) -- six-control runbook for privileged dispatch operations.
+- [`docs/prd/non-ascii-defense.md`](../prd/non-ascii-defense.md) -- non-ASCII defense layers.
+- [`.github/PULL_REQUEST_TEMPLATE.md`](../../.github/PULL_REQUEST_TEMPLATE.md) -- links this checklist in the merge checklist.
 - [`scripts/scan_apm_portability.py`](../scripts/scan_apm_portability.py) -- deterministic gate for dimension 1.
 - [`.github/workflows/verify-apm-drift.yml`](../.github/workflows/verify-apm-drift.yml) -- deterministic gate for dimension 2.
