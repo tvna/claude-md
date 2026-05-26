@@ -254,6 +254,10 @@ class TestClassifyAction:
             == "advisory"
         )
 
+    def test_codecov_non_ascii_is_advisory_not_block(self) -> None:
+        """Codecov reports assoc=NONE but is trusted for generated comments."""
+        assert san.classify_action(True, False, "NONE", "codecov") == "advisory"
+
     def test_trusted_bot_ascii_only_is_none(self) -> None:
         """No non-ASCII -> none regardless of login (cheap-exit guard)."""
         assert (
@@ -776,6 +780,27 @@ class TestRun:
         # Block path must NOT fire: no REQUEST_CHANGES review.
         assert all(
             path != "/repos/o/r/pulls/119/reviews" for _, path in methods_paths
+        )
+
+    def test_codecov_pr_comment_advises_does_not_block(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Regression for #480: Codecov comments may include non-ASCII."""
+        seen = _capture_gh_api(monkeypatch)
+        event = {
+            "issue": {"number": 478, "pull_request": {"url": "..."}},
+            "comment": {
+                "body": "Test analytics footer includes clipboard \U0001f4cb.",
+                "author_association": "NONE",
+                "user": {"login": "codecov"},
+            },
+        }
+        assert san.run(event, "issue_comment", "o/r") == 0
+        methods_paths = [(c[0], c[1]) for c in seen]
+        assert ("POST", "/repos/o/r/issues/478/labels") in methods_paths
+        assert ("POST", "/repos/o/r/issues/478/comments") in methods_paths
+        assert all(
+            path != "/repos/o/r/pulls/478/reviews" for _, path in methods_paths
         )
 
     def test_unknown_bot_pr_still_blocks(
