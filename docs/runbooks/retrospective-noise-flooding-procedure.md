@@ -60,6 +60,18 @@ pattern. The signals become a noise pattern when **two or more fire
 on the same PR**, because each signal alone has a benign
 interpretation; co-firing collapses the benign explanation.
 
+S1 policy-artifact rows: the auto-retro repair-history table tags
+`Merge from main` rows with a leading `[policy-artifact]` token in the
+"What the reviewer / gate caught" column. Rows carrying this marker
+are structural side-effects of the squash + linear-history +
+strict-status-checks combination in `.github/rulesets/main.json` --
+a branch that falls behind main has no force-push option, so
+merge-from-main is the only safe path. Operators may skip these rows
+when filling the section 3 classification column; the row is recorded
+for review visibility but does not need a `missing deterministic gate`
+/ `unclear agent instruction` / `external or human decision` tag.
+Refs issue #400.
+
 ### 2.1 Severity thresholds (rule of thumb)
 
 The thresholds below are operator rules of thumb derived from the

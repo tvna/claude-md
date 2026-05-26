@@ -429,6 +429,40 @@ class TestRepairHistoryTable:
         table = ar._build_repair_history_table(None, commits, len(commits))
         assert table.count("| Merge from main |") == 2
 
+    def test_merge_from_main_rows_carry_policy_artifact_marker(self) -> None:
+        commits = [
+            "Merge branch 'main' into feature",
+            "Merge remote-tracking branch 'origin/main' into feature",
+        ]
+        table = ar._build_repair_history_table(None, commits, len(commits))
+        merge_lines = [
+            line for line in table.splitlines() if "Merge from main" in line
+        ]
+        assert len(merge_lines) == 2
+        for line in merge_lines:
+            assert "[policy-artifact]" in line
+
+    def test_policy_artifact_footnote_emitted_when_merge_row_present(
+        self,
+    ) -> None:
+        table = ar._build_repair_history_table(
+            None, ["Merge branch 'main' into feature"], 1
+        )
+        assert "[policy-artifact] rows are forced by the squash" in table
+        assert ".github/rulesets/main.json" in table
+        assert "CLAUDE.md section 3" in table
+
+    def test_no_marker_or_footnote_on_non_merge_rows(self) -> None:
+        commits = ["fix(x): repair", "feat(harness): unrelated"]
+        table = ar._build_repair_history_table(None, commits, len(commits))
+        assert "[policy-artifact]" not in table
+        assert "rows are forced by the squash" not in table
+
+    def test_no_footnote_on_sentinel_row(self) -> None:
+        table = ar._build_repair_history_table(None, ["feat(harness): plain"], 1)
+        assert "(no automated repair signals detected)" in table
+        assert "[policy-artifact]" not in table
+
     def test_multi_commit_summary_row(self) -> None:
         table = ar._build_repair_history_table(None, ["feat: a", "feat: b"], 4)
         assert "Multi-commit PR" in table
