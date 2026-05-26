@@ -213,6 +213,55 @@ The hook exception exists only because a session-blocking hook bug
 would be worse than the gate it backs up; the server-side gate
 remains as backstop.
 
+### M10. Standardised dependency and tool installation
+
+Workflow jobs that run Python tooling install dependencies through a
+single uv-managed channel. The dev dependency group in
+`pyproject.toml` is the source of truth, `uv.lock` pins the resolved
+graph, and every CI job that uses a script-quality tool reaches it
+via `uv sync --locked` followed by `uv run <tool>`.
+
+Canonical install primitives:
+
+| Need | Primitive | Where it is declared |
+|---|---|---|
+| Repository-wide quality tools (pytest, ruff, mypy, ...) | `uv sync --locked` then `uv run <tool>` | `[dependency-groups].dev` in `pyproject.toml` |
+| Pinned one-off CLI used only inside CI (apm-cli today) | `uv run --with "<pkg>==<X.Y.Z>" --exclude-newer "<N> days" <cmd>` | inline in the workflow YAML, version supplied via workflow env var |
+| Editor-style tool with its own venv (prek today) | `uv tool run <tool>` | inline in the workflow YAML |
+
+Direct `pip install`, `pip3 install`, `python -m pip install`, and
+`python3 -m pip install` are forbidden in workflow YAML.
+`scripts/scan_workflow_pip.py` is the deterministic gate (#289) and is
+invoked from `verify-agents.yml`'s `lint-scripts-static` job. A
+genuine one-off bypass appends `<!-- pip-install-ack -->` on the same
+line and must be justified in the PR body; the marker is a review
+artefact, not a silent escape hatch.
+
+Procedure for adding a new script-quality tool:
+
+1. Add the package to `[dependency-groups].dev` in `pyproject.toml`
+   with a bounded major range (for example `>=1.11,<2`), and add an
+   inline comment that cites the issue introducing the tool. Follow
+   the existing entries for `ruff` and `mypy` as the prior art.
+2. Run `uv lock` locally so `uv.lock` reflects the resolved graph;
+   commit `pyproject.toml` and `uv.lock` together so reviewers see a
+   single deterministic state change.
+3. Add the CI step that exercises the tool via `uv run <tool>` to the
+   appropriate workflow (typically a new step under
+   `lint-scripts-static` or `lint-scripts-pytest` in
+   `verify-agents.yml`). Reuse the existing `uv sync --locked` step
+   in that job; do not introduce a second install primitive.
+4. If the new tool needs a configuration block, place it in
+   `pyproject.toml` alongside `[tool.ruff]` and `[tool.mypy]` so the
+   single source of truth stays single.
+5. Open the PR with `Refs #<issue>` and confirm
+   `uv run python scripts/scan_workflow_pip.py verify` still passes
+   locally before requesting review.
+
+Reference: `pyproject.toml` `[dependency-groups].dev` and
+`scripts/scan_workflow_pip.py` jointly enforce this gate today
+(#192, #289, #195).
+
 ## Optional enhancements
 
 The items below are not gates. Add them when the script's blast
@@ -260,12 +309,10 @@ For scripts that talk to the GitHub API, contract tests that record
 the request shape (method, URL, headers, body keys) catch regressions
 when the boundary helper changes. Tracked by issue #194.
 
-### O7. Standardised dependency and tool installation
-
-When a script needs a third-party dependency, declare it in
-`pyproject.toml` so `uv sync` resolves it deterministically rather
-than relying on ad-hoc `pip install` lines in workflow YAML. Tracked
-by issue #195.
+Note: the original O7 placeholder ("Standardised dependency and tool
+installation") was promoted to must-have rule M10 above in #195. It is
+no longer optional; new script-quality tools must follow the M10
+procedure.
 
 ## Worked example: minimal script skeleton
 
@@ -397,6 +444,7 @@ class TestMainExitCode:
 | M7 secret handling | section 4 | Bounded tool surface; secrets never reach logs or process listings |
 | M8 lint/type/coverage | section 3 | Deterministic gates close the loop before merge |
 | M9 fail policy | section 4 | Loud failure on gates; explicit fail-open only where a wedged hook would be worse |
+| M10 install path | section 3, section 4 | Single uv-managed install primitive; supply-chain bounded by `pyproject.toml` + `uv.lock` and enforced by `scan_workflow_pip.py` |
 
 ## References
 
@@ -412,7 +460,7 @@ class TestMainExitCode:
   - #192 ci(scripts): add static typing and lint gates
   - #193 ci(workflows): verify script invocation drift
   - #194 test(scripts): add GitHub API boundary tests
-  - #195 ci(scripts): standardize dependency and tool installation
+  - #195 ci(scripts): standardize dependency and tool installation (promoted to must-have M10)
 - Related runbooks: `docs/standards/issue-pr-body-standard.md`,
   `docs/runbooks/issue-triage.md`, `docs/prd/non-ascii-defense.md`,
   `docs/runbooks/rulesets.md`.
