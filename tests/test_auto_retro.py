@@ -2841,6 +2841,36 @@ class TestExtractVerificationPairs:
         pairs = ar.extract_verification_pairs(body)
         assert pairs and pairs[0].passed is False
 
+    def test_passed_when_count_word_between_all_and_hooks(self) -> None:
+        """`all six hooks Passed` reproduces the #410 row 3 misread. Refs #411."""
+        body = (
+            "## Verification\n\n"
+            "- command: `uvx prek run --all-files`\n"
+            "  result: `all six hooks Passed or Skipped`\n"
+        )
+        pairs = ar.extract_verification_pairs(body)
+        assert pairs and pairs[0].passed is True
+
+    def test_passed_when_numeric_between_all_and_checks(self) -> None:
+        """`all 3 checks have passed` (gh pr checks shape). Refs #411."""
+        body = (
+            "## Verification\n\n"
+            "- command: `gh pr checks 1`\n"
+            "  result: `all 3 checks have passed`\n"
+        )
+        pairs = ar.extract_verification_pairs(body)
+        assert pairs and pairs[0].passed is True
+
+    def test_all_unit_pattern_requires_hooks_checks_or_tests(self) -> None:
+        """False-positive guard: `all six widgets failed` must not pass. Refs #411."""
+        body = (
+            "## Verification\n\n"
+            "- command: `pytest`\n"
+            "  result: `all six widgets failed badly`\n"
+        )
+        pairs = ar.extract_verification_pairs(body)
+        assert pairs and pairs[0].passed is False
+
     def test_passed_when_result_is_pytest_count_passed_in_time(self) -> None:
         """pytest summary `N passed in Ts` is a pass. Refs #453."""
         body = (
@@ -2993,6 +3023,20 @@ class TestRepairHistoryTableNewRows:
         table = ar._build_repair_history_table(None, [], 1)
         assert "Verification fail" not in table
         assert "Post-merge gate unchecked" not in table
+
+    def test_issue_410_row_3_no_longer_misreports(self) -> None:
+        """End-to-end regression for #411: feed the body shape that produced
+        the misread row in retro #410 row 3 through extract_verification_pairs
+        and assert the rebuilt table emits no `Verification fail` row.
+        """
+        body = (
+            "## Verification\n\n"
+            "- command: `uvx prek run --all-files`\n"
+            "  result: `all six hooks Passed or Skipped`\n"
+        )
+        pairs = ar.extract_verification_pairs(body)
+        table = ar._build_repair_history_table(None, [], 1, pairs)
+        assert "Verification fail" not in table
 
     def test_mixed_pass_fail_pairs_only_fail_row_emitted(self) -> None:
         """Smoke fixture from issue #453 Verification section: one
