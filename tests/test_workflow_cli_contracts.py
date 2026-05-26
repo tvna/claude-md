@@ -86,6 +86,7 @@ class WorkflowInvocation(NamedTuple):
 # enforce that in both directions.
 CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("auto_retro.py", "run"): "test_auto_retro_run_matches_workflow_env",
+    ("auto_retro.py", "sentinel"): "test_auto_retro_sentinel_matches_workflow_env",
     ("body_policy.py", "verify"): "test_body_policy_verify_matches_workflow_body_file",
     ("branch_cleanup.py", "reconcile"): "test_branch_cleanup_reconcile_matches_workflow_args",
     ("branch_cleanup.py", "survey"): "test_branch_cleanup_survey_matches_workflow_args",
@@ -276,6 +277,26 @@ def test_auto_retro_run_matches_workflow_env(
     monkeypatch.setenv("REPO", REPO)
 
     assert auto_retro.main(["run"]) == 0
+
+
+def test_auto_retro_sentinel_matches_workflow_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Mirror the env shape used by .github/workflows/auto-retro-sentinel.yml.
+
+    The workflow shells to ``python3 scripts/auto_retro.py sentinel`` with
+    only REPO + GH_TOKEN + (optional) AUTO_RETRO_SENTINEL_DAYS in the env.
+    The gh_api boundary is stubbed to an empty search result so the
+    contract exercises the argv/env wiring (CLI flag parsing,
+    environment lookup, sentinel_run entry) without network access.
+    """
+    monkeypatch.setenv("REPO", REPO)
+    monkeypatch.delenv("AUTO_RETRO_SENTINEL_DAYS", raising=False)
+    monkeypatch.setattr(
+        auto_retro, "gh_api", lambda *_a, **_kw: json.dumps({"items": []})
+    )
+
+    assert auto_retro.main(["sentinel"]) == 0
 
 
 def test_body_policy_verify_matches_workflow_body_file(tmp_path: Path) -> None:
