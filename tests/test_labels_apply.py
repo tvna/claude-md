@@ -137,6 +137,22 @@ class TestFetchLiveLabels:
         with pytest.raises(RuntimeError, match="pagination required but not implemented"):
             labels_apply.fetch_live_labels("owner/repo", "secret", opener=opener)
 
+    def test_does_not_paginate_when_under_guard_threshold(self) -> None:
+        # Characterization: at 99 results (one below the >=100 guard) the
+        # function returns directly without issuing a second page request.
+        # Future paginator PRs must update this test to flip the contract.
+        calls = 0
+
+        def opener(request: urllib.request.Request) -> Response:
+            nonlocal calls
+            calls += 1
+            return Response([{"name": str(i)} for i in range(99)])
+
+        labels = labels_apply.fetch_live_labels("owner/repo", "secret", opener=opener)
+
+        assert len(labels) == 99
+        assert calls == 1
+
 
 class TestCli:
     def test_plan_mixed_actions(self, tmp_path: Path) -> None:
@@ -204,6 +220,32 @@ class TestCli:
         assert [call["method"] for call in calls] == ["POST", "PATCH"]
         assert calls[0]["url"] == "https://api.github.com/repos/owner/repo/labels"
         assert calls[1]["url"] == "https://api.github.com/repos/owner/repo/labels/changed"
+
+    def test_apply_aborts_on_403_without_leaking_token(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        sot = write_sot(tmp_path, [{"name": "new", "color": "ffffff", "description": "New"}])
+
+        def apply_call(**kwargs: object) -> tuple[int, str]:
+            return 403, '{"message":"Resource not accessible by integration"}'
+
+        result = labels_apply.run(
+            mode="apply",
+            repo="owner/repo",
+            sot_path=sot,
+            prune=False,
+            dry_run=False,
+            summary_file=tmp_path / "summary.md",
+            token="sentinel-secret-TOKEN",
+            live_labels=[],
+            apply_call=apply_call,
+        )
+
+        captured = capsys.readouterr()
+        assert result == 1
+        assert "::error::Failed to POST label 'new' (last HTTP 403)." in captured.out
+        assert "sentinel-secret-TOKEN" not in captured.out
+        assert "sentinel-secret-TOKEN" not in captured.err
 
     def test_apply_with_prune_deletes_live_not_in_sot(self, tmp_path: Path) -> None:
         sot = write_sot(tmp_path, VALID_SOT)

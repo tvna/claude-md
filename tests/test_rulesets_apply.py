@@ -241,6 +241,35 @@ class TestHttpWrappers:
         assert calls == 1
         assert sleeps == []
 
+    def test_apply_call_breaks_on_429_rate_limit_like(self, tmp_path: Path) -> None:
+        payload = write_sot(tmp_path / "main.json", "main")
+        sleeps: list[int] = []
+        calls = 0
+
+        def opener(request):
+            nonlocal calls
+            calls += 1
+            raise urllib.error.HTTPError(
+                request.full_url,
+                429,
+                "Too Many Requests",
+                {},
+                io.BytesIO(b"rate limited"),
+            )
+
+        code, body = ra.apply_call(
+            method="PUT",
+            url="https://example.test/rulesets/42",
+            payload_path=payload,
+            token="tok",
+            opener=opener,
+            sleeper=sleeps.append,
+        )
+        assert code == 429
+        assert body == "rate limited"
+        assert calls == 1
+        assert sleeps == []
+
     def test_apply_call_retries_curl_level_failure(self, tmp_path: Path) -> None:
         payload = write_sot(tmp_path / "main.json", "main")
         sleeps: list[int] = []
