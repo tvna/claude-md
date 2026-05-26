@@ -2252,8 +2252,24 @@ class TestComputeRepairSignals:
             "fix_typed_title": False,
             "multi_commit_pr": False,
             "verification_pairs_failed": False,
-            "post_merge_unchecked": False,
         }
+
+    def test_post_merge_signal_removed(self) -> None:
+        """Per #418, `post_merge_unchecked` is no longer returned at merge time."""
+        out = ar.compute_repair_signals(self._pr(), has_inline_comments=False)
+        assert "post_merge_unchecked" not in out
+
+    def test_unchecked_post_merge_items_do_not_fire_any_signal(self) -> None:
+        """A body with only unchecked Post-merge items must not fire any signal."""
+        body = (
+            "## Checklist\n\n### Post-merge\n\n"
+            "- [ ] linked issue closed\n"
+            "- [ ] auto-retro opened\n"
+        )
+        out = ar.compute_repair_signals(
+            self._pr(body=body), has_inline_comments=False
+        )
+        assert not any(out.values())
 
     def test_body_refs_signal_fires_for_refs(self) -> None:
         out = ar.compute_repair_signals(
@@ -2722,9 +2738,7 @@ class TestRepairHistoryTableNewRows:
                 passed=False,
             ),
         ]
-        table = ar._build_repair_history_table(
-            None, [], 1, pairs, []
-        )
+        table = ar._build_repair_history_table(None, [], 1, pairs)
         assert "Verification fail" in table
         assert "`pytest -q`" in table
         assert "observed: `exit 1`" in table
@@ -2737,40 +2751,33 @@ class TestRepairHistoryTableNewRows:
                 passed=True,
             ),
         ]
-        table = ar._build_repair_history_table(
-            None, [], 1, pairs, []
-        )
+        table = ar._build_repair_history_table(None, [], 1, pairs)
         assert "Verification fail" not in table
 
-    def test_post_merge_unchecked_row_emitted(self) -> None:
+    def test_post_merge_rows_never_emitted(self) -> None:
+        """Per #418, Post-merge items are no longer rendered at merge time."""
+        # Even a body-derived list of unchecked Post-merge items cannot reach
+        # the table builder anymore: the parameter was removed. Confirm the
+        # row marker text is absent for a representative call.
         table = ar._build_repair_history_table(
-            None, [], 1, None, [("linked issue closed", False)]
-        )
-        assert "Post-merge gate unchecked" in table
-        assert "linked issue closed" in table
-
-    def test_checked_post_merge_item_not_in_table(self) -> None:
-        table = ar._build_repair_history_table(
-            None, [], 1, None, [("linked issue closed", True)]
+            None, [], 1, [ar.VerificationPair("`x`", "`exit 1`", False)]
         )
         assert "Post-merge gate unchecked" not in table
 
-    def test_row_ordering_existing_classes_before_new(self) -> None:
+    def test_row_ordering_existing_classes_before_verification(self) -> None:
         pairs = [
             ar.VerificationPair("`a`", "`exit 1`", False),
         ]
-        post_merge = [("p", False)]
         table = ar._build_repair_history_table(
-            None, ["fix(harness): patch"], 2, pairs, post_merge
+            None, ["fix(harness): patch"], 2, pairs
         )
-        # Existing class (Iteration commit) appears before new classes.
+        # Iteration commit appears before the trailing Verification row.
         iter_idx = table.find("Iteration commit")
         verif_idx = table.find("Verification fail")
-        post_idx = table.find("Post-merge gate unchecked")
-        assert 0 < iter_idx < verif_idx < post_idx
+        assert 0 < iter_idx < verif_idx
 
     def test_default_args_keep_legacy_callsite(self) -> None:
-        # No new-arg callers still work, no new rows produced.
+        # Legacy three-arg callers still work, no extra rows produced.
         table = ar._build_repair_history_table(None, [], 1)
         assert "Verification fail" not in table
         assert "Post-merge gate unchecked" not in table
