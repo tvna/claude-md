@@ -7,13 +7,15 @@ Issue: [#279](https://github.com/tvna/claude-md/issues/279)
 
 This document records what an agent run could establish from primary
 sources for the four open questions enumerated in issue #279, and lists
-the steps a human operator must take to finish the PoC. The candidate
-ruleset shape captured below is documentary only; it is not wired into
-`.github/rulesets/` and is not picked up by `apply-rulesets.yml` (the
-workflow enumerates `all-branches.json`, `dependabot.json`, `main.json`
-and `scripts/rulesets_apply.py` only registers the same three names in
-its `TARGETS` map). The actor_id placeholder is `0` and must be
-replaced with a captured Installation `actor_id` before any dispatch.
+the steps a human operator must take to finish the PoC. Two candidate
+ruleset shapes are captured below; both are documentary only and not
+wired into `.github/rulesets/`. `apply-rulesets.yml` enumerates
+`all-branches.json`, `dependabot.json`, `main.json` and
+`scripts/rulesets_apply.py` registers the same three names in its
+`TARGETS` map -- a fourth file is not picked up by either surface
+without an explicit code change. Shape B carries an `actor_id: 0`
+placeholder that must be replaced with a captured Installation
+`actor_id` before any dispatch.
 
 ## Status of each open question
 
@@ -40,8 +42,12 @@ Human follow-up steps to close Q1:
    entry whose `app_slug` is `renovate`. Record the `target_id`
    (Installation actor id) and the full response body as a comment on
    issue #279.
-3. Replace the `0` placeholder in the candidate ruleset (below) with
-   the captured `actor_id`.
+3. Replace the `0` placeholder in Shape B of the candidate ruleset
+   (below) with the captured `actor_id` if and only if the #276
+   decision is to grant the Integration bypass (Shape B). If Shape A
+   (`bypass_actors: []`) is chosen, the captured `actor_id` is still
+   recorded on issue #279 as evidence, but never written to a SoT
+   JSON.
 
 The unanswered part of Q1 is whether the GitHub Rulesets API accepts
 that Installation `actor_id` with `actor_type: "Integration"`. The
@@ -49,6 +55,11 @@ Mend Renovate App is a third-party GitHub App, so the speculation in
 issue #276 is that the Integration actor path applies. This must be
 confirmed by dispatching `apply-rulesets` with `dry_run=true` after
 the placeholder is replaced and inspecting the resulting job summary.
+The same dispatch is also the only authoritative way to observe what
+GitHub's Rulesets API returns for an Integration bypass entry that
+references the Mend Renovate App Installation id -- the deprecated
+Dependabot App returned HTTP 422 (per PR #273), and the dispatch is
+the test for whether the Mend App reproduces that failure mode.
 
 ## Q2 - pep621 manager and uv.lock support (answered)
 
@@ -84,18 +95,27 @@ update path.
 Answer: Renovate's rebase mechanism is force-push on the existing
 `renovate/*` branch. The documentation does not describe a
 close-and-reopen fallback equivalent to the post-2026-05-24 Dependabot
-behavior recorded in `docs/rulesets.md`. The implication for this
-repository is that `non_fast_forward` enforcement on
+behavior recorded in `docs/runbooks/rulesets.md`. The implication for
+this repository is that `non_fast_forward` enforcement on
 `refs/heads/renovate/*` will block Renovate's rebase unless the Mend
-Renovate App Installation actor is registered in `bypass_actors`,
-exactly mirroring the pre-PR-#274 shape that
-`.github/rulesets/dependabot.json` used to carry for Dependabot.
+Renovate App Installation actor is registered in `bypass_actors`.
 
-Caveat: the docs describe behavior under normal `git push`. They do
-not enumerate what Renovate does when `git push --force-with-lease`
-is rejected by branch protection. The PoC dispatch (human follow-up
-step in Q1) should observe the actual server response and record it
-on issue #279 as a comment.
+Caveat (post-PR-#454 reality, not a pre-PR-#274 mirror): the current
+`.github/rulesets/dependabot.json` has `bypass_actors: []` after the
+admin role bypass was removed by PR #454 and the Dependabot Integration
+bypass was already removed earlier (PR #273) after the Rulesets API
+started returning HTTP 422 for the deprecated standalone Dependabot
+GitHub App. Dependabot falls back to closing + reopening the PR with a
+freshly rebased branch (per `docs/runbooks/rulesets.md`). A Renovate
+ruleset that adopts the same `bypass_actors: []` posture must rely on
+an equivalent fallback path; per the Renovate docs above, no such
+documented fallback exists. The PoC dispatch (human follow-up step in
+Q1) must observe the actual server response when the Mend Renovate App
+attempts `git push --force-with-lease` against the protected branch
+and record it on issue #279 as a comment; that observation is the
+authoritative input to the #276 decision on whether a Mend Renovate
+App Installation bypass is acceptable, or whether Renovate's rebase is
+abandoned in favor of close-and-reopen via a different mechanism.
 
 ## Q4 - Mend Renovate App permissions at install (answered)
 
@@ -122,7 +142,7 @@ new scopes are `Code: write` (branch creation under `renovate/*`),
 `Workflows: write` (so Renovate can update pinned-Action SHAs in
 workflow files), and `Administration: read` (branch-protection read).
 
-Least-privilege check against `docs/security-control-inventory.md`:
+Least-privilege check against `docs/prd/security-control-inventory.md`:
 `Workflows: write` is the broadest new scope. It is required for
 Renovate to bump pinned third-party Action SHAs, which the repository
 relies on (`scripts/scan_workflow_action_pins.py`). The current
@@ -136,9 +156,37 @@ whether the Mend App's `Workflows: write` scope is acceptable.
 
 ## Candidate ruleset shape (documentary; DO NOT APPLY as-is)
 
-The candidate `bypass_actors` shape, copied from
-`.github/rulesets/dependabot.json` and adjusted for the `renovate/*`
-prefix, would be:
+The candidate ruleset, structured for the `renovate/*` prefix and
+compared against the post-PR-#454 `.github/rulesets/dependabot.json`
+SoT, is one of two shapes depending on the Q3 decision recorded in
+#276:
+
+Shape A -- mirror current `dependabot.json` (`bypass_actors: []`).
+Use this when the #276 decision is "rely on Renovate's close-and-reopen
+fallback path, if any; otherwise accept that the rebase checkbox is
+broken under `non_fast_forward`":
+
+```json
+{
+  "name": "renovate-branches",
+  "target": "branch",
+  "enforcement": "active",
+  "conditions": {
+    "ref_name": {
+      "include": ["refs/heads/renovate/*"],
+      "exclude": []
+    }
+  },
+  "bypass_actors": [],
+  "rules": [
+    {"type": "non_fast_forward"}
+  ]
+}
+```
+
+Shape B -- grant the Mend Renovate App Installation an Integration
+bypass. Use this when the #276 decision is "preserve the rebase
+checkbox by allowing Renovate force-push on `renovate/*`":
 
 ```json
 {
@@ -153,11 +201,6 @@ prefix, would be:
   },
   "bypass_actors": [
     {
-      "actor_id": 5,
-      "actor_type": "RepositoryRole",
-      "bypass_mode": "always"
-    },
-    {
       "actor_id": 0,
       "actor_type": "Integration",
       "bypass_mode": "always"
@@ -169,11 +212,17 @@ prefix, would be:
 }
 ```
 
-The `actor_id: 0` entry is a placeholder. Do not dispatch
+The `actor_id: 0` entry in Shape B is a placeholder. Do not dispatch
 `apply-rulesets` against any file that still contains it; `0` is not
 a valid GitHub Apps Installation id and the Rulesets API will reject
 the call. After Q1 is closed the placeholder must be replaced with
 the captured Installation `actor_id`.
+
+Neither shape includes a `RepositoryRole` admin bypass. PR #454
+removed the admin bypass from all three live rulesets so the "Merge
+without waiting for requirements" UI path is no longer reachable;
+re-introducing it for `renovate-branches` would regress that
+deliberate policy.
 
 ## Human follow-up checklist (closes the PoC)
 
@@ -181,18 +230,23 @@ the captured Installation `actor_id`.
       the PoC branch.
 - [ ] Run `gh api /repos/tvna/claude-md/installations` and post the
       response body as a comment on issue #279, ticking Q1.
-- [ ] Replace `actor_id: 0` in this document's candidate JSON with the
-      captured value and commit on the PoC branch.
+- [ ] Replace `actor_id: 0` in Shape B of this document's candidate
+      JSON with the captured value if the #276 decision is Shape B;
+      otherwise record the captured value as evidence on issue #279
+      without modifying this document. Commit on the PoC branch only
+      when Shape B is chosen.
 - [ ] Temporarily replace `.github/rulesets/dependabot.json` with the
-      captured candidate, dispatch `Apply rulesets` with
-      `ruleset=dependabot` and `dry_run=true`, capture the planned
-      diff from the job summary, then revert the SoT replacement.
-      Post the captured summary as a comment on issue #279.
+      chosen candidate (Shape A or Shape B), dispatch `Apply rulesets`
+      with `ruleset=dependabot` and `dry_run=true`, capture the
+      planned diff from the job summary, then revert the SoT
+      replacement. Post the captured summary as a comment on issue
+      #279.
 - [ ] Let Renovate open one PR on the PoC branch, tick the rebase
       checkbox on the Dependency Dashboard, and record whether the
       resulting push targets `refs/heads/renovate/*` with force-push
-      or with close-and-reopen. Post the observation on issue #279
-      (closes Q3 with primary evidence).
+      or with close-and-reopen (or fails with an HTTP 422 analogous to
+      the deprecated Dependabot App). Post the observation on issue
+      #279 (closes Q3 with primary evidence).
 - [ ] On issue #276, flip the four open-question checkboxes to `[x]`
       with back-links to the issue #279 comments that supplied the
       evidence.
