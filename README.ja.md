@@ -1,5 +1,7 @@
 # claude-md
 
+[![codecov](https://codecov.io/gh/tvna/claude-md/branch/main/graph/badge.svg)](https://codecov.io/gh/tvna/claude-md)
+
 [English](./README.md) | 日本語 | [简体中文](./README.zh.md)
 
 個人用に調整したエージェント指示のマスターリポジトリです。[`microsoft/apm`](https://github.com/microsoft/apm) で [`CLAUDE.md`](./CLAUDE.md) と [`AGENTS.md`](./AGENTS.md) にコンパイルし、他のプロジェクトから参照して使います。

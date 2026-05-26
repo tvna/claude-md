@@ -1,5 +1,7 @@
 # claude-md
 
+[![codecov](https://codecov.io/gh/tvna/claude-md/branch/main/graph/badge.svg)](https://codecov.io/gh/tvna/claude-md)
+
 English | [Japanese](./README.ja.md) | [Simplified Chinese](./README.zh.md)
 
 Master repository for personally tuned agent instructions, compiled with [`microsoft/apm`](https://github.com/microsoft/apm) into [`CLAUDE.md`](./CLAUDE.md) and [`AGENTS.md`](./AGENTS.md) for other projects.
