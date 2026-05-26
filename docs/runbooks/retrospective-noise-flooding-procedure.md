@@ -223,6 +223,42 @@ escalation path. The escalation never bundles a new gate into the
 design-doc PR; the gate, if warranted, is its own PR closing its
 own sub-issue.
 
+### 5.1 Retro sentinel auto-close (deterministic backstop)
+
+The Q1 escalation produced [#414](https://github.com/tvna/claude-md/issues/414)
+after the 17-retro batch of 2026-05-24 to 2026-05-26 surfaced a
+noise-dominated stream. The deterministic follow-up is the
+**Strategy B sentinel** wired in
+[`.github/workflows/auto-retro-sentinel.yml`](../../.github/workflows/auto-retro-sentinel.yml)
+and backed by `sentinel_run` in
+[`scripts/auto_retro.py`](../../scripts/auto_retro.py).
+
+The sentinel runs on a daily cron tick and closes open retros that
+have stayed **untouched** beyond the inactivity window (default
+14 days, overridable via the `AUTO_RETRO_SENTINEL_DAYS` env var).
+"Untouched" means BOTH of these signals fire on the retro:
+
+- every acceptance-criteria checkbox in the retro body is still
+  `[ ]` (no operator marked any progress), AND
+- the retro has no comments from logins outside the trusted-bot
+  allowlist (no operator wrote a triage note instead of editing
+  the body).
+
+A closed retro carries a `<!-- auto-retro-sentinel:closed -->`
+marker comment that names the inactivity threshold and the reopen
+instruction. The marker is the idempotency anchor: a subsequent
+cron tick that finds the same retro reopened by an operator will
+skip it because the marker comment is still present.
+
+Operator implication: when the retrospective writer (per
+[section 6](#6-cadence-and-ownership)) intentionally records a
+no-actionable-repair verdict, they should close the retro manually
+rather than wait for the sentinel -- the manual close preserves
+the operator's reasoning in the close comment, while the sentinel
+close only records the inactivity timeout. The sentinel is the
+deterministic backstop for retros that fall off the operator's
+radar, not the primary disposition channel.
+
 ## 6. Cadence and ownership
 
 This procedure runs once per merge, inside the retrospective that

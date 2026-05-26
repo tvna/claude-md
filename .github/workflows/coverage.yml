@@ -40,7 +40,10 @@ jobs:
         run: uv sync --locked
 
       - name: Run script unit tests with coverage
-        run: uv run python -m pytest --cov --cov-report=term-missing --cov-report=xml --cov-fail-under=92.71 -v
+        # --junitxml feeds Codecov Test Analytics (#469) in addition to the
+        # existing coverage XML output; junit_family=legacy is the format
+        # Codecov recommends for test result ingestion.
+        run: uv run python -m pytest --cov --cov-report=term-missing --cov-report=xml --cov-fail-under=92.71 -v --junitxml=junit.xml -o junit_family=legacy
 
       - name: Upload coverage to Codecov
         if: always()
@@ -48,5 +51,16 @@ jobs:
         with:
           files: ./coverage.xml
           flags: scripts
+          fail_ci_if_error: false
+          use_oidc: true
+
+      - name: Upload test results to Codecov
+        # Runs even when the pytest step failed so failed test runs are
+        # included in Test Analytics flake / failure history (#469).
+        if: always()
+        uses: codecov/test-results-action@0fa95f0e1eeaafde2c782583b36b28ad0d8c77d3 # v1.2.1
+        with:
+          files: ./junit.xml
+          disable_search: true
           fail_ci_if_error: false
           use_oidc: true

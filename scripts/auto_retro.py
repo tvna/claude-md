@@ -47,6 +47,7 @@ import sys
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
@@ -965,6 +966,70 @@ def find_existing_retro(
     return None
 
 
+_ACCEPTANCE_CHECKBOX_RE = re.compile(
+    r"^[ \t]*-[ \t]+\[([ xX])\][ \t]+", re.MULTILINE
+)
+
+
+def is_retro_untouched(body: str, comments: list[dict[str, Any]]) -> bool:
+    """Return True when the retro body and comments show no operator engagement.
+
+    Sentinel signal for issue #414. "Untouched" means BOTH:
+
+    * every acceptance-criteria checkbox in the body is still ``[ ]``
+      (no operator marked any progress); AND
+    * the issue has no comments from logins outside
+      :data:`_SENTINEL_IGNORED_COMMENT_LOGINS` (no operator wrote a
+      triage note instead of editing the body).
+
+    The acceptance-criteria slice is read via :func:`_slice_section`
+    rather than scanning the whole body so that operator-fill rows
+    elsewhere (e.g. the Classification table under the auto-fill
+    block) do not falsely satisfy the checkbox check.
+
+    Returns False whenever the section is missing (defensive: treat
+    unparseable bodies as touched so the sentinel never auto-closes
+    something it cannot read).
+    """
+    section = _slice_section(body or "", "Acceptance criteria")
+    if not section.strip():
+        return False
+    checkboxes = _ACCEPTANCE_CHECKBOX_RE.findall(section)
+    if not checkboxes:
+        return False
+    if any(state.lower() == "x" for state in checkboxes):
+        return False
+    for comment in comments or []:
+        user = comment.get("user") or {}
+        login = user.get("login") or ""
+        if login and login not in _SENTINEL_IGNORED_COMMENT_LOGINS:
+            return False
+    return True
+
+
+def is_retro_age_exceeded(
+    created_at: str, now_iso: str, days: int
+) -> bool:
+    """Return True when ``now_iso - created_at`` exceeds ``days``.
+
+    Both arguments are ISO 8601 strings (``YYYY-MM-DDTHH:MM:SSZ``).
+    Returns False on any parse failure so the sentinel never closes a
+    retro whose timestamps it cannot read (fail-safe per CLAUDE.md
+    section 4).
+    """
+    try:
+        created = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+        now = datetime.fromisoformat(now_iso.replace("Z", "+00:00"))
+    except (ValueError, AttributeError):
+        return False
+    if created.tzinfo is None:
+        created = created.replace(tzinfo=timezone.utc)
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=timezone.utc)
+    delta = now - created
+    return delta.days > days
+
+
 def issue_labels(layer_labels: tuple[str, ...]) -> list[str]:
     """Return the label list for the retro issue.
 
@@ -1324,6 +1389,32 @@ _BACK_LINK_MARKER = "<!-- auto-retro:back-link -->"
 # .github/labels.json; tests/test_auto_retro.py guards the drift.
 _TERMINAL_LABEL = "harness:retro-opened"
 
+# Sentinel marker for the auto-close comment posted by the retro sentinel
+# workflow (issue #414). Idempotency anchor: a retro carrying this
+# marker has already been triaged by the sentinel and must not be
+# re-closed on subsequent cron runs.
+_SENTINEL_CLOSE_MARKER = "<!-- auto-retro-sentinel:closed -->"
+
+# Default age threshold (in days) for the retro sentinel to consider a
+# retro stale. Overridable at runtime via the AUTO_RETRO_SENTINEL_DAYS
+# env var. Starting at 14 per the operator runbook rationale recorded
+# in issue #414.
+_DEFAULT_SENTINEL_DAYS: int = 14
+
+# Logins whose comments do NOT count as operator engagement for the
+# sentinel "untouched" check. Extends _TRUSTED_BOT_LOGINS with the
+# repository's own Actions identity, which is the author of the retro
+# issue itself; a self-comment from it would not signal triage.
+_SENTINEL_IGNORED_COMMENT_LOGINS: frozenset[str] = (
+    _TRUSTED_BOT_LOGINS | frozenset({"github-actions[bot]"})
+)
+
+# Per-page cap for the sentinel's retro search. Each cron tick processes
+# at most this many open retros; overflow rolls into the next tick. A
+# healthy repo carries far fewer than 50 open retros at a time, so this
+# is a soft ceiling rather than a correctness constraint.
+_SENTINEL_SEARCH_PAGE_SIZE: int = 50
+
 
 def find_existing_back_link_id(
     repo: str, pr_number: int, marker: str = _BACK_LINK_MARKER
@@ -1389,6 +1480,113 @@ def apply_terminal_label(
         "POST",
         f"/repos/{repo}/issues/{pr_number}/labels",
         {"labels": [label]},
+    )
+
+
+# ---------------------------------------------------------------------------
+# Retro sentinel I/O boundary (issue #414)
+# ---------------------------------------------------------------------------
+
+
+def search_open_retro_issues(repo: str) -> list[dict[str, Any]]:
+    """Return open retro issues for *repo* (paginated to one page).
+
+    Filter: ``layer:meta`` + ``type:docs`` labels (the two labels every
+    auto-opened retro carries per :func:`issue_labels`) AND title prefix
+    ``retro(`` / ``retro:`` (filtered client-side because the GitHub
+    search API does not honor leading parens in ``in:title``).
+
+    The per-page cap (:data:`_SENTINEL_SEARCH_PAGE_SIZE`) is a soft
+    ceiling -- if it overflows the next cron tick processes the
+    remainder. Returns the raw search items so the caller can read
+    ``number``, ``title``, ``created_at``, and ``body``.
+    """
+    query = (
+        f"repo:{repo} is:issue is:open in:title retro "
+        "label:layer:meta label:type:docs"
+    )
+    encoded = quote(query, safe="")
+    raw = gh_api(
+        "GET",
+        f"/search/issues?q={encoded}&per_page={_SENTINEL_SEARCH_PAGE_SIZE}",
+    )
+    data = json.loads(raw) if raw.strip() else {}
+    items = list(data.get("items") or [])
+    out: list[dict[str, Any]] = []
+    for item in items:
+        title = item.get("title") or ""
+        stripped = title.lstrip().lower()
+        if stripped.startswith("retro(") or stripped.startswith("retro:"):
+            out.append(item)
+    return out
+
+
+def fetch_issue_comments(repo: str, number: int) -> list[dict[str, Any]]:
+    """Return issue comments for ``<repo>#<number>``; ``[]`` on parse failure.
+
+    Single page (``per_page=100``) is sufficient for the sentinel: the
+    threshold (:func:`is_retro_untouched`) only needs to know whether at
+    least one non-bot comment exists, not the full list. Caller wraps
+    the gh_api error so a transient failure on one retro does not block
+    the rest of the cron tick.
+    """
+    raw = gh_api(
+        "GET", f"/repos/{repo}/issues/{number}/comments?per_page=100"
+    )
+    if not raw.strip():
+        return []
+    parsed = json.loads(raw)
+    if not isinstance(parsed, list):
+        return []
+    return parsed
+
+
+def has_sentinel_marker(comments: list[dict[str, Any]]) -> bool:
+    """Return True when any comment carries :data:`_SENTINEL_CLOSE_MARKER`.
+
+    Idempotency anchor: prevents the sentinel from re-closing a retro
+    it has already triaged on a previous cron tick.
+    """
+    for comment in comments or []:
+        body = comment.get("body") or ""
+        if _SENTINEL_CLOSE_MARKER in body:
+            return True
+    return False
+
+
+def post_sentinel_comment(repo: str, retro_number: int, days: int) -> None:
+    """POST the sentinel auto-close comment on *retro_number*.
+
+    Comment shape: marker line + a single explanation line that names
+    the inactivity threshold and the reopen instruction. Callers must
+    have already checked :func:`has_sentinel_marker` to avoid double
+    posting.
+    """
+    body = (
+        f"{_SENTINEL_CLOSE_MARKER}\n"
+        f"auto-retro sentinel closed this retro after {days} days of "
+        "inactivity (no acceptance-criteria checked, no operator "
+        "comments). Reopen if a missed repair surfaces. "
+        "Refs issue #414."
+    )
+    gh_api(
+        "POST",
+        f"/repos/{repo}/issues/{retro_number}/comments",
+        {"body": body},
+    )
+
+
+def close_issue_as_not_planned(repo: str, number: int) -> None:
+    """PATCH the issue to ``state=closed`` with ``state_reason=not_planned``.
+
+    ``not_planned`` is the GitHub state_reason that semantically maps
+    to "closed without action" -- preserves the audit trail (the issue
+    existed) while signalling that no follow-up landed.
+    """
+    gh_api(
+        "PATCH",
+        f"/repos/{repo}/issues/{number}",
+        {"state": "closed", "state_reason": "not_planned"},
     )
 
 
@@ -1599,6 +1797,169 @@ def run(event: dict[str, Any], repo: str) -> int:
     return 0
 
 
+def _now_utc_iso() -> str:
+    """Return the current UTC time as an ISO 8601 string with ``Z`` suffix.
+
+    Wrapped so :func:`sentinel_run` can be tested with a monkeypatched
+    clock without monkeypatching :mod:`datetime` directly.
+    """
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _build_sentinel_summary(
+    closed: list[int], skipped: list[tuple[int, str]], days: int
+) -> str:
+    """Render the GITHUB_STEP_SUMMARY block for one sentinel run.
+
+    ``closed`` is the list of retro issue numbers that the sentinel
+    closed on this tick; ``skipped`` is a list of ``(number, reason)``
+    tuples for retros that did not qualify (still inside the inactivity
+    window, operator-touched, or already sentinel-closed).
+    """
+    closed_block = (
+        "\n".join(f"- #{n}" for n in closed) if closed else "- (none)"
+    )
+    skipped_block = (
+        "\n".join(f"- #{n}: {reason}" for n, reason in skipped)
+        if skipped
+        else "- (none)"
+    )
+    return (
+        "## auto-retro sentinel summary\n"
+        "\n"
+        f"Inactivity threshold: {days} days.\n"
+        "\n"
+        "### Closed\n"
+        "\n"
+        f"{closed_block}\n"
+        "\n"
+        "### Skipped\n"
+        "\n"
+        f"{skipped_block}\n"
+    )
+
+
+def sentinel_run(repo: str, now_iso: str, days: int) -> int:
+    """Scan open retros and auto-close untouched ones older than *days*.
+
+    Per-retro flow (each retro fails soft so one error does not block
+    the rest of the cron tick):
+
+    1. Skip when ``created_at`` is younger than the threshold.
+    2. Skip when a prior sentinel comment marker is present (idempotent).
+    3. Skip when the retro shows operator engagement
+       (:func:`is_retro_untouched` returns False).
+    4. Otherwise POST the sentinel comment, then PATCH the issue to
+       ``closed`` / ``not_planned``.
+
+    Returns 0 always; the step summary records the close / skip
+    breakdown so an operator can audit the run.
+    """
+    try:
+        items = search_open_retro_issues(repo)
+    except subprocess.CalledProcessError as exc:
+        print(
+            f"::error::sentinel search failed (exit {exc.returncode}); "
+            "no retros processed this tick",
+            file=sys.stderr,
+        )
+        return 0
+
+    closed: list[int] = []
+    skipped: list[tuple[int, str]] = []
+
+    for item in items:
+        raw_number = item.get("number")
+        if not isinstance(raw_number, int):
+            continue
+        number = raw_number
+        created_at = str(item.get("created_at") or "")
+        if not is_retro_age_exceeded(created_at, now_iso, days):
+            skipped.append((number, "inside inactivity window"))
+            continue
+        try:
+            comments = fetch_issue_comments(repo, number)
+        except subprocess.CalledProcessError as exc:
+            print(
+                f"::warning::fetch_issue_comments failed for retro "
+                f"#{number} (exit {exc.returncode}); skipping this "
+                "retro on this tick",
+                file=sys.stderr,
+            )
+            skipped.append((number, "comments fetch failed"))
+            continue
+        if has_sentinel_marker(comments):
+            skipped.append((number, "already sentinel-closed marker present"))
+            continue
+        body = item.get("body") or ""
+        if not is_retro_untouched(body, comments):
+            skipped.append((number, "operator engagement detected"))
+            continue
+        try:
+            post_sentinel_comment(repo, number, days)
+        except subprocess.CalledProcessError as exc:
+            print(
+                f"::warning::post_sentinel_comment failed for retro "
+                f"#{number} (exit {exc.returncode}); NOT closing to "
+                "avoid silent close without operator-visible reason",
+                file=sys.stderr,
+            )
+            skipped.append((number, "comment post failed"))
+            continue
+        try:
+            close_issue_as_not_planned(repo, number)
+        except subprocess.CalledProcessError as exc:
+            print(
+                f"::warning::close_issue_as_not_planned failed for retro "
+                f"#{number} (exit {exc.returncode}); sentinel comment "
+                "posted but issue remains open",
+                file=sys.stderr,
+            )
+            skipped.append((number, "close patch failed after comment"))
+            continue
+        closed.append(number)
+        print(f"closed retro #{number} as not_planned (sentinel)")
+
+    _append_summary(_build_sentinel_summary(closed, skipped, days))
+    return 0
+
+
+def _cmd_sentinel(args: argparse.Namespace) -> int:
+    repo = (
+        args.repo or os.environ.get("REPO") or os.environ.get("GITHUB_REPOSITORY")
+    )
+    if not repo:
+        print(
+            "::error::missing --repo / $REPO / $GITHUB_REPOSITORY",
+            file=sys.stderr,
+        )
+        return 1
+    days_raw = (
+        args.days
+        if args.days is not None
+        else os.environ.get("AUTO_RETRO_SENTINEL_DAYS")
+    )
+    if days_raw is None:
+        days = _DEFAULT_SENTINEL_DAYS
+    else:
+        try:
+            days = int(days_raw)
+        except (TypeError, ValueError):
+            print(
+                f"::error::invalid sentinel days value {days_raw!r}; "
+                f"must be a positive integer",
+                file=sys.stderr,
+            )
+            return 1
+        if days <= 0:
+            print(
+                f"::error::sentinel days must be positive (got {days})",
+                file=sys.stderr,
+            )
+            return 1
+    return sentinel_run(repo, _now_utc_iso(), days)
+
+
 def _cmd_run(args: argparse.Namespace) -> int:
     event_path = args.event_file or os.environ.get("GITHUB_EVENT_PATH")
     repo = (
@@ -1640,6 +2001,26 @@ def main(argv: list[str] | None = None) -> int:
     )
     p_run.add_argument("--repo", help="Override $REPO (owner/name).")
     p_run.set_defaults(func=_cmd_run)
+
+    p_sentinel = sub.add_parser(
+        "sentinel",
+        help=(
+            "Auto-close open retro issues that have been untouched for "
+            "more than --days days. Refs #414."
+        ),
+    )
+    p_sentinel.add_argument("--repo", help="Override $REPO (owner/name).")
+    p_sentinel.add_argument(
+        "--days",
+        type=int,
+        default=None,
+        help=(
+            f"Inactivity threshold in days "
+            f"(default {_DEFAULT_SENTINEL_DAYS}, env "
+            "AUTO_RETRO_SENTINEL_DAYS)."
+        ),
+    )
+    p_sentinel.set_defaults(func=_cmd_sentinel)
 
     args = parser.parse_args(argv)
     try:
