@@ -69,11 +69,11 @@ Notes:
 |---|---|---|---|---|---|
 | `main.json` | IA, Persist, Impact | Default-branch ruleset: 3 required status checks (`Verify agent instructions / gate`, `Verify issue link / gate`, `Verify title policy / gate`); blocks force-push; requires PR + linear history + resolved threads + code-owner review; squash-only merge; blocks deletion. | `docs/runbooks/rulesets.md`, `ruleset-drift.yml`, #18, #27, #120 | partially covered | #120 (required-checks-vs-ruleset live sync) |
 | `all-branches.json` | IA, Impact | Non-default branch ruleset: blocks force-push on every branch except the default branch; deletion intentionally NOT blocked (relies on `delete_branch_on_merge: true`). | `docs/runbooks/rulesets.md`, `docs/runbooks/branch-cleanup.md`, #27, #59 | covered | — |
-| `dependabot.json` | IA, RD | `dependabot/*` ruleset: blocks force-push; admin-only bypass. (Originally granted Dependabot Integration `actor_id: 49699333` a bypass per #140, but GitHub deprecated the standalone Dependabot GitHub App and the Rulesets API rejects that bypass actor — see #273.) | `docs/runbooks/rulesets.md`, #18, #273 | partially covered | #273 (no automation can rebase `dependabot/*` branches; Dependabot falls back to close + reopen) |
+| `dependabot.json` | IA, RD | `dependabot/*` ruleset: blocks force-push; no bypass actors. (Originally granted Dependabot Integration `actor_id: 49699333` a bypass per #140, but GitHub deprecated the standalone Dependabot GitHub App and the Rulesets API rejects that bypass actor — see #273. The admin `RepositoryRole` bypass was also removed across all three rulesets.) | `docs/runbooks/rulesets.md`, #18, #273 | partially covered | #273 (no automation can rebase `dependabot/*` branches; Dependabot falls back to close + reopen) |
 
 Notes:
 
-- `RepositoryRole` admin bypass (id 5) is present on all three rulesets. That is documented in `docs/runbooks/rulesets.md`; #182 covers the "destructive-operation runbook" path for any future apply that touches bypass actors.
+- `bypass_actors` is `[]` on all three rulesets — the "Merge without waiting for requirements" UI path is unreachable. Emergency escape requires the [Emergency disable / re-enable procedure](../runbooks/rulesets.md#emergency-disable--re-enable-procedure), which leaves `repository_ruleset.update` audit events and is detected by `ruleset-drift.yml` if the re-enable step is forgotten.
 - The drift gate is `ruleset-drift.yml`; the cross-family aggregator `security-control-drift-report.yml` (#180) wires that drift output into #178 as evidence rather than duplicating the detector.
 
 ## 3. Label source of truth (`.github/labels.json`)
