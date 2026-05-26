@@ -141,6 +141,7 @@ rejects a deliberately unsafe sample.
 | `docs/runbooks/dependabot-automerge.md` | RD, Persist | Documents allowlist policy and labels that veto auto-merge; references audit script. | `dependabot-automerge.yml`, `scripts/dependabot_automerge.py`, #185 | covered | — |
 | `docs/standards/issue-pr-body-standard.md` | DE, RD, IA | Documents body section requirements; trusted-bot carve-out; advisory hook integration. | `verify-github-content.yml`, `scripts/body_policy.py`, `scripts/pr_body_close_keyword_gate.py`, #206 | covered | — |
 | `docs/runbooks/issue-triage.md` | Coll, Recon, Persist, PrivEsc | Documents label taxonomy, `LABELS_PAT` Environment scope, apply workflow, prune semantics, manual verification. | `apply-labels.yml`, `.github/labels.json`, #84 | partially covered | #181, #182 |
+| `docs/runbooks/agent-provenance.md` | RD, Exec, LM, C2 | Documents minimum provenance metadata, permission review, update cadence, and rollback expectations before adopting or updating skills, subagents, MCP servers, or comparable agent extensions. | #63, #312, `docs/agent-provenance.md` | covered | — |
 | `docs/prd/non-ascii-defense.md` | DE, LM, Cred, Coll | Documents three-layer non-ASCII defense (past sanitization, write-side workflow + PreToolUse, read-side PostToolUse); rollback steps. | `scan-non-ascii.yml`, `scripts/scan_non_ascii.py`, `scripts/preflight_non_ascii.py`, #102, #146 | covered | — |
 | `docs/standards/performance-metrics.md` | RD | Design-only doc; no operational control today; no privileged data. | #61, #58 | not applicable | — |
 | `docs/standards/remote-environment.md` | Exec, C2, Persist | Documents SessionStart hook, uv pin propagation, verification commands, rollback procedure, outbound-network expectations. | `scripts/install-uv.sh`, `.claude/settings.json`, `scripts/uv_pin.py`, #106, #109, #112 | covered | — |
@@ -155,17 +156,17 @@ This table answers, for each row of #178's coverage table: which surfaces in thi
 | ATT&CK | Contributing surfaces | Aggregate status | Gap |
 |---|---|---|---|
 | Recon | `docs/runbooks/issue-triage.md`, `docs/runbooks/rulesets.md`, `docs/standards/remote-environment.md`, `threat_intel_triage.py` | partially covered | #170, #181 (no scheduled secret scan beyond GitHub default) |
-| RD | `verify-github-content.yml`, `scan-non-ascii.yml`, `.github/dependabot.yml`, `uv.lock`, `pyproject.toml`, `dependabot.json` ruleset | covered | — |
+| RD | `verify-github-content.yml`, `scan-non-ascii.yml`, `.github/dependabot.yml`, `uv.lock`, `pyproject.toml`, `dependabot.json` ruleset, `docs/runbooks/agent-provenance.md` | covered | — |
 | IA | `main.json`, `all-branches.json`, `dependabot.json`, `verify-github-content.yml`, `ruleset-drift.yml` | partially covered | #120 |
-| Exec | `verify-agents.yml`, `verify-apm.yml`, `install-uv.sh`, `pyproject.toml`, `uv.lock`, `.claude/settings.json` carve-out | partially covered | #181 (workflow `permissions:` audit) |
+| Exec | `verify-agents.yml`, `verify-apm.yml`, `install-uv.sh`, `pyproject.toml`, `uv.lock`, `.claude/settings.json` carve-out, `docs/runbooks/agent-provenance.md` | partially covered | #181 (workflow `permissions:` audit) |
 | Persist | `verify-apm.yml`, `ruleset-drift.yml`, `apply-labels.yml`, `apply-rulesets.yml`, `verify-github-content.yml`, `security-control-drift-report.yml` | covered | — |
 | PrivEsc | `apply-labels.yml`, `apply-rulesets.yml`, `ruleset-drift.yml`, `docs/runbooks/issue-triage.md`, `docs/runbooks/rulesets.md` | partially covered | #56, #181 |
 | DE | `verify-github-content.yml`, `scan-non-ascii.yml`, `verify-apm.yml`, `preflight_non_ascii.py` | covered | — |
 | Cred | `scan-non-ascii.yml`, `preflight_non_ascii.py`, `docs/runbooks/rulesets.md`, `docs/runbooks/issue-triage.md` (Environment-scoped PATs) | partially covered | #181 (log redaction audit) |
 | Disc | `docs/runbooks/rulesets.md`, `docs/runbooks/issue-triage.md`, `docs/runbooks/branch-cleanup.md`, `docs/standards/remote-environment.md` | covered | — |
-| LM | `.apm/instructions/master.instructions.md`, `CLAUDE.md`, `AGENTS.md`, `verify-apm.yml`, `generate-agents.yml` | partially covered | #183 |
+| LM | `.apm/instructions/master.instructions.md`, `CLAUDE.md`, `AGENTS.md`, `verify-apm.yml`, `generate-agents.yml`, `docs/runbooks/agent-provenance.md` | partially covered | #183 |
 | Coll | `scan-non-ascii.yml`, `threat-intel-triage.yml`, `_trusted_bots.py`, `docs/prd/non-ascii-defense.md` | partially covered | #63, #102 |
-| C2 | `install-uv.sh`, `threat_intel_triage.py`, `generate-agents.yml`, `uv.lock`, `pyproject.toml` | covered | — |
+| C2 | `install-uv.sh`, `threat_intel_triage.py`, `generate-agents.yml`, `uv.lock`, `pyproject.toml`, `docs/runbooks/agent-provenance.md` | covered | — |
 | Exfil | `apply-labels.yml`, `apply-rulesets.yml`, `ruleset-drift.yml`, `docs/runbooks/rulesets.md`, `docs/runbooks/branch-cleanup.md` | partially covered | #181, #182 |
 | Impact | `apply-labels.yml`, `apply-rulesets.yml`, `branch-cleanup.yml`, `ruleset-drift.yml`, `main.json`, `all-branches.json` | partially covered | #182 |
 
@@ -185,6 +186,7 @@ Follow-up issues this inventory references:
 | #182 | Privileged-operation runbook checklist (dry-run / authorization / rollback / audit) |
 | #183 | Downstream instruction review checklist |
 | #184 | ATT&CK review cadence on #178 |
+| #312 | Agent extension provenance runbook for skills, subagents, MCP servers, and comparable extensions |
 
 No new follow-up issues are opened by this inventory: every gap identified above maps to one of the issues in the table. If a future review surfaces a gap that does not fit any of these, append it to this file and open a new issue then.
 
@@ -211,6 +213,6 @@ Reviewers should also confirm:
 - `ls .github/workflows/` matches the 15 rows in section 1.
 - `ls .github/rulesets/` matches the 3 rows in section 2.
 - `ls scripts/` matches the 19 rows in section 6 (`__pycache__` is excluded; not security-relevant).
-- `ls docs/` matches the 10 rows in section 7.
+- `ls docs/` matches the 11 rows in section 7.
 
 Closes #179.
