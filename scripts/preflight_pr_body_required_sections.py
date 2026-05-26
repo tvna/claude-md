@@ -105,7 +105,7 @@ def build_deny_reason(tool_name: str, missing: list[str]) -> str:
         f"retrigger loop documented in retro #356.\n\n"
         f"Add an H2 (`## <name>`) or H3 (`### <name>`) heading for each "
         f"missing entry above. See .github/PULL_REQUEST_TEMPLATE.md for "
-        f"the canonical shape and docs/issue-pr-body-standard.md for "
+        f"the canonical shape and docs/standards/issue-pr-body-standard.md for "
         f"per-section guidance. Heading text is case-sensitive but the "
         f"server treats `Risk & blast radius` and `Risk and blast "
         f"radius` as equivalent."

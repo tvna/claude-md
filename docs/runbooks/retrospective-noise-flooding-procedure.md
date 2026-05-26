@@ -1,7 +1,7 @@
 # Retrospective noise and flooding visibility -- procedure
 
 Operator-facing companion to the retrospective documents in
-[`docs/history/retrospective-pr-*.md`](history/) and the auto-retro
+[`docs/archive/retrospective-pr-*.md`](history/) and the auto-retro
 harness in [`scripts/auto_retro.py`](../scripts/auto_retro.py).
 Deliverable for [#315](https://github.com/tvna/claude-md/issues/315);
 part of [#63](https://github.com/tvna/claude-md/issues/63) Phase 8(D-3).
@@ -33,7 +33,7 @@ non-bot, non-retro merge.
   (missing deterministic gate / unclear agent instruction / external
   or human decision that cannot be automated) is owned by CLAUDE.md
   section 3 and mirrored in
-  [`docs/agent-rules-design-philosophy.md`](agent-rules-design-philosophy.md)
+  [`docs/prd/agent-rules-design-philosophy.md`](../prd/agent-rules-design-philosophy.md)
   section 6.4. This procedure consumes the taxonomy, it does not
   extend it.
 
@@ -63,7 +63,7 @@ interpretation; co-firing collapses the benign explanation.
 ### 2.1 Severity thresholds (rule of thumb)
 
 The thresholds below are operator rules of thumb derived from the
-existing retrospective corpus (`docs/history/retrospective-pr-229.md`
+existing retrospective corpus (`docs/archive/retrospective-pr-229.md`
 through `retrospective-pr-257.md`). They are not deterministic
 gates; a retrospective writer may override any threshold with a
 recorded rationale.
@@ -98,7 +98,7 @@ classification when the worked evidence on the PR justifies it.
 
 The classification feeds directly into the section 6.4 lane-mapping
 table in
-[`docs/agent-rules-design-philosophy.md`](agent-rules-design-philosophy.md),
+[`docs/prd/agent-rules-design-philosophy.md`](../prd/agent-rules-design-philosophy.md),
 which tells the retrospective writer which ownership lane (harness,
 universal text, or repo-local doc) carries the durable fix.
 
@@ -110,7 +110,7 @@ like under this procedure.
 
 ### 4.1 Worked example -- non-noise (PR #237)
 
-`docs/history/retrospective-pr-237.md` documents PR #237 as a
+`docs/archive/retrospective-pr-237.md` documents PR #237 as a
 single-commit, zero-repair merge. Running the section 2 checklist:
 
 - S1 commit count: 1 commit. Green.
@@ -198,8 +198,8 @@ Q3. Would the deterministic check fire on the historical PR corpus
     Yes -> File a new sub-issue of #63 proposing the gate.
            Reference this section by anchor. The sub-issue follows
            the issue body standard in
-           docs/issue-pr-body-standard.md and the lane-mapping
-           guidance in docs/agent-rules-design-philosophy.md
+           docs/standards/issue-pr-body-standard.md and the lane-mapping
+           guidance in docs/prd/agent-rules-design-philosophy.md
            section 6.4.
 ```
 
@@ -218,7 +218,7 @@ solo-developer themselves in the current repository state).
 
 The procedure has no scheduled cadence outside the per-merge cycle;
 its evidence base grows monotonically with each
-`docs/history/retrospective-pr-*.md` file that lands.
+`docs/archive/retrospective-pr-*.md` file that lands.
 
 ## 7. References
 
@@ -231,13 +231,13 @@ its evidence base grows monotonically with each
   harness; its `_build_repair_history_table` function pre-fills the
   signals consumed by [section 2](#2-signals-to-inspect) (S1, S2,
   S3).
-- [`docs/agent-rules-design-philosophy.md`](agent-rules-design-philosophy.md)
+- [`docs/prd/agent-rules-design-philosophy.md`](../prd/agent-rules-design-philosophy.md)
   section 6.4 -- the retrospective-classification-to-lane mapping
   table consumed by [section 3](#3-classification-mapping).
-- [`docs/issue-pr-body-standard.md`](issue-pr-body-standard.md) --
+- [`docs/standards/issue-pr-body-standard.md`](../standards/issue-pr-body-standard.md) --
   body shape for the follow-up sub-issue produced by
   [section 5](#5-when-to-file-a-follow-up-gate).
-- [`docs/history/retrospective-pr-237.md`](history/retrospective-pr-237.md)
+- [`docs/archive/retrospective-pr-237.md`](../archive/retrospective-pr-237.md)
   -- the non-noise worked example in section 4.1.
 - CLAUDE.md section 3 -- the three-category repair taxonomy
   consumed by section 3.

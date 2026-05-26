@@ -34,7 +34,7 @@ jobs:
       - name: Guard RULESETS_PAT
         run: |
           if [ -z "${GH_TOKEN_API}" ]; then
-            echo "::error::RULESETS_PAT secret is not set (reused read-only for ruleset detect). See docs/rulesets.md."
+            echo "::error::RULESETS_PAT secret is not set (reused read-only for ruleset detect). See docs/runbooks/rulesets.md."
             exit 1
           fi
 

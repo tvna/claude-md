@@ -36,7 +36,7 @@ from _github_api import API_VERSION
 
 API_ROOT = "https://api.github.com"
 DEFAULT_DOCS_URL = (
-    "https://github.com/tvna/claude-md/blob/main/docs/rulesets.md"
+    "https://github.com/tvna/claude-md/blob/main/docs/runbooks/rulesets.md"
     "#pr-time-required-checks-sync-gate"
 )
 
@@ -256,7 +256,7 @@ def main(argv: list[str] | None = None) -> int:
         if not token:
             print(
                 "::error::GH_TOKEN_API env var (RULESETS_PAT) is not set. "
-                "See docs/rulesets.md \"Required secret\".",
+                "See docs/runbooks/rulesets.md \"Required secret\".",
                 file=sys.stderr,
             )
             return 1

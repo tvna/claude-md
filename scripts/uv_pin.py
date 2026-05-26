@@ -6,7 +6,7 @@ The pin lives at `[tool.uv].required-version` as an exact PEP440 specifier
 is invoked from CI (`.github/workflows/verify-agents.yml`) and the
 SessionStart hook (`scripts/install-uv.sh`).
 
-Tested by ``tests/test_uv_pin.py``. See ``docs/remote-environment.md``
+Tested by ``tests/test_uv_pin.py``. See ``docs/standards/remote-environment.md``
 for the operator-facing rationale (#112).
 """
 

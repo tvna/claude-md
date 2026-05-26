@@ -3,7 +3,7 @@ name: Scan non-ASCII content
 # All logic lives in scripts/scan_non_ascii.py and is unit-tested in
 # tests/test_scan_non_ascii.py per the refactor strategy in issue #123
 # (mirrors #112). The workflow only marshals env vars and shells out
-# to the single Python entry point. See docs/non-ascii-defense.md.
+# to the single Python entry point. See docs/prd/non-ascii-defense.md.
 
 on:
   issues:
