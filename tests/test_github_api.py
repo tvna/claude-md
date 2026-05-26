@@ -6,6 +6,8 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 
 from _github_api import apply_call
@@ -144,3 +146,76 @@ def test_apply_call_payload_none_has_no_body_or_content_type() -> None:
     assert code == 204
     assert requests[0].data is None
     assert "Content-type" not in requests[0].headers
+
+
+@pytest.mark.parametrize("code", [401, 403, 404, 429])
+def test_apply_call_breaks_on_named_4xx_codes(code: int) -> None:
+    calls = 0
+    sleeps: list[float] = []
+
+    def opener(request: urllib.request.Request) -> Response:
+        nonlocal calls
+        calls += 1
+        raise http_error(code, f"body-{code}")
+
+    result_code, result_body = apply_call(
+        method="GET",
+        url="https://example.test/x",
+        payload=None,
+        token="token",
+        opener=opener,
+        sleeper=sleeps.append,
+    )
+
+    assert result_code == code
+    assert result_body == f"body-{code}"
+    assert calls == 1
+    assert sleeps == []
+
+
+def test_apply_call_print_does_not_leak_bearer_token(capsys: pytest.CaptureFixture[str]) -> None:
+    # Exercise every print branch in apply_call: 5xx-then-success and URLError.
+    # A single absence assertion guards the format string against any future
+    # refactor that adds the token to the same printed line.
+    items: list[Response | BaseException] = [
+        http_error(500, "server"),
+        urllib.error.URLError("net"),
+        Response(200, "ok"),
+    ]
+
+    def opener(request: urllib.request.Request) -> Response:
+        item = items.pop(0)
+        if isinstance(item, BaseException):
+            raise item
+        return item
+
+    apply_call(
+        method="GET",
+        url="https://example.test/x",
+        payload=None,
+        token="sentinel-DEADBEEF",
+        opener=opener,
+        sleeper=lambda _s: None,
+    )
+
+    captured = capsys.readouterr()
+    assert "sentinel-DEADBEEF" not in captured.out
+    assert "sentinel-DEADBEEF" not in captured.err
+
+
+def test_apply_call_returns_body_verbatim_when_not_json() -> None:
+    # apply_call is JSON-agnostic; callers parse. Documents that malformed
+    # JSON is returned as-is rather than swallowed.
+    def opener(request: urllib.request.Request) -> Response:
+        return Response(200, "{not valid json")
+
+    code, body = apply_call(
+        method="GET",
+        url="https://example.test/x",
+        payload=None,
+        token="token",
+        opener=opener,
+    )
+
+    assert code == 200
+    assert body == "{not valid json"
