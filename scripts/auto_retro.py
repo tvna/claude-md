@@ -221,6 +221,12 @@ _MERGE_FROM_MAIN_PREFIXES: tuple[str, ...] = (
     "Merge remote-tracking branch 'origin/main'",
 )
 
+# Leading marker on the right-hand cell of merge-from-main rows. Lets
+# operators skip the row when filling the section 3 classification
+# column: the row is a structural artifact of the squash + linear-history
+# + strict-status-checks ruleset, not a repair loop. Issue #400.
+_POLICY_ARTIFACT_MARKER = "[policy-artifact]"
+
 
 def _count_merge_from_main(subjects: list[str]) -> int:
     """Return the number of *subjects* that are merge-from-main commits.
@@ -543,16 +549,19 @@ def _build_repair_history_table(
                 )
             )
 
+    policy_artifact_emitted = False
     for subject in commit_subjects:
         stripped = subject.strip()
         if any(
             stripped.startswith(prefix) for prefix in _MERGE_FROM_MAIN_PREFIXES
         ):
+            policy_artifact_emitted = True
             rows.append(
                 (
                     _escape_table_cell("Merge from main"),
                     _escape_table_cell(
-                        f"`{subject}` -- rebase debt before merge"
+                        f"{_POLICY_ARTIFACT_MARKER} `{subject}` -- "
+                        "rebase debt before merge"
                     ),
                 )
             )
@@ -599,7 +608,17 @@ def _build_repair_history_table(
         f"| {idx} | {left} | {right} |\n"
         for idx, (left, right) in enumerate(rows, start=1)
     )
-    return header + body_rows
+    footnote = ""
+    if policy_artifact_emitted:
+        footnote = (
+            "\n"
+            f"_{_POLICY_ARTIFACT_MARKER} rows are forced by the squash + "
+            "linear-history + strict-status-checks policy in "
+            "`.github/rulesets/main.json`. They are exempt from the "
+            "CLAUDE.md section 3 classification taxonomy and may be "
+            "skipped when filling the classification column._\n"
+        )
+    return header + body_rows + footnote
 
 
 def build_retro_body(
