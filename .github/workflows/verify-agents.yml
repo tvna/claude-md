@@ -95,8 +95,12 @@ jobs:
       - name: Sync locked project environment
         run: uv sync --locked
 
-      - name: Run script unit tests with coverage
-        run: uv run python -m pytest --cov --cov-report=term-missing --cov-report=xml --cov-fail-under=92.71 -v
+      - name: Run script unit tests
+        # Coverage instrumentation runs only on push to main (see
+        # .github/workflows/coverage.yml and #462) so PR runs stay fast.
+        # Developers must run `uv run python -m pytest --cov` locally
+        # before push when coverage may have shifted.
+        run: uv run python -m pytest -v
 
   prek:
     runs-on: ubuntu-latest
