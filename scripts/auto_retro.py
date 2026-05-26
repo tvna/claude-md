@@ -44,6 +44,8 @@ import os
 import re
 import subprocess
 import sys
+import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -53,6 +55,13 @@ from _trusted_bots import _TRUSTED_BOT_LOGINS
 from issue_link import extract_refs, strip_html_comments
 
 FALLBACK_TYPE_SCOPE = "retro"
+
+# Refs issue #380: GitHub may not finalize merge_commit_sha by the time
+# pull_request_target.closed fires; retry the PR-detail fetch with
+# bounded exponential backoff before falling through to the empty-list
+# soft-fail. Total max wait = sum(_MERGE_SHA_RETRY_BACKOFF) seconds.
+_MERGE_SHA_RETRY_ATTEMPTS: int = 4
+_MERGE_SHA_RETRY_BACKOFF: tuple[float, ...] = (2.0, 4.0, 8.0)
 
 # Section names mirror body_policy._ISSUE_COMMON_REQUIRED so the
 # auto-opened retro issue passes verify-body-policy. Drift between the
@@ -875,15 +884,26 @@ def fetch_pr_commits(repo: str, pr_number: int) -> list[str]:
     return subjects
 
 
-def fetch_check_runs(repo: str, pr_number: int) -> list[dict[str, Any]]:
+def fetch_check_runs(
+    repo: str,
+    pr_number: int,
+    *,
+    sleeper: Callable[[float], None] = time.sleep,
+) -> list[dict[str, Any]]:
     """Return failed check_run entries for the PR's merge commit.
 
     Two-step fetch:
 
     1. ``GET /repos/{repo}/pulls/{pr_number}`` to read
-       ``merge_commit_sha``. Short-circuits to ``[]`` if the SHA is null
-       (GitHub may not have computed it yet on
-       ``pull_request_target.closed``).
+       ``merge_commit_sha``. GitHub may not have finalized the SHA when
+       ``pull_request_target.closed`` fires (refs issue #380), so the
+       PR-detail call is retried up to :data:`_MERGE_SHA_RETRY_ATTEMPTS`
+       times with the :data:`_MERGE_SHA_RETRY_BACKOFF` sequence between
+       attempts. If every attempt still yields ``None``, emit a
+       ``::warning::`` line and soft-fail to ``[]`` -- check_runs is an
+       augmenting signal for the Repair history table, not a correctness
+       invariant. The ``sleeper`` parameter is injectable for tests
+       (mirrors ``scripts/_github_api.py`` ``apply_call`` precedent).
     2. ``GET /repos/{repo}/commits/{sha}/check-runs?per_page=100`` to
        enumerate runs against that SHA.
 
@@ -899,10 +919,24 @@ def fetch_check_runs(repo: str, pr_number: int) -> list[dict[str, Any]]:
     when the annotation API fails, or beyond the
     :data:`_CHECK_RUN_DISPLAY_CAP` enrichment ceiling). Refs issue #381.
     """
-    raw = gh_api("GET", f"/repos/{repo}/pulls/{pr_number}")
-    pr_detail = json.loads(raw) if raw.strip() else {}
-    sha = pr_detail.get("merge_commit_sha")
+    sha: str | None = None
+    for attempt in range(1, _MERGE_SHA_RETRY_ATTEMPTS + 1):
+        raw = gh_api("GET", f"/repos/{repo}/pulls/{pr_number}")
+        pr_detail = json.loads(raw) if raw.strip() else {}
+        sha = pr_detail.get("merge_commit_sha")
+        if sha:
+            break
+        if attempt < _MERGE_SHA_RETRY_ATTEMPTS:
+            sleeper(_MERGE_SHA_RETRY_BACKOFF[attempt - 1])
     if not sha:
+        print(
+            f"::warning::fetch_check_runs: merge_commit_sha still null "
+            f"for {repo}#{pr_number} after {_MERGE_SHA_RETRY_ATTEMPTS} "
+            f"attempts (backoff {list(_MERGE_SHA_RETRY_BACKOFF)}s); "
+            "Repair history will use commit-subject signals only "
+            "(refs issue #380)",
+            file=sys.stderr,
+        )
         return []
     raw = gh_api(
         "GET",
@@ -1134,6 +1168,15 @@ def create_issue(
 # scan_non_ascii.py:313-326).
 _BACK_LINK_MARKER = "<!-- auto-retro:back-link -->"
 
+# Label applied to the source PR after the retro issue is opened and
+# the back-link comment is posted. Emission is the harness contract --
+# subscribed Claude sessions and operators read it as the signal that
+# the PR has reached terminal state and no further session attention
+# is required. Consumption (e.g. unsubscribe_pr_activity) is platform
+# / session policy and out of scope here. SoT entry lives in
+# .github/labels.json; tests/test_auto_retro.py guards the drift.
+_TERMINAL_LABEL = "harness:retro-opened"
+
 
 def find_existing_back_link_id(
     repo: str, pr_number: int, marker: str = _BACK_LINK_MARKER
@@ -1182,6 +1225,24 @@ def post_back_link_comment(
         {"body": body},
     )
     return "created"
+
+
+def apply_terminal_label(
+    repo: str, pr_number: int, label: str = _TERMINAL_LABEL
+) -> None:
+    """POST *label* to the source PR's labels endpoint.
+
+    GitHub's labels endpoint is naturally idempotent (re-adding an
+    existing label is a no-op), so no pre-check is needed. The orchestrator
+    is responsible for the fail-soft policy: the retro issue is already
+    created by the time this fires, so a failed label add must not roll
+    back the audit trail.
+    """
+    gh_api(
+        "POST",
+        f"/repos/{repo}/issues/{pr_number}/labels",
+        {"labels": [label]},
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1350,6 +1411,7 @@ def run(event: dict[str, Any], repo: str) -> int:
     new_url = created.get("html_url") or ""
 
     back_link_status = "skipped"
+    terminal_label_status = "skipped"
     if isinstance(new_number, int):
         try:
             back_link_status = post_back_link_comment(repo, pr.number, new_number)
@@ -1366,9 +1428,26 @@ def run(event: dict[str, Any], repo: str) -> int:
             )
             back_link_status = "failed"
 
+        try:
+            apply_terminal_label(repo, pr.number)
+            terminal_label_status = "applied"
+        except subprocess.CalledProcessError as exc:
+            # Fail-soft: the terminal label is a secondary signal layered on
+            # top of the retro+back-link audit trail. A label-add failure
+            # must NOT roll back the retro -- warn and continue so the
+            # primary outputs remain intact.
+            print(
+                f"::warning::apply_terminal_label failed "
+                f"(exit {exc.returncode}); retro issue #{new_number} created "
+                f"but source PR was not labeled {_TERMINAL_LABEL!r}",
+                file=sys.stderr,
+            )
+            terminal_label_status = "failed"
+
     msg = (
         f"created retro issue #{new_number} ({new_url}); "
-        f"back-link={back_link_status}"
+        f"back-link={back_link_status}; "
+        f"terminal-label={terminal_label_status}"
     )
     print(msg)
     _append_summary(_build_summary(pr, "created", msg))

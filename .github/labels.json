@@ -93,5 +93,10 @@
     "name": "dependencies",
     "description": "Dependency bump (Dependabot or manual).",
     "color": "0366d6"
+  },
+  {
+    "name": "harness:retro-opened",
+    "description": "auto-retro harness opened a retrospective issue; PR is at terminal state.",
+    "color": "0e8a16"
   }
 ]
