@@ -63,3 +63,6 @@ jobs:
             echo "Run 'uv run --with \"apm-cli==${APM_CLI_VERSION}\" --exclude-newer \"14 days\" apm compile' locally and commit the result."
             exit 1
           fi
+
+      - name: Verify .apm checksum lockfile
+        run: python3 scripts/verify_apm_checksums.py verify
