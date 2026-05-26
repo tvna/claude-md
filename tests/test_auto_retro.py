@@ -363,6 +363,33 @@ class TestBuildRetroBody:
         body = ar.build_retro_body(_make_pr(layer_labels=()), [])
         assert "(none on source PR)" in body
 
+    def test_pr_368_historical_canonical_fix_does_not_produce_iteration_row(
+        self,
+    ) -> None:
+        """Issue #413 historical re-render: PR #368 (`fix(ci): close
+        verify skip bypass`) landed one merge-from-main commit and one
+        canonical fix commit. The historical retro mis-flagged that
+        canonical commit as Iteration commit. After the fix the body
+        must render it as Fix commit and not duplicate it into the
+        iteration class."""
+        pr = _make_pr(
+            number=368,
+            title="fix(ci): close verify skip bypass",
+        )
+        commits = [
+            "Merge branch 'main' into fix/verify-skip",
+            "fix(ci): close verify skip bypass (#366)",
+        ]
+        body = ar.build_retro_body(pr, commits)
+        assert "| Fix commit |" in body
+        assert "canonical fix commit on fix-typed PR" in body
+        # The canonical subject must not also appear with the
+        # iteration-commit narration.
+        assert (
+            "`fix(ci): close verify skip bypass (#366)` -- signals"
+            not in body
+        )
+
 
 # ---------------------------------------------------------------------------
 # _build_repair_history_table / build_retro_body table-and-marker contract
@@ -420,6 +447,86 @@ class TestRepairHistoryTable:
         assert "fix(scripts): retry timeout" in table
         assert "fixup! feat(harness): earlier subject" in table
         assert "squash! fix typo" in table
+
+    # Issue #413 regression suite: canonical fix on fix-typed PR must not
+    # be flagged as Iteration commit.
+    def test_canonical_fix_commit_on_fix_typed_pr_emits_fix_commit_row(
+        self,
+    ) -> None:
+        commits = ["fix(ci): close verify skip bypass (#366)"]
+        table = ar._build_repair_history_table(
+            None, commits, len(commits), pr_type="fix"
+        )
+        assert "| Fix commit |" in table
+        assert "| Iteration commit |" not in table
+        assert "canonical fix commit on fix-typed PR" in table
+
+    def test_canonical_fix_skips_leading_merge_from_main(self) -> None:
+        commits = [
+            "Merge branch 'main' into branch",
+            "fix(ci): close verify skip bypass",
+        ]
+        table = ar._build_repair_history_table(
+            None, commits, len(commits), pr_type="fix"
+        )
+        assert "| Fix commit |" in table
+        assert "| Merge from main |" in table
+        assert "| Iteration commit |" not in table
+
+    def test_intermediate_work_before_fix_keeps_iteration_classification(
+        self,
+    ) -> None:
+        commits = [
+            "feat(harness): groundwork",
+            "fix(harness): correct earlier groundwork",
+        ]
+        table = ar._build_repair_history_table(
+            None, commits, len(commits), pr_type="fix"
+        )
+        assert "| Fix commit |" not in table
+        assert table.count("| Iteration commit |") == 1
+
+    def test_multi_fix_pr_only_first_is_canonical(self) -> None:
+        commits = [
+            "fix(a): primary fix",
+            "fix(b): follow-up after CI failure",
+        ]
+        table = ar._build_repair_history_table(
+            None, commits, len(commits), pr_type="fix"
+        )
+        assert table.count("| Fix commit |") == 1
+        assert table.count("| Iteration commit |") == 1
+        assert "fix(a): primary fix" in table
+        assert "fix(b): follow-up after CI failure" in table
+
+    def test_non_fix_typed_pr_keeps_iteration_classification(self) -> None:
+        commits = ["fix(x): emergency fix in a feat PR"]
+        table = ar._build_repair_history_table(
+            None, commits, len(commits), pr_type="feat"
+        )
+        assert "| Fix commit |" not in table
+        assert "| Iteration commit |" in table
+
+    def test_fixup_and_squash_prefixes_unaffected_by_pr_type(self) -> None:
+        commits = [
+            "fixup! feat(x): earlier",
+            "squash! fix typo",
+        ]
+        table = ar._build_repair_history_table(
+            None, commits, len(commits), pr_type="fix"
+        )
+        assert "| Fix commit |" not in table
+        assert table.count("| Iteration commit |") == 2
+
+    def test_unparsed_pr_title_defaults_preserve_iteration_classification(
+        self,
+    ) -> None:
+        commits = ["fix(x): a fix"]
+        table = ar._build_repair_history_table(
+            None, commits, len(commits), pr_type=""
+        )
+        assert "| Fix commit |" not in table
+        assert "| Iteration commit |" in table
 
     def test_merge_from_main_rows_both_prefix_variants(self) -> None:
         commits = [

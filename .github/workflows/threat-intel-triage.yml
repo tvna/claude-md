@@ -8,11 +8,14 @@ on:
 
 permissions:
   issues: write
-  pull-requests: read
+  pull-requests: write
   contents: read
 
 jobs:
   triage:
+    if: >-
+      github.event_name == 'issues' ||
+      github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}
@@ -21,23 +24,12 @@ jobs:
       LABELS_JSON: ${{ toJSON(github.event.issue.labels || github.event.pull_request.labels) }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Classify threat intelligence need
         id: triage
         run: |
-          labels_file="$(mktemp)"
-          printf '%s' "$LABELS_JSON" > "$labels_file"
-          labels="$(
-            python3 - "$labels_file" <<'PY'
-import json
-import sys
-
-with open(sys.argv[1], encoding="utf-8") as handle:
-    labels = json.load(handle)
-print(",".join(label.get("name", "") for label in labels if isinstance(label, dict)))
-PY
-          )"
+          labels="$(printf '%s' "$LABELS_JSON" | jq -r '(. // []) | map(.name // "") | join(",")')"
           python3 scripts/threat_intel_triage.py scan \
             --repo-root . \
             --labels "$labels" \
