@@ -100,7 +100,16 @@ _RESULT_PASSING_PREFIXES: tuple[str, ...] = (
     "pass",
     "passed",
     "success",
+    # Common tool-natural-language pass shapes. Refs #417.
+    "all hooks",
+    "all checks",
+    "all tests",
 )
+
+# Pure numeric result (e.g., a count from `grep -c` or `wc -l`). The
+# operator chose count-style verification, so the value is a measured
+# quantity rather than a status code; treat as passing. Refs #417.
+_RESULT_PASSING_NUMERIC_RE = re.compile(r"^-?\d+(?:\.\d+)?$")
 
 # Append-to-existing-retro markers used by append_repair_history_row.
 _AUTO_FILLED_OPEN = "<!-- auto-filled:repair-history -->"
@@ -279,14 +288,24 @@ def _slice_section(body: str, heading: str) -> str:
 def _result_is_passing(result: str) -> bool:
     """Return True if a Verification result line text looks like a pass.
 
-    Strips surrounding backticks and leading whitespace, then matches a
-    small allowlist of pass markers (``exit 0``, ``OK:``, ``pass``,
-    ``passed``, ``success``, ``ok``). Anything else (including ``exit
-    1``, ``failed``, prose) is treated as a failure signal.
+    Strips surrounding backticks and leading whitespace, then:
+
+    * a purely numeric result (matched by :data:`_RESULT_PASSING_NUMERIC_RE`)
+      is treated as a measured quantity from a count-style verification
+      and accepted as passing;
+    * otherwise the lowercased text is matched against the prefix
+      allowlist in :data:`_RESULT_PASSING_PREFIXES` (``exit 0``, ``OK:``,
+      ``pass``, ``passed``, ``success``, ``ok``, plus common tool
+      summaries such as ``all hooks ...``).
+
+    Anything else (including ``exit 1``, ``failed``, free-form prose) is
+    treated as a failure signal. Refs #417.
     """
     text = result.strip()
     if text.startswith("`") and text.endswith("`") and len(text) >= 2:
         text = text[1:-1].strip()
+    if _RESULT_PASSING_NUMERIC_RE.match(text):
+        return True
     lower = text.lower()
     return any(lower.startswith(prefix) for prefix in _RESULT_PASSING_PREFIXES)
 
