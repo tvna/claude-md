@@ -33,9 +33,8 @@
           {"context": "Verify APM / gate"},
           {"context": "Verify dependabot labels / verify"},
           {"context": "Verify design philosophy doc / verify"},
-          {"context": "Verify issue link / gate"},
-          {"context": "Verify ruleset sync / gate"},
-          {"context": "Verify title policy / gate"}
+          {"context": "Verify GitHub content / gate"},
+          {"context": "Verify ruleset sync / gate"}
         ]
       }
     }
