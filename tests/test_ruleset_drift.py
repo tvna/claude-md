@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import io
 import json
 import sys
+import urllib.error
 import urllib.request
+from email.message import Message
 from pathlib import Path
 from typing import Any
 
@@ -271,6 +274,24 @@ class TestFetchLiveRulesetsList:
         assert captured[0].full_url == "https://api.github.com/repos/owner/repo/rulesets"
         assert captured[0].headers["Authorization"] == "Bearer tkn"
         assert captured[0].headers["X-github-api-version"] == "2022-11-28"
+
+    def test_propagates_http_403(self) -> None:
+        # The function does not trap HTTPError. The orchestrator (detect)
+        # and main()'s except clause surface the error as "::error::..."
+        # without echoing the token (token never appears in the print path).
+        def opener(request: urllib.request.Request) -> Response:
+            raise urllib.error.HTTPError(
+                request.full_url,
+                403,
+                "Forbidden",
+                Message(),
+                io.BytesIO(b'{"message":"Resource not accessible"}'),
+            )
+
+        with pytest.raises(urllib.error.HTTPError) as exc_info:
+            ruleset_drift.fetch_live_rulesets_list("owner/repo", "tkn", opener=opener)
+
+        assert exc_info.value.code == 403
 
 
 class TestFetchLiveRuleset:
