@@ -44,6 +44,7 @@ The append-only policy for `archive/` is documented separately in
 | [security-control-drift-report.md](runbooks/security-control-drift-report.md) | Aggregator runbook for per-family drift detectors posting a single rolling comment on the MITRE ATT&CK tracker. | #180, #178 | `.github/workflows/security-control-drift-report.yml`; `scripts/security_drift_report.py` |
 | [downstream-instruction-review-checklist.md](runbooks/downstream-instruction-review-checklist.md) | Security-focused review checklist for PRs that change instructions this repository ships to downstream consumers. | #183, #178 | `.github/workflows/verify-apm-portability.yml`; `.github/workflows/verify-apm-drift.yml`; `.github/PULL_REQUEST_TEMPLATE.md` (Bootstrap items) |
 | [retrospective-noise-flooding-procedure.md](runbooks/retrospective-noise-flooding-procedure.md) | Operator procedure for reviewing retrospective and auto-retro flooding signal vs noise. | #315, #63 Phase 8(D-3) | `.github/workflows/auto-retro.yml`; `scripts/auto_retro.py`; `docs/archive/retrospective-pr-*.md` (subject) |
+| [prek.md](runbooks/prek.md) | `j178/prek` install steps, configured hooks, and the CI gate that runs `prek run --all-files` on every PR. | #408 | `.pre-commit-config.yaml`; `.github/workflows/verify-agents.yml` (`prek` job); `scripts/uv_pin.py`; `scripts/scan_workflow_pip.py` |
 
 ## archive/ -- frozen historical evidence
 
