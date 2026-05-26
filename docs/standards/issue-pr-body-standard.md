@@ -1,14 +1,14 @@
 # Issue/PR Body Standard - Contributor Runbook
 
-> Design rationale: see [`docs/agent-rules-design-philosophy.md`](./agent-rules-design-philosophy.md). This runbook is the concrete body shape that carries the Facts / Assumptions discipline (principle P2) and the issue-citation discipline (principle P3) referenced by the meta-doc.
+> Design rationale: see [`docs/prd/agent-rules-design-philosophy.md`](../prd/agent-rules-design-philosophy.md). This runbook is the concrete body shape that carries the Facts / Assumptions discipline (principle P2) and the issue-citation discipline (principle P3) referenced by the meta-doc.
 
 This document is the contributor- and agent-facing runbook for the body shape
 of every issue and pull request in this repository. The label taxonomy in
-[`docs/issue-triage.md`](./issue-triage.md) tells an agent **how to route**
+[`docs/runbooks/issue-triage.md`](../runbooks/issue-triage.md) tells an agent **how to route**
 an item from labels alone; this document tells a human or agent **what to
 write inside the body** once routing has chosen "read the body".
 
-Per [CLAUDE.md](../CLAUDE.md) section 1, every change needs a goal and a
+Per [CLAUDE.md](../../CLAUDE.md) section 1, every change needs a goal and a
 verification step. Per section 2, facts and speculation must be separated.
 Per section 3, every commit and PR must cite an issue number. Per section 5,
 each PR should touch only what it must. A fixed body shape is the cheapest
@@ -19,7 +19,7 @@ code is read.
 
 | File | Target | Purpose |
 |---|---|---|
-| `docs/issue-pr-body-standard.md` *(this file)* | - | Body-shape runbook |
+| `docs/standards/issue-pr-body-standard.md` *(this file)* | - | Body-shape runbook |
 | `.github/PULL_REQUEST_TEMPLATE.md` | new PRs | PR template the standard describes |
 | `.github/labels.json` | `/repos/tvna/claude-md/labels` | `type:*` axis the standard partitions on |
 | `scripts/issue_link.py` | `verify-issue-link.yml` | Refs check (one piece of body policy that is already enforced) |
@@ -177,7 +177,7 @@ out of the final PR body and does not need to be preserved.
 
 ## Worked examples
 
-See [`docs/history/issue-pr-body-examples.md`](history/issue-pr-body-examples.md) for one issue-body sample per type and a PR body sample. The examples are ASCII-only by construction.
+See [`docs/archive/issue-pr-body-examples.md`](../archive/issue-pr-body-examples.md) for one issue-body sample per type and a PR body sample. The examples are ASCII-only by construction.
 
 ## Body-policy gate
 
@@ -282,7 +282,7 @@ checking for `Refs #N`. The rationale is that `dependabot[bot]` opens
 PRs from `.github/dependabot.yml` configuration on a schedule and
 cannot be made to write a `Refs #N` line; the dependency PRs are
 labelled and reviewed through a separate path (see
-`docs/dependabot-automerge.md`).
+`docs/runbooks/dependabot-automerge.md`).
 
 Extension policy from the module docstring: exact match only, no
 wildcards, extend one entry at a time. Any PR that adds a login to
@@ -295,7 +295,7 @@ historical context of the carve-out stays visible.
 ```sh
 # 1. The doc itself is ASCII-only (it must pass scan-non-ascii.yml).
 python -c "import pathlib; \
-  assert pathlib.Path('docs/issue-pr-body-standard.md').read_text().isascii()"
+  assert pathlib.Path('docs/standards/issue-pr-body-standard.md').read_text().isascii()"
 
 # 2. The Refs check passes on an example PR body.
 printf '## Related Issue\n\nRefs #206\n' > /tmp/pr-body.md
@@ -318,16 +318,16 @@ python scripts/body_policy.py verify \
 
 ## References
 
-- [`docs/issue-triage.md`](./issue-triage.md) - label taxonomy and routing
+- [`docs/runbooks/issue-triage.md`](../runbooks/issue-triage.md) - label taxonomy and routing
   table; bodies are read only after labels route the issue.
-- [`.github/PULL_REQUEST_TEMPLATE.md`](../.github/PULL_REQUEST_TEMPLATE.md) -
+- [`.github/PULL_REQUEST_TEMPLATE.md`](../../.github/PULL_REQUEST_TEMPLATE.md) -
   the PR template this runbook describes.
 - [`.github/labels.json`](../.github/labels.json) - the `type:*` axis the
   type-specific guidance partitions on.
 - [`scripts/issue_link.py`](../scripts/issue_link.py) - Refs-check gate.
 - [`scripts/_trusted_bots.py`](../scripts/_trusted_bots.py) - allowlist
   single source of truth.
-- [CLAUDE.md](../CLAUDE.md) - sections 1, 2, 3, 4, 5 (rationale tie-in).
+- [CLAUDE.md](../../CLAUDE.md) - sections 1, 2, 3, 4, 5 (rationale tie-in).
 - [#196](https://github.com/tvna/claude-md/issues/196) - sibling standard
   for workflow scripts (will back-link to this doc when its runbook lands).
 - [#197](https://github.com/tvna/claude-md/issues/197) - umbrella tracking

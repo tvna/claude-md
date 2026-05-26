@@ -110,4 +110,4 @@ None. The workflow uses the default `GITHUB_TOKEN` because the only write it per
 - [#18](https://github.com/tvna/claude-md/issues/18) — parent ruleset tracker (Phase 4-B = this workflow).
 - [#31](https://github.com/tvna/claude-md/issues/31) — tracking issue for this workflow.
 - [`.github/rulesets/all-branches.json`](../.github/rulesets/all-branches.json) — confirms deletion is not blocked on non-default branches.
-- [`docs/rulesets.md`](./rulesets.md) — sibling runbook this file's structure is patterned after.
+- [`docs/runbooks/rulesets.md`](./rulesets.md) — sibling runbook this file's structure is patterned after.

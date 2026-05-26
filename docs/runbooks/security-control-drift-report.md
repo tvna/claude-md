@@ -9,7 +9,7 @@ Tracks [#180](https://github.com/tvna/claude-md/issues/180) under parent
 ## Purpose
 
 One scheduled report that surfaces drift across the security-control families
-already enumerated in [`docs/security-control-inventory.md`](./security-control-inventory.md).
+already enumerated in [`docs/prd/security-control-inventory.md`](../prd/security-control-inventory.md).
 The workflow does **not** duplicate any detector: it invokes the existing
 read-only entry points (`ruleset_drift.py detect`, `labels_apply.py plan`,
 `apm compile` + `git diff`, `uv_pin.py drift`, `uv_pin.py stale`), then
@@ -75,10 +75,10 @@ detection step.
 
 | Row | Where to act |
 |---|---|
-| `rulesets` | Follow the per-family issue filed by `ruleset-drift.yml` (SoT-vs-live drift or unknown-ruleset). See `docs/rulesets.md`. |
-| `labels` | Dispatch `apply-labels.yml` with `dry_run=false` after reviewing the plan summary. See `docs/issue-triage.md`. |
+| `rulesets` | Follow the per-family issue filed by `ruleset-drift.yml` (SoT-vs-live drift or unknown-ruleset). See `docs/runbooks/rulesets.md`. |
+| `labels` | Dispatch `apply-labels.yml` with `dry_run=false` after reviewing the plan summary. See `docs/runbooks/issue-triage.md`. |
 | `apm-instructions` | Locally run `uv run --with "apm-cli==<pin>" --exclude-newer "14 days" apm compile` and commit the regenerated `CLAUDE.md` / `AGENTS.md`. |
-| `uv-pin-literal` | Remove the offending pin literal outside `pyproject.toml`, or update `pyproject.toml`. See `docs/remote-environment.md`. |
+| `uv-pin-literal` | Remove the offending pin literal outside `pyproject.toml`, or update `pyproject.toml`. See `docs/standards/remote-environment.md`. |
 | `uv-pin-staleness` | Informational. Bump `[tool.uv].required-version` in `pyproject.toml` when ready to adopt the newer uv. |
 
 A row with `status=error` means the detector itself failed (network blip,

@@ -71,7 +71,7 @@ def decide(
         f"mirror of verify-body-policy.yml shape gate): `{tool_name}` "
         f"would fail server-side.\n\n{joined}\n\nFix the PR body to use "
         "the post-2026-05-26 shape: see "
-        "docs/issue-pr-body-standard.md and "
+        "docs/standards/issue-pr-body-standard.md and "
         ".github/PULL_REQUEST_TEMPLATE.md."
     )
     return {

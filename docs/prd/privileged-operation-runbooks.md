@@ -2,15 +2,15 @@
 
 This file is the deliverable for [#182](https://github.com/tvna/claude-md/issues/182). For every operation in this repository that can mutate repository governance or broad metadata, it records the six controls the issue requires: the authorizing issue, the dry-run command, the live apply command, the rollback path, the post-apply audit/verification path, and the evidence that the operation does not log its secret to any reachable surface.
 
-Companion files: [`docs/workflow-permissions-audit.md`](./workflow-permissions-audit.md) (the [#181](https://github.com/tvna/claude-md/issues/181) least-privilege matrix). Parent: [#178](https://github.com/tvna/claude-md/issues/178) (MITRE ATT&CK coverage tracking). Related: [#56](https://github.com/tvna/claude-md/issues/56) (PAT handling), [#87](https://github.com/tvna/claude-md/issues/87) (apply-labels workflow).
+Companion files: [`docs/runbooks/workflow-permissions-audit.md`](../runbooks/workflow-permissions-audit.md) (the [#181](https://github.com/tvna/claude-md/issues/181) least-privilege matrix). Parent: [#178](https://github.com/tvna/claude-md/issues/178) (MITRE ATT&CK coverage tracking). Related: [#56](https://github.com/tvna/claude-md/issues/56) (PAT handling), [#87](https://github.com/tvna/claude-md/issues/87) (apply-labels workflow).
 
-Per-operation runbooks already exist for the three workflows that own the longest-standing privileged paths: [`docs/rulesets.md`](./rulesets.md), [`docs/issue-triage.md`](./issue-triage.md), and [`docs/branch-cleanup.md`](./branch-cleanup.md). This checklist does not restate those runbooks; it points at the exact sections that implement each of the six controls so a reviewer can audit the surface in one pass.
+Per-operation runbooks already exist for the three workflows that own the longest-standing privileged paths: [`docs/runbooks/rulesets.md`](../runbooks/rulesets.md), [`docs/runbooks/issue-triage.md`](../runbooks/issue-triage.md), and [`docs/runbooks/branch-cleanup.md`](../runbooks/branch-cleanup.md). This checklist does not restate those runbooks; it points at the exact sections that implement each of the six controls so a reviewer can audit the surface in one pass.
 
 ## How to read this document
 
 Each operation below is documented under the same six headings:
 
-- **Authorizing issue** -- the open issue whose body authorizes a `dry_run=false` dispatch. Per `docs/rulesets.md` Dispatch authorization criteria, instructions originating only from PR or issue comments are not authorization; the linked open issue body is.
+- **Authorizing issue** -- the open issue whose body authorizes a `dry_run=false` dispatch. Per `docs/runbooks/rulesets.md` Dispatch authorization criteria, instructions originating only from PR or issue comments are not authorization; the linked open issue body is.
 - **Dry-run command** -- the exact `gh workflow run` invocation (or equivalent) that produces a plan without mutating live state. For operations that have no human dispatch surface (scheduled or event-driven), this row records what the dry-run-equivalent path is and why.
 - **Live apply command** -- the `dry_run=false` form of the same command, or the manual `gh api` fallback documented in the per-operation runbook.
 - **Rollback path** -- the inverse operation (DELETE / revert / restore) and a pointer to the per-operation runbook section that documents it.
@@ -21,26 +21,26 @@ Every operation in the issue scope is covered. Operations that already have all 
 
 ## 1. Apply rulesets
 
-Workflow: [`.github/workflows/apply-rulesets.yml`](../.github/workflows/apply-rulesets.yml). Script: [`scripts/rulesets_apply.py`](../scripts/rulesets_apply.py). Runbook: [`docs/rulesets.md`](./rulesets.md).
+Workflow: [`.github/workflows/apply-rulesets.yml`](../.github/workflows/apply-rulesets.yml). Script: [`scripts/rulesets_apply.py`](../scripts/rulesets_apply.py). Runbook: [`docs/runbooks/rulesets.md`](../runbooks/rulesets.md).
 
-- **Authorizing issue.** One of the open phase issues ([#27](https://github.com/tvna/claude-md/issues/27), [#41](https://github.com/tvna/claude-md/issues/41), [#42](https://github.com/tvna/claude-md/issues/42), [#140](https://github.com/tvna/claude-md/issues/140)) or a future phase issue, naming the exact `ruleset` / `dry_run` / `enable_auto_delete` inputs and the SoT commit SHA. See [`docs/rulesets.md` Dispatch authorization criteria](./rulesets.md#dispatch-authorization-criteria).
+- **Authorizing issue.** One of the open phase issues ([#27](https://github.com/tvna/claude-md/issues/27), [#41](https://github.com/tvna/claude-md/issues/41), [#42](https://github.com/tvna/claude-md/issues/42), [#140](https://github.com/tvna/claude-md/issues/140)) or a future phase issue, naming the exact `ruleset` / `dry_run` / `enable_auto_delete` inputs and the SoT commit SHA. See [`docs/runbooks/rulesets.md` Dispatch authorization criteria](../runbooks/rulesets.md#dispatch-authorization-criteria).
 - **Dry-run command.** `gh workflow run apply-rulesets.yml --ref main -f ruleset=<name> -f dry_run=true -f enable_auto_delete=false`. The job summary prints either a "POST planned" row (first-time apply) or a per-field unified diff of `name` / `target` / `enforcement` / `conditions` / `bypass_actors` / `rules`.
-- **Live apply command.** Same invocation with `dry_run=false`, re-dispatched only after the dry-run diff matches the linked SoT JSON byte-for-byte. See [`docs/rulesets.md` Apply via workflow](./rulesets.md#apply-via-workflow-primary).
-- **Rollback path.** `gh api --method DELETE /repos/tvna/claude-md/rulesets/<id>`. Non-destructive: the SoT JSON in git is unchanged, and re-running the workflow restores the previous state via the POST path. See [`docs/rulesets.md` Rollback](./rulesets.md#rollback).
-- **Audit / post-apply verification.** (a) `gh api /repos/tvna/claude-md/rulesets/<id>` confirms live equals the committed JSON. (b) Settings -> Logs -> Audit log filtered to the last hour must show one `repository_ruleset.create|update|destroy` matching the dispatch and one `environment.deployment_approval` matching the `ruleset-apply` environment approver. See [`docs/rulesets.md` Post-apply audit log review](./rulesets.md#post-apply-audit-log-review).
+- **Live apply command.** Same invocation with `dry_run=false`, re-dispatched only after the dry-run diff matches the linked SoT JSON byte-for-byte. See [`docs/runbooks/rulesets.md` Apply via workflow](../runbooks/rulesets.md#apply-via-workflow-primary).
+- **Rollback path.** `gh api --method DELETE /repos/tvna/claude-md/rulesets/<id>`. Non-destructive: the SoT JSON in git is unchanged, and re-running the workflow restores the previous state via the POST path. See [`docs/runbooks/rulesets.md` Rollback](../runbooks/rulesets.md#rollback).
+- **Audit / post-apply verification.** (a) `gh api /repos/tvna/claude-md/rulesets/<id>` confirms live equals the committed JSON. (b) Settings -> Logs -> Audit log filtered to the last hour must show one `repository_ruleset.create|update|destroy` matching the dispatch and one `environment.deployment_approval` matching the `ruleset-apply` environment approver. See [`docs/runbooks/rulesets.md` Post-apply audit log review](../runbooks/rulesets.md#post-apply-audit-log-review).
 - **Secret-not-logged evidence.** `RULESETS_PAT` is bound only via `env.GH_TOKEN: ${{ secrets.RULESETS_PAT }}` at the top of the workflow; every step uses `gh` / `gh api`, which reads the token from the environment without echoing it. The repo-wide grep in the common pattern note below confirms no `echo "$GH_TOKEN"` or `echo "$RULESETS_PAT"` exists. The `Guard RULESETS_PAT` step ([`apply-rulesets.yml:43-50`](../.github/workflows/apply-rulesets.yml)) tests presence (`-z "${GH_TOKEN}"`) without printing the value.
 
 Residual: `RULESETS_PAT` carries `Administration: Read and write`; dispatch is `main`-ref guarded and the `ruleset-apply` Environment gate requires an approver.
 
 ## 2. Apply labels (non-prune)
 
-Workflow: [`.github/workflows/apply-labels.yml`](../.github/workflows/apply-labels.yml). Script: [`scripts/labels_apply.py`](../scripts/labels_apply.py). Runbook: [`docs/issue-triage.md`](./issue-triage.md).
+Workflow: [`.github/workflows/apply-labels.yml`](../.github/workflows/apply-labels.yml). Script: [`scripts/labels_apply.py`](../scripts/labels_apply.py). Runbook: [`docs/runbooks/issue-triage.md`](../runbooks/issue-triage.md).
 
 - **Authorizing issue.** Per [#87](https://github.com/tvna/claude-md/issues/87) and [#84](https://github.com/tvna/claude-md/issues/84), the dispatching change is the merged PR that edited `.github/labels.json`; the PR body or its referenced issue records the intent. Apply with `prune=false` is non-destructive on existing issue assignments and follows the same authorization model as a normal commit.
-- **Dry-run command.** `gh workflow run apply-labels.yml --ref main -f dry_run=true -f prune=false`. Emits the plan-only matrix (POST/PATCH rows, no DELETE rows). See [`docs/issue-triage.md` Apply](./issue-triage.md#apply).
+- **Dry-run command.** `gh workflow run apply-labels.yml --ref main -f dry_run=true -f prune=false`. Emits the plan-only matrix (POST/PATCH rows, no DELETE rows). See [`docs/runbooks/issue-triage.md` Apply](../runbooks/issue-triage.md#apply).
 - **Live apply command.** Same invocation with `dry_run=false, prune=false`. Reconciles by POST (new labels) and PATCH (color/description drift).
-- **Rollback path.** Per-label `gh api --method DELETE /repos/tvna/claude-md/labels/<name>` for an accidentally-created label, or revert the SoT edit and re-dispatch. See [`docs/issue-triage.md` Rollback](./issue-triage.md#rollback).
-- **Audit / post-apply verification.** The three `diff` recipes in [`docs/issue-triage.md` Verify](./issue-triage.md#verify): live label set equals SoT, per-label color/description matches, and every open non-PR issue passes the cardinality check on `layer:*` / `type:*` / `state:*` / `severity:*` / `threat:*`. Settings audit log shows `repo.add_label` / `repo.update_label` entries for the labels modified.
+- **Rollback path.** Per-label `gh api --method DELETE /repos/tvna/claude-md/labels/<name>` for an accidentally-created label, or revert the SoT edit and re-dispatch. See [`docs/runbooks/issue-triage.md` Rollback](../runbooks/issue-triage.md#rollback).
+- **Audit / post-apply verification.** The three `diff` recipes in [`docs/runbooks/issue-triage.md` Verify](../runbooks/issue-triage.md#verify): live label set equals SoT, per-label color/description matches, and every open non-PR issue passes the cardinality check on `layer:*` / `type:*` / `state:*` / `severity:*` / `threat:*`. Settings audit log shows `repo.add_label` / `repo.update_label` entries for the labels modified.
 - **Secret-not-logged evidence.** `LABELS_PAT` is bound only via `env.GH_TOKEN: ${{ secrets.LABELS_PAT }}`. The `Guard LABELS_PAT` step ([`apply-labels.yml:34-40`](../.github/workflows/apply-labels.yml)) tests presence without printing the value. Same masking guarantee as `RULESETS_PAT` (see the common pattern note).
 
 ## 3. Prune labels (destructive)
@@ -50,19 +50,19 @@ Same workflow and script as Section 2, dispatched with `prune=true`.
 - **Authorizing issue.** A dedicated open issue or phase task must authorize prune (for example [#84](https://github.com/tvna/claude-md/issues/84) Phase 4 retired the `agent:*` labels). Authorization explicitly names which labels the dry-run plan must show under `plan-only (DELETE)`; any other DELETE row in the plan blocks the live dispatch.
 - **Dry-run command.** `gh workflow run apply-labels.yml --ref main -f dry_run=true -f prune=true`. The plan-only matrix now includes DELETE rows; confirm only the authorized names appear.
 - **Live apply command.** Same invocation with `dry_run=false, prune=true`.
-- **Rollback path.** **Partially destructive.** Re-dispatching the workflow restores the label definition (color, description) if the name is added back to SoT, but **does not** restore per-issue or per-PR assignments -- those were removed by GitHub when the label was deleted and must be re-applied manually. See [`docs/issue-triage.md` Rollback](./issue-triage.md#rollback) for the exact warning text.
-- **Audit / post-apply verification.** Same three `diff` recipes in [`docs/issue-triage.md` Verify](./issue-triage.md#verify), plus `repo.remove_label` entries in the Settings audit log matching the authorized prune set.
+- **Rollback path.** **Partially destructive.** Re-dispatching the workflow restores the label definition (color, description) if the name is added back to SoT, but **does not** restore per-issue or per-PR assignments -- those were removed by GitHub when the label was deleted and must be re-applied manually. See [`docs/runbooks/issue-triage.md` Rollback](../runbooks/issue-triage.md#rollback) for the exact warning text.
+- **Audit / post-apply verification.** Same three `diff` recipes in [`docs/runbooks/issue-triage.md` Verify](../runbooks/issue-triage.md#verify), plus `repo.remove_label` entries in the Settings audit log matching the authorized prune set.
 - **Secret-not-logged evidence.** Same as Section 2.
 
 ## 4. Branch cleanup -- survey mode (current)
 
-Workflow: [`.github/workflows/branch-cleanup.yml`](../.github/workflows/branch-cleanup.yml). Script: [`scripts/branch_cleanup.py`](../scripts/branch_cleanup.py). Runbook: [`docs/branch-cleanup.md`](./branch-cleanup.md).
+Workflow: [`.github/workflows/branch-cleanup.yml`](../.github/workflows/branch-cleanup.yml). Script: [`scripts/branch_cleanup.py`](../scripts/branch_cleanup.py). Runbook: [`docs/runbooks/branch-cleanup.md`](../runbooks/branch-cleanup.md).
 
 - **Authorizing issue.** [#31](https://github.com/tvna/claude-md/issues/31) (tracking). The current workflow has no live mutation path; the schedule and dispatch surface are both read-only with respect to branches.
-- **Dry-run command.** `gh workflow run branch-cleanup.yml --ref main -f dry_run=true -f min_age_days=60`. Produces the candidate table in `$GITHUB_STEP_SUMMARY` and updates the rolling summary issue per [`docs/branch-cleanup.md` Summary issue convention](./branch-cleanup.md#summary-issue-convention).
-- **Live apply command.** Not implemented. Flipping `dry_run=false` is a no-op; the workflow declares `permissions: contents: read` and contains no `gh api DELETE /git/refs/...` call. See [`docs/branch-cleanup.md` Current phase: dry-run only](./branch-cleanup.md#current-phase-dry-run-only).
+- **Dry-run command.** `gh workflow run branch-cleanup.yml --ref main -f dry_run=true -f min_age_days=60`. Produces the candidate table in `$GITHUB_STEP_SUMMARY` and updates the rolling summary issue per [`docs/runbooks/branch-cleanup.md` Summary issue convention](../runbooks/branch-cleanup.md#summary-issue-convention).
+- **Live apply command.** Not implemented. Flipping `dry_run=false` is a no-op; the workflow declares `permissions: contents: read` and contains no `gh api DELETE /git/refs/...` call. See [`docs/runbooks/branch-cleanup.md` Current phase: dry-run only](../runbooks/branch-cleanup.md#current-phase-dry-run-only).
 - **Rollback path.** Not applicable (no delete path).
-- **Audit / post-apply verification.** `$GITHUB_STEP_SUMMARY` per run is the durable per-run audit trail; the rolling summary issue is a convenience surface. The selection criteria in [`docs/branch-cleanup.md` Selection criteria](./branch-cleanup.md#selection-criteria) define the expected candidate set.
+- **Audit / post-apply verification.** `$GITHUB_STEP_SUMMARY` per run is the durable per-run audit trail; the rolling summary issue is a convenience surface. The selection criteria in [`docs/runbooks/branch-cleanup.md` Selection criteria](../runbooks/branch-cleanup.md#selection-criteria) define the expected candidate set.
 - **Secret-not-logged evidence.** Uses default `GITHUB_TOKEN` only (no PAT). Auto-masked by GitHub Actions.
 
 ## 5. Branch cleanup -- deletion path (future, gap)
@@ -75,10 +75,10 @@ When Goal D lands, the delete-enabled workflow must:
 2. Add a `ruleset-apply`-style GitHub Environment gate (separate Environment, e.g. `branch-cleanup-apply`) to make the dispatch authorization explicit.
 3. Implement `dry_run=true` as the genuine default plan-only path (no DELETE call).
 4. Implement `dry_run=false` only behind both the Environment approval and a `main`-ref guard, mirroring `apply-rulesets.yml`.
-5. Document the rollback path -- `gh api --method POST /repos/tvna/claude-md/git/refs -f ref="refs/heads/<branch>" -f sha="<last_commit_sha>"` within the 90-day ref retention window, using the SHA the summary comment recorded -- in [`docs/branch-cleanup.md` Rollback](./branch-cleanup.md#rollback) (already present).
+5. Document the rollback path -- `gh api --method POST /repos/tvna/claude-md/git/refs -f ref="refs/heads/<branch>" -f sha="<last_commit_sha>"` within the 90-day ref retention window, using the SHA the summary comment recorded -- in [`docs/runbooks/branch-cleanup.md` Rollback](../runbooks/branch-cleanup.md#rollback) (already present).
 6. Record `git.delete` / `protected_branch.destroy` entries in the Settings audit log and surface the run URL in the rolling issue comment.
 
-This audit does not open a new follow-up issue for the gap; [#31](https://github.com/tvna/claude-md/issues/31) Goal D is the existing tracker, and [`docs/workflow-permissions-audit.md`](./workflow-permissions-audit.md) already records the same dependency.
+This audit does not open a new follow-up issue for the gap; [#31](https://github.com/tvna/claude-md/issues/31) Goal D is the existing tracker, and [`docs/runbooks/workflow-permissions-audit.md`](../runbooks/workflow-permissions-audit.md) already records the same dependency.
 
 ## 6. Generated instruction publication
 
@@ -106,7 +106,7 @@ Sources: `pyproject.toml`, `uv.lock`, `scripts/install-uv.sh`, `scripts/uv_pin.p
 
 ## 8. Threat-intelligence triage
 
-Workflow: [`.github/workflows/threat-intel-triage.yml`](../.github/workflows/threat-intel-triage.yml). Script: [`scripts/threat_intel_triage.py`](../scripts/threat_intel_triage.py). Runbook: [`docs/issue-triage.md` `threat:*`](./issue-triage.md#threat-0-to-2).
+Workflow: [`.github/workflows/threat-intel-triage.yml`](../.github/workflows/threat-intel-triage.yml). Script: [`scripts/threat_intel_triage.py`](../scripts/threat_intel_triage.py). Runbook: [`docs/runbooks/issue-triage.md` `threat:*`](../runbooks/issue-triage.md#threat-0-to-2).
 
 - **Authorizing issue.** [#170](https://github.com/tvna/claude-md/issues/170) (sustained operations). The workflow runs automatically on `issues` and `pull_request_target` events; no dispatch exists.
 - **Dry-run command.** Not provided as an input. The workflow's outputs are deterministic given a fixed `(uv.lock, pyproject.toml, OSV.dev snapshot, CISA KEV snapshot)` -- the same inputs produce the same `recommended_labels` and `remove_labels` outputs. `scripts/threat_intel_triage.py` exposes `--osv-file` and `--kev-file` fixture inputs (used by `tests/test_threat_intel_triage.py`) so the routing logic can be exercised locally without live network access; this is the dry-run-equivalent surface for the script.
@@ -127,7 +127,7 @@ Workflow: [`.github/workflows/auto-retro.yml`](../.github/workflows/auto-retro.y
 - **Rollback path.** Two surfaces:
   - **Pause / resume.** `gh workflow disable .github/workflows/auto-retro.yml --ref main` halts further auto-creates without touching existing retro issues; `gh workflow enable .github/workflows/auto-retro.yml --ref main` resumes. Use this for a runaway-issue incident where the cause is still under investigation.
   - **Revert the implementation.** `git revert <merge-sha>` of the workflow or script PR removes the deterministic trigger. Runaway retro issues are identifiable by label `type:docs + layer:meta` plus title prefix `retro(` or `retro:`; close individually via `gh api --method PATCH /repos/tvna/claude-md/issues/<n> -f state=closed -f state_reason=not_planned`. The retrospective body is recoverable from the workflow run log, so a wrongful close is reversible by re-opening.
-- **Audit / post-apply verification.** Each run writes a one-section table to `$GITHUB_STEP_SUMMARY` recording the source PR, action (`created` / `skip`), and detail (existing retro number on duplicate, repair-signal aggregate on no-signal skip). The durable per-merge cadence trail is `docs/history/retrospective-pr-*.md`; an unexpected gap or burst there is the first symptom of a regression.
+- **Audit / post-apply verification.** Each run writes a one-section table to `$GITHUB_STEP_SUMMARY` recording the source PR, action (`created` / `skip`), and detail (existing retro number on duplicate, repair-signal aggregate on no-signal skip). The durable per-merge cadence trail is `docs/archive/retrospective-pr-*.md`; an unexpected gap or burst there is the first symptom of a regression.
 - **Secret-not-logged evidence.** Uses default `GITHUB_TOKEN` only (no PAT). Auto-masked by GitHub Actions. The script never `echo`es the token, and `gh api` reads the token from the environment without printing it.
 
 Residual: `pull_request_target` runs with a write-capable token on every closed PR. The `merged == true` job-level gate plus the `should_skip` bot/retro filter cap the blast radius; further hardening (e.g. an actor-based filter) is tracked under [#181](https://github.com/tvna/claude-md/issues/181).

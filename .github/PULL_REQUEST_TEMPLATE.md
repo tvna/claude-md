@@ -114,7 +114,7 @@ Check the box only when the matching pair is present.
 - [ ] CI green on the merge commit (all required status checks)
 - [ ] CLAUDE.md / AGENTS.md regenerated if applicable (`apm compile` produced no diff)
 - [ ] If this PR touches `.apm/instructions/**`, `CLAUDE.md`, or `AGENTS.md`: `verify-apm-portability.yml` green; any `portability-ack:` marker cites its authorizing sub-issue
-- [ ] If this PR touches `.apm/instructions/**`, `CLAUDE.md`, or `AGENTS.md`: `verify-apm-drift.yml` green; reviewer applied `docs/downstream-instruction-review-checklist.md`
+- [ ] If this PR touches `.apm/instructions/**`, `CLAUDE.md`, or `AGENTS.md`: `verify-apm-drift.yml` green; reviewer applied `docs/runbooks/downstream-instruction-review-checklist.md`
 
 ### Post-merge (auto-retro signal)
 

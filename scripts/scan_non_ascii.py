@@ -12,7 +12,7 @@ pure functions on top, a thin :func:`gh_api` subprocess boundary at
 the bottom, monkeypatched in tests. Surface area mirrors the prior
 inline shell exactly so behaviour is preserved byte-for-byte.
 
-See also: issue #102 (umbrella) and ``docs/non-ascii-defense.md``.
+See also: issue #102 (umbrella) and ``docs/prd/non-ascii-defense.md``.
 """
 
 from __future__ import annotations
@@ -138,7 +138,7 @@ def classify_action(
 ) -> str:
     """Decide the action: ``none`` / ``skip`` / ``advisory`` / ``block``.
 
-    Mirrors the truth table in ``docs/non-ascii-defense.md`` (Layer 2):
+    Mirrors the truth table in ``docs/prd/non-ascii-defense.md`` (Layer 2):
 
     - no non-ASCII -> none
     - trusted + ack -> skip (operator-reviewed), unless the title violates
@@ -222,7 +222,7 @@ def build_advisory_comment(
         "**Why this matters.** `subscribe_pr_activity` ingests this text "
         "into Claude sessions. Non-ASCII characters (Japanese, emoji, "
         "zero-width, RTL marks, fullwidth) are a known prompt-injection "
-        "carrier. See `docs/non-ascii-defense.md` and `docs/rulesets.md` "
+        "carrier. See `docs/prd/non-ascii-defense.md` and `docs/runbooks/rulesets.md` "
         "lines 48-51.\n"
         "\n"
         f"{verdict}\n"

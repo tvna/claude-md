@@ -54,10 +54,10 @@ harness gets a chance to enforce or fail to enforce it.
 - Folding the decision tree into the historical replay. The decision
   tree (section 4) stays in this document because it is the live rule
   used on every PR; the historical replay (formerly section 5, now
-  `docs/history/decision-tree-replay.md`) is extracted because it is
+  `docs/archive/decision-tree-replay.md`) is extracted because it is
   append-only calibration evidence that does not change when section
   4 changes. The repo-local retrospective docs
-  (`docs/history/retrospective-pr-*.md`) continue to serve as the
+  (`docs/archive/retrospective-pr-*.md`) continue to serve as the
   open-ended examples corpus that lives outside this document, and
   section 6.4 governs how those retrospectives feed back into
   instruction changes.
@@ -71,7 +71,7 @@ changes.
 | Lane | Source of truth | Audience | Change mechanism |
 |---|---|---|---|
 | Universal text | `.apm/instructions/master.instructions.md` | Every agent in every project that imports this repository | Edit the APM source; `apm compile` regenerates `CLAUDE.md` / `AGENTS.md`; `verify-apm-drift.yml` enforces no drift |
-| Harness | `scripts/*.py` + `.github/workflows/*.yml` + Claude Code hooks declared in `.claude/settings.json` | The repository itself; runs without agent involvement | Edit the script or workflow; add or update a paired test in `tests/test_<name>.py` per `docs/workflow-script-quality.md` |
+| Harness | `scripts/*.py` + `.github/workflows/*.yml` + Claude Code hooks declared in `.claude/settings.json` | The repository itself; runs without agent involvement | Edit the script or workflow; add or update a paired test in `tests/test_<name>.py` per `docs/standards/workflow-script-quality.md` |
 | Repo-local doc | `docs/*.md` in this repository | Contributors and reviewers of this repository; not exported to downstream consumers | Edit the doc; cross-link from the universal text only by abstract reference, never by literal example |
 | Project-local instructions | Downstream consumer projects (`.apm/`, `CLAUDE.md` delta, project-specific runbooks) | Agents working in that one project | Owned entirely by the downstream consumer; this repository neither ships nor reviews it |
 
@@ -109,7 +109,7 @@ agent prompts.
 The universal text refers to the harness only abstractly ("push
 deterministic work into hooks"). The concrete harness lives in
 `scripts/` and `.github/workflows/`, and its quality is governed by
-`docs/workflow-script-quality.md`.
+`docs/standards/workflow-script-quality.md`.
 
 ### 2.3 What "repo-local doc" means here
 
@@ -186,7 +186,7 @@ removed.
 - **PRD**: Product Requirements Document. Required by master section
   1 ("Match the document weight to the blast radius: detailed PRD
   for architectural / multi-PR work, concise spec otherwise."). This
-  document (`docs/agent-rules-design-philosophy.md`) is the PRD for
+  document (`docs/prd/agent-rules-design-philosophy.md`) is the PRD for
   the universal-text and harness boundary; downstream consumers
   write their own PRDs for their own architectural changes.
 - **P1 through P6**: The six numbered principles in
@@ -220,12 +220,12 @@ of merged PRs and closed sub-issues of #226.
 
 | Layer (principle) | Universal text owns | Harness owns | Repo-local doc owns | Project-local owns | Boundary risk |
 |---|---|---|---|---|---|
-| P1 - goal and plan structure | Plan-mode trigger; document weight rule; verification design in the plan | `scripts/plan_language_context.py` (SessionStart hook); `tests/test_plan_language_context.py` | `docs/issue-pr-body-standard.md` (body shape encodes the plan); `docs/performance-metrics.md` (measurement is a verification artifact) | The consumer's plan-mode trigger discipline | Mixing plan-language responsibility with GitHub-post ASCII enforcement in one rule (corrected by [#227](https://github.com/tvna/claude-md/issues/227)) |
-| P2 - input and pre-code reasoning | Untrusted-data treatment of external text (including quoted/forwarded content in any channel); runtime no-override of trusted instruction sources anchored in governance-gated provenance; fact-vs-speculation tagging; assumption enumeration; simpler-path proposal | `scripts/preflight_non_ascii.py` (PreToolUse hook against non-ASCII injection); `scripts/body_policy.py`, `scripts/title_policy.py`, `scripts/pr_body_close_keyword_gate.py` (structural shape of external-authored bodies); `scripts/scan_non_ascii.py` (advisory drift detector); `scripts/sanitize_history.py` (historical-text cleansing) | `docs/downstream-instruction-review-checklist.md` (reviewer-facing untrusted-text checklist); `docs/non-ascii-defense.md` (Layer 1-2-3 defense narrative); `docs/issue-pr-body-standard.md` (Facts / Assumptions sections); `docs/issue-triage.md` (label-driven routing) | The consumer's own incoming-text and ambiguity policy | Treating external text as authority, or letting speculation slip into universal text disguised as a fact (PR #225) |
-| P3 - delivery harness around the code | Issue-first; ASCII discipline; declarative module management; auto-subscribe to PR activity; retrospective auto-open; classify each repair | `scripts/issue_link.py`, `body_policy.py`, `title_policy.py`, `pr_body_close_keyword_gate.py`, `auto_retro.py`, `scan_non_ascii.py`, `preflight_non_ascii.py`, `branch_cleanup.py`, `rulesets_apply.py`, `ruleset_drift.py`, `labels_apply.py`, `dependabot_automerge.py`, `dependabot_labels.py`, `threat_intel_triage.py`, `uv_pin.py`, `scan_apm_portability.py`; 16 paired workflows; 19 paired tests | `docs/issue-pr-body-standard.md`, `docs/issue-triage.md`, `docs/non-ascii-defense.md`, `docs/rulesets.md`, `docs/branch-cleanup.md`, `docs/dependabot-automerge.md`, `docs/remote-environment.md`, `docs/repo-scope.md`, `docs/security-control-inventory.md`, `docs/history/retrospective-pr-*.md` | The consumer's own CI provider, issue tracker, and dependency manager | Naming a specific tool (gh CLI, GitHub Actions, dependabot) inside universal text; embedding a specific PR number as an example |
-| P4 - safety boundary | Minimum code; safety-bounded simplicity; defense-in-depth preservation; destructive-operation safeguards; tool-scope confinement; external-disclosure and secret-log prevention; fail-loud over silent default; debug instrumentation as attack surface | `.github/CODEOWNERS` (repo-scope binding for MCP/agent tools); `.github/workflows/*.yml` `permissions:` declarations (least-privilege per workflow); `scripts/scan_apm_portability.py` (forbids naming repo-local tools in universal text); `(lint and type gates exist in workflow-script-quality.md M8; behavioral check is reviewer judgment)` | `docs/workflow-script-quality.md` (M1 to M9 must-have checklist; O1 to O7 optional enhancements); `docs/repo-scope.md` (allowed-repository policy and runbook); `docs/workflow-permissions-audit.md` (per-workflow permission matrix); `docs/security-control-inventory.md` (visualization of the harness coverage); `docs/privileged-operation-runbooks.md` (escalation paths) | The consumer's own language ecosystem, code style, credential manager, external-endpoint policy, and per-agent tool inventory | Embedding a stack-specific example or a concrete tool endpoint inside universal text; widening a least-privilege workflow `permissions:` block for a one-off debug |
+| P1 - goal and plan structure | Plan-mode trigger; document weight rule; verification design in the plan | `scripts/plan_language_context.py` (SessionStart hook); `tests/test_plan_language_context.py` | `docs/standards/issue-pr-body-standard.md` (body shape encodes the plan); `docs/standards/performance-metrics.md` (measurement is a verification artifact) | The consumer's plan-mode trigger discipline | Mixing plan-language responsibility with GitHub-post ASCII enforcement in one rule (corrected by [#227](https://github.com/tvna/claude-md/issues/227)) |
+| P2 - input and pre-code reasoning | Untrusted-data treatment of external text (including quoted/forwarded content in any channel); runtime no-override of trusted instruction sources anchored in governance-gated provenance; fact-vs-speculation tagging; assumption enumeration; simpler-path proposal | `scripts/preflight_non_ascii.py` (PreToolUse hook against non-ASCII injection); `scripts/body_policy.py`, `scripts/title_policy.py`, `scripts/pr_body_close_keyword_gate.py` (structural shape of external-authored bodies); `scripts/scan_non_ascii.py` (advisory drift detector); `scripts/sanitize_history.py` (historical-text cleansing) | `docs/runbooks/downstream-instruction-review-checklist.md` (reviewer-facing untrusted-text checklist); `docs/prd/non-ascii-defense.md` (Layer 1-2-3 defense narrative); `docs/standards/issue-pr-body-standard.md` (Facts / Assumptions sections); `docs/runbooks/issue-triage.md` (label-driven routing) | The consumer's own incoming-text and ambiguity policy | Treating external text as authority, or letting speculation slip into universal text disguised as a fact (PR #225) |
+| P3 - delivery harness around the code | Issue-first; ASCII discipline; declarative module management; auto-subscribe to PR activity; retrospective auto-open; classify each repair | `scripts/issue_link.py`, `body_policy.py`, `title_policy.py`, `pr_body_close_keyword_gate.py`, `auto_retro.py`, `scan_non_ascii.py`, `preflight_non_ascii.py`, `branch_cleanup.py`, `rulesets_apply.py`, `ruleset_drift.py`, `labels_apply.py`, `dependabot_automerge.py`, `dependabot_labels.py`, `threat_intel_triage.py`, `uv_pin.py`, `scan_apm_portability.py`; 16 paired workflows; 19 paired tests | `docs/standards/issue-pr-body-standard.md`, `docs/runbooks/issue-triage.md`, `docs/prd/non-ascii-defense.md`, `docs/runbooks/rulesets.md`, `docs/runbooks/branch-cleanup.md`, `docs/runbooks/dependabot-automerge.md`, `docs/standards/remote-environment.md`, `docs/standards/repo-scope.md`, `docs/prd/security-control-inventory.md`, `docs/archive/retrospective-pr-*.md` | The consumer's own CI provider, issue tracker, and dependency manager | Naming a specific tool (gh CLI, GitHub Actions, dependabot) inside universal text; embedding a specific PR number as an example |
+| P4 - safety boundary | Minimum code; safety-bounded simplicity; defense-in-depth preservation; destructive-operation safeguards; tool-scope confinement; external-disclosure and secret-log prevention; fail-loud over silent default; debug instrumentation as attack surface | `.github/CODEOWNERS` (repo-scope binding for MCP/agent tools); `.github/workflows/*.yml` `permissions:` declarations (least-privilege per workflow); `scripts/scan_apm_portability.py` (forbids naming repo-local tools in universal text); `(lint and type gates exist in workflow-script-quality.md M8; behavioral check is reviewer judgment)` | `docs/standards/workflow-script-quality.md` (M1 to M9 must-have checklist; O1 to O7 optional enhancements); `docs/standards/repo-scope.md` (allowed-repository policy and runbook); `docs/runbooks/workflow-permissions-audit.md` (per-workflow permission matrix); `docs/prd/security-control-inventory.md` (visualization of the harness coverage); `docs/prd/privileged-operation-runbooks.md` (escalation paths) | The consumer's own language ecosystem, code style, credential manager, external-endpoint policy, and per-agent tool inventory | Embedding a stack-specific example or a concrete tool endpoint inside universal text; widening a least-privilege workflow `permissions:` block for a one-off debug |
 | P5 - change scope and agent split | Touch-only-what-you-must; clean only your own orphans; sub-agent vs skill split; separate implementation and verification agents | `(none - agent judgment)` | `(gap candidate - no doc explicitly governs scope discipline today)` | The consumer's own agent inventory and roster | Mentioning a Claude-only feature (sub-agents, skills) by literal name as universal terminology |
-| P6 - handoff and communication | Native-language plan artifacts; show procedure and case studies; visualize workflow; refuse LGTM; explain trade-offs | `scripts/plan_language_context.py` (owner-language metadata recovery); `.github/owners.yaml`; `.github/CODEOWNERS` | `docs/history/retrospective-pr-*.md` (case studies are the force-multiplier evidence); `docs/security-control-inventory.md` (visualization of the harness coverage); `docs/performance-metrics.md` (visualization of measurement) | The consumer's own `owners.yaml` entries | Treating "case studies" as universal content rather than as repo-local artifacts that the universal text merely *requires*; plan-language drift slipping into English despite harness injection (corrected by [#269](https://github.com/tvna/claude-md/issues/269)) |
+| P6 - handoff and communication | Native-language plan artifacts; show procedure and case studies; visualize workflow; refuse LGTM; explain trade-offs | `scripts/plan_language_context.py` (owner-language metadata recovery); `.github/owners.yaml`; `.github/CODEOWNERS` | `docs/archive/retrospective-pr-*.md` (case studies are the force-multiplier evidence); `docs/prd/security-control-inventory.md` (visualization of the harness coverage); `docs/standards/performance-metrics.md` (visualization of measurement) | The consumer's own `owners.yaml` entries | Treating "case studies" as universal content rather than as repo-local artifacts that the universal text merely *requires*; plan-language drift slipping into English despite harness injection (corrected by [#269](https://github.com/tvna/claude-md/issues/269)) |
 
 Empty cells marked `(none ...)` are intentional: the layer's concern
 is not enforceable by a script today. Cells marked `(gap candidate)`
@@ -240,7 +240,7 @@ GitHub issue before any branch, commit, or PR; cite its number in
 every commit and PR"). The harness owns the deterministic enforcement
 (`scripts/issue_link.py` plus `verify-issue-link.yml` plus
 `tests/test_issue_link.py`). The repo-local doc owns the operator
-runbook (`docs/issue-pr-body-standard.md` tells contributors exactly
+runbook (`docs/standards/issue-pr-body-standard.md` tells contributors exactly
 what to put in the body). The project-local lane is the consumer's
 own issue tracker, which this repository cannot enforce.
 
@@ -275,7 +275,7 @@ Q2. Can the rule be enforced by a deterministic check (a script, a
     Yes -> Harness lane. The universal text may say "build the
            harness for X"; the harness itself lives in
            scripts/ + .github/workflows/ + tests/ following
-           docs/workflow-script-quality.md. The repo-local doc lane
+           docs/standards/workflow-script-quality.md. The repo-local doc lane
            may also gain a runbook for the harness.
 
     No  -> Q3.
@@ -304,7 +304,7 @@ Q4. Does the rule need a repository-specific noun (a file path, a
 Q5. Is the rule a description of a past event (a retrospective, a
     repaired wording, an audit finding)?
 
-    Yes -> Repo-local doc lane: docs/history/retrospective-pr-<N>.md
+    Yes -> Repo-local doc lane: docs/archive/retrospective-pr-<N>.md
            or a new case-study doc. Case studies are explicitly required
            by P6 to exist somewhere, but they must not be embedded
            in the universal text.
@@ -328,7 +328,7 @@ Q5. Is the rule a description of a past event (a retrospective, a
 
 ## 5. Boundary patterns and worked examples
 
-Replayed in [`docs/history/decision-tree-replay.md`](history/decision-tree-replay.md). The replay is a calibration check that section 4's decision tree reproduces the historical record; it is not normative.
+Replayed in [`docs/archive/decision-tree-replay.md`](../archive/decision-tree-replay.md). The replay is a calibration check that section 4's decision tree reproduces the historical record; it is not normative.
 
 ## 6. Gap analysis procedure
 
@@ -351,7 +351,7 @@ For each line, walk the matrix in section 3 and look for a cell that
 names a concrete artifact carrying the concern. If none exists, open
 a sub-issue of #226 proposing either:
 
-- a new harness script (per `docs/workflow-script-quality.md`), or
+- a new harness script (per `docs/standards/workflow-script-quality.md`), or
 - a new repo-local doc, or
 - a justification for leaving the cell empty (some concerns are
   intentionally agent-judgment only).
@@ -403,9 +403,9 @@ example lands.
 
 | Retrospective category | Primary lane | Typical secondary lane | Field example |
 |---|---|---|---|
-| Missing deterministic gate | Harness | Universal text (only if the gate enforces a new universal principle) | `docs/history/retrospective-pr-229.md` records a body-policy preflight gap surfaced between PR open and merge; the durable fix was a new `scripts/` preflight, not a universal-text edit |
-| Unclear agent instruction | Universal text | Repo-local doc (a worked example or runbook clarification) | `docs/history/retrospective-pr-235.md` records an auto-retro skip-rule ambiguity; the durable fix was a wording tightening in the harness rule plus a clarifying note in the repo-local retrospective doc |
-| External or human decision | Project-local | Repo-local doc (an escalation note describing the unresolved item) | `docs/history/retrospective-pr-237.md` records a no-repair merge where outstanding follow-up items required human judgment; nothing landed in universal text or harness |
+| Missing deterministic gate | Harness | Universal text (only if the gate enforces a new universal principle) | `docs/archive/retrospective-pr-229.md` records a body-policy preflight gap surfaced between PR open and merge; the durable fix was a new `scripts/` preflight, not a universal-text edit |
+| Unclear agent instruction | Universal text | Repo-local doc (a worked example or runbook clarification) | `docs/archive/retrospective-pr-235.md` records an auto-retro skip-rule ambiguity; the durable fix was a wording tightening in the harness rule plus a clarifying note in the repo-local retrospective doc |
+| External or human decision | Project-local | Repo-local doc (an escalation note describing the unresolved item) | `docs/archive/retrospective-pr-237.md` records a no-repair merge where outstanding follow-up items required human judgment; nothing landed in universal text or harness |
 
 The mapping is a router, not a deterministic gate: it tells the
 contributor which lane to draft into first. The decision tree in
@@ -416,17 +416,17 @@ For the orthogonal concern of spotting noise-commit and flooding
 patterns on a merged PR (high commit count, low-information
 subjects, repeated repair commits, force-update churn, unrelated
 churn), the retrospective writer applies the procedure in
-[`docs/retrospective-noise-flooding-procedure.md`](retrospective-noise-flooding-procedure.md).
+[`docs/runbooks/retrospective-noise-flooding-procedure.md`](../runbooks/retrospective-noise-flooding-procedure.md).
 That procedure maps each signal into the same three-category
 taxonomy used here, and keeps any deterministic follow-up as a
 separate sub-issue rather than bundling it into the design-doc
 phase.
 
 Hand-authored retrospective `.md` files land under
-`docs/history/retrospective-pr-<N>.md`. The auto-retro harness
+`docs/archive/retrospective-pr-<N>.md`. The auto-retro harness
 (`scripts/auto_retro.py`) only opens the GitHub issue; the durable
 write to disk happens when a contributor lands the retrospective doc
-in the next PR, and that PR puts the file in `docs/history/`.
+in the next PR, and that PR puts the file in `docs/archive/`.
 
 ### 6.5 Cadence
 
@@ -456,7 +456,7 @@ at least one of:
 
 PRs that touch only `docs/`, `scripts/`, `tests/`, or
 `.github/workflows/` fall outside this section; they have their own
-review surface (`docs/workflow-script-quality.md` for harness PRs,
+review surface (`docs/standards/workflow-script-quality.md` for harness PRs,
 the body and title policies for every PR).
 
 ### 7.2 Deterministic gates the reviewer can rely on
@@ -474,7 +474,7 @@ gates are green on the PR head commit:
   explicit `portability-ack:` marker on the same line cites the
   authorizing sub-issue.
 - `verify-body-policy.yml` and `verify-title-policy.yml` confirm
-  the PR body and title follow `docs/issue-pr-body-standard.md`.
+  the PR body and title follow `docs/standards/issue-pr-body-standard.md`.
 - `scan-non-ascii.yml` confirms no non-ASCII characters slipped
   into files that must remain ASCII.
 
@@ -533,7 +533,7 @@ If any of the three conditions fails, request changes.
 ### 7.5 Worked case: PR #225
 
 The repair loop on PR #225 (replayed in
-[section 5.1 of `docs/history/decision-tree-replay.md`](history/decision-tree-replay.md#51-pr-225---repository-specific-wording-in-a-universal-sentence))
+[section 5.1 of `docs/archive/decision-tree-replay.md`](../archive/decision-tree-replay.md#51-pr-225---repository-specific-wording-in-a-universal-sentence))
 is the canonical example for this section. A reviewer running the
 criteria above on that PR's pre-repair state would have observed
 Q4 = yes in the diff (the wording needed a repository-specific
@@ -547,7 +547,7 @@ catch reproducible.
 This document is valid only if:
 
 - **Replay calibration.** Each of the seven closed sub-issues
-  replayed in [`docs/history/decision-tree-replay.md`](history/decision-tree-replay.md)
+  replayed in [`docs/archive/decision-tree-replay.md`](../archive/decision-tree-replay.md)
   resolves through the decision tree to the lane the repository
   historically used. Today: seven of seven match.
 - **Inverted self-consistency.** Each existing bullet of
@@ -574,15 +574,15 @@ boundary risk):
 
 1. Open a sub-issue of [#226](https://github.com/tvna/claude-md/issues/226)
    describing the proposed change per
-   `docs/issue-pr-body-standard.md` (Scope / Facts / Assumptions /
+   `docs/standards/issue-pr-body-standard.md` (Scope / Facts / Assumptions /
    Acceptance criteria / Verification / Parent).
 2. Open a single PR that edits only this document and, if the
    addition requires it, the cross-link headers in
-   `docs/repo-scope.md`, `docs/security-control-inventory.md`,
-   `docs/issue-pr-body-standard.md`, `docs/non-ascii-defense.md`,
-   and `docs/workflow-script-quality.md`.
+   `docs/standards/repo-scope.md`, `docs/prd/security-control-inventory.md`,
+   `docs/standards/issue-pr-body-standard.md`, `docs/prd/non-ascii-defense.md`,
+   and `docs/standards/workflow-script-quality.md`.
 3. Re-run the validation strategy in section 8. The replay table in
-   `docs/history/decision-tree-replay.md` must remain at 100 percent
+   `docs/archive/decision-tree-replay.md` must remain at 100 percent
    match; if a new closed sub-issue is added to the replay set, trace
    it explicitly in that file.
 4. Reference the parent #226 on the `Refs #` line of the PR body.
@@ -604,7 +604,7 @@ flow, not this update flow.
   that this document is the deliverable for.
 - [#225](https://github.com/tvna/claude-md/pull/225) - the PR whose
   repaired wording motivated #226 and is replayed in
-  `docs/history/decision-tree-replay.md` section 5.1.
+  `docs/archive/decision-tree-replay.md` section 5.1.
 - [#75](https://github.com/tvna/claude-md/issues/75) - per-principle
   `*Layer: ...*` subtitles.
 - [#227](https://github.com/tvna/claude-md/issues/227) - corrected
@@ -616,30 +616,30 @@ flow, not this update flow.
   [#47](https://github.com/tvna/claude-md/issues/47),
   [#73](https://github.com/tvna/claude-md/issues/73),
   [#77](https://github.com/tvna/claude-md/issues/77) - additional
-  closed sub-issues replayed in `docs/history/decision-tree-replay.md`.
+  closed sub-issues replayed in `docs/archive/decision-tree-replay.md`.
 - [#79](https://github.com/tvna/claude-md/issues/79) - currently
   open structural sub-issue; out of scope for this document.
 - `.apm/instructions/master.instructions.md` - the universal text
   this document describes; not modified by this document.
-- `docs/repo-scope.md` - content-based prohibition of tool-specific
+- `docs/standards/repo-scope.md` - content-based prohibition of tool-specific
   configuration; theoretical grounding for the Q1 disqualifier.
-- `docs/security-control-inventory.md` - five-column evidence table
+- `docs/prd/security-control-inventory.md` - five-column evidence table
   precedent; harness-lane coverage source.
-- `docs/issue-pr-body-standard.md` - body shape standard; carries
+- `docs/standards/issue-pr-body-standard.md` - body shape standard; carries
   the Facts / Assumptions discipline from P2.
-- `docs/non-ascii-defense.md` - the three-layer ASCII discipline
+- `docs/prd/non-ascii-defense.md` - the three-layer ASCII discipline
   enforced by the harness for P3 GitHub posts.
-- `docs/workflow-script-quality.md` - the must-have checklist for
+- `docs/standards/workflow-script-quality.md` - the must-have checklist for
   harness scripts; the closest thing this repo has to a P4 quality
   gate beyond reviewer judgment.
-- `docs/history/decision-tree-replay.md` - the historical replay
+- `docs/archive/decision-tree-replay.md` - the historical replay
   (formerly section 5 of this document) showing that the decision
   tree in section 4 reproduces this repository's past lane
   assignments.
-- `docs/history/retrospective-pr-*.md` - case-study lane precedent for P6;
+- `docs/archive/retrospective-pr-*.md` - case-study lane precedent for P6;
   individual retrospectives (PR #229, #235, #237) supply the field
   examples cited in section 6.4.
-- `docs/retrospective-noise-flooding-procedure.md` - the Phase 8(D-3)
+- `docs/runbooks/retrospective-noise-flooding-procedure.md` - the Phase 8(D-3)
   deliverable for #315 (parent #63); applied by retrospective
   writers alongside the section 6.4 lane mapping to spot
   noise-commit and flooding patterns and to decide whether a

@@ -26,7 +26,7 @@ jobs:
       - name: Guard RULESETS_PAT
         run: |
           if [ -z "${GH_TOKEN_API}" ]; then
-            echo "::error::RULESETS_PAT secret is not set. See docs/rulesets.md §\"Required secret\"."
+            echo "::error::RULESETS_PAT secret is not set. See docs/runbooks/rulesets.md §\"Required secret\"."
             exit 1
           fi
 

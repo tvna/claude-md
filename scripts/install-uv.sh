@@ -3,7 +3,7 @@
 #
 # Invoked by the SessionStart hook registered in `.claude/settings.json`.
 # Reads `[tool.uv].required-version` (an exact `==X.Y.Z` pin per #112) from
-# `$CLAUDE_PROJECT_DIR/pyproject.toml`. See `docs/remote-environment.md`
+# `$CLAUDE_PROJECT_DIR/pyproject.toml`. See `docs/standards/remote-environment.md`
 # for the rationale and update procedure.
 
 set -euo pipefail

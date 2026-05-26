@@ -1,6 +1,6 @@
 # Performance Metrics — Phase 2 Design Contract
 
-This document is the design-only contract for measuring the performance impact of edits to the universal `CLAUDE.md` / `AGENTS.md` master source. It addresses purpose (2) declared in [`docs/repo-scope.md`](repo-scope.md) ("measuring the performance impact of those edits") and is the Phase 2 deliverable of the governance plan tracked in [#58](https://github.com/tvna/claude-md/issues/58), opened as [#61](https://github.com/tvna/claude-md/issues/61).
+This document is the design-only contract for measuring the performance impact of edits to the universal `CLAUDE.md` / `AGENTS.md` master source. It addresses purpose (2) declared in [`docs/standards/repo-scope.md`](repo-scope.md) ("measuring the performance impact of those edits") and is the Phase 2 deliverable of the governance plan tracked in [#58](https://github.com/tvna/claude-md/issues/58), opened as [#61](https://github.com/tvna/claude-md/issues/61).
 
 No numbers, no harness code, and no CI wiring land with this document. Phase 3 ([#62](https://github.com/tvna/claude-md/issues/62)) implements the harness and acquires the first baseline by quoting the schema and contracts named below.
 
@@ -8,7 +8,7 @@ No numbers, no harness code, and no CI wiring land with this document. Phase 3 (
 
 | File / branch | Target | Purpose |
 |---|---|---|
-| `docs/performance-metrics.md` *(this file)* | — | Contract: metric set, harness shape, result record schema, branch layout |
+| `docs/standards/performance-metrics.md` *(this file)* | — | Contract: metric set, harness shape, result record schema, branch layout |
 | `benchmarks/spec/v<N>/` on `main` | committed alongside the source | Version-pinned benchmark task spec (created by Phase 3, [#62](https://github.com/tvna/claude-md/issues/62)) |
 | `benchmarks` orphan branch | `origin/benchmarks` | Long-lived store of immutable result records, keyed by compiled-source SHA |
 
@@ -92,7 +92,7 @@ Phase 3's `docs/performance-baseline.md` quotes these fields by name; renames re
 
 The benchmark task spec lives on `main` under `benchmarks/spec/v<N>/` and is created by Phase 3 ([#62](https://github.com/tvna/claude-md/issues/62)).
 
-Why on `main`, not on the `benchmarks` orphan branch: the spec evolves alongside the source instructions and must be reviewable through the normal PR flow (`docs/repo-scope.md` SoT layout, CODEOWNERS, `apply-rulesets.yml`-protected `main`). Versioning by directory name (e.g. `v0`, `v1`) — rather than a moving tag — lets a baseline at SHA *X* unambiguously reference spec `v2`.
+Why on `main`, not on the `benchmarks` orphan branch: the spec evolves alongside the source instructions and must be reviewable through the normal PR flow (`docs/standards/repo-scope.md` SoT layout, CODEOWNERS, `apply-rulesets.yml`-protected `main`). Versioning by directory name (e.g. `v0`, `v1`) — rather than a moving tag — lets a baseline at SHA *X* unambiguously reference spec `v2`.
 
 Submodule consumer impact: the spec ships in the submodule checkout but is plain text outside `CLAUDE.md` / `AGENTS.md`, so it does not enter the universal instruction surface and does not bias downstream tool behaviour.
 
@@ -132,7 +132,7 @@ The empty orphan branch is created once, out-of-band from PRs to `main`:
 git checkout --orphan benchmarks
 git rm -rf --cached .
 git clean -fdx
-# add a minimal README.md pointing to docs/performance-metrics.md on main
+# add a minimal README.md pointing to docs/standards/performance-metrics.md on main
 git add README.md
 git commit -m "chore(benchmarks): initialise orphan branch for performance result records (#61)"
 git push -u origin benchmarks
@@ -171,7 +171,7 @@ Explicitly deferred to later phases / sub-issues:
 - [#58](https://github.com/tvna/claude-md/issues/58) — parent tracking issue (purpose, prohibition, phase plan)
 - [#60](https://github.com/tvna/claude-md/issues/60) — Phase 1 (scope governance, sibling)
 - [#62](https://github.com/tvna/claude-md/issues/62) — Phase 3 (baseline numbers, depends on this contract)
-- [`docs/repo-scope.md`](repo-scope.md) — declared repo purpose (the source of "(2) measuring the performance impact")
-- [`docs/rulesets.md`](rulesets.md), [`docs/ai-triage-routing.md`](ai-triage-routing.md) — runbook format precedent
+- [`docs/standards/repo-scope.md`](repo-scope.md) — declared repo purpose (the source of "(2) measuring the performance impact")
+- [`docs/runbooks/rulesets.md`](../runbooks/rulesets.md), [`docs/ai-triage-routing.md`](ai-triage-routing.md) — runbook format precedent
 - [`apm.yml`](../apm.yml) — `target: [claude, codex]`; defines what `apm compile` produces (input to metric (a))
 - [`.github/workflows/generate-agents.yml`](../.github/workflows/generate-agents.yml) — toolchain pin (`apm-cli==0.12.1`, `uv`) reused by the harness

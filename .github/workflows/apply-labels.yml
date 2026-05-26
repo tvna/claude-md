@@ -35,7 +35,7 @@ jobs:
       - name: Guard LABELS_PAT
         run: |
           if [ -z "${GH_TOKEN}" ]; then
-            echo "::error::LABELS_PAT secret is not set. See docs/issue-triage.md §\"Required secret\"."
+            echo "::error::LABELS_PAT secret is not set. See docs/runbooks/issue-triage.md §\"Required secret\"."
             exit 1
           fi
 

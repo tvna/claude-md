@@ -544,7 +544,7 @@ def _env_token() -> str:
     token = os.environ.get("GH_TOKEN")
     if not token:
         print(
-            '::error::RULESETS_PAT secret is not set. See docs/rulesets.md '
+            '::error::RULESETS_PAT secret is not set. See docs/runbooks/rulesets.md '
             '"Required secret".'
         )
         raise SystemExit(1)

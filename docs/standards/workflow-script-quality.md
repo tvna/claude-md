@@ -1,6 +1,6 @@
 # Workflow Script Quality Standard
 
-> Design rationale: see [`docs/agent-rules-design-philosophy.md`](./agent-rules-design-philosophy.md). This standard is the closest thing this repository has to a deterministic principle-P4 quality gate; the meta-doc cites it as the carrier of harness-lane quality for the artifact-code layer.
+> Design rationale: see [`docs/prd/agent-rules-design-philosophy.md`](../prd/agent-rules-design-philosophy.md). This standard is the closest thing this repository has to a deterministic principle-P4 quality gate; the meta-doc cites it as the carrier of harness-lane quality for the artifact-code layer.
 
 This document is the contributor- and agent-facing standard for Python
 scripts under `scripts/` that are invoked from GitHub Actions workflows
@@ -9,7 +9,7 @@ new or modified workflow-called script must meet, and lists optional
 enhancements that may be added when the script's blast radius or
 external coupling warrants them.
 
-Per [CLAUDE.md](../CLAUDE.md) section 3, deterministic harness work
+Per [CLAUDE.md](../../CLAUDE.md) section 3, deterministic harness work
 belongs in hooks and CI rather than reviewer memory; this standard is
 the checklist a reviewer (human or agent) applies before a script
 lands. Per section 4, the must-have list never strips a check that
@@ -46,7 +46,7 @@ Out of scope for this document:
 
 | File | Target | Purpose |
 |---|---|---|
-| `docs/workflow-script-quality.md` *(this file)* | - | Standard runbook |
+| `docs/standards/workflow-script-quality.md` *(this file)* | - | Standard runbook |
 | `pyproject.toml` `[tool.pytest.ini_options]` | local + CI | `pythonpath = ["scripts"]`, `testpaths = ["tests"]` so test modules can `import <name>` directly |
 | `scripts/_github_api.py` | shared library | Reusable HTTP boundary with retry and `Authorization: Bearer` handling |
 | `scripts/_trusted_bots.py` | shared library | Single source of truth for the trusted-bot allowlist |
@@ -413,6 +413,6 @@ class TestMainExitCode:
   - #193 ci(workflows): verify script invocation drift
   - #194 test(scripts): add GitHub API boundary tests
   - #195 ci(scripts): standardize dependency and tool installation
-- Related runbooks: `docs/issue-pr-body-standard.md`,
-  `docs/issue-triage.md`, `docs/non-ascii-defense.md`,
-  `docs/rulesets.md`.
+- Related runbooks: `docs/standards/issue-pr-body-standard.md`,
+  `docs/runbooks/issue-triage.md`, `docs/prd/non-ascii-defense.md`,
+  `docs/runbooks/rulesets.md`.

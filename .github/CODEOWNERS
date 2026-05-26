@@ -1,4 +1,4 @@
 .github/workflows/apply-rulesets.yml   @tvna
 .github/rulesets/**                    @tvna
 .github/CODEOWNERS                     @tvna
-docs/rulesets.md                       @tvna
+docs/runbooks/rulesets.md              @tvna
