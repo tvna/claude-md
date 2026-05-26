@@ -44,6 +44,8 @@ import os
 import re
 import subprocess
 import sys
+import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -53,6 +55,13 @@ from _trusted_bots import _TRUSTED_BOT_LOGINS
 from issue_link import extract_refs, strip_html_comments
 
 FALLBACK_TYPE_SCOPE = "retro"
+
+# Refs issue #380: GitHub may not finalize merge_commit_sha by the time
+# pull_request_target.closed fires; retry the PR-detail fetch with
+# bounded exponential backoff before falling through to the empty-list
+# soft-fail. Total max wait = sum(_MERGE_SHA_RETRY_BACKOFF) seconds.
+_MERGE_SHA_RETRY_ATTEMPTS: int = 4
+_MERGE_SHA_RETRY_BACKOFF: tuple[float, ...] = (2.0, 4.0, 8.0)
 
 # Section names mirror body_policy._ISSUE_COMMON_REQUIRED so the
 # auto-opened retro issue passes verify-body-policy. Drift between the
@@ -875,15 +884,26 @@ def fetch_pr_commits(repo: str, pr_number: int) -> list[str]:
     return subjects
 
 
-def fetch_check_runs(repo: str, pr_number: int) -> list[dict[str, Any]]:
+def fetch_check_runs(
+    repo: str,
+    pr_number: int,
+    *,
+    sleeper: Callable[[float], None] = time.sleep,
+) -> list[dict[str, Any]]:
     """Return failed check_run entries for the PR's merge commit.
 
     Two-step fetch:
 
     1. ``GET /repos/{repo}/pulls/{pr_number}`` to read
-       ``merge_commit_sha``. Short-circuits to ``[]`` if the SHA is null
-       (GitHub may not have computed it yet on
-       ``pull_request_target.closed``).
+       ``merge_commit_sha``. GitHub may not have finalized the SHA when
+       ``pull_request_target.closed`` fires (refs issue #380), so the
+       PR-detail call is retried up to :data:`_MERGE_SHA_RETRY_ATTEMPTS`
+       times with the :data:`_MERGE_SHA_RETRY_BACKOFF` sequence between
+       attempts. If every attempt still yields ``None``, emit a
+       ``::warning::`` line and soft-fail to ``[]`` -- check_runs is an
+       augmenting signal for the Repair history table, not a correctness
+       invariant. The ``sleeper`` parameter is injectable for tests
+       (mirrors ``scripts/_github_api.py`` ``apply_call`` precedent).
     2. ``GET /repos/{repo}/commits/{sha}/check-runs?per_page=100`` to
        enumerate runs against that SHA.
 
@@ -899,10 +919,24 @@ def fetch_check_runs(repo: str, pr_number: int) -> list[dict[str, Any]]:
     when the annotation API fails, or beyond the
     :data:`_CHECK_RUN_DISPLAY_CAP` enrichment ceiling). Refs issue #381.
     """
-    raw = gh_api("GET", f"/repos/{repo}/pulls/{pr_number}")
-    pr_detail = json.loads(raw) if raw.strip() else {}
-    sha = pr_detail.get("merge_commit_sha")
+    sha: str | None = None
+    for attempt in range(1, _MERGE_SHA_RETRY_ATTEMPTS + 1):
+        raw = gh_api("GET", f"/repos/{repo}/pulls/{pr_number}")
+        pr_detail = json.loads(raw) if raw.strip() else {}
+        sha = pr_detail.get("merge_commit_sha")
+        if sha:
+            break
+        if attempt < _MERGE_SHA_RETRY_ATTEMPTS:
+            sleeper(_MERGE_SHA_RETRY_BACKOFF[attempt - 1])
     if not sha:
+        print(
+            f"::warning::fetch_check_runs: merge_commit_sha still null "
+            f"for {repo}#{pr_number} after {_MERGE_SHA_RETRY_ATTEMPTS} "
+            f"attempts (backoff {list(_MERGE_SHA_RETRY_BACKOFF)}s); "
+            "Repair history will use commit-subject signals only "
+            "(refs issue #380)",
+            file=sys.stderr,
+        )
         return []
     raw = gh_api(
         "GET",
