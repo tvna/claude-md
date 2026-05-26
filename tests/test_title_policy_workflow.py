@@ -33,7 +33,11 @@ def _required_contexts() -> list[str]:
 
 
 def test_ruleset_requires_title_policy_gate_context() -> None:
-    assert "Verify title policy / gate" in _required_contexts()
+    # Post-issue-#468 step 2: title-policy verification is required via
+    # the grouped `Verify GitHub content / gate` context. The standalone
+    # `Verify title policy / gate` context is intentionally absent from
+    # SoT pending standalone-workflow deletion in step 3 of 3.
+    assert "Verify GitHub content / gate" in _required_contexts()
 
 
 def test_required_context_matches_workflow_name_and_job_id() -> None:
@@ -41,7 +45,10 @@ def test_required_context_matches_workflow_name_and_job_id() -> None:
     expected_context = f"{_workflow_name(text)} / gate"
 
     assert "gate" in _job_ids(text)
-    assert expected_context in _required_contexts()
+    # Post-issue-#468 step 2: this standalone workflow's context is no
+    # longer SoT-required (coverage moved to verify-github-content.yml).
+    # Step 3 of 3 deletes this workflow file.
+    assert expected_context not in _required_contexts()
 
 
 def test_workflow_validates_issue_and_pr_titles() -> None:
