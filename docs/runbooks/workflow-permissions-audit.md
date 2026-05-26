@@ -54,12 +54,9 @@ A workflow that does only `checkout` plus a pure local script (no API call, no `
 | `security-control-drift-report.yml` | `schedule` (weekly) + `workflow_dispatch` (input `dry_run` default true) | `RULESETS_PAT` via `env.GH_TOKEN_API` (read-only), `GITHUB_TOKEN` via `env.GH_TOKEN` (for posting rolling comment on #178) | `contents: read`, `issues: write` | `contents: read`, `issues: write` | `none`. Residual: same `RULESETS_PAT` exposure pattern as `ruleset-drift.yml` (scheduled, not Environment-scoped). `curl` to astral-sh/uv supply chain (pinned per #112). | #56, #181 (PAT scoping), #180 (already closed by this workflow itself) |
 | `threat-intel-triage.yml` | `issues` (opened/edited/labeled/unlabeled/reopened), `pull_request_target` (opened/edited/synchronize/labeled/unlabeled/reopened/ready_for_review) | `GITHUB_TOKEN` via `env.GH_TOKEN` | `contents: read`, `issues: write` | `contents: read`, `issues: write`, `pull-requests: read` | `over-grant: pull-requests: read`. The workflow reads labels from the event payload and mutates labels via `gh issue edit` (which uses the issues endpoint even on PR numbers); the PR API itself is never called. Risk is low (read scope only) but the declaration should narrow. Residual: `pull_request_target` without an explicit author filter (relies on label-driven triage being safe to run on fork PRs because outputs are deterministic OSV/KEV lookups). | #170 (sustained ops), #181 (drop unused `pull-requests: read`) |
 | `verify-agents.yml` | `pull_request` | `GITHUB_TOKEN` via `env.GH_TOKEN` (in `lint-scripts` stale check only) | top-level `contents: read`. verify job needs `contents: read` only (called workflow runs in `verify` mode, no push). | top-level `contents: read`; verify job overrides to `contents: write`, `pull-requests: write` | `over-grant: verify job declares contents: write, pull-requests: write but generate-agents.yml verify path neither pushes nor opens a PR`. Same root cause as `generate-agents.yml` line above; remediation is to narrow the verify-job override (or the callable workflow's top-level block) to `contents: read`. | #181 |
-| `verify-apm-drift.yml` | `pull_request` (paths under `.apm/`, `CLAUDE.md`, `AGENTS.md`, `apm.yml`, `pyproject.toml`, `uv.lock`, `.github/workflows/**`) | none (`GITHUB_TOKEN` implicit, not used by any step) | `contents: read` | `contents: read` | `none`. Residual: `curl` to astral-sh/uv supply chain (pinned per #112). | — |
-| `verify-apm-portability.yml` | `pull_request` (paths under `.apm/`, `CLAUDE.md`, `AGENTS.md`, `scripts/scan_apm_portability.py`, this file) | none | `contents: read` | `contents: read` | `none`. | — |
-| `verify-body-policy.yml` | `issues` (opened/edited/reopened), `pull_request` (opened/edited/synchronize/reopened/ready_for_review) | none (reads event payload) | `contents: read` | `contents: read` | `none`. | — |
+| `verify-apm.yml` | `pull_request` | none (`GITHUB_TOKEN` implicit, not used by any step) | `contents: read` | `contents: read` | `none`. Residual: `curl` to astral-sh/uv supply chain (pinned per #112). Replaces the deleted `verify-apm-drift.yml` and `verify-apm-portability.yml` per #468; portability scan + `apm compile` drift check share one checkout and one uv install. | — |
 | `verify-dependabot-labels.yml` | `pull_request` (paths under `.github/dependabot.yml`, `.github/labels.json`, `scripts/dependabot_labels.py`, this file) | none | `contents: read` | `contents: read` | `none`. | — |
-| `verify-issue-link.yml` | `pull_request` (opened/edited/synchronize/reopened/ready_for_review) | `GITHUB_TOKEN` via `env.GH_TOKEN` | `contents: read`, `issues: read` | `pull-requests: read`, `issues: read`, `contents: read` | `over-grant: pull-requests: read`. PR body is read from the event payload (`github.event.pull_request.body`); the script only calls `gh api /repos/.../issues/{n}` to resolve referenced issues. The PR API itself is never read. | #181 |
-| `verify-title-policy.yml` | `issues` (opened/edited/reopened), `pull_request` (opened/edited/synchronize/reopened/ready_for_review) | none | `contents: read` | `contents: read` | `none`. | — |
+| `verify-github-content.yml` | `issues` (opened/edited/reopened), `pull_request` (opened/edited/synchronize/reopened/ready_for_review) | `GITHUB_TOKEN` via `env.GH_TOKEN` (issue-link step only) | `contents: read`, `issues: read`, `pull-requests: read` | `contents: read`, `issues: read`, `pull-requests: read` | `over-grant: pull-requests: read`. Same residual as the deleted `verify-issue-link.yml`: PR body is read from the event payload (`github.event.pull_request.body`); the script only calls `gh api /repos/.../issues/{n}` to resolve referenced issues. The PR API itself is never read. Replaces the deleted `verify-title-policy.yml`, `verify-body-policy.yml`, and `verify-issue-link.yml` per #468; title-policy, body-policy, and issue-link checks share one checkout. | #181 |
 
 ## Notes on privileged-mutation workflows
 
@@ -100,15 +97,15 @@ Follow-up issues this audit references (every "Follow-up" cell maps to one of th
 | #31 | Branch cleanup phased rollout (Goal D is the deletion path) | `branch-cleanup.yml` |
 | #56 | Ruleset PAT handling and privileged-dispatch hardening | `apply-rulesets.yml`, `ruleset-drift.yml`, `security-control-drift-report.yml` |
 | #170 | Sustained external threat-intelligence triage operations | `threat-intel-triage.yml` |
-| #181 | Workflow permissions and PAT audit (least privilege matrix) | self-referenced; matrix rows that surface a `mismatch` other than `none`: `generate-agents.yml`, `ruleset-drift.yml`, `security-control-drift-report.yml`, `threat-intel-triage.yml`, `verify-agents.yml`, `verify-issue-link.yml` |
+| #181 | Workflow permissions and PAT audit (least privilege matrix) | self-referenced; matrix rows that surface a `mismatch` other than `none`: `generate-agents.yml`, `ruleset-drift.yml`, `security-control-drift-report.yml`, `threat-intel-triage.yml`, `verify-agents.yml`, `verify-github-content.yml` |
 | #182 | Privileged-operation runbook checklist (dry-run / authorization / rollback / audit) | `apply-labels.yml`, `apply-rulesets.yml`, `branch-cleanup.yml` (delete path) |
 | #183 | Downstream instruction review checklist | `generate-agents.yml` |
 
-Surfaces explicitly marked `none` (no follow-up): `auto-retro.yml`, `dependabot-automerge.yml`, `scan-non-ascii.yml`, `verify-apm-drift.yml`, `verify-apm-portability.yml`, `verify-body-policy.yml`, `verify-dependabot-labels.yml`, `verify-title-policy.yml`.
+Surfaces explicitly marked `none` (no follow-up): `auto-retro.yml`, `dependabot-automerge.yml`, `scan-non-ascii.yml`, `verify-apm.yml`, `verify-dependabot-labels.yml`.
 
 ## Note on companion inventory
 
-`docs/prd/security-control-inventory.md` Section 1 enumerates 15 workflows. Two workflows have landed since that inventory was written and are not yet listed there: `auto-retro.yml` (added by PR #237 / #234) and `verify-apm-portability.yml`. Both are covered in the matrix above. The inventory will be brought back in sync by a separate PR; updating it is out of the scope of this audit (which is permissions-only, not surface-count).
+`docs/prd/security-control-inventory.md` Section 1 was originally written against 15 workflows. The inventory drifts from this matrix as workflows are added, removed, or grouped; the audit-side fan-out is tracked here. The inventory will be brought back in sync by a separate PR; updating it for surface-count parity is out of the scope of this audit (which is permissions-only).
 
 ## Verification
 
@@ -120,14 +117,14 @@ rg -n "permissions:|GITHUB_TOKEN|secrets\.|PAT|gh api|curl|workflow_dispatch|env
 
 Expected reviewer behavior:
 
-- Every match inside `.github/workflows/*.yml` falls into one of the 17 rows in the *Permission matrix* above; matches in the same file appear together under that file's row.
+- Every match inside `.github/workflows/*.yml` falls into one of the rows in the *Permission matrix* above; matches in the same file appear together under that file's row.
 - Matches in `docs/**` are documentation of these same workflows (notably `docs/runbooks/issue-triage.md`, `docs/runbooks/rulesets.md`, `docs/runbooks/branch-cleanup.md`, `docs/prd/non-ascii-defense.md`, `docs/runbooks/security-control-drift-report.md`, `docs/standards/workflow-script-quality.md`, `docs/standards/remote-environment.md`, `docs/prd/security-control-inventory.md`) and are absorbed by the matrix's *Token / secret* and *Mismatch* columns (the workflow row points at the documenting file via the script reference or the PAT name).
 - Matches in `scripts/**` are the implementation of the same surfaces (`labels_apply.py`, `rulesets_apply.py`, `ruleset_drift.py`, `security_drift_report.py`, `scan_non_ascii.py`, `auto_retro.py`, `issue_link.py`, `branch_cleanup.py`, `dependabot_labels.py`, `_github_api.py`, `install-uv.sh`, `plan_language_context.py`); each is exercised by the workflow that imports it, so it is absorbed by the matrix indirectly. The `install-uv.sh` `curl` match is the SessionStart hook, separately documented in `docs/standards/remote-environment.md`.
 - Matches that the matrix does not cover are a defect in this audit and should be added by a follow-up PR that updates this file.
 
 Reviewers should also confirm:
 
-- `ls .github/workflows/` returns exactly 17 files and each is a row in the matrix.
+- `ls .github/workflows/` files are each a row in the matrix (the surface-count is tracked separately per the companion-inventory note above).
 - Every workflow has an explicit `permissions:` block (no `implicit default` rows in the matrix). Verified.
 - Every `over-grant` row carries a follow-up issue number.
 
