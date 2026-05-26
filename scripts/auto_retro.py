@@ -506,15 +506,26 @@ def _build_repair_history_table(
     commit_subjects: list[str],
     pr_commit_count: int,
     verification_pairs: list[VerificationPair] | None = None,
+    pr_type: str = "",
 ) -> str:
     """Render the Repair history markdown table (header + rows, no surrounds).
 
-    Walks five deterministic signal classes in fixed order: CI failures,
-    fix-up commits, merge-from-main commits, multi-commit summary, and
-    failed Verification pairs. Emits a sentinel row only when all classes
-    produced zero rows. The Post-merge checklist class was removed in
-    #418 because its items are unchecked at merge time by design;
-    deferred re-scan is tracked in #421.
+    Walks deterministic signal classes in fixed order: CI failures,
+    fix-up commits (canonical fix exempted on fix-typed PRs as a
+    distinct ``Fix commit`` row -- see #413), merge-from-main commits,
+    multi-commit summary, and failed Verification pairs. Emits a
+    sentinel row only when all classes produced zero rows. The
+    Post-merge checklist class was removed in #418 because its items
+    are unchecked at merge time by design; deferred re-scan is tracked
+    in #421.
+
+    When ``pr_type == "fix"``, the first non-merge-from-main commit
+    subject that itself starts with ``fix(`` is rendered as a
+    ``Fix commit`` row instead of ``Iteration commit``: it is the
+    canonical fix the PR was opened to land, not evidence of an earlier
+    silent failure. ``fixup!`` and ``squash!`` subjects remain
+    unconditional iteration markers regardless of PR type because they
+    are explicit iteration prefixes by convention.
 
     Cells are run through :func:`_escape_table_cell` so commit subjects
     containing ``|`` cannot break the table. The shape mirrors the
@@ -559,8 +570,38 @@ def _build_repair_history_table(
             )
         )
 
-    for subject in commit_subjects:
+    # Issue #413: on a fix-typed PR the first non-merge-from-main commit
+    # that itself starts with `fix(` is the canonical fix the PR landed,
+    # not an iteration on an earlier silent failure. Compute its index
+    # once so the row-emit loop below can split it out as a `Fix commit`
+    # row. Reuses _MERGE_FROM_MAIN_PREFIXES so the "non-merge" definition
+    # stays consistent with _count_merge_from_main and the policy-artifact
+    # rows below.
+    canonical_fix_index: int | None = None
+    if pr_type == "fix":
+        for i, subject in enumerate(commit_subjects):
+            stripped_i = subject.strip()
+            if any(
+                stripped_i.startswith(prefix)
+                for prefix in _MERGE_FROM_MAIN_PREFIXES
+            ):
+                continue
+            if stripped_i.startswith("fix("):
+                canonical_fix_index = i
+            break
+
+    for i, subject in enumerate(commit_subjects):
         stripped = subject.strip()
+        if i == canonical_fix_index:
+            rows.append(
+                (
+                    _escape_table_cell("Fix commit"),
+                    _escape_table_cell(
+                        f"`{subject}` -- canonical fix commit on fix-typed PR"
+                    ),
+                )
+            )
+            continue
         if (
             stripped.startswith("fix(")
             or stripped.startswith("fixup!")
@@ -655,6 +696,9 @@ def build_retro_body(
     are also empty).
     """
     type_scope = extract_type_scope(pr.title)
+    # Bare type (scope stripped) drives the canonical-fix exemption in
+    # _build_repair_history_table. Mirrors build_retro_title's split.
+    pr_type = type_scope.split("(", 1)[0] if type_scope else ""
     fallback_note = ""
     if not type_scope:
         fallback_note = (
@@ -675,6 +719,7 @@ def build_retro_body(
         commit_subjects,
         pr.commits,
         verification_pairs,
+        pr_type=pr_type,
     )
     # Idempotent date stamp: derive from pr.merged_at (already an ISO
     # 8601 string from the event payload) rather than datetime.now() so

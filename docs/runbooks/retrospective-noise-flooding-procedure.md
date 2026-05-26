@@ -25,10 +25,12 @@ non-bot, non-retro merge.
 - Replacing the auto-retro repair-history pre-fill. The
   `_build_repair_history_table` function in
   [`scripts/auto_retro.py`](../scripts/auto_retro.py) already detects
-  four signal classes (CI failures, fix-up commits, merge-from-main,
-  multi-commit PR) and writes them into the retro issue body. This
-  procedure layers human judgment on top of those signals; it does
-  not duplicate them.
+  five signal classes (CI failures, fix-up commits with the canonical
+  `fix(...)` commit on a fix-typed PR split out as a separate
+  `Fix commit` row -- see #413, merge-from-main, multi-commit PR, and
+  failed Verification pairs) and writes them into the retro issue
+  body. This procedure layers human judgment on top of those signals;
+  it does not duplicate them.
 - Re-classifying the three repair-taxonomy categories. The taxonomy
   (missing deterministic gate / unclear agent instruction / external
   or human decision that cannot be automated) is owned by CLAUDE.md
@@ -48,8 +50,8 @@ or `git log` query.
 | # | Signal | Where to read it | What it means |
 |---|--------|------------------|---------------|
 | S1 | High commit count on a single PR | Auto-retro repair-history table `Multi-commit PR` row; or `git log --oneline <base>..<head> | wc -l` | The PR did not squash to a single intent. Either the author iterated in public (legitimate when each commit is a discrete step) or the branch absorbed unrelated work. Note: the `multi_commit_pr` gate that triggers auto-retro creation subtracts merge-from-main commits from the count, so rebase debt forced by the squash-only, linear-history policy does not fire the gate on its own; the repair-history table still records the merge-from-main rows for review visibility. |
-| S2 | Low-information commit subjects | Auto-retro `Iteration commit` row; or scan commit subjects for `wip`, `fix`, `fixup!`, `squash!`, `update`, `more`, `tweak`, generic verbs with no scope | Subjects that do not state intent erase the audit trail. A reviewer cannot reconstruct what each commit changed without diffing it. |
-| S3 | Repeated repair commits | Auto-retro `Iteration commit` row with three or more entries; or `git log --grep='^fix' <base>..<head>` count | Repeated `fix(...)` commits on the same PR indicate the deterministic gates caught defects late. The pattern points at a missing earlier gate or an unclear agent instruction. |
+| S2 | Low-information commit subjects | Auto-retro `Iteration commit` row (the canonical `fix(...)` commit on a fix-typed PR is rendered as `Fix commit` instead and is exempt from this count -- see #413); or scan commit subjects for `wip`, `fix`, `fixup!`, `squash!`, `update`, `more`, `tweak`, generic verbs with no scope | Subjects that do not state intent erase the audit trail. A reviewer cannot reconstruct what each commit changed without diffing it. |
+| S3 | Repeated repair commits | Auto-retro `Iteration commit` row with three or more entries (the canonical `fix(...)` commit on a fix-typed PR is exempt -- see #413); or `git log --grep='^fix' <base>..<head>` count | Repeated `fix(...)` commits on the same PR indicate the deterministic gates caught defects late. The pattern points at a missing earlier gate or an unclear agent instruction. |
 | S4 | Force-update churn | `git reflog show origin/<branch>` from the local checkout if available; or the PR `force-pushed` timeline events visible in the GitHub UI | Force pushes rewrite the audit log. A small number is normal (rebase onto main, fix-up squash before merge). A large number obscures which version a reviewer approved. |
 | S5 | Unrelated churn in the diff | `git diff --stat <base>..<head>` against the PR scope stated in the closing issue | Files outside the PR scope appearing in the diff (e.g. a docs PR that also touches `scripts/`, an APM-source PR that also rewrites `tests/`) widens blast radius beyond what the closing issue authorized. |
 
