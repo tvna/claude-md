@@ -1168,6 +1168,15 @@ def create_issue(
 # scan_non_ascii.py:313-326).
 _BACK_LINK_MARKER = "<!-- auto-retro:back-link -->"
 
+# Label applied to the source PR after the retro issue is opened and
+# the back-link comment is posted. Emission is the harness contract --
+# subscribed Claude sessions and operators read it as the signal that
+# the PR has reached terminal state and no further session attention
+# is required. Consumption (e.g. unsubscribe_pr_activity) is platform
+# / session policy and out of scope here. SoT entry lives in
+# .github/labels.json; tests/test_auto_retro.py guards the drift.
+_TERMINAL_LABEL = "harness:retro-opened"
+
 
 def find_existing_back_link_id(
     repo: str, pr_number: int, marker: str = _BACK_LINK_MARKER
@@ -1216,6 +1225,24 @@ def post_back_link_comment(
         {"body": body},
     )
     return "created"
+
+
+def apply_terminal_label(
+    repo: str, pr_number: int, label: str = _TERMINAL_LABEL
+) -> None:
+    """POST *label* to the source PR's labels endpoint.
+
+    GitHub's labels endpoint is naturally idempotent (re-adding an
+    existing label is a no-op), so no pre-check is needed. The orchestrator
+    is responsible for the fail-soft policy: the retro issue is already
+    created by the time this fires, so a failed label add must not roll
+    back the audit trail.
+    """
+    gh_api(
+        "POST",
+        f"/repos/{repo}/issues/{pr_number}/labels",
+        {"labels": [label]},
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1384,6 +1411,7 @@ def run(event: dict[str, Any], repo: str) -> int:
     new_url = created.get("html_url") or ""
 
     back_link_status = "skipped"
+    terminal_label_status = "skipped"
     if isinstance(new_number, int):
         try:
             back_link_status = post_back_link_comment(repo, pr.number, new_number)
@@ -1400,9 +1428,26 @@ def run(event: dict[str, Any], repo: str) -> int:
             )
             back_link_status = "failed"
 
+        try:
+            apply_terminal_label(repo, pr.number)
+            terminal_label_status = "applied"
+        except subprocess.CalledProcessError as exc:
+            # Fail-soft: the terminal label is a secondary signal layered on
+            # top of the retro+back-link audit trail. A label-add failure
+            # must NOT roll back the retro -- warn and continue so the
+            # primary outputs remain intact.
+            print(
+                f"::warning::apply_terminal_label failed "
+                f"(exit {exc.returncode}); retro issue #{new_number} created "
+                f"but source PR was not labeled {_TERMINAL_LABEL!r}",
+                file=sys.stderr,
+            )
+            terminal_label_status = "failed"
+
     msg = (
         f"created retro issue #{new_number} ({new_url}); "
-        f"back-link={back_link_status}"
+        f"back-link={back_link_status}; "
+        f"terminal-label={terminal_label_status}"
     )
     print(msg)
     _append_summary(_build_summary(pr, "created", msg))
