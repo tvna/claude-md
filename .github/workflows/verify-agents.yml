@@ -94,6 +94,9 @@ jobs:
       - name: Assert workflows install Python deps via uv only
         run: uv run python scripts/scan_workflow_pip.py verify
 
+      - name: Verify .apm checksum lockfile
+        run: uv run python scripts/verify_apm_checksums.py verify
+
       - name: Warn if uv pin trails upstream
         env:
           GH_TOKEN: ${{ github.token }}
