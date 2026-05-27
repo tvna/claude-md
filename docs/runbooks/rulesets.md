@@ -9,7 +9,7 @@ The rulesets are introduced incrementally per the phased rollout in [#18](https:
 | File | Target | Purpose |
 |---|---|---|
 | `.github/rulesets/main.json` | `~DEFAULT_BRANCH` | Strict `main` protection (PR-only, squash-only, required status check, linear history) |
-| `.github/rulesets/all-branches.json` | `~ALL` except `~DEFAULT_BRANCH` and `refs/heads/dependabot/*` | `non_fast_forward` only (deletion intentionally omitted; see [#18 comment 2](https://github.com/tvna/claude-md/issues/18#issuecomment-4482555311)) |
+| `.github/rulesets/all-branches.json` | `~ALL` except `~DEFAULT_BRANCH`, `refs/heads/dependabot/*`, and `refs/heads/claude/*` | `non_fast_forward` only (deletion intentionally omitted; see [#18 comment 2](https://github.com/tvna/claude-md/issues/18#issuecomment-4482555311)). `refs/heads/claude/*` is excluded per [#507](https://github.com/tvna/claude-md/issues/507) so agent branches can recover from rebase via `git commit --amend` + `git push --force-with-lease`; agent branches are short-lived personal staging space, not shared. |
 | `.github/rulesets/dependabot.json` | `refs/heads/dependabot/*` | `non_fast_forward` with no bypass actors. Originally granted the Dependabot Integration `actor_id: 49699333` a bypass per [#140](https://github.com/tvna/claude-md/issues/140), but GitHub deprecated the standalone Dependabot GitHub App and the Rulesets API now returns HTTP 422 for that bypass actor — see [#273](https://github.com/tvna/claude-md/issues/273); `@dependabot rebase` is therefore blocked and Dependabot falls back to closing + reopening the PR with a freshly rebased branch. The admin `RepositoryRole` bypass was also removed across all three rulesets so the "Merge without waiting for requirements" path is no longer reachable. |
 | `docs/runbooks/rulesets.md` *(this file)* | — | Runbook |
 
@@ -23,6 +23,7 @@ The apply step is split across phases so that the strictest rule (`commit_messag
 | **3-A** ([#41](https://github.com/tvna/claude-md/issues/41)) | `main.json` (incl. `require_code_owner_review: true`¹; without `commit_message_pattern`) | `ruleset=main`, `dry_run=false`, `enable_auto_delete=false` |
 | **3-B** ([#42](https://github.com/tvna/claude-md/issues/42)) | `main.json` (after adding `commit_message_pattern`) | `ruleset=main`, `dry_run=false`, `enable_auto_delete=false` (PUT path, ≥7 days after 3-A) |
 | **P4-dependabot** ([#140](https://github.com/tvna/claude-md/issues/140)) | `all-branches.json` (PUT: adds `refs/heads/dependabot/*` to `exclude`) + `dependabot.json` (POST) | `ruleset=all-branches`, then `ruleset=dependabot`, both `dry_run=false`, `enable_auto_delete=false` |
+| **P5-claude** ([#507](https://github.com/tvna/claude-md/issues/507)) | `all-branches.json` (PUT: adds `refs/heads/claude/*` to `exclude`) | `ruleset=all-branches`, `dry_run=false`, `enable_auto_delete=false` |
 
 ¹ Phase 3-A applies `main.json` as committed — including `require_code_owner_review: true` ([#56](https://github.com/tvna/claude-md/issues/56) P1-b). No separate dispatch is needed to activate code-owner enforcement; it ships in the same PUT as the rest of `main.json`.
 
