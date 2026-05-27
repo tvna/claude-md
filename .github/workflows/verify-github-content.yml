@@ -32,9 +32,20 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          # fetch-depth: 0 makes origin/<base> reachable from HEAD so the
+          # single-commit step below can run `git rev-list <base>..HEAD`.
+          # Issue #492.
+          fetch-depth: 0
 
       - name: Validate title policy
         run: python3 scripts/title_policy.py verify --kind "$KIND"
+
+      - name: Validate single-commit PR rule
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: origin/${{ github.event.pull_request.base.ref }}
+        run: python3 scripts/preflight_pr_single_commit.py
 
       - name: Validate body section structure
         run: |
