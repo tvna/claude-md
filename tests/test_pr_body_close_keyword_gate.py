@@ -18,6 +18,7 @@ from typing import Any
 import pr_body_close_keyword_gate as gate
 import pytest
 
+pytestmark = pytest.mark.shard_preflight
 # ---------------------------------------------------------------------------
 # classify_action
 # ---------------------------------------------------------------------------

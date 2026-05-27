@@ -12,6 +12,7 @@ from pathlib import Path
 import pytest
 import scan_maintainability_metrics
 
+pytestmark = pytest.mark.shard_ci_ops
 REPO_ROOT = Path(__file__).resolve().parents[1]
 STANDARD_PATH = REPO_ROOT / "docs" / "standards" / "maintainability-metrics.md"
 

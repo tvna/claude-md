@@ -28,6 +28,7 @@ import body_policy
 import preflight_pr_body_required_sections as preflight
 import pytest
 
+pytestmark = pytest.mark.shard_preflight
 # ---------------------------------------------------------------------------
 # Fixture bodies
 # ---------------------------------------------------------------------------

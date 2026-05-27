@@ -20,6 +20,7 @@ from typing import Any
 import backup_non_ascii as backup
 import pytest
 
+pytestmark = pytest.mark.shard_policy
 # ---------------------------------------------------------------------------
 # Fakes for the runner boundary
 # ---------------------------------------------------------------------------

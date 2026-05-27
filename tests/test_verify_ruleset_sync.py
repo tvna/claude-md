@@ -17,6 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 
 import verify_ruleset_sync as vrs
 
+pytestmark = pytest.mark.shard_ci_ops
 # ---------------------------------------------------------------------------
 # Fixtures / helpers
 # ---------------------------------------------------------------------------

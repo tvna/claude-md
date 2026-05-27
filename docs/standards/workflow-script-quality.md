@@ -273,12 +273,63 @@ The items below are not gates. Add them when the script's blast
 radius, external coupling, or historical bug pattern warrants the
 extra investment.
 
-### O1. Property-based or fuzz tests
+### O1. Property-based tests (Hypothesis) and mutation-testing deferral
 
 When the script parses user-authored prose or untrusted JSON, add
-property-based tests (e.g. Hypothesis) that exercise the parser on
-generated inputs. Consider this when the script has shipped a parser
+property-based tests (Hypothesis) that exercise the parser on generated
+inputs. Reach for this option when the script has shipped a parser
 bug, or when the parser sits on an injection-relevant boundary.
+
+**Pilot of record (#199).** `scripts/title_policy.py` is the
+injection-relevant boundary (#155): its output gates issue and PR
+titles before they reach notifications, project lists, and agent
+summaries. `tests/test_title_policy.py::TestPropertyInvariants`
+exercises four invariants over `st.text()`:
+
+1. `is_ascii_title(s) == s.isascii()` (defining equivalence).
+2. `pr_title_has_issue_ref(t) == bool(pr_title_issue_refs(t))`
+   (cross-API consistency).
+3. After `pr_title_strip_issue_refs(t)`, no `(#NNN)` token remains
+   (projection invariant).
+4. `pr_title_strip_issue_refs` is idempotent.
+
+**Runtime expectations.** Hypothesis runs inside the existing
+`lint-scripts-pytest` job on every `pull_request` event; no separate
+schedule or workflow is introduced. Default `max_examples=100` keeps
+the four properties under ~1 s combined on CI hardware. New property
+tests added under this option must stay within that envelope (no
+`@settings(deadline=None)` without a recorded rationale, no network or
+disk I/O inside strategies).
+
+**Adoption procedure.** Follow the M10 dependency procedure to add
+`hypothesis` (already declared in `[dependency-groups].dev`,
+introduced by #199). New property tests live next to the existing
+example-based tests for the same script -- they extend the test
+module, never replace its parametrized cases.
+
+**Mutation testing is deferred (#199).** Tools such as `mutmut` and
+`cosmic-ray` were evaluated alongside this pilot and not adopted now:
+
+- Coverage is already at `fail_under = 92.71` (#188) and the
+  workflow-called scripts are small, single-responsibility modules
+  with explicit fail-loud / fail-open contracts (M9). Mutation score
+  would mostly re-prove the existing parametrized cases.
+- Mutation runs are minutes-per-script and would push the
+  `lint-scripts-pytest` job past the budget the rest of the matrix
+  fits into. The deterministic gates listed in M8 are higher leverage
+  for the same CI minutes.
+- A property-based pilot already exercises the boundary the issue
+  flagged ("titles, labels, rulesets, workflow inputs, GitHub API
+  responses") with a fraction of the runtime.
+
+Re-evaluate when one of the following triggers fires:
+
+- A bug ships in a workflow-called script that the existing tests
+  AND the new property tests both missed. The retro must name the
+  test class that would have caught it.
+- A new top-level Python package enters the repository via the
+  Coverage graduation procedure (G2) with materially larger surface
+  area than the current `scripts/` tree.
 
 ### O2. Fixture-driven external API tests
 
@@ -297,9 +348,12 @@ issue #193.
 ### O4. Coverage thresholds
 
 A per-module coverage floor catches regressions where new branches
-land without tests. Tracked by issue #188. Until that lands, aim for
-"every pure function has at least one positive and one negative
-test."
+land without tests. The repository-wide threshold landed with #188 as
+the script-specific gate (`[tool.coverage.report].fail_under` in
+`pyproject.toml`). Extension to non-`scripts/` Python packages is
+governed by the [Coverage graduation policy](#coverage-graduation-policy)
+below (#198). Until a per-script floor lands, also aim for "every
+pure function has at least one positive and one negative test."
 
 ### O5. Pydantic-based input modelling
 
@@ -437,6 +491,84 @@ class TestMainExitCode:
         assert <name>.main(["--dry-run", "true"]) == 0
 ```
 
+## Coverage graduation policy
+
+This section is the authoritative policy for when and how Python code
+outside `scripts/` enters the repository coverage gate. It exists so a
+new package cannot grow without being measured, and so the existing
+script-specific gate (#188) is never weakened by the expansion (#198).
+
+### G1. Current footprint
+
+The coverage gate of record is `[tool.coverage.report].fail_under` in
+`pyproject.toml`, enforced by `.github/workflows/coverage.yml` via
+`pytest --cov-fail-under=<value>`. The measured tree is
+`[tool.coverage.run].source = ["scripts"]` because every Python
+runtime module in this repository currently lives under `scripts/`
+(workflow-called entry points and underscore-prefixed shared
+libraries). Codecov status remains informational only; the local
+`fail_under` is the blocking signal.
+
+### G2. Graduation procedure for a new top-level Python package
+
+When a PR introduces Python runtime code outside `scripts/` (a new
+top-level package or module that is imported or executed in
+production paths, not a one-off script), the same PR must:
+
+1. Extend `[tool.coverage.run].source` to include the new package path
+   alongside `"scripts"`. Do not replace the existing entries; the
+   list is additive.
+2. Measure the new package's coverage in isolation against the new
+   tests added in the same PR, then set `[tool.coverage.report].fail_under`
+   to the **lowest value that the combined source tree still
+   satisfies on green CI**. The threshold may move only in the
+   direction that does not weaken the script-specific floor from
+   #188: the combined `fail_under` must remain greater than or equal
+   to the script-only baseline measured immediately before the
+   graduation PR.
+3. Add a one-line inline comment in `pyproject.toml` next to the
+   updated `source` list naming the issue that introduces the
+   package, mirroring the style used for the dev-dependency entries.
+
+This keeps the first PR small (it records the baseline rather than
+chasing 100%) and forces every later raise to be a separate PR with
+its own rationale, matching CLAUDE.md section 4.
+
+### G3. Exclusions
+
+Exclusions are the exception, not the default. The acceptable
+categories are:
+
+- `__main__` guards and CLI entry-point shims that are exercised
+  end-to-end by integration tests (covered by `subprocess.run`-based
+  CLI contract tests under M3 rather than by direct import).
+- Generated code committed for reproducibility (for example
+  serialised schema, compiled grammars). Generated code must carry a
+  header comment naming the generator.
+- Pure data modules (constants, fixture payloads) that contain no
+  executable branches.
+
+Every exclusion lives under `[tool.coverage.run].omit` with an inline
+comment giving the category from the list above and the issue that
+introduced the exclusion. Adding an exclusion without that rationale
+is a review-blocking defect.
+
+### G4. Invariant: the script gate cannot weaken
+
+The `scripts/`-specific coverage achieved at the point of #188 (the
+`fail_under` value recorded in `pyproject.toml` when this policy was
+introduced via #198) is a floor. A graduation PR may raise the
+combined threshold; it must not lower it. If adding a new package
+would mechanically force the combined `fail_under` downward, the PR
+must add enough tests in the same change to keep the floor intact, or
+be split so the new package lands behind the existing gate via
+`omit` until its own tests reach parity.
+
+This invariant is what makes the merge of script and broader
+coverage safe under the "intentionally merges them with documented
+rationale" choice in #198: one threshold, one fail-loud gate, no
+silent regression on either side.
+
 ## Rationale (CLAUDE.md mapping)
 
 | Standard item | CLAUDE.md anchor | What it enforces |
@@ -450,6 +582,7 @@ class TestMainExitCode:
 | M8 lint/type/coverage | section 3 | Deterministic gates close the loop before merge |
 | M9 fail policy | section 4 | Loud failure on gates; explicit fail-open only where a wedged hook would be worse |
 | M10 install path | section 3, section 4 | Single uv-managed install primitive; supply-chain bounded by `pyproject.toml` + `uv.lock` and enforced by `scan_workflow_pip.py` |
+| G1-G4 coverage graduation | section 3, section 4 | Single coverage gate, additive `source` list, script floor cannot weaken when new packages graduate (#198) |
 
 ## References
 
@@ -466,6 +599,7 @@ class TestMainExitCode:
   - #193 ci(workflows): verify script invocation drift
   - #194 test(scripts): add GitHub API boundary tests
   - #195 ci(scripts): standardize dependency and tool installation (promoted to must-have M10)
+  - #198 test(quality): extend coverage gates beyond workflow scripts (carried by the Coverage graduation policy section above)
 - Related runbooks: `docs/standards/issue-pr-body-standard.md`,
   `docs/runbooks/issue-triage.md`, `docs/prd/non-ascii-defense.md`,
   `docs/runbooks/rulesets.md`.

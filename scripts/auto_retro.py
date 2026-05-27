@@ -256,6 +256,8 @@ def should_skip(
 _MERGE_FROM_MAIN_PREFIXES: tuple[str, ...] = (
     "Merge branch 'main'",
     "Merge remote-tracking branch 'origin/main'",
+    "Merge branch 'master'",
+    "Merge remote-tracking branch 'origin/master'",
 )
 
 # Leading marker on the right-hand cell of merge-from-main rows. Lets

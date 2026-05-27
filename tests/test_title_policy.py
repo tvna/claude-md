@@ -1,10 +1,17 @@
-"""Tests for ``scripts/title_policy.py``."""
+"""Tests for ``scripts/title_policy.py``.
+
+Refs #199 -- ``TestPropertyInvariants`` below is the narrow Hypothesis
+pilot documented in ``docs/standards/workflow-script-quality.md`` O1.
+"""
 
 from __future__ import annotations
 
 import pytest
 import title_policy
+from hypothesis import given
+from hypothesis import strategies as st
 
+pytestmark = pytest.mark.shard_policy
 
 class TestIsAsciiTitle:
     @pytest.mark.parametrize(
@@ -199,6 +206,37 @@ class TestVerifyTitle:
         )
         out = capsys.readouterr().out
         assert "OK: issue title is ASCII-only and follows naming convention." in out
+
+
+class TestPropertyInvariants:
+    """Hypothesis pilot for the four pure parsers in ``title_policy``.
+
+    The pilot is documented in ``docs/standards/workflow-script-quality.md``
+    O1 (#199). Each property names the invariant it pins so a failure
+    report points at the spec, not the implementation detail.
+    """
+
+    @given(st.text())
+    def test_is_ascii_title_matches_str_isascii(self, title: str) -> None:
+        assert title_policy.is_ascii_title(title) is title.isascii()
+
+    @given(st.text())
+    def test_has_ref_iff_findall_nonempty(self, title: str) -> None:
+        assert title_policy.pr_title_has_issue_ref(title) is bool(
+            title_policy.pr_title_issue_refs(title)
+        )
+
+    @given(st.text())
+    def test_strip_removes_every_issue_ref(self, title: str) -> None:
+        stripped = title_policy.pr_title_strip_issue_refs(title)
+        assert title_policy.pr_title_has_issue_ref(stripped) is False
+        assert title_policy.pr_title_issue_refs(stripped) == []
+
+    @given(st.text())
+    def test_strip_is_idempotent(self, title: str) -> None:
+        once = title_policy.pr_title_strip_issue_refs(title)
+        twice = title_policy.pr_title_strip_issue_refs(once)
+        assert once == twice
 
 
 class TestCLI:

@@ -29,20 +29,46 @@ dev = [
     "mypy>=1.11,<2",
     # mypy needs stubs for pyyaml (used by scripts/plan_language_context.py).
     "types-PyYAML>=6,<7",
+    # Property-based test pilot for scripts/title_policy.py (#199). O1 in
+    # docs/standards/workflow-script-quality.md documents the scope and the
+    # mutation-testing deferral that landed alongside this dependency.
+    "hypothesis>=6,<7",
 ]
 
 [tool.pytest.ini_options]
 pythonpath = ["scripts"]
 testpaths = ["tests"]
+# Marker taxonomy for the lint-scripts-pytest matrix (#545). Each test file
+# under tests/ declares exactly one module-scope `pytestmark = pytest.mark.shard_<bucket>`;
+# the static gate `scripts/verify_test_shard_markers.py` enforces the one-per-file
+# rule before pytest runs, and the post-matrix gate
+# `scripts/verify_shard_coverage.py` confirms the union of executed node IDs
+# equals the universe collected by `pytest --collect-only`.
+markers = [
+    "shard_preflight: tests for scripts/preflight_*.py and related Layer-2.5 hooks.",
+    "shard_policy: body-policy, title-policy, non-ASCII, and trusted-bot tests.",
+    "shard_ci_ops: CI-analysis, auto-retro, issue-link, and workflow-orchestration tests.",
+    "shard_default: tests not assigned to a domain bucket yet (catch-all, must shrink).",
+]
 
 [tool.coverage.run]
+# Single combined gate per the Coverage graduation policy (#198): the
+# `source` list is additive. New top-level Python packages graduate
+# through the G2 procedure in `docs/standards/workflow-script-quality.md`,
+# which keeps the script-specific floor from #188 intact.
 source = ["scripts"]
 
 [tool.coverage.report]
+# `fail_under` is the authoritative blocking gate (#188); Codecov status
+# remains informational only. Graduation PRs may raise this floor but
+# never lower it (G4 invariant in workflow-script-quality.md, #198).
 fail_under = 92.71
 show_missing = true
 # No scripts are omitted: the initial threshold is the measured baseline from
 # the full test suite, so every runtime script remains visible in CI output.
+# Future exclusions follow the G3 category list in
+# `docs/standards/workflow-script-quality.md` and must carry an inline
+# rationale here (#198).
 
 [tool.ruff]
 # Lint gate (#192). Scope is intentional: only the Python we ship and its

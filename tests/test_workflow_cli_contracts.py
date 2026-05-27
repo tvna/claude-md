@@ -29,6 +29,7 @@ import re
 from pathlib import Path
 from typing import Any, NamedTuple
 
+import analyze_ci_timings
 import auto_retro
 import body_policy
 import branch_cleanup
@@ -36,6 +37,7 @@ import dependabot_automerge
 import dependabot_labels
 import issue_link
 import labels_apply
+import preflight_pr_single_commit
 import pytest
 import ruleset_drift
 import rulesets_apply
@@ -43,16 +45,23 @@ import scan_apm_portability
 import scan_design_philosophy_drift
 import scan_maintainability_metrics
 import scan_non_ascii
+import scan_preflight_drift
+import scan_retro_followup_drift
 import scan_workflow_action_pins
 import scan_workflow_pip
 import security_drift_report
 import threat_intel_triage
 import title_policy
 import uv_pin
+import verify_apm_checksums
+import verify_readme_translation
 import verify_required_check_contexts
 import verify_ruleset_sync
+import verify_shard_coverage
+import verify_test_shard_markers
 import yaml
 
+pytestmark = pytest.mark.shard_ci_ops
 REPO = "owner/repo"
 
 _WORKFLOWS_DIR = Path(".github/workflows")
@@ -66,7 +75,6 @@ _PYTHON_SCRIPT_INVOCATION = re.compile(
     r"\s+scripts/([A-Za-z_][\w-]*\.py)"
     r"(?:\s+(\S+))?"
 )
-
 
 class WorkflowInvocation(NamedTuple):
     """A single ``python ... scripts/<name>.py [<sub>]`` call in a workflow."""
@@ -86,6 +94,7 @@ class WorkflowInvocation(NamedTuple):
 # ``_iter_workflow_invocations`` observes -- the two drift tests below
 # enforce that in both directions.
 CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
+    ("analyze_ci_timings.py", None): "test_analyze_ci_timings_matches_workflow_args",
     ("auto_retro.py", "run"): "test_auto_retro_run_matches_workflow_env",
     ("auto_retro.py", "sentinel"): "test_auto_retro_sentinel_matches_workflow_env",
     ("body_policy.py", "verify"): "test_body_policy_verify_matches_workflow_body_file",
@@ -97,6 +106,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("labels_apply.py", "$COMMAND"): "test_labels_apply_validate_and_plan_match_workflow_args",
     ("labels_apply.py", "plan"): "test_labels_apply_validate_and_plan_match_workflow_args",
     ("labels_apply.py", "validate"): "test_labels_apply_validate_and_plan_match_workflow_args",
+    ("preflight_pr_single_commit.py", None): "test_preflight_pr_single_commit_matches_workflow_env",
     ("ruleset_drift.py", "detect"): "test_ruleset_drift_detect_and_file_issue_match_workflow_args",
     ("ruleset_drift.py", "file-sot-issue"): "test_ruleset_drift_detect_and_file_issue_match_workflow_args",
     ("ruleset_drift.py", "file-unknown-issue"): "test_ruleset_drift_detect_and_file_issue_match_workflow_args",
@@ -106,6 +116,8 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("scan_design_philosophy_drift.py", "verify"): "test_scan_design_philosophy_drift_verify_matches_workflow_paths",
     ("scan_maintainability_metrics.py", "verify"): "test_scan_maintainability_metrics_verify_matches_workflow_args",
     ("scan_non_ascii.py", "run"): "test_scan_non_ascii_run_matches_workflow_env",
+    ("scan_preflight_drift.py", "verify"): "test_scan_preflight_drift_verify_matches_workflow_args",
+    ("scan_retro_followup_drift.py", "run"): "test_scan_retro_followup_drift_run_matches_workflow_env",
     ("scan_workflow_action_pins.py", "verify"): "test_scan_workflow_action_pins_verify_matches_workflow_args",
     ("scan_workflow_pip.py", "verify"): "test_scan_workflow_pip_verify_matches_workflow_args",
     ("security_drift_report.py", "aggregate"): "test_security_drift_report_aggregate_and_post_comment_match_workflow_args",
@@ -115,8 +127,12 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("uv_pin.py", "drift"): "test_uv_pin_workflow_subcommands_match_ci_usage",
     ("uv_pin.py", "read"): "test_uv_pin_workflow_subcommands_match_ci_usage",
     ("uv_pin.py", "stale"): "test_uv_pin_workflow_subcommands_match_ci_usage",
+    ("verify_apm_checksums.py", "verify"): "test_verify_apm_checksums_matches_workflow_args",
+    ("verify_readme_translation.py", "verify"): "test_verify_readme_translation_matches_workflow_args",
     ("verify_required_check_contexts.py", "verify"): "test_verify_required_check_contexts_matches_workflow_args",
     ("verify_ruleset_sync.py", "verify"): "test_verify_ruleset_sync_matches_workflow_args",
+    ("verify_shard_coverage.py", None): "test_verify_shard_coverage_matches_workflow_args",
+    ("verify_test_shard_markers.py", None): "test_verify_test_shard_markers_matches_workflow_args",
 }
 
 
@@ -602,6 +618,49 @@ def test_scan_apm_portability_verify_matches_workflow_paths(tmp_path: Path) -> N
     ) == 0
 
 
+def test_verify_apm_checksums_matches_workflow_args(tmp_path: Path) -> None:
+    apm_source = tmp_path / ".apm/instructions/master.instructions.md"
+    apm_source.parent.mkdir(parents=True)
+    apm_source.write_text("source\n", encoding="utf-8")
+
+    assert verify_apm_checksums.main(["--root", str(tmp_path), "update"]) == 0
+    assert verify_apm_checksums.main(["--root", str(tmp_path), "verify"]) == 0
+
+
+def test_verify_readme_translation_matches_workflow_args(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Mirror the env+argv shape used by verify-github-content.yml.
+
+    The workflow shells to
+    ``python3 scripts/verify_readme_translation.py verify
+    --base-ref "$BASE_REF" --body-file "$body_file"``.
+    Exercise the same shape with the changed-files lookup stubbed so
+    the test stays hermetic across CI checkout depths (the
+    lint-scripts-pytest job checks out shallow, so a real
+    ``git diff origin/main..HEAD`` would fail with exit 128).
+    """
+    monkeypatch.setattr(
+        verify_readme_translation,
+        "changed_readmes",
+        lambda base, head="HEAD", **kwargs: frozenset(
+            {"README.md", "README.ja.md", "README.zh.md"}
+        ),
+    )
+
+    body_file = tmp_path / "body.md"
+    body_file.write_text("no marker", encoding="utf-8")
+    assert verify_readme_translation.main(
+        [
+            "verify",
+            "--base-ref",
+            "origin/main",
+            "--body-file",
+            str(body_file),
+        ]
+    ) == 0
+
+
 def test_scan_design_philosophy_drift_verify_matches_workflow_paths(
     tmp_path: Path,
 ) -> None:
@@ -650,6 +709,18 @@ def test_scan_non_ascii_run_matches_workflow_env(
     monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(tmp_path / "summary.md"))
 
     assert scan_non_ascii.main(["run"]) == 0
+
+
+def test_scan_retro_followup_drift_run_matches_workflow_env(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        scan_retro_followup_drift, "search_retro_issues", lambda repo: []
+    )
+    monkeypatch.setenv("REPO", REPO)
+    monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(tmp_path / "summary.md"))
+
+    assert scan_retro_followup_drift.main(["run"]) == 0
 
 
 def test_scan_workflow_action_pins_verify_matches_workflow_args() -> None:
@@ -765,6 +836,123 @@ def test_title_policy_verify_matches_workflow_kind_env(
     assert title_policy.main(["verify", "--kind", "pull_request"]) == 0
 
 
+def test_analyze_ci_timings_matches_workflow_args(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Mirror the argv shape used by measure-lint-pytest-timings.yml.
+
+    The workflow shells to
+    ``uv run python scripts/analyze_ci_timings.py --jobs jobs/
+    --workflow "Verify agent instructions" --title "..."``. Exercise the
+    same shape against a minimal jobs/ fixture so the contract pins the
+    flag-only invocation (no subcommand). Refs #552.
+    """
+    jobs_dir = tmp_path / "jobs"
+    jobs_dir.mkdir()
+    (jobs_dir / "1.json").write_text(
+        json.dumps(
+            {
+                "jobs": [
+                    {
+                        "name": "lint-scripts-static",
+                        "workflow_name": "Verify agent instructions",
+                        "started_at": "2026-05-27T12:00:00Z",
+                        "completed_at": "2026-05-27T12:01:00Z",
+                        "steps": [
+                            {
+                                "name": "Checkout repository",
+                                "started_at": "2026-05-27T12:00:00Z",
+                                "completed_at": "2026-05-27T12:00:10Z",
+                            }
+                        ],
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    rc = analyze_ci_timings.main(
+        [
+            "--jobs",
+            str(jobs_dir),
+            "--workflow",
+            "Verify agent instructions",
+            "--title",
+            "verify-agents.yml timings (weekly)",
+        ]
+    )
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "verify-agents.yml timings (weekly)" in out
+
+
+def test_verify_test_shard_markers_matches_workflow_args(tmp_path: Path) -> None:
+    """Mirror the argv shape used by verify-agents.yml lint-scripts-static.
+
+    The workflow shells to ``uv run python scripts/verify_test_shard_markers.py``
+    with no subcommand and no flags -- it relies on the script defaulting
+    ``--tests-dir`` to ``<repo>/tests``. Exercise the same shape against a
+    tiny conformant fixture so the contract pins the no-argv invocation.
+    Refs #545.
+    """
+    (tmp_path / "test_a.py").write_text(
+        "import pytest\npytestmark = pytest.mark.shard_default\n",
+        encoding="utf-8",
+    )
+
+    assert verify_test_shard_markers.main(["--tests-dir", str(tmp_path)]) == 0
+
+
+def test_verify_shard_coverage_matches_workflow_args(tmp_path: Path) -> None:
+    """Mirror the argv shape used by verify-agents.yml lint-scripts-pytest-gate.
+
+    The workflow shells to
+    ``uv run python scripts/verify_shard_coverage.py --collected <file>
+    --junit <one or more junit-*.xml>``. Exercise the same shape with a
+    minimal collected-universe + single JUnit artifact so the contract
+    pins the multi-value --junit flag. Refs #545.
+    """
+    collected = tmp_path / "collected.txt"
+    collected.write_text("tests/test_a.py::test_one\n", encoding="utf-8")
+    junit = tmp_path / "junit-default.xml"
+    junit.write_text(
+        '<?xml version="1.0"?><testsuite>'
+        '<testcase classname="tests.test_a" name="test_one"/>'
+        "</testsuite>\n",
+        encoding="utf-8",
+    )
+
+    assert verify_shard_coverage.main(
+        ["--collected", str(collected), "--junit", str(junit)]
+    ) == 0
+
+
+def test_preflight_pr_single_commit_matches_workflow_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Mirror the env shape used by .github/workflows/verify-github-content.yml.
+
+    The workflow shells to ``python3 scripts/preflight_pr_single_commit.py``
+    with only BASE_REF in the env (no argv). Exercise the same shape:
+    BASE_REF set, list_subjects + count_commits stubbed to a clean
+    single-commit branch, expect exit 0.
+    """
+    monkeypatch.setenv("BASE_REF", "origin/main")
+    monkeypatch.setattr(
+        preflight_pr_single_commit,
+        "list_subjects",
+        lambda base, head="HEAD", **kwargs: ["abc1234 feat: single commit"],
+    )
+    monkeypatch.setattr(
+        preflight_pr_single_commit,
+        "count_commits",
+        lambda base, head="HEAD", **kwargs: 1,
+    )
+
+    assert preflight_pr_single_commit.main() == 0
+
+
 def test_uv_pin_workflow_subcommands_match_ci_usage(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -823,6 +1011,12 @@ def test_verify_required_check_contexts_matches_workflow_args() -> None:
             ".github/workflows",
         ]
     ) == 0
+
+
+def test_scan_preflight_drift_verify_matches_workflow_args() -> None:
+    """Mirrors the `Verify preflight set matches CI script invocations`
+    step in `.github/workflows/verify-agents.yml` (issue #493)."""
+    assert scan_preflight_drift.main(["verify"]) == 0
 
 
 @pytest.mark.parametrize(

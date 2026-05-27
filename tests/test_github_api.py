@@ -12,6 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 
 from _github_api import apply_call
 
+pytestmark = pytest.mark.shard_ci_ops
 
 class Response:
     def __init__(self, status: int, body: str = "") -> None:

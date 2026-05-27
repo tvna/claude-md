@@ -4,12 +4,31 @@ This document is the operator-facing companion to the JSON source of truth in `.
 
 The rulesets are introduced incrementally per the phased rollout in [#18](https://github.com/tvna/claude-md/issues/18). The JSON files do not auto-apply — the **primary path** is the [`Apply rulesets`](../.github/workflows/apply-rulesets.yml) workflow ([#51](https://github.com/tvna/claude-md/issues/51)); a manual `gh api` fallback is preserved below each section as an escape hatch.
 
+## Operational hold
+
+**Hold**: do not dispatch `apply-rulesets.yml` (`workflow_dispatch`) until [#56](https://github.com/tvna/claude-md/issues/56) P0-a (move `RULESETS_PAT` to an Environment-scoped secret) and P0-b (ref-guard step) are live on `main`.
+
+`RULESETS_PAT` is a repo-scoped fine-grained PAT with no ref guard, so a `workflow_dispatch` from a non-`main` ref can print the secret into the public Actions log; the [#56](https://github.com/tvna/claude-md/issues/56) threat-model table names this vector "Branch-ref exfil". The hold is documentary; the deterministic guard ships with P0.
+
+Triage rationale: Wave -1 ([#178](https://github.com/tvna/claude-md/issues/178)) sequenced the issue / PR template harness bootstrap (Issue Forms in [#203](https://github.com/tvna/claude-md/issues/203), PR template in [#204](https://github.com/tvna/claude-md/issues/204), body-policy gate in [#205](https://github.com/tvna/claude-md/issues/205), body-standard runbook in [#206](https://github.com/tvna/claude-md/issues/206)) ahead of P0 above. That bootstrap has merged; the only remaining blocker on the lift is P0-a / P0-b.
+
+Override condition: a security-urgent dispatch may proceed only after P0-a and P0-b have shipped first. Comment-only dispatch requests during the hold window are refused on the same grounds as the existing [Dispatch authorization criteria](#dispatch-authorization-criteria); the hold raises the bar further by requiring P0-a and P0-b to be live before any new dispatch is authorized.
+
+### Lift criteria
+
+Remove this section in the same PR that closes [#56](https://github.com/tvna/claude-md/issues/56) P0 by ticking both checkboxes:
+
+- [ ] **P0-a** Move `RULESETS_PAT` from repo secret to Environment secret `ruleset-apply` with required reviewers = repo admin and deployment branch policy = `Selected branches` to `main` only. Add `environment: ruleset-apply` to the `apply` job in `.github/workflows/apply-rulesets.yml`.
+- [ ] **P0-b** Add an early ref-guard step (`if: github.ref != 'refs/heads/main'` then `::error::` + `exit 1`) as the first step of the `apply` job, before checkout, as belt-and-suspenders for P0-a.
+
+Until both ship, treat any `dry_run=false` dispatch (and any dispatch against a non-`main` ref) as out of policy.
+
 ## SoT layout
 
 | File | Target | Purpose |
 |---|---|---|
 | `.github/rulesets/main.json` | `~DEFAULT_BRANCH` | Strict `main` protection (PR-only, squash-only, required status check, linear history) |
-| `.github/rulesets/all-branches.json` | `~ALL` except `~DEFAULT_BRANCH` and `refs/heads/dependabot/*` | `non_fast_forward` only (deletion intentionally omitted; see [#18 comment 2](https://github.com/tvna/claude-md/issues/18#issuecomment-4482555311)) |
+| `.github/rulesets/all-branches.json` | `~ALL` except `~DEFAULT_BRANCH`, `refs/heads/dependabot/*`, and `refs/heads/claude/*` | `non_fast_forward` only (deletion intentionally omitted; see [#18 comment 2](https://github.com/tvna/claude-md/issues/18#issuecomment-4482555311)). `refs/heads/claude/*` is excluded per [#507](https://github.com/tvna/claude-md/issues/507) so agent branches can recover from rebase via `git commit --amend` + `git push --force-with-lease`; agent branches are short-lived personal staging space, not shared. |
 | `.github/rulesets/dependabot.json` | `refs/heads/dependabot/*` | `non_fast_forward` with no bypass actors. Originally granted the Dependabot Integration `actor_id: 49699333` a bypass per [#140](https://github.com/tvna/claude-md/issues/140), but GitHub deprecated the standalone Dependabot GitHub App and the Rulesets API now returns HTTP 422 for that bypass actor — see [#273](https://github.com/tvna/claude-md/issues/273); `@dependabot rebase` is therefore blocked and Dependabot falls back to closing + reopening the PR with a freshly rebased branch. The admin `RepositoryRole` bypass was also removed across all three rulesets so the "Merge without waiting for requirements" path is no longer reachable. |
 | `docs/runbooks/rulesets.md` *(this file)* | — | Runbook |
 
@@ -23,6 +42,7 @@ The apply step is split across phases so that the strictest rule (`commit_messag
 | **3-A** ([#41](https://github.com/tvna/claude-md/issues/41)) | `main.json` (incl. `require_code_owner_review: true`¹; without `commit_message_pattern`) | `ruleset=main`, `dry_run=false`, `enable_auto_delete=false` |
 | **3-B** ([#42](https://github.com/tvna/claude-md/issues/42)) | `main.json` (after adding `commit_message_pattern`) | `ruleset=main`, `dry_run=false`, `enable_auto_delete=false` (PUT path, ≥7 days after 3-A) |
 | **P4-dependabot** ([#140](https://github.com/tvna/claude-md/issues/140)) | `all-branches.json` (PUT: adds `refs/heads/dependabot/*` to `exclude`) + `dependabot.json` (POST) | `ruleset=all-branches`, then `ruleset=dependabot`, both `dry_run=false`, `enable_auto_delete=false` |
+| **P5-claude** ([#507](https://github.com/tvna/claude-md/issues/507)) | `all-branches.json` (PUT: adds `refs/heads/claude/*` to `exclude`) | `ruleset=all-branches`, `dry_run=false`, `enable_auto_delete=false` |
 
 ¹ Phase 3-A applies `main.json` as committed — including `require_code_owner_review: true` ([#56](https://github.com/tvna/claude-md/issues/56) P1-b). No separate dispatch is needed to activate code-owner enforcement; it ships in the same PUT as the rest of `main.json`.
 

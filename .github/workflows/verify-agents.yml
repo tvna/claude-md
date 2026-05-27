@@ -63,12 +63,103 @@ jobs:
       - name: Assert script maintainability metrics
         run: uv run python scripts/scan_maintainability_metrics.py verify
 
+      - name: Verify .apm checksum lockfile
+        run: uv run python scripts/verify_apm_checksums.py verify
+
+      - name: Verify preflight set matches CI script invocations
+        # Refs #493: fails when a pull_request: workflow gains a
+        # `python3 scripts/<name>.py` call without a matching step in
+        # `scripts/preflight_all.py`. See docs/runbooks/preflight.md.
+        run: uv run python scripts/scan_preflight_drift.py verify
+
+      - name: Verify test shard markers
+        # Refs #545: each tests/test_*.py must declare exactly one
+        # module-scope shard marker so the lint-scripts-pytest matrix
+        # neither skips nor double-counts a file. Running this before the
+        # matrix surfaces marker drift with a clear diagnostic instead of
+        # a silent missing node ID in the gate's JUnit aggregation.
+        run: uv run python scripts/verify_test_shard_markers.py
+
       - name: Warn if uv pin trails upstream
         env:
           GH_TOKEN: ${{ github.token }}
         run: uv run python scripts/uv_pin.py stale
 
   lint-scripts-pytest:
+    # Refs #545: marker-bucketed matrix. Each leg runs a disjoint subset
+    # of tests/ filtered by `pytest -m shard_<bucket>`. The completeness
+    # job `lint-scripts-pytest-gate` aggregates the per-leg JUnit
+    # artifacts and asserts the union equals the universe collected by
+    # `pytest --collect-only` (no test left unrun, no test double-counted).
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [preflight, policy, ci_ops, default]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Read uv pin from pyproject.toml
+        id: uvpin
+        run: |
+          set -euo pipefail
+          PIN="$(python3 scripts/uv_pin.py read)"
+          echo "version=${PIN}" >> "$GITHUB_OUTPUT"
+
+      - name: Install uv
+        env:
+          UV_VERSION: ${{ steps.uvpin.outputs.version }}
+        run: |
+          curl -LsSf "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/uv-x86_64-unknown-linux-gnu.tar.gz" -o /tmp/uv.tar.gz
+          tar -xzf /tmp/uv.tar.gz -C /tmp
+          mkdir -p "$HOME/.local/bin"
+          install -m 0755 /tmp/uv-x86_64-unknown-linux-gnu/uv "$HOME/.local/bin/uv"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          uv --version
+
+      - name: Install Python
+        run: uv python install
+
+      - name: Sync locked project environment
+        run: uv sync --locked
+
+      - name: Run script unit tests for shard ${{ matrix.shard }}
+        # Coverage instrumentation runs only on push to main (see
+        # .github/workflows/coverage.yml and #462) so PR runs stay fast.
+        # Developers must run `uv run python -m pytest --cov` locally
+        # before push when coverage may have shifted.
+        # --junitxml feeds Codecov Test Analytics (#469); junit_family=legacy
+        # is the format Codecov recommends. Codecov upload is deferred to
+        # the aggregate gate so each PR run uploads a single bundle, not
+        # one per shard.
+        run: |
+          uv run python -m pytest \
+            -m "shard_${{ matrix.shard }}" \
+            -v \
+            --junitxml=junit-${{ matrix.shard }}.xml \
+            -o junit_family=legacy
+
+      - name: Upload shard JUnit artifact
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: junit-${{ matrix.shard }}
+          path: junit-${{ matrix.shard }}.xml
+          if-no-files-found: error
+          retention-days: 7
+
+  lint-scripts-pytest-gate:
+    # Refs #545: completeness gate. Runs once after every matrix leg
+    # finishes (success or failure), enumerates the collected test
+    # universe, downloads each leg's JUnit artifact, and asserts the
+    # union of executed node IDs equals the universe with no duplicates.
+    # Codecov Test Analytics upload happens here (single OIDC point) so
+    # the per-leg jobs do not each need id-token: write.
+    needs: lint-scripts-pytest
+    if: always()
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -101,22 +192,50 @@ jobs:
       - name: Sync locked project environment
         run: uv sync --locked
 
-      - name: Run script unit tests
-        # Coverage instrumentation runs only on push to main (see
-        # .github/workflows/coverage.yml and #462) so PR runs stay fast.
-        # Developers must run `uv run python -m pytest --cov` locally
-        # before push when coverage may have shifted.
-        # --junitxml feeds Codecov Test Analytics (#469); junit_family=legacy
-        # is the format Codecov recommends for test result ingestion.
-        run: uv run python -m pytest -v --junitxml=junit.xml -o junit_family=legacy
+      - name: Assert every matrix leg succeeded
+        # Fail the gate when any shard failed. ``needs.<id>.result`` is
+        # ``success`` only when every matrix leg passed; any other value
+        # (failure, cancelled, skipped) means a leg did not run cleanly.
+        env:
+          MATRIX_RESULT: ${{ needs.lint-scripts-pytest.result }}
+        run: |
+          if [ "$MATRIX_RESULT" != 'success' ]; then
+            echo "::error::lint-scripts-pytest matrix result=${MATRIX_RESULT} (expected 'success'). One or more shards failed; see the matrix legs above."
+            exit 1
+          fi
+
+      - name: Download all shard JUnit artifacts
+        # Runs even when "Assert every matrix leg succeeded" failed so the
+        # Codecov upload below has per-shard JUnit XML to record in Test
+        # Analytics failure history (#556).
+        if: always()
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: junit-*
+          path: junit-artifacts
+          merge-multiple: true
+
+      - name: Collect full test universe
+        # Runs once on the full tests/ directory; `--collect-only -q`
+        # prints one node ID per line followed by a summary tail.
+        # `verify_shard_coverage.py` ignores the tail.
+        run: |
+          uv run python -m pytest --collect-only -q > collected.txt
+
+      - name: Verify shard coverage (union == universe, no duplicates)
+        run: |
+          uv run python scripts/verify_shard_coverage.py \
+            --collected collected.txt \
+            --junit junit-artifacts/junit-*.xml
 
       - name: Upload test results to Codecov
-        # Runs even when the pytest step failed so failed test runs are
-        # included in Test Analytics flake / failure history (#469).
+        # Runs even when an earlier step in this gate failed so failed
+        # runs are still recorded in Test Analytics flake / failure
+        # history (#469). All shard JUnit files are uploaded together.
         if: always()
         uses: codecov/test-results-action@0fa95f0e1eeaafde2c782583b36b28ad0d8c77d3 # v1.2.1
         with:
-          files: ./junit.xml
+          files: ./junit-artifacts/junit-preflight.xml,./junit-artifacts/junit-policy.xml,./junit-artifacts/junit-ci_ops.xml,./junit-artifacts/junit-default.xml
           disable_search: true
           fail_ci_if_error: false
           use_oidc: true
@@ -156,7 +275,11 @@ jobs:
 
   gate:
     name: "Verify agent instructions / gate"
-    needs: [verify, lint-scripts-static, lint-scripts-pytest, prek]
+    # Refs #545: depends on `lint-scripts-pytest-gate` (the marker-matrix
+    # completeness gate) rather than the matrix job directly so the
+    # aggregate result reflects both "every shard passed" and "the union
+    # of executed tests covered the collected universe".
+    needs: [verify, lint-scripts-static, lint-scripts-pytest-gate, prek]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -164,7 +287,7 @@ jobs:
         env:
           VERIFY_RESULT: ${{ needs.verify.result }}
           LINT_STATIC_RESULT: ${{ needs.lint-scripts-static.result }}
-          LINT_PYTEST_RESULT: ${{ needs.lint-scripts-pytest.result }}
+          LINT_PYTEST_RESULT: ${{ needs.lint-scripts-pytest-gate.result }}
           PREK_RESULT: ${{ needs.prek.result }}
         run: |
           if [ "$LINT_STATIC_RESULT" != 'success' ]; then

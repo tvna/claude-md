@@ -35,6 +35,10 @@ DEFERRED_OVERSIZE_MODULES: dict[Path, str] = {
         "legacy retrospective aggregator; split into parser, GitHub IO, "
         "and renderer modules in a follow-up PR before tightening the budget"
     ),
+    Path("scripts/threat_intel_triage.py"): (
+        "legacy multi-source intelligence gate; split OSV, KEV, NVD, EPSS, "
+        "and malicious-package adapters before tightening the budget"
+    ),
 }
 
 

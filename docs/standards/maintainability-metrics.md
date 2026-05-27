@@ -42,14 +42,16 @@ Initial baseline:
 | File | Status | Rationale |
 |---|---|---|
 | `scripts/auto_retro.py` | Reports only | Legacy retrospective aggregator currently combines parsing, GitHub IO, and rendering. It should be split in a follow-up PR before the module-size budget is tightened. |
+| `scripts/threat_intel_triage.py` | Reports only | Legacy multi-source intelligence gate currently combines OSV, KEV, NVD, EPSS, and malicious-package adapters. Those adapters should be split before the module-size budget is tightened. |
 
 ## Threshold Rationale
 
 The 800-line budget is intentionally above the existing cluster of
-large-but-reviewable scripts and below the outlier that combines
+large-but-reviewable scripts and below the outliers that combine
 multiple responsibilities. As of the pilot, all non-deferred scripts
-sit below 800 physical lines; `scripts/auto_retro.py` is documented
-baseline debt rather than precedent for future modules.
+sit below 800 physical lines; `scripts/auto_retro.py` and
+`scripts/threat_intel_triage.py` are documented baseline debt rather
+than precedent for future modules.
 
 Changing this threshold requires updating this document, the scanner's
 constant, and the tests in the same PR. Any new deferred exception must

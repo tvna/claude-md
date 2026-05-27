@@ -4,7 +4,7 @@ This file is the deliverable for [#183](https://github.com/tvna/claude-md/issues
 
 Companion: [`docs/prd/agent-rules-design-philosophy.md`](../prd/agent-rules-design-philosophy.md) section 7 (instruction-PR review criteria). Section 7 decides whether a change belongs in the universal lane at all (ownership and portability); this document decides whether a change that already belongs in the universal lane is safe to merge (security). The two are independent; both must pass.
 
-Related: [#63](https://github.com/tvna/claude-md/issues/63) (residual workflow risks, prompt-injection boundaries, supply-chain gaps), [`docs/prd/security-control-inventory.md`](../prd/security-control-inventory.md), [`docs/prd/privileged-operation-runbooks.md`](../prd/privileged-operation-runbooks.md), [`docs/prd/non-ascii-defense.md`](../prd/non-ascii-defense.md).
+Related: [#63](https://github.com/tvna/claude-md/issues/63) (residual workflow risks, prompt-injection boundaries, supply-chain gaps), [`docs/prd/security-control-inventory.md`](../prd/security-control-inventory.md), [`docs/prd/privileged-operation-runbooks.md`](../prd/privileged-operation-runbooks.md), [`docs/prd/non-ascii-defense.md`](../prd/non-ascii-defense.md), [`docs/runbooks/agent-provenance.md`](agent-provenance.md).
 
 ## How to read this document
 
@@ -33,8 +33,8 @@ If the diff touches `CLAUDE.md` or `AGENTS.md` directly without a corresponding 
 ## 1. Universal vs project-specific
 
 - **Question.** Does the wording in the diff hold for every downstream consumer of this repository, or only for `tvna/claude-md`?
-- **Evidence.** Walk the decision tree (Q1 through Q5) in [`docs/prd/agent-rules-design-philosophy.md` section 4](../prd/agent-rules-design-philosophy.md#4-decision-tree-where-does-a-new-candidate-rule-belong). The `verify-apm-portability.yml` gate (which runs `scripts/scan_apm_portability.py`) automatically blocks the most common repository-specific tokens -- issue numbers, doc paths, script names, tool product names -- but it cannot detect a sentence that names no token yet still encodes a `tvna/claude-md`-only assumption.
-- **Hard block.** Q4 = yes in the decision tree, or `verify-apm-portability.yml` red, or any `portability-ack:` marker introduced without the section 7.4 escape-hatch conditions met. Request demotion to a repo-local doc or a harness check.
+- **Evidence.** Walk the decision tree (Q1 through Q5) in [`docs/prd/agent-rules-design-philosophy.md` section 4](../prd/agent-rules-design-philosophy.md#4-decision-tree-where-does-a-new-candidate-rule-belong). The `verify-apm-portability.yml` gate (which runs `scripts/scan_apm_portability.py`) automatically blocks two violation classes: Pattern A (literal repo-local tokens such as issue numbers, doc paths, script names, tool product names) and Pattern B (assertive-existence phrasing such as "lives in a dedicated runbook" or "see the companion guide" -- introduced by #535 after the #530 -> #533 regression where the same defect was repaired twice at different abstraction levels). The reviewer still inspects sentences that name no token and use no assertive-existence verb yet still encode a `tvna/claude-md`-only assumption; the automation backs the manual step rather than replacing it.
+- **Hard block.** Q4 = yes in the decision tree, or `verify-apm-portability.yml` red on either Pattern A or Pattern B, or any `portability-ack:` marker introduced without the section 7.4 escape-hatch conditions met. Request demotion to a repo-local doc or a harness check.
 
 ## 2. Compiled-output drift
 
@@ -106,6 +106,7 @@ Doc-only updates to this checklist (without an instruction change) revert via th
 - Related: [#63](https://github.com/tvna/claude-md/issues/63) -- residual workflow risks, prompt-injection boundaries, supply-chain gaps.
 - Companion: [`docs/prd/agent-rules-design-philosophy.md`](../prd/agent-rules-design-philosophy.md) section 7 -- ownership and portability review criteria.
 - [`docs/prd/security-control-inventory.md`](../prd/security-control-inventory.md) -- repo-wide security surface inventory (Lateral Movement row is the parent of this checklist).
+- [`docs/runbooks/agent-provenance.md`](agent-provenance.md) -- provenance review for skills, subagents, MCP servers, and comparable agent extensions.
 - [`docs/prd/privileged-operation-runbooks.md`](../prd/privileged-operation-runbooks.md) -- six-control runbook for privileged dispatch operations.
 - [`docs/prd/non-ascii-defense.md`](../prd/non-ascii-defense.md) -- non-ASCII defense layers.
 - [`.github/PULL_REQUEST_TEMPLATE.md`](../../.github/PULL_REQUEST_TEMPLATE.md) -- links this checklist in the merge checklist.

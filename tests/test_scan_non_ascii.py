@@ -18,6 +18,7 @@ from typing import Any
 import pytest
 import scan_non_ascii as san
 
+pytestmark = pytest.mark.shard_policy
 # ---------------------------------------------------------------------------
 # extract_event
 # ---------------------------------------------------------------------------
@@ -256,7 +257,7 @@ class TestClassifyAction:
 
     def test_codecov_non_ascii_is_advisory_not_block(self) -> None:
         """Codecov reports assoc=NONE but is trusted for generated comments."""
-        assert san.classify_action(True, False, "NONE", "codecov") == "advisory"
+        assert san.classify_action(True, False, "NONE", "codecov[bot]") == "advisory"
 
     def test_trusted_bot_ascii_only_is_none(self) -> None:
         """No non-ASCII -> none regardless of login (cheap-exit guard)."""
@@ -271,6 +272,25 @@ class TestClassifyAction:
             san.classify_action(True, False, "NONE", "renovate[bot]")
             == "block"
         )
+
+
+# ---------------------------------------------------------------------------
+# Trusted bot allowlist invariants
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "login",
+    sorted(san._NON_ASCII_TRUSTED_BOT_LOGINS),
+)
+def test_every_trusted_bot_login_ends_with_bot_suffix(login: str) -> None:
+    """Regression guard for #480 / #504: GitHub webhook payloads deliver
+    bot author logins in the canonical ``<name>[bot]`` shape. An entry
+    that drops the suffix silently bypasses the allowlist at runtime,
+    because the exact-match check never fires against the real login."""
+    assert login.endswith("[bot]"), (
+        f"Trusted bot login {login!r} missing canonical '[bot]' suffix"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -792,7 +812,7 @@ class TestRun:
             "comment": {
                 "body": "Test analytics footer includes clipboard \U0001f4cb.",
                 "author_association": "NONE",
-                "user": {"login": "codecov"},
+                "user": {"login": "codecov[bot]"},
             },
         }
         assert san.run(event, "issue_comment", "o/r") == 0

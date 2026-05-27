@@ -44,8 +44,10 @@ The append-only policy for `archive/` is documented separately in
 | [workflow-permissions-audit.md](runbooks/workflow-permissions-audit.md) | Least-privilege matrix for every workflow (trigger, token / secret used, minimum permissions vs declared, mismatch follow-up). | #181, #178 | `.github/workflows/*.yml` (audit target); `scripts/scan_workflow_pip.py`; `scripts/scan_workflow_action_pins.py` |
 | [security-control-drift-report.md](runbooks/security-control-drift-report.md) | Aggregator runbook for per-family drift detectors posting a single rolling comment on the MITRE ATT&CK tracker. | #180, #178 | `.github/workflows/security-control-drift-report.yml`; `scripts/security_drift_report.py` |
 | [downstream-instruction-review-checklist.md](runbooks/downstream-instruction-review-checklist.md) | Security-focused review checklist for PRs that change instructions this repository ships to downstream consumers. | #183, #178 | `.github/workflows/verify-apm-portability.yml`; `.github/workflows/verify-apm-drift.yml`; `.github/PULL_REQUEST_TEMPLATE.md` (Bootstrap items) |
+| [agent-provenance.md](runbooks/agent-provenance.md) | Provenance metadata and review criteria for skills, subagents, MCP servers, and comparable agent extensions. | #312, #63 | `docs/prd/security-control-inventory.md`; `docs/runbooks/downstream-instruction-review-checklist.md`; `docs/standards/repo-scope.md` |
 | [retrospective-noise-flooding-procedure.md](runbooks/retrospective-noise-flooding-procedure.md) | Operator procedure for reviewing retrospective and auto-retro flooding signal vs noise. | #315, #63 Phase 8(D-3) | `.github/workflows/auto-retro.yml`; `scripts/auto_retro.py`; `docs/archive/retrospective-pr-*.md` (subject) |
 | [prek.md](runbooks/prek.md) | `j178/prek` install steps, configured hooks, and the CI gate that runs `prek run --all-files` on every PR. | #408 | `.pre-commit-config.yaml`; `.github/workflows/verify-agents.yml` (`prek` job); `scripts/uv_pin.py`; `scripts/scan_workflow_pip.py` |
+| [readme-translation-drift.md](runbooks/readme-translation-drift.md) | Deterministic gate that fails a PR when `README.md` changes without matching `README.ja.md` / `README.zh.md` updates, plus the opt-out marker procedure. | #476 | `scripts/verify_readme_translation.py`; `.github/workflows/verify-github-content.yml` (`gate` job); `README.md`; `README.ja.md`; `README.zh.md` |
 
 ## archive/ -- frozen historical evidence
 
@@ -58,6 +60,7 @@ naming convention and the per-30-entries year-folder cutover.
 |---|---|
 | [decision-tree-replay.md](archive/decision-tree-replay.md) | Calibration evidence that the decision tree in `prd/agent-rules-design-philosophy.md` section 4 reproduces historical lane assignments. Append-only; not normative. |
 | [issue-pr-body-examples.md](archive/issue-pr-body-examples.md) | Worked example bodies, one per `type:*` label plus one PR. Calibration material for `standards/issue-pr-body-standard.md`. |
+| [renovate-poc-279.md](archive/renovate-poc-279.md) | Renovate migration PoC primary-source evidence for issue #279 (Q2/Q3/Q4 answered from Renovate docs; Q1 pending human Mend Renovate App install). Two documentary candidate ruleset shapes captured against the post-PR-#454 SoT. |
 | [retrospective-pr-229.md](archive/retrospective-pr-229.md) | Retrospective for PR #229 (layer responsibility boundary repair loops). |
 | [retrospective-pr-235.md](archive/retrospective-pr-235.md) | Retrospective for PR #235 (security control inventory, repair-free). |
 | [retrospective-pr-237.md](archive/retrospective-pr-237.md) | Retrospective for PR #237 (auto-retro workflow, repair-free). |
@@ -71,4 +74,5 @@ naming convention and the per-30-entries year-folder cutover.
 ## Navigation aids
 
 - [archive/RETENTION.md](archive/RETENTION.md) -- append-only policy and auto-retro placement convention for `archive/`.
+- [agent-provenance.md](agent-provenance.md) -- compatibility pointer to `runbooks/agent-provenance.md` for the original #312 target path.
 - This INDEX is reviewed whenever a file is added, removed, or moved across lanes. Treat it as a self-describing supplement to `ls docs/`, not a replacement for the folder layout: the lane is visible at the filesystem level; this index just names what each file owns.
