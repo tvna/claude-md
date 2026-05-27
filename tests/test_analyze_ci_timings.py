@@ -16,6 +16,7 @@ from pathlib import Path
 import analyze_ci_timings
 import pytest
 
+pytestmark = pytest.mark.shard_ci_ops
 
 def _make_job(
     *,

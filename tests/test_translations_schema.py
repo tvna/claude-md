@@ -17,6 +17,7 @@ from typing import Any
 
 import pytest
 
+pytestmark = pytest.mark.shard_default
 TRANSLATIONS_PATH = (
     Path(__file__).resolve().parent.parent / "scripts" / "translations.json"
 )

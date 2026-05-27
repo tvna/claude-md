@@ -78,6 +78,12 @@ ALLOWLIST: dict[str, str] = {
         "Runner, not a gate. Mirroring itself would recurse; the drift "
         "gate is `scan_preflight_drift` which IS mirrored as a step."
     ),
+    "verify_shard_coverage": (
+        "Input is the per-leg JUnit XML artifacts produced by the "
+        "lint-scripts-pytest matrix legs, which only exist in CI. The "
+        "static counterpart `verify_test_shard_markers` IS mirrored as a "
+        "preflight step. Refs #545."
+    ),
 }
 
 

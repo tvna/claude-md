@@ -17,6 +17,7 @@ from pathlib import Path
 import preflight_all as pa
 import pytest
 
+pytestmark = pytest.mark.shard_preflight
 # ---------------------------------------------------------------------------
 # STEPS manifest invariants
 # ---------------------------------------------------------------------------

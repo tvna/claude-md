@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 import verify_required_check_contexts as mod
 
+pytestmark = pytest.mark.shard_ci_ops
 
 class TestLoadSotContexts:
     def test_extracts_contexts(self, tmp_path: Path) -> None:

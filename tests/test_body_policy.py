@@ -12,6 +12,7 @@ from pathlib import Path
 import body_policy
 import pytest
 
+pytestmark = pytest.mark.shard_policy
 # ---------------------------------------------------------------------------
 # Fixture bodies
 # ---------------------------------------------------------------------------

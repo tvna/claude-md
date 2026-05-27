@@ -18,6 +18,7 @@ from pathlib import Path
 import dependabot_labels as dl
 import pytest
 
+pytestmark = pytest.mark.shard_ci_ops
 # ---------------------------------------------------------------------------
 # parse_dependabot_labels
 # ---------------------------------------------------------------------------
