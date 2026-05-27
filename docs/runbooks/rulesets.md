@@ -6,17 +6,17 @@ The rulesets are introduced incrementally per the phased rollout in [#18](https:
 
 ## Operational hold
 
-`apply-rulesets.yml` `workflow_dispatch` is on hold until [#56](https://github.com/tvna/claude-md/issues/56) P0-a and P0-b ship. While the hold is in effect, dispatching the workflow from a non-`main` ref can expose `RULESETS_PAT` in the public Actions log (see the [#56](https://github.com/tvna/claude-md/issues/56) threat model, vector "Branch-ref exfil"). The hold is documentary; the deterministic guard arrives with [#56](https://github.com/tvna/claude-md/issues/56) P0.
+**Hold**: do not dispatch `apply-rulesets.yml` (`workflow_dispatch`) until [#56](https://github.com/tvna/claude-md/issues/56) P0-a (move `RULESETS_PAT` to an Environment secret) and P0-b (early ref-guard step) are live on `main`. Until then, `RULESETS_PAT` is a repo-scoped secret with no ref guard, so a dispatch from a non-`main` ref can print the PAT into the public Actions log. The full threat model (vector name: "Branch-ref exfil") lives in the linked issue. This section is documentary; the deterministic guard arrives with the same PR that ticks P0-a and P0-b.
 
-Triage rationale: [#178](https://github.com/tvna/claude-md/issues/178) sequences the issue / PR template harness bootstrap ([#206](https://github.com/tvna/claude-md/issues/206), [#204](https://github.com/tvna/claude-md/issues/204), [#203](https://github.com/tvna/claude-md/issues/203), [#205](https://github.com/tvna/claude-md/issues/205)) ahead of [#56](https://github.com/tvna/claude-md/issues/56) P0, so the security work that lifts the hold will not land until Wave -1 is complete.
+Triage trail: [#178](https://github.com/tvna/claude-md/issues/178) sequenced this hold behind the issue / PR body-template harness bootstrap (Wave -1: #203 Issue Forms, #204 PR template Facts / Risk / Rollback sections, #205 body-policy verify gate, #206 issue/PR body standard doc). Wave -1 has merged; the only remaining blocker on lifting the hold is the [#56](https://github.com/tvna/claude-md/issues/56) P0 work itself.
 
-Override condition: a security-urgent dispatch may proceed only after [#56](https://github.com/tvna/claude-md/issues/56) P0-a and P0-b have shipped first. Comment-only dispatch requests during the hold window are refused on the same grounds as the existing [Dispatch authorization criteria](#dispatch-authorization-criteria); the hold raises the bar further by requiring P0-a and P0-b to be live before any new dispatch is authorized.
+Override: a security-urgent dispatch is only authorized after P0-a and P0-b are live on `main`. Comment-only dispatch requests do not lift this hold; the existing [Dispatch authorization criteria](#dispatch-authorization-criteria) apply unchanged on top.
 
 ### Lift criteria
 
-Remove this section in the same PR that closes [#56](https://github.com/tvna/claude-md/issues/56) P0 by ticking both of the following [#56](https://github.com/tvna/claude-md/issues/56) checkboxes:
+Remove this section in the same PR that ticks both of the following [#56](https://github.com/tvna/claude-md/issues/56) checkboxes:
 
-- [ ] **P0-a** Move `RULESETS_PAT` from repo secret to Environment secret `ruleset-apply` with required reviewers = repo admin and deployment branch policy = `Selected branches` to `main` only. Add `environment: ruleset-apply` to the `apply` job in `.github/workflows/apply-rulesets.yml`.
+- [ ] **P0-a** Move `RULESETS_PAT` from repo secret to Environment secret `ruleset-apply` (required reviewers = repo admin; deployment branch policy = `Selected branches` -> `main` only). Add `environment: ruleset-apply` to the `apply` job in `.github/workflows/apply-rulesets.yml`.
 - [ ] **P0-b** Add an early ref-guard step (`if: github.ref != 'refs/heads/main'` then `::error::` + `exit 1`) as the first step of the `apply` job, before checkout, as belt-and-suspenders for P0-a.
 
 Until both ship, treat any `dry_run=false` dispatch (and any dispatch against a non-`main` ref) as out of policy.
