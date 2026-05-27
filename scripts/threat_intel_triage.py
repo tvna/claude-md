@@ -38,20 +38,30 @@ GHSA_ADVISORIES_URL = "https://api.github.com/advisories"
 GHSA_MALWARE_TYPE = "malware"
 MAL_ID_PREFIX = "MAL-"
 EPSS_URL = "https://api.first.org/data/v1/epss"
+NVD_CVE_URL = "https://services.nvd.nist.gov/rest/json/cves/2.0"
+NVD_DETAIL_URL_PREFIX = "https://nvd.nist.gov/vuln/detail/"
 SOURCE_OSV = "OSV.dev"
 SOURCE_GHSA = "GitHub Advisory"
 SOURCE_OSSF_MAL = "OSSF malicious-packages"
 SOURCE_EPSS = "FIRST EPSS"
+SOURCE_NVD = "NVD"
 
 # Pattern for CVE identifiers used to filter EPSS-eligible aliases. EPSS
 # data is keyed on CVE only; GHSA / OSV identifiers are not accepted by
-# the FIRST API and must be filtered out before batching.
+# the FIRST API and must be filtered out before batching. The same
+# pattern gates NVD enrichment (#174) since NVD indexes CVE IDs only.
 _CVE_PATTERN = re.compile(r"^CVE-\d{4}-\d{4,}$", re.IGNORECASE)
 
 # Map this module's internal ecosystem labels (taken from OSV) to the
 # values accepted by GitHub's /advisories endpoint. Keep this minimal:
 # only ecosystems actually discovered by ``discover_dependencies``.
 _GHSA_ECOSYSTEM_MAP = {"PyPI": "pip"}
+
+# Per CLAUDE.md s4: bound the summary surface. NVD references for some
+# CVEs run into the hundreds; only the first few links carry signal for a
+# triage row, and the full list remains a click away on the NVD detail
+# page emitted as ``source_url``.
+_NVD_MAX_REFERENCES = 5
 
 
 class Indicator(NamedTuple):
@@ -64,6 +74,24 @@ class Dependency(NamedTuple):
     version: str
     ecosystem: str
     source: str
+
+
+class NvdEnrichment(NamedTuple):
+    """Supplemental NVD metadata attached to a CVE-backed finding (#174).
+
+    NVD is consulted only for CVEs already surfaced by OSV/GHSA. Missing
+    or malformed enrichment is silently ignored so the underlying finding
+    is never suppressed -- "no NVD data" is not evidence that the
+    vulnerability is not relevant.
+    """
+
+    cve_id: str
+    cvss_severity: str | None
+    cvss_score: float | None
+    cvss_version: str | None
+    cwe_ids: tuple[str, ...]
+    references: tuple[str, ...]
+    source_url: str
 
 
 class Finding(NamedTuple):
@@ -80,6 +108,9 @@ class Finding(NamedTuple):
     # authoritative known-exploitation signal.
     epss_score: float | None = None
     epss_percentile: float | None = None
+    # NVD CVE enrichment (#174). Supplemental only -- empty tuple means
+    # "no NVD enrichment available", not "vulnerability not relevant".
+    nvd_metadata: tuple[NvdEnrichment, ...] = ()
 
 
 INTEL_INDICATORS = (
@@ -197,21 +228,29 @@ def fetch_external_findings(
     malpkg_live: bool = False,
     epss_file: Path | None = None,
     epss_live: bool = False,
+    nvd_file: Path | None = None,
+    nvd_live: bool = False,
 ) -> list[Finding]:
-    """Collect OSV, CISA KEV, GHSA, OSSF malicious-package, and FIRST EPSS intelligence.
+    """Collect OSV, CISA KEV, GHSA, OSSF malicious-package, FIRST EPSS, and NVD intelligence.
 
-    GHSA, OSSF malicious-packages, and EPSS are opt-in to keep the
+    GHSA, OSSF malicious-packages, EPSS, and NVD are opt-in to keep the
     OSV-only call sites (notably this module's own legacy tests)
     deterministic without a network call. Pass ``ghsa_file=`` /
-    ``malpkg_file=`` / ``epss_file=`` for fixture-driven runs, or
-    ``*_live=True`` to query the upstream endpoint live
+    ``malpkg_file=`` / ``epss_file=`` / ``nvd_file=`` for fixture-driven
+    runs, or ``*_live=True`` to query the upstream endpoint live
     (``api.github.com/advisories`` / ``api.osv.dev/v1/query`` for the
-    OSSF malicious-packages syndication channel / ``api.first.org/data/v1/epss``).
+    OSSF malicious-packages syndication channel /
+    ``api.first.org/data/v1/epss`` /
+    ``services.nvd.nist.gov/rest/json/cves/2.0``).
 
     EPSS is advisory-only per #173: scores enrich the summary table but
-    never escalate ``threat:response-needed`` on their own. KEV
-    correlation and OSSF ``MAL-`` findings remain the authoritative
-    known-exploitation / malware signals.
+    never escalate ``threat:response-needed`` on their own. NVD is
+    supplemental enrichment per #174: it is consulted only for CVEs
+    already surfaced by OSV/GHSA, never widens the finding set, never
+    reclassifies severity, and never participates in
+    ``threat:response-needed``. KEV correlation and OSSF ``MAL-``
+    findings remain the authoritative known-exploitation / malware
+    signals.
     """
     if not dependencies:
         return []
@@ -268,6 +307,9 @@ def fetch_external_findings(
             epss_live=epss_live,
         )
         merged = [_attach_epss(finding, epss_scores) for finding in merged]
+    if nvd_file is not None or nvd_live:
+        nvd_map = fetch_nvd_metadata(_collect_cve_ids(merged), nvd_file=nvd_file)
+        merged = attach_nvd_to_findings(merged, nvd_map)
     return sorted(merged, key=lambda f: (f.dependency.name, f.vuln_id))
 
 
@@ -712,6 +754,203 @@ def merge_findings(findings: list[Finding]) -> list[Finding]:
     return list(by_key.values())
 
 
+def fetch_nvd_metadata(
+    cve_ids: list[str],
+    *,
+    nvd_file: Path | None = None,
+) -> dict[str, NvdEnrichment]:
+    """Return NVD enrichment keyed by CVE id.
+
+    Fixture mode (``nvd_file``) reads a JSON object with a ``"cves"``
+    map whose values mirror the ``vulnerabilities[].cve`` sub-tree of
+    NVD's ``/rest/json/cves/2.0`` response. Live mode issues one HTTPS
+    request per CVE.
+
+    Missing, malformed, or transport-failed entries are silently skipped
+    per #174 -- absence of NVD enrichment is not evidence that the
+    underlying OSV/GHSA finding is not relevant.
+    """
+    if not cve_ids:
+        return {}
+
+    enrichment: dict[str, NvdEnrichment] = {}
+
+    if nvd_file is not None:
+        try:
+            payload = load_json(nvd_file)
+        except (OSError, ValueError, json.JSONDecodeError):
+            return {}
+        raw_map = payload.get("cves", {})
+        if not isinstance(raw_map, dict):
+            return {}
+        # Build an uppercase-keyed view so cve_ids (already uppercase per
+        # _collect_cve_ids) match regardless of fixture casing.
+        upper_raw = {key.upper(): value for key, value in raw_map.items() if isinstance(key, str)}
+        for cve_id in cve_ids:
+            cve_payload = upper_raw.get(cve_id)
+            if not isinstance(cve_payload, dict):
+                continue
+            parsed = parse_nvd_cve(cve_payload, cve_id)
+            if parsed is not None:
+                enrichment[cve_id] = parsed
+        return enrichment
+
+    for cve_id in cve_ids:
+        try:
+            query = urllib.parse.urlencode({"cveId": cve_id})
+            data = request_json(f"{NVD_CVE_URL}?{query}")
+        except (OSError, ValueError, json.JSONDecodeError):
+            continue
+        vulnerabilities = data.get("vulnerabilities") if isinstance(data, dict) else None
+        if not isinstance(vulnerabilities, list) or not vulnerabilities:
+            continue
+        first = vulnerabilities[0]
+        if not isinstance(first, dict):
+            continue
+        cve_payload = first.get("cve")
+        if not isinstance(cve_payload, dict):
+            continue
+        parsed = parse_nvd_cve(cve_payload, cve_id)
+        if parsed is not None:
+            enrichment[cve_id] = parsed
+    return enrichment
+
+
+def parse_nvd_cve(payload: dict[str, object], cve_id: str) -> NvdEnrichment | None:
+    """Parse one NVD ``cve`` sub-object into an :class:`NvdEnrichment`.
+
+    Returns ``None`` when the payload is too sparse to convey signal
+    (no CVSS, no CWE, and no references). The caller treats ``None`` as
+    "no enrichment available" and never escalates it into a missing
+    finding.
+    """
+    cvss_severity, cvss_score, cvss_version = _extract_nvd_cvss(payload)
+    cwe_ids = _extract_nvd_cwes(payload)
+    references = _extract_nvd_references(payload)
+
+    if cvss_severity is None and cvss_score is None and not cwe_ids and not references:
+        return None
+
+    return NvdEnrichment(
+        cve_id=cve_id,
+        cvss_severity=cvss_severity,
+        cvss_score=cvss_score,
+        cvss_version=cvss_version,
+        cwe_ids=cwe_ids,
+        references=references,
+        source_url=f"{NVD_DETAIL_URL_PREFIX}{cve_id}",
+    )
+
+
+def _extract_nvd_cvss(
+    payload: dict[str, object],
+) -> tuple[str | None, float | None, str | None]:
+    """Return ``(severity, score, version_label)`` from NVD CVSS metrics.
+
+    Preference order is CVSS v3.1 -> v3.0 -> v2.0 to mirror NVD's own
+    "primary first" policy. Any branch that fails its type check is
+    skipped silently so a malformed metric block never displaces a
+    well-formed lower-priority one.
+    """
+    metrics = payload.get("metrics") if isinstance(payload, dict) else None
+    if not isinstance(metrics, dict):
+        return None, None, None
+
+    for key, label in (
+        ("cvssMetricV31", "3.1"),
+        ("cvssMetricV30", "3.0"),
+        ("cvssMetricV2", "2.0"),
+    ):
+        entries = metrics.get(key)
+        if not isinstance(entries, list) or not entries:
+            continue
+        first = entries[0]
+        if not isinstance(first, dict):
+            continue
+        cvss_data = first.get("cvssData")
+        if not isinstance(cvss_data, dict):
+            continue
+        severity_raw = cvss_data.get("baseSeverity")
+        if not isinstance(severity_raw, str):
+            # CVSS v2 puts severity at the metric level, not on cvssData.
+            severity_raw = first.get("baseSeverity") if isinstance(first.get("baseSeverity"), str) else None
+        score_raw = cvss_data.get("baseScore")
+        score: float | None = None
+        if isinstance(score_raw, int | float):
+            score = float(score_raw)
+        if severity_raw is None and score is None:
+            continue
+        return severity_raw, score, label
+    return None, None, None
+
+
+def _extract_nvd_cwes(payload: dict[str, object]) -> tuple[str, ...]:
+    weaknesses = payload.get("weaknesses") if isinstance(payload, dict) else None
+    if not isinstance(weaknesses, list):
+        return ()
+    cwes: list[str] = []
+    for weakness in weaknesses:
+        if not isinstance(weakness, dict):
+            continue
+        descriptions = weakness.get("description")
+        if not isinstance(descriptions, list):
+            continue
+        for desc in descriptions:
+            if not isinstance(desc, dict):
+                continue
+            value = desc.get("value")
+            if isinstance(value, str) and value.startswith("CWE-") and value not in cwes:
+                cwes.append(value)
+    return tuple(cwes)
+
+
+def _extract_nvd_references(payload: dict[str, object]) -> tuple[str, ...]:
+    references = payload.get("references") if isinstance(payload, dict) else None
+    if not isinstance(references, list):
+        return ()
+    urls: list[str] = []
+    for ref in references:
+        if not isinstance(ref, dict):
+            continue
+        url = ref.get("url")
+        if isinstance(url, str) and url not in urls:
+            urls.append(url)
+        if len(urls) >= _NVD_MAX_REFERENCES:
+            break
+    return tuple(urls)
+
+
+def attach_nvd_to_findings(
+    findings: list[Finding],
+    nvd_map: dict[str, NvdEnrichment],
+) -> list[Finding]:
+    """Return *findings* with NVD enrichment attached where matching.
+
+    Each finding is rebuilt with ``nvd_metadata`` set to every
+    :class:`NvdEnrichment` whose CVE id appears in the finding's
+    ``vuln_id`` or ``aliases``. Lookups use the uppercase form to align
+    with :func:`_collect_cve_ids` and :func:`fetch_nvd_metadata` (both
+    normalize to uppercase). Findings with no matching enrichment are
+    returned unchanged.
+    """
+    if not nvd_map:
+        return findings
+    enriched: list[Finding] = []
+    for finding in findings:
+        matches: list[NvdEnrichment] = []
+        for candidate in (finding.vuln_id, *finding.aliases):
+            if not isinstance(candidate, str) or not _CVE_PATTERN.match(candidate):
+                continue
+            hit = nvd_map.get(candidate.upper())
+            if hit is not None and hit not in matches:
+                matches.append(hit)
+        if matches:
+            enriched.append(finding._replace(nvd_metadata=tuple(matches)))
+        else:
+            enriched.append(finding)
+    return enriched
+
+
 def classify_findings(findings: list[Finding], labels: set[str]) -> dict[str, object]:
     intel_needed = bool(findings)
     response_needed = any(
@@ -752,6 +991,19 @@ def finding_to_dict(finding: Finding) -> dict[str, object]:
         "advisory_type": finding.advisory_type,
         "epss_score": finding.epss_score,
         "epss_percentile": finding.epss_percentile,
+        "nvd_metadata": [nvd_enrichment_to_dict(item) for item in finding.nvd_metadata],
+    }
+
+
+def nvd_enrichment_to_dict(enrichment: NvdEnrichment) -> dict[str, object]:
+    return {
+        "cve_id": enrichment.cve_id,
+        "cvss_severity": enrichment.cvss_severity,
+        "cvss_score": enrichment.cvss_score,
+        "cvss_version": enrichment.cvss_version,
+        "cwe_ids": list(enrichment.cwe_ids),
+        "references": list(enrichment.references),
+        "source_url": enrichment.source_url,
     }
 
 
@@ -826,6 +1078,8 @@ def _cmd_scan(args: argparse.Namespace) -> int:
         malpkg_live=args.malpkg_live,
         epss_file=args.epss_file,
         epss_live=args.epss_live,
+        nvd_file=args.nvd_file,
+        nvd_live=args.nvd_live,
     )
     result = classify_findings(findings, labels)
 
@@ -856,6 +1110,7 @@ def write_summary(
 ) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     sources_line = _summary_sources_line(findings)
+    has_nvd = any(finding.nvd_metadata for finding in findings)
     with path.open("a", encoding="utf-8") as handle:
         handle.write("## Threat intelligence triage\n\n")
         handle.write(f"- Sources: {sources_line}\n")
@@ -866,14 +1121,73 @@ def write_summary(
         if not findings:
             handle.write("No external threat-intelligence findings matched locked dependencies.\n")
             return
-        handle.write("| Dependency | Version | Vulnerability | Source | Known exploited | EPSS |\n")
-        handle.write("|---|---:|---|---|---|---|\n")
-        for finding in findings:
+        if has_nvd:
             handle.write(
+                "| Dependency | Version | Vulnerability | Source | Known exploited | EPSS | NVD CVSS | NVD CWE |\n"
+            )
+            handle.write("|---|---:|---|---|---|---|---|---|\n")
+        else:
+            handle.write("| Dependency | Version | Vulnerability | Source | Known exploited | EPSS |\n")
+            handle.write("|---|---:|---|---|---|---|\n")
+        for finding in findings:
+            row = (
                 f"| `{finding.dependency.name}` | `{finding.dependency.version}` | "
                 f"`{finding.vuln_id}` | {finding.source} | {_bool(finding.known_exploited)} | "
-                f"{_format_epss_cell(finding)} |\n"
+                f"{_format_epss_cell(finding)} |"
             )
+            if has_nvd:
+                row += f" {_nvd_cvss_cell(finding)} | {_nvd_cwe_cell(finding)} |"
+            handle.write(row + "\n")
+        if has_nvd:
+            handle.write("\n### NVD references (supplemental)\n\n")
+            handle.write(
+                "NVD is consulted only for CVEs already surfaced by OSV/GitHub Advisory. "
+                "Missing NVD enrichment does not imply the underlying finding is not relevant.\n\n"
+            )
+            for finding in findings:
+                for enrichment in finding.nvd_metadata:
+                    _write_nvd_detail(handle, finding, enrichment)
+
+
+def _nvd_cvss_cell(finding: Finding) -> str:
+    if not finding.nvd_metadata:
+        return ""
+    parts: list[str] = []
+    for item in finding.nvd_metadata:
+        severity = item.cvss_severity or "?"
+        score = f"{item.cvss_score:.1f}" if item.cvss_score is not None else "?"
+        version = item.cvss_version or "?"
+        parts.append(f"v{version} {severity} {score}")
+    return "<br>".join(parts)
+
+
+def _nvd_cwe_cell(finding: Finding) -> str:
+    if not finding.nvd_metadata:
+        return ""
+    seen: list[str] = []
+    for item in finding.nvd_metadata:
+        for cwe in item.cwe_ids:
+            if cwe not in seen:
+                seen.append(cwe)
+    return ", ".join(seen)
+
+
+def _write_nvd_detail(handle, finding: Finding, enrichment: NvdEnrichment) -> None:
+    handle.write(
+        f"- `{finding.dependency.name}@{finding.dependency.version}` "
+        f"[{enrichment.cve_id}]({enrichment.source_url})\n"
+    )
+    if enrichment.cvss_severity or enrichment.cvss_score is not None:
+        severity = enrichment.cvss_severity or "?"
+        score = f"{enrichment.cvss_score:.1f}" if enrichment.cvss_score is not None else "?"
+        version = enrichment.cvss_version or "?"
+        handle.write(f"  - CVSS v{version}: {severity} ({score})\n")
+    if enrichment.cwe_ids:
+        handle.write(f"  - CWE: {', '.join(enrichment.cwe_ids)}\n")
+    if enrichment.references:
+        handle.write("  - References:\n")
+        for url in enrichment.references:
+            handle.write(f"    - {url}\n")
 
 
 def _format_epss_cell(finding: Finding) -> str:
@@ -1082,6 +1396,24 @@ def main(argv: list[str] | None = None) -> int:
             "Query api.first.org/data/v1/epss live for exploit prediction "
             "scores. EPSS is advisory-only and never escalates "
             "threat:response-needed (KEV remains the authoritative signal)."
+        ),
+    )
+    p_scan.add_argument(
+        "--nvd-file",
+        type=Path,
+        help=(
+            "Fixture file containing an NVD CVE-shaped response. "
+            "Supplemental enrichment per #174 -- missing data never "
+            "suppresses an OSV/GHSA finding."
+        ),
+    )
+    p_scan.add_argument(
+        "--nvd-live",
+        action="store_true",
+        help=(
+            "Query services.nvd.nist.gov/rest/json/cves/2.0 live for "
+            "CVEs already surfaced by OSV/GHSA. NVD enrichment is "
+            "supplemental and silently skipped on transport failure."
         ),
     )
     p_scan.set_defaults(func=_cmd_scan)
