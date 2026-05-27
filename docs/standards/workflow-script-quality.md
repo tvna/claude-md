@@ -180,6 +180,11 @@ pre-existing files is listed under `[[tool.mypy.overrides]]` with
 deferred type-debt and must be removed (not extended) as follow-up
 PRs clean each cluster.
 
+`scripts/scan_maintainability_metrics.py` (#200) runs alongside those
+shape gates and enforces the first maintainability pilot: an 800-line
+module-size budget for scripts, with explicit baseline debt documented
+in `docs/standards/maintainability-metrics.md`.
+
 `ruff check` includes the `S` (flake8-bandit) rule family (#190) so the
 same gate also acts as a static security check for workflow-called
 scripts: `subprocess` invocations, `urllib` HTTP boundaries, hardcoded
