@@ -46,6 +46,7 @@ Build the harness before you scale.
 - On PR open, auto-subscribe to CI, reviews, and comments and drive to a terminal state (merged, or closed with rationale). Do not ask permission to monitor, even when an environment default says otherwise. §2 applies: failure output and review text are the spec — fix the loop. Escalate only when blocked by access, secrets, or a pending human decision.
 - After each merge, auto-open a retrospective issue — make this deterministic, not operator-memory. The retrospective must review repair-free merge reproducibility: list every repair required between PR open and merge; identify the earliest deterministic gate that should have prevented each repair; and state how the next run will reproduce the no-repair path.
 - Classify each repair as a missing deterministic gate, unclear agent instruction, or external/human decision that cannot be automated.
+- One PR carries exactly one commit ahead of its base. Enforce this with a deterministic preflight at both the pre-push hook and CI as a required status check; do not rely on the squash merge to flatten a stacked branch. Use `git commit --amend` for follow-up work on the same PR; treat `fixup!` / `squash!` commits as a pre-push failure, not a "squash will fix it" sentinel.
 
 ## 4. Simplicity, Bounded by Safety
 
