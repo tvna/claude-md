@@ -37,6 +37,13 @@ uv run --with "apm-cli==0.12.1" apm compile
 
 APM は `.apm/instructions/*.instructions.md` を読み、`apm.yml` に基づいて `CLAUDE.md` と `AGENTS.md` の両方を書き出します。uv 設定では、依存関係解決に 14 日間の `exclude-newer` 遅延を適用しています。
 
+意図的に `.apm/` のソースファイルを変更したときは、チェックサムのロックファイルを更新します。
+
+```bash
+python3 scripts/verify_apm_checksums.py update
+python3 scripts/verify_apm_checksums.py verify
+```
+
 ## 別プロジェクトから使う
 
 ### 1. サブモジュールとして取り込む
@@ -75,3 +82,6 @@ git submodule update --remote .claude-md-master
 - すべての編集は PR 経由で取り込む。マージ後は retrospective を実施する（Principle 3）。
 - ここに置くのは **すべてのプロジェクトに当てはまるルール** だけにする。プロジェクト固有のルールは各プロジェクト自身の `CLAUDE.md` に置く。
 - 追加より削除を優先する（Principle 4）。
+- 新規または変更された、`scripts/` 配下の workflow から呼ばれる Python スクリプトは [workflow script quality standard](./docs/standards/workflow-script-quality.md) を満たすこと。
+- `.apm/instructions/**`、`CLAUDE.md`、`AGENTS.md` を編集する PR は [downstream instruction review checklist](./docs/runbooks/downstream-instruction-review-checklist.md) を通すこと（決定的ゲートが green になった後に適用するセキュリティ重視のレビュー）。
+- レーン別（`prd/`、`standards/`、`runbooks/`、`archive/`）の文書地図全体は [`docs/INDEX.md`](./docs/INDEX.md) を参照。

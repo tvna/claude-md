@@ -51,6 +51,7 @@ import threat_intel_triage
 import title_policy
 import uv_pin
 import verify_apm_checksums
+import verify_readme_translation
 import verify_required_check_contexts
 import verify_ruleset_sync
 import yaml
@@ -118,6 +119,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("uv_pin.py", "read"): "test_uv_pin_workflow_subcommands_match_ci_usage",
     ("uv_pin.py", "stale"): "test_uv_pin_workflow_subcommands_match_ci_usage",
     ("verify_apm_checksums.py", "verify"): "test_verify_apm_checksums_matches_workflow_args",
+    ("verify_readme_translation.py", "verify"): "test_verify_readme_translation_matches_workflow_args",
     ("verify_required_check_contexts.py", "verify"): "test_verify_required_check_contexts_matches_workflow_args",
     ("verify_ruleset_sync.py", "verify"): "test_verify_ruleset_sync_matches_workflow_args",
 }
@@ -612,6 +614,40 @@ def test_verify_apm_checksums_matches_workflow_args(tmp_path: Path) -> None:
 
     assert verify_apm_checksums.main(["--root", str(tmp_path), "update"]) == 0
     assert verify_apm_checksums.main(["--root", str(tmp_path), "verify"]) == 0
+
+
+def test_verify_readme_translation_matches_workflow_args(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Mirror the env+argv shape used by verify-github-content.yml.
+
+    The workflow shells to
+    ``python3 scripts/verify_readme_translation.py verify
+    --base-ref "$BASE_REF" --body-file "$body_file"``.
+    Exercise the same shape with the changed-files lookup stubbed so
+    the test stays hermetic across CI checkout depths (the
+    lint-scripts-pytest job checks out shallow, so a real
+    ``git diff origin/main..HEAD`` would fail with exit 128).
+    """
+    monkeypatch.setattr(
+        verify_readme_translation,
+        "changed_readmes",
+        lambda base, head="HEAD", **kwargs: frozenset(
+            {"README.md", "README.ja.md", "README.zh.md"}
+        ),
+    )
+
+    body_file = tmp_path / "body.md"
+    body_file.write_text("no marker", encoding="utf-8")
+    assert verify_readme_translation.main(
+        [
+            "verify",
+            "--base-ref",
+            "origin/main",
+            "--body-file",
+            str(body_file),
+        ]
+    ) == 0
 
 
 def test_scan_design_philosophy_drift_verify_matches_workflow_paths(

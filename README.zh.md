@@ -37,6 +37,13 @@ uv run --with "apm-cli==0.12.1" apm compile
 
 APM 会读取 `.apm/instructions/*.instructions.md`，并根据 `apm.yml` 写出 `CLAUDE.md` 和 `AGENTS.md`。uv 配置对依赖解析应用了 14 天的 `exclude-newer` 延迟。
 
+当有意修改 `.apm/` 源文件时，刷新校验和锁文件：
+
+```bash
+python3 scripts/verify_apm_checksums.py update
+python3 scripts/verify_apm_checksums.py verify
+```
+
 ## 在其他项目中使用
 
 ### 1. 作为 submodule 引入
@@ -75,3 +82,6 @@ git submodule update --remote .claude-md-master
 - 所有编辑都通过 PR 合入。合并后运行 retrospective（Principle 3）。
 - 这里只放 **适用于每个项目的规则**。项目专属规则应放在各项目自己的 `CLAUDE.md` 中。
 - 优先删减文字，而不是增加文字（Principle 4）。
+- 新增或修改的、由 workflow 调用的 `scripts/` 下 Python 脚本必须满足 [workflow script quality standard](./docs/standards/workflow-script-quality.md)。
+- 涉及 `.apm/instructions/**`、`CLAUDE.md` 或 `AGENTS.md` 的 PR 必须通过 [downstream instruction review checklist](./docs/runbooks/downstream-instruction-review-checklist.md)（在确定性 gate 全部 green 之后再施加的、以安全为重点的复核）。
+- 按 lane（`prd/`、`standards/`、`runbooks/`、`archive/`）整理的完整文档索引见 [`docs/INDEX.md`](./docs/INDEX.md)。

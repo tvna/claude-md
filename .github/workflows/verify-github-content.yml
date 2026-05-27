@@ -65,3 +65,14 @@ jobs:
           body_file="$(mktemp)"
           printf '%s' "$PR_BODY" > "$body_file"
           python3 scripts/issue_link.py verify --repo "$REPO" --body-file "$body_file" --author "$PR_AUTHOR"
+
+      - name: Validate README translation parity
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: origin/${{ github.event.pull_request.base.ref }}
+        run: |
+          body_file="$(mktemp)"
+          printf '%s' "$PR_BODY" > "$body_file"
+          python3 scripts/verify_readme_translation.py verify \
+            --base-ref "$BASE_REF" \
+            --body-file "$body_file"

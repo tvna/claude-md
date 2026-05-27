@@ -155,6 +155,20 @@ STEPS: tuple[Step, ...] = (
         argv=("python3", "scripts/preflight_pr_single_commit.py"),
     ),
     Step(
+        # Refs #476. PR body is optional locally (PR_BODY env unset means
+        # the opt-out marker is absent, which is the stricter default --
+        # contributors who run preflight see drift before push). The
+        # base-ref shape mirrors CI's verify-github-content.yml step.
+        name="verify_readme_translation",
+        argv=(
+            "python3",
+            "scripts/verify_readme_translation.py",
+            "verify",
+            "--base-ref",
+            "origin/main",
+        ),
+    ),
+    Step(
         name="verify_ruleset_sync",
         argv=(
             "python3",
