@@ -268,12 +268,63 @@ The items below are not gates. Add them when the script's blast
 radius, external coupling, or historical bug pattern warrants the
 extra investment.
 
-### O1. Property-based or fuzz tests
+### O1. Property-based tests (Hypothesis) and mutation-testing deferral
 
 When the script parses user-authored prose or untrusted JSON, add
-property-based tests (e.g. Hypothesis) that exercise the parser on
-generated inputs. Consider this when the script has shipped a parser
+property-based tests (Hypothesis) that exercise the parser on generated
+inputs. Reach for this option when the script has shipped a parser
 bug, or when the parser sits on an injection-relevant boundary.
+
+**Pilot of record (#199).** `scripts/title_policy.py` is the
+injection-relevant boundary (#155): its output gates issue and PR
+titles before they reach notifications, project lists, and agent
+summaries. `tests/test_title_policy.py::TestPropertyInvariants`
+exercises four invariants over `st.text()`:
+
+1. `is_ascii_title(s) == s.isascii()` (defining equivalence).
+2. `pr_title_has_issue_ref(t) == bool(pr_title_issue_refs(t))`
+   (cross-API consistency).
+3. After `pr_title_strip_issue_refs(t)`, no `(#NNN)` token remains
+   (projection invariant).
+4. `pr_title_strip_issue_refs` is idempotent.
+
+**Runtime expectations.** Hypothesis runs inside the existing
+`lint-scripts-pytest` job on every `pull_request` event; no separate
+schedule or workflow is introduced. Default `max_examples=100` keeps
+the four properties under ~1 s combined on CI hardware. New property
+tests added under this option must stay within that envelope (no
+`@settings(deadline=None)` without a recorded rationale, no network or
+disk I/O inside strategies).
+
+**Adoption procedure.** Follow the M10 dependency procedure to add
+`hypothesis` (already declared in `[dependency-groups].dev`,
+introduced by #199). New property tests live next to the existing
+example-based tests for the same script -- they extend the test
+module, never replace its parametrized cases.
+
+**Mutation testing is deferred (#199).** Tools such as `mutmut` and
+`cosmic-ray` were evaluated alongside this pilot and not adopted now:
+
+- Coverage is already at `fail_under = 92.71` (#188) and the
+  workflow-called scripts are small, single-responsibility modules
+  with explicit fail-loud / fail-open contracts (M9). Mutation score
+  would mostly re-prove the existing parametrized cases.
+- Mutation runs are minutes-per-script and would push the
+  `lint-scripts-pytest` job past the budget the rest of the matrix
+  fits into. The deterministic gates listed in M8 are higher leverage
+  for the same CI minutes.
+- A property-based pilot already exercises the boundary the issue
+  flagged ("titles, labels, rulesets, workflow inputs, GitHub API
+  responses") with a fraction of the runtime.
+
+Re-evaluate when one of the following triggers fires:
+
+- A bug ships in a workflow-called script that the existing tests
+  AND the new property tests both missed. The retro must name the
+  test class that would have caught it.
+- A new top-level Python package enters the repository via the
+  Coverage graduation procedure (G2) with materially larger surface
+  area than the current `scripts/` tree.
 
 ### O2. Fixture-driven external API tests
 
