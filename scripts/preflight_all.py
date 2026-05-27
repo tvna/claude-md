@@ -155,6 +155,15 @@ STEPS: tuple[Step, ...] = (
         argv=("python3", "scripts/preflight_pr_single_commit.py"),
     ),
     Step(
+        # Refs #491. Sibling of preflight_pr_single_commit: that gate uses
+        # --no-merges to count author commits, this gate rejects any merge
+        # commit (parent count > 1) ahead of base. Also wired via
+        # .pre-commit-config.yaml pre-push stage and the gate job of
+        # .github/workflows/verify-github-content.yml.
+        name="preflight_pr_no_merge_commits",
+        argv=("python3", "scripts/preflight_pr_no_merge_commits.py"),
+    ),
+    Step(
         # Refs #476. PR body is optional locally (PR_BODY env unset means
         # the opt-out marker is absent, which is the stricter default --
         # contributors who run preflight see drift before push). The

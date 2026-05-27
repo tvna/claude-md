@@ -35,3 +35,16 @@ repos:
         pass_filenames: false
         stages: [pre-push]
         always_run: true
+
+      # Pre-push gate: a PR carries no merge-from-main commits.
+      # Issue #491. Complementary to preflight-pr-single-commit which
+      # uses `--no-merges` and therefore lets merge commits through.
+      # Same install requirement; CI in verify-github-content.yml is
+      # the backstop.
+      - id: preflight-pr-no-merge-commits
+        name: preflight pr no merge commits (scripts/preflight_pr_no_merge_commits.py)
+        entry: uv run python scripts/preflight_pr_no_merge_commits.py
+        language: system
+        pass_filenames: false
+        stages: [pre-push]
+        always_run: true
