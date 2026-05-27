@@ -33,13 +33,12 @@ _CONVENTIONAL_TYPES = (
     "tracking",
 )
 _TYPE_PATTERN = "|".join(_CONVENTIONAL_TYPES)
-_CONVENTIONAL_TITLE_RE = re.compile(
-    rf"^(?:{_TYPE_PATTERN})(?:\([a-z0-9][a-z0-9-]*\))?: .+"
-)
+_CONVENTIONAL_TITLE_RE = re.compile(rf"^(?:{_TYPE_PATTERN})(?:\([a-z0-9][a-z0-9-]*\))?: .+")
 # Per #167 and #214, PR subject lines must not carry issue refs like (#NNN);
 # `.github/workflows/verify-issue-link.yml` already validates `Refs #NNN` in
 # the PR body, so the title is redundant when it duplicates that link.
 _PR_ISSUE_REF_RE = re.compile(r"\(#\d+\)")
+
 
 def is_ascii_title(title: str) -> bool:
     """Return True if *title* contains only ASCII code points."""
@@ -56,6 +55,32 @@ def follows_naming_convention(title: str, *, kind: str) -> bool:
 def pr_title_has_issue_ref(title: str) -> bool:
     """Return True if *title* contains a `(#NNN)` issue-ref token."""
     return _PR_ISSUE_REF_RE.search(title) is not None
+
+
+def pr_title_issue_refs(title: str) -> list[str]:
+    """Return every ``(#NNN)`` token in *title* in source order.
+
+    Empty list when *title* carries no issue-reference token. Pairs with
+    :func:`pr_title_has_issue_ref` so client-side preflights can list
+    the offending tokens without re-implementing the regex.
+    """
+    return _PR_ISSUE_REF_RE.findall(title)
+
+
+def pr_title_strip_issue_refs(title: str) -> str:
+    """Return *title* with every ``(#NNN)`` token removed and whitespace collapsed."""
+    stripped = _PR_ISSUE_REF_RE.sub("", title)
+    return re.sub(r"\s+", " ", stripped).strip()
+
+
+def allowed_types_csv() -> str:
+    """Return the allowed conventional-commit types as a CSV string.
+
+    Single source for operator-facing hint text so client-side preflight
+    hooks and any future error messages cannot drift from
+    ``_CONVENTIONAL_TYPES``.
+    """
+    return ", ".join(_CONVENTIONAL_TYPES)
 
 
 def naming_convention_hint(kind: str) -> str:
@@ -84,17 +109,11 @@ def verify_title(title: str, *, kind: str) -> int:
         details = ", ".join(describe_non_ascii(title))
         if details:
             details = f" Non-ASCII code points: {details}."
-        print(
-            f"::error::{kind} title must be ASCII-only for prompt-injection "
-            f"defense.{details}"
-        )
+        print(f"::error::{kind} title must be ASCII-only for prompt-injection " f"defense.{details}")
         fail = 1
 
     if not follows_naming_convention(title, kind=kind):
-        print(
-            f"::error::{kind} title must follow repository naming convention: "
-            f"{naming_convention_hint(kind)}."
-        )
+        print(f"::error::{kind} title must follow repository naming convention: " f"{naming_convention_hint(kind)}.")
         fail = 1
 
     if kind == "pull_request" and pr_title_has_issue_ref(title):
