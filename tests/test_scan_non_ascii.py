@@ -18,6 +18,7 @@ from typing import Any
 import pytest
 import scan_non_ascii as san
 
+pytestmark = pytest.mark.shard_policy
 # ---------------------------------------------------------------------------
 # extract_event
 # ---------------------------------------------------------------------------

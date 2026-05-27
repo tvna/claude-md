@@ -12,6 +12,7 @@ import subprocess
 import issue_link
 import pytest
 
+pytestmark = pytest.mark.shard_ci_ops
 # ---------------------------------------------------------------------------
 # strip_html_comments
 # ---------------------------------------------------------------------------

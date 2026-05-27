@@ -11,6 +11,7 @@ import title_policy
 from hypothesis import given
 from hypothesis import strategies as st
 
+pytestmark = pytest.mark.shard_policy
 
 class TestIsAsciiTitle:
     @pytest.mark.parametrize(

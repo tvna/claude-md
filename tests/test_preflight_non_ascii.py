@@ -20,6 +20,7 @@ import preflight_non_ascii as pna
 import pytest
 from scan_non_ascii import ACK_MARKER
 
+pytestmark = pytest.mark.shard_preflight
 # ---------------------------------------------------------------------------
 # extract_text_fields
 # ---------------------------------------------------------------------------

@@ -148,6 +148,15 @@ STEPS: tuple[Step, ...] = (
         argv=("python3", "scripts/scan_preflight_drift.py", "verify"),
     ),
     Step(
+        # Refs #545. Static check that every tests/test_*.py declares
+        # exactly one module-scope shard marker so the lint-scripts-pytest
+        # matrix neither skips a file nor double-counts one. Runs before
+        # the pytest matrix in CI; mirrored here so contributors see the
+        # failure pre-push.
+        name="verify_test_shard_markers",
+        argv=("python3", "scripts/verify_test_shard_markers.py"),
+    ),
+    Step(
         # Refs #492. Also wired via .pre-commit-config.yaml pre-push stage;
         # mirroring here keeps the single ``preflight_all.py`` entrypoint
         # truthful for contributors who use only the .githooks/pre-push hook.

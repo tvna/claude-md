@@ -11,6 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 
 import labels_apply
 
+pytestmark = pytest.mark.shard_ci_ops
 
 class Response:
     def __init__(self, payload: object) -> None:

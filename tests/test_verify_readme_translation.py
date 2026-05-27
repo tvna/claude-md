@@ -18,6 +18,7 @@ from typing import Any
 import pytest
 import verify_readme_translation as gate
 
+pytestmark = pytest.mark.shard_ci_ops
 
 def _fake_runner(stdout: str = "", returncode: int = 0):
     """Return a callable mimicking ``subprocess.run(..., check=True)``.
