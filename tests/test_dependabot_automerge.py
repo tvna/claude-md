@@ -6,6 +6,7 @@ from pathlib import Path
 import dependabot_automerge as da
 import pytest
 
+pytestmark = pytest.mark.shard_ci_ops
 POLICY = {
     "enabled": False,
     "allow": [

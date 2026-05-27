@@ -5,7 +5,10 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
 import threat_intel_triage as triage
+
+pytestmark = pytest.mark.shard_ci_ops
 
 
 class TestParseLabels:

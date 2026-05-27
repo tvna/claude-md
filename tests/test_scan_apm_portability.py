@@ -12,6 +12,7 @@ from pathlib import Path
 import pytest
 import scan_apm_portability as sap
 
+pytestmark = pytest.mark.shard_default
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 

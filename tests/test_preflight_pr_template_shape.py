@@ -17,6 +17,7 @@ from typing import Any
 import preflight_pr_template_shape as shape
 import pytest
 
+pytestmark = pytest.mark.shard_preflight
 # ---------------------------------------------------------------------------
 # Fixture bodies
 # ---------------------------------------------------------------------------

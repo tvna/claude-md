@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 import scan_preflight_drift as spd
 
+pytestmark = pytest.mark.shard_default
 # ---------------------------------------------------------------------------
 # workflow_targets_pull_request
 # ---------------------------------------------------------------------------

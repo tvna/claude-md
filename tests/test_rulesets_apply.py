@@ -11,6 +11,7 @@ from typing import Any
 import pytest
 import rulesets_apply as ra
 
+pytestmark = pytest.mark.shard_ci_ops
 
 class Response:
     def __init__(self, status: int, body: Any) -> None:

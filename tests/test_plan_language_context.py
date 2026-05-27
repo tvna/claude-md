@@ -20,6 +20,7 @@ from pathlib import Path
 import plan_language_context as plc
 import pytest
 
+pytestmark = pytest.mark.shard_ci_ops
 # ---------------------------------------------------------------------------
 # parse_codeowners
 # ---------------------------------------------------------------------------

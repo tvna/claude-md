@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 import verify_apm_checksums as vac
 
+pytestmark = pytest.mark.shard_ci_ops
 
 def _write(root: Path, rel: str, text: str) -> None:
     path = root / rel

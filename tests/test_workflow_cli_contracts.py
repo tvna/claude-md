@@ -54,8 +54,11 @@ import verify_apm_checksums
 import verify_readme_translation
 import verify_required_check_contexts
 import verify_ruleset_sync
+import verify_shard_coverage
+import verify_test_shard_markers
 import yaml
 
+pytestmark = pytest.mark.shard_ci_ops
 REPO = "owner/repo"
 
 _WORKFLOWS_DIR = Path(".github/workflows")
@@ -122,6 +125,8 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("verify_readme_translation.py", "verify"): "test_verify_readme_translation_matches_workflow_args",
     ("verify_required_check_contexts.py", "verify"): "test_verify_required_check_contexts_matches_workflow_args",
     ("verify_ruleset_sync.py", "verify"): "test_verify_ruleset_sync_matches_workflow_args",
+    ("verify_shard_coverage.py", None): "test_verify_shard_coverage_matches_workflow_args",
+    ("verify_test_shard_markers.py", None): "test_verify_test_shard_markers_matches_workflow_args",
 }
 
 
@@ -805,6 +810,47 @@ def test_title_policy_verify_matches_workflow_kind_env(
     monkeypatch.setenv("TITLE", "fix(ci): ascii title")
 
     assert title_policy.main(["verify", "--kind", "pull_request"]) == 0
+
+
+def test_verify_test_shard_markers_matches_workflow_args(tmp_path: Path) -> None:
+    """Mirror the argv shape used by verify-agents.yml lint-scripts-static.
+
+    The workflow shells to ``uv run python scripts/verify_test_shard_markers.py``
+    with no subcommand and no flags -- it relies on the script defaulting
+    ``--tests-dir`` to ``<repo>/tests``. Exercise the same shape against a
+    tiny conformant fixture so the contract pins the no-argv invocation.
+    Refs #545.
+    """
+    (tmp_path / "test_a.py").write_text(
+        "import pytest\npytestmark = pytest.mark.shard_default\n",
+        encoding="utf-8",
+    )
+
+    assert verify_test_shard_markers.main(["--tests-dir", str(tmp_path)]) == 0
+
+
+def test_verify_shard_coverage_matches_workflow_args(tmp_path: Path) -> None:
+    """Mirror the argv shape used by verify-agents.yml lint-scripts-pytest-gate.
+
+    The workflow shells to
+    ``uv run python scripts/verify_shard_coverage.py --collected <file>
+    --junit <one or more junit-*.xml>``. Exercise the same shape with a
+    minimal collected-universe + single JUnit artifact so the contract
+    pins the multi-value --junit flag. Refs #545.
+    """
+    collected = tmp_path / "collected.txt"
+    collected.write_text("tests/test_a.py::test_one\n", encoding="utf-8")
+    junit = tmp_path / "junit-default.xml"
+    junit.write_text(
+        '<?xml version="1.0"?><testsuite>'
+        '<testcase classname="tests.test_a" name="test_one"/>'
+        "</testsuite>\n",
+        encoding="utf-8",
+    )
+
+    assert verify_shard_coverage.main(
+        ["--collected", str(collected), "--junit", str(junit)]
+    ) == 0
 
 
 def test_preflight_pr_single_commit_matches_workflow_env(
