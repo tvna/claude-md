@@ -253,9 +253,20 @@ def should_skip(
 # .github/rulesets/main.json forces branches behind main to rebase or
 # merge main in before merge, so these commits are a structural side
 # effect of the policy rather than evidence of a repair loop.
+#
+# Kept in lock-step with
+# ``scripts/preflight_pr_no_merge_commits.py:_MERGE_FROM_MAIN_PREFIXES``
+# so the blocking gate (#491) and this reporting classifier agree on
+# what counts as a merge-from-main subject. A contract test in
+# ``tests/test_merge_from_main_prefixes_lockstep.py`` asserts set
+# equality; if you extend one tuple, extend the other in the same PR or
+# the contract test will fail. See
+# ``docs/runbooks/rebase-debt-recovery.md`` for the maintenance rule.
 _MERGE_FROM_MAIN_PREFIXES: tuple[str, ...] = (
     "Merge branch 'main'",
     "Merge remote-tracking branch 'origin/main'",
+    "Merge branch 'master'",
+    "Merge remote-tracking branch 'origin/master'",
 )
 
 # Leading marker on the right-hand cell of merge-from-main rows. Lets
