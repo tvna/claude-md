@@ -202,6 +202,10 @@ jobs:
           fi
 
       - name: Download all shard JUnit artifacts
+        # Runs even when "Assert every matrix leg succeeded" failed so the
+        # Codecov upload below has per-shard JUnit XML to record in Test
+        # Analytics failure history (#556).
+        if: always()
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           pattern: junit-*
