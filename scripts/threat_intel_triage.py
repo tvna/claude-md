@@ -37,9 +37,16 @@ CISA_KEV_URL = "https://www.cisa.gov/sites/default/files/feeds/known_exploited_v
 GHSA_ADVISORIES_URL = "https://api.github.com/advisories"
 GHSA_MALWARE_TYPE = "malware"
 MAL_ID_PREFIX = "MAL-"
+EPSS_URL = "https://api.first.org/data/v1/epss"
 SOURCE_OSV = "OSV.dev"
 SOURCE_GHSA = "GitHub Advisory"
 SOURCE_OSSF_MAL = "OSSF malicious-packages"
+SOURCE_EPSS = "FIRST EPSS"
+
+# Pattern for CVE identifiers used to filter EPSS-eligible aliases. EPSS
+# data is keyed on CVE only; GHSA / OSV identifiers are not accepted by
+# the FIRST API and must be filtered out before batching.
+_CVE_PATTERN = re.compile(r"^CVE-\d{4}-\d{4,}$", re.IGNORECASE)
 
 # Map this module's internal ecosystem labels (taken from OSV) to the
 # values accepted by GitHub's /advisories endpoint. Keep this minimal:
@@ -68,6 +75,11 @@ class Finding(NamedTuple):
     # GHSA-only attribute. ``None`` for OSV-only findings; ``"malware"``
     # escalates ``threat:response-needed`` per #172.
     advisory_type: str | None = None
+    # FIRST EPSS enrichment per #173. Advisory-only: never escalates
+    # ``threat:response-needed`` on its own; KEV correlation remains the
+    # authoritative known-exploitation signal.
+    epss_score: float | None = None
+    epss_percentile: float | None = None
 
 
 INTEL_INDICATORS = (
@@ -183,13 +195,23 @@ def fetch_external_findings(
     ghsa_token: str | None = None,
     malpkg_file: Path | None = None,
     malpkg_live: bool = False,
+    epss_file: Path | None = None,
+    epss_live: bool = False,
 ) -> list[Finding]:
-    """Collect OSV, CISA KEV, GHSA, and OSSF malicious-package intelligence.
+    """Collect OSV, CISA KEV, GHSA, OSSF malicious-package, and FIRST EPSS intelligence.
 
-    GHSA and OSSF malicious-packages are opt-in to keep the OSV-only call
-    sites deterministic without a network call. Pass ``ghsa_file=`` /
-    ``malpkg_file=`` for fixture-driven runs, or ``*_live=True`` to query
-    the upstream endpoint live.
+    GHSA, OSSF malicious-packages, and EPSS are opt-in to keep the
+    OSV-only call sites (notably this module's own legacy tests)
+    deterministic without a network call. Pass ``ghsa_file=`` /
+    ``malpkg_file=`` / ``epss_file=`` for fixture-driven runs, or
+    ``*_live=True`` to query the upstream endpoint live
+    (``api.github.com/advisories`` / ``api.osv.dev/v1/query`` for the
+    OSSF malicious-packages syndication channel / ``api.first.org/data/v1/epss``).
+
+    EPSS is advisory-only per #173: scores enrich the summary table but
+    never escalate ``threat:response-needed`` on their own. KEV
+    correlation and OSSF ``MAL-`` findings remain the authoritative
+    known-exploitation / malware signals.
     """
     if not dependencies:
         return []
@@ -239,6 +261,13 @@ def fetch_external_findings(
         )
 
     merged = merge_findings(osv_findings + ghsa_findings + ossf_findings)
+    if epss_file is not None or epss_live:
+        epss_scores = fetch_epss_scores(
+            _collect_cve_ids(merged),
+            epss_file=epss_file,
+            epss_live=epss_live,
+        )
+        merged = [_attach_epss(finding, epss_scores) for finding in merged]
     return sorted(merged, key=lambda f: (f.dependency.name, f.vuln_id))
 
 
@@ -318,6 +347,92 @@ def parse_kev_cves(data: dict[str, object]) -> set[str]:
         if isinstance(cve_id, str):
             cves.add(cve_id)
     return cves
+
+
+def fetch_epss_scores(
+    cves: list[str],
+    *,
+    epss_file: Path | None = None,
+    epss_live: bool = False,
+) -> dict[str, tuple[float, float]]:
+    """Return ``{cve: (score, percentile)}`` from FIRST EPSS for *cves*.
+
+    Fixture mode (``epss_file``) reads a JSON object with a ``"data"``
+    array shaped like ``api.first.org/data/v1/epss``. Live mode batches
+    CVEs into a single ``GET /epss?cve=A,B,C`` query.
+
+    EPSS lookups soft-fail: any transport, JSON, or parse error returns
+    an empty dict so the OSV / GHSA / KEV pipeline keeps working. EPSS
+    is advisory-only per #173 -- the absence of scores must not block
+    routing on confirmed exploitation evidence (KEV / malware).
+    """
+    if not cves:
+        return {}
+    if epss_file is not None:
+        try:
+            data = load_json(epss_file)
+        except (OSError, ValueError, json.JSONDecodeError):
+            return {}
+        return _parse_epss_payload(data)
+    if not epss_live:
+        return {}
+    query = urllib.parse.urlencode({"cve": ",".join(sorted(set(cves)))})
+    try:
+        data = request_json(f"{EPSS_URL}?{query}")
+    except (OSError, ValueError, json.JSONDecodeError):
+        return {}
+    return _parse_epss_payload(data)
+
+
+def _parse_epss_payload(data: dict[str, object]) -> dict[str, tuple[float, float]]:
+    rows = data.get("data", [])
+    if not isinstance(rows, list):
+        return {}
+    scores: dict[str, tuple[float, float]] = {}
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        cve = row.get("cve")
+        score = _coerce_epss_float(row.get("epss"))
+        percentile = _coerce_epss_float(row.get("percentile"))
+        if isinstance(cve, str) and score is not None and percentile is not None:
+            scores[cve.upper()] = (score, percentile)
+    return scores
+
+
+def _coerce_epss_float(value: object) -> float | None:
+    if isinstance(value, int | float):
+        return float(value)
+    if isinstance(value, str):
+        try:
+            return float(value)
+        except ValueError:
+            return None
+    return None
+
+
+def _collect_cve_ids(findings: list[Finding]) -> list[str]:
+    """Return unique uppercase CVE identifiers across *findings*."""
+    seen: set[str] = set()
+    for finding in findings:
+        for candidate in (finding.vuln_id, *finding.aliases):
+            if isinstance(candidate, str) and _CVE_PATTERN.match(candidate):
+                seen.add(candidate.upper())
+    return sorted(seen)
+
+
+def _attach_epss(finding: Finding, scores: dict[str, tuple[float, float]]) -> Finding:
+    """Return *finding* with EPSS fields filled if any of its CVEs match *scores*."""
+    if not scores:
+        return finding
+    for candidate in (finding.vuln_id, *finding.aliases):
+        if not isinstance(candidate, str):
+            continue
+        match = scores.get(candidate.upper())
+        if match is not None:
+            score, percentile = match
+            return finding._replace(epss_score=score, epss_percentile=percentile)
+    return finding
 
 
 def fetch_ghsa_advisories(
@@ -587,6 +702,12 @@ def merge_findings(findings: list[Finding]) -> list[Finding]:
             source=", ".join(sources),
             known_exploited=existing.known_exploited or finding.known_exploited,
             advisory_type=existing.advisory_type or finding.advisory_type,
+            epss_score=existing.epss_score if existing.epss_score is not None else finding.epss_score,
+            epss_percentile=(
+                existing.epss_percentile
+                if existing.epss_percentile is not None
+                else finding.epss_percentile
+            ),
         )
     return list(by_key.values())
 
@@ -629,6 +750,8 @@ def finding_to_dict(finding: Finding) -> dict[str, object]:
         "source": finding.source,
         "known_exploited": finding.known_exploited,
         "advisory_type": finding.advisory_type,
+        "epss_score": finding.epss_score,
+        "epss_percentile": finding.epss_percentile,
     }
 
 
@@ -701,6 +824,8 @@ def _cmd_scan(args: argparse.Namespace) -> int:
         ghsa_token=os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN"),
         malpkg_file=args.malpkg_file,
         malpkg_live=args.malpkg_live,
+        epss_file=args.epss_file,
+        epss_live=args.epss_live,
     )
     result = classify_findings(findings, labels)
 
@@ -741,13 +866,21 @@ def write_summary(
         if not findings:
             handle.write("No external threat-intelligence findings matched locked dependencies.\n")
             return
-        handle.write("| Dependency | Version | Vulnerability | Source | Known exploited |\n")
-        handle.write("|---|---:|---|---|---|\n")
+        handle.write("| Dependency | Version | Vulnerability | Source | Known exploited | EPSS |\n")
+        handle.write("|---|---:|---|---|---|---|\n")
         for finding in findings:
             handle.write(
                 f"| `{finding.dependency.name}` | `{finding.dependency.version}` | "
-                f"`{finding.vuln_id}` | {finding.source} | {_bool(finding.known_exploited)} |\n"
+                f"`{finding.vuln_id}` | {finding.source} | {_bool(finding.known_exploited)} | "
+                f"{_format_epss_cell(finding)} |\n"
             )
+
+
+def _format_epss_cell(finding: Finding) -> str:
+    """Render the EPSS column for *finding*. EPSS is advisory-only per #173."""
+    if finding.epss_score is None or finding.epss_percentile is None:
+        return "-"
+    return f"{finding.epss_score:.3f} (p{finding.epss_percentile * 100:.1f}%)"
 
 
 def _summary_sources_line(findings: list[Finding]) -> str:
@@ -771,6 +904,8 @@ def _summary_sources_line(findings: list[Finding]) -> str:
     if not ordered:
         ordered = [SOURCE_OSV, SOURCE_GHSA, SOURCE_OSSF_MAL]
     ordered.append("CISA KEV")
+    if any(finding.epss_score is not None for finding in findings):
+        ordered.append(SOURCE_EPSS)
     return ", ".join(ordered)
 
 
@@ -933,6 +1068,20 @@ def main(argv: list[str] | None = None) -> int:
             "Query api.osv.dev/v1/query live for each dependency by name "
             "only and keep MAL- prefixed records (the OSSF "
             "malicious-packages syndication channel on OSV.dev)."
+        ),
+    )
+    p_scan.add_argument(
+        "--epss-file",
+        type=Path,
+        help="Fixture file containing a FIRST EPSS-shaped response.",
+    )
+    p_scan.add_argument(
+        "--epss-live",
+        action="store_true",
+        help=(
+            "Query api.first.org/data/v1/epss live for exploit prediction "
+            "scores. EPSS is advisory-only and never escalates "
+            "threat:response-needed (KEV remains the authoritative signal)."
         ),
     )
     p_scan.set_defaults(func=_cmd_scan)
