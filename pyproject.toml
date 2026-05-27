@@ -29,6 +29,10 @@ dev = [
     "mypy>=1.11,<2",
     # mypy needs stubs for pyyaml (used by scripts/plan_language_context.py).
     "types-PyYAML>=6,<7",
+    # Property-based test pilot for scripts/title_policy.py (#199). O1 in
+    # docs/standards/workflow-script-quality.md documents the scope and the
+    # mutation-testing deferral that landed alongside this dependency.
+    "hypothesis>=6,<7",
 ]
 
 [tool.pytest.ini_options]
