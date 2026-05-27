@@ -721,6 +721,277 @@ class TestEpssEnrichment:
         assert triage.fetch_epss_scores(["CVE-2026-1111"], epss_file=epss) == {}
 
 
+class TestNvdEnrichment:
+    """NVD CVE metadata enrichment (#174).
+
+    NVD is a *supplemental* enrichment source -- it must never widen the
+    finding set, never suppress findings on missing data, and never be
+    treated as evidence-of-absence for response decisions.
+    """
+
+    def _osv_payload_with_cve_alias(self) -> dict[str, object]:
+        return {
+            "results": [{"vulns": [{"id": "GHSA-aaaa-bbbb-cccc"}]}],
+            "details": {"GHSA-aaaa-bbbb-cccc": {"aliases": ["CVE-2026-9001"]}},
+        }
+
+    def _empty_kev(self) -> dict[str, object]:
+        return {"vulnerabilities": []}
+
+    def test_nvd_enrichment_attaches_cvss_cwe_and_references(self, tmp_path: Path) -> None:
+        osv = tmp_path / "osv.json"
+        kev = tmp_path / "kev.json"
+        nvd = tmp_path / "nvd.json"
+        osv.write_text(json.dumps(self._osv_payload_with_cve_alias()), encoding="utf-8")
+        kev.write_text(json.dumps(self._empty_kev()), encoding="utf-8")
+        nvd.write_text(
+            json.dumps(
+                {
+                    "cves": {
+                        "CVE-2026-9001": {
+                            "metrics": {
+                                "cvssMetricV31": [
+                                    {
+                                        "cvssData": {
+                                            "baseScore": 9.8,
+                                            "baseSeverity": "CRITICAL",
+                                        }
+                                    }
+                                ]
+                            },
+                            "weaknesses": [
+                                {"description": [{"value": "CWE-79"}]},
+                                {"description": [{"value": "CWE-94"}]},
+                            ],
+                            "references": [
+                                {"url": "https://example.test/advisory-1"},
+                                {"url": "https://example.test/advisory-2"},
+                            ],
+                        }
+                    }
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        findings = triage.fetch_external_findings(
+            [triage.Dependency("demo", "1.0.0", "PyPI", "uv.lock")],
+            osv_file=osv,
+            kev_file=kev,
+            nvd_file=nvd,
+        )
+
+        assert len(findings) == 1
+        assert len(findings[0].nvd_metadata) == 1
+        enrichment = findings[0].nvd_metadata[0]
+        assert enrichment.cve_id == "CVE-2026-9001"
+        assert enrichment.cvss_severity == "CRITICAL"
+        assert enrichment.cvss_score == 9.8
+        assert enrichment.cvss_version == "3.1"
+        assert enrichment.cwe_ids == ("CWE-79", "CWE-94")
+        assert enrichment.references == (
+            "https://example.test/advisory-1",
+            "https://example.test/advisory-2",
+        )
+        assert enrichment.source_url == "https://nvd.nist.gov/vuln/detail/CVE-2026-9001"
+
+    def test_nvd_missing_metadata_preserves_finding(self, tmp_path: Path) -> None:
+        osv = tmp_path / "osv.json"
+        kev = tmp_path / "kev.json"
+        nvd = tmp_path / "nvd.json"
+        osv.write_text(json.dumps(self._osv_payload_with_cve_alias()), encoding="utf-8")
+        kev.write_text(json.dumps(self._empty_kev()), encoding="utf-8")
+        nvd.write_text(json.dumps({"cves": {}}), encoding="utf-8")
+
+        findings = triage.fetch_external_findings(
+            [triage.Dependency("demo", "1.0.0", "PyPI", "uv.lock")],
+            osv_file=osv,
+            kev_file=kev,
+            nvd_file=nvd,
+        )
+        result = triage.classify_findings(findings, set())
+
+        assert len(findings) == 1
+        assert findings[0].nvd_metadata == ()
+        assert result["intel_needed"] is True
+        assert result["finding_count"] == 1
+
+    def test_nvd_malformed_payload_preserves_finding(self, tmp_path: Path) -> None:
+        osv = tmp_path / "osv.json"
+        kev = tmp_path / "kev.json"
+        nvd = tmp_path / "nvd.json"
+        osv.write_text(json.dumps(self._osv_payload_with_cve_alias()), encoding="utf-8")
+        kev.write_text(json.dumps(self._empty_kev()), encoding="utf-8")
+        nvd.write_text(
+            json.dumps(
+                {
+                    "cves": {
+                        "CVE-2026-9001": {
+                            "metrics": "not-an-object",
+                            "weaknesses": [],
+                            "references": [],
+                        }
+                    }
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        findings = triage.fetch_external_findings(
+            [triage.Dependency("demo", "1.0.0", "PyPI", "uv.lock")],
+            osv_file=osv,
+            kev_file=kev,
+            nvd_file=nvd,
+        )
+        result = triage.classify_findings(findings, set())
+
+        assert len(findings) == 1
+        assert findings[0].nvd_metadata == ()
+        assert result["intel_needed"] is True
+
+    def test_nvd_cvss_falls_back_v30_then_v2(self, tmp_path: Path) -> None:
+        payload_v30 = {
+            "metrics": {
+                "cvssMetricV30": [
+                    {"cvssData": {"baseScore": 7.5, "baseSeverity": "HIGH"}}
+                ]
+            }
+        }
+        result_v30 = triage.parse_nvd_cve(payload_v30, "CVE-2026-1")
+        assert result_v30 is not None
+        assert result_v30.cvss_version == "3.0"
+        assert result_v30.cvss_severity == "HIGH"
+        assert result_v30.cvss_score == 7.5
+
+        payload_v2 = {
+            "metrics": {
+                "cvssMetricV2": [
+                    {
+                        "cvssData": {"baseScore": 5.0},
+                        "baseSeverity": "MEDIUM",
+                    }
+                ]
+            }
+        }
+        result_v2 = triage.parse_nvd_cve(payload_v2, "CVE-2026-2")
+        assert result_v2 is not None
+        assert result_v2.cvss_version == "2.0"
+        assert result_v2.cvss_severity == "MEDIUM"
+        assert result_v2.cvss_score == 5.0
+
+    def test_nvd_does_not_alter_findings_without_cve_aliases(self, tmp_path: Path) -> None:
+        """GHSA findings without a CVE alias must not be erased when NVD data is absent."""
+        osv = tmp_path / "osv.json"
+        kev = tmp_path / "kev.json"
+        ghsa = tmp_path / "ghsa.json"
+        nvd = tmp_path / "nvd.json"
+        osv.write_text(
+            json.dumps({"results": [{"vulns": []}], "details": {}}),
+            encoding="utf-8",
+        )
+        kev.write_text(json.dumps(self._empty_kev()), encoding="utf-8")
+        ghsa.write_text(
+            json.dumps(
+                {
+                    "advisories": [
+                        {
+                            "ghsa_id": "GHSA-mmmm-nnnn-oooo",
+                            "type": "malware",
+                            "vulnerabilities": [
+                                {"package": {"ecosystem": "pip", "name": "demo"}},
+                            ],
+                        }
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+        nvd.write_text(json.dumps({"cves": {}}), encoding="utf-8")
+
+        findings = triage.fetch_external_findings(
+            [triage.Dependency("demo", "1.0.0", "PyPI", "uv.lock")],
+            osv_file=osv,
+            kev_file=kev,
+            ghsa_file=ghsa,
+            nvd_file=nvd,
+        )
+
+        assert len(findings) == 1
+        assert findings[0].nvd_metadata == ()
+        assert findings[0].advisory_type == triage.GHSA_MALWARE_TYPE
+
+    def test_scan_summary_includes_nvd_metadata(self, tmp_path: Path, capsys) -> None:
+        (tmp_path / "uv.lock").write_text(
+            '[[package]]\nname = "demo"\nversion = "1.0.0"\n',
+            encoding="utf-8",
+        )
+        osv = tmp_path / "osv.json"
+        kev = tmp_path / "kev.json"
+        nvd = tmp_path / "nvd.json"
+        summary = tmp_path / "summary.md"
+        osv.write_text(json.dumps(self._osv_payload_with_cve_alias()), encoding="utf-8")
+        kev.write_text(json.dumps(self._empty_kev()), encoding="utf-8")
+        nvd.write_text(
+            json.dumps(
+                {
+                    "cves": {
+                        "CVE-2026-9001": {
+                            "metrics": {
+                                "cvssMetricV31": [
+                                    {
+                                        "cvssData": {
+                                            "baseScore": 9.8,
+                                            "baseSeverity": "CRITICAL",
+                                        }
+                                    }
+                                ]
+                            },
+                            "weaknesses": [{"description": [{"value": "CWE-79"}]}],
+                            "references": [{"url": "https://example.test/a"}],
+                        }
+                    }
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        rc = triage.main(
+            [
+                "scan",
+                "--repo-root",
+                str(tmp_path),
+                "--osv-file",
+                str(osv),
+                "--kev-file",
+                str(kev),
+                "--nvd-file",
+                str(nvd),
+                "--summary-file",
+                str(summary),
+                "--format",
+                "json",
+            ]
+        )
+        captured = capsys.readouterr()
+        result = json.loads(captured.out)
+
+        assert rc == 0
+        assert result["intel_needed"] is True
+        summary_text = summary.read_text(encoding="utf-8")
+        assert "NVD CVSS" in summary_text
+        assert "NVD CWE" in summary_text
+        assert "CRITICAL" in summary_text
+        assert "CWE-79" in summary_text
+        assert "https://example.test/a" in summary_text
+        assert "Missing NVD enrichment does not imply" in summary_text
+        assert "https://nvd.nist.gov/vuln/detail/CVE-2026-9001" in summary_text
+
+        finding_entry = result["findings"][0]
+        assert finding_entry["nvd_metadata"][0]["cve_id"] == "CVE-2026-9001"
+        assert finding_entry["nvd_metadata"][0]["cvss_severity"] == "CRITICAL"
+        assert finding_entry["nvd_metadata"][0]["cwe_ids"] == ["CWE-79"]
+
+
 class TestCli:
     def test_json_output(self, capsys) -> None:
         rc = triage.main(
