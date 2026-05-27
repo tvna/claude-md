@@ -84,6 +84,31 @@ A future "DRY refactor" PR may be tempted to collapse the two scripts into a sin
 
 If you genuinely want to reduce duplication, share `resolve_base()` via a small import — do not merge the gates themselves.
 
+## Operator workflow for follow-up commits
+
+The single-commit gate (#492) enforces exactly one author commit ahead of `origin/main` per branch. When CI feedback or review comments require follow-up work, use `git commit --amend` rather than adding a new commit:
+
+```bash
+# Stage the follow-up edit.
+git add path/to/edited/file
+
+# Amend the existing commit instead of creating a new one.
+git commit --amend --no-edit
+
+# Force push with lease so the upstream branch carries the same
+# single commit, just with the new content.
+git push --force-with-lease
+```
+
+`fixup!` and `squash!` commit subjects (the conventional autosquash markers from `git commit --fixup` / `--squash`) trip the single-commit gate at push time: they read as a second author commit ahead of base and fail the count check. Do not rely on the squash merge to flatten them later — the gate catches them earlier so the PR thread stays single-commit through review.
+
+If the branch already carries multiple author commits (e.g. a legacy push that predates this gate, or a forgotten `--amend`), squash them locally before pushing:
+
+```bash
+git rebase -i origin/main   # mark every commit except the first as `squash`
+git push --force-with-lease
+```
+
 ## `_MERGE_FROM_MAIN_PREFIXES` lock-step rule
 
 The constant `_MERGE_FROM_MAIN_PREFIXES` is defined in two places:
