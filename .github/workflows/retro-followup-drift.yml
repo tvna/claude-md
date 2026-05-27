@@ -1,0 +1,36 @@
+name: Scan retro/follow-up linkage drift
+
+# All logic lives in scripts/scan_retro_followup_drift.py and is unit-tested
+# in tests/test_scan_retro_followup_drift.py. This workflow only marshals env
+# vars and shells out to the single Python entry point. Implements PR1 of the
+# TP/FP retrofit that closes the retro convergence loop by labelling retro
+# issues whose follow-ups have drifted. Refs #558.
+
+on:
+  schedule:
+    # Daily at 06:37 UTC. No collision with the existing weekly crons:
+    # generate-agents (Sat 18:00), security-control-drift-report (Sun 23:00),
+    # ruleset-drift (Sun 21:00), branch-cleanup (Sun 20:00).
+    - cron: "37 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: retro-followup-drift
+  cancel-in-progress: false
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+
+      - name: Scan retro/follow-up drift
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: python3 scripts/scan_retro_followup_drift.py run

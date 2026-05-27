@@ -45,6 +45,7 @@ import scan_apm_portability
 import scan_design_philosophy_drift
 import scan_non_ascii
 import scan_preflight_drift
+import scan_retro_followup_drift
 import scan_workflow_action_pins
 import scan_workflow_pip
 import security_drift_report
@@ -114,6 +115,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("scan_design_philosophy_drift.py", "verify"): "test_scan_design_philosophy_drift_verify_matches_workflow_paths",
     ("scan_non_ascii.py", "run"): "test_scan_non_ascii_run_matches_workflow_env",
     ("scan_preflight_drift.py", "verify"): "test_scan_preflight_drift_verify_matches_workflow_args",
+    ("scan_retro_followup_drift.py", "run"): "test_scan_retro_followup_drift_run_matches_workflow_env",
     ("scan_workflow_action_pins.py", "verify"): "test_scan_workflow_action_pins_verify_matches_workflow_args",
     ("scan_workflow_pip.py", "verify"): "test_scan_workflow_pip_verify_matches_workflow_args",
     ("security_drift_report.py", "aggregate"): "test_security_drift_report_aggregate_and_post_comment_match_workflow_args",
@@ -705,6 +707,18 @@ def test_scan_non_ascii_run_matches_workflow_env(
     monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(tmp_path / "summary.md"))
 
     assert scan_non_ascii.main(["run"]) == 0
+
+
+def test_scan_retro_followup_drift_run_matches_workflow_env(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        scan_retro_followup_drift, "search_retro_issues", lambda repo: []
+    )
+    monkeypatch.setenv("REPO", REPO)
+    monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(tmp_path / "summary.md"))
+
+    assert scan_retro_followup_drift.main(["run"]) == 0
 
 
 def test_scan_workflow_action_pins_verify_matches_workflow_args() -> None:
