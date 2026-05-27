@@ -314,6 +314,199 @@ class TestExternalFindings:
             triage.RESPONSE_LABEL,
         ]
 
+    def test_ossf_malicious_package_match_escalates_response(self, tmp_path: Path) -> None:
+        osv = tmp_path / "osv.json"
+        kev = tmp_path / "kev.json"
+        malpkg = tmp_path / "malpkg.json"
+        osv.write_text(
+            json.dumps({"results": [{"vulns": []}], "details": {}}),
+            encoding="utf-8",
+        )
+        kev.write_text(json.dumps({"vulnerabilities": []}), encoding="utf-8")
+        malpkg.write_text(
+            json.dumps(
+                {
+                    "malicious_packages": [
+                        {
+                            "id": "MAL-2026-7777",
+                            "aliases": ["GHSA-mali-cious-pkg0"],
+                            "affected": [
+                                {
+                                    "package": {"ecosystem": "PyPI", "name": "demo"},
+                                    "versions": ["9.9.9"],
+                                }
+                            ],
+                        }
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        findings = triage.fetch_external_findings(
+            [triage.Dependency("demo", "1.0.0", "PyPI", "uv.lock")],
+            osv_file=osv,
+            kev_file=kev,
+            malpkg_file=malpkg,
+        )
+        result = triage.classify_findings(findings, set())
+
+        assert len(findings) == 1
+        assert findings[0].source == triage.SOURCE_OSSF_MAL
+        assert findings[0].vuln_id == "MAL-2026-7777"
+        assert findings[0].advisory_type == triage.GHSA_MALWARE_TYPE
+        assert "GHSA-mali-cious-pkg0" in findings[0].aliases
+        assert result["intel_needed"] is True
+        assert result["response_needed"] is True
+        assert result["recommended_labels"] == [
+            triage.INTEL_LABEL,
+            triage.RESPONSE_LABEL,
+        ]
+
+    def test_ossf_non_matching_entry_does_not_label(self, tmp_path: Path) -> None:
+        osv = tmp_path / "osv.json"
+        kev = tmp_path / "kev.json"
+        malpkg = tmp_path / "malpkg.json"
+        osv.write_text(
+            json.dumps({"results": [{"vulns": []}], "details": {}}),
+            encoding="utf-8",
+        )
+        kev.write_text(json.dumps({"vulnerabilities": []}), encoding="utf-8")
+        malpkg.write_text(
+            json.dumps(
+                {
+                    "malicious_packages": [
+                        {
+                            "id": "MAL-2026-8888",
+                            "affected": [
+                                {"package": {"ecosystem": "PyPI", "name": "other"}}
+                            ],
+                        }
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        findings = triage.fetch_external_findings(
+            [triage.Dependency("demo", "1.0.0", "PyPI", "uv.lock")],
+            osv_file=osv,
+            kev_file=kev,
+            malpkg_file=malpkg,
+        )
+        result = triage.classify_findings(findings, set())
+
+        assert findings == []
+        assert result["intel_needed"] is False
+        assert result["response_needed"] is False
+        assert result["recommended_labels"] == []
+        assert result["remove_labels"] == []
+
+    def test_ossf_drops_records_without_mal_prefix(self, tmp_path: Path) -> None:
+        osv = tmp_path / "osv.json"
+        kev = tmp_path / "kev.json"
+        malpkg = tmp_path / "malpkg.json"
+        osv.write_text(
+            json.dumps({"results": [{"vulns": []}], "details": {}}),
+            encoding="utf-8",
+        )
+        kev.write_text(json.dumps({"vulnerabilities": []}), encoding="utf-8")
+        malpkg.write_text(
+            json.dumps(
+                {
+                    "malicious_packages": [
+                        {
+                            "id": "GHSA-aaaa-bbbb-cccc",
+                            "affected": [
+                                {"package": {"ecosystem": "PyPI", "name": "demo"}}
+                            ],
+                        }
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        findings = triage.fetch_external_findings(
+            [triage.Dependency("demo", "1.0.0", "PyPI", "uv.lock")],
+            osv_file=osv,
+            kev_file=kev,
+            malpkg_file=malpkg,
+        )
+
+        assert findings == []
+
+    def test_ossf_and_osv_dedupe_preserves_source_attribution(self, tmp_path: Path) -> None:
+        osv = tmp_path / "osv.json"
+        kev = tmp_path / "kev.json"
+        malpkg = tmp_path / "malpkg.json"
+        osv.write_text(
+            json.dumps(
+                {
+                    "results": [{"vulns": [{"id": "MAL-2026-9999"}]}],
+                    "details": {"MAL-2026-9999": {"aliases": []}},
+                }
+            ),
+            encoding="utf-8",
+        )
+        kev.write_text(json.dumps({"vulnerabilities": []}), encoding="utf-8")
+        malpkg.write_text(
+            json.dumps(
+                {
+                    "malicious_packages": [
+                        {
+                            "id": "MAL-2026-9999",
+                            "affected": [
+                                {"package": {"ecosystem": "PyPI", "name": "demo"}}
+                            ],
+                        }
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        findings = triage.fetch_external_findings(
+            [triage.Dependency("demo", "1.0.0", "PyPI", "uv.lock")],
+            osv_file=osv,
+            kev_file=kev,
+            malpkg_file=malpkg,
+        )
+        result = triage.classify_findings(findings, set())
+
+        assert len(findings) == 1
+        assert findings[0].vuln_id == "MAL-2026-9999"
+        assert triage.SOURCE_OSV in findings[0].source
+        assert triage.SOURCE_OSSF_MAL in findings[0].source
+        assert findings[0].advisory_type == triage.GHSA_MALWARE_TYPE
+        assert result["response_needed"] is True
+
+    def test_osv_mal_prefix_alone_escalates_response(self, tmp_path: Path) -> None:
+        osv = tmp_path / "osv.json"
+        kev = tmp_path / "kev.json"
+        osv.write_text(
+            json.dumps(
+                {
+                    "results": [{"vulns": [{"id": "MAL-2026-1234"}]}],
+                    "details": {"MAL-2026-1234": {"aliases": []}},
+                }
+            ),
+            encoding="utf-8",
+        )
+        kev.write_text(json.dumps({"vulnerabilities": []}), encoding="utf-8")
+
+        findings = triage.fetch_external_findings(
+            [triage.Dependency("demo", "1.0.0", "PyPI", "uv.lock")],
+            osv_file=osv,
+            kev_file=kev,
+        )
+        result = triage.classify_findings(findings, set())
+
+        assert len(findings) == 1
+        assert findings[0].vuln_id == "MAL-2026-1234"
+        assert findings[0].advisory_type == triage.GHSA_MALWARE_TYPE
+        assert result["response_needed"] is True
+
     def test_ghsa_and_osv_dedupe_preserves_source_attribution(self, tmp_path: Path) -> None:
         osv = tmp_path / "osv.json"
         kev = tmp_path / "kev.json"
@@ -359,6 +552,173 @@ class TestExternalFindings:
         assert triage.SOURCE_GHSA in findings[0].source
         assert findings[0].advisory_type == "reviewed"
         assert "CVE-2026-3333" in findings[0].aliases
+
+
+class TestEpssEnrichment:
+    """FIRST EPSS enrichment is advisory-only per #173.
+
+    EPSS scores enrich the summary table but never escalate
+    ``threat:response-needed`` on their own; KEV correlation and GHSA
+    malware advisories remain the authoritative response signals.
+    """
+
+    @staticmethod
+    def _write_empty_kev(path: Path) -> None:
+        path.write_text(json.dumps({"vulnerabilities": []}), encoding="utf-8")
+
+    @staticmethod
+    def _write_osv_with_cve(path: Path, vuln_id: str, cve: str) -> None:
+        path.write_text(
+            json.dumps(
+                {
+                    "results": [{"vulns": [{"id": vuln_id}]}],
+                    "details": {vuln_id: {"aliases": [cve]}},
+                }
+            ),
+            encoding="utf-8",
+        )
+
+    def test_epss_attaches_score_to_cve_aliased_finding(self, tmp_path: Path) -> None:
+        osv = tmp_path / "osv.json"
+        kev = tmp_path / "kev.json"
+        epss = tmp_path / "epss.json"
+        self._write_osv_with_cve(osv, "GHSA-abcd-1234-wxyz", "CVE-2026-1111")
+        self._write_empty_kev(kev)
+        epss.write_text(
+            json.dumps(
+                {
+                    "status": "OK",
+                    "data": [
+                        {"cve": "CVE-2026-1111", "epss": "0.42130", "percentile": "0.95210"},
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        findings = triage.fetch_external_findings(
+            [triage.Dependency("demo", "1.0.0", "PyPI", "uv.lock")],
+            osv_file=osv,
+            kev_file=kev,
+            epss_file=epss,
+        )
+        result = triage.classify_findings(findings, set())
+
+        assert len(findings) == 1
+        assert findings[0].epss_score == 0.4213
+        assert findings[0].epss_percentile == 0.9521
+        # Advisory-only: high EPSS without KEV/malware does not escalate.
+        assert result["intel_needed"] is True
+        assert result["response_needed"] is False
+        assert result["recommended_labels"] == [triage.INTEL_LABEL]
+        # finding_to_dict surfaces EPSS for downstream consumers.
+        assert result["findings"][0]["epss_score"] == 0.4213
+        assert result["findings"][0]["epss_percentile"] == 0.9521
+
+    def test_high_epss_alone_does_not_escalate_response(self, tmp_path: Path) -> None:
+        osv = tmp_path / "osv.json"
+        kev = tmp_path / "kev.json"
+        epss = tmp_path / "epss.json"
+        self._write_osv_with_cve(osv, "GHSA-zzzz-9999-yyyy", "CVE-2026-2222")
+        self._write_empty_kev(kev)
+        epss.write_text(
+            json.dumps(
+                {
+                    "data": [
+                        {"cve": "CVE-2026-2222", "epss": "0.97500", "percentile": "0.99900"},
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        findings = triage.fetch_external_findings(
+            [triage.Dependency("demo", "1.0.0", "PyPI", "uv.lock")],
+            osv_file=osv,
+            kev_file=kev,
+            epss_file=epss,
+        )
+        result = triage.classify_findings(findings, set())
+
+        assert findings[0].epss_score == 0.975
+        assert findings[0].known_exploited is False
+        assert result["response_needed"] is False
+        assert result["recommended_labels"] == [triage.INTEL_LABEL]
+
+    def test_epss_supplements_kev_correlated_finding(self, tmp_path: Path) -> None:
+        osv = tmp_path / "osv.json"
+        kev = tmp_path / "kev.json"
+        epss = tmp_path / "epss.json"
+        self._write_osv_with_cve(osv, "GHSA-abcd-1234-wxyz", "CVE-2026-1111")
+        kev.write_text(
+            json.dumps({"vulnerabilities": [{"cveID": "CVE-2026-1111"}]}),
+            encoding="utf-8",
+        )
+        epss.write_text(
+            json.dumps(
+                {
+                    "data": [
+                        {"cve": "CVE-2026-1111", "epss": "0.88000", "percentile": "0.99000"},
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        findings = triage.fetch_external_findings(
+            [triage.Dependency("demo", "1.0.0", "PyPI", "uv.lock")],
+            osv_file=osv,
+            kev_file=kev,
+            epss_file=epss,
+        )
+        result = triage.classify_findings(findings, set())
+
+        assert findings[0].known_exploited is True
+        assert findings[0].epss_score == 0.88
+        # KEV remains the authoritative response signal; EPSS rides along.
+        assert result["response_needed"] is True
+        assert result["recommended_labels"] == [
+            triage.INTEL_LABEL,
+            triage.RESPONSE_LABEL,
+        ]
+
+    def test_epss_missing_cve_leaves_finding_unchanged(self, tmp_path: Path) -> None:
+        osv = tmp_path / "osv.json"
+        kev = tmp_path / "kev.json"
+        epss = tmp_path / "epss.json"
+        self._write_osv_with_cve(osv, "GHSA-abcd-1234-wxyz", "CVE-2026-1111")
+        self._write_empty_kev(kev)
+        # EPSS payload omits the relevant CVE -- FIRST returns no row when
+        # the score is not yet published.
+        epss.write_text(json.dumps({"data": []}), encoding="utf-8")
+
+        findings = triage.fetch_external_findings(
+            [triage.Dependency("demo", "1.0.0", "PyPI", "uv.lock")],
+            osv_file=osv,
+            kev_file=kev,
+            epss_file=epss,
+        )
+
+        assert findings[0].epss_score is None
+        assert findings[0].epss_percentile is None
+
+    def test_collect_cve_ids_filters_non_cve_identifiers(self) -> None:
+        findings = [
+            triage.Finding(
+                dependency=triage.Dependency("demo", "1.0.0", "PyPI", "uv.lock"),
+                vuln_id="GHSA-aaaa-bbbb-cccc",
+                aliases=("CVE-2026-3333", "OSV-2026-9", "not-a-cve"),
+                source=triage.SOURCE_GHSA,
+                known_exploited=False,
+            ),
+        ]
+        assert triage._collect_cve_ids(findings) == ["CVE-2026-3333"]
+
+    def test_fetch_epss_soft_fails_on_broken_fixture(self, tmp_path: Path) -> None:
+        epss = tmp_path / "epss.json"
+        epss.write_text("not json", encoding="utf-8")
+        # Soft-fail returns an empty mapping so callers keep working.
+        assert triage.fetch_epss_scores(["CVE-2026-1111"], epss_file=epss) == {}
 
 
 class TestCli:
@@ -456,6 +816,75 @@ class TestCli:
         ]
         assert "Sources: OSV.dev, CISA KEV" in summary.read_text(encoding="utf-8")
 
+    def test_scan_includes_ossf_source_in_summary(self, tmp_path: Path, capsys) -> None:
+        (tmp_path / "uv.lock").write_text(
+            '[[package]]\nname = "demo"\nversion = "1.0.0"\n',
+            encoding="utf-8",
+        )
+        osv = tmp_path / "osv.json"
+        kev = tmp_path / "kev.json"
+        malpkg = tmp_path / "malpkg.json"
+        summary = tmp_path / "summary.md"
+        out = tmp_path / "github_output"
+        osv.write_text(
+            json.dumps({"results": [{"vulns": []}], "details": {}}),
+            encoding="utf-8",
+        )
+        kev.write_text(json.dumps({"vulnerabilities": []}), encoding="utf-8")
+        malpkg.write_text(
+            json.dumps(
+                {
+                    "malicious_packages": [
+                        {
+                            "id": "MAL-2026-7777",
+                            "affected": [
+                                {"package": {"ecosystem": "PyPI", "name": "demo"}}
+                            ],
+                        }
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        rc = triage.main(
+            [
+                "scan",
+                "--repo-root",
+                str(tmp_path),
+                "--osv-file",
+                str(osv),
+                "--kev-file",
+                str(kev),
+                "--malpkg-file",
+                str(malpkg),
+                "--github-output",
+                str(out),
+                "--summary-file",
+                str(summary),
+                "--format",
+                "json",
+            ]
+        )
+        captured = capsys.readouterr()
+        result = json.loads(captured.out)
+
+        assert rc == 0
+        assert result["response_needed"] is True
+        assert result["recommended_labels"] == [
+            triage.INTEL_LABEL,
+            triage.RESPONSE_LABEL,
+        ]
+        summary_text = summary.read_text(encoding="utf-8")
+        assert triage.SOURCE_OSSF_MAL in summary_text
+        assert "CISA KEV" in summary_text
+        assert out.read_text(encoding="utf-8").splitlines() == [
+            "intel_needed=true",
+            "response_needed=true",
+            "recommended_labels=threat:intel-needed,threat:response-needed",
+            "remove_labels=",
+        ]
+
     def test_scan_includes_ghsa_source_in_summary(self, tmp_path: Path, capsys) -> None:
         (tmp_path / "uv.lock").write_text(
             '[[package]]\nname = "demo"\nversion = "1.0.0"\n',
@@ -513,3 +942,61 @@ class TestCli:
         assert "GitHub Advisory" in summary_text
         assert "CISA KEV" in summary_text
         assert "| Source |" in summary_text
+
+    def test_scan_includes_epss_in_summary(self, tmp_path: Path, capsys) -> None:
+        (tmp_path / "uv.lock").write_text(
+            '[[package]]\nname = "demo"\nversion = "1.0.0"\n',
+            encoding="utf-8",
+        )
+        osv = tmp_path / "osv.json"
+        kev = tmp_path / "kev.json"
+        epss = tmp_path / "epss.json"
+        summary = tmp_path / "summary.md"
+        osv.write_text(
+            json.dumps(
+                {
+                    "results": [{"vulns": [{"id": "GHSA-abcd-1234-wxyz"}]}],
+                    "details": {"GHSA-abcd-1234-wxyz": {"aliases": ["CVE-2026-1111"]}},
+                }
+            ),
+            encoding="utf-8",
+        )
+        kev.write_text(json.dumps({"vulnerabilities": []}), encoding="utf-8")
+        epss.write_text(
+            json.dumps(
+                {
+                    "data": [
+                        {"cve": "CVE-2026-1111", "epss": "0.42130", "percentile": "0.95210"},
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        rc = triage.main(
+            [
+                "scan",
+                "--repo-root",
+                str(tmp_path),
+                "--osv-file",
+                str(osv),
+                "--kev-file",
+                str(kev),
+                "--epss-file",
+                str(epss),
+                "--summary-file",
+                str(summary),
+                "--format",
+                "json",
+            ]
+        )
+        captured = capsys.readouterr()
+        result = json.loads(captured.out)
+
+        assert rc == 0
+        # EPSS is advisory-only and must not flip response_needed.
+        assert result["response_needed"] is False
+        summary_text = summary.read_text(encoding="utf-8")
+        assert "FIRST EPSS" in summary_text
+        assert "| EPSS |" in summary_text
+        assert "0.421 (p95.2%)" in summary_text
