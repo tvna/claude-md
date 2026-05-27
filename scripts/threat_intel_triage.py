@@ -31,12 +31,15 @@ RESPONSE_LABEL = "threat:response-needed"
 SECURITY_LABEL = "severity:security"
 THREAT_LABELS = {INTEL_LABEL, RESPONSE_LABEL}
 OSV_QUERYBATCH_URL = "https://api.osv.dev/v1/querybatch"
+OSV_QUERY_URL = "https://api.osv.dev/v1/query"
 OSV_VULN_URL = "https://api.osv.dev/v1/vulns/{id}"
 CISA_KEV_URL = "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"
 GHSA_ADVISORIES_URL = "https://api.github.com/advisories"
 GHSA_MALWARE_TYPE = "malware"
+MAL_ID_PREFIX = "MAL-"
 SOURCE_OSV = "OSV.dev"
 SOURCE_GHSA = "GitHub Advisory"
+SOURCE_OSSF_MAL = "OSSF malicious-packages"
 
 # Map this module's internal ecosystem labels (taken from OSV) to the
 # values accepted by GitHub's /advisories endpoint. Keep this minimal:
@@ -178,13 +181,15 @@ def fetch_external_findings(
     ghsa_file: Path | None = None,
     ghsa_live: bool = False,
     ghsa_token: str | None = None,
+    malpkg_file: Path | None = None,
+    malpkg_live: bool = False,
 ) -> list[Finding]:
-    """Collect OSV, CISA KEV, and GitHub Advisory intelligence for *dependencies*.
+    """Collect OSV, CISA KEV, GHSA, and OSSF malicious-package intelligence.
 
-    GHSA is opt-in to keep the existing OSV-only call sites
-    (notably this module's own legacy tests) deterministic without a
-    network call. Pass ``ghsa_file=`` for fixture-driven runs or
-    ``ghsa_live=True`` to query ``api.github.com/advisories`` live.
+    GHSA and OSSF malicious-packages are opt-in to keep the OSV-only call
+    sites deterministic without a network call. Pass ``ghsa_file=`` /
+    ``malpkg_file=`` for fixture-driven runs, or ``*_live=True`` to query
+    the upstream endpoint live.
     """
     if not dependencies:
         return []
@@ -203,6 +208,7 @@ def fetch_external_findings(
             aliases = tuple(str(alias) for alias in details.get("aliases", []) if isinstance(alias, str))
             cve_ids = {vuln_id, *aliases}
             known_exploited = bool(cve_ids & kev_cves)
+            advisory_type = GHSA_MALWARE_TYPE if vuln_id.startswith(MAL_ID_PREFIX) else None
             osv_findings.append(
                 Finding(
                     dependency=dep,
@@ -210,6 +216,7 @@ def fetch_external_findings(
                     aliases=aliases,
                     source=SOURCE_OSV,
                     known_exploited=known_exploited,
+                    advisory_type=advisory_type,
                 )
             )
 
@@ -222,7 +229,16 @@ def fetch_external_findings(
             kev_cves=kev_cves,
         )
 
-    merged = merge_findings(osv_findings + ghsa_findings)
+    ossf_findings: list[Finding] = []
+    if malpkg_file is not None or malpkg_live:
+        ossf_findings = fetch_ossf_malicious_packages(
+            dependencies,
+            malpkg_file=malpkg_file,
+            malpkg_live=malpkg_live,
+            kev_cves=kev_cves,
+        )
+
+    merged = merge_findings(osv_findings + ghsa_findings + ossf_findings)
     return sorted(merged, key=lambda f: (f.dependency.name, f.vuln_id))
 
 
@@ -424,6 +440,122 @@ def _ghsa_affects_dependency(advisory: dict[str, object], dep: Dependency) -> bo
     return False
 
 
+def fetch_ossf_malicious_packages(
+    dependencies: list[Dependency],
+    *,
+    malpkg_file: Path | None = None,
+    malpkg_live: bool = False,
+    kev_cves: set[str] | None = None,
+) -> list[Finding]:
+    """Collect OSSF malicious-package findings for *dependencies*.
+
+    Fixture mode (``malpkg_file``) reads a JSON object with a
+    ``"malicious_packages"`` array of OSV-shaped records (each carrying
+    ``id``, optional ``aliases``, and ``affected[].package.{ecosystem,name}``).
+    Live mode queries ``api.osv.dev/v1/query`` per dependency with the
+    version field omitted and keeps only IDs prefixed ``MAL-`` -- this
+    is the OSSF malicious-packages syndication channel on OSV.dev and
+    is the documented stable access path for the corpus.
+
+    Matching is **name-only** (case-insensitive within ecosystem) so a
+    newly introduced typosquat or maintainer-takeover release registers
+    even when the locked version is not itself flagged.
+    """
+    if not dependencies:
+        return []
+    if malpkg_file is None and not malpkg_live:
+        return []
+    kev = kev_cves if kev_cves is not None else set()
+
+    records: list[dict[str, object]]
+    if malpkg_file is not None:
+        records = load_ossf_malicious_records(malpkg_file)
+    else:
+        records = []
+        for dep in dependencies:
+            records.extend(query_osv_malicious_for_dependency(dep))
+
+    findings: list[Finding] = []
+    for record in records:
+        vuln_id = record.get("id")
+        if not isinstance(vuln_id, str) or not vuln_id.startswith(MAL_ID_PREFIX):
+            continue
+        raw_aliases = record.get("aliases", [])
+        aliases = tuple(
+            str(alias)
+            for alias in (raw_aliases if isinstance(raw_aliases, list) else [])
+            if isinstance(alias, str)
+        )
+        identifiers = {vuln_id, *aliases}
+        known_exploited = bool(identifiers & kev)
+        for dep in _ossf_affected_dependencies(record, dependencies):
+            findings.append(
+                Finding(
+                    dependency=dep,
+                    vuln_id=vuln_id,
+                    aliases=aliases,
+                    source=SOURCE_OSSF_MAL,
+                    known_exploited=known_exploited,
+                    advisory_type=GHSA_MALWARE_TYPE,
+                )
+            )
+    return findings
+
+
+def load_ossf_malicious_records(path: Path) -> list[dict[str, object]]:
+    """Return the list of malicious-package dicts from an OSSF fixture file."""
+    data = load_json(path)
+    records = data.get("malicious_packages", [])
+    if not isinstance(records, list):
+        raise ValueError(f"{path} must contain a 'malicious_packages' array")
+    return [item for item in records if isinstance(item, dict)]
+
+
+def query_osv_malicious_for_dependency(dep: Dependency) -> list[dict[str, object]]:
+    """Query OSV.dev for *dep* by name only and return MAL-prefixed records."""
+    payload: dict[str, object] = {
+        "package": {"name": dep.name, "ecosystem": dep.ecosystem},
+    }
+    response = request_json(OSV_QUERY_URL, payload=payload)
+    vulns = response.get("vulns", [])
+    if not isinstance(vulns, list):
+        return []
+    return [
+        vuln
+        for vuln in vulns
+        if isinstance(vuln, dict)
+        and isinstance(vuln.get("id"), str)
+        and vuln["id"].startswith(MAL_ID_PREFIX)
+    ]
+
+
+def _ossf_affected_dependencies(
+    record: dict[str, object], dependencies: list[Dependency]
+) -> list[Dependency]:
+    affected = record.get("affected", [])
+    if not isinstance(affected, list):
+        return []
+    matched: list[Dependency] = []
+    for entry in affected:
+        if not isinstance(entry, dict):
+            continue
+        package = entry.get("package")
+        if not isinstance(package, dict):
+            continue
+        eco = package.get("ecosystem")
+        name = package.get("name")
+        if not isinstance(eco, str) or not isinstance(name, str):
+            continue
+        for dep in dependencies:
+            if (
+                dep.ecosystem == eco
+                and dep.name.lower() == name.lower()
+                and dep not in matched
+            ):
+                matched.append(dep)
+    return matched
+
+
 def merge_findings(findings: list[Finding]) -> list[Finding]:
     """Dedupe findings sharing (dependency identity, vuln_id) while keeping source attribution.
 
@@ -567,6 +699,8 @@ def _cmd_scan(args: argparse.Namespace) -> int:
         ghsa_file=args.ghsa_file,
         ghsa_live=args.ghsa_live,
         ghsa_token=os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN"),
+        malpkg_file=args.malpkg_file,
+        malpkg_live=args.malpkg_live,
     )
     result = classify_findings(findings, labels)
 
@@ -631,11 +765,11 @@ def _summary_sources_line(findings: list[Finding]) -> str:
                 seen.append(src)
     # Stable preferred order so the summary reads the same regardless of
     # iteration order of the underlying findings.
-    preferred = [SOURCE_OSV, SOURCE_GHSA]
+    preferred = [SOURCE_OSV, SOURCE_GHSA, SOURCE_OSSF_MAL]
     ordered = [src for src in preferred if src in seen]
     ordered.extend(src for src in seen if src not in preferred)
     if not ordered:
-        ordered = [SOURCE_OSV, SOURCE_GHSA]
+        ordered = [SOURCE_OSV, SOURCE_GHSA, SOURCE_OSSF_MAL]
     ordered.append("CISA KEV")
     return ", ".join(ordered)
 
@@ -782,6 +916,23 @@ def main(argv: list[str] | None = None) -> int:
         help=(
             "Query api.github.com/advisories live. Uses GH_TOKEN or "
             "GITHUB_TOKEN if set to lift the unauthenticated rate limit."
+        ),
+    )
+    p_scan.add_argument(
+        "--malpkg-file",
+        type=Path,
+        help=(
+            "Fixture file containing an OSSF malicious-packages JSON "
+            "envelope ({'malicious_packages': [OSV-shaped records]})."
+        ),
+    )
+    p_scan.add_argument(
+        "--malpkg-live",
+        action="store_true",
+        help=(
+            "Query api.osv.dev/v1/query live for each dependency by name "
+            "only and keep MAL- prefixed records (the OSSF "
+            "malicious-packages syndication channel on OSV.dev)."
         ),
     )
     p_scan.set_defaults(func=_cmd_scan)
