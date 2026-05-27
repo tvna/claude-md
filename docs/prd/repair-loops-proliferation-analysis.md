@@ -198,6 +198,10 @@ These are suggestions only. They are NOT decisions to ship; each would need its 
 - Removing the operator classification step. The taxonomy is the contract; the suggestion above only enforces completion, not replacement.
 - Backfilling classifications onto PRs #235 through #349. Those retros are explicit positive controls and the framework already accepts them as such.
 
+## 8a. Rollback log
+
+- **2026-05: `preflight_pr_no_merge_commits` gate rolled back (Issue #541).** Issue #491 had introduced a blocking gate that rejected any merge commit in `{base}..HEAD` to keep merge-from-main commits out of the PR diff and out of the auto-retro repair-history table. PR #523 surfaced a false-positive: when the repository owner clicked GitHub's "Update branch" (or any automation merged `main` into the feature branch), the gate fired even though the contributor had not authored a `git merge main`, forcing a manual `git rebase` + `git push --force-with-lease` repair on every base advance. The gate could not distinguish operator-initiated server-side updates from contributor-authored merges, and narrowing it to skip the `committer GitHub <noreply@github.com>` identity would leave a brittle surface against future automation. The squash-merge method on `main` already flattens merge commits at merge time, so the gate's only motivation was auto-retro noise suppression and not a structural defect on `main`. Lesson: do not add a gate that cannot distinguish operator-initiated server-side updates from contributor-authored merges. The `_MERGE_FROM_MAIN_PREFIXES` tuple in `scripts/auto_retro.py` is retained because retro reporting still benefits from labeling those subjects as policy artifacts.
+
 ## 9. Verification
 
 - command: `python scripts/scan_non_ascii.py docs/prd/repair-loops-proliferation-analysis.md`
@@ -215,5 +219,6 @@ These are suggestions only. They are NOT decisions to ship; each would need its 
 - Issue #298 (reproducer for adding signals beyond `inline_review_comments`).
 - Issue #253, PR #254 (`has_review_comments` skip rule).
 - Issue #381 (CI fail row cap and annotation truncation).
+- Issue #491, Issue #541, PR #523 (no-merge-commits gate introduction, false-positive discovery, and rollback recorded in section 8a).
 - CLAUDE.md section 3 (operator classification taxonomy and repair-free reproduction contract).
 - `scripts/auto_retro.py` `should_skip` (line 201), `compute_repair_signals` (line 368), `_build_repair_history_table` (line 480), `build_retro_body` (line 624).

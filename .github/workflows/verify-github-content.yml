@@ -47,16 +47,6 @@ jobs:
           BASE_REF: origin/${{ github.event.pull_request.base.ref }}
         run: python3 scripts/preflight_pr_single_commit.py
 
-      - name: Validate no merge-from-main commits
-        if: github.event_name == 'pull_request'
-        env:
-          BASE_REF: origin/${{ github.event.pull_request.base.ref }}
-          # HEAD_REF pins the comparison endpoint to the actual PR head SHA
-          # so the GitHub-generated `refs/pull/<N>/merge` synthetic merge
-          # does not false-positive the gate. Issue #491.
-          HEAD_REF: ${{ github.event.pull_request.head.sha }}
-        run: python3 scripts/preflight_pr_no_merge_commits.py
-
       - name: Validate body section structure
         run: |
           body_file="$(mktemp)"

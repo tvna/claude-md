@@ -104,7 +104,6 @@ author has not yet finished bounding the change.
 - [ ] Risk & blast radius assessed; Rollback steps are runnable
 - [ ] Issue number recorded on the `Closes #` line above (or `Refs #` with rationale per the template comment)
 - [ ] Branch carries exactly one commit ahead of `main` (`scripts/preflight_pr_single_commit.py` exits 0, Issue #492)
-- [ ] Branch carries no merge-from-main commits (`scripts/preflight_pr_no_merge_commits.py` exits 0, Issue #491)
 
 ### After-merge (CI)
 
