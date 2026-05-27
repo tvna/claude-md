@@ -73,14 +73,25 @@ These labels are applied by the `Threat intelligence triage` workflow. They do n
 | `threat:intel-needed` | Collect threat intelligence before routing or implementation. |
 | `threat:response-needed` | Security response is required; do not open an autonomous PR before investigation. |
 
-The deterministic rule lives in `scripts/threat_intel_triage.py`. The workflow extracts locked PyPI dependencies from `uv.lock` (plus exact pins in `pyproject.toml`) and consults four external sources:
+The deterministic rule lives in `scripts/threat_intel_triage.py`. The workflow extracts locked PyPI dependencies from `uv.lock` (plus exact pins in `pyproject.toml`) and consults five external sources:
 
 - **OSV.dev** — aggregator queried for vulnerabilities that affect each package version.
 - **GitHub Advisory Database** — queried directly via `api.github.com/advisories` (`--ghsa-live`) so reviewed, unreviewed, and malware advisories preserve source attribution alongside OSV. GitHub Actions enumeration is deferred to [#176](https://github.com/tvna/claude-md/issues/176).
 - **OSSF malicious-packages** — queried via `api.osv.dev/v1/query` (`--malpkg-live`) per dependency with the version field omitted, keeping only IDs prefixed `MAL-` (the OSSF malicious-packages syndication channel on OSV.dev). This is the documented stable access path for the corpus; matching is **name-only** (case-insensitive within ecosystem) so newly introduced typosquats and maintainer-takeover releases register even when the locked version is not itself flagged.
 - **CISA KEV** — fetched to correlate any OSV, GHSA, or OSSF finding whose ID or aliases appear in the known-exploited catalog.
+- **FIRST EPSS** — queried via `api.first.org/data/v1/epss` (`--epss-live`) for CVE-aliased findings. Provides an exploit-prediction score (0.0-1.0) and percentile rank so reviewers can prioritize CVEs that KEV has not (yet) confirmed as exploited. Per [#173](https://github.com/tvna/claude-md/issues/173) EPSS is **advisory-only**: scores enrich the summary table but never escalate `threat:response-needed` on their own. CISA KEV remains the authoritative known-exploitation signal; the rationale for not adding an EPSS threshold here is recorded below.
 
-Any external finding adds `threat:intel-needed`. Any KEV-correlated finding, any GHSA advisory whose `type` is `malware`, *or* any finding whose ID starts with `MAL-` (OSSF malicious-packages) also adds `threat:response-needed`. Fixture inputs (`--osv-file`, `--kev-file`, `--ghsa-file`, `--malpkg-file`) exist for tests so CI can verify the routing logic without live network access; the same fixture path is the documented fallback when OSV.dev or GitHub Advisory is unreachable -- an operator can dispatch the workflow with a pre-fetched fixture instead of `--malpkg-live`. The triage summary lists which sources actually surfaced findings and tags each row with its source string (e.g. `OSV.dev, OSSF malicious-packages`).
+Any external finding adds `threat:intel-needed`. Any KEV-correlated finding, any GHSA advisory whose `type` is `malware`, *or* any finding whose ID starts with `MAL-` (OSSF malicious-packages) also adds `threat:response-needed`. Fixture inputs (`--osv-file`, `--kev-file`, `--ghsa-file`, `--malpkg-file`, `--epss-file`) exist for tests so CI can verify the routing logic without live network access; the same fixture path is the documented fallback when OSV.dev or GitHub Advisory is unreachable -- an operator can dispatch the workflow with a pre-fetched fixture instead of the corresponding `--*-live` flag. The triage summary lists which sources actually surfaced findings and tags each row with its source string (e.g. `OSV.dev, OSSF malicious-packages`); when EPSS scores are attached, an `EPSS` column shows `<score> (p<percentile>%)` per finding and `FIRST EPSS` appears in the `Sources:` line.
+
+### Why EPSS is advisory-only (no auto-escalation threshold)
+
+KEV records vulnerabilities **observed** in active exploitation. EPSS is a probabilistic forecast of exploitation likelihood. The two signals are complementary, not interchangeable:
+
+- KEV correlation is rare and unambiguous: when it fires, response action is warranted.
+- EPSS distributes across the entire CVE population; even a 0.95 score still admits false positives, and choosing a threshold without observed false-positive data would lock automation into a guess.
+- The auto-escalation surface (`threat:response-needed`) blocks autonomous PRs and requires investigation. A probabilistic signal raising that flag would generate review load that does not match a confirmed-exploitation incident.
+
+A future sub-issue may revisit this once distribution data has been observed on real findings; until then the score is surfaced for human prioritization only.
 
 ## Agent routing
 

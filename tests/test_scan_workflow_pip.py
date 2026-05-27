@@ -12,6 +12,7 @@ from pathlib import Path
 import pytest
 import scan_workflow_pip
 
+pytestmark = pytest.mark.shard_ci_ops
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 

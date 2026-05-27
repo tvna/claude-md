@@ -8,6 +8,7 @@ from pathlib import Path
 import branch_cleanup
 import pytest
 
+pytestmark = pytest.mark.shard_ci_ops
 
 class _Result:
     def __init__(self, stdout: str = "") -> None:

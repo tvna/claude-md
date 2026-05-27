@@ -21,6 +21,7 @@ import json
 import preflight_title_policy as preflight
 import pytest
 
+pytestmark = pytest.mark.shard_preflight
 # ---------------------------------------------------------------------------
 # extract_title
 # ---------------------------------------------------------------------------

@@ -38,6 +38,18 @@ dev = [
 [tool.pytest.ini_options]
 pythonpath = ["scripts"]
 testpaths = ["tests"]
+# Marker taxonomy for the lint-scripts-pytest matrix (#545). Each test file
+# under tests/ declares exactly one module-scope `pytestmark = pytest.mark.shard_<bucket>`;
+# the static gate `scripts/verify_test_shard_markers.py` enforces the one-per-file
+# rule before pytest runs, and the post-matrix gate
+# `scripts/verify_shard_coverage.py` confirms the union of executed node IDs
+# equals the universe collected by `pytest --collect-only`.
+markers = [
+    "shard_preflight: tests for scripts/preflight_*.py and related Layer-2.5 hooks.",
+    "shard_policy: body-policy, title-policy, non-ASCII, and trusted-bot tests.",
+    "shard_ci_ops: CI-analysis, auto-retro, issue-link, and workflow-orchestration tests.",
+    "shard_default: tests not assigned to a domain bucket yet (catch-all, must shrink).",
+]
 
 [tool.coverage.run]
 # Single combined gate per the Coverage graduation policy (#198): the

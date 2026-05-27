@@ -17,6 +17,7 @@ from typing import Any
 import preflight_pr_single_commit as gate
 import pytest
 
+pytestmark = pytest.mark.shard_preflight
 
 def _fake_runner(stdout: str = "", returncode: int = 0):
     """Return a callable mimicking ``subprocess.run(..., capture_output=True)``.
