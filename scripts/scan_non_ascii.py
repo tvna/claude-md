@@ -45,7 +45,7 @@ _NON_ASCII_RE = re.compile(r"[^\x00-\x7F]")
 # Non-ASCII scanner-specific extension: Codecov posts generated PR comments
 # (not PRs) whose UI footer may contain emoji. Keep this separate from the
 # shared author allowlist so issue-link and body-policy gates do not change.
-_NON_ASCII_TRUSTED_BOT_LOGINS = _TRUSTED_BOT_LOGINS | frozenset({"codecov"})
+_NON_ASCII_TRUSTED_BOT_LOGINS = _TRUSTED_BOT_LOGINS | frozenset({"codecov[bot]"})
 
 
 # ---------------------------------------------------------------------------
