@@ -43,6 +43,7 @@ import rulesets_apply
 import scan_apm_portability
 import scan_design_philosophy_drift
 import scan_non_ascii
+import scan_preflight_drift
 import scan_workflow_action_pins
 import scan_workflow_pip
 import security_drift_report
@@ -107,6 +108,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("scan_apm_portability.py", "verify"): "test_scan_apm_portability_verify_matches_workflow_paths",
     ("scan_design_philosophy_drift.py", "verify"): "test_scan_design_philosophy_drift_verify_matches_workflow_paths",
     ("scan_non_ascii.py", "run"): "test_scan_non_ascii_run_matches_workflow_env",
+    ("scan_preflight_drift.py", "verify"): "test_scan_preflight_drift_verify_matches_workflow_args",
     ("scan_workflow_action_pins.py", "verify"): "test_scan_workflow_action_pins_verify_matches_workflow_args",
     ("scan_workflow_pip.py", "verify"): "test_scan_workflow_pip_verify_matches_workflow_args",
     ("security_drift_report.py", "aggregate"): "test_security_drift_report_aggregate_and_post_comment_match_workflow_args",
@@ -617,19 +619,23 @@ def test_verify_apm_checksums_matches_workflow_args(tmp_path: Path) -> None:
 def test_verify_readme_translation_matches_workflow_args(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    # Workflow invocation shape:
-    #   python3 scripts/verify_readme_translation.py verify \
-    #     --base-ref "$BASE_REF" --body-file "$body_file"
-    fake_diff = "README.md\nREADME.ja.md\nREADME.zh.md\n"
+    """Mirror the env+argv shape used by verify-github-content.yml.
 
-    def fake_run(cmd: list[str], **kwargs: Any):
-        import subprocess as _sp
-
-        return _sp.CompletedProcess(
-            args=cmd, returncode=0, stdout=fake_diff, stderr=""
-        )
-
-    monkeypatch.setattr(verify_readme_translation.subprocess, "run", fake_run)
+    The workflow shells to
+    ``python3 scripts/verify_readme_translation.py verify
+    --base-ref "$BASE_REF" --body-file "$body_file"``.
+    Exercise the same shape with the changed-files lookup stubbed so
+    the test stays hermetic across CI checkout depths (the
+    lint-scripts-pytest job checks out shallow, so a real
+    ``git diff origin/main..HEAD`` would fail with exit 128).
+    """
+    monkeypatch.setattr(
+        verify_readme_translation,
+        "changed_readmes",
+        lambda base, head="HEAD", **kwargs: frozenset(
+            {"README.md", "README.ja.md", "README.zh.md"}
+        ),
+    )
 
     body_file = tmp_path / "body.md"
     body_file.write_text("no marker", encoding="utf-8")
@@ -884,6 +890,12 @@ def test_verify_required_check_contexts_matches_workflow_args() -> None:
             ".github/workflows",
         ]
     ) == 0
+
+
+def test_scan_preflight_drift_verify_matches_workflow_args() -> None:
+    """Mirrors the `Verify preflight set matches CI script invocations`
+    step in `.github/workflows/verify-agents.yml` (issue #493)."""
+    assert scan_preflight_drift.main(["verify"]) == 0
 
 
 @pytest.mark.parametrize(
