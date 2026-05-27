@@ -46,6 +46,15 @@ SOURCE_OSSF_MAL = "OSSF malicious-packages"
 SOURCE_EPSS = "FIRST EPSS"
 SOURCE_NVD = "NVD"
 
+# OSV.dev ecosystem identifier for ``uses: owner/repo@<ref>`` workflow
+# references (#176). Held in its own constant because the string is
+# checked at several call sites and a typo silently produces zero
+# findings against OSV.
+ECOSYSTEM_ACTIONS = "GitHub Actions"
+ECOSYSTEM_PYPI = "PyPI"
+WORKFLOW_SUBDIR = ".github/workflows"
+SCRIPTS_SUBDIR = "scripts"
+
 # Pattern for CVE identifiers used to filter EPSS-eligible aliases. EPSS
 # data is keyed on CVE only; GHSA / OSV identifiers are not accepted by
 # the FIRST API and must be filtered out before batching. The same
@@ -153,11 +162,30 @@ def parse_labels(raw: str | list[str] | tuple[str, ...]) -> set[str]:
 
 
 def discover_dependencies(repo_root: Path) -> list[Dependency]:
-    """Return version-pinned dependencies from lockfiles in *repo_root*."""
+    """Return version-pinned dependencies discoverable in *repo_root*.
+
+    Surfaces scanned (#176):
+
+    * ``uv.lock`` -- PyPI transitive lock.
+    * ``pyproject.toml`` -- exact PyPI pins from ``project.dependencies``
+      and ``dependency-groups``.
+    * ``.github/workflows/**/*.{yml,yaml}`` -- GitHub Actions ``uses:``
+      references. SHA-pinned actions take the tag from the trailing
+      ``# <tag>`` comment so OSV correlates against the released version
+      rather than the opaque commit SHA.
+    * ``.github/workflows/**/*.{yml,yaml}`` and ``scripts/**/*.{sh,py}``
+      -- transient PyPI pins inside ``uv run --with pkg==version``
+      invocations. Non-executable docs prose is intentionally excluded
+      so README / runbook examples cannot create noisy findings.
+    """
     by_key: dict[tuple[str, str, str], Dependency] = {}
     for dep in parse_uv_lock(repo_root / "uv.lock"):
         by_key[(dep.ecosystem, dep.name, dep.version)] = dep
     for dep in parse_pyproject_pinned_dependencies(repo_root / "pyproject.toml"):
+        by_key.setdefault((dep.ecosystem, dep.name, dep.version), dep)
+    for dep in parse_workflow_actions(repo_root):
+        by_key.setdefault((dep.ecosystem, dep.name, dep.version), dep)
+    for dep in parse_transient_uv_run(repo_root):
         by_key.setdefault((dep.ecosystem, dep.name, dep.version), dep)
     return sorted(by_key.values(), key=lambda dep: (dep.ecosystem, dep.name, dep.version))
 
@@ -214,6 +242,161 @@ def parse_exact_python_requirement(requirement: str) -> tuple[str, str] | None:
     if match is None:
         return None
     return match.group(1), match.group(2)
+
+
+# Pattern for a ``uses:`` value: captures the reference (everything up to
+# whitespace, ``#``, or end-of-line) and optionally the trailing
+# ``# <tag>`` comment used by SHA-pinned references. Tolerates the YAML
+# list-dash prefix and arbitrary leading whitespace. Mirrors the parsing
+# contract enforced by ``scripts/scan_workflow_action_pins.py`` -- the
+# two scripts intentionally diverge on intent (this one ingests refs
+# into the threat-intel pipeline; the other is a deterministic
+# SHA-pin gate).
+_USES_LINE = re.compile(
+    r"^\s*-?\s*uses:\s*(?P<ref>\S+)(?:\s+#\s*(?P<tag>\S.*?)\s*$)?",
+    re.MULTILINE,
+)
+
+# Comment line: any line whose first non-whitespace character is ``#``.
+_COMMENT_LINE = re.compile(r"^\s*#")
+
+# Full 40-character lowercase hex (a git commit SHA).
+_FULL_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
+
+# A literal exact pin inside a ``uv run --with`` argument. Strict on
+# both name and version so shell-variable expansions (``${VAR}``),
+# placeholders (``<pin>``), and range specifiers (``>=``, ``~=``) are
+# rejected silently and never reach OSV as garbage queries. The
+# optional extras group (``[foo,bar]``) matches the syntax allowed by
+# pip / uv.
+_UV_WITH_EXACT_PIN = re.compile(
+    r"--with[=\s]+[\"']?(?P<name>[A-Za-z0-9_.\-]+)"
+    r"(?:\[[A-Za-z0-9_.\-,]+\])?==(?P<version>[A-Za-z0-9_.+\-]+)[\"']?"
+)
+
+
+def parse_workflow_actions(repo_root: Path) -> list[Dependency]:
+    """Return ``GitHub Actions`` dependencies from workflow YAML.
+
+    Walks ``.github/workflows/**/*.{yml,yaml}`` under *repo_root* and
+    converts every external ``uses:`` reference into a
+    :class:`Dependency` keyed on the OSV ecosystem
+    ``"GitHub Actions"``.
+
+    * ``./...`` and ``../...`` references are local in-repo composite
+      workflows; they have no upstream version surface to correlate.
+    * ``docker://...`` references are OCI images; digest pinning is
+      tracked separately (see ``scripts/scan_workflow_action_pins.py``)
+      and is out of scope for the OSV correlation surface here.
+    * Lines whose first non-whitespace character is ``#`` are skipped
+      so the rule can be documented inside workflow YAML without
+      self-tripping.
+    * SHA-pinned references (``owner/repo@<40-hex-sha>``) take the
+      version from the trailing ``# <tag>`` comment when present so
+      OSV correlates against the released version rather than the
+      opaque commit SHA. When the comment is missing, the SHA itself
+      is used as a last-resort version string -- this keeps the
+      surface complete even when ``scan_workflow_action_pins`` has not
+      yet been satisfied.
+    """
+    workflow_dir = repo_root / WORKFLOW_SUBDIR
+    if not workflow_dir.is_dir():
+        return []
+    deps: list[Dependency] = []
+    for path in sorted(workflow_dir.rglob("*")):
+        if not path.is_file() or path.suffix not in (".yml", ".yaml"):
+            continue
+        deps.extend(_extract_workflow_actions(path))
+    return deps
+
+
+def _extract_workflow_actions(path: Path) -> list[Dependency]:
+    text = path.read_text(encoding="utf-8", errors="ignore")
+    source = str(path)
+    deps: list[Dependency] = []
+    for line in text.splitlines():
+        if _COMMENT_LINE.match(line):
+            continue
+        match = _USES_LINE.match(line)
+        if match is None:
+            continue
+        ref = match.group("ref")
+        tag_comment = match.group("tag")
+        parsed = _parse_action_reference(ref, tag_comment)
+        if parsed is None:
+            continue
+        name, version = parsed
+        deps.append(
+            Dependency(
+                name=name,
+                version=version,
+                ecosystem=ECOSYSTEM_ACTIONS,
+                source=source,
+            )
+        )
+    return deps
+
+
+def _parse_action_reference(
+    ref: str, tag_comment: str | None
+) -> tuple[str, str] | None:
+    """Return ``(owner/repo, version)`` for *ref* or None when out of scope."""
+    if ref.startswith("./") or ref.startswith("../"):
+        return None
+    if ref.startswith("docker://"):
+        return None
+    if "@" not in ref:
+        return None
+    owner_repo, _, rev = ref.rpartition("@")
+    if not owner_repo or "/" not in owner_repo or not rev:
+        return None
+    if _FULL_SHA_RE.match(rev) and tag_comment:
+        return owner_repo, tag_comment
+    return owner_repo, rev
+
+
+def parse_transient_uv_run(repo_root: Path) -> list[Dependency]:
+    """Return PyPI dependencies pinned through ``uv run --with pkg==ver``.
+
+    Scans executable inputs only -- ``.github/workflows/**/*.{yml,yaml}``
+    and ``scripts/**/*.{sh,py}``. Markdown prose under ``docs/`` (and
+    elsewhere) is intentionally excluded so a README or runbook example
+    cannot create noisy findings (per #176 completion check).
+
+    Range specifiers (``>=``, ``~=``), shell-variable expansions
+    (``${VAR}``), and placeholders such as ``<pin>`` are silently
+    skipped: only literal ``name==version`` pins survive the regex.
+    """
+    deps: list[Dependency] = []
+    for path in _iter_executable_inputs(repo_root):
+        text = path.read_text(encoding="utf-8", errors="ignore")
+        source = str(path)
+        for match in _UV_WITH_EXACT_PIN.finditer(text):
+            deps.append(
+                Dependency(
+                    name=match.group("name"),
+                    version=match.group("version"),
+                    ecosystem=ECOSYSTEM_PYPI,
+                    source=source,
+                )
+            )
+    return deps
+
+
+def _iter_executable_inputs(repo_root: Path) -> list[Path]:
+    """Return the sorted list of executable-input files scanned for ``uv run``."""
+    candidates: list[Path] = []
+    workflow_dir = repo_root / WORKFLOW_SUBDIR
+    if workflow_dir.is_dir():
+        for path in workflow_dir.rglob("*"):
+            if path.is_file() and path.suffix in (".yml", ".yaml"):
+                candidates.append(path)
+    scripts_dir = repo_root / SCRIPTS_SUBDIR
+    if scripts_dir.is_dir():
+        for path in scripts_dir.rglob("*"):
+            if path.is_file() and path.suffix in (".sh", ".py"):
+                candidates.append(path)
+    return sorted(candidates)
 
 
 def fetch_external_findings(

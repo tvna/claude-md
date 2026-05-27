@@ -150,6 +150,218 @@ class TestDependencyDiscovery:
             triage.Dependency("pytest", "8.3.5", "PyPI", str(tmp_path / "uv.lock")),
         ]
 
+    def test_parse_workflow_actions_sha_pinned_uses_tag_comment(
+        self, tmp_path: Path
+    ) -> None:
+        workflow_dir = tmp_path / ".github" / "workflows"
+        workflow_dir.mkdir(parents=True)
+        workflow = workflow_dir / "ci.yml"
+        workflow.write_text(
+            "jobs:\n"
+            "  build:\n"
+            "    steps:\n"
+            "      - uses: actions/checkout@"
+            "abcdef0123456789abcdef0123456789abcdef01 # v4.2.0\n"
+            "      - uses: actions/setup-python@v5\n",
+            encoding="utf-8",
+        )
+
+        deps = triage.parse_workflow_actions(tmp_path)
+
+        assert deps == [
+            triage.Dependency(
+                "actions/checkout",
+                "v4.2.0",
+                triage.ECOSYSTEM_ACTIONS,
+                str(workflow),
+            ),
+            triage.Dependency(
+                "actions/setup-python",
+                "v5",
+                triage.ECOSYSTEM_ACTIONS,
+                str(workflow),
+            ),
+        ]
+
+    def test_parse_workflow_actions_sha_without_tag_falls_back_to_sha(
+        self, tmp_path: Path
+    ) -> None:
+        workflow_dir = tmp_path / ".github" / "workflows"
+        workflow_dir.mkdir(parents=True)
+        workflow = workflow_dir / "ci.yml"
+        sha = "abcdef0123456789abcdef0123456789abcdef01"
+        workflow.write_text(
+            f"jobs:\n  build:\n    steps:\n      - uses: actions/checkout@{sha}\n",
+            encoding="utf-8",
+        )
+
+        deps = triage.parse_workflow_actions(tmp_path)
+
+        assert deps == [
+            triage.Dependency(
+                "actions/checkout", sha, triage.ECOSYSTEM_ACTIONS, str(workflow)
+            ),
+        ]
+
+    def test_parse_workflow_actions_skips_local_and_docker(
+        self, tmp_path: Path
+    ) -> None:
+        workflow_dir = tmp_path / ".github" / "workflows"
+        workflow_dir.mkdir(parents=True)
+        workflow = workflow_dir / "ci.yml"
+        workflow.write_text(
+            "jobs:\n"
+            "  build:\n"
+            "    steps:\n"
+            "      - uses: ./.github/workflows/reusable.yml\n"
+            "      - uses: ../local/composite.yml\n"
+            "      - uses: docker://example.com/image:tag\n"
+            "      - uses: owner/action@v1\n",
+            encoding="utf-8",
+        )
+
+        deps = triage.parse_workflow_actions(tmp_path)
+
+        assert deps == [
+            triage.Dependency(
+                "owner/action", "v1", triage.ECOSYSTEM_ACTIONS, str(workflow)
+            ),
+        ]
+
+    def test_parse_workflow_actions_skips_comment_lines(
+        self, tmp_path: Path
+    ) -> None:
+        workflow_dir = tmp_path / ".github" / "workflows"
+        workflow_dir.mkdir(parents=True)
+        workflow = workflow_dir / "ci.yml"
+        workflow.write_text(
+            "# - uses: actions/forbidden-example@v1\n"
+            "jobs:\n"
+            "  build:\n"
+            "    steps:\n"
+            "      - uses: actions/real@v2\n",
+            encoding="utf-8",
+        )
+
+        deps = triage.parse_workflow_actions(tmp_path)
+
+        assert deps == [
+            triage.Dependency(
+                "actions/real", "v2", triage.ECOSYSTEM_ACTIONS, str(workflow)
+            ),
+        ]
+
+    def test_parse_transient_uv_run_captures_exact_pin(
+        self, tmp_path: Path
+    ) -> None:
+        workflow_dir = tmp_path / ".github" / "workflows"
+        workflow_dir.mkdir(parents=True)
+        workflow = workflow_dir / "ci.yml"
+        workflow.write_text(
+            "jobs:\n"
+            "  build:\n"
+            "    steps:\n"
+            '      - run: uv run --with "apm-cli==0.5.0" apm compile\n',
+            encoding="utf-8",
+        )
+
+        deps = triage.parse_transient_uv_run(tmp_path)
+
+        assert deps == [
+            triage.Dependency(
+                "apm-cli", "0.5.0", triage.ECOSYSTEM_PYPI, str(workflow)
+            ),
+        ]
+
+    def test_parse_transient_uv_run_scans_scripts(self, tmp_path: Path) -> None:
+        scripts_dir = tmp_path / "scripts"
+        scripts_dir.mkdir(parents=True)
+        script = scripts_dir / "bootstrap.sh"
+        script.write_text(
+            "#!/bin/sh\n"
+            "uv run --with cowsay==6.1 cowsay hi\n",
+            encoding="utf-8",
+        )
+
+        deps = triage.parse_transient_uv_run(tmp_path)
+
+        assert deps == [
+            triage.Dependency(
+                "cowsay", "6.1", triage.ECOSYSTEM_PYPI, str(script)
+            ),
+        ]
+
+    def test_parse_transient_uv_run_ignores_shell_vars_and_ranges(
+        self, tmp_path: Path
+    ) -> None:
+        workflow_dir = tmp_path / ".github" / "workflows"
+        workflow_dir.mkdir(parents=True)
+        workflow = workflow_dir / "ci.yml"
+        workflow.write_text(
+            "jobs:\n"
+            "  build:\n"
+            "    steps:\n"
+            '      - run: uv run --with "apm-cli==${APM_CLI_VERSION}" apm compile\n'
+            '      - run: uv run --with "apm-cli==<pin>" apm compile\n'
+            '      - run: uv run --with "ruff>=0.5,<0.6" ruff check\n'
+            '      - run: uv run --with "polars~=1.0" python -c "import polars"\n',
+            encoding="utf-8",
+        )
+
+        assert triage.parse_transient_uv_run(tmp_path) == []
+
+    def test_parse_transient_uv_run_ignores_non_executable_prose(
+        self, tmp_path: Path
+    ) -> None:
+        # Per #176: README / runbook prose is not an executable input.
+        docs_dir = tmp_path / "docs"
+        docs_dir.mkdir(parents=True)
+        (docs_dir / "note.md").write_text(
+            "Run `uv run --with apm-cli==9.9.9 apm compile` to repro.\n",
+            encoding="utf-8",
+        )
+        (tmp_path / "README.md").write_text(
+            "Quick start: `uv run --with apm-cli==9.9.9 apm compile`.\n",
+            encoding="utf-8",
+        )
+
+        assert triage.parse_transient_uv_run(tmp_path) == []
+
+    def test_discover_dependencies_includes_workflow_actions_and_transient(
+        self, tmp_path: Path
+    ) -> None:
+        (tmp_path / "uv.lock").write_text(
+            '[[package]]\nname = "pytest"\nversion = "8.3.5"\n',
+            encoding="utf-8",
+        )
+        workflow_dir = tmp_path / ".github" / "workflows"
+        workflow_dir.mkdir(parents=True)
+        workflow = workflow_dir / "ci.yml"
+        workflow.write_text(
+            "jobs:\n"
+            "  build:\n"
+            "    steps:\n"
+            "      - uses: actions/checkout@"
+            "abcdef0123456789abcdef0123456789abcdef01 # v4.2.0\n"
+            '      - run: uv run --with apm-cli==0.5.0 apm compile\n',
+            encoding="utf-8",
+        )
+
+        deps = triage.discover_dependencies(tmp_path)
+
+        assert triage.Dependency(
+            "actions/checkout",
+            "v4.2.0",
+            triage.ECOSYSTEM_ACTIONS,
+            str(workflow),
+        ) in deps
+        assert triage.Dependency(
+            "apm-cli", "0.5.0", triage.ECOSYSTEM_PYPI, str(workflow)
+        ) in deps
+        assert triage.Dependency(
+            "pytest", "8.3.5", triage.ECOSYSTEM_PYPI, str(tmp_path / "uv.lock")
+        ) in deps
+
 
 class TestExternalFindings:
     def test_parse_kev_cves(self) -> None:
