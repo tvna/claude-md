@@ -43,6 +43,7 @@ import ruleset_drift
 import rulesets_apply
 import scan_apm_portability
 import scan_design_philosophy_drift
+import scan_maintainability_metrics
 import scan_non_ascii
 import scan_preflight_drift
 import scan_retro_followup_drift
@@ -113,6 +114,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("rulesets_apply.py", "auto-delete"): "test_rulesets_apply_plan_and_auto_delete_match_workflow_args",
     ("scan_apm_portability.py", "verify"): "test_scan_apm_portability_verify_matches_workflow_paths",
     ("scan_design_philosophy_drift.py", "verify"): "test_scan_design_philosophy_drift_verify_matches_workflow_paths",
+    ("scan_maintainability_metrics.py", "verify"): "test_scan_maintainability_metrics_verify_matches_workflow_args",
     ("scan_non_ascii.py", "run"): "test_scan_non_ascii_run_matches_workflow_env",
     ("scan_preflight_drift.py", "verify"): "test_scan_preflight_drift_verify_matches_workflow_args",
     ("scan_retro_followup_drift.py", "run"): "test_scan_retro_followup_drift_run_matches_workflow_env",
@@ -725,6 +727,12 @@ def test_scan_workflow_action_pins_verify_matches_workflow_args() -> None:
     """Mirrors the ``Assert workflows pin actions to SHA + tag comment``
     step in ``.github/workflows/verify-agents.yml``."""
     assert scan_workflow_action_pins.main(["verify", "--repo-root", "."]) == 0
+
+
+def test_scan_maintainability_metrics_verify_matches_workflow_args() -> None:
+    """Mirrors the ``Assert script maintainability metrics`` step in
+    ``.github/workflows/verify-agents.yml``."""
+    assert scan_maintainability_metrics.main(["verify", "--repo-root", "."]) == 0
 
 
 def test_scan_workflow_pip_verify_matches_workflow_args() -> None:

@@ -60,6 +60,9 @@ jobs:
       - name: Assert workflows pin actions to SHA + tag comment
         run: uv run python scripts/scan_workflow_action_pins.py verify
 
+      - name: Assert script maintainability metrics
+        run: uv run python scripts/scan_maintainability_metrics.py verify
+
       - name: Verify .apm checksum lockfile
         run: uv run python scripts/verify_apm_checksums.py verify
 
