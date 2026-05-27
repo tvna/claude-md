@@ -4,7 +4,7 @@
 Resolves the primary owner from ``.github/CODEOWNERS``, looks up that
 handle in ``.github/owners.yaml`` (ISO-639-1 code), and emits a
 ``hookSpecificOutput.additionalContext`` block telling the model to
-write plan-mode artifacts (plan files at ``/root/.claude/plans/*.md``
+write plan-mode artifacts (plan files at ``/tmp/claude-plans/*.md``
 and chat responses while planning) in that language.
 
 The injected context explicitly carves out GitHub posts via
@@ -142,7 +142,7 @@ def build_context_message(owner: str, iso: str) -> str:
     return (
         f"Repository language policy (sourced from .github/CODEOWNERS "
         f"primary owner {owner} -> .github/owners.yaml). While in plan "
-        f"mode, you MUST write plan files at /root/.claude/plans/*.md "
+        f"mode, you MUST write plan files at /tmp/claude-plans/*.md "
         f"AND chat responses in language code '{iso}'; this SessionStart "
         f"injection is the authoritative source and MUST NOT be "
         f"overridden by an English default. If you draft any portion in "

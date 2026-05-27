@@ -152,7 +152,7 @@ class TestResolveLanguage:
 class TestBuildContextMessage:
     def test_contains_plan_path_and_iso(self) -> None:
         msg = plc.build_context_message("@tvna", "ja")
-        assert "/root/.claude/plans/" in msg
+        assert "/tmp/claude-plans/" in msg
         assert "'ja'" in msg
         assert "@tvna" in msg
 
