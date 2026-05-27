@@ -36,13 +36,23 @@ pythonpath = ["scripts"]
 testpaths = ["tests"]
 
 [tool.coverage.run]
+# Single combined gate per the Coverage graduation policy (#198): the
+# `source` list is additive. New top-level Python packages graduate
+# through the G2 procedure in `docs/standards/workflow-script-quality.md`,
+# which keeps the script-specific floor from #188 intact.
 source = ["scripts"]
 
 [tool.coverage.report]
+# `fail_under` is the authoritative blocking gate (#188); Codecov status
+# remains informational only. Graduation PRs may raise this floor but
+# never lower it (G4 invariant in workflow-script-quality.md, #198).
 fail_under = 92.71
 show_missing = true
 # No scripts are omitted: the initial threshold is the measured baseline from
 # the full test suite, so every runtime script remains visible in CI output.
+# Future exclusions follow the G3 category list in
+# `docs/standards/workflow-script-quality.md` and must carry an inline
+# rationale here (#198).
 
 [tool.ruff]
 # Lint gate (#192). Scope is intentional: only the Python we ship and its
