@@ -73,10 +73,25 @@ These labels are applied by the `Threat intelligence triage` workflow. They do n
 | `threat:intel-needed` | Collect threat intelligence before routing or implementation. |
 | `threat:response-needed` | Security response is required; do not open an autonomous PR before investigation. |
 
-The deterministic rule lives in `scripts/threat_intel_triage.py`. The workflow extracts locked PyPI dependencies from `uv.lock` (plus exact pins in `pyproject.toml`) and consults five external sources plus one supplemental enrichment layer:
+The deterministic rule lives in `scripts/threat_intel_triage.py`. The workflow extracts every repository-local dependency surface and consults five external sources plus one supplemental enrichment layer.
 
-- **OSV.dev** — aggregator queried for vulnerabilities that affect each package version.
-- **GitHub Advisory Database** — queried directly via `api.github.com/advisories` (`--ghsa-live`) so reviewed, unreviewed, and malware advisories preserve source attribution alongside OSV. GitHub Actions enumeration is deferred to [#176](https://github.com/tvna/claude-md/issues/176).
+### Repository-local dependency surfaces
+
+`discover_dependencies` in `scripts/threat_intel_triage.py` walks the following inputs. Non-executable prose (Markdown under `docs/`, `README*.md`, `AGENTS.md`) is intentionally excluded so a runbook example cannot create noisy findings.
+
+| Surface | Source | Records |
+|---|---|---|
+| Locked PyPI graph | `uv.lock` | every transitive `[[package]]` entry |
+| Direct PyPI pins | `pyproject.toml` (`project.dependencies`, `dependency-groups.*`) | exact `name==version` entries only; ranges are ignored |
+| GitHub Actions | `.github/workflows/**/*.{yml,yaml}` `uses:` lines | `owner/repo@<ref>`; for SHA-pinned references the trailing `# <tag>` comment supplies the version so OSV correlates against the released tag |
+| Transient PyPI pins | `.github/workflows/**/*.{yml,yaml}` and `scripts/**/*.{sh,py}` `uv run --with <pkg>==<ver>` | only literal `name==version` invocations; shell-variable expansions, placeholders, and range specifiers are silently skipped |
+
+Local in-repo workflow references (`./...`) and `docker://...` OCI images are out of scope: the former carry no upstream version surface, the latter are gated by digest pinning under `scripts/scan_workflow_action_pins.py`.
+
+### External sources
+
+- **OSV.dev** — aggregator queried for vulnerabilities that affect each package version. Covers PyPI (`uv.lock`, `pyproject.toml`, `uv run --with` transient pins) **and** the `GitHub Actions` ecosystem (workflow `uses:` references).
+- **GitHub Advisory Database** — queried directly via `api.github.com/advisories` (`--ghsa-live`) so reviewed, unreviewed, and malware advisories preserve source attribution alongside OSV. Ecosystems without a GHSA mapping (currently anything other than PyPI) are silently skipped at the GHSA stage; correlation for the GitHub Actions surface relies on OSV.
 - **OSSF malicious-packages** — queried via `api.osv.dev/v1/query` (`--malpkg-live`) per dependency with the version field omitted, keeping only IDs prefixed `MAL-` (the OSSF malicious-packages syndication channel on OSV.dev). This is the documented stable access path for the corpus; matching is **name-only** (case-insensitive within ecosystem) so newly introduced typosquats and maintainer-takeover releases register even when the locked version is not itself flagged.
 - **CISA KEV** — fetched to correlate any OSV, GHSA, or OSSF finding whose ID or aliases appear in the known-exploited catalog.
 - **FIRST EPSS** — queried via `api.first.org/data/v1/epss` (`--epss-live`) for CVE-aliased findings. Provides an exploit-prediction score (0.0-1.0) and percentile rank so reviewers can prioritize CVEs that KEV has not (yet) confirmed as exploited. Per [#173](https://github.com/tvna/claude-md/issues/173) EPSS is **advisory-only**: scores enrich the summary table but never escalate `threat:response-needed` on their own. CISA KEV remains the authoritative known-exploitation signal; the rationale for not adding an EPSS threshold here is recorded below.
