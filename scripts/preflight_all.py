@@ -148,6 +148,13 @@ STEPS: tuple[Step, ...] = (
         argv=("python3", "scripts/scan_preflight_drift.py", "verify"),
     ),
     Step(
+        # Refs #492. Also wired via .pre-commit-config.yaml pre-push stage;
+        # mirroring here keeps the single ``preflight_all.py`` entrypoint
+        # truthful for contributors who use only the .githooks/pre-push hook.
+        name="preflight_pr_single_commit",
+        argv=("python3", "scripts/preflight_pr_single_commit.py"),
+    ),
+    Step(
         name="verify_ruleset_sync",
         argv=(
             "python3",
