@@ -29,6 +29,7 @@ import re
 from pathlib import Path
 from typing import Any, NamedTuple
 
+import analyze_ci_timings
 import auto_retro
 import body_policy
 import branch_cleanup
@@ -91,6 +92,7 @@ class WorkflowInvocation(NamedTuple):
 # ``_iter_workflow_invocations`` observes -- the two drift tests below
 # enforce that in both directions.
 CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
+    ("analyze_ci_timings.py", None): "test_analyze_ci_timings_matches_workflow_args",
     ("auto_retro.py", "run"): "test_auto_retro_run_matches_workflow_env",
     ("auto_retro.py", "sentinel"): "test_auto_retro_sentinel_matches_workflow_env",
     ("body_policy.py", "verify"): "test_body_policy_verify_matches_workflow_body_file",
@@ -810,6 +812,57 @@ def test_title_policy_verify_matches_workflow_kind_env(
     monkeypatch.setenv("TITLE", "fix(ci): ascii title")
 
     assert title_policy.main(["verify", "--kind", "pull_request"]) == 0
+
+
+def test_analyze_ci_timings_matches_workflow_args(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Mirror the argv shape used by measure-lint-pytest-timings.yml.
+
+    The workflow shells to
+    ``uv run python scripts/analyze_ci_timings.py --jobs jobs/
+    --workflow "Verify agent instructions" --title "..."``. Exercise the
+    same shape against a minimal jobs/ fixture so the contract pins the
+    flag-only invocation (no subcommand). Refs #552.
+    """
+    jobs_dir = tmp_path / "jobs"
+    jobs_dir.mkdir()
+    (jobs_dir / "1.json").write_text(
+        json.dumps(
+            {
+                "jobs": [
+                    {
+                        "name": "lint-scripts-static",
+                        "workflow_name": "Verify agent instructions",
+                        "started_at": "2026-05-27T12:00:00Z",
+                        "completed_at": "2026-05-27T12:01:00Z",
+                        "steps": [
+                            {
+                                "name": "Checkout repository",
+                                "started_at": "2026-05-27T12:00:00Z",
+                                "completed_at": "2026-05-27T12:00:10Z",
+                            }
+                        ],
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    rc = analyze_ci_timings.main(
+        [
+            "--jobs",
+            str(jobs_dir),
+            "--workflow",
+            "Verify agent instructions",
+            "--title",
+            "verify-agents.yml timings (weekly)",
+        ]
+    )
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "verify-agents.yml timings (weekly)" in out
 
 
 def test_verify_test_shard_markers_matches_workflow_args(tmp_path: Path) -> None:
