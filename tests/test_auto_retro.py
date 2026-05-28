@@ -3594,6 +3594,24 @@ class TestDecisionTree:
         assert out.startswith("flowchart TD\n")
         assert "compute_repair_signals" in out
 
+    def test_decision_tree_markdown_wraps_generated_mermaid(self) -> None:
+        text = ar.render_decision_tree_markdown()
+        assert text.startswith("# Auto-retro decision tree\n")
+        assert "```mermaid\nflowchart TD\n" in text
+        assert "compute_repair_signals" in text
+        assert text.endswith("```\n")
+
+    def test_decision_tree_doc_cli_writes_markdown(self, tmp_path: Path) -> None:
+        output = tmp_path / "tree.md"
+
+        assert ar.main(["decision-tree-doc", "--output", str(output)]) == 0
+
+        assert output.read_text(encoding="utf-8") == ar.render_decision_tree_markdown()
+
+    def test_checked_in_decision_tree_doc_is_current(self) -> None:
+        path = Path("docs/generated/auto-retro-decision-tree.md")
+        assert path.read_text(encoding="utf-8") == ar.render_decision_tree_markdown()
+
 
 class TestCLI:
     def test_run_reads_event_file_and_creates(
