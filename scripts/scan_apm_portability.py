@@ -7,7 +7,7 @@ are intended to be referenced standalone from downstream projects. This
 script is the deterministic gate the PR #229 repair loop identified as
 missing.
 
-Invoked from ``.github/workflows/verify-apm-portability.yml`` as
+Invoked from ``.github/workflows/portable-pr-policy.yml`` as
 ``python3 scripts/scan_apm_portability.py verify --path <file> ...``.
 
 The contract is:
