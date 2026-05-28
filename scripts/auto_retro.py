@@ -116,6 +116,14 @@ _RESULT_PASSING_PREFIXES: tuple[str, ...] = (
     "all hooks",
     "all checks",
     "all tests",
+    # Successful verification evidence captured in the #592 corpus.
+    # These are proof that the operator ran a check and observed the
+    # expected passing state, not repair rows. Refs #593.
+    "compilation completed successfully",
+    "required test coverage",
+    "parses",
+    "shows",
+    "matches",
 )
 
 # Pure numeric result (e.g., a count from `grep -c` or `wc -l`). The
@@ -144,6 +152,19 @@ _RESULT_PASSING_COUNT_RE = re.compile(r"^\d+\s+passed\b", re.IGNORECASE)
 # Trailing `ok` word marker: `yaml syntax ok`, `config ok.`. Word
 # boundary keeps `not ok` and `lookup` out of the match. Refs #453.
 _RESULT_PASSING_TRAILING_OK_RE = re.compile(r"\bok\b\.?\s*$", re.IGNORECASE)
+
+# Verification prose that records an expected absence, a confined diff,
+# or an intentional-only hit is passing evidence. Kept as a narrow
+# allowlist from the #592 corpus so arbitrary free-form prose remains a
+# failure signal. Refs #593.
+_RESULT_PASSING_EVIDENCE_RE = re.compile(
+    r"^(?:\d+:|\(no hits\)|no matches|only the intentional|"
+    r"one commit on the branch|"
+    r".*\|\s*\d+\s+\+|"
+    r".*\b(?:exit 0|exits 0|ascii-clean|0 deletions|0 matches|"
+    r"non_ascii=\s*0|\d+\s+passed)\b)",
+    re.IGNORECASE,
+)
 
 # Explicit failure-count marker that must NOT be treated as passing even
 # if the rest of the string smells like a pass (`0 passed, 3 failed`).
@@ -385,6 +406,8 @@ def _result_is_passing(result: str) -> bool:
     if _RESULT_PASSING_COUNT_RE.match(text):
         return True
     if _RESULT_PASSING_TRAILING_OK_RE.search(text):
+        return True
+    if _RESULT_PASSING_EVIDENCE_RE.match(text):
         return True
     lower = text.lower()
     return any(lower.startswith(prefix) for prefix in _RESULT_PASSING_PREFIXES)
@@ -2265,12 +2288,12 @@ def run(event: dict[str, Any], repo: str) -> int:
     if (
         not has_inline_comments
         and not check_runs_unknown
-        and _has_only_exempt_policy_artifact_rows(repair_rows)
+        and (not repair_rows or _has_only_exempt_policy_artifact_rows(repair_rows))
     ):
-        msg = (
-            "only policy-artifact repair rows generated "
-            f"({signal_summary})"
-        )
+        if repair_rows:
+            msg = f"only policy-artifact repair rows generated ({signal_summary})"
+        else:
+            msg = f"no standalone repair workload ({signal_summary})"
         print(f"skip: {msg}")
         _append_summary(_build_summary(pr, "skip", msg))
         return 0
