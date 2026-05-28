@@ -20,6 +20,45 @@ feature, enter the matching Nix shell, and run:
 uv sync --locked --group local
 ```
 
+## Runtime
+
+Podman is the supported local runtime for these devcontainers. VS Code's
+Dev Containers extension still names the compatibility setting
+`dev.containers.dockerPath`; this repository sets that workspace value to
+`podman` in `claude-md.code-workspace`.
+
+Use the checked-in workspace file when opening the repository:
+
+```sh
+code claude-md.code-workspace
+```
+
+If you open the folder directly instead of the workspace file, set the
+same value in VS Code user or workspace settings:
+
+```json
+{
+  "dev.containers.dockerPath": "podman"
+}
+```
+
+The Dev Containers extension talks to container engines through a CLI
+compatibility surface. The VS Code documentation calls out Podman 5+ as
+mostly compatible with Docker CLI commands and instructs users to set
+`dev.containers.dockerPath` to `podman` for Linux, Windows, or macOS:
+<https://code.visualstudio.com/remote/advancedcontainers/docker-options#_podman>.
+
+On macOS or Windows, start the Podman VM before opening the container:
+
+```sh
+podman machine start
+podman info
+```
+
+Do not depend on Docker Desktop for this repository's devcontainer
+workflow. If VS Code reports Docker-oriented wording, treat it as Dev
+Containers compatibility terminology, not a Docker runtime requirement.
+
 ## Nix version management
 
 `flake.nix` is the source of truth for container-visible tools. Shared
@@ -67,6 +106,13 @@ TCP ports `22`, `80`, and `443` to those IPs, plus DNS to the container
 resolver. It requires `NET_ADMIN`; the devcontainer entrypoints request
 that capability through `runArgs`.
 
+Rootless Podman can vary by host OS and Podman machine settings. If
+allowlist application fails with a capability, iptables, or netfilter
+error, first confirm that the Podman machine grants the requested
+`NET_ADMIN` capability. Use `DEVCONTAINER_APPLY_EGRESS_ALLOWLIST=0` only
+for diagnosis, then update the allowlist or runtime notes in a reviewed
+PR with the observed failure mode.
+
 Set `DEVCONTAINER_APPLY_EGRESS_ALLOWLIST=0` before container start only
 for diagnosis. Any persistent broad exception needs a reviewed update to
 the allowlist file with rationale.
@@ -94,11 +140,13 @@ uv run --group local pytest -n auto
 Do not change CI to xdist unless the sharding and coverage gates are
 updated in the same PR.
 
-When Docker is unavailable, run the static checks on the host:
+When Podman or the Dev Containers extension is unavailable, run the
+static checks on the host:
 
 ```sh
 nix flake check
 python3 -m json.tool .devcontainer/claude/devcontainer.json
 python3 -m json.tool .devcontainer/codex/devcontainer.json
+python3 -m json.tool claude-md.code-workspace
 bash -n .devcontainer/scripts/apply-egress-allowlist.sh
 ```
