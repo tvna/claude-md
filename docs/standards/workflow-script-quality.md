@@ -130,7 +130,7 @@ documented contracts, not ad-hoc stdout parsing:
 
 Reference: `.github/workflows/apply-rulesets.yml` passes
 `--summary-file "$GITHUB_STEP_SUMMARY"`;
-`.github/workflows/branch-cleanup.yml` passes both
+`.github/workflows/weekly-maintenance.yml` passes both
 `--github-output "${GITHUB_OUTPUT}"` and writes the step summary via
 shell redirection.
 
@@ -146,7 +146,7 @@ Read-only gates (the `verify-*.yml` family) do not need a dry-run
 mode; they are already non-mutating by construction.
 
 Reference: `.github/workflows/apply-rulesets.yml` and
-`.github/workflows/branch-cleanup.yml` both default `dry_run` to
+`.github/workflows/weekly-maintenance.yml` both default `dry_run` to
 `true`; `scripts/rulesets_apply.py` and `scripts/branch_cleanup.py`
 honour the flag.
 
@@ -506,7 +506,7 @@ script-specific gate (#188) is never weakened by the expansion (#198).
 ### G1. Current footprint
 
 The coverage gate of record is `[tool.coverage.report].fail_under` in
-`pyproject.toml`, enforced by `.github/workflows/coverage.yml` via
+`pyproject.toml`, enforced by `.github/workflows/post-merge.yml` via
 `pytest --cov-fail-under=<value>`. The measured tree is
 `[tool.coverage.run].source = ["scripts"]` because every Python
 runtime module in this repository currently lives under `scripts/`

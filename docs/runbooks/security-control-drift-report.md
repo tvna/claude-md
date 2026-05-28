@@ -1,7 +1,7 @@
 # Security control drift report — Runbook
 
 Operator-facing companion to
-[`.github/workflows/security-control-drift-report.yml`](../.github/workflows/security-control-drift-report.yml)
+[`.github/workflows/weekly-maintenance.yml`](../.github/workflows/weekly-maintenance.yml)
 and [`scripts/security_drift_report.py`](../scripts/security_drift_report.py).
 Tracks [#180](https://github.com/tvna/claude-md/issues/180) under parent
 [#178](https://github.com/tvna/claude-md/issues/178) (MITRE ATT&CK coverage).
@@ -17,7 +17,7 @@ aggregates the outcomes into a single Markdown table and posts (or updates)
 a rolling comment on the parent tracking issue.
 
 Per-family detectors keep their own gates and own per-family issue-filing
-paths (e.g. `ruleset-drift.yml` continues to file SoT drift / unknown
+paths (e.g. the `ruleset-drift` weekly-maintenance job continues to file SoT drift / unknown
 ruleset issues on the existing weekly cron). This aggregator only reports;
 it never opens a new issue and never auto-remediates.
 
@@ -25,20 +25,17 @@ it never opens a new issue and never auto-remediates.
 
 | Trigger | Cron | Effect |
 |---|---|---|
-| `schedule` | `0 23 * * 0` (UTC) — Mon 08:00 JST | Always assembles the report and updates the rolling comment on #178 (the `dry_run` field is forced to `false`). |
-| `workflow_dispatch` | manual | Assembles the report; `dry_run` input defaults to `true` (no comment) so an operator can preview the table in the step summary before publishing. |
+| `schedule` | `0 20 * * 0` (UTC) -- Mon 05:00 JST | Always assembles the report and updates the rolling comment on #178 (the dry-run field is forced to `false`). |
+| `workflow_dispatch` | manual | Select `task=security-control-drift`; the `security_control_dry_run` input defaults to `true` (no comment) so an operator can preview the table in the step summary before publishing. |
 
-Cron offset rationale: `branch-cleanup.yml` runs at `0 20 * * 0` and
-`ruleset-drift.yml` at `0 21 * * 0`. The aggregator is scheduled at
-`0 23 * * 0` so the detectors it reads (notably `uv_pin.py stale`, which
-calls `astral-sh/uv` release API) are not contending with the ruleset
-detection step.
+The weekly maintenance workflow intentionally runs these jobs on the same
+JST Monday 05:00 trigger to reduce scheduled workflow sprawl.
 
 ## Families covered
 
 | Family | Detector entry point | Notes |
 |---|---|---|
-| `rulesets` | `scripts/ruleset_drift.py detect` | Requires `RULESETS_PAT` (read-only PAT, same secret as `ruleset-drift.yml`). Outputs `drift_count` / `unknown_count`. |
+| `rulesets` | `scripts/ruleset_drift.py detect` | Requires `RULESETS_PAT` (read-only PAT, same secret as the `ruleset-drift` job). Outputs `drift_count` / `unknown_count`. |
 | `labels` | `scripts/labels_apply.py plan` | Uses `GITHUB_TOKEN` (metadata read suffices). Summary file is parsed for `plan-only` / `report-only` rows. |
 | `apm-instructions` | `apm compile` + `git diff --exit-code -- CLAUDE.md AGENTS.md` | Compile is pinned via `APM_CLI_VERSION` env (`0.12.1`) and `uv run --with apm-cli==<pin> --exclude-newer "14 days"` to suppress transient drift, mirroring `verify-apm-drift.yml`. |
 | `uv-pin-literal` | `scripts/uv_pin.py drift` | Asserts the pin literal lives only in `pyproject.toml`. |
@@ -64,8 +61,8 @@ detection step.
 
 ## Dry-run preview
 
-1. Go to **Actions → Security control drift report → Run workflow**.
-2. Leave `dry_run` as `true` (default).
+1. Go to **Actions -> Weekly maintenance -> Run workflow**.
+2. Select `task=security-control-drift` and leave `security_control_dry_run` as `true` (default).
 3. After the run completes, open the run page and read the **Summary** tab
    — the assembled Markdown table is appended to `$GITHUB_STEP_SUMMARY`.
 4. Confirm the table rows look as expected. No comment is posted on #178
@@ -75,7 +72,7 @@ detection step.
 
 | Row | Where to act |
 |---|---|
-| `rulesets` | Follow the per-family issue filed by `ruleset-drift.yml` (SoT-vs-live drift or unknown-ruleset). See `docs/runbooks/rulesets.md`. |
+| `rulesets` | Follow the per-family issue filed by the `ruleset-drift` weekly-maintenance job (SoT-vs-live drift or unknown-ruleset). See `docs/runbooks/rulesets.md`. |
 | `labels` | Dispatch `apply-labels.yml` with `dry_run=false` after reviewing the plan summary. See `docs/runbooks/issue-triage.md`. |
 | `apm-instructions` | Locally run `uv run --with "apm-cli==<pin>" --exclude-newer "14 days" apm compile` and commit the regenerated `CLAUDE.md` / `AGENTS.md`. |
 | `uv-pin-literal` | Remove the offending pin literal outside `pyproject.toml`, or update `pyproject.toml`. See `docs/standards/remote-environment.md`. |
@@ -90,5 +87,5 @@ detector failure does not hide the status of the remaining families.
 
 The aggregator is read-only and idempotent — it only `GET`s detector
 outputs and `PATCH`es / `POST`s a single comment on a tracking issue. To
-roll back, disable the workflow via **Actions → Security control drift
-report → Disable workflow**; no repository state changes need reverting.
+roll back, disable the workflow via **Actions -> Weekly maintenance -> Disable
+workflow**; no repository state changes need reverting.

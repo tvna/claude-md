@@ -133,7 +133,7 @@ class TestComputeMissing:
         assert vrs.compute_missing({"a", "b", "c"}, {"a"}) == {"b", "c"}
 
     def test_live_ahead_is_ignored(self) -> None:
-        # full drift is owned by ruleset-drift.yml; this gate ignores it.
+        # full drift is owned by weekly-maintenance.yml; this gate ignores it.
         assert vrs.compute_missing({"a"}, {"a", "b"}) == set()
 
     def test_disjoint(self) -> None:

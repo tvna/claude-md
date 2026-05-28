@@ -4421,7 +4421,7 @@ def test_sentinel_workflow_file_exists_and_runs_sentinel_subcommand() -> None:
     assert "schedule:" in text
     # The label-touching pull-requests permission must NOT be granted:
     # the sentinel only acts on retro issues and the source-PR label was
-    # already applied by .github/workflows/auto-retro.yml.
+    # already applied by .github/workflows/post-merge.yml.
     assert "pull-requests: write" not in text
 
 

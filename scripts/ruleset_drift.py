@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Ruleset drift detection helpers (extracted from .github/workflows/ruleset-drift.yml).
+"""Ruleset drift detection helpers (invoked from .github/workflows/weekly-maintenance.yml).
 
 Pure functions classify SoT-vs-live rulesets and render the Markdown bodies that
 the workflow uses for `$GITHUB_STEP_SUMMARY` and `gh issue create --body-file`.

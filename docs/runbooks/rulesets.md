@@ -213,13 +213,13 @@ Since `bypass_actors` is `[]`, there is no per-actor escape hatch. To make a sin
 6. **Audit log review**: confirm exactly two `repository_ruleset.update` entries (disable → enable) per the [Post-apply audit log review](#post-apply-audit-log-review) procedure, plus the emergency mutation in between. Any extra entry signals tampering.
 7. **Record** the disable window (start/end timestamps), the emergency action taken, and the audit log evidence in the incident issue body.
 
-Prefer this disable / re-enable procedure over re-introducing a bypass actor — it leaves explicit `repository_ruleset.update` events in the audit log and is detected by `ruleset-drift.yml` (cron) if step 4 is forgotten.
+Prefer this disable / re-enable procedure over re-introducing a bypass actor — it leaves explicit `repository_ruleset.update` events in the audit log and is detected by the `ruleset-drift` job in `weekly-maintenance.yml` if step 4 is forgotten.
 
 ## Drift detection
 
-The scheduled workflow `.github/workflows/ruleset-drift.yml` ([#30](https://github.com/tvna/claude-md/issues/30)) diffs each live ruleset returned by `GET /repos/{owner}/{repo}/rulesets` against the matching `.github/rulesets/*.json` SoT file and writes the result to the job summary.
+The `ruleset-drift` job in `.github/workflows/weekly-maintenance.yml` ([#30](https://github.com/tvna/claude-md/issues/30)) diffs each live ruleset returned by `GET /repos/{owner}/{repo}/rulesets` against the matching `.github/rulesets/*.json` SoT file and writes the result to the job summary.
 
-- Schedule: Mondays at 06:00 JST (`cron: "0 21 * * 0"`); also dispatchable manually from the Actions tab. Read-only — no inputs.
+- Schedule: Mondays at 05:00 JST (`cron: "0 20 * * 0"` UTC); also dispatchable manually from the Actions tab with `task=ruleset-drift`. Read-only — no mutation inputs.
 - On SoT-vs-live drift: opens a new issue titled `fix(ruleset-drift): SoT vs live drift detected (YYYY-MM-DD)` with the unified diff in a collapsible block; labels `layer:meta`, `type:fix`; body cites `#30` as the parent.
 - On a live ruleset that has no SoT file (`unknown_ruleset`): opens a separate issue titled `fix(ruleset-drift): unknown ruleset detected (YYYY-MM-DD)` with the same labels.
 - New issue per drift run — no deduplication, no auto-close. Resolve by re-dispatching `Apply rulesets` (drift) or by adding/removing the SoT file (unknown), then close the issue manually.
@@ -229,10 +229,10 @@ Ad-hoc check between scheduled runs: dispatch `Apply rulesets` with `dry_run=tru
 
 ## PR-time required-checks sync gate
 
-The PR-blocking workflow `.github/workflows/verify-ruleset-sync.yml` ([#120](https://github.com/tvna/claude-md/issues/120)) catches the lag window between merging a SoT change that adds a new `required_status_checks` context and dispatching `Apply rulesets` to push it live. While `ruleset-drift.yml` (#30) detects full drift on a weekly cron, this gate runs **on every pull request** and fails if the live `main-protection` ruleset is missing any context declared by the **PR base ref's** `.github/rulesets/main.json`.
+The PR-blocking workflow `.github/workflows/verify-ruleset-sync.yml` ([#120](https://github.com/tvna/claude-md/issues/120)) catches the lag window between merging a SoT change that adds a new `required_status_checks` context and dispatching `Apply rulesets` to push it live. While the `ruleset-drift` job in `weekly-maintenance.yml` (#30) detects full drift on a weekly cron, this gate runs **on every pull request** and fails if the live `main-protection` ruleset is missing any context declared by the **PR base ref's** `.github/rulesets/main.json`.
 
 - Trigger: `pull_request` (`opened`, `edited`, `synchronize`, `reopened`, `ready_for_review`); no `paths:` filter so a PR that does not itself edit the SoT still surfaces pre-existing dispatch debt.
-- Scope: only `required_status_checks[].context` in the lagging-behind direction (live missing what SoT declares). The opposite direction (live ahead of SoT) is full ruleset drift; `ruleset-drift.yml` owns it.
+- Scope: only `required_status_checks[].context` in the lagging-behind direction (live missing what SoT declares). The opposite direction (live ahead of SoT) is full ruleset drift; `weekly-maintenance.yml` owns it.
 - Base-ref SoT, not PR HEAD: fetched via `GET /repos/{repo}/contents/.github/rulesets/main.json?ref=${base_ref}`. A PR that introduces a new context therefore does not self-fail — but every PR opened **after** that one merges will fail until `Apply rulesets` is dispatched.
 - Secret: reuses `RULESETS_PAT` read-only, bound as `GH_TOKEN_API`. The `gate` job is scoped to the `ruleset-verify` GitHub Environment so the secret is reachable from `pull_request` events; the Environment must be configured **without** required-reviewer approval so the gate runs unattended on every PR.
 - Required status check: `Verify ruleset sync / gate` is listed in `main.json`'s `required_status_checks` so the gate blocks merge once it is itself applied to live.

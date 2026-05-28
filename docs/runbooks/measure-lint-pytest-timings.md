@@ -1,6 +1,6 @@
 # Measure verify-agents.yml timings
 
-Operator runbook for [`.github/workflows/measure-lint-pytest-timings.yml`](../../.github/workflows/measure-lint-pytest-timings.yml).
+Operator runbook for the `measure-timings` job in [`.github/workflows/weekly-maintenance.yml`](../../.github/workflows/weekly-maintenance.yml).
 
 ## Purpose
 
@@ -26,20 +26,16 @@ does not open any issue.
 
 | Trigger | Cron | Effect |
 |---|---|---|
-| `schedule` | `0 1 * * 1` (UTC) -- Monday 10:00 JST | Always assembles the report; uploads the artifact and appends the step summary. No issue comment (the input is unset on cron). |
-| `workflow_dispatch` | manual | Same artifact + summary. When `issue_number` is supplied, the workflow additionally posts the report as a comment on that issue. When `cutoff` is supplied (a UTC `YYYY-MM-DD`), the report switches to compare mode: pre-cutoff (baseline) and post-cutoff (post-change) tables side-by-side with a delta p50 column. |
+| `schedule` | `0 20 * * 0` (UTC) -- Monday 05:00 JST | Always assembles the report; uploads the artifact and appends the step summary. No issue comment (the input is unset on cron). |
+| `workflow_dispatch` | manual | Select `task=measure-timings`. Same artifact + summary. When `measure_issue_number` is supplied, the workflow additionally posts the report as a comment on that issue. When `measure_cutoff` is supplied (a UTC `YYYY-MM-DD`), the report switches to compare mode: pre-cutoff (baseline) and post-cutoff (post-change) tables side-by-side with a delta p50 column. |
 
-Cron offset rationale: the Sunday cluster (`branch-cleanup.yml` at
-`0 20 * * 0`, `ruleset-drift.yml` at `0 21 * * 0`,
-`security-control-drift-report.yml` at `0 23 * * 0`) reads from the same
-GitHub REST API surface as this workflow. Shifting to Monday early UTC
-avoids API contention and lands the report inside the JST business-day
-window where reviewers will look at it.
+The timing report now runs with the rest of weekly maintenance at JST Monday
+05:00 to keep weekly scheduled workflow entry points consolidated.
 
 ## Dispatching with an issue number
 
-1. Actions -> "Measure verify-agents.yml timings" -> Run workflow.
-2. Enter the issue number (no leading `#`) in the `issue_number` input.
+1. Actions -> "Weekly maintenance" -> Run workflow.
+2. Select `task=measure-timings` and enter the issue number (no leading `#`) in the `measure_issue_number` input.
 3. After the run completes:
    - the run page Summary tab shows the markdown report,
    - the `ci-timings-report` artifact is downloadable for 90 days,
@@ -58,9 +54,8 @@ landed on `main` (use the merge timestamp's calendar day). Samples with
 baseline column; samples at or after the cutoff go into the post-change
 column.
 
-1. Actions -> "Measure verify-agents.yml timings" -> Run workflow.
-2. Enter the `cutoff` input as `YYYY-MM-DD` (UTC). Optionally enter the
-   `issue_number` to mirror the comment onto a tracking issue.
+1. Actions -> "Weekly maintenance" -> Run workflow.
+2. Select `task=measure-timings` and enter the `measure_cutoff` input as `YYYY-MM-DD` (UTC). Optionally enter `measure_issue_number` to mirror the comment onto a tracking issue.
 3. The report's per-job and per-step tables become
    `pre count | pre p50 | post count | post p50 | delta p50`. The delta
    column carries one of:
@@ -92,7 +87,7 @@ To close issue #545 acceptance criteria AC1 (baseline timing data) and AC7
    exceeded, file the revert decision per #545 AC7.
 4. Reply on the AC1 thread linking the run URL and the resulting
    comment. Update retro #550's "earliest prevention point" column with
-   "compare-mode dispatch of `measure-lint-pytest-timings.yml` before
+   "compare-mode dispatch of `weekly-maintenance.yml` before
    PR open" as the deterministic gate that would have caught the
    missing-baseline repair.
 

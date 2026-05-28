@@ -56,10 +56,10 @@ Same workflow and script as Section 2, dispatched with `prune=true`.
 
 ## 4. Branch cleanup -- survey mode (current)
 
-Workflow: [`.github/workflows/branch-cleanup.yml`](../.github/workflows/branch-cleanup.yml). Script: [`scripts/branch_cleanup.py`](../scripts/branch_cleanup.py). Runbook: [`docs/runbooks/branch-cleanup.md`](../runbooks/branch-cleanup.md).
+Workflow: `branch-cleanup` job in [`.github/workflows/weekly-maintenance.yml`](../.github/workflows/weekly-maintenance.yml). Script: [`scripts/branch_cleanup.py`](../scripts/branch_cleanup.py). Runbook: [`docs/runbooks/branch-cleanup.md`](../runbooks/branch-cleanup.md).
 
 - **Authorizing issue.** [#31](https://github.com/tvna/claude-md/issues/31) (tracking). The current workflow has no live mutation path; the schedule and dispatch surface are both read-only with respect to branches.
-- **Dry-run command.** `gh workflow run branch-cleanup.yml --ref main -f dry_run=true -f min_age_days=60`. Produces the candidate table in `$GITHUB_STEP_SUMMARY` and updates the rolling summary issue per [`docs/runbooks/branch-cleanup.md` Summary issue convention](../runbooks/branch-cleanup.md#summary-issue-convention).
+- **Dry-run command.** `gh workflow run weekly-maintenance.yml --ref main -f task=branch-cleanup -f branch_cleanup_dry_run=true -f branch_cleanup_min_age_days=60`. Produces the candidate table in `$GITHUB_STEP_SUMMARY` and updates the rolling summary issue per [`docs/runbooks/branch-cleanup.md` Summary issue convention](../runbooks/branch-cleanup.md#summary-issue-convention).
 - **Live apply command.** Not implemented. Flipping `dry_run=false` is a no-op; the workflow declares `permissions: contents: read` and contains no `gh api DELETE /git/refs/...` call. See [`docs/runbooks/branch-cleanup.md` Current phase: dry-run only](../runbooks/branch-cleanup.md#current-phase-dry-run-only).
 - **Rollback path.** Not applicable (no delete path).
 - **Audit / post-apply verification.** `$GITHUB_STEP_SUMMARY` per run is the durable per-run audit trail; the rolling summary issue is a convenience surface. The selection criteria in [`docs/runbooks/branch-cleanup.md` Selection criteria](../runbooks/branch-cleanup.md#selection-criteria) define the expected candidate set.
@@ -86,7 +86,7 @@ Workflow: [`.github/workflows/generate-agents.yml`](../.github/workflows/generat
 
 - **Authorizing issue.** The PR that introduced or last updated `.apm/`, `apm.yml`, or any APM source file. The workflow does not write to `main` directly: in `mode: generate` it opens a PR named `chore: regenerate agent instructions` against `main`, so any change still passes the standard review and required-status-check loop before landing.
 - **Dry-run command.** `gh workflow run verify-agents.yml --ref <pr-branch>`, which calls `generate-agents.yml` with `mode: verify`. The verify path runs the full `apm compile` and then `git diff --exit-code -- CLAUDE.md AGENTS.md`, failing the PR check if regeneration would differ. See `verify-agents.yml:33-42`.
-- **Live apply command.** Scheduled every Sunday at 03:00 JST (`cron: "0 18 * * 6"`), or `gh workflow run generate-agents.yml --ref main` (default `mode: generate`). Both paths open a PR; neither pushes directly to `main`.
+- **Live apply command.** Scheduled through `weekly-maintenance.yml` every Monday at 05:00 JST, or `gh workflow run generate-agents.yml --ref main` (default `mode: generate`). Both paths open a PR; neither pushes directly to `main`.
 - **Rollback path.** `git revert <merge-sha>` on `main` for the `chore: regenerate agent instructions` PR. Because the workflow re-derives the files on the next schedule from SoT, the revert is only durable if it is accompanied by a corresponding revert of the `.apm/` change that caused the regeneration.
 - **Audit / post-apply verification.** The PR diff is the verification surface (a reviewer reads exactly what `apm compile` produced). On the verify path, the `verify-agents.yml` gate blocks any PR whose `.apm/` changes would generate a different `CLAUDE.md` / `AGENTS.md` than the PR itself ships. No Settings audit log entry is meaningful here because the operation is a normal `git push` from `github-actions[bot]`.
 - **Secret-not-logged evidence.** Uses default `GITHUB_TOKEN` only (no PAT). The `curl` to the astral-sh/uv release tarball is pinned per [#112](https://github.com/tvna/claude-md/issues/112) via `scripts/uv_pin.py`, eliminating the version-drift supply-chain surface.
@@ -119,13 +119,13 @@ Residual: `pull_request_target` runs with write-capable token even on fork PRs; 
 
 ## 9. Auto-open retrospective issue on merge
 
-Workflow: [`.github/workflows/auto-retro.yml`](../.github/workflows/auto-retro.yml). Script: [`scripts/auto_retro.py`](../scripts/auto_retro.py). Tests: [`tests/test_auto_retro.py`](../tests/test_auto_retro.py). Tracking: [#149](https://github.com/tvna/claude-md/issues/149).
+Workflow: [`.github/workflows/post-merge.yml`](../.github/workflows/post-merge.yml). Script: [`scripts/auto_retro.py`](../scripts/auto_retro.py). Tests: [`tests/test_auto_retro.py`](../tests/test_auto_retro.py). Tracking: [#149](https://github.com/tvna/claude-md/issues/149).
 
 - **Authorizing issue.** [#149](https://github.com/tvna/claude-md/issues/149) (umbrella) and the per-PR change issues that introduced the workflow ([#234](https://github.com/tvna/claude-md/issues/234)), the repair-history pre-fill ([#343](https://github.com/tvna/claude-md/issues/343)), and the policy-artifact-only noise skip ([#594](https://github.com/tvna/claude-md/issues/594)). The workflow runs automatically on `pull_request_target: closed` events with `github.event.pull_request.merged == true`; no human dispatch exists. The deterministic skip rules in `should_skip` (`scripts/auto_retro.py`) prevent self-recursion (retro-typed PRs), bot-authored merges, and PRs with no repair signal. The post-signal repair-history gate also skips standalone retros when the generated rows are only exempt `[policy-artifact]` rows such as merge-from-main and multi-commit policy artifacts, unless a review repair, CI failure, verification failure, or iteration commit makes the retro actionable.
 - **Dry-run command.** Not exposed as an input. The pre-merge dry-run-equivalent surface is `tests/test_auto_retro.py`, which mocks the `gh_api` boundary and exercises every branch of `run()`. For a specific event payload, `python3 scripts/auto_retro.py run --event-file <fixture.json> --repo tvna/claude-md` exits without side effects on the read-only paths (skip / existing-retro short-circuit) and surfaces the parse decisions only.
 - **Live apply command.** Automatic on `pull_request_target: closed`. The only mutation is `POST /repos/<owner>/<repo>/issues` to open a new retrospective issue, idempotency-gated by `find_existing_retro`.
 - **Rollback path.** Two surfaces:
-  - **Pause / resume.** `gh workflow disable .github/workflows/auto-retro.yml --ref main` halts further auto-creates without touching existing retro issues; `gh workflow enable .github/workflows/auto-retro.yml --ref main` resumes. Use this for a runaway-issue incident where the cause is still under investigation.
+  - **Pause / resume.** `gh workflow disable .github/workflows/post-merge.yml --ref main` halts further auto-creates without touching existing retro issues; `gh workflow enable .github/workflows/post-merge.yml --ref main` resumes. Use this for a runaway-issue incident where the cause is still under investigation.
   - **Revert the implementation.** `git revert <merge-sha>` of the workflow or script PR removes the deterministic trigger. Runaway retro issues are identifiable by label `type:docs + layer:meta` plus title prefix `retro(` or `retro:`; close individually via `gh api --method PATCH /repos/tvna/claude-md/issues/<n> -f state=closed -f state_reason=not_planned`. The retrospective body is recoverable from the workflow run log, so a wrongful close is reversible by re-opening.
 - **Audit / post-apply verification.** Each run writes a one-section table to `$GITHUB_STEP_SUMMARY` recording the source PR, action (`created` / `skip`), and detail (existing retro number on duplicate, repair-signal aggregate on no-signal skip, or policy-artifact-only skip detail). The durable per-merge cadence trail is `docs/archive/retrospective-pr-*.md`; an unexpected gap or burst there is the first symptom of a regression.
 - **Secret-not-logged evidence.** Uses default `GITHUB_TOKEN` only (no PAT). Auto-masked by GitHub Actions. The script never `echo`es the token, and `gh api` reads the token from the environment without printing it.
@@ -134,7 +134,7 @@ Residual: `pull_request_target` runs with a write-capable token on every closed 
 
 ## Common pattern: secret-not-logged evidence
 
-All five workflows that use a token (`apply-rulesets.yml`, `apply-labels.yml`, `ruleset-drift.yml`, `security-control-drift-report.yml`, `verify-ruleset-sync.yml`) bind the token only through `env.GH_TOKEN: ${{ secrets.NAME }}` at the workflow or job level. GitHub Actions automatically masks any value passed through `${{ secrets.* }}` from job logs, replacing it with `***`. The repo-wide check is:
+All token-using workflows (`apply-rulesets.yml`, `apply-labels.yml`, `weekly-maintenance.yml`, `verify-ruleset-sync.yml`) bind the token only through `env.GH_TOKEN: ${{ secrets.NAME }}` at the workflow or job level. GitHub Actions automatically masks any value passed through `${{ secrets.* }}` from job logs, replacing it with `***`. The repo-wide check is:
 
 ```sh
 rg -n 'echo[[:space:]]+["$].*(GH_TOKEN|RULESETS_PAT|LABELS_PAT)|set -x' .github/workflows scripts
@@ -142,7 +142,7 @@ rg -n 'echo[[:space:]]+["$].*(GH_TOKEN|RULESETS_PAT|LABELS_PAT)|set -x' .github/
 
 At the time this audit was written, every match is one of:
 
-- `echo "::error::RULESETS_PAT secret is not set..."` -- prints the secret **name** as a literal string inside a guard step that runs only when the secret is absent (`apply-rulesets.yml:48`, `ruleset-drift.yml:29`, `security-control-drift-report.yml:37`, `verify-ruleset-sync.yml:23`).
+- `echo "::error::RULESETS_PAT secret is not set..."` -- prints the secret **name** as a literal string inside a guard step that runs only when the secret is absent (`apply-rulesets.yml:48`, `weekly-maintenance.yml`, `verify-ruleset-sync.yml:23`).
 - `echo "::error::LABELS_PAT secret is not set..."` -- same pattern in `apply-labels.yml:38`.
 - `echo "$HOME/.local/bin" >> "$GITHUB_PATH"` -- appends a directory to PATH; does not touch the token.
 
@@ -157,7 +157,7 @@ This audit does not open new follow-up issues. Per CLAUDE.md Section 3 (reuse in
 | No live delete path; needs Environment gate, dry-run, rollback, audit when added | Branch cleanup -- deletion path | [#31](https://github.com/tvna/claude-md/issues/31) Goal D |
 | Top-level `contents: write` / `pull-requests: write` over-granted on the verify-mode reuse path | Generated instruction publication | [#181](https://github.com/tvna/claude-md/issues/181), [#183](https://github.com/tvna/claude-md/issues/183) |
 | `pull_request_target` write-capable token without actor filter | Threat-intelligence triage | [#170](https://github.com/tvna/claude-md/issues/170), [#181](https://github.com/tvna/claude-md/issues/181) |
-| `RULESETS_PAT` reused by scheduled read-only workflows without Environment scoping | (Cross-operation) `ruleset-drift.yml`, `security-control-drift-report.yml` | [#56](https://github.com/tvna/claude-md/issues/56), [#181](https://github.com/tvna/claude-md/issues/181) |
+| `RULESETS_PAT` reused by scheduled read-only workflows without Environment scoping | (Cross-operation) `weekly-maintenance.yml` ruleset and security-control jobs | [#56](https://github.com/tvna/claude-md/issues/56), [#181](https://github.com/tvna/claude-md/issues/181) |
 
 Operations that have all six controls today and require no follow-up: apply rulesets, apply labels (non-prune), prune labels, branch cleanup (survey mode), dependency lock / tool bootstrap, auto-open retrospective issue on merge.
 
