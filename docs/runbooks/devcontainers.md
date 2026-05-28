@@ -33,12 +33,21 @@ Use the checked-in workspace file when opening the repository:
 code claude-md.code-workspace
 ```
 
+On macOS, VS Code launched from the Dock or Finder can miss Homebrew
+paths that are present in an interactive shell. The workspace prepends
+`/opt/homebrew/bin` and `/usr/local/bin` to the macOS integrated
+terminal PATH so Podman installs from either Apple Silicon or Intel
+Homebrew are visible to workspace tasks and diagnostics.
+
 If you open the folder directly instead of the workspace file, set the
 same value in VS Code user or workspace settings:
 
 ```json
 {
-  "dev.containers.dockerPath": "podman"
+  "dev.containers.dockerPath": "podman",
+  "terminal.integrated.env.osx": {
+    "PATH": "/opt/homebrew/bin:/usr/local/bin:${env:PATH}"
+  }
 }
 ```
 
