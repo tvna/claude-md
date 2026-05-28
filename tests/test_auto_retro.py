@@ -2607,10 +2607,17 @@ class TestRunAggregateSignals:
             m == "POST" and p == "/repos/o/r/issues" for m, p, _ in seen
         )
 
-    def test_creates_retro_when_zero_comments_but_multi_commit(
+    def test_creates_retro_when_zero_comments_but_iteration_commit(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        seen = _orchestrator_recorder(monkeypatch, review_comments=[])
+        seen = _orchestrator_recorder(
+            monkeypatch,
+            review_comments=[],
+            commits=[
+                {"commit": {"message": "feat(harness): add first"}},
+                {"commit": {"message": "fixup! add first"}},
+            ],
+        )
         event = _merged_event(number=302, commits=3)
         assert ar.run(event, "o/r") == 0
         assert any(
@@ -2652,6 +2659,137 @@ class TestRunAggregateSignals:
             m == "POST" and p == "/repos/o/r/issues" for m, p, _ in seen
         )
         assert "multi_commit_pr=false" in capsys.readouterr().out
+
+    def test_skips_policy_artifact_only_rows_even_when_refs_fire(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """G1-style retro noise: refs plus merge/multi rows only.
+
+        Refs #594. Mirrors the #592 examples where the generated Repair
+        history table contains only exempt policy-artifact rows.
+        """
+        summary = tmp_path / "summary.md"
+        monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(summary))
+        seen = _orchestrator_recorder(
+            monkeypatch,
+            review_comments=[],
+            commits=[
+                {
+                    "commit": {
+                        "message": "Merge branch 'main' into feature\n"
+                    }
+                },
+                {"commit": {"message": "feat(harness): add first"}},
+                {"commit": {"message": "docs(harness): add second"}},
+            ],
+        )
+        event = _merged_event(
+            number=576,
+            title="feat(harness): G1 policy artifact example",
+            body="Refs #592",
+            commits=3,
+        )
+        assert ar.run(event, "o/r") == 0
+        assert not any(
+            m == "POST" and p == "/repos/o/r/issues" for m, p, _ in seen
+        )
+        printed = capsys.readouterr().out
+        assert "only policy-artifact repair rows generated" in printed
+        assert "only policy-artifact repair rows generated" in summary.read_text(
+            encoding="utf-8"
+        )
+
+    def test_policy_artifact_rows_plus_ci_failure_still_creates(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        seen = _orchestrator_recorder(
+            monkeypatch,
+            review_comments=[],
+            commits=[
+                {
+                    "commit": {
+                        "message": "Merge branch 'main' into feature\n"
+                    }
+                },
+                {"commit": {"message": "feat(harness): add first"}},
+                {"commit": {"message": "docs(harness): add second"}},
+            ],
+            pr_detail={"merge_commit_sha": "deadbeef"},
+            check_runs=[
+                {
+                    "name": "verify-agents",
+                    "conclusion": "failure",
+                    "completed_at": "2026-05-28T00:00:00Z",
+                }
+            ],
+        )
+        event = _merged_event(
+            number=588,
+            title="feat(harness): G1 plus real CI failure",
+            body="Refs #592",
+            commits=3,
+        )
+        assert ar.run(event, "o/r") == 0
+        assert any(
+            m == "POST" and p == "/repos/o/r/issues" for m, p, _ in seen
+        )
+
+    def test_policy_artifact_rows_plus_review_repair_still_creates(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        seen = _orchestrator_recorder(
+            monkeypatch,
+            review_comments=[{"id": 1, "body": "fix requested"}],
+            commits=[
+                {
+                    "commit": {
+                        "message": "Merge branch 'main' into feature\n"
+                    }
+                },
+                {"commit": {"message": "feat(harness): add first"}},
+                {"commit": {"message": "docs(harness): add second"}},
+            ],
+        )
+        event = _merged_event(
+            number=589,
+            title="feat(harness): G1 plus review repair",
+            body="Refs #592",
+            commits=3,
+        )
+        assert ar.run(event, "o/r") == 0
+        assert any(
+            m == "POST" and p == "/repos/o/r/issues" for m, p, _ in seen
+        )
+
+    def test_policy_artifact_rows_plus_iteration_commit_still_creates(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        seen = _orchestrator_recorder(
+            monkeypatch,
+            review_comments=[],
+            commits=[
+                {
+                    "commit": {
+                        "message": "Merge branch 'main' into feature\n"
+                    }
+                },
+                {"commit": {"message": "feat(harness): add first"}},
+                {"commit": {"message": "fixup! add first"}},
+            ],
+        )
+        event = _merged_event(
+            number=590,
+            title="feat(harness): G1 plus iteration commit",
+            body="Refs #592",
+            commits=3,
+        )
+        assert ar.run(event, "o/r") == 0
+        assert any(
+            m == "POST" and p == "/repos/o/r/issues" for m, p, _ in seen
+        )
 
     def test_skips_with_detailed_reason_when_no_signal_fires(
         self,
