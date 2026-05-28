@@ -128,7 +128,7 @@ jobs:
 
       - name: Run script unit tests for shard ${{ matrix.shard }}
         # Coverage instrumentation runs only on push to main (see
-        # .github/workflows/coverage.yml and #462) so PR runs stay fast.
+        # .github/workflows/post-merge.yml and #462) so PR runs stay fast.
         # Developers must run `uv run python -m pytest --cov` locally
         # before push when coverage may have shifted.
         # --junitxml feeds Codecov Test Analytics (#469); junit_family=legacy

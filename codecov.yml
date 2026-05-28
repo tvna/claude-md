@@ -1,6 +1,6 @@
 # Codecov configuration. The authoritative pass/fail gate remains the
 # local pytest --cov-fail-under value defined in pyproject.toml and
-# invoked from .github/workflows/coverage.yml (post-merge). Every Codecov
+# invoked from .github/workflows/post-merge.yml. Every Codecov
 # status here is informational so this layer provides dashboard and
 # trend history only, never a separate blocking signal. See #462.
 coverage:

@@ -854,7 +854,7 @@ def test_title_policy_verify_matches_workflow_kind_env(
 def test_analyze_ci_timings_matches_workflow_args(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """Mirror the argv shape used by measure-lint-pytest-timings.yml.
+    """Mirror the argv shape used by weekly-maintenance.yml.
 
     The workflow shells to
     ``uv run python scripts/analyze_ci_timings.py --jobs jobs/

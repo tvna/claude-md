@@ -1,6 +1,6 @@
 # Branch cleanup — runbook
 
-Operator-facing companion to [`.github/workflows/branch-cleanup.yml`](../.github/workflows/branch-cleanup.yml). Tracking issue: [#31](https://github.com/tvna/claude-md/issues/31). Parent: [#18](https://github.com/tvna/claude-md/issues/18) Phase 4-B.
+Operator-facing companion to the `branch-cleanup` job in [`.github/workflows/weekly-maintenance.yml`](../.github/workflows/weekly-maintenance.yml). Tracking issue: [#31](https://github.com/tvna/claude-md/issues/31). Parent: [#18](https://github.com/tvna/claude-md/issues/18) Phase 4-B.
 
 ## Overview
 
@@ -30,9 +30,9 @@ Per [#31](https://github.com/tvna/claude-md/issues/31), the deletion path lands 
 cron: "0 20 * * 0"
 ```
 
-= 20:00 UTC every Sunday = **05:00 JST Monday**. Offset from `generate-agents.yml` (`0 18 * * 6` = 03:00 JST Sun) to avoid contention.
+= 20:00 UTC every Sunday = **05:00 JST Monday**. Weekly maintenance tasks share this trigger.
 
-Also dispatchable on demand via **Actions → Branch cleanup (dry-run) → Run workflow**.
+Also dispatchable on demand via **Actions -> Weekly maintenance -> Run workflow** with `task=branch-cleanup`.
 
 ## Selection criteria
 
@@ -46,8 +46,8 @@ A branch qualifies as a deletion candidate iff **all** of the following hold:
 
 | Input | Type | Default | Purpose |
 |---|---|---|---|
-| `dry_run` | boolean | `true` | Reserved. No effect in the current code path (no DELETE exists). Will gate deletion in the follow-up PR. |
-| `min_age_days` | number | `60` | Override the age threshold. Use `min_age_days=0` to force every non-default branch into the candidate list (useful for verifying the survey logic from a PR branch). |
+| `branch_cleanup_dry_run` | boolean | `true` | Reserved. No effect in the current code path (no DELETE exists). Will gate deletion in the follow-up PR. |
+| `branch_cleanup_min_age_days` | number | `60` | Override the age threshold. Use `branch_cleanup_min_age_days=0` to force every non-default branch into the candidate list (useful for verifying the survey logic from a PR branch). |
 
 ## Summary issue convention
 

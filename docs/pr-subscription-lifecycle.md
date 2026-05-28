@@ -1,7 +1,7 @@
 # PR subscription lifecycle -- terminal-state signal
 
 Operator-facing companion to [`scripts/auto_retro.py`](../scripts/auto_retro.py)
-and [`.github/workflows/auto-retro.yml`](../.github/workflows/auto-retro.yml).
+and [`.github/workflows/post-merge.yml`](../.github/workflows/post-merge.yml).
 Refs [#387](https://github.com/tvna/claude-md/issues/387).
 
 ## 1. Purpose and non-goals
@@ -53,7 +53,7 @@ pipeline ran end-to-end.
 ## 4. Out of scope
 
 - Close-without-merge PRs. The `merged == true` guard at
-  `.github/workflows/auto-retro.yml:29` excludes them, so rationale
+  `.github/workflows/post-merge.yml` excludes them, so rationale
   comments on non-merged closes continue to surface in subscribed
   sessions as before.
 - Removing or renaming the label after emission. Once applied, the

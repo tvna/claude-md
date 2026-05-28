@@ -160,7 +160,7 @@ single-commit, zero-repair merge. Running the section 2 checklist:
 - S3 repair commits: 0. Green.
 - S4 force pushes: 0 observable. Green.
 - S5 unrelated churn: the diff is three net-new files
-  (`scripts/auto_retro.py`, `.github/workflows/auto-retro.yml`,
+  (`scripts/auto_retro.py`, `.github/workflows/post-merge.yml`,
   `tests/test_auto_retro.py`) all inside the closing issue #234
   scope. Green.
 
