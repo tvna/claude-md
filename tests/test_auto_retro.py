@@ -14,7 +14,7 @@ import json
 import subprocess
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 import _retro_labels as rl
 import auto_retro as ar
@@ -2585,25 +2585,47 @@ class TestRenderRepairSignals:
 class TestRunAggregateSignals:
     """Coverage for the issue #298 aggregate-gate behavior on top of TestRun."""
 
-    def test_creates_retro_when_zero_comments_but_body_has_refs(
+    def test_skips_when_zero_comments_body_refs_have_no_standalone_work(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         seen = _orchestrator_recorder(monkeypatch, review_comments=[])
         event = _merged_event(number=300, body="Refs #287\nRefs #298")
         assert ar.run(event, "o/r") == 0
-        assert any(
+        assert not any(
             m == "POST" and p == "/repos/o/r/issues" for m, p, _ in seen
         )
 
-    def test_creates_retro_when_zero_comments_but_fix_typed(
+    def test_creates_retro_when_body_refs_have_failed_verification(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         seen = _orchestrator_recorder(monkeypatch, review_comments=[])
         event = _merged_event(
-            number=301, title="fix(harness): qualify gate names"
+            number=300,
+            body=(
+                "Refs #287\n\n"
+                "## Verification\n\n"
+                "- command: `pytest`\n"
+                "  result: `failed: 3 tests broken`\n"
+            ),
         )
         assert ar.run(event, "o/r") == 0
         assert any(
+            m == "POST" and p == "/repos/o/r/issues" for m, p, _ in seen
+        )
+
+    def test_skips_when_zero_comments_fix_typed_has_only_canonical_fix(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        seen = _orchestrator_recorder(
+            monkeypatch,
+            review_comments=[],
+            commits=[{"commit": {"message": "fix(harness): qualify gate names"}}],
+        )
+        event = _merged_event(
+            number=301, title="fix(harness): qualify gate names", commits=1
+        )
+        assert ar.run(event, "o/r") == 0
+        assert not any(
             m == "POST" and p == "/repos/o/r/issues" for m, p, _ in seen
         )
 
@@ -2618,7 +2640,7 @@ class TestRunAggregateSignals:
                 {"commit": {"message": "fixup! add first"}},
             ],
         )
-        event = _merged_event(number=302, commits=3)
+        event = _merged_event(number=302, commits=2)
         assert ar.run(event, "o/r") == 0
         assert any(
             m == "POST" and p == "/repos/o/r/issues" for m, p, _ in seen
@@ -3106,6 +3128,26 @@ class TestExtractVerificationPairs:
         pairs = ar.extract_verification_pairs(body)
         assert pairs and pairs[0].passed is False
 
+    @pytest.mark.parametrize(
+        "result",
+        [
+            "`blocked: ModuleNotFoundError: No module named 'hypothesis'`",
+            "`blocked: required uv ==0.11.11, local uv is 0.11.16`",
+            "`not completed locally after rebase; direct local environment lacks hypothesis`",
+            "`not run; local uv 0.11.16 does not match repository required-version ==0.11.11`",
+        ],
+    )
+    def test_issue_592_environment_mismatch_still_fails(
+        self, result: str
+    ) -> None:
+        body = (
+            "## Verification\n\n"
+            "- command: `representative`\n"
+            f"  result: {result}\n"
+        )
+        pairs = ar.extract_verification_pairs(body)
+        assert pairs and pairs[0].passed is False
+
 
 class TestExtractPostMergeChecklist:
     def test_empty_body_returns_empty(self) -> None:
@@ -3269,6 +3311,77 @@ class TestRepairHistoryTableNewRows:
         assert "Verification fail: `pytest --cov`" not in table
         assert "Verification fail: `scan ascii`" not in table
         assert "Verification fail: `negative fixture`" not in table
+
+
+class TestIssue592Corpus:
+    """Stable #592 corpus summary for the #593 false-positive repair."""
+
+    _BASE_SIGNALS: ClassVar[dict[str, bool]] = {
+        "inline_review_comments": False,
+        "body_cites_refs": False,
+        "fix_typed_title": False,
+        "multi_commit_pr": False,
+        "verification_pairs_failed": False,
+    }
+
+    @staticmethod
+    def _pair(result: str) -> ar.VerificationPair:
+        passed = ar.extract_verification_pairs(
+            "## Verification\n\n"
+            "- command: `representative`\n"
+            f"  result: {result}\n"
+        )[0].passed
+        return ar.VerificationPair("`representative`", result, passed)
+
+    @pytest.mark.parametrize(
+        "issue,group,signals,commits,results,pr_type,expected",
+        [
+            (576, "G1", {"body_cites_refs": True}, ["docs: x", "Merge branch 'main' into f"], [], "", False),
+            (588, "G1", {"body_cites_refs": True}, ["docs: x", "Merge branch 'main' into f"], [], "", False),
+            (589, "G1", {"body_cites_refs": True}, ["feat: x", "Merge branch 'main' into f"], [], "", False),
+            (590, "G1", {"body_cites_refs": True}, ["perf: x", "Merge branch 'main' into f"], [], "", False),
+            (565, "G1", {"body_cites_refs": True}, ["feat: x", "Merge branch 'main' into f"], [], "", False),
+            (563, "G1", {"body_cites_refs": True}, ["feat: x", "Merge branch 'main' into f"], [], "", False),
+            (585, "G2", {}, ["docs: x"], [], "", False),
+            (555, "G2", {}, ["feat: x"], [], "", False),
+            (546, "G2", {}, ["feat: x"], [], "", False),
+            (521, "G3", {}, ["docs: x"], ["`Compilation completed successfully`"], "", False),
+            (526, "G3", {}, ["docs: x"], ["`non_ascii= 0`"], "", False),
+            (532, "G3", {}, ["docs: x"], ["`(no hits) exit 1`"], "", False),
+            (539, "G3", {}, ["docs: x"], ["`hashref_56= 3 non_ascii= 0`"], "", False),
+            (540, "G3", {}, ["docs: x"], ["shows Chapter 3 ending at the Chapter 4 heading"], "", False),
+            (544, "G3", {}, ["feat: x", "Merge branch 'main' into f"], ["Required test coverage reached."], "", False),
+            (550, "G3", {}, ["docs: x"], ["matches the new H2 heading"], "", False),
+            (551, "G3", {}, ["docs: x"], ["`yaml syntax ok`"], "", False),
+            (553, "G3", {}, ["docs: x"], ["all checks have passed"], "", False),
+            (557, "G3", {}, ["ci: x", "Merge branch 'main' into f"], ["`OK: no direct pip install.` exit 0"], "", False),
+            (561, "G3", {}, ["ci: x"], ["pytest 1828 passed in 203.91s"], "", False),
+            (567, "G4", {"verification_pairs_failed": True}, ["ci: x"], ["`not run; local uv 0.11.16 does not match repository required-version ==0.11.11`"], "", True),
+            (570, "G4", {"verification_pairs_failed": True}, ["feat: x"], ["`blocked: ModuleNotFoundError: No module named 'hypothesis'`"], "", True),
+            (543, "G5", {"fix_typed_title": True}, ["fix(harness): remove gate"], ["`378 passed in 200.38s`"], "fix", False),
+        ],
+    )
+    def test_corpus_standalone_work_disposition(
+        self,
+        issue: int,
+        group: str,
+        signals: dict[str, bool],
+        commits: list[str],
+        results: list[str],
+        pr_type: str,
+        expected: bool,
+    ) -> None:
+        merged_signals = dict(self._BASE_SIGNALS)
+        merged_signals.update(signals)
+        pairs = [self._pair(result) for result in results]
+        assert merged_signals["verification_pairs_failed"] is any(
+            not pair.passed for pair in pairs
+        )
+        rows = ar._repair_history_rows([], commits, len(commits), pairs, pr_type)
+        standalone = bool(rows) and not ar._has_only_exempt_policy_artifact_rows(
+            rows
+        )
+        assert standalone is expected, f"issue #{issue} ({group})"
 
 
 # ---------------------------------------------------------------------------
