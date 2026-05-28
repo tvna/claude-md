@@ -1141,12 +1141,13 @@ def classify_findings(findings: list[Finding], labels: set[str]) -> dict[str, ob
         for finding in findings
     )
 
-    recommended_labels: list[str] = []
+    wanted_labels: list[str] = []
     if intel_needed:
-        recommended_labels.append(INTEL_LABEL)
+        wanted_labels.append(INTEL_LABEL)
     if response_needed:
-        recommended_labels.append(RESPONSE_LABEL)
-    remove_labels = sorted((labels & THREAT_LABELS) - set(recommended_labels))
+        wanted_labels.append(RESPONSE_LABEL)
+    recommended_labels = [label for label in wanted_labels if label not in labels]
+    remove_labels = sorted((labels & THREAT_LABELS) - set(wanted_labels))
 
     return {
         "intel_needed": intel_needed,
@@ -1205,12 +1206,13 @@ def classify(title: str, body: str, labels: set[str]) -> dict[str, object]:
     intel_needed = security_labeled or bool(intel_matches) or bool(response_matches)
     response_needed = security_labeled or bool(response_matches)
 
-    recommended_labels: list[str] = []
+    wanted_labels: list[str] = []
     if intel_needed:
-        recommended_labels.append(INTEL_LABEL)
+        wanted_labels.append(INTEL_LABEL)
     if response_needed:
-        recommended_labels.append(RESPONSE_LABEL)
-    remove_labels = sorted((labels & THREAT_LABELS) - set(recommended_labels))
+        wanted_labels.append(RESPONSE_LABEL)
+    recommended_labels = [label for label in wanted_labels if label not in labels]
+    remove_labels = sorted((labels & THREAT_LABELS) - set(wanted_labels))
 
     return {
         "intel_needed": intel_needed,

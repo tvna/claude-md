@@ -102,8 +102,19 @@ class TestClassify:
         )
         assert result["intel_needed"] is True
         assert result["response_needed"] is False
-        assert result["recommended_labels"] == [triage.INTEL_LABEL]
+        assert result["recommended_labels"] == []
         assert result["remove_labels"] == [triage.RESPONSE_LABEL]
+
+    def test_existing_needed_label_is_not_recommended_again(self) -> None:
+        result = triage.classify(
+            "fix: evaluate CVE-2026-12345",
+            "Need to determine whether this repo is affected.",
+            {triage.INTEL_LABEL},
+        )
+        assert result["intel_needed"] is True
+        assert result["response_needed"] is False
+        assert result["recommended_labels"] == []
+        assert result["remove_labels"] == []
 
 
 class TestDependencyDiscovery:
@@ -422,10 +433,7 @@ class TestExternalFindings:
         assert findings[0].known_exploited is True
         assert result["intel_needed"] is True
         assert result["response_needed"] is True
-        assert result["recommended_labels"] == [
-            triage.INTEL_LABEL,
-            triage.RESPONSE_LABEL,
-        ]
+        assert result["recommended_labels"] == [triage.RESPONSE_LABEL]
         assert result["remove_labels"] == []
 
     def test_ghsa_finding_matches_locked_dependency(self, tmp_path: Path) -> None:
