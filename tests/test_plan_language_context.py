@@ -9,11 +9,12 @@ Pure functions get focused unit tests; the file-IO boundary in
 files into a ``tmp_path`` repo root and pointing the hook at it via
 the ``CLAUDE_PROJECT_DIR`` env var.
 
-Refs #211.
+Refs #211, #606.
 """
 
 from __future__ import annotations
 
+import io
 import json
 from pathlib import Path
 
@@ -226,8 +227,15 @@ class TestMain:
         monkeypatch: pytest.MonkeyPatch,
         capsys: pytest.CaptureFixture[str],
         root: Path,
+        *,
+        payload: str = "",
+        use_env: bool = True,
     ) -> tuple[int, str, str]:
-        monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(root))
+        if use_env:
+            monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(root))
+        else:
+            monkeypatch.delenv("CLAUDE_PROJECT_DIR", raising=False)
+        monkeypatch.setattr("sys.stdin", io.StringIO(payload))
         rc = plc.main([])
         captured = capsys.readouterr()
         return rc, captured.out, captured.err
@@ -247,6 +255,54 @@ class TestMain:
         ctx = decision["hookSpecificOutput"]["additionalContext"]
         assert "'ja'" in ctx
         assert "mcp__github__" in ctx
+
+    def test_codex_session_start_uses_cwd_event_when_claude_env_absent(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+        tmp_path: Path,
+    ) -> None:
+        root = self._setup_repo(tmp_path, "*  @tvna\n", '"@tvna": ja\n')
+        payload = json.dumps(
+            {"hook_event_name": "SessionStart", "cwd": str(root), "source": "startup"}
+        )
+        rc, out, err = self._run(
+            monkeypatch,
+            capsys,
+            root,
+            payload=payload,
+            use_env=False,
+        )
+        assert rc == 0
+        assert err == ""
+        decision = json.loads(out)
+        assert decision["hookSpecificOutput"]["hookEventName"] == "SessionStart"
+
+    def test_claude_project_dir_wins_over_codex_cwd_event(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+        tmp_path: Path,
+    ) -> None:
+        (tmp_path / "env-root").mkdir()
+        (tmp_path / "event-root").mkdir()
+        root = self._setup_repo(tmp_path / "env-root", "*  @tvna\n", '"@tvna": ja\n')
+        codex_root = self._setup_repo(
+            tmp_path / "event-root",
+            "*  @nobody\n",
+            '"@nobody": en\n',
+        )
+        payload = json.dumps(
+            {
+                "hook_event_name": "SessionStart",
+                "cwd": str(codex_root),
+                "source": "startup",
+            }
+        )
+        rc, out, err = self._run(monkeypatch, capsys, root, payload=payload)
+        assert rc == 0
+        assert err == ""
+        assert "'ja'" in json.loads(out)["hookSpecificOutput"]["additionalContext"]
 
     def test_missing_codeowners_fails_open(
         self,

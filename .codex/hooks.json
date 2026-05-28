@@ -1,0 +1,78 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "scripts/install-uv.sh",
+            "statusMessage": "Checking uv pin"
+          }
+        ]
+      },
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 scripts/plan_language_context.py",
+            "statusMessage": "Loading language policy"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "^mcp__github__(issue_write|add_issue_comment|create_pull_request|update_pull_request|add_reply_to_pull_request_comment|pull_request_review_write|add_comment_to_pending_review|sub_issue_write)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 scripts/preflight_non_ascii.py",
+            "statusMessage": "Checking GitHub text"
+          }
+        ]
+      },
+      {
+        "matcher": "^mcp__github__(create_pull_request|update_pull_request)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 scripts/pr_body_close_keyword_gate.py",
+            "statusMessage": "Checking PR issue links"
+          }
+        ]
+      },
+      {
+        "matcher": "^mcp__github__(issue_write|create_pull_request|update_pull_request)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 scripts/preflight_title_policy.py",
+            "statusMessage": "Checking GitHub title"
+          }
+        ]
+      },
+      {
+        "matcher": "^mcp__github__(create_pull_request|update_pull_request)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 scripts/preflight_pr_body_required_sections.py",
+            "statusMessage": "Checking PR sections"
+          }
+        ]
+      },
+      {
+        "matcher": "^mcp__github__(create_pull_request|update_pull_request)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 scripts/preflight_pr_template_shape.py",
+            "statusMessage": "Checking PR template"
+          }
+        ]
+      }
+    ]
+  }
+}

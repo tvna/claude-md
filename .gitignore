@@ -37,7 +37,10 @@ apm_modules/
 .cursorrules
 .aider*
 .continue/
-.codex/
+# .codex/hooks.json is the narrow file-level carve-out from #604/#606,
+# permitted only to host deterministic Codex lifecycle hooks.
+.codex/*
+!.codex/hooks.json
 .github/copilot-instructions.md
 .windsurfrules
 .codeium/
