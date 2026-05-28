@@ -33,12 +33,20 @@ Use the checked-in workspace file when opening the repository:
 code claude-md.code-workspace
 ```
 
+On macOS, VS Code launched from the Dock or Finder can miss Podman's CLI
+directory even when it is present in an interactive shell. The workspace
+prepends `/opt/podman/bin` to the macOS integrated terminal PATH so the
+Podman CLI is visible to workspace tasks and diagnostics.
+
 If you open the folder directly instead of the workspace file, set the
 same value in VS Code user or workspace settings:
 
 ```json
 {
-  "dev.containers.dockerPath": "podman"
+  "dev.containers.dockerPath": "podman",
+  "terminal.integrated.env.osx": {
+    "PATH": "/opt/podman/bin:${env:PATH}"
+  }
 }
 ```
 
