@@ -117,6 +117,14 @@ _RESULT_PASSING_PREFIXES: tuple[str, ...] = (
     "all hooks",
     "all checks",
     "all tests",
+    # Successful verification evidence captured in the #592 corpus.
+    # These are proof that the operator ran a check and observed the
+    # expected passing state, not repair rows. Refs #593.
+    "compilation completed successfully",
+    "required test coverage",
+    "parses",
+    "shows",
+    "matches",
 )
 
 # Successful verification is often recorded as an observation sentence
@@ -2320,12 +2328,12 @@ def run(event: dict[str, Any], repo: str) -> int:
     if (
         not has_inline_comments
         and not check_runs_unknown
-        and _has_only_exempt_policy_artifact_rows(repair_rows)
+        and (not repair_rows or _has_only_exempt_policy_artifact_rows(repair_rows))
     ):
-        msg = (
-            "only policy-artifact repair rows generated "
-            f"({signal_summary})"
-        )
+        if repair_rows:
+            msg = f"only policy-artifact repair rows generated ({signal_summary})"
+        else:
+            msg = f"no standalone repair workload ({signal_summary})"
         print(f"skip: {msg}")
         _append_summary(_build_summary(pr, "skip", msg))
         return 0

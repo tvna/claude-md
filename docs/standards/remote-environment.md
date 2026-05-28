@@ -14,7 +14,7 @@ The Claude Code on the Web remote environment ships with a stale `uv` (`0.8.17`)
 | `.github/workflows/generate-agents.yml`, `.github/workflows/verify-apm-drift.yml` | CI | Call `scripts/uv_pin.py read` to derive the version, then install via the existing `curl` flow. No version literal lives here. |
 | `scripts/install-uv.sh` | Remote session | Calls `scripts/uv_pin.py read` to derive the pin, then installs `uv` at SessionStart. |
 | `.claude/settings.json` | Remote session | Registers `scripts/install-uv.sh` as the `SessionStart` hook. Permitted under the [#109](https://github.com/tvna/claude-md/issues/109) carve-out in `docs/standards/repo-scope.md`. |
-| `.codex/hooks.json` | Codex session | Registers the same SessionStart hook shape for Codex. The uv installer remains Claude-remote-gated until a Codex remote environment variable is documented; the language-context hook consumes Codex's `cwd` event field. Tracked by [#604](https://github.com/tvna/claude-md/issues/604) / [#606](https://github.com/tvna/claude-md/issues/606). |
+| `.codex/hooks.json` | Codex session | Registers the same SessionStart hook shape for Codex. The uv installer remains Claude-remote-gated until Codex documents a stable remote-only signal; the language-context hook consumes Codex's `cwd` event field. Tracked by [#604](https://github.com/tvna/claude-md/issues/604) / [#606](https://github.com/tvna/claude-md/issues/606) / [#616](https://github.com/tvna/claude-md/issues/616). |
 | `.github/workflows/verify-agents.yml` (`lint-uv-pin` job) | CI | Drift gate — runs `pytest tests/test_uv_pin.py` then `scripts/uv_pin.py drift`. Fails any PR that re-introduces a uv version literal outside `pyproject.toml`. See [#112](https://github.com/tvna/claude-md/issues/112). |
 | `.github/dependabot.yml` | CI | Bumps GitHub Actions SHAs and `uv.lock` entries weekly. The uv binary pin itself is bumped manually (see *Update procedure* below). |
 | `docs/standards/remote-environment.md` *(this file)* | — | Runbook: how the hook works, how the SoT propagates, verification, update procedure. |
@@ -45,7 +45,15 @@ Codex consumes this repository's universal instruction surface through `AGENTS.m
 
 The Codex hook config may mirror existing Claude hook scripts only when the script behavior is tested for both payload shapes or is payload-independent. Do not add Codex-only hook behavior that weakens the Claude guardrail or assumes complete hook parity. Current documented Codex limits include incomplete shell interception for some shell paths and unsupported `permissionDecision: "ask"` behavior in `PreToolUse`.
 
-When a Codex remote environment needs the same dependency state, use the verification commands below as the contract until Codex documents a stable remote-session environment flag. Do not make `scripts/install-uv.sh` perform network installation in local Codex sessions.
+As of 2026-05-28, the official Codex hooks documentation defines `SessionStart.source` as `startup`, `resume`, `clear`, or `compact`, and defines shared hook input fields such as `session_id`, `cwd`, `hook_event_name`, `model`, and `permission_mode`. Those fields identify hook lifecycle and workspace context, not whether the session is local, cloud, SSH-backed, or controlled remotely from another device. The official Codex cloud-environment documentation describes setup scripts, maintenance scripts, and user-configured environment variables, but it does not document a built-in remote-only environment variable for repo hooks.
+
+When a Codex remote environment needs the same dependency state, use the verification commands below as the contract until Codex documents a stable remote-only signal. Do not treat `SessionStart.source`, `session_id`, `cwd`, `model`, `permission_mode`, or user-defined Codex environment variables as sufficient install gates, and do not make `scripts/install-uv.sh` perform network installation in local Codex sessions.
+
+Once Codex documents a remote-only signal, the implementation path is intentionally narrow:
+
+1. Add that signal to the guard in `scripts/install-uv.sh` without changing `CLAUDE_CODE_REMOTE=true` behavior.
+2. Add a shell-level test that proves local Codex-shaped environments remain no-op and the documented remote signal enters the install path.
+3. Update this runbook with the exact official documentation URL, the rollback command, and a manual remote verification transcript.
 
 ## Why not nix
 

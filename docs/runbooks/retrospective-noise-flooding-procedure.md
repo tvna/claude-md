@@ -91,6 +91,17 @@ for review visibility but does not need a `missing deterministic gate`
 / `unclear agent instruction` / `external or human decision` tag.
 Refs issue #400.
 
+As of [#593](https://github.com/tvna/claude-md/issues/593), the
+auto-retro opener also applies this distinction at issue-creation
+time. A merged PR does not open a standalone retrospective when the
+only rendered rows are `[policy-artifact]` rows, a
+`(no automated repair signals detected)` sentinel, or successful
+Verification evidence. The opener still creates a retrospective for
+inline review comments, failed CI check runs, failed Verification
+pairs such as local dependency/tool mismatch, or repeated explicit
+iteration commits. Policy-artifact rows remain visible when a
+retrospective opens for one of those actionable signals.
+
 ### 2.1 Severity thresholds (rule of thumb)
 
 The thresholds below are operator rules of thumb derived from the

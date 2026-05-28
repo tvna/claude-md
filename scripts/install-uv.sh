@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # Pin `uv` at session start to the version declared in pyproject.toml.
 #
-# Invoked by the SessionStart hook registered in `.claude/settings.json`.
+# Invoked by the SessionStart hooks registered in `.claude/settings.json` and
+# `.codex/hooks.json`; the install path remains gated to Claude remote sessions
+# until Codex documents a stable remote-only signal.
 # Reads `[tool.uv].required-version` (an exact `==X.Y.Z` pin per #112) from
 # `$CLAUDE_PROJECT_DIR/pyproject.toml`. See `docs/standards/remote-environment.md`
 # for the rationale and update procedure.
