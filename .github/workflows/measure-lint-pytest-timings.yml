@@ -14,6 +14,11 @@ on:
         type: string
         required: false
         default: ''
+      cutoff:
+        description: 'Optional UTC date (YYYY-MM-DD). When set, the report switches to compare mode: pre-cutoff (baseline) vs post-cutoff (post-change) with a delta p50 column. Use this to close issue #545 AC1/AC7 for performance-claiming PRs.'
+        type: string
+        required: false
+        default: ''
 
 permissions:
   contents: read
@@ -74,13 +79,29 @@ jobs:
           done
 
       - name: Generate timing report
+        env:
+          CUTOFF: ${{ inputs.cutoff }}
         run: |
           set -euo pipefail
-          uv run python scripts/analyze_ci_timings.py \
-            --jobs jobs/ \
-            --workflow "Verify agent instructions" \
-            --title "verify-agents.yml timings (weekly)" \
-            > report.md
+          # When ``CUTOFF`` is empty (cron or unset dispatch input), the
+          # script runs in single-window mode. When it carries a date, the
+          # script switches to compare mode for #545 AC1/AC7 closeout.
+          # ``--title`` is rewritten in compare mode so the comment header
+          # is self-describing.
+          if [ -n "${CUTOFF}" ]; then
+            uv run python scripts/analyze_ci_timings.py \
+              --jobs jobs/ \
+              --workflow "Verify agent instructions" \
+              --cutoff "${CUTOFF}" \
+              --title "verify-agents.yml timings (pre vs post ${CUTOFF})" \
+              > report.md
+          else
+            uv run python scripts/analyze_ci_timings.py \
+              --jobs jobs/ \
+              --workflow "Verify agent instructions" \
+              --title "verify-agents.yml timings (weekly)" \
+              > report.md
+          fi
 
       - name: Append report to step summary
         run: cat report.md >> "$GITHUB_STEP_SUMMARY"
