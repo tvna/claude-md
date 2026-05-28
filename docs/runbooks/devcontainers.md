@@ -48,6 +48,25 @@ rm .devcontainer-write-check
 which claude || which codex
 ```
 
+If VS Code fails before post-create with `unable to find user codex` or
+`unable to find user claude`, it is reusing a stale container that was
+created before the agent user existed. That failure happens before the
+repository's in-container preflight can run. Inspect the labelled
+container from the host, then remove it only after the script reports it
+as stale:
+
+```sh
+.devcontainer/scripts/check-stale-agent-container.sh codex \
+  --workspace /Users/tvna/Documents/GitOps/claude-md
+.devcontainer/scripts/check-stale-agent-container.sh codex \
+  --workspace /Users/tvna/Documents/GitOps/claude-md \
+  --rm
+```
+
+Use `claude` instead of `codex` for the Claude entrypoint. Then reopen
+the devcontainer so VS Code creates a fresh container from the current
+GHCR image.
+
 The prebuild definitions live under `.devcontainer/images/<agent>/`.
 Those files are CI inputs only; local users should open the agent
 entrypoints listed above. The prebuild definitions also run the agent
@@ -268,6 +287,7 @@ python3 -m json.tool claude-md.code-workspace
 bash -n .devcontainer/scripts/apply-egress-allowlist.sh
 bash -n .devcontainer/scripts/install-agent-cli.sh
 bash -n .devcontainer/scripts/prepare-agent-workspace.sh
+bash -n .devcontainer/scripts/check-stale-agent-container.sh
 sh -n .devcontainer/images/features/agent-user/install.sh
 nix build .#claude-cli
 nix build .#codex-cli
