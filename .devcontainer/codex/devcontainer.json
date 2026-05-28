@@ -8,7 +8,7 @@
   "remoteEnv": {
     "AGENT_CONTAINER": "codex"
   },
-  "postCreateCommand": "nix develop .#codex --command uv sync --locked --group local",
+  "postCreateCommand": "nix develop .#codex --command uv sync --locked --group local && bash .devcontainer/scripts/install-agent-cli.sh codex",
   "postStartCommand": "if [ \"${DEVCONTAINER_APPLY_EGRESS_ALLOWLIST:-1}\" = \"1\" ]; then nix develop .#network --command sudo --preserve-env=PATH bash .devcontainer/scripts/apply-egress-allowlist.sh .devcontainer/network/codex.allowlist; fi",
   "customizations": {
     "vscode": {

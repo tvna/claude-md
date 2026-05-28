@@ -20,9 +20,19 @@ the matching Nix shell, and run:
 uv sync --locked --group local
 ```
 
+They also install the matching agent CLI into `/usr/local/bin` from the
+Nix package outputs:
+
+| Agent | CLI verification |
+|---|---|
+| Claude | `claude --version` |
+| Codex | `codex --version` |
+
 The prebuild definitions live under `.devcontainer/images/<agent>/`.
 Those files are CI inputs only; local users should open the agent
-entrypoints listed above.
+entrypoints listed above. The prebuild definitions also run the agent
+CLI install script so GHCR images already contain the Nix-built CLI
+symlink.
 
 ## Prebuilt images
 
@@ -147,6 +157,12 @@ tools live in the common package set, while Claude-only and Codex-only
 tools live in their own shell definitions. `flake.lock` pins the
 resolved nixpkgs revision.
 
+The Claude and Codex CLIs are pinned in `flake.nix` as Nix packages that
+fetch the Linux x64 and arm64 npm release tarballs by hash. The
+devcontainer post-create step links those Nix-built binaries into
+`/usr/local/bin` so they are available in ordinary VS Code terminals as
+well as inside `nix develop`.
+
 To update pinned tool versions:
 
 ```sh
@@ -230,4 +246,7 @@ python3 -m json.tool .devcontainer/claude/devcontainer.json
 python3 -m json.tool .devcontainer/codex/devcontainer.json
 python3 -m json.tool claude-md.code-workspace
 bash -n .devcontainer/scripts/apply-egress-allowlist.sh
+bash -n .devcontainer/scripts/install-agent-cli.sh
+nix build .#claude-cli
+nix build .#codex-cli
 ```

@@ -9,6 +9,7 @@
   "remoteEnv": {
     "AGENT_CONTAINER": "codex"
   },
+  "postCreateCommand": "bash .devcontainer/scripts/install-agent-cli.sh codex",
   "customizations": {
     "vscode": {
       "extensions": [
