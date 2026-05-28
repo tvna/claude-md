@@ -162,7 +162,12 @@ class TestMainCli:
         names = {entry["name"] for entry in manifest}
         # Spot-check a few well-known gates rather than the full set so
         # the test does not have to track every future addition.
-        assert {"scan_apm_portability", "verify_apm_checksums", "uv_pin_drift"} <= names
+        assert {
+            "scan_apm_portability",
+            "verify_apm_checksums",
+            "uv_pin_drift",
+            "nixpkgs_cooldown",
+        } <= names
         for entry in manifest:
             assert set(entry.keys()) == {"name", "argv", "required_env", "required_bin", "soft"}
 
