@@ -73,9 +73,14 @@ prior art that pattern was extracted from.
 
 ### M2. Unit tests under `tests/test_<name>.py`
 
-Every workflow-called script has a matching test module. `pytest -q`
-from the repository root must exit 0. Tests exercise pure functions
-directly; tests for the boundary use monkeypatch to inject fakes.
+Every workflow-called script has a matching test module.
+`uv run python -m pytest -q` from the repository root must exit 0.
+Tests exercise pure functions directly; tests for the boundary use
+monkeypatch to inject fakes.
+When quoting the result in a PR body, use a pass marker that
+`scripts/auto_retro.py` recognizes, for example
+`result: exit 0 (684 passed)` or `result: 684 passed in 1.23s`.
+Do not quote a local `blocked:` result as successful verification.
 
 The `[tool.pytest.ini_options]` block in `pyproject.toml` already sets
 `pythonpath = ["scripts"]` and `testpaths = ["tests"]`, so a test
@@ -179,6 +184,11 @@ pre-existing files is listed under `[[tool.mypy.overrides]]` with
 `ignore_errors = true` and an inline rationale; those entries are
 deferred type-debt and must be removed (not extended) as follow-up
 PRs clean each cluster.
+
+`scripts/scan_maintainability_metrics.py` (#200) runs alongside those
+shape gates and enforces the first maintainability pilot: an 800-line
+module-size budget for scripts, with explicit baseline debt documented
+in `docs/standards/maintainability-metrics.md`.
 
 `ruff check` includes the `S` (flake8-bandit) rule family (#190) so the
 same gate also acts as a static security check for workflow-called

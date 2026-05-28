@@ -97,6 +97,61 @@ Local in-repo workflow references (`./...`) and `docker://...` OCI images are ou
 - **FIRST EPSS** — queried via `api.first.org/data/v1/epss` (`--epss-live`) for CVE-aliased findings. Provides an exploit-prediction score (0.0-1.0) and percentile rank so reviewers can prioritize CVEs that KEV has not (yet) confirmed as exploited. Per [#173](https://github.com/tvna/claude-md/issues/173) EPSS is **advisory-only**: scores enrich the summary table but never escalate `threat:response-needed` on their own. CISA KEV remains the authoritative known-exploitation signal; the rationale for not adding an EPSS threshold here is recorded below.
 - **NVD (supplemental enrichment, [#174](https://github.com/tvna/claude-md/issues/174))** — `--nvd-file` for fixture-driven tests, `--nvd-live` to query `services.nvd.nist.gov/rest/json/cves/2.0`. NVD is consulted **only for CVEs already surfaced by OSV or GHSA**; it never widens the finding set, never reclassifies severity, and never affects the `threat:response-needed` decision. When NVD enrichment is available it attaches CVSS (v3.1 → v3.0 → v2.0 fallback), CWE identifiers, and reference URLs to the triage summary row and to a follow-up `### NVD references (supplemental)` block. **Limitations:** NVD has strict unauthenticated rate limits (5 requests per 30 seconds) and visible analyst-publish latency on newly assigned CVEs, so transport failure, 404, or empty payloads are silently skipped. **Missing NVD enrichment is not evidence that the underlying OSV/GHSA finding is irrelevant** — response decisions remain driven by KEV correlation, OSSF `MAL-` findings, and GHSA `malware` advisories, never by NVD presence.
 
+### Source-selection policy
+
+Threat-intelligence sources are admitted only when they preserve deterministic,
+attributable routing. A proposed source must meet all of these properties before
+it can influence labels:
+
+- **Public availability.** The source is public, queryable by maintainers, and
+  does not require private credentials, paid access, or sharing repository
+  context with an unapproved service.
+- **License and terms compatibility.** The source permits automated lookup,
+  citation in GitHub Actions summaries, and fixture snapshots for tests.
+- **Stable machine-readable format.** The source exposes JSON, CSV, or another
+  documented structured format with stable identifiers that can be joined to a
+  repository dependency surface.
+- **Source attribution.** Every surfaced finding can name the source that
+  produced it. Aggregated data must preserve whether a result came from OSV.dev,
+  GHSA, OSSF malicious-packages, CISA KEV, FIRST EPSS, NVD, or a future source.
+- **Fixture-testability.** The workflow must support a checked-in or
+  test-generated fixture path so CI verifies the routing rule without live
+  network access.
+
+Current finding sources are OSV.dev, GitHub Advisory Database, OSSF
+malicious-packages, and CISA KEV. FIRST EPSS is a prediction enrichment source,
+not an escalation source. NVD is metadata enrichment only and cannot widen the
+finding set. Candidate sources named for later review include ecosystem-specific
+advisory feeds, Dependabot/security-alert exports, and other public malware or
+known-exploitation catalogs, but none should be added until the properties above
+are satisfied and fixtures cover the new branch.
+
+Precedence is ordered by evidence strength:
+
+1. **Confirmed exploitation or malware** takes priority. CISA KEV correlation,
+   GHSA `malware` advisories, and OSSF `MAL-` findings can add
+   `threat:response-needed`.
+2. **Prediction enriches but does not escalate.** FIRST EPSS scores help humans
+   prioritize CVE-aliased findings, but do not add `threat:response-needed`.
+3. **Vulnerability metadata informs context.** OSV.dev, GHSA vulnerability
+   advisories, and NVD metadata establish or enrich the finding set, but absent
+   exploitation or malware evidence they route to `threat:intel-needed` only.
+
+Missing source data is never evidence of safety. Empty, rate-limited, failed, or
+unsupported responses mean "no usable data from this source in this run"; they do
+not clear another source's finding and do not remove an existing need for human
+review. Operators should use fixture inputs when a live source is unreachable and
+should state any live-source outage in the workflow summary or follow-up comment
+when it affects confidence.
+
+Source quality is reviewed during the retrospective for every PR that changes
+`scripts/threat_intel_triage.py`, `.github/workflows/threat-intel-triage.yml`, or
+this runbook, and at least quarterly while #170 remains open. The review records
+false positives, false negatives, stale-label removals, rate-limit failures, and
+terms or schema changes. A source that repeatedly produces unactionable findings
+or cannot be fixture-tested is parked until a narrower query, better
+normalization, or removal plan is documented.
+
 Any external finding adds `threat:intel-needed`. Any KEV-correlated finding, any GHSA advisory whose `type` is `malware`, *or* any finding whose ID starts with `MAL-` (OSSF malicious-packages) also adds `threat:response-needed`. Fixture inputs (`--osv-file`, `--kev-file`, `--ghsa-file`, `--malpkg-file`, `--epss-file`, `--nvd-file`) exist for tests so CI can verify the routing logic without live network access; the same fixture path is the documented fallback when OSV.dev or GitHub Advisory is unreachable -- an operator can dispatch the workflow with a pre-fetched fixture instead of the corresponding `--*-live` flag. The triage summary lists which sources actually surfaced findings and tags each row with its source string (e.g. `OSV.dev, OSSF malicious-packages`); when EPSS scores are attached, an `EPSS` column shows `<score> (p<percentile>%)` per finding and `FIRST EPSS` appears in the `Sources:` line. NVD never appears in the source string because it is enrichment, not a finding source; when NVD data is attached the row gains `NVD CVSS` and `NVD CWE` columns and a `### NVD references (supplemental)` block lists per-CVE detail.
 
 ### Why EPSS is advisory-only (no auto-escalation threshold)
