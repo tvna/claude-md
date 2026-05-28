@@ -67,6 +67,7 @@ from _trusted_bots import _TRUSTED_BOT_LOGINS
 from issue_link import extract_refs, strip_html_comments
 
 FALLBACK_TYPE_SCOPE = "retro"
+_DECISION_TREE_DOC_PATH = Path("docs/generated/auto-retro-decision-tree.md")
 
 # Refs issue #380: GitHub may not finalize merge_commit_sha by the time
 # pull_request_target.closed fires; retry the PR-detail fetch with
@@ -881,6 +882,21 @@ def render_decision_tree_mermaid() -> str:
         else:
             lines.append(f"    {edge.source} --> {edge.target}")
     return "\n".join(lines) + "\n"
+
+
+def render_decision_tree_markdown() -> str:
+    """Render the checked-in auto-retro decision tree document."""
+    return (
+        "# Auto-retro decision tree\n"
+        "\n"
+        "This file is generated from `scripts/auto_retro.py::run` by "
+        "`python3 scripts/auto_retro.py decision-tree-doc`. Do not edit it "
+        "by hand; update `run()` and regenerate instead.\n"
+        "\n"
+        "```mermaid\n"
+        f"{render_decision_tree_mermaid()}"
+        "```\n"
+    )
 
 
 def _max_active_fp(
@@ -2576,6 +2592,13 @@ def _cmd_decision_tree(_args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_decision_tree_doc(args: argparse.Namespace) -> int:
+    output = Path(args.output)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(render_decision_tree_markdown(), encoding="utf-8")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -2614,6 +2637,17 @@ def main(argv: list[str] | None = None) -> int:
         help="Render the auto-retro run decision tree as Mermaid.",
     )
     p_decision_tree.set_defaults(func=_cmd_decision_tree)
+
+    p_decision_tree_doc = sub.add_parser(
+        "decision-tree-doc",
+        help="Write the checked-in auto-retro decision tree document.",
+    )
+    p_decision_tree_doc.add_argument(
+        "--output",
+        default=str(_DECISION_TREE_DOC_PATH),
+        help=f"Markdown output path (default {_DECISION_TREE_DOC_PATH}).",
+    )
+    p_decision_tree_doc.set_defaults(func=_cmd_decision_tree_doc)
 
     args = parser.parse_args(argv)
     try:

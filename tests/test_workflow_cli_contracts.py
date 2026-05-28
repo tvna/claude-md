@@ -95,6 +95,7 @@ class WorkflowInvocation(NamedTuple):
 # enforce that in both directions.
 CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("analyze_ci_timings.py", None): "test_analyze_ci_timings_matches_workflow_args",
+    ("auto_retro.py", "decision-tree-doc"): "test_auto_retro_decision_tree_doc_matches_workflow_args",
     ("auto_retro.py", "run"): "test_auto_retro_run_matches_workflow_env",
     ("auto_retro.py", "sentinel"): "test_auto_retro_sentinel_matches_workflow_env",
     ("body_policy.py", "verify"): "test_body_policy_verify_matches_workflow_body_file",
@@ -315,6 +316,20 @@ def test_auto_retro_sentinel_matches_workflow_env(
     )
 
     assert auto_retro.main(["sentinel"]) == 0
+
+
+def test_auto_retro_decision_tree_doc_matches_workflow_args(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Mirror the default-output shape used by the generated-doc workflow."""
+    monkeypatch.chdir(tmp_path)
+    output = Path("docs/generated/auto-retro-decision-tree.md")
+
+    assert auto_retro.main(["decision-tree-doc"]) == 0
+
+    assert output.read_text(encoding="utf-8") == (
+        auto_retro.render_decision_tree_markdown()
+    )
 
 
 def test_body_policy_verify_matches_workflow_body_file(tmp_path: Path) -> None:
