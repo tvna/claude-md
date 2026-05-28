@@ -66,7 +66,7 @@ Maps 1:1 to the Conventional Commit prefixes used in this repo (`docs(...)`, `fi
 
 ### `threat:*` (0 to 2)
 
-These labels are applied by the `Threat intelligence triage` workflow. They do not replace `severity:security`; they record whether external threat-intelligence collection found repository-relevant vulnerability information.
+These labels are applied by the `triage` job in the `Issue and PR triage` workflow. They do not replace `severity:security`; they record whether external threat-intelligence collection found repository-relevant vulnerability information.
 
 | Label | Meaning |
 |---|---|
@@ -145,7 +145,7 @@ should state any live-source outage in the workflow summary or follow-up comment
 when it affects confidence.
 
 Source quality is reviewed during the retrospective for every PR that changes
-`scripts/threat_intel_triage.py`, `.github/workflows/threat-intel-triage.yml`, or
+`scripts/threat_intel_triage.py`, `.github/workflows/issue-pr-triage.yml`, or
 this runbook, and at least quarterly while #170 remains open. The review records
 false positives, false negatives, stale-label removals, rate-limit failures, and
 terms or schema changes. A source that repeatedly produces unactionable findings

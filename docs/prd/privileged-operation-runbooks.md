@@ -106,7 +106,7 @@ Sources: `pyproject.toml`, `uv.lock`, `scripts/install-uv.sh`, `scripts/uv_pin.p
 
 ## 8. Threat-intelligence triage
 
-Workflow: [`.github/workflows/threat-intel-triage.yml`](../.github/workflows/threat-intel-triage.yml). Script: [`scripts/threat_intel_triage.py`](../scripts/threat_intel_triage.py). Runbook: [`docs/runbooks/issue-triage.md` `threat:*`](../runbooks/issue-triage.md#threat-0-to-2).
+Workflow: [`.github/workflows/issue-pr-triage.yml`](../.github/workflows/issue-pr-triage.yml) / `triage`. Script: [`scripts/threat_intel_triage.py`](../scripts/threat_intel_triage.py). Runbook: [`docs/runbooks/issue-triage.md` `threat:*`](../runbooks/issue-triage.md#threat-0-to-2).
 
 - **Authorizing issue.** [#170](https://github.com/tvna/claude-md/issues/170) (sustained operations). The workflow runs automatically on `issues` and `pull_request_target` events; no dispatch exists.
 - **Dry-run command.** Not provided as an input. The workflow's outputs are deterministic given a fixed `(uv.lock, pyproject.toml, OSV.dev snapshot, GHSA snapshot, OSSF malicious-packages snapshot, CISA KEV snapshot, FIRST EPSS snapshot)` -- the same inputs produce the same `recommended_labels` and `remove_labels` outputs. `scripts/threat_intel_triage.py` exposes `--osv-file`, `--kev-file`, `--ghsa-file`, `--malpkg-file`, and `--epss-file` fixture inputs (used by `tests/test_threat_intel_triage.py`) so the routing logic can be exercised locally without live network access; this is the dry-run-equivalent surface for the script. EPSS is advisory-only per [#173](https://github.com/tvna/claude-md/issues/173) and never changes the label decision, so its snapshot affects only the summary table.

@@ -450,7 +450,7 @@ def _assemble_families(args: argparse.Namespace) -> list[FamilyRow]:
         ),
         pr_gate_only_row(
             family="non-ascii",
-            detector=".github/workflows/scan-non-ascii.yml",
+            detector=".github/workflows/issue-pr-triage.yml / scan",
             evidence="scripts/scan_non_ascii.py + scripts/preflight_non_ascii.py",
         ),
         pr_gate_only_row(

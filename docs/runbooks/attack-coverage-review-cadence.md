@@ -197,7 +197,7 @@ one comment per quarter to a tracking issue. To roll back:
 ## Verify
 
 ```sh
-# 1. The runbook is ASCII-only (must pass scan-non-ascii.yml).
+# 1. The runbook is ASCII-only (must pass issue-pr-triage.yml / scan).
 python3 -c "import pathlib; assert pathlib.Path('docs/runbooks/attack-coverage-review-cadence.md').read_text().isascii()"
 
 # 2. The template block extracts cleanly and contains all seven required H3 sections.

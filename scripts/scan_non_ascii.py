@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Non-ASCII scan + advisory/block actions for issues, PRs, and comments.
 
-Invoked from ``.github/workflows/scan-non-ascii.yml`` as the single
+Invoked from ``.github/workflows/issue-pr-triage.yml`` as the single
 ``python3 scripts/scan_non_ascii.py run`` entry point. The workflow only
 marshals env vars; all logic lives here and is unit-tested in
 ``tests/test_scan_non_ascii.py``.
@@ -241,7 +241,7 @@ def build_advisory_comment(
         f"{escaped}\n"
         "```\n"
         "\n"
-        "_Posted automatically by `.github/workflows/scan-non-ascii.yml`._\n"
+        "_Posted automatically by `.github/workflows/issue-pr-triage.yml`._\n"
     )
 
 
@@ -379,7 +379,7 @@ def block_external(repo: str, number: int, kind: str) -> str:
             {
                 "event": "REQUEST_CHANGES",
                 "body": (
-                    "Blocked by .github/workflows/scan-non-ascii.yml -- "
+                    "Blocked by .github/workflows/issue-pr-triage.yml -- "
                     "non-ASCII content from external contributor. See the "
                     "advisory comment above; re-submit with ASCII-only content."
                 ),
