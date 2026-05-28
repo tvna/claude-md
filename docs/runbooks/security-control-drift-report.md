@@ -46,7 +46,7 @@ JST Monday 05:00 trigger to reduce scheduled workflow sprawl.
 | Family | Status reason |
 |---|---|
 | `title-policy` (`verify-title-policy.yml`) | PR-gate only; no scheduled drift surface beyond PR review. |
-| `non-ascii` (`scan-non-ascii.yml`, `preflight_non_ascii.py`) | PR-gate only. |
+| `non-ascii` (`issue-pr-triage.yml` / `scan`, `preflight_non_ascii.py`) | PR-gate only. |
 | `dependabot-labels` (`verify-dependabot-labels.yml`) | PR-gate only. |
 | `required-checks` (live vs `.github/rulesets/main.json`) | Tracked separately by [#120](https://github.com/tvna/claude-md/issues/120); intentionally out of scope here. |
 

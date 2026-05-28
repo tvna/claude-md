@@ -68,7 +68,7 @@ If the diff touches `CLAUDE.md` or `AGENTS.md` directly without a corresponding 
 - **Evidence.** Three artifacts the reviewer looks for:
   - **`severity:security` label** on the PR (or its `Closes #` / `Refs #` target). The label is the routing signal that this dimension applies.
   - **Authorizing or parked-follow-up issue link** in the PR body. Either an open sub-issue of #178 / #63 that authorizes the change with explicit rationale and verification, or a parked follow-up issue documenting the residual risk and the re-open condition (calendar date, evidence threshold, or upstream event).
-  - **Verification evidence** in the PR body's `## Verification` section. For a security-sensitive change, the reviewer requires output from at least one deterministic gate (`verify-apm-portability.yml`, `verify-apm-drift.yml`, `scan-non-ascii.yml`) or an explicit "this gate cannot run for this category" statement that names the residual risk.
+  - **Verification evidence** in the PR body's `## Verification` section. For a security-sensitive change, the reviewer requires output from at least one deterministic gate (`verify-apm.yml`, `issue-pr-triage.yml` / `scan`) or an explicit "this gate cannot run for this category" statement that names the residual risk.
 - **Hard block.** The PR is security-sensitive and any of the three artifacts is missing. Request changes; do not accept "trust me" as evidence.
 
 ## Verify

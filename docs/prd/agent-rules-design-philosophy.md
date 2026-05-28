@@ -43,7 +43,7 @@ harness gets a chance to enforce or fail to enforce it.
   repository-specific case studies.
 - Becoming a hard gate. The repository already has
   `verify-apm-drift.yml`, `verify-body-policy.yml`,
-  `verify-title-policy.yml`, `scan-non-ascii.yml`,
+  `verify-github-content.yml`, `issue-pr-triage.yml` / `scan`,
   `verify-apm-portability.yml`, and the `preflight_non_ascii.py`
   `PreToolUse` hook for the deterministic checks. This document does
   not duplicate those gates; it tells reviewers which lane each gate
@@ -530,7 +530,7 @@ gates are green on the PR head commit:
   authorizing sub-issue.
 - `verify-body-policy.yml` and `verify-title-policy.yml` confirm
   the PR body and title follow `docs/standards/issue-pr-body-standard.md`.
-- `scan-non-ascii.yml` confirms no non-ASCII characters slipped
+- `issue-pr-triage.yml` / `scan` confirms no non-ASCII characters slipped
   into files that must remain ASCII.
 
 A red light on any of the above is a hard block; do not advance to

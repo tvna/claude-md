@@ -21,7 +21,7 @@ The append-only policy for `archive/` is documented separately in
 | [agent-rules-design-philosophy.md](prd/agent-rules-design-philosophy.md) | Meta-runbook for evolving `.apm/instructions/master.instructions.md` and its compiled `CLAUDE.md` / `AGENTS.md`. Six principles plus the four-lane responsibility matrix. | #226, #246 | `.apm/instructions/master.instructions.md` (source); `scripts/scan_design_philosophy_drift.py`; `.github/workflows/verify-design-philosophy.yml` |
 | [security-control-inventory.md](prd/security-control-inventory.md) | MITRE ATT&CK coverage SoT for repository security surfaces. Re-read whenever a workflow, script, ruleset, or runbook lands. | #179, #178 | `scripts/security_drift_report.py`; `.github/workflows/weekly-maintenance.yml` |
 | [privileged-operation-runbooks.md](prd/privileged-operation-runbooks.md) | Six-control contract (authorizing issue, dry-run, live apply, rollback, audit, secret-leak evidence) for every privileged operation. | #182, #178 | `.github/workflows/apply-rulesets.yml`; `.github/workflows/apply-labels.yml`; `.github/workflows/weekly-maintenance.yml` |
-| [non-ascii-defense.md](prd/non-ascii-defense.md) | Three-layer ASCII discipline at the GitHub-post boundary. | #102 | `scripts/scan_non_ascii.py`; `scripts/preflight_non_ascii.py`; `scripts/sanitize_history.py`; `.github/workflows/scan-non-ascii.yml` |
+| [non-ascii-defense.md](prd/non-ascii-defense.md) | Three-layer ASCII discipline at the GitHub-post boundary. | #102 | `scripts/scan_non_ascii.py`; `scripts/preflight_non_ascii.py`; `scripts/sanitize_history.py`; `.github/workflows/issue-pr-triage.yml` |
 
 ## standards/ -- shapes, schemas, contracts
 

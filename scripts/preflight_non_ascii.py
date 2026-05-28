@@ -8,7 +8,7 @@ marker, emits a ``permissionDecision: "deny"`` JSON on stdout that asks
 Claude to either translate to English or append ``<!-- non-ascii-ack -->``
 to the body before retrying.
 
-Complements the server-side Layer 2 workflow (``scan-non-ascii.yml`` /
+Complements the server-side Layer 2 workflow (``issue-pr-triage.yml`` /
 ``scripts/scan_non_ascii.py``); see ``docs/prd/non-ascii-defense.md`` Layer
 2.5. Refs #146, umbrella #102.
 
@@ -92,7 +92,7 @@ def build_deny_reason(
     return (
         f"Blocked by scripts/preflight_non_ascii.py (Layer 2.5): "
         f"`{tool_name}` {where} contains non-ASCII characters that would "
-        f"trigger the server-side scan-non-ascii.yml workflow on every "
+        f"trigger the server-side issue-pr-triage.yml workflow on every "
         f"post. Pick one and retry:\n"
         f"  1. Translate the {where} to English.\n"
         f"  2. Append `\\n\\n{ack_marker}` to the body (OWNER opt-out -- "

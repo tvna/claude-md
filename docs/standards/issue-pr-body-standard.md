@@ -104,7 +104,7 @@ pass unchanged" so the no-behaviour-change claim is checkable.
 `Acceptance criteria` should include either "the file exists at
 `<path>`" or a content check ("section X is present and links to Y").
 Examples in the body must be ASCII-only to keep the
-`scan-non-ascii.yml` gate green.
+`issue-pr-triage.yml` / `scan` job green.
 
 ### `type:tracking`
 
@@ -328,7 +328,7 @@ historical context of the carve-out stays visible.
 ## Verify
 
 ```sh
-# 1. The doc itself is ASCII-only (it must pass scan-non-ascii.yml).
+# 1. The doc itself is ASCII-only (it must pass issue-pr-triage.yml / scan).
 python -c "import pathlib; \
   assert pathlib.Path('docs/standards/issue-pr-body-standard.md').read_text().isascii()"
 

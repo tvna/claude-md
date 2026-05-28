@@ -8,7 +8,7 @@ This document is the operator-facing companion to [#102](https://github.com/tvna
 
 | File | Target | Purpose |
 |---|---|---|
-| `.github/workflows/scan-non-ascii.yml` | GitHub Actions | Write-side trigger; marshals env vars and shells out to the Python entry point below |
+| `.github/workflows/issue-pr-triage.yml` / `scan` | GitHub Actions | Write-side trigger; marshals env vars and shells out to the Python entry point below |
 | `scripts/scan_non_ascii.py` | repo working tree | All Layer 2 logic (extract / classify / label / advisory / block). Per the refactor strategy in [#123](https://github.com/tvna/claude-md/issues/123) — mirrors `scripts/uv_pin.py` |
 | `tests/test_scan_non_ascii.py` | repo working tree | pytest coverage for the above; runs in `verify-agents.yml` on every PR |
 | `.github/workflows/verify-title-policy.yml` | GitHub Actions | Title-boundary gate for ASCII-only, convention-compliant issue and PR titles ([#155](https://github.com/tvna/claude-md/issues/155)) |
@@ -94,11 +94,11 @@ The file is committed (same exposure reasoning as the backup) and lands in a rev
 - `PATCH /repos/tvna/claude-md/issues/comments/{comment_id}` — issue comments
 - `PATCH /repos/tvna/claude-md/pulls/{number}` — PR title/body (PRs use a separate body endpoint)
 
-## Layer 2 — Write-side detection (`scan-non-ascii.yml` + `scripts/scan_non_ascii.py`)
+## Layer 2 — Write-side detection (`issue-pr-triage.yml` / `scan` + `scripts/scan_non_ascii.py`)
 
 ### Title boundary (`verify-title-policy.yml` + `scripts/title_policy.py`)
 
-Titles are stricter than bodies and comments. They must be ASCII-only because issue and PR titles are header-level metadata read by notifications, project boards, triage lists, and agents before body context or opt-out markers can be inspected. The `Verify title policy / gate` workflow rejects any non-ASCII code point in issue and PR titles, including Japanese text, emoji, zero-width marks, RTL controls, fullwidth homoglyphs, and other multi-byte control surfaces. It also enforces repository naming convention: issue titles use `type(scope): summary`, while PR titles use `type(scope): summary (#issue)`. The issue-side check runs on `issues`; the PR-side check runs on `pull_request` and is required by `.github/rulesets/main.json`. The `Scan non-ASCII content` workflow also posts the normal label/advisory notification for non-ASCII issue/PR title violations, and the body-level `<!-- non-ascii-ack -->` opt-out does not dismiss a non-ASCII title.
+Titles are stricter than bodies and comments. They must be ASCII-only because issue and PR titles are header-level metadata read by notifications, project boards, triage lists, and agents before body context or opt-out markers can be inspected. The `Verify title policy / gate` workflow rejects any non-ASCII code point in issue and PR titles, including Japanese text, emoji, zero-width marks, RTL controls, fullwidth homoglyphs, and other multi-byte control surfaces. It also enforces repository naming convention: issue titles use `type(scope): summary`, while PR titles use `type(scope): summary (#issue)`. The issue-side check runs on `issues`; the PR-side check runs on `pull_request` and is required by `.github/rulesets/main.json`. The `Issue and PR triage` workflow's `scan` job also posts the normal label/advisory notification for non-ASCII issue/PR title violations, and the body-level `<!-- non-ascii-ack -->` opt-out does not dismiss a non-ASCII title.
 
 **Implementation split.** The YAML workflow only marshals env vars and invokes `python3 scripts/scan_non_ascii.py run`. All logic — event extraction, classification, escaping, label/comment/block side effects — lives in `scripts/scan_non_ascii.py` and is covered by `tests/test_scan_non_ascii.py`. Pattern per [#123](https://github.com/tvna/claude-md/issues/123) (mirrors [#112](https://github.com/tvna/claude-md/issues/112) / [#122](https://github.com/tvna/claude-md/pull/122)).
 
@@ -252,7 +252,7 @@ gh issue list --state all --json title,body \
 **L2 — Write-side workflow (after merging Layer 2):**
 
 1. Owner opens a test issue titled `日本語テスト #102 verify`.
-2. Within ~60 s, the `Scan non-ASCII content` workflow run succeeds; `gh issue view <new>` shows label `severity:non-ascii-content` and exactly one advisory comment containing `日本語`.
+2. Within ~60 s, the `Issue and PR triage` workflow's `scan` job succeeds; `gh issue view <new>` shows label `severity:non-ascii-content` and exactly one advisory comment containing `日本語`.
 3. From a sock-puppet fork account, open a PR with non-ASCII in the body — the workflow opens a request-changes review.
 4. Close/delete test artifacts; record the workflow run URLs in [#102](https://github.com/tvna/claude-md/issues/102).
 
@@ -276,7 +276,7 @@ gh issue list --state all --json title,body \
 | Layer | Path |
 |---|---|
 | 1 — past sanitization | `python3 scripts/sanitize_history.py restore --backup originals-YYYYMMDD.json.gz`. The SHA-256 idempotency check makes restore safe even if some items were not yet patched. |
-| 2 — write-side workflow | Revert the PR that added `.github/workflows/scan-non-ascii.yml`. The `severity:non-ascii-content` label remains harmless without the workflow; delete it via `Apply labels` (`prune=true`) if desired. |
+| 2 — write-side workflow | Revert the PR that added the `scan` job in `.github/workflows/issue-pr-triage.yml`. The `severity:non-ascii-content` label remains harmless without the workflow; delete it via `Apply labels` (`prune=true`) if desired. |
 | 3 — read-side hook | Remove the `PostToolUse` entry from `~/.claude/settings.json` (or rename `~/.claude/hooks/sanitize-github-response.sh` to disable). No repo change. |
 
 ## References

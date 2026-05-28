@@ -1,22 +1,56 @@
-name: Threat intelligence triage
+name: Issue and PR triage
 
 on:
   issues:
     types: [opened, edited, labeled, unlabeled, reopened]
   pull_request_target:
     types: [opened, edited, synchronize, labeled, unlabeled, reopened, ready_for_review]
+  issue_comment:
+    types: [created, edited]
+  pull_request_review_comment:
+    types: [created, edited]
 
-permissions:
-  issues: write
-  pull-requests: write
-  contents: read
+permissions: {}
 
 jobs:
+  scan:
+    runs-on: ubuntu-latest
+    if: >-
+      github.actor != 'github-actions[bot]' &&
+      (
+        (github.event_name == 'issues' &&
+          contains(fromJSON('["opened","edited","reopened"]'), github.event.action)) ||
+        (github.event_name == 'pull_request_target' &&
+          contains(fromJSON('["opened","edited","reopened"]'), github.event.action)) ||
+        github.event_name == 'issue_comment' ||
+        github.event_name == 'pull_request_review_comment'
+      )
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+
+      - name: Scan and act on non-ASCII content
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+        run: python3 scripts/scan_non_ascii.py run
+
   triage:
     if: >-
       github.event_name == 'issues' ||
-      github.event.pull_request.head.repo.full_name == github.repository
+      (
+        github.event_name == 'pull_request_target' &&
+        github.event.pull_request.head.repo.full_name == github.repository
+      )
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
     env:
       GH_TOKEN: ${{ github.token }}
       REPO: ${{ github.repository }}

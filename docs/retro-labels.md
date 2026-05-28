@@ -208,7 +208,7 @@ rules above and verify the signal on the linked follow-up.
 ## Verify
 
 ```sh
-# 1. The doc is ASCII-only (it must pass scan-non-ascii.yml).
+# 1. The doc is ASCII-only (it must pass issue-pr-triage.yml / scan).
 python3 -c "import pathlib; pathlib.Path('docs/retro-labels.md').read_text().encode('ascii')"
 
 # 2. The label SoT exposes the four constants this doc enumerates.
