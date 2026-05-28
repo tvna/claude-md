@@ -73,9 +73,10 @@ prior art that pattern was extracted from.
 
 ### M2. Unit tests under `tests/test_<name>.py`
 
-Every workflow-called script has a matching test module. `pytest -q`
-from the repository root must exit 0. Tests exercise pure functions
-directly; tests for the boundary use monkeypatch to inject fakes.
+Every workflow-called script has a matching test module.
+`uv run python -m pytest -q` from the repository root must exit 0.
+Tests exercise pure functions directly; tests for the boundary use
+monkeypatch to inject fakes.
 
 The `[tool.pytest.ini_options]` block in `pyproject.toml` already sets
 `pythonpath = ["scripts"]` and `testpaths = ["tests"]`, so a test
