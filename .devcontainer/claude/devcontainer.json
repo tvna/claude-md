@@ -1,0 +1,27 @@
+{
+  "name": "claude-md Claude",
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu-24.04",
+  "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
+  "features": {
+    "ghcr.io/devcontainers/features/nix:1": {
+      "extraNixConfig": "experimental-features = nix-command flakes\naccept-flake-config = true"
+    }
+  },
+  "runArgs": [
+    "--cap-add=NET_ADMIN"
+  ],
+  "remoteEnv": {
+    "AGENT_CONTAINER": "claude"
+  },
+  "postCreateCommand": "nix develop .#claude --command uv sync --locked --group local",
+  "postStartCommand": "if [ \"${DEVCONTAINER_APPLY_EGRESS_ALLOWLIST:-1}\" = \"1\" ]; then nix develop .#network --command sudo --preserve-env=PATH bash .devcontainer/scripts/apply-egress-allowlist.sh .devcontainer/network/claude.allowlist; fi",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "jnoortheen.nix-ide",
+        "ms-python.python",
+        "charliermarsh.ruff"
+      ]
+    }
+  }
+}

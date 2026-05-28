@@ -54,6 +54,9 @@ jobs:
       - name: Assert uv pin lives only in pyproject.toml
         run: uv run python scripts/uv_pin.py drift
 
+      - name: Assert nixpkgs lock respects uv cooldown
+        run: uv run python scripts/nixpkgs_cooldown.py verify
+
       - name: Assert workflows install Python deps via uv only
         run: uv run python scripts/scan_workflow_pip.py verify
 

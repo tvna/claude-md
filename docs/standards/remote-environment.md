@@ -63,6 +63,12 @@ Once Codex documents a remote-only signal, the implementation path is intentiona
 
 Decision recorded in [#106](https://github.com/tvna/claude-md/issues/106).
 
+This decision applies only to the remote-session hook that repairs a
+single pre-existing `uv` binary. The VS Code devcontainer workflow in
+[`docs/runbooks/devcontainers.md`](../runbooks/devcontainers.md) uses
+Nix for a different problem: provisioning full Claude and Codex
+workspace toolchains with isolated agent-specific package sets.
+
 ## Verification
 
 In a fresh remote session:
