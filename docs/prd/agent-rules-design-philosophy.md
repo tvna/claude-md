@@ -195,6 +195,19 @@ removed.
   in section 3 must equal the subtitle `<text>` after normalization
   (`&` to `and`, case-insensitive, whitespace-collapsed); see
   section 3 for the invariant.
+- **hardness contour**: The shape of a universal-text rule's
+  enforcement edge, expressed by hardline phrasings such as "No
+  exceptions" or "every commit and PR". Diluting the contour means
+  attaching wording that softens, scopes-down, or carves out the
+  hardline without removing the hardline itself, so a reader cannot
+  tell from the text alone which rule actually binds. Reviewer
+  questions for preservation are listed in section 7.6.
+- **in-line carve-out**: A clause placed directly adjacent to a
+  hardline phrasing that introduces an exception, scope reduction,
+  or qualification without moving to a separate sub-bullet, runbook,
+  or repo-local doc. The pattern is the primary failure mode that
+  dilutes a hardness contour; section 7.6 lists it as an anti-pattern
+  the reviewer must catch before merge.
 
 ## 3. Responsibility matrix - six layers by four lanes
 
@@ -330,6 +343,41 @@ Q5. Is the rule a description of a past event (a retrospective, a
 
 Replayed in [`docs/archive/decision-tree-replay.md`](../archive/decision-tree-replay.md). The replay is a calibration check that section 4's decision tree reproduces the historical record; it is not normative.
 
+### 5.1 PR #577 - in-line carve-out next to a hardline phrasing
+
+**What happened.** PR #577 (closes #548) added the clause "When the
+work is a single GitHub UI-only edit ... perform that edit directly
+instead of opening a sub-issue." directly under the section 3
+hardline "Open a GitHub issue before any branch, commit, or PR; cite
+its number in every commit and PR. No exceptions -- typos, docs,
+hotfixes included." The added clause is logically already covered by
+the existing rule's "any branch, commit, or PR" scope, but its
+in-line placement next to "No exceptions" softens the hardness
+contour without removing the hardline phrasing.
+
+**Decision tree trace.**
+
+- Q1: Tool-agnostic? Yes (the rule is about issue ordering, not about
+  any vendor or product).
+- Q2: Deterministic? No (the threshold "single GitHub UI-only edit"
+  is reviewer judgment, not script-checkable).
+- Q3: Agent judgment plus universal? Yes.
+- Q4: Needs a repository-specific noun? No.
+- **Lane (decision tree only): universal text.** The four-question
+  walk does not block the PR.
+
+**Why the contour check is needed.** Section 4's tree is a
+necessary but not sufficient gate for the universal-text lane. The
+PR #577 edit passes the four questions yet still dilutes the
+hardness contour by attaching an in-line carve-out to a hardline
+phrasing and by re-stating a clause already implied by the existing
+rule's scope. Section 7.6 records the three anti-patterns the
+reviewer applies on top of the decision tree to catch this dilution
+before merge; the PR #577 diff fires the first two anti-patterns
+("in-line carve-out next to a hardline phrasing" and "redundant
+clause already implied by the existing rule's scope") and would
+have produced a "request changes" outcome under that subsection.
+
 ## 6. Gap analysis procedure
 
 Run the three sweeps below whenever a new universal text bullet, a
@@ -411,6 +459,13 @@ The mapping is a router, not a deterministic gate: it tells the
 contributor which lane to draft into first. The decision tree in
 section 4 then validates whether that draft lane is the correct
 final destination.
+
+"Unclear agent instruction" findings default to the runbook layer
+(a worked example or a repo-local runbook clarification); promotion
+into universal text requires a separate scoped sub-issue of #226
+with code-owner review and must preserve the hardness contour per
+[section 7.6](#76-hardness-contour-preservation) before any edit to
+`.apm/instructions/master.instructions.md` is proposed.
 
 For the orthogonal concern of spotting noise-commit and flooding
 patterns on a merged PR (high commit count, low-information
@@ -542,6 +597,64 @@ before merge, instead of allowing the repair to happen between PR
 open and merge. The criteria in section 7 are designed to make that
 catch reproducible.
 
+### 7.6 Hardness contour preservation
+
+The section 4 decision tree is a necessary but not sufficient gate
+for the universal-text lane. A diff that resolves to universal text
+through Q1 to Q4 can still dilute the hardness contour of an
+existing rule -- the shape of its enforcement edge expressed by
+hardline phrasings such as "No exceptions" or "every commit and
+PR". Reviewers apply the three anti-pattern questions below in
+addition to (not in place of) the decision tree. If any one fires
+on the diff, the outcome is "request changes" and the wording
+belongs in the runbook layer or in a separate scoped sub-issue
+rather than in universal text.
+
+The PR #577 worked case in [section 5.1](#51-pr-577---in-line-carve-out-next-to-a-hardline-phrasing)
+is the canonical evidence that the decision tree alone does not
+catch this dilution; section 5.1 records the four-question trace
+that produced a universal-text verdict and the anti-pattern hits
+that should have produced a "request changes" outcome instead.
+
+**Anti-pattern A: in-line carve-out next to a hardline phrasing.**
+
+- Reviewer question: Does the diff place an exception, scope
+  reduction, or qualification clause directly adjacent to a hardline
+  phrasing ("No exceptions", "every commit and PR", "always",
+  "never") without moving it to a separate sub-bullet, runbook, or
+  repo-local doc?
+- Outcome on fire: request changes. The carve-out belongs in a
+  runbook or a repo-local doc; the hardline phrasing in universal
+  text must keep its enforcement edge intact.
+
+**Anti-pattern B: redundant clause already implied by the existing rule's scope.**
+
+- Reviewer question: Is the new clause already covered by the
+  existing rule's scope as written (for example, a clause about "a
+  single GitHub UI-only edit" added to a rule that already says "any
+  branch, commit, or PR")?
+- Outcome on fire: request changes. A redundant clause adds reader
+  load without changing the binding rule, so it dilutes the contour
+  without justifying its own existence; if a clarification is
+  genuinely needed, the runbook layer is the correct destination.
+
+**Anti-pattern C: retrospective-derived wording promoted into universal text without a runbook layover.**
+
+- Reviewer question: Did the wording originate from a retrospective
+  classified as "Unclear agent instruction" and arrive in universal
+  text without first landing in a runbook clarification (per
+  [section 6.4](#64-retrospective-classification-to-action-lane-mapping))?
+- Outcome on fire: request changes. The default destination for
+  "Unclear agent instruction" findings is the runbook layer;
+  promotion into universal text is a separate scoped sub-issue that
+  the reviewer must see cited on the PR before approving.
+
+Section 7.3's three lane outcomes still apply; this subsection adds
+a fourth implicit outcome for universal-text edits: even when Q1
+through Q4 resolve to universal text, a fire on anti-pattern A, B,
+or C produces "request changes" with the redirect destination
+called out in the outcome line.
+
 ## 8. Validation strategy
 
 This document is valid only if:
@@ -605,6 +718,9 @@ flow, not this update flow.
 - [#225](https://github.com/tvna/claude-md/pull/225) - the PR whose
   repaired wording motivated #226 and is replayed in
   `docs/archive/decision-tree-replay.md` section 5.1.
+- [#577](https://github.com/tvna/claude-md/pull/577) - the PR whose
+  in-line carve-out under a hardline phrasing motivated section 5.1
+  of this document and the section 7.6 anti-pattern checklist.
 - [#75](https://github.com/tvna/claude-md/issues/75) - per-principle
   `*Layer: ...*` subtitles.
 - [#227](https://github.com/tvna/claude-md/issues/227) - corrected
