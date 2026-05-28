@@ -22,6 +22,48 @@ class TestRunAggregateSignals:
             m == "POST" and p == "/repos/o/r/issues" for m, p, _ in seen
         )
 
+    def test_skips_g2_no_signal_rows_even_with_review_comments(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """G2-style retro noise: a signal fires, but the repair table
+        would contain only the no-automated-signal sentinel.
+
+        Refs #595. Mirrors #592's G2 examples, including #585.
+        """
+        summary = tmp_path / "summary.md"
+        monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(summary))
+        seen = orchestrator_recorder(
+            monkeypatch,
+            review_comments=[{"id": 1, "body": "comment without row data"}],
+            commits=[
+                {
+                    "commit": {
+                        "message": (
+                            "docs(security): establish ATT&CK review cadence"
+                        )
+                    }
+                }
+            ],
+        )
+        event = merged_event(
+            number=583,
+            title="docs(security): establish ATT&CK review cadence",
+            body="",
+            commits=1,
+        )
+        assert ar.run(event, "o/r") == 0
+        assert not any(
+            m == "POST" and p == "/repos/o/r/issues" for m, p, _ in seen
+        )
+        printed = capsys.readouterr().out
+        assert "no standalone repair workload" in printed
+        assert "no standalone repair workload" in summary.read_text(
+            encoding="utf-8"
+        )
+
     def test_creates_retro_when_body_refs_have_failed_verification(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:

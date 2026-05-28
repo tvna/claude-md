@@ -51,8 +51,15 @@ class TestRunCreate:
     ) -> None:
         summary = tmp_path / "summary.md"
         monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(summary))
-        orchestrator_recorder(monkeypatch)
-        ar.run(merged_event(number=42), "o/r")
+        orchestrator_recorder(
+            monkeypatch,
+            commits=[
+                {"commit": {"message": "feat(harness): step one"}},
+                {"commit": {"message": "fixup! step one"}},
+            ],
+        )
+        event = merged_event(number=42, commits=2)
+        ar.run(event, "o/r")
         text = summary.read_text(encoding="utf-8")
         assert "## auto-retro summary" in text
         assert "`created`" in text
@@ -142,8 +149,12 @@ class TestRunCreate:
         seen = orchestrator_recorder(
             monkeypatch,
             created_response={"number": 777, "html_url": "https://x/i/777"},
+            commits=[
+                {"commit": {"message": "feat(harness): step one"}},
+                {"commit": {"message": "fixup! step one"}},
+            ],
         )
-        assert ar.run(merged_event(number=42), "o/r") == 0
+        assert ar.run(merged_event(number=42, commits=2), "o/r") == 0
         create_idx = next(
             i for i, (m, p, _b) in enumerate(seen)
             if m == "POST" and p == "/repos/o/r/issues"
@@ -171,8 +182,12 @@ class TestRunCreate:
             back_link_comments=[
                 {"id": 8675309, "body": f"{ar._BACK_LINK_MARKER}\nold"},
             ],
+            commits=[
+                {"commit": {"message": "feat(harness): step one"}},
+                {"commit": {"message": "fixup! step one"}},
+            ],
         )
-        assert ar.run(merged_event(number=42), "o/r") == 0
+        assert ar.run(merged_event(number=42, commits=2), "o/r") == 0
         assert any(
             m == "PATCH" and p == "/repos/o/r/issues/comments/8675309"
             for m, p, _b in seen
@@ -194,8 +209,12 @@ class TestRunCreate:
         seen = orchestrator_recorder(
             monkeypatch,
             created_response={"number": 777, "html_url": "https://x/i/777"},
+            commits=[
+                {"commit": {"message": "feat(harness): step one"}},
+                {"commit": {"message": "fixup! step one"}},
+            ],
         )
-        assert ar.run(merged_event(number=42), "o/r") == 0
+        assert ar.run(merged_event(number=42, commits=2), "o/r") == 0
         back_link_idx = next(
             i for i, (m, p, _b) in enumerate(seen)
             if m == "POST" and p == "/repos/o/r/issues/42/comments"

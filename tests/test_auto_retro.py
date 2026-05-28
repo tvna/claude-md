@@ -635,7 +635,8 @@ class TestRepairHistoryTable:
     def test_sentinel_when_no_signals(self) -> None:
         table = ar._build_repair_history_table(None, ["feat(harness): plain"], 1)
         assert "(no automated repair signals detected)" in table
-        assert "operator: investigate manually" in table
+        assert "positive-control" in table
+        assert "repair taxonomy classification requested" in table
         # No numbered rows: only the "| -- |" sentinel.
         assert "| 1 |" not in table
 
@@ -814,13 +815,20 @@ class TestBuildRetroBodyMarkers:
         assert body.count("<!-- auto-filled:repair-history -->") == 1
         assert body.count("<!-- /auto-filled:repair-history -->") == 1
 
-    def test_operator_fill_markers_present(self) -> None:
+    def test_operator_fill_markers_absent_for_positive_control(self) -> None:
         body = ar.build_retro_body(_make_pr(), [])
+        assert "<!-- operator-fill:remaining-steps -->" not in body
+        assert "<!-- /operator-fill:remaining-steps -->" not in body
+        assert "Positive-control outcome" in body
+        assert "no repair taxonomy classification is requested" in body
+
+    def test_operator_fill_markers_present_when_repair_rows_exist(self) -> None:
+        body = ar.build_retro_body(_make_pr(), ["fix(x): repair"])
         assert body.count("<!-- operator-fill:remaining-steps -->") == 1
         assert body.count("<!-- /operator-fill:remaining-steps -->") == 1
 
     def test_marker_pairs_are_well_nested(self) -> None:
-        body = ar.build_retro_body(_make_pr(), [])
+        body = ar.build_retro_body(_make_pr(), ["fix(x): repair"])
         auto_open = body.index("<!-- auto-filled:repair-history -->")
         auto_close = body.index("<!-- /auto-filled:repair-history -->")
         op_open = body.index("<!-- operator-fill:remaining-steps -->")
