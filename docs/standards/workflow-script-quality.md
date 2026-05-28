@@ -77,6 +77,10 @@ Every workflow-called script has a matching test module.
 `uv run python -m pytest -q` from the repository root must exit 0.
 Tests exercise pure functions directly; tests for the boundary use
 monkeypatch to inject fakes.
+When quoting the result in a PR body, use a pass marker that
+`scripts/auto_retro.py` recognizes, for example
+`result: exit 0 (684 passed)` or `result: 684 passed in 1.23s`.
+Do not quote a local `blocked:` result as successful verification.
 
 The `[tool.pytest.ini_options]` block in `pyproject.toml` already sets
 `pythonpath = ["scripts"]` and `testpaths = ["tests"]`, so a test

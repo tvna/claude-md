@@ -148,6 +148,15 @@ The required H2 sections, in order, are:
     result: `exit 0 (684 passed)`
   ```
 
+  Successful results should start with a marker that
+  `scripts/auto_retro.py` classifies as passing: `exit 0`, `OK:`,
+  `passed`, `success`, `all checks`, `all tests`, or a pytest summary
+  such as `684 passed in 1.23s`. Do not use free-form success prose
+  such as `only matching lines remain`; write `exit 0 (...)` instead.
+  If a command is blocked by local toolchain drift, record that fact
+  outside `## Verification` unless the blocked check is itself the
+  repair evidence to be audited by the next retrospective.
+
   PRs created on or after 2026-05-26 UTC are gated by
   `scripts/body_policy.py:verify_pr_verification_pairs` (see
   [Body-policy gate](#body-policy-gate) below). A `command:` line
