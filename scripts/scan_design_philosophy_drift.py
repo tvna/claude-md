@@ -100,6 +100,8 @@ REQUIRED_GLOSSARY_ENTRIES: tuple[str, ...] = (
     "repair-free merge",
     "PRD",
     "P1 through P6",
+    "hardness contour",
+    "in-line carve-out",
 )
 
 

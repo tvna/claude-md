@@ -44,3 +44,29 @@ RETRO_TENTATIVE: Final[str] = "retro:tentative"
 ALL_RETRO_LABELS: Final[frozenset[str]] = frozenset(
     {RETRO_TP, RETRO_FP, RETRO_FP_CANDIDATE, RETRO_TENTATIVE}
 )
+
+# Thresholds for the label-derived prior consumed by
+# ``scripts/auto_retro.py`` (PR2 of the TP/FP retrofit, refs #582).
+#
+# The prior maps each repair signal (`inline_review_comments`,
+# `body_cites_refs`, `fix_typed_title`, `multi_commit_pr`,
+# `verification_pairs_failed`) to its historical false-positive rate,
+# computed from past retros that carry ``retro:fp``. ``auto_retro.run``
+# evaluates the prior AFTER signal computation and uses the MAX
+# fp_rate across active signals to decide:
+#
+# * fp_rate >= PRIOR_SKIP_THRESHOLD              -> skip retro opening
+# * PRIOR_TENTATIVE_THRESHOLD <= fp_rate < SKIP  -> open with retro:tentative
+# * fp_rate < PRIOR_TENTATIVE_THRESHOLD          -> open normally
+#
+# The decision is gated by ``PRIOR_MIN_SAMPLE_SIZE`` so an unknown
+# prior (fewer than N past observations of the signal) does not skip:
+# the gate degrades safely toward "open normally" when the population
+# is too thin to estimate. This replaces the date-based
+# ``BOOTSTRAP_UNTIL`` from the original plan -- sample-size driven
+# safety is more robust than a date and self-clears as the operator +
+# the #560 scanner populate labels organically.
+PRIOR_SKIP_THRESHOLD: Final[float] = 0.5
+PRIOR_TENTATIVE_THRESHOLD: Final[float] = 0.3
+PRIOR_MIN_SAMPLE_SIZE: Final[int] = 5
+PRIOR_FETCH_LIMIT: Final[int] = 50

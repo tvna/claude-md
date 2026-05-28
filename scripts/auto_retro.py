@@ -52,6 +52,14 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
+from _retro_labels import (
+    PRIOR_FETCH_LIMIT,
+    PRIOR_MIN_SAMPLE_SIZE,
+    PRIOR_SKIP_THRESHOLD,
+    PRIOR_TENTATIVE_THRESHOLD,
+    RETRO_FP,
+    RETRO_TENTATIVE,
+)
 from _trusted_bots import _TRUSTED_BOT_LOGINS
 from issue_link import extract_refs, strip_html_comments
 
@@ -522,6 +530,186 @@ def render_repair_signals(signals: dict[str, bool]) -> str:
     return ", ".join(f"{name}={str(fired).lower()}" for name, fired in signals.items())
 
 
+# Single source of truth for the signal universe. Mirrors the keys
+# returned by :func:`compute_repair_signals` and is consumed by the
+# label-derived prior helpers below. Kept as a tuple (not a frozenset)
+# so the rendered "Signals fired:" line has a stable ordering across
+# runs -- required for byte-identical retro bodies on re-run of the
+# same merge event. Refs #582.
+_SIGNAL_NAMES: tuple[str, ...] = (
+    "inline_review_comments",
+    "body_cites_refs",
+    "fix_typed_title",
+    "multi_commit_pr",
+    "verification_pairs_failed",
+)
+
+
+def render_signals_fired_line(signals: dict[str, bool]) -> str:
+    """Render the ``- Signals fired: ...`` Facts-section line.
+
+    Lists every signal whose ``fired`` flag is True in declaration
+    order, comma-separated. Returns ``- Signals fired: (none)`` when
+    no signal fires -- empty payload is still parseable by
+    :func:`parse_signals_from_retro_body`.
+
+    The shape is fixed because :func:`parse_signals_from_retro_body`
+    parses it as a deterministic feature when reconstructing past
+    retros for the prior calculator. Refs #582.
+    """
+    fired = [name for name in _SIGNAL_NAMES if signals.get(name, False)]
+    if not fired:
+        return "- Signals fired: (none)"
+    return "- Signals fired: " + ", ".join(fired)
+
+
+_SIGNALS_FIRED_LINE_RE = re.compile(
+    r"^\s*-\s+Signals fired:\s*(.*?)\s*$", re.MULTILINE
+)
+
+
+def parse_signals_from_retro_body(body: str) -> frozenset[str]:
+    """Extract the signal-name set from a retro body's Facts section.
+
+    Returns an empty frozenset when the body has no ``Signals fired:``
+    line (legacy retros from before #582 landed) or when the line
+    contains the sentinel ``(none)``. Tolerates extra whitespace and
+    case variation in the signal names but rejects names not in
+    :data:`_SIGNAL_NAMES` so a typo on the producing side does not
+    silently poison the prior. Refs #582.
+    """
+    cleaned = strip_html_comments(body or "")
+    match = _SIGNALS_FIRED_LINE_RE.search(cleaned)
+    if match is None:
+        return frozenset()
+    payload = match.group(1).strip()
+    if not payload or payload.lower() == "(none)":
+        return frozenset()
+    known = set(_SIGNAL_NAMES)
+    names = {part.strip() for part in payload.split(",") if part.strip()}
+    return frozenset(names & known)
+
+
+@dataclass(frozen=True)
+class PastRetro:
+    """A past retro issue's signal set and label set, captured for the prior.
+
+    ``signals`` is the frozenset of signal names parsed from the retro
+    body's ``- Signals fired:`` line (empty for pre-#582 retros).
+    ``labels`` is the frozenset of label strings currently applied to
+    the retro -- the prior only cares whether ``retro:fp`` is among
+    them, but the full set is preserved so future retrofits can layer
+    on other labels without changing the dataclass shape.
+    """
+
+    number: int
+    signals: frozenset[str]
+    labels: frozenset[str]
+
+
+def compute_prior_from_labels(
+    past_retros: list[PastRetro],
+    signal_names: tuple[str, ...] = _SIGNAL_NAMES,
+) -> dict[str, tuple[float, int]]:
+    """For each signal name, return ``(fp_rate, sample_size)``.
+
+    ``fp_rate`` is
+
+        |{r in past_retros : signal in r.signals and RETRO_FP in r.labels}|
+        / max(1, |{r in past_retros : signal in r.signals}|)
+
+    and ``sample_size`` is the denominator (un-floored). Empty input
+    yields ``(0.0, 0)`` for every signal -- the consumer
+    (:func:`should_skip_by_prior`) gates on ``sample_size >=
+    PRIOR_MIN_SAMPLE_SIZE`` so the empty-prior case degrades to
+    "open normally" rather than to a silent skip. Refs #582.
+    """
+    prior: dict[str, tuple[float, int]] = {}
+    for name in signal_names:
+        denom = sum(1 for r in past_retros if name in r.signals)
+        if denom == 0:
+            prior[name] = (0.0, 0)
+            continue
+        numer = sum(
+            1 for r in past_retros if name in r.signals and RETRO_FP in r.labels
+        )
+        prior[name] = (numer / denom, denom)
+    return prior
+
+
+def _max_active_fp(
+    signals: dict[str, bool],
+    prior: dict[str, tuple[float, int]],
+    min_sample_size: int,
+) -> tuple[float, str | None, int]:
+    """Return ``(max_fp_rate, signal_name, sample_size)`` over active signals.
+
+    Only signals that fired on the current PR AND have a sample_size of
+    at least ``min_sample_size`` are considered. When no qualifying
+    signal exists, returns ``(0.0, None, 0)``. Shared helper used by
+    both :func:`should_skip_by_prior` and :func:`is_tentative_by_prior`
+    to keep the "max wins" rule centralised.
+    """
+    best: tuple[float, str | None, int] = (0.0, None, 0)
+    for name, fired in signals.items():
+        if not fired:
+            continue
+        rate, sample = prior.get(name, (0.0, 0))
+        if sample < min_sample_size:
+            continue
+        if rate >= best[0]:
+            best = (rate, name, sample)
+    return best
+
+
+def should_skip_by_prior(
+    signals: dict[str, bool],
+    prior: dict[str, tuple[float, int]],
+    skip_threshold: float = PRIOR_SKIP_THRESHOLD,
+    min_sample_size: int = PRIOR_MIN_SAMPLE_SIZE,
+) -> tuple[bool, str]:
+    """Return ``(skip, reason)`` based on the label-derived prior.
+
+    Skips when the MAX fp_rate over signals that fired on the current
+    PR (and meet the sample-size floor) is greater than or equal to
+    ``skip_threshold``. The "worst signal wins" rule matches
+    :func:`scripts.scan_retro_followup_drift.aggregate_drift`. When
+    no signal qualifies, returns ``(False, "")`` -- the empty-prior
+    safety net.
+    """
+    rate, name, sample = _max_active_fp(signals, prior, min_sample_size)
+    if name is not None and rate >= skip_threshold:
+        return True, (
+            f"prior FP rate {rate:.2f} for signal {name!r} "
+            f"(n={sample}) >= {skip_threshold}"
+        )
+    return False, ""
+
+
+def is_tentative_by_prior(
+    signals: dict[str, bool],
+    prior: dict[str, tuple[float, int]],
+    tentative_threshold: float = PRIOR_TENTATIVE_THRESHOLD,
+    skip_threshold: float = PRIOR_SKIP_THRESHOLD,
+    min_sample_size: int = PRIOR_MIN_SAMPLE_SIZE,
+) -> bool:
+    """True when the prior places the retro in the tentative band.
+
+    The tentative band is ``[tentative_threshold, skip_threshold)``:
+    the prior is high enough that the retro might be a false positive
+    but not high enough to skip outright. The caller (``run``) records
+    this verdict by adding ``retro:tentative`` to the issue labels so
+    operators see the uncertainty at triage time.
+
+    Sample-size gating matches :func:`should_skip_by_prior` so the
+    same population is considered for both decisions.
+    """
+    rate, name, _sample = _max_active_fp(signals, prior, min_sample_size)
+    if name is None:
+        return False
+    return tentative_threshold <= rate < skip_threshold
+
+
 def build_retro_title(pr: MergedPR) -> str:
     """``retro(<type>): review PR #<N> repair loops``.
 
@@ -781,6 +969,7 @@ def build_retro_body(
     commit_subjects: list[str],
     check_runs: list[dict[str, Any]] | None = None,
     verification_pairs: list[VerificationPair] | None = None,
+    signals: dict[str, bool] | None = None,
 ) -> str:
     """Return the markdown body. Contains every section in :data:`_REQUIRED_SECTIONS`.
 
@@ -788,6 +977,14 @@ def build_retro_body(
     working; in that case the Repair history table falls back to
     commit-subject signals only (and emits the sentinel row when those
     are also empty).
+
+    ``signals`` is the :func:`compute_repair_signals` output for the
+    source PR; when provided, a ``- Signals fired:`` line is added to
+    the Facts section so future :func:`compute_prior_from_labels`
+    invocations can reconstruct the signal set deterministically
+    without re-fetching the source PR. When omitted (legacy callers),
+    the line is rendered as ``- Signals fired: (none)`` -- contributing
+    zero observations to the prior, which is the safe degradation. Refs #582.
     """
     type_scope = extract_type_scope(pr.title)
     # Bare type (scope stripped) drives the canonical-fix exemption in
@@ -836,6 +1033,7 @@ def build_retro_body(
         f"- Merged by: {pr.merged_by_login or '(unknown)'}\n"
         f"- Source PR author: {pr.user_login or '(unknown)'}\n"
         f"- Layer labels inherited from source PR: {layer_str}\n"
+        f"{render_signals_fired_line(signals or {})}\n"
         "- Commit subjects in PR (repair-history candidates):\n"
         f"{commits_block}\n"
         f"{fallback_note}"
@@ -1058,17 +1256,24 @@ def is_retro_age_exceeded(
     return delta.days > days
 
 
-def issue_labels(layer_labels: tuple[str, ...]) -> list[str]:
+def issue_labels(
+    layer_labels: tuple[str, ...], *, tentative: bool = False
+) -> list[str]:
     """Return the label list for the retro issue.
 
     Always ``type:docs`` + ``layer:meta``; appends any additional
     ``layer:*`` labels inherited from the source PR. Deduplicates while
-    preserving order.
+    preserving order. When ``tentative`` is True, appends
+    ``retro:tentative`` so operators see at triage time that the
+    label-derived prior placed the retro in the uncertain band
+    (refs #582).
     """
     labels = ["type:docs", "layer:meta"]
     for lbl in layer_labels:
         if lbl and lbl not in labels:
             labels.append(lbl)
+    if tentative and RETRO_TENTATIVE not in labels:
+        labels.append(RETRO_TENTATIVE)
     return labels
 
 
@@ -1287,6 +1492,71 @@ def search_retro_issues(repo: str, pr_number: int) -> list[dict[str, Any]]:
     raw = gh_api("GET", f"/search/issues?q={encoded}&per_page=50")
     data = json.loads(raw) if raw.strip() else {}
     return list(data.get("items") or [])
+
+
+def fetch_past_retro_labels(
+    repo: str, limit: int = PRIOR_FETCH_LIMIT
+) -> list[PastRetro]:
+    """Return up to *limit* past retros as :class:`PastRetro` records.
+
+    Uses a single search query matching the
+    ``auto_retro.issue_labels`` convention (``type:docs`` +
+    ``layer:meta`` + title contains ``retro``), then parses each
+    item's body for the ``- Signals fired:`` line. Soft-fails on
+    search errors and on per-item JSON shape errors -- the prior
+    degrades to empty (no skip, no tentative) rather than aborting
+    the retro flow.
+
+    The query mirrors
+    :func:`scripts.scan_retro_followup_drift.search_retro_issues`
+    so PR1's scanner and PR2's prior population observe the same
+    retro population.
+    Refs #582.
+    """
+    query = (
+        f"repo:{repo} is:issue label:type:docs "
+        f"label:layer:meta in:title retro"
+    )
+    encoded = quote(query, safe="")
+    per_page = min(max(limit, 1), 100)
+    try:
+        raw = gh_api(
+            "GET", f"/search/issues?q={encoded}&per_page={per_page}"
+        )
+    except subprocess.CalledProcessError as exc:
+        print(
+            f"::warning::fetch_past_retro_labels search failed "
+            f"(exit {exc.returncode}); prior will be empty",
+            file=sys.stderr,
+        )
+        return []
+    try:
+        data = json.loads(raw) if raw.strip() else {}
+    except json.JSONDecodeError:
+        return []
+    items = list(data.get("items") or [])[:limit]
+    out: list[PastRetro] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        number = item.get("number")
+        if not isinstance(number, int):
+            continue
+        labels_raw = item.get("labels") or []
+        names: set[str] = set()
+        for lbl in labels_raw:
+            if isinstance(lbl, dict):
+                name = lbl.get("name")
+                if isinstance(name, str) and name:
+                    names.add(name)
+        body = item.get("body")
+        if not isinstance(body, str) or not body:
+            body = ""
+        signals = parse_signals_from_retro_body(body)
+        out.append(
+            PastRetro(number=number, signals=signals, labels=frozenset(names))
+        )
+    return out
 
 
 def has_review_comments(repo: str, pr_number: int) -> bool:
@@ -1752,6 +2022,21 @@ def run(event: dict[str, Any], repo: str) -> int:
         _append_summary(_build_summary(pr, "skip", msg))
         return 0
 
+    # Label-derived prior (refs #582): short the gate when the active
+    # signal mix historically produced false positives. Evaluated AFTER
+    # signal computation because the prior is irrelevant when no signal
+    # fires. Fail-soft: a transient search-API error degrades the
+    # prior to empty, which routes through the empty-prior safety
+    # net (open normally).
+    past_retros = fetch_past_retro_labels(repo)
+    prior = compute_prior_from_labels(past_retros)
+    prior_skip, prior_reason = should_skip_by_prior(signals, prior)
+    if prior_skip:
+        print(f"skip: {prior_reason}")
+        _append_summary(_build_summary(pr, "skip", prior_reason))
+        return 0
+    tentative = is_tentative_by_prior(signals, prior)
+
     if commit_subjects is None:
         commit_subjects = fetch_pr_commits(repo, pr.number)
     check_runs_unknown = False
@@ -1796,8 +2081,9 @@ def run(event: dict[str, Any], repo: str) -> int:
         commit_subjects,
         check_runs,
         verification_pairs,
+        signals=signals,
     )
-    labels = issue_labels(pr.layer_labels)
+    labels = issue_labels(pr.layer_labels, tentative=tentative)
 
     created = create_issue(repo, title, body, labels)
     new_number = created.get("number")

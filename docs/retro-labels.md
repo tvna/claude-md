@@ -3,13 +3,14 @@
 This document is the operator-facing runbook for the four retrospective
 labels that govern the TP/FP feedback loop. The labels turn human
 classification (`retro:tp` / `retro:fp`) into machine-readable prior
-information that future PRs will consume in
-`scripts/auto_retro.py:compute_repair_signals` and the classification
-heuristic. The labels are also written by the scanner
+information consumed by `scripts/auto_retro.py` at signal-evaluation
+time (PR2, refs #582) and by the classification heuristic in a later
+PR. The labels are also written by the scanner
 `scripts/scan_retro_followup_drift.py` when follow-up issues/PRs drift.
 
 The labels live as a single source of truth in
-[`scripts/_retro_labels.py`](../scripts/_retro_labels.py). Refs #558.
+[`scripts/_retro_labels.py`](../scripts/_retro_labels.py), alongside
+the four prior thresholds consumed by the signal gate. Refs #558, #582.
 
 ## SoT layout
 
@@ -69,15 +70,21 @@ call.
 
 ### `retro:tentative`
 
-**Auto-opened with low prior confidence**: reserved for a future PR
-that retrofits `scripts/auto_retro.py:compute_repair_signals` with a
-label-derived prior. Not used by the PR1 scanner.
+**Auto-opened with low prior confidence**: applied by
+`scripts/auto_retro.py:run` (PR2, refs #582) when the label-derived
+prior places the retro in the uncertain band -- the active signal's
+historical false-positive rate is in
+`[PRIOR_TENTATIVE_THRESHOLD, PRIOR_SKIP_THRESHOLD)`. The retro is
+opened (audit trail preserved) but flagged for the operator to make
+the final call.
 
-When the future signal-layer retrofit lands, the auto-retro flow will
-attach this label to retros opened when the per-signal-combination
-historical false-positive rate is in a "uncertain" middle band: the
-retro is opened (so the audit trail is preserved) but flagged for the
-operator to make the call.
+Applied by: scanner only (`auto_retro.run`). Operators do not apply
+this label by hand -- the band is computed automatically.
+
+When to relabel: at retro close time, the operator applies
+`retro:tp` or `retro:fp` per the close-time convention below. The
+`retro:tentative` label may be stripped manually or left in place
+(it is read-only after close, see "Operator close-time convention").
 
 ## Operator close-time convention
 
@@ -141,6 +148,44 @@ existing-label check (see `decide_target_label` in
 `scripts/scan_retro_followup_drift.py`). A retro that has been
 labelled `retro:fp-candidate` on one day will not be re-labelled the
 next day unless its drift verdict escalates to `fp_confirmed`.
+
+## Signal-layer prior (PR2, refs #582)
+
+`scripts/auto_retro.py:run` computes a label-derived prior AFTER
+signal computation and uses it to short the retro-creation gate.
+The prior is a per-signal false-positive rate over the last
+`PRIOR_FETCH_LIMIT` past retros: for each signal name, the rate is
+the share of retros where the signal fired AND the retro carries
+`retro:fp`. The decision rule per active signal:
+
+| Max active signal `fp_rate` | Action |
+|---|---|
+| `>= PRIOR_SKIP_THRESHOLD` (0.5) | Skip the retro entirely; record `skip` in step summary |
+| `[PRIOR_TENTATIVE_THRESHOLD, PRIOR_SKIP_THRESHOLD)` (0.3 - 0.5) | Open with `retro:tentative` label |
+| `< PRIOR_TENTATIVE_THRESHOLD` (0.3) | Open normally |
+| Sample size `< PRIOR_MIN_SAMPLE_SIZE` (5) | Treat as unknown -> open normally |
+
+The sample-size floor is the empty-prior safety net: when the
+historical population of a signal is too thin to estimate, the gate
+degrades toward "open normally" rather than confidently skipping. The
+floor is self-clearing as operators + the scanner populate
+`retro:fp` labels organically -- no operator action needed at the
+bootstrap boundary.
+
+The "max active signal" rule means the WORST signal wins: if a PR
+fires both `multi_commit_pr` (historical FP rate 0.6) and
+`fix_typed_title` (historical FP rate 0.1), the gate uses 0.6. This
+mirrors `scripts/scan_retro_followup_drift.aggregate_drift`.
+
+### Reconstructing signals from past retros
+
+Past-retro signals are reconstructed from a fixed
+`- Signals fired: <comma-list>` line in the retro body's `## Facts`
+section. The line is emitted deterministically by
+`scripts/auto_retro.py:build_retro_body` so the prior consumer is
+not parsing prose (per CLAUDE.md section 2). Pre-#582 retros (those
+without the line) parse to an empty signal set and contribute zero
+observations to the prior -- safe degradation.
 
 ## Why these particular signals
 
