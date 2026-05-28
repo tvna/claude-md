@@ -477,3 +477,246 @@ class TestCli:
         rc, out = self._run(["--jobs", str(path), "--title", "Sprint 4 report"])
         assert rc == 0
         assert out.startswith("# Sprint 4 report")
+
+    def test_cutoff_switches_to_compare_mode(self, tmp_path: Path) -> None:
+        path = _write_jobs(
+            tmp_path,
+            "r.json",
+            [
+                _make_job(
+                    name="lint-scripts-pytest",
+                    started_at="2026-05-26T12:00:00Z",
+                    completed_at="2026-05-26T12:03:20Z",
+                ),
+                _make_job(
+                    name="lint-scripts-pytest-gate",
+                    started_at="2026-05-28T12:00:00Z",
+                    completed_at="2026-05-28T12:01:20Z",
+                ),
+            ],
+        )
+        rc, out = self._run(["--jobs", str(path), "--cutoff", "2026-05-28"])
+        assert rc == 0
+        # Compare-mode header is present and trend-mode header is absent.
+        assert "Cutoff: 2026-05-28T00:00:00Z" in out
+        assert "pre count" in out
+        assert "post count" in out
+        assert "delta p50" in out
+        assert "trend(5)" not in out
+        # pre-only and post-only rows render the right markers.
+        assert "| lint-scripts-pytest |" in out
+        assert "gone" in out
+        assert "| lint-scripts-pytest-gate |" in out
+        assert "new" in out
+
+    def test_cutoff_rejects_bad_format(self, tmp_path: Path) -> None:
+        path = _write_jobs(tmp_path, "r.json", [_make_job(name="a")])
+        with pytest.raises(SystemExit) as exc:
+            analyze_ci_timings.main(["--jobs", str(path), "--cutoff", "20260528"])
+        assert exc.value.code == 2
+
+
+# ---------------------------------------------------------------------------
+# Compare-mode partitioning and rendering
+# ---------------------------------------------------------------------------
+
+
+class TestPartitionAggregatesByCutoff:
+    def test_strict_pre_post_split(self) -> None:
+        ts_pre = datetime(2026, 5, 26, 12, 0, tzinfo=UTC)
+        ts_post = datetime(2026, 5, 28, 12, 0, tzinfo=UTC)
+        agg = {"job-a": [(ts_pre, 100.0), (ts_post, 50.0)]}
+        cutoff = datetime(2026, 5, 28, tzinfo=UTC)
+        pre, post = analyze_ci_timings.partition_aggregates_by_cutoff(agg, cutoff)
+        assert pre == {"job-a": [100.0]}
+        assert post == {"job-a": [50.0]}
+
+    def test_cutoff_boundary_is_post(self) -> None:
+        # An execution started exactly at the cutoff lands in ``post``;
+        # this matches the "merge timestamp = cutoff" convention so the
+        # merge run itself is counted as post-change.
+        ts = datetime(2026, 5, 28, 0, 0, tzinfo=UTC)
+        agg = {"job-a": [(ts, 42.0)]}
+        cutoff = datetime(2026, 5, 28, tzinfo=UTC)
+        pre, post = analyze_ci_timings.partition_aggregates_by_cutoff(agg, cutoff)
+        assert pre == {}
+        assert post == {"job-a": [42.0]}
+
+    def test_only_pre_keeps_name_out_of_post(self) -> None:
+        ts = datetime(2026, 5, 20, 12, 0, tzinfo=UTC)
+        agg = {"only-pre": [(ts, 7.0)]}
+        cutoff = datetime(2026, 5, 28, tzinfo=UTC)
+        pre, post = analyze_ci_timings.partition_aggregates_by_cutoff(agg, cutoff)
+        assert pre == {"only-pre": [7.0]}
+        assert post == {}
+
+    def test_only_post_keeps_name_out_of_pre(self) -> None:
+        ts = datetime(2026, 5, 30, 12, 0, tzinfo=UTC)
+        agg = {"only-post": [(ts, 9.0)]}
+        cutoff = datetime(2026, 5, 28, tzinfo=UTC)
+        pre, post = analyze_ci_timings.partition_aggregates_by_cutoff(agg, cutoff)
+        assert pre == {}
+        assert post == {"only-post": [9.0]}
+
+    def test_step_key_tuple_supported(self) -> None:
+        # The same generic helper partitions step-level aggregates whose
+        # keys are (job, step) tuples.
+        ts_pre = datetime(2026, 5, 26, tzinfo=UTC)
+        ts_post = datetime(2026, 5, 30, tzinfo=UTC)
+        agg = {
+            ("gate", "setup"): [(ts_pre, 3.0), (ts_post, 2.0)],
+        }
+        cutoff = datetime(2026, 5, 28, tzinfo=UTC)
+        pre, post = analyze_ci_timings.partition_aggregates_by_cutoff(agg, cutoff)
+        assert pre == {("gate", "setup"): [3.0]}
+        assert post == {("gate", "setup"): [2.0]}
+
+
+class TestDeltaP50Marker:
+    def test_pre_and_post_present_signed_pct(self) -> None:
+        # pre p50 = 200, post p50 = 100 -> -50.0%.
+        assert (
+            analyze_ci_timings._delta_p50_marker([200.0, 200.0], [100.0, 100.0])
+            == "-50.0%"
+        )
+
+    def test_post_slower_carries_plus_sign(self) -> None:
+        assert (
+            analyze_ci_timings._delta_p50_marker([100.0], [150.0])
+            == "+50.0%"
+        )
+
+    def test_only_post_returns_new(self) -> None:
+        assert analyze_ci_timings._delta_p50_marker([], [50.0]) == "new"
+
+    def test_only_pre_returns_gone(self) -> None:
+        assert analyze_ci_timings._delta_p50_marker([100.0], []) == "gone"
+
+    def test_both_empty_returns_na(self) -> None:
+        assert analyze_ci_timings._delta_p50_marker([], []) == "n/a"
+
+    def test_zero_pre_with_post_returns_inf(self) -> None:
+        assert analyze_ci_timings._delta_p50_marker([0.0], [5.0]) == "+inf"
+
+    def test_zero_pre_and_zero_post_returns_zero(self) -> None:
+        assert analyze_ci_timings._delta_p50_marker([0.0], [0.0]) == "0.0%"
+
+
+class TestRenderCompareReport:
+    def _bracket_jobs(self) -> list[dict[str, object]]:
+        # 2 pre-cutoff runs of the old single job (p50 = 200s) and 3
+        # post-cutoff runs of the new gate (p50 = 80s) plus a job present
+        # in both windows so we exercise the signed delta branch too.
+        return [
+            _make_job(
+                name="lint-scripts-pytest",
+                started_at="2026-05-25T12:00:00Z",
+                completed_at="2026-05-25T12:03:20Z",  # 200s
+            ),
+            _make_job(
+                name="lint-scripts-pytest",
+                started_at="2026-05-26T12:00:00Z",
+                completed_at="2026-05-26T12:03:20Z",  # 200s
+            ),
+            _make_job(
+                name="lint-scripts-pytest-gate",
+                started_at="2026-05-28T12:00:00Z",
+                completed_at="2026-05-28T12:01:20Z",  # 80s
+            ),
+            _make_job(
+                name="lint-scripts-pytest-gate",
+                started_at="2026-05-29T12:00:00Z",
+                completed_at="2026-05-29T12:01:20Z",  # 80s
+            ),
+            _make_job(
+                name="lint-scripts-pytest-gate",
+                started_at="2026-05-30T12:00:00Z",
+                completed_at="2026-05-30T12:01:20Z",  # 80s
+            ),
+            _make_job(
+                name="lint-scripts-static",
+                started_at="2026-05-26T12:00:00Z",
+                completed_at="2026-05-26T12:00:50Z",  # 50s
+            ),
+            _make_job(
+                name="lint-scripts-static",
+                started_at="2026-05-29T12:00:00Z",
+                completed_at="2026-05-29T12:00:55Z",  # 55s
+            ),
+        ]
+
+    def test_header_lists_pre_and_post_totals(self) -> None:
+        cutoff = datetime(2026, 5, 28, tzinfo=UTC)
+        report = analyze_ci_timings.render_report(
+            self._bracket_jobs(), title="t", cutoff=cutoff
+        )
+        assert report.startswith("# t")
+        assert "Cutoff: 2026-05-28T00:00:00Z" in report
+        # 3 pre-cutoff jobs (2 old pytest + 1 static), 4 post-cutoff (3 gate + 1 static).
+        assert "Pre-cutoff job executions: 3." in report
+        assert "Post-cutoff job executions: 4." in report
+
+    def test_pre_only_row_renders_gone_marker(self) -> None:
+        cutoff = datetime(2026, 5, 28, tzinfo=UTC)
+        report = analyze_ci_timings.render_report(
+            self._bracket_jobs(), title="t", cutoff=cutoff
+        )
+        lines = [r for r in report.splitlines() if "lint-scripts-pytest |" in r]
+        # Pre-only row (the old single job): 2 pre samples, 0 post, marker "gone".
+        assert any(
+            r.startswith("| lint-scripts-pytest |") and r.endswith("| gone |")
+            for r in lines
+        )
+
+    def test_post_only_row_renders_new_marker(self) -> None:
+        cutoff = datetime(2026, 5, 28, tzinfo=UTC)
+        report = analyze_ci_timings.render_report(
+            self._bracket_jobs(), title="t", cutoff=cutoff
+        )
+        gate_row = next(
+            r
+            for r in report.splitlines()
+            if r.startswith("| lint-scripts-pytest-gate |")
+        )
+        assert gate_row.endswith("| new |")
+        assert "| 0 |" in gate_row  # pre count
+        assert "| 3 |" in gate_row  # post count
+
+    def test_both_windows_row_renders_signed_pct(self) -> None:
+        cutoff = datetime(2026, 5, 28, tzinfo=UTC)
+        report = analyze_ci_timings.render_report(
+            self._bracket_jobs(), title="t", cutoff=cutoff
+        )
+        static_row = next(
+            r
+            for r in report.splitlines()
+            if r.startswith("| lint-scripts-static |")
+        )
+        # pre p50 = 50.0, post p50 = 55.0 -> +10.0%.
+        assert static_row.endswith("| +10.0% |")
+
+    def test_compare_report_is_ascii_safe(self) -> None:
+        cutoff = datetime(2026, 5, 28, tzinfo=UTC)
+        report = analyze_ci_timings.render_report(
+            self._bracket_jobs(), title="t", cutoff=cutoff
+        )
+        report.encode("ascii")
+
+    def test_compare_report_does_not_emit_trend_legend(self) -> None:
+        cutoff = datetime(2026, 5, 28, tzinfo=UTC)
+        report = analyze_ci_timings.render_report(
+            self._bracket_jobs(), title="t", cutoff=cutoff
+        )
+        # The trend indicator is meaningless when the delta column already
+        # carries the pre-vs-post signal.
+        assert "Trend legend" not in report
+        assert "trend(5)" not in report
+        assert "Delta legend" in report
+
+    def test_compare_report_with_no_samples_renders_placeholders(self) -> None:
+        cutoff = datetime(2026, 5, 28, tzinfo=UTC)
+        report = analyze_ci_timings.render_report([], title="t", cutoff=cutoff)
+        assert "_no job samples_" in report
+        assert "_no step samples_" in report
+        assert "Pre-cutoff job executions: 0." in report
+        assert "Post-cutoff job executions: 0." in report
