@@ -138,12 +138,24 @@ The required H2 sections, in order, are:
 - `## Verification` - one command/result pair per observation, in the
   shape below. Each entry is one fact about what was actually run.
   Type checks and linters verify shape, not behaviour; include at
-  least one behaviour check when behaviour changed.
+  least one behaviour check when behaviour changed. Repository Python
+  checks must run through `uv run` so dev dependencies come from
+  `pyproject.toml` and `uv.lock` instead of the operator's ambient
+  Python environment.
 
   ```
-  - command: `pytest -q`
+  - command: `uv run python -m pytest -q`
     result: `exit 0 (684 passed)`
   ```
+
+  Successful results should start with a marker that
+  `scripts/auto_retro.py` classifies as passing: `exit 0`, `OK:`,
+  `passed`, `success`, `all checks`, `all tests`, or a pytest summary
+  such as `684 passed in 1.23s`. Do not use free-form success prose
+  such as `only matching lines remain`; write `exit 0 (...)` instead.
+  If a command is blocked by local toolchain drift, record that fact
+  outside `## Verification` unless the blocked check is itself the
+  repair evidence to be audited by the next retrospective.
 
   PRs created on or after 2026-05-26 UTC are gated by
   `scripts/body_policy.py:verify_pr_verification_pairs` (see
