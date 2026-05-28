@@ -1,9 +1,10 @@
 # docs/ index
 
 This file enumerates every document under `docs/` by the lane that owns
-it. Lanes are the same four buckets that `ls docs/` already shows:
+it. Lanes are the buckets that `ls docs/` already shows:
 `prd/` (design contracts), `standards/` (shapes, schemas, and contracts),
-`runbooks/` (operator procedures), `archive/` (frozen historical evidence).
+`runbooks/` (operator procedures), `generated/` (checked-in generated
+views), `archive/` (frozen historical evidence).
 
 If you only want one entry per lane, read the first row of each table
 below -- that is the highest-traffic document in the lane. Otherwise
@@ -50,6 +51,12 @@ The append-only policy for `archive/` is documented separately in
 | [retrospective-noise-flooding-procedure.md](runbooks/retrospective-noise-flooding-procedure.md) | Operator procedure for reviewing retrospective and auto-retro flooding signal vs noise. | #315, #63 Phase 8(D-3) | `.github/workflows/auto-retro.yml`; `scripts/auto_retro.py`; `docs/archive/retrospective-pr-*.md` (subject) |
 | [prek.md](runbooks/prek.md) | `j178/prek` install steps, configured hooks, and the CI gate that runs `prek run --all-files` on every PR. | #408 | `.pre-commit-config.yaml`; `.github/workflows/verify-agents.yml` (`prek` job); `scripts/uv_pin.py`; `scripts/scan_workflow_pip.py` |
 | [readme-translation-drift.md](runbooks/readme-translation-drift.md) | Deterministic gate that fails a PR when `README.md` changes without matching `README.ja.md` / `README.zh.md` updates, plus the opt-out marker procedure. | #476 | `scripts/verify_readme_translation.py`; `.github/workflows/verify-github-content.yml` (`gate` job); `README.md`; `README.ja.md`; `README.zh.md` |
+
+## generated/ -- checked-in generated views
+
+| File | Subject | Source | Tracking issues |
+|---|---|---|---|
+| [auto-retro-decision-tree.md](generated/auto-retro-decision-tree.md) | Mermaid decision tree for the current `auto_retro.run()` control flow. | `python3 scripts/auto_retro.py decision-tree-doc` | #598, #605 |
 
 ## archive/ -- frozen historical evidence
 

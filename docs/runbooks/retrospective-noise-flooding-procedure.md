@@ -39,6 +39,23 @@ non-bot, non-retro merge.
   section 6.4. This procedure consumes the taxonomy, it does not
   extend it.
 
+## 1a. Auto-retro decision tree rendering
+
+Before splitting `scripts/auto_retro.py`, render the current
+orchestrator decision tree from the `run()` function's Python AST:
+
+```bash
+python scripts/auto_retro.py decision-tree
+```
+
+The command writes Mermaid `flowchart TD` text to stdout. Paste the
+output into a PR description, issue comment, or Markdown scratch file
+when reviewing whether a proposed split preserves the existing
+skip/append/open flow. The renderer reads the checked-in `run()`
+source with `inspect.getsource`, parses it with `ast`, and emits nodes
+for conditions, try/except paths, calls, and early returns. That keeps
+the diagram mechanically aligned with control-flow edits to `run()`.
+
 ## 2. Signals to inspect
 
 A merged PR carries a noise or flooding pattern when one or more of
