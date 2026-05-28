@@ -39,6 +39,23 @@ non-bot, non-retro merge.
   section 6.4. This procedure consumes the taxonomy, it does not
   extend it.
 
+## 1a. Auto-retro decision tree rendering
+
+Before splitting `scripts/auto_retro.py`, render the current
+orchestrator decision tree from the code-owned representation:
+
+```bash
+python scripts/auto_retro.py decision-tree
+```
+
+The command writes Mermaid `flowchart TD` text to stdout. Paste the
+output into a PR description, issue comment, or Markdown scratch file
+when reviewing whether a proposed split preserves the existing
+skip/append/open flow. Signal branches are generated from
+`auto_retro._SIGNAL_NAMES`, so the diagram follows the same signal
+universe that `compute_repair_signals` and the label-derived prior
+consume.
+
 ## 2. Signals to inspect
 
 A merged PR carries a noise or flooding pattern when one or more of

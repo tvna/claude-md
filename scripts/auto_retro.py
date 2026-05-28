@@ -598,6 +598,15 @@ class PastRetro:
     labels: frozenset[str]
 
 
+@dataclass(frozen=True)
+class DecisionTreeEdge:
+    """One renderable edge in the auto-retro decision tree."""
+
+    source: str
+    target: str
+    label: str
+
+
 def compute_prior_from_labels(
     past_retros: list[PastRetro],
     signal_names: tuple[str, ...] = _SIGNAL_NAMES,
@@ -626,6 +635,95 @@ def compute_prior_from_labels(
         )
         prior[name] = (numer / denom, denom)
     return prior
+
+
+_DECISION_TREE_NODE_LABELS: dict[str, str] = {
+    "START": "pull_request closed event",
+    "PARSE": "parse_event",
+    "SKIP_UNMERGED": "skip: PR is not merged",
+    "SHOULD_SKIP": "should_skip",
+    "SKIP_TRUSTED": "skip: trusted bot",
+    "SKIP_RETRO": "skip: retrospective PR",
+    "EXISTING": "find_existing_retro",
+    "SKIP_EXISTING": "skip: existing retro",
+    "FIX_APPEND": "find_target_retro_from_refs",
+    "APPENDED": "append row to target retro",
+    "COMMENTS": "has_review_comments",
+    "COMMITS": "fetch commit subjects when needed",
+    "SIGNALS": "compute_repair_signals",
+    "NO_SIGNAL": "skip: no repair signal",
+    "PRIOR": "label-derived prior",
+    "SKIP_PRIOR": "skip: prior FP threshold",
+    "TENTATIVE": "tentative prior band",
+    "BODY": "build retro title/body/labels",
+    "CREATE": "create retro issue",
+    "BACKLINK": "post PR back-link",
+    "TERMINAL": "apply terminal label",
+    "DONE": "created retro issue",
+}
+
+
+def auto_retro_decision_tree_edges() -> tuple[DecisionTreeEdge, ...]:
+    """Return the current high-level decision tree for ``run``.
+
+    The graph is intentionally code-owned and deterministic so reviewers can
+    regenerate it while splitting the large auto-retro orchestrator. Signal
+    branches are expanded from :data:`_SIGNAL_NAMES`, which keeps the diagram
+    aligned with :func:`compute_repair_signals`.
+    """
+    edges = [
+        DecisionTreeEdge("START", "PARSE", "event payload"),
+        DecisionTreeEdge("PARSE", "SKIP_UNMERGED", "merged=false"),
+        DecisionTreeEdge("PARSE", "SHOULD_SKIP", "merged=true"),
+        DecisionTreeEdge("SHOULD_SKIP", "SKIP_TRUSTED", "bot author/merger"),
+        DecisionTreeEdge("SHOULD_SKIP", "SKIP_RETRO", "retro title"),
+        DecisionTreeEdge("SHOULD_SKIP", "EXISTING", "otherwise"),
+        DecisionTreeEdge("EXISTING", "SKIP_EXISTING", "retro exists"),
+        DecisionTreeEdge("EXISTING", "FIX_APPEND", "fix title may amend retro"),
+        DecisionTreeEdge("FIX_APPEND", "APPENDED", "references retro issue"),
+        DecisionTreeEdge("FIX_APPEND", "COMMENTS", "no target retro"),
+        DecisionTreeEdge("EXISTING", "COMMENTS", "not a fix follow-up"),
+        DecisionTreeEdge("COMMENTS", "COMMITS", "comments fetched or fail-safe"),
+        DecisionTreeEdge("COMMITS", "SIGNALS", "subjects fetched or fallback"),
+        DecisionTreeEdge("SIGNALS", "NO_SIGNAL", "all signals false"),
+    ]
+    edges.extend(
+        DecisionTreeEdge("SIGNALS", "PRIOR", f"{name}=true")
+        for name in _SIGNAL_NAMES
+    )
+    edges.extend(
+        [
+            DecisionTreeEdge("PRIOR", "SKIP_PRIOR", "FP rate >= skip threshold"),
+            DecisionTreeEdge("PRIOR", "TENTATIVE", "open normally or tentative"),
+            DecisionTreeEdge("TENTATIVE", "BODY", "compute label set"),
+            DecisionTreeEdge("BODY", "CREATE", "render issue payload"),
+            DecisionTreeEdge("CREATE", "BACKLINK", "issue created"),
+            DecisionTreeEdge("BACKLINK", "TERMINAL", "best-effort"),
+            DecisionTreeEdge("TERMINAL", "DONE", "best-effort"),
+        ]
+    )
+    return tuple(edges)
+
+
+def _mermaid_text(text: str) -> str:
+    return text.replace('"', '\\"')
+
+
+def render_decision_tree_mermaid() -> str:
+    """Render the auto-retro decision tree as a Mermaid flowchart."""
+    edges = auto_retro_decision_tree_edges()
+    node_ids = sorted(
+        {edge.source for edge in edges} | {edge.target for edge in edges}
+    )
+    lines = ["flowchart TD"]
+    for node_id in node_ids:
+        label = _DECISION_TREE_NODE_LABELS.get(node_id, node_id)
+        lines.append(f'    {node_id}["{_mermaid_text(label)}"]')
+    for edge in edges:
+        lines.append(
+            f'    {edge.source} -->|"{_mermaid_text(edge.label)}"| {edge.target}'
+        )
+    return "\n".join(lines) + "\n"
 
 
 def _max_active_fp(
@@ -2277,6 +2375,11 @@ def _cmd_run(args: argparse.Namespace) -> int:
     return run(event, repo)
 
 
+def _cmd_decision_tree(_args: argparse.Namespace) -> int:
+    sys.stdout.write(render_decision_tree_mermaid())
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -2309,6 +2412,12 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
     p_sentinel.set_defaults(func=_cmd_sentinel)
+
+    p_decision_tree = sub.add_parser(
+        "decision-tree",
+        help="Render the auto-retro run decision tree as Mermaid.",
+    )
+    p_decision_tree.set_defaults(func=_cmd_decision_tree)
 
     args = parser.parse_args(argv)
     try:

@@ -3359,6 +3359,29 @@ class TestRunAppendBranch:
 # ---------------------------------------------------------------------------
 
 
+class TestDecisionTree:
+    def test_mermaid_expands_current_signal_names(self) -> None:
+        text = ar.render_decision_tree_mermaid()
+        assert text.startswith("flowchart TD\n")
+        for name in ar._SIGNAL_NAMES:
+            assert f'"{name}=true"' in text
+        assert "post_merge_unchecked" not in text
+
+    def test_edges_are_deterministic(self) -> None:
+        first = ar.auto_retro_decision_tree_edges()
+        second = ar.auto_retro_decision_tree_edges()
+        assert first == second
+        assert len(first) == 21 + len(ar._SIGNAL_NAMES)
+
+    def test_decision_tree_cli_writes_mermaid(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        assert ar.main(["decision-tree"]) == 0
+        out = capsys.readouterr().out
+        assert out.startswith("flowchart TD\n")
+        assert "compute_repair_signals" in out
+
+
 class TestCLI:
     def test_run_reads_event_file_and_creates(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
