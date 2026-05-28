@@ -100,6 +100,10 @@ STEPS: tuple[Step, ...] = (
         argv=("python3", "scripts/uv_pin.py", "drift"),
     ),
     Step(
+        name="nixpkgs_cooldown",
+        argv=("python3", "scripts/nixpkgs_cooldown.py", "verify"),
+    ),
+    Step(
         name="scan_workflow_pip",
         argv=("python3", "scripts/scan_workflow_pip.py", "verify"),
     ),

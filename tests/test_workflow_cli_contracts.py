@@ -37,6 +37,7 @@ import dependabot_automerge
 import dependabot_labels
 import issue_link
 import labels_apply
+import nixpkgs_cooldown
 import preflight_pr_single_commit
 import pytest
 import ruleset_drift
@@ -107,6 +108,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("labels_apply.py", "$COMMAND"): "test_labels_apply_validate_and_plan_match_workflow_args",
     ("labels_apply.py", "plan"): "test_labels_apply_validate_and_plan_match_workflow_args",
     ("labels_apply.py", "validate"): "test_labels_apply_validate_and_plan_match_workflow_args",
+    ("nixpkgs_cooldown.py", "verify"): "test_nixpkgs_cooldown_verify_matches_workflow_args",
     ("preflight_pr_single_commit.py", None): "test_preflight_pr_single_commit_matches_workflow_env",
     ("ruleset_drift.py", "detect"): "test_ruleset_drift_detect_and_file_issue_match_workflow_args",
     ("ruleset_drift.py", "file-sot-issue"): "test_ruleset_drift_detect_and_file_issue_match_workflow_args",
@@ -754,6 +756,28 @@ def test_scan_workflow_pip_verify_matches_workflow_args() -> None:
     """Mirrors the ``Assert workflows install Python deps via uv only``
     step in ``.github/workflows/verify-agents.yml``."""
     assert scan_workflow_pip.main(["verify", "--repo-root", "."]) == 0
+
+
+def test_nixpkgs_cooldown_verify_matches_workflow_args(tmp_path: Path) -> None:
+    """Mirrors the ``Assert nixpkgs lock respects uv cooldown`` step."""
+    (tmp_path / "pyproject.toml").write_text(
+        '[tool.uv]\nexclude-newer = "14 days"\n',
+        encoding="utf-8",
+    )
+    (tmp_path / "flake.lock").write_text(
+        json.dumps({"nodes": {"nixpkgs": {"locked": {"lastModified": 1_700_000_000}}}}),
+        encoding="utf-8",
+    )
+
+    assert nixpkgs_cooldown.main(
+        [
+            "verify",
+            "--repo-root",
+            str(tmp_path),
+            "--now-epoch",
+            str(1_700_000_000 + (14 * 24 * 60 * 60)),
+        ]
+    ) == 0
 
 
 def test_security_drift_report_aggregate_and_post_comment_match_workflow_args(
