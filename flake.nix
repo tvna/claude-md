@@ -52,7 +52,7 @@
             installPhase = ''
               runHook preInstall
 
-              install -Dm755 package/claude $out/bin/claude
+              install -Dm755 claude $out/bin/claude
 
               runHook postInstall
             '';
@@ -69,7 +69,7 @@
               runHook preInstall
 
               mkdir -p $out/bin
-              cp -R package/vendor $out/vendor
+              cp -R vendor $out/vendor
               chmod +x $out/vendor/${codexCliNative.target}/bin/codex
               cat > $out/bin/codex <<EOF
 #!${pkgs.runtimeShell}
