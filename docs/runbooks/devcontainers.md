@@ -20,6 +20,16 @@ the matching Nix shell, and run:
 uv sync --locked --group local
 ```
 
+Claude terminals run as user `claude`, and Codex terminals run as user
+`codex`. The prebuilt images use `.devcontainer/images/features/agent-user`
+to provide the matching agent name with UID 0. This is intentional for
+rootless Podman on macOS: bind-mounted workspaces are writable by the
+container UID mapped to the host user, while non-root UIDs cannot repair
+ownership with `chown`. The local entrypoints set `remoteUser` to that
+agent user with `updateRemoteUserUID` disabled so UID 0 is preserved.
+Post-create workspace preparation fails fast if the workspace is not
+writable before `uv sync` runs.
+
 They also install the matching agent CLI into `/usr/local/bin` from the
 Nix package outputs:
 
@@ -27,6 +37,16 @@ Nix package outputs:
 |---|---|
 | Claude | `claude --version` |
 | Codex | `codex --version` |
+
+After the container opens, verify the runtime identity and workspace
+write access before starting agent work:
+
+```sh
+id -un
+touch .devcontainer-write-check
+rm .devcontainer-write-check
+which claude || which codex
+```
 
 The prebuild definitions live under `.devcontainer/images/<agent>/`.
 Those files are CI inputs only; local users should open the agent
@@ -247,6 +267,8 @@ python3 -m json.tool .devcontainer/codex/devcontainer.json
 python3 -m json.tool claude-md.code-workspace
 bash -n .devcontainer/scripts/apply-egress-allowlist.sh
 bash -n .devcontainer/scripts/install-agent-cli.sh
+bash -n .devcontainer/scripts/prepare-agent-workspace.sh
+sh -n .devcontainer/images/features/agent-user/install.sh
 nix build .#claude-cli
 nix build .#codex-cli
 ```

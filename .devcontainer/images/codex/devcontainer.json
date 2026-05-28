@@ -4,8 +4,15 @@
   "features": {
     "ghcr.io/devcontainers/features/nix:1": {
       "extraNixConfig": "experimental-features = nix-command flakes\naccept-flake-config = true"
+    },
+    "../features/agent-user": {
+      "agentUser": "codex"
     }
   },
+  "overrideFeatureInstallOrder": [
+    "ghcr.io/devcontainers/features/nix",
+    "../features/agent-user"
+  ],
   "remoteEnv": {
     "AGENT_CONTAINER": "codex"
   },
