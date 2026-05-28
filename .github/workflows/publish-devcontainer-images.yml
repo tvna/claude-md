@@ -1,0 +1,50 @@
+name: Publish devcontainer images
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".devcontainer/**"
+      - ".github/workflows/publish-devcontainer-images.yml"
+      - "flake.lock"
+      - "flake.nix"
+      - "pyproject.toml"
+      - "uv.lock"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        agent: [claude, codex]
+    env:
+      DEVCONTAINERS_CLI_VERSION: "0.86.1"
+      IMAGE_PREFIX: ghcr.io/${{ github.repository_owner }}/claude-md-devcontainer
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Log in to GHCR
+        env:
+          GHCR_TOKEN: ${{ github.token }}
+        run: |
+          printf '%s' "$GHCR_TOKEN" | docker login ghcr.io \
+            --username "${{ github.actor }}" \
+            --password-stdin
+
+      - name: Build and publish ${{ matrix.agent }} devcontainer image
+        run: |
+          image="${IMAGE_PREFIX}-${{ matrix.agent }}"
+          npx --yes "@devcontainers/cli@${DEVCONTAINERS_CLI_VERSION}" build \
+            --workspace-folder . \
+            --config ".devcontainer/images/${{ matrix.agent }}/devcontainer.json" \
+            --image-name "${image}:main" \
+            --image-name "${image}:${GITHUB_SHA}" \
+            --push

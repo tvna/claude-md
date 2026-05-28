@@ -1,0 +1,21 @@
+{
+  "name": "claude-md Codex prebuild",
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu-24.04",
+  "features": {
+    "ghcr.io/devcontainers/features/nix:1": {
+      "extraNixConfig": "experimental-features = nix-command flakes\naccept-flake-config = true"
+    }
+  },
+  "remoteEnv": {
+    "AGENT_CONTAINER": "codex"
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "jnoortheen.nix-ide",
+        "ms-python.python",
+        "charliermarsh.ruff"
+      ]
+    }
+  }
+}
