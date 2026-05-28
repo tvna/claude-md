@@ -267,6 +267,15 @@ _MERGE_FROM_MAIN_PREFIXES: tuple[str, ...] = (
 _POLICY_ARTIFACT_MARKER = "[policy-artifact]"
 
 
+@dataclass(frozen=True)
+class RepairHistoryRow:
+    """One generated Repair history row before markdown rendering."""
+
+    repair: str
+    detail: str
+    policy_artifact: bool = False
+
+
 def _count_merge_from_main(subjects: list[str]) -> int:
     """Return the number of *subjects* that are merge-from-main commits.
 
@@ -561,14 +570,14 @@ def _escape_table_cell(text: str) -> str:
     return text.replace("|", "\\|").replace("\r", " ").replace("\n", " ")
 
 
-def _build_repair_history_table(
+def _repair_history_rows(
     check_runs: list[dict[str, Any]] | None,
     commit_subjects: list[str],
     pr_commit_count: int,
     verification_pairs: list[VerificationPair] | None = None,
     pr_type: str = "",
-) -> str:
-    """Render the Repair history markdown table (header + rows, no surrounds).
+) -> list[RepairHistoryRow]:
+    """Return generated Repair history rows before markdown rendering.
 
     Walks deterministic signal classes in fixed order: CI failures,
     fix-up commits (canonical fix exempted on fix-typed PRs as a
@@ -592,7 +601,7 @@ def _build_repair_history_table(
     canonical hand-rewrites of #305, #307, #317, #333, #334, #336 on
     2026-05-25. Refs issue #343.
     """
-    rows: list[tuple[str, str]] = []
+    rows: list[RepairHistoryRow] = []
 
     rendered_failed = 0
     total_failed = 0
@@ -614,19 +623,14 @@ def _build_repair_history_table(
             parts.append(f"logs: {html_url}")
         if summary:
             parts.append(f"annotation: {summary}")
-        rows.append(
-            (
-                _escape_table_cell(f"CI fail: {name}"),
-                _escape_table_cell("; ".join(parts)),
-            )
-        )
+        rows.append(RepairHistoryRow(f"CI fail: {name}", "; ".join(parts)))
 
     overflow = total_failed - _CHECK_RUN_DISPLAY_CAP
     if overflow > 0:
         rows.append(
-            (
-                _escape_table_cell(f"CI fail: + {overflow} more failures"),
-                _escape_table_cell("see PR check-run list (truncated)"),
+            RepairHistoryRow(
+                f"CI fail: + {overflow} more failures",
+                "see PR check-run list (truncated)",
             )
         )
 
@@ -650,18 +654,15 @@ def _build_repair_history_table(
                 canonical_fix_index = i
             break
 
-    policy_artifact_emitted = False
     for i, subject in enumerate(commit_subjects):
         stripped = subject.strip()
         if i == canonical_fix_index:
-            policy_artifact_emitted = True
             rows.append(
-                (
-                    _escape_table_cell("Fix commit"),
-                    _escape_table_cell(
-                        f"{_POLICY_ARTIFACT_MARKER} `{subject}` -- "
-                        "canonical fix commit on fix-typed PR"
-                    ),
+                RepairHistoryRow(
+                    "Fix commit",
+                    f"{_POLICY_ARTIFACT_MARKER} `{subject}` -- "
+                    "canonical fix commit on fix-typed PR",
+                    policy_artifact=True,
                 )
             )
             continue
@@ -670,14 +671,12 @@ def _build_repair_history_table(
             or stripped.startswith("fixup!")
             or stripped.startswith("squash!")
         ):
-            policy_artifact_emitted = True
             rows.append(
-                (
-                    _escape_table_cell("Iteration commit"),
-                    _escape_table_cell(
-                        f"{_POLICY_ARTIFACT_MARKER} `{subject}` -- "
-                        "signals an earlier silent failure"
-                    ),
+                RepairHistoryRow(
+                    "Iteration commit",
+                    f"{_POLICY_ARTIFACT_MARKER} `{subject}` -- "
+                    "signals an earlier silent failure",
+                    policy_artifact=True,
                 )
             )
 
@@ -686,26 +685,22 @@ def _build_repair_history_table(
         if any(
             stripped.startswith(prefix) for prefix in _MERGE_FROM_MAIN_PREFIXES
         ):
-            policy_artifact_emitted = True
             rows.append(
-                (
-                    _escape_table_cell("Merge from main"),
-                    _escape_table_cell(
-                        f"{_POLICY_ARTIFACT_MARKER} `{subject}` -- "
-                        "rebase debt before merge"
-                    ),
+                RepairHistoryRow(
+                    "Merge from main",
+                    f"{_POLICY_ARTIFACT_MARKER} `{subject}` -- "
+                    "rebase debt before merge",
+                    policy_artifact=True,
                 )
             )
 
     if pr_commit_count > 1:
-        policy_artifact_emitted = True
         rows.append(
-            (
-                _escape_table_cell("Multi-commit PR"),
-                _escape_table_cell(
-                    f"{_POLICY_ARTIFACT_MARKER} {pr_commit_count} "
-                    "commits squash-merged"
-                ),
+            RepairHistoryRow(
+                "Multi-commit PR",
+                f"{_POLICY_ARTIFACT_MARKER} {pr_commit_count} "
+                "commits squash-merged",
+                policy_artifact=True,
             )
         )
 
@@ -713,15 +708,45 @@ def _build_repair_history_table(
         if pair.passed:
             continue
         rows.append(
-            (
-                _escape_table_cell(f"Verification fail: {pair.command}"),
-                _escape_table_cell(f"observed: {pair.result}"),
+            RepairHistoryRow(
+                f"Verification fail: {pair.command}",
+                f"observed: {pair.result}",
             )
         )
 
     # Post-merge subsection rows were removed in #418: the items are
     # checked AFTER the merge by design, so they are always unchecked at
     # the moment auto-retro runs. Deferred re-scan tracked in #421.
+    return rows
+
+
+def _has_only_exempt_policy_artifact_rows(rows: list[RepairHistoryRow]) -> bool:
+    """True when rows contain only low-noise policy artifacts.
+
+    Iteration commits keep their marker for operator taxonomy purposes,
+    but they still represent a repeated repair commit and remain
+    actionable for retro creation. Refs #594.
+    """
+    return bool(rows) and all(
+        row.policy_artifact and row.repair != "Iteration commit" for row in rows
+    )
+
+
+def _build_repair_history_table(
+    check_runs: list[dict[str, Any]] | None,
+    commit_subjects: list[str],
+    pr_commit_count: int,
+    verification_pairs: list[VerificationPair] | None = None,
+    pr_type: str = "",
+) -> str:
+    """Render the Repair history markdown table (header + rows, no surrounds)."""
+    rows = _repair_history_rows(
+        check_runs,
+        commit_subjects,
+        pr_commit_count,
+        verification_pairs,
+        pr_type,
+    )
 
     header = (
         "| # | Repair | What the reviewer / gate caught |\n"
@@ -734,11 +759,12 @@ def _build_repair_history_table(
             "| operator: investigate manually or mark `(none)` |\n"
         )
     body_rows = "".join(
-        f"| {idx} | {left} | {right} |\n"
-        for idx, (left, right) in enumerate(rows, start=1)
+        f"| {idx} | {_escape_table_cell(row.repair)} "
+        f"| {_escape_table_cell(row.detail)} |\n"
+        for idx, row in enumerate(rows, start=1)
     )
     footnote = ""
-    if policy_artifact_emitted:
+    if any(row.policy_artifact for row in rows):
         footnote = (
             "\n"
             f"_{_POLICY_ARTIFACT_MARKER} rows are forced by the squash + "
@@ -1728,6 +1754,7 @@ def run(event: dict[str, Any], repo: str) -> int:
 
     if commit_subjects is None:
         commit_subjects = fetch_pr_commits(repo, pr.number)
+    check_runs_unknown = False
     try:
         check_runs = fetch_check_runs(repo, pr.number)
     except subprocess.CalledProcessError as exc:
@@ -1741,7 +1768,28 @@ def run(event: dict[str, Any], repo: str) -> int:
             file=sys.stderr,
         )
         check_runs = []
+        check_runs_unknown = True
     verification_pairs = extract_verification_pairs(pr.body or "")
+    pr_type = (extract_type_scope(pr.title) or "").split("(", 1)[0]
+    repair_rows = _repair_history_rows(
+        check_runs,
+        commit_subjects,
+        pr.commits,
+        verification_pairs,
+        pr_type=pr_type,
+    )
+    if (
+        not has_inline_comments
+        and not check_runs_unknown
+        and _has_only_exempt_policy_artifact_rows(repair_rows)
+    ):
+        msg = (
+            "only policy-artifact repair rows generated "
+            f"({signal_summary})"
+        )
+        print(f"skip: {msg}")
+        _append_summary(_build_summary(pr, "skip", msg))
+        return 0
     title = build_retro_title(pr)
     body = build_retro_body(
         pr,
