@@ -13,11 +13,49 @@ agent workflows can diverge without mutating the other environment.
 | Codex | `.devcontainer/codex/devcontainer.json` | `nix develop .#codex` |
 
 Open either entrypoint with VS Code's "Dev Containers: Reopen in
-Container..." flow. Both entrypoints install the Dev Containers Nix
-feature, enter the matching Nix shell, and run:
+Container..." flow. Both entrypoints pull a prebuilt GHCR image, enter
+the matching Nix shell, and run:
 
 ```sh
 uv sync --locked --group local
+```
+
+The prebuild definitions live under `.devcontainer/images/<agent>/`.
+Those files are CI inputs only; local users should open the agent
+entrypoints listed above.
+
+## Prebuilt images
+
+Local devcontainers use these images:
+
+| Agent | Image |
+|---|---|
+| Claude | `ghcr.io/tvna/claude-md-devcontainer-claude:main` |
+| Codex | `ghcr.io/tvna/claude-md-devcontainer-codex:main` |
+
+The `Publish devcontainer images` workflow builds both images with the
+Dev Containers CLI and pushes them to GHCR on `main` changes to
+`.devcontainer/**`, the workflow itself, `flake.nix`, `flake.lock`,
+`pyproject.toml`, or `uv.lock`. It also supports manual
+`workflow_dispatch`.
+
+Each publish creates two tags per agent:
+
+- `main` for local VS Code entrypoints.
+- the exact source commit SHA for audit and rollback.
+
+If a devcontainer change merges before the publish workflow completes,
+wait for that workflow to finish and then rebuild/reopen the local
+container so Podman pulls the updated `:main` image. If publish fails,
+use the commit-SHA tag from the last green publish as the rollback
+reference while fixing the workflow.
+
+If Podman cannot pull from GHCR with an authorization error after the
+first publish, confirm that both GHCR packages are public. Private
+packages require an explicit host login before VS Code can pull them:
+
+```sh
+/opt/podman/bin/podman login ghcr.io
 ```
 
 ## Runtime
