@@ -43,9 +43,12 @@ _ESCAPED_MAX_LEN = 4000
 _NON_ASCII_RE = re.compile(r"[^\x00-\x7F]")
 
 # Non-ASCII scanner-specific extension: Codecov posts generated PR comments
-# (not PRs) whose UI footer may contain emoji. Keep this separate from the
-# shared author allowlist so issue-link and body-policy gates do not change.
-_NON_ASCII_TRUSTED_BOT_LOGINS = _TRUSTED_BOT_LOGINS | frozenset({"codecov[bot]"})
+# (not PRs) whose UI footer may contain emoji. GitHub has delivered those
+# comments as both "codecov" and "codecov[bot]" (#504, #620). Keep this
+# separate from the shared author allowlist so issue-link and body-policy
+# gates do not change.
+_CODECOV_BOT_LOGINS = frozenset({"codecov", "codecov[bot]"})
+_NON_ASCII_TRUSTED_BOT_LOGINS = _TRUSTED_BOT_LOGINS | _CODECOV_BOT_LOGINS
 
 
 # ---------------------------------------------------------------------------
