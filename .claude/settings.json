@@ -2,9 +2,9 @@
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
   "permissions": {
     "allow": [
-      "Edit(/root/.claude/plans/**)",
-      "Write(/root/.claude/plans/**)",
-      "MultiEdit(/root/.claude/plans/**)"
+      "Edit(/tmp/claude-plans/**)",
+      "Write(/tmp/claude-plans/**)",
+      "MultiEdit(/tmp/claude-plans/**)"
     ]
   },
   "hooks": {

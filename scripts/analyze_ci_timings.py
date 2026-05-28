@@ -33,7 +33,15 @@ a single ASCII character (``^`` faster-rising, ``v`` falling,
 ``=`` flat, ``?`` insufficient samples) so the report can be pasted
 verbatim into a GitHub comment without tripping the non-ASCII gate.
 
-Tested by ``tests/test_analyze_ci_timings.py``. Refs #474.
+Pass ``--cutoff YYYY-MM-DD`` to switch the report into compare mode:
+samples are split at UTC midnight of the cutoff date into a baseline
+window (pre-cutoff) and a post-change window (post-cutoff), and the
+tables become ``pre count | pre p50 | post count | post p50 | delta p50``.
+This is the mode used to close issue #545 acceptance criteria AC1
+(baseline) and AC7 (post-change p50 strictly lower than baseline) for
+performance-claiming PRs in one workflow dispatch.
+
+Tested by ``tests/test_analyze_ci_timings.py``. Refs #474, #545.
 """
 
 from __future__ import annotations
@@ -41,9 +49,10 @@ from __future__ import annotations
 import argparse
 import json
 import statistics
-from collections.abc import Iterable, Iterator
+from collections.abc import Hashable, Iterable, Iterator
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import TypeVar
 
 # GitHub Actions API returns ISO-8601 with a trailing ``Z``. Parsing
 # with this exact format avoids the dateutil dependency and keeps the
@@ -247,6 +256,60 @@ def aggregate_step_durations(
 
 
 # ---------------------------------------------------------------------------
+# Partitioning (cutoff-windowed baseline vs post-change)
+# ---------------------------------------------------------------------------
+
+
+_K = TypeVar("_K", bound=Hashable)
+
+
+def partition_aggregates_by_cutoff(
+    aggregates: dict[_K, list[tuple[datetime, float]]],
+    cutoff: datetime,
+) -> tuple[dict[_K, list[float]], dict[_K, list[float]]]:
+    """Split ``aggregates`` at ``cutoff`` into ``(pre, post)`` sample dicts.
+
+    Samples whose ``started_at`` is strictly before ``cutoff`` go to
+    ``pre``; samples at or after ``cutoff`` go to ``post``. Used by the
+    compare-mode report (#545 AC1 / AC7) to put baseline and post-change
+    p50 on the same row.
+    """
+    pre: dict[_K, list[float]] = {}
+    post: dict[_K, list[float]] = {}
+    for key, samples in aggregates.items():
+        for ts, val in samples:
+            if ts < cutoff:
+                pre.setdefault(key, []).append(val)
+            else:
+                post.setdefault(key, []).append(val)
+    return pre, post
+
+
+def _delta_p50_marker(pre_samples: list[float], post_samples: list[float]) -> str:
+    """Render the ``delta p50`` cell for a compare row.
+
+    ``new`` -- no pre-cutoff sample; the row appeared after cutoff.
+    ``gone`` -- no post-cutoff sample; the row existed only before.
+    ``+/-X.Y%`` -- both windows present; signed percentage change.
+    Output is ASCII-only (the report is pasted into a GitHub comment
+    behind ``scripts/preflight_non_ascii.py``).
+    """
+    if not pre_samples and not post_samples:
+        return "n/a"
+    if not pre_samples:
+        return "new"
+    if not post_samples:
+        return "gone"
+    pre_p50 = _percentile(pre_samples, 50)
+    post_p50 = _percentile(post_samples, 50)
+    if pre_p50 == 0:
+        return "+inf" if post_p50 > 0 else "0.0%"
+    pct = (post_p50 - pre_p50) / pre_p50 * 100.0
+    sign = "+" if pct >= 0 else ""
+    return f"{sign}{pct:.1f}%"
+
+
+# ---------------------------------------------------------------------------
 # Rendering
 # ---------------------------------------------------------------------------
 
@@ -292,7 +355,65 @@ def _render_step_table(
     return "\n".join(rows)
 
 
-def render_report(jobs: list[dict[str, object]], *, title: str) -> str:
+def _render_compare_job_table(
+    pre: dict[str, list[float]],
+    post: dict[str, list[float]],
+) -> str:
+    rows: list[str] = []
+    rows.append(
+        "| job | pre count | pre p50 | post count | post p50 | delta p50 |"
+    )
+    rows.append("| --- | ---: | ---: | ---: | ---: | ---: |")
+    for name in sorted(set(pre) | set(post)):
+        pre_samples = pre.get(name, [])
+        post_samples = post.get(name, [])
+        rows.append(
+            f"| {name} | {len(pre_samples)} | "
+            f"{_fmt_seconds(_percentile(pre_samples, 50))} | "
+            f"{len(post_samples)} | "
+            f"{_fmt_seconds(_percentile(post_samples, 50))} | "
+            f"{_delta_p50_marker(pre_samples, post_samples)} |"
+        )
+    return "\n".join(rows)
+
+
+def _render_compare_step_table(
+    pre: dict[tuple[str, str], list[float]],
+    post: dict[tuple[str, str], list[float]],
+) -> str:
+    rows: list[str] = []
+    rows.append(
+        "| job | step | pre count | pre p50 | post count | post p50 | delta p50 |"
+    )
+    rows.append("| --- | --- | ---: | ---: | ---: | ---: | ---: |")
+    for key in sorted(set(pre) | set(post)):
+        job_name, step_name = key
+        pre_samples = pre.get(key, [])
+        post_samples = post.get(key, [])
+        rows.append(
+            f"| {job_name} | {step_name} | {len(pre_samples)} | "
+            f"{_fmt_seconds(_percentile(pre_samples, 50))} | "
+            f"{len(post_samples)} | "
+            f"{_fmt_seconds(_percentile(post_samples, 50))} | "
+            f"{_delta_p50_marker(pre_samples, post_samples)} |"
+        )
+    return "\n".join(rows)
+
+
+def render_report(
+    jobs: list[dict[str, object]],
+    *,
+    title: str,
+    cutoff: datetime | None = None,
+) -> str:
+    if cutoff is None:
+        return _render_single_window_report(jobs, title=title)
+    return _render_compare_report(jobs, title=title, cutoff=cutoff)
+
+
+def _render_single_window_report(
+    jobs: list[dict[str, object]], *, title: str
+) -> str:
     job_agg = aggregate_job_durations(jobs)
     step_agg = aggregate_step_durations(jobs)
     parts: list[str] = []
@@ -321,6 +442,50 @@ def render_report(jobs: list[dict[str, object]], *, title: str) -> str:
     return "\n".join(parts)
 
 
+def _render_compare_report(
+    jobs: list[dict[str, object]],
+    *,
+    title: str,
+    cutoff: datetime,
+) -> str:
+    job_agg = aggregate_job_durations(jobs)
+    step_agg = aggregate_step_durations(jobs)
+    pre_jobs, post_jobs = partition_aggregates_by_cutoff(job_agg, cutoff)
+    pre_steps, post_steps = partition_aggregates_by_cutoff(step_agg, cutoff)
+    pre_total = sum(len(s) for s in pre_jobs.values())
+    post_total = sum(len(s) for s in post_jobs.values())
+    cutoff_iso = cutoff.strftime("%Y-%m-%dT%H:%M:%SZ")
+    parts: list[str] = []
+    parts.append(f"# {title}")
+    parts.append("")
+    parts.append(
+        f"Cutoff: {cutoff_iso}. "
+        f"Pre-cutoff job executions: {pre_total}. "
+        f"Post-cutoff job executions: {post_total}."
+    )
+    parts.append("")
+    parts.append("## Per-job durations (seconds, pre vs post cutoff)")
+    parts.append("")
+    if pre_jobs or post_jobs:
+        parts.append(_render_compare_job_table(pre_jobs, post_jobs))
+    else:
+        parts.append("_no job samples_")
+    parts.append("")
+    parts.append("## Per-step durations (seconds, pre vs post cutoff)")
+    parts.append("")
+    if pre_steps or post_steps:
+        parts.append(_render_compare_step_table(pre_steps, post_steps))
+    else:
+        parts.append("_no step samples_")
+    parts.append("")
+    parts.append(
+        "Delta legend: `+X.Y%` = post p50 slower than pre, `-X.Y%` = post "
+        "faster, `new` = no pre-cutoff sample, `gone` = no post-cutoff "
+        "sample, `+inf` = pre p50 was zero with post-cutoff samples present."
+    )
+    return "\n".join(parts)
+
+
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
@@ -332,6 +497,15 @@ def _parse_since(value: str) -> datetime:
     except ValueError as exc:
         raise argparse.ArgumentTypeError(
             f"--since expects YYYY-MM-DD, got {value!r}"
+        ) from exc
+
+
+def _parse_cutoff(value: str) -> datetime:
+    try:
+        return datetime.strptime(value, "%Y-%m-%d").replace(tzinfo=UTC)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(
+            f"--cutoff expects YYYY-MM-DD (UTC midnight), got {value!r}"
         ) from exc
 
 
@@ -368,6 +542,18 @@ def main(argv: list[str] | None = None) -> int:
         default="CI timings report",
         help="Markdown report title.",
     )
+    parser.add_argument(
+        "--cutoff",
+        type=_parse_cutoff,
+        default=None,
+        help=(
+            "Optional UTC date (YYYY-MM-DD). When supplied, the report "
+            "splits aggregates into pre-cutoff (baseline) and post-cutoff "
+            "(post-change) columns with a delta p50 marker. Use this to "
+            "satisfy issue #545 AC1/AC7 (baseline vs post-change comparison) "
+            "for performance-claiming PRs."
+        ),
+    )
     args = parser.parse_args(argv)
 
     jobs = load_jobs(args.jobs)
@@ -377,7 +563,7 @@ def main(argv: list[str] | None = None) -> int:
         job_name=args.job,
         since=args.since,
     )
-    report = render_report(jobs, title=args.title)
+    report = render_report(jobs, title=args.title, cutoff=args.cutoff)
     print(report)
     return 0
 

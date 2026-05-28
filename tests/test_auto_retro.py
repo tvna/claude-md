@@ -16,6 +16,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
+import _retro_labels as rl
 import auto_retro as ar
 import body_policy as bp
 import pytest
@@ -4094,3 +4095,539 @@ class TestHistoricalRetroFixtures:
             "- [ ] `## Follow-up issues` filed (or explicitly stated `(none)`).\n"
         )
         assert ar.is_retro_untouched(body_noise_like, []) is True
+
+
+# ---------------------------------------------------------------------------
+# PR2: label-derived prior (refs #582)
+# ---------------------------------------------------------------------------
+
+
+class TestRetroLabelsPriorConstants:
+    """The four prior thresholds must satisfy the documented relationships.
+
+    Catches accidental edits to ``scripts/_retro_labels.py`` that would
+    invert the band ordering (tentative >= skip) or zero out the
+    sample-size safety net.
+    """
+
+    def test_skip_threshold_above_tentative(self) -> None:
+        assert rl.PRIOR_SKIP_THRESHOLD > rl.PRIOR_TENTATIVE_THRESHOLD
+
+    def test_tentative_threshold_in_unit_range(self) -> None:
+        assert 0.0 < rl.PRIOR_TENTATIVE_THRESHOLD < 1.0
+
+    def test_skip_threshold_in_unit_range(self) -> None:
+        assert 0.0 < rl.PRIOR_SKIP_THRESHOLD <= 1.0
+
+    def test_min_sample_size_is_positive(self) -> None:
+        assert rl.PRIOR_MIN_SAMPLE_SIZE >= 1
+
+    def test_fetch_limit_is_reasonable(self) -> None:
+        # Anything outside [1, 100] would either neuter the prior or
+        # exceed GitHub's search per_page max.
+        assert 1 <= rl.PRIOR_FETCH_LIMIT <= 100
+
+
+class TestRenderSignalsFiredLine:
+    """``- Signals fired:`` line shape consumed by parse_signals_from_retro_body."""
+
+    def test_empty_signals_dict_renders_none(self) -> None:
+        assert ar.render_signals_fired_line({}) == "- Signals fired: (none)"
+
+    def test_all_false_renders_none(self) -> None:
+        signals = {name: False for name in ar._SIGNAL_NAMES}
+        assert ar.render_signals_fired_line(signals) == "- Signals fired: (none)"
+
+    def test_single_signal_fired(self) -> None:
+        signals = {name: False for name in ar._SIGNAL_NAMES}
+        signals["multi_commit_pr"] = True
+        assert (
+            ar.render_signals_fired_line(signals)
+            == "- Signals fired: multi_commit_pr"
+        )
+
+    def test_preserves_signal_declaration_order(self) -> None:
+        # Even if the dict is built out of order, the line follows the
+        # canonical _SIGNAL_NAMES tuple. Required for byte-identical
+        # bodies on re-run.
+        signals = {
+            "multi_commit_pr": True,
+            "inline_review_comments": True,
+            "body_cites_refs": False,
+            "fix_typed_title": True,
+            "verification_pairs_failed": False,
+        }
+        assert ar.render_signals_fired_line(signals) == (
+            "- Signals fired: inline_review_comments, "
+            "fix_typed_title, multi_commit_pr"
+        )
+
+    def test_unknown_signal_names_are_dropped(self) -> None:
+        # An accidental extra key from a future signal added without
+        # updating _SIGNAL_NAMES must not leak into the line.
+        signals = {"future_unknown_signal": True, "multi_commit_pr": True}
+        assert (
+            ar.render_signals_fired_line(signals)
+            == "- Signals fired: multi_commit_pr"
+        )
+
+
+class TestParseSignalsFromRetroBody:
+    """Round-trip parser for the ``- Signals fired:`` Facts line."""
+
+    def test_empty_body_returns_empty(self) -> None:
+        assert ar.parse_signals_from_retro_body("") == frozenset()
+
+    def test_body_without_signals_line_returns_empty(self) -> None:
+        # Pre-#582 legacy retros must contribute zero observations.
+        body = "## Facts\n\n- Source PR: #1 -- feat(x): hi\n"
+        assert ar.parse_signals_from_retro_body(body) == frozenset()
+
+    def test_none_sentinel_returns_empty(self) -> None:
+        body = "## Facts\n\n- Signals fired: (none)\n"
+        assert ar.parse_signals_from_retro_body(body) == frozenset()
+
+    def test_single_signal_parses(self) -> None:
+        body = "## Facts\n\n- Signals fired: multi_commit_pr\n"
+        assert ar.parse_signals_from_retro_body(body) == frozenset(
+            {"multi_commit_pr"}
+        )
+
+    def test_multi_signal_parses(self) -> None:
+        body = (
+            "## Facts\n\n- Signals fired: "
+            "inline_review_comments, multi_commit_pr, fix_typed_title\n"
+        )
+        assert ar.parse_signals_from_retro_body(body) == frozenset(
+            {"inline_review_comments", "multi_commit_pr", "fix_typed_title"}
+        )
+
+    def test_unknown_signal_names_are_filtered(self) -> None:
+        # A retro body could be edited by hand to include a typo; the
+        # parser refuses to populate the prior with names not in the
+        # canonical _SIGNAL_NAMES tuple.
+        body = (
+            "## Facts\n\n- Signals fired: "
+            "multi_commit_pr, made_up_signal_typo\n"
+        )
+        assert ar.parse_signals_from_retro_body(body) == frozenset(
+            {"multi_commit_pr"}
+        )
+
+    def test_html_comment_signals_line_is_ignored(self) -> None:
+        # An HTML-commented heading must NOT leak into the parser
+        # output -- the strip_html_comments boundary is exercised.
+        body = (
+            "## Facts\n\n<!-- - Signals fired: multi_commit_pr -->\n"
+            "- Signals fired: fix_typed_title\n"
+        )
+        assert ar.parse_signals_from_retro_body(body) == frozenset(
+            {"fix_typed_title"}
+        )
+
+    def test_render_and_parse_round_trip(self) -> None:
+        for active in (
+            set(),
+            {"multi_commit_pr"},
+            {"inline_review_comments", "fix_typed_title"},
+            set(ar._SIGNAL_NAMES),
+        ):
+            signals = {name: name in active for name in ar._SIGNAL_NAMES}
+            line = ar.render_signals_fired_line(signals)
+            body = f"## Facts\n\n{line}\n"
+            assert ar.parse_signals_from_retro_body(body) == frozenset(active)
+
+
+class TestComputePriorFromLabels:
+    """Per-signal FP rate computation from a population of past retros."""
+
+    def test_empty_population_yields_zero_with_zero_sample(self) -> None:
+        prior = ar.compute_prior_from_labels([])
+        for name in ar._SIGNAL_NAMES:
+            assert prior[name] == (0.0, 0)
+
+    def test_single_fp_retro_yields_full_fp_rate(self) -> None:
+        past = [
+            ar.PastRetro(
+                number=1,
+                signals=frozenset({"multi_commit_pr"}),
+                labels=frozenset({rl.RETRO_FP}),
+            )
+        ]
+        prior = ar.compute_prior_from_labels(past)
+        assert prior["multi_commit_pr"] == (1.0, 1)
+        # Other signals untouched.
+        assert prior["inline_review_comments"] == (0.0, 0)
+
+    def test_single_tp_retro_yields_zero_fp_rate(self) -> None:
+        past = [
+            ar.PastRetro(
+                number=2,
+                signals=frozenset({"multi_commit_pr"}),
+                labels=frozenset({rl.RETRO_TP}),
+            )
+        ]
+        prior = ar.compute_prior_from_labels(past)
+        assert prior["multi_commit_pr"] == (0.0, 1)
+
+    def test_mixed_population_computes_fp_rate(self) -> None:
+        # 3 fp, 2 tp over the same signal -> 0.6 / 5.
+        past = [
+            ar.PastRetro(
+                number=i,
+                signals=frozenset({"multi_commit_pr"}),
+                labels=frozenset({rl.RETRO_FP if i < 3 else rl.RETRO_TP}),
+            )
+            for i in range(5)
+        ]
+        prior = ar.compute_prior_from_labels(past)
+        rate, sample = prior["multi_commit_pr"]
+        assert sample == 5
+        assert abs(rate - 0.6) < 1e-9
+
+    def test_signals_with_no_observations_yield_zero(self) -> None:
+        # A retro with signal A only must not contribute to signal B.
+        past = [
+            ar.PastRetro(
+                number=1,
+                signals=frozenset({"multi_commit_pr"}),
+                labels=frozenset({rl.RETRO_FP}),
+            )
+        ]
+        prior = ar.compute_prior_from_labels(past)
+        assert prior["fix_typed_title"] == (0.0, 0)
+
+    def test_unlabelled_retros_count_toward_denominator_only(self) -> None:
+        # A past retro with no retro:tp/fp label still observes the
+        # signal -- it just doesn't move the numerator. This is the
+        # "operator hasn't closed yet" case.
+        past = [
+            ar.PastRetro(
+                number=1,
+                signals=frozenset({"multi_commit_pr"}),
+                labels=frozenset(),
+            ),
+            ar.PastRetro(
+                number=2,
+                signals=frozenset({"multi_commit_pr"}),
+                labels=frozenset({rl.RETRO_FP}),
+            ),
+        ]
+        prior = ar.compute_prior_from_labels(past)
+        assert prior["multi_commit_pr"] == (0.5, 2)
+
+
+class TestShouldSkipByPrior:
+    """Skip-band verdict over the active signal set."""
+
+    def _signals_with(self, *active: str) -> dict[str, bool]:
+        return {name: name in active for name in ar._SIGNAL_NAMES}
+
+    def test_empty_prior_does_not_skip(self) -> None:
+        skip, reason = ar.should_skip_by_prior(
+            self._signals_with("multi_commit_pr"), {}
+        )
+        assert skip is False
+        assert reason == ""
+
+    def test_inactive_signal_with_high_fp_rate_does_not_skip(self) -> None:
+        # multi_commit_pr is the high-FP signal, but it did NOT fire on
+        # the current PR -- the prior should not block.
+        prior = {"multi_commit_pr": (0.9, 10)}
+        skip, _reason = ar.should_skip_by_prior(
+            self._signals_with("inline_review_comments"), prior
+        )
+        assert skip is False
+
+    def test_active_signal_above_threshold_with_enough_sample_skips(
+        self,
+    ) -> None:
+        prior = {"multi_commit_pr": (0.6, 10)}
+        skip, reason = ar.should_skip_by_prior(
+            self._signals_with("multi_commit_pr"), prior
+        )
+        assert skip is True
+        assert "multi_commit_pr" in reason
+        assert "0.60" in reason
+        assert "n=10" in reason
+
+    def test_active_signal_at_threshold_skips(self) -> None:
+        # ``>=`` boundary: exactly at the threshold is the skip band.
+        prior = {
+            "multi_commit_pr": (rl.PRIOR_SKIP_THRESHOLD, rl.PRIOR_MIN_SAMPLE_SIZE)
+        }
+        skip, _reason = ar.should_skip_by_prior(
+            self._signals_with("multi_commit_pr"), prior
+        )
+        assert skip is True
+
+    def test_insufficient_sample_size_does_not_skip(self) -> None:
+        # The empty-prior safety net: a tiny population must not
+        # confidently skip even if the FP rate is high.
+        prior = {"multi_commit_pr": (1.0, rl.PRIOR_MIN_SAMPLE_SIZE - 1)}
+        skip, _reason = ar.should_skip_by_prior(
+            self._signals_with("multi_commit_pr"), prior
+        )
+        assert skip is False
+
+    def test_max_fp_signal_wins_over_lower_active(self) -> None:
+        prior = {
+            "multi_commit_pr": (0.6, 10),
+            "fix_typed_title": (0.2, 10),
+        }
+        skip, reason = ar.should_skip_by_prior(
+            self._signals_with("multi_commit_pr", "fix_typed_title"), prior
+        )
+        assert skip is True
+        assert "multi_commit_pr" in reason
+
+
+class TestIsTentativeByPrior:
+    """Tentative-band verdict between tentative and skip thresholds."""
+
+    def _signals_with(self, *active: str) -> dict[str, bool]:
+        return {name: name in active for name in ar._SIGNAL_NAMES}
+
+    def test_fp_rate_in_band_returns_true(self) -> None:
+        # 0.4 sits in [0.3, 0.5).
+        prior = {"multi_commit_pr": (0.4, 10)}
+        assert (
+            ar.is_tentative_by_prior(
+                self._signals_with("multi_commit_pr"), prior
+            )
+            is True
+        )
+
+    def test_fp_rate_at_tentative_threshold_returns_true(self) -> None:
+        prior = {
+            "multi_commit_pr": (
+                rl.PRIOR_TENTATIVE_THRESHOLD,
+                rl.PRIOR_MIN_SAMPLE_SIZE,
+            )
+        }
+        assert (
+            ar.is_tentative_by_prior(
+                self._signals_with("multi_commit_pr"), prior
+            )
+            is True
+        )
+
+    def test_fp_rate_at_skip_threshold_returns_false(self) -> None:
+        # The skip threshold belongs to the skip band, not tentative.
+        prior = {
+            "multi_commit_pr": (
+                rl.PRIOR_SKIP_THRESHOLD,
+                rl.PRIOR_MIN_SAMPLE_SIZE,
+            )
+        }
+        assert (
+            ar.is_tentative_by_prior(
+                self._signals_with("multi_commit_pr"), prior
+            )
+            is False
+        )
+
+    def test_fp_rate_below_tentative_returns_false(self) -> None:
+        prior = {"multi_commit_pr": (0.1, 10)}
+        assert (
+            ar.is_tentative_by_prior(
+                self._signals_with("multi_commit_pr"), prior
+            )
+            is False
+        )
+
+    def test_insufficient_sample_size_returns_false(self) -> None:
+        prior = {"multi_commit_pr": (0.4, rl.PRIOR_MIN_SAMPLE_SIZE - 1)}
+        assert (
+            ar.is_tentative_by_prior(
+                self._signals_with("multi_commit_pr"), prior
+            )
+            is False
+        )
+
+
+class TestIssueLabelsTentative:
+    """``retro:tentative`` is added only when explicitly requested."""
+
+    def test_default_no_tentative_label(self) -> None:
+        labels = ar.issue_labels(())
+        assert rl.RETRO_TENTATIVE not in labels
+
+    def test_tentative_true_appends_label(self) -> None:
+        labels = ar.issue_labels((), tentative=True)
+        assert rl.RETRO_TENTATIVE in labels
+        # Required labels still present in declared order.
+        assert labels[0] == "type:docs"
+        assert labels[1] == "layer:meta"
+
+    def test_tentative_true_with_layer_labels(self) -> None:
+        labels = ar.issue_labels(("layer:python",), tentative=True)
+        assert "layer:python" in labels
+        assert rl.RETRO_TENTATIVE in labels
+
+    def test_tentative_is_keyword_only(self) -> None:
+        # Refs #582: ``tentative`` must be keyword-only so positional
+        # callers cannot accidentally pass a truthy layer-label tuple.
+        import inspect
+
+        sig = inspect.signature(ar.issue_labels)
+        param = sig.parameters["tentative"]
+        assert param.kind is inspect.Parameter.KEYWORD_ONLY
+
+
+class TestBuildRetroBodyEmitsSignalsLine:
+    """``build_retro_body`` writes the new ``Signals fired:`` line."""
+
+    def _pr(self) -> ar.MergedPR:
+        return ar.MergedPR(
+            number=1,
+            title="feat(x): hi",
+            merged=True,
+            merged_at="2026-05-28T00:00:00Z",
+            merged_by_login="tvna",
+            user_login="tvna",
+            layer_labels=(),
+            html_url="https://example/1",
+            body="",
+            commits=1,
+        )
+
+    def test_no_signals_arg_renders_none_sentinel(self) -> None:
+        body = ar.build_retro_body(self._pr(), ["chore: x"])
+        assert "- Signals fired: (none)" in body
+
+    def test_signals_arg_renders_fired_names(self) -> None:
+        signals = {name: False for name in ar._SIGNAL_NAMES}
+        signals["multi_commit_pr"] = True
+        signals["fix_typed_title"] = True
+        body = ar.build_retro_body(self._pr(), ["fix: x"], signals=signals)
+        # Canonical ordering from _SIGNAL_NAMES.
+        assert (
+            "- Signals fired: fix_typed_title, multi_commit_pr" in body
+        )
+
+    def test_signals_line_round_trips_via_parser(self) -> None:
+        signals = {name: False for name in ar._SIGNAL_NAMES}
+        signals["inline_review_comments"] = True
+        body = ar.build_retro_body(self._pr(), ["x"], signals=signals)
+        assert ar.parse_signals_from_retro_body(body) == frozenset(
+            {"inline_review_comments"}
+        )
+
+
+class TestFetchPastRetroLabels:
+    """Side-effect: search query shape and PastRetro reconstruction."""
+
+    def test_search_query_matches_scanner_convention(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        captured: list[str] = []
+
+        def fake(method: str, path: str, *_a: Any, **_kw: Any) -> str:
+            captured.append(path)
+            return json.dumps({"items": []})
+
+        monkeypatch.setattr(ar, "gh_api", fake)
+        ar.fetch_past_retro_labels("o/r")
+        assert len(captured) == 1
+        path = captured[0]
+        assert path.startswith("/search/issues?q=")
+        # The query must include type:docs and layer:meta labels so
+        # PR1's scanner and PR2's prior populate from the same set.
+        assert "label%3Atype%3Adocs" in path
+        assert "label%3Alayer%3Ameta" in path
+        assert "retro" in path
+
+    def test_parses_items_into_past_retro_records(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        payload = {
+            "items": [
+                {
+                    "number": 100,
+                    "labels": [
+                        {"name": "type:docs"},
+                        {"name": "layer:meta"},
+                        {"name": rl.RETRO_FP},
+                    ],
+                    "body": (
+                        "## Facts\n\n- Signals fired: multi_commit_pr\n"
+                    ),
+                },
+                {
+                    "number": 101,
+                    "labels": [{"name": rl.RETRO_TP}],
+                    "body": (
+                        "## Facts\n\n- Signals fired: "
+                        "inline_review_comments, fix_typed_title\n"
+                    ),
+                },
+            ]
+        }
+        monkeypatch.setattr(
+            ar, "gh_api", lambda *_a, **_kw: json.dumps(payload)
+        )
+        past = ar.fetch_past_retro_labels("o/r")
+        assert len(past) == 2
+        assert past[0].number == 100
+        assert past[0].signals == frozenset({"multi_commit_pr"})
+        assert rl.RETRO_FP in past[0].labels
+        assert past[1].number == 101
+        assert past[1].signals == frozenset(
+            {"inline_review_comments", "fix_typed_title"}
+        )
+
+    def test_limit_truncates_items(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        items = [
+            {"number": i, "labels": [], "body": ""} for i in range(10)
+        ]
+        monkeypatch.setattr(
+            ar,
+            "gh_api",
+            lambda *_a, **_kw: json.dumps({"items": items}),
+        )
+        out = ar.fetch_past_retro_labels("o/r", limit=3)
+        assert len(out) == 3
+
+    def test_search_failure_returns_empty(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        def boom(*_a: Any, **_kw: Any) -> str:
+            raise subprocess.CalledProcessError(returncode=1, cmd=["gh"])
+
+        monkeypatch.setattr(ar, "gh_api", boom)
+        # Soft-fail: the retro flow proceeds with empty prior.
+        assert ar.fetch_past_retro_labels("o/r") == []
+
+    def test_malformed_json_returns_empty(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(ar, "gh_api", lambda *_a, **_kw: "not-json")
+        assert ar.fetch_past_retro_labels("o/r") == []
+
+    def test_legacy_body_without_signals_line_yields_empty_signals(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Pre-#582 retros have no Signals fired line; they still
+        # populate as PastRetro records but contribute zero
+        # signal-observations to the prior. Refs #582.
+        monkeypatch.setattr(
+            ar,
+            "gh_api",
+            lambda *_a, **_kw: json.dumps(
+                {
+                    "items": [
+                        {
+                            "number": 50,
+                            "labels": [{"name": rl.RETRO_FP}],
+                            "body": "## Facts\n\n- Source PR: #1\n",
+                        }
+                    ]
+                }
+            ),
+        )
+        past = ar.fetch_past_retro_labels("o/r")
+        assert past[0].signals == frozenset()
+        assert rl.RETRO_FP in past[0].labels
