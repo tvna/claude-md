@@ -275,7 +275,15 @@ Claude and Codex can therefore carry different service requirements.
 The enforcement script resolves hostnames at container start and allows
 TCP ports `22`, `80`, and `443` to those IPs, plus DNS to the container
 resolver. It requires `NET_ADMIN`; the devcontainer entrypoints request
-that capability through `runArgs`.
+that capability through `runArgs`. The script runs directly inside the
+Nix network shell. Do not wrap it in `sudo`: the agent users already run
+with UID 0 for rootless Podman workspace writes, and sudo account
+validation can fail before the allowlist is applied.
+
+If startup logs show `sudo: account validation failure, is your account
+locked?` or `postStartCommand from devcontainer.json failed`, do not
+ignore it. The container and VS Code Server may still start, but the
+egress allowlist did not apply.
 
 Rootless Podman can vary by host OS and Podman machine settings. If
 allowlist application fails with a capability, iptables, or netfilter
