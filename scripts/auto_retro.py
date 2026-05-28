@@ -39,11 +39,14 @@ time; ``tests/test_auto_retro.py`` asserts the two stay aligned.
 from __future__ import annotations
 
 import argparse
+import ast
+import inspect
 import json
 import os
 import re
 import subprocess
 import sys
+import textwrap
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -64,6 +67,7 @@ from _trusted_bots import _TRUSTED_BOT_LOGINS
 from issue_link import extract_refs, strip_html_comments
 
 FALLBACK_TYPE_SCOPE = "retro"
+_DECISION_TREE_DOC_PATH = Path("docs/generated/auto-retro-decision-tree.md")
 
 # Refs issue #380: GitHub may not finalize merge_commit_sha by the time
 # pull_request_target.closed fires; retry the PR-detail fetch with
@@ -115,6 +119,32 @@ _RESULT_PASSING_PREFIXES: tuple[str, ...] = (
     "all tests",
 )
 
+# Successful verification is often recorded as an observation sentence
+# rather than a tool-status token. Keep this list concrete: every phrase
+# below comes from the #592 G3 retro corpus and describes proof that the
+# verification did what the operator expected, not a generic failure.
+_RESULT_PASSING_OBSERVATION_PHRASES: tuple[str, ...] = (
+    "ascii-clean",
+    "completed successfully",
+    "diff is confined",
+    "exit 0",
+    "exits 0",
+    "gate trips as designed",
+    "insertions",
+    "insertions(+)",
+    "no hits",
+    "no matches",
+    "one commit on the branch",
+    "only the intentional",
+    "parsed without exception",
+    "parses;",
+    " passed in ",
+    "required test coverage",
+    "ruff / mypy / prek pass",
+    "shows chapter",
+    "total coverage",
+)
+
 # Pure numeric result (e.g., a count from `grep -c` or `wc -l`). The
 # operator chose count-style verification, so the value is a measured
 # quantity rather than a status code; treat as passing. Refs #417.
@@ -141,6 +171,13 @@ _RESULT_PASSING_COUNT_RE = re.compile(r"^\d+\s+passed\b", re.IGNORECASE)
 # Trailing `ok` word marker: `yaml syntax ok`, `config ok.`. Word
 # boundary keeps `not ok` and `lookup` out of the match. Refs #453.
 _RESULT_PASSING_TRAILING_OK_RE = re.compile(r"\bok\b\.?\s*$", re.IGNORECASE)
+
+# ASCII cleanliness checks usually print key/value facts rather than a
+# status word. Treat the exact zero-count observation as success. Refs #596.
+_RESULT_PASSING_NON_ASCII_ZERO_RE = re.compile(
+    r"\bnon_ascii\s*=\s*0\b",
+    re.IGNORECASE,
+)
 
 # Explicit failure-count marker that must NOT be treated as passing even
 # if the rest of the string smells like a pass (`0 passed, 3 failed`).
@@ -360,7 +397,8 @@ def _result_is_passing(result: str) -> bool:
     Anything else (including ``exit 1``, ``failed``, free-form prose) is
     treated as a failure signal. Refs #411, #417, #453.
     """
-    text = result.strip()
+    raw_text = result.strip()
+    text = raw_text
     if text.startswith("`") and text.endswith("`") and len(text) >= 2:
         text = text[1:-1].strip()
     # Strip a trailing operator-commentary parenthetical so it does not
@@ -383,8 +421,13 @@ def _result_is_passing(result: str) -> bool:
         return True
     if _RESULT_PASSING_TRAILING_OK_RE.search(text):
         return True
+    if _RESULT_PASSING_NON_ASCII_ZERO_RE.search(raw_text):
+        return True
     lower = text.lower()
-    return any(lower.startswith(prefix) for prefix in _RESULT_PASSING_PREFIXES)
+    raw_lower = raw_text.lower()
+    return any(lower.startswith(prefix) for prefix in _RESULT_PASSING_PREFIXES) or any(
+        phrase in raw_lower for phrase in _RESULT_PASSING_OBSERVATION_PHRASES
+    )
 
 
 def extract_verification_pairs(body: str) -> list[VerificationPair]:
@@ -607,6 +650,23 @@ class PastRetro:
     labels: frozenset[str]
 
 
+@dataclass(frozen=True)
+class DecisionTreeEdge:
+    """One renderable edge in the auto-retro decision tree."""
+
+    source: str
+    target: str
+    label: str
+
+
+@dataclass(frozen=True)
+class DecisionTreeNode:
+    """One renderable node in the auto-retro decision tree."""
+
+    node_id: str
+    label: str
+
+
 def compute_prior_from_labels(
     past_retros: list[PastRetro],
     signal_names: tuple[str, ...] = _SIGNAL_NAMES,
@@ -635,6 +695,200 @@ def compute_prior_from_labels(
         )
         prior[name] = (numer / denom, denom)
     return prior
+
+
+def _mermaid_text(text: str) -> str:
+    return text.replace('"', '\\"')
+
+
+def _ast_text(node: ast.AST) -> str:
+    """Return deterministic source text for one AST node."""
+    return ast.unparse(node).strip()
+
+
+def _called_name(node: ast.AST) -> str | None:
+    if isinstance(node, ast.Call):
+        if isinstance(node.func, ast.Name):
+            return node.func.id
+        if isinstance(node.func, ast.Attribute):
+            return node.func.attr
+    return None
+
+
+def _stmt_label(stmt: ast.stmt) -> str:
+    if isinstance(stmt, ast.Assign):
+        targets = ", ".join(_ast_text(t) for t in stmt.targets)
+        called = _called_name(stmt.value)
+        if called is not None:
+            return f"{targets} = {called}(...)"
+        return f"{targets} = {_ast_text(stmt.value)}"
+    if isinstance(stmt, ast.AnnAssign):
+        target = _ast_text(stmt.target)
+        if stmt.value is None:
+            return target
+        called = _called_name(stmt.value)
+        if called is not None:
+            return f"{target} = {called}(...)"
+        return f"{target} = {_ast_text(stmt.value)}"
+    if isinstance(stmt, ast.Expr):
+        called = _called_name(stmt.value)
+        if called is not None:
+            return f"{called}(...)"
+        return _ast_text(stmt.value)
+    if isinstance(stmt, ast.Return):
+        return f"return {_ast_text(stmt.value)}" if stmt.value else "return"
+    if isinstance(stmt, ast.Raise):
+        return f"raise {_ast_text(stmt.exc)}" if stmt.exc else "raise"
+    if isinstance(stmt, ast.If):
+        return f"if {_ast_text(stmt.test)}"
+    if isinstance(stmt, ast.Try):
+        return "try"
+    return _ast_text(stmt)
+
+
+class _AstDecisionTreeBuilder:
+    def __init__(self) -> None:
+        self._next_id = 0
+        self.nodes: list[DecisionTreeNode] = []
+        self.edges: list[DecisionTreeEdge] = []
+
+    def _new_node(self, label: str) -> str:
+        self._next_id += 1
+        node_id = f"N{self._next_id:03d}"
+        self.nodes.append(DecisionTreeNode(node_id=node_id, label=label))
+        return node_id
+
+    def _connect(
+        self, incoming: list[tuple[str, str]], target: str
+    ) -> None:
+        for source, label in incoming:
+            self.edges.append(DecisionTreeEdge(source, target, label))
+
+    def build_function(
+        self, func: Callable[..., Any]
+    ) -> tuple[tuple[DecisionTreeNode, ...], tuple[DecisionTreeEdge, ...]]:
+        source = textwrap.dedent(inspect.getsource(func))
+        module = ast.parse(source)
+        function = module.body[0]
+        if not isinstance(function, ast.FunctionDef):
+            raise ValueError("decision tree source did not parse to a function")
+        start = self._new_node(f"{function.name}(...)")
+        statements = list(function.body)
+        if (
+            statements
+            and isinstance(statements[0], ast.Expr)
+            and isinstance(statements[0].value, ast.Constant)
+            and isinstance(statements[0].value.value, str)
+        ):
+            statements = statements[1:]
+        exits = self._build_block(statements, [(start, "start")])
+        if exits:
+            done = self._new_node("end")
+            self._connect(exits, done)
+        return tuple(self.nodes), tuple(self.edges)
+
+    def _build_block(
+        self, statements: list[ast.stmt], incoming: list[tuple[str, str]]
+    ) -> list[tuple[str, str]]:
+        exits = incoming
+        for stmt in statements:
+            if not exits:
+                break
+            if isinstance(stmt, ast.If):
+                exits = self._build_if(stmt, exits)
+            elif isinstance(stmt, ast.Try):
+                exits = self._build_try(stmt, exits)
+            else:
+                exits = self._build_plain(stmt, exits)
+        return exits
+
+    def _build_plain(
+        self, stmt: ast.stmt, incoming: list[tuple[str, str]]
+    ) -> list[tuple[str, str]]:
+        node_id = self._new_node(_stmt_label(stmt))
+        self._connect(incoming, node_id)
+        if isinstance(stmt, ast.Return | ast.Raise):
+            return []
+        return [(node_id, "")]
+
+    def _build_if(
+        self, stmt: ast.If, incoming: list[tuple[str, str]]
+    ) -> list[tuple[str, str]]:
+        node_id = self._new_node(_stmt_label(stmt))
+        self._connect(incoming, node_id)
+        body_exits = self._build_block(stmt.body, [(node_id, "true")])
+        if stmt.orelse:
+            orelse_exits = self._build_block(stmt.orelse, [(node_id, "false")])
+        else:
+            orelse_exits = [(node_id, "false")]
+        return body_exits + orelse_exits
+
+    def _build_try(
+        self, stmt: ast.Try, incoming: list[tuple[str, str]]
+    ) -> list[tuple[str, str]]:
+        node_id = self._new_node(_stmt_label(stmt))
+        self._connect(incoming, node_id)
+        exits = self._build_block(stmt.body, [(node_id, "try")])
+        for handler in stmt.handlers:
+            if handler.type is None:
+                label = "except"
+            else:
+                label = f"except {_ast_text(handler.type)}"
+            handler_id = self._new_node(label)
+            self.edges.append(DecisionTreeEdge(node_id, handler_id, "raises"))
+            exits.extend(self._build_block(handler.body, [(handler_id, "")]))
+        if stmt.orelse:
+            exits = self._build_block(stmt.orelse, exits)
+        if stmt.finalbody:
+            exits = self._build_block(stmt.finalbody, exits)
+        return exits
+
+
+def auto_retro_decision_tree() -> tuple[
+    tuple[DecisionTreeNode, ...], tuple[DecisionTreeEdge, ...]
+]:
+    """Extract the current ``run`` control-flow tree from Python AST."""
+    return _AstDecisionTreeBuilder().build_function(run)
+
+
+def auto_retro_decision_tree_edges() -> tuple[DecisionTreeEdge, ...]:
+    """Return AST-derived Mermaid edges for compatibility with tests."""
+    _nodes, edges = auto_retro_decision_tree()
+    return edges
+
+
+def render_decision_tree_mermaid() -> str:
+    """Render the AST-derived auto-retro decision tree as Mermaid."""
+    nodes, edges = auto_retro_decision_tree()
+    lines = ["flowchart TD"]
+    for node in nodes:
+        lines.append(
+            f'    {node.node_id}["{_mermaid_text(node.label)}"]'
+        )
+    for edge in edges:
+        if edge.label:
+            lines.append(
+                f'    {edge.source} -->|"{_mermaid_text(edge.label)}"| '
+                f"{edge.target}"
+            )
+        else:
+            lines.append(f"    {edge.source} --> {edge.target}")
+    return "\n".join(lines) + "\n"
+
+
+def render_decision_tree_markdown() -> str:
+    """Render the checked-in auto-retro decision tree document."""
+    return (
+        "# Auto-retro decision tree\n"
+        "\n"
+        "This file is generated from `scripts/auto_retro.py::run` by "
+        "`python3 scripts/auto_retro.py decision-tree-doc`. Do not edit it "
+        "by hand; update `run()` and regenerate instead.\n"
+        "\n"
+        "```mermaid\n"
+        f"{render_decision_tree_mermaid()}"
+        "```\n"
+    )
 
 
 def _max_active_fp(
@@ -2325,6 +2579,18 @@ def _cmd_run(args: argparse.Namespace) -> int:
     return run(event, repo)
 
 
+def _cmd_decision_tree(_args: argparse.Namespace) -> int:
+    sys.stdout.write(render_decision_tree_mermaid())
+    return 0
+
+
+def _cmd_decision_tree_doc(args: argparse.Namespace) -> int:
+    output = Path(args.output)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(render_decision_tree_markdown(), encoding="utf-8")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -2357,6 +2623,23 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
     p_sentinel.set_defaults(func=_cmd_sentinel)
+
+    p_decision_tree = sub.add_parser(
+        "decision-tree",
+        help="Render the auto-retro run decision tree as Mermaid.",
+    )
+    p_decision_tree.set_defaults(func=_cmd_decision_tree)
+
+    p_decision_tree_doc = sub.add_parser(
+        "decision-tree-doc",
+        help="Write the checked-in auto-retro decision tree document.",
+    )
+    p_decision_tree_doc.add_argument(
+        "--output",
+        default=str(_DECISION_TREE_DOC_PATH),
+        help=f"Markdown output path (default {_DECISION_TREE_DOC_PATH}).",
+    )
+    p_decision_tree_doc.set_defaults(func=_cmd_decision_tree_doc)
 
     args = parser.parse_args(argv)
     try:

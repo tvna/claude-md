@@ -148,6 +148,10 @@ STEPS: tuple[Step, ...] = (
         ),
     ),
     Step(
+        name="auto_retro_decision_tree_doc",
+        argv=("python3", "scripts/auto_retro.py", "decision-tree-doc"),
+    ),
+    Step(
         name="scan_preflight_drift",
         argv=("python3", "scripts/scan_preflight_drift.py", "verify"),
     ),

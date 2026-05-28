@@ -3065,6 +3065,47 @@ class TestExtractVerificationPairs:
         pairs = ar.extract_verification_pairs(body)
         assert pairs and pairs[0].passed is False
 
+    @pytest.mark.parametrize(
+        "result",
+        [
+            "`Compilation completed successfully; "
+            "CLAUDE.md / AGENTS.md regenerated`",
+            "`docs/runbooks/rulesets.md | 17 +++++++++++++++++` "
+            "(one file, 17 insertions, 0 deletions)",
+            "`non_ascii= 0`",
+            "`Compilation completed successfully` and "
+            "`git diff --exit-code CLAUDE.md AGENTS.md` exits 0",
+            "`(no hits) exit 1`",
+            "only the intentional Rollback log entry remains.",
+            "`378 passed in 200.38s`.",
+            "Required test coverage of 92.71 percent reached. "
+            "Total coverage 94.41 percent.",
+            "`OK: every workflow uses: entry is SHA-pinned with a tag comment.` exit 0",
+            "parses; `jobs.measure.steps` length = 11; "
+            "triggers = `schedule`, `workflow_dispatch`. exit 0",
+            "no matches; both files are ASCII-clean",
+            "pytest 1828 passed in 203.91s; ruff / mypy / prek pass;",
+            "one commit on the branch",
+            "`::error file=/tmp/synthetic.md,line=2::assertive-existence "
+            "phrase` and exit 1 -- gate trips as designed",
+        ],
+    )
+    def test_issue_596_g3_success_observations_are_passing(
+        self, result: str
+    ) -> None:
+        body = "## Verification\n\n- command: `verify`\n  result: " + result + "\n"
+        pairs = ar.extract_verification_pairs(body)
+        assert pairs and pairs[0].passed is True
+
+    def test_issue_596_plain_exit_1_still_fails(self) -> None:
+        body = (
+            "## Verification\n\n"
+            "- command: `pytest`\n"
+            "  result: `exit 1`\n"
+        )
+        pairs = ar.extract_verification_pairs(body)
+        assert pairs and pairs[0].passed is False
+
 
 class TestExtractPostMergeChecklist:
     def test_empty_body_returns_empty(self) -> None:
@@ -3200,6 +3241,34 @@ class TestRepairHistoryTableNewRows:
         # Passing pair leaves no row -- in particular not a fail row.
         assert "Verification fail: `uv run pytest -v`" not in table
         assert "246 passed in 198.59s" not in table
+
+    def test_issue_596_g3_success_observations_leave_no_fail_rows(self) -> None:
+        body = (
+            "## Verification\n\n"
+            "- command: `apm compile`\n"
+            "  result: `Compilation completed successfully` and "
+            "`git diff --exit-code CLAUDE.md AGENTS.md` exits 0\n"
+            "- command: `grep removed-term`\n"
+            "  result: `(no hits) exit 1`\n"
+            "- command: `pytest --cov`\n"
+            "  result: Required test coverage of 92.71 percent reached. "
+            "Total coverage 94.41 percent.\n"
+            "- command: `scan ascii`\n"
+            "  result: no matches; both files are ASCII-clean\n"
+            "- command: `negative fixture`\n"
+            "  result: `::error file=/tmp/synthetic.md,line=2::"
+            "assertive-existence phrase` and exit 1 -- gate trips as designed\n"
+            "- command: `ruff check .`\n"
+            "  result: `exit 1`\n"
+        )
+        pairs = ar.extract_verification_pairs(body)
+        table = ar._build_repair_history_table(None, [], 1, pairs)
+        assert "Verification fail: `ruff check .`" in table
+        assert "Verification fail: `apm compile`" not in table
+        assert "Verification fail: `grep removed-term`" not in table
+        assert "Verification fail: `pytest --cov`" not in table
+        assert "Verification fail: `scan ascii`" not in table
+        assert "Verification fail: `negative fixture`" not in table
 
 
 # ---------------------------------------------------------------------------
@@ -3495,6 +3564,53 @@ class TestRunAppendBranch:
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
+
+
+class TestDecisionTree:
+    def test_mermaid_is_extracted_from_run_ast(self) -> None:
+        text = ar.render_decision_tree_mermaid()
+        assert text.startswith("flowchart TD\n")
+        assert 'N001["run(...)"]' in text
+        assert '["if not pr.merged"]' in text
+        assert '["if not any(signals.values())"]' in text
+        assert "compute_repair_signals(...)" in text
+        assert "create_issue(...)" in text
+        assert "return 0" in text
+
+    def test_edges_are_deterministic(self) -> None:
+        first = ar.auto_retro_decision_tree_edges()
+        second = ar.auto_retro_decision_tree_edges()
+        assert first == second
+        assert len(first) > 80
+        assert any(edge.label == "true" for edge in first)
+        assert any(edge.label == "false" for edge in first)
+        assert any(edge.label == "raises" for edge in first)
+
+    def test_decision_tree_cli_writes_mermaid(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        assert ar.main(["decision-tree"]) == 0
+        out = capsys.readouterr().out
+        assert out.startswith("flowchart TD\n")
+        assert "compute_repair_signals" in out
+
+    def test_decision_tree_markdown_wraps_generated_mermaid(self) -> None:
+        text = ar.render_decision_tree_markdown()
+        assert text.startswith("# Auto-retro decision tree\n")
+        assert "```mermaid\nflowchart TD\n" in text
+        assert "compute_repair_signals" in text
+        assert text.endswith("```\n")
+
+    def test_decision_tree_doc_cli_writes_markdown(self, tmp_path: Path) -> None:
+        output = tmp_path / "tree.md"
+
+        assert ar.main(["decision-tree-doc", "--output", str(output)]) == 0
+
+        assert output.read_text(encoding="utf-8") == ar.render_decision_tree_markdown()
+
+    def test_checked_in_decision_tree_doc_is_current(self) -> None:
+        path = Path("docs/generated/auto-retro-decision-tree.md")
+        assert path.read_text(encoding="utf-8") == ar.render_decision_tree_markdown()
 
 
 class TestCLI:
