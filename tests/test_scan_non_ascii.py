@@ -255,9 +255,10 @@ class TestClassifyAction:
             == "advisory"
         )
 
-    def test_codecov_non_ascii_is_advisory_not_block(self) -> None:
+    @pytest.mark.parametrize("login", ["codecov", "codecov[bot]"])
+    def test_codecov_non_ascii_is_advisory_not_block(self, login: str) -> None:
         """Codecov reports assoc=NONE but is trusted for generated comments."""
-        assert san.classify_action(True, False, "NONE", "codecov[bot]") == "advisory"
+        assert san.classify_action(True, False, "NONE", login) == "advisory"
 
     def test_trusted_bot_ascii_only_is_none(self) -> None:
         """No non-ASCII -> none regardless of login (cheap-exit guard)."""
@@ -281,16 +282,18 @@ class TestClassifyAction:
 
 @pytest.mark.parametrize(
     "login",
-    sorted(san._NON_ASCII_TRUSTED_BOT_LOGINS),
+    sorted(san._TRUSTED_BOT_LOGINS),
 )
-def test_every_trusted_bot_login_ends_with_bot_suffix(login: str) -> None:
-    """Regression guard for #480 / #504: GitHub webhook payloads deliver
-    bot author logins in the canonical ``<name>[bot]`` shape. An entry
-    that drops the suffix silently bypasses the allowlist at runtime,
-    because the exact-match check never fires against the real login."""
+def test_every_shared_trusted_bot_login_ends_with_bot_suffix(login: str) -> None:
+    """Shared trusted bots keep the GitHub-canonical ``<name>[bot]`` shape."""
     assert login.endswith("[bot]"), (
         f"Trusted bot login {login!r} missing canonical '[bot]' suffix"
     )
+
+
+def test_codecov_scanner_aliases_are_exact_observed_shapes() -> None:
+    """Regression guard for #504 / #620: Codecov has appeared both ways."""
+    assert frozenset({"codecov", "codecov[bot]"}) == san._CODECOV_BOT_LOGINS
 
 
 # ---------------------------------------------------------------------------
@@ -802,17 +805,18 @@ class TestRun:
             path != "/repos/o/r/pulls/119/reviews" for _, path in methods_paths
         )
 
+    @pytest.mark.parametrize("login", ["codecov", "codecov[bot]"])
     def test_codecov_pr_comment_advises_does_not_block(
-        self, monkeypatch: pytest.MonkeyPatch
+        self, monkeypatch: pytest.MonkeyPatch, login: str
     ) -> None:
-        """Regression for #480: Codecov comments may include non-ASCII."""
+        """Regression for #480/#504/#620: Codecov comments may include non-ASCII."""
         seen = _capture_gh_api(monkeypatch)
         event = {
             "issue": {"number": 478, "pull_request": {"url": "..."}},
             "comment": {
                 "body": "Test analytics footer includes clipboard \U0001f4cb.",
                 "author_association": "NONE",
-                "user": {"login": "codecov[bot]"},
+                "user": {"login": login},
             },
         }
         assert san.run(event, "issue_comment", "o/r") == 0
