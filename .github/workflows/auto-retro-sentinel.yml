@@ -10,7 +10,7 @@ name: Auto-close untouched retrospective issues
 # and is unit-tested in tests/test_auto_retro.py. The workflow only
 # marshals env vars and shells to the single Python entry point.
 #
-# Companion to .github/workflows/auto-retro.yml: that workflow opens
+# Companion to .github/workflows/post-merge.yml: that workflow opens
 # the retro on merge; this one decides when an unattended retro
 # should close. The harness:retro-opened label gate on the source PR
 # is unchanged by either workflow.
@@ -33,7 +33,7 @@ permissions:
   # write needed to PATCH the retro to closed/not_planned and POST the
   # sentinel comment. pull-requests:write is intentionally NOT granted
   # -- the sentinel touches retro issues only; source-PR labels were
-  # already applied by .github/workflows/auto-retro.yml.
+  # already applied by .github/workflows/post-merge.yml.
   issues: write
 
 concurrency:

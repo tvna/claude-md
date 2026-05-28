@@ -1,0 +1,541 @@
+name: Weekly maintenance
+
+on:
+  schedule:
+    # 05:00 JST every Monday. GitHub Actions cron is evaluated in UTC.
+    - cron: "0 20 * * 0"
+  workflow_dispatch:
+    inputs:
+      task:
+        description: 'Weekly task to run manually.'
+        type: choice
+        required: true
+        default: all
+        options:
+          - all
+          - branch-cleanup
+          - dependency-freshness
+          - generate-agents
+          - measure-timings
+          - ruleset-drift
+          - security-control-drift
+      branch_cleanup_dry_run:
+        description: 'Branch cleanup: plan only. The workflow currently has no delete code path.'
+        type: boolean
+        required: true
+        default: true
+      branch_cleanup_min_age_days:
+        description: 'Branch cleanup: minimum days since last commit for a branch to qualify.'
+        type: number
+        required: true
+        default: 60
+      measure_issue_number:
+        description: 'Measure timings: optional issue number to receive the report as a comment.'
+        type: string
+        required: false
+        default: ''
+      measure_cutoff:
+        description: 'Measure timings: optional UTC date (YYYY-MM-DD) for compare mode.'
+        type: string
+        required: false
+        default: ''
+      security_control_dry_run:
+        description: 'Security control drift: plan only, do not post comment on tracking issue.'
+        type: boolean
+        required: true
+        default: true
+
+permissions: {}
+
+env:
+  REPO: ${{ github.repository }}
+  APM_CLI_VERSION: "0.12.1"
+
+jobs:
+  branch-cleanup:
+    if: github.event_name == 'schedule' || inputs.task == 'all' || inputs.task == 'branch-cleanup'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: read
+    concurrency:
+      group: branch-cleanup
+      cancel-in-progress: false
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      SUMMARY_ISSUE_TITLE: "[branch-cleanup] weekly summary log"
+    steps:
+      - name: Guard dispatch ref
+        if: github.event_name == 'workflow_dispatch' && github.ref != 'refs/heads/main'
+        run: |
+          echo "::error::branch-cleanup must be dispatched against main (got ${{ github.ref }})."
+          exit 1
+
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Resolve default branch
+        id: defaults
+        run: |
+          set -euo pipefail
+          DEFAULT_BRANCH=$(gh api "/repos/${REPO}" --jq .default_branch)
+          echo "default_branch=${DEFAULT_BRANCH}" >> "$GITHUB_OUTPUT"
+          echo "Default branch: ${DEFAULT_BRANCH}"
+
+      - name: Survey candidate branches
+        id: survey
+        env:
+          RAW_DRY_RUN: ${{ inputs.branch_cleanup_dry_run }}
+          RAW_MIN_AGE_DAYS: ${{ inputs.branch_cleanup_min_age_days }}
+          DEFAULT_BRANCH: ${{ steps.defaults.outputs.default_branch }}
+          EVENT_NAME: ${{ github.event_name }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          python3 scripts/branch_cleanup.py survey \
+            --repo "${REPO}" \
+            --dry-run "${RAW_DRY_RUN:-true}" \
+            --min-age-days "${RAW_MIN_AGE_DAYS:-60}" \
+            --default-branch "${DEFAULT_BRANCH}" \
+            --event-name "${EVENT_NAME}" \
+            --run-url "${RUN_URL}" \
+            --out /tmp/cleanup-comment.md \
+            --github-output "${GITHUB_OUTPUT}" \
+            >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Maintain rolling summary issue
+        env:
+          ISSUE_TITLE: ${{ env.SUMMARY_ISSUE_TITLE }}
+          CANDIDATE_COUNT: ${{ steps.survey.outputs.candidate_count }}
+          IDLE_CLOSE_DAYS: "28"
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          python3 scripts/branch_cleanup.py reconcile \
+            --repo "${REPO}" \
+            --title "${ISSUE_TITLE}" \
+            --candidate-count "${CANDIDATE_COUNT}" \
+            --comment-file /tmp/cleanup-comment.md \
+            --idle-close-days "${IDLE_CLOSE_DAYS}" \
+            --run-url "${RUN_URL}"
+
+  dependency-freshness:
+    if: github.event_name == 'schedule' || inputs.task == 'all' || inputs.task == 'dependency-freshness'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Read uv pin from pyproject.toml
+        id: uvpin
+        run: |
+          set -euo pipefail
+          PIN="$(python3 scripts/uv_pin.py read)"
+          echo "version=${PIN}" >> "$GITHUB_OUTPUT"
+
+      - name: Install uv
+        env:
+          UV_VERSION: ${{ steps.uvpin.outputs.version }}
+        run: |
+          curl -LsSf "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/uv-x86_64-unknown-linux-gnu.tar.gz" -o /tmp/uv.tar.gz
+          tar -xzf /tmp/uv.tar.gz -C /tmp
+          mkdir -p "$HOME/.local/bin"
+          install -m 0755 /tmp/uv-x86_64-unknown-linux-gnu/uv "$HOME/.local/bin/uv"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          uv --version
+
+      - name: Sync locked project environment
+        run: uv sync --locked
+
+      - name: Assert uv pin lives only in pyproject.toml
+        run: uv run python scripts/uv_pin.py drift
+
+      - name: Assert workflows install Python deps via uv only
+        run: uv run python scripts/scan_workflow_pip.py verify
+
+      - name: Assert workflows pin actions to SHA + tag comment
+        run: uv run python scripts/scan_workflow_action_pins.py verify
+
+      - name: Warn if uv pin trails upstream
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: uv run python scripts/uv_pin.py stale
+
+      - name: Summarize policy
+        run: |
+          {
+            echo "## Dependency freshness report"
+            echo
+            echo "- Lockfile drift: \`uv sync --locked\`"
+            echo "- uv pin drift: \`scripts/uv_pin.py drift\`"
+            echo "- Workflow dependency install drift: \`scripts/scan_workflow_pip.py verify\`"
+            echo "- GitHub Action pin drift: \`scripts/scan_workflow_action_pins.py verify\`"
+            echo "- Upstream uv staleness: warning-only \`scripts/uv_pin.py stale\`"
+            echo
+            echo "Policy: \`docs/standards/dependency-freshness.md\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  generate-agents:
+    if: github.event_name == 'schedule' || inputs.task == 'all' || inputs.task == 'generate-agents'
+    uses: ./.github/workflows/generate-agents.yml
+    with:
+      mode: generate
+    permissions:
+      contents: write
+      pull-requests: write
+
+  measure-timings:
+    if: github.event_name == 'schedule' || inputs.task == 'all' || inputs.task == 'measure-timings'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    concurrency:
+      group: measure-lint-pytest-timings
+      cancel-in-progress: false
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Read uv pin from pyproject.toml
+        id: uvpin
+        run: |
+          set -euo pipefail
+          PIN="$(python3 scripts/uv_pin.py read)"
+          echo "version=${PIN}" >> "$GITHUB_OUTPUT"
+
+      - name: Install uv
+        env:
+          UV_VERSION: ${{ steps.uvpin.outputs.version }}
+        run: |
+          set -euo pipefail
+          curl -LsSf "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/uv-x86_64-unknown-linux-gnu.tar.gz" -o /tmp/uv.tar.gz
+          tar -xzf /tmp/uv.tar.gz -C /tmp
+          mkdir -p "$HOME/.local/bin"
+          install -m 0755 /tmp/uv-x86_64-unknown-linux-gnu/uv "$HOME/.local/bin/uv"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          uv --version
+
+      - name: Install Python
+        run: uv python install
+
+      - name: Sync locked project environment
+        run: uv sync --locked
+
+      - name: Fetch verify-agents.yml runs
+        run: |
+          set -euo pipefail
+          gh api "repos/${REPO}/actions/workflows/verify-agents.yml/runs?per_page=100" > runs.json
+
+      - name: Fetch per-run jobs
+        run: |
+          set -euo pipefail
+          mkdir -p jobs
+          for id in $(jq -r '.workflow_runs[].id' runs.json); do
+            gh api "repos/${REPO}/actions/runs/${id}/jobs" > "jobs/${id}.json"
+          done
+
+      - name: Generate timing report
+        env:
+          CUTOFF: ${{ inputs.measure_cutoff }}
+        run: |
+          set -euo pipefail
+          if [ -n "${CUTOFF}" ]; then
+            uv run python scripts/analyze_ci_timings.py \
+              --jobs jobs/ \
+              --workflow "Verify agent instructions" \
+              --cutoff "${CUTOFF}" \
+              --title "verify-agents.yml timings (pre vs post ${CUTOFF})" \
+              > report.md
+          else
+            uv run python scripts/analyze_ci_timings.py \
+              --jobs jobs/ \
+              --workflow "Verify agent instructions" \
+              --title "verify-agents.yml timings (weekly)" \
+              > report.md
+          fi
+
+      - name: Append report to step summary
+        run: cat report.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload report artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ci-timings-report
+          path: report.md
+          retention-days: 90
+
+      - name: Post report as comment on dispatch issue
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.measure_issue_number != '' }}
+        run: |
+          set -euo pipefail
+          gh issue comment "${{ inputs.measure_issue_number }}" \
+            --repo "${REPO}" \
+            --body-file report.md
+
+  ruleset-drift:
+    if: github.event_name == 'schedule' || inputs.task == 'all' || inputs.task == 'ruleset-drift'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    concurrency:
+      group: ruleset-drift
+      cancel-in-progress: false
+    env:
+      GH_TOKEN_API: ${{ secrets.RULESETS_PAT }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Guard RULESETS_PAT
+        run: |
+          if [ -z "${GH_TOKEN_API}" ]; then
+            echo "::error::RULESETS_PAT secret is not set. See docs/runbooks/rulesets.md §\"Required secret\"."
+            exit 1
+          fi
+
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Validate ruleset JSON syntax
+        run: |
+          set -euo pipefail
+          for f in .github/rulesets/main.json .github/rulesets/all-branches.json .github/rulesets/dependabot.json; do
+            if ! jq empty < "$f"; then
+              echo "::error file=$f::Invalid JSON syntax."
+              exit 1
+            fi
+          done
+
+      - name: Detect ruleset drift
+        id: diff
+        env:
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          python3 scripts/ruleset_drift.py detect \
+            --repo "${REPO}" \
+            --sot-dir .github/rulesets \
+            --run-url "${RUN_URL}" \
+            --summary-file "${GITHUB_STEP_SUMMARY}" \
+            --sot-body-file /tmp/drift-sot-issue.md \
+            --unknown-body-file /tmp/drift-unknown-issue.md \
+            >> "$GITHUB_OUTPUT"
+
+      - name: File SoT-vs-live drift issue
+        if: steps.diff.outputs.drift_count != '0'
+        env:
+          RUN_DATE: ${{ steps.diff.outputs.run_date }}
+        run: |
+          set -euo pipefail
+          python3 scripts/ruleset_drift.py file-sot-issue \
+            --repo "${REPO}" \
+            --run-date "${RUN_DATE}" \
+            --body-file /tmp/drift-sot-issue.md
+
+      - name: File unknown-ruleset issue
+        if: steps.diff.outputs.unknown_count != '0'
+        env:
+          RUN_DATE: ${{ steps.diff.outputs.run_date }}
+        run: |
+          set -euo pipefail
+          python3 scripts/ruleset_drift.py file-unknown-issue \
+            --repo "${REPO}" \
+            --run-date "${RUN_DATE}" \
+            --body-file /tmp/drift-unknown-issue.md
+
+  security-control-drift:
+    if: github.event_name == 'schedule' || inputs.task == 'all' || inputs.task == 'security-control-drift'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    concurrency:
+      group: security-control-drift-report
+      cancel-in-progress: false
+    env:
+      GH_TOKEN_API: ${{ secrets.RULESETS_PAT }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Guard RULESETS_PAT
+        run: |
+          if [ -z "${GH_TOKEN_API}" ]; then
+            echo "::error::RULESETS_PAT secret is not set (reused read-only for ruleset detect). See docs/runbooks/rulesets.md."
+            exit 1
+          fi
+
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Read uv pin from pyproject.toml
+        id: uvpin
+        run: |
+          set -euo pipefail
+          PIN="$(python3 scripts/uv_pin.py read)"
+          echo "version=${PIN}" >> "$GITHUB_OUTPUT"
+
+      - name: Install uv
+        env:
+          UV_VERSION: ${{ steps.uvpin.outputs.version }}
+        run: |
+          set -euo pipefail
+          curl -LsSf "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/uv-x86_64-unknown-linux-gnu.tar.gz" -o /tmp/uv.tar.gz
+          tar -xzf /tmp/uv.tar.gz -C /tmp
+          mkdir -p "$HOME/.local/bin"
+          install -m 0755 /tmp/uv-x86_64-unknown-linux-gnu/uv "$HOME/.local/bin/uv"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          uv --version
+
+      - name: Install Python
+        run: uv python install
+
+      - name: Sync locked project environment
+        run: uv sync --locked
+
+      - name: Detect ruleset drift (read-only)
+        id: ruleset
+        continue-on-error: true
+        env:
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          python3 scripts/ruleset_drift.py detect \
+            --repo "${REPO}" \
+            --sot-dir .github/rulesets \
+            --run-url "${RUN_URL}" \
+            --summary-file /tmp/ruleset-detect-summary.md \
+            --sot-body-file /tmp/ruleset-sot.md \
+            --unknown-body-file /tmp/ruleset-unknown.md \
+            > /tmp/ruleset-detect.out
+          echo "rc=0" >> "$GITHUB_OUTPUT"
+
+      - name: Record ruleset detect exit code
+        id: ruleset_rc
+        if: always()
+        env:
+          OUTCOME: ${{ steps.ruleset.outcome }}
+        run: |
+          set -euo pipefail
+          if [ "${OUTCOME}" = "success" ]; then
+            echo "rc=0" >> "$GITHUB_OUTPUT"
+          else
+            echo "rc=1" >> "$GITHUB_OUTPUT"
+            touch /tmp/ruleset-detect.out
+          fi
+
+      - name: Plan labels drift (read-only)
+        id: labels
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          : > /tmp/labels-summary.md
+          python3 scripts/labels_apply.py plan \
+            --repo "${REPO}" \
+            --sot .github/labels.json \
+            --prune false \
+            --dry-run true \
+            --summary-file /tmp/labels-summary.md
+
+      - name: Record labels plan exit code
+        id: labels_rc
+        if: always()
+        env:
+          OUTCOME: ${{ steps.labels.outcome }}
+        run: |
+          set -euo pipefail
+          if [ "${OUTCOME}" = "success" ]; then
+            echo "rc=0" >> "$GITHUB_OUTPUT"
+          else
+            echo "rc=1" >> "$GITHUB_OUTPUT"
+            touch /tmp/labels-summary.md
+          fi
+
+      - name: Compile APM instructions
+        id: apm_compile
+        continue-on-error: true
+        run: uv run --with "apm-cli==${APM_CLI_VERSION}" --exclude-newer "14 days" apm compile
+
+      - name: Diff CLAUDE.md / AGENTS.md
+        id: apm
+        if: always()
+        run: |
+          set -euo pipefail
+          if git diff --exit-code -- CLAUDE.md AGENTS.md; then
+            echo "rc=0" >> "$GITHUB_OUTPUT"
+          else
+            echo "rc=1" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Detect uv pin literal drift (read-only)
+        id: uv_drift
+        continue-on-error: true
+        run: python3 scripts/uv_pin.py drift
+
+      - name: Record uv drift exit code
+        id: uv_drift_rc
+        if: always()
+        env:
+          OUTCOME: ${{ steps.uv_drift.outcome }}
+        run: |
+          set -euo pipefail
+          if [ "${OUTCOME}" = "success" ]; then
+            echo "rc=0" >> "$GITHUB_OUTPUT"
+          else
+            echo "rc=1" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Warn if uv pin trails upstream (read-only)
+        id: uv_stale
+        continue-on-error: true
+        run: python3 scripts/uv_pin.py stale > /tmp/uv-stale.out 2>&1
+
+      - name: Record uv stale exit code
+        id: uv_stale_rc
+        if: always()
+        env:
+          OUTCOME: ${{ steps.uv_stale.outcome }}
+        run: |
+          set -euo pipefail
+          if [ "${OUTCOME}" = "success" ]; then
+            echo "rc=0" >> "$GITHUB_OUTPUT"
+          else
+            echo "rc=1" >> "$GITHUB_OUTPUT"
+            touch /tmp/uv-stale.out
+          fi
+
+      - name: Aggregate drift report
+        id: aggregate
+        if: always()
+        env:
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          python3 scripts/security_drift_report.py aggregate \
+            --ruleset-detect-output /tmp/ruleset-detect.out \
+            --ruleset-detect-rc "${{ steps.ruleset_rc.outputs.rc }}" \
+            --labels-plan-rc "${{ steps.labels_rc.outputs.rc }}" \
+            --labels-summary-file /tmp/labels-summary.md \
+            --apm-diff-rc "${{ steps.apm.outputs.rc }}" \
+            --uv-drift-rc "${{ steps.uv_drift_rc.outputs.rc }}" \
+            --uv-stale-rc "${{ steps.uv_stale_rc.outputs.rc }}" \
+            --uv-stale-output /tmp/uv-stale.out \
+            --run-url "${RUN_URL}" \
+            --summary-file "${GITHUB_STEP_SUMMARY}" \
+            --report-file /tmp/security-drift-report.md \
+            --github-output "${GITHUB_OUTPUT}"
+
+      - name: Post or update rolling comment on #178
+        if: always()
+        env:
+          DRY_RUN: ${{ github.event_name == 'schedule' && 'false' || inputs.security_control_dry_run }}
+        run: |
+          set -euo pipefail
+          python3 scripts/security_drift_report.py post-comment \
+            --repo "${REPO}" \
+            --issue 178 \
+            --report-file /tmp/security-drift-report.md \
+            --dry-run "${DRY_RUN}"

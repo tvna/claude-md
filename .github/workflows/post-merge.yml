@@ -1,0 +1,190 @@
+name: Post-merge automation
+
+on:
+  pull_request_target:
+    types: [closed]
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      task:
+        description: 'Post-merge task to run manually.'
+        type: choice
+        required: true
+        default: decision-tree
+        options:
+          - decision-tree
+          - coverage
+          - all
+
+permissions: {}
+
+jobs:
+  open-retro:
+    if: github.event_name == 'pull_request_target' && github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+    concurrency:
+      group: auto-retro-pr-${{ github.event.pull_request.number }}
+      cancel-in-progress: false
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+
+      - name: Open retrospective issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: python3 scripts/auto_retro.py run
+
+  coverage:
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && (inputs.task == 'coverage' || inputs.task == 'all'))
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Read uv pin from pyproject.toml
+        id: uvpin
+        run: |
+          set -euo pipefail
+          PIN="$(python3 scripts/uv_pin.py read)"
+          echo "version=${PIN}" >> "$GITHUB_OUTPUT"
+
+      - name: Install uv
+        env:
+          UV_VERSION: ${{ steps.uvpin.outputs.version }}
+        run: |
+          curl -LsSf "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/uv-x86_64-unknown-linux-gnu.tar.gz" -o /tmp/uv.tar.gz
+          tar -xzf /tmp/uv.tar.gz -C /tmp
+          mkdir -p "$HOME/.local/bin"
+          install -m 0755 /tmp/uv-x86_64-unknown-linux-gnu/uv "$HOME/.local/bin/uv"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          uv --version
+
+      - name: Install Python
+        run: uv python install
+
+      - name: Sync locked project environment
+        run: uv sync --locked
+
+      - name: Run script unit tests with coverage
+        run: uv run python -m pytest --cov --cov-report=term-missing --cov-report=xml --cov-fail-under=92.71 -v --junitxml=junit.xml -o junit_family=legacy
+
+      - name: Upload coverage to Codecov
+        if: always()
+        uses: codecov/codecov-action@e79a6962e0d4c0c17b229090214935d2e33f8354 # v6.0.1
+        with:
+          files: ./coverage.xml
+          flags: scripts
+          fail_ci_if_error: false
+          use_oidc: true
+
+      - name: Upload test results to Codecov
+        if: always()
+        uses: codecov/test-results-action@0fa95f0e1eeaafde2c782583b36b28ad0d8c77d3 # v1.2.1
+        with:
+          files: ./junit.xml
+          disable_search: true
+          fail_ci_if_error: false
+          use_oidc: true
+
+  decision-tree:
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && (inputs.task == 'decision-tree' || inputs.task == 'all'))
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    concurrency:
+      group: auto-retro-decision-tree-${{ github.ref }}
+      cancel-in-progress: true
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Generate decision tree document
+        run: python3 scripts/auto_retro.py decision-tree-doc
+
+      - name: Open pull request if generated decision tree changed
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_BRANCH: chore/update-auto-retro-decision-tree
+          PR_TITLE: "docs(auto-retro): update generated decision tree (#605)"
+        run: |
+          if git diff --quiet -- docs/generated/auto-retro-decision-tree.md; then
+            echo "Auto-retro decision tree document is already up to date."
+            exit 0
+          fi
+
+          cat > /tmp/pr-body.md <<'EOF'
+          ## Summary
+
+          Regenerates `docs/generated/auto-retro-decision-tree.md` from `scripts/auto_retro.py::run`.
+
+          ## Related Issue
+
+          Closes #605
+
+          ## Facts
+
+          - `python3 scripts/auto_retro.py decision-tree-doc` changed `docs/generated/auto-retro-decision-tree.md`.
+          - The generated document contains Mermaid produced from the `auto_retro.run()` AST.
+
+          ## Assumptions
+
+          - speculation: The post-merge generator ran because a merged change affected the auto-retro decision tree surface.
+
+          ## Risk & blast radius
+
+          - Documentation-only generated artifact under `docs/generated/`; no runtime workflow behavior changes.
+
+          ## Rollback
+
+          - Revert this generated-doc PR.
+
+          ## Verification
+
+          - command: `python3 scripts/auto_retro.py decision-tree-doc`
+            result: `exit 0`
+
+          ## Checklist
+
+          ### Bootstrap
+
+          - [x] Facts vs. Assumptions split is honest
+          - [x] Risk & blast radius assessed; Rollback steps are runnable
+          - [x] Issue number recorded on the `Closes #` line above
+          - [x] Branch carries exactly one commit ahead of `main`
+
+          ### After-merge (CI)
+
+          - [x] Generated decision tree drift check exits 0
+          - [ ] CI green on the merge commit
+
+          ### Post-merge
+
+          - [ ] Linked issue closed by the merge
+          - [ ] auto-retro issue opened by `.github/workflows/post-merge.yml`
+          - [ ] No follow-up `fix(...)` PR needed within 24h of merge
+
+          _Generated by [github-actions](https://github.com/actions)_
+          EOF
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$PR_BRANCH"
+          git add docs/generated/auto-retro-decision-tree.md
+          git commit -m "$PR_TITLE"
+          git push --force-with-lease origin "$PR_BRANCH"
+
+          if gh pr view "$PR_BRANCH" --json number --jq .number >/dev/null 2>&1; then
+            gh pr edit "$PR_BRANCH" --title "$PR_TITLE" --body-file /tmp/pr-body.md
+          else
+            gh pr create --base "$GITHUB_REF_NAME" --head "$PR_BRANCH" --title "$PR_TITLE" --body-file /tmp/pr-body.md
+          fi

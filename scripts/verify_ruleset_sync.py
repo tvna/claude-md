@@ -8,14 +8,14 @@ live ruleset via the `Apply rulesets` workflow.
 
 Scope (per #120): only the `required_status_checks` lag in the lagging-behind
 direction. Full SoT-vs-live drift is owned by `scripts/ruleset_drift.py`
-(`.github/workflows/ruleset-drift.yml`, #30 / #116).
+(`.github/workflows/weekly-maintenance.yml`, #30 / #116).
 
 Design notes:
 
 - Reads the SoT from the PR base ref via `GET /repos/{repo}/contents/...?ref=`
   rather than the PR head, so a PR that introduces a new context does not
   self-fail (see #120 Q2 / Q4).
-- Uses the same `RULESETS_PAT` secret as `ruleset-drift.yml`, bound as
+- Uses the same `RULESETS_PAT` secret as `weekly-maintenance.yml`, bound as
   `GH_TOKEN_API` in the workflow env.
 - Pure functions on top; HTTP boundary at the bottom, injectable for tests.
 """
@@ -67,7 +67,7 @@ def compute_missing(sot_contexts: set[str], live_contexts: set[str]) -> set[str]
 
     Only the lagging-behind direction (`sot - live`). The opposite direction
     (live has contexts not in SoT) is full ruleset drift and is owned by
-    `ruleset-drift.yml`; this gate intentionally ignores it.
+    `weekly-maintenance.yml`; this gate intentionally ignores it.
     """
     return sot_contexts - live_contexts
 

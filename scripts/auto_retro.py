@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Auto-open a retrospective issue when a pull request is merged.
 
-Invoked from ``.github/workflows/auto-retro.yml`` as the single
+Invoked from ``.github/workflows/post-merge.yml`` as the single
 ``python3 scripts/auto_retro.py run`` entry point. The workflow only
 marshals env vars; all logic lives here and is unit-tested in
 ``tests/test_auto_retro.py``.
@@ -1337,7 +1337,7 @@ def build_retro_body(
         "Refs CLAUDE.md section 3 (\"After each merge, auto-open a "
         f"retrospective issue\"). Source PR: #{pr.number}.\n"
         "\n"
-        "_Opened automatically by `.github/workflows/auto-retro.yml`. "
+        "_Opened automatically by `.github/workflows/post-merge.yml`. "
         f"Proposed work pre-filled by retro triage {triage_date} "
         "(auto-filled rows: check_runs + commit subjects; operator-filled "
         "rows: classification, prevention point, no-repair path, "
