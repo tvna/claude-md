@@ -34,9 +34,9 @@ locked environment sync plus the repository-shape gates above.
 
 ## Scheduled Reporting
 
-`.github/workflows/dependency-freshness-report.yml` runs weekly and on manual
-dispatch. It repeats the blocking drift checks and emits a warning-only uv
-upstream staleness annotation through `scripts/uv_pin.py stale`.
+`.github/workflows/weekly-maintenance.yml` runs the dependency-freshness task
+weekly and on manual dispatch. It repeats the blocking drift checks and emits a
+warning-only uv upstream staleness annotation through `scripts/uv_pin.py stale`.
 
 The report is intentionally non-mutating:
 

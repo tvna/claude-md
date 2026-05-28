@@ -251,7 +251,7 @@ class TestBuildReport:
         assert "Families with drift: 1" in summary
         assert "drift" in summary
         # Actionable: cites the existing detector workflow + remediation doc.
-        assert "ruleset-drift.yml" in summary
+        assert "weekly-maintenance.yml" in summary
         assert "docs/runbooks/rulesets.md" in summary
         # Body carries the same payload + the marker.
         assert sdr.DEFAULT_MARKER in body

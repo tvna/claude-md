@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Aggregate security-control drift signals into one deterministic report.
 
-The workflow `.github/workflows/security-control-drift-report.yml` invokes
+The workflow `.github/workflows/weekly-maintenance.yml` invokes
 this module. It does not duplicate any detector: it consumes the read-only
 output of existing scripts (`ruleset_drift.py detect`, `labels_apply.py
 plan`, `uv_pin.py drift`, `uv_pin.py stale`) and the verify-apm.yml
@@ -23,7 +23,7 @@ Failure policy: fails LOUD per CLAUDE.md section 4 on malformed REQUIRED
 inputs (this is a gate). Per-family detector failures are recorded as a
 `status=error` row in the report and the aggregator still exits 0 -- drift
 itself is reported, not gated; each per-family detector keeps its own
-gate semantics independently (e.g. `ruleset-drift.yml` keeps filing its
+gate semantics independently (e.g. `weekly-maintenance.yml` keeps filing its
 own per-family issues on the existing weekly cron).
 
 Tested by `tests/test_security_drift_report.py`. Refs #180, parent #178.
@@ -126,7 +126,7 @@ def uv_stale_has_warning(stale_text: str) -> bool:
 # ---------------------------------------------------------------------------
 
 def classify_rulesets(*, rc: int, detect_output: str) -> FamilyRow:
-    evidence = ".github/workflows/ruleset-drift.yml"
+    evidence = ".github/workflows/weekly-maintenance.yml"
     if rc != 0:
         return FamilyRow(
             family="rulesets",
@@ -157,7 +157,7 @@ def classify_rulesets(*, rc: int, detect_output: str) -> FamilyRow:
         status=STATUS_DRIFT,
         evidence=evidence,
         action=(
-            f"{'; '.join(parts)} -- see issues filed by ruleset-drift.yml and "
+            f"{'; '.join(parts)} -- see issues filed by weekly-maintenance.yml and "
             "docs/runbooks/rulesets.md for remediation"
         ),
     )
@@ -371,7 +371,7 @@ def build_report(
         + _render_table(families)
         + "\n"
         "Detector workflows file their own per-family issues when drift is "
-        "actionable (see `ruleset-drift.yml`); this rolling comment is a "
+        "actionable (see `weekly-maintenance.yml`); this rolling comment is a "
         "single-glance status across all families for the parent #178 tracking issue.\n"
     )
 
