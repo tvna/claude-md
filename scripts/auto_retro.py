@@ -1206,7 +1206,7 @@ def _build_repair_history_table(
         return (
             header
             + "| -- | (no automated repair signals detected) "
-            "| operator: investigate manually or mark `(none)` |\n"
+            "| positive-control: no repair taxonomy classification requested |\n"
         )
     body_rows = "".join(
         f"| {idx} | {_escape_table_cell(row.repair)} "
@@ -1278,6 +1278,53 @@ def build_retro_body(
     # 8601 string from the event payload) rather than datetime.now() so
     # the body is byte-identical on re-run of the same event.
     triage_date = pr.merged_at[:10] if pr.merged_at else "YYYY-MM-DD"
+    positive_control = "(no automated repair signals detected)" in repair_table
+    proposed_work_tail = (
+        "\n"
+        "<!-- operator-fill:remaining-steps -->\n"
+        "2. Classification -- (operator) tag each repair above as one of: "
+        "`missing deterministic gate` / `unclear agent instruction` / "
+        "`external or human decision that cannot be automated`.\n"
+        "3. Earliest prevention point -- (operator) per repair, name the "
+        "deterministic gate that should have caught it (workflow, hook, "
+        "ruleset, label, preflight).\n"
+        "4. No-repair reproduction path -- (operator) numbered steps the next "
+        "similar PR should follow to land in one shot.\n"
+        "5. Follow-up issues -- (operator) list deferred gates as "
+        "`- [ ] type(scope): TITLE -- RATIONALE` or write `(none)`.\n"
+        "<!-- /operator-fill:remaining-steps -->\n"
+    )
+    verification_block = (
+        "- Every repair in the table has a classification from the "
+        "section 3 taxonomy.\n"
+        "- Every repair has a named earliest prevention point.\n"
+        "- The no-repair reproduction path matches what would happen if "
+        "the deterministic gates from this retrospective were in place.\n"
+        "- The `## Follow-up issues` section (if any) is machine-parseable "
+        "per the bullet convention above.\n"
+    )
+    acceptance_block = (
+        "- [ ] Repair history table complete.\n"
+        "- [ ] Each repair classified with the section 3 taxonomy.\n"
+        "- [ ] Each repair has an earliest prevention point.\n"
+        "- [ ] No-repair reproduction path stated.\n"
+        "- [ ] `## Follow-up issues` filed (or explicitly stated `(none)`).\n"
+    )
+    if positive_control:
+        proposed_work_tail = (
+            "\n"
+            "2. Positive-control outcome -- no automated repair signals were "
+            "detected, so no repair taxonomy classification is requested.\n"
+        )
+        verification_block = (
+            "- The repair history table is explicitly labelled as a "
+            "positive-control no-signal outcome.\n"
+            "- No operator repair taxonomy classification is requested.\n"
+        )
+        acceptance_block = (
+            "- [ ] Positive-control no-signal outcome recorded.\n"
+            "- [ ] No repair taxonomy classification requested.\n"
+        )
     return (
         "## Scope\n"
         "\n"
@@ -1308,37 +1355,15 @@ def build_retro_body(
         "\n"
         f"{repair_table}"
         "<!-- /auto-filled:repair-history -->\n"
-        "\n"
-        "<!-- operator-fill:remaining-steps -->\n"
-        "2. Classification -- (operator) tag each repair above as one of: "
-        "`missing deterministic gate` / `unclear agent instruction` / "
-        "`external or human decision that cannot be automated`.\n"
-        "3. Earliest prevention point -- (operator) per repair, name the "
-        "deterministic gate that should have caught it (workflow, hook, "
-        "ruleset, label, preflight).\n"
-        "4. No-repair reproduction path -- (operator) numbered steps the next "
-        "similar PR should follow to land in one shot.\n"
-        "5. Follow-up issues -- (operator) list deferred gates as "
-        "`- [ ] type(scope): TITLE -- RATIONALE` or write `(none)`.\n"
-        "<!-- /operator-fill:remaining-steps -->\n"
+        f"{proposed_work_tail}"
         "\n"
         "## Verification\n"
         "\n"
-        "- Every repair in the table has a classification from the "
-        "section 3 taxonomy.\n"
-        "- Every repair has a named earliest prevention point.\n"
-        "- The no-repair reproduction path matches what would happen if "
-        "the deterministic gates from this retrospective were in place.\n"
-        "- The `## Follow-up issues` section (if any) is machine-parseable "
-        "per the bullet convention above.\n"
+        f"{verification_block}"
         "\n"
         "## Acceptance criteria\n"
         "\n"
-        "- [ ] Repair history table complete.\n"
-        "- [ ] Each repair classified with the section 3 taxonomy.\n"
-        "- [ ] Each repair has an earliest prevention point.\n"
-        "- [ ] No-repair reproduction path stated.\n"
-        "- [ ] `## Follow-up issues` filed (or explicitly stated `(none)`).\n"
+        f"{acceptance_block}"
         "\n"
         "## Parent\n"
         "\n"
@@ -2326,9 +2351,14 @@ def run(event: dict[str, Any], repo: str) -> int:
         pr_type=pr_type,
     )
     if (
-        not has_inline_comments
-        and not check_runs_unknown
-        and (not repair_rows or _has_only_exempt_policy_artifact_rows(repair_rows))
+        not check_runs_unknown
+        and (
+            not repair_rows
+            or (
+                not has_inline_comments
+                and _has_only_exempt_policy_artifact_rows(repair_rows)
+            )
+        )
     ):
         if repair_rows:
             msg = f"only policy-artifact repair rows generated ({signal_summary})"
