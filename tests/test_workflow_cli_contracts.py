@@ -53,6 +53,7 @@ import scan_workflow_pip
 import security_drift_report
 import threat_intel_triage
 import title_policy
+import update_devcontainer_image_pins
 import uv_pin
 import verify_apm_checksums
 import verify_readme_translation
@@ -127,6 +128,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("security_drift_report.py", "post-comment"): "test_security_drift_report_aggregate_and_post_comment_match_workflow_args",
     ("threat_intel_triage.py", "scan"): "test_threat_intel_scan_matches_workflow_args",
     ("title_policy.py", "verify"): "test_title_policy_verify_matches_workflow_kind_env",
+    ("update_devcontainer_image_pins.py", "$GITHUB_SHA"): "test_update_devcontainer_image_pins_matches_workflow_args",
     ("uv_pin.py", "drift"): "test_uv_pin_workflow_subcommands_match_ci_usage",
     ("uv_pin.py", "read"): "test_uv_pin_workflow_subcommands_match_ci_usage",
     ("uv_pin.py", "stale"): "test_uv_pin_workflow_subcommands_match_ci_usage",
@@ -873,6 +875,46 @@ def test_title_policy_verify_matches_workflow_kind_env(
     monkeypatch.setenv("TITLE", "fix(ci): ascii title")
 
     assert title_policy.main(["verify", "--kind", "pull_request"]) == 0
+
+
+def test_update_devcontainer_image_pins_matches_workflow_args(tmp_path: Path) -> None:
+    old_sha = "0" * 40
+    new_sha = "1" * 40
+    for agent in update_devcontainer_image_pins.AGENTS:
+        config_dir = tmp_path / ".devcontainer" / agent
+        config_dir.mkdir(parents=True, exist_ok=True)
+        (config_dir / "devcontainer.json").write_text(
+            json.dumps(
+                {
+                    "name": f"claude-md {agent}",
+                    "image": f"{update_devcontainer_image_pins.IMAGE_PREFIX}-{agent}:{old_sha}",
+                    "remoteUser": agent,
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+    runbook_dir = tmp_path / "docs" / "runbooks"
+    runbook_dir.mkdir(parents=True, exist_ok=True)
+    (runbook_dir / "devcontainers.md").write_text(
+        "\n".join(
+            [
+                f"pinned images were published from `{old_sha}`",
+                f"`{update_devcontainer_image_pins.IMAGE_PREFIX}-claude:{old_sha}`",
+                f"`{update_devcontainer_image_pins.IMAGE_PREFIX}-codex:{old_sha}`",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    assert update_devcontainer_image_pins.main([new_sha, "--repo-root", str(tmp_path)]) == 0
+
+    for agent in update_devcontainer_image_pins.AGENTS:
+        config_path = tmp_path / ".devcontainer" / agent / "devcontainer.json"
+        config = json.loads(config_path.read_text(encoding="utf-8"))
+        assert config["image"] == f"{update_devcontainer_image_pins.IMAGE_PREFIX}-{agent}:{new_sha}"
 
 
 def test_analyze_ci_timings_matches_workflow_args(
