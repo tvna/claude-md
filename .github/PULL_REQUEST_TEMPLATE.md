@@ -77,7 +77,7 @@ Required shape (enforced by scripts/body_policy.py verify_pr_verification_pairs
 for PRs created on or after 2026-05-26):
 
 - command: `<inline-code>`
-  result: `<exit code, log line, OK marker, or short observation>`
+  result: `<exit 0, OK marker, N passed summary, or explicit failure>`
 -->
 ## Verification
 
