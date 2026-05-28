@@ -12,6 +12,11 @@ The injected context explicitly carves out GitHub posts via
 (``scripts/preflight_non_ascii.py``). The two hooks compose: this one
 shapes local plan output, the other gates GitHub I/O.
 
+Used by both Claude Code and Codex SessionStart hooks. Claude supplies
+``CLAUDE_PROJECT_DIR`` in the environment; Codex supplies the session
+``cwd`` in the event JSON on stdin. The environment variable wins when
+present so existing Claude behavior stays unchanged.
+
 Architecture mirrors :mod:`preflight_non_ascii`: pure functions on top,
 one thin stdin/stdout boundary at the bottom (:func:`main`). Any error
 fails open per CLAUDE.md Sec.4 -- a hook bug must never wedge the
@@ -182,10 +187,27 @@ def decide(
 # ---------------------------------------------------------------------------
 
 
-def _project_root() -> Path:
+def _project_root(event: dict[str, Any] | None = None) -> Path:
     """Resolve the repo root, preferring the harness-supplied env var."""
     root = os.environ.get("CLAUDE_PROJECT_DIR")
-    return Path(root) if root else Path.cwd()
+    if root:
+        return Path(root)
+    if event is not None:
+        cwd = event.get("cwd")
+        if isinstance(cwd, str) and cwd:
+            return Path(cwd)
+    return Path.cwd()
+
+
+def _read_event_stdin() -> dict[str, Any]:
+    """Return SessionStart event JSON from stdin, or ``{}`` on empty input."""
+    raw = sys.stdin.read()
+    if not raw.strip():
+        return {}
+    event = json.loads(raw)
+    if not isinstance(event, dict):
+        raise ValueError(f"event must be an object, got {type(event).__name__}")
+    return event
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -196,8 +218,16 @@ def main(argv: list[str] | None = None) -> int:
     stdout. A hook bug must not block session start; the absence of
     additionalContext degrades to the pre-existing English default.
     """
-    del argv  # not used; SessionStart events have no actionable stdin
-    root = _project_root()
+    del argv  # not used; SessionStart event fields only locate the repo.
+    try:
+        event = _read_event_stdin()
+    except (json.JSONDecodeError, ValueError) as exc:
+        print(
+            f"::error::plan_language_context: malformed stdin JSON: {exc}",
+            file=sys.stderr,
+        )
+        return 0
+    root = _project_root(event)
     try:
         codeowners_text = (root / _CODEOWNERS_PATH).read_text(encoding="utf-8")
         owners_yaml_text = (root / _OWNERS_YAML_PATH).read_text(encoding="utf-8")

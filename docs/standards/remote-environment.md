@@ -14,6 +14,7 @@ The Claude Code on the Web remote environment ships with a stale `uv` (`0.8.17`)
 | `.github/workflows/generate-agents.yml`, `.github/workflows/verify-apm-drift.yml` | CI | Call `scripts/uv_pin.py read` to derive the version, then install via the existing `curl` flow. No version literal lives here. |
 | `scripts/install-uv.sh` | Remote session | Calls `scripts/uv_pin.py read` to derive the pin, then installs `uv` at SessionStart. |
 | `.claude/settings.json` | Remote session | Registers `scripts/install-uv.sh` as the `SessionStart` hook. Permitted under the [#109](https://github.com/tvna/claude-md/issues/109) carve-out in `docs/standards/repo-scope.md`. |
+| `.codex/hooks.json` | Codex session | Registers the same SessionStart hook shape for Codex. The uv installer remains Claude-remote-gated until a Codex remote environment variable is documented; the language-context hook consumes Codex's `cwd` event field. Tracked by [#604](https://github.com/tvna/claude-md/issues/604) / [#606](https://github.com/tvna/claude-md/issues/606). |
 | `.github/workflows/verify-agents.yml` (`lint-uv-pin` job) | CI | Drift gate — runs `pytest tests/test_uv_pin.py` then `scripts/uv_pin.py drift`. Fails any PR that re-introduces a uv version literal outside `pyproject.toml`. See [#112](https://github.com/tvna/claude-md/issues/112). |
 | `.github/dependabot.yml` | CI | Bumps GitHub Actions SHAs and `uv.lock` entries weekly. The uv binary pin itself is bumped manually (see *Update procedure* below). |
 | `docs/standards/remote-environment.md` *(this file)* | — | Runbook: how the hook works, how the SoT propagates, verification, update procedure. |
@@ -40,9 +41,11 @@ The carve-out for `.claude/settings.json` pulls the hook surface back under PR r
 
 ## Codex boundary
 
-Codex consumes this repository's universal instruction surface through `AGENTS.md`; it does not currently have an in-repo startup hook carved out here. The `.claude/settings.json` guard is therefore imported as a governance rule, not as a copied file shape: Codex-specific configuration such as `.codex/` remains prohibited unless a future issue establishes a narrow deterministic-provisioning carve-out with review and verification equivalent to the Claude Code hook.
+Codex consumes this repository's universal instruction surface through `AGENTS.md`. Issue [#604](https://github.com/tvna/claude-md/issues/604) establishes the narrow `.codex/hooks.json` carve-out for repository-owned deterministic hooks, and [#606](https://github.com/tvna/claude-md/issues/606) lands the first implementation slice.
 
-When a Codex remote environment needs the same dependency state, use the verification commands below as the contract. Do not add a Codex-specific settings file solely to mirror Claude Code's `SessionStart` mechanism.
+The Codex hook config may mirror existing Claude hook scripts only when the script behavior is tested for both payload shapes or is payload-independent. Do not add Codex-only hook behavior that weakens the Claude guardrail or assumes complete hook parity. Current documented Codex limits include incomplete shell interception for some shell paths and unsupported `permissionDecision: "ask"` behavior in `PreToolUse`.
+
+When a Codex remote environment needs the same dependency state, use the verification commands below as the contract until Codex documents a stable remote-session environment flag. Do not make `scripts/install-uv.sh` perform network installation in local Codex sessions.
 
 ## Why not nix
 
