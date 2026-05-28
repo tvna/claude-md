@@ -48,6 +48,38 @@ rm .devcontainer-write-check
 which claude || which codex
 ```
 
+If VS Code fails before post-create with `unable to find user codex` or
+`unable to find user claude`, it is reusing a stale container that was
+created before the agent user existed, or it has a stale local copy of a
+previously mutable GHCR image. That failure happens before the
+repository's in-container preflight can run. The entrypoints run a
+host-side `initializeCommand` that pulls the pinned image, verifies the
+agent user exists in that image, rejects mutable `main` or `latest`
+image tags, and removes only stale containers labelled for the same
+workspace and config.
+
+To run the same recovery manually, inspect the labelled container from
+the host, then remove it only after the script reports it as stale:
+
+```sh
+.devcontainer/scripts/check-stale-agent-container.sh codex \
+  --workspace /Users/tvna/Documents/GitOps/claude-md
+.devcontainer/scripts/check-stale-agent-container.sh codex \
+  --workspace /Users/tvna/Documents/GitOps/claude-md \
+  --rm
+```
+
+Use `claude` instead of `codex` for the Claude entrypoint. Then reopen
+the devcontainer so VS Code creates a fresh container from the pinned
+GHCR image.
+
+To force the full image refresh and stale-container cleanup path before
+opening VS Code, run:
+
+```sh
+.devcontainer/scripts/ensure-agent-image.sh codex
+```
+
 The prebuild definitions live under `.devcontainer/images/<agent>/`.
 Those files are CI inputs only; local users should open the agent
 entrypoints listed above. The prebuild definitions also run the agent
@@ -56,12 +88,13 @@ symlink.
 
 ## Prebuilt images
 
-Local devcontainers use these images:
+Local devcontainers use immutable commit-SHA image tags. The currently
+pinned images were published from `e743213b24d8ba935b146a94245dd2a2bf50f736`:
 
 | Agent | Image |
 |---|---|
-| Claude | `ghcr.io/tvna/claude-md-devcontainer-claude:main` |
-| Codex | `ghcr.io/tvna/claude-md-devcontainer-codex:main` |
+| Claude | `ghcr.io/tvna/claude-md-devcontainer-claude:e743213b24d8ba935b146a94245dd2a2bf50f736` |
+| Codex | `ghcr.io/tvna/claude-md-devcontainer-codex:e743213b24d8ba935b146a94245dd2a2bf50f736` |
 
 The `Publish devcontainer images` workflow builds both images with the
 Dev Containers CLI and pushes them to GHCR on `main` changes to
@@ -71,14 +104,18 @@ Dev Containers CLI and pushes them to GHCR on `main` changes to
 
 Each publish creates two tags per agent:
 
-- `main` for local VS Code entrypoints.
-- the exact source commit SHA for audit and rollback.
+- `main` as a moving convenience alias.
+- the exact source commit SHA for local VS Code entrypoints, audit, and
+  rollback.
 
 If a devcontainer change merges before the publish workflow completes,
-wait for that workflow to finish and then rebuild/reopen the local
-container so Podman pulls the updated `:main` image. If publish fails,
-use the commit-SHA tag from the last green publish as the rollback
-reference while fixing the workflow.
+wait for that workflow to finish and then open a follow-up PR that
+updates the pinned SHA tags in `.devcontainer/claude/devcontainer.json`
+and `.devcontainer/codex/devcontainer.json`. Do not point local
+entrypoints at `:main`; it can leave Podman and VS Code using different
+local interpretations of the same mutable tag. If publish fails, keep
+the commit-SHA tag from the last green publish as the rollback reference
+while fixing the workflow.
 
 If Podman cannot pull from GHCR with an authorization error after the
 first publish, confirm that both GHCR packages are public. Private
@@ -268,6 +305,8 @@ python3 -m json.tool claude-md.code-workspace
 bash -n .devcontainer/scripts/apply-egress-allowlist.sh
 bash -n .devcontainer/scripts/install-agent-cli.sh
 bash -n .devcontainer/scripts/prepare-agent-workspace.sh
+bash -n .devcontainer/scripts/check-stale-agent-container.sh
+bash -n .devcontainer/scripts/ensure-agent-image.sh
 sh -n .devcontainer/images/features/agent-user/install.sh
 nix build .#claude-cli
 nix build .#codex-cli
