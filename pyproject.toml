@@ -48,6 +48,12 @@ markers = [
     "shard_preflight: tests for scripts/preflight_*.py and related Layer-2.5 hooks.",
     "shard_policy: body-policy, title-policy, non-ASCII, and trusted-bot tests.",
     "shard_ci_ops: CI-analysis, auto-retro, issue-link, and workflow-orchestration tests.",
+    "shard_ci_ops_auto_retro_append: auto-retro fix-typed append branch tests.",
+    "shard_ci_ops_auto_retro_create: auto-retro issue creation, backlink, and terminal-label tests.",
+    "shard_ci_ops_auto_retro_create_slow: slow auto-retro create/fail-soft and run CLI tests.",
+    "shard_ci_ops_auto_retro_decision_tree: auto-retro generated decision-tree tests.",
+    "shard_ci_ops_auto_retro_signals: auto-retro repair-signal and prior-skip branch tests.",
+    "shard_ci_ops_auto_retro_skips: auto-retro early-skip branch tests.",
     "shard_default: tests not assigned to a domain bucket yet (catch-all, must shrink).",
 ]
 
