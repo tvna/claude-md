@@ -13,8 +13,15 @@ class TestRunCreateFailSoft:
     ) -> None:
         """Transient API failure on the comments lookup must NOT silently
         skip the retro. Fall back to creating the issue."""
-        seen = orchestrator_recorder(monkeypatch, comments_error=True)
-        assert ar.run(merged_event(number=42), "o/r") == 0
+        seen = orchestrator_recorder(
+            monkeypatch,
+            comments_error=True,
+            commits=[
+                {"commit": {"message": "feat(harness): step one"}},
+                {"commit": {"message": "fixup! step one"}},
+            ],
+        )
+        assert ar.run(merged_event(number=42, commits=2), "o/r") == 0
         # Issue creation must still happen (fail-safe path).
         assert any(
             method == "POST" and path == "/repos/o/r/issues"
@@ -44,8 +51,12 @@ class TestRunCreateFailSoft:
             monkeypatch,
             created_response={"number": 777, "html_url": "https://x/i/777"},
             back_link_post_error=True,
+            commits=[
+                {"commit": {"message": "feat(harness): step one"}},
+                {"commit": {"message": "fixup! step one"}},
+            ],
         )
-        assert ar.run(merged_event(number=42), "o/r") == 0
+        assert ar.run(merged_event(number=42, commits=2), "o/r") == 0
         # Issue creation happened.
         assert any(
             m == "POST" and p == "/repos/o/r/issues"
@@ -62,8 +73,12 @@ class TestRunCreateFailSoft:
             monkeypatch,
             created_response={"number": 777, "html_url": "https://x/i/777"},
             terminal_label_post_error=True,
+            commits=[
+                {"commit": {"message": "feat(harness): step one"}},
+                {"commit": {"message": "fixup! step one"}},
+            ],
         )
-        assert ar.run(merged_event(number=42), "o/r") == 0
+        assert ar.run(merged_event(number=42, commits=2), "o/r") == 0
         # Retro creation and back-link both landed before the failing label.
         assert any(
             m == "POST" and p == "/repos/o/r/issues"

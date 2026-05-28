@@ -15,10 +15,16 @@ class TestCLI:
     def test_run_reads_event_file_and_creates(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
-        event = merged_event(number=8)
+        event = merged_event(number=8, commits=2)
         event_file = tmp_path / "event.json"
         event_file.write_text(json.dumps(event))
-        seen = orchestrator_recorder(monkeypatch)
+        seen = orchestrator_recorder(
+            monkeypatch,
+            commits=[
+                {"commit": {"message": "feat(harness): step one"}},
+                {"commit": {"message": "fixup! step one"}},
+            ],
+        )
         exit_code = ar.main(
             ["run", "--event-file", str(event_file), "--repo", "o/r"]
         )

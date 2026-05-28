@@ -83,7 +83,7 @@ flowchart TD
     N077["verification_pairs = extract_verification_pairs(...)"]
     N078["pr_type = (extract_type_scope(pr.title) or '').split('(', 1)[0]"]
     N079["repair_rows = _repair_history_rows(...)"]
-    N080["if not has_inline_comments and (not check_runs_unknown) and (not repair_rows or _has_only_exempt_policy_artifact_rows(repair_rows))"]
+    N080["if not check_runs_unknown and (not repair_rows or (not has_inline_comments and _has_only_exempt_policy_artifact_rows(repair_rows)))"]
     N081["if repair_rows"]
     N082["msg = f'only policy-artifact repair rows generated ({signal_summary})'"]
     N083["msg = f'no standalone repair workload ({signal_summary})'"]
