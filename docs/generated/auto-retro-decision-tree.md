@@ -83,35 +83,37 @@ flowchart TD
     N077["verification_pairs = extract_verification_pairs(...)"]
     N078["pr_type = (extract_type_scope(pr.title) or '').split('(', 1)[0]"]
     N079["repair_rows = _repair_history_rows(...)"]
-    N080["if not has_inline_comments and (not check_runs_unknown) and _has_only_exempt_policy_artifact_rows(repair_rows)"]
-    N081["msg = f'only policy-artifact repair rows generated ({signal_summary})'"]
-    N082["print(...)"]
-    N083["_append_summary(...)"]
-    N084["return 0"]
-    N085["title = build_retro_title(...)"]
-    N086["body = build_retro_body(...)"]
-    N087["labels = issue_labels(...)"]
-    N088["created = create_issue(...)"]
-    N089["new_number = get(...)"]
-    N090["new_url = created.get('html_url') or ''"]
-    N091["back_link_status = 'skipped'"]
-    N092["terminal_label_status = 'skipped'"]
-    N093["if isinstance(new_number, int)"]
-    N094["try"]
-    N095["back_link_status = post_back_link_comment(...)"]
-    N096["except subprocess.CalledProcessError"]
-    N097["print(...)"]
-    N098["back_link_status = 'failed'"]
-    N099["try"]
-    N100["apply_terminal_label(...)"]
-    N101["terminal_label_status = 'applied'"]
-    N102["except subprocess.CalledProcessError"]
-    N103["print(...)"]
-    N104["terminal_label_status = 'failed'"]
-    N105["msg = f'created retro issue #{new_number} ({new_url}); back-link={back_link_status}; terminal-label={terminal_label_status}'"]
-    N106["print(...)"]
-    N107["_append_summary(...)"]
-    N108["return 0"]
+    N080["if not has_inline_comments and (not check_runs_unknown) and (not repair_rows or _has_only_exempt_policy_artifact_rows(repair_rows))"]
+    N081["if repair_rows"]
+    N082["msg = f'only policy-artifact repair rows generated ({signal_summary})'"]
+    N083["msg = f'no standalone repair workload ({signal_summary})'"]
+    N084["print(...)"]
+    N085["_append_summary(...)"]
+    N086["return 0"]
+    N087["title = build_retro_title(...)"]
+    N088["body = build_retro_body(...)"]
+    N089["labels = issue_labels(...)"]
+    N090["created = create_issue(...)"]
+    N091["new_number = get(...)"]
+    N092["new_url = created.get('html_url') or ''"]
+    N093["back_link_status = 'skipped'"]
+    N094["terminal_label_status = 'skipped'"]
+    N095["if isinstance(new_number, int)"]
+    N096["try"]
+    N097["back_link_status = post_back_link_comment(...)"]
+    N098["except subprocess.CalledProcessError"]
+    N099["print(...)"]
+    N100["back_link_status = 'failed'"]
+    N101["try"]
+    N102["apply_terminal_label(...)"]
+    N103["terminal_label_status = 'applied'"]
+    N104["except subprocess.CalledProcessError"]
+    N105["print(...)"]
+    N106["terminal_label_status = 'failed'"]
+    N107["msg = f'created retro issue #{new_number} ({new_url}); back-link={back_link_status}; terminal-label={terminal_label_status}'"]
+    N108["print(...)"]
+    N109["_append_summary(...)"]
+    N110["return 0"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 -->|"true"| N004
@@ -200,34 +202,37 @@ flowchart TD
     N078 --> N079
     N079 --> N080
     N080 -->|"true"| N081
-    N081 --> N082
-    N082 --> N083
+    N081 -->|"true"| N082
+    N081 -->|"false"| N083
+    N082 --> N084
     N083 --> N084
-    N080 -->|"false"| N085
+    N084 --> N085
     N085 --> N086
-    N086 --> N087
+    N080 -->|"false"| N087
     N087 --> N088
     N088 --> N089
     N089 --> N090
     N090 --> N091
     N091 --> N092
     N092 --> N093
-    N093 -->|"true"| N094
-    N094 -->|"try"| N095
-    N094 -->|"raises"| N096
-    N096 --> N097
-    N097 --> N098
-    N095 --> N099
+    N093 --> N094
+    N094 --> N095
+    N095 -->|"true"| N096
+    N096 -->|"try"| N097
+    N096 -->|"raises"| N098
     N098 --> N099
-    N099 -->|"try"| N100
+    N099 --> N100
+    N097 --> N101
     N100 --> N101
-    N099 -->|"raises"| N102
+    N101 -->|"try"| N102
     N102 --> N103
-    N103 --> N104
-    N101 --> N105
+    N101 -->|"raises"| N104
     N104 --> N105
-    N093 -->|"false"| N105
     N105 --> N106
+    N103 --> N107
     N106 --> N107
+    N095 -->|"false"| N107
     N107 --> N108
+    N108 --> N109
+    N109 --> N110
 ```
