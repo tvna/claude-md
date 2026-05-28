@@ -118,6 +118,32 @@ _RESULT_PASSING_PREFIXES: tuple[str, ...] = (
     "all tests",
 )
 
+# Successful verification is often recorded as an observation sentence
+# rather than a tool-status token. Keep this list concrete: every phrase
+# below comes from the #592 G3 retro corpus and describes proof that the
+# verification did what the operator expected, not a generic failure.
+_RESULT_PASSING_OBSERVATION_PHRASES: tuple[str, ...] = (
+    "ascii-clean",
+    "completed successfully",
+    "diff is confined",
+    "exit 0",
+    "exits 0",
+    "gate trips as designed",
+    "insertions",
+    "insertions(+)",
+    "no hits",
+    "no matches",
+    "one commit on the branch",
+    "only the intentional",
+    "parsed without exception",
+    "parses;",
+    " passed in ",
+    "required test coverage",
+    "ruff / mypy / prek pass",
+    "shows chapter",
+    "total coverage",
+)
+
 # Pure numeric result (e.g., a count from `grep -c` or `wc -l`). The
 # operator chose count-style verification, so the value is a measured
 # quantity rather than a status code; treat as passing. Refs #417.
@@ -144,6 +170,13 @@ _RESULT_PASSING_COUNT_RE = re.compile(r"^\d+\s+passed\b", re.IGNORECASE)
 # Trailing `ok` word marker: `yaml syntax ok`, `config ok.`. Word
 # boundary keeps `not ok` and `lookup` out of the match. Refs #453.
 _RESULT_PASSING_TRAILING_OK_RE = re.compile(r"\bok\b\.?\s*$", re.IGNORECASE)
+
+# ASCII cleanliness checks usually print key/value facts rather than a
+# status word. Treat the exact zero-count observation as success. Refs #596.
+_RESULT_PASSING_NON_ASCII_ZERO_RE = re.compile(
+    r"\bnon_ascii\s*=\s*0\b",
+    re.IGNORECASE,
+)
 
 # Explicit failure-count marker that must NOT be treated as passing even
 # if the rest of the string smells like a pass (`0 passed, 3 failed`).
@@ -363,7 +396,8 @@ def _result_is_passing(result: str) -> bool:
     Anything else (including ``exit 1``, ``failed``, free-form prose) is
     treated as a failure signal. Refs #411, #417, #453.
     """
-    text = result.strip()
+    raw_text = result.strip()
+    text = raw_text
     if text.startswith("`") and text.endswith("`") and len(text) >= 2:
         text = text[1:-1].strip()
     # Strip a trailing operator-commentary parenthetical so it does not
@@ -386,8 +420,13 @@ def _result_is_passing(result: str) -> bool:
         return True
     if _RESULT_PASSING_TRAILING_OK_RE.search(text):
         return True
+    if _RESULT_PASSING_NON_ASCII_ZERO_RE.search(raw_text):
+        return True
     lower = text.lower()
-    return any(lower.startswith(prefix) for prefix in _RESULT_PASSING_PREFIXES)
+    raw_lower = raw_text.lower()
+    return any(lower.startswith(prefix) for prefix in _RESULT_PASSING_PREFIXES) or any(
+        phrase in raw_lower for phrase in _RESULT_PASSING_OBSERVATION_PHRASES
+    )
 
 
 def extract_verification_pairs(body: str) -> list[VerificationPair]:
