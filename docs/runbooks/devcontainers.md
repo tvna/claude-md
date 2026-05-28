@@ -102,6 +102,15 @@ Dev Containers CLI and pushes them to GHCR on `main` changes to
 `pyproject.toml`, or `uv.lock`. It also supports manual
 `workflow_dispatch`.
 
+The workflow builds each agent image natively for `linux/amd64` and
+`linux/arm64`, then publishes `main` and the exact source commit SHA as
+multi-platform manifest tags. Apple Silicon hosts must resolve the
+`linux/arm64` image variant. If VS Code Explorer or Source Control stays
+in a loading state and container processes show `qemu-x86_64-static` for
+VS Code Server, fileWatcher, extensionHost, or Git commands, the pinned
+image SHA points at an amd64-only publish and should be updated after
+the next successful multi-platform publish.
+
 Each publish creates two tags per agent:
 
 - `main` as a moving convenience alias.
@@ -113,9 +122,17 @@ wait for that workflow to finish and then open a follow-up PR that
 updates the pinned SHA tags in `.devcontainer/claude/devcontainer.json`
 and `.devcontainer/codex/devcontainer.json`. Do not point local
 entrypoints at `:main`; it can leave Podman and VS Code using different
-local interpretations of the same mutable tag. If publish fails, keep
-the commit-SHA tag from the last green publish as the rollback reference
-while fixing the workflow.
+local interpretations of the same mutable tag. The replacement pinned
+SHA must be a successful multi-platform publish; verify it includes both
+`linux/amd64` and `linux/arm64` before asking Apple Silicon users to
+reopen the container. If publish fails, keep the commit-SHA tag from the
+last green publish as the rollback reference while fixing the workflow.
+
+To inspect the platforms available for a published image tag:
+
+```sh
+docker buildx imagetools inspect ghcr.io/tvna/claude-md-devcontainer-codex:<sha>
+```
 
 If Podman cannot pull from GHCR with an authorization error after the
 first publish, confirm that both GHCR packages are public. Private
