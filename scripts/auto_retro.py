@@ -113,6 +113,14 @@ _RESULT_PASSING_PREFIXES: tuple[str, ...] = (
     "all hooks",
     "all checks",
     "all tests",
+    # Successful verification evidence captured in the #592 corpus.
+    # These are proof that the operator ran a check and observed the
+    # expected passing state, not repair rows. Refs #593.
+    "compilation completed successfully",
+    "required test coverage",
+    "parses",
+    "shows",
+    "matches",
 )
 
 # Pure numeric result (e.g., a count from `grep -c` or `wc -l`). The
@@ -141,6 +149,19 @@ _RESULT_PASSING_COUNT_RE = re.compile(r"^\d+\s+passed\b", re.IGNORECASE)
 # Trailing `ok` word marker: `yaml syntax ok`, `config ok.`. Word
 # boundary keeps `not ok` and `lookup` out of the match. Refs #453.
 _RESULT_PASSING_TRAILING_OK_RE = re.compile(r"\bok\b\.?\s*$", re.IGNORECASE)
+
+# Verification prose that records an expected absence, a confined diff,
+# or an intentional-only hit is passing evidence. Kept as a narrow
+# allowlist from the #592 corpus so arbitrary free-form prose remains a
+# failure signal. Refs #593.
+_RESULT_PASSING_EVIDENCE_RE = re.compile(
+    r"^(?:\d+:|\(no hits\)|no matches|only the intentional|"
+    r"one commit on the branch|"
+    r".*\|\s*\d+\s+\+|"
+    r".*\b(?:exit 0|exits 0|ascii-clean|0 deletions|0 matches|"
+    r"non_ascii=\s*0|\d+\s+passed)\b)",
+    re.IGNORECASE,
+)
 
 # Explicit failure-count marker that must NOT be treated as passing even
 # if the rest of the string smells like a pass (`0 passed, 3 failed`).
@@ -374,6 +395,8 @@ def _result_is_passing(result: str) -> bool:
         return True
     if _RESULT_PASSING_TRAILING_OK_RE.search(text):
         return True
+    if _RESULT_PASSING_EVIDENCE_RE.match(text):
+        return True
     lower = text.lower()
     return any(lower.startswith(prefix) for prefix in _RESULT_PASSING_PREFIXES)
 
@@ -514,6 +537,70 @@ def compute_repair_signals(
             not p.passed for p in verification_pairs
         ),
     }
+
+
+def _count_iteration_commit_subjects(
+    commit_subjects: list[str],
+    pr_type: str = "",
+) -> int:
+    """Count explicit iteration subjects, excluding a canonical fix row.
+
+    Mirrors the split used by :func:`_build_repair_history_table`: on a
+    fix-typed PR, the first non-merge ``fix(...)`` subject is the fix the
+    PR exists to land, while later ``fix(...)`` / ``fixup!`` / ``squash!``
+    subjects are iteration evidence. Refs #593.
+    """
+    canonical_fix_index: int | None = None
+    if pr_type == "fix":
+        for i, subject in enumerate(commit_subjects):
+            stripped_i = subject.strip()
+            if any(
+                stripped_i.startswith(prefix)
+                for prefix in _MERGE_FROM_MAIN_PREFIXES
+            ):
+                continue
+            if stripped_i.startswith("fix("):
+                canonical_fix_index = i
+            break
+
+    count = 0
+    for i, subject in enumerate(commit_subjects):
+        if i == canonical_fix_index:
+            continue
+        stripped = subject.strip()
+        if (
+            stripped.startswith("fix(")
+            or stripped.startswith("fixup!")
+            or stripped.startswith("squash!")
+        ):
+            count += 1
+    return count
+
+
+def has_standalone_repair_work(
+    signals: dict[str, bool],
+    check_runs: list[dict[str, Any]] | None,
+    commit_subjects: list[str],
+    verification_pairs: list[VerificationPair],
+    pr_type: str = "",
+) -> bool:
+    """True when a retro would contain operator-actionable repair work.
+
+    Weak signals such as line-anchored issue refs, a fix-typed title, or
+    policy-artifact commit rows still stay visible in audit output when a
+    retro is opened for another reason, but they no longer open a full
+    standalone workload by themselves. Refs #593 and the #592 corpus.
+    """
+    if signals.get("inline_review_comments", False):
+        return True
+    if any(
+        str(entry.get("conclusion") or "") in _CHECK_RUN_FAIL_CONCLUSIONS
+        for entry in check_runs or []
+    ):
+        return True
+    if any(not pair.passed for pair in verification_pairs):
+        return True
+    return _count_iteration_commit_subjects(commit_subjects, pr_type) >= 2
 
 
 def render_repair_signals(signals: dict[str, bool]) -> str:
@@ -2027,6 +2114,18 @@ def run(event: dict[str, Any], repo: str) -> int:
         )
         check_runs = []
     verification_pairs = extract_verification_pairs(pr.body or "")
+    type_scope = extract_type_scope(pr.title)
+    pr_type = type_scope.split("(", 1)[0] if type_scope else ""
+    if not has_standalone_repair_work(
+        signals, check_runs, commit_subjects, verification_pairs, pr_type
+    ):
+        msg = (
+            "no standalone repair workload "
+            f"({signal_summary}; policy-artifact/no-signal rows only)"
+        )
+        print(f"skip: {msg}")
+        _append_summary(_build_summary(pr, "skip", msg))
+        return 0
     title = build_retro_title(pr)
     body = build_retro_body(
         pr,
