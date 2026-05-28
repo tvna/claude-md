@@ -113,7 +113,7 @@ should already contain matching command/result pairs for each item.
 Check the box only when the matching pair is present.
 -->
 
-- [ ] `pytest -q` exits 0 (paired in Verification above)
+- [ ] `uv run python -m pytest -q` exits 0 (paired in Verification above)
 - [ ] CI green on the merge commit (all required status checks)
 - [ ] CLAUDE.md / AGENTS.md regenerated if applicable (`apm compile` produced no diff)
 - [ ] If this PR touches `.apm/instructions/**`, `CLAUDE.md`, or `AGENTS.md`: `verify-apm.yml` green (covers both portability scan and `apm compile` drift); any `portability-ack:` marker cites its authorizing sub-issue and reviewer applied `docs/runbooks/downstream-instruction-review-checklist.md`

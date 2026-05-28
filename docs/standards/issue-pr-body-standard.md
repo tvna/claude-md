@@ -138,10 +138,13 @@ The required H2 sections, in order, are:
 - `## Verification` - one command/result pair per observation, in the
   shape below. Each entry is one fact about what was actually run.
   Type checks and linters verify shape, not behaviour; include at
-  least one behaviour check when behaviour changed.
+  least one behaviour check when behaviour changed. Repository Python
+  checks must run through `uv run` so dev dependencies come from
+  `pyproject.toml` and `uv.lock` instead of the operator's ambient
+  Python environment.
 
   ```
-  - command: `pytest -q`
+  - command: `uv run python -m pytest -q`
     result: `exit 0 (684 passed)`
   ```
 
