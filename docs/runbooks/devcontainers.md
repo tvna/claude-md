@@ -63,6 +63,39 @@ podman machine start
 podman info
 ```
 
+If Dev Containers can run `/opt/podman/bin/podman` but fails with
+`unable to connect to Podman socket` or `connect: connection refused`,
+the PATH is already resolved and the Podman VM or connection is the
+remaining problem. Check the host state before retrying VS Code:
+
+```sh
+/opt/podman/bin/podman machine list
+/opt/podman/bin/podman system connection list
+/opt/podman/bin/podman machine start
+/opt/podman/bin/podman info
+```
+
+If no machine exists, initialize one first:
+
+```sh
+/opt/podman/bin/podman machine init
+/opt/podman/bin/podman machine start
+```
+
+If `machine list` is empty but `system connection list` still shows
+`podman-machine-default` entries, the connection metadata is stale. That
+state blocks `machine init` with `system connection "podman-machine-default"
+already exists` while `machine start` still reports `VM does not exist`.
+Remove the stale connections, then initialize the machine again:
+
+```sh
+/opt/podman/bin/podman system connection rm podman-machine-default
+/opt/podman/bin/podman system connection rm podman-machine-default-root
+/opt/podman/bin/podman machine init
+/opt/podman/bin/podman machine start
+/opt/podman/bin/podman info
+```
+
 Do not depend on Docker Desktop for this repository's devcontainer
 workflow. If VS Code reports Docker-oriented wording, treat it as Dev
 Containers compatibility terminology, not a Docker runtime requirement.
