@@ -436,6 +436,34 @@ class TestExternalFindings:
         assert result["recommended_labels"] == [triage.RESPONSE_LABEL]
         assert result["remove_labels"] == []
 
+    def test_existing_finding_label_is_not_recommended_again(
+        self, tmp_path: Path
+    ) -> None:
+        osv = tmp_path / "osv.json"
+        kev = tmp_path / "kev.json"
+        osv.write_text(
+            json.dumps(
+                {
+                    "results": [{"vulns": [{"id": "GHSA-abcd-1234-wxyz"}]}],
+                    "details": {"GHSA-abcd-1234-wxyz": {"aliases": ["CVE-2026-1111"]}},
+                }
+            ),
+            encoding="utf-8",
+        )
+        kev.write_text(json.dumps({"vulnerabilities": []}), encoding="utf-8")
+
+        findings = triage.fetch_external_findings(
+            [triage.Dependency("demo", "1.0.0", "PyPI", "uv.lock")],
+            osv_file=osv,
+            kev_file=kev,
+        )
+        result = triage.classify_findings(findings, {triage.INTEL_LABEL})
+
+        assert result["intel_needed"] is True
+        assert result["response_needed"] is False
+        assert result["recommended_labels"] == []
+        assert result["remove_labels"] == []
+
     def test_ghsa_finding_matches_locked_dependency(self, tmp_path: Path) -> None:
         osv = tmp_path / "osv.json"
         kev = tmp_path / "kev.json"

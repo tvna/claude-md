@@ -1141,13 +1141,11 @@ def classify_findings(findings: list[Finding], labels: set[str]) -> dict[str, ob
         for finding in findings
     )
 
-    wanted_labels: list[str] = []
-    if intel_needed:
-        wanted_labels.append(INTEL_LABEL)
-    if response_needed:
-        wanted_labels.append(RESPONSE_LABEL)
-    recommended_labels = [label for label in wanted_labels if label not in labels]
-    remove_labels = sorted((labels & THREAT_LABELS) - set(wanted_labels))
+    recommended_labels, remove_labels = classify_label_changes(
+        labels,
+        intel_needed=intel_needed,
+        response_needed=response_needed,
+    )
 
     return {
         "intel_needed": intel_needed,
@@ -1206,13 +1204,11 @@ def classify(title: str, body: str, labels: set[str]) -> dict[str, object]:
     intel_needed = security_labeled or bool(intel_matches) or bool(response_matches)
     response_needed = security_labeled or bool(response_matches)
 
-    wanted_labels: list[str] = []
-    if intel_needed:
-        wanted_labels.append(INTEL_LABEL)
-    if response_needed:
-        wanted_labels.append(RESPONSE_LABEL)
-    recommended_labels = [label for label in wanted_labels if label not in labels]
-    remove_labels = sorted((labels & THREAT_LABELS) - set(wanted_labels))
+    recommended_labels, remove_labels = classify_label_changes(
+        labels,
+        intel_needed=intel_needed,
+        response_needed=response_needed,
+    )
 
     return {
         "intel_needed": intel_needed,
@@ -1223,6 +1219,22 @@ def classify(title: str, body: str, labels: set[str]) -> dict[str, object]:
         "matched_response_indicators": response_matches,
         "security_labeled": security_labeled,
     }
+
+
+def classify_label_changes(
+    labels: set[str], *, intel_needed: bool, response_needed: bool
+) -> tuple[list[str], list[str]]:
+    wanted_labels: list[str] = []
+    if intel_needed:
+        wanted_labels.append(INTEL_LABEL)
+    if response_needed:
+        wanted_labels.append(RESPONSE_LABEL)
+    existing_threat_labels = labels & THREAT_LABELS
+    recommended_labels = [
+        label for label in wanted_labels if label not in existing_threat_labels
+    ]
+    remove_labels = sorted(existing_threat_labels - set(wanted_labels))
+    return recommended_labels, remove_labels
 
 
 def _cmd_classify(args: argparse.Namespace) -> int:
