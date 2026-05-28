@@ -4,10 +4,11 @@
 Bound in ``.claude/settings.json`` to
 ``mcp__github__(create_pull_request|update_pull_request)``. Reads the
 PreToolUse event JSON from stdin and, when the PR body would fail the
-post-2026-05-26 Verification + Checklist shape check enforced by
-``scripts/body_policy.py``, emits a ``permissionDecision: "deny"`` JSON
-on stdout so the operator can fix the body BEFORE the API call instead
-of round-tripping through ``verify-body-policy.yml``.
+post-2026-05-26 Verification + Checklist + agent-attribution footer
+shape check enforced by ``scripts/body_policy.py``, emits a
+``permissionDecision: "deny"`` JSON on stdout so the operator can fix
+the body BEFORE the API call instead of round-tripping through
+``verify-body-policy.yml``.
 
 Architecture mirrors :mod:`pr_body_close_keyword_gate` and
 :mod:`preflight_non_ascii`: pure decision function on top, a single
@@ -34,6 +35,7 @@ import sys
 from typing import Any
 
 from body_policy import (
+    verify_pr_agent_attribution_footer,
     verify_pr_checklist_subsections,
     verify_pr_verification_pairs,
 )
@@ -50,7 +52,7 @@ def evaluate(body: str) -> list[str]:
     """Return list of ``::error::`` strings; empty list means OK."""
     return verify_pr_verification_pairs(body) + verify_pr_checklist_subsections(
         body
-    )
+    ) + verify_pr_agent_attribution_footer(body)
 
 
 def decide(
