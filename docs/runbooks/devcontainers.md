@@ -89,12 +89,12 @@ symlink.
 ## Prebuilt images
 
 Local devcontainers use immutable commit-SHA image tags. The currently
-pinned images were published from `e743213b24d8ba935b146a94245dd2a2bf50f736`:
+pinned images were published from `946730092e69667a86843fc844501391506901bd`:
 
 | Agent | Image |
 |---|---|
-| Claude | `ghcr.io/tvna/claude-md-devcontainer-claude:e743213b24d8ba935b146a94245dd2a2bf50f736` |
-| Codex | `ghcr.io/tvna/claude-md-devcontainer-codex:e743213b24d8ba935b146a94245dd2a2bf50f736` |
+| Claude | `ghcr.io/tvna/claude-md-devcontainer-claude:946730092e69667a86843fc844501391506901bd` |
+| Codex | `ghcr.io/tvna/claude-md-devcontainer-codex:946730092e69667a86843fc844501391506901bd` |
 
 The `Publish devcontainer images` workflow builds both images with the
 Dev Containers CLI and pushes them to GHCR on `main` changes to
@@ -117,16 +117,22 @@ Each publish creates two tags per agent:
 - the exact source commit SHA for local VS Code entrypoints, audit, and
   rollback.
 
-If a devcontainer change merges before the publish workflow completes,
-wait for that workflow to finish and then open a follow-up PR that
-updates the pinned SHA tags in `.devcontainer/claude/devcontainer.json`
-and `.devcontainer/codex/devcontainer.json`. Do not point local
-entrypoints at `:main`; it can leave Podman and VS Code using different
-local interpretations of the same mutable tag. The replacement pinned
-SHA must be a successful multi-platform publish; verify it includes both
+If a devcontainer image input changes, the publish workflow builds and
+pushes the new image tag first, then opens a follow-up PR that updates
+the pinned SHA tags in `.devcontainer/claude/devcontainer.json` and
+`.devcontainer/codex/devcontainer.json`. Do not point local entrypoints
+at `:main`; it can leave Podman and VS Code using different local
+interpretations of the same mutable tag. The replacement pinned SHA must
+be a successful multi-platform publish; verify it includes both
 `linux/amd64` and `linux/arm64` before asking Apple Silicon users to
 reopen the container. If publish fails, keep the commit-SHA tag from the
 last green publish as the rollback reference while fixing the workflow.
+
+The publish workflow intentionally watches only image-build inputs such
+as `.devcontainer/images/**`, `.devcontainer/scripts/install-agent-cli.sh`,
+and the Nix/uv lockfiles. Local entrypoint pin updates do not trigger a
+new image publish; that prevents an infinite loop where each automatic
+pin PR creates another image tag and another pin PR.
 
 To inspect the platforms available for a published image tag:
 
