@@ -34,6 +34,16 @@
         ]
       },
       {
+        "matcher": "^mcp__github__(issue_write|add_issue_comment|create_pull_request|update_pull_request|add_reply_to_pull_request_comment|pull_request_review_write|add_comment_to_pending_review)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 scripts/preflight_codex_github_footer.py",
+            "statusMessage": "Checking Codex GitHub footer"
+          }
+        ]
+      },
+      {
         "matcher": "^mcp__github__(create_pull_request|update_pull_request)$",
         "hooks": [
           {

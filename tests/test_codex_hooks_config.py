@@ -78,7 +78,9 @@ def test_codex_pre_tool_use_covers_claude_github_write_hooks() -> None:
             commands.append(command)
 
     assert "^mcp__github__(issue_write|add_issue_comment|create_pull_request|update_pull_request|add_reply_to_pull_request_comment|pull_request_review_write|add_comment_to_pending_review|sub_issue_write)$" in matchers
+    assert "^mcp__github__(issue_write|add_issue_comment|create_pull_request|update_pull_request|add_reply_to_pull_request_comment|pull_request_review_write|add_comment_to_pending_review)$" in matchers
     assert "python3 scripts/preflight_non_ascii.py" in commands
+    assert "python3 scripts/preflight_codex_github_footer.py" in commands
     assert "python3 scripts/pr_body_close_keyword_gate.py" in commands
     assert "python3 scripts/preflight_title_policy.py" in commands
     assert "python3 scripts/preflight_pr_body_required_sections.py" in commands
