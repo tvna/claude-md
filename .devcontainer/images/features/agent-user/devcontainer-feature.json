@@ -1,0 +1,13 @@
+{
+  "id": "agent-user",
+  "version": "1.0.0",
+  "name": "Agent runtime user",
+  "description": "Adds an agent-named UID 0 user for rootless Podman workspace mounts.",
+  "options": {
+    "agentUser": {
+      "type": "string",
+      "default": "codex",
+      "description": "Agent user name to expose in the devcontainer."
+    }
+  }
+}
