@@ -14,7 +14,7 @@ Three rules are mirrored from :mod:`title_policy`:
 * ASCII-only (:func:`title_policy.is_ascii_title`). Server-side rationale:
   prompt-injection defense per #155.
 * Conventional-commit type (:func:`title_policy.follows_naming_convention`,
-  backed by ``_CONVENTIONAL_TYPES``). Server-side rationale: predictable
+  backed by ``.github/title-policy.toml``). Server-side rationale: predictable
   title shape for triage queues, agent summaries, and CI commit logs.
 * No ``(#NNN)`` issue-reference token, PRs only
   (:func:`title_policy.pr_title_has_issue_ref`). Server-side rationale per
