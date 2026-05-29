@@ -31,12 +31,46 @@ Post-create workspace preparation fails fast if the workspace is not
 writable before `uv sync` runs.
 
 They also install the matching agent CLI into `/usr/local/bin` from the
-Nix package outputs:
+Nix package outputs, and link the GitHub CLI to `/usr/local/bin/gh`:
 
 | Agent | CLI verification |
 |---|---|
-| Claude | `claude --version` |
-| Codex | `codex --version` |
+| Claude | `claude --version` and `gh --version` |
+| Codex | `codex --version` and `gh --version` |
+
+Each agent entrypoint mounts container-engine named volumes for login
+state. These volumes are scoped to the local Podman or Docker host, not
+to the repository and not to the macOS filesystem:
+
+| Agent | Persistent paths |
+|---|---|
+| Claude | `/home/claude/.claude`, `/home/claude/.config/gh` |
+| Codex | `/home/codex/.codex`, `/home/codex/.config/gh` |
+
+Rebuilding or recreating the same devcontainer keeps the corresponding
+agent and GitHub CLI login state as long as the same container host keeps
+those volumes. Removing the named volume resets that login state. Do not
+copy these directories into the repository or into host dotfiles; they
+may contain tokens or session material.
+
+To reset the persisted sessions, stop the affected containers first,
+then remove the agent-specific volumes from the container host:
+
+```sh
+podman volume rm claude-md-claude-session claude-md-claude-gh
+podman volume rm claude-md-codex-session claude-md-codex-gh
+```
+
+The runtime setup writes DevContainer-local defaults into the mounted
+agent home. Bash commands and GitHub MCP operations are allowed by
+default inside the devcontainer so agent work can proceed without
+per-command prompts. This scope is intentionally limited to the
+container: the script writes only under the container user's home and
+`/etc/profile.d` inside the image/container, never to host-side
+`.claude`, `.codex`, or shell configuration. The same setup installs a
+short prompt of the form `codex:claude-md(main)$` or
+`claude:claude-md(main)$`, preserving the active agent, directory, and
+git branch without the long VS Code default prefix.
 
 After the container opens, verify the runtime identity and workspace
 write access before starting agent work:
@@ -46,6 +80,7 @@ id -un
 touch .devcontainer-write-check
 rm .devcontainer-write-check
 which claude || which codex
+gh --version
 ```
 
 If VS Code fails before post-create with `unable to find user codex` or
@@ -193,9 +228,10 @@ or reuse the image-pin PR, then revoke the old token.
 
 The publish workflow intentionally watches only image-build inputs such
 as `.devcontainer/images/**`, `.devcontainer/scripts/install-agent-cli.sh`,
-and the Nix/uv lockfiles. Local entrypoint pin updates do not trigger a
-new image publish; that prevents an infinite loop where each automatic
-pin PR creates another image tag and another pin PR.
+`.devcontainer/scripts/configure-agent-runtime.sh`, and the Nix/uv
+lockfiles. Local entrypoint pin updates do not trigger a new image
+publish; that prevents an infinite loop where each automatic pin PR
+creates another image tag and another pin PR.
 
 To inspect the platforms available for a published image tag:
 
@@ -397,6 +433,7 @@ python3 -m json.tool .devcontainer/claude/devcontainer.json
 python3 -m json.tool .devcontainer/codex/devcontainer.json
 python3 -m json.tool claude-md.code-workspace
 bash -n .devcontainer/scripts/apply-egress-allowlist.sh
+bash -n .devcontainer/scripts/configure-agent-runtime.sh
 bash -n .devcontainer/scripts/install-agent-cli.sh
 bash -n .devcontainer/scripts/prepare-agent-workspace.sh
 bash -n .devcontainer/scripts/check-stale-agent-container.sh
