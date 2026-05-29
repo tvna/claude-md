@@ -128,6 +128,55 @@ def test_codex_pre_tool_use_covers_claude_github_write_hooks() -> None:
     assert "python3 scripts/preflight_branch_base.py verify" in commands
 
 
+def test_codex_pre_tool_use_covers_codex_github_connector_tools() -> None:
+    """Codex GitHub connector PR/issue writes are gated before submission.
+
+    Refs #740. The connector exposes create/update PR and create issue as
+    ``mcp__codex_apps__github._<verb>`` rather than ``mcp__github__<verb>``;
+    without a matcher for that shape the title/body preflights only fire
+    after the PR/issue already reached GitHub. This test fails if the
+    connector create/update PR tool names are dropped from the matcher
+    surface.
+    """
+    data = _load_hooks()
+    hooks = data["hooks"]
+    assert isinstance(hooks, dict)
+    pre_tool_use = hooks["PreToolUse"]
+    assert isinstance(pre_tool_use, list)
+
+    matcher_to_commands: dict[str, list[str]] = {}
+    for group in pre_tool_use:
+        assert isinstance(group, dict)
+        matcher = group["matcher"]
+        handlers = group["hooks"]
+        assert isinstance(matcher, str)
+        assert isinstance(handlers, list)
+        commands = matcher_to_commands.setdefault(matcher, [])
+        for handler in handlers:
+            command = handler["command"]
+            assert isinstance(command, str)
+            commands.append(command)
+
+    title_body_matcher = (
+        "^mcp__codex_apps__github\\._(create_issue|create_pull_request|update_pull_request)$"
+    )
+    pr_matcher = "^mcp__codex_apps__github\\._(create_pull_request|update_pull_request)$"
+
+    assert title_body_matcher in matcher_to_commands
+    assert pr_matcher in matcher_to_commands
+
+    # Title + non-ASCII + footer guard the connector title/body surface.
+    assert "python3 scripts/preflight_title_policy.py" in matcher_to_commands[title_body_matcher]
+    assert "python3 scripts/preflight_non_ascii.py" in matcher_to_commands[title_body_matcher]
+    assert "python3 scripts/preflight_codex_github_footer.py" in matcher_to_commands[title_body_matcher]
+
+    # PR body shape/section/link gates guard connector PR writes.
+    assert "python3 scripts/preflight_pr_body_required_sections.py" in matcher_to_commands[pr_matcher]
+    assert "python3 scripts/preflight_pr_template_shape.py" in matcher_to_commands[pr_matcher]
+    assert "python3 scripts/pr_body_close_keyword_gate.py" in matcher_to_commands[pr_matcher]
+    assert "python3 scripts/preflight_branch_base.py verify" in matcher_to_commands[pr_matcher]
+
+
 def test_codex_pr_write_hooks_match_claude_base_freshness_gate() -> None:
     data = _load_hooks()
     hooks = data["hooks"]

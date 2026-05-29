@@ -46,6 +46,7 @@ import re
 import sys
 from typing import Any
 
+from _github_tool_names import canonical_github_tool
 from title_policy import (
     allowed_types_csv,
     describe_non_ascii,
@@ -115,10 +116,15 @@ def kind_for_tool(tool_name: str) -> str | None:
 
     ``"issue"`` for ``mcp__github__issue_write`` and ``"pull_request"``
     for the two PR-write tools. ``None`` for any off-target tool.
+
+    Codex GitHub connector tool names are folded onto their Claude
+    equivalents first (Refs #740) so a connector-shaped PR/issue write is
+    classified the same as the native call.
     """
-    if tool_name == "mcp__github__issue_write":
+    canonical = canonical_github_tool(tool_name)
+    if canonical == "mcp__github__issue_write":
         return "issue"
-    if tool_name in _PR_TOOLS:
+    if canonical in _PR_TOOLS:
         return "pull_request"
     return None
 
