@@ -86,6 +86,7 @@ EOF
         in
         {
           inherit claude-cli codex-cli;
+          gh-cli = pkgs.gh;
         };
       mkShells = system:
         let
