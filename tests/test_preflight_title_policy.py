@@ -418,6 +418,29 @@ class TestDecidePullRequest:
         reason = out["hookSpecificOutput"]["permissionDecisionReason"]
         assert "U+200D" in reason
 
+    def test_performance_type_mismatch_denies(self) -> None:
+        out = preflight.decide(
+            "mcp__github__create_pull_request",
+            {
+                "title": "fix(devcontainer): cache image builds",
+                "body": "## Facts\n\n- Fact: caches image builds to reduce runtime.",
+            },
+        )
+        assert out is not None
+        reason = out["hookSpecificOutput"]["permissionDecisionReason"]
+        assert "does not fit" in reason
+        assert "perf(devcontainer)" in reason
+
+    def test_devcontainer_perf_title_allows(self) -> None:
+        out = preflight.decide(
+            "mcp__github__create_pull_request",
+            {
+                "title": "perf(devcontainer): cache image builds",
+                "body": "## Facts\n\n- Fact: caches image builds to reduce runtime.",
+            },
+        )
+        assert out is None
+
 
 # ---------------------------------------------------------------------------
 # decide -- rule precedence & skip paths

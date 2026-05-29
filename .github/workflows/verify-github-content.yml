@@ -29,7 +29,10 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Validate title policy
-        run: python3 scripts/title_policy.py verify --kind "$KIND"
+        run: |
+          body_file="$(mktemp)"
+          printf '%s' "$ISSUE_BODY" > "$body_file"
+          python3 scripts/title_policy.py verify --kind "$KIND" --body-file "$body_file"
 
       - name: Validate body section structure
         run: |

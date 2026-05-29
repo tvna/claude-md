@@ -57,6 +57,7 @@ markers = [
     "shard_ci_ops_auto_retro_decision_tree: auto-retro generated decision-tree tests.",
     "shard_ci_ops_auto_retro_signals: auto-retro repair-signal and prior-skip branch tests.",
     "shard_ci_ops_auto_retro_skips: auto-retro early-skip branch tests.",
+    "shard_ci_ops_auto_retro_rescan: auto-retro deferred Post-merge re-scan tests (#421).",
     "shard_default: tests not assigned to a domain bucket yet (catch-all, must shrink).",
 ]
 

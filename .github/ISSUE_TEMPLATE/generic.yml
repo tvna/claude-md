@@ -8,6 +8,10 @@ body:
         Use this form only when none of the dedicated forms (feat / fix / refactor /
         docs / tracking / chore) fits. Valid title types here are
         `build`, `ci`, `perf`, `test`, `revert`, `style` (see `scripts/title_policy.py`).
+        Use `perf(devcontainer): ...` for DevContainer cache, latency, startup,
+        throughput, memory, or resource improvements; use `ci(devcontainer): ...`
+        for workflow-only DevContainer automation and `build(devcontainer): ...`
+        for image build/publish mechanics.
         Titles must be ASCII-only and match `type(scope): summary` (scope optional).
         No `type:*` label is pre-applied -- a maintainer applies it during triage.
         See CLAUDE.md sections 1 and 2.
