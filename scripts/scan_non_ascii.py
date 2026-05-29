@@ -26,7 +26,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from _trusted_bots import _TRUSTED_BOT_LOGINS
+from _trusted_bots import _NON_ASCII_SKIP_LOGINS, _TRUSTED_BOT_LOGINS
 
 # Trust classification per author_association.
 _TRUSTED_ASSOC = frozenset({"OWNER", "MEMBER", "COLLABORATOR"})
@@ -42,13 +42,6 @@ _ESCAPED_MAX_LEN = 4000
 
 _NON_ASCII_RE = re.compile(r"[^\x00-\x7F]")
 
-# Non-ASCII scanner-specific extension: Codecov posts generated PR comments
-# (not PRs) whose UI footer may contain emoji. GitHub has delivered those
-# comments as both "codecov" and "codecov[bot]" (#504, #620). Keep this
-# separate from the shared author allowlist so issue-link and body-policy
-# gates do not change.
-_CODECOV_BOT_LOGINS = frozenset({"codecov", "codecov[bot]"})
-_NON_ASCII_TRUSTED_BOT_LOGINS = _TRUSTED_BOT_LOGINS | _CODECOV_BOT_LOGINS
 
 
 # ---------------------------------------------------------------------------
@@ -154,10 +147,15 @@ def classify_action(
     - trusted -> advisory
     - external -> block (ack ignored)
 
-    Exception (issue #137): when *login* is in :data:`_TRUSTED_BOT_LOGINS`,
+    Exception 1 (issue #137): when *login* is in :data:`_TRUSTED_BOT_LOGINS`,
     a would-be ``block`` is demoted to ``advisory``. The scan still runs
     and the advisory comment is still posted; only the destructive action
     is suppressed.
+
+    Exception 2 (issues #480, #504, #620): when *login* is in
+    :data:`_NON_ASCII_SKIP_LOGINS` (e.g. ``codecov``, ``devin-ai-integration[bot]``),
+    the scan returns ``none`` immediately -- no label, no comment.
+    These bots post generated content whose non-ASCII is not a security concern.
     """
     if not has_non_ascii:
         return "none"
@@ -166,7 +164,9 @@ def classify_action(
         return "skip"
     if trust == "trusted":
         return "advisory"
-    if login is not None and login in _NON_ASCII_TRUSTED_BOT_LOGINS:
+    if login is not None and login in _NON_ASCII_SKIP_LOGINS:
+        return "none"
+    if login is not None and login in _TRUSTED_BOT_LOGINS:
         return "advisory"
     return "block"
 
