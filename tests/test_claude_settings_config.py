@@ -11,6 +11,7 @@ pytestmark = pytest.mark.shard_preflight
 
 ROOT = Path(__file__).resolve().parents[1]
 CLAUDE_SETTINGS = ROOT / ".claude" / "settings.json"
+CORE_HOOK_EVENTS = {"SessionStart", "PreToolUse", "PostToolUse"}
 
 
 def _load_settings() -> dict[str, object]:
@@ -35,7 +36,9 @@ def test_claude_settings_json_is_valid() -> None:
     data = _load_settings()
     hooks = data.get("hooks")
     assert isinstance(hooks, dict)
-    assert set(hooks) == {"SessionStart", "PreToolUse", "PostToolUse"}
+    assert set(hooks) >= CORE_HOOK_EVENTS
+    unexpected = set(hooks) - CORE_HOOK_EVENTS - {"sessionStart"}
+    assert not unexpected
 
 
 def test_claude_post_tool_use_starts_ci_monitor_after_mcp_pr_create() -> None:
@@ -65,6 +68,9 @@ def test_all_claude_hook_commands_point_to_repo_files() -> None:
         assert isinstance(groups, list)
         for group in groups:
             assert isinstance(group, dict)
+            if group.get("_apm_source") == "superpowers" and "command" in group:
+                commands.append(group["command"])
+                continue
             handlers = group["hooks"]
             assert isinstance(handlers, list)
             for handler in handlers:
@@ -74,5 +80,32 @@ def test_all_claude_hook_commands_point_to_repo_files() -> None:
                 commands.append(command)
 
     for command in commands:
+        if "CLAUDE_PLUGIN_ROOT" in command or command == "./hooks/run-hook.cmd session-start":
+            continue
         path = command.split()[-1].removeprefix("$CLAUDE_PROJECT_DIR/")
         assert (ROOT / path).exists()
+
+
+def test_claude_superpowers_hooks_are_apm_managed() -> None:
+    data = _load_settings()
+    hooks = data["hooks"]
+    assert isinstance(hooks, dict)
+
+    session_start = hooks["SessionStart"]
+    assert isinstance(session_start, list)
+    assert any(
+        isinstance(group, dict)
+        and group.get("_apm_source") == "superpowers"
+        and isinstance(group.get("matcher"), str)
+        and "startup" in group["matcher"]
+        for group in session_start
+    )
+
+    legacy_session_start = hooks.get("sessionStart")
+    assert isinstance(legacy_session_start, list)
+    assert legacy_session_start == [
+        {
+            "command": "./hooks/run-hook.cmd session-start",
+            "_apm_source": "superpowers",
+        }
+    ]
