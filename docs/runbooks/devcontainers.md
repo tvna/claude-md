@@ -159,6 +159,38 @@ fails before creating a new branch if that secret is missing, and it
 retries PR creation when a previous run already pushed the image-pin
 branch.
 
+One-time setup for `DEVCONTAINER_PIN_PR_TOKEN`:
+
+1. Open GitHub user settings, then **Developer settings**.
+2. Open **Personal access tokens** -> **Fine-grained tokens**.
+3. Select **Generate new token**.
+4. Set the token name to `DEVCONTAINER_PIN_PR_TOKEN`.
+5. Set an expiration date of 90 days or less, then record the rotation
+   date in the operator calendar.
+6. Under **Resource owner**, select `tvna`.
+7. Under **Repository access**, select **Only select repositories** and
+   choose `tvna/claude-md`.
+8. Under **Repository permissions**, set:
+   - **Contents**: Read and write.
+   - **Pull requests**: Read and write.
+   - **Metadata**: Read-only.
+9. Generate the token and copy it once. Do not paste it into an issue,
+   PR, commit, terminal transcript, or runbook.
+10. Open `tvna/claude-md` -> **Settings** -> **Environments**.
+11. Create or open the `devcontainer-image-pins` Environment.
+12. Leave required reviewers disabled unless a manual approval gate is
+    intentionally desired for every image publish.
+13. Add an Environment secret named `DEVCONTAINER_PIN_PR_TOKEN` with the
+    copied token value.
+14. Trigger `Publish devcontainer images` with `workflow_dispatch`, or
+    wait for the next `main` publish, and confirm the
+    `Update local devcontainer image pins` job opens or reuses the
+    generated image-pin PR.
+
+Rotation uses the same secret name: generate the replacement token
+first, update the Environment secret, confirm the next publish can open
+or reuse the image-pin PR, then revoke the old token.
+
 The publish workflow intentionally watches only image-build inputs such
 as `.devcontainer/images/**`, `.devcontainer/scripts/install-agent-cli.sh`,
 and the Nix/uv lockfiles. Local entrypoint pin updates do not trigger a

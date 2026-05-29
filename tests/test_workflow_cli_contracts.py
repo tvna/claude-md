@@ -48,6 +48,7 @@ import scan_maintainability_metrics
 import scan_non_ascii
 import scan_preflight_drift
 import scan_retro_followup_drift
+import scan_secret_runbooks
 import scan_workflow_action_pins
 import scan_workflow_pip
 import security_drift_report
@@ -122,6 +123,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("scan_non_ascii.py", "run"): "test_scan_non_ascii_run_matches_workflow_env",
     ("scan_preflight_drift.py", "verify"): "test_scan_preflight_drift_verify_matches_workflow_args",
     ("scan_retro_followup_drift.py", "run"): "test_scan_retro_followup_drift_run_matches_workflow_env",
+    ("scan_secret_runbooks.py", "verify"): "test_scan_secret_runbooks_verify_matches_workflow_args",
     ("scan_workflow_action_pins.py", "verify"): "test_scan_workflow_action_pins_verify_matches_workflow_args",
     ("scan_workflow_pip.py", "verify"): "test_scan_workflow_pip_verify_matches_workflow_args",
     ("security_drift_report.py", "aggregate"): "test_security_drift_report_aggregate_and_post_comment_match_workflow_args",
@@ -649,7 +651,7 @@ def test_verify_apm_checksums_matches_workflow_args(tmp_path: Path) -> None:
 def test_verify_readme_translation_matches_workflow_args(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """Mirror the env+argv shape used by verify-github-content.yml.
+    """Mirror the env+argv shape used by portable-pr-policy.yml.
 
     The workflow shells to
     ``python3 scripts/verify_readme_translation.py verify
@@ -746,6 +748,11 @@ def test_scan_workflow_action_pins_verify_matches_workflow_args() -> None:
     """Mirrors the ``Assert workflows pin actions to SHA + tag comment``
     step in ``.github/workflows/verify-agents.yml``."""
     assert scan_workflow_action_pins.main(["verify", "--repo-root", "."]) == 0
+
+
+def test_scan_secret_runbooks_verify_matches_workflow_args() -> None:
+    """Mirrors the ``Assert workflow secrets have concrete runbooks`` step."""
+    assert scan_secret_runbooks.main(["verify"]) == 0
 
 
 def test_scan_maintainability_metrics_verify_matches_workflow_args() -> None:
@@ -969,7 +976,7 @@ def test_analyze_ci_timings_matches_workflow_args(
 
     The workflow shells to
     ``uv run python scripts/analyze_ci_timings.py --jobs jobs/
-    --workflow "Verify agent instructions" --title "..."``. Exercise the
+    --workflow "Verify repository scripts" --title "..."``. Exercise the
     same shape against a minimal jobs/ fixture so the contract pins the
     flag-only invocation (no subcommand). Refs #552.
     """
@@ -981,7 +988,7 @@ def test_analyze_ci_timings_matches_workflow_args(
                 "jobs": [
                     {
                         "name": "lint-scripts-static",
-                        "workflow_name": "Verify agent instructions",
+                        "workflow_name": "Verify repository scripts",
                         "started_at": "2026-05-27T12:00:00Z",
                         "completed_at": "2026-05-27T12:01:00Z",
                         "steps": [
@@ -1003,7 +1010,7 @@ def test_analyze_ci_timings_matches_workflow_args(
             "--jobs",
             str(jobs_dir),
             "--workflow",
-            "Verify agent instructions",
+            "Verify repository scripts",
             "--title",
             "verify-agents.yml timings (weekly)",
         ]
@@ -1057,7 +1064,7 @@ def test_verify_shard_coverage_matches_workflow_args(tmp_path: Path) -> None:
 def test_preflight_pr_single_commit_matches_workflow_env(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Mirror the env shape used by .github/workflows/verify-github-content.yml.
+    """Mirror the env shape used by .github/workflows/portable-pr-policy.yml.
 
     The workflow shells to ``python3 scripts/preflight_pr_single_commit.py``
     with only BASE_REF in the env (no argv). Exercise the same shape:

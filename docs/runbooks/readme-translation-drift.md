@@ -1,6 +1,6 @@
 # README translation drift gate
 
-> Issue #476 (`feat(harness): add README translation-drift gate ...`). Companion to `scripts/verify_readme_translation.py` and the `Validate README translation parity` step in `.github/workflows/verify-github-content.yml`.
+> Issue #476 (`feat(harness): add README translation-drift gate ...`). Companion to `scripts/verify_readme_translation.py` and the `Validate README translation parity` step in `.github/workflows/portable-pr-policy.yml`.
 
 This runbook documents the deterministic gate that prevents `README.md`
 from drifting away from `README.ja.md` and `README.zh.md` PR-by-PR, and
@@ -22,7 +22,7 @@ translation parity must not depend on operator memory.
 | `docs/runbooks/readme-translation-drift.md` *(this file)* | - | Runbook describing the gate and the opt-out procedure |
 | `scripts/verify_readme_translation.py` | CI | Deterministic gate that compares `git diff --name-only base..HEAD` against the README allowlist |
 | `tests/test_verify_readme_translation.py` | local + CI | Unit tests for the pure functions and the CLI exit codes |
-| `.github/workflows/verify-github-content.yml` | GitHub Actions | Hosts the `Validate README translation parity` step inside the `gate` job |
+| `.github/workflows/portable-pr-policy.yml` | GitHub Actions | Hosts the `Validate README translation parity` step inside the `gate` job |
 | `README.md` / `README.ja.md` / `README.zh.md` | repo root | The three files whose modification sets the gate guards |
 
 ## Gate behavior
@@ -49,8 +49,8 @@ review.
 ### Where it runs
 
 The step lives inside the `gate` job of
-`.github/workflows/verify-github-content.yml`. The job's existing
-required-status-check context `Verify GitHub content / gate` (pinned in
+`.github/workflows/portable-pr-policy.yml`. The job's existing
+required-status-check context `Portable PR policy / gate` (pinned in
 `.github/rulesets/main.json`) covers this step too -- no ruleset
 change was needed when the gate landed.
 
@@ -71,7 +71,7 @@ See docs/runbooks/readme-translation-drift.md and Issue #476.
 ```
 
 Per CLAUDE.md section 4 the gate fails loud (exit 1) so the
-`Verify GitHub content / gate` required check goes red and the PR
+`Portable PR policy / gate` required check goes red and the PR
 cannot merge.
 
 ## Opt-out marker

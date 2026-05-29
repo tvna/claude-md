@@ -112,6 +112,10 @@ STEPS: tuple[Step, ...] = (
         argv=("python3", "scripts/scan_workflow_action_pins.py", "verify"),
     ),
     Step(
+        name="scan_secret_runbooks",
+        argv=("python3", "scripts/scan_secret_runbooks.py", "verify"),
+    ),
+    Step(
         name="scan_maintainability_metrics",
         argv=("python3", "scripts/scan_maintainability_metrics.py", "verify"),
     ),
@@ -179,7 +183,7 @@ STEPS: tuple[Step, ...] = (
         # Refs #476. PR body is optional locally (PR_BODY env unset means
         # the opt-out marker is absent, which is the stricter default --
         # contributors who run preflight see drift before push). The
-        # base-ref shape mirrors CI's verify-github-content.yml step.
+        # base-ref shape mirrors CI's portable-pr-policy.yml step.
         name="verify_readme_translation",
         argv=(
             "python3",

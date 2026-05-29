@@ -50,7 +50,8 @@ Run with `dry_run=true` first for every phase to inspect the planned POST/PUT an
 
 ## Required secret: `RULESETS_PAT`
 
-The workflow uses a fine-grained PAT stored as repo secret `RULESETS_PAT`.
+The workflow uses a fine-grained PAT stored as the `RULESETS_PAT`
+Environment secret for the `ruleset-apply` GitHub Environment.
 
 | Property | Value |
 |---|---|
@@ -60,7 +61,43 @@ The workflow uses a fine-grained PAT stored as repo secret `RULESETS_PAT`.
 | Repository permissions | **`Administration: Read and write`** (covers both `/repos/{owner}/{repo}/rulesets` and `PATCH /repos/{owner}/{repo}` for `delete_branch_on_merge`) |
 | Expiry | Set to ≤90 days; renew via the same secret name before expiry |
 
-**Rotation**: Record the PAT expiry in your calendar. When rotating, generate a new PAT first, update the `RULESETS_PAT` secret, then revoke the old token. Rotation does not require code changes; the workflow reads `${{ secrets.RULESETS_PAT }}` at dispatch time.
+One-time setup for `RULESETS_PAT`:
+
+1. Open GitHub user settings, then **Developer settings**.
+2. Open **Personal access tokens** -> **Fine-grained tokens**.
+3. Select **Generate new token**.
+4. Set the token name to `RULESETS_PAT`.
+5. Set an expiration date of 90 days or less, then record the rotation
+   date in the operator calendar.
+6. Under **Resource owner**, select `tvna`.
+7. Under **Repository access**, select **Only select repositories** and
+   choose `tvna/claude-md`.
+8. Under **Repository permissions**, set:
+   - **Administration**: Read and write.
+   - **Metadata**: Read-only.
+9. Generate the token and copy it once. Do not paste it into an issue,
+   PR, commit, terminal transcript, or runbook.
+10. Open `tvna/claude-md` -> **Settings** -> **Environments**.
+11. Create or open the `ruleset-apply` Environment.
+12. Keep required reviewers enabled for live apply review.
+13. Add an Environment secret named `RULESETS_PAT` with the copied token
+    value.
+14. Dispatch `apply-rulesets.yml` on `main` with `dry_run=true` and
+    confirm the guard step passes and the job emits a plan without
+    mutating live rulesets.
+
+The weekly drift jobs currently also read `RULESETS_PAT` without an
+Environment boundary, as recorded in
+[`workflow-permissions-audit.md`](workflow-permissions-audit.md). Until
+that residual exposure is closed, any repo-level `RULESETS_PAT` must use
+the same fine-grained token properties above.
+
+**Rotation**: Record the PAT expiry in your calendar. When rotating,
+generate a new PAT first, update the `RULESETS_PAT` secret in every
+documented storage location that still consumes it, confirm a
+`dry_run=true` dispatch passes the guard step, then revoke the old token.
+Rotation does not require code changes; the workflow reads
+`${{ secrets.RULESETS_PAT }}` at dispatch time.
 
 ## Dispatch authorization criteria
 
@@ -163,7 +200,7 @@ Smoke tests for the live behaviour (from [#18 §Verification](https://github.com
 1. From a clean clone with a non-bypass account, `git push origin main` is rejected.
 2. `git push --force origin <any-branch>` is rejected.
 3. A PR whose squash commit subject lacks `#\d+` is blocked at merge (after Phase 3-B).
-4. A PR where `Verify agent instructions / gate` is failing is blocked at merge (after Phase 3-A).
+4. A PR where `Verify repository scripts / gate` is failing is blocked at merge (after Phase 3-A).
 5. A PR whose title contains Japanese, emoji, zero-width, RTL, fullwidth, or any other non-ASCII code point is blocked by `Verify title policy / gate` (after [#155](https://github.com/tvna/claude-md/issues/155)).
 6. The PR merge UI exposes only the "Squash and merge" button.
 
@@ -242,7 +279,12 @@ One-time setup for the `ruleset-verify` Environment (per [#120](https://github.c
 1. **Settings → Environments → New environment**, name it `ruleset-verify`.
 2. Leave "Required reviewers" unchecked. The gate runs unattended; an approval gate would block every PR on manual review.
 3. Leave "Deployment branches and tags" set to "All branches" so the gate runs for any PR branch.
-4. Add an environment secret named `RULESETS_PAT` with the same fine-grained PAT used by `ruleset-apply` (read access to Administration is sufficient for this gate; reusing the existing token avoids a second rotation cadence).
+4. Add an environment secret named `RULESETS_PAT` with the same
+   fine-grained PAT used by `ruleset-apply`. Read access to
+   Administration is sufficient for this gate, but reusing the
+   `ruleset-apply` token avoids a second rotation cadence. If a separate
+   token is issued instead, follow the same fine-grained PAT issuance
+   steps above and set **Administration** to Read-only.
 
 Resolution when the gate is red:
 

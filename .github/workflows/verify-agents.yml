@@ -1,4 +1,4 @@
-name: Verify agent instructions
+name: Verify repository scripts
 
 on:
   pull_request:
@@ -7,14 +7,6 @@ permissions:
   contents: read
 
 jobs:
-  verify:
-    uses: ./.github/workflows/generate-agents.yml
-    with:
-      mode: verify
-    permissions:
-      contents: write
-      pull-requests: write
-
   lint-scripts-static:
     runs-on: ubuntu-latest
     steps:
@@ -63,11 +55,11 @@ jobs:
       - name: Assert workflows pin actions to SHA + tag comment
         run: uv run python scripts/scan_workflow_action_pins.py verify
 
+      - name: Assert workflow secrets have concrete runbooks
+        run: uv run python scripts/scan_secret_runbooks.py verify
+
       - name: Assert script maintainability metrics
         run: uv run python scripts/scan_maintainability_metrics.py verify
-
-      - name: Verify .apm checksum lockfile
-        run: uv run python scripts/verify_apm_checksums.py verify
 
       - name: Verify preflight set matches CI script invocations
         # Refs #493: fails when a pull_request: workflow gains a
@@ -254,55 +246,20 @@ jobs:
           fail_ci_if_error: false
           use_oidc: true
 
-  prek:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-
-      - name: Read uv pin from pyproject.toml
-        id: uvpin
-        run: |
-          set -euo pipefail
-          PIN="$(python3 scripts/uv_pin.py read)"
-          echo "version=${PIN}" >> "$GITHUB_OUTPUT"
-
-      - name: Install uv
-        env:
-          UV_VERSION: ${{ steps.uvpin.outputs.version }}
-        run: |
-          curl -LsSf "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/uv-x86_64-unknown-linux-gnu.tar.gz" -o /tmp/uv.tar.gz
-          tar -xzf /tmp/uv.tar.gz -C /tmp
-          mkdir -p "$HOME/.local/bin"
-          install -m 0755 /tmp/uv-x86_64-unknown-linux-gnu/uv "$HOME/.local/bin/uv"
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-          uv --version
-
-      - name: Install Python
-        run: uv python install
-
-      - name: Sync locked project environment
-        run: uv sync --locked
-
-      - name: Run prek (j178/prek) against all files
-        run: uv tool run prek run --all-files --show-diff-on-failure
-
   gate:
-    name: "Verify agent instructions / gate"
+    name: "Verify repository scripts / gate"
     # Refs #545: depends on `lint-scripts-pytest-gate` (the marker-matrix
     # completeness gate) rather than the matrix job directly so the
     # aggregate result reflects both "every shard passed" and "the union
     # of executed tests covered the collected universe".
-    needs: [verify, lint-scripts-static, lint-scripts-pytest-gate, prek]
+    needs: [lint-scripts-static, lint-scripts-pytest-gate]
     if: always()
     runs-on: ubuntu-latest
     steps:
       - name: Aggregate verification result
         env:
-          VERIFY_RESULT: ${{ needs.verify.result }}
           LINT_STATIC_RESULT: ${{ needs.lint-scripts-static.result }}
           LINT_PYTEST_RESULT: ${{ needs.lint-scripts-pytest-gate.result }}
-          PREK_RESULT: ${{ needs.prek.result }}
         run: |
           if [ "$LINT_STATIC_RESULT" != 'success' ]; then
             echo "::error::script lint static gate result=${LINT_STATIC_RESULT} (expected 'success')."
@@ -312,12 +269,20 @@ jobs:
             echo "::error::script lint pytest gate result=${LINT_PYTEST_RESULT} (expected 'success')."
             exit 1
           fi
-          if [ "$PREK_RESULT" != 'success' ]; then
-            echo "::error::prek gate result=${PREK_RESULT} (expected 'success')."
+          echo "Script lint static + pytest gates passed."
+
+  legacy-agent-instructions-context:
+    name: "Verify agent instructions / gate"
+    needs: gate
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Mirror repository scripts result for live ruleset migration
+        env:
+          GATE_RESULT: ${{ needs.gate.result }}
+        run: |
+          if [ "$GATE_RESULT" != 'success' ]; then
+            echo "::error::Verify repository scripts / gate result=${GATE_RESULT} (expected 'success')."
             exit 1
           fi
-          if [ "$VERIFY_RESULT" != 'success' ]; then
-            echo "::error::APM drift verification result=${VERIFY_RESULT} (expected 'success')."
-            exit 1
-          fi
-          echo "APM drift verification passed. script lint static + pytest gates passed. prek gate passed."
+          echo "Verify repository scripts / gate passed."
