@@ -324,6 +324,10 @@ devcontainer post-create step links those Nix-built binaries into
 `/usr/local/bin` so they are available in ordinary VS Code terminals as
 well as inside `nix develop`.
 
+Codex also gets `bubblewrap` from nixpkgs. Its sandbox checks for `bwrap`
+on `PATH`, so the Codex post-create runtime setup links the Nix-built
+binary into `/usr/local/bin/bwrap` before interactive Codex use.
+
 uv is pinned the same way, but its version is read from
 `pyproject.toml` `[tool.uv].required-version` instead of being repeated
 in `flake.nix`. This keeps the devcontainer `nix develop` shell aligned

@@ -67,6 +67,15 @@ def test_flake_exposes_gh_cli_package_for_runtime_symlink() -> None:
     assert "gh-cli = pkgs.gh;" in flake
 
 
+def test_codex_runtime_installs_bubblewrap_for_sandbox() -> None:
+    flake = (REPO_ROOT / "flake.nix").read_text(encoding="utf-8")
+    script = (REPO_ROOT / ".devcontainer/scripts/configure-agent-runtime.sh").read_text(encoding="utf-8")
+
+    assert "bubblewrap = pkgs.bubblewrap;" in flake
+    assert "agentPackages.bubblewrap" in flake
+    assert "install_nix_binary bubblewrap bwrap" in script
+
+
 def test_devcontainer_publish_watches_runtime_script() -> None:
     workflow = (REPO_ROOT / ".github/workflows/publish-devcontainer-images.yml").read_text(encoding="utf-8")
 
