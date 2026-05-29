@@ -24,6 +24,17 @@
             "command": "python3 $CLAUDE_PROJECT_DIR/scripts/plan_language_context.py"
           }
         ]
+      },
+      {
+        "matcher": "startup|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd\" session-start",
+            "async": false
+          }
+        ],
+        "_apm_source": "superpowers"
       }
     ],
     "PreToolUse": [
@@ -82,6 +93,12 @@
             "command": "python3 $CLAUDE_PROJECT_DIR/scripts/post_pr_create_ci_monitor.py"
           }
         ]
+      }
+    ],
+    "sessionStart": [
+      {
+        "command": "./hooks/run-hook.cmd session-start",
+        "_apm_source": "superpowers"
       }
     ]
   }
