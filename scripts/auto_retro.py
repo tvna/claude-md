@@ -48,7 +48,7 @@ import textwrap
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
@@ -1539,9 +1539,9 @@ def is_retro_age_exceeded(
     except (ValueError, AttributeError):
         return False
     if created.tzinfo is None:
-        created = created.replace(tzinfo=timezone.utc)
+        created = created.replace(tzinfo=UTC)
     if now.tzinfo is None:
-        now = now.replace(tzinfo=timezone.utc)
+        now = now.replace(tzinfo=UTC)
     delta = now - created
     return delta.days > days
 
@@ -2433,7 +2433,7 @@ def _now_utc_iso() -> str:
     Wrapped so :func:`sentinel_run` can be tested with a monkeypatched
     clock without monkeypatching :mod:`datetime` directly.
     """
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def _build_sentinel_summary(
@@ -2589,8 +2589,8 @@ class PostMergeGateResult:
 def _hours_between(iso_a: str, iso_b: str) -> float:
     """Return the number of hours between two ISO 8601 timestamps."""
     fmt = "%Y-%m-%dT%H:%M:%SZ"
-    a = datetime.strptime(iso_a[:20], fmt).replace(tzinfo=timezone.utc)
-    b = datetime.strptime(iso_b[:20], fmt).replace(tzinfo=timezone.utc)
+    a = datetime.strptime(iso_a[:20], fmt).replace(tzinfo=UTC)
+    b = datetime.strptime(iso_b[:20], fmt).replace(tzinfo=UTC)
     return abs((b - a).total_seconds()) / 3600.0
 
 
@@ -2605,9 +2605,9 @@ def search_recently_merged_prs(
     """
     cutoff = datetime.strptime(
         now_iso[:20], "%Y-%m-%dT%H:%M:%SZ"
-    ).replace(tzinfo=timezone.utc)
+    ).replace(tzinfo=UTC)
     since_ts = cutoff.timestamp() - (hours * 3600)
-    since_dt = datetime.fromtimestamp(since_ts, tz=timezone.utc)
+    since_dt = datetime.fromtimestamp(since_ts, tz=UTC)
     since_str = since_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
     query = (
         f"repo:{repo} type:pr is:merged "

@@ -47,7 +47,10 @@
     "terminal.integrated.env.osx": {
       "PATH": "/opt/podman/bin:${env:PATH}"
     },
-    "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python"
+    "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
+    "ruff.nativeServer": "on",
+    "ruff.importStrategy": "useBundled",
+    "ruff.configuration": "${workspaceFolder}/pyproject.toml"
   },
   "extensions": {
     "recommendations": [

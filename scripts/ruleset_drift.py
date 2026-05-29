@@ -527,7 +527,7 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _utc_today() -> str:
-    return _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%d")
+    return _dt.datetime.now(_dt.UTC).strftime("%Y-%m-%d")
 
 
 def _write(path: Path, content: str) -> None:
