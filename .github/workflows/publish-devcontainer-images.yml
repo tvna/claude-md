@@ -114,7 +114,7 @@ jobs:
 
       - name: Open pin update PR
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.DEVCONTAINER_PIN_PR_TOKEN }}
         run: |
           if git diff --quiet; then
             echo "devcontainer image pins already match ${GITHUB_SHA}"
@@ -122,17 +122,27 @@ jobs:
           fi
 
           branch="codex/devcontainer-image-pins-${GITHUB_SHA}"
-          if git ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
-            echo "pin update branch already exists: $branch"
-            exit 0
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "::error::DEVCONTAINER_PIN_PR_TOKEN is required because the default GitHub Actions token cannot create pull requests in this repository."
+            exit 1
           fi
 
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git checkout -b "$branch"
-          git add .devcontainer/claude/devcontainer.json .devcontainer/codex/devcontainer.json docs/runbooks/devcontainers.md
-          git commit -m "fix(devcontainer): pin published agent images" -m "Refs #683"
-          git push origin "$branch"
+          if git ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
+            existing_pr="$(gh pr list --head "$branch" --state open --json url --jq '.[0].url // ""')"
+            if [ -n "$existing_pr" ]; then
+              echo "pin update PR already exists: $existing_pr"
+              exit 0
+            fi
+            echo "pin update branch already exists without an open PR; retrying PR creation: $branch"
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git checkout -b "$branch"
+            git add .devcontainer/claude/devcontainer.json .devcontainer/codex/devcontainer.json docs/runbooks/devcontainers.md
+            git commit -m "fix(devcontainer): pin published agent images" -m "Refs #683"
+            git push origin "$branch"
+          fi
+
           cat > pr-body.md <<EOF
           ## Summary
 

@@ -127,6 +127,11 @@ be a successful multi-platform publish; verify it includes both
 `linux/amd64` and `linux/arm64` before asking Apple Silicon users to
 reopen the container. If publish fails, keep the commit-SHA tag from the
 last green publish as the rollback reference while fixing the workflow.
+The follow-up PR is created with the `DEVCONTAINER_PIN_PR_TOKEN`
+repository secret because the default GitHub Actions token is not
+permitted to create pull requests in this repository. The workflow fails
+before creating a new branch if that secret is missing, and it retries PR
+creation when a previous run already pushed the image-pin branch.
 
 The publish workflow intentionally watches only image-build inputs such
 as `.devcontainer/images/**`, `.devcontainer/scripts/install-agent-cli.sh`,
