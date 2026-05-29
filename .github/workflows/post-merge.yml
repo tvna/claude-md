@@ -43,6 +43,8 @@ jobs:
   coverage:
     if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && (inputs.task == 'coverage' || inputs.task == 'all'))
     runs-on: ubuntu-latest
+    outputs:
+      coverage_gate_result: ${{ steps.coverage-tests.outcome }}
     permissions:
       contents: read
       id-token: write
@@ -75,6 +77,8 @@ jobs:
         run: uv sync --locked
 
       - name: Run script unit tests with coverage
+        id: coverage-tests
+        continue-on-error: true
         run: uv run python -m pytest --cov --cov-report=term-missing --cov-report=xml --cov-fail-under=92.71 -v --junitxml=junit.xml -o junit_family=legacy
 
       - name: Upload coverage to Codecov
@@ -94,6 +98,34 @@ jobs:
           disable_search: true
           fail_ci_if_error: false
           use_oidc: true
+
+      - name: Fail coverage job when coverage gate failed
+        if: steps.coverage-tests.outcome == 'failure'
+        run: |
+          echo "::error::script coverage gate failed; see the pytest coverage output above."
+          exit 1
+
+  coverage-failure-issue:
+    if: always() && needs.coverage.outputs.coverage_gate_result == 'failure'
+    needs: coverage
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Open or update coverage failure issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+          SERVER_URL: ${{ github.server_url }}
+          WORKFLOW: ${{ github.workflow }}
+          COVERAGE_RESULT: ${{ needs.coverage.result }}
+        run: python3 scripts/coverage_failure_issue.py run
 
   decision-tree:
     if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && (inputs.task == 'decision-tree' || inputs.task == 'all'))

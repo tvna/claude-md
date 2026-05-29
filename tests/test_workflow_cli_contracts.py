@@ -33,6 +33,7 @@ import analyze_ci_timings
 import auto_retro
 import body_policy
 import branch_cleanup
+import coverage_failure_issue
 import dependabot_automerge
 import dependabot_labels
 import issue_link
@@ -106,6 +107,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("body_policy.py", "verify"): "test_body_policy_verify_matches_workflow_body_file",
     ("branch_cleanup.py", "reconcile"): "test_branch_cleanup_reconcile_matches_workflow_args",
     ("branch_cleanup.py", "survey"): "test_branch_cleanup_survey_matches_workflow_args",
+    ("coverage_failure_issue.py", "run"): "test_coverage_failure_issue_run_matches_workflow_env",
     ("dependabot_automerge.py", "audit"): "test_dependabot_automerge_audit_matches_workflow_files",
     ("dependabot_labels.py", "verify"): "test_dependabot_labels_verify_matches_workflow_paths",
     ("issue_link.py", "verify"): "test_issue_link_verify_matches_workflow_body_file_and_author",
@@ -649,6 +651,39 @@ def test_rulesets_apply_plan_and_auto_delete_match_workflow_args(
             str(tmp_path / "rulesets-summary.md"),
         ]
     ) == 0
+
+
+def test_coverage_failure_issue_run_matches_workflow_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[coverage_failure_issue.CoverageFailureContext] = []
+    monkeypatch.setenv("GH_TOKEN", "token")
+    monkeypatch.setenv("REPO", REPO)
+    monkeypatch.setenv("RUN_ID", "123")
+    monkeypatch.setenv("RUN_ATTEMPT", "2")
+    monkeypatch.setenv("SERVER_URL", "https://github.com")
+    monkeypatch.setenv("WORKFLOW", "Post-merge automation")
+    monkeypatch.setenv("COVERAGE_RESULT", "failure")
+
+    def fake_open_or_update(
+        context: coverage_failure_issue.CoverageFailureContext,
+        *,
+        runner=coverage_failure_issue.subprocess.run,
+    ) -> str:
+        calls.append(context)
+        return "created"
+
+    monkeypatch.setattr(coverage_failure_issue, "open_or_update_issue", fake_open_or_update)
+
+    assert coverage_failure_issue.main(["run"]) == 0
+    assert calls[0] == coverage_failure_issue.CoverageFailureContext(
+        repo=REPO,
+        run_url="https://github.com/owner/repo/actions/runs/123/attempts/2",
+        workflow="Post-merge automation",
+        coverage_result="failure",
+        run_id="123",
+        run_attempt="2",
+    )
 
 
 def test_scan_apm_portability_verify_matches_workflow_paths(tmp_path: Path) -> None:
