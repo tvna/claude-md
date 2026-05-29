@@ -118,6 +118,52 @@ def test_claude_superpowers_hooks_are_apm_managed() -> None:
     ]
 
 
+def test_claude_pre_tool_use_covers_codex_github_connector_tools() -> None:
+    """Codex GitHub connector PR/issue writes are gated in the Claude config too.
+
+    Refs #740. The fix is applied to both agent configs (defense in depth):
+    regardless of which harness surfaces a
+    ``mcp__codex_apps__github._<verb>`` tool name, the title/body preflights
+    must fire before the write reaches GitHub. This test fails if the
+    connector create/update PR tool names are dropped from the matcher
+    surface. The Codex-only footer hook is intentionally absent here, matching
+    the existing Claude config which never binds it.
+    """
+    data = _load_settings()
+    pre_tool_use = _hook_groups(data, "PreToolUse")
+
+    matcher_to_commands: dict[str, list[str]] = {}
+    for group in pre_tool_use:
+        matcher = group.get("matcher")
+        handlers = group.get("hooks")
+        if not isinstance(matcher, str) or not isinstance(handlers, list):
+            continue
+        commands = matcher_to_commands.setdefault(matcher, [])
+        for handler in handlers:
+            assert isinstance(handler, dict)
+            command = handler["command"]
+            assert isinstance(command, str)
+            commands.append(command)
+
+    title_body_matcher = (
+        "mcp__codex_apps__github\\._(create_issue|create_pull_request|update_pull_request)"
+    )
+    pr_matcher = "mcp__codex_apps__github\\._(create_pull_request|update_pull_request)"
+
+    assert title_body_matcher in matcher_to_commands
+    assert pr_matcher in matcher_to_commands
+
+    title_body_cmds = matcher_to_commands[title_body_matcher]
+    assert "python3 $CLAUDE_PROJECT_DIR/scripts/preflight_title_policy.py" in title_body_cmds
+    assert "python3 $CLAUDE_PROJECT_DIR/scripts/preflight_non_ascii.py" in title_body_cmds
+
+    pr_cmds = matcher_to_commands[pr_matcher]
+    assert "python3 $CLAUDE_PROJECT_DIR/scripts/preflight_pr_body_required_sections.py" in pr_cmds
+    assert "python3 $CLAUDE_PROJECT_DIR/scripts/preflight_pr_template_shape.py" in pr_cmds
+    assert "python3 $CLAUDE_PROJECT_DIR/scripts/pr_body_close_keyword_gate.py" in pr_cmds
+    assert "python3 $CLAUDE_PROJECT_DIR/scripts/preflight_branch_base.py verify" in pr_cmds
+
+
 def test_claude_pr_write_hooks_include_base_freshness_gate() -> None:
     data = _load_settings()
     pre_tool_use = _hook_groups(data, "PreToolUse")

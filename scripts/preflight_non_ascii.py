@@ -24,6 +24,7 @@ import json
 import sys
 from typing import Any
 
+from _github_tool_names import canonical_github_tool
 from scan_non_ascii import (
     ACK_MARKER,
     detect_non_ascii,
@@ -113,7 +114,7 @@ def decide(tool_name: str, tool_input: dict[str, Any]) -> dict[str, Any] | None:
       3. No non-ASCII detected -> allow.
       4. Otherwise -> deny dict.
     """
-    if tool_name not in _TARGET_TOOLS:
+    if canonical_github_tool(tool_name) not in _TARGET_TOOLS:
         return None
     title, body = extract_text_fields(tool_input)
     if has_ack_marker(body):

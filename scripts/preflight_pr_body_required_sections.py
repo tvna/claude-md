@@ -57,6 +57,7 @@ import json
 import sys
 from typing import Any
 
+from _github_tool_names import canonical_github_tool
 from body_policy import (
     extract_headings,
     missing_sections,
@@ -124,7 +125,7 @@ def decide(
       3. All required sections present -> allow.
       4. One or more missing -> deny, listing every missing name.
     """
-    if tool_name not in _TARGET_TOOLS:
+    if canonical_github_tool(tool_name) not in _TARGET_TOOLS:
         return None
     body = tool_input.get("body")
     if not isinstance(body, str):

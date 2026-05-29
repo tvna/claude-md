@@ -14,6 +14,7 @@ import os
 import sys
 from typing import Any
 
+from _github_tool_names import canonical_github_tool
 from body_policy import build_codex_attribution_footer, verify_codex_attribution_footer
 
 _TARGET_TOOLS: frozenset[str] = frozenset(
@@ -111,7 +112,7 @@ def decide(
     environ: dict[str, str] | None = None,
 ) -> dict[str, Any] | None:
     """Return the hook output dict, or ``None`` when the call may proceed."""
-    if tool_name not in _TARGET_TOOLS:
+    if canonical_github_tool(tool_name) not in _TARGET_TOOLS:
         return None
 
     body = extract_body(tool_input)

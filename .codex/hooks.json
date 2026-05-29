@@ -98,6 +98,51 @@
             "statusMessage": "Checking PR template"
           }
         ]
+      },
+      {
+        "matcher": "^mcp__codex_apps__github\\._(create_issue|create_pull_request|update_pull_request)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 scripts/preflight_non_ascii.py",
+            "statusMessage": "Checking GitHub text"
+          },
+          {
+            "type": "command",
+            "command": "python3 scripts/preflight_codex_github_footer.py",
+            "statusMessage": "Checking Codex GitHub footer"
+          },
+          {
+            "type": "command",
+            "command": "python3 scripts/preflight_title_policy.py",
+            "statusMessage": "Checking GitHub title"
+          }
+        ]
+      },
+      {
+        "matcher": "^mcp__codex_apps__github\\._(create_pull_request|update_pull_request)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 scripts/preflight_branch_base.py verify",
+            "statusMessage": "Checking branch base"
+          },
+          {
+            "type": "command",
+            "command": "python3 scripts/pr_body_close_keyword_gate.py",
+            "statusMessage": "Checking PR issue links"
+          },
+          {
+            "type": "command",
+            "command": "python3 scripts/preflight_pr_body_required_sections.py",
+            "statusMessage": "Checking PR sections"
+          },
+          {
+            "type": "command",
+            "command": "python3 scripts/preflight_pr_template_shape.py",
+            "statusMessage": "Checking PR template"
+          }
+        ]
       }
     ],
     "PostToolUse": [
