@@ -147,16 +147,13 @@ class TestIsRetroPr:
     @pytest.mark.parametrize(
         "title",
         [
-            "retro(feat-harness): review PR #234 repair loops",
-            "retro: ad-hoc retrospective",
-            "  RETRO(scope): leading space + uppercase",
-            # (retro) scope on a non-retro Conventional Commit type --
-            # covers retro-closing PRs that title policy forces to use
-            # docs/feat/fix/etc. as the primary type.
-            "docs(retro): record PR 235 repair-free merge",
-            "feat(retro): broaden auto-retro skip rule",
-            "fix(retro): edge case",
-            "  Docs(Retro): leading space + mixed case",
+            # (auto-retro) scope -- covers the auto-opened retro shape and
+            # retro-closing PRs that title policy forces to use an allowed
+            # Conventional Commit type with the auto-retro scope.
+            "fix(auto-retro): review PR #234 repair loops",
+            "docs(auto-retro): record PR 235 repair-free merge",
+            "feat(auto-retro): broaden auto-retro skip rule",
+            "  Docs(Auto-Retro): leading space + mixed case",
         ],
     )
     def test_matches(self, title: str) -> None:
@@ -169,13 +166,18 @@ class TestIsRetroPr:
             "fix: also not",
             "retrospect: close but no",
             "",
-            # Precision guards: tokens that contain "retro" without
-            # being a literal (retro) scope must not match.
+            # Legacy retro shapes are no longer recognized; existing retro
+            # issues are migrated to the fix(auto-retro) prefix.
+            "retro(feat-harness): review PR #234 repair loops",
+            "retro: ad-hoc retrospective",
+            "docs(retro): record PR 235 repair-free merge",
+            # Precision guards: tokens that contain "retro" without being a
+            # literal (auto-retro) scope must not match.
             "docs(retrospective): foo",
             "chore(retro-bot): foo",
-            # Description text mentions (retro) but it is NOT inside the
-            # type(scope) token.
-            "fix(harness): broaden auto-retro skip rule to cover docs(retro) PRs",
+            # Description text mentions (auto-retro) but it is NOT inside
+            # the type(scope) token.
+            "fix(harness): broaden the auto-retro skip rule for (auto-retro) PRs",
         ],
     )
     def test_non_matches(self, title: str) -> None:
@@ -222,14 +224,14 @@ class TestShouldSkip:
         assert "authored by trusted bot" in reason
 
     def test_skip_when_pr_is_retro(self) -> None:
-        pr = _make_pr(title="retro(feat-harness): review PR #200 repair loops")
+        pr = _make_pr(title="fix(auto-retro): review PR #200 repair loops")
         skip, reason = ar.should_skip(pr)
         assert skip is True
         assert "recursion" in reason
 
     def test_skip_when_pr_has_retro_scope(self) -> None:
-        """docs(retro): ... is a retro-closing PR; must skip to avoid recursion."""
-        pr = _make_pr(title="docs(retro): record PR 235 repair-free merge")
+        """docs(auto-retro): ... is a retro-closing PR; must skip recursion."""
+        pr = _make_pr(title="docs(auto-retro): record PR 235 repair-free merge")
         skip, reason = ar.should_skip(pr)
         assert skip is True
         assert "recursion" in reason
@@ -247,47 +249,38 @@ class TestShouldSkip:
 
 
 class TestBuildRetroTitle:
-    def test_with_type_scope_strips_scope(self) -> None:
-        """Source type(scope) must yield retro(type), not retro(type(scope))."""
-        pr = _make_pr(number=42, title="feat(harness): do a thing")
+    @pytest.mark.parametrize(
+        "number, source_title",
+        [
+            (42, "feat(harness): do a thing"),
+            (240, "docs(auto-retro): record PR 235 repair-free merge"),
+            (7, "chore: bump deps"),
+            (9, "Freeform title"),
+        ],
+    )
+    def test_emits_canonical_fix_auto_retro_title(
+        self, number: int, source_title: str
+    ) -> None:
+        """The retro title is a fixed fix(auto-retro) token regardless of
+        the source PR's own type(scope)."""
+        pr = _make_pr(number=number, title=source_title)
         assert (
             ar.build_retro_title(pr)
-            == "retro(feat): review PR #42 repair loops"
-        )
-
-    def test_with_retro_scope_avoids_nested_parens(self) -> None:
-        """The motivating regression: docs(retro): ... must not nest into
-        retro(docs(retro)): ... . See issue #245."""
-        pr = _make_pr(number=240, title="docs(retro): record PR 235 repair-free merge")
-        title = ar.build_retro_title(pr)
-        assert title == "retro(docs): review PR #240 repair loops"
-        # Hard regression guard: no double-open / double-close parens
-        # in the generated title regardless of source PR shape.
-        assert "((" not in title
-        assert "))" not in title
-
-    def test_without_scope(self) -> None:
-        pr = _make_pr(number=7, title="chore: bump deps")
-        assert ar.build_retro_title(pr) == "retro(chore): review PR #7 repair loops"
-
-    def test_fallback_for_freeform_title(self) -> None:
-        pr = _make_pr(number=9, title="Freeform title")
-        assert (
-            ar.build_retro_title(pr) == "retro(retro): review PR #9 repair loops"
+            == f"fix(auto-retro): review PR #{number} repair loops"
         )
 
     @pytest.mark.parametrize(
         "source_title",
         [
             "feat(harness): foo",
-            "docs(retro): bar",
+            "docs(auto-retro): bar",
             "chore(agent-rules): baz",
             "fix: no scope",
             "Freeform title",
             "",
         ],
     )
-    def test_never_emits_nested_parens(self, source_title: str) -> None:
+    def test_emits_single_paren_group(self, source_title: str) -> None:
         """For any source title shape, the generated retro title contains
         exactly one (...) group -- never nested."""
         pr = _make_pr(number=1, title=source_title)
@@ -327,7 +320,7 @@ class TestBuildRetroBody:
         pr = _make_pr(title="Freeform title")
         body = ar.build_retro_body(pr, [])
         assert "did not parse as a Conventional" in body
-        assert ar.FALLBACK_TYPE_SCOPE in body
+        assert "recorded as empty" in body
 
     def test_facts_include_commit_subjects(self) -> None:
         pr = _make_pr(number=10)
@@ -902,12 +895,12 @@ class TestFindExistingRetro:
     def test_matches_by_pr_number(self) -> None:
         items = [
             {"number": 10, "title": "feat: unrelated"},
-            {"number": 11, "title": "retro(feat-harness): review PR #42 repair loops"},
+            {"number": 11, "title": "fix(auto-retro): review PR #42 repair loops"},
         ]
         assert ar.find_existing_retro(items, 42) == 11
 
     def test_no_match_returns_none(self) -> None:
-        items = [{"number": 1, "title": "retro: review PR #99 repair loops"}]
+        items = [{"number": 1, "title": "fix(auto-retro): review PR #99 repair loops"}]
         assert ar.find_existing_retro(items, 42) is None
 
     def test_empty_list_returns_none(self) -> None:
@@ -924,28 +917,32 @@ class TestFindExistingRetro:
         items = [
             {
                 "number": 7,
-                "title": "retro(chore): review PR #42 repair loops",
+                "title": "fix(auto-retro): review PR #42 repair loops",
                 "state": "closed",
             }
         ]
         assert ar.find_existing_retro(items, 42) == 7
 
-    def test_matches_retro_colon_variant(self) -> None:
-        """Success path for the ``retro:`` (no-scope) prefix variant."""
-        items = [{"number": 3, "title": "retro: review PR #42 repair loops"}]
-        assert ar.find_existing_retro(items, 42) == 3
+    def test_rejects_legacy_retro_prefix(self) -> None:
+        """Legacy ``retro(`` / ``retro:`` titles are migrated to
+        fix(auto-retro); the new-only detection must not match them."""
+        items = [
+            {"number": 3, "title": "retro: review PR #42 repair loops"},
+            {"number": 4, "title": "retro(fix): review PR #42 repair loops"},
+        ]
+        assert ar.find_existing_retro(items, 42) is None
 
     def test_rejects_pr_number_substring_collision(self) -> None:
         """A retro for #2490 must not be returned when looking up #249."""
         items = [
-            {"number": 8, "title": "retro(fix): review PR #2490 repair loops"}
+            {"number": 8, "title": "fix(auto-retro): review PR #2490 repair loops"}
         ]
         assert ar.find_existing_retro(items, 249) is None
 
     def test_matches_case_insensitive_prefix(self) -> None:
-        """``Retro(Fix):`` (mixed case) must still match -- prefix is lowered."""
+        """``Fix(Auto-Retro):`` (mixed case) must still match -- prefix is lowered."""
         items = [
-            {"number": 12, "title": "Retro(Fix): review PR #42 repair loops"}
+            {"number": 12, "title": "Fix(Auto-Retro): review PR #42 repair loops"}
         ]
         assert ar.find_existing_retro(items, 42) == 12
 
@@ -1047,7 +1044,7 @@ class TestSearchRetroIssues:
             ar,
             "gh_api",
             lambda *_a, **_kw: json.dumps(
-                {"items": [{"number": 1, "title": "retro(x): review PR #42 ..."}]}
+                {"items": [{"number": 1, "title": "fix(auto-retro): review PR #42 ..."}]}
             ),
         )
         out = ar.search_retro_issues("o/r", 42)
@@ -2790,12 +2787,12 @@ class TestFindTargetRetroFromRefs:
 
     def test_returns_retro_number_when_fix_typed_refs_a_retro(self) -> None:
         pr = self._pr()
-        titles = {40: "retro(feat): review PR #20 repair loops"}
+        titles = {40: "fix(auto-retro): review PR #20 repair loops"}
         assert ar.find_target_retro_from_refs(pr, titles) == 40
 
     def test_returns_none_for_non_fix_typed_title(self) -> None:
         pr = self._pr(title="feat(harness): new thing")
-        titles = {40: "retro(feat): review PR #20 repair loops"}
+        titles = {40: "fix(auto-retro): review PR #20 repair loops"}
         assert ar.find_target_retro_from_refs(pr, titles) is None
 
     def test_returns_none_when_ref_does_not_resolve_to_retro(self) -> None:
@@ -2807,7 +2804,7 @@ class TestFindTargetRetroFromRefs:
         pr = self._pr(body="Refs #40\nRefs #50\n")
         titles = {
             40: "feat: ordinary",
-            50: "retro(feat): review",
+            50: "fix(auto-retro): review",
         }
         assert ar.find_target_retro_from_refs(pr, titles) == 50
 
@@ -2817,7 +2814,7 @@ class TestFindTargetRetroFromRefs:
 
     def test_ignores_html_commented_refs(self) -> None:
         pr = self._pr(body="<!-- Refs #40 -->\n")
-        titles = {40: "retro(feat): review"}
+        titles = {40: "fix(auto-retro): review"}
         assert ar.find_target_retro_from_refs(pr, titles) is None
 
 
@@ -3207,7 +3204,7 @@ def _sentinel_recorder(
 def _open_retro(
     number: int,
     *,
-    title: str = "retro(feat): review PR #99 repair loops",
+    title: str = "fix(auto-retro): review PR #99 repair loops",
     created_at: str = "2026-05-01T00:00:00Z",
     body: str | None = None,
 ) -> dict[str, Any]:
@@ -3459,7 +3456,7 @@ class TestSentinelRun:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Search-filter belt-and-braces: an issue that slips into the
-        search result but does NOT start with retro(/retro: must NOT be
+        search result but is not a fix(auto-retro) title must NOT be
         processed. The client-side filter inside search_open_retro_issues
         is the second line of defence after the search query labels.
         """

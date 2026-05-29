@@ -31,7 +31,7 @@ class TestRunSkips:
     ) -> None:
         seen = orchestrator_recorder(monkeypatch)
         event = merged_event(
-            title="retro(feat-harness): review PR #200 repair loops"
+            title="fix(auto-retro): review PR #200 repair loops"
         )
         assert ar.run(event, "o/r") == 0
         assert seen == []
@@ -44,7 +44,7 @@ class TestRunSkips:
             existing=[
                 {
                     "number": 100,
-                    "title": "retro(feat-harness): review PR #42 repair loops",
+                    "title": "fix(auto-retro): review PR #42 repair loops",
                 }
             ],
         )
@@ -64,7 +64,7 @@ class TestRunSkips:
             existing=[
                 {
                     "number": 50,
-                    "title": "retro(chore): review PR #42 repair loops",
+                    "title": "fix(auto-retro): review PR #42 repair loops",
                     "state": "closed",
                 }
             ],
