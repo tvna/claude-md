@@ -38,6 +38,7 @@ install_nix_binary() {
 }
 
 install_nix_binary gh-cli gh
+install_nix_binary pinned-uv uv
 
 home_dir="$(getent passwd "$agent" | cut -d: -f6)"
 if [[ -z "$home_dir" ]]; then
@@ -75,6 +76,14 @@ TOML
 esac
 
 "${sudo_command[@]}" chown -R "$agent:$agent" "$home_dir/.config" "$home_dir/.$agent"
+
+"${sudo_command[@]}" tee /etc/profile.d/claude-md-nix-path.sh >/dev/null <<'BASH'
+# Make binaries linked from Nix-built packages available in plain terminals.
+case ":${PATH}:" in
+  *:/usr/local/bin:*) ;;
+  *) export PATH="/usr/local/bin:${PATH}" ;;
+esac
+BASH
 
 "${sudo_command[@]}" tee /etc/profile.d/claude-md-agent-prompt.sh >/dev/null <<'BASH'
 # Short, devcontainer-local prompt: agent:repo(branch)$

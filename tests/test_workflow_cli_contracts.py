@@ -808,6 +808,19 @@ def test_nixpkgs_cooldown_verify_matches_workflow_args(tmp_path: Path) -> None:
     ) == 0
 
 
+def test_devcontainer_uv_pin_comes_from_pyproject() -> None:
+    """Devcontainer shells must not drift behind the repository uv pin."""
+    flake = Path("flake.nix").read_text(encoding="utf-8")
+    runtime = Path(".devcontainer/scripts/configure-agent-runtime.sh").read_text(encoding="utf-8")
+
+    assert "builtins.readFile ./pyproject.toml" in flake
+    assert "required-version" in flake
+    assert "pkgs.uv" not in flake
+    assert "agentPackages.pinned-uv" in flake
+    assert "install_nix_binary pinned-uv uv" in runtime
+    assert "/usr/local/bin" in runtime
+
+
 def test_security_drift_report_aggregate_and_post_comment_match_workflow_args(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
