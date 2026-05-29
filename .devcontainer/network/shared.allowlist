@@ -15,4 +15,6 @@ channels.nixos.org
 github-releases.githubusercontent.com
 ghcr.io
 mcr.microsoft.com
+# apm is now a Nix derivation fetched from release-assets.githubusercontent.com;
+# aka.ms is no longer required for apm installation.
 aka.ms
