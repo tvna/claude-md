@@ -1,6 +1,6 @@
 # Branch cleanup — runbook
 
-Operator-facing companion to the `branch-cleanup` job in [`.github/workflows/weekly-maintenance.yml`](../.github/workflows/weekly-maintenance.yml). Tracking issue: [#31](https://github.com/tvna/claude-md/issues/31). Parent: [#18](https://github.com/tvna/claude-md/issues/18) Phase 4-B.
+Operator-facing companion to the `branch-cleanup` job in [`.github/workflows/weekly-maintenance.yml`](../../.github/workflows/weekly-maintenance.yml). Tracking issue: [#31](https://github.com/tvna/claude-md/issues/31). Parent: [#18](https://github.com/tvna/claude-md/issues/18) Phase 4-B.
 
 ## Overview
 
@@ -109,5 +109,5 @@ None. The workflow uses the default `GITHUB_TOKEN` because the only write it per
 
 - [#18](https://github.com/tvna/claude-md/issues/18) — parent ruleset tracker (Phase 4-B = this workflow).
 - [#31](https://github.com/tvna/claude-md/issues/31) — tracking issue for this workflow.
-- [`.github/rulesets/all-branches.json`](../.github/rulesets/all-branches.json) — confirms deletion is not blocked on non-default branches.
+- [`.github/rulesets/all-branches.json`](../../.github/rulesets/all-branches.json) — confirms deletion is not blocked on non-default branches.
 - [`docs/runbooks/rulesets.md`](./rulesets.md) — sibling runbook this file's structure is patterned after.
