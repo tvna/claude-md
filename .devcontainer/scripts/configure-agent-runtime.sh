@@ -39,6 +39,9 @@ install_nix_binary() {
 
 install_nix_binary gh-cli gh
 install_nix_binary pinned-uv uv
+if [[ "$agent" == "codex" ]]; then
+  install_nix_binary bubblewrap bwrap
+fi
 
 home_dir="$(getent passwd "$agent" | cut -d: -f6)"
 if [[ -z "$home_dir" ]]; then

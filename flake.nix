@@ -117,6 +117,7 @@ EOF
         in
         {
           inherit claude-cli codex-cli pinned-uv;
+          bubblewrap = pkgs.bubblewrap;
           gh-cli = pkgs.gh;
         };
       mkShells = system:
@@ -163,6 +164,7 @@ EOF
             pkgs.nodePackages.npm
           ];
           codex = mkAgentShell "codex" [
+            agentPackages.bubblewrap
             agentPackages.codex-cli
             pkgs.nodePackages.pnpm
           ];
