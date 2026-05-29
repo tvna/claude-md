@@ -1,8 +1,8 @@
 # Security control drift report — Runbook
 
 Operator-facing companion to
-[`.github/workflows/weekly-maintenance.yml`](../.github/workflows/weekly-maintenance.yml)
-and [`scripts/security_drift_report.py`](../scripts/security_drift_report.py).
+[`.github/workflows/weekly-maintenance.yml`](../../.github/workflows/weekly-maintenance.yml)
+and [`scripts/security_drift_report.py`](../../scripts/security_drift_report.py).
 Tracks [#180](https://github.com/tvna/claude-md/issues/180) under parent
 [#178](https://github.com/tvna/claude-md/issues/178) (MITRE ATT&CK coverage).
 
