@@ -1,0 +1,43 @@
+lockfile_version: '1'
+generated_at: '2026-05-29T13:21:52.332119+00:00'
+apm_version: 0.12.1
+dependencies:
+- repo_url: obra/superpowers
+  host: github.com
+  resolved_commit: f2cbfbefebbfef77321e4c9abc9e949826bea9d7
+  resolved_ref: f2cbfbefebbfef77321e4c9abc9e949826bea9d7
+  package_type: marketplace_plugin
+  deployed_files:
+  - .agents/skills/brainstorming
+  - .agents/skills/dispatching-parallel-agents
+  - .agents/skills/executing-plans
+  - .agents/skills/finishing-a-development-branch
+  - .agents/skills/receiving-code-review
+  - .agents/skills/requesting-code-review
+  - .agents/skills/subagent-driven-development
+  - .agents/skills/systematic-debugging
+  - .agents/skills/test-driven-development
+  - .agents/skills/using-git-worktrees
+  - .agents/skills/using-superpowers
+  - .agents/skills/verification-before-completion
+  - .agents/skills/writing-plans
+  - .agents/skills/writing-skills
+  - .claude/skills/brainstorming
+  - .claude/skills/dispatching-parallel-agents
+  - .claude/skills/executing-plans
+  - .claude/skills/finishing-a-development-branch
+  - .claude/skills/receiving-code-review
+  - .claude/skills/requesting-code-review
+  - .claude/skills/subagent-driven-development
+  - .claude/skills/systematic-debugging
+  - .claude/skills/test-driven-development
+  - .claude/skills/using-git-worktrees
+  - .claude/skills/using-superpowers
+  - .claude/skills/verification-before-completion
+  - .claude/skills/writing-plans
+  - .claude/skills/writing-skills
+  content_hash: sha256:fb4f87bfef928a6d68f5d5aaa29e3eba011961c5f03bbf171c3c348d8d161abb
+local_deployed_files:
+- .claude/rules/master.md
+local_deployed_file_hashes:
+  .claude/rules/master.md: sha256:e50fe7efeb85ee81eb1a4225b4e6121e5f8f51ea41b0733403c8c182e325f485
