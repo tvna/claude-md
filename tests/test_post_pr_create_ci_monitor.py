@@ -77,15 +77,21 @@ def test_decide_starts_monitor_and_returns_context(monkeypatch: pytest.MonkeyPat
     assert output is not None
     hook = output["hookSpecificOutput"]
     assert hook["hookEventName"] == "PostToolUse"
-    assert "CI monitoring started automatically" in hook["additionalContext"]
-    assert str(log_path) in hook["additionalContext"]
+    ctx = hook["additionalContext"]
+    assert "polling/heartbeat CI monitor started automatically" in ctx
+    assert str(log_path) in ctx
+    assert "NOT webhook-backed" in ctx
+    assert "subscribe_pr_activity" in ctx
 
 
 def test_decide_reports_missing_pr_reference() -> None:
     output = monitor.decide({"tool_name": monitor.TARGET_TOOL, "tool_response": {"ok": True}})
 
     assert output is not None
-    assert "did not contain a PR URL or number" in output["hookSpecificOutput"]["additionalContext"]
+    ctx = output["hookSpecificOutput"]["additionalContext"]
+    assert "did not contain a PR URL or number" in ctx
+    assert "polling" in ctx
+    assert "subscribe_pr_activity" in ctx
 
 
 def test_start_monitor_launches_detached_process(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
