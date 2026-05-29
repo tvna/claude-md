@@ -90,7 +90,7 @@ def _retro_search_item(
 ) -> dict[str, Any]:
     return {
         "number": number,
-        "title": f"retro(feat): review PR #{pr_number} repair loops",
+        "title": f"fix(auto-retro): review PR #{pr_number} repair loops",
     }
 
 
@@ -343,7 +343,7 @@ class TestPostMergeRescanRun:
     ) -> None:
         _rescan_recorder(
             monkeypatch,
-            merged_prs=[_search_item(10, title="retro(feat): review PR #9")],
+            merged_prs=[_search_item(10, title="fix(auto-retro): review PR #9")],
         )
         assert ar.post_merge_rescan_run(
             "o/r", "2026-05-29T10:00:00Z", 48

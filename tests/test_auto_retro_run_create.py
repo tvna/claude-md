@@ -38,7 +38,7 @@ class TestRunCreate:
         assert len(post_calls) == 1
         _, _, payload = post_calls[0]
         assert payload["title"] == (
-            "retro(feat): review PR #42 repair loops"
+            "fix(auto-retro): review PR #42 repair loops"
         )
         assert "feat(harness): step one" in payload["body"]
         assert "fix(harness): step two" in payload["body"]
