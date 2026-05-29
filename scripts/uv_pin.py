@@ -16,10 +16,9 @@ import argparse
 import re
 import subprocess
 import sys
+import tomllib
 from collections.abc import Iterable, Iterator
 from pathlib import Path
-
-import tomllib
 
 # Subdirectories the literal-value drift check inspects.
 DRIFT_SUBDIRS: tuple[str, ...] = (".github", "scripts", "docs")
