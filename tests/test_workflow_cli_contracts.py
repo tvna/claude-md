@@ -649,7 +649,7 @@ def test_verify_apm_checksums_matches_workflow_args(tmp_path: Path) -> None:
 def test_verify_readme_translation_matches_workflow_args(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """Mirror the env+argv shape used by verify-github-content.yml.
+    """Mirror the env+argv shape used by portable-pr-policy.yml.
 
     The workflow shells to
     ``python3 scripts/verify_readme_translation.py verify
@@ -869,6 +869,51 @@ def test_threat_intel_scan_matches_workflow_args(
     ) == 0
 
 
+def test_pr_label_mutation_jobs_have_pull_request_write() -> None:
+    offenders: list[str] = []
+    for workflow in sorted(_WORKFLOWS_DIR.glob("*.yml")):
+        raw = workflow.read_text(encoding="utf-8")
+        try:
+            document = yaml.safe_load(raw)
+        except yaml.YAMLError:
+            continue
+        if not isinstance(document, dict) or "pull_request_target" not in raw:
+            continue
+        jobs = document.get("jobs")
+        if not isinstance(jobs, dict):
+            continue
+        for job_name, job in jobs.items():
+            if not isinstance(job, dict):
+                continue
+            steps = job.get("steps")
+            if not isinstance(steps, list):
+                continue
+            mutates_pr_labels = False
+            for step in steps:
+                if not isinstance(step, dict):
+                    continue
+                run_text = step.get("run")
+                if not isinstance(run_text, str):
+                    continue
+                if (
+                    "gh issue edit" in run_text
+                    and ("--add-label" in run_text or "--remove-label" in run_text)
+                ):
+                    mutates_pr_labels = True
+            if not mutates_pr_labels:
+                continue
+            permissions = job.get("permissions")
+            if not isinstance(permissions, dict):
+                offenders.append(f"{workflow}:{job_name} missing permissions block")
+                continue
+            if permissions.get("pull-requests") != "write":
+                offenders.append(
+                    f"{workflow}:{job_name} must declare pull-requests: write"
+                )
+
+    assert offenders == []
+
+
 def test_title_policy_verify_matches_workflow_kind_env(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -924,7 +969,7 @@ def test_analyze_ci_timings_matches_workflow_args(
 
     The workflow shells to
     ``uv run python scripts/analyze_ci_timings.py --jobs jobs/
-    --workflow "Verify agent instructions" --title "..."``. Exercise the
+    --workflow "Verify repository scripts" --title "..."``. Exercise the
     same shape against a minimal jobs/ fixture so the contract pins the
     flag-only invocation (no subcommand). Refs #552.
     """
@@ -936,7 +981,7 @@ def test_analyze_ci_timings_matches_workflow_args(
                 "jobs": [
                     {
                         "name": "lint-scripts-static",
-                        "workflow_name": "Verify agent instructions",
+                        "workflow_name": "Verify repository scripts",
                         "started_at": "2026-05-27T12:00:00Z",
                         "completed_at": "2026-05-27T12:01:00Z",
                         "steps": [
@@ -958,7 +1003,7 @@ def test_analyze_ci_timings_matches_workflow_args(
             "--jobs",
             str(jobs_dir),
             "--workflow",
-            "Verify agent instructions",
+            "Verify repository scripts",
             "--title",
             "verify-agents.yml timings (weekly)",
         ]
@@ -1012,7 +1057,7 @@ def test_verify_shard_coverage_matches_workflow_args(tmp_path: Path) -> None:
 def test_preflight_pr_single_commit_matches_workflow_env(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Mirror the env shape used by .github/workflows/verify-github-content.yml.
+    """Mirror the env shape used by .github/workflows/portable-pr-policy.yml.
 
     The workflow shells to ``python3 scripts/preflight_pr_single_commit.py``
     with only BASE_REF in the env (no argv). Exercise the same shape:
