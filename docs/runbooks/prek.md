@@ -30,6 +30,8 @@ Repo-local hooks (`language: system`, run via `uv run python`):
 
 - `uv-pin-drift` — wraps `scripts/uv_pin.py drift`; triggers on `pyproject.toml`.
 - `scan-workflow-pip` — wraps `scripts/scan_workflow_pip.py verify`; triggers on `^\.github/workflows/.*\.ya?ml$`.
+- `preflight-pr-single-commit` — pre-push hook wrapping `scripts/preflight_pr_single_commit.py`; blocks PR branches that are not exactly one commit ahead of `origin/main`.
+- `preflight-branch-base` — pre-push hook wrapping `scripts/preflight_branch_base.py verify`; fetches `origin/main` and blocks pushes when `HEAD` does not contain the current base branch.
 
 ## CI gate
 

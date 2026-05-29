@@ -32,6 +32,13 @@ def _hook_groups(data: dict[str, object], name: str) -> list[dict[str, object]]:
     return out
 
 
+def _repo_script_from_command(command: str) -> str:
+    for token in command.split():
+        if token.startswith("$CLAUDE_PROJECT_DIR/"):
+            return token.removeprefix("$CLAUDE_PROJECT_DIR/")
+    return command.split()[-1].removeprefix("$CLAUDE_PROJECT_DIR/")
+
+
 def test_claude_settings_json_is_valid() -> None:
     data = _load_settings()
     hooks = data.get("hooks")
@@ -82,7 +89,7 @@ def test_all_claude_hook_commands_point_to_repo_files() -> None:
     for command in commands:
         if "CLAUDE_PLUGIN_ROOT" in command or command == "./hooks/run-hook.cmd session-start":
             continue
-        path = command.split()[-1].removeprefix("$CLAUDE_PROJECT_DIR/")
+        path = _repo_script_from_command(command)
         assert (ROOT / path).exists()
 
 
@@ -109,3 +116,25 @@ def test_claude_superpowers_hooks_are_apm_managed() -> None:
             "_apm_source": "superpowers",
         }
     ]
+
+
+def test_claude_pr_write_hooks_include_base_freshness_gate() -> None:
+    data = _load_settings()
+    pre_tool_use = _hook_groups(data, "PreToolUse")
+
+    matching = [
+        group
+        for group in pre_tool_use
+        if group.get("matcher") == "mcp__github__(create_pull_request|update_pull_request)"
+    ]
+    assert matching
+    assert any(
+        isinstance(handlers := group.get("hooks"), list)
+        and any(
+            isinstance(handler, dict)
+            and handler.get("command")
+            == "python3 $CLAUDE_PROJECT_DIR/scripts/preflight_branch_base.py verify"
+            for handler in handlers
+        )
+        for group in matching
+    )

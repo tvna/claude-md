@@ -59,6 +59,11 @@
         "hooks": [
           {
             "type": "command",
+            "command": "python3 scripts/preflight_branch_base.py verify",
+            "statusMessage": "Checking branch base"
+          },
+          {
+            "type": "command",
             "command": "python3 scripts/pr_body_close_keyword_gate.py",
             "statusMessage": "Checking PR issue links"
           }
