@@ -16,7 +16,7 @@
   "remoteEnv": {
     "AGENT_CONTAINER": "claude"
   },
-  "postCreateCommand": "bash .devcontainer/scripts/install-agent-cli.sh claude",
+  "postCreateCommand": "bash .devcontainer/scripts/install-agent-cli.sh claude && bash .devcontainer/scripts/configure-agent-runtime.sh claude",
   "customizations": {
     "vscode": {
       "extensions": [

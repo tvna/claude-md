@@ -42,7 +42,7 @@ def test_codex_hooks_json_is_valid() -> None:
     data = _load_hooks()
     hooks = data.get("hooks")
     assert isinstance(hooks, dict)
-    assert set(hooks) == {"SessionStart", "PreToolUse"}
+    assert set(hooks) == {"SessionStart", "PreToolUse", "PostToolUse"}
 
 
 def test_all_codex_hook_commands_point_to_repo_files() -> None:
@@ -85,3 +85,28 @@ def test_codex_pre_tool_use_covers_claude_github_write_hooks() -> None:
     assert "python3 scripts/preflight_title_policy.py" in commands
     assert "python3 scripts/preflight_pr_body_required_sections.py" in commands
     assert "python3 scripts/preflight_pr_template_shape.py" in commands
+
+
+def test_codex_post_tool_use_checks_pr_ci_early() -> None:
+    data = _load_hooks()
+    hooks = data["hooks"]
+    assert isinstance(hooks, dict)
+    post_tool_use = hooks["PostToolUse"]
+    assert isinstance(post_tool_use, list)
+
+    commands: list[str] = []
+    matchers: list[str] = []
+    for group in post_tool_use:
+        assert isinstance(group, dict)
+        matcher = group["matcher"]
+        handlers = group["hooks"]
+        assert isinstance(matcher, str)
+        assert isinstance(handlers, list)
+        matchers.append(matcher)
+        for handler in handlers:
+            command = handler["command"]
+            assert isinstance(command, str)
+            commands.append(command)
+
+    assert "^mcp__github__create_pull_request$" in matchers
+    assert "python3 scripts/ci_early_status_probe.py" in commands

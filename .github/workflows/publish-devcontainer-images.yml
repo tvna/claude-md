@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - ".devcontainer/images/**"
+      - ".devcontainer/scripts/configure-agent-runtime.sh"
       - ".devcontainer/scripts/install-agent-cli.sh"
       - ".github/workflows/publish-devcontainer-images.yml"
       - "flake.lock"

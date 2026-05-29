@@ -83,6 +83,18 @@
           }
         ]
       }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "^mcp__github__create_pull_request$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 scripts/ci_early_status_probe.py",
+            "statusMessage": "Checking early CI status"
+          }
+        ]
+      }
     ]
   }
 }
