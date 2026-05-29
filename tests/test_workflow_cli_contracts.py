@@ -1043,7 +1043,7 @@ def test_update_devcontainer_image_pins_matches_workflow_args(tmp_path: Path) ->
         assert config["image"] == f"{update_devcontainer_image_pins.IMAGE_PREFIX}-{agent}:{new_sha}"
 
 
-def test_devcontainer_pin_pr_uses_github_actions_token() -> None:
+def test_devcontainer_pin_pr_uses_environment_secret_token() -> None:
     workflow_path = Path(".github/workflows/publish-devcontainer-images.yml")
     raw = workflow_path.read_text(encoding="utf-8")
     workflow = yaml.safe_load(raw)
@@ -1053,12 +1053,15 @@ def test_devcontainer_pin_pr_uses_github_actions_token() -> None:
         "contents": "write",
         "pull-requests": "write",
     }
-    assert "DEVCONTAINER_PIN_PR_TOKEN" not in raw
+    assert "DEVCONTAINER_PIN_PR_TOKEN" in raw
 
     open_pr = next(
         step for step in update_pins["steps"] if step.get("name") == "Open pin update PR"
     )
-    assert open_pr["env"] == {"GH_TOKEN": "${{ github.token }}"}
+    assert open_pr["env"] == {
+        "GH_TOKEN": "${{ secrets.DEVCONTAINER_PIN_PR_TOKEN }}"
+    }
+    assert "DEVCONTAINER_PIN_PR_TOKEN is required" in open_pr["run"]
     assert 'github-actions[bot]"' in open_pr["run"]
     assert "Refs #696" in open_pr["run"]
 
