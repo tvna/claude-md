@@ -230,6 +230,73 @@ def test_codex_post_tool_use_starts_ci_monitor_after_mcp_pr_create() -> None:
     assert "python3 scripts/ci_early_status_probe.py" in commands
 
 
+def test_codex_post_tool_use_starts_ci_monitor_after_codex_connector_pr_create() -> None:
+    """Codex connector PR creation must trigger the same CI monitor/probe as the legacy path.
+
+    Refs #760. The PostToolUse section previously only matched
+    ``mcp__github__create_pull_request``, so Codex connector PRs silently
+    skipped the polling monitor and early status probe. This test fails if the
+    connector path is dropped.
+    """
+    data = _load_hooks()
+    hooks = data["hooks"]
+    assert isinstance(hooks, dict)
+    post_tool_use = hooks["PostToolUse"]
+    assert isinstance(post_tool_use, list)
+
+    connector_matcher = "^mcp__codex_apps__github\\._create_pull_request$"
+
+    matcher_to_commands: dict[str, list[str]] = {}
+    for group in post_tool_use:
+        assert isinstance(group, dict)
+        matcher = group["matcher"]
+        handlers = group["hooks"]
+        assert isinstance(matcher, str)
+        assert isinstance(handlers, list)
+        commands = matcher_to_commands.setdefault(matcher, [])
+        for handler in handlers:
+            command = handler["command"]
+            assert isinstance(command, str)
+            commands.append(command)
+
+    assert connector_matcher in matcher_to_commands, (
+        "PostToolUse has no entry for the Codex connector create_pull_request path"
+    )
+    assert "python3 scripts/post_pr_create_ci_monitor.py" in matcher_to_commands[connector_matcher]
+    assert "python3 scripts/ci_early_status_probe.py" in matcher_to_commands[connector_matcher]
+
+
+def test_codex_session_start_surfaces_hooks_path_gap() -> None:
+    """SessionStart must include a check_hooks_path hook to surface missing core.hooksPath.
+
+    Refs #760. Without core.hooksPath=.githooks the pre-push stale-base gate
+    is silently skipped for Codex worktrees.
+    """
+    data = _load_hooks()
+    hooks = data["hooks"]
+    assert isinstance(hooks, dict)
+    session_start = hooks["SessionStart"]
+    assert isinstance(session_start, list)
+
+    commands: list[str] = []
+    for group in session_start:
+        assert isinstance(group, dict)
+        if group.get("_apm_source") == "superpowers":
+            continue
+        handlers = group.get("hooks", [])
+        assert isinstance(handlers, list)
+        for handler in handlers:
+            if isinstance(handler, dict):
+                cmd = handler.get("command", "")
+                if isinstance(cmd, str):
+                    commands.append(cmd)
+
+    assert "python3 scripts/check_hooks_path.py" in commands, (
+        "SessionStart does not include check_hooks_path.py; "
+        "missing core.hooksPath will not be surfaced at session start"
+    )
+
+
 def test_codex_permission_request_policy_plan_is_documented() -> None:
     body = PERMISSION_REQUEST_PLAN.read_text(encoding="utf-8")
 

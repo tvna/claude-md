@@ -17,7 +17,12 @@ import time
 from collections.abc import Callable
 from typing import Any
 
-_TARGET_TOOL = "mcp__github__create_pull_request"
+_TARGET_TOOLS: frozenset[str] = frozenset(
+    {
+        "mcp__github__create_pull_request",
+        "mcp__codex_apps__github._create_pull_request",
+    }
+)
 _DEFAULT_DELAY_SECONDS = 30.0
 _FAIL_CONCLUSIONS: frozenset[str] = frozenset(
     {"failure", "failed", "cancelled", "canceled", "timed_out", "action_required"}
@@ -165,7 +170,7 @@ def decide(
     runner: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
     environ: dict[str, str] | None = None,
 ) -> dict[str, Any] | None:
-    if event.get("tool_name") != _TARGET_TOOL:
+    if event.get("tool_name") not in _TARGET_TOOLS:
         return None
 
     repo, pr = extract_pr_target(event)
