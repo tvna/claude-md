@@ -26,6 +26,14 @@
         ]
       },
       {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 $CLAUDE_PROJECT_DIR/scripts/check_hooks_path.py"
+          }
+        ]
+      },
+      {
         "matcher": "startup|clear|compact",
         "hooks": [
           {
@@ -134,6 +142,15 @@
       },
       {
         "matcher": "mcp__github__create_pull_request",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 $CLAUDE_PROJECT_DIR/scripts/post_pr_create_ci_monitor.py"
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__codex_apps__github\\._create_pull_request",
         "hooks": [
           {
             "type": "command",

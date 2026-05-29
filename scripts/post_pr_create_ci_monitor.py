@@ -43,6 +43,13 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+TARGET_TOOLS: frozenset[str] = frozenset(
+    {
+        "mcp__github__create_pull_request",
+        "mcp__codex_apps__github._create_pull_request",
+    }
+)
+# Kept for backward compatibility with existing tests that reference the legacy name.
 TARGET_TOOL = "mcp__github__create_pull_request"
 GITHUB_PR_URL_RE = re.compile(r"https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/pull/([0-9]+)")
 URL_KEYS = frozenset({"url", "html_url", "web_url", "pull_request_url"})
@@ -169,7 +176,7 @@ def build_context(message: str) -> dict[str, Any]:
 
 def decide(event: dict[str, Any]) -> dict[str, Any] | None:
     """Return hook output for a PostToolUse event."""
-    if event.get("tool_name") != TARGET_TOOL:
+    if event.get("tool_name") not in TARGET_TOOLS:
         return None
 
     command = build_watch_command(event)
