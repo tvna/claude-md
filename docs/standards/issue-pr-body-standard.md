@@ -385,10 +385,10 @@ python scripts/body_policy.py verify \
   table; bodies are read only after labels route the issue.
 - [`.github/PULL_REQUEST_TEMPLATE.md`](../../.github/PULL_REQUEST_TEMPLATE.md) -
   the PR template this runbook describes.
-- [`.github/labels.json`](../.github/labels.json) - the `type:*` axis the
+- [`.github/labels.json`](../../.github/labels.json) - the `type:*` axis the
   type-specific guidance partitions on.
-- [`scripts/issue_link.py`](../scripts/issue_link.py) - Refs-check gate.
-- [`scripts/_trusted_bots.py`](../scripts/_trusted_bots.py) - allowlist
+- [`scripts/issue_link.py`](../../scripts/issue_link.py) - Refs-check gate.
+- [`scripts/_trusted_bots.py`](../../scripts/_trusted_bots.py) - allowlist
   single source of truth.
 - [CLAUDE.md](../../CLAUDE.md) - sections 1, 2, 3, 4, 5 (rationale tie-in).
 - [#196](https://github.com/tvna/claude-md/issues/196) - sibling standard

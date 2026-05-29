@@ -2,7 +2,7 @@
 
 This document is the operator-facing runbook for the labels that triage every issue in this repository. The core axes, severity flag, and automated threat flags are all readable from the GraphQL `labels.nodes[]` header, letting an API/MCP client route an issue without fetching its body.
 
-The taxonomy is introduced incrementally per the phased rollout in [#84](https://github.com/tvna/claude-md/issues/84), which supersedes the `agent:*` design from [#34](https://github.com/tvna/claude-md/issues/34). The JSON SoT lives at `.github/labels.json`; the `Apply labels` workflow described below reconciles GitHub against it. Per [CLAUDE.md §3](../blob/main/CLAUDE.md), agents must be concentrated at one workflow point *after* deterministic gates pass — the labels are the gate. Per §5 it exists to avoid wasting tokens on bodies the agent should not read in full.
+The taxonomy is introduced incrementally per the phased rollout in [#84](https://github.com/tvna/claude-md/issues/84), which supersedes the `agent:*` design from [#34](https://github.com/tvna/claude-md/issues/34). The JSON SoT lives at `.github/labels.json`; the `Apply labels` workflow described below reconciles GitHub against it. Per [CLAUDE.md §3](../../CLAUDE.md), agents must be concentrated at one workflow point *after* deterministic gates pass -- the labels are the gate. Per §5 it exists to avoid wasting tokens on bodies the agent should not read in full.
 
 ## SoT layout
 
