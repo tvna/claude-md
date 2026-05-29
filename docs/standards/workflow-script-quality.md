@@ -470,6 +470,12 @@ before the script invocation:
           fi
 ```
 
+The same PR must update the owning runbook with concrete token issuance
+steps. At minimum, document where to create the API key, PAT, or service
+token; where the secret is stored; the exact minimum permissions; expiry
+or rotation cadence; and the verification command or workflow run that
+proves the handoff works without printing the value.
+
 ## Worked example: minimal test fixture
 
 ```python

@@ -48,6 +48,7 @@ import scan_maintainability_metrics
 import scan_non_ascii
 import scan_preflight_drift
 import scan_retro_followup_drift
+import scan_secret_runbooks
 import scan_workflow_action_pins
 import scan_workflow_pip
 import security_drift_report
@@ -122,6 +123,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("scan_non_ascii.py", "run"): "test_scan_non_ascii_run_matches_workflow_env",
     ("scan_preflight_drift.py", "verify"): "test_scan_preflight_drift_verify_matches_workflow_args",
     ("scan_retro_followup_drift.py", "run"): "test_scan_retro_followup_drift_run_matches_workflow_env",
+    ("scan_secret_runbooks.py", "verify"): "test_scan_secret_runbooks_verify_matches_workflow_args",
     ("scan_workflow_action_pins.py", "verify"): "test_scan_workflow_action_pins_verify_matches_workflow_args",
     ("scan_workflow_pip.py", "verify"): "test_scan_workflow_pip_verify_matches_workflow_args",
     ("security_drift_report.py", "aggregate"): "test_security_drift_report_aggregate_and_post_comment_match_workflow_args",
@@ -746,6 +748,11 @@ def test_scan_workflow_action_pins_verify_matches_workflow_args() -> None:
     """Mirrors the ``Assert workflows pin actions to SHA + tag comment``
     step in ``.github/workflows/verify-agents.yml``."""
     assert scan_workflow_action_pins.main(["verify", "--repo-root", "."]) == 0
+
+
+def test_scan_secret_runbooks_verify_matches_workflow_args() -> None:
+    """Mirrors the ``Assert workflow secrets have concrete runbooks`` step."""
+    assert scan_secret_runbooks.main(["verify"]) == 0
 
 
 def test_scan_maintainability_metrics_verify_matches_workflow_args() -> None:

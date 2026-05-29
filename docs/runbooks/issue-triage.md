@@ -190,6 +190,35 @@ The `Apply labels` workflow (`.github/workflows/apply-labels.yml`) is the only s
 
 `LABELS_PAT` — fine-grained PAT scoped to `tvna/claude-md` with `Repository permissions → Issues: Read and write` (the labels endpoints live under Issues in the new PAT scopes). Stored in the `labels-apply` GitHub Environment, not at the repo level.
 
+One-time setup for `LABELS_PAT`:
+
+1. Open GitHub user settings, then **Developer settings**.
+2. Open **Personal access tokens** -> **Fine-grained tokens**.
+3. Select **Generate new token**.
+4. Set the token name to `LABELS_PAT`.
+5. Set an expiration date of 90 days or less, then record the rotation
+   date in the operator calendar.
+6. Under **Resource owner**, select `tvna`.
+7. Under **Repository access**, select **Only select repositories** and
+   choose `tvna/claude-md`.
+8. Under **Repository permissions**, set:
+   - **Issues**: Read and write.
+   - **Metadata**: Read-only.
+9. Generate the token and copy it once. Do not paste it into an issue,
+   PR, commit, terminal transcript, or runbook.
+10. Open `tvna/claude-md` -> **Settings** -> **Environments**.
+11. Create or open the `labels-apply` Environment.
+12. Keep required reviewers enabled for live apply review if repository
+    policy requires manual approval before label mutation.
+13. Add an Environment secret named `LABELS_PAT` with the copied token
+    value.
+14. Run `apply-labels.yml` with `dry_run=true` and confirm the guard
+    step passes and the job emits a plan without mutating labels.
+
+Rotation uses the same secret name: generate the replacement token
+first, update the `labels-apply` Environment secret, confirm a
+`dry_run=true` dispatch passes the guard step, then revoke the old token.
+
 ### Dispatch
 
 ```sh
