@@ -100,10 +100,7 @@ def load_owner_languages(toml_text: str) -> dict[str, str]:
     """
     if not toml_text.strip():
         return {}
-    try:
-        import tomllib
-    except ImportError:
-        import tomli as tomllib  # type: ignore[no-redef]
+    import tomllib
 
     data = tomllib.loads(toml_text)
     out: dict[str, str] = {}
@@ -231,18 +228,6 @@ def main(argv: list[str] | None = None) -> int:
             file=sys.stderr,
         )
         return 0
-
-    try:
-        import tomllib
-    except ImportError:
-        try:
-            import tomli as tomllib  # type: ignore[no-redef]  # noqa: F401
-        except ImportError as exc:
-            print(
-                f"::error::plan_language_context: tomllib/tomli not available: {exc}",
-                file=sys.stderr,
-            )
-            return 0
 
     try:
         decision = decide(codeowners_text, owners_toml_text)

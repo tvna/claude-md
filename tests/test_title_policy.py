@@ -6,9 +6,10 @@ pilot documented in ``docs/standards/workflow-script-quality.md`` O1.
 
 from __future__ import annotations
 
+import tomllib
+
 import pytest
 import title_policy
-import tomllib
 from hypothesis import given
 from hypothesis import strategies as st
 

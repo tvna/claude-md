@@ -22,7 +22,7 @@ import os
 import sys
 import urllib.parse
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal
 
@@ -260,7 +260,7 @@ def fetch_pr_detail(repo: str, number: int, *, token: str) -> dict[str, Any]:
 
 def parse_iso8601(value: str) -> datetime:
     """Parse GitHub-style ISO 8601 timestamps as aware UTC datetimes."""
-    return datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone(timezone.utc)
+    return datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone(UTC)
 
 
 def parse_now(value: str | None) -> datetime | None:

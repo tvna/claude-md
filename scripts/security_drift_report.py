@@ -400,7 +400,7 @@ def find_existing_comment(
 # ---------------------------------------------------------------------------
 
 def _utc_today() -> str:
-    return _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%d")
+    return _dt.datetime.now(_dt.UTC).strftime("%Y-%m-%d")
 
 
 def _read_text(path: Path) -> str:

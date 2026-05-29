@@ -52,7 +52,7 @@ import os
 import re
 import subprocess
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
@@ -113,7 +113,7 @@ def _parse_iso(value: str) -> datetime | None:
     except ValueError:
         return None
     if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
+        parsed = parsed.replace(tzinfo=UTC)
     return parsed
 
 
@@ -431,7 +431,7 @@ def run(
     fail-soft (the failed followup is skipped, the scan continues) so
     a transient API problem on one item does not abort the whole pass.
     """
-    today_iso = today or datetime.now(timezone.utc).date().isoformat()
+    today_iso = today or datetime.now(UTC).date().isoformat()
     retros = search_retro_issues(repo)
 
     labels_applied: dict[str, int] = {RETRO_FP_CANDIDATE: 0, RETRO_FP: 0}
