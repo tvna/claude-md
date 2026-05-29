@@ -17,9 +17,8 @@ import json
 import re
 import sys
 import time
-from pathlib import Path
-
 import tomllib
+from pathlib import Path
 
 _EXCLUDE_NEWER_RE = re.compile(r"^(?P<days>[1-9][0-9]*) days?$")
 

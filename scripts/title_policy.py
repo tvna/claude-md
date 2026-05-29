@@ -16,10 +16,9 @@ from __future__ import annotations
 import argparse
 import os
 import re
+import tomllib
 from dataclasses import dataclass
 from pathlib import Path
-
-import tomllib
 
 _DEFAULT_MAX_FINDINGS = 10
 TITLE_POLICY_CONFIG = Path(__file__).resolve().parents[1] / ".github" / "title-policy.toml"

@@ -45,10 +45,7 @@ def _load() -> tuple[frozenset[str], frozenset[str]]:
         return _DEFAULT_GENERAL, _DEFAULT_NON_ASCII_SKIP
 
     try:
-        try:
-            import tomllib
-        except ImportError:
-            import tomli as tomllib  # type: ignore[no-redef]
+        import tomllib
         data = tomllib.loads(text)
     except Exception as exc:
         print(

@@ -1,14 +1,11 @@
 [project]
 name = "claude-md"
 version = "1.0.0"
-requires-python = ">=3.10"
-# tomli is the Python 3.10 backport of stdlib tomllib (available in 3.11+).
-# scripts/plan_language_context.py (SessionStart hook, #211) tries tomllib
-# first and falls back to tomli on 3.10. Declared so uv-managed envs (CI,
-# tests) have the loader available; the hook itself fails open on ImportError.
+requires-python = ">=3.11"
 # pyyaml is retained because tests/test_superpowers_apm_install.py and
 # tests/test_workflow_cli_contracts.py import yaml directly at module level.
-dependencies = ["tomli>=2,<3", "pyyaml>=6,<7"]
+# tomllib is stdlib in Python 3.11+; tomli backport no longer needed.
+dependencies = ["pyyaml>=6,<7"]
 
 [tool.uv]
 package = false
@@ -86,7 +83,7 @@ show_missing = true
 [tool.ruff]
 # Lint gate (#192). Scope is intentional: only the Python we ship and its
 # tests. target-version matches the project's requires-python lower bound.
-target-version = "py310"
+target-version = "py311"
 line-length = 120
 extend-exclude = [
     # Data file (#102 P3 snapshot of past issue/PR bodies), not Python source.

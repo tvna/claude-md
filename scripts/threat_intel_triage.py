@@ -19,12 +19,11 @@ import argparse
 import json
 import os
 import re
+import tomllib
 import urllib.parse
 import urllib.request
 from pathlib import Path
 from typing import NamedTuple
-
-import tomllib
 
 INTEL_LABEL = "threat:intel-needed"
 RESPONSE_LABEL = "threat:response-needed"
