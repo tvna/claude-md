@@ -1,16 +1,36 @@
 #!/usr/bin/env python3
-"""PostToolUse hook: start CI monitoring after MCP PR creation.
+"""PostToolUse hook: start polling-based CI monitoring after MCP PR creation.
 
-The universal agent contract says that opening a PR starts the CI/review
-monitoring loop. This hook makes the first CI-monitoring step deterministic
-for ``mcp__github__create_pull_request`` by extracting the created PR from
-the PostToolUse response and launching ``gh pr checks --watch`` in a detached
-process.
+## Monitoring kind: polling/heartbeat
 
-The hook is shared by the Claude and Codex hook configs. It is intentionally
-fail-open: PR creation has already happened by the time PostToolUse runs, so
-failures are reported as additional context instead of blocking unrelated
-work. It never logs the full tool payload.
+This hook launches ``gh pr checks --watch`` as a detached polling process.
+It polls the GitHub API on a fixed interval until all checks settle. It is
+NOT a webhook-backed monitor: there is no GitHub App event subscription, no
+``workflow_run``/``check_suite`` push path, and no delivery guarantee.
+
+Webhook-backed monitoring is provided by the ``subscribe_pr_activity`` MCP
+tool (Claude Code session layer). Use that tool when low-latency, push-based
+delivery is required. This hook is a deterministic polling fallback that runs
+immediately after ``mcp__github__create_pull_request`` returns, before the
+agent has had a chance to call ``subscribe_pr_activity``.
+
+## Event source and delivery path
+
+| Property         | This hook                          | Webhook path                      |
+|------------------|------------------------------------|-----------------------------------|
+| Trigger          | PostToolUse (``create_pull_request``) | GitHub App / ``check_suite`` push |
+| Delivery         | ``gh pr checks --watch`` poll loop | HTTP POST to registered endpoint  |
+| Latency          | Poll interval (≥ 10 s)             | Near real-time                    |
+| Retry on failure | None — fire-and-forget subprocess  | GitHub redeliver mechanism        |
+| Failure mode     | Log written to ``/tmp``; silent    | HTTP error logged by GitHub       |
+
+## Failure mode
+
+If ``Popen`` fails, the hook returns an ``additionalContext`` error message
+and exits 0 (fail-open). PR creation has already happened by the time
+``PostToolUse`` runs, so blocking here would be counterproductive.
+
+The hook never logs the full tool payload.
 """
 
 from __future__ import annotations
@@ -155,10 +175,11 @@ def decide(event: dict[str, Any]) -> dict[str, Any] | None:
     command = build_watch_command(event)
     if command is None:
         return build_context(
-            "PR CI monitoring was not started automatically: the MCP "
-            "create_pull_request response did not contain a PR URL or number. "
-            "Immediately run `gh pr checks <pr> --watch` before considering "
-            "the PR handoff complete."
+            "PR polling/heartbeat CI monitor was not started automatically: "
+            "the MCP create_pull_request response did not contain a PR URL or "
+            "number. Immediately run `gh pr checks <pr> --watch` (polling) "
+            "before considering the PR handoff complete. For webhook-backed "
+            "monitoring, call subscribe_pr_activity instead."
         )
 
     argv, pr_ref = command
@@ -167,15 +188,20 @@ def decide(event: dict[str, Any]) -> dict[str, Any] | None:
         log_path = start_monitor(argv, cwd=cwd)
     except OSError as exc:
         return build_context(
-            "PR CI monitoring failed to start automatically after MCP PR "
-            f"creation for {pr_ref}: {exc}. Immediately run "
-            f"`{' '.join(argv)}` before considering the PR handoff complete."
+            "PR polling/heartbeat CI monitor failed to start automatically "
+            f"after MCP PR creation for {pr_ref}: {exc}. Immediately run "
+            f"`{' '.join(argv)}` (polling) before considering the PR handoff "
+            "complete. For webhook-backed monitoring, call "
+            "subscribe_pr_activity instead."
         )
 
     return build_context(
-        "PR CI monitoring started automatically after MCP PR creation for "
-        f"{pr_ref}. Monitor log: {log_path}. Continue tracking CI, reviews, "
-        "and comments until the PR reaches a terminal state."
+        "PR polling/heartbeat CI monitor started automatically after MCP PR "
+        f"creation for {pr_ref}. Monitor log: {log_path}. This is a "
+        "polling/heartbeat monitor (gh pr checks --watch); it is NOT "
+        "webhook-backed. For push-based delivery, also call "
+        "subscribe_pr_activity. Continue tracking CI, reviews, and comments "
+        "until the PR reaches a terminal state."
     )
 
 
