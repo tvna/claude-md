@@ -869,6 +869,51 @@ def test_threat_intel_scan_matches_workflow_args(
     ) == 0
 
 
+def test_pr_label_mutation_jobs_have_pull_request_write() -> None:
+    offenders: list[str] = []
+    for workflow in sorted(_WORKFLOWS_DIR.glob("*.yml")):
+        raw = workflow.read_text(encoding="utf-8")
+        try:
+            document = yaml.safe_load(raw)
+        except yaml.YAMLError:
+            continue
+        if not isinstance(document, dict) or "pull_request_target" not in raw:
+            continue
+        jobs = document.get("jobs")
+        if not isinstance(jobs, dict):
+            continue
+        for job_name, job in jobs.items():
+            if not isinstance(job, dict):
+                continue
+            steps = job.get("steps")
+            if not isinstance(steps, list):
+                continue
+            mutates_pr_labels = False
+            for step in steps:
+                if not isinstance(step, dict):
+                    continue
+                run_text = step.get("run")
+                if not isinstance(run_text, str):
+                    continue
+                if (
+                    "gh issue edit" in run_text
+                    and ("--add-label" in run_text or "--remove-label" in run_text)
+                ):
+                    mutates_pr_labels = True
+            if not mutates_pr_labels:
+                continue
+            permissions = job.get("permissions")
+            if not isinstance(permissions, dict):
+                offenders.append(f"{workflow}:{job_name} missing permissions block")
+                continue
+            if permissions.get("pull-requests") != "write":
+                offenders.append(
+                    f"{workflow}:{job_name} must declare pull-requests: write"
+                )
+
+    assert offenders == []
+
+
 def test_title_policy_verify_matches_workflow_kind_env(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

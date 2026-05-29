@@ -111,11 +111,25 @@ VS Code Server, fileWatcher, extensionHost, or Git commands, the pinned
 image SHA points at an amd64-only publish and should be updated after
 the next successful multi-platform publish.
 
-Each publish creates two tags per agent:
+Each publish creates two runnable tags per agent:
 
 - `main` as a moving convenience alias.
 - the exact source commit SHA for local VS Code entrypoints, audit, and
   rollback.
+
+The build job also maintains non-runnable BuildKit cache tags in GHCR:
+
+- `buildcache-amd64`
+- `buildcache-arm64`
+
+Those cache tags are scoped per agent package and architecture, for
+example `ghcr.io/tvna/claude-md-devcontainer-codex:buildcache-arm64`.
+They are imported with `--cache-from` before each build and exported with
+`--cache-to ... mode=max` after successful builds. They must not be used
+as local devcontainer image pins. If a cache becomes suspect, delete only
+the matching `buildcache-*` tag from GHCR or temporarily add
+`--no-cache` while investigating; the runnable commit-SHA image tags
+remain the source of truth for local users.
 
 If a devcontainer image input changes, the publish workflow builds and
 pushes the new image tag first, then opens a follow-up PR that updates
@@ -131,11 +145,19 @@ Recurring DevContainer maintenance is tracked in
 [#696](https://github.com/tvna/claude-md/issues/696). Generated image-pin
 PRs reference that tracking issue instead of the resolved implementation
 issue that originally introduced pin automation. The follow-up PR is
-created with the `DEVCONTAINER_PIN_PR_TOKEN` repository secret because
-the default GitHub Actions token is not permitted to create pull requests
-in this repository. The workflow fails before creating a new branch if
-that secret is missing, and it retries PR creation when a previous run
-already pushed the image-pin branch.
+created with the `DEVCONTAINER_PIN_PR_TOKEN` secret from the
+`devcontainer-image-pins` GitHub Environment because the default GitHub
+Actions token is not permitted to create pull requests in this
+repository. Store the token as an Environment secret, not as a broad
+repository secret, so the handoff is limited to the image-pin update job.
+The token needs the minimum permissions required to push the generated
+branch and open the PR: repository contents read/write, pull requests
+read/write, and metadata read-only. Keep Environment reviewers disabled
+unless a deliberate manual approval gate is desired, because reviewers
+pause the automatic pin update after every image publish. The workflow
+fails before creating a new branch if that secret is missing, and it
+retries PR creation when a previous run already pushed the image-pin
+branch.
 
 The publish workflow intentionally watches only image-build inputs such
 as `.devcontainer/images/**`, `.devcontainer/scripts/install-agent-cli.sh`,

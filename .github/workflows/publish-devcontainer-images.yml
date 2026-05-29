@@ -57,14 +57,23 @@ jobs:
             --username "${{ github.actor }}" \
             --password-stdin
 
+      - name: Prepare BuildKit builder
+        run: |
+          builder="devcontainer-${{ matrix.agent }}-${{ matrix.arch }}"
+          docker buildx create --name "$builder" --driver docker-container --use
+          docker buildx inspect --bootstrap
+
       - name: Build and publish ${{ matrix.agent }} devcontainer image
         run: |
           image="${IMAGE_PREFIX}-${{ matrix.agent }}"
+          cache_ref="${image}:buildcache-${{ matrix.arch }}"
           npx --yes "@devcontainers/cli@${DEVCONTAINERS_CLI_VERSION}" build \
             --workspace-folder . \
             --config ".devcontainer/images/${{ matrix.agent }}/devcontainer.json" \
             --platform "${{ matrix.platform }}" \
             --image-name "${image}:${GITHUB_SHA}-${{ matrix.arch }}" \
+            --cache-from "type=registry,ref=${cache_ref}" \
+            --cache-to "type=registry,ref=${cache_ref},mode=max" \
             --push
 
   publish:
@@ -102,12 +111,16 @@ jobs:
     needs: publish
     if: github.event_name == 'push'
     runs-on: ubuntu-24.04
+    environment:
+      name: devcontainer-image-pins
     permissions:
       contents: write
       pull-requests: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          token: ${{ secrets.DEVCONTAINER_PIN_PR_TOKEN || github.token }}
 
       - name: Update pinned image SHAs
         run: python3 scripts/update_devcontainer_image_pins.py "$GITHUB_SHA"
@@ -123,7 +136,7 @@ jobs:
 
           branch="codex/devcontainer-image-pins-${GITHUB_SHA}"
           if [ -z "${GH_TOKEN:-}" ]; then
-            echo "::error::DEVCONTAINER_PIN_PR_TOKEN is required because the default GitHub Actions token cannot create pull requests in this repository."
+            echo "::error::DEVCONTAINER_PIN_PR_TOKEN is required in the devcontainer-image-pins environment because the default GitHub Actions token cannot create pull requests in this repository."
             exit 1
           fi
 
