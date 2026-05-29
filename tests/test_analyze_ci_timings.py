@@ -21,7 +21,7 @@ pytestmark = pytest.mark.shard_ci_ops
 def _make_job(
     *,
     name: str,
-    workflow_name: str = "Verify agent instructions",
+    workflow_name: str = "Verify repository scripts",
     started_at: str = "2026-05-20T12:00:00Z",
     completed_at: str = "2026-05-20T12:01:00Z",
     steps: list[dict[str, object]] | None = None,
@@ -167,11 +167,11 @@ class TestLoadJobs:
 class TestFilterJobs:
     def test_workflow_name(self) -> None:
         jobs = [
-            _make_job(name="a", workflow_name="Verify agent instructions"),
+            _make_job(name="a", workflow_name="Verify repository scripts"),
             _make_job(name="b", workflow_name="Something Else"),
         ]
         result = analyze_ci_timings.filter_jobs(
-            jobs, workflow_name="Verify agent instructions"
+            jobs, workflow_name="Verify repository scripts"
         )
         assert [j["name"] for j in result] == ["a"]
 
@@ -423,11 +423,11 @@ class TestCli:
             "r1.json",
             [
                 _make_job(name="a", workflow_name="Other"),
-                _make_job(name="b", workflow_name="Verify agent instructions"),
+                _make_job(name="b", workflow_name="Verify repository scripts"),
             ],
         )
         rc, out = self._run(
-            ["--jobs", str(path), "--workflow", "Verify agent instructions"]
+            ["--jobs", str(path), "--workflow", "Verify repository scripts"]
         )
         assert rc == 0
         assert "| b |" in out
