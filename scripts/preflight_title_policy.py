@@ -50,11 +50,13 @@ from title_policy import (
     allowed_types_csv,
     describe_non_ascii,
     follows_naming_convention,
+    format_type_fit_finding,
     is_ascii_title,
     naming_convention_hint,
     pr_title_has_issue_ref,
     pr_title_issue_refs,
     pr_title_strip_issue_refs,
+    type_fit_findings,
 )
 
 # Tools whose ``title`` field the server-side title-policy gate enforces
@@ -98,6 +100,14 @@ def extract_title(tool_input: dict[str, Any]) -> str:
     if not isinstance(title, str):
         return ""
     return title
+
+
+def extract_body(tool_input: dict[str, Any]) -> str:
+    """Return the optional body/description field as a string."""
+    body = tool_input.get("body") or tool_input.get("description") or ""
+    if not isinstance(body, str):
+        return ""
+    return body
 
 
 def kind_for_tool(tool_name: str) -> str | None:
@@ -189,6 +199,23 @@ def build_issue_ref_deny_reason(tool_name: str, title: str, refs: list[str], sug
     )
 
 
+def build_type_fit_deny_reason(tool_name: str, kind: str, title: str, finding_text: str) -> str:
+    """Return the deny reason text for semantic type/title mismatch."""
+    return (
+        f"Blocked by scripts/preflight_title_policy.py (Layer 2.5): "
+        f"`{tool_name}` {kind} title uses a Conventional Commit type "
+        f"that does not fit the detected work category. "
+        f"{finding_text}\n\n"
+        f"  Offending title: {title!r}\n\n"
+        f"Use `perf(<scope>): ...` for runtime, cache, latency, throughput, "
+        f"startup, memory, or resource improvements. DevContainer work is "
+        f"a valid scope; choose `perf(devcontainer): ...` for performance "
+        f"work, `fix(devcontainer): ...` for a demonstrated defect, "
+        f"`ci(devcontainer): ...` for workflow-only changes, and "
+        f"`build(devcontainer): ...` for build/package mechanics."
+    )
+
+
 def decide(tool_name: str, tool_input: dict[str, Any]) -> dict[str, Any] | None:
     """Return the hook output dict, or ``None`` if the call should proceed.
 
@@ -210,6 +237,7 @@ def decide(tool_name: str, tool_input: dict[str, Any]) -> dict[str, Any] | None:
     title = extract_title(tool_input)
     if not title:
         return None
+    body = extract_body(tool_input)
 
     if not is_ascii_title(title):
         findings = describe_non_ascii(title)
@@ -218,6 +246,17 @@ def decide(tool_name: str, tool_input: dict[str, Any]) -> dict[str, Any] | None:
     invalid_type = find_invalid_type(title, kind=kind)
     if invalid_type is not None:
         return _build_deny_dict(build_invalid_type_deny_reason(tool_name, kind, title, invalid_type))
+
+    fit_findings = type_fit_findings(title, kind=kind, body=body)
+    if fit_findings:
+        return _build_deny_dict(
+            build_type_fit_deny_reason(
+                tool_name,
+                kind,
+                title,
+                format_type_fit_finding(fit_findings[0]),
+            )
+        )
 
     if kind == "pull_request" and pr_title_has_issue_ref(title):
         refs = pr_title_issue_refs(title)

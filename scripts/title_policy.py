@@ -16,6 +16,8 @@ from __future__ import annotations
 import argparse
 import os
 import re
+from dataclasses import dataclass
+from pathlib import Path
 
 _DEFAULT_MAX_FINDINGS = 10
 _CONVENTIONAL_TYPES = (
@@ -38,6 +40,55 @@ _CONVENTIONAL_TITLE_RE = re.compile(rf"^(?:{_TYPE_PATTERN})(?:\([a-z0-9][a-z0-9-
 # `.github/workflows/verify-issue-link.yml` already validates `Refs #NNN` in
 # the PR body, so the title is redundant when it duplicates that link.
 _PR_ISSUE_REF_RE = re.compile(r"\(#\d+\)")
+_TITLE_PARTS_RE = re.compile(
+    rf"^(?P<type>{_TYPE_PATTERN})(?:\((?P<scope>[a-z0-9][a-z0-9-]*)\))?: (?P<summary>.+)"
+)
+
+_PERFORMANCE_TERMS = frozenset(
+    {
+        "cache",
+        "caching",
+        "faster",
+        "latency",
+        "memory",
+        "performance",
+        "resource",
+        "speed",
+        "startup",
+        "throughput",
+    }
+)
+_PERFORMANCE_PHRASES = (
+    "build cache",
+    "cache image",
+    "cache images",
+    "image build cache",
+    "prebuilt image",
+    "prebuilt images",
+    "reduce runtime",
+    "speed up",
+)
+_PERF_ADJACENT_ALLOWED_TYPES = frozenset({"build", "ci", "docs", "perf", "test", "tracking"})
+_PERF_FIX_TERMS = frozenset({"bug", "defect", "error", "fail", "failure", "regression"})
+_CI_INFRA_TERMS = frozenset({"action", "actions", "ci", "gate", "workflow", "workflows"})
+_BUILD_INFRA_TERMS = frozenset({"build", "container", "image", "images", "package", "publish"})
+
+
+@dataclass(frozen=True)
+class TitleParts:
+    """Parsed conventional title fields."""
+
+    type: str
+    scope: str
+    summary: str
+
+
+@dataclass(frozen=True)
+class TypeFitFinding:
+    """A high-confidence title type mismatch."""
+
+    reason: str
+    expected_types: tuple[str, ...]
 
 
 def is_ascii_title(title: str) -> bool:
@@ -50,6 +101,18 @@ def follows_naming_convention(title: str, *, kind: str) -> bool:
     if kind in {"issue", "pull_request"}:
         return _CONVENTIONAL_TITLE_RE.fullmatch(title) is not None
     raise ValueError(f"unsupported title kind: {kind!r}")
+
+
+def parse_title_parts(title: str) -> TitleParts | None:
+    """Return conventional title parts, or ``None`` when shape is invalid."""
+    match = _TITLE_PARTS_RE.fullmatch(title)
+    if match is None:
+        return None
+    return TitleParts(
+        type=match.group("type"),
+        scope=match.group("scope") or "",
+        summary=match.group("summary"),
+    )
 
 
 def pr_title_has_issue_ref(title: str) -> bool:
@@ -83,6 +146,32 @@ def allowed_types_csv() -> str:
     return ", ".join(_CONVENTIONAL_TYPES)
 
 
+def type_fit_findings(title: str, *, kind: str, body: str = "") -> list[TypeFitFinding]:
+    """Return high-confidence type/title mismatches.
+
+    This is intentionally conservative: it only rejects cases where the
+    title/body vocabulary strongly points at a better type. Ambiguous
+    maintenance work still passes and should be handled in review.
+    """
+    if kind not in {"issue", "pull_request"}:
+        raise ValueError(f"unsupported title kind: {kind!r}")
+    parts = parse_title_parts(title)
+    if parts is None:
+        return []
+
+    text = _normalized_policy_text(title, body)
+    findings: list[TypeFitFinding] = []
+    if _has_performance_signal(text):
+        findings.extend(_performance_type_findings(parts, text))
+    return findings
+
+
+def format_type_fit_finding(finding: TypeFitFinding) -> str:
+    """Return a concise human-facing explanation for a type-fit finding."""
+    expected = ", ".join(finding.expected_types)
+    return f"{finding.reason} Expected title type: {expected}."
+
+
 def naming_convention_hint(kind: str) -> str:
     """Return the operator-facing expected title shape for *kind*."""
     if kind in {"issue", "pull_request"}:
@@ -102,7 +191,7 @@ def describe_non_ascii(title: str, limit: int = _DEFAULT_MAX_FINDINGS) -> list[s
     return findings
 
 
-def verify_title(title: str, *, kind: str) -> int:
+def verify_title(title: str, *, kind: str, body: str = "") -> int:
     """Print a GitHub Actions annotation and return a process exit code."""
     fail = 0
     if not is_ascii_title(title):
@@ -115,6 +204,11 @@ def verify_title(title: str, *, kind: str) -> int:
     if not follows_naming_convention(title, kind=kind):
         print(f"::error::{kind} title must follow repository naming convention: " f"{naming_convention_hint(kind)}.")
         fail = 1
+    else:
+        policy_body = body or _body_from_env()
+        for finding in type_fit_findings(title, kind=kind, body=policy_body):
+            print(f"::error::{kind} title type does not fit the work: {format_type_fit_finding(finding)}")
+            fail = 1
 
     if kind == "pull_request" and pr_title_has_issue_ref(title):
         print(
@@ -130,11 +224,63 @@ def verify_title(title: str, *, kind: str) -> int:
     return 0
 
 
+def _normalized_policy_text(title: str, body: str) -> str:
+    text = f"{title}\n{body}".lower()
+    return re.sub(r"[^a-z0-9#+.-]+", " ", text)
+
+
+def _words(text: str) -> set[str]:
+    return set(re.findall(r"[a-z0-9][a-z0-9+-]*", text))
+
+
+def _has_performance_signal(text: str) -> bool:
+    words = _words(text)
+    return bool(words & _PERFORMANCE_TERMS) or any(phrase in text for phrase in _PERFORMANCE_PHRASES)
+
+
+def _performance_type_findings(parts: TitleParts, text: str) -> list[TypeFitFinding]:
+    words = _words(text)
+    if parts.type == "perf":
+        return []
+    if parts.type in {"docs", "test", "tracking"}:
+        return []
+    if parts.type == "ci" and words & _CI_INFRA_TERMS:
+        return []
+    if parts.type == "build" and words & _BUILD_INFRA_TERMS:
+        return []
+    if parts.type == "fix" and words & _PERF_FIX_TERMS:
+        return []
+    if parts.type == "feat" and ("benchmark" in words or "metrics" in words):
+        return []
+    return [
+        TypeFitFinding(
+            reason=(
+                "performance, cache, latency, throughput, startup, memory, or resource wording "
+                "is high-confidence performance work"
+            ),
+            expected_types=tuple(sorted(_PERF_ADJACENT_ALLOWED_TYPES)),
+        )
+    ]
+
+
+def _body_from_env() -> str:
+    return os.environ.get("PR_BODY") or os.environ.get("ISSUE_BODY") or ""
+
+
 def _cmd_verify(args: argparse.Namespace) -> int:
     title = args.title
     if title is None:
         title = os.environ.get("TITLE", "")
-    return verify_title(title, kind=args.kind)
+    body = _read_body_arg(args)
+    return verify_title(title, kind=args.kind, body=body or "")
+
+
+def _read_body_arg(args: argparse.Namespace) -> str | None:
+    if args.body_file:
+        return Path(args.body_file).read_text()
+    if args.body is not None:
+        return args.body
+    return None
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -154,6 +300,14 @@ def main(argv: list[str] | None = None) -> int:
     p_verify.add_argument(
         "--title",
         help="Title to validate. Defaults to the TITLE environment variable.",
+    )
+    p_verify.add_argument(
+        "--body",
+        help="Optional issue or PR body used for conservative type-fit checks.",
+    )
+    p_verify.add_argument(
+        "--body-file",
+        help="Optional file containing the issue or PR body used for type-fit checks.",
     )
     p_verify.set_defaults(func=_cmd_verify)
 

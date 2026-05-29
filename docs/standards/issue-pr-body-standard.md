@@ -116,6 +116,34 @@ the umbrella itself can close (typically "no open child issues remain"
 or "replaced by a newer tracking issue"). `Parent` is usually omitted
 on a tracking issue.
 
+## Title type-fit guidance
+
+`scripts/title_policy.py` rejects high-confidence mismatches between the
+Conventional Commit type in the title and the work described by the
+title/body. The check is conservative: review still owns ambiguous
+cases, but mechanical signals catch repeated title drift before issues
+or PRs enter triage queues.
+
+Use these repository-specific conventions:
+
+- `perf(<scope>): ...` - runtime, latency, cache, throughput, startup,
+  memory, or resource improvements. Example:
+  `perf(devcontainer): cache image builds`.
+- `fix(devcontainer): ...` - a demonstrated DevContainer defect or
+  regression. Include the observed failure in `Facts`.
+- `ci(devcontainer): ...` - workflow-only DevContainer automation,
+  gates, or GitHub Actions wiring.
+- `build(devcontainer): ...` - container image build, package, publish,
+  or build-system mechanics.
+- `docs(devcontainer): ...` - documentation-only DevContainer changes,
+  even when the documentation mentions performance or cache behavior.
+
+Performance-adjacent words such as "cache", "latency", "startup",
+"throughput", "memory", or "resource" should not appear under `fix`,
+`feat`, or `chore` unless the title/body also names the defect, new
+measurement feature, or other non-performance intent that justifies the
+type.
+
 ## PR body sections
 
 `.github/PULL_REQUEST_TEMPLATE.md` defines the required PR body shape.
