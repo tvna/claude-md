@@ -651,7 +651,7 @@ def test_verify_apm_checksums_matches_workflow_args(tmp_path: Path) -> None:
 def test_verify_readme_translation_matches_workflow_args(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """Mirror the env+argv shape used by verify-github-content.yml.
+    """Mirror the env+argv shape used by portable-pr-policy.yml.
 
     The workflow shells to
     ``python3 scripts/verify_readme_translation.py verify
@@ -976,7 +976,7 @@ def test_analyze_ci_timings_matches_workflow_args(
 
     The workflow shells to
     ``uv run python scripts/analyze_ci_timings.py --jobs jobs/
-    --workflow "Verify agent instructions" --title "..."``. Exercise the
+    --workflow "Verify repository scripts" --title "..."``. Exercise the
     same shape against a minimal jobs/ fixture so the contract pins the
     flag-only invocation (no subcommand). Refs #552.
     """
@@ -988,7 +988,7 @@ def test_analyze_ci_timings_matches_workflow_args(
                 "jobs": [
                     {
                         "name": "lint-scripts-static",
-                        "workflow_name": "Verify agent instructions",
+                        "workflow_name": "Verify repository scripts",
                         "started_at": "2026-05-27T12:00:00Z",
                         "completed_at": "2026-05-27T12:01:00Z",
                         "steps": [
@@ -1010,7 +1010,7 @@ def test_analyze_ci_timings_matches_workflow_args(
             "--jobs",
             str(jobs_dir),
             "--workflow",
-            "Verify agent instructions",
+            "Verify repository scripts",
             "--title",
             "verify-agents.yml timings (weekly)",
         ]
@@ -1064,7 +1064,7 @@ def test_verify_shard_coverage_matches_workflow_args(tmp_path: Path) -> None:
 def test_preflight_pr_single_commit_matches_workflow_env(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Mirror the env shape used by .github/workflows/verify-github-content.yml.
+    """Mirror the env shape used by .github/workflows/portable-pr-policy.yml.
 
     The workflow shells to ``python3 scripts/preflight_pr_single_commit.py``
     with only BASE_REF in the env (no argv). Exercise the same shape:

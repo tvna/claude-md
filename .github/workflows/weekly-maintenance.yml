@@ -248,14 +248,14 @@ jobs:
           if [ -n "${CUTOFF}" ]; then
             uv run python scripts/analyze_ci_timings.py \
               --jobs jobs/ \
-              --workflow "Verify agent instructions" \
+              --workflow "Verify repository scripts" \
               --cutoff "${CUTOFF}" \
               --title "verify-agents.yml timings (pre vs post ${CUTOFF})" \
               > report.md
           else
             uv run python scripts/analyze_ci_timings.py \
               --jobs jobs/ \
-              --workflow "Verify agent instructions" \
+              --workflow "Verify repository scripts" \
               --title "verify-agents.yml timings (weekly)" \
               > report.md
           fi

@@ -1,9 +1,9 @@
 <!--
 Per CLAUDE.md section 3, every PR must reference its issue (`#<number>`).
 The line below is validated by the issue-link step inside
-.github/workflows/verify-github-content.yml on every `pull_request`
+.github/workflows/portable-pr-policy.yml on every `pull_request`
 event and enforced as a required status check on `main` via the
-`Verify GitHub content / gate` context (see
+`Portable PR policy / gate` context (see
 .github/rulesets/main.json).
 
 Default: `Closes #<number>` so the linked issue auto-closes on merge.
@@ -117,7 +117,7 @@ Check the box only when the matching pair is present.
 - [ ] `uv run python -m pytest -q` exits 0 (paired in Verification above)
 - [ ] CI green on the merge commit (all required status checks)
 - [ ] CLAUDE.md / AGENTS.md regenerated if applicable (`apm compile` produced no diff)
-- [ ] If this PR touches `.apm/instructions/**`, `CLAUDE.md`, or `AGENTS.md`: `verify-apm.yml` green (covers both portability scan and `apm compile` drift); any `portability-ack:` marker cites its authorizing sub-issue and reviewer applied `docs/runbooks/downstream-instruction-review-checklist.md`
+- [ ] If this PR touches `.apm/instructions/**`, `CLAUDE.md`, or `AGENTS.md`: `portable-pr-policy.yml` green (covers both portability scan and `apm compile` drift); any `portability-ack:` marker cites its authorizing sub-issue and reviewer applied `docs/runbooks/downstream-instruction-review-checklist.md`
 
 ### Post-merge (auto-retro signal)
 

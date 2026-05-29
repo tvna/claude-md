@@ -1,0 +1,148 @@
+name: Portable PR policy
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+  issues: read
+  pull-requests: read
+
+concurrency:
+  group: portable-pr-policy-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  APM_CLI_VERSION: "0.12.1"
+
+jobs:
+  gate:
+    name: "Portable PR policy / gate"
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      KIND: pull_request
+      TITLE: ${{ github.event.pull_request.title }}
+      PR_BODY: ${{ github.event.pull_request.body }}
+      PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+      BODY_POLICY_CUTOFF: "2026-05-26T00:00:00Z"
+      BODY_POLICY_SHAPE_CUTOFF: "2026-05-26T00:00:00Z"
+      BASE_REF: origin/${{ github.event.pull_request.base.ref }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          # fetch-depth: 0 makes origin/<base> reachable from HEAD so the
+          # single-commit and README translation checks can compare
+          # <base>..HEAD.
+          fetch-depth: 0
+
+      - name: Validate title policy
+        run: python3 scripts/title_policy.py verify --kind "$KIND"
+
+      - name: Validate single-commit PR rule
+        run: python3 scripts/preflight_pr_single_commit.py
+
+      - name: Validate body section structure
+        run: |
+          body_file="$(mktemp)"
+          printf '%s' "$PR_BODY" > "$body_file"
+          python3 scripts/body_policy.py verify \
+            --kind "$KIND" \
+            --body-file "$body_file"
+
+      - name: Validate PR-issue link
+        run: |
+          body_file="$(mktemp)"
+          printf '%s' "$PR_BODY" > "$body_file"
+          python3 scripts/issue_link.py verify --repo "$REPO" --body-file "$body_file" --author "$PR_AUTHOR"
+
+      - name: Validate README translation parity
+        run: |
+          body_file="$(mktemp)"
+          printf '%s' "$PR_BODY" > "$body_file"
+          python3 scripts/verify_readme_translation.py verify \
+            --base-ref "$BASE_REF" \
+            --body-file "$body_file"
+
+      - name: Scan APM artifacts for repo-local references
+        run: |
+          python3 scripts/scan_apm_portability.py verify \
+            --path .apm/instructions/master.instructions.md \
+            --path CLAUDE.md \
+            --path AGENTS.md
+
+      - name: Read uv pin from pyproject.toml
+        id: uvpin
+        run: |
+          set -euo pipefail
+          PIN="$(python3 scripts/uv_pin.py read)"
+          echo "version=${PIN}" >> "$GITHUB_OUTPUT"
+
+      - name: Install uv
+        env:
+          UV_VERSION: ${{ steps.uvpin.outputs.version }}
+        run: |
+          curl -LsSf "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/uv-x86_64-unknown-linux-gnu.tar.gz" -o /tmp/uv.tar.gz
+          tar -xzf /tmp/uv.tar.gz -C /tmp
+          mkdir -p "$HOME/.local/bin"
+          install -m 0755 /tmp/uv-x86_64-unknown-linux-gnu/uv "$HOME/.local/bin/uv"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          uv --version
+
+      - name: Install Python
+        run: uv python install
+
+      - name: Sync locked project environment
+        run: uv sync --locked
+
+      - name: Compile agent instructions
+        run: uv run --with "apm-cli==${APM_CLI_VERSION}" --exclude-newer "14 days" apm compile
+
+      - name: Verify CLAUDE.md / AGENTS.md drift
+        run: |
+          if ! git diff --exit-code -- CLAUDE.md AGENTS.md; then
+            echo "::error::CLAUDE.md / AGENTS.md drift detected vs .apm/instructions/master.instructions.md."
+            echo "Run 'uv run --with \"apm-cli==${APM_CLI_VERSION}\" --exclude-newer \"14 days\" apm compile' locally and commit the result."
+            exit 1
+          fi
+
+      - name: Verify .apm checksum lockfile
+        run: python3 scripts/verify_apm_checksums.py verify
+
+      - name: Run prek (j178/prek) against all files
+        run: uv tool run prek run --all-files --show-diff-on-failure
+
+  legacy-verify-apm-context:
+    name: "Verify APM / gate"
+    needs: gate
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Mirror portable PR policy result for live ruleset migration
+        env:
+          GATE_RESULT: ${{ needs.gate.result }}
+        run: |
+          if [ "$GATE_RESULT" != 'success' ]; then
+            echo "::error::Portable PR policy / gate result=${GATE_RESULT} (expected 'success')."
+            exit 1
+          fi
+          echo "Portable PR policy / gate passed."
+
+  legacy-github-content-context:
+    name: "Verify GitHub content / gate"
+    needs: gate
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Mirror portable PR policy result for live ruleset migration
+        env:
+          GATE_RESULT: ${{ needs.gate.result }}
+        run: |
+          if [ "$GATE_RESULT" != 'success' ]; then
+            echo "::error::Portable PR policy / gate result=${GATE_RESULT} (expected 'success')."
+            exit 1
+          fi
+          echo "Portable PR policy / gate passed."

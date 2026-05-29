@@ -4,7 +4,7 @@
 The workflow `.github/workflows/weekly-maintenance.yml` invokes
 this module. It does not duplicate any detector: it consumes the read-only
 output of existing scripts (`ruleset_drift.py detect`, `labels_apply.py
-plan`, `uv_pin.py drift`, `uv_pin.py stale`) and the verify-apm.yml
+plan`, `uv_pin.py drift`, `uv_pin.py stale`) and the portable-pr-policy.yml
 compile-then-diff recipe, then assembles a single Markdown table and a
 rolling comment body for the parent tracking issue (#178).
 
@@ -194,7 +194,7 @@ def classify_labels(*, rc: int, summary_text: str) -> FamilyRow:
 
 
 def classify_apm(*, rc: int) -> FamilyRow:
-    evidence = ".github/workflows/verify-apm.yml"
+    evidence = ".github/workflows/portable-pr-policy.yml"
     detector = "apm compile + git diff --exit-code -- CLAUDE.md AGENTS.md"
     if rc == 0:
         return FamilyRow(
@@ -445,7 +445,7 @@ def _assemble_families(args: argparse.Namespace) -> list[FamilyRow]:
         ),
         pr_gate_only_row(
             family="title-policy",
-            detector=".github/workflows/verify-github-content.yml",
+            detector=".github/workflows/portable-pr-policy.yml",
             evidence="scripts/title_policy.py",
         ),
         pr_gate_only_row(

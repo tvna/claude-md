@@ -200,7 +200,7 @@ Smoke tests for the live behaviour (from [#18 §Verification](https://github.com
 1. From a clean clone with a non-bypass account, `git push origin main` is rejected.
 2. `git push --force origin <any-branch>` is rejected.
 3. A PR whose squash commit subject lacks `#\d+` is blocked at merge (after Phase 3-B).
-4. A PR where `Verify agent instructions / gate` is failing is blocked at merge (after Phase 3-A).
+4. A PR where `Verify repository scripts / gate` is failing is blocked at merge (after Phase 3-A).
 5. A PR whose title contains Japanese, emoji, zero-width, RTL, fullwidth, or any other non-ASCII code point is blocked by `Verify title policy / gate` (after [#155](https://github.com/tvna/claude-md/issues/155)).
 6. The PR merge UI exposes only the "Squash and merge" button.
 

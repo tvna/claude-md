@@ -22,8 +22,8 @@ tests monkeypatch via the ``runner`` kwarg.
 Wiring:
 
 * CI: a step inside the ``gate`` job of
-  ``.github/workflows/verify-github-content.yml``. The job's existing
-  required-status-check context (``Verify GitHub content / gate``,
+  ``.github/workflows/portable-pr-policy.yml``. The job's existing
+  required-status-check context (``Portable PR policy / gate``,
   pinned in ``.github/rulesets/main.json``) covers this step too --
   no ruleset change needed. The job already checks out with
   ``fetch-depth: 0`` for the single-commit gate (#492), so the diff

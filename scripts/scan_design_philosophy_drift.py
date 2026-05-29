@@ -5,9 +5,9 @@ Issue #308 retrospective for PR #297 and PR #304: each PR added a new
 numbered section to ``.apm/instructions/master.instructions.md`` without
 adding the corresponding row to the Section 3 responsibility matrix in
 ``docs/prd/agent-rules-design-philosophy.md``. The existing
-``verify-apm-drift`` and ``verify-apm-portability`` gates enforce
+``portable-pr-policy`` gate enforces
 source-to-compiled-artifact equivalence and repo-local-noun absence
-respectively, but neither inspects the design-philosophy doc.
+respectively, but does not inspect the design-philosophy doc.
 
 Issue #329 retrospective for #322 extends this scan with two checks:
 row label parity (each ``| P<n> - <label> |`` row must equal the master

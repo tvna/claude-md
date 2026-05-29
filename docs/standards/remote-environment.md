@@ -11,7 +11,7 @@ The Claude Code on the Web remote environment ships with a stale `uv` (`0.8.17`)
 | `pyproject.toml` `[tool.uv].required-version` | All | **Single source of truth for the pinned uv version.** Exact `==X.Y.Z` pin (see [#112](https://github.com/tvna/claude-md/issues/112) for the tradeoff). |
 | `scripts/uv_pin.py` | All | Pin reader / drift checker / upstream-staleness checker. Single implementation consumed by CI, the SessionStart hook, and `tests/test_uv_pin.py`. |
 | `tests/test_uv_pin.py` | CI | Pytest suite for `scripts/uv_pin.py` (run by the `lint-uv-pin` job before the drift check). |
-| `.github/workflows/generate-agents.yml`, `.github/workflows/verify-apm-drift.yml` | CI | Call `scripts/uv_pin.py read` to derive the version, then install via the existing `curl` flow. No version literal lives here. |
+| `.github/workflows/generate-agents.yml`, `.github/workflows/portable-pr-policy.yml` | CI | Call `scripts/uv_pin.py read` to derive the version, then install via the existing `curl` flow. No version literal lives here. |
 | `scripts/install-uv.sh` | Remote session | Calls `scripts/uv_pin.py read` to derive the pin, then installs `uv` at SessionStart. |
 | `.claude/settings.json` | Remote session | Registers `scripts/install-uv.sh` as the `SessionStart` hook. Permitted under the [#109](https://github.com/tvna/claude-md/issues/109) carve-out in `docs/standards/repo-scope.md`. |
 | `.codex/hooks.json` | Codex session | Registers the same SessionStart hook shape for Codex. The uv installer remains Claude-remote-gated until Codex documents a stable remote-only signal; the language-context hook consumes Codex's `cwd` event field. Tracked by [#604](https://github.com/tvna/claude-md/issues/604) / [#606](https://github.com/tvna/claude-md/issues/606) / [#616](https://github.com/tvna/claude-md/issues/616). |
@@ -82,7 +82,7 @@ uv run --with "apm-cli==0.12.1" apm compile            # must exit 0
 git diff --exit-code -- CLAUDE.md AGENTS.md            # must exit 0 (no drift vs CI)
 ```
 
-The final two commands match the CI `verify-apm-drift.yml` gate. If they pass locally, the remote session is functionally equivalent to CI.
+The final two commands match the CI `portable-pr-policy.yml` APM drift steps. If they pass locally, the remote session is functionally equivalent to CI.
 
 Direct script test (any environment, no session needed):
 
@@ -96,7 +96,7 @@ env -u CLAUDE_CODE_REMOTE scripts/install-uv.sh        # no-op, exits 0 silently
 The uv version lives in **one place only**: `[tool.uv].required-version` in `pyproject.toml`. To bump:
 
 1. Edit `pyproject.toml` — change `required-version` to the new `==X.Y.Z` pin. That is the only file you touch.
-2. Open a PR. CI must show green for `verify-agents` (which includes the `lint-uv-pin` drift gate from [#112](https://github.com/tvna/claude-md/issues/112)) and `verify-apm-drift`.
+2. Open a PR. CI must show green for `verify-agents` (which includes the `lint-uv-pin` drift gate from [#112](https://github.com/tvna/claude-md/issues/112)) and `portable-pr-policy`.
 3. Open a new session against the PR branch and run the [Verification](#verification) recipe end-to-end.
 4. Record the bump in the retrospective issue for that PR (CLAUDE.md §3).
 
@@ -114,7 +114,7 @@ Upstream-follow: Dependabot (`.github/dependabot.yml`) does not natively bump `[
 - [#58](https://github.com/tvna/claude-md/issues/58) — parent governance issue for the `.claude/` prohibition.
 - `docs/standards/repo-scope.md` § "Security tradeoff for `.claude/settings.json`" — risk-acceptance record.
 - `pyproject.toml` — canonical `[tool.uv].required-version` (the single source of truth, see [#112](https://github.com/tvna/claude-md/issues/112)).
-- `.github/workflows/generate-agents.yml`, `.github/workflows/verify-apm-drift.yml` — consumers via inline `tomllib` read.
+- `.github/workflows/generate-agents.yml`, `.github/workflows/portable-pr-policy.yml` — consumers via inline `tomllib` read.
 - `.github/workflows/verify-agents.yml` (`lint-uv-pin` job) — drift gate that fails any reintroduction of a uv-version literal outside `pyproject.toml`.
 - `.github/dependabot.yml` — weekly bumps for `github-actions` SHAs and `uv.lock` entries.
 - https://code.claude.com/docs/en/claude-code-on-the-web — environment / network policy documentation.
