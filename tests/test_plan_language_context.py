@@ -103,7 +103,7 @@ class TestPrimaryOwner:
 
 class TestLoadOwnerLanguages:
     def test_happy_path(self) -> None:
-        text = '"@tvna": ja\n"@alice": en\n'
+        text = '"@tvna" = "ja"\n"@alice" = "en"\n'
         assert plc.load_owner_languages(text) == {"@tvna": "ja", "@alice": "en"}
 
     def test_empty_text(self) -> None:
@@ -112,16 +112,13 @@ class TestLoadOwnerLanguages:
     def test_whitespace_only(self) -> None:
         assert plc.load_owner_languages("   \n  \n") == {}
 
-    def test_yaml_null(self) -> None:
-        assert plc.load_owner_languages("---\n") == {}
-
-    def test_non_mapping_top_level_raises(self) -> None:
-        with pytest.raises(ValueError, match="must be a mapping"):
-            plc.load_owner_languages("- one\n- two\n")
-
     def test_drops_non_string_values(self) -> None:
-        # ``ja`` -> string, ``42`` -> int (dropped), nested mapping dropped.
-        text = '"@tvna": ja\n"@bot": 42\n"@x":\n  nested: y\n'
+        # Integer values are dropped; only string values are kept.
+        text = '"@tvna" = "ja"\n"@bot" = 42\n'
+        assert plc.load_owner_languages(text) == {"@tvna": "ja"}
+
+    def test_comments_are_ignored(self) -> None:
+        text = '# comment\n"@tvna" = "ja"\n'
         assert plc.load_owner_languages(text) == {"@tvna": "ja"}
 
 
@@ -133,16 +130,16 @@ class TestLoadOwnerLanguages:
 class TestResolveLanguage:
     def test_happy_path(self) -> None:
         codeowners = "*  @tvna\n"
-        owners = '"@tvna": ja\n'
+        owners = '"@tvna" = "ja"\n'
         assert plc.resolve_language(codeowners, owners) == ("@tvna", "ja")
 
-    def test_owner_not_in_owners_yaml(self) -> None:
-        owner, iso = plc.resolve_language("*  @nobody\n", '"@tvna": ja\n')
+    def test_owner_not_in_owners_toml(self) -> None:
+        owner, iso = plc.resolve_language("*  @nobody\n", '"@tvna" = "ja"\n')
         assert owner == "@nobody"
         assert iso is None
 
     def test_empty_codeowners(self) -> None:
-        assert plc.resolve_language("", '"@tvna": ja\n') == (None, None)
+        assert plc.resolve_language("", '"@tvna" = "ja"\n') == (None, None)
 
 
 # ---------------------------------------------------------------------------
@@ -178,6 +175,10 @@ class TestBuildContextMessage:
         assert "STOP" in msg
         assert "drift" in msg
 
+    def test_references_owners_toml(self) -> None:
+        msg = plc.build_context_message("@tvna", "ja")
+        assert "owners.toml" in msg
+
 
 # ---------------------------------------------------------------------------
 # decide
@@ -186,18 +187,18 @@ class TestBuildContextMessage:
 
 class TestDecide:
     def test_happy_path_emits_session_start_output(self) -> None:
-        out = plc.decide("*  @tvna\n", '"@tvna": ja\n')
+        out = plc.decide("*  @tvna\n", '"@tvna" = "ja"\n')
         assert out is not None
         assert out["hookSpecificOutput"]["hookEventName"] == "SessionStart"
         assert "ja" in out["hookSpecificOutput"]["additionalContext"]
 
     def test_unmapped_owner_returns_none(self) -> None:
-        assert plc.decide("*  @nobody\n", '"@tvna": ja\n') is None
+        assert plc.decide("*  @nobody\n", '"@tvna" = "ja"\n') is None
 
     def test_empty_codeowners_returns_none(self) -> None:
-        assert plc.decide("", '"@tvna": ja\n') is None
+        assert plc.decide("", '"@tvna" = "ja"\n') is None
 
-    def test_empty_owners_yaml_returns_none(self) -> None:
+    def test_empty_owners_toml_returns_none(self) -> None:
         assert plc.decide("*  @tvna\n", "") is None
 
 
@@ -211,15 +212,15 @@ class TestMain:
         self,
         tmp_path: Path,
         codeowners: str | None,
-        owners_yaml: str | None,
+        owners_toml: str | None,
     ) -> Path:
         """Build a fake repo root with optional config files."""
         gh = tmp_path / ".github"
         gh.mkdir()
         if codeowners is not None:
             (gh / "CODEOWNERS").write_text(codeowners, encoding="utf-8")
-        if owners_yaml is not None:
-            (gh / "owners.yaml").write_text(owners_yaml, encoding="utf-8")
+        if owners_toml is not None:
+            (gh / "owners.toml").write_text(owners_toml, encoding="utf-8")
         return tmp_path
 
     def _run(
@@ -246,7 +247,7 @@ class TestMain:
         capsys: pytest.CaptureFixture[str],
         tmp_path: Path,
     ) -> None:
-        root = self._setup_repo(tmp_path, "*  @tvna\n", '"@tvna": ja\n')
+        root = self._setup_repo(tmp_path, "*  @tvna\n", '"@tvna" = "ja"\n')
         rc, out, err = self._run(monkeypatch, capsys, root)
         assert rc == 0
         assert err == ""
@@ -262,7 +263,7 @@ class TestMain:
         capsys: pytest.CaptureFixture[str],
         tmp_path: Path,
     ) -> None:
-        root = self._setup_repo(tmp_path, "*  @tvna\n", '"@tvna": ja\n')
+        root = self._setup_repo(tmp_path, "*  @tvna\n", '"@tvna" = "ja"\n')
         payload = json.dumps(
             {"hook_event_name": "SessionStart", "cwd": str(root), "source": "startup"}
         )
@@ -286,11 +287,11 @@ class TestMain:
     ) -> None:
         (tmp_path / "env-root").mkdir()
         (tmp_path / "event-root").mkdir()
-        root = self._setup_repo(tmp_path / "env-root", "*  @tvna\n", '"@tvna": ja\n')
+        root = self._setup_repo(tmp_path / "env-root", "*  @tvna\n", '"@tvna" = "ja"\n')
         codex_root = self._setup_repo(
             tmp_path / "event-root",
             "*  @nobody\n",
-            '"@nobody": en\n',
+            '"@nobody" = "en"\n',
         )
         payload = json.dumps(
             {
@@ -310,14 +311,14 @@ class TestMain:
         capsys: pytest.CaptureFixture[str],
         tmp_path: Path,
     ) -> None:
-        root = self._setup_repo(tmp_path, None, '"@tvna": ja\n')
+        root = self._setup_repo(tmp_path, None, '"@tvna" = "ja"\n')
         rc, out, err = self._run(monkeypatch, capsys, root)
         assert rc == 0
         assert out == ""
         assert "::error::" in err
         assert "cannot read config" in err
 
-    def test_missing_owners_yaml_fails_open(
+    def test_missing_owners_toml_fails_open(
         self,
         monkeypatch: pytest.MonkeyPatch,
         capsys: pytest.CaptureFixture[str],
@@ -329,18 +330,18 @@ class TestMain:
         assert out == ""
         assert "::error::" in err
 
-    def test_malformed_yaml_fails_open(
+    def test_malformed_toml_fails_open(
         self,
         monkeypatch: pytest.MonkeyPatch,
         capsys: pytest.CaptureFixture[str],
         tmp_path: Path,
     ) -> None:
-        root = self._setup_repo(tmp_path, "*  @tvna\n", "not: yaml: [::\n")
+        root = self._setup_repo(tmp_path, "*  @tvna\n", "[invalid\n")
         rc, out, err = self._run(monkeypatch, capsys, root)
         assert rc == 0
         assert out == ""
         assert "::error::" in err
-        assert "cannot parse owners.yaml" in err
+        assert "cannot parse owners.toml" in err
 
     def test_unmapped_owner_emits_nothing(
         self,
@@ -348,7 +349,7 @@ class TestMain:
         capsys: pytest.CaptureFixture[str],
         tmp_path: Path,
     ) -> None:
-        root = self._setup_repo(tmp_path, "*  @nobody\n", '"@tvna": ja\n')
+        root = self._setup_repo(tmp_path, "*  @nobody\n", '"@tvna" = "ja"\n')
         rc, out, err = self._run(monkeypatch, capsys, root)
         assert rc == 0
         assert out == ""

@@ -2,4 +2,4 @@
 # scripts/plan_language_context.py (SessionStart hook). Keys retain
 # the literal '@' prefix so equality with CODEOWNERS handles is exact.
 # Refs #211.
-"@tvna": ja
+"@tvna" = "ja"

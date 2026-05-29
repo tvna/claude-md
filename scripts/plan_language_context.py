@@ -2,7 +2,7 @@
 """SessionStart hook: pin plan-mode language to the CODEOWNERS owner.
 
 Resolves the primary owner from ``.github/CODEOWNERS``, looks up that
-handle in ``.github/owners.yaml`` (ISO-639-1 code), and emits a
+handle in ``.github/owners.toml`` (ISO-639-1 code), and emits a
 ``hookSpecificOutput.additionalContext`` block telling the model to
 write plan-mode artifacts (plan files at ``/tmp/claude-plans/*.md``
 and chat responses while planning) in that language.
@@ -33,7 +33,7 @@ from pathlib import Path
 from typing import Any
 
 _CODEOWNERS_PATH = Path(".github") / "CODEOWNERS"
-_OWNERS_YAML_PATH = Path(".github") / "owners.yaml"
+_OWNERS_TOML_PATH = Path(".github") / "owners.toml"
 
 
 # ---------------------------------------------------------------------------
@@ -47,7 +47,7 @@ def parse_codeowners(text: str) -> list[tuple[str, list[str]]]:
     Comments (``#``-leading after lstrip) and blank lines are skipped.
     Each remaining line is split on whitespace; the first token is the
     glob pattern, the rest are owner handles (kept with the leading
-    ``@`` so equality with ``owners.yaml`` keys is literal).
+    ``@`` so equality with ``owners.toml`` keys is literal).
     """
     rules: list[tuple[str, list[str]]] = []
     for raw in text.splitlines():
@@ -89,8 +89,8 @@ def primary_owner(rules: list[tuple[str, list[str]]]) -> str | None:
     return None  # unreachable, but keeps the type narrow
 
 
-def load_owner_languages(yaml_text: str) -> dict[str, str]:
-    """Return a ``{handle: iso639_1}`` map parsed from owners.yaml.
+def load_owner_languages(toml_text: str) -> dict[str, str]:
+    """Return a ``{handle: iso639_1}`` map parsed from owners.toml.
 
     Empty text yields ``{}``. Non-mapping top-level structures raise
     ``ValueError`` so :func:`main` fails open with a diagnostic. Entries
@@ -98,20 +98,14 @@ def load_owner_languages(yaml_text: str) -> dict[str, str]:
     sidecar is owner-authored config, not user input, so loud failure
     on a single bad row would over-block.
     """
-    if not yaml_text.strip():
+    if not toml_text.strip():
         return {}
-    # Lazy import: declared in pyproject.toml, but a fresh clone before
-    # `uv sync` (or an older venv) may lack it. ImportError bubbles up
-    # to main() which logs and fails open per CLAUDE.md Sec.4.
-    import yaml
+    try:
+        import tomllib
+    except ImportError:
+        import tomli as tomllib  # type: ignore[no-redef]
 
-    data = yaml.safe_load(yaml_text)
-    if data is None:
-        return {}
-    if not isinstance(data, dict):
-        raise ValueError(
-            f"owners.yaml top-level must be a mapping, got {type(data).__name__}"
-        )
+    data = tomllib.loads(toml_text)
     out: dict[str, str] = {}
     for key, value in data.items():
         if isinstance(key, str) and isinstance(value, str):
@@ -120,19 +114,19 @@ def load_owner_languages(yaml_text: str) -> dict[str, str]:
 
 
 def resolve_language(
-    codeowners_text: str, owners_yaml_text: str
+    codeowners_text: str, owners_toml_text: str
 ) -> tuple[str | None, str | None]:
     """Return ``(owner_handle, iso_code)`` or ``(owner, None)`` / ``(None, None)``.
 
     Two-value return so :func:`build_context_message` can quote the
     handle in the injected text (useful for the reader to verify the
-    source). ``None`` for the language means "no entry in owners.yaml"
+    source). ``None`` for the language means "no entry in owners.toml"
     -- the caller treats this as "no context to inject".
     """
     owner = primary_owner(parse_codeowners(codeowners_text))
     if owner is None:
         return None, None
-    languages = load_owner_languages(owners_yaml_text)
+    languages = load_owner_languages(owners_toml_text)
     return owner, languages.get(owner)
 
 
@@ -146,7 +140,7 @@ def build_context_message(owner: str, iso: str) -> str:
     """
     return (
         f"Repository language policy (sourced from .github/CODEOWNERS "
-        f"primary owner {owner} -> .github/owners.yaml). While in plan "
+        f"primary owner {owner} -> .github/owners.toml). While in plan "
         f"mode, you MUST write plan files at /tmp/claude-plans/*.md "
         f"AND chat responses in language code '{iso}'; this SessionStart "
         f"injection is the authoritative source and MUST NOT be "
@@ -162,16 +156,16 @@ def build_context_message(owner: str, iso: str) -> str:
 
 
 def decide(
-    codeowners_text: str, owners_yaml_text: str
+    codeowners_text: str, owners_toml_text: str
 ) -> dict[str, Any] | None:
     """Return the SessionStart hook output dict, or ``None`` to no-op.
 
     Order:
       1. No primary owner -> None (CODEOWNERS empty or unreadable upstream).
-      2. Owner not mapped in owners.yaml -> None (operator hasn't opted in).
+      2. Owner not mapped in owners.toml -> None (operator hasn't opted in).
       3. Otherwise -> hookSpecificOutput dict with additionalContext.
     """
-    owner, iso = resolve_language(codeowners_text, owners_yaml_text)
+    owner, iso = resolve_language(codeowners_text, owners_toml_text)
     if owner is None or iso is None:
         return None
     return {
@@ -213,7 +207,7 @@ def _read_event_stdin() -> dict[str, Any]:
 def main(argv: list[str] | None = None) -> int:
     """Read project files, write SessionStart decision JSON to stdout.
 
-    Fails open per CLAUDE.md Sec.4: any OSError, YAML error, or import
+    Fails open per CLAUDE.md Sec.4: any OSError, TOML error, or import
     failure emits ``::error::...`` to stderr and exits 0 with empty
     stdout. A hook bug must not block session start; the absence of
     additionalContext degrades to the pre-existing English default.
@@ -230,7 +224,7 @@ def main(argv: list[str] | None = None) -> int:
     root = _project_root(event)
     try:
         codeowners_text = (root / _CODEOWNERS_PATH).read_text(encoding="utf-8")
-        owners_yaml_text = (root / _OWNERS_YAML_PATH).read_text(encoding="utf-8")
+        owners_toml_text = (root / _OWNERS_TOML_PATH).read_text(encoding="utf-8")
     except OSError as exc:
         print(
             f"::error::plan_language_context: cannot read config: {exc}",
@@ -239,19 +233,22 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     try:
-        import yaml
-    except ImportError as exc:
-        print(
-            f"::error::plan_language_context: PyYAML not installed: {exc}",
-            file=sys.stderr,
-        )
-        return 0
+        import tomllib
+    except ImportError:
+        try:
+            import tomli as tomllib  # type: ignore[no-redef]  # noqa: F401
+        except ImportError as exc:
+            print(
+                f"::error::plan_language_context: tomllib/tomli not available: {exc}",
+                file=sys.stderr,
+            )
+            return 0
 
     try:
-        decision = decide(codeowners_text, owners_yaml_text)
-    except (yaml.YAMLError, ValueError) as exc:
+        decision = decide(codeowners_text, owners_toml_text)
+    except Exception as exc:
         print(
-            f"::error::plan_language_context: cannot parse owners.yaml: {exc}",
+            f"::error::plan_language_context: cannot parse owners.toml: {exc}",
             file=sys.stderr,
         )
         return 0

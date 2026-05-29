@@ -2,11 +2,13 @@
 name = "claude-md"
 version = "1.0.0"
 requires-python = ">=3.10"
-# PyYAML powers scripts/plan_language_context.py (SessionStart hook, #211)
-# which parses .github/owners.yaml. Declared so uv-managed envs (CI,
-# tests) have the loader available; the hook itself fails open on
-# ImportError so legacy environments without it still start.
-dependencies = ["pyyaml>=6,<7"]
+# tomli is the Python 3.10 backport of stdlib tomllib (available in 3.11+).
+# scripts/plan_language_context.py (SessionStart hook, #211) tries tomllib
+# first and falls back to tomli on 3.10. Declared so uv-managed envs (CI,
+# tests) have the loader available; the hook itself fails open on ImportError.
+# pyyaml is retained because tests/test_superpowers_apm_install.py and
+# tests/test_workflow_cli_contracts.py import yaml directly at module level.
+dependencies = ["tomli>=2,<3", "pyyaml>=6,<7"]
 
 [tool.uv]
 package = false
@@ -27,7 +29,8 @@ dev = [
     "ruff>=0.7,<0.9",
     # Type gate (#192). 1.x line is stable; cap on 2.x for the same reason.
     "mypy>=1.11,<2",
-    # mypy needs stubs for pyyaml (used by scripts/plan_language_context.py).
+    # mypy stubs for pyyaml: still needed by tests/test_superpowers_apm_install.py
+    # and tests/test_workflow_cli_contracts.py which import yaml directly.
     "types-PyYAML>=6,<7",
     # Property-based test pilot for scripts/title_policy.py (#199). O1 in
     # docs/standards/workflow-script-quality.md documents the scope and the
