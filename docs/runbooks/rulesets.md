@@ -2,7 +2,7 @@
 
 This document is the operator-facing companion to the JSON source of truth in `.github/rulesets/`. The JSON files describe the rules; this document describes how to push them to GitHub, verify them, and roll them back.
 
-The rulesets are introduced incrementally per the phased rollout in [#18](https://github.com/tvna/claude-md/issues/18). The JSON files do not auto-apply — the **primary path** is the [`Apply rulesets`](../.github/workflows/apply-rulesets.yml) workflow ([#51](https://github.com/tvna/claude-md/issues/51)); a manual `gh api` fallback is preserved below each section as an escape hatch.
+The rulesets are introduced incrementally per the phased rollout in [#18](https://github.com/tvna/claude-md/issues/18). The JSON files do not auto-apply -- the **primary path** is the [`Apply rulesets`](../../.github/workflows/apply-rulesets.yml) workflow ([#51](https://github.com/tvna/claude-md/issues/51)); a manual `gh api` fallback is preserved below each section as an escape hatch.
 
 ## Operational hold
 
