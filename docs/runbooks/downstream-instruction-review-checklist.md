@@ -33,7 +33,7 @@ If the diff touches `CLAUDE.md` or `AGENTS.md` directly without a corresponding 
 ## 1. Universal vs project-specific
 
 - **Question.** Does the wording in the diff hold for every downstream consumer of this repository, or only for `tvna/claude-md`?
-- **Evidence.** Walk the decision tree (Q1 through Q5) in [`docs/prd/agent-rules-design-philosophy.md` section 4](../prd/agent-rules-design-philosophy.md#4-decision-tree-where-does-a-new-candidate-rule-belong). The `portable-pr-policy.yml` gate runs `scripts/scan_apm_portability.py` and automatically blocks two violation classes: Pattern A (literal repo-local tokens such as issue numbers, doc paths, script names, tool product names) and Pattern B (assertive-existence phrasing such as "lives in a dedicated runbook" or "see the companion guide" -- introduced by #535 after the #530 -> #533 regression where the same defect was repaired twice at different abstraction levels). The reviewer still inspects sentences that name no token and use no assertive-existence verb yet still encode a `tvna/claude-md`-only assumption; the automation backs the manual step rather than replacing it.
+- **Evidence.** Walk the decision tree (Q1 through Q5) in [`docs/prd/agent-rules-design-philosophy.md` section 4](../prd/agent-rules-design-philosophy.md#4-decision-tree---where-does-a-new-candidate-rule-belong). The `portable-pr-policy.yml` gate runs `scripts/scan_apm_portability.py` and automatically blocks two violation classes: Pattern A (literal repo-local tokens such as issue numbers, doc paths, script names, tool product names) and Pattern B (assertive-existence phrasing such as "lives in a dedicated runbook" or "see the companion guide" -- introduced by #535 after the #530 -> #533 regression where the same defect was repaired twice at different abstraction levels). The reviewer still inspects sentences that name no token and use no assertive-existence verb yet still encode a `tvna/claude-md`-only assumption; the automation backs the manual step rather than replacing it.
 - **Hard block.** Q4 = yes in the decision tree, or `portable-pr-policy.yml` red on either Pattern A or Pattern B, or any `portability-ack:` marker introduced without the section 7.4 escape-hatch conditions met. Request demotion to a repo-local doc or a harness check.
 
 ## 2. Compiled-output drift
@@ -110,5 +110,5 @@ Doc-only updates to this checklist (without an instruction change) revert via th
 - [`docs/prd/privileged-operation-runbooks.md`](../prd/privileged-operation-runbooks.md) -- six-control runbook for privileged dispatch operations.
 - [`docs/prd/non-ascii-defense.md`](../prd/non-ascii-defense.md) -- non-ASCII defense layers.
 - [`.github/PULL_REQUEST_TEMPLATE.md`](../../.github/PULL_REQUEST_TEMPLATE.md) -- links this checklist in the merge checklist.
-- [`scripts/scan_apm_portability.py`](../scripts/scan_apm_portability.py) -- deterministic gate for dimension 1.
+- [`scripts/scan_apm_portability.py`](../../scripts/scan_apm_portability.py) -- deterministic gate for dimension 1.
 - [`.github/workflows/portable-pr-policy.yml`](../../.github/workflows/portable-pr-policy.yml) -- deterministic gate for dimensions 1 and 2.

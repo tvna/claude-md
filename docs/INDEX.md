@@ -2,33 +2,45 @@
 
 This file enumerates every document under `docs/` by the lane that owns
 it. Lanes are the buckets that `ls docs/` already shows:
-`prd/` (design contracts), `standards/` (shapes, schemas, and contracts),
-`runbooks/` (operator procedures), `generated/` (checked-in generated
-views), `archive/` (frozen historical evidence).
+`prd/` (design-stage rationale and decision records), `standards/`
+(adopted rules, schemas, and contracts), `runbooks/` (operator
+procedures), `generated/` (checked-in generated views), `archive/`
+(frozen historical evidence).
 
 If you only want one entry per lane, read the first row of each table
 below -- that is the highest-traffic document in the lane. Otherwise
 scan the `Territory` column for the domain you care about and follow
 the `Companion` column to the workflow or script that implements it.
 
-The append-only policy for `archive/` is documented separately in
+Lane README files define the detailed placement rules:
+[`prd/README.md`](prd/README.md), [`standards/README.md`](standards/README.md),
+and [`runbooks/README.md`](runbooks/README.md). The append-only policy
+for `archive/` is documented separately in
 [`archive/RETENTION.md`](archive/RETENTION.md).
 
-## prd/ -- design contracts
+## prd/ -- design-stage rationale and decision records
 
 | File | Territory | Tracking issues | Companion |
 |---|---|---|---|
+| [README.md](prd/README.md) | Compatibility entrypoint for PRD/design placement rules. | #202 | `docs/INDEX.md`; `docs/standards/documentation-quality.md` |
 | [agent-rules-design-philosophy.md](prd/agent-rules-design-philosophy.md) | Meta-runbook for evolving `.apm/instructions/master.instructions.md` and its compiled `CLAUDE.md` / `AGENTS.md`. Six principles plus the four-lane responsibility matrix. | #226, #246 | `.apm/instructions/master.instructions.md` (source); `scripts/scan_design_philosophy_drift.py`; `.github/workflows/verify-design-philosophy.yml` |
+| [repair-loops-proliferation-analysis.md](prd/repair-loops-proliferation-analysis.md) | Read-only analysis of auto-retro repair-loop signal branches; feeds future follow-up issues rather than defining a gate. | #412 | `scripts/auto_retro.py`; `docs/archive/retrospective-pr-*.md` |
 | [security-control-inventory.md](prd/security-control-inventory.md) | MITRE ATT&CK coverage SoT for repository security surfaces. Re-read whenever a workflow, script, ruleset, or runbook lands. | #179, #178 | `scripts/security_drift_report.py`; `.github/workflows/weekly-maintenance.yml` |
 | [privileged-operation-runbooks.md](prd/privileged-operation-runbooks.md) | Six-control contract (authorizing issue, dry-run, live apply, rollback, audit, secret-leak evidence) for every privileged operation. | #182, #178 | `.github/workflows/apply-rulesets.yml`; `.github/workflows/apply-labels.yml`; `.github/workflows/weekly-maintenance.yml` |
 | [non-ascii-defense.md](prd/non-ascii-defense.md) | Three-layer ASCII discipline at the GitHub-post boundary. | #102 | `scripts/scan_non_ascii.py`; `scripts/preflight_non_ascii.py`; `scripts/sanitize_history.py`; `.github/workflows/issue-pr-triage.yml` |
 
-## standards/ -- shapes, schemas, contracts
+The last three `prd/` entries are adopted contracts with legacy
+placement. They should move to `standards/` in a scoped follow-up rather
+than serving as precedent for new PRD files.
+
+## standards/ -- adopted rules, schemas, and contracts
 
 | File | Territory | Tracking issues | Companion |
 |---|---|---|---|
+| [README.md](standards/README.md) | Placement rules for adopted repository standards. | #202 | `docs/INDEX.md`; `docs/standards/documentation-quality.md` |
 | [issue-pr-body-standard.md](standards/issue-pr-body-standard.md) | Required H2 sections, ordering, and Facts / Assumptions discipline for issue and PR bodies. | #226 section 7 | `scripts/body_policy.py`; `scripts/preflight_pr_body_required_sections.py`; `scripts/preflight_pr_template_shape.py`; `.github/workflows/portable-pr-policy.yml`; `.github/workflows/verify-github-content.yml`; `.github/PULL_REQUEST_TEMPLATE.md` |
 | [workflow-script-quality.md](standards/workflow-script-quality.md) | Quality gates M1 through M9 for Python scripts under `scripts/` invoked from `.github/workflows/`. | #226 principle P4 | `.github/workflows/verify-agents.yml` (`lint-scripts` job: ruff, mypy, pytest with coverage floor) |
+| [documentation-quality.md](standards/documentation-quality.md) | Deterministic documentation quality checks for contributor-facing standards and runbooks. | #202 | `scripts/scan_markdown_links.py`; `.github/workflows/verify-agents.yml` (`lint-scripts-static` job) |
 | [maintainability-metrics.md](standards/maintainability-metrics.md) | Lightweight maintainability metric inventory and the module-size pilot gate for scripts under `scripts/`. | #200 | `scripts/scan_maintainability_metrics.py`; `.github/workflows/verify-agents.yml` (`lint-scripts-static` job) |
 | [dependency-freshness.md](standards/dependency-freshness.md) | Recurring dependency freshness, lockfile drift, and toolchain reproducibility track. | #201 | `.github/workflows/weekly-maintenance.yml`; `scripts/uv_pin.py`; `scripts/scan_workflow_action_pins.py`; `scripts/scan_workflow_pip.py`; `.github/dependabot.yml` |
 | [repo-scope.md](standards/repo-scope.md) | Repo purpose statement and the content-based prohibition on agent-tool-specific configuration files (the Q1 disqualifier). | #58 | `.gitignore`; `.claudeignore` (current enforcement; Phase 4 CI gate parked) |
@@ -39,6 +51,7 @@ The append-only policy for `archive/` is documented separately in
 
 | File | Territory | Tracking issues | Companion |
 |---|---|---|---|
+| [README.md](runbooks/README.md) | Placement rules for operator procedures. | #202 | `docs/INDEX.md`; `docs/standards/documentation-quality.md` |
 | [rulesets.md](runbooks/rulesets.md) | Apply / verify / rollback runbook for `.github/rulesets/*.json` SoT. | #18 | `.github/workflows/apply-rulesets.yml`; `.github/workflows/verify-ruleset-sync.yml`; `.github/workflows/weekly-maintenance.yml`; `scripts/rulesets_apply.py`; `scripts/ruleset_drift.py`; `scripts/verify_ruleset_sync.py` |
 | [issue-triage.md](runbooks/issue-triage.md) | Label taxonomy and routing runbook readable from `labels.nodes[]` headers without fetching issue bodies. | #84, #34 | `.github/labels.json`; `.github/workflows/apply-labels.yml`; `scripts/labels_apply.py` |
 | [branch-cleanup.md](runbooks/branch-cleanup.md) | Weekly survey of abandoned branches; currently dry-run only. | #31, #18 Phase 4-B | `.github/workflows/weekly-maintenance.yml`; `scripts/branch_cleanup.py` |

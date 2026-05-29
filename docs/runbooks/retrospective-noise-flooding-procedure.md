@@ -2,7 +2,7 @@
 
 Operator-facing companion to the retrospective documents in
 [`docs/archive/retrospective-pr-*.md`](../archive/) and the auto-retro
-harness in [`scripts/auto_retro.py`](../scripts/auto_retro.py).
+harness in [`scripts/auto_retro.py`](../../scripts/auto_retro.py).
 Deliverable for [#315](https://github.com/tvna/claude-md/issues/315);
 part of [#63](https://github.com/tvna/claude-md/issues/63) Phase 8(D-3).
 
@@ -24,7 +24,7 @@ non-bot, non-retro merge.
   bundled into the design-doc PR.
 - Replacing the auto-retro repair-history pre-fill. The
   `_build_repair_history_table` function in
-  [`scripts/auto_retro.py`](../scripts/auto_retro.py) already detects
+  [`scripts/auto_retro.py`](../../scripts/auto_retro.py) already detects
   five signal classes (CI failures, fix-up commits with the canonical
   `fix(...)` commit on a fix-typed PR split out as a separate
   `Fix commit` row -- see #413, merge-from-main, multi-commit PR, and
@@ -305,7 +305,7 @@ its evidence base grows monotonically with each
 - [#63](https://github.com/tvna/claude-md/issues/63) -- parent
   catalog for the transparency-paradox threat model; this document
   is the Phase 8(D-3) entry.
-- [`scripts/auto_retro.py`](../scripts/auto_retro.py) -- auto-retro
+- [`scripts/auto_retro.py`](../../scripts/auto_retro.py) -- auto-retro
   harness; its `_build_repair_history_table` function pre-fills the
   signals consumed by [section 2](#2-signals-to-inspect) (S1, S2,
   S3).
