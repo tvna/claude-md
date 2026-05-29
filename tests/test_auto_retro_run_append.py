@@ -62,7 +62,7 @@ class TestRunAppendBranch:
     ) -> None:
         seen = self._setup(
             monkeypatch,
-            retro_title="retro(feat): review PR #20 repair loops",
+            retro_title="fix(auto-retro): review PR #20 repair loops",
         )
         event = merged_event(
             number=77,

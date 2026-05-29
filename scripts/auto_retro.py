@@ -16,12 +16,10 @@ bottom, monkeypatched in tests.
 
 Skip conditions:
 
-* the merged PR is itself a retrospective. Detected when the title
-  starts with ``retro(`` or ``retro:``, OR when the title's
-  ``type(scope)`` token contains the literal ``(retro)`` scope (e.g.
-  ``docs(retro):``, ``feat(retro):``). The second branch covers
-  retro-closing PRs that the title policy forces to use a non-``retro``
-  Conventional Commit type. Avoids recursion.
+* the merged PR is itself a retrospective. Detected when the title's
+  ``type(scope)`` token contains the literal ``(auto-retro)`` scope (e.g.
+  ``fix(auto-retro):``, ``docs(auto-retro):``) -- covering both the
+  auto-opened retro shape and retro-closing PRs. Avoids recursion.
 * the merged PR was authored or merged by a login in
   ``_trusted_bots._TRUSTED_BOT_LOGINS``
 * a retro issue already exists for the source PR (open or closed)
@@ -66,7 +64,6 @@ from _retro_labels import (
 from _trusted_bots import _TRUSTED_BOT_LOGINS
 from issue_link import extract_refs, strip_html_comments
 
-FALLBACK_TYPE_SCOPE = "retro"
 _DECISION_TREE_DOC_PATH = Path("docs/generated/auto-retro-decision-tree.md")
 
 # Refs issue #380: GitHub may not finalize merge_commit_sha by the time
@@ -88,8 +85,8 @@ _REQUIRED_SECTIONS: tuple[str, ...] = (
 )
 
 # Conservative match: lowercase Conventional Commit token with optional
-# parenthetic scope. Non-matching titles fall back to FALLBACK_TYPE_SCOPE
-# and the retro body records the fallback in its Facts section.
+# parenthetic scope. A non-matching source PR title yields an empty token;
+# the retro body records the parse failure in its Facts section.
 _TYPE_SCOPE_RE = re.compile(r"^([a-z][a-z0-9-]*(?:\([a-z0-9-]+\))?)\s*:")
 
 # Patterns for reading the post-2026-05-26 PR shape. Kept literally
@@ -263,8 +260,8 @@ def parse_event(event: dict[str, Any]) -> MergedPR:
 def extract_type_scope(pr_title: str) -> str:
     """Extract the ``type(scope)`` token from a Conventional Commit title.
 
-    Returns ``""`` when the title does not match; callers should fall
-    back to :data:`FALLBACK_TYPE_SCOPE`.
+    Returns ``""`` when the title does not match; callers handle the empty
+    token explicitly.
     """
     match = _TYPE_SCOPE_RE.match(pr_title)
     if match is None:
@@ -275,17 +272,26 @@ def extract_type_scope(pr_title: str) -> str:
 def is_retro_pr(pr_title: str) -> bool:
     """True if the PR is itself a retrospective (skip to avoid recursion).
 
-    Matches in two ways: (a) title starts with ``retro(`` or ``retro:``
-    (case-insensitive, leading whitespace stripped); (b) the title's
-    ``type(scope)`` token literally contains ``(retro)``. The second
-    branch covers retro-closing PRs like ``docs(retro): ...`` that the
-    title policy forces to use a non-``retro`` Conventional Commit type.
+    Matches when the title's ``type(scope)`` token literally contains
+    ``(auto-retro)`` -- covering both auto-opened retros and retro-closing
+    PRs like ``fix(auto-retro): ...`` / ``docs(auto-retro): ...`` that the
+    title policy forces to use an allowed Conventional Commit type with an
+    ``auto-retro`` scope.
     """
     stripped = pr_title.lstrip().lower()
-    if stripped.startswith("retro(") or stripped.startswith("retro:"):
-        return True
     token = extract_type_scope(stripped) or ""
-    return "(retro)" in token
+    return "(auto-retro)" in token
+
+
+def is_retro_issue_title(title: str) -> bool:
+    """True if *title* is an auto-opened retrospective issue title.
+
+    Single source of truth for retro-issue title detection. Matches the
+    canonical ``fix(auto-retro): review PR #<N> repair loops`` prefix
+    (case-insensitive after lstrip). Legacy ``retro(`` / ``retro:`` titles
+    are migrated to this prefix, so only the new shape is recognized.
+    """
+    return title.lstrip().lower().startswith("fix(auto-retro)")
 
 
 def should_skip(
@@ -973,17 +979,16 @@ def is_tentative_by_prior(
 
 
 def build_retro_title(pr: MergedPR) -> str:
-    """``retro(<type>): review PR #<N> repair loops``.
+    """``fix(auto-retro): review PR #<N> repair loops``.
 
-    Strips the optional ``(scope)`` from the source ``type(scope)`` token
-    to keep the generated title at a single nesting level. Without this,
-    a source PR titled ``docs(retro): ...`` would produce
-    ``retro(docs(retro)): ...`` -- nested parens that break the
-    Conventional Commit shape of the auto-opened retro title.
+    The title is a fixed ``fix(auto-retro)`` Conventional Commit token:
+    ``fix`` is an allowed type in ``.github/title-policy.toml`` and
+    ``auto-retro`` is the canonical scope, so the auto-opened retro title
+    is policy-conformant. The source PR's own ``type(scope)`` is no longer
+    encoded in the title; it remains recorded in the issue body's Facts
+    section.
     """
-    token = extract_type_scope(pr.title) or FALLBACK_TYPE_SCOPE
-    type_only = token.split("(", 1)[0]
-    return f"retro({type_only}): review PR #{pr.number} repair loops"
+    return f"fix(auto-retro): review PR #{pr.number} repair loops"
 
 
 # check_run conclusion values that count as a repair signal. Excludes
@@ -1250,14 +1255,14 @@ def build_retro_body(
     """
     type_scope = extract_type_scope(pr.title)
     # Bare type (scope stripped) drives the canonical-fix exemption in
-    # _build_repair_history_table. Mirrors build_retro_title's split.
+    # _build_repair_history_table.
     pr_type = type_scope.split("(", 1)[0] if type_scope else ""
     fallback_note = ""
     if not type_scope:
         fallback_note = (
             "\n- Note: source PR title did not parse as a Conventional "
-            "Commit-style `type(scope): subject`; retro title falls back to "
-            f"`{FALLBACK_TYPE_SCOPE}`.\n"
+            "Commit-style `type(scope): subject`; the source type is "
+            "recorded as empty for repair-history classification.\n"
         )
     layer_str = (
         ", ".join(pr.layer_labels) if pr.layer_labels else "(none on source PR)"
@@ -1391,8 +1396,8 @@ def find_target_retro_from_refs(
     - the PR title starts with ``fix(`` (Conventional Commit ``fix``
       type), AND
     - the PR body has at least one line-anchored ``Refs|Closes|Fixes|
-      Resolves #N`` whose target issue title starts with ``retro(`` or
-      ``retro:`` (case-insensitive after lstrip).
+      Resolves #N`` whose target issue title is a retro issue title (see
+      :func:`is_retro_issue_title`).
 
     The first match wins so the body order determines priority. Pure
     function: callers supply ``referenced_titles`` via :func:`fetch_issue_titles`.
@@ -1405,8 +1410,7 @@ def find_target_retro_from_refs(
         title = referenced_titles.get(number)
         if title is None:
             continue
-        stripped = title.lstrip().lower()
-        if stripped.startswith("retro(") or stripped.startswith("retro:"):
+        if is_retro_issue_title(title):
             return number
     return None
 
@@ -1461,18 +1465,17 @@ def find_existing_retro(
 ) -> int | None:
     """Return the matching retro issue number from search results, or None.
 
-    Match heuristic: title begins with ``retro(`` or ``retro:`` (case-
-    insensitive after lstrip) AND contains ``PR #<N>`` not followed by
+    Match heuristic: title is a retro issue title (see
+    :func:`is_retro_issue_title`) AND contains ``PR #<N>`` not followed by
     another digit. The trailing ``(?!\\d)`` lookahead prevents PR-number
     prefix collisions (e.g. a lookup for #249 must not match a retro for
-    #2490). The prefix guard avoids matching an unrelated retro that
-    happens to share a type-scope token.
+    #2490). The prefix guard avoids matching an unrelated issue that
+    happens to mention the same PR number.
     """
     needle = re.compile(rf"PR #{pr_number}(?!\d)")
     for item in search_items:
         title = item.get("title") or ""
-        stripped = title.lstrip().lower()
-        if not (stripped.startswith("retro(") or stripped.startswith("retro:")):
+        if not is_retro_issue_title(title):
             continue
         if needle.search(title):
             return item.get("number")
@@ -2077,9 +2080,9 @@ def search_open_retro_issues(repo: str) -> list[dict[str, Any]]:
     """Return open retro issues for *repo* (paginated to one page).
 
     Filter: ``layer:meta`` + ``type:docs`` labels (the two labels every
-    auto-opened retro carries per :func:`issue_labels`) AND title prefix
-    ``retro(`` / ``retro:`` (filtered client-side because the GitHub
-    search API does not honor leading parens in ``in:title``).
+    auto-opened retro carries per :func:`issue_labels`) AND a retro issue
+    title (see :func:`is_retro_issue_title`), filtered client-side because
+    the GitHub search API does not honor leading parens in ``in:title``.
 
     The per-page cap (:data:`_SENTINEL_SEARCH_PAGE_SIZE`) is a soft
     ceiling -- if it overflows the next cron tick processes the
@@ -2100,8 +2103,7 @@ def search_open_retro_issues(repo: str) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     for item in items:
         title = item.get("title") or ""
-        stripped = title.lstrip().lower()
-        if stripped.startswith("retro(") or stripped.startswith("retro:"):
+        if is_retro_issue_title(title):
             out.append(item)
     return out
 
