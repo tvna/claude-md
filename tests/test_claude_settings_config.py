@@ -54,6 +54,15 @@ def test_claude_post_tool_use_starts_ci_monitor_after_mcp_pr_create() -> None:
 
     assert post_tool_use == [
         {
+            "matcher": "Write",
+            "hooks": [
+                {
+                    "type": "command",
+                    "command": "python3 $CLAUDE_PROJECT_DIR/scripts/plan_approval_gate.py",
+                }
+            ],
+        },
+        {
             "matcher": "mcp__github__create_pull_request",
             "hooks": [
                 {
@@ -61,7 +70,7 @@ def test_claude_post_tool_use_starts_ci_monitor_after_mcp_pr_create() -> None:
                     "command": "python3 $CLAUDE_PROJECT_DIR/scripts/post_pr_create_ci_monitor.py",
                 }
             ],
-        }
+        },
     ]
 
 
