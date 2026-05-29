@@ -8,10 +8,29 @@ from __future__ import annotations
 
 import pytest
 import title_policy
+import tomllib
 from hypothesis import given
 from hypothesis import strategies as st
 
 pytestmark = pytest.mark.shard_policy
+
+
+class TestTitlePolicyConfig:
+    def test_config_lives_under_github(self) -> None:
+        assert title_policy.TITLE_POLICY_CONFIG.parts[-2:] == (
+            ".github",
+            "title-policy.toml",
+        )
+
+    def test_allowed_types_are_loaded_from_toml(self) -> None:
+        data = tomllib.loads(title_policy.TITLE_POLICY_CONFIG.read_text(encoding="utf-8"))
+        configured = data["title_policy"]["types"]
+        assert configured == title_policy.allowed_types_csv().split(", ")
+
+    def test_scope_pattern_is_loaded_from_toml(self) -> None:
+        data = tomllib.loads(title_policy.TITLE_POLICY_CONFIG.read_text(encoding="utf-8"))
+        assert data["title_policy"]["scope_pattern"] == title_policy._SCOPE_PATTERN
+
 
 class TestIsAsciiTitle:
     @pytest.mark.parametrize(
