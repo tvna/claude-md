@@ -14,6 +14,8 @@ pytestmark = pytest.mark.shard_preflight
 
 ROOT = Path(__file__).resolve().parents[1]
 CODEX_HOOKS = ROOT / ".codex" / "hooks.json"
+PERMISSION_REQUEST_PLAN = ROOT / "docs" / "prd" / "codex-permission-request-policy-gate.md"
+DOCS_INDEX = ROOT / "docs" / "INDEX.md"
 CORE_HOOK_EVENTS = {"SessionStart", "PreToolUse", "PostToolUse"}
 
 
@@ -226,3 +228,27 @@ def test_codex_post_tool_use_starts_ci_monitor_after_mcp_pr_create() -> None:
     assert "^mcp__github__create_pull_request$" in matchers
     assert "python3 scripts/post_pr_create_ci_monitor.py" in commands
     assert "python3 scripts/ci_early_status_probe.py" in commands
+
+
+def test_codex_permission_request_policy_plan_is_documented() -> None:
+    body = PERMISSION_REQUEST_PLAN.read_text(encoding="utf-8")
+
+    required_phrases = [
+        "Refs #711",
+        "Refs #617",
+        "Refs #604",
+        "Codex-specific entry point",
+        "shared repository policy predicate",
+        "Claude parity",
+        "allow, deny, and no-decision",
+        "malformed JSON",
+        "unsupported payload",
+        "must not update `.codex/hooks.json`",
+        "rollback command",
+        "targeted verification",
+    ]
+    for phrase in required_phrases:
+        assert phrase in body
+
+    index = DOCS_INDEX.read_text(encoding="utf-8")
+    assert "codex-permission-request-policy-gate.md" in index
