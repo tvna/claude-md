@@ -111,11 +111,25 @@ VS Code Server, fileWatcher, extensionHost, or Git commands, the pinned
 image SHA points at an amd64-only publish and should be updated after
 the next successful multi-platform publish.
 
-Each publish creates two tags per agent:
+Each publish creates two runnable tags per agent:
 
 - `main` as a moving convenience alias.
 - the exact source commit SHA for local VS Code entrypoints, audit, and
   rollback.
+
+The build job also maintains non-runnable BuildKit cache tags in GHCR:
+
+- `buildcache-amd64`
+- `buildcache-arm64`
+
+Those cache tags are scoped per agent package and architecture, for
+example `ghcr.io/tvna/claude-md-devcontainer-codex:buildcache-arm64`.
+They are imported with `--cache-from` before each build and exported with
+`--cache-to ... mode=max` after successful builds. They must not be used
+as local devcontainer image pins. If a cache becomes suspect, delete only
+the matching `buildcache-*` tag from GHCR or temporarily add
+`--no-cache` while investigating; the runnable commit-SHA image tags
+remain the source of truth for local users.
 
 If a devcontainer image input changes, the publish workflow builds and
 pushes the new image tag first, then opens a follow-up PR that updates

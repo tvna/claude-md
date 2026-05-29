@@ -57,14 +57,23 @@ jobs:
             --username "${{ github.actor }}" \
             --password-stdin
 
+      - name: Prepare BuildKit builder
+        run: |
+          builder="devcontainer-${{ matrix.agent }}-${{ matrix.arch }}"
+          docker buildx create --name "$builder" --driver docker-container --use
+          docker buildx inspect --bootstrap
+
       - name: Build and publish ${{ matrix.agent }} devcontainer image
         run: |
           image="${IMAGE_PREFIX}-${{ matrix.agent }}"
+          cache_ref="${image}:buildcache-${{ matrix.arch }}"
           npx --yes "@devcontainers/cli@${DEVCONTAINERS_CLI_VERSION}" build \
             --workspace-folder . \
             --config ".devcontainer/images/${{ matrix.agent }}/devcontainer.json" \
             --platform "${{ matrix.platform }}" \
             --image-name "${image}:${GITHUB_SHA}-${{ matrix.arch }}" \
+            --cache-from "type=registry,ref=${cache_ref}" \
+            --cache-to "type=registry,ref=${cache_ref},mode=max" \
             --push
 
   publish:
