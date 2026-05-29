@@ -87,7 +87,7 @@ def test_codex_pre_tool_use_covers_claude_github_write_hooks() -> None:
     assert "python3 scripts/preflight_pr_template_shape.py" in commands
 
 
-def test_codex_post_tool_use_checks_pr_ci_early() -> None:
+def test_codex_post_tool_use_starts_ci_monitor_after_mcp_pr_create() -> None:
     data = _load_hooks()
     hooks = data["hooks"]
     assert isinstance(hooks, dict)
@@ -109,4 +109,5 @@ def test_codex_post_tool_use_checks_pr_ci_early() -> None:
             commands.append(command)
 
     assert "^mcp__github__create_pull_request$" in matchers
+    assert "python3 scripts/post_pr_create_ci_monitor.py" in commands
     assert "python3 scripts/ci_early_status_probe.py" in commands

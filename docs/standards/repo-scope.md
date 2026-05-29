@@ -47,7 +47,7 @@ The list is non-exhaustive. When a new tool emerges, follow the *Update procedur
 | `docs/` | Operator runbooks. Subject to the *Open Q1 resolution* rule above. |
 | `claude-md.code-workspace` ([#49](https://github.com/tvna/claude-md/issues/49)) | VS Code multi-root workspace pointer. Editor metadata, not agent config. |
 | `.claude/settings.local.json` | Documented developer-local file. The broader `.claude/` directory rule transitively keeps it out of commits — the historical entry remains documented here so future contributors understand it predated the broader rule. |
-| `.claude/settings.json` ([#109](https://github.com/tvna/claude-md/issues/109)) | **Narrow file-level carve-out** to host deterministic `SessionStart` provisioning hooks. The broader `.claude/` directory rule still applies to every other path under `.claude/` (e.g. `.claude/hooks/`, `.claude/commands/`). See *Security tradeoff* below. |
+| `.claude/settings.json` ([#109](https://github.com/tvna/claude-md/issues/109)) | **Narrow file-level carve-out** to host deterministic lifecycle hooks. The broader `.claude/` directory rule still applies to every other path under `.claude/` (e.g. `.claude/hooks/`, `.claude/commands/`). See *Security tradeoff* below. |
 | `.codex/hooks.json` ([#604](https://github.com/tvna/claude-md/issues/604), [#606](https://github.com/tvna/claude-md/issues/606)) | **Narrow file-level carve-out** to host deterministic Codex lifecycle hooks that mirror existing repo-owned Claude hook scripts where Codex supports the event shape. The broader `.codex/` directory rule still applies to every other path under `.codex/`. |
 
 ### Codex import of the `.claude/settings.json` guard
@@ -55,7 +55,7 @@ The list is non-exhaustive. When a new tool emerges, follow the *Update procedur
 Codex inherits the same governance principle through a Codex-specific hook primitive:
 
 - **Fact.** This repository already targets Codex through the compiled `AGENTS.md` surface (`apm.yml: target: [claude, codex]`).
-- **Fact.** `.claude/settings.json` is allowed only because it is a reviewed, deterministic provisioning trigger for Claude Code remote sessions.
+- **Fact.** `.claude/settings.json` is allowed only because it is a reviewed, deterministic hook trigger for Claude Code sessions.
 - **Fact.** Codex documents repo-local hooks in `.codex/hooks.json`; #604 records the matching governance primitive, and #606 adds the first reviewed implementation slice.
 - **Rule.** Only `.codex/hooks.json` is carved out. It may invoke repo-owned deterministic scripts under `scripts/` where behavior is tested for Codex payloads or is payload-independent. All other `.codex/` paths remain prohibited.
 - **Implication.** Codex-specific preferences, local credentials, prompts, model choices, or UI configuration stay outside the repo. Universal behavior continues to flow through `.apm/instructions/master.instructions.md` and the generated `AGENTS.md`.
