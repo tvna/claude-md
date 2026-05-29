@@ -121,7 +121,7 @@ class TestFindInvalidType:
             ("security(scripts): enable ruff S rules", "security"),
             # Bare unknown type, no scope.
             ("hotfix: emergency", "hotfix"),
-            # Capitalized type does not match the lowercase _CONVENTIONAL_TYPES.
+            # Capitalized type does not match the lowercase configured types.
             ("Feat: shouted", "Feat"),
             # Missing the required ": " separator.
             ("featx add thing", "featx add thing"),

@@ -19,29 +19,44 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
+import tomllib
+
 _DEFAULT_MAX_FINDINGS = 10
-_CONVENTIONAL_TYPES = (
-    "build",
-    "chore",
-    "ci",
-    "docs",
-    "feat",
-    "fix",
-    "perf",
-    "refactor",
-    "revert",
-    "style",
-    "test",
-    "tracking",
-)
-_TYPE_PATTERN = "|".join(_CONVENTIONAL_TYPES)
-_CONVENTIONAL_TITLE_RE = re.compile(rf"^(?:{_TYPE_PATTERN})(?:\([a-z0-9][a-z0-9-]*\))?: .+")
+TITLE_POLICY_CONFIG = Path(__file__).resolve().parents[1] / ".github" / "title-policy.toml"
+
+
+def _load_title_policy_config(path: Path = TITLE_POLICY_CONFIG) -> tuple[tuple[str, ...], str]:
+    with path.open("rb") as fp:
+        data = tomllib.load(fp)
+    policy = data.get("title_policy")
+    if not isinstance(policy, dict):
+        raise ValueError(f"missing [title_policy] table in {path}")
+
+    types = policy.get("types")
+    if (
+        not isinstance(types, list)
+        or not types
+        or any(not isinstance(item, str) or not item for item in types)
+    ):
+        raise ValueError(f"{path} [title_policy].types must be a non-empty string list")
+
+    scope_pattern = policy.get("scope_pattern")
+    if not isinstance(scope_pattern, str) or not scope_pattern:
+        raise ValueError(f"{path} [title_policy].scope_pattern must be a non-empty string")
+
+    re.compile(scope_pattern)
+    return tuple(types), scope_pattern
+
+
+_CONVENTIONAL_TYPES, _SCOPE_PATTERN = _load_title_policy_config()
+_TYPE_PATTERN = "|".join(re.escape(item) for item in _CONVENTIONAL_TYPES)
+_CONVENTIONAL_TITLE_RE = re.compile(rf"^(?:{_TYPE_PATTERN})(?:\({_SCOPE_PATTERN}\))?: .+")
 # Per #167 and #214, PR subject lines must not carry issue refs like (#NNN);
 # `.github/workflows/verify-issue-link.yml` already validates `Refs #NNN` in
 # the PR body, so the title is redundant when it duplicates that link.
 _PR_ISSUE_REF_RE = re.compile(r"\(#\d+\)")
 _TITLE_PARTS_RE = re.compile(
-    rf"^(?P<type>{_TYPE_PATTERN})(?:\((?P<scope>[a-z0-9][a-z0-9-]*)\))?: (?P<summary>.+)"
+    rf"^(?P<type>{_TYPE_PATTERN})(?:\((?P<scope>{_SCOPE_PATTERN})\))?: (?P<summary>.+)"
 )
 
 _PERFORMANCE_TERMS = frozenset(
