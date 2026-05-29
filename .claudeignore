@@ -9,7 +9,7 @@ __pycache__/
 
 # Agent-tool-specific config (prohibited per docs/standards/repo-scope.md, #58)
 # .claude/settings.json is the narrow file-level carve-out from #109
-# (deterministic SessionStart provisioning hooks only).
+# (deterministic lifecycle hooks only).
 .claude/*
 !.claude/settings.json
 .cursor/
