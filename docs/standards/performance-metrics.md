@@ -172,6 +172,6 @@ Explicitly deferred to later phases / sub-issues:
 - [#60](https://github.com/tvna/claude-md/issues/60) — Phase 1 (scope governance, sibling)
 - [#62](https://github.com/tvna/claude-md/issues/62) — Phase 3 (baseline numbers, depends on this contract)
 - [`docs/standards/repo-scope.md`](repo-scope.md) — declared repo purpose (the source of "(2) measuring the performance impact")
-- [`docs/runbooks/rulesets.md`](../runbooks/rulesets.md), [`docs/ai-triage-routing.md`](ai-triage-routing.md) — runbook format precedent
-- [`apm.yml`](../apm.yml) — `target: [claude, codex]`; defines what `apm compile` produces (input to metric (a))
-- [`.github/workflows/generate-agents.yml`](../.github/workflows/generate-agents.yml) — toolchain pin (`apm-cli==0.12.1`, `uv`) reused by the harness
+- [`docs/runbooks/rulesets.md`](../runbooks/rulesets.md), [`docs/runbooks/issue-triage.md`](../runbooks/issue-triage.md) — runbook format precedent
+- [`apm.yml`](../../apm.yml) — `target: [claude, codex]`; defines what `apm compile` produces (input to metric (a))
+- [`.github/workflows/generate-agents.yml`](../../.github/workflows/generate-agents.yml) — toolchain pin (`apm-cli==0.12.1`, `uv`) reused by the harness
