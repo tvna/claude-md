@@ -184,6 +184,12 @@ STEPS: tuple[Step, ...] = (
         argv=("python3", "scripts/preflight_pr_single_commit.py"),
     ),
     Step(
+        # Refs #745. Fetches the live base branch and fails before push when
+        # HEAD does not contain it, matching GitHub's out-of-date branch gate.
+        name="preflight_branch_base",
+        argv=("python3", "scripts/preflight_branch_base.py", "verify"),
+    ),
+    Step(
         # Refs #476. PR body is optional locally (PR_BODY env unset means
         # the opt-out marker is absent, which is the stricter default --
         # contributors who run preflight see drift before push). The

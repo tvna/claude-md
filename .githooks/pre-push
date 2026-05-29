@@ -21,10 +21,16 @@ fi
 
 repo_root="$(git rev-parse --show-toplevel)"
 preflight="${repo_root}/scripts/preflight_all.py"
+base_preflight="${repo_root}/scripts/preflight_branch_base.py"
 
 if [ ! -f "${preflight}" ]; then
     echo "pre-push: ${preflight} not found, skipping." >&2
     exit 0
+fi
+
+if [ -f "${base_preflight}" ]; then
+    echo "pre-push: checking branch contains latest origin/main" >&2
+    python3 "${base_preflight}" verify
 fi
 
 echo "pre-push: running scripts/preflight_all.py" >&2

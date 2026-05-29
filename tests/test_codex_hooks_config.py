@@ -42,6 +42,13 @@ def _command_entries(data: dict[str, object]) -> list[dict[str, object]]:
     return entries
 
 
+def _repo_script_from_command(command: str) -> str:
+    for token in command.split():
+        if token.startswith("scripts/"):
+            return token
+    return command.split()[-1]
+
+
 def test_codex_hooks_json_is_valid() -> None:
     data = _load_hooks()
     hooks = data.get("hooks")
@@ -59,7 +66,7 @@ def test_all_codex_hook_commands_point_to_repo_files() -> None:
         assert isinstance(command, str)
         if "CLAUDE_PLUGIN_ROOT" in command or command == "./hooks/run-hook.cmd session-start":
             continue
-        path = command.split()[-1]
+        path = _repo_script_from_command(command)
         assert not path.startswith("/")
         assert (ROOT / path).exists()
 
@@ -118,6 +125,32 @@ def test_codex_pre_tool_use_covers_claude_github_write_hooks() -> None:
     assert "python3 scripts/preflight_title_policy.py" in commands
     assert "python3 scripts/preflight_pr_body_required_sections.py" in commands
     assert "python3 scripts/preflight_pr_template_shape.py" in commands
+    assert "python3 scripts/preflight_branch_base.py verify" in commands
+
+
+def test_codex_pr_write_hooks_match_claude_base_freshness_gate() -> None:
+    data = _load_hooks()
+    hooks = data["hooks"]
+    assert isinstance(hooks, dict)
+    pre_tool_use = hooks["PreToolUse"]
+    assert isinstance(pre_tool_use, list)
+
+    matching = [
+        group
+        for group in pre_tool_use
+        if isinstance(group, dict)
+        and group.get("matcher") == "^mcp__github__(create_pull_request|update_pull_request)$"
+    ]
+    assert matching
+    assert any(
+        isinstance(handlers := group.get("hooks"), list)
+        and any(
+            isinstance(handler, dict)
+            and handler.get("command") == "python3 scripts/preflight_branch_base.py verify"
+            for handler in handlers
+        )
+        for group in matching
+    )
 
 
 def test_codex_post_tool_use_starts_ci_monitor_after_mcp_pr_create() -> None:

@@ -35,3 +35,10 @@ repos:
         pass_filenames: false
         stages: [pre-push]
         always_run: true
+      - id: preflight-branch-base
+        name: preflight branch base (scripts/preflight_branch_base.py verify)
+        entry: uv run python scripts/preflight_branch_base.py verify
+        language: system
+        pass_filenames: false
+        stages: [pre-push]
+        always_run: true
