@@ -102,6 +102,7 @@ jobs:
           ci_ops_auto_retro_decision_tree,
           ci_ops_auto_retro_signals,
           ci_ops_auto_retro_skips,
+          ci_ops_auto_retro_rescan,
           default,
         ]
     steps:
@@ -241,7 +242,7 @@ jobs:
         if: always()
         uses: codecov/test-results-action@0fa95f0e1eeaafde2c782583b36b28ad0d8c77d3 # v1.2.1
         with:
-          files: ./junit-artifacts/junit-preflight.xml,./junit-artifacts/junit-policy.xml,./junit-artifacts/junit-ci_ops.xml,./junit-artifacts/junit-ci_ops_auto_retro_append.xml,./junit-artifacts/junit-ci_ops_auto_retro_create.xml,./junit-artifacts/junit-ci_ops_auto_retro_create_slow.xml,./junit-artifacts/junit-ci_ops_auto_retro_decision_tree.xml,./junit-artifacts/junit-ci_ops_auto_retro_signals.xml,./junit-artifacts/junit-ci_ops_auto_retro_skips.xml,./junit-artifacts/junit-default.xml
+          files: ./junit-artifacts/junit-preflight.xml,./junit-artifacts/junit-policy.xml,./junit-artifacts/junit-ci_ops.xml,./junit-artifacts/junit-ci_ops_auto_retro_append.xml,./junit-artifacts/junit-ci_ops_auto_retro_create.xml,./junit-artifacts/junit-ci_ops_auto_retro_create_slow.xml,./junit-artifacts/junit-ci_ops_auto_retro_decision_tree.xml,./junit-artifacts/junit-ci_ops_auto_retro_signals.xml,./junit-artifacts/junit-ci_ops_auto_retro_skips.xml,./junit-artifacts/junit-ci_ops_auto_retro_rescan.xml,./junit-artifacts/junit-default.xml
           disable_search: true
           fail_ci_if_error: false
           use_oidc: true

@@ -40,6 +40,7 @@ ALLOWED_BUCKETS: frozenset[str] = frozenset({
     "shard_ci_ops_auto_retro_decision_tree",
     "shard_ci_ops_auto_retro_signals",
     "shard_ci_ops_auto_retro_skips",
+    "shard_ci_ops_auto_retro_rescan",
     "shard_default",
 })
 

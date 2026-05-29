@@ -2552,6 +2552,465 @@ def sentinel_run(repo: str, now_iso: str, days: int) -> int:
     return 0
 
 
+# ---------------------------------------------------------------------------
+# Post-merge re-scan (issue #421)
+# ---------------------------------------------------------------------------
+
+# Default lookback window (in hours) for the post-merge re-scan. PRs merged
+# more recently than this may still have pending observation gates (the 24h
+# no-follow-up window). 48h ensures the 24h gate has closed while keeping the
+# scan window bounded. Overridable via AUTO_RETRO_RESCAN_HOURS.
+_DEFAULT_RESCAN_HOURS: int = 48
+
+# Minimum age (in hours) before a merged PR is eligible for re-scan. This
+# ensures the "No follow-up fix(...) PR needed within 24h of merge" gate has
+# had time to be observed. PRs merged less than this many hours ago are
+# skipped.
+_RESCAN_MIN_AGE_HOURS: int = 24
+
+# Marker for the deferred Post-merge rescan comment posted to the retro issue
+# so subsequent cron runs do not re-scan the same PR.
+_RESCAN_MARKER = "<!-- auto-retro:post-merge-rescan -->"
+
+# Per-page cap for the rescan's merged-PR search. Each cron tick processes
+# at most this many recently merged PRs.
+_RESCAN_SEARCH_PAGE_SIZE: int = 50
+
+
+@dataclass(frozen=True)
+class PostMergeGateResult:
+    gate: str
+    satisfied: bool
+    detail: str
+
+
+def _hours_between(iso_a: str, iso_b: str) -> float:
+    """Return the number of hours between two ISO 8601 timestamps."""
+    fmt = "%Y-%m-%dT%H:%M:%SZ"
+    a = datetime.strptime(iso_a[:20], fmt).replace(tzinfo=timezone.utc)
+    b = datetime.strptime(iso_b[:20], fmt).replace(tzinfo=timezone.utc)
+    return abs((b - a).total_seconds()) / 3600.0
+
+
+def search_recently_merged_prs(
+    repo: str, hours: int, now_iso: str
+) -> list[dict[str, Any]]:
+    """Return PRs merged in the last *hours* hours.
+
+    Uses the GitHub search API with ``type:pr is:merged`` and a date
+    filter. Returns the raw search items so the caller can read
+    ``number``, ``title``, ``pull_request``, etc.
+    """
+    cutoff = datetime.strptime(
+        now_iso[:20], "%Y-%m-%dT%H:%M:%SZ"
+    ).replace(tzinfo=timezone.utc)
+    since_ts = cutoff.timestamp() - (hours * 3600)
+    since_dt = datetime.fromtimestamp(since_ts, tz=timezone.utc)
+    since_str = since_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+    query = (
+        f"repo:{repo} type:pr is:merged "
+        f"merged:>={since_str}"
+    )
+    encoded = quote(query, safe="")
+    raw = gh_api(
+        "GET",
+        f"/search/issues?q={encoded}&per_page={_RESCAN_SEARCH_PAGE_SIZE}",
+    )
+    data = json.loads(raw) if raw.strip() else {}
+    return list(data.get("items") or [])
+
+
+def fetch_issue_state(repo: str, number: int) -> str:
+    """Return the state of issue ``<repo>#<number>`` (``open`` or ``closed``).
+
+    Returns ``"unknown"`` on fetch failure.
+    """
+    try:
+        raw = gh_api("GET", f"/repos/{repo}/issues/{number}")
+    except subprocess.CalledProcessError:
+        return "unknown"
+    try:
+        data = json.loads(raw) if raw.strip() else {}
+    except json.JSONDecodeError:
+        return "unknown"
+    return str(data.get("state") or "unknown")
+
+
+def search_fix_prs_since(
+    repo: str, merged_at: str, now_iso: str
+) -> list[dict[str, Any]]:
+    """Return ``fix(...)`` PRs merged between *merged_at* and *now_iso*.
+
+    Used to verify the "No follow-up fix(...) PR needed within 24h"
+    gate. Filters client-side to titles starting with ``fix(``.
+    """
+    query = (
+        f"repo:{repo} type:pr is:merged "
+        f"merged:{merged_at}..{now_iso}"
+    )
+    encoded = quote(query, safe="")
+    try:
+        raw = gh_api(
+            "GET",
+            f"/search/issues?q={encoded}&per_page=50",
+        )
+    except subprocess.CalledProcessError:
+        return []
+    data = json.loads(raw) if raw.strip() else {}
+    items = list(data.get("items") or [])
+    return [
+        item for item in items
+        if (item.get("title") or "").lstrip().lower().startswith("fix(")
+    ]
+
+
+def fetch_pr_detail(repo: str, pr_number: int) -> dict[str, Any]:
+    """Fetch full PR detail from the pulls endpoint (includes ``merged_at``).
+
+    Returns ``{}`` on failure.
+    """
+    try:
+        raw = gh_api("GET", f"/repos/{repo}/pulls/{pr_number}")
+    except subprocess.CalledProcessError:
+        return {}
+    try:
+        return json.loads(raw) if raw.strip() else {}
+    except json.JSONDecodeError:
+        return {}
+
+
+def verify_post_merge_gates(
+    repo: str,
+    pr_number: int,
+    pr_body: str,
+    merged_at: str,
+    now_iso: str,
+) -> list[PostMergeGateResult]:
+    """Verify each Post-merge checklist gate for a merged PR.
+
+    Returns a :class:`PostMergeGateResult` for every unchecked item.
+    Checked items are omitted (they are already satisfied by operator
+    observation).
+    """
+    items = extract_post_merge_checklist(pr_body)
+    if not items:
+        return []
+
+    results: list[PostMergeGateResult] = []
+    for text, checked in items:
+        if checked:
+            continue
+        lower = text.lower()
+        if "linked issue closed" in lower:
+            body_no_comments = strip_html_comments(pr_body or "")
+            refs = extract_refs(body_no_comments)
+            if not refs:
+                results.append(PostMergeGateResult(
+                    gate="linked_issue_closed",
+                    satisfied=True,
+                    detail="no linked issues found in PR body (gate not applicable)",
+                ))
+                continue
+            all_closed = True
+            for ref in refs:
+                state = fetch_issue_state(repo, ref)
+                if state != "closed":
+                    all_closed = False
+                    break
+            results.append(PostMergeGateResult(
+                gate="linked_issue_closed",
+                satisfied=all_closed,
+                detail=(
+                    f"linked issues {refs} all closed"
+                    if all_closed
+                    else f"issue #{ref} state={state}"
+                ),
+            ))
+        elif "auto-retro issue opened" in lower:
+            existing_items = search_retro_issues(repo, pr_number)
+            existing = find_existing_retro(existing_items, pr_number)
+            results.append(PostMergeGateResult(
+                gate="retro_issue_opened",
+                satisfied=existing is not None,
+                detail=(
+                    f"retro issue #{existing} exists"
+                    if existing is not None
+                    else f"no retro issue found for PR #{pr_number}"
+                ),
+            ))
+        elif "follow-up" in lower and "fix" in lower:
+            fix_prs = search_fix_prs_since(repo, merged_at, now_iso)
+            has_followup = len(fix_prs) > 0
+            results.append(PostMergeGateResult(
+                gate="no_followup_fix",
+                satisfied=not has_followup,
+                detail=(
+                    "no follow-up fix(...) PR found"
+                    if not has_followup
+                    else "follow-up fix PR(s) found: "
+                    + ", ".join(
+                        "#" + str(p.get("number", "?"))
+                        for p in fix_prs
+                    )
+                ),
+            ))
+        else:
+            results.append(PostMergeGateResult(
+                gate="unknown",
+                satisfied=True,
+                detail=f"unrecognized gate text: {text!r}",
+            ))
+
+    return results
+
+
+def _build_rescan_summary(
+    appended: list[tuple[int, int]],
+    skipped: list[tuple[int, str]],
+    hours: int,
+) -> str:
+    """Render the GITHUB_STEP_SUMMARY block for one rescan run.
+
+    ``appended`` is a list of ``(pr_number, retro_number)`` tuples for
+    PRs whose unsatisfied gates were appended to their retro.
+    ``skipped`` is a list of ``(pr_number, reason)`` tuples.
+    """
+    appended_block = (
+        "\n".join(
+            f"- PR #{pr}: appended to retro #{retro}"
+            for pr, retro in appended
+        )
+        if appended
+        else "- (none)"
+    )
+    skipped_block = (
+        "\n".join(f"- PR #{pr}: {reason}" for pr, reason in skipped)
+        if skipped
+        else "- (none)"
+    )
+    return (
+        "## auto-retro post-merge rescan summary\n"
+        "\n"
+        f"Lookback window: {hours} hours.\n"
+        "\n"
+        "### Appended\n"
+        "\n"
+        f"{appended_block}\n"
+        "\n"
+        "### Skipped\n"
+        "\n"
+        f"{skipped_block}\n"
+    )
+
+
+def post_merge_rescan_run(repo: str, now_iso: str, hours: int) -> int:
+    """Re-scan Post-merge checklist gates on recently merged PRs.
+
+    For each PR merged in the last *hours* hours (but at least
+    :data:`_RESCAN_MIN_AGE_HOURS` old), parse the Post-merge
+    checklist, verify each unchecked gate, and append a row to the
+    existing retro issue for gates that did not fire.
+
+    Returns 0 always; the step summary records the outcome so an
+    operator can audit the run. Refs #421.
+    """
+    try:
+        items = search_recently_merged_prs(repo, hours, now_iso)
+    except subprocess.CalledProcessError as exc:
+        print(
+            f"::error::post-merge rescan search failed "
+            f"(exit {exc.returncode}); no PRs processed this tick",
+            file=sys.stderr,
+        )
+        _append_summary(_build_rescan_summary([], [], hours))
+        return 0
+
+    appended: list[tuple[int, int]] = []
+    skipped: list[tuple[int, str]] = []
+
+    for item in items:
+        raw_number = item.get("number")
+        if not isinstance(raw_number, int):
+            continue
+        pr_number = raw_number
+        title = str(item.get("title") or "")
+
+        if is_retro_pr(title):
+            skipped.append((pr_number, "retro PR (skip)"))
+            continue
+
+        skip, reason = should_skip(
+            MergedPR(
+                number=pr_number,
+                title=title,
+                merged=True,
+                merged_at="",
+                merged_by_login=(
+                    (item.get("user") or {}).get("login")
+                ),
+                user_login=(
+                    (item.get("user") or {}).get("login")
+                ),
+                layer_labels=(),
+                html_url="",
+            )
+        )
+        if skip:
+            skipped.append((pr_number, reason))
+            continue
+
+        pr_detail = fetch_pr_detail(repo, pr_number)
+        if not pr_detail:
+            skipped.append((pr_number, "could not fetch PR detail"))
+            continue
+
+        merged_at = str(pr_detail.get("merged_at") or "")
+        if not merged_at:
+            skipped.append((pr_number, "no merged_at in PR detail"))
+            continue
+
+        age_hours = _hours_between(merged_at, now_iso)
+        if age_hours < _RESCAN_MIN_AGE_HOURS:
+            skipped.append(
+                (pr_number, f"too recent ({age_hours:.1f}h < {_RESCAN_MIN_AGE_HOURS}h)")
+            )
+            continue
+
+        pr_body = str(pr_detail.get("body") or "")
+        post_merge_items = extract_post_merge_checklist(pr_body)
+        if not post_merge_items:
+            skipped.append((pr_number, "no Post-merge checklist found"))
+            continue
+
+        all_checked = all(checked for _, checked in post_merge_items)
+        if all_checked:
+            skipped.append((pr_number, "all Post-merge items already checked"))
+            continue
+
+        existing_items = search_retro_issues(repo, pr_number)
+        retro_number = find_existing_retro(existing_items, pr_number)
+        if retro_number is None:
+            skipped.append((pr_number, "no retro issue to append to"))
+            continue
+
+        retro_body = fetch_issue_body(repo, retro_number)
+        if not retro_body:
+            skipped.append(
+                (pr_number, f"could not fetch retro #{retro_number} body")
+            )
+            continue
+
+        if _RESCAN_MARKER in retro_body:
+            skipped.append(
+                (pr_number, f"retro #{retro_number} already rescan-marked")
+            )
+            continue
+
+        gate_results = verify_post_merge_gates(
+            repo, pr_number, pr_body, merged_at, now_iso,
+        )
+        unsatisfied = [g for g in gate_results if not g.satisfied]
+        if not unsatisfied:
+            skipped.append(
+                (pr_number, "all Post-merge gates satisfied (no action)")
+            )
+            continue
+
+        open_idx = retro_body.find(_AUTO_FILLED_OPEN)
+        close_idx = retro_body.find(_AUTO_FILLED_CLOSE)
+        if open_idx == -1 or close_idx == -1 or close_idx < open_idx:
+            skipped.append(
+                (pr_number, f"retro #{retro_number} missing auto-filled markers")
+            )
+            continue
+
+        block = retro_body[open_idx:close_idx]
+        next_idx = _next_table_index(block)
+        new_rows = ""
+        for i, gate in enumerate(unsatisfied):
+            row_idx = next_idx + i
+            repair = _escape_table_cell(
+                f"Post-merge gate: {gate.gate}"
+            )
+            detail = _escape_table_cell(gate.detail)
+            new_rows += f"| {row_idx} | {repair} | {detail} |\n"
+
+        new_body = (
+            retro_body[:close_idx]
+            + new_rows
+            + retro_body[close_idx:]
+        )
+
+        rescan_comment = (
+            f"\n\n{_RESCAN_MARKER}\n"
+            f"_Deferred Post-merge re-scan appended "
+            f"{len(unsatisfied)} row(s) for PR #{pr_number}. "
+            f"Refs #421._\n"
+        )
+        new_body += rescan_comment
+
+        try:
+            patch_issue_body(repo, retro_number, new_body)
+        except subprocess.CalledProcessError as exc:
+            print(
+                f"::warning::patch_issue_body failed for retro "
+                f"#{retro_number} (exit {exc.returncode}); "
+                "skipping this PR on this tick",
+                file=sys.stderr,
+            )
+            skipped.append(
+                (pr_number, f"PATCH retro #{retro_number} failed")
+            )
+            continue
+
+        appended.append((pr_number, retro_number))
+        print(
+            f"appended {len(unsatisfied)} Post-merge gate row(s) "
+            f"for PR #{pr_number} to retro #{retro_number}"
+        )
+
+    _append_summary(_build_rescan_summary(appended, skipped, hours))
+    return 0
+
+
+def _cmd_post_merge_rescan(args: argparse.Namespace) -> int:
+    repo = (
+        args.repo
+        or os.environ.get("REPO")
+        or os.environ.get("GITHUB_REPOSITORY")
+    )
+    if not repo:
+        print(
+            "::error::missing --repo / $REPO / $GITHUB_REPOSITORY",
+            file=sys.stderr,
+        )
+        return 1
+    hours_raw = (
+        args.hours
+        if args.hours is not None
+        else os.environ.get("AUTO_RETRO_RESCAN_HOURS")
+    )
+    if hours_raw is None:
+        hours = _DEFAULT_RESCAN_HOURS
+    else:
+        try:
+            hours = int(hours_raw)
+        except (TypeError, ValueError):
+            print(
+                f"::error::invalid rescan hours value {hours_raw!r}; "
+                f"must be a positive integer",
+                file=sys.stderr,
+            )
+            return 1
+        if hours <= 0:
+            print(
+                f"::error::rescan hours must be positive (got {hours})",
+                file=sys.stderr,
+            )
+            return 1
+    return post_merge_rescan_run(repo, _now_utc_iso(), hours)
+
+
 def _cmd_sentinel(args: argparse.Namespace) -> int:
     repo = (
         args.repo or os.environ.get("REPO") or os.environ.get("GITHUB_REPOSITORY")
@@ -2661,6 +3120,27 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
     p_sentinel.set_defaults(func=_cmd_sentinel)
+
+    p_rescan = sub.add_parser(
+        "post-merge-rescan",
+        help=(
+            "Re-scan Post-merge checklist gates on recently merged PRs "
+            "and append rows to existing retro issues for unsatisfied "
+            "gates. Refs #421."
+        ),
+    )
+    p_rescan.add_argument("--repo", help="Override $REPO (owner/name).")
+    p_rescan.add_argument(
+        "--hours",
+        type=int,
+        default=None,
+        help=(
+            f"Lookback window in hours "
+            f"(default {_DEFAULT_RESCAN_HOURS}, env "
+            "AUTO_RETRO_RESCAN_HOURS)."
+        ),
+    )
+    p_rescan.set_defaults(func=_cmd_post_merge_rescan)
 
     p_decision_tree = sub.add_parser(
         "decision-tree",
