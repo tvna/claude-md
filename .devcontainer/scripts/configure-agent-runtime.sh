@@ -39,7 +39,11 @@ install_nix_binary() {
 
 install_nix_binary gh-cli gh
 install_nix_binary pinned-uv uv
-install_nix_binary apm-cli apm
+if [[ ! -x "/usr/local/bin/apm" ]]; then
+  install_nix_binary apm-cli apm
+else
+  echo "apm already present: $(/usr/local/bin/apm --version)"
+fi
 if [[ "$agent" == "codex" ]]; then
   install_nix_binary bubblewrap bwrap
 fi
