@@ -4,3 +4,4 @@
 # endpoints when a reviewed workflow requires them.
 @include shared.allowlist
 api.openai.com
+auth.openai.com

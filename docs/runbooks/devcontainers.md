@@ -369,6 +369,10 @@ destinations. Each agent entrypoint runs:
 The agent allowlist may include `.devcontainer/network/shared.allowlist`
 with `@include shared.allowlist`, then append agent-specific endpoints.
 Claude and Codex can therefore carry different service requirements.
+For Codex, keep both `api.openai.com` and `auth.openai.com` in
+`.devcontainer/network/codex.allowlist`: the former covers API calls,
+and the latter covers ChatGPT-mediated OAuth token exchange during
+`codex login`.
 
 The enforcement script resolves hostnames at container start and allows
 TCP ports `22`, `80`, and `443` to those IPs, plus DNS to the container
