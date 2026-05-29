@@ -57,8 +57,18 @@ def test_codex_runtime_config_uses_supported_toml_keys() -> None:
     codex_toml = script[toml_start:toml_end]
 
     assert 'approval_policy = "never"' in codex_toml
+    assert "[mcp_servers.codex_apps]" in codex_toml
+    assert "startup_timeout_sec = 120" in codex_toml
     assert "[permissions]" not in codex_toml
     assert "allow = [" not in codex_toml
+
+
+def test_runbook_documents_existing_codex_volume_refresh() -> None:
+    runbook = (REPO_ROOT / "docs/runbooks/devcontainers.md").read_text(encoding="utf-8")
+
+    assert "startup_timeout_sec" in runbook
+    assert "bash .devcontainer/scripts/configure-agent-runtime.sh codex" in runbook
+    assert "command -v bwrap" in runbook
 
 
 def test_flake_exposes_gh_cli_package_for_runtime_symlink() -> None:

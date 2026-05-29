@@ -72,6 +72,19 @@ short prompt of the form `codex:claude-md(main)$` or
 `claude:claude-md(main)$`, preserving the active agent, directory, and
 git branch without the long VS Code default prefix.
 
+For Codex, the same runtime setup also writes
+`[mcp_servers.codex_apps].startup_timeout_sec = 120` and links
+`/usr/local/bin/bwrap`. Existing Codex session volumes keep their old
+`/home/codex/.codex/config.toml` until the post-create setup runs again.
+If Codex still reports `codex_apps` MCP startup timeout or missing
+`bubblewrap`, run this inside the Codex DevContainer, then restart
+Codex:
+
+```sh
+bash .devcontainer/scripts/configure-agent-runtime.sh codex
+command -v bwrap
+```
+
 After the container opens, verify the runtime identity and workspace
 write access before starting agent work:
 

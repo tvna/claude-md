@@ -71,6 +71,9 @@ JSON
 # Devcontainer-local defaults. This file lives on a container-engine
 # named volume and is not read by the macOS/container host.
 approval_policy = "never"
+
+[mcp_servers.codex_apps]
+startup_timeout_sec = 120
 TOML
     ;;
 esac
