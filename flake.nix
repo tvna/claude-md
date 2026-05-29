@@ -11,6 +11,10 @@
         "aarch64-linux"
         "x86_64-linux"
       ];
+      uvVersionSpec = (builtins.fromTOML (builtins.readFile ./pyproject.toml)).tool.uv.required-version;
+      uvVersion =
+        assert nixpkgs.lib.hasPrefix "==" uvVersionSpec;
+        nixpkgs.lib.removePrefix "==" uvVersionSpec;
       forAllSystems = nixpkgs.lib.genAttrs systems;
       mkPackages = system:
         let
@@ -41,6 +45,33 @@
               hash = "sha512-5EosY67yU28UJSnl/obdN2F1CDaimYbzm9SLR8dwwzkeBBnY6dHgAKJ2GTu9Nc8CmgmtVFBGzgPqehsIcueVvA==";
             };
           }.${system};
+          uvNative = {
+            aarch64-linux = {
+              target = "aarch64-unknown-linux-gnu";
+              hash = "sha256-FV/k07PLS/zhGKtLE4D3FRWuh00T2YWBcbT5wm4WaE0=";
+            };
+            x86_64-linux = {
+              target = "x86_64-unknown-linux-gnu";
+              hash = "sha256-p2eEglQ5GFXJbfJx6cqLf3LdFy0xBGBEeFPSXZB7muA=";
+            };
+          }.${system};
+          pinned-uv = pkgs.stdenvNoCC.mkDerivation {
+            pname = "uv";
+            version = uvVersion;
+            src = pkgs.fetchurl {
+              url = "https://releases.astral.sh/github/uv/releases/download/${uvVersion}/uv-${uvNative.target}.tar.gz";
+              hash = uvNative.hash;
+            };
+            dontBuild = true;
+            installPhase = ''
+              runHook preInstall
+
+              install -Dm755 uv $out/bin/uv
+              install -Dm755 uvx $out/bin/uvx
+
+              runHook postInstall
+            '';
+          };
           claude-cli = pkgs.stdenvNoCC.mkDerivation {
             pname = "claude-code-cli";
             version = claudeCodeVersion;
@@ -85,7 +116,7 @@ EOF
           };
         in
         {
-          inherit claude-cli codex-cli;
+          inherit claude-cli codex-cli pinned-uv;
           gh-cli = pkgs.gh;
         };
       mkShells = system:
@@ -105,7 +136,7 @@ EOF
             nodejs_22
             python311
             ripgrep
-            uv
+            agentPackages.pinned-uv
           ];
           pythonQualityPackages = with pkgs; [
             mypy

@@ -342,6 +342,14 @@ devcontainer post-create step links those Nix-built binaries into
 `/usr/local/bin` so they are available in ordinary VS Code terminals as
 well as inside `nix develop`.
 
+uv is pinned the same way, but its version is read from
+`pyproject.toml` `[tool.uv].required-version` instead of being repeated
+in `flake.nix`. This keeps the devcontainer `nix develop` shell aligned
+with the repository lockfile policy and prevents older nixpkgs uv builds
+from ignoring settings such as the `exclude-newer` cooldown. The
+post-create runtime setup also links the pinned uv into `/usr/local/bin`
+so plain terminals can run `uv` after setup.
+
 To update pinned tool versions:
 
 ```sh
@@ -349,9 +357,12 @@ nix flake update
 nix flake check
 ```
 
-Then open a PR with both `flake.nix` and `flake.lock` changes. If a
-tool cannot reasonably be managed by Nix, document the alternate pin in
-this runbook before adding it to a devcontainer command.
+Then open a PR with both `flake.nix` and `flake.lock` changes when the
+nixpkgs input changed. For uv bumps, update
+`[tool.uv].required-version`, `uv.lock`, and the fixed-output hashes in
+`flake.nix` together. If a tool cannot reasonably be managed by Nix,
+document the alternate pin in this runbook before adding it to a
+devcontainer command.
 
 Nix follows the same adoption cooldown as uv. The value in
 `[tool.uv].exclude-newer` is the single source of truth, and
