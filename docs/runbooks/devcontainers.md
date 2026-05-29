@@ -137,12 +137,12 @@ symlink.
 ## Prebuilt images
 
 Local devcontainers use immutable commit-SHA image tags. The currently
-pinned images were published from `1b9e21c1e852ee9639b7912a222e781ea8f1af4e`:
+pinned images were published from `3bd93d999093a61f4ff2796d94f14b24c7bbff37`:
 
 | Agent | Image |
 |---|---|
-| Claude | `ghcr.io/tvna/claude-md-devcontainer-claude:1b9e21c1e852ee9639b7912a222e781ea8f1af4e` |
-| Codex | `ghcr.io/tvna/claude-md-devcontainer-codex:1b9e21c1e852ee9639b7912a222e781ea8f1af4e` |
+| Claude | `ghcr.io/tvna/claude-md-devcontainer-claude:3bd93d999093a61f4ff2796d94f14b24c7bbff37` |
+| Codex | `ghcr.io/tvna/claude-md-devcontainer-codex:3bd93d999093a61f4ff2796d94f14b24c7bbff37` |
 
 The `Publish devcontainer images` workflow builds both images with the
 Dev Containers CLI and pushes them to GHCR on `main` changes to
