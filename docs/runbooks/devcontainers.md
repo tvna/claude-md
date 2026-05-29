@@ -180,51 +180,33 @@ Recurring DevContainer maintenance is tracked in
 [#696](https://github.com/tvna/claude-md/issues/696). Generated image-pin
 PRs reference that tracking issue instead of the resolved implementation
 issue that originally introduced pin automation. The follow-up PR is
-created with the `DEVCONTAINER_PIN_PR_TOKEN` secret from the
-`devcontainer-image-pins` GitHub Environment because the default GitHub
-Actions token is not permitted to create pull requests in this
-repository. Store the token as an Environment secret, not as a broad
-repository secret, so the handoff is limited to the image-pin update job.
-The token needs the minimum permissions required to push the generated
-branch and open the PR: repository contents read/write, pull requests
-read/write, and metadata read-only. Keep Environment reviewers disabled
-unless a deliberate manual approval gate is desired, because reviewers
-pause the automatic pin update after every image publish. The workflow
-fails before creating a new branch if that secret is missing, and it
-retries PR creation when a previous run already pushed the image-pin
-branch.
+created with the workflow `GITHUB_TOKEN`, so GitHub records the author as
+`github-actions[bot]` instead of a repository owner or personal token
+holder. No personal access token or Environment secret is required for
+this path.
 
-One-time setup for `DEVCONTAINER_PIN_PR_TOKEN`:
+The `Update local devcontainer image pins` job requests GitHub
+auto-merge for the generated PR immediately after `gh pr create`
+succeeds. If a retry finds that the image-pin branch already exists with
+an open PR, it requests auto-merge for that existing PR instead of
+opening a duplicate. GitHub still waits for the repository's required
+checks and rulesets before merging; the workflow only enables the
+auto-merge request.
 
-1. Open GitHub user settings, then **Developer settings**.
-2. Open **Personal access tokens** -> **Fine-grained tokens**.
-3. Select **Generate new token**.
-4. Set the token name to `DEVCONTAINER_PIN_PR_TOKEN`.
-5. Set an expiration date of 90 days or less, then record the rotation
-   date in the operator calendar.
-6. Under **Resource owner**, select `tvna`.
-7. Under **Repository access**, select **Only select repositories** and
-   choose `tvna/claude-md`.
-8. Under **Repository permissions**, set:
-   - **Contents**: Read and write.
-   - **Pull requests**: Read and write.
-   - **Metadata**: Read-only.
-9. Generate the token and copy it once. Do not paste it into an issue,
-   PR, commit, terminal transcript, or runbook.
-10. Open `tvna/claude-md` -> **Settings** -> **Environments**.
-11. Create or open the `devcontainer-image-pins` Environment.
-12. Leave required reviewers disabled unless a manual approval gate is
-    intentionally desired for every image publish.
-13. Add an Environment secret named `DEVCONTAINER_PIN_PR_TOKEN` with the
-    copied token value.
-14. Trigger `Publish devcontainer images` with `workflow_dispatch`, or
-    wait for the next `main` publish, and confirm the
-    `Update local devcontainer image pins` job opens or reuses the
-    generated image-pin PR.
+One-time repository setup:
 
-Rotation uses the same secret name: generate the replacement token
-first, update the Environment secret, confirm the next publish can open
-or reuse the image-pin PR, then revoke the old token.
+1. Open `tvna/claude-md` -> **Settings** -> **Actions** -> **General**.
+2. Under **Workflow permissions**, allow GitHub Actions to create and
+   approve pull requests.
+3. Confirm the repository rulesets allow `github-actions[bot]` to push
+   non-default generated branches such as
+   `codex/devcontainer-image-pins-<sha>`.
+4. Trigger `Publish devcontainer images` with `workflow_dispatch`, or
+   wait for the next `main` publish, and confirm the
+   `Update local devcontainer image pins` job opens or reuses the
+   generated image-pin PR.
+5. Confirm the generated PR shows `github-actions[bot]` as the author and
+   has auto-merge enabled.
 
 The publish workflow intentionally watches only image-build inputs such
 as `.devcontainer/images/**`, `.devcontainer/scripts/install-agent-cli.sh`,

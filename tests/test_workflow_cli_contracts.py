@@ -1043,6 +1043,40 @@ def test_update_devcontainer_image_pins_matches_workflow_args(tmp_path: Path) ->
         assert config["image"] == f"{update_devcontainer_image_pins.IMAGE_PREFIX}-{agent}:{new_sha}"
 
 
+def test_devcontainer_pin_pr_uses_github_actions_token() -> None:
+    workflow_path = Path(".github/workflows/publish-devcontainer-images.yml")
+    raw = workflow_path.read_text(encoding="utf-8")
+    workflow = yaml.safe_load(raw)
+
+    update_pins = workflow["jobs"]["update-pins"]
+    assert update_pins["permissions"] == {
+        "contents": "write",
+        "pull-requests": "write",
+    }
+    assert "DEVCONTAINER_PIN_PR_TOKEN" not in raw
+
+    open_pr = next(
+        step for step in update_pins["steps"] if step.get("name") == "Open pin update PR"
+    )
+    assert open_pr["env"] == {"GH_TOKEN": "${{ github.token }}"}
+    assert 'github-actions[bot]"' in open_pr["run"]
+    assert "Refs #696" in open_pr["run"]
+
+
+def test_devcontainer_pin_pr_requests_automerge_after_create() -> None:
+    workflow_path = Path(".github/workflows/publish-devcontainer-images.yml")
+    workflow = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
+    update_pins = workflow["jobs"]["update-pins"]
+    open_pr = next(
+        step for step in update_pins["steps"] if step.get("name") == "Open pin update PR"
+    )
+
+    assert 'pr_url="$(gh pr create \\' in open_pr["run"]
+    assert 'gh pr merge "$pr_url" --auto --squash' in open_pr["run"]
+    assert "pin update PR already exists" in open_pr["run"]
+    assert 'enable_auto_merge "$existing_pr"' in open_pr["run"]
+
+
 def test_analyze_ci_timings_matches_workflow_args(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:

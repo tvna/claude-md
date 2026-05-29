@@ -120,15 +120,13 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          token: ${{ secrets.DEVCONTAINER_PIN_PR_TOKEN || github.token }}
 
       - name: Update pinned image SHAs
         run: python3 scripts/update_devcontainer_image_pins.py "$GITHUB_SHA"
 
       - name: Open pin update PR
         env:
-          GH_TOKEN: ${{ secrets.DEVCONTAINER_PIN_PR_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           if git diff --quiet; then
             echo "devcontainer image pins already match ${GITHUB_SHA}"
@@ -136,15 +134,20 @@ jobs:
           fi
 
           branch="codex/devcontainer-image-pins-${GITHUB_SHA}"
-          if [ -z "${GH_TOKEN:-}" ]; then
-            echo "::error::DEVCONTAINER_PIN_PR_TOKEN is required in the devcontainer-image-pins environment because the default GitHub Actions token cannot create pull requests in this repository."
-            exit 1
-          fi
+          enable_auto_merge() {
+            pr_url="$1"
+            if gh pr view "$pr_url" --json autoMergeRequest --jq '.autoMergeRequest != null' | grep -qx true; then
+              echo "auto-merge already enabled: $pr_url"
+              return 0
+            fi
+            gh pr merge "$pr_url" --auto --squash
+          }
 
           if git ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
             existing_pr="$(gh pr list --head "$branch" --state open --json url --jq '.[0].url // ""')"
             if [ -n "$existing_pr" ]; then
               echo "pin update PR already exists: $existing_pr"
+              enable_auto_merge "$existing_pr"
               exit 0
             fi
             echo "pin update branch already exists without an open PR; retrying PR creation: $branch"
@@ -159,8 +162,9 @@ jobs:
 
           sed "s/__GITHUB_SHA__/${GITHUB_SHA}/g" \
             .github/pr-body-templates/devcontainer-image-pins.md > pr-body.md
-          gh pr create \
+          pr_url="$(gh pr create \
             --base main \
             --head "$branch" \
             --title "fix(devcontainer): pin published agent images" \
-            --body-file pr-body.md
+            --body-file pr-body.md)"
+          enable_auto_merge "$pr_url"
