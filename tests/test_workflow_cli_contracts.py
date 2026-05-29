@@ -100,6 +100,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("analyze_ci_timings.py", None): "test_analyze_ci_timings_matches_workflow_args",
     ("auto_retro.py", "decision-tree-doc"): "test_auto_retro_decision_tree_doc_matches_workflow_args",
     ("auto_retro.py", "run"): "test_auto_retro_run_matches_workflow_env",
+    ("auto_retro.py", "post-merge-rescan"): "test_auto_retro_post_merge_rescan_matches_workflow_env",
     ("auto_retro.py", "sentinel"): "test_auto_retro_sentinel_matches_workflow_env",
     ("body_policy.py", "verify"): "test_body_policy_verify_matches_workflow_body_file",
     ("branch_cleanup.py", "reconcile"): "test_branch_cleanup_reconcile_matches_workflow_args",
@@ -322,6 +323,24 @@ def test_auto_retro_sentinel_matches_workflow_env(
     )
 
     assert auto_retro.main(["sentinel"]) == 0
+
+
+def test_auto_retro_post_merge_rescan_matches_workflow_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Mirror the env shape used by auto-retro-post-merge-rescan.yml.
+
+    The workflow shells to ``python3 scripts/auto_retro.py post-merge-rescan``
+    with REPO + GH_TOKEN + (optional) AUTO_RETRO_RESCAN_HOURS in the env.
+    Refs #421.
+    """
+    monkeypatch.setenv("REPO", REPO)
+    monkeypatch.delenv("AUTO_RETRO_RESCAN_HOURS", raising=False)
+    monkeypatch.setattr(
+        auto_retro, "gh_api", lambda *_a, **_kw: json.dumps({"items": []})
+    )
+
+    assert auto_retro.main(["post-merge-rescan"]) == 0
 
 
 def test_auto_retro_decision_tree_doc_matches_workflow_args(
