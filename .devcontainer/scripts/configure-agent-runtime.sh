@@ -68,9 +68,6 @@ JSON
 # Devcontainer-local defaults. This file lives on a container-engine
 # named volume and is not read by the macOS/container host.
 approval_policy = "never"
-
-[permissions]
-allow = ["bash", "mcp__github__*"]
 TOML
     ;;
 esac
