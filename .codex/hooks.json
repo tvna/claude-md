@@ -22,6 +22,16 @@
         ]
       },
       {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 scripts/check_hooks_path.py",
+            "statusMessage": "Checking git hooks path"
+          }
+        ]
+      },
+      {
         "matcher": "startup|clear|compact",
         "hooks": [
           {
@@ -148,6 +158,21 @@
     "PostToolUse": [
       {
         "matcher": "^mcp__github__create_pull_request$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 scripts/post_pr_create_ci_monitor.py",
+            "statusMessage": "Starting PR CI monitor"
+          },
+          {
+            "type": "command",
+            "command": "python3 scripts/ci_early_status_probe.py",
+            "statusMessage": "Checking early CI status"
+          }
+        ]
+      },
+      {
+        "matcher": "^mcp__codex_apps__github\\._create_pull_request$",
         "hooks": [
           {
             "type": "command",

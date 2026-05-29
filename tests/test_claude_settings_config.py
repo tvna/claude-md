@@ -71,6 +71,15 @@ def test_claude_post_tool_use_starts_ci_monitor_after_mcp_pr_create() -> None:
                 }
             ],
         },
+        {
+            "matcher": "mcp__codex_apps__github\\._create_pull_request",
+            "hooks": [
+                {
+                    "type": "command",
+                    "command": "python3 $CLAUDE_PROJECT_DIR/scripts/post_pr_create_ci_monitor.py",
+                }
+            ],
+        },
     ]
 
 
@@ -125,6 +134,34 @@ def test_claude_superpowers_hooks_are_apm_managed() -> None:
             "_apm_source": "superpowers",
         }
     ]
+
+
+def test_claude_session_start_surfaces_hooks_path_gap() -> None:
+    """SessionStart must include check_hooks_path.py to surface missing core.hooksPath.
+
+    Refs #760. Without core.hooksPath=.githooks the pre-push stale-base gate
+    is silently skipped for Claude Code sessions too, not just Codex worktrees.
+    """
+    data = _load_settings()
+    hooks = data["hooks"]
+    assert isinstance(hooks, dict)
+    session_start = hooks["SessionStart"]
+    assert isinstance(session_start, list)
+
+    commands: list[str] = []
+    for group in session_start:
+        assert isinstance(group, dict)
+        if group.get("_apm_source") == "superpowers":
+            continue
+        for handler in group.get("hooks", []):
+            if isinstance(handler, dict):
+                cmd = handler.get("command", "")
+                if isinstance(cmd, str):
+                    commands.append(cmd)
+
+    assert any("check_hooks_path.py" in c for c in commands), (
+        "SessionStart does not include check_hooks_path.py"
+    )
 
 
 def test_claude_pre_tool_use_covers_codex_github_connector_tools() -> None:
