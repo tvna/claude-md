@@ -52,6 +52,10 @@
         "hooks": [
           {
             "type": "command",
+            "command": "python3 $CLAUDE_PROJECT_DIR/scripts/preflight_branch_base.py verify"
+          },
+          {
+            "type": "command",
             "command": "python3 $CLAUDE_PROJECT_DIR/scripts/pr_body_close_keyword_gate.py"
           }
         ]
@@ -77,6 +81,40 @@
       {
         "matcher": "mcp__github__(create_pull_request|update_pull_request)",
         "hooks": [
+          {
+            "type": "command",
+            "command": "python3 $CLAUDE_PROJECT_DIR/scripts/preflight_pr_template_shape.py"
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__codex_apps__github\\._(create_issue|create_pull_request|update_pull_request)",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 $CLAUDE_PROJECT_DIR/scripts/preflight_non_ascii.py"
+          },
+          {
+            "type": "command",
+            "command": "python3 $CLAUDE_PROJECT_DIR/scripts/preflight_title_policy.py"
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__codex_apps__github\\._(create_pull_request|update_pull_request)",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 $CLAUDE_PROJECT_DIR/scripts/preflight_branch_base.py verify"
+          },
+          {
+            "type": "command",
+            "command": "python3 $CLAUDE_PROJECT_DIR/scripts/pr_body_close_keyword_gate.py"
+          },
+          {
+            "type": "command",
+            "command": "python3 $CLAUDE_PROJECT_DIR/scripts/preflight_pr_body_required_sections.py"
+          },
           {
             "type": "command",
             "command": "python3 $CLAUDE_PROJECT_DIR/scripts/preflight_pr_template_shape.py"

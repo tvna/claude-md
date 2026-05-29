@@ -35,6 +35,7 @@ from collections.abc import Callable
 from typing import Any, Literal
 
 from _github_api import apply_call
+from _github_tool_names import canonical_github_tool
 from _ref_classifier import (
     TRACKING_LABEL,
     body_has_partial_marker,
@@ -175,7 +176,7 @@ def decide(
     bind them to the real environment while tests can swap in mocks
     without touching urllib or :data:`os.environ`.
     """
-    if tool_name not in _TARGET_TOOLS:
+    if canonical_github_tool(tool_name) not in _TARGET_TOOLS:
         return None
     body = tool_input.get("body")
     if not isinstance(body, str):

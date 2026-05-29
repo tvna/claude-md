@@ -14,6 +14,8 @@ pytestmark = pytest.mark.shard_preflight
 
 ROOT = Path(__file__).resolve().parents[1]
 CODEX_HOOKS = ROOT / ".codex" / "hooks.json"
+PERMISSION_REQUEST_PLAN = ROOT / "docs" / "prd" / "codex-permission-request-policy-gate.md"
+DOCS_INDEX = ROOT / "docs" / "INDEX.md"
 CORE_HOOK_EVENTS = {"SessionStart", "PreToolUse", "PostToolUse"}
 
 
@@ -42,6 +44,13 @@ def _command_entries(data: dict[str, object]) -> list[dict[str, object]]:
     return entries
 
 
+def _repo_script_from_command(command: str) -> str:
+    for token in command.split():
+        if token.startswith("scripts/"):
+            return token
+    return command.split()[-1]
+
+
 def test_codex_hooks_json_is_valid() -> None:
     data = _load_hooks()
     hooks = data.get("hooks")
@@ -59,7 +68,7 @@ def test_all_codex_hook_commands_point_to_repo_files() -> None:
         assert isinstance(command, str)
         if "CLAUDE_PLUGIN_ROOT" in command or command == "./hooks/run-hook.cmd session-start":
             continue
-        path = command.split()[-1]
+        path = _repo_script_from_command(command)
         assert not path.startswith("/")
         assert (ROOT / path).exists()
 
@@ -118,6 +127,81 @@ def test_codex_pre_tool_use_covers_claude_github_write_hooks() -> None:
     assert "python3 scripts/preflight_title_policy.py" in commands
     assert "python3 scripts/preflight_pr_body_required_sections.py" in commands
     assert "python3 scripts/preflight_pr_template_shape.py" in commands
+    assert "python3 scripts/preflight_branch_base.py verify" in commands
+
+
+def test_codex_pre_tool_use_covers_codex_github_connector_tools() -> None:
+    """Codex GitHub connector PR/issue writes are gated before submission.
+
+    Refs #740. The connector exposes create/update PR and create issue as
+    ``mcp__codex_apps__github._<verb>`` rather than ``mcp__github__<verb>``;
+    without a matcher for that shape the title/body preflights only fire
+    after the PR/issue already reached GitHub. This test fails if the
+    connector create/update PR tool names are dropped from the matcher
+    surface.
+    """
+    data = _load_hooks()
+    hooks = data["hooks"]
+    assert isinstance(hooks, dict)
+    pre_tool_use = hooks["PreToolUse"]
+    assert isinstance(pre_tool_use, list)
+
+    matcher_to_commands: dict[str, list[str]] = {}
+    for group in pre_tool_use:
+        assert isinstance(group, dict)
+        matcher = group["matcher"]
+        handlers = group["hooks"]
+        assert isinstance(matcher, str)
+        assert isinstance(handlers, list)
+        commands = matcher_to_commands.setdefault(matcher, [])
+        for handler in handlers:
+            command = handler["command"]
+            assert isinstance(command, str)
+            commands.append(command)
+
+    title_body_matcher = (
+        "^mcp__codex_apps__github\\._(create_issue|create_pull_request|update_pull_request)$"
+    )
+    pr_matcher = "^mcp__codex_apps__github\\._(create_pull_request|update_pull_request)$"
+
+    assert title_body_matcher in matcher_to_commands
+    assert pr_matcher in matcher_to_commands
+
+    # Title + non-ASCII + footer guard the connector title/body surface.
+    assert "python3 scripts/preflight_title_policy.py" in matcher_to_commands[title_body_matcher]
+    assert "python3 scripts/preflight_non_ascii.py" in matcher_to_commands[title_body_matcher]
+    assert "python3 scripts/preflight_codex_github_footer.py" in matcher_to_commands[title_body_matcher]
+
+    # PR body shape/section/link gates guard connector PR writes.
+    assert "python3 scripts/preflight_pr_body_required_sections.py" in matcher_to_commands[pr_matcher]
+    assert "python3 scripts/preflight_pr_template_shape.py" in matcher_to_commands[pr_matcher]
+    assert "python3 scripts/pr_body_close_keyword_gate.py" in matcher_to_commands[pr_matcher]
+    assert "python3 scripts/preflight_branch_base.py verify" in matcher_to_commands[pr_matcher]
+
+
+def test_codex_pr_write_hooks_match_claude_base_freshness_gate() -> None:
+    data = _load_hooks()
+    hooks = data["hooks"]
+    assert isinstance(hooks, dict)
+    pre_tool_use = hooks["PreToolUse"]
+    assert isinstance(pre_tool_use, list)
+
+    matching = [
+        group
+        for group in pre_tool_use
+        if isinstance(group, dict)
+        and group.get("matcher") == "^mcp__github__(create_pull_request|update_pull_request)$"
+    ]
+    assert matching
+    assert any(
+        isinstance(handlers := group.get("hooks"), list)
+        and any(
+            isinstance(handler, dict)
+            and handler.get("command") == "python3 scripts/preflight_branch_base.py verify"
+            for handler in handlers
+        )
+        for group in matching
+    )
 
 
 def test_codex_post_tool_use_starts_ci_monitor_after_mcp_pr_create() -> None:
@@ -144,3 +228,27 @@ def test_codex_post_tool_use_starts_ci_monitor_after_mcp_pr_create() -> None:
     assert "^mcp__github__create_pull_request$" in matchers
     assert "python3 scripts/post_pr_create_ci_monitor.py" in commands
     assert "python3 scripts/ci_early_status_probe.py" in commands
+
+
+def test_codex_permission_request_policy_plan_is_documented() -> None:
+    body = PERMISSION_REQUEST_PLAN.read_text(encoding="utf-8")
+
+    required_phrases = [
+        "Refs #711",
+        "Refs #617",
+        "Refs #604",
+        "Codex-specific entry point",
+        "shared repository policy predicate",
+        "Claude parity",
+        "allow, deny, and no-decision",
+        "malformed JSON",
+        "unsupported payload",
+        "must not update `.codex/hooks.json`",
+        "rollback command",
+        "targeted verification",
+    ]
+    for phrase in required_phrases:
+        assert phrase in body
+
+    index = DOCS_INDEX.read_text(encoding="utf-8")
+    assert "codex-permission-request-policy-gate.md" in index

@@ -34,6 +34,7 @@ import json
 import sys
 from typing import Any
 
+from _github_tool_names import canonical_github_tool
 from body_policy import (
     verify_pr_agent_attribution_footer,
     verify_pr_checklist_subsections,
@@ -59,7 +60,7 @@ def decide(
     tool_name: str, tool_input: dict[str, Any]
 ) -> dict[str, Any] | None:
     """Return the hook output dict, or ``None`` if the call should proceed."""
-    if tool_name not in _TARGET_TOOLS:
+    if canonical_github_tool(tool_name) not in _TARGET_TOOLS:
         return None
     body = tool_input.get("body")
     if not isinstance(body, str):
