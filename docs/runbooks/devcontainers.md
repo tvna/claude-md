@@ -193,10 +193,21 @@ Recurring DevContainer maintenance is tracked in
 [#696](https://github.com/tvna/claude-md/issues/696). Generated image-pin
 PRs reference that tracking issue instead of the resolved implementation
 issue that originally introduced pin automation. The follow-up PR is
-created with the workflow `GITHUB_TOKEN`, so GitHub records the author as
-`github-actions[bot]` instead of a repository owner or personal token
-holder. No personal access token or Environment secret is required for
-this path.
+created with the `DEVCONTAINER_PIN_PR_TOKEN` environment secret because
+this repository does not rely on the repository-level setting that lets
+the default `GITHUB_TOKEN` create pull requests.
+
+Issue and rotate that token as a fine-grained personal access token or a
+GitHub App installation token with access limited to `tvna/claude-md`.
+The minimum repository permissions are Metadata read, Contents read and
+write, and Pull requests read and write. Store it only as
+`DEVCONTAINER_PIN_PR_TOKEN` in the `devcontainer-image-pins` Environment,
+not as a repository-wide secret. Set an expiry of 90 days or less for a
+PAT, rotate it before expiry, and verify the handoff by triggering
+`Publish devcontainer images` with `workflow_dispatch` and confirming
+the `Update local devcontainer image pins` job opens or reuses the
+generated image-pin PR without exposing the token value in logs.
+Record the next rotation date with the Environment secret owner.
 
 The `Update local devcontainer image pins` job requests GitHub
 auto-merge for the generated PR immediately after `gh pr create`
@@ -206,11 +217,12 @@ opening a duplicate. GitHub still waits for the repository's required
 checks and rulesets before merging; the workflow only enables the
 auto-merge request.
 
-One-time repository setup:
+### One-time setup for `DEVCONTAINER_PIN_PR_TOKEN`
 
-1. Open `tvna/claude-md` -> **Settings** -> **Actions** -> **General**.
-2. Under **Workflow permissions**, allow GitHub Actions to create and
-   approve pull requests.
+1. Open `tvna/claude-md` -> **Settings** -> **Environments** ->
+   `devcontainer-image-pins`.
+2. Add the `DEVCONTAINER_PIN_PR_TOKEN` Environment secret described
+   above.
 3. Confirm the repository rulesets allow `github-actions[bot]` to push
    non-default generated branches such as
    `codex/devcontainer-image-pins-<sha>`.
@@ -218,8 +230,8 @@ One-time repository setup:
    wait for the next `main` publish, and confirm the
    `Update local devcontainer image pins` job opens or reuses the
    generated image-pin PR.
-5. Confirm the generated PR shows `github-actions[bot]` as the author and
-   has auto-merge enabled.
+5. Confirm the generated branch commit shows `github-actions[bot]` as
+   the author and the generated PR has auto-merge enabled.
 
 The publish workflow intentionally watches only image-build inputs such
 as `.devcontainer/images/**`, `.devcontainer/scripts/install-agent-cli.sh`,
