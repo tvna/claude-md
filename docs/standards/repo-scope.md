@@ -49,6 +49,7 @@ The list is non-exhaustive. When a new tool emerges, follow the *Update procedur
 | `.claude/settings.local.json` | Documented developer-local file. The broader `.claude/` directory rule transitively keeps it out of commits — the historical entry remains documented here so future contributors understand it predated the broader rule. |
 | `.claude/settings.json` ([#109](https://github.com/tvna/claude-md/issues/109)) | **Narrow file-level carve-out** to host deterministic `SessionStart` provisioning hooks. The broader `.claude/` directory rule still applies to every other path under `.claude/` (e.g. `.claude/hooks/`, `.claude/commands/`). See *Security tradeoff* below. |
 | `.codex/hooks.json` ([#604](https://github.com/tvna/claude-md/issues/604), [#606](https://github.com/tvna/claude-md/issues/606)) | **Narrow file-level carve-out** to host deterministic Codex lifecycle hooks that mirror existing repo-owned Claude hook scripts where Codex supports the event shape. The broader `.codex/` directory rule still applies to every other path under `.codex/`. |
+| `.agents/skills/` ([#728](https://github.com/tvna/claude-md/issues/728)) | **Narrow directory carve-out** for APM-deployed, cross-client skills from pinned dependencies. The source of truth remains `apm.yml` plus `apm.lock.yaml`; local tool-specific mirrors such as `.claude/skills/` remain prohibited by `.gitignore`. |
 
 ### Codex import of the `.claude/settings.json` guard
 
@@ -57,7 +58,7 @@ Codex inherits the same governance principle through a Codex-specific hook primi
 - **Fact.** This repository already targets Codex through the compiled `AGENTS.md` surface (`apm.yml: target: [claude, codex]`).
 - **Fact.** `.claude/settings.json` is allowed only because it is a reviewed, deterministic provisioning trigger for Claude Code remote sessions.
 - **Fact.** Codex documents repo-local hooks in `.codex/hooks.json`; #604 records the matching governance primitive, and #606 adds the first reviewed implementation slice.
-- **Rule.** Only `.codex/hooks.json` is carved out. It may invoke repo-owned deterministic scripts under `scripts/` where behavior is tested for Codex payloads or is payload-independent. All other `.codex/` paths remain prohibited.
+- **Rule.** Only `.codex/hooks.json` is carved out. It may invoke repo-owned deterministic scripts under `scripts/` where behavior is tested for Codex payloads or is payload-independent, and it may invoke hooks from pinned APM dependencies when the generated entry carries `_apm_source`. All other `.codex/` paths remain prohibited.
 - **Implication.** Codex-specific preferences, local credentials, prompts, model choices, or UI configuration stay outside the repo. Universal behavior continues to flow through `.apm/instructions/master.instructions.md` and the generated `AGENTS.md`.
 
 ### Security tradeoff for `.claude/settings.json`
@@ -67,7 +68,7 @@ The `.claude/settings.json` carve-out is conscious risk-acceptance, recorded und
 - **Risk accepted.** A committed hook can run arbitrary shell at session start; `permissions` / `model` / `apiKeyHelper` keys carry their own security surface. A misconfigured or malicious change here would execute before the operator types a single command.
 - **Why we accept it.** The alternative — provisioning via the Claude Code on the Web UI's setup script — moves the same shell *outside* code review entirely. The Web UI is not under git history, not diffable against CI, and not reproducible when an environment is recreated. Treating an in-repo `settings.json` as the trigger pulls the hook surface back under PR review.
 - **Bounded mitigations.**
-  1. Only this one file is carved out — `.claude/hooks/`, `.claude/commands/`, and any other subdir remain prohibited. Hook logic that does not fit inline lives under `scripts/` (already permitted) and is invoked from `settings.json`.
+  1. Only this one file is carved out — `.claude/hooks/`, `.claude/commands/`, and any other subdir remain prohibited. Hook logic that does not fit inline lives under `scripts/` (already permitted) or inside a pinned APM dependency recorded in `apm.lock.yaml`, and is invoked from `settings.json`.
   2. Content remains subject to the *Open Q1 resolution* rule above. `settings.json` content that exists solely for one agent tool's UX (slash-command catalogues, model selection, custom permissions tuning, etc.) is still out of scope — only **deterministic provisioning** (CI parity, dependency install) belongs here.
   3. PR review enforces 1–2 until a CI lint is added (tracked as a future phase under #58). The uv-pin drift gate in `.github/workflows/verify-agents.yml` (landed in [#112](https://github.com/tvna/claude-md/issues/112)) is a precedent — a narrow deterministic check that complements PR review without trying to police hook content as a whole.
 
