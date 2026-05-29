@@ -104,6 +104,45 @@ class TestFollowsNamingConvention:
         )
 
 
+class TestTypeFitFindings:
+    @pytest.mark.parametrize(
+        "title",
+        [
+            "perf(devcontainer): cache image builds",
+            "perf(agent): reduce startup latency",
+            "docs(devcontainer): document prebuilt image cache",
+            "ci(devcontainer): cache image build workflow",
+            "build(devcontainer): cache image builds",
+            "fix(devcontainer): fix image build cache regression",
+            "feat(performance): add benchmark metrics",
+        ],
+    )
+    def test_performance_adjacent_titles_can_fit(self, title: str) -> None:
+        assert title_policy.type_fit_findings(title, kind="pull_request") == []
+
+    @pytest.mark.parametrize(
+        "title",
+        [
+            "fix(devcontainer): cache image builds",
+            "feat(devcontainer): speed up prebuilt images",
+            "chore(devcontainer): reduce startup latency",
+        ],
+    )
+    def test_performance_mismatch_returns_finding(self, title: str) -> None:
+        findings = title_policy.type_fit_findings(title, kind="pull_request")
+        assert len(findings) == 1
+        assert "performance" in findings[0].reason
+        assert "perf" in findings[0].expected_types
+
+    def test_body_can_supply_performance_signal(self) -> None:
+        findings = title_policy.type_fit_findings(
+            "fix(devcontainer): improve image setup",
+            kind="issue",
+            body="Fact: this speeds up devcontainer startup by caching images.",
+        )
+        assert len(findings) == 1
+
+
 class TestPrTitleHasIssueRef:
     @pytest.mark.parametrize(
         "title",
@@ -193,6 +232,35 @@ class TestVerifyTitle:
             "::error::pull_request title must not contain issue references "
             "like (#NNN)" in out
         )
+
+    def test_type_fit_mismatch_exits_one(
+        self,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        assert (
+            title_policy.verify_title(
+                "fix(devcontainer): cache image builds",
+                kind="pull_request",
+            )
+            == 1
+        )
+        out = capsys.readouterr().out
+        assert "::error::pull_request title type does not fit the work" in out
+        assert "Expected title type" in out
+
+    def test_body_participates_in_type_fit_check(
+        self,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        assert (
+            title_policy.verify_title(
+                "fix(devcontainer): improve image setup",
+                kind="issue",
+                body="Fact: this speeds up startup by caching images.",
+            )
+            == 1
+        )
+        assert "title type does not fit" in capsys.readouterr().out
 
     def test_issue_with_issue_ref_in_title_still_passes(
         self, capsys: pytest.CaptureFixture[str]

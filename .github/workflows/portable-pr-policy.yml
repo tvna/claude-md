@@ -40,7 +40,10 @@ jobs:
           fetch-depth: 0
 
       - name: Validate title policy
-        run: python3 scripts/title_policy.py verify --kind "$KIND"
+        run: |
+          body_file="$(mktemp)"
+          printf '%s' "$PR_BODY" > "$body_file"
+          python3 scripts/title_policy.py verify --kind "$KIND" --body-file "$body_file"
 
       - name: Validate single-commit PR rule
         run: python3 scripts/preflight_pr_single_commit.py
