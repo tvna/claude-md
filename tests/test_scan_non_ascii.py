@@ -256,9 +256,14 @@ class TestClassifyAction:
         )
 
     @pytest.mark.parametrize("login", ["codecov", "codecov[bot]"])
-    def test_codecov_non_ascii_is_advisory_not_block(self, login: str) -> None:
-        """Codecov reports assoc=NONE but is trusted for generated comments."""
-        assert san.classify_action(True, False, "NONE", login) == "advisory"
+    def test_codecov_non_ascii_is_none_skip(self, login: str) -> None:
+        """Codecov is in _NON_ASCII_SKIP_LOGINS: fully exempt, no label/comment."""
+        assert san.classify_action(True, False, "NONE", login) == "none"
+
+    @pytest.mark.parametrize("login", ["devin-ai-integration[bot]", "devin[bot]"])
+    def test_devin_non_ascii_is_none_skip(self, login: str) -> None:
+        """Devin is in _NON_ASCII_SKIP_LOGINS: fully exempt, no label/comment."""
+        assert san.classify_action(True, False, "NONE", login) == "none"
 
     def test_trusted_bot_ascii_only_is_none(self) -> None:
         """No non-ASCII -> none regardless of login (cheap-exit guard)."""
@@ -291,9 +296,17 @@ def test_every_shared_trusted_bot_login_ends_with_bot_suffix(login: str) -> None
     )
 
 
-def test_codecov_scanner_aliases_are_exact_observed_shapes() -> None:
-    """Regression guard for #504 / #620: Codecov has appeared both ways."""
-    assert frozenset({"codecov", "codecov[bot]"}) == san._CODECOV_BOT_LOGINS
+def test_non_ascii_skip_logins_contains_codecov_and_devin() -> None:
+    """Regression guard for #504 / #620: both codecov forms must be present.
+    Also verifies that devin forms are covered."""
+    assert "codecov" in san._NON_ASCII_SKIP_LOGINS
+    assert "codecov[bot]" in san._NON_ASCII_SKIP_LOGINS
+    assert any("devin" in login for login in san._NON_ASCII_SKIP_LOGINS)
+
+
+def test_non_ascii_skip_logins_disjoint_from_trusted_bot_logins() -> None:
+    """The two sets serve different purposes and must not overlap."""
+    assert san._NON_ASCII_SKIP_LOGINS.isdisjoint(san._TRUSTED_BOT_LOGINS)
 
 
 # ---------------------------------------------------------------------------
@@ -806,10 +819,11 @@ class TestRun:
         )
 
     @pytest.mark.parametrize("login", ["codecov", "codecov[bot]"])
-    def test_codecov_pr_comment_advises_does_not_block(
+    def test_codecov_pr_comment_is_fully_skipped(
         self, monkeypatch: pytest.MonkeyPatch, login: str
     ) -> None:
-        """Regression for #480/#504/#620: Codecov comments may include non-ASCII."""
+        """Regression for #480/#504/#620: Codecov is now fully exempt (action=none).
+        No label, no advisory comment -- the post is silently passed through."""
         seen = _capture_gh_api(monkeypatch)
         event = {
             "issue": {"number": 478, "pull_request": {"url": "..."}},
@@ -820,12 +834,24 @@ class TestRun:
             },
         }
         assert san.run(event, "issue_comment", "o/r") == 0
-        methods_paths = [(c[0], c[1]) for c in seen]
-        assert ("POST", "/repos/o/r/issues/478/labels") in methods_paths
-        assert ("POST", "/repos/o/r/issues/478/comments") in methods_paths
-        assert all(
-            path != "/repos/o/r/pulls/478/reviews" for _, path in methods_paths
-        )
+        assert seen == []
+
+    @pytest.mark.parametrize("login", ["devin-ai-integration[bot]", "devin[bot]"])
+    def test_devin_pr_comment_is_fully_skipped(
+        self, monkeypatch: pytest.MonkeyPatch, login: str
+    ) -> None:
+        """Devin comments with non-ASCII are fully exempt (action=none)."""
+        seen = _capture_gh_api(monkeypatch)
+        event = {
+            "issue": {"number": 501, "pull_request": {"url": "..."}},
+            "comment": {
+                "body": "Devin footer with emoji \U0001f916.",
+                "author_association": "NONE",
+                "user": {"login": login},
+            },
+        }
+        assert san.run(event, "issue_comment", "o/r") == 0
+        assert seen == []
 
     def test_unknown_bot_pr_still_blocks(
         self, monkeypatch: pytest.MonkeyPatch

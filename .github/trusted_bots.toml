@@ -1,0 +1,15 @@
+# Exact-match login allowlists for harness gates.
+# Extend deliberately, one entry at a time.
+# Refs #137, #480, #504, #620.
+
+[general]
+# Shared across issue-link, body-policy, and non-ASCII scanner (advisory demotion).
+logins = ["dependabot[bot]"]
+
+[non_ascii_skip]
+# Bots fully exempt from non-ASCII scan (action = "none": no label, no comment).
+# Their generated content may include emoji or other non-ASCII that is not a
+# security concern.
+# codecov: #480, #504, #620 -- GitHub has delivered as both "codecov" and "codecov[bot]"
+# devin: Cognition AI Devin integration (devin-ai-integration[bot] canonical form)
+logins = ["codecov", "codecov[bot]", "devin-ai-integration[bot]", "devin[bot]"]
