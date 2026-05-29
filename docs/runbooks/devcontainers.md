@@ -145,11 +145,19 @@ Recurring DevContainer maintenance is tracked in
 [#696](https://github.com/tvna/claude-md/issues/696). Generated image-pin
 PRs reference that tracking issue instead of the resolved implementation
 issue that originally introduced pin automation. The follow-up PR is
-created with the `DEVCONTAINER_PIN_PR_TOKEN` repository secret because
-the default GitHub Actions token is not permitted to create pull requests
-in this repository. The workflow fails before creating a new branch if
-that secret is missing, and it retries PR creation when a previous run
-already pushed the image-pin branch.
+created with the `DEVCONTAINER_PIN_PR_TOKEN` secret from the
+`devcontainer-image-pins` GitHub Environment because the default GitHub
+Actions token is not permitted to create pull requests in this
+repository. Store the token as an Environment secret, not as a broad
+repository secret, so the handoff is limited to the image-pin update job.
+The token needs the minimum permissions required to push the generated
+branch and open the PR: repository contents read/write, pull requests
+read/write, and metadata read-only. Keep Environment reviewers disabled
+unless a deliberate manual approval gate is desired, because reviewers
+pause the automatic pin update after every image publish. The workflow
+fails before creating a new branch if that secret is missing, and it
+retries PR creation when a previous run already pushed the image-pin
+branch.
 
 The publish workflow intentionally watches only image-build inputs such
 as `.devcontainer/images/**`, `.devcontainer/scripts/install-agent-cli.sh`,
