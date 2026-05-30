@@ -64,6 +64,15 @@
         ]
       },
       {
+        "matcher": "mcp__github__issue_write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 scripts/issue_closure_fast_path.py"
+          }
+        ]
+      },
+      {
         "matcher": "mcp__github__create_branch",
         "hooks": [
           {
