@@ -23,6 +23,7 @@
           };
           claudeCodeVersion = "2.1.154";
           codexCliVersion = "0.135.0";
+          apmVersion = "0.12.1";
           claudeCodeNative = {
             aarch64-linux = {
               package = "claude-code-linux-arm64";
@@ -43,6 +44,16 @@
               target = "x86_64-unknown-linux-musl";
               packageVersion = "${codexCliVersion}-linux-x64";
               hash = "sha512-5EosY67yU28UJSnl/obdN2F1CDaimYbzm9SLR8dwwzkeBBnY6dHgAKJ2GTu9Nc8CmgmtVFBGzgPqehsIcueVvA==";
+            };
+          }.${system};
+          apmNative = {
+            aarch64-linux = {
+              archive = "apm-linux-arm64";
+              hash = "sha256-NkplG444MzHPCumW09V7fxZLON40VjSuCP5xFMT546c=";
+            };
+            x86_64-linux = {
+              archive = "apm-linux-x86_64";
+              hash = "sha256-oLiW6MvdEEQRJemJqhnRgMYgUu2nyKqFD+s2eAXRJW8=";
             };
           }.${system};
           uvNative = {
@@ -114,10 +125,37 @@ EOF
               runHook postInstall
             '';
           };
+          apm-cli = pkgs.stdenvNoCC.mkDerivation {
+            pname = "apm-cli";
+            version = apmVersion;
+            src = pkgs.fetchurl {
+              url = "https://github.com/microsoft/apm/releases/download/v${apmVersion}/${apmNative.archive}.tar.gz";
+              hash = apmNative.hash;
+            };
+            dontBuild = true;
+            dontStrip = true;
+            dontPatchELF = true;
+            installPhase = ''
+              runHook preInstall
+
+              mkdir -p $out/libexec/apm $out/bin
+              install -Dm755 apm $out/libexec/apm/apm
+              cp -R _internal $out/libexec/apm/_internal
+              cat > $out/bin/apm <<EOF
+#!${pkgs.runtimeShell}
+exec "$out/libexec/apm/apm" "\$@"
+EOF
+              chmod +x $out/bin/apm
+
+              runHook postInstall
+            '';
+          };
         in
         {
-          inherit claude-cli codex-cli pinned-uv;
+          inherit claude-cli codex-cli pinned-uv apm-cli;
+          bubblewrap = pkgs.bubblewrap;
           gh-cli = pkgs.gh;
+          python-runtime = pkgs.python311;
         };
       mkShells = system:
         let
@@ -163,6 +201,7 @@ EOF
             pkgs.nodePackages.npm
           ];
           codex = mkAgentShell "codex" [
+            agentPackages.bubblewrap
             agentPackages.codex-cli
             pkgs.nodePackages.pnpm
           ];

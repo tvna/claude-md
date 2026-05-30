@@ -1,0 +1,150 @@
+name: Backup non-ASCII originals (P1)
+
+on:
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: 'Issue number to post the SHA-256 summary to (e.g. 102). Leave blank to skip.'
+        type: string
+        required: false
+        default: ''
+
+permissions: {}
+
+env:
+  REPO: ${{ github.repository }}
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Guard dispatch ref
+        if: github.event_name == 'workflow_dispatch' && github.ref != 'refs/heads/main'
+        run: |
+          echo "::error::This workflow must be dispatched against main (got ${{ github.ref }})."
+          exit 1
+
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Capture issues, PRs, and comments
+        id: capture
+        run: |
+          set -euo pipefail
+
+          TIMESTAMP=$(date -u +"%Y%m%dT%H%MZ")
+          ARTIFACT_NAME="backup-non-ascii-${TIMESTAMP}"
+          OUTDIR="/tmp/backup"
+          mkdir -p "${OUTDIR}"
+
+          echo "Fetching issues..."
+          gh api --paginate "repos/${REPO}/issues?state=all&per_page=100" \
+            > "${OUTDIR}/issues.json"
+
+          echo "Fetching pull requests..."
+          gh api --paginate "repos/${REPO}/pulls?state=all&per_page=100" \
+            > "${OUTDIR}/pull_requests.json"
+
+          echo "Fetching issue comments..."
+          gh api --paginate "repos/${REPO}/issues/comments?per_page=100" \
+            > "${OUTDIR}/issue_comments.json"
+
+          echo "Fetching pull request review comments..."
+          gh api --paginate "repos/${REPO}/pulls/comments?per_page=100" \
+            > "${OUTDIR}/pull_request_review_comments.json"
+
+          ARCHIVE="${OUTDIR}/originals-${TIMESTAMP}.json.gz"
+
+          export TIMESTAMP REPO
+          python3 - <<'EOF'
+          import gzip, json, os, pathlib
+
+          outdir = pathlib.Path("/tmp/backup")
+          timestamp = os.environ["TIMESTAMP"]
+
+          payload = {"captured_at": timestamp, "repo": os.environ["REPO"]}
+          for key, fname in [
+              ("issues",                    "issues.json"),
+              ("pull_requests",             "pull_requests.json"),
+              ("issue_comments",            "issue_comments.json"),
+              ("pull_request_review_comments", "pull_request_review_comments.json"),
+          ]:
+              data = json.loads((outdir / fname).read_text())
+              payload[key] = data
+              print(f"{key}: {len(data)} items", flush=True)
+
+          archive = outdir / f"originals-{timestamp}.json.gz"
+          with gzip.open(archive, "wt", encoding="utf-8") as fh:
+              json.dump(payload, fh, ensure_ascii=True, indent=None)
+
+          print(f"Archive: {archive}", flush=True)
+          EOF
+
+          SHA256=$(sha256sum "${ARCHIVE}" | awk '{print $1}')
+          ARCHIVE_BASENAME=$(basename "${ARCHIVE}")
+
+          echo "artifact_name=${ARTIFACT_NAME}" >> "$GITHUB_OUTPUT"
+          echo "archive_path=${ARCHIVE}"         >> "$GITHUB_OUTPUT"
+          echo "archive_basename=${ARCHIVE_BASENAME}" >> "$GITHUB_OUTPUT"
+          echo "sha256=${SHA256}"                >> "$GITHUB_OUTPUT"
+          echo "timestamp=${TIMESTAMP}"          >> "$GITHUB_OUTPUT"
+
+      - name: Write step summary
+        env:
+          ARTIFACT_NAME: ${{ steps.capture.outputs.artifact_name }}
+          ARCHIVE_BASENAME: ${{ steps.capture.outputs.archive_basename }}
+          SHA256: ${{ steps.capture.outputs.sha256 }}
+          TIMESTAMP: ${{ steps.capture.outputs.timestamp }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          {
+            echo "## Non-ASCII originals backup (P1)"
+            echo ""
+            echo "| Field | Value |"
+            echo "|-------|-------|"
+            echo "| Artifact | \`${ARTIFACT_NAME}\` |"
+            echo "| File | \`${ARCHIVE_BASENAME}\` |"
+            echo "| SHA-256 | \`${SHA256}\` |"
+            echo "| Captured at | \`${TIMESTAMP}\` |"
+            echo "| Retention | 90 days |"
+            echo "| Run | ${RUN_URL} |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload backup artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ${{ steps.capture.outputs.artifact_name }}
+          path: ${{ steps.capture.outputs.archive_path }}
+          retention-days: 90
+
+      - name: Post SHA-256 to issue
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.issue_number != '' }}
+        env:
+          ARTIFACT_NAME: ${{ steps.capture.outputs.artifact_name }}
+          ARCHIVE_BASENAME: ${{ steps.capture.outputs.archive_basename }}
+          SHA256: ${{ steps.capture.outputs.sha256 }}
+          TIMESTAMP: ${{ steps.capture.outputs.timestamp }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          ISSUE_NUMBER: ${{ inputs.issue_number }}
+        run: |
+          set -euo pipefail
+          BODY="**P1 backup captured** \`${TIMESTAMP}\`
+
+          | Field | Value |
+          |-------|-------|
+          | Artifact | \`${ARTIFACT_NAME}\` |
+          | File | \`${ARCHIVE_BASENAME}\` |
+          | SHA-256 | \`${SHA256}\` |
+          | Retention | 90 days |
+          | Run | ${RUN_URL} |
+
+          Record these values in the issue body backup section."
+
+          gh issue comment "${ISSUE_NUMBER}" \
+            --repo "${REPO}" \
+            --body "${BODY}"

@@ -72,6 +72,21 @@ short prompt of the form `codex:claude-md(main)$` or
 `claude:claude-md(main)$`, preserving the active agent, directory, and
 git branch without the long VS Code default prefix.
 
+For Codex, the same runtime setup also writes
+`[mcp_servers.codex_apps].startup_timeout_sec = 120` and links
+`/usr/local/bin/bwrap` and `/usr/local/bin/python3`. Existing Codex
+session volumes keep their old `/home/codex/.codex/config.toml` until
+the post-create setup runs again.
+If Codex still reports `codex_apps` MCP startup timeout, missing
+`bubblewrap`, or SessionStart hook failures with exit code 127 (python3
+not found), run this inside the Codex DevContainer, then restart Codex:
+
+```sh
+bash .devcontainer/scripts/configure-agent-runtime.sh codex
+command -v bwrap
+command -v python3
+```
+
 After the container opens, verify the runtime identity and workspace
 write access before starting agent work:
 
@@ -124,12 +139,12 @@ symlink.
 ## Prebuilt images
 
 Local devcontainers use immutable commit-SHA image tags. The currently
-pinned images were published from `1b9e21c1e852ee9639b7912a222e781ea8f1af4e`:
+pinned images were published from `0d43217a344860c787ed25fdaec228b469162a2a`:
 
 | Agent | Image |
 |---|---|
-| Claude | `ghcr.io/tvna/claude-md-devcontainer-claude:1b9e21c1e852ee9639b7912a222e781ea8f1af4e` |
-| Codex | `ghcr.io/tvna/claude-md-devcontainer-codex:1b9e21c1e852ee9639b7912a222e781ea8f1af4e` |
+| Claude | `ghcr.io/tvna/claude-md-devcontainer-claude:0d43217a344860c787ed25fdaec228b469162a2a` |
+| Codex | `ghcr.io/tvna/claude-md-devcontainer-codex:0d43217a344860c787ed25fdaec228b469162a2a` |
 
 The `Publish devcontainer images` workflow builds both images with the
 Dev Containers CLI and pushes them to GHCR on `main` changes to
@@ -180,10 +195,21 @@ Recurring DevContainer maintenance is tracked in
 [#696](https://github.com/tvna/claude-md/issues/696). Generated image-pin
 PRs reference that tracking issue instead of the resolved implementation
 issue that originally introduced pin automation. The follow-up PR is
-created with the workflow `GITHUB_TOKEN`, so GitHub records the author as
-`github-actions[bot]` instead of a repository owner or personal token
-holder. No personal access token or Environment secret is required for
-this path.
+created with the `DEVCONTAINER_PIN_PR_TOKEN` environment secret because
+this repository does not rely on the repository-level setting that lets
+the default `GITHUB_TOKEN` create pull requests.
+
+Issue and rotate that token as a fine-grained personal access token or a
+GitHub App installation token with access limited to `tvna/claude-md`.
+The minimum repository permissions are Metadata read, Contents read and
+write, and Pull requests read and write. Store it only as
+`DEVCONTAINER_PIN_PR_TOKEN` in the `devcontainer-image-pins` Environment,
+not as a repository-wide secret. Set an expiry of 90 days or less for a
+PAT, rotate it before expiry, and verify the handoff by triggering
+`Publish devcontainer images` with `workflow_dispatch` and confirming
+the `Update local devcontainer image pins` job opens or reuses the
+generated image-pin PR without exposing the token value in logs.
+Record the next rotation date with the Environment secret owner.
 
 The `Update local devcontainer image pins` job requests GitHub
 auto-merge for the generated PR immediately after `gh pr create`
@@ -193,11 +219,12 @@ opening a duplicate. GitHub still waits for the repository's required
 checks and rulesets before merging; the workflow only enables the
 auto-merge request.
 
-One-time repository setup:
+### One-time setup for `DEVCONTAINER_PIN_PR_TOKEN`
 
-1. Open `tvna/claude-md` -> **Settings** -> **Actions** -> **General**.
-2. Under **Workflow permissions**, allow GitHub Actions to create and
-   approve pull requests.
+1. Open `tvna/claude-md` -> **Settings** -> **Environments** ->
+   `devcontainer-image-pins`.
+2. Add the `DEVCONTAINER_PIN_PR_TOKEN` Environment secret described
+   above.
 3. Confirm the repository rulesets allow `github-actions[bot]` to push
    non-default generated branches such as
    `codex/devcontainer-image-pins-<sha>`.
@@ -205,8 +232,8 @@ One-time repository setup:
    wait for the next `main` publish, and confirm the
    `Update local devcontainer image pins` job opens or reuses the
    generated image-pin PR.
-5. Confirm the generated PR shows `github-actions[bot]` as the author and
-   has auto-merge enabled.
+5. Confirm the generated branch commit shows `github-actions[bot]` as
+   the author and the generated PR has auto-merge enabled.
 
 The publish workflow intentionally watches only image-build inputs such
 as `.devcontainer/images/**`, `.devcontainer/scripts/install-agent-cli.sh`,
@@ -323,6 +350,10 @@ fetch the Linux x64 and arm64 npm release tarballs by hash. The
 devcontainer post-create step links those Nix-built binaries into
 `/usr/local/bin` so they are available in ordinary VS Code terminals as
 well as inside `nix develop`.
+
+Codex also gets `bubblewrap` from nixpkgs. Its sandbox checks for `bwrap`
+on `PATH`, so the Codex post-create runtime setup links the Nix-built
+binary into `/usr/local/bin/bwrap` before interactive Codex use.
 
 uv is pinned the same way, but its version is read from
 `pyproject.toml` `[tool.uv].required-version` instead of being repeated

@@ -79,6 +79,20 @@ class TestEvaluate:
         errors = shape.evaluate(body)
         assert any("agent-attribution footer" in e for e in errors)
 
+    def test_duplicate_agent_footer_returns_error(self) -> None:
+        # Manual footer + harness auto-appended session footer (#784).
+        body = (
+            _VERIFICATION_OK
+            + "\n"
+            + _CHECKLIST_OK
+            + "\n"
+            + _FOOTER_OK
+            + "\n"
+            + _FOOTER_OK
+        )
+        errors = shape.evaluate(body)
+        assert any("multiple agent-attribution footers" in e for e in errors)
+
 
 class TestDecide:
     def test_well_formed_body_passes(self) -> None:

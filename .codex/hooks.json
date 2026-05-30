@@ -32,6 +32,16 @@
         ]
       },
       {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 scripts/check_pr_mergeability.py session-start",
+            "statusMessage": "Checking open PR mergeability"
+          }
+        ]
+      },
+      {
         "matcher": "startup|clear|compact",
         "hooks": [
           {
@@ -55,12 +65,32 @@
         ]
       },
       {
+        "matcher": "^mcp__github__issue_write$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 scripts/issue_closure_fast_path.py",
+            "statusMessage": "Checking issue closure evidence"
+          }
+        ]
+      },
+      {
         "matcher": "^mcp__github__(issue_write|add_issue_comment|create_pull_request|update_pull_request|add_reply_to_pull_request_comment|pull_request_review_write|add_comment_to_pending_review)$",
         "hooks": [
           {
             "type": "command",
             "command": "python3 scripts/preflight_codex_github_footer.py",
             "statusMessage": "Checking Codex GitHub footer"
+          }
+        ]
+      },
+      {
+        "matcher": "^mcp__github__create_branch$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 scripts/preflight_main_freshness.py",
+            "statusMessage": "Checking origin/main freshness"
           }
         ]
       },
@@ -168,6 +198,21 @@
             "type": "command",
             "command": "python3 scripts/ci_early_status_probe.py",
             "statusMessage": "Checking early CI status"
+          },
+          {
+            "type": "command",
+            "command": "python3 scripts/check_pr_mergeability.py",
+            "statusMessage": "Checking PR mergeability"
+          }
+        ]
+      },
+      {
+        "matcher": "^mcp__github__update_pull_request_branch$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 scripts/check_pr_mergeability.py",
+            "statusMessage": "Checking PR mergeability"
           }
         ]
       },
@@ -183,6 +228,11 @@
             "type": "command",
             "command": "python3 scripts/ci_early_status_probe.py",
             "statusMessage": "Checking early CI status"
+          },
+          {
+            "type": "command",
+            "command": "python3 scripts/check_pr_mergeability.py",
+            "statusMessage": "Checking PR mergeability"
           }
         ]
       }

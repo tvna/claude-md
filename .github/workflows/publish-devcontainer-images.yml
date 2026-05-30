@@ -126,8 +126,13 @@ jobs:
 
       - name: Open pin update PR
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.DEVCONTAINER_PIN_PR_TOKEN }}
         run: |
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "::error::DEVCONTAINER_PIN_PR_TOKEN is required in the devcontainer-image-pins environment"
+            exit 1
+          fi
+
           if git diff --quiet; then
             echo "devcontainer image pins already match ${GITHUB_SHA}"
             exit 0

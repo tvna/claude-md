@@ -57,14 +57,41 @@ def test_codex_runtime_config_uses_supported_toml_keys() -> None:
     codex_toml = script[toml_start:toml_end]
 
     assert 'approval_policy = "never"' in codex_toml
+    assert "[mcp_servers.codex_apps]" in codex_toml
+    assert "startup_timeout_sec = 120" in codex_toml
     assert "[permissions]" not in codex_toml
     assert "allow = [" not in codex_toml
+
+
+def test_runbook_documents_existing_codex_volume_refresh() -> None:
+    runbook = (REPO_ROOT / "docs/runbooks/devcontainers.md").read_text(encoding="utf-8")
+
+    assert "startup_timeout_sec" in runbook
+    assert "bash .devcontainer/scripts/configure-agent-runtime.sh codex" in runbook
+    assert "command -v bwrap" in runbook
 
 
 def test_flake_exposes_gh_cli_package_for_runtime_symlink() -> None:
     flake = (REPO_ROOT / "flake.nix").read_text(encoding="utf-8")
 
     assert "gh-cli = pkgs.gh;" in flake
+
+
+def test_runtime_script_links_python3_for_hook_subprocesses() -> None:
+    flake = (REPO_ROOT / "flake.nix").read_text(encoding="utf-8")
+    script = (REPO_ROOT / ".devcontainer/scripts/configure-agent-runtime.sh").read_text(encoding="utf-8")
+
+    assert "python-runtime = pkgs.python311;" in flake
+    assert "install_nix_binary python-runtime python3" in script
+
+
+def test_codex_runtime_installs_bubblewrap_for_sandbox() -> None:
+    flake = (REPO_ROOT / "flake.nix").read_text(encoding="utf-8")
+    script = (REPO_ROOT / ".devcontainer/scripts/configure-agent-runtime.sh").read_text(encoding="utf-8")
+
+    assert "bubblewrap = pkgs.bubblewrap;" in flake
+    assert "agentPackages.bubblewrap" in flake
+    assert "install_nix_binary bubblewrap bwrap" in script
 
 
 def test_devcontainer_publish_watches_runtime_script() -> None:

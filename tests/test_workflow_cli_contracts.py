@@ -45,6 +45,7 @@ import ruleset_drift
 import rulesets_apply
 import scan_apm_portability
 import scan_design_philosophy_drift
+import scan_hook_coverage_drift
 import scan_maintainability_metrics
 import scan_markdown_links
 import scan_non_ascii
@@ -126,6 +127,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("scan_markdown_links.py", "verify"): "test_scan_markdown_links_verify_matches_workflow_args",
     ("scan_maintainability_metrics.py", "verify"): "test_scan_maintainability_metrics_verify_matches_workflow_args",
     ("scan_non_ascii.py", "run"): "test_scan_non_ascii_run_matches_workflow_env",
+    ("scan_hook_coverage_drift.py", "verify"): "test_scan_hook_coverage_drift_verify_matches_workflow_args",
     ("scan_preflight_drift.py", "verify"): "test_scan_preflight_drift_verify_matches_workflow_args",
     ("scan_retro_followup_drift.py", "run"): "test_scan_retro_followup_drift_run_matches_workflow_env",
     ("scan_secret_runbooks.py", "verify"): "test_scan_secret_runbooks_verify_matches_workflow_args",
@@ -1043,7 +1045,7 @@ def test_update_devcontainer_image_pins_matches_workflow_args(tmp_path: Path) ->
         assert config["image"] == f"{update_devcontainer_image_pins.IMAGE_PREFIX}-{agent}:{new_sha}"
 
 
-def test_devcontainer_pin_pr_uses_github_actions_token() -> None:
+def test_devcontainer_pin_pr_uses_environment_secret_token() -> None:
     workflow_path = Path(".github/workflows/publish-devcontainer-images.yml")
     raw = workflow_path.read_text(encoding="utf-8")
     workflow = yaml.safe_load(raw)
@@ -1053,12 +1055,15 @@ def test_devcontainer_pin_pr_uses_github_actions_token() -> None:
         "contents": "write",
         "pull-requests": "write",
     }
-    assert "DEVCONTAINER_PIN_PR_TOKEN" not in raw
+    assert "DEVCONTAINER_PIN_PR_TOKEN" in raw
 
     open_pr = next(
         step for step in update_pins["steps"] if step.get("name") == "Open pin update PR"
     )
-    assert open_pr["env"] == {"GH_TOKEN": "${{ github.token }}"}
+    assert open_pr["env"] == {
+        "GH_TOKEN": "${{ secrets.DEVCONTAINER_PIN_PR_TOKEN }}"
+    }
+    assert "DEVCONTAINER_PIN_PR_TOKEN is required" in open_pr["run"]
     assert 'github-actions[bot]"' in open_pr["run"]
     assert "Refs #696" in open_pr["run"]
 
@@ -1252,6 +1257,12 @@ def test_verify_required_check_contexts_matches_workflow_args() -> None:
             ".github/workflows",
         ]
     ) == 0
+
+
+def test_scan_hook_coverage_drift_verify_matches_workflow_args() -> None:
+    """Mirrors the `Verify Claude/Codex hook coverage parity` step in
+    `.github/workflows/verify-agents.yml` (issue #615)."""
+    assert scan_hook_coverage_drift.main(["verify"]) == 0
 
 
 def test_scan_preflight_drift_verify_matches_workflow_args() -> None:

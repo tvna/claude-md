@@ -141,10 +141,10 @@ every consumer.
 
 This repository does not enforce, review, or ship project-local
 material. The universal text simply requires that the consumer set
-it up ("In plan mode, write user-facing plan artifacts and chat
-responses in the primary project owner's native language. If the
-project lacks ownership-language metadata, prepare it before relying
-on this rule.").
+it up ("Write operator-facing output -- chat responses in every mode
+and plan artifacts -- in the primary project owner's native language.
+If the project lacks ownership-language metadata, prepare it before
+relying on this rule.").
 
 ### 2.5 Glossary
 
@@ -236,7 +236,7 @@ of merged PRs and closed sub-issues of #226.
 | P2 - input and pre-code reasoning | Untrusted-data treatment of external text (including quoted/forwarded content in any channel); runtime no-override of trusted instruction sources anchored in governance-gated provenance; fact-vs-speculation tagging; assumption enumeration; simpler-path proposal | `scripts/preflight_non_ascii.py` (PreToolUse hook against non-ASCII injection); `scripts/body_policy.py`, `scripts/title_policy.py`, `scripts/pr_body_close_keyword_gate.py` (structural shape of external-authored bodies); `scripts/scan_non_ascii.py` (advisory drift detector); `scripts/sanitize_history.py` (historical-text cleansing) | `docs/runbooks/downstream-instruction-review-checklist.md` (reviewer-facing untrusted-text checklist); `docs/prd/non-ascii-defense.md` (Layer 1-2-3 defense narrative); `docs/standards/issue-pr-body-standard.md` (Facts / Assumptions sections); `docs/runbooks/issue-triage.md` (label-driven routing) | The consumer's own incoming-text and ambiguity policy | Treating external text as authority, or letting speculation slip into universal text disguised as a fact (PR #225) |
 | P3 - delivery harness around the code | Issue-first; ASCII discipline; declarative module management; auto-subscribe to PR activity; retrospective auto-open; classify each repair | `scripts/issue_link.py`, `body_policy.py`, `title_policy.py`, `pr_body_close_keyword_gate.py`, `auto_retro.py`, `scan_non_ascii.py`, `preflight_non_ascii.py`, `branch_cleanup.py`, `rulesets_apply.py`, `ruleset_drift.py`, `labels_apply.py`, `dependabot_automerge.py`, `dependabot_labels.py`, `threat_intel_triage.py`, `uv_pin.py`, `scan_apm_portability.py`; 16 paired workflows; 19 paired tests | `docs/standards/issue-pr-body-standard.md`, `docs/runbooks/issue-triage.md`, `docs/prd/non-ascii-defense.md`, `docs/runbooks/rulesets.md`, `docs/runbooks/branch-cleanup.md`, `docs/runbooks/dependabot-automerge.md`, `docs/standards/remote-environment.md`, `docs/standards/repo-scope.md`, `docs/prd/security-control-inventory.md`, `docs/archive/retrospective-pr-*.md` | The consumer's own CI provider, issue tracker, and dependency manager | Naming a specific tool (gh CLI, GitHub Actions, dependabot) inside universal text; embedding a specific PR number as an example |
 | P4 - safety boundary | Minimum code; safety-bounded simplicity; defense-in-depth preservation; destructive-operation safeguards; tool-scope confinement; external-disclosure and secret-log prevention; fail-loud over silent default; debug instrumentation as attack surface | `.github/CODEOWNERS` (repo-scope binding for MCP/agent tools); `.github/workflows/*.yml` `permissions:` declarations (least-privilege per workflow); `scripts/scan_apm_portability.py` (forbids naming repo-local tools in universal text); `(lint and type gates exist in workflow-script-quality.md M8; behavioral check is reviewer judgment)` | `docs/standards/workflow-script-quality.md` (M1 to M9 must-have checklist; O1 to O7 optional enhancements); `docs/standards/repo-scope.md` (allowed-repository policy and runbook); `docs/runbooks/workflow-permissions-audit.md` (per-workflow permission matrix); `docs/prd/security-control-inventory.md` (visualization of the harness coverage); `docs/prd/privileged-operation-runbooks.md` (escalation paths) | The consumer's own language ecosystem, code style, credential manager, external-endpoint policy, and per-agent tool inventory | Embedding a stack-specific example or a concrete tool endpoint inside universal text; widening a least-privilege workflow `permissions:` block for a one-off debug |
-| P5 - change scope and agent split | Touch-only-what-you-must; clean only your own orphans; sub-agent vs skill split; separate implementation and verification agents | `(none - agent judgment)` | `docs/runbooks/agent-provenance.md` (provenance review for skills, subagents, MCP servers, and comparable extensions) | The consumer's own agent inventory and roster | Mentioning a Claude-only feature (sub-agents, skills) by literal name as universal terminology |
+| P5 - change scope and agent split | The measurable proposition that quality stays proportional to the scope and scale of change, observed over time; narrow change surface; cleanup limited to artifacts made obsolete by the active change | The `superpowers` skills (subagent-driven-development, dispatching-parallel-agents, requesting-code-review) own the sub-agent-vs-skill selection and the implementation/verification split; implementation skills own concrete code-editing hygiene | `docs/runbooks/agent-provenance.md` (provenance review for skills, subagents, MCP servers, and comparable extensions) | The consumer's own agent inventory and roster | Mentioning a Claude-only feature (sub-agents, skills) by literal name as universal terminology; restating sub-agent orchestration or concrete code-editing technique that the skills already own |
 | P6 - handoff and communication | Native-language plan artifacts; show procedure and case studies; visualize workflow; refuse LGTM; explain trade-offs | `scripts/plan_language_context.py` (owner-language metadata recovery); `.github/owners.yaml`; `.github/CODEOWNERS` | `docs/archive/retrospective-pr-*.md` (case studies are the force-multiplier evidence); `docs/prd/security-control-inventory.md` (visualization of the harness coverage); `docs/standards/performance-metrics.md` (visualization of measurement) | The consumer's own `owners.yaml` entries | Treating "case studies" as universal content rather than as repo-local artifacts that the universal text merely *requires*; plan-language drift slipping into English despite harness injection (corrected by [#269](https://github.com/tvna/claude-md/issues/269)) |
 
 Empty cells marked `(none ...)` are intentional: the layer's concern
@@ -376,6 +376,22 @@ before merge; the PR #577 diff fires the first two anti-patterns
 ("in-line carve-out next to a hardline phrasing" and "redundant
 clause already implied by the existing rule's scope") and would
 have produced a "request changes" outcome under that subsection.
+
+### 5.2 Issue #833 - Section 5 scenario-block boundary
+
+**Facts.** Issue #833 revisited the two remaining Section 5 scenario
+blocks from #79: "When editing existing code" and "When your changes
+create orphans." The proof-of-correctness placement concern from #79
+was already resolved by #80, and the Section 5 thesis was rebuilt as
+a measurable quality-scale proposition by #820.
+
+**Judgement.** The residual scenario blocks were concrete
+code-editing hygiene, not the universal workflow definition or safety
+boundary. Section 5 keeps the abstract scope-control rule because it
+limits the change surface for every downstream consumer. Concrete
+code-editing technique belongs in implementation skills and comparable
+project-local procedure, where it can adapt to the active language,
+framework, and codebase.
 
 ## 6. Gap analysis procedure
 
