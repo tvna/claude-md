@@ -62,6 +62,12 @@ jobs:
           printf '%s' "$PR_BODY" > "$body_file"
           python3 scripts/issue_link.py verify --repo "$REPO" --body-file "$body_file" --author "$PR_AUTHOR"
 
+      - name: Validate linked issue titles
+        run: |
+          body_file="$(mktemp)"
+          printf '%s' "$PR_BODY" > "$body_file"
+          python3 scripts/verify_linked_issue_titles.py verify --repo "$REPO" --body-file "$body_file"
+
       - name: Validate README translation parity
         run: |
           body_file="$(mktemp)"

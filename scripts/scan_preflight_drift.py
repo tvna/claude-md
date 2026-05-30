@@ -70,6 +70,12 @@ ALLOWLIST: dict[str, str] = {
         "GH_TOKEN. Client gate: scripts/pr_body_close_keyword_gate.py and "
         "scripts/preflight_pr_template_shape.py (MCP PreToolUse)."
     ),
+    "verify_linked_issue_titles": (
+        "Input is the PR body plus GitHub API calls (one per linked issue) "
+        "that require GH_TOKEN. No local equivalent: the title of a remote "
+        "issue cannot be checked without network access and a valid token. "
+        "Tracked by #941."
+    ),
     "uv_pin": (
         "Used twice: ``uv_pin read`` is an output helper (no gate), "
         "``uv_pin drift`` IS a gate and is mirrored as a preflight step."
