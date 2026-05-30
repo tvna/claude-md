@@ -28,6 +28,7 @@ Tested by ``tests/test_body_policy.py``. Refs #205.
 from __future__ import annotations
 
 import argparse
+import html
 import os
 import re
 import sys
@@ -45,7 +46,7 @@ _TRACKING_MARKER = "Initial child issues"
 _PR_REQUIRED: tuple[str, ...] = (
     "Facts",
     "Assumptions",
-    "Risk & blast radius",
+    "Risk and blast radius",
     "Rollback",
     "Verification",
     "Checklist",
@@ -113,6 +114,10 @@ def extract_headings(body: str) -> list[tuple[int, str]]:
     for match in _HEADING_RE.finditer(cleaned):
         level = len(match.group(1))
         text = _TRAILING_COLON_RE.sub("", match.group(2)).strip()
+        # MCP write tools (create_pull_request / update_pull_request) HTML-encode
+        # & as &amp; before storing. Decode here so "Risk &amp; blast radius"
+        # matches the required "Risk & blast radius" entry. Refs #892.
+        text = html.unescape(text)
         if text:
             out.append((level, text))
     return out
@@ -134,11 +139,11 @@ def _normalize_heading(text: str) -> str:
     """Return a form that treats ``&`` and ``and`` as interchangeable.
 
     The single substitution makes the canonical required-section name
-    ``Risk & blast radius`` match a prose form ``Risk and blast radius``
-    without changing letter case or other whitespace inside the heading.
-    Refs #332: AI agents render the heading in prose form on first
-    attempt, and forcing the literal ``&`` glyph creates an avoidable
-    body-policy gate failure.
+    ``Risk and blast radius`` also accept the legacy ``Risk & blast radius``
+    spelling without changing letter case or other whitespace inside the heading.
+    Refs #332: AI agents rendered the heading in prose form on first
+    attempt; #912 made ``and`` the canonical default to avoid HTML-encoding
+    of ``&`` by ``mcp__github__create_pull_request``.
     """
     return _AMPERSAND_RE.sub(" and ", text).strip()
 
@@ -151,8 +156,8 @@ def missing_sections(
 
     Matching is case-sensitive (so ``facts`` still does not satisfy
     ``Facts``), but ``&`` and ``and`` are treated as equivalent: a body
-    that writes ``## Risk and blast radius`` satisfies the canonical
-    ``Risk & blast radius`` slot, and vice versa.
+    that writes ``## Risk & blast radius`` satisfies the canonical
+    ``Risk and blast radius`` slot, and vice versa.
     """
     present = {_normalize_heading(text) for _, text in headings}
     return [
@@ -173,7 +178,7 @@ def extract_section_body(body: str, heading: str, level: int = 2) -> str:
     Returns ``""`` when *heading* is absent. Matching is case-insensitive
     and tolerates trailing colons and whitespace (mirrors
     :func:`extract_headings`). Heading text comparison is normalized via
-    :func:`_normalize_heading` so ``Risk & blast radius`` and ``Risk and
+    :func:`_normalize_heading` so ``Risk and blast radius`` and ``Risk &
     blast radius`` map to the same slot.
     """
     cleaned = strip_html_comments(body.replace("\r", ""))

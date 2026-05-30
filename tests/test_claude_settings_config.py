@@ -76,6 +76,15 @@ def test_claude_post_tool_use_starts_ci_monitor_after_mcp_pr_create() -> None:
             "hooks": [
                 {
                     "type": "command",
+                    "command": "python3 scripts/post_pr_create_body_fix.py",
+                },
+            ],
+        },
+        {
+            "matcher": "mcp__github__create_pull_request",
+            "hooks": [
+                {
+                    "type": "command",
                     "command": "python3 scripts/post_pr_create_ci_monitor.py",
                 },
                 {

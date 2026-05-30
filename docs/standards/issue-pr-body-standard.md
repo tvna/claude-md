@@ -159,7 +159,7 @@ The required H2 sections, in order, are:
   log lines) per CLAUDE.md section 2. No speculation.
 - `## Assumptions` - what the author is trusting but has not verified.
   Speculation must be tagged with `speculation:`.
-- `## Risk & blast radius` - who or what is affected if the change is
+- `## Risk and blast radius` - who or what is affected if the change is
   wrong, and how reversible it is, per CLAUDE.md section 4.
 - `## Rollback` - the exact steps to revert or disable the change in
   prod.
