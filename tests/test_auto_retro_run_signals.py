@@ -192,6 +192,13 @@ class TestRunAggregateSignals:
         assert "only policy-artifact repair rows generated" in summary.read_text(
             encoding="utf-8"
         )
+        assert any(
+            m == "POST"
+            and p == "/repos/o/r/issues/576/comments"
+            and isinstance(b, dict)
+            and ar._SKIP_COMMENT_MARKER in (b.get("body") or "")
+            for m, p, b in seen
+        )
 
     def test_policy_artifact_rows_plus_ci_failure_still_creates(
         self, monkeypatch: pytest.MonkeyPatch

@@ -106,3 +106,108 @@ class TestRunSkips:
         text = summary.read_text(encoding="utf-8")
         assert "## auto-retro summary" in text
         assert "`skip`" in text
+
+
+class TestSkipComment:
+    """Skip-notification comment posted when auto-retro evaluates but skips.
+
+    Covers issue #932: without a comment, operators cannot tell whether the
+    background job ran and intentionally skipped or crashed silently.
+    """
+
+    def _is_skip_comment_post(
+        self, method: str, path: str, body: object
+    ) -> bool:
+        return (
+            method == "POST"
+            and path.endswith("/comments")
+            and isinstance(body, dict)
+            and ar._SKIP_COMMENT_MARKER in (body.get("body") or "")
+        )
+
+    def test_skip_comment_posted_for_no_signal(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """No repair signals -> skip comment on source PR."""
+        seen = orchestrator_recorder(monkeypatch, review_comments=[])
+        assert ar.run(merged_event(number=42), "o/r") == 0
+        assert any(self._is_skip_comment_post(*t) for t in seen)
+
+    def test_skip_comment_posted_for_prior_skip(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Prior FP rate skip also posts a skip comment on the source PR."""
+        monkeypatch.setattr(
+            ar,
+            "should_skip_by_prior",
+            lambda *_: (True, "prior FP rate 0.90 (n=50)"),
+        )
+        seen = orchestrator_recorder(monkeypatch)  # default has review comment
+        assert ar.run(merged_event(number=42), "o/r") == 0
+        assert any(self._is_skip_comment_post(*t) for t in seen)
+
+    def test_skip_comment_idempotent_patches_existing(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Rerun updates an existing skip comment via PATCH, not a new POST."""
+        seen = orchestrator_recorder(
+            monkeypatch,
+            review_comments=[],
+            back_link_comments=[
+                {
+                    "id": 777,
+                    "body": (
+                        f"{ar._SKIP_COMMENT_MARKER}\n"
+                        "auto-retro skipped: previous reason"
+                    ),
+                }
+            ],
+        )
+        assert ar.run(merged_event(number=42), "o/r") == 0
+        assert any(
+            method == "PATCH" and "/issues/comments/777" in path
+            for method, path, _ in seen
+        )
+        assert not any(self._is_skip_comment_post(*t) for t in seen)
+
+    def test_skip_comment_fail_soft(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Network error posting skip comment must not change the exit code."""
+        orchestrator_recorder(
+            monkeypatch, review_comments=[], back_link_post_error=True
+        )
+        assert ar.run(merged_event(number=42), "o/r") == 0
+
+    def test_structural_skips_do_not_post_skip_comment(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Structural skips leave no comment; only evaluation skips do."""
+        structural_events = [
+            merged_event(merged=False),
+            merged_event(merged_by={"login": "dependabot[bot]"}),
+            merged_event(title="fix(auto-retro): review PR #200 repair loops"),
+        ]
+        for event in structural_events:
+            seen = orchestrator_recorder(monkeypatch)
+            assert ar.run(event, "o/r") == 0
+            assert not any(
+                method == "POST" and "/comments" in path
+                for method, path, _ in seen
+            ), f"Unexpected skip comment posted for {event}"
+
+    def test_existing_retro_skip_does_not_post_skip_comment(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """When a retro already exists the PR has a back-link; no skip comment."""
+        seen = orchestrator_recorder(
+            monkeypatch,
+            existing=[
+                {
+                    "number": 100,
+                    "title": "fix(auto-retro): review PR #42 repair loops",
+                }
+            ],
+        )
+        assert ar.run(merged_event(number=42), "o/r") == 0
+        assert not any(self._is_skip_comment_post(*t) for t in seen)
