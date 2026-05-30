@@ -19,6 +19,9 @@
   "postStartCommand": "if [ \"${DEVCONTAINER_APPLY_EGRESS_ALLOWLIST:-1}\" = \"1\" ]; then nix develop .#network --command bash .devcontainer/scripts/apply-egress-allowlist.sh .devcontainer/network/codex.allowlist; fi",
   "customizations": {
     "vscode": {
+      "settings": {
+        "extensions.ignoreRecommendations": true
+      },
       "extensions": [
         "jnoortheen.nix-ide",
         "ms-python.python",
