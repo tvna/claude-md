@@ -155,6 +155,7 @@ EOF
           inherit claude-cli codex-cli pinned-uv apm-cli;
           bubblewrap = pkgs.bubblewrap;
           gh-cli = pkgs.gh;
+          python-runtime = pkgs.python311;
         };
       mkShells = system:
         let
