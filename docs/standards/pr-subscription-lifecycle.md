@@ -1,10 +1,15 @@
-# PR subscription lifecycle -- terminal-state signal
+# PR Subscription Lifecycle Standard
 
-Operator-facing companion to [`scripts/auto_retro.py`](../scripts/auto_retro.py)
-and [`.github/workflows/post-merge.yml`](../.github/workflows/post-merge.yml).
-Refs [#387](https://github.com/tvna/claude-md/issues/387).
+This standard defines the repository-owned terminal-state signal for a
+merged PR after the auto-retro pipeline has opened or reused its
+retrospective issue. The goal is to give subscribed sessions and human
+operators one current, machine-readable mark to inspect without reading
+PR history.
 
-## 1. Purpose and non-goals
+The implementation lives in [`scripts/auto_retro.py`](../../scripts/auto_retro.py)
+and [`.github/workflows/post-merge.yml`](../../.github/workflows/post-merge.yml).
+
+## Purpose And Non-Goals
 
 **Purpose.** Document the harness contract for signaling that a merged
 PR has reached its terminal state, so subscribed Claude sessions and
@@ -20,12 +25,12 @@ human operators have a single deterministic mark to read.
   machine-readable signal layered on top of the existing PR -> retro
   reverse pointer; the comment remains the human-visible entry point.
 
-## 2. The signal
+## Signal
 
 The label `harness:retro-opened` is added to the source PR by
 `scripts/auto_retro.py::apply_terminal_label` immediately after
 `post_back_link_comment` returns successfully. The SoT entry lives in
-[`.github/labels.json`](../.github/labels.json) and is reconciled onto
+[`.github/labels.json`](../../.github/labels.json) and is reconciled onto
 the repository by `apply-labels.yml`.
 
 A PR carrying this label has, by construction:
@@ -38,7 +43,7 @@ The label is therefore a single-bit terminal-state mark. Absence does
 not imply the PR is non-terminal; presence implies the auto-retro
 pipeline ran end-to-end.
 
-## 3. Emission contract
+## Emission Contract
 
 - Emission is the harness's responsibility. The constant
   `_TERMINAL_LABEL` in `scripts/auto_retro.py` and the SoT entry in
@@ -50,7 +55,7 @@ pipeline ran end-to-end.
   not roll back the retro issue or the back-link comment. The retro
   audit trail is the primary deliverable; the label is secondary.
 
-## 4. Out of scope
+## Out Of Scope
 
 - Close-without-merge PRs. The `merged == true` guard at
   `.github/workflows/post-merge.yml` excludes them, so rationale
@@ -58,3 +63,8 @@ pipeline ran end-to-end.
   sessions as before.
 - Removing or renaming the label after emission. Once applied, the
   label persists until a human or a future workflow removes it.
+
+## References
+
+- [#387](https://github.com/tvna/claude-md/issues/387) -- original
+  terminal-signal issue.

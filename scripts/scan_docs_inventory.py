@@ -1,0 +1,124 @@
+#!/usr/bin/env python3
+"""Verify docs lane inventory and top-level placement.
+
+Refs #918. ``docs/INDEX.md`` is the operator-facing map for the docs
+tree, so every Markdown document under ``docs/`` must either appear
+there or be the index itself. Top-level docs are reserved for navigation
+and documented compatibility pointers.
+"""
+
+from __future__ import annotations
+
+import argparse
+import re
+import sys
+from pathlib import Path
+from urllib.parse import unquote, urlsplit
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+INDEX_PATH = Path("docs/INDEX.md")
+ALLOWED_TOP_LEVEL_DOCS = frozenset(
+    {
+        "docs/INDEX.md",
+        "docs/agent-provenance.md",
+    }
+)
+
+INLINE_LINK_RE = re.compile(r"!?\[[^\]\n]*\]\(([^)\n]+)\)")
+REFERENCE_LINK_RE = re.compile(r"^\s{0,3}\[[^\]\n]+\]:\s+(\S+)", re.MULTILINE)
+IGNORED_SCHEMES = frozenset({"http", "https", "mailto", "tel", "data"})
+
+
+def rel(path: Path, root: Path) -> str:
+    """Return a stable repository-relative path string."""
+    try:
+        return path.relative_to(root).as_posix()
+    except ValueError:
+        return path.as_posix()
+
+
+def extract_target(raw: str) -> str:
+    """Return the URL/path portion of a Markdown link target."""
+    target = raw.strip()
+    if target.startswith("<") and ">" in target:
+        return target[1 : target.index(">")]
+    if " " in target:
+        return target.split(" ", 1)[0]
+    return target
+
+
+def iter_docs_markdown(root: Path) -> list[Path]:
+    """Return every Markdown document below ``docs/``."""
+    docs = root / "docs"
+    if not docs.exists():
+        return []
+    return sorted(path for path in docs.rglob("*.md") if path.is_file())
+
+
+def collect_index_entries(root: Path) -> set[str]:
+    """Return repository-relative docs paths linked from ``docs/INDEX.md``."""
+    index = root / INDEX_PATH
+    if not index.exists():
+        return set()
+
+    text = index.read_text(encoding="utf-8")
+    entries: set[str] = set()
+    for pattern in (INLINE_LINK_RE, REFERENCE_LINK_RE):
+        for match in pattern.finditer(text):
+            target = extract_target(match.group(1))
+            parts = urlsplit(target)
+            if parts.scheme in IGNORED_SCHEMES or target.startswith("//"):
+                continue
+            raw_path = unquote(parts.path)
+            if not raw_path or raw_path == ".":
+                continue
+            if Path(raw_path).is_absolute():
+                resolved = root / raw_path.lstrip("/")
+            else:
+                resolved = index.parent / raw_path
+            if resolved.suffix.lower() == ".md":
+                entries.add(rel(resolved.resolve(), root.resolve()))
+    return entries
+
+
+def verify(root: Path = REPO_ROOT) -> list[str]:
+    """Return docs inventory diagnostics."""
+    root = root.resolve()
+    errors: list[str] = []
+    index_entries = collect_index_entries(root)
+
+    for path in iter_docs_markdown(root):
+        relative = rel(path, root)
+        if path.parent == root / "docs" and relative not in ALLOWED_TOP_LEVEL_DOCS:
+            errors.append(
+                f"::error file={relative}::unexpected top-level docs file; "
+                "move it into a lane or add an explicit compatibility exemption"
+            )
+        if relative == INDEX_PATH.as_posix():
+            continue
+        if relative not in index_entries:
+            errors.append(
+                f"::error file={INDEX_PATH.as_posix()}::docs/INDEX.md "
+                f"does not list {relative}"
+            )
+    return errors
+
+
+def main(argv: list[str] | None = None) -> int:
+    """CLI entrypoint."""
+    parser = argparse.ArgumentParser(description=__doc__)
+    subparsers = parser.add_subparsers(dest="command", required=True)
+    subparsers.add_parser("verify", help="verify docs inventory")
+    args = parser.parse_args(argv)
+
+    if args.command == "verify":
+        errors = verify(REPO_ROOT)
+        for error in errors:
+            print(error, file=sys.stderr)
+        return 1 if errors else 0
+    parser.error(f"unknown command: {args.command}")
+    return 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

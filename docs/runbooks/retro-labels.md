@@ -1,16 +1,15 @@
 # Retrospective Labels - Operator Runbook
 
-This document is the operator-facing runbook for the four retrospective
-labels that govern the TP/FP feedback loop. The labels turn human
-classification (`retro:tp` / `retro:fp`) into machine-readable prior
-information consumed by `scripts/auto_retro.py` at signal-evaluation
-time (PR2, refs #582) and by the classification heuristic in a later
-PR. The labels are also written by the scanner
-`scripts/scan_retro_followup_drift.py` when follow-up issues/PRs drift.
+This runbook tells operators how to classify retrospective issues and
+how to interpret scanner-applied retrospective labels. The current
+purpose of the label set is to keep the retrospective feedback loop from
+drifting: operators make the final TP/FP call, scanners surface stale or
+broken follow-up links, and `scripts/auto_retro.py` consumes the result
+as machine-readable prior information.
 
 The labels live as a single source of truth in
-[`scripts/_retro_labels.py`](../scripts/_retro_labels.py), alongside
-the four prior thresholds consumed by the signal gate. Refs #558, #582.
+[`scripts/_retro_labels.py`](../../scripts/_retro_labels.py), alongside
+the four prior thresholds consumed by the signal gate.
 
 ## SoT layout
 
@@ -19,7 +18,7 @@ the four prior thresholds consumed by the signal gate. Refs #558, #582.
 | `scripts/_retro_labels.py` | Label string constants and `ALL_RETRO_LABELS` frozenset |
 | `scripts/scan_retro_followup_drift.py` | Daily scanner that applies `retro:fp-candidate` and `retro:fp` based on follow-up state |
 | `.github/workflows/retro-followup-drift.yml` | Cron + `workflow_dispatch` driver for the scanner |
-| `docs/retro-labels.md` *(this file)* | Operator runbook |
+| `docs/runbooks/retro-labels.md` *(this file)* | Operator runbook |
 
 ## The four labels
 
@@ -209,7 +208,7 @@ rules above and verify the signal on the linked follow-up.
 
 ```sh
 # 1. The doc is ASCII-only (it must pass issue-pr-triage.yml / scan).
-python3 -c "import pathlib; pathlib.Path('docs/retro-labels.md').read_text().encode('ascii')"
+python3 -c "import pathlib; pathlib.Path('docs/runbooks/retro-labels.md').read_text().encode('ascii')"
 
 # 2. The label SoT exposes the four constants this doc enumerates.
 python3 -c "from scripts._retro_labels import ALL_RETRO_LABELS; \
@@ -221,9 +220,10 @@ uv run pytest tests/test_scan_retro_followup_drift.py -v
 
 ## References
 
-- [`scripts/_retro_labels.py`](../scripts/_retro_labels.py) -- label SoT.
-- [`scripts/scan_retro_followup_drift.py`](../scripts/scan_retro_followup_drift.py) -- scanner.
-- [`.github/workflows/retro-followup-drift.yml`](../.github/workflows/retro-followup-drift.yml) -- cron driver.
-- [`scripts/auto_retro.py`](../scripts/auto_retro.py) -- the retro generator the labels feed back into.
-- [CLAUDE.md](../CLAUDE.md) section 3 -- retro framework rationale.
+- [`scripts/_retro_labels.py`](../../scripts/_retro_labels.py) -- label SoT.
+- [`scripts/scan_retro_followup_drift.py`](../../scripts/scan_retro_followup_drift.py) -- scanner.
+- [`.github/workflows/retro-followup-drift.yml`](../../.github/workflows/retro-followup-drift.yml) -- cron driver.
+- [`scripts/auto_retro.py`](../../scripts/auto_retro.py) -- the retro generator the labels feed back into.
+- [CLAUDE.md](../../CLAUDE.md) section 3 -- retro framework rationale.
 - [#558](https://github.com/tvna/claude-md/issues/558) -- PR1 issue.
+- [#582](https://github.com/tvna/claude-md/issues/582) -- label-derived prior issue.

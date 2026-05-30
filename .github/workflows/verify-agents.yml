@@ -61,6 +61,9 @@ jobs:
       - name: Assert local Markdown links resolve
         run: uv run python scripts/scan_markdown_links.py verify
 
+      - name: Assert docs index and lane placement
+        run: uv run python scripts/scan_docs_inventory.py verify
+
       - name: Assert script maintainability metrics
         run: uv run python scripts/scan_maintainability_metrics.py verify
 
