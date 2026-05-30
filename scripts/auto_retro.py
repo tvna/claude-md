@@ -122,6 +122,10 @@ _RESULT_PASSING_PREFIXES: tuple[str, ...] = (
     "parses",
     "shows",
     "matches",
+    # nix hash prefix: `sha256-<base64>` is the standard nix SRI hash
+    # format output by `nix eval ... .src.outputHash` and by python
+    # base64/binascii hash helpers. Refs #927.
+    "sha256-",
 )
 
 # Successful verification is often recorded as an observation sentence
@@ -148,6 +152,12 @@ _RESULT_PASSING_OBSERVATION_PHRASES: tuple[str, ...] = (
     "ruff / mypy / prek pass",
     "shows chapter",
     "total coverage",
+    # Phrases from the #927 corpus: observations confirmed as successful
+    # verification proof in open retros #742, #810, #829. Refs #927.
+    "compiled successfully",
+    "all gates pass",
+    "guard block present",
+    "tarball contains",
 )
 
 # Pure numeric result (e.g., a count from `grep -c` or `wc -l`). The
@@ -183,6 +193,40 @@ _RESULT_PASSING_NON_ASCII_ZERO_RE = re.compile(
     r"\bnon_ascii\s*=\s*0\b",
     re.IGNORECASE,
 )
+
+# nix eval quoted-string output (e.g. `"1.2.3"`, `"sha256-abc=="`).
+# A successful `nix eval` on a string-typed attribute always wraps the
+# value in double-quotes; evaluation errors use the un-quoted `error: ...`
+# prefix instead. Refs #927.
+_RESULT_PASSING_NIX_QUOTED_RE = re.compile(r'^"[^"\n]+"$')
+
+# grep -n match output: `18:aka.ms`. A non-empty `linenum:content` result
+# means the operator's pattern was found in the file -- i.e. the file
+# contains the expected entry. Refs #927.
+_RESULT_PASSING_GREP_N_RE = re.compile(r"^\d+:\S")
+
+# sha256sum / shasum standard output: 64 hex chars + whitespace + filename
+# (e.g. `a0b896...  apm-linux-x86_64.tar.gz`). Only sha256 (64 chars)
+# is covered; sha1 / md5 are matched by _RESULT_PASSING_HEX_HASH_RE.
+# Refs #927.
+_RESULT_PASSING_SHASUM_RE = re.compile(r"^[0-9a-f]{64}\s+\S", re.IGNORECASE)
+
+# Pure hex hash string of 8+ chars (e.g. `15e7b5dfd8e654725ff0`).
+# Operators using hash-based verification record a bare hex digest as the
+# measured result; any 8+ char hex string is treated as a quantity, not a
+# status. Refs #927.
+_RESULT_PASSING_HEX_HASH_RE = re.compile(r"^[0-9a-f]{8,}$", re.IGNORECASE)
+
+# Package name-version string (e.g. `bubblewrap-0.11.0`, `uv-1.2.3`).
+# Output of `nix eval .#packages.<system>.NAME.name` or similar when the
+# derivation exists and is evaluable. Refs #927.
+_RESULT_PASSING_PKG_VERSION_RE = re.compile(
+    r"^[a-z][a-z0-9_-]*-\d+\.\d+", re.IGNORECASE
+)
+
+# nix-prefixed tool or shell name (e.g. `nix-shell`, `nix-develop`).
+# Output of `nix eval .#devShells.<system>.NAME.name --raw`. Refs #927.
+_RESULT_PASSING_NIX_TOOL_RE = re.compile(r"^nix-[a-z][a-z0-9-]*$", re.IGNORECASE)
 
 # Explicit failure-count marker that must NOT be treated as passing even
 # if the rest of the string smells like a pass (`0 passed, 3 failed`).
@@ -408,8 +452,13 @@ def _result_is_passing(result: str) -> bool:
     :data:`_RESULT_FAILING_COUNT_RE`) forces a failure verdict even if
     another marker would have accepted it.
 
+    Additional patterns from the #927 corpus (retros #742, #788, #802,
+    #807, #810, #829, #900) are matched by dedicated regexes for nix eval
+    quoted-string output, grep -n line results, sha256sum output, pure hex
+    hashes, package name-version strings, and nix-prefixed tool names.
+
     Anything else (including ``exit 1``, ``failed``, free-form prose) is
-    treated as a failure signal. Refs #411, #417, #453.
+    treated as a failure signal. Refs #411, #417, #453, #927.
     """
     raw_text = result.strip()
     text = raw_text
@@ -436,6 +485,18 @@ def _result_is_passing(result: str) -> bool:
     if _RESULT_PASSING_TRAILING_OK_RE.search(text):
         return True
     if _RESULT_PASSING_NON_ASCII_ZERO_RE.search(raw_text):
+        return True
+    if _RESULT_PASSING_NIX_QUOTED_RE.match(text):
+        return True
+    if _RESULT_PASSING_GREP_N_RE.match(text):
+        return True
+    if _RESULT_PASSING_SHASUM_RE.match(text):
+        return True
+    if _RESULT_PASSING_HEX_HASH_RE.match(text):
+        return True
+    if _RESULT_PASSING_PKG_VERSION_RE.match(text):
+        return True
+    if _RESULT_PASSING_NIX_TOOL_RE.match(text):
         return True
     lower = text.lower()
     raw_lower = raw_text.lower()
