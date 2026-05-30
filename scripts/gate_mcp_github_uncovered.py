@@ -5,18 +5,20 @@ PreToolUse hook registered under the ``mcp__github__`` matcher in
 ``.claude/settings.json``. For every ``mcp__github__*`` call, checks
 whether that specific tool has a dedicated ``PreToolUse`` hook entry. If
 it does, the call is already gated and this script passes through (exit 0,
-no decision). If it does not, the script denies the call and asks the
-agent to use ``gh`` CLI via Bash instead.
+no decision). If it does not, the script denies the call and redirects the agent to
+``scripts/github_api.py`` (for reads) or instructs them to add a
+paired PreToolUse hook before using a new write tool.
 
 Rationale: dedicated hooks gate and audit the write tools listed in
 :data:`HOOK_COVERED_TOOLS`. Any tool NOT in that set has no preflight at
-all; routing those calls through ``gh`` CLI ensures the Bash
-``PreToolUse`` hook (``preflight_push_base.py``) is always in the path.
+all. Read operations should use ``scripts/github_api.py`` for lower token
+consumption. Write operations require a hook before they can be unblocked.
+See #887 for the MCP-vs-GitHub-API design decision.
 
 Fails open per CLAUDE.md section 4: parse errors log to stderr and exit 0
 so a hook bug never wedges the session.
 
-Refs #870.
+Refs #870, #887.
 """
 
 from __future__ import annotations
@@ -66,10 +68,13 @@ def decide(tool_name: str) -> dict[str, Any] | None:
         "permissionDecision": "deny",
         "decisionReason": (
             f"`{tool_name}` has no dedicated PreToolUse hook gate. "
-            f"Use `gh` CLI via Bash instead -- for example:\n"
-            f"  gh api repos/{{owner}}/{{repo}}/{short.replace('_', '/')} ...\n"
-            f"The Bash PreToolUse hook (preflight_push_base.py) covers all "
-            f"gh calls and provides the audit trail this MCP tool lacks."
+            f"For read operations (list, search, get), use the approved wrapper:\n"
+            f"  python3 scripts/github_api.py GET "
+            f"https://api.github.com/repos/{{owner}}/{{repo}}/{short.replace('_', '/')} "
+            f"[--fields f1,f2]\n"
+            f"For write operations, a paired PreToolUse hook must be added to "
+            f".claude/settings.json before this tool can be used. "
+            f"See #887 for the MCP-vs-GitHub-API design decision."
         ),
     }
 
