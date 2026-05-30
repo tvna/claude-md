@@ -231,6 +231,11 @@
         "hooks": [
           {
             "type": "command",
+            "command": "python3 scripts/post_pr_create_body_fix.py",
+            "statusMessage": "Fixing PR body encoding and footer"
+          },
+          {
+            "type": "command",
             "command": "python3 scripts/post_pr_create_ci_monitor.py",
             "statusMessage": "Starting PR CI monitor"
           },
