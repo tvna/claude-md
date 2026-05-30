@@ -42,3 +42,10 @@ repos:
         pass_filenames: false
         stages: [pre-push]
         always_run: true
+      - id: preflight-coverage
+        name: preflight coverage (scripts/preflight_coverage.py)
+        entry: uv run python scripts/preflight_coverage.py
+        language: system
+        pass_filenames: false
+        stages: [pre-push]
+        always_run: true

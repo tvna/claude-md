@@ -352,13 +352,53 @@ issue #193.
 
 ### O4. Coverage thresholds
 
-A per-module coverage floor catches regressions where new branches
-land without tests. The repository-wide threshold landed with #188 as
-the script-specific gate (`[tool.coverage.report].fail_under` in
-`pyproject.toml`). Extension to non-`scripts/` Python packages is
-governed by the [Coverage graduation policy](#coverage-graduation-policy)
-below (#198). Until a per-script floor lands, also aim for "every
-pure function has at least one positive and one negative test."
+Two complementary gates enforce coverage on the `scripts/` tree. They
+operate at different granularities because aggregate thresholds alone
+are not sufficient.
+
+**Why aggregate gates allow individual files to slip through**
+
+The aggregate gate (`[tool.coverage.report].fail_under` in
+`pyproject.toml`) measures the combined line count of every file in
+the source tree. When the tree is large, a newly added file with 0%
+coverage barely moves the aggregate. For example, with a 9 000-line
+tree at 92% coverage, a new 100-line file with no tests drops the
+aggregate to only 91.2% — well above a typical 90% floor. The new
+file ships with zero coverage while all gates appear green.
+
+**Gate 1: aggregate post-merge threshold**
+
+The repository-wide aggregate threshold lands with #188 and is
+enforced by `.github/workflows/post-merge.yml` via
+`pytest --cov-fail-under=<value>`. It is the final backstop:
+it fires after merge and opens a tracking issue via
+`scripts/coverage_failure_issue.py` when coverage regresses.
+Configuration: `[tool.coverage.report].fail_under` in `pyproject.toml`.
+
+**Gate 2: per-file PreToolUse hook (landed #952)**
+
+`scripts/preflight_coverage.py` fires as a Claude Code and Codex
+`PreToolUse` hook before `mcp__github__(create_pull_request|update_pull_request)`
+and as a `pre-push` pre-commit stage hook. It:
+
+1. Runs `git diff --name-only origin/main -- scripts/` to identify
+   changed public `scripts/*.py` files (private helpers prefixed with
+   `_` are skipped; they are tested indirectly through their callers).
+2. Reads or generates `coverage.json` (`pytest --cov --cov-report=json`).
+3. Checks each changed file individually against a 90% line-coverage
+   floor (constant `PER_FILE_FLOOR` in the script; lower than the
+   aggregate gate to accommodate files with legitimately uncoverable
+   branches).
+4. Exits 1 and prints `::error file=<path>::` annotations for every
+   file that fails; PR creation is blocked until tests are added.
+
+The hook reuses an existing `coverage.json` when one is already
+present in the repository root (the developer already ran
+`uv run pytest --cov` locally), so the cost of the check is zero when
+the developer ran tests before triggering the hook.
+
+Extension to non-`scripts/` Python packages is governed by the
+[Coverage graduation policy](#coverage-graduation-policy) below (#198).
 
 ### O5. Pydantic-based input modelling
 
