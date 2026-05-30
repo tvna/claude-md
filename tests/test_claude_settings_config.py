@@ -63,6 +63,15 @@ def test_claude_post_tool_use_starts_ci_monitor_after_mcp_pr_create() -> None:
             ],
         },
         {
+            "matcher": "mcp__github__(add_issue_comment|add_reply_to_pull_request_comment)",
+            "hooks": [
+                {
+                    "type": "command",
+                    "command": "python3 scripts/gate_issue_close_comment.py --record",
+                }
+            ],
+        },
+        {
             "matcher": "mcp__github__create_pull_request",
             "hooks": [
                 {

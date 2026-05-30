@@ -73,6 +73,15 @@
         ]
       },
       {
+        "matcher": "mcp__github__issue_write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 scripts/gate_issue_close_comment.py"
+          }
+        ]
+      },
+      {
         "matcher": "mcp__github__create_branch",
         "hooks": [
           {
@@ -190,6 +199,15 @@
           {
             "type": "command",
             "command": "python3 scripts/plan_approval_gate.py"
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__github__(add_issue_comment|add_reply_to_pull_request_comment)",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 scripts/gate_issue_close_comment.py --record"
           }
         ]
       },
