@@ -65,6 +65,16 @@
         ]
       },
       {
+        "matcher": "^mcp__github__issue_write$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 scripts/issue_closure_fast_path.py",
+            "statusMessage": "Checking issue closure evidence"
+          }
+        ]
+      },
+      {
         "matcher": "^mcp__github__(issue_write|add_issue_comment|create_pull_request|update_pull_request|add_reply_to_pull_request_comment|pull_request_review_write|add_comment_to_pending_review)$",
         "hooks": [
           {
