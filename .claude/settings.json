@@ -13,7 +13,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/scripts/install-uv.sh"
+            "command": "scripts/install-uv.sh"
           }
         ]
       },
@@ -21,7 +21,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 $CLAUDE_PROJECT_DIR/scripts/plan_language_context.py"
+            "command": "python3 scripts/plan_language_context.py"
           }
         ]
       },
@@ -29,7 +29,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 $CLAUDE_PROJECT_DIR/scripts/check_hooks_path.py"
+            "command": "python3 scripts/check_hooks_path.py"
           }
         ]
       },
@@ -51,7 +51,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 $CLAUDE_PROJECT_DIR/scripts/preflight_non_ascii.py"
+            "command": "python3 scripts/preflight_non_ascii.py"
           }
         ]
       },
@@ -60,11 +60,11 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 $CLAUDE_PROJECT_DIR/scripts/preflight_branch_base.py verify"
+            "command": "python3 scripts/preflight_branch_base.py verify"
           },
           {
             "type": "command",
-            "command": "python3 $CLAUDE_PROJECT_DIR/scripts/pr_body_close_keyword_gate.py"
+            "command": "python3 scripts/pr_body_close_keyword_gate.py"
           }
         ]
       },
@@ -73,7 +73,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 $CLAUDE_PROJECT_DIR/scripts/preflight_title_policy.py"
+            "command": "python3 scripts/preflight_title_policy.py"
           }
         ]
       },
@@ -82,7 +82,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 $CLAUDE_PROJECT_DIR/scripts/preflight_pr_body_required_sections.py"
+            "command": "python3 scripts/preflight_pr_body_required_sections.py"
           }
         ]
       },
@@ -91,7 +91,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 $CLAUDE_PROJECT_DIR/scripts/preflight_pr_template_shape.py"
+            "command": "python3 scripts/preflight_pr_template_shape.py"
           }
         ]
       },
@@ -100,11 +100,11 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 $CLAUDE_PROJECT_DIR/scripts/preflight_non_ascii.py"
+            "command": "python3 scripts/preflight_non_ascii.py"
           },
           {
             "type": "command",
-            "command": "python3 $CLAUDE_PROJECT_DIR/scripts/preflight_title_policy.py"
+            "command": "python3 scripts/preflight_title_policy.py"
           }
         ]
       },
@@ -113,19 +113,19 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 $CLAUDE_PROJECT_DIR/scripts/preflight_branch_base.py verify"
+            "command": "python3 scripts/preflight_branch_base.py verify"
           },
           {
             "type": "command",
-            "command": "python3 $CLAUDE_PROJECT_DIR/scripts/pr_body_close_keyword_gate.py"
+            "command": "python3 scripts/pr_body_close_keyword_gate.py"
           },
           {
             "type": "command",
-            "command": "python3 $CLAUDE_PROJECT_DIR/scripts/preflight_pr_body_required_sections.py"
+            "command": "python3 scripts/preflight_pr_body_required_sections.py"
           },
           {
             "type": "command",
-            "command": "python3 $CLAUDE_PROJECT_DIR/scripts/preflight_pr_template_shape.py"
+            "command": "python3 scripts/preflight_pr_template_shape.py"
           }
         ]
       }
@@ -136,7 +136,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 $CLAUDE_PROJECT_DIR/scripts/plan_approval_gate.py"
+            "command": "python3 scripts/plan_approval_gate.py"
           }
         ]
       },
@@ -145,7 +145,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 $CLAUDE_PROJECT_DIR/scripts/post_pr_create_ci_monitor.py"
+            "command": "python3 scripts/post_pr_create_ci_monitor.py"
           }
         ]
       },
@@ -154,7 +154,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 $CLAUDE_PROJECT_DIR/scripts/post_pr_create_ci_monitor.py"
+            "command": "python3 scripts/post_pr_create_ci_monitor.py"
           }
         ]
       }

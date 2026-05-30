@@ -34,9 +34,9 @@ def _hook_groups(data: dict[str, object], name: str) -> list[dict[str, object]]:
 
 def _repo_script_from_command(command: str) -> str:
     for token in command.split():
-        if token.startswith("$CLAUDE_PROJECT_DIR/"):
-            return token.removeprefix("$CLAUDE_PROJECT_DIR/")
-    return command.split()[-1].removeprefix("$CLAUDE_PROJECT_DIR/")
+        if token.startswith("scripts/"):
+            return token
+    return command.split()[-1]
 
 
 def test_claude_settings_json_is_valid() -> None:
@@ -58,7 +58,7 @@ def test_claude_post_tool_use_starts_ci_monitor_after_mcp_pr_create() -> None:
             "hooks": [
                 {
                     "type": "command",
-                    "command": "python3 $CLAUDE_PROJECT_DIR/scripts/plan_approval_gate.py",
+                    "command": "python3 scripts/plan_approval_gate.py",
                 }
             ],
         },
@@ -67,7 +67,7 @@ def test_claude_post_tool_use_starts_ci_monitor_after_mcp_pr_create() -> None:
             "hooks": [
                 {
                     "type": "command",
-                    "command": "python3 $CLAUDE_PROJECT_DIR/scripts/post_pr_create_ci_monitor.py",
+                    "command": "python3 scripts/post_pr_create_ci_monitor.py",
                 }
             ],
         },
@@ -76,7 +76,7 @@ def test_claude_post_tool_use_starts_ci_monitor_after_mcp_pr_create() -> None:
             "hooks": [
                 {
                     "type": "command",
-                    "command": "python3 $CLAUDE_PROJECT_DIR/scripts/post_pr_create_ci_monitor.py",
+                    "command": "python3 scripts/post_pr_create_ci_monitor.py",
                 }
             ],
         },
@@ -200,14 +200,14 @@ def test_claude_pre_tool_use_covers_codex_github_connector_tools() -> None:
     assert pr_matcher in matcher_to_commands
 
     title_body_cmds = matcher_to_commands[title_body_matcher]
-    assert "python3 $CLAUDE_PROJECT_DIR/scripts/preflight_title_policy.py" in title_body_cmds
-    assert "python3 $CLAUDE_PROJECT_DIR/scripts/preflight_non_ascii.py" in title_body_cmds
+    assert "python3 scripts/preflight_title_policy.py" in title_body_cmds
+    assert "python3 scripts/preflight_non_ascii.py" in title_body_cmds
 
     pr_cmds = matcher_to_commands[pr_matcher]
-    assert "python3 $CLAUDE_PROJECT_DIR/scripts/preflight_pr_body_required_sections.py" in pr_cmds
-    assert "python3 $CLAUDE_PROJECT_DIR/scripts/preflight_pr_template_shape.py" in pr_cmds
-    assert "python3 $CLAUDE_PROJECT_DIR/scripts/pr_body_close_keyword_gate.py" in pr_cmds
-    assert "python3 $CLAUDE_PROJECT_DIR/scripts/preflight_branch_base.py verify" in pr_cmds
+    assert "python3 scripts/preflight_pr_body_required_sections.py" in pr_cmds
+    assert "python3 scripts/preflight_pr_template_shape.py" in pr_cmds
+    assert "python3 scripts/pr_body_close_keyword_gate.py" in pr_cmds
+    assert "python3 scripts/preflight_branch_base.py verify" in pr_cmds
 
 
 def test_claude_pr_write_hooks_include_base_freshness_gate() -> None:
@@ -225,8 +225,34 @@ def test_claude_pr_write_hooks_include_base_freshness_gate() -> None:
         and any(
             isinstance(handler, dict)
             and handler.get("command")
-            == "python3 $CLAUDE_PROJECT_DIR/scripts/preflight_branch_base.py verify"
+            == "python3 scripts/preflight_branch_base.py verify"
             for handler in handlers
         )
         for group in matching
     )
+
+
+def test_claude_hook_commands_do_not_use_claude_project_dir() -> None:
+    """No hook command in .claude/settings.json should reference $CLAUDE_PROJECT_DIR.
+
+    Refs #783. $CLAUDE_PROJECT_DIR is not set in the FleetView remote-execution
+    environment. A command containing it expands to an invalid path and the hook
+    fails silently instead of denying the tool call -- the exact gap that allowed
+    a behind-branch PR to be created despite the stale-base PreToolUse gate.
+    """
+    data = _load_settings()
+    hooks = data["hooks"]
+    assert isinstance(hooks, dict)
+
+    for event, groups in hooks.items():
+        assert isinstance(groups, list)
+        for group in groups:
+            assert isinstance(group, dict)
+            if group.get("_apm_source") == "superpowers":
+                continue
+            for handler in group.get("hooks", []):
+                if isinstance(handler, dict):
+                    command = handler.get("command", "")
+                    assert "$CLAUDE_PROJECT_DIR" not in command, (
+                        f"{event} hook command uses $CLAUDE_PROJECT_DIR (unset in FleetView): {command!r}"
+                    )
