@@ -56,3 +56,24 @@ def test_main_produces_no_output_when_path_correct(capsys: pytest.CaptureFixture
         subject.main()
     captured = capsys.readouterr()
     assert captured.out == ""
+
+
+def test_main_exits_zero_when_check_raises() -> None:
+    with patch("check_hooks_path.check", side_effect=RuntimeError("unexpected")), pytest.raises(SystemExit) as exc_info:
+        subject.main()
+    assert exc_info.value.code == 0
+
+
+class TestGitConfig:
+    def test_returns_none_when_git_not_found(self) -> None:
+        import shutil
+        with patch.object(shutil, "which", return_value=None):
+            assert subject._git_config("core.hooksPath") is None
+
+    def test_returns_none_when_git_returns_error(self) -> None:
+        with patch("subprocess.run", return_value=_run(1, "")):
+            assert subject._git_config("core.hooksPath") is None
+
+    def test_returns_stripped_value_on_success(self) -> None:
+        with patch("subprocess.run", return_value=_run(0, ".githooks\n")):
+            assert subject._git_config("core.hooksPath") == ".githooks"
