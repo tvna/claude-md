@@ -44,7 +44,6 @@ class TestDecide:
             "mcp__github__search_issues",
             "mcp__github__list_commits",
             "mcp__github__get_file_contents",
-            "mcp__github__merge_pull_request",
             "mcp__github__list_pull_requests",
         ],
     )
