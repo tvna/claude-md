@@ -205,3 +205,49 @@ def test_main_malformed_json_no_crash(capsys: pytest.CaptureFixture[str]) -> Non
         subject.main()
     captured = capsys.readouterr()
     assert captured.out == ""
+
+
+def test_main_non_dict_event_no_output(capsys: pytest.CaptureFixture[str]) -> None:
+    with mock.patch("sys.stdin", io.StringIO("[1, 2, 3]")):
+        subject.main()
+    assert capsys.readouterr().out == ""
+
+
+def test_main_non_dict_tool_input_treated_as_empty(capsys: pytest.CaptureFixture[str]) -> None:
+    event = json.dumps({"tool_name": "mcp__github__close_issue", "tool_input": "not-a-dict"})
+    with mock.patch("sys.stdin", io.StringIO(event)):
+        subject.main()
+    assert capsys.readouterr().out == ""
+
+
+class TestSearchMergedPrs:
+    def test_os_error_returns_none(self) -> None:
+        def bad_runner(*_args, **_kwargs):
+            raise OSError("gh not found")
+
+        result = subject._search_merged_prs("o", "r", 1, runner=bad_runner)
+        assert result is None
+
+    def test_blank_lines_in_stdout_are_skipped(self) -> None:
+        import json as _json
+        obj = {"number": 5, "title": "t", "html_url": "u", "closed_at": "2026-01-01"}
+        raw = f"\n{_json.dumps(obj)}\n\n"
+        result = subject._search_merged_prs(
+            "o", "r", 1,
+            runner=lambda *_a, **_kw: _completed(raw),
+        )
+        assert result is not None
+        assert len(result) == 1
+
+    def test_invalid_json_lines_are_skipped(self) -> None:
+        result = subject._search_merged_prs(
+            "o", "r", 1,
+            runner=lambda *_a, **_kw: _completed("not json\n"),
+        )
+        assert result == []
+
+
+class TestExtractCloseTarget:
+    def test_missing_repo_returns_none(self) -> None:
+        result = subject._extract_close_target("mcp__github__update_issue", {"owner": "o", "state": "closed"})
+        assert result is None
