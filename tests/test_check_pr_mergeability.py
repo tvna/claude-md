@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-import subprocess
+import urllib.request
 from typing import Any
 
 import check_pr_mergeability as subject
@@ -9,14 +9,62 @@ import pytest
 
 pytestmark = pytest.mark.shard_preflight
 
+_TOKEN = "test-token"
 
-def _completed(data: Any, returncode: int = 0) -> subprocess.CompletedProcess[str]:
-    return subprocess.CompletedProcess(
-        ["gh"],
-        returncode,
-        stdout=json.dumps(data) if not isinstance(data, str) else data,
-        stderr="",
-    )
+
+# ---------------------------------------------------------------------------
+# Fake opener helpers
+# ---------------------------------------------------------------------------
+
+
+class _FakeResponse:
+    """Minimal urllib response-like object for testing."""
+
+    def __init__(self, data: Any, status: int = 200) -> None:
+        self.status = status
+        self._body = json.dumps(data).encode()
+
+    def read(self) -> bytes:
+        return self._body
+
+    def __enter__(self) -> _FakeResponse:
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        pass
+
+
+def _opener(data: Any, status: int = 200) -> Any:
+    """Return a fake opener that always responds with *data*."""
+    resp = _FakeResponse(data, status)
+
+    def fake(req: urllib.request.Request) -> _FakeResponse:
+        return resp
+
+    return fake
+
+
+def _seq_opener(responses: list[Any], status: int = 200) -> Any:
+    """Return a fake opener that cycles through *responses* in order."""
+    queue = list(responses)
+
+    def fake(req: urllib.request.Request) -> _FakeResponse:
+        data = queue.pop(0) if queue else responses[-1]
+        return _FakeResponse(data, status)
+
+    return fake
+
+
+def _url_opener(url_map: dict[str, Any]) -> Any:
+    """Return a fake opener dispatching based on URL substrings."""
+
+    def fake(req: urllib.request.Request) -> _FakeResponse:
+        for pattern, data in url_map.items():
+            if pattern in req.full_url:
+                return _FakeResponse(data)
+        raise ValueError(f"unexpected URL: {req.full_url}")
+
+    return fake
 
 
 def _pr_event(tool_name: str, response: Any, tool_input: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -74,17 +122,16 @@ def test_decide_ignores_non_target_tool() -> None:
 
 
 def test_decide_handles_update_pull_request_branch() -> None:
-    calls: list[list[str]] = []
-
-    def fake_runner(cmd: list[str], **_: Any) -> subprocess.CompletedProcess[str]:
-        calls.append(cmd)
-        return _completed({"mergeable": True, "mergeable_state": "clean"})
-
     event = _pr_event(
         "mcp__github__update_pull_request_branch",
         {"html_url": "https://github.com/tvna/claude-md/pull/10"},
     )
-    result = subject.decide_post_tool_use(event, runner=fake_runner, sleeper=lambda _: None)
+    result = subject.decide_post_tool_use(
+        event,
+        opener=_opener({"mergeable": True, "mergeable_state": "clean"}),
+        token=_TOKEN,
+        sleeper=lambda _: None,
+    )
 
     assert result is not None
     ctx = result["hookSpecificOutput"]["additionalContext"]
@@ -97,14 +144,16 @@ def test_decide_handles_update_pull_request_branch() -> None:
 
 
 def test_decide_returns_dirty_warning() -> None:
-    def fake_runner(cmd: list[str], **_: Any) -> subprocess.CompletedProcess[str]:
-        return _completed({"mergeable": False, "mergeable_state": "dirty"})
-
     event = _pr_event(
         "mcp__github__create_pull_request",
         {"html_url": "https://github.com/tvna/claude-md/pull/5"},
     )
-    result = subject.decide_post_tool_use(event, runner=fake_runner, sleeper=lambda _: None)
+    result = subject.decide_post_tool_use(
+        event,
+        opener=_opener({"mergeable": False, "mergeable_state": "dirty"}),
+        token=_TOKEN,
+        sleeper=lambda _: None,
+    )
 
     assert result is not None
     ctx = result["hookSpecificOutput"]["additionalContext"]
@@ -113,14 +162,16 @@ def test_decide_returns_dirty_warning() -> None:
 
 
 def test_decide_returns_clean_ok() -> None:
-    def fake_runner(cmd: list[str], **_: Any) -> subprocess.CompletedProcess[str]:
-        return _completed({"mergeable": True, "mergeable_state": "clean"})
-
     event = _pr_event(
         "mcp__github__create_pull_request",
         {"html_url": "https://github.com/tvna/claude-md/pull/7"},
     )
-    result = subject.decide_post_tool_use(event, runner=fake_runner, sleeper=lambda _: None)
+    result = subject.decide_post_tool_use(
+        event,
+        opener=_opener({"mergeable": True, "mergeable_state": "clean"}),
+        token=_TOKEN,
+        sleeper=lambda _: None,
+    )
 
     assert result is not None
     ctx = result["hookSpecificOutput"]["additionalContext"]
@@ -129,14 +180,16 @@ def test_decide_returns_clean_ok() -> None:
 
 
 def test_decide_returns_blocked_advisory() -> None:
-    def fake_runner(cmd: list[str], **_: Any) -> subprocess.CompletedProcess[str]:
-        return _completed({"mergeable": True, "mergeable_state": "blocked"})
-
     event = _pr_event(
         "mcp__github__create_pull_request",
         {"html_url": "https://github.com/tvna/claude-md/pull/8"},
     )
-    result = subject.decide_post_tool_use(event, runner=fake_runner, sleeper=lambda _: None)
+    result = subject.decide_post_tool_use(
+        event,
+        opener=_opener({"mergeable": True, "mergeable_state": "blocked"}),
+        token=_TOKEN,
+        sleeper=lambda _: None,
+    )
 
     assert result is not None
     ctx = result["hookSpecificOutput"]["additionalContext"]
@@ -149,39 +202,35 @@ def test_decide_polls_until_mergeable_non_null() -> None:
         {"mergeable": None, "mergeable_state": "unknown"},
         {"mergeable": True, "mergeable_state": "clean"},
     ]
-    call_count = 0
     sleeps: list[float] = []
-
-    def fake_runner(cmd: list[str], **_: Any) -> subprocess.CompletedProcess[str]:
-        nonlocal call_count
-        data = responses[min(call_count, len(responses) - 1)]
-        call_count += 1
-        return _completed(data)
-
-    def fake_sleeper(secs: float) -> None:
-        sleeps.append(secs)
 
     event = _pr_event(
         "mcp__github__create_pull_request",
         {"html_url": "https://github.com/tvna/claude-md/pull/9"},
     )
-    result = subject.decide_post_tool_use(event, runner=fake_runner, sleeper=fake_sleeper)
+    result = subject.decide_post_tool_use(
+        event,
+        opener=_seq_opener(responses),
+        token=_TOKEN,
+        sleeper=sleeps.append,
+    )
 
-    assert call_count == 3
     assert len(sleeps) == 2
     assert result is not None
     assert "clean" in result["hookSpecificOutput"]["additionalContext"]
 
 
 def test_decide_times_out_gracefully() -> None:
-    def fake_runner(cmd: list[str], **_: Any) -> subprocess.CompletedProcess[str]:
-        return _completed({"mergeable": None, "mergeable_state": "unknown"})
-
     event = _pr_event(
         "mcp__github__create_pull_request",
         {"html_url": "https://github.com/tvna/claude-md/pull/11"},
     )
-    result = subject.decide_post_tool_use(event, runner=fake_runner, sleeper=lambda _: None)
+    result = subject.decide_post_tool_use(
+        event,
+        opener=_opener({"mergeable": None, "mergeable_state": "unknown"}),
+        token=_TOKEN,
+        sleeper=lambda _: None,
+    )
 
     assert result is not None
     ctx = result["hookSpecificOutput"]["additionalContext"]
@@ -190,7 +239,7 @@ def test_decide_times_out_gracefully() -> None:
 
 def test_decide_skips_when_no_pr_number() -> None:
     event = _pr_event("mcp__github__create_pull_request", {})
-    result = subject.decide_post_tool_use(event)
+    result = subject.decide_post_tool_use(event, token=_TOKEN)
 
     assert result is not None
     ctx = result["hookSpecificOutput"]["additionalContext"]
@@ -198,14 +247,16 @@ def test_decide_skips_when_no_pr_number() -> None:
 
 
 def test_decide_skips_when_api_fails() -> None:
-    def fake_runner(cmd: list[str], **_: Any) -> subprocess.CompletedProcess[str]:
-        return _completed("", returncode=1)
-
     event = _pr_event(
         "mcp__github__create_pull_request",
         {"html_url": "https://github.com/tvna/claude-md/pull/12"},
     )
-    result = subject.decide_post_tool_use(event, runner=fake_runner, sleeper=lambda _: None)
+    result = subject.decide_post_tool_use(
+        event,
+        opener=_opener({}, status=422),
+        token=_TOKEN,
+        sleeper=lambda _: None,
+    )
 
     assert result is not None
     ctx = result["hookSpecificOutput"]["additionalContext"]
@@ -217,65 +268,80 @@ def test_decide_skips_when_api_fails() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_session_start_emits_banner_for_dirty_pr(capsys: pytest.CaptureFixture[str]) -> None:
-    pr_list = [
-        {
-            "number": 55,
-            "url": "https://github.com/tvna/claude-md/pull/55",
-            "headRepositoryOwner": {"login": "tvna"},
-            "headRepository": {"name": "claude-md"},
-        }
-    ]
+def _pr_list_entry(number: int) -> dict[str, Any]:
+    return {
+        "number": number,
+        "html_url": f"https://github.com/tvna/claude-md/pull/{number}",
+        "user": {"login": "tvna"},
+        "head": {
+            "sha": "abc123",
+            "repo": {"name": "claude-md", "owner": {"login": "tvna"}},
+        },
+    }
 
-    def fake_runner(cmd: list[str], **_: Any) -> subprocess.CompletedProcess[str]:
-        if "pr" in cmd and "list" in cmd:
-            return _completed(pr_list)
-        return _completed({"mergeable": False, "mergeable_state": "dirty"})
 
-    subject.run_session_start(runner=fake_runner, sleeper=lambda _: None)
+def test_session_start_emits_banner_for_dirty_pr(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(subject, "_detect_repo", lambda: "tvna/claude-md")
+
+    pr_list = [_pr_list_entry(55)]
+    url_map = {
+        "api.github.com/user": {"login": "tvna"},
+        "/pulls?": pr_list,
+        "/pulls/55": {"mergeable": False, "mergeable_state": "dirty"},
+    }
+
+    subject.run_session_start(
+        opener=_url_opener(url_map),
+        token=_TOKEN,
+        sleeper=lambda _: None,
+    )
 
     out = capsys.readouterr().out
     assert "MERGE CONFLICT WARNING" in out
     assert "pull/55" in out
 
 
-def test_session_start_silent_when_all_clean(capsys: pytest.CaptureFixture[str]) -> None:
-    pr_list = [
-        {
-            "number": 60,
-            "url": "https://github.com/tvna/claude-md/pull/60",
-            "headRepositoryOwner": {"login": "tvna"},
-            "headRepository": {"name": "claude-md"},
-        }
-    ]
+def test_session_start_silent_when_all_clean(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(subject, "_detect_repo", lambda: "tvna/claude-md")
 
-    def fake_runner(cmd: list[str], **_: Any) -> subprocess.CompletedProcess[str]:
-        if "pr" in cmd and "list" in cmd:
-            return _completed(pr_list)
-        return _completed({"mergeable": True, "mergeable_state": "clean"})
+    pr_list = [_pr_list_entry(60)]
+    url_map = {
+        "api.github.com/user": {"login": "tvna"},
+        "/pulls?": pr_list,
+        "/pulls/60": {"mergeable": True, "mergeable_state": "clean"},
+    }
 
-    subject.run_session_start(runner=fake_runner, sleeper=lambda _: None)
+    subject.run_session_start(
+        opener=_url_opener(url_map),
+        token=_TOKEN,
+        sleeper=lambda _: None,
+    )
 
     out = capsys.readouterr().out
     assert out == ""
 
 
-def test_session_start_emits_banner_for_behind_pr(capsys: pytest.CaptureFixture[str]) -> None:
-    pr_list = [
-        {
-            "number": 70,
-            "url": "https://github.com/tvna/claude-md/pull/70",
-            "headRepositoryOwner": {"login": "tvna"},
-            "headRepository": {"name": "claude-md"},
-        }
-    ]
+def test_session_start_emits_banner_for_behind_pr(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(subject, "_detect_repo", lambda: "tvna/claude-md")
 
-    def fake_runner(cmd: list[str], **_: Any) -> subprocess.CompletedProcess[str]:
-        if "pr" in cmd and "list" in cmd:
-            return _completed(pr_list)
-        return _completed({"mergeable": True, "mergeable_state": "behind"})
+    pr_list = [_pr_list_entry(70)]
+    url_map = {
+        "api.github.com/user": {"login": "tvna"},
+        "/pulls?": pr_list,
+        "/pulls/70": {"mergeable": True, "mergeable_state": "behind"},
+    }
 
-    subject.run_session_start(runner=fake_runner, sleeper=lambda _: None)
+    subject.run_session_start(
+        opener=_url_opener(url_map),
+        token=_TOKEN,
+        sleeper=lambda _: None,
+    )
 
     out = capsys.readouterr().out
     assert "OUT-OF-DATE WARNING" in out
@@ -283,34 +349,31 @@ def test_session_start_emits_banner_for_behind_pr(capsys: pytest.CaptureFixture[
     assert "MERGE CONFLICT" not in out
 
 
-def test_session_start_emits_both_banners_for_dirty_and_behind(capsys: pytest.CaptureFixture[str]) -> None:
-    pr_list = [
-        {
-            "number": 71,
-            "url": "https://github.com/tvna/claude-md/pull/71",
-            "headRepositoryOwner": {"login": "tvna"},
-            "headRepository": {"name": "claude-md"},
-        },
-        {
-            "number": 72,
-            "url": "https://github.com/tvna/claude-md/pull/72",
-            "headRepositoryOwner": {"login": "tvna"},
-            "headRepository": {"name": "claude-md"},
-        },
-    ]
-    states = {"71": "dirty", "72": "behind"}
+def test_session_start_emits_both_banners_for_dirty_and_behind(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(subject, "_detect_repo", lambda: "tvna/claude-md")
 
-    def fake_runner(cmd: list[str], **_: Any) -> subprocess.CompletedProcess[str]:
-        if "pr" in cmd and "list" in cmd:
-            return _completed(pr_list)
-        # Identify PR by URL path component in the API path argument
-        path_arg = next((a for a in cmd if "/pulls/" in a), "")
-        number = path_arg.split("/pulls/")[-1] if path_arg else ""
-        state = states.get(number, "clean")
-        mergeable = state != "dirty"
-        return _completed({"mergeable": mergeable, "mergeable_state": state})
+    pr_list = [_pr_list_entry(71), _pr_list_entry(72)]
+    states: dict[str, str] = {"71": "dirty", "72": "behind"}
 
-    subject.run_session_start(runner=fake_runner, sleeper=lambda _: None)
+    def smart_opener(req: urllib.request.Request) -> _FakeResponse:
+        url = req.full_url
+        if "api.github.com/user" in url:
+            return _FakeResponse({"login": "tvna"})
+        if "/pulls?" in url:
+            return _FakeResponse(pr_list)
+        for num, state in states.items():
+            if f"/pulls/{num}" in url:
+                mergeable = state != "dirty"
+                return _FakeResponse({"mergeable": mergeable, "mergeable_state": state})
+        raise ValueError(f"unexpected URL: {url}")
+
+    subject.run_session_start(
+        opener=smart_opener,
+        token=_TOKEN,
+        sleeper=lambda _: None,
+    )
 
     out = capsys.readouterr().out
     assert "MERGE CONFLICT WARNING" in out
@@ -319,14 +382,29 @@ def test_session_start_emits_both_banners_for_dirty_and_behind(capsys: pytest.Ca
     assert "pull/72" in out
 
 
-def test_session_start_silent_when_no_open_prs(capsys: pytest.CaptureFixture[str]) -> None:
-    def fake_runner(cmd: list[str], **_: Any) -> subprocess.CompletedProcess[str]:
-        return _completed([])
+def test_session_start_silent_when_no_open_prs(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(subject, "_detect_repo", lambda: "tvna/claude-md")
 
-    subject.run_session_start(runner=fake_runner, sleeper=lambda _: None)
+    url_map = {
+        "api.github.com/user": {"login": "tvna"},
+        "/pulls?": [],
+    }
+
+    subject.run_session_start(
+        opener=_url_opener(url_map),
+        token=_TOKEN,
+        sleeper=lambda _: None,
+    )
 
     out = capsys.readouterr().out
     assert out == ""
+
+
+def test_session_start_silent_when_no_token(capsys: pytest.CaptureFixture[str]) -> None:
+    subject.run_session_start(token="", sleeper=lambda _: None)
+    assert capsys.readouterr().out == ""
 
 
 # ---------------------------------------------------------------------------
@@ -359,11 +437,11 @@ def test_main_posttooluse_mode_emits_json(monkeypatch: pytest.MonkeyPatch) -> No
     output: list[str] = []
     monkeypatch.setattr("sys.stdin", io.StringIO(stdin_data))
     monkeypatch.setattr("sys.stdout", type("FakeOut", (), {"write": lambda self, s: output.append(s)})())
-
-    def fake_runner(cmd: list[str], **_: Any) -> subprocess.CompletedProcess[str]:
-        return _completed({"mergeable": True, "mergeable_state": "clean"})
-
-    monkeypatch.setattr(subject, "_poll_mergeability", lambda *a, **kw: {"mergeable": True, "mergeable_state": "clean"})
+    monkeypatch.setattr(
+        subject,
+        "_poll_mergeability",
+        lambda *a, **kw: {"mergeable": True, "mergeable_state": "clean"},
+    )
 
     rc = subject.main([])
     assert rc == 0

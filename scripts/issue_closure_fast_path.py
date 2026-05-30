@@ -30,15 +30,21 @@ never block issue closure; the operator retains full control.
 from __future__ import annotations
 
 import json
-import subprocess
+import os
 import sys
+import urllib.parse
+import urllib.request
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _github_api import apply_call
 
 _TARGET_TOOL = "mcp__github__issue_write"
 _CLOSE_STATE = "closed"
 
-_Runner = Callable[..., "subprocess.CompletedProcess[str]"]
+_Opener = Callable[[urllib.request.Request], Any]
 
 
 # ---------------------------------------------------------------------------
@@ -51,40 +57,46 @@ def _search_merged_prs(
     repo: str,
     issue_number: int,
     *,
-    runner: _Runner = subprocess.run,
+    opener: _Opener = urllib.request.urlopen,
+    token: str = "",
 ) -> list[dict[str, Any]] | None:
     """Return merged PRs mentioning *issue_number*, or ``None`` on API error."""
+    actual_token = token or os.environ.get("GH_TOKEN", "")
+    if not actual_token:
+        return None
+
     query = f"repo:{owner}/{repo} is:pr is:merged #{issue_number}"
-    cmd = [
-        "gh",
-        "api",
-        f"search/issues?q={query}&per_page=10",
-        "--jq",
-        ".items[] | {number: .number, title: .title, html_url: .html_url, closed_at: .closed_at}",
-    ]
+    url = f"https://api.github.com/search/issues?q={urllib.parse.quote(query)}&per_page=10"
     try:
-        result = runner(cmd, capture_output=True, text=True, timeout=30, check=False)
-    except (OSError, subprocess.SubprocessError) as exc:
+        code, body = apply_call(method="GET", url=url, payload=None, token=actual_token, opener=opener)
+    except Exception as exc:
         print(
-            f"::warning::issue_closure_fast_path: gh search failed: {exc}",
+            f"::warning::issue_closure_fast_path: search failed: {exc}",
             file=sys.stderr,
         )
         return None
-    if result.returncode != 0:
+    if not (200 <= code < 300):
         return None
 
-    items: list[dict[str, Any]] = []
-    for line in result.stdout.splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            obj = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if isinstance(obj, dict):
-            items.append(obj)
-    return items
+    try:
+        data = json.loads(body)
+    except json.JSONDecodeError:
+        return None
+
+    if not isinstance(data, dict):
+        return None
+
+    items = data.get("items") or []
+    return [
+        {
+            "number": item.get("number"),
+            "title": item.get("title"),
+            "html_url": item.get("html_url"),
+            "closed_at": item.get("closed_at"),
+        }
+        for item in items
+        if isinstance(item, dict)
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -164,7 +176,8 @@ def decide(
     tool_name: str,
     tool_input: dict[str, Any],
     *,
-    runner: _Runner = subprocess.run,
+    opener: _Opener = urllib.request.urlopen,
+    token: str = "",
 ) -> dict[str, Any] | None:
     """Return advisory hook output, or ``None`` if no action is needed."""
     target = _extract_close_target(tool_name, tool_input)
@@ -172,7 +185,7 @@ def decide(
         return None
 
     owner, repo, issue_number = target
-    prs = _search_merged_prs(owner, repo, issue_number, runner=runner)
+    prs = _search_merged_prs(owner, repo, issue_number, opener=opener, token=token)
     if prs is None:
         # API failure — fail-open, emit no output
         return None

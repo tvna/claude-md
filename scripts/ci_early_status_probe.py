@@ -11,11 +11,15 @@ from __future__ import annotations
 import json
 import os
 import re
-import subprocess
 import sys
 import time
+import urllib.request
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _github_api import apply_call
 
 _TARGET_TOOLS: frozenset[str] = frozenset(
     {
@@ -28,6 +32,8 @@ _FAIL_CONCLUSIONS: frozenset[str] = frozenset(
     {"failure", "failed", "cancelled", "canceled", "timed_out", "action_required"}
 )
 _PR_URL_RE = re.compile(r"https://github\.com/([^/\s]+/[^/\s]+)/pull/(\d+)")
+
+_Opener = Callable[[urllib.request.Request], Any]
 
 
 def _walk_strings(value: Any) -> list[str]:
@@ -87,32 +93,98 @@ def parse_delay(environ: dict[str, str] | None = None) -> float:
     return max(0.0, delay)
 
 
+def _rest_get(path: str, *, token: str, opener: _Opener = urllib.request.urlopen) -> tuple[int, Any]:
+    """Return (status_code, parsed_json_or_None) for a GET request."""
+    url = f"https://api.github.com/{path}"
+    try:
+        code, body = apply_call(method="GET", url=url, payload=None, token=token, opener=opener)
+    except Exception as exc:
+        print(f"::warning::ci_early_status_probe: API call failed: {exc}", file=sys.stderr)
+        return 0, None
+    try:
+        return code, json.loads(body)
+    except json.JSONDecodeError:
+        return code, None
+
+
 def run_checks(
     repo: str | None,
     pr: str,
     *,
-    runner: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
-) -> subprocess.CompletedProcess[str]:
-    cmd = ["gh", "pr", "checks", pr, "--json", "name,state,conclusion,workflow"]
-    if repo:
-        cmd.extend(["--repo", repo])
-    return runner(
-        cmd,
-        capture_output=True,
-        text=True,
-        timeout=60,
-        check=False,
+    opener: _Opener = urllib.request.urlopen,
+    token: str = "",
+) -> list[dict[str, Any]]:
+    """Return check rows for *pr* in *repo*, or empty list on error.
+
+    Each row has ``name``, ``state``, ``conclusion``, and optionally
+    ``workflow`` (workflow run name, when determinable).
+    """
+    actual_token = token or os.environ.get("GH_TOKEN", "")
+    if not actual_token:
+        print("::warning::ci_early_status_probe: GH_TOKEN not set", file=sys.stderr)
+        return []
+
+    if not repo or "/" not in repo:
+        print(f"::warning::ci_early_status_probe: cannot determine owner/repo from {repo!r}", file=sys.stderr)
+        return []
+
+    owner, repo_name = repo.split("/", 1)
+
+    # Resolve head SHA from PR number
+    code, pr_data = _rest_get(f"repos/{repo}/pulls/{pr}", token=actual_token, opener=opener)
+    if not isinstance(pr_data, dict) or not (200 <= code < 300):
+        print(f"::warning::ci_early_status_probe: gh pr checks failed: HTTP {code} fetching PR", file=sys.stderr)
+        return []
+    sha = (pr_data.get("head") or {}).get("sha")
+    if not isinstance(sha, str):
+        return []
+
+    # Fetch check runs
+    code, checks_data = _rest_get(
+        f"repos/{repo}/commits/{sha}/check-runs?per_page=100",
+        token=actual_token,
+        opener=opener,
     )
+    if not isinstance(checks_data, dict) or not (200 <= code < 300):
+        print(f"::warning::ci_early_status_probe: gh pr checks failed: HTTP {code} fetching check runs", file=sys.stderr)
+        return []
+    check_runs = checks_data.get("check_runs") or []
+
+    # Fetch workflow runs to map check_suite_id → workflow name
+    wf_map: dict[str, str] = {}
+    wf_code, wf_data = _rest_get(
+        f"repos/{repo}/actions/runs?head_sha={sha}&per_page=50",
+        token=actual_token,
+        opener=opener,
+    )
+    if isinstance(wf_data, dict) and 200 <= wf_code < 300:
+        for wf_run in wf_data.get("workflow_runs") or []:
+            if not isinstance(wf_run, dict):
+                continue
+            cs_id = str(wf_run.get("check_suite_id") or wf_run.get("check_suite", {}).get("id") or "")
+            wf_name = wf_run.get("name") or ""
+            if cs_id and wf_name:
+                wf_map[cs_id] = wf_name
+
+    # Normalise to the structure expected by _load_check_rows / failed_checks
+    rows: list[dict[str, Any]] = []
+    for run in check_runs:
+        if not isinstance(run, dict):
+            continue
+        cs_id = str((run.get("check_suite") or {}).get("id") or "")
+        rows.append(
+            {
+                "name": run.get("name") or "",
+                "state": (run.get("status") or "").upper(),
+                "conclusion": run.get("conclusion") or "",
+                "workflow": wf_map.get(cs_id, ""),
+            }
+        )
+    return rows
 
 
-def _load_check_rows(stdout: str) -> list[dict[str, Any]]:
-    try:
-        parsed = json.loads(stdout) if stdout.strip() else []
-    except json.JSONDecodeError:
-        return []
-    if not isinstance(parsed, list):
-        return []
-    return [row for row in parsed if isinstance(row, dict)]
+def _load_check_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [row for row in rows if isinstance(row, dict)]
 
 
 def failed_checks(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -167,7 +239,8 @@ def decide(
     event: dict[str, Any],
     *,
     sleeper: Callable[[float], None] = time.sleep,
-    runner: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
+    opener: _Opener = urllib.request.urlopen,
+    token: str = "",
     environ: dict[str, str] | None = None,
 ) -> dict[str, Any] | None:
     if event.get("tool_name") not in _TARGET_TOOLS:
@@ -181,13 +254,13 @@ def decide(
     sleeper(delay)
 
     try:
-        result = run_checks(repo, pr, runner=runner)
-    except (OSError, subprocess.SubprocessError) as exc:
+        rows = run_checks(repo, pr, opener=opener, token=token)
+    except (OSError, Exception) as exc:
         print(f"::warning::ci_early_status_probe: gh pr checks failed: {exc}", file=sys.stderr)
         return None
 
-    rows = _load_check_rows(result.stdout)
-    failed = failed_checks(rows)
+    loaded = _load_check_rows(rows)
+    failed = failed_checks(loaded)
     if not failed:
         return None
     return build_additional_context(repo, pr, failed, delay)

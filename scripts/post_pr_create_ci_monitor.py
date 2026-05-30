@@ -3,10 +3,11 @@
 
 ## Monitoring kind: polling/heartbeat
 
-This hook launches ``gh pr checks --watch`` as a detached polling process.
-It polls the GitHub API on a fixed interval until all checks settle. It is
-NOT a webhook-backed monitor: there is no GitHub App event subscription, no
-``workflow_run``/``check_suite`` push path, and no delivery guarantee.
+This hook launches ``scripts/_ci_watch.py`` as a detached polling process.
+It polls the GitHub REST API (check-runs endpoint) on a fixed interval until
+all checks settle. It is NOT a webhook-backed monitor: there is no GitHub App
+event subscription, no ``workflow_run``/``check_suite`` push path, and no
+delivery guarantee.
 
 Webhook-backed monitoring is provided by the ``subscribe_pr_activity`` MCP
 tool (Claude Code session layer). Use that tool when low-latency, push-based
@@ -19,14 +20,14 @@ agent has had a chance to call ``subscribe_pr_activity``.
 | Property         | This hook                          | Webhook path                      |
 |------------------|------------------------------------|-----------------------------------|
 | Trigger          | PostToolUse (``create_pull_request``) | GitHub App / ``check_suite`` push |
-| Delivery         | ``gh pr checks --watch`` poll loop | HTTP POST to registered endpoint  |
-| Latency          | Poll interval (≥ 10 s)             | Near real-time                    |
+| Delivery         | ``_ci_watch.py`` REST poll loop    | HTTP POST to registered endpoint  |
+| Latency          | Poll interval (≥ 15 s)             | Near real-time                    |
 | Retry on failure | None — fire-and-forget subprocess  | GitHub redeliver mechanism        |
 | Failure mode     | Log written to ``/tmp``; silent    | HTTP error logged by GitHub       |
 
 ## Early-failure watch phase vs steady-state heartbeat
 
-The ``gh pr checks --watch`` poll this hook launches runs immediately after
+The ``_ci_watch.py`` poll this hook launches runs immediately after
 PR creation and is the *early-failure watch phase*: it detects an
 already-failed required check without waiting for a long session-level
 heartbeat interval. The ``additionalContext`` returned to the agent makes
@@ -67,6 +68,8 @@ GITHUB_PR_URL_RE = re.compile(r"https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.
 URL_KEYS = frozenset({"url", "html_url", "web_url", "pull_request_url"})
 NUMBER_KEYS = frozenset({"number", "pullRequestNumber", "pull_request_number", "pr_number"})
 REPO_KEYS = frozenset({"repo", "repository", "repository_full_name", "nameWithOwner"})
+
+_CI_WATCH_SCRIPT = str(Path(__file__).resolve().parent / "_ci_watch.py")
 
 
 def _walk(value: Any) -> list[Any]:
@@ -137,19 +140,24 @@ def _is_owner_repo(value: str) -> bool:
 
 
 def build_watch_command(event: dict[str, Any]) -> tuple[list[str], str] | None:
-    """Return ``(argv, pr_ref)`` for the CI watch command."""
+    """Return ``(argv, pr_ref)`` for the CI watch command.
+
+    Returns a Python subprocess command using ``scripts/_ci_watch.py`` so
+    that the monitor works in environments where the ``gh`` CLI is absent.
+    ``argv[3]`` is always the PR reference (URL or number) for log-name extraction.
+    """
     response = event.get("tool_response")
     tool_input = event.get("tool_input") if isinstance(event.get("tool_input"), dict) else {}
 
     pr_url = extract_pr_url(response)
     if pr_url is not None:
-        return ["gh", "pr", "checks", pr_url, "--watch"], pr_url
+        return [sys.executable, _CI_WATCH_SCRIPT, "--pr", pr_url], pr_url
 
     pr_number = extract_pr_number(response)
     if pr_number is None:
         return None
 
-    argv = ["gh", "pr", "checks", pr_number, "--watch"]
+    argv = [sys.executable, _CI_WATCH_SCRIPT, "--pr", pr_number]
     repo = extract_repo(tool_input)
     if repo is not None:
         argv.extend(["--repo", repo])
@@ -196,8 +204,8 @@ def decide(event: dict[str, Any]) -> dict[str, Any] | None:
         return build_context(
             "PR polling/heartbeat CI monitor was not started automatically: "
             "the MCP create_pull_request response did not contain a PR URL or "
-            "number. Immediately run `gh pr checks <pr> --watch` (polling) as "
-            "the early-failure watch phase, and keep checking on a short "
+            "number. Immediately start the early-failure watch phase by calling "
+            "subscribe_pr_activity, and keep checking on a short "
             "interval until the required checks reach a terminal state, before "
             "considering the PR handoff complete. Only then fall back to a "
             "longer steady-state heartbeat interval. For webhook-backed "
@@ -211,8 +219,8 @@ def decide(event: dict[str, Any]) -> dict[str, Any] | None:
     except OSError as exc:
         return build_context(
             "PR polling/heartbeat CI monitor failed to start automatically "
-            f"after MCP PR creation for {pr_ref}: {exc}. Immediately run "
-            f"`{' '.join(argv)}` (polling) as the early-failure watch phase, "
+            f"after MCP PR creation for {pr_ref}: {exc}. Immediately call "
+            "subscribe_pr_activity as the early-failure watch phase, "
             "and keep checking on a short interval until the required checks "
             "reach a terminal state, before considering the PR handoff "
             "complete. Only then fall back to a longer steady-state heartbeat "
@@ -223,7 +231,7 @@ def decide(event: dict[str, Any]) -> dict[str, Any] | None:
     return build_context(
         "PR polling/heartbeat CI monitor started automatically after MCP PR "
         f"creation for {pr_ref}. Monitor log: {log_path}. This is a "
-        "polling/heartbeat monitor (gh pr checks --watch); it is NOT "
+        "polling/heartbeat monitor (REST API check-runs poll); it is NOT "
         "webhook-backed. For push-based delivery, also call "
         "subscribe_pr_activity. This immediate watch is the early-failure "
         "watch phase: stay on immediate or short-interval CI checks until the "
