@@ -109,15 +109,6 @@
         ]
       },
       {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python3 scripts/preflight_push_prek.py"
-          }
-        ]
-      },
-      {
         "matcher": "mcp__github__(create_pull_request|update_pull_request)",
         "hooks": [
           {
@@ -248,6 +239,15 @@
           {
             "type": "command",
             "command": "python3 scripts/check_pr_mergeability.py"
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__github__merge_pull_request",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 scripts/post_merge_retro_append.py"
           }
         ]
       },
