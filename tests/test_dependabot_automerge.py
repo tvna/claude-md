@@ -98,6 +98,162 @@ def test_non_dependabot_author_blocks() -> None:
     assert "author is not trusted: octocat" in result.reasons
 
 
+def test_classify_update_type_same_version_returns_patch() -> None:
+    result = da.classify_update_type("bump x from 1.2.3 to 1.2.3")
+    assert result == "patch"
+
+
+def test_audit_no_pull_request_key_returns_ineligible() -> None:
+    result = da.audit({}, POLICY, [".github/workflows/ci.yml"])
+    assert result.eligible is False
+    assert "event has no pull_request object" in result.reasons
+
+
+def test_audit_draft_pr_is_blocked() -> None:
+    result = da.audit(event(draft=True), POLICY, [".github/workflows/ci.yml"])
+    assert result.eligible is False
+    assert "pull request is draft" in result.reasons
+
+
+def test_audit_no_semver_in_title_blocked() -> None:
+    result = da.audit(
+        event(title="chore(deps): bump some-action"),
+        POLICY,
+        [".github/workflows/ci.yml"],
+    )
+    assert result.eligible is False
+    assert "title does not expose a semver from/to update" in result.reasons
+
+
+def test_audit_no_rule_for_ecosystem_blocked() -> None:
+    policy_no_uv = {
+        "enabled": False,
+        "allow": [
+            {
+                "ecosystem": "github-actions",
+                "update_types": ["patch"],
+                "paths": [".github/workflows/*"],
+            }
+        ],
+    }
+    result = da.audit(
+        event(
+            ref="dependabot/pip/requests-2.28.0",
+            title="chore(deps): bump requests from 2.27.0 to 2.28.0",
+        ),
+        policy_no_uv,
+        ["pyproject.toml", "uv.lock"],
+    )
+    assert result.eligible is False
+    assert any("no policy rule" in r for r in result.reasons)
+
+
+def test_audit_unexpected_path_within_known_ecosystem() -> None:
+    policy_narrow = {
+        "enabled": False,
+        "allow": [
+            {
+                "ecosystem": "github-actions",
+                "update_types": ["patch", "minor"],
+                "paths": [".github/workflows/ci.yml"],
+            },
+        ],
+    }
+    result = da.audit(
+        event(),
+        policy_narrow,
+        [".github/workflows/ci.yml", ".github/workflows/extra.yml"],
+    )
+    assert result.eligible is False
+    assert any("unexpected changed path" in r for r in result.reasons)
+
+
+def test_render_markdown_no_reasons() -> None:
+    from dependabot_automerge import AuditResult
+    result = AuditResult(eligible=True, enabled=False, update_type="patch", ecosystem="uv", reasons=[])
+    md = da.render_markdown(result)
+    assert "No blocking reasons found." in md
+
+
+def test_nested_str_non_dict_intermediate() -> None:
+    result = da._nested_str({"user": "not-a-dict"}, "user", "login")
+    assert result == ""
+
+
+def test_label_names_non_list_returns_empty() -> None:
+    result = da._label_names({"labels": "not-a-list"})
+    assert result == set()
+
+
+def test_matching_rule_non_list_rules_returns_none() -> None:
+    result = da._matching_rule({"allow": "not-a-list"}, "uv")
+    assert result is None
+
+
+def test_matching_rule_no_match_returns_none() -> None:
+    result = da._matching_rule({"allow": [{"ecosystem": "pip"}]}, "uv")
+    assert result is None
+
+
+def test_string_list_non_list_returns_empty() -> None:
+    assert da._string_list("not-a-list") == []
+    assert da._string_list(None) == []
+
+
+def test_unexpected_paths_all_match_returns_empty() -> None:
+    result = da._unexpected_paths(
+        [".github/workflows/ci.yml"],
+        [".github/workflows/*"],
+    )
+    assert result == []
+
+
+def test_audit_non_dependabot_branch_blocked() -> None:
+    result = da.audit(
+        event(ref="feature/my-feature"),
+        POLICY,
+        [".github/workflows/ci.yml"],
+    )
+    assert result.eligible is False
+    assert any("head branch is not dependabot/*" in r for r in result.reasons)
+
+
+def test_render_markdown_with_reasons() -> None:
+    from dependabot_automerge import AuditResult
+
+    result = AuditResult(
+        eligible=False,
+        enabled=False,
+        update_type=None,
+        ecosystem=None,
+        reasons=["title does not expose a semver from/to update"],
+    )
+    md = da.render_markdown(result)
+    assert "### Blocking reasons" in md
+    assert "title does not expose a semver from/to update" in md
+
+
+def test_read_changed_files_empty_raises(tmp_path: Path) -> None:
+    empty = tmp_path / "empty.txt"
+    empty.write_text("", encoding="utf-8")
+    with pytest.raises(ValueError, match="empty"):
+        da._read_changed_files(empty)
+
+
+def test_cmd_audit_missing_file_returns_error(capsys: pytest.CaptureFixture[str]) -> None:
+    import argparse
+    args = argparse.Namespace(
+        event="/nonexistent/event.json",
+        policy="/nonexistent/policy.json",
+        changed_files="/nonexistent/changed.txt",
+        summary_file=None,
+        output=None,
+    )
+    rc = da._cmd_audit(args)
+    assert rc == 1
+    assert "::error::" in capsys.readouterr().out
+
+
 def test_cli_writes_summary_and_outputs(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     event_path = tmp_path / "event.json"
     policy_path = tmp_path / "policy.json"
@@ -129,3 +285,35 @@ def test_cli_writes_summary_and_outputs(tmp_path: Path, capsys: pytest.CaptureFi
     assert "Dependabot auto-merge audit" in capsys.readouterr().out
     assert "eligible: `true`" in summary_path.read_text(encoding="utf-8")
     assert "should_enable=false" in output_path.read_text(encoding="utf-8")
+
+
+def test_main_block_raises_system_exit(tmp_path: Path) -> None:
+    import runpy
+
+    event_path = tmp_path / "event.json"
+    policy_path = tmp_path / "policy.json"
+    changed_files_path = tmp_path / "changed-files.txt"
+
+    event_path.write_text(json.dumps(event()), encoding="utf-8")
+    policy_path.write_text(json.dumps(POLICY), encoding="utf-8")
+    changed_files_path.write_text(".github/workflows/verify.yml\n", encoding="utf-8")
+
+    import sys
+
+    original_argv = sys.argv[:]
+    sys.argv = [
+        "dependabot_automerge.py",
+        "audit",
+        "--event", str(event_path),
+        "--policy", str(policy_path),
+        "--changed-files", str(changed_files_path),
+    ]
+    try:
+        with pytest.raises(SystemExit) as exc_info:
+            runpy.run_path(
+                str(Path(__file__).parent.parent / "scripts" / "dependabot_automerge.py"),
+                run_name="__main__",
+            )
+        assert exc_info.value.code == 0
+    finally:
+        sys.argv = original_argv

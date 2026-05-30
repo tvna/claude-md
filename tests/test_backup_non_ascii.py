@@ -326,3 +326,72 @@ class TestArgparse:
         with pytest.raises(SystemExit) as excinfo:
             backup.main(["bogus"])
         assert excinfo.value.code != 0
+
+
+# ---------------------------------------------------------------------------
+# Missing branch coverage
+# ---------------------------------------------------------------------------
+
+
+class TestParentNumberFromUrl:
+    def test_none_url_returns_none(self) -> None:
+        assert backup._parent_number_from_url(None) is None
+
+    def test_non_numeric_tail_returns_none(self) -> None:
+        # Line 47-48: ValueError branch
+        assert backup._parent_number_from_url("https://example.com/issues/abc") is None
+
+
+class TestNowIso:
+    def test_returns_iso_string(self) -> None:
+        # Line 152: _now_iso coverage
+        result = backup._now_iso()
+        assert "T" in result
+        assert result.endswith("Z")
+
+
+class TestGhPaginateSkipsBlankLines:
+    def test_blank_lines_in_stdout_are_skipped(self) -> None:
+        # Line 192: the ``continue`` on empty/whitespace lines
+        import subprocess
+
+        def fake_runner(cmd, **kwargs):
+            return subprocess.CompletedProcess(
+                args=cmd, returncode=0, stdout='\n{"id": 1}\n\n   \n{"id": 2}\n', stderr=""
+            )
+
+        result = backup.gh_paginate("/foo", runner=fake_runner)
+        assert [item["id"] for item in result] == [1, 2]
+
+
+class TestCmdCaptureMissingToken:
+    def test_missing_gh_token_returns_2(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        # Lines 209-210: GH_TOKEN missing branch
+        monkeypatch.setenv("REPO", "x/y")
+        monkeypatch.delenv("GH_TOKEN", raising=False)
+        rc = backup.main(["capture", "--out", str(tmp_path / "x.gz")])
+        assert rc == 2
+
+
+class TestMainIfName:
+    def test_main_raises_system_exit(self) -> None:
+        with pytest.raises(SystemExit):
+            backup.main(["unknown-cmd"])
+
+
+class TestBackupMainDunderName:
+    def test_if_name_main(self) -> None:
+        # Line 272-273: __main__ guard
+        import runpy
+
+        with pytest.raises(SystemExit):
+            runpy.run_path(
+                str(
+                    __import__("pathlib").Path(__file__).parent.parent
+                    / "scripts"
+                    / "backup_non_ascii.py"
+                ),
+                run_name="__main__",
+            )
