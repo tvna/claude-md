@@ -112,3 +112,27 @@ def test_runbook_documents_persistent_session_reset() -> None:
 
     for agent in AGENTS:
         assert f"podman volume rm claude-md-{agent}-session" in runbook
+
+
+def test_gh_config_permission_check_script_exists_and_is_executable() -> None:
+    script = REPO_ROOT / ".devcontainer/scripts/check-gh-config-permissions.sh"
+    assert script.exists(), "check-gh-config-permissions.sh is missing"
+    assert script.stat().st_mode & 0o111, "check-gh-config-permissions.sh is not executable"
+
+
+def test_entrypoints_run_gh_config_permission_check_at_poststart() -> None:
+    for agent in AGENTS:
+        config = load_json(REPO_ROOT / ".devcontainer" / agent / "devcontainer.json")
+        post_start = config.get("postStartCommand", "")
+        assert isinstance(post_start, str)
+        assert "check-gh-config-permissions.sh" in post_start
+        assert f"/home/{agent}/.config/gh" in post_start
+
+
+def test_runbook_documents_gh_bind_mount_security() -> None:
+    runbook = (REPO_ROOT / "docs/runbooks/devcontainers.md").read_text(encoding="utf-8")
+
+    assert "chmod 700 ~/.config/gh" in runbook
+    assert "chmod 600 ~/.config/gh/hosts.yml" in runbook
+    assert "gh auth status" in runbook
+    assert "read-write" in runbook

@@ -70,6 +70,44 @@ from a configuration that used named gh volumes, prune the orphans:
 podman volume rm claude-md-claude-gh claude-md-codex-gh 2>/dev/null || true
 ```
 
+### gh config bind mount security (issue #919)
+
+The bind mount is read-write so that token refresh inside the container
+persists back to the host. A read-only variant (`type=bind,readonly`) was
+evaluated but rejected: `gh auth refresh` and `gh auth login` inside the
+container would silently succeed while writing to a tmpfs overlay, leaving
+the host token stale on the next session. Read-write is the correct
+configuration for this workflow.
+
+Because the host's `~/.config/gh` directory is exposed to every process
+in the container, its file modes must be restrictive. The `postStartCommand`
+runs `.devcontainer/scripts/check-gh-config-permissions.sh` before the
+egress allowlist; it exits 1 and prints remediation steps when modes are
+too permissive. If the container fails to start with a permission error,
+fix the modes on the host:
+
+```sh
+chmod 700 ~/.config/gh
+chmod 600 ~/.config/gh/hosts.yml
+```
+
+Minimum required gh token scopes for this repository's workflows:
+
+| Scope | Reason |
+|---|---|
+| `repo` | Create and update issues, PRs, and comments via `gh` or MCP tools |
+| `read:org` | Read team membership when `gh api /orgs/...` calls are made |
+
+`public_repo` is sufficient for read-only operations on a public repository.
+Re-issue the token with tighter scopes if the current token has broader
+access than the table above (e.g., `admin:org`, `write:packages`).
+
+To verify the active token scopes inside the container:
+
+```sh
+gh auth status
+```
+
 The runtime setup writes DevContainer-local defaults into the mounted
 agent home. Bash commands and GitHub MCP operations are allowed by
 default inside the devcontainer so agent work can proceed without
