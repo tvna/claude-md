@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
+from unittest.mock import patch
 
 import preflight_branch_base as gate
 import pytest
@@ -30,6 +31,7 @@ def _repo_with_stale_feature(tmp_path: Path) -> Path:
     _git(repo, "init", "-b", "main")
     _git(repo, "config", "user.email", "test@example.com")
     _git(repo, "config", "user.name", "Test User")
+    _git(repo, "config", "commit.gpgsign", "false")
     _write_commit(repo, "base.txt", "base-1\n")
     _git(repo, "switch", "-c", "feature")
     _write_commit(repo, "feature.txt", "feature\n")
@@ -77,3 +79,70 @@ class TestCli:
 
         assert exit_code == 0
         assert "OK: branch contains base" in capsys.readouterr().out
+
+    def test_verify_falls_back_to_remote_ref_when_no_base_ref(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+        repo = _repo_with_stale_feature(tmp_path)
+
+        exit_code = gate.main(["verify", "--repo-root", str(repo), "--skip-fetch"])
+
+        assert exit_code == 1
+        captured = capsys.readouterr()
+        assert "out-of-date" in captured.err
+
+    def test_verify_surfaces_runtime_error_on_fetch_failure(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+        repo = _repo_with_stale_feature(tmp_path)
+
+        with patch.object(gate, "fetch_base", side_effect=RuntimeError("fetch failed")):
+            exit_code = gate.main(["verify", "--repo-root", str(repo)])
+
+        assert exit_code == 1
+        assert "branch base preflight failed" in capsys.readouterr().err
+
+
+class TestRunGit:
+    def test_raises_when_git_not_found(self, tmp_path: Path) -> None:
+        with patch("preflight_branch_base.shutil.which", return_value=None), pytest.raises(RuntimeError, match="git executable not found"):
+            gate.run_git(tmp_path, ["status"])
+
+
+class TestFetchBase:
+    def test_raises_on_nonzero_returncode(self, tmp_path: Path) -> None:
+        fake = subprocess.CompletedProcess(["git"], returncode=128, stdout="", stderr="fatal: repo not found")
+        with patch.object(gate, "run_git", return_value=fake), pytest.raises(RuntimeError, match="git fetch origin main failed"):
+            gate.fetch_base(tmp_path, remote="origin", base_branch="main")
+
+    def test_returns_fetch_head_on_success(self, tmp_path: Path) -> None:
+        fake = subprocess.CompletedProcess(["git"], returncode=0, stdout="", stderr="")
+        with patch.object(gate, "run_git", return_value=fake):
+            ref = gate.fetch_base(tmp_path, remote="origin", base_branch="main")
+        assert ref == "FETCH_HEAD"
+
+
+class TestCheckBaseFreshness:
+    def test_returns_fail_when_base_ref_unavailable(self, tmp_path: Path) -> None:
+        fake_fail = subprocess.CompletedProcess(["git"], returncode=128, stdout="", stderr="unknown revision")
+
+        def _run_git(_repo: Path, args: list[str]) -> subprocess.CompletedProcess[str]:
+            return fake_fail
+
+        with patch.object(gate, "run_git", side_effect=_run_git):
+            result = gate.check_base_freshness(repo=tmp_path, base_ref="nonexistent")
+
+        assert result.status == "fail"
+        assert "is not available" in result.detail
+
+    def test_returns_fail_on_unexpected_merge_base_exit(self, tmp_path: Path) -> None:
+        rev_ok = subprocess.CompletedProcess(["git"], returncode=0, stdout="abc123\n", stderr="")
+        merge_bad = subprocess.CompletedProcess(["git"], returncode=2, stdout="", stderr="fatal: error")
+        call_count = 0
+
+        def _run_git(_repo: Path, args: list[str]) -> subprocess.CompletedProcess[str]:
+            nonlocal call_count
+            call_count += 1
+            return rev_ok if call_count == 1 else merge_bad
+
+        with patch.object(gate, "run_git", side_effect=_run_git):
+            result = gate.check_base_freshness(repo=tmp_path, base_ref="main")
+
+        assert result.status == "fail"
+        assert "merge-base check failed" in result.detail
