@@ -73,6 +73,9 @@ def test_runbook_documents_codex_transport_timeout_diagnostics() -> None:
     assert "Conversation interrupted" in runbook
     assert "getent hosts api.openai.com auth.openai.com" in runbook
     assert "curl -I --max-time 20 https://api.openai.com" in runbook
+    assert "HTTP/2 421" in runbook
+    assert "cf-mitigated: challenge" in runbook
+    assert "Set-Cookie" in runbook
     assert "DEVCONTAINER_APPLY_EGRESS_ALLOWLIST=0" in runbook
 
 
