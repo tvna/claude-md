@@ -191,6 +191,7 @@ module = [
     "threat_intel_triage",
     "test_threat_intel_triage",
     "test_github_api",
+    "test_github_api_cli",
     "test_sanitize_history",
     "test_rulesets_apply",
     "test_pr_body_close_keyword_gate",

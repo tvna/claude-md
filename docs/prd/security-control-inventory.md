@@ -114,6 +114,9 @@ rejects a deliberately unsafe sample.
 | Surface | ATT&CK | Existing defense | Evidence | Status | Gap |
 |---|---|---|---|---|---|
 | `_github_api.py` | Cred, Exec | Shared HTTP wrapper; token passed as parameter (never logged); retry with jitter. | `tests/test_github_api.py` | covered | — |
+| `github_api.py` | Cred, Exec, DE | CLI wrapper for GitHub REST API read operations; routes all agent GitHub reads through a single auditable path; `--fields` filter reduces token consumption; rejects non-`api.github.com` URLs; reads token from `GH_TOKEN` (never echoed). | `tests/test_github_api_cli.py`, `scripts/gate_gh_cli.py` (enforces usage), #887 | covered | — |
+| `gate_gh_cli.py` | DE, Exec | PreToolUse hook for Bash; denies `gh` CLI invocations and direct `curl api.github.com` calls; redirects to `scripts/github_api.py` (reads) or `mcp__github__*` with hook (writes); fail-open on parse errors. | `tests/test_gate_gh_cli.py`, `.claude/settings.json`, #887 | covered | — |
+| `gate_mcp_github_uncovered.py` | DE, Exec | Catch-all PreToolUse hook for `mcp__github__*` tools without dedicated hooks; denies uncovered tools and redirects to `scripts/github_api.py` (reads) or instructs adding a hook (writes). | `tests/test_gate_mcp_github_uncovered.py`, `.claude/settings.json`, #870, #887 | covered | — |
 | `_trusted_bots.py` | RD, Coll | Static allowlist of trusted bot logins; consumed by `scan_non_ascii.py` and PR-body checks. | `docs/standards/issue-pr-body-standard.md`, `docs/prd/non-ascii-defense.md` | covered | — |
 | `body_policy.py` | DE, RD | Validates issue/PR body section structure with cutoff date; pure function, no network. | `tests/test_body_policy.py`, `portable-pr-policy.yml`, `verify-github-content.yml`, #206 | covered | — |
 | `branch_cleanup.py` | Impact, Persist | Survey-only; creates/edits rolling issue; `dry_run` default; bounded age threshold; tested age boundaries. | `tests/test_branch_cleanup.py`, `weekly-maintenance.yml`, `docs/runbooks/branch-cleanup.md` | partially covered | #182 (privileged-op runbook for future deletion path) |
@@ -212,7 +215,7 @@ Reviewers should also confirm:
 
 - `ls .github/workflows/` matches the 15 rows in section 1.
 - `ls .github/rulesets/` matches the 3 rows in section 2.
-- `ls scripts/` matches the 19 rows in section 6 (`__pycache__` is excluded; not security-relevant).
+- `ls scripts/` matches the 22 rows in section 6 (`__pycache__` is excluded; not security-relevant).
 - `ls docs/` matches the 11 rows in section 7.
 
 Closes #179.

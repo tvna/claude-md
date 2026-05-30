@@ -99,6 +99,16 @@
         "hooks": [
           {
             "type": "command",
+            "command": "python3 scripts/gate_gh_cli.py",
+            "statusMessage": "Checking for prohibited gh CLI usage"
+          }
+        ]
+      },
+      {
+        "matcher": "^Bash$",
+        "hooks": [
+          {
+            "type": "command",
             "command": "python3 scripts/preflight_push_base.py",
             "statusMessage": "Checking branch base before push"
           }

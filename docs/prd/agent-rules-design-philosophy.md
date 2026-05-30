@@ -234,7 +234,7 @@ of merged PRs and closed sub-issues of #226.
 |---|---|---|---|---|---|
 | P1 - goal and plan structure | Plan-mode trigger; document weight rule; verification design in the plan | `scripts/plan_language_context.py` (SessionStart hook); `tests/test_plan_language_context.py` | `docs/standards/issue-pr-body-standard.md` (body shape encodes the plan); `docs/standards/performance-metrics.md` (measurement is a verification artifact) | The consumer's plan-mode trigger discipline | Mixing plan-language responsibility with GitHub-post ASCII enforcement in one rule (corrected by [#227](https://github.com/tvna/claude-md/issues/227)) |
 | P2 - input and pre-code reasoning | Untrusted-data treatment of external text (including quoted/forwarded content in any channel); runtime no-override of trusted instruction sources anchored in governance-gated provenance; fact-vs-speculation tagging; assumption enumeration; simpler-path proposal | `scripts/preflight_non_ascii.py` (PreToolUse hook against non-ASCII injection); `scripts/body_policy.py`, `scripts/title_policy.py`, `scripts/pr_body_close_keyword_gate.py` (structural shape of external-authored bodies); `scripts/scan_non_ascii.py` (advisory drift detector); `scripts/sanitize_history.py` (historical-text cleansing) | `docs/runbooks/downstream-instruction-review-checklist.md` (reviewer-facing untrusted-text checklist); `docs/prd/non-ascii-defense.md` (Layer 1-2-3 defense narrative); `docs/standards/issue-pr-body-standard.md` (Facts / Assumptions sections); `docs/runbooks/issue-triage.md` (label-driven routing) | The consumer's own incoming-text and ambiguity policy | Treating external text as authority, or letting speculation slip into universal text disguised as a fact (PR #225) |
-| P3 - delivery harness around the code | Issue-first; ASCII discipline; declarative module management; auto-subscribe to PR activity; retrospective auto-open; classify each repair | `scripts/issue_link.py`, `body_policy.py`, `title_policy.py`, `pr_body_close_keyword_gate.py`, `auto_retro.py`, `scan_non_ascii.py`, `preflight_non_ascii.py`, `branch_cleanup.py`, `rulesets_apply.py`, `ruleset_drift.py`, `labels_apply.py`, `dependabot_automerge.py`, `dependabot_labels.py`, `threat_intel_triage.py`, `uv_pin.py`, `scan_apm_portability.py`; 16 paired workflows; 19 paired tests | `docs/standards/issue-pr-body-standard.md`, `docs/runbooks/issue-triage.md`, `docs/prd/non-ascii-defense.md`, `docs/runbooks/rulesets.md`, `docs/runbooks/branch-cleanup.md`, `docs/runbooks/dependabot-automerge.md`, `docs/standards/remote-environment.md`, `docs/standards/repo-scope.md`, `docs/prd/security-control-inventory.md`, `docs/archive/retrospective-pr-*.md` | The consumer's own CI provider, issue tracker, and dependency manager | Naming a specific tool (gh CLI, GitHub Actions, dependabot) inside universal text; embedding a specific PR number as an example |
+| P3 - delivery harness around the code | Issue-first; ASCII discipline; declarative module management; auto-subscribe to PR activity; retrospective auto-open; classify each repair | `scripts/issue_link.py`, `body_policy.py`, `title_policy.py`, `pr_body_close_keyword_gate.py`, `auto_retro.py`, `scan_non_ascii.py`, `preflight_non_ascii.py`, `branch_cleanup.py`, `rulesets_apply.py`, `ruleset_drift.py`, `labels_apply.py`, `dependabot_automerge.py`, `dependabot_labels.py`, `threat_intel_triage.py`, `uv_pin.py`, `scan_apm_portability.py`, `gate_mcp_github_uncovered.py`, `gate_gh_cli.py`, `github_api.py`; 16 paired workflows; 21 paired tests | `docs/standards/issue-pr-body-standard.md`, `docs/runbooks/issue-triage.md`, `docs/prd/non-ascii-defense.md`, `docs/runbooks/rulesets.md`, `docs/runbooks/branch-cleanup.md`, `docs/runbooks/dependabot-automerge.md`, `docs/standards/remote-environment.md`, `docs/standards/repo-scope.md`, `docs/prd/security-control-inventory.md`, `docs/archive/retrospective-pr-*.md` | The consumer's own CI provider, issue tracker, and dependency manager | Naming a specific tool (gh CLI, GitHub Actions, dependabot) inside universal text; embedding a specific PR number as an example |
 | P4 - safety boundary | Minimum code; safety-bounded simplicity; defense-in-depth preservation; destructive-operation safeguards; tool-scope confinement; external-disclosure and secret-log prevention; fail-loud over silent default; debug instrumentation as attack surface | `.github/CODEOWNERS` (repo-scope binding for MCP/agent tools); `.github/workflows/*.yml` `permissions:` declarations (least-privilege per workflow); `scripts/scan_apm_portability.py` (forbids naming repo-local tools in universal text); `(lint and type gates exist in workflow-script-quality.md M8; behavioral check is reviewer judgment)` | `docs/standards/workflow-script-quality.md` (M1 to M9 must-have checklist; O1 to O7 optional enhancements); `docs/standards/repo-scope.md` (allowed-repository policy and runbook); `docs/runbooks/workflow-permissions-audit.md` (per-workflow permission matrix); `docs/prd/security-control-inventory.md` (visualization of the harness coverage); `docs/prd/privileged-operation-runbooks.md` (escalation paths) | The consumer's own language ecosystem, code style, credential manager, external-endpoint policy, and per-agent tool inventory | Embedding a stack-specific example or a concrete tool endpoint inside universal text; widening a least-privilege workflow `permissions:` block for a one-off debug |
 | P5 - change scope and agent split | The measurable proposition that quality stays proportional to the scope and scale of change, observed over time; narrow change surface; cleanup limited to artifacts made obsolete by the active change | The `superpowers` skills (subagent-driven-development, dispatching-parallel-agents, requesting-code-review) own the sub-agent-vs-skill selection and the implementation/verification split; implementation skills own concrete code-editing hygiene | `docs/runbooks/agent-provenance.md` (provenance review for skills, subagents, MCP servers, and comparable extensions) | The consumer's own agent inventory and roster | Mentioning a Claude-only feature (sub-agents, skills) by literal name as universal terminology; restating sub-agent orchestration or concrete code-editing technique that the skills already own |
 | P6 - handoff and communication | Native-language plan artifacts; show procedure and case studies; visualize workflow; refuse LGTM; explain trade-offs | `scripts/plan_language_context.py` (owner-language metadata recovery); `.github/owners.yaml`; `.github/CODEOWNERS` | `docs/archive/retrospective-pr-*.md` (case studies are the force-multiplier evidence); `docs/prd/security-control-inventory.md` (visualization of the harness coverage); `docs/standards/performance-metrics.md` (visualization of measurement) | The consumer's own `owners.yaml` entries | Treating "case studies" as universal content rather than as repo-local artifacts that the universal text merely *requires*; plan-language drift slipping into English despite harness injection (corrected by [#269](https://github.com/tvna/claude-md/issues/269)) |
@@ -392,6 +392,44 @@ limits the change surface for every downstream consumer. Concrete
 code-editing technique belongs in implementation skills and comparable
 project-local procedure, where it can adapt to the active language,
 framework, and codebase.
+
+### 5.3 Issue #887 - MCP-vs-GitHub-API design decision
+
+**Background.** Prior to #887, the harness rule in master section 3 directed
+agents to use `gh` CLI as a fallback for any `mcp__github__*` tool that lacked
+a dedicated PreToolUse hook. That stopgap left two unaddressed problems: write
+operations via `gh` CLI had no content-safety gate, and all MCP tool responses
+injected full JSON payloads into context regardless of how much of the data
+was actually needed.
+
+**Decision.** `gh` CLI is prohibited in the agent tool surface. The
+replacement framework is:
+
+| Operation type | Tool | Rationale |
+|---|---|---|
+| Read (list, search, get) | `scripts/github_api.py GET URL [--fields f1,f2]` | Lower token cost via response filtering; auditable wrapper |
+| Write + PreToolUse hook exists | `mcp__github__<tool>` | Hook provides content-safety gate |
+| Write + no hook yet | Blocked by `gate_mcp_github_uncovered.py` | Hook must be added first; see #887 for process |
+| Raw `curl api.github.com` | Denied by `gate_gh_cli.py` | Must go through `scripts/github_api.py` |
+| `gh` CLI | Denied by `gate_gh_cli.py` | No content-safety gate on writes; bypasses token accounting |
+
+**Decision tree trace.**
+
+- Q1: Tool-agnostic? No -- `gh` CLI and `mcp__github__` name vendor products.
+- **Lane: repo-local doc (demoted from universal text)**. The abstract form
+  ("use platform-integrated tool calls with PreToolUse hooks; use the approved
+  REST API wrapper for reads") lives in universal text. The concrete `gh`/MCP
+  naming lives in this section and in `docs/prd/security-control-inventory.md`.
+
+**Enforcement.** `scripts/gate_gh_cli.py` is the deterministic gate.
+`scripts/gate_mcp_github_uncovered.py` redirects uncovered MCP tools to the
+API wrapper. Both are registered as PreToolUse hooks in `.claude/settings.json`
+and covered by paired test files.
+
+**Relationship to #877.** Issue #877 documented the previous MCP-vs-gh-CLI
+framework. That framework is superseded by #887. The #877 PRD update should
+cross-reference this section and treat the prior gh-CLI-as-fallback rule as
+historical record only.
 
 ## 6. Gap analysis procedure
 

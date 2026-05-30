@@ -86,6 +86,15 @@
         "hooks": [
           {
             "type": "command",
+            "command": "python3 scripts/gate_gh_cli.py"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
             "command": "python3 scripts/preflight_push_base.py"
           }
         ]
