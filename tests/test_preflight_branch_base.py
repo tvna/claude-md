@@ -16,7 +16,7 @@ pytestmark = pytest.mark.shard_preflight
 
 
 def _git(repo: Path, *args: str) -> None:
-    subprocess.run(["git", *args], cwd=repo, check=True, capture_output=True, text=True)
+    subprocess.run(["git", "-c", "commit.gpgsign=false", *args], cwd=repo, check=True, capture_output=True, text=True)
 
 
 def _write_commit(repo: Path, name: str, content: str) -> None:
@@ -31,7 +31,6 @@ def _repo_with_stale_feature(tmp_path: Path) -> Path:
     _git(repo, "init", "-b", "main")
     _git(repo, "config", "user.email", "test@example.com")
     _git(repo, "config", "user.name", "Test User")
-    _git(repo, "config", "commit.gpgsign", "false")
     _write_commit(repo, "base.txt", "base-1\n")
     _git(repo, "switch", "-c", "feature")
     _write_commit(repo, "feature.txt", "feature\n")
