@@ -22,6 +22,12 @@ junit.xml
 # APM dependencies/cache output
 apm_modules/
 
+# Host-unit DuckDB metrics store (#815). The per-host database is local
+# measurement state, never committed; only metrics/duckdb/schema/**.sql is
+# source. See docs/standards/host-unit-duckdb-metrics.md.
+*.duckdb
+*.duckdb.wal
+
 # Claude local state
 # .claude/ is broadly prohibited per docs/standards/repo-scope.md (#58).
 # .claude/settings.local.json is the documented developer-local carve-out —
