@@ -23,6 +23,7 @@ At time of writing, the steps mirror the script invocations from the
 | `uv_pin_drift`                    | `verify-agents.yml`                   | no                   |
 | `scan_workflow_pip`               | `verify-agents.yml`                   | no                   |
 | `scan_workflow_action_pins`       | `verify-agents.yml`                   | no                   |
+| `scan_docs_inventory`             | `verify-agents.yml`                   | no                   |
 | `scan_design_philosophy_drift`    | `verify-design-philosophy.yml`        | no                   |
 | `dependabot_labels`               | `verify-dependabot-labels.yml`        | no                   |
 | `verify_required_check_contexts`  | `verify-ruleset-sync.yml`             | no                   |
@@ -80,6 +81,8 @@ retrospectives. Do not configure it permanently in your shell rc.
 * `scripts/scan_preflight_drift.py` -- CI gate that diffs the local
   set against `pull_request:` workflow scripts. Fails CI when CI
   adds a gate that preflight does not mirror.
+* `scripts/scan_docs_inventory.py` -- docs inventory and lane-placement
+  gate mirrored from `verify-agents.yml`.
 * `.githooks/pre-push` -- invokes the entrypoint, opt-in via
   `core.hooksPath`.
 * `.github/workflows/verify-agents.yml` -- runs the drift gate in
