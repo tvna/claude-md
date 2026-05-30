@@ -45,15 +45,37 @@ Codex consumes this repository's universal instruction surface through `AGENTS.m
 
 The Codex hook config may mirror existing Claude hook scripts only when the script behavior is tested for both payload shapes or is payload-independent. Do not add Codex-only hook behavior that weakens the Claude guardrail or assumes complete hook parity. Current documented Codex limits include incomplete shell interception for some shell paths and unsupported `permissionDecision: "ask"` behavior in `PreToolUse`.
 
-As of 2026-05-28, the official Codex hooks documentation defines `SessionStart.source` as `startup`, `resume`, `clear`, or `compact`, and defines shared hook input fields such as `session_id`, `cwd`, `hook_event_name`, `model`, and `permission_mode`. Those fields identify hook lifecycle and workspace context, not whether the session is local, cloud, SSH-backed, or controlled remotely from another device. The official Codex cloud-environment documentation describes setup scripts, maintenance scripts, and user-configured environment variables, but it does not document a built-in remote-only environment variable for repo hooks.
+As of 2026-05-28, the official Codex hooks documentation defines `SessionStart.source` as `startup`, `resume`, `clear`, or `compact`, and defines shared hook input fields such as `session_id`, `cwd`, `hook_event_name`, `model`, and `permission_mode`. Those fields identify hook lifecycle and workspace context, not whether the session is local, cloud, SSH-backed, or controlled remotely from another device. The official Codex cloud-environment documentation describes setup scripts, maintenance scripts, and user-configured environment variables, but it does not document a built-in remote-only environment variable for repo hooks. The `AGENT=codex` proposal (openai/codex#13416) was closed as not planned as of 2026-05-30.
 
-When a Codex remote environment needs the same dependency state, use the verification commands below as the contract until Codex documents a stable remote-only signal. Do not treat `SessionStart.source`, `session_id`, `cwd`, `model`, `permission_mode`, or user-defined Codex environment variables as sufficient install gates, and do not make `scripts/install-uv.sh` perform network installation in local Codex sessions.
+Because no built-in platform signal exists, `scripts/install-uv.sh` uses an explicit operator opt-in: `CODEX_CODE_REMOTE=true`. This is not a proxy detection mechanism — it is a deliberate deployment decision. Do not treat `SessionStart.source`, `session_id`, `cwd`, `model`, or `permission_mode` as install gates.
 
-Once Codex documents a remote-only signal, the implementation path is intentionally narrow:
+**Configuring `CODEX_CODE_REMOTE=true` for Codex cloud tasks:**
 
-1. Add that signal to the guard in `scripts/install-uv.sh` without changing `CLAUDE_CODE_REMOTE=true` behavior.
-2. Add a shell-level test that proves local Codex-shaped environments remain no-op and the documented remote signal enters the install path.
-3. Update this runbook with the exact official documentation URL, the rollback command, and a manual remote verification transcript.
+In your Codex environment configuration (web dashboard or `codex cloud env` CLI), add the environment variable:
+
+```
+CODEX_CODE_REMOTE=true
+```
+
+Environment variables configured in the Codex cloud environment are set for the full duration of the task — including the `SessionStart` hook phase — and persist when a cached container is resumed. Do not set `CODEX_CODE_REMOTE=true` in local `.codex/config.toml`, local shell profiles, or any context outside the cloud environment configuration; doing so causes the installer to run in local sessions.
+
+**Rollback:** Remove `CODEX_CODE_REMOTE=true` from the Codex cloud environment configuration. The guard is a single `if` check in `scripts/install-uv.sh`; no other change is required.
+
+**Codex cloud verification** (run inside a Codex cloud task after setting `CODEX_CODE_REMOTE=true`):
+
+```sh
+PIN="$(python3 -c 'import tomllib; print(tomllib.load(open("pyproject.toml","rb"))["tool"]["uv"]["required-version"].lstrip("="))')"
+uv --version                    # must print: uv $PIN
+command -v uv                   # must print: $HOME/.local/bin/uv
+uv sync --locked                # must exit 0
+```
+
+**Future migration:** When OpenAI documents a built-in Codex remote-only signal, the migration path is narrow:
+
+1. Replace the `[ "${CODEX_CODE_REMOTE:-}" != "true" ]` branch in `scripts/install-uv.sh` with the official signal check, without changing `CLAUDE_CODE_REMOTE=true` behavior.
+2. Add a test that proves the official signal enters the install path.
+3. Update this runbook with the exact official documentation URL.
+4. Retain `CODEX_CODE_REMOTE=true` as a fallback for one release cycle with a deprecation note, then remove it.
 
 ## Why not nix
 
@@ -118,3 +140,5 @@ Upstream-follow: Dependabot (`.github/dependabot.yml`) does not natively bump `[
 - `.github/workflows/verify-agents.yml` (`lint-uv-pin` job) — drift gate that fails any reintroduction of a uv-version literal outside `pyproject.toml`.
 - `.github/dependabot.yml` — weekly bumps for `github-actions` SHAs and `uv.lock` entries.
 - https://code.claude.com/docs/en/claude-code-on-the-web — environment / network policy documentation.
+- [#616](https://github.com/tvna/claude-md/issues/616) — Codex remote uv provisioning: verified signal research and implementation.
+- openai/codex#13416 — `AGENT=codex` env-var proposal; closed as not planned (2026-05-30).
