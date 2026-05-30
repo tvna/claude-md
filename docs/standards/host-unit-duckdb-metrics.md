@@ -34,21 +34,42 @@ Two consequences follow and bound everything below:
 |---|---|---|
 | `docs/standards/host-unit-duckdb-metrics.md` *(this file)* | -- | Adopted contract: trade-off, lifecycle, schema, write path, observation, export |
 | [`metrics/duckdb/schema/v1/schema.sql`](../../metrics/duckdb/schema/v1/schema.sql) | host-local `*.duckdb` | Versioned init path: tables, OTLP export view, read-back view, baseline template |
+| [`metrics/duckdb/init.sh`](../../metrics/duckdb/init.sh) | operator shell | Environment-aware init helper: detects devcontainer vs. local path, supports `CLAUDE_MD_METRICS_DB` override |
 | `*.duckdb` (host-local, git-ignored) | each host | The database itself -- local measurement state, never committed (Refs #88) |
 
 ## Storage location and lifecycle
 
-- **One database per host.** Recommended path: `$HOME/.local/state/claude-md/metrics.duckdb`
-  (override with an env var locally if desired). The path is operator-local; it
-  is never committed and never published.
-- **Init.** Load the versioned schema against a fresh or existing database; the
-  file is idempotent (`IF NOT EXISTS` on every object), so re-running it is
-  safe:
+- **One database per host.** The path is operator-local; it is never committed
+  and never published. The default path depends on the execution environment
+  (see table below); override at any time with the `CLAUDE_MD_METRICS_DB`
+  environment variable.
+
+  | Execution environment | Default path |
+  |---|---|
+  | devcontainer (claude) | `/home/claude/.claude/metrics.duckdb` |
+  | devcontainer (codex) | `/home/codex/.codex/metrics.duckdb` |
+  | local machine / Codespaces / other persistent host | `$HOME/.local/state/claude-md/metrics.duckdb` |
+  | CI runners (GitHub Actions etc.) | — (ephemeral; no write path in v1) |
+
+  The devcontainer paths land inside the named Docker volumes
+  (`claude-md-claude-session` and `claude-md-codex-session`) that are already
+  declared in `.devcontainer/*/devcontainer.json`; no new volume mount is
+  required.  The fallback path uses `$HOME/.local/state/` per the XDG Base
+  Directory convention and is appropriate for local machines and GitHub
+  Codespaces alike.
+
+- **Init.** Use the environment-aware helper, which auto-detects the correct
+  path via the `AGENT_CONTAINER` env var (set by devcontainer) and falls back
+  to the XDG path:
 
   ```sh
-  duckdb "$HOME/.local/state/claude-md/metrics.duckdb" \
-    < metrics/duckdb/schema/v1/schema.sql
+  ./metrics/duckdb/init.sh
+  # override:
+  CLAUDE_MD_METRICS_DB=/custom/path.duckdb ./metrics/duckdb/init.sh
   ```
+
+  The helper calls `duckdb … < metrics/duckdb/schema/v1/schema.sql`, which is
+  idempotent (`IF NOT EXISTS` on every object), so re-running is safe.
 
 - **Retention / rotation.** The database is append-mostly and small (one row per
   measured change). No rotation is required for v1; if a host's file is lost it
@@ -186,18 +207,20 @@ dependency, so the init, the baseline `INSERT`, and the read-back are
 **operator-local** steps, run on a host that has the DuckDB CLI:
 
 ```sh
-# 1. Init (idempotent)
-duckdb "$HOME/.local/state/claude-md/metrics.duckdb" \
-  < metrics/duckdb/schema/v1/schema.sql
+# 1. Init (idempotent; auto-detects environment via AGENT_CONTAINER)
+./metrics/duckdb/init.sh
+# prints the resolved path, e.g.: Initialized: /home/claude/.claude/metrics.duckdb
+
+# Override path explicitly:
+CLAUDE_MD_METRICS_DB=/custom/path.duckdb ./metrics/duckdb/init.sh
 
 # 2. Capture the baseline row against main (fill the template in the schema file)
-#    then read it back:
-duckdb "$HOME/.local/state/claude-md/metrics.duckdb" \
-  -c "SELECT * FROM v_proportionality;"
+#    then read it back (substitute the resolved DB path for $DB):
+DB="${CLAUDE_MD_METRICS_DB:-$HOME/.local/state/claude-md/metrics.duckdb}"
+duckdb "$DB" -c "SELECT * FROM v_proportionality;"
 
 # 3. Confirm the OTLP export surface is populated:
-duckdb "$HOME/.local/state/claude-md/metrics.duckdb" \
-  -c "SELECT MetricName, Value FROM otlp_metric_data_point;"
+duckdb "$DB" -c "SELECT MetricName, Value FROM otlp_metric_data_point;"
 ```
 
 What CI *does* verify deterministically: this document's local links and the

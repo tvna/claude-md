@@ -6,8 +6,9 @@
 -- and never committed -- it is local measurement state, not source (Refs #88).
 --
 -- Init (operator, local; duckdb is intentionally NOT a repo dependency):
---   duckdb "$HOME/.local/state/claude-md/metrics.duckdb" \
---     < metrics/duckdb/schema/v1/schema.sql
+--   ./metrics/duckdb/init.sh
+--   # or with an explicit path override:
+--   CLAUDE_MD_METRICS_DB=/custom/path.duckdb ./metrics/duckdb/init.sh
 --
 -- Design contract: docs/standards/host-unit-duckdb-metrics.md
 --
