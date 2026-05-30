@@ -158,6 +158,16 @@ class TestExtractHeadings:
         body = "## Scope\r\n\r\nprose\r\n"
         assert body_policy.extract_headings(body) == [(2, "Scope")]
 
+    def test_html_entity_ampersand_decoded(self) -> None:
+        # MCP write tools encode & as &amp; before storing. The heading text
+        # must decode back to & so section matching still works. Refs #892.
+        body = "## Risk &amp; blast radius\n"
+        assert body_policy.extract_headings(body) == [(2, "Risk & blast radius")]
+
+    def test_html_entity_lt_gt_decoded(self) -> None:
+        body = "## Scope &lt;optional&gt;\n"
+        assert body_policy.extract_headings(body) == [(2, "Scope <optional>")]
+
 
 # ---------------------------------------------------------------------------
 # required_sections
