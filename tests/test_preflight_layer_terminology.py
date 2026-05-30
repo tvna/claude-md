@@ -9,19 +9,12 @@ import pytest
 pytestmark = pytest.mark.shard_preflight
 
 
-ALLOWED_LAYER_25_PATHS = {
-    Path("scripts/preflight_non_ascii.py"),
-    Path("tests/test_preflight_non_ascii.py"),
-    Path("docs/prd/non-ascii-defense.md"),
-    Path("docs/prd/agent-rules-design-philosophy.md"),
-}
+ALLOWED_LAYER_25_PATHS: frozenset[Path] = frozenset()
 
 SCANNED_ROOTS = (
     Path("scripts"),
     Path("tests"),
-    Path("docs/standards/issue-pr-body-standard.md"),
-    Path("docs/prd/non-ascii-defense.md"),
-    Path("docs/prd/agent-rules-design-philosophy.md"),
+    Path("docs"),
 )
 
 
@@ -41,7 +34,7 @@ def _scanned_files() -> list[Path]:
     return sorted(set(files))
 
 
-def test_layer_25_term_stays_local_to_non_ascii_defense() -> None:
+def test_layer_25_term_is_eliminated() -> None:
     layer_label = "Layer " + "2.5"
     mirror_label = "2" + ".5 mirror"
     offenders: list[str] = []

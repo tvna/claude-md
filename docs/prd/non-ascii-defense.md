@@ -20,9 +20,9 @@ This document is the operator-facing companion to [#102](https://github.com/tvna
 | `scripts/translations.json` *(P3, future PR)* | repo working tree | JA->EN mapping for past sanitization; the operator-reviewable audit trail |
 | `scripts/sanitize_history.py` | local invocation | P5 apply tool; reuses `_github_api.apply_call` for retry/backoff and pytest-covers drift/idempotency/restore |
 | `tests/test_sanitize_history.py` | repo working tree | pytest coverage for the above; runs in `verify-agents.yml` on every PR |
-| `scripts/preflight_non_ascii.py` | repo working tree | Layer 2.5 `PreToolUse` hook: denies non-ASCII GitHub MCP write-tool calls client-side before they reach Layer 2 |
-| `tests/test_preflight_non_ascii.py` | repo working tree | pytest coverage for Layer 2.5; runs in `verify-agents.yml` |
-| `.claude/settings.json` entry `PreToolUse` | Claude Code harness (in-tree) | Registers Layer 2.5; carve-out per `docs/standards/repo-scope.md` lines 46-48 |
+| `scripts/preflight_non_ascii.py` | repo working tree | Client-side `PreToolUse` hook: denies non-ASCII GitHub MCP write-tool calls before they reach Layer 2 |
+| `tests/test_preflight_non_ascii.py` | repo working tree | pytest coverage for the client-side preflight hook; runs in `verify-agents.yml` |
+| `.claude/settings.json` entry `PreToolUse` | Claude Code harness (in-tree) | Registers the client-side `PreToolUse` hook; carve-out per `docs/standards/repo-scope.md` lines 46-48 |
 | `~/.claude/settings.json` (developer-local) | Claude Code harness | Registers the `PostToolUse` hook below |
 | `~/.claude/hooks/sanitize-github-response.sh` (developer-local) | Claude Code harness | Escapes non-ASCII in `mcp__github__*` responses before Claude consumes them |
 | `docs/prd/non-ascii-defense.md` *(this file)* | — | Runbook |
@@ -133,11 +133,9 @@ on:
 
 **Label provisioning:** `severity:non-ascii-content` lives in `.github/labels.json`; apply it via `Actions → Apply labels → Run workflow` (`dry_run=false`) before merging this layer.
 
-## Layer 2.5 — Client-side preflight (`scripts/preflight_non_ascii.py`)
+## Client-side preflight (`scripts/preflight_non_ascii.py`)
 
-> **Scope note.** The "2.5" label is local to this defense stack: it names a client-side step between Layer 2 (write-side detection) and Layer 3 (read-side hook). It is not a P2/P3 structural layer in `agent-rules-design-philosophy.md` and does not establish a pattern for inserting N.5 slots between other CLAUDE.md sections. The policy rationale (why non-ASCII in write calls is an untrusted-input concern) is owned by P2; the enforcement hook (`scripts/preflight_non_ascii.py`) is owned by P3.
-
-Layer 2 catches non-ASCII *after* it reaches GitHub: every Japanese issue still triggers a workflow run, a label, and an advisory comment — even for the OWNER. From a Claude Code session, that loop fires on every post. Layer 2.5 short-circuits it at the client.
+Layer 2 catches non-ASCII *after* it reaches GitHub: every Japanese issue still triggers a workflow run, a label, and an advisory comment — even for the OWNER. From a Claude Code session, that loop fires on every post. The client-side hook short-circuits it.
 
 **Mechanism.** A `PreToolUse` hook registered in `.claude/settings.json` (the documented carve-out per [`docs/standards/repo-scope.md`](../standards/repo-scope.md) lines 46-48) intercepts the GitHub MCP write tools:
 

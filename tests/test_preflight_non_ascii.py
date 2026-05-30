@@ -1,4 +1,4 @@
-"""Tests for ``scripts/preflight_non_ascii.py`` (Layer 2.5 hook).
+"""Tests for ``scripts/preflight_non_ascii.py`` (client-side preflight hook).
 
 The ``scripts/`` directory is added to ``sys.path`` via the ``pythonpath``
 key under ``[tool.pytest.ini_options]`` in ``pyproject.toml``.

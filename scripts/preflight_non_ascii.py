@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Client-side preflight for GitHub MCP write tools (Layer 2.5).
+"""Client-side preflight for GitHub MCP write tools.
 
 PreToolUse hook invoked by Claude Code on the matchers configured in
 ``.claude/settings.json``. Reads a PreToolUse event JSON from stdin and,
@@ -9,8 +9,8 @@ Claude to either translate to English or append ``<!-- non-ascii-ack -->``
 to the body before retrying.
 
 Complements the server-side Layer 2 workflow (``issue-pr-triage.yml`` /
-``scripts/scan_non_ascii.py``); see ``docs/prd/non-ascii-defense.md`` Layer
-2.5. Refs #146, umbrella #102.
+``scripts/scan_non_ascii.py``); see ``docs/prd/non-ascii-defense.md``
+client-side preflight section. Refs #146, umbrella #102.
 
 Architecture mirrors :mod:`scan_non_ascii`: pure functions on top, one
 thin stdin/stdout boundary at the bottom (:func:`main`). The detection
@@ -87,11 +87,12 @@ def build_deny_reason(
 
     Lists which fields contained non-ASCII, shows the escaped form so the
     model treats it as data, and offers the two remediation options in
-    the order documented in ``docs/prd/non-ascii-defense.md`` Layer 2.5.
+    the order documented in ``docs/prd/non-ascii-defense.md``
+    client-side preflight section.
     """
     where = " and ".join(fields) if fields else "input"
     return (
-        f"Blocked by scripts/preflight_non_ascii.py (Layer 2.5): "
+        f"Blocked by scripts/preflight_non_ascii.py: "
         f"`{tool_name}` {where} contains non-ASCII characters that would "
         f"trigger the server-side issue-pr-triage.yml workflow on every "
         f"post. Pick one and retry:\n"
