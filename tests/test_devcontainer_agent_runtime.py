@@ -120,13 +120,31 @@ def test_gh_config_permission_check_script_exists_and_is_executable() -> None:
     assert script.stat().st_mode & 0o111, "check-gh-config-permissions.sh is not executable"
 
 
-def test_entrypoints_run_gh_config_permission_check_at_poststart() -> None:
+def test_entrypoints_run_gh_config_permission_check_before_container_start() -> None:
+    for agent in AGENTS:
+        config = load_json(REPO_ROOT / ".devcontainer" / agent / "devcontainer.json")
+        initialize = config.get("initializeCommand", "")
+        assert isinstance(initialize, str)
+        assert "check-gh-config-permissions.sh ${HOME}/.config/gh" in initialize
+        assert initialize.index("check-gh-config-permissions.sh") < initialize.index("ensure-agent-image.sh")
+
+
+def test_entrypoints_do_not_check_gh_bind_mount_modes_at_poststart() -> None:
     for agent in AGENTS:
         config = load_json(REPO_ROOT / ".devcontainer" / agent / "devcontainer.json")
         post_start = config.get("postStartCommand", "")
         assert isinstance(post_start, str)
-        assert "check-gh-config-permissions.sh" in post_start
-        assert f"/home/{agent}/.config/gh" in post_start
+        assert "check-gh-config-permissions.sh" not in post_start
+        assert f"/home/{agent}/.config/gh" not in post_start
+
+
+def test_gh_config_permission_check_is_host_platform_aware() -> None:
+    script = (REPO_ROOT / ".devcontainer/scripts/check-gh-config-permissions.sh").read_text(encoding="utf-8")
+
+    assert "stat -f '%Lp'" in script
+    assert "stat -c '%a'" in script
+    assert "chmod 700 $(display_path" in script
+    assert "chmod 600 $(display_path" in script
 
 
 def test_runbook_documents_gh_bind_mount_security() -> None:
@@ -134,5 +152,6 @@ def test_runbook_documents_gh_bind_mount_security() -> None:
 
     assert "chmod 700 ~/.config/gh" in runbook
     assert "chmod 600 ~/.config/gh/hosts.yml" in runbook
+    assert "host-side" in runbook
     assert "gh auth status" in runbook
     assert "read-write" in runbook
