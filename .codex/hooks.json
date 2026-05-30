@@ -95,6 +95,16 @@
         ]
       },
       {
+        "matcher": "^Bash$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 scripts/preflight_push_base.py",
+            "statusMessage": "Checking branch base before push"
+          }
+        ]
+      },
+      {
         "matcher": "^mcp__github__(create_pull_request|update_pull_request)$",
         "hooks": [
           {
