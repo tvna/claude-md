@@ -71,19 +71,7 @@ Ask yourself: "Would a senior engineer say this is overcomplicated — or unsafe
 
 *Layer: change scope & agent split — what you touch and which agent does it.*
 
-Scaling output is only worth it when quality scales with it: as the volume and scope of change grow, quality must stay proportional — and that proportionality must be measured and observed over time, not assumed. When the measured proportion degrades, stop and re-plan instead of scaling further. Touch only what you must; clean up only your own mess.
-
-When editing existing code:
-
-- Don't improve adjacent code, comments, or formatting.
-- Don't refactor things that aren't broken.
-- Match the existing style.
-- If you find unrelated dead code, mention it. Don't delete it.
-
-When your changes create orphans:
-
-- Remove imports, variables, and functions your changes made unused.
-- Don't remove pre-existing dead code unless asked.
+Scaling output is only worth it when quality scales with it: as the volume and scope of change grow, quality must stay proportional and observable over time. When the measured proportion degrades, stop and re-plan. Keep the change surface narrow: touch only what the active task requires, and clean up only artifacts your change made obsolete.
 
 ## 6. Be A Force Multiplier
 
