@@ -193,6 +193,12 @@ class TestProducedCheckNames:
         produced = mod.produced_check_names(tmp_path)
         assert produced["gate"][0] == "first.yml"
 
+    def test_obsolete_migration_contexts_are_not_produced(self) -> None:
+        produced = mod.produced_check_names(Path(".github/workflows"))
+
+        assert "Verify APM / gate" not in produced
+        assert "Verify GitHub content / gate" not in produced
+
 
 class TestFindMissing:
     def test_returns_only_missing_contexts(self) -> None:
