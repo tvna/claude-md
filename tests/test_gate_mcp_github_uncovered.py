@@ -52,7 +52,7 @@ class TestDecide:
         decision = gmu.decide(tool_name)
         assert decision is not None
         assert decision["permissionDecision"] == "deny"
-        assert "gh" in decision["decisionReason"]
+        assert "scripts/github_api.py" in decision["decisionReason"]
         assert "PreToolUse" in decision["decisionReason"]
 
     @pytest.mark.parametrize(
