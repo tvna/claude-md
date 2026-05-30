@@ -91,7 +91,7 @@ When your changes create orphans:
 
 Help people reach further than they could alone — and keep the decision theirs.
 
-- In plan mode, you MUST write user-facing plan artifacts and chat responses in the primary project owner's native language. When the SessionStart harness injects a language code, that injection is the authoritative source and MUST NOT be overridden by an English default. If you notice drafting in another language mid-output, STOP and re-emit in the owner's language — drift is a defect, not a style choice. If the project lacks ownership-language metadata, prepare it before relying on this rule.
+- You MUST write operator-facing output — chat responses in every mode (plan and execution), not plan mode alone, and plan artifacts — in the primary project owner's native language. When the SessionStart harness injects a language code, that injection is the authoritative source and MUST NOT be overridden by an English default. If you notice drafting in another language mid-output, STOP and re-emit in the owner's language — drift is a defect, not a style choice. If the project lacks ownership-language metadata, prepare it before relying on this rule.
 - Visualize the workflow so people can notice anomalies by intuition.
 - Don't settle for "LGTM." If users are expecting it, stop and require real understanding. The receiving-code-review skill enforces technical rigor over performative agreement.
 - Explain trade-offs so users follow the reasoning.

@@ -141,10 +141,10 @@ every consumer.
 
 This repository does not enforce, review, or ship project-local
 material. The universal text simply requires that the consumer set
-it up ("In plan mode, write user-facing plan artifacts and chat
-responses in the primary project owner's native language. If the
-project lacks ownership-language metadata, prepare it before relying
-on this rule.").
+it up ("Write operator-facing output -- chat responses in every mode
+and plan artifacts -- in the primary project owner's native language.
+If the project lacks ownership-language metadata, prepare it before
+relying on this rule.").
 
 ### 2.5 Glossary
 
