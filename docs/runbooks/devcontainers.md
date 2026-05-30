@@ -111,6 +111,41 @@ To verify the active token scopes inside the container:
 gh auth status
 ```
 
+### Cloud Codex sessions
+
+Cloud-hosted Codex sessions (claude.ai/code, GitHub Actions, or other
+remote environments) run on ephemeral hosts that do not share named
+volumes or host bind mounts between sessions. The local bind-mount
+approach above does not apply.
+
+Instead, pass a personal access token as `GH_TOKEN` in the Codex
+environment configuration:
+
+1. Create a fine-grained PAT at `github.com/settings/tokens` with
+   **Contents: read** and **Issues / Pull requests: read and write** on
+   `tvna/claude-md`. Set an expiry of 90 days or less.
+2. Add `GH_TOKEN=<token>` as an environment variable in the Codex
+   environment settings (or the equivalent secret store for your
+   integration). Do not commit the value to the repository.
+3. Verify in a new session:
+
+   ```sh
+   gh auth status
+   ```
+
+   If `gh` reports `You are not logged into any GitHub hosts`, run:
+
+   ```sh
+   gh auth login --with-token <<< "$GH_TOKEN"
+   ```
+
+   Scripts that consume `GH_TOKEN` directly (such as
+   `sanitize_history.py apply`) will pick up the environment variable
+   without an explicit login step.
+
+Rotate the PAT before expiry and update the Codex environment secret.
+Record the next rotation date alongside the token owner.
+
 The runtime setup writes DevContainer-local defaults into the mounted
 agent home. Bash commands and GitHub MCP operations are allowed by
 default inside the devcontainer so agent work can proceed without
