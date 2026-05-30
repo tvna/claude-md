@@ -168,10 +168,6 @@ def test_audit_no_rule_for_ecosystem_blocked() -> None:
 
 
 def test_audit_unexpected_path_within_known_ecosystem() -> None:
-    # When all files share the github-actions ecosystem but one path is unexpected,
-    # all changed files must match the ecosystem pattern. Build a scenario where
-    # infer_ecosystem returns "github-actions" (all files under .github/workflows/)
-    # but one file is outside the allowed paths list for the rule.
     policy_narrow = {
         "enabled": False,
         "allow": [

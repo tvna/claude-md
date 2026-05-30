@@ -286,8 +286,7 @@ def test_main_malformed_json_returns_zero(monkeypatch: pytest.MonkeyPatch, capsy
 
 
 def test_main_empty_stdin_returns_zero(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("sys.stdin", type("Input", (), {"read": lambda self: "   "})()
-    )
+    monkeypatch.setattr("sys.stdin", type("Input", (), {"read": lambda self: "   "})())
     rc = probe.main([])
     assert rc == 0
 
@@ -306,8 +305,7 @@ def test_main_block_raises_system_exit(monkeypatch: pytest.MonkeyPatch) -> None:
     import runpy
     from pathlib import Path
 
-    monkeypatch.setattr("sys.stdin", type("Input", (), {"read": lambda self: "   "})()
-    )
+    monkeypatch.setattr("sys.stdin", type("Input", (), {"read": lambda self: "   "})())
     with pytest.raises(SystemExit) as exc_info:
         runpy.run_path(
             str(Path(__file__).parent.parent / "scripts" / "ci_early_status_probe.py"),
