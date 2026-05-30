@@ -100,6 +100,18 @@ curl -I --max-time 20 https://api.openai.com
 curl -I --max-time 20 https://auth.openai.com
 ```
 
+Interpretation:
+
+- If `getent hosts` returns addresses for both hosts, DNS resolution is
+  not the failing boundary.
+- `HTTP/2 421` from `https://api.openai.com` still proves that TLS and
+  HTTPS reached the OpenAI edge; it is not the same as a timeout.
+- `HTTP/2 403` from `https://auth.openai.com` with
+  `cf-mitigated: challenge` proves that the request reached Cloudflare
+  and was challenged there. Record the status, `cf-mitigated`, and
+  `cf-ray` fields only. Do not paste `Set-Cookie` values or full
+  headers into issues.
+
 If those fail, compare with the egress allowlist disabled for one
 container start:
 
