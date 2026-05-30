@@ -37,6 +37,14 @@
         "hooks": [
           {
             "type": "command",
+            "command": "python3 scripts/check_session_branch.py"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
             "command": "python3 scripts/check_pr_mergeability.py session-start"
           }
         ]
@@ -105,6 +113,15 @@
           {
             "type": "command",
             "command": "python3 scripts/preflight_push_base.py"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 scripts/preflight_push_session_branch.py"
           }
         ]
       },
