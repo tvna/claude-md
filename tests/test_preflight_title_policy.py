@@ -1,4 +1,4 @@
-"""Tests for ``scripts/preflight_title_policy.py`` (Layer 2.5 hook).
+"""Tests for ``scripts/preflight_title_policy.py``.
 
 The ``scripts/`` directory is added to ``sys.path`` via the ``pythonpath``
 key under ``[tool.pytest.ini_options]`` in ``pyproject.toml``.

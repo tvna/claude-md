@@ -65,7 +65,8 @@ def decide(
     if result.returncode != 0:
         detail = (result.stderr or result.stdout).strip()
         return _deny(
-            "Blocked by scripts/preflight_push_base.py (Layer 2.5): "
+            "Blocked by scripts/preflight_push_base.py "
+            "(client-side preflight): "
             "the branch is out-of-date with the base branch.\n\n"
             f"{detail}\n\n"
             "Repair: `git fetch origin main && git rebase origin/main`, "

@@ -16,8 +16,8 @@ caught after ``mcp__github__create_pull_request`` fires today; the
 operator must then edit the body, which re-triggers every ``gate``
 workflow on ``pull_request: edited``. Retro #356 row 1 records PR #355
 running three trigger waves (13:04 / 13:07 / 13:10) on a single head
-SHA because the initial body lacked the required sections. This Layer
-2.5 mirror short-circuits that loop.
+SHA because the initial body lacked the required sections. This
+client-side mirror short-circuits that loop.
 
 Architecture mirrors :mod:`preflight_pr_template_shape` (its sibling
 that covers the post-2026-05-26 Verification command/result + Checklist
@@ -97,7 +97,7 @@ def build_deny_reason(tool_name: str, missing: list[str]) -> str:
     missing_csv = ", ".join(missing)
     return (
         f"Blocked by scripts/preflight_pr_body_required_sections.py "
-        f"(Layer 2.5 mirror of verify-body-policy.yml baseline gate): "
+        f"(client-side mirror of verify-body-policy.yml baseline gate): "
         f"`{tool_name}` body is missing required section(s): "
         f"{missing_csv}. The server-side gate scripts/body_policy.py "
         f"(verify-body-policy.yml) would reject this on `pull_request: "

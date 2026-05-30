@@ -9,8 +9,8 @@ and execution) and plan files at ``/tmp/claude-plans/*.md`` -- in that
 language.
 
 The injected context explicitly carves out GitHub posts via
-``mcp__github__*`` write tools, which remain ASCII-only under Layer 2.5
-(``scripts/preflight_non_ascii.py``). The two hooks compose: this one
+``mcp__github__*`` write tools, which remain ASCII-only under
+``scripts/preflight_non_ascii.py``. The two hooks compose: this one
 shapes local plan output, the other gates GitHub I/O.
 
 Used by both Claude Code and Codex SessionStart hooks. Claude supplies
@@ -134,7 +134,7 @@ def build_context_message(owner: str, iso: str) -> str:
     Wording is deliberate: it names the source files (so a reader can
     audit the policy), binds operator-facing output in every mode
     (planning and execution), and carves out ``mcp__github__*`` write
-    tools so it cannot be read as softening the Layer 2.5 ASCII gate.
+    tools so it cannot be read as softening the GitHub write ASCII gate.
     """
     return (
         f"Repository language policy (sourced from .github/CODEOWNERS "
@@ -148,7 +148,7 @@ def build_context_message(owner: str, iso: str) -> str:
         f"drift is a defect, not a style choice. Exception: GitHub posts "
         f"created via mcp__github__* write tools (issues, PRs, comments, "
         f"reviews) MUST remain ASCII/English -- "
-        f"scripts/preflight_non_ascii.py (Layer 2.5) will deny non-ASCII "
+        f"scripts/preflight_non_ascii.py will deny non-ASCII "
         f"bodies there. Code identifiers, file paths, and command output "
         f"stay in their source form."
     )

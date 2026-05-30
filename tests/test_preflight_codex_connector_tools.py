@@ -1,4 +1,4 @@
-"""Codex GitHub connector coverage for the Layer 2.5 preflight hooks.
+"""Codex GitHub connector coverage for the client-side preflight hooks.
 
 Issue #740: the preflight title/body gates only recognized Claude-style
 ``mcp__github__*`` tool names, so a PR/issue write issued through the
