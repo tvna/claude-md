@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -53,9 +54,21 @@ def test_codex_runtime_config_uses_supported_toml_keys() -> None:
     codex_toml = (REPO_ROOT / ".devcontainer/config/codex/config.toml").read_text(encoding="utf-8")
 
     assert 'approval_policy = "never"' in codex_toml
-    assert "[mcp_servers.codex_apps]" not in codex_toml
+    assert "[mcp_servers.codex_apps]" in codex_toml
+    assert "startup_timeout_sec = 120" in codex_toml
     assert "[permissions]" not in codex_toml
     assert "allow = [" not in codex_toml
+
+
+def test_codex_runtime_config_pretrusts_workspace() -> None:
+    config_path = REPO_ROOT / ".devcontainer/config/codex/config.toml"
+    config = tomllib.loads(config_path.read_text(encoding="utf-8"))
+
+    projects = config.get("projects")
+    assert isinstance(projects, dict)
+    workspace = projects.get("/workspaces/claude-md")
+    assert isinstance(workspace, dict)
+    assert workspace.get("trust_level") == "trusted"
 
 
 def test_runbook_documents_existing_codex_volume_refresh() -> None:

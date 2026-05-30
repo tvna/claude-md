@@ -73,7 +73,8 @@ short prompt of the form `codex:claude-md(main)$` or
 git branch without the long VS Code default prefix.
 
 For Codex, the same runtime setup also writes
-`[mcp_servers.codex_apps].startup_timeout_sec = 120` and links
+`[mcp_servers.codex_apps].startup_timeout_sec = 120`, marks
+`/workspaces/claude-md` with `trust_level = "trusted"`, and links
 `/usr/local/bin/bwrap` and `/usr/local/bin/python3`. Existing Codex
 session volumes keep their old `/home/codex/.codex/config.toml` until
 the post-create setup runs again.
