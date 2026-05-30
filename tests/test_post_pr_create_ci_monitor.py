@@ -82,6 +82,9 @@ def test_decide_starts_monitor_and_returns_context(monkeypatch: pytest.MonkeyPat
     assert str(log_path) in ctx
     assert "NOT webhook-backed" in ctx
     assert "subscribe_pr_activity" in ctx
+    assert "early-failure watch phase" in ctx
+    assert "terminal state" in ctx
+    assert "steady-state heartbeat" in ctx
 
 
 def test_decide_reports_missing_pr_reference() -> None:
@@ -91,6 +94,28 @@ def test_decide_reports_missing_pr_reference() -> None:
     ctx = output["hookSpecificOutput"]["additionalContext"]
     assert "did not contain a PR URL or number" in ctx
     assert "polling" in ctx
+    assert "subscribe_pr_activity" in ctx
+    assert "early-failure watch phase" in ctx
+    assert "steady-state heartbeat" in ctx
+
+
+def test_decide_reports_start_failure_with_early_failure_phase(monkeypatch: pytest.MonkeyPatch) -> None:
+    def boom(argv: list[str], *, cwd: str | None = None) -> Path:
+        raise OSError("no gh on PATH")
+
+    monkeypatch.setattr(monitor, "start_monitor", boom)
+    event = {
+        "tool_name": monitor.TARGET_TOOL,
+        "tool_response": {"url": "https://github.com/tvna/claude-md/pull/723"},
+    }
+
+    output = monitor.decide(event)
+
+    assert output is not None
+    ctx = output["hookSpecificOutput"]["additionalContext"]
+    assert "failed to start automatically" in ctx
+    assert "early-failure watch phase" in ctx
+    assert "steady-state heartbeat" in ctx
     assert "subscribe_pr_activity" in ctx
 
 
