@@ -98,6 +98,218 @@ def test_non_dependabot_author_blocks() -> None:
     assert "author is not trusted: octocat" in result.reasons
 
 
+# --- classify_update_type: same version returns "patch" (line 56) ---
+
+
+def test_classify_update_type_same_version_returns_patch() -> None:
+    # Triggers the fallthrough to "patch" on line 56 when old == new
+    result = da.classify_update_type("bump x from 1.2.3 to 1.2.3")
+    assert result == "patch"
+
+
+# --- audit: no pull_request in event (line 76) ---
+
+
+def test_audit_no_pull_request_key_returns_ineligible() -> None:
+    result = da.audit({}, POLICY, [".github/workflows/ci.yml"])
+    assert result.eligible is False
+    assert "event has no pull_request object" in result.reasons
+
+
+# --- audit: draft PR (line 92) ---
+
+
+def test_audit_draft_pr_is_blocked() -> None:
+    result = da.audit(event(draft=True), POLICY, [".github/workflows/ci.yml"])
+    assert result.eligible is False
+    assert "pull request is draft" in result.reasons
+
+
+# --- audit: no update type (line 99) ---
+
+
+def test_audit_no_semver_in_title_blocked() -> None:
+    result = da.audit(
+        event(title="chore(deps): bump some-action"),
+        POLICY,
+        [".github/workflows/ci.yml"],
+    )
+    assert result.eligible is False
+    assert "title does not expose a semver from/to update" in result.reasons
+
+
+# --- audit: no policy rule for ecosystem (line 108) ---
+
+
+def test_audit_no_rule_for_ecosystem_blocked() -> None:
+    policy_no_uv = {
+        "enabled": False,
+        "allow": [
+            {
+                "ecosystem": "github-actions",
+                "update_types": ["patch"],
+                "paths": [".github/workflows/*"],
+            }
+        ],
+    }
+    result = da.audit(
+        event(
+            ref="dependabot/pip/requests-2.28.0",
+            title="chore(deps): bump requests from 2.27.0 to 2.28.0",
+        ),
+        policy_no_uv,
+        ["pyproject.toml", "uv.lock"],
+    )
+    assert result.eligible is False
+    assert any("no policy rule" in r for r in result.reasons)
+
+
+# --- audit: unexpected paths (line 116) ---
+
+
+def test_audit_unexpected_path_within_known_ecosystem() -> None:
+    # When all files share the github-actions ecosystem but one path is unexpected,
+    # all changed files must match the ecosystem pattern. Build a scenario where
+    # infer_ecosystem returns "github-actions" (all files under .github/workflows/)
+    # but one file is outside the allowed paths list for the rule.
+    policy_narrow = {
+        "enabled": False,
+        "allow": [
+            {
+                "ecosystem": "github-actions",
+                "update_types": ["patch", "minor"],
+                "paths": [".github/workflows/ci.yml"],  # only one specific file
+            },
+        ],
+    }
+    result = da.audit(
+        event(),
+        policy_narrow,
+        [".github/workflows/ci.yml", ".github/workflows/extra.yml"],
+    )
+    assert result.eligible is False
+    assert any("unexpected changed path" in r for r in result.reasons)
+
+
+# --- render_markdown: no reasons (lines 139-140) ---
+
+
+def test_render_markdown_no_reasons() -> None:
+    from dependabot_automerge import AuditResult
+    result = AuditResult(eligible=True, enabled=False, update_type="patch", ecosystem="uv", reasons=[])
+    md = da.render_markdown(result)
+    assert "No blocking reasons found." in md
+
+
+# --- _nested_str: non-dict intermediate (line 176) ---
+
+
+def test_nested_str_non_dict_intermediate() -> None:
+    result = da._nested_str({"user": "not-a-dict"}, "user", "login")
+    assert result == ""
+
+
+# --- _label_names: non-list labels (line 184) ---
+
+
+def test_label_names_non_list_returns_empty() -> None:
+    result = da._label_names({"labels": "not-a-list"})
+    assert result == set()
+
+
+# --- _matching_rule: non-list rules (line 195) ---
+
+
+def test_matching_rule_non_list_rules_returns_none() -> None:
+    result = da._matching_rule({"allow": "not-a-list"}, "uv")
+    assert result is None
+
+
+# --- _matching_rule: no match (line 199) ---
+
+
+def test_matching_rule_no_match_returns_none() -> None:
+    result = da._matching_rule({"allow": [{"ecosystem": "pip"}]}, "uv")
+    assert result is None
+
+
+# --- _string_list: non-list input (line 204) ---
+
+
+def test_string_list_non_list_returns_empty() -> None:
+    assert da._string_list("not-a-list") == []
+    assert da._string_list(None) == []
+
+
+# --- _unexpected_paths: all paths match (line 212) ---
+
+
+def test_unexpected_paths_all_match_returns_empty() -> None:
+    result = da._unexpected_paths(
+        [".github/workflows/ci.yml"],
+        [".github/workflows/*"],
+    )
+    assert result == []
+
+
+# --- audit: non-dependabot head branch (line 90) ---
+
+
+def test_audit_non_dependabot_branch_blocked() -> None:
+    result = da.audit(
+        event(ref="feature/my-feature"),
+        POLICY,
+        [".github/workflows/ci.yml"],
+    )
+    assert result.eligible is False
+    assert any("head branch is not dependabot/*" in r for r in result.reasons)
+
+
+# --- render_markdown: with reasons (lines 139-140) ---
+
+
+def test_render_markdown_with_reasons() -> None:
+    from dependabot_automerge import AuditResult
+
+    result = AuditResult(
+        eligible=False,
+        enabled=False,
+        update_type=None,
+        ecosystem=None,
+        reasons=["title does not expose a semver from/to update"],
+    )
+    md = da.render_markdown(result)
+    assert "### Blocking reasons" in md
+    assert "title does not expose a semver from/to update" in md
+
+
+# --- _read_changed_files: empty file raises ValueError (line 220) ---
+
+
+def test_read_changed_files_empty_raises(tmp_path: Path) -> None:
+    empty = tmp_path / "empty.txt"
+    empty.write_text("", encoding="utf-8")
+    with pytest.raises(ValueError, match="empty"):
+        da._read_changed_files(empty)
+
+
+# --- _cmd_audit: error path (lines 152-154) ---
+
+
+def test_cmd_audit_missing_file_returns_error(capsys: pytest.CaptureFixture[str]) -> None:
+    import argparse
+    args = argparse.Namespace(
+        event="/nonexistent/event.json",
+        policy="/nonexistent/policy.json",
+        changed_files="/nonexistent/changed.txt",
+        summary_file=None,
+        output=None,
+    )
+    rc = da._cmd_audit(args)
+    assert rc == 1
+    assert "::error::" in capsys.readouterr().out
+
+
 def test_cli_writes_summary_and_outputs(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     event_path = tmp_path / "event.json"
     policy_path = tmp_path / "policy.json"

@@ -151,3 +151,109 @@ def test_main_emits_post_tool_context(monkeypatch: pytest.MonkeyPatch, capsys: p
 
     out = json.loads(capsys.readouterr().out)
     assert out["hookSpecificOutput"]["hookEventName"] == "PostToolUse"
+
+
+# --- _walk: bounds guard (line 82) ---
+
+
+def test_walk_bounds_limits_output() -> None:
+    # Build a list-of-strings large enough to trigger the len(out) < 200 guard
+    large_list = [str(i) for i in range(300)]
+    result = monitor._walk(large_list)
+    # The walk starts by appending the list itself, then each element
+    # It stops at 200 items regardless of how many remain
+    assert len(result) <= 200
+
+
+# --- extract_pr_number: str decimal path (lines 112-113) ---
+
+
+def test_extract_pr_number_from_str_decimal() -> None:
+    # covers line 112-113
+    result = monitor.extract_pr_number({"number": "42"})
+    assert result == "42"
+
+
+# --- extract_repo: owner+name combo (line 121) ---
+
+
+def test_extract_repo_from_owner_and_name_fields() -> None:
+    # covers line 121
+    result = monitor.extract_repo({"owner": "tvna", "name": "claude-md"})
+    assert result == "tvna/claude-md"
+
+
+# --- _is_owner_repo: false paths (lines 128-131 via extract_repo) ---
+
+
+def test_is_owner_repo_too_many_parts() -> None:
+    assert monitor._is_owner_repo("a/b/c") is False
+
+
+def test_is_owner_repo_invalid_chars() -> None:
+    assert monitor._is_owner_repo("a/b c") is False
+
+
+def test_is_owner_repo_single_part() -> None:
+    assert monitor._is_owner_repo("onlyone") is False
+
+
+# --- start_monitor: exception re-raise (lines 174-175) ---
+
+
+def test_start_monitor_reraises_on_popen_failure(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(monitor.tempfile, "gettempdir", lambda: str(tmp_path))
+
+    def boom(*args: object, **kwargs: object) -> None:
+        raise OSError("popen failed")
+
+    monkeypatch.setattr(subprocess, "Popen", boom)
+    with pytest.raises(OSError, match="popen failed"):
+        monitor.start_monitor(["gh", "pr", "checks", "1", "--watch"])
+
+
+# --- main: malformed JSON and non-dict paths (lines 244-246, 249) ---
+
+
+def test_main_malformed_json_returns_zero(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    monkeypatch.setattr("sys.stdin", type("Input", (), {"read": lambda self: "{{bad"})())
+    assert monitor.main([]) == 0
+    assert "malformed" in capsys.readouterr().err
+
+
+def test_main_non_dict_event_returns_zero(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("sys.stdin", type("Input", (), {"read": lambda self: json.dumps([1, 2])})())
+    assert monitor.main([]) == 0
+
+
+# --- extract_repo: non-dict item skip (line 121) ---
+
+
+def test_extract_repo_skips_non_dict_items() -> None:
+    # Passing a list that contains non-dict items exercises the continue on line 121
+    result = monitor.extract_repo(["not-a-dict", 42, None])
+    assert result is None
+
+
+# --- extract_repo: REPO_KEYS fallback path (lines 128-131) ---
+
+
+def test_extract_repo_from_repo_key_without_owner() -> None:
+    # No 'owner' key, but 'repo' key contains an owner/repo string
+    result = monitor.extract_repo({"repo": "tvna/claude-md"})
+    assert result == "tvna/claude-md"
+
+
+# --- __main__ block (line 257) ---
+
+
+def test_main_block_raises_system_exit(monkeypatch: pytest.MonkeyPatch) -> None:
+    import runpy
+
+    monkeypatch.setattr("sys.stdin", type("Input", (), {"read": lambda self: "   "})())
+    with pytest.raises(SystemExit) as exc_info:
+        runpy.run_path(
+            str(Path(__file__).parent.parent / "scripts" / "post_pr_create_ci_monitor.py"),
+            run_name="__main__",
+        )
+    assert exc_info.value.code == 0
