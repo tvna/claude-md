@@ -61,6 +61,7 @@ import title_policy
 import update_devcontainer_image_pins
 import uv_pin
 import verify_apm_checksums
+import verify_linked_issue_titles
 import verify_readme_translation
 import verify_required_check_contexts
 import verify_ruleset_sync
@@ -144,6 +145,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("uv_pin.py", "read"): "test_uv_pin_workflow_subcommands_match_ci_usage",
     ("uv_pin.py", "stale"): "test_uv_pin_workflow_subcommands_match_ci_usage",
     ("verify_apm_checksums.py", "verify"): "test_verify_apm_checksums_matches_workflow_args",
+    ("verify_linked_issue_titles.py", "verify"): "test_verify_linked_issue_titles_verify_matches_workflow_args",
     ("verify_readme_translation.py", "verify"): "test_verify_readme_translation_matches_workflow_args",
     ("verify_required_check_contexts.py", "verify"): "test_verify_required_check_contexts_matches_workflow_args",
     ("verify_ruleset_sync.py", "verify"): "test_verify_ruleset_sync_matches_workflow_args",
@@ -706,6 +708,35 @@ def test_verify_apm_checksums_matches_workflow_args(tmp_path: Path) -> None:
 
     assert verify_apm_checksums.main(["--root", str(tmp_path), "update"]) == 0
     assert verify_apm_checksums.main(["--root", str(tmp_path), "verify"]) == 0
+
+
+def test_verify_linked_issue_titles_verify_matches_workflow_args(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Mirror the env+argv shape used by portable-pr-policy.yml.
+
+    The workflow shells to
+    ``python3 scripts/verify_linked_issue_titles.py verify
+    --repo "$REPO" --body-file "$body_file"``.
+    Exercise the same shape with get_issue_title stubbed so the test
+    stays hermetic (no GH_TOKEN or network required). Tracked by #941.
+    """
+    body_file = tmp_path / "body.md"
+    body_file.write_text("Closes #941\n", encoding="utf-8")
+    monkeypatch.setattr(
+        verify_linked_issue_titles,
+        "get_issue_title",
+        lambda repo, number, **_k: "ci: valid linked issue title",
+    )
+    assert verify_linked_issue_titles.main(
+        [
+            "verify",
+            "--repo",
+            REPO,
+            "--body-file",
+            str(body_file),
+        ]
+    ) == 0
 
 
 def test_verify_readme_translation_matches_workflow_args(
