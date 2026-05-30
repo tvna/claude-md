@@ -341,3 +341,38 @@ def test_cli_writes_summary_and_outputs(tmp_path: Path, capsys: pytest.CaptureFi
     assert "Dependabot auto-merge audit" in capsys.readouterr().out
     assert "eligible: `true`" in summary_path.read_text(encoding="utf-8")
     assert "should_enable=false" in output_path.read_text(encoding="utf-8")
+
+
+# --- __main__ block (line 252) ---
+
+
+def test_main_block_raises_system_exit(tmp_path: Path) -> None:
+    import runpy
+
+    event_path = tmp_path / "event.json"
+    policy_path = tmp_path / "policy.json"
+    changed_files_path = tmp_path / "changed-files.txt"
+
+    event_path.write_text(json.dumps(event()), encoding="utf-8")
+    policy_path.write_text(json.dumps(POLICY), encoding="utf-8")
+    changed_files_path.write_text(".github/workflows/verify.yml\n", encoding="utf-8")
+
+    import sys
+
+    original_argv = sys.argv[:]
+    sys.argv = [
+        "dependabot_automerge.py",
+        "audit",
+        "--event", str(event_path),
+        "--policy", str(policy_path),
+        "--changed-files", str(changed_files_path),
+    ]
+    try:
+        with pytest.raises(SystemExit) as exc_info:
+            runpy.run_path(
+                str(Path(__file__).parent.parent / "scripts" / "dependabot_automerge.py"),
+                run_name="__main__",
+            )
+        assert exc_info.value.code == 0
+    finally:
+        sys.argv = original_argv

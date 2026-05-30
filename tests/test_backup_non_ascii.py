@@ -379,3 +379,19 @@ class TestMainIfName:
     def test_main_raises_system_exit(self) -> None:
         with pytest.raises(SystemExit):
             backup.main(["unknown-cmd"])
+
+
+class TestBackupMainDunderName:
+    def test_if_name_main(self) -> None:
+        # Line 272-273: __main__ guard
+        import runpy
+
+        with pytest.raises(SystemExit):
+            runpy.run_path(
+                str(
+                    __import__("pathlib").Path(__file__).parent.parent
+                    / "scripts"
+                    / "backup_non_ascii.py"
+                ),
+                run_name="__main__",
+            )

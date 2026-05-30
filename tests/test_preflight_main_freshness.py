@@ -290,3 +290,91 @@ class TestMain:
         exit_code = gate.main([])
         assert exit_code == 0
         assert capsys.readouterr().out == ""
+
+
+# ---------------------------------------------------------------------------
+# fetch_and_record error paths (lines 151-175)
+# ---------------------------------------------------------------------------
+
+
+class TestFetchAndRecord:
+    def test_raises_when_git_not_found(self, tmp_path: Path) -> None:
+        with patch("preflight_main_freshness.shutil.which", return_value=None), pytest.raises(RuntimeError, match="git executable not found"):
+            gate.fetch_and_record(repo=tmp_path, stamp_path=tmp_path / "stamp")
+
+    def test_raises_on_fetch_failure(self, tmp_path: Path) -> None:
+        import subprocess
+        fake_fail = subprocess.CompletedProcess(["git"], returncode=1, stdout="", stderr="network error")
+        with patch("preflight_main_freshness.subprocess.run", return_value=fake_fail), pytest.raises(RuntimeError, match="git fetch origin main failed"):
+            gate.fetch_and_record(repo=tmp_path, stamp_path=tmp_path / "stamp")
+
+    def test_raises_on_rev_parse_failure(self, tmp_path: Path) -> None:
+        import subprocess
+        fetch_ok = subprocess.CompletedProcess(["git"], returncode=0, stdout="", stderr="")
+        rev_fail = subprocess.CompletedProcess(["git"], returncode=1, stdout="", stderr="bad ref")
+        call_count = 0
+
+        def fake_run(*_args, **_kwargs):
+            nonlocal call_count
+            call_count += 1
+            return fetch_ok if call_count == 1 else rev_fail
+
+        with patch("preflight_main_freshness.subprocess.run", side_effect=fake_run), pytest.raises(RuntimeError, match="git rev-parse"):
+            gate.fetch_and_record(repo=tmp_path, stamp_path=tmp_path / "stamp")
+
+    def test_success_returns_stamp(self, tmp_path: Path) -> None:
+        import subprocess
+        fetch_ok = subprocess.CompletedProcess(["git"], returncode=0, stdout="", stderr="")
+        rev_ok = subprocess.CompletedProcess(["git"], returncode=0, stdout="abc1234567890\n", stderr="")
+        call_count = 0
+
+        def fake_run(*_args, **_kwargs):
+            nonlocal call_count
+            call_count += 1
+            return fetch_ok if call_count == 1 else rev_ok
+
+        stamp_path = tmp_path / "stamp"
+        with patch("preflight_main_freshness.subprocess.run", side_effect=fake_run):
+            stamp = gate.fetch_and_record(repo=tmp_path, stamp_path=stamp_path)
+        assert stamp.sha == "abc1234567890"
+
+
+# ---------------------------------------------------------------------------
+# _build_deny_dict (line 210)
+# ---------------------------------------------------------------------------
+
+
+def test_build_deny_dict_returns_hook_output() -> None:
+    result = gate._build_deny_dict("reason text")
+    assert result["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert "reason text" in result["hookSpecificOutput"]["permissionDecisionReason"]
+
+
+# ---------------------------------------------------------------------------
+# _cmd_record via main CLI (lines 225-231)
+# ---------------------------------------------------------------------------
+
+
+class TestCmdRecord:
+    def test_record_success(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+        import subprocess
+        fetch_ok = subprocess.CompletedProcess(["git"], returncode=0, stdout="", stderr="")
+        rev_ok = subprocess.CompletedProcess(["git"], returncode=0, stdout="abc1234567890\n", stderr="")
+        call_count = 0
+
+        def fake_run(*_args, **_kwargs):
+            nonlocal call_count
+            call_count += 1
+            return fetch_ok if call_count == 1 else rev_ok
+
+        stamp_path = tmp_path / "stamp"
+        with patch("preflight_main_freshness.subprocess.run", side_effect=fake_run), patch.object(gate, "STAMP_FILE", stamp_path):
+            exit_code = gate.main(["record"])
+        assert exit_code == 0
+        assert "OK: recorded" in capsys.readouterr().out
+
+    def test_record_failure_surfaces_error(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+        with patch.object(gate, "fetch_and_record", side_effect=RuntimeError("fetch failed")):
+            exit_code = gate.main(["record"])
+        assert exit_code == 1
+        assert "fetch failed" in capsys.readouterr().err
