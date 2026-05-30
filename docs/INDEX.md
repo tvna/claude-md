@@ -47,6 +47,7 @@ than serving as precedent for new PRD files.
 | [repo-scope.md](standards/repo-scope.md) | Repo purpose statement and the content-based prohibition on agent-tool-specific configuration files (the Q1 disqualifier). | #58 | `.gitignore`; `.claudeignore` (current enforcement; Phase 4 CI gate parked) |
 | [remote-environment.md](standards/remote-environment.md) | Keeping the remote execution environment's `uv` aligned with what CI uses. | #106, #109 | `scripts/install-uv.sh`; `scripts/uv_pin.py`; `pyproject.toml` (`[tool.uv].required-version`) |
 | [performance-metrics.md](standards/performance-metrics.md) | Phase 2 design-only measurement schema for the performance impact of master-source edits. No harness lands with this document. | #58, #61 | (none; Phase 3 harness tracked in #62) |
+| [host-unit-duckdb-metrics.md](standards/host-unit-duckdb-metrics.md) | OTel-compatible per-host DuckDB store for the quality-vs-scope proportionality signal. Supersedes the orphan-branch JSON approach; collect early in DuckDB, export to OTLP later. | #815, #814, #226 | `metrics/duckdb/schema/v1/schema.sql`; `docs/standards/performance-metrics.md` |
 
 ## runbooks/ -- operator procedures
 
