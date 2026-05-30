@@ -71,7 +71,7 @@ Ask yourself: "Would a senior engineer say this is overcomplicated — or unsafe
 
 *Layer: change scope & agent split — what you touch and which agent does it.*
 
-Scale fast, preserve quality, and optimize token usage. Touch only what you must; clean up only your own mess.
+Scaling output is only worth it when quality scales with it: as the volume and scope of change grow, quality must stay proportional — and that proportionality must be measured and observed over time, not assumed. When the measured proportion degrades, stop and re-plan instead of scaling further. Touch only what you must; clean up only your own mess.
 
 When editing existing code:
 
