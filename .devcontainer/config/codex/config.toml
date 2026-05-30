@@ -1,3 +1,98 @@
 # Devcontainer-local defaults. This file lives on a container-engine
 # named volume and is not read by the macOS/container host.
 approval_policy = "never"
+
+[mcp_servers.codex_apps]
+startup_timeout_sec = 120
+
+[projects."/workspaces/claude-md"]
+trust_level = "trusted"
+
+[hooks.state]
+
+[hooks.state."/workspaces/claude-md/.codex/hooks.json:pre_tool_use:0:0"]
+trusted_hash = "sha256:68333561cc7cc6cc045fb1ca185d39c6f2b016d6203a8d3a40e37cef36cbefdd"
+
+[hooks.state."/workspaces/claude-md/.codex/hooks.json:pre_tool_use:1:0"]
+trusted_hash = "sha256:288207f97bb551392a465803a74e1fc4ab3d67c6916f1ac6b5b0a4bbce61e260"
+
+[hooks.state."/workspaces/claude-md/.codex/hooks.json:pre_tool_use:2:0"]
+trusted_hash = "sha256:ebdd5e4129f226d03fd436bdf280816f12a847e43a8ba2d535eab457df7fb5b9"
+
+[hooks.state."/workspaces/claude-md/.codex/hooks.json:pre_tool_use:3:0"]
+trusted_hash = "sha256:9d75e9d4055ff873cc9958a0f7869cad844c59da77b9f9c1c93b393ab28eb1c8"
+
+[hooks.state."/workspaces/claude-md/.codex/hooks.json:pre_tool_use:4:0"]
+trusted_hash = "sha256:a8b0354dd251bd1da3906660e3f71afb28fc432a3acadadd8ae36bcf05c529ef"
+
+[hooks.state."/workspaces/claude-md/.codex/hooks.json:pre_tool_use:5:0"]
+trusted_hash = "sha256:8fb7c60e46a6fde6f5500f26be744c73c2190cc4f7c7e219e58d830b46f39888"
+
+[hooks.state."/workspaces/claude-md/.codex/hooks.json:pre_tool_use:5:1"]
+trusted_hash = "sha256:c08bf1c39d97242a2941f6ecec94cd11931675a85ca52590871cb1d610ec1e4e"
+
+[hooks.state."/workspaces/claude-md/.codex/hooks.json:pre_tool_use:6:0"]
+trusted_hash = "sha256:b7a1f67fa3405b5a9630ef37dd403ff9815ceebac117444bbaf7773e8025a091"
+
+[hooks.state."/workspaces/claude-md/.codex/hooks.json:pre_tool_use:7:0"]
+trusted_hash = "sha256:c98ce70e1c8f85da84641819a53c0c926be8afdc339bae151b6d7b297701f064"
+
+[hooks.state."/workspaces/claude-md/.codex/hooks.json:pre_tool_use:8:0"]
+trusted_hash = "sha256:4da105528d6b489ac03c4971ace5d14dfa7b168ba274c3b17ae1bf6afd87881c"
+
+[hooks.state."/workspaces/claude-md/.codex/hooks.json:pre_tool_use:9:0"]
+trusted_hash = "sha256:807a93d41dfe0ca48a1d869d89173857e0482d20f9a3b1884f5147e046dd5088"
+
+[hooks.state."/workspaces/claude-md/.codex/hooks.json:pre_tool_use:9:1"]
+trusted_hash = "sha256:fc2a7656522e6b4438c3b307bd7c0bd8498b16451fb8bc6a39c0ecedfe8d97fa"
+
+[hooks.state."/workspaces/claude-md/.codex/hooks.json:pre_tool_use:9:2"]
+trusted_hash = "sha256:557c4672feec6d3e93ccfbcfda2f6a722df3f3ae6b6b027f070e3a163930af4a"
+
+[hooks.state."/workspaces/claude-md/.codex/hooks.json:pre_tool_use:10:0"]
+trusted_hash = "sha256:775e02981f43b1ee9c3c2887eaf3af9826284a5002b774accb200a16b6dd1fbc"
+
+[hooks.state."/workspaces/claude-md/.codex/hooks.json:pre_tool_use:10:1"]
+trusted_hash = "sha256:6e72e7959ddb3c6c4b92a08be692813fc0c0db81dc1de0f4237b796cec998611"
+
+[hooks.state."/workspaces/claude-md/.codex/hooks.json:pre_tool_use:10:2"]
+trusted_hash = "sha256:e07534eb6b5bb6abb6546208b9411b39d991a722d64038a29b4442ac6233cc32"
+
+[hooks.state."/workspaces/claude-md/.codex/hooks.json:pre_tool_use:10:3"]
+trusted_hash = "sha256:97744ca9716e896e823d891c2f094acd739797e8f5ec7d5487dca293157e80f7"
+
+[hooks.state."/workspaces/claude-md/.codex/hooks.json:pre_tool_use:11:0"]
+trusted_hash = "sha256:d52a3f3b042d2280a5d6f4b19539f8938c02b3cb8f27ed070d7a7f752aaca4a1"
+
+[hooks.state."/workspaces/claude-md/.codex/hooks.json:post_tool_use:0:0"]
+trusted_hash = "sha256:a35b22ce956e08907614ed014a05de0a62ac6ac5bf5b46236976b3f48a18f1f0"
+
+[hooks.state."/workspaces/claude-md/.codex/hooks.json:post_tool_use:0:1"]
+trusted_hash = "sha256:7a87c9ea4cbf249ac872034ef3af2b044009f4ce750330e97bc6f8d419f57f3a"
+
+[hooks.state."/workspaces/claude-md/.codex/hooks.json:post_tool_use:0:2"]
+trusted_hash = "sha256:abda40a24a7001836267a6abad7df891abb0060b0818faa2c841a6b87aefb8a0"
+
+[hooks.state."/workspaces/claude-md/.codex/hooks.json:post_tool_use:1:0"]
+trusted_hash = "sha256:aa6b1cf3cd91d38569b9e872d7c992b244fc8567b4020776b7ef92c5933148f8"
+
+[hooks.state."/workspaces/claude-md/.codex/hooks.json:post_tool_use:2:0"]
+trusted_hash = "sha256:e5bfbf93296c7138c16bd9969bc06ceea08224599ffec41fdc6efe91a56d0ab6"
+
+[hooks.state."/workspaces/claude-md/.codex/hooks.json:post_tool_use:2:1"]
+trusted_hash = "sha256:9e8005311423c6d7b4ae36c24ff24c482e807747aeed9d93820dcb477af7fcc1"
+
+[hooks.state."/workspaces/claude-md/.codex/hooks.json:post_tool_use:2:2"]
+trusted_hash = "sha256:8271b450a005e6e511e9ef3a2b18b9b5110407ab202f7ac6b2e07052452b7c2f"
+
+[hooks.state."/workspaces/claude-md/.codex/hooks.json:session_start:0:0"]
+trusted_hash = "sha256:0fb5e56802b3b6b790db43758100d08f1d6cbe8ee21cb15ff2096e4490aef4de"
+
+[hooks.state."/workspaces/claude-md/.codex/hooks.json:session_start:1:0"]
+trusted_hash = "sha256:1143e889ac3c811f615c9112b3b96f362bc78cd8f5fc9a2dae6bdc1bc6b7a418"
+
+[hooks.state."/workspaces/claude-md/.codex/hooks.json:session_start:2:0"]
+trusted_hash = "sha256:1e6639006dbecdfc4352e7e96dfb187ae9aecdb58e3e5418cedace82f7c4e041"
+
+[hooks.state."/workspaces/claude-md/.codex/hooks.json:session_start:3:0"]
+trusted_hash = "sha256:d00d3dc2ed6d34be26fbc42714f2f15bbd01a87a36344120005e3679ea0fb4b7"

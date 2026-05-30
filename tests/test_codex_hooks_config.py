@@ -17,6 +17,10 @@ CODEX_HOOKS = ROOT / ".codex" / "hooks.json"
 PERMISSION_REQUEST_PLAN = ROOT / "docs" / "prd" / "codex-permission-request-policy-gate.md"
 DOCS_INDEX = ROOT / "docs" / "INDEX.md"
 CORE_HOOK_EVENTS = {"SessionStart", "PreToolUse", "PostToolUse"}
+UNSUPPORTED_DEVCONTAINER_HOOK_FRAGMENTS = (
+    "CLAUDE_PLUGIN_ROOT",
+    "./hooks/run-hook.cmd",
+)
 
 
 def _load_hooks() -> dict[str, object]:
@@ -66,36 +70,37 @@ def test_all_codex_hook_commands_point_to_repo_files() -> None:
     assert commands
     for command in commands:
         assert isinstance(command, str)
-        if "CLAUDE_PLUGIN_ROOT" in command or command == "./hooks/run-hook.cmd session-start":
-            continue
         path = _repo_script_from_command(command)
         assert not path.startswith("/")
         assert (ROOT / path).exists()
 
 
-def test_codex_superpowers_hooks_are_apm_managed() -> None:
+def test_codex_session_start_hooks_are_runnable_in_devcontainer() -> None:
+    data = _load_hooks()
+    commands: list[str] = []
+    for entry in _command_entries(data):
+        command = entry["command"]
+        assert isinstance(command, str)
+        commands.append(command)
+
+    assert not [
+        command
+        for command in commands
+        if any(fragment in command for fragment in UNSUPPORTED_DEVCONTAINER_HOOK_FRAGMENTS)
+    ]
+
+
+def test_codex_session_start_uses_repo_managed_hooks_only() -> None:
     data = _load_hooks()
     hooks = data["hooks"]
     assert isinstance(hooks, dict)
 
     session_start = hooks["SessionStart"]
     assert isinstance(session_start, list)
-    assert any(
-        isinstance(group, dict)
-        and group.get("_apm_source") == "superpowers"
-        and isinstance(group.get("matcher"), str)
-        and "startup" in group["matcher"]
-        for group in session_start
-    )
+    assert session_start
 
-    legacy_session_start = hooks.get("sessionStart")
-    assert isinstance(legacy_session_start, list)
-    assert legacy_session_start == [
-        {
-            "command": "./hooks/run-hook.cmd session-start",
-            "_apm_source": "superpowers",
-        }
-    ]
+    assert "sessionStart" not in hooks
+    assert not any(isinstance(group, dict) and group.get("_apm_source") == "superpowers" for group in session_start)
 
 
 def test_codex_pre_tool_use_covers_claude_github_write_hooks() -> None:
