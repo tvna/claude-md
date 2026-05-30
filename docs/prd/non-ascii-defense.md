@@ -135,6 +135,8 @@ on:
 
 ## Layer 2.5 — Client-side preflight (`scripts/preflight_non_ascii.py`)
 
+> **Scope note.** The "2.5" label is local to this defense stack: it names a client-side step between Layer 2 (write-side detection) and Layer 3 (read-side hook). It is not a P2/P3 structural layer in `agent-rules-design-philosophy.md` and does not establish a pattern for inserting N.5 slots between other CLAUDE.md sections. The policy rationale (why non-ASCII in write calls is an untrusted-input concern) is owned by P2; the enforcement hook (`scripts/preflight_non_ascii.py`) is owned by P3.
+
 Layer 2 catches non-ASCII *after* it reaches GitHub: every Japanese issue still triggers a workflow run, a label, and an advisory comment — even for the OWNER. From a Claude Code session, that loop fires on every post. Layer 2.5 short-circuits it at the client.
 
 **Mechanism.** A `PreToolUse` hook registered in `.claude/settings.json` (the documented carve-out per [`docs/standards/repo-scope.md`](../standards/repo-scope.md) lines 46-48) intercepts the GitHub MCP write tools:
