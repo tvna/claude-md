@@ -24,6 +24,18 @@ agent has had a chance to call ``subscribe_pr_activity``.
 | Retry on failure | None — fire-and-forget subprocess  | GitHub redeliver mechanism        |
 | Failure mode     | Log written to ``/tmp``; silent    | HTTP error logged by GitHub       |
 
+## Early-failure watch phase vs steady-state heartbeat
+
+The ``gh pr checks --watch`` poll this hook launches runs immediately after
+PR creation and is the *early-failure watch phase*: it detects an
+already-failed required check without waiting for a long session-level
+heartbeat interval. The ``additionalContext`` returned to the agent makes
+this explicit and instructs it to keep immediate/short-interval checks until
+the required checks reach a terminal state, falling back to a longer
+steady-state heartbeat interval only after that initial CI signal is known.
+This closes the gap observed on PR #778 (issue #781), where a 30-minute
+heartbeat monitor was the only signal and reported a CI failure late.
+
 ## Failure mode
 
 If ``Popen`` fails, the hook returns an ``additionalContext`` error message
@@ -184,8 +196,11 @@ def decide(event: dict[str, Any]) -> dict[str, Any] | None:
         return build_context(
             "PR polling/heartbeat CI monitor was not started automatically: "
             "the MCP create_pull_request response did not contain a PR URL or "
-            "number. Immediately run `gh pr checks <pr> --watch` (polling) "
-            "before considering the PR handoff complete. For webhook-backed "
+            "number. Immediately run `gh pr checks <pr> --watch` (polling) as "
+            "the early-failure watch phase, and keep checking on a short "
+            "interval until the required checks reach a terminal state, before "
+            "considering the PR handoff complete. Only then fall back to a "
+            "longer steady-state heartbeat interval. For webhook-backed "
             "monitoring, call subscribe_pr_activity instead."
         )
 
@@ -197,8 +212,11 @@ def decide(event: dict[str, Any]) -> dict[str, Any] | None:
         return build_context(
             "PR polling/heartbeat CI monitor failed to start automatically "
             f"after MCP PR creation for {pr_ref}: {exc}. Immediately run "
-            f"`{' '.join(argv)}` (polling) before considering the PR handoff "
-            "complete. For webhook-backed monitoring, call "
+            f"`{' '.join(argv)}` (polling) as the early-failure watch phase, "
+            "and keep checking on a short interval until the required checks "
+            "reach a terminal state, before considering the PR handoff "
+            "complete. Only then fall back to a longer steady-state heartbeat "
+            "interval. For webhook-backed monitoring, call "
             "subscribe_pr_activity instead."
         )
 
@@ -207,8 +225,14 @@ def decide(event: dict[str, Any]) -> dict[str, Any] | None:
         f"creation for {pr_ref}. Monitor log: {log_path}. This is a "
         "polling/heartbeat monitor (gh pr checks --watch); it is NOT "
         "webhook-backed. For push-based delivery, also call "
-        "subscribe_pr_activity. Continue tracking CI, reviews, and comments "
-        "until the PR reaches a terminal state."
+        "subscribe_pr_activity. This immediate watch is the early-failure "
+        "watch phase: stay on immediate or short-interval CI checks until the "
+        "required checks reach a terminal state (or a timeout window expires) "
+        "so an already-failed check is detected without waiting for a long "
+        "heartbeat interval. Only after that initial CI signal is known should "
+        "you fall back to a longer steady-state heartbeat interval. Continue "
+        "tracking CI, reviews, and comments until the PR reaches a terminal "
+        "state."
     )
 
 

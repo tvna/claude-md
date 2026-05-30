@@ -63,7 +63,31 @@ than waiting for the next poll cycle.
 The two paths are complementary. The polling hook always runs; add
 `subscribe_pr_activity` on top when push-based delivery is needed.
 
-## 4. Preventing confusion
+## 4. Early-failure watch phase vs steady-state heartbeat
+
+A PR monitor has two phases, and conflating them is what let PR #778's CI
+failure go unnoticed until a 30-minute heartbeat fired
+([issue #781](https://github.com/tvna/claude-md/issues/781)):
+
+- **Early-failure watch phase (initial CI discovery).** The moment a PR is
+  opened, the polling hook launches `gh pr checks --watch`, which blocks and
+  reports as soon as the required checks settle. Treat this immediate (or
+  short-interval) watch as the authoritative first signal: keep checking
+  until the required checks reach a terminal state, or a timeout window
+  expires. An already-failed check is therefore detected without waiting for
+  any long heartbeat interval.
+- **Steady-state heartbeat (follow-up).** Only after that initial CI signal
+  is known should a longer session-level heartbeat interval (for example
+  `FREQ=MINUTELY;INTERVAL=30`) take over. The heartbeat is for ongoing
+  follow-up — re-runs, new pushes, late reviews — not for first CI discovery.
+
+**The gap to avoid.** Do not make a long heartbeat the *only* monitor on a
+freshly opened PR. A 30-minute interval as the first signal can leave a
+broken PR idle for up to half an hour. The hook's `additionalContext` names
+the early-failure watch phase explicitly so the agent stays on the immediate
+watch until checks are terminal before relaxing to the heartbeat cadence.
+
+## 5. Preventing confusion
 
 - Operator-facing output from the polling hook **always** uses the phrase
   "polling/heartbeat CI monitor" so operators can distinguish it from a
