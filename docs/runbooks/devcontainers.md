@@ -444,6 +444,24 @@ Codex also gets `bubblewrap` from nixpkgs. Its sandbox checks for `bwrap`
 on `PATH`, so the Codex post-create runtime setup links the Nix-built
 binary into `/usr/local/bin/bwrap` before interactive Codex use.
 
+The Codex devcontainer sets `--security-opt=seccomp=unconfined` in
+`runArgs` because Docker's default seccomp profile blocks the
+`unshare(CLONE_NEWUSER)` and `mount(devpts)` syscalls that bwrap
+requires to set up its sandbox. Without this flag, bwrap fails with
+`Can't mount devpts on /newroot/dev/pts: Permission denied`. This flag
+must live in the devcontainer definition; applying it as an interactive
+workaround after container startup does not take effect. To confirm bwrap
+can set up its sandbox after a container rebuild, run inside the Codex
+devcontainer:
+
+```sh
+bwrap --dev /dev --proc /proc --tmpfs /tmp \
+  --ro-bind /usr /usr --ro-bind /etc /etc \
+  --unshare-all -- echo ok
+```
+
+Exit code 0 confirms devpts mounting succeeds without interactive fixes.
+
 uv is pinned the same way, but its version is read from
 `pyproject.toml` `[tool.uv].required-version` instead of being repeated
 in `flake.nix`. This keeps the devcontainer `nix develop` shell aligned
