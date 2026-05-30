@@ -2029,6 +2029,12 @@ def create_issue(
 # scan_non_ascii.py:313-326).
 _BACK_LINK_MARKER = "<!-- auto-retro:back-link -->"
 
+# Marker for the skip-notification comment posted on the source PR when
+# auto-retro evaluates a merged PR and decides no retro is warranted.
+# Idempotency anchor: reruns update the existing comment rather than
+# stacking duplicates (same convention as _BACK_LINK_MARKER).
+_SKIP_COMMENT_MARKER = "<!-- auto-retro:skip -->"
+
 # Label applied to the source PR after the retro issue is opened and
 # the back-link comment is posted. Emission is the harness contract --
 # subscribed Claude sessions and operators read it as the signal that
@@ -2130,6 +2136,50 @@ def apply_terminal_label(
         f"/repos/{repo}/issues/{pr_number}/labels",
         {"labels": [label]},
     )
+
+
+def post_skip_comment(repo: str, pr_number: int, reason: str) -> str:
+    """PATCH an existing skip comment, else POST a new one.
+
+    Idempotent via :data:`_SKIP_COMMENT_MARKER`. Called on evaluation-based
+    skip paths so the source PR always carries evidence that auto-retro ran
+    and found nothing to act on, distinguishing intentional skips from silent
+    workflow failures. Returns ``"updated <id>"`` or ``"created"``.
+    """
+    body = f"{_SKIP_COMMENT_MARKER}\nauto-retro skipped: {reason}"
+    existing = find_existing_back_link_id(
+        repo, pr_number, marker=_SKIP_COMMENT_MARKER
+    )
+    if existing is not None:
+        gh_api(
+            "PATCH",
+            f"/repos/{repo}/issues/comments/{existing}",
+            {"body": body},
+        )
+        return f"updated {existing}"
+    gh_api(
+        "POST",
+        f"/repos/{repo}/issues/{pr_number}/comments",
+        {"body": body},
+    )
+    return "created"
+
+
+def _post_skip_comment_soft(repo: str, pr_number: int, reason: str) -> None:
+    """Call :func:`post_skip_comment`, surfacing API failures as warnings.
+
+    Fail-soft: a transient network error must NOT change the exit code --
+    the skip is already recorded in the step summary and stdout log. The
+    warning keeps the audit trail intact without masking the original skip.
+    """
+    try:
+        post_skip_comment(repo, pr_number, reason)
+    except subprocess.CalledProcessError as exc:
+        print(
+            f"::warning::post_skip_comment failed "
+            f"(exit {exc.returncode}); skip outcome not visible on PR",
+            file=sys.stderr,
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -2370,6 +2420,7 @@ def run(event: dict[str, Any], repo: str) -> int:
         msg = f"no repair signal fired ({signal_summary})"
         print(f"skip: {msg}")
         _append_summary(_build_summary(pr, "skip", msg))
+        _post_skip_comment_soft(repo, pr.number, msg)
         return 0
 
     # Label-derived prior (refs #582): short the gate when the active
@@ -2384,6 +2435,7 @@ def run(event: dict[str, Any], repo: str) -> int:
     if prior_skip:
         print(f"skip: {prior_reason}")
         _append_summary(_build_summary(pr, "skip", prior_reason))
+        _post_skip_comment_soft(repo, pr.number, prior_reason)
         return 0
     tentative = is_tentative_by_prior(signals, prior)
 
@@ -2429,6 +2481,7 @@ def run(event: dict[str, Any], repo: str) -> int:
             msg = f"no standalone repair workload ({signal_summary})"
         print(f"skip: {msg}")
         _append_summary(_build_summary(pr, "skip", msg))
+        _post_skip_comment_soft(repo, pr.number, msg)
         return 0
     title = build_retro_title(pr)
     body = build_retro_body(
