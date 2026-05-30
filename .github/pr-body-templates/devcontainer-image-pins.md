@@ -15,7 +15,7 @@ Refs #696.
 
 - Assumption: the published tag contains the expected amd64 and arm64 manifests because the publish job succeeded.
 
-## Risk & blast radius
+## Risk and blast radius
 
 - Limited to local devcontainer image pins and the devcontainer runbook.
 

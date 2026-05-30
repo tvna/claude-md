@@ -6,7 +6,7 @@ Bound in ``.claude/settings.json`` to
 PreToolUse event JSON from stdin and, when the drafted PR body would
 fail the baseline H2/H3 heading existence check enforced by
 ``scripts/body_policy.py`` (the ``_PR_REQUIRED`` tuple: Facts /
-Assumptions / Risk & blast radius / Rollback / Verification /
+Assumptions / Risk and blast radius / Rollback / Verification /
 Checklist), emits a ``permissionDecision: "deny"`` JSON on stdout so
 the operator can add the missing sections BEFORE the API call instead
 of round-tripping through ``verify-body-policy.yml``.
@@ -108,7 +108,7 @@ def build_deny_reason(tool_name: str, missing: list[str]) -> str:
         f"missing entry above. See .github/PULL_REQUEST_TEMPLATE.md for "
         f"the canonical shape and docs/standards/issue-pr-body-standard.md for "
         f"per-section guidance. Heading text is case-sensitive but the "
-        f"server treats `Risk & blast radius` and `Risk and blast "
+        f"server treats `Risk and blast radius` and `Risk & blast "
         f"radius` as equivalent."
     )
 

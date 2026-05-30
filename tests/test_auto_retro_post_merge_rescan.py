@@ -30,7 +30,7 @@ _PR_BODY_WITH_POST_MERGE = (
     "## Related Issue\n\nCloses #100\n\n"
     "## Facts\n\n- a\n\n"
     "## Assumptions\n\n- a\n\n"
-    "## Risk & blast radius\n\n- low\n\n"
+    "## Risk and blast radius\n\n- low\n\n"
     "## Rollback\n\n- revert\n\n"
     "## Verification\n\n"
     "- command: `echo ok`\n"
