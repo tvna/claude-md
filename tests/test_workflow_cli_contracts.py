@@ -45,6 +45,7 @@ import ruleset_drift
 import rulesets_apply
 import scan_apm_portability
 import scan_design_philosophy_drift
+import scan_hook_coverage_drift
 import scan_maintainability_metrics
 import scan_markdown_links
 import scan_non_ascii
@@ -126,6 +127,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("scan_markdown_links.py", "verify"): "test_scan_markdown_links_verify_matches_workflow_args",
     ("scan_maintainability_metrics.py", "verify"): "test_scan_maintainability_metrics_verify_matches_workflow_args",
     ("scan_non_ascii.py", "run"): "test_scan_non_ascii_run_matches_workflow_env",
+    ("scan_hook_coverage_drift.py", "verify"): "test_scan_hook_coverage_drift_verify_matches_workflow_args",
     ("scan_preflight_drift.py", "verify"): "test_scan_preflight_drift_verify_matches_workflow_args",
     ("scan_retro_followup_drift.py", "run"): "test_scan_retro_followup_drift_run_matches_workflow_env",
     ("scan_secret_runbooks.py", "verify"): "test_scan_secret_runbooks_verify_matches_workflow_args",
@@ -1255,6 +1257,12 @@ def test_verify_required_check_contexts_matches_workflow_args() -> None:
             ".github/workflows",
         ]
     ) == 0
+
+
+def test_scan_hook_coverage_drift_verify_matches_workflow_args() -> None:
+    """Mirrors the `Verify Claude/Codex hook coverage parity` step in
+    `.github/workflows/verify-agents.yml` (issue #615)."""
+    assert scan_hook_coverage_drift.main(["verify"]) == 0
 
 
 def test_scan_preflight_drift_verify_matches_workflow_args() -> None:

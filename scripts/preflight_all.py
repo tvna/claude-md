@@ -168,6 +168,12 @@ STEPS: tuple[Step, ...] = (
         argv=("python3", "scripts/scan_preflight_drift.py", "verify"),
     ),
     Step(
+        # Refs #615. Fails when a Claude hook script is absent from Codex
+        # coverage and is not in the explicit allowlist in the script.
+        name="scan_hook_coverage_drift",
+        argv=("python3", "scripts/scan_hook_coverage_drift.py", "verify"),
+    ),
+    Step(
         # Refs #545. Static check that every tests/test_*.py declares
         # exactly one module-scope shard marker so the lint-scripts-pytest
         # matrix neither skips a file nor double-counts one. Runs before
