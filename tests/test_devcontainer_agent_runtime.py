@@ -39,26 +39,21 @@ def test_entrypoints_run_runtime_configuration() -> None:
 
 def test_runtime_script_installs_gh_and_container_scoped_defaults() -> None:
     script = (REPO_ROOT / ".devcontainer/scripts/configure-agent-runtime.sh").read_text(encoding="utf-8")
+    claude_settings = (REPO_ROOT / ".devcontainer/config/claude/settings.json").read_text(encoding="utf-8")
+    agent_prompt = (REPO_ROOT / ".devcontainer/config/profile.d/claude-md-agent-prompt.sh").read_text(encoding="utf-8")
 
     assert "install_nix_binary gh-cli gh" in script
-    assert '"Bash(*)"' in script
-    assert '"mcp__github__*"' in script
+    assert '"Bash(*)"' in claude_settings
+    assert '"mcp__github__*"' in claude_settings
     assert "/etc/profile.d/claude-md-agent-prompt.sh" in script
-    assert "agent:repo(branch)" in script
+    assert "agent:repo(branch)" in agent_prompt
 
 
 def test_codex_runtime_config_uses_supported_toml_keys() -> None:
-    script = (REPO_ROOT / ".devcontainer/scripts/configure-agent-runtime.sh").read_text(encoding="utf-8")
-
-    start = script.index('tee "$home_dir/.codex/config.toml"')
-    heredoc_start = script.index("<<'TOML'", start)
-    toml_start = script.index("\n", heredoc_start) + 1
-    toml_end = script.index("\nTOML", toml_start)
-    codex_toml = script[toml_start:toml_end]
+    codex_toml = (REPO_ROOT / ".devcontainer/config/codex/config.toml").read_text(encoding="utf-8")
 
     assert 'approval_policy = "never"' in codex_toml
-    assert "[mcp_servers.codex_apps]" in codex_toml
-    assert "startup_timeout_sec = 120" in codex_toml
+    assert "[mcp_servers.codex_apps]" not in codex_toml
     assert "[permissions]" not in codex_toml
     assert "allow = [" not in codex_toml
 
