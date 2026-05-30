@@ -80,11 +80,14 @@ the host token stale on the next session. Read-write is the correct
 configuration for this workflow.
 
 Because the host's `~/.config/gh` directory is exposed to every process
-in the container, its file modes must be restrictive. The `postStartCommand`
-runs `.devcontainer/scripts/check-gh-config-permissions.sh` before the
-egress allowlist; it exits 1 and prints remediation steps when modes are
-too permissive. If the container fails to start with a permission error,
-fix the modes on the host:
+in the container, its file modes must be restrictive. The host-side
+`initializeCommand` runs `.devcontainer/scripts/check-gh-config-permissions.sh`
+before the image and stale-container checks; it exits 1 and prints
+remediation steps when modes are too permissive. The guard runs before
+container startup because macOS/Podman bind mounts can report permissive
+Linux modes inside the container even when the host files are already
+restrictive. If the container fails to start with a permission error, fix
+the modes on the host:
 
 ```sh
 chmod 700 ~/.config/gh
