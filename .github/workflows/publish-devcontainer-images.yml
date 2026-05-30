@@ -145,7 +145,8 @@ jobs:
               echo "auto-merge already enabled: $pr_url"
               return 0
             fi
-            gh pr merge "$pr_url" --auto --squash
+            gh pr merge "$pr_url" --auto --squash \
+              || echo "::warning::auto-merge request failed for $pr_url; enable it manually if needed"
           }
 
           if git ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
