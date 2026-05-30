@@ -427,3 +427,13 @@ class TestMainExitCode:
         assert code == 1
         captured = capsys.readouterr()
         assert "git invocation failed" in captured.err
+
+
+def test_main_block_exits_via_runpy(monkeypatch: pytest.MonkeyPatch) -> None:
+    import runpy
+    import sys
+
+    monkeypatch.setattr(sys, "argv", ["verify_readme_translation", "--help"])
+    with pytest.raises(SystemExit) as exc_info:
+        runpy.run_module("verify_readme_translation", run_name="__main__")
+    assert exc_info.value.code == 0

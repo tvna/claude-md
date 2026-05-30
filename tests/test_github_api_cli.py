@@ -199,3 +199,32 @@ class TestMain:
         )
         assert rc == 2
         assert "JSON" in stderr_buf.getvalue()
+
+    def test_fields_with_non_json_response_returns_body_verbatim(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("GH_TOKEN", "tok")
+        import io
+
+        import github_api as gapi
+        monkeypatch.setattr(gapi, "apply_call", lambda **_: (200, "not-json-at-all"))
+
+        stdout_buf = io.StringIO()
+        monkeypatch.setattr("sys.stdout", stdout_buf)
+        monkeypatch.setattr("sys.stderr", io.StringIO())
+
+        rc = main(
+            ["GET", "https://api.github.com/repos/o/r/issues", "--fields", "number"]
+        )
+        assert rc == 0
+        assert stdout_buf.getvalue() == "not-json-at-all"
+
+
+def test_main_block_exits_via_runpy(monkeypatch: pytest.MonkeyPatch) -> None:
+    import runpy
+    import sys
+
+    monkeypatch.setattr(sys, "argv", ["github_api", "--help"])
+    with pytest.raises(SystemExit) as exc_info:
+        runpy.run_module("github_api", run_name="__main__")
+    assert exc_info.value.code == 0

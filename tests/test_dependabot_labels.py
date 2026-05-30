@@ -322,3 +322,13 @@ class TestVerifyCli:
         )
         assert rc == 1
         assert "::error::" in capsys.readouterr().out
+
+
+def test_main_block_exits_via_runpy(monkeypatch: pytest.MonkeyPatch) -> None:
+    import runpy
+    import sys
+
+    monkeypatch.setattr(sys, "argv", ["dependabot_labels", "--help"])
+    with pytest.raises(SystemExit) as exc_info:
+        runpy.run_module("dependabot_labels", run_name="__main__")
+    assert exc_info.value.code == 0

@@ -1519,3 +1519,877 @@ class TestCli:
         assert "FIRST EPSS" in summary_text
         assert "| EPSS |" in summary_text
         assert "0.421 (p95.2%)" in summary_text
+
+
+# ---------------------------------------------------------------------------
+# parse_uv_lock() -- non-list packages and non-dict package entries
+# ---------------------------------------------------------------------------
+
+
+class TestParseUvLockEdgeCases:
+    def test_non_list_packages_returns_empty(self, tmp_path: Path) -> None:
+        lock = tmp_path / "uv.lock"
+        lock.write_text('[metadata]\n[package]\nname = "x"\n', encoding="utf-8")
+        # TOML with package as a dict (not array) hits the non-list guard.
+        # We patch the return value directly to avoid TOML format constraints.
+        import tomllib
+
+        content = lock.read_text(encoding="utf-8")
+        data = tomllib.loads(content)
+        data["package"] = "not-a-list"
+        # Test the function with the guard by creating a TOML that produces a dict for "package".
+        # Easier: write valid TOML with a non-array package value and call via Path.
+        lock.write_text('[package]\nname = "x"\n', encoding="utf-8")
+        result = triage.parse_uv_lock(lock)
+        # "package" is a TOML table (dict), not an array -> isinstance check triggers
+        assert result == []
+
+    def test_non_dict_package_entry_is_skipped(self, tmp_path: Path) -> None:
+        lock = tmp_path / "uv.lock"
+        # Write valid TOML array with one valid and one non-dict entry.
+        # TOML arrays of tables require [[package]] syntax.
+        lock.write_text(
+            '[[package]]\nname = "pytest"\nversion = "8.3.5"\n',
+            encoding="utf-8",
+        )
+        # patch the loaded data to include a non-dict entry
+        import tomllib as _tomllib
+
+        orig_loads = _tomllib.loads
+
+        def fake_loads(text: str) -> dict:
+            data = orig_loads(text)
+            data["package"] = [{"name": "pytest", "version": "8.3.5"}, "not-a-dict"]
+            return data
+
+        import sys
+        sys.modules["tomllib"].loads = fake_loads  # type: ignore[attr-defined]
+        try:
+            result = triage.parse_uv_lock(lock)
+        finally:
+            sys.modules["tomllib"].loads = orig_loads  # type: ignore[attr-defined]
+        # The non-dict entry should be skipped; only the valid one kept.
+        assert len(result) == 1
+        assert result[0].name == "pytest"
+
+
+# ---------------------------------------------------------------------------
+# parse_workflow_actions() -- missing .github/workflows directory (line 307)
+# ---------------------------------------------------------------------------
+
+
+class TestParseWorkflowActionsNoDir:
+    def test_returns_empty_when_workflow_dir_missing(self, tmp_path: Path) -> None:
+        result = triage.parse_workflow_actions(tmp_path)
+        assert result == []
+
+
+# ---------------------------------------------------------------------------
+# scan_dependencies() -- empty list returns [] immediately (line 438)
+# ---------------------------------------------------------------------------
+
+
+class TestFetchExternalFindingsEmpty:
+    def test_empty_dependencies_returns_empty_list(self, tmp_path: Path) -> None:
+        result = triage.fetch_external_findings([])
+        assert result == []
+
+
+# ---------------------------------------------------------------------------
+# parse_osv_batch_results() -- defensive isinstance checks (lines 540, 545-546, 549-550)
+# ---------------------------------------------------------------------------
+
+
+class TestParseOsvBatchResultsDefensiveChecks:
+    def test_non_list_results_raises(self) -> None:
+        dep = triage.Dependency("requests", "2.31.0", "PyPI", "uv.lock")
+        with pytest.raises(ValueError, match="results array"):
+            triage.parse_osv_batch_results([dep], {"results": "not-a-list"})
+
+    def test_non_dict_result_entry_yields_empty_ids(self) -> None:
+        dep = triage.Dependency("requests", "2.31.0", "PyPI", "uv.lock")
+        result = triage.parse_osv_batch_results([dep], {"results": ["not-a-dict"]})
+        assert result == [(dep, [])]
+
+    def test_non_list_vulns_yields_empty_ids(self) -> None:
+        dep = triage.Dependency("requests", "2.31.0", "PyPI", "uv.lock")
+        result = triage.parse_osv_batch_results([dep], {"results": [{"vulns": "not-a-list"}]})
+        assert result == [(dep, [])]
+
+
+# ---------------------------------------------------------------------------
+# parse_kev_cves() -- non-list vulnerabilities raises; non-dict entry skipped
+# ---------------------------------------------------------------------------
+
+
+class TestParseKevCvesEdgeCases:
+    def test_non_list_vulnerabilities_raises(self) -> None:
+        with pytest.raises(ValueError, match="vulnerabilities array"):
+            triage.parse_kev_cves({"vulnerabilities": "not-a-list"})
+
+    def test_non_dict_vulnerability_is_skipped(self) -> None:
+        result = triage.parse_kev_cves({"vulnerabilities": ["not-a-dict", {"cveID": "CVE-2026-1"}]})
+        assert result == {"CVE-2026-1"}
+
+
+# ---------------------------------------------------------------------------
+# request_json_any() -- mock urlopen (lines 1471-1488)
+# ---------------------------------------------------------------------------
+
+
+class TestRequestJsonAny:
+    def test_get_request_returns_parsed_json(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        import urllib.request as _urllib_request
+
+        response_body = json.dumps({"ok": True}).encode("utf-8")
+
+        class _FakeResponse:
+            def read(self) -> bytes:
+                return response_body
+
+            def __enter__(self) -> _FakeResponse:
+                return self
+
+            def __exit__(self, *args: object) -> None:
+                pass
+
+        monkeypatch.setattr(_urllib_request, "urlopen", lambda req, timeout=None: _FakeResponse())
+        result = triage.request_json_any("https://example.com/api")
+        assert result == {"ok": True}
+
+    def test_post_request_sends_payload(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        import urllib.request as _urllib_request
+
+        captured_requests: list[_urllib_request.Request] = []
+
+        class _FakeResponse:
+            def read(self) -> bytes:
+                return b'{"result": "ok"}'
+
+            def __enter__(self) -> _FakeResponse:
+                return self
+
+            def __exit__(self, *args: object) -> None:
+                pass
+
+        def fake_urlopen(req: object, timeout: object = None) -> _FakeResponse:
+            captured_requests.append(req)  # type: ignore[arg-type]
+            return _FakeResponse()
+
+        monkeypatch.setattr(_urllib_request, "urlopen", fake_urlopen)
+        result = triage.request_json_any("https://example.com/api", payload={"key": "val"})
+        assert result == {"result": "ok"}
+        assert captured_requests[0].method == "POST"
+
+    def test_token_adds_authorization_header(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        import urllib.request as _urllib_request
+
+        captured_requests: list[_urllib_request.Request] = []
+
+        class _FakeResponse:
+            def read(self) -> bytes:
+                return b'{"ok": true}'
+
+            def __enter__(self) -> _FakeResponse:
+                return self
+
+            def __exit__(self, *args: object) -> None:
+                pass
+
+        def fake_urlopen(req: object, timeout: object = None) -> _FakeResponse:
+            captured_requests.append(req)  # type: ignore[arg-type]
+            return _FakeResponse()
+
+        monkeypatch.setattr(_urllib_request, "urlopen", fake_urlopen)
+        triage.request_json_any("https://example.com/api", token="secret-token")
+        auth = captured_requests[0].get_header("Authorization")
+        assert auth == "Bearer secret-token"
+
+
+# ---------------------------------------------------------------------------
+# query_osv_batch() and fetch_cisa_kev() -- mock request_json (lines 499-510)
+# ---------------------------------------------------------------------------
+
+
+class TestNetworkBoundaryFunctions:
+    def test_query_osv_batch_returns_request_json_result(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        payload = {"results": []}
+        monkeypatch.setattr(triage, "request_json", lambda *a, **kw: payload)
+        dep = triage.Dependency("requests", "2.31.0", "PyPI", "uv.lock")
+        result = triage.query_osv_batch([dep])
+        assert result == payload
+
+    def test_fetch_cisa_kev_returns_request_json_result(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        payload = {"vulnerabilities": []}
+        monkeypatch.setattr(triage, "request_json", lambda *a, **kw: payload)
+        result = triage.fetch_cisa_kev()
+        assert result == payload
+
+    def test_fetch_osv_details_no_file_calls_request_json(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        details = {"GHSA-xxxx-xxxx-xxxx": {"aliases": []}}
+        monkeypatch.setattr(triage, "request_json", lambda *a, **kw: details)
+        dep = triage.Dependency("requests", "2.31.0", "PyPI", "uv.lock")
+        result = triage.fetch_osv_details([(dep, ["GHSA-xxxx-xxxx-xxxx"])])
+        assert "GHSA-xxxx-xxxx-xxxx" in result
+
+
+# ---------------------------------------------------------------------------
+# parse_uv_lock() -- file not found (line 195)
+# ---------------------------------------------------------------------------
+
+
+class TestParseUvLockFileMissing:
+    def test_returns_empty_when_file_does_not_exist(self, tmp_path: Path) -> None:
+        result = triage.parse_uv_lock(tmp_path / "nonexistent.lock")
+        assert result == []
+
+
+# ---------------------------------------------------------------------------
+# parse_workflow_actions() -- non-yml file triggers continue (line 307)
+# ---------------------------------------------------------------------------
+
+
+class TestParseWorkflowActionsNonYml:
+    def test_skips_non_yml_files_in_workflow_dir(self, tmp_path: Path) -> None:
+        wf_dir = tmp_path / ".github" / "workflows"
+        wf_dir.mkdir(parents=True)
+        (wf_dir / "README.md").write_text("not a workflow\n")
+        result = triage.parse_workflow_actions(tmp_path)
+        assert result == []
+
+
+# ---------------------------------------------------------------------------
+# _parse_action_ref() -- missing @ (line 348) and malformed ref (line 351)
+# ---------------------------------------------------------------------------
+
+
+class TestParseActionRefEdgeCases:
+    def test_returns_none_when_no_at_sign(self) -> None:
+        assert triage._parse_action_reference("actions/checkout", None) is None
+
+    def test_returns_none_when_no_slash_in_owner_repo(self) -> None:
+        assert triage._parse_action_reference("@abc123", None) is None
+
+
+# ---------------------------------------------------------------------------
+# fetch_osv_details() -- file mode with non-dict details (line 523)
+# ---------------------------------------------------------------------------
+
+
+class TestFetchOsvDetailsNonDictDetails:
+    def test_returns_empty_when_details_not_a_dict(self, tmp_path: Path) -> None:
+        osv_file = tmp_path / "osv.json"
+        osv_file.write_text('{"details": ["not", "a", "dict"]}', encoding="utf-8")
+        dep = triage.Dependency("requests", "2.31.0", "PyPI", "uv.lock")
+        result = triage.fetch_osv_details([(dep, ["GHSA-x-y-z"])], osv_file=osv_file)
+        assert result == {}
+
+
+# ---------------------------------------------------------------------------
+# fetch_epss_scores() -- empty CVEs (594), no live (601-602), live mode (603-608)
+# ---------------------------------------------------------------------------
+
+
+class TestFetchEpssScoresEdgeCases:
+    def test_empty_cves_returns_empty(self) -> None:
+        assert triage.fetch_epss_scores([]) == {}
+
+    def test_no_live_mode_returns_empty(self) -> None:
+        assert triage.fetch_epss_scores(["CVE-2024-0001"]) == {}
+
+    def test_live_mode_calls_request_json(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(triage, "request_json", lambda *a, **kw: {"data": []})
+        result = triage.fetch_epss_scores(["CVE-2024-0001"], epss_live=True)
+        assert result == {}
+
+    def test_live_mode_propagates_network_error_as_empty(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        def _raise(*a: object, **kw: object) -> object:
+            raise OSError("network down")
+
+        monkeypatch.setattr(triage, "request_json", _raise)
+        result = triage.fetch_epss_scores(["CVE-2024-0001"], epss_live=True)
+        assert result == {}
+
+
+# ---------------------------------------------------------------------------
+# _parse_epss_payload() -- non-list rows (614), non-dict row (618)
+# ---------------------------------------------------------------------------
+
+
+class TestParseEpssPayloadEdgeCases:
+    def test_returns_empty_when_data_not_a_list(self) -> None:
+        assert triage._parse_epss_payload({"data": "not-a-list"}) == {}
+
+    def test_skips_non_dict_rows(self) -> None:
+        payload = {"data": ["not-a-dict", {"cve": "CVE-2024-0001", "epss": "0.5", "percentile": "0.9"}]}
+        result = triage._parse_epss_payload(payload)
+        assert "CVE-2024-0001" in result
+
+
+# ---------------------------------------------------------------------------
+# _coerce_epss_float() -- string branch (629-635)
+# ---------------------------------------------------------------------------
+
+
+class TestCoerceEpssFloat:
+    def test_float_value_returned_directly(self) -> None:
+        assert triage._coerce_epss_float(0.5) == pytest.approx(0.5)
+
+    def test_int_value_coerced_to_float(self) -> None:
+        assert triage._coerce_epss_float(42) == pytest.approx(42.0)
+
+    def test_string_numeric_coerced(self) -> None:
+        assert triage._coerce_epss_float("0.123") == pytest.approx(0.123)
+
+    def test_string_non_numeric_returns_none(self) -> None:
+        assert triage._coerce_epss_float("not-a-number") is None
+
+    def test_non_str_non_numeric_returns_none(self) -> None:
+        assert triage._coerce_epss_float(None) is None
+
+
+# ---------------------------------------------------------------------------
+# _attach_epss() -- non-str candidate (654), no match found (659)
+# ---------------------------------------------------------------------------
+
+
+_DEP = triage.Dependency("requests", "2.31.0", "PyPI", "uv.lock")
+
+
+class TestAttachEpssEdgeCases:
+    def test_non_str_candidate_skipped(self) -> None:
+        finding = triage.Finding(
+            dependency=_DEP,
+            vuln_id="GHSA-x-y-z",
+            aliases=(None,),  # type: ignore[arg-type]
+            source="OSV.dev",
+            known_exploited=False,
+        )
+        scores = {"CVE-2024-0001": (0.5, 0.9)}
+        result = triage._attach_epss(finding, scores)
+        assert result.epss_score is None
+
+    def test_no_matching_score_returns_unchanged(self) -> None:
+        finding = triage.Finding(
+            dependency=_DEP,
+            vuln_id="GHSA-x-y-z",
+            aliases=("CVE-2099-9999",),
+            source="OSV.dev",
+            known_exploited=False,
+        )
+        scores = {"CVE-2024-0001": (0.5, 0.9)}
+        result = triage._attach_epss(finding, scores)
+        assert result.epss_score is None
+
+
+# ---------------------------------------------------------------------------
+# fetch_ghsa_advisories() -- empty deps (679), live mode (686-699),
+# no vuln_id (705), dep not affected (712), load ValueError (731)
+# ---------------------------------------------------------------------------
+
+
+class TestFetchGhsaAdvisories:
+    def test_empty_deps_returns_empty(self) -> None:
+        assert triage.fetch_ghsa_advisories([]) == []
+
+    def test_live_mode_queries_per_dep(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        dep = triage.Dependency("requests", "2.28.0", "PyPI", "uv.lock")
+        advisory = {
+            "ghsa_id": "GHSA-a-b-c",
+            "vulnerabilities": [{"package": {"ecosystem": "pip", "name": "requests"}}],
+        }
+        monkeypatch.setattr(triage, "request_json_any", lambda *a, **kw: [advisory])
+        result = triage.fetch_ghsa_advisories([dep])
+        assert len(result) == 1
+        assert result[0].vuln_id == "GHSA-a-b-c"
+
+    def test_live_mode_skips_unknown_ecosystem(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        dep = triage.Dependency("some-pkg", "1.0.0", "Cargo", "Cargo.lock")
+        called = []
+        monkeypatch.setattr(
+            triage, "request_json_any", lambda *a, **kw: called.append(1) or []
+        )
+        result = triage.fetch_ghsa_advisories([dep])
+        assert result == []
+        assert called == []
+
+    def test_advisory_without_ghsa_id_skipped(self, tmp_path: Path) -> None:
+        ghsa_file = tmp_path / "ghsa.json"
+        advisory = {
+            "vulnerabilities": [{"package": {"ecosystem": "pip", "name": "requests"}}]
+        }
+        ghsa_file.write_text(
+            '{"advisories": [' + __import__("json").dumps(advisory) + "]}",
+            encoding="utf-8",
+        )
+        dep = triage.Dependency("requests", "2.28.0", "PyPI", "uv.lock")
+        result = triage.fetch_ghsa_advisories([dep], ghsa_file=ghsa_file)
+        assert result == []
+
+    def test_advisory_not_affecting_dep_skipped(self, tmp_path: Path) -> None:
+        ghsa_file = tmp_path / "ghsa.json"
+        advisory = {
+            "ghsa_id": "GHSA-a-b-c",
+            "vulnerabilities": [{"package": {"ecosystem": "pip", "name": "other-pkg"}}],
+        }
+        ghsa_file.write_text(
+            '{"advisories": [' + __import__("json").dumps(advisory) + "]}",
+            encoding="utf-8",
+        )
+        dep = triage.Dependency("requests", "2.28.0", "PyPI", "uv.lock")
+        result = triage.fetch_ghsa_advisories([dep], ghsa_file=ghsa_file)
+        assert result == []
+
+    def test_load_ghsa_advisories_raises_on_non_list(
+        self, tmp_path: Path
+    ) -> None:
+        ghsa_file = tmp_path / "ghsa.json"
+        ghsa_file.write_text('{"advisories": "not-a-list"}', encoding="utf-8")
+        with pytest.raises(ValueError, match="advisories"):
+            triage.load_ghsa_advisories(ghsa_file)
+
+
+# ---------------------------------------------------------------------------
+# _ghsa_aliases() -- identifier items (749, 752)
+# ---------------------------------------------------------------------------
+
+
+class TestGhsaAliases:
+    def test_non_dict_identifier_item_skipped(self) -> None:
+        advisory = {
+            "ghsa_id": "GHSA-a-b-c",
+            "identifiers": ["not-a-dict", {"value": "CVE-2024-0001", "type": "CVE"}],
+        }
+        aliases = triage._ghsa_aliases(advisory, "GHSA-a-b-c")
+        assert "CVE-2024-0001" in aliases
+
+    def test_identifier_value_added_as_alias(self) -> None:
+        advisory = {
+            "ghsa_id": "GHSA-a-b-c",
+            "identifiers": [{"value": "CVE-2024-9999", "type": "CVE"}],
+        }
+        aliases = triage._ghsa_aliases(advisory, "GHSA-a-b-c")
+        assert "CVE-2024-9999" in aliases
+
+
+# ---------------------------------------------------------------------------
+# _ghsa_affects_dependency() -- all branch paths (764, 767, 770, 773, 775, 779)
+# ---------------------------------------------------------------------------
+
+
+class TestGhsaAffectsDependency:
+    def test_unknown_ecosystem_returns_false(self) -> None:
+        advisory: dict[str, object] = {}
+        dep = triage.Dependency("pkg", "1.0", "Cargo", "Cargo.lock")
+        assert triage._ghsa_affects_dependency(advisory, dep) is False
+
+    def test_non_list_vulnerabilities_returns_false(self) -> None:
+        advisory = {"vulnerabilities": "not-a-list"}
+        dep = triage.Dependency("requests", "2.28.0", "PyPI", "uv.lock")
+        assert triage._ghsa_affects_dependency(advisory, dep) is False
+
+    def test_non_dict_vuln_entry_skipped(self) -> None:
+        advisory = {"vulnerabilities": ["not-a-dict"]}
+        dep = triage.Dependency("requests", "2.28.0", "PyPI", "uv.lock")
+        assert triage._ghsa_affects_dependency(advisory, dep) is False
+
+    def test_non_dict_package_skipped(self) -> None:
+        advisory = {"vulnerabilities": [{"package": "not-a-dict"}]}
+        dep = triage.Dependency("requests", "2.28.0", "PyPI", "uv.lock")
+        assert triage._ghsa_affects_dependency(advisory, dep) is False
+
+    def test_wrong_ecosystem_skipped(self) -> None:
+        advisory = {
+            "vulnerabilities": [{"package": {"ecosystem": "npm", "name": "requests"}}]
+        }
+        dep = triage.Dependency("requests", "2.28.0", "PyPI", "uv.lock")
+        assert triage._ghsa_affects_dependency(advisory, dep) is False
+
+    def test_matching_name_wrong_dep_returns_false(self) -> None:
+        advisory = {
+            "vulnerabilities": [{"package": {"ecosystem": "pip", "name": "other"}}]
+        }
+        dep = triage.Dependency("requests", "2.28.0", "PyPI", "uv.lock")
+        assert triage._ghsa_affects_dependency(advisory, dep) is False
+
+
+# ---------------------------------------------------------------------------
+# fetch_ossf_malicious_packages() -- early returns (804, 806), live mode (813-815)
+# ---------------------------------------------------------------------------
+
+
+class TestFetchOssfMaliciousPackages:
+    def test_empty_deps_returns_empty(self) -> None:
+        assert triage.fetch_ossf_malicious_packages([]) == []
+
+    def test_no_file_no_live_returns_empty(self) -> None:
+        dep = triage.Dependency("pkg", "1.0", "PyPI", "uv.lock")
+        assert triage.fetch_ossf_malicious_packages([dep]) == []
+
+    def test_live_mode_queries_per_dep(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        dep = triage.Dependency("evil-pkg", "1.0.0", "PyPI", "uv.lock")
+        monkeypatch.setattr(
+            triage,
+            "query_osv_malicious_for_dependency",
+            lambda d: [],
+        )
+        result = triage.fetch_ossf_malicious_packages([dep], malpkg_live=True)
+        assert result == []
+
+    def test_load_ossf_records_raises_on_non_list(
+        self, tmp_path: Path
+    ) -> None:
+        malpkg_file = tmp_path / "malpkg.json"
+        malpkg_file.write_text(
+            '{"malicious_packages": "not-a-list"}', encoding="utf-8"
+        )
+        with pytest.raises(ValueError, match="malicious_packages"):
+            triage.load_ossf_malicious_records(malpkg_file)
+
+
+# ---------------------------------------------------------------------------
+# query_osv_malicious_for_dependency() -- network call (855-862)
+# ---------------------------------------------------------------------------
+
+
+class TestQueryOsvMaliciousForDependency:
+    def test_returns_mal_prefixed_records(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        dep = triage.Dependency("evil-pkg", "1.0.0", "PyPI", "uv.lock")
+        vulns = [
+            {"id": "MAL-2024-0001", "aliases": []},
+            {"id": "GHSA-x-y-z"},
+        ]
+        monkeypatch.setattr(triage, "request_json", lambda *a, **kw: {"vulns": vulns})
+        result = triage.query_osv_malicious_for_dependency(dep)
+        assert len(result) == 1
+        assert result[0]["id"] == "MAL-2024-0001"
+
+    def test_non_list_vulns_returns_empty(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        dep = triage.Dependency("pkg", "1.0.0", "PyPI", "uv.lock")
+        monkeypatch.setattr(triage, "request_json", lambda *a, **kw: {"vulns": "bad"})
+        assert triage.query_osv_malicious_for_dependency(dep) == []
+
+
+# ---------------------------------------------------------------------------
+# _ossf_affected_dependencies() -- all defensive branches (876, 880, 883, 887)
+# ---------------------------------------------------------------------------
+
+
+class TestOssfAffectedDependencies:
+    def test_non_list_affected_returns_empty(self) -> None:
+        record: dict[str, object] = {"affected": "not-a-list"}
+        dep = triage.Dependency("pkg", "1.0", "PyPI", "uv.lock")
+        assert triage._ossf_affected_dependencies(record, [dep]) == []
+
+    def test_non_dict_entry_skipped(self) -> None:
+        record = {"affected": ["not-a-dict"]}
+        dep = triage.Dependency("pkg", "1.0", "PyPI", "uv.lock")
+        assert triage._ossf_affected_dependencies(record, [dep]) == []
+
+    def test_non_dict_package_skipped(self) -> None:
+        record = {"affected": [{"package": "not-a-dict"}]}
+        dep = triage.Dependency("pkg", "1.0", "PyPI", "uv.lock")
+        assert triage._ossf_affected_dependencies(record, [dep]) == []
+
+    def test_non_str_ecosystem_skipped(self) -> None:
+        record = {"affected": [{"package": {"ecosystem": 42, "name": "pkg"}}]}
+        dep = triage.Dependency("pkg", "1.0", "PyPI", "uv.lock")
+        assert triage._ossf_affected_dependencies(record, [dep]) == []
+
+
+# ---------------------------------------------------------------------------
+# merge_findings() -- new alias added (line 921)
+# ---------------------------------------------------------------------------
+
+
+class TestMergeFindingsNewAlias:
+    def test_new_alias_from_duplicate_finding_merged(self) -> None:
+        dep = triage.Dependency("requests", "2.31.0", "PyPI", "uv.lock")
+        f1 = triage.Finding(
+            dependency=dep,
+            vuln_id="GHSA-x-y-z",
+            aliases=("CVE-2024-0001",),
+            source="OSV.dev",
+            known_exploited=False,
+        )
+        f2 = triage.Finding(
+            dependency=dep,
+            vuln_id="GHSA-x-y-z",
+            aliases=("CVE-2024-0001", "CVE-2024-0002"),
+            source="GitHub Advisory",
+            known_exploited=False,
+        )
+        merged = triage.merge_findings([f1, f2])
+        assert len(merged) == 1
+        assert "CVE-2024-0002" in merged[0].aliases
+
+
+# ---------------------------------------------------------------------------
+# fetch_nvd_metadata() -- file mode error branches (963-964, 967), live mode (980-998)
+# ---------------------------------------------------------------------------
+
+
+class TestFetchNvdMetadata:
+    def test_file_mode_ioerror_returns_empty(self, tmp_path: Path) -> None:
+        nonexistent = tmp_path / "nonexistent.json"
+        result = triage.fetch_nvd_metadata(["CVE-2024-0001"], nvd_file=nonexistent)
+        assert result == {}
+
+    def test_file_mode_non_dict_raw_map_returns_empty(
+        self, tmp_path: Path
+    ) -> None:
+        nvd_file = tmp_path / "nvd.json"
+        nvd_file.write_text('{"cves": ["not-a-dict"]}', encoding="utf-8")
+        result = triage.fetch_nvd_metadata(["CVE-2024-0001"], nvd_file=nvd_file)
+        assert result == {}
+
+    def test_live_mode_success(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        cve_payload = {"references": [{"url": "https://nvd.nist.gov/vuln/detail/CVE-2024-0001"}]}
+        nvd_response = {"vulnerabilities": [{"cve": cve_payload}]}
+        monkeypatch.setattr(triage, "request_json", lambda *a, **kw: nvd_response)
+        result = triage.fetch_nvd_metadata(["CVE-2024-0001"])
+        assert "CVE-2024-0001" in result
+
+    def test_live_mode_network_error_continues(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        def _raise(*a: object, **kw: object) -> object:
+            raise OSError("network down")
+
+        monkeypatch.setattr(triage, "request_json", _raise)
+        result = triage.fetch_nvd_metadata(["CVE-2024-0001"])
+        assert result == {}
+
+    def test_live_mode_empty_vulnerabilities_skipped(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(triage, "request_json", lambda *a, **kw: {"vulnerabilities": []})
+        result = triage.fetch_nvd_metadata(["CVE-2024-0001"])
+        assert result == {}
+
+    def test_live_mode_non_dict_first_skipped(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            triage, "request_json", lambda *a, **kw: {"vulnerabilities": ["not-a-dict"]}
+        )
+        result = triage.fetch_nvd_metadata(["CVE-2024-0001"])
+        assert result == {}
+
+    def test_live_mode_non_dict_cve_payload_skipped(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            triage,
+            "request_json",
+            lambda *a, **kw: {"vulnerabilities": [{"cve": "not-a-dict"}]},
+        )
+        result = triage.fetch_nvd_metadata(["CVE-2024-0001"])
+        assert result == {}
+
+
+# ---------------------------------------------------------------------------
+# _extract_nvd_cvss() -- branch paths (1051, 1054, 1064, 1066)
+# ---------------------------------------------------------------------------
+
+
+class TestExtractNvdCvss:
+    def test_non_dict_first_entry_skipped(self) -> None:
+        payload = {
+            "metrics": {"cvssMetricV31": ["not-a-dict"]}
+        }
+        result = triage._extract_nvd_cvss(payload)
+        assert result == (None, None, None)
+
+    def test_non_dict_cvss_data_skipped(self) -> None:
+        payload = {
+            "metrics": {"cvssMetricV31": [{"cvssData": "not-a-dict"}]}
+        }
+        result = triage._extract_nvd_cvss(payload)
+        assert result == (None, None, None)
+
+    def test_none_severity_and_score_falls_through(self) -> None:
+        payload = {
+            "metrics": {
+                "cvssMetricV31": [{"cvssData": {"baseSeverity": None, "baseScore": None}}]
+            }
+        }
+        result = triage._extract_nvd_cvss(payload)
+        assert result == (None, None, None)
+
+
+# ---------------------------------------------------------------------------
+# _extract_nvd_cwes() -- branch paths (1076, 1079, 1082)
+# ---------------------------------------------------------------------------
+
+
+class TestExtractNvdCwes:
+    def test_non_dict_weakness_skipped(self) -> None:
+        payload = {"weaknesses": ["not-a-dict"]}
+        assert triage._extract_nvd_cwes(payload) == ()
+
+    def test_non_list_descriptions_skipped(self) -> None:
+        payload = {"weaknesses": [{"description": "not-a-list"}]}
+        assert triage._extract_nvd_cwes(payload) == ()
+
+    def test_non_dict_desc_entry_skipped(self) -> None:
+        payload = {"weaknesses": [{"description": ["not-a-dict"]}]}
+        assert triage._extract_nvd_cwes(payload) == ()
+
+
+# ---------------------------------------------------------------------------
+# _extract_nvd_references() -- branch paths (1096, 1101)
+# ---------------------------------------------------------------------------
+
+
+class TestExtractNvdReferences:
+    def test_non_dict_ref_entry_skipped(self) -> None:
+        payload = {"references": ["not-a-dict", {"url": "https://example.com"}]}
+        result = triage._extract_nvd_references(payload)
+        assert result == ("https://example.com",)
+
+    def test_max_references_limit_enforced(self) -> None:
+        refs = [{"url": f"https://example.com/{i}"} for i in range(10)]
+        payload = {"references": refs}
+        result = triage._extract_nvd_references(payload)
+        assert len(result) == triage._NVD_MAX_REFERENCES
+
+
+# ---------------------------------------------------------------------------
+# attach_nvd_to_findings() -- no matching NVD enrichment (line 1132)
+# ---------------------------------------------------------------------------
+
+
+class TestAttachNvdToFindingsNoMatch:
+    def test_finding_without_cve_alias_returned_unchanged(self) -> None:
+        dep = triage.Dependency("requests", "2.31.0", "PyPI", "uv.lock")
+        finding = triage.Finding(
+            dependency=dep,
+            vuln_id="GHSA-x-y-z",
+            aliases=(),
+            source="OSV.dev",
+            known_exploited=False,
+        )
+        enrichment = triage.NvdEnrichment(
+            cve_id="CVE-2024-0001",
+            cvss_severity="HIGH",
+            cvss_score=8.5,
+            cvss_version="3.1",
+            cwe_ids=("CWE-79",),
+            references=("https://example.com",),
+            source_url="https://nvd.nist.gov/vuln/detail/CVE-2024-0001",
+        )
+        nvd_map = {"CVE-2024-0001": enrichment}
+        result = triage.attach_nvd_to_findings([finding], nvd_map)
+        assert len(result) == 1
+        assert result[0].nvd_metadata == ()
+
+
+# ---------------------------------------------------------------------------
+# _nvd_cvss_cell() / _nvd_cwe_cell() -- empty metadata (1350, 1362)
+# ---------------------------------------------------------------------------
+
+
+class TestNvdCellHelpers:
+    def test_nvd_cvss_cell_empty_metadata(self) -> None:
+        dep = triage.Dependency("requests", "2.31.0", "PyPI", "uv.lock")
+        finding = triage.Finding(
+            dependency=dep, vuln_id="GHSA-x-y-z", aliases=(), source="OSV.dev",
+            known_exploited=False,
+        )
+        assert triage._nvd_cvss_cell(finding) == ""
+
+    def test_nvd_cwe_cell_empty_metadata(self) -> None:
+        dep = triage.Dependency("requests", "2.31.0", "PyPI", "uv.lock")
+        finding = triage.Finding(
+            dependency=dep, vuln_id="GHSA-x-y-z", aliases=(), source="OSV.dev",
+            known_exploited=False,
+        )
+        assert triage._nvd_cwe_cell(finding) == ""
+
+
+# ---------------------------------------------------------------------------
+# _string_list() -- non-list input (line 1436)
+# ---------------------------------------------------------------------------
+
+
+class TestStringList:
+    def test_non_list_returns_empty(self) -> None:
+        assert triage._string_list("not-a-list") == []
+
+    def test_list_with_strings_returned(self) -> None:
+        assert triage._string_list(["a", "b", 3]) == ["a", "b"]
+
+
+# ---------------------------------------------------------------------------
+# load_json() -- non-dict raises (line 1443)
+# ---------------------------------------------------------------------------
+
+
+class TestLoadJsonNonDict:
+    def test_raises_when_json_is_not_object(self, tmp_path: Path) -> None:
+        f = tmp_path / "data.json"
+        f.write_text("[1, 2, 3]", encoding="utf-8")
+        with pytest.raises(ValueError, match="JSON object"):
+            triage.load_json(f)
+
+
+# ---------------------------------------------------------------------------
+# request_json() -- non-dict response raises (lines 1453-1456)
+# ---------------------------------------------------------------------------
+
+
+class TestRequestJsonNonDict:
+    def test_raises_when_response_is_not_dict(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(triage, "request_json_any", lambda *a, **kw: [1, 2, 3])
+        with pytest.raises(ValueError, match="non-object"):
+            triage.request_json("https://example.com/api")
+
+    def test_returns_dict_on_success(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        expected = {"key": "value"}
+        monkeypatch.setattr(triage, "request_json_any", lambda *a, **kw: expected)
+        result = triage.request_json("https://example.com/api")
+        assert result == expected
+
+
+# ---------------------------------------------------------------------------
+# main() -- OSError/ValueError exception handler (lines 1620-1622)
+# ---------------------------------------------------------------------------
+
+
+class TestThreatIntelMainExceptionHandler:
+    def test_main_catches_oserror_from_cmd_scan(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        def _raise_os(args: object) -> object:
+            raise OSError("disk I/O failed")
+
+        monkeypatch.setattr(triage, "_cmd_scan", _raise_os)
+        rc = triage.main(["scan"])
+        assert rc == 1
+        assert "disk I/O failed" in capsys.readouterr().out
+
+    def test_main_block_exits_via_runpy(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        import runpy
+        import sys
+
+        monkeypatch.setattr(sys, "argv", ["threat_intel_triage", "--help"])
+        with pytest.raises(SystemExit) as exc_info:
+            runpy.run_module("threat_intel_triage", run_name="__main__")
+        assert exc_info.value.code == 0
