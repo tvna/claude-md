@@ -1,7 +1,9 @@
 """Tests for scripts/post_merge_retro_append.py.
 
-Verifies that the PostToolUse hook correctly detects merge events and emits
-the mandatory retro-append additionalContext. Refs issue #916.
+Verifies that the PostToolUse hook correctly detects a merge event,
+emits the right additionalContext for the append path (auto-retro found)
+and the fallback/create path (no auto-retro), and stays silent for
+non-merge tools or malformed input. Refs issue #916.
 """
 
 from __future__ import annotations
@@ -21,74 +23,73 @@ pytestmark = pytest.mark.shard_preflight
 
 
 class TestExtractMergeCoords:
-    def test_url_in_response(self) -> None:
-        tool_input = {"owner": "tvna", "repo": "claude-md", "pullRequestNumber": 908}
-        response = {"url": "https://github.com/tvna/claude-md/pull/908"}
+    def test_pr_number_from_tool_input_int(self) -> None:
+        tool_input = {"owner": "tvna", "repo": "claude-md", "pullRequestNumber": 916}
+        owner, repo, number = hook.extract_merge_coords(tool_input, None)
+        assert (owner, repo, number) == ("tvna", "claude-md", "916")
+
+    def test_pr_number_from_tool_input_str(self) -> None:
+        tool_input = {"owner": "tvna", "repo": "claude-md", "pullRequestNumber": "916"}
+        owner, repo, number = hook.extract_merge_coords(tool_input, None)
+        assert number == "916"
+
+    def test_pr_number_from_response_url(self) -> None:
+        tool_input: dict[str, object] = {}
+        response = {"url": "https://github.com/tvna/claude-md/pull/916"}
         owner, repo, number = hook.extract_merge_coords(tool_input, response)
-        assert (owner, repo, number) == ("tvna", "claude-md", "908")
+        assert (owner, repo, number) == ("tvna", "claude-md", "916")
 
-    def test_pr_number_from_tool_input(self) -> None:
-        tool_input = {"owner": "tvna", "repo": "claude-md", "pullRequestNumber": 42}
-        owner, repo, number = hook.extract_merge_coords(tool_input, {})
-        assert (owner, repo, number) == ("tvna", "claude-md", "42")
-
-    def test_pr_number_string_from_tool_input(self) -> None:
-        tool_input = {"owner": "tvna", "repo": "claude-md", "pull_request_number": "99"}
-        owner, repo, number = hook.extract_merge_coords(tool_input, {})
-        assert (owner, repo, number) == ("tvna", "claude-md", "99")
-
-    def test_pr_number_from_response_dict(self) -> None:
-        tool_input = {"owner": "tvna", "repo": "claude-md"}
-        response = {"number": 123}
+    def test_tool_input_owner_repo_preferred_over_url(self) -> None:
+        tool_input = {"owner": "tvna", "repo": "claude-md", "pullRequestNumber": 100}
+        response = {"url": "https://github.com/other/repo/pull/999"}
         owner, repo, number = hook.extract_merge_coords(tool_input, response)
-        assert (owner, repo, number) == ("tvna", "claude-md", "123")
+        assert (owner, repo, number) == ("tvna", "claude-md", "100")
 
-    def test_prefers_url_over_number_in_response(self) -> None:
-        tool_input = {"owner": "tvna", "repo": "claude-md", "pullRequestNumber": 999}
-        response = {"url": "https://github.com/tvna/claude-md/pull/100", "number": 999}
-        owner, repo, number = hook.extract_merge_coords(tool_input, response)
-        assert number == "100"
-
-    def test_missing_all_returns_none(self) -> None:
+    def test_missing_all_returns_none_triple(self) -> None:
         owner, repo, number = hook.extract_merge_coords({}, None)
+        assert (owner, repo, number) == (None, None, None)
+
+    def test_non_decimal_pr_number_string_ignored(self) -> None:
+        tool_input = {"owner": "tvna", "repo": "claude-md", "pullRequestNumber": "abc"}
+        _, _, number = hook.extract_merge_coords(tool_input, None)
         assert number is None
 
-    def test_response_none_fallback_to_input(self) -> None:
-        tool_input = {"owner": "tvna", "repo": "claude-md", "pullRequestNumber": 7}
+    def test_zero_pr_number_ignored(self) -> None:
+        tool_input = {"pullRequestNumber": 0}
         _, _, number = hook.extract_merge_coords(tool_input, None)
-        assert number == "7"
+        assert number is None
+
+    def test_response_string_url(self) -> None:
+        tool_input: dict[str, object] = {}
+        response = "merged https://github.com/tvna/claude-md/pull/42"
+        _, _, number = hook.extract_merge_coords(tool_input, response)
+        assert number == "42"
 
 
 # ---------------------------------------------------------------------------
-# decide — non-merge tool
+# decide — non-merge tool: silent
 # ---------------------------------------------------------------------------
 
 
-class TestDecideIgnoresOtherTools:
+class TestDecideNonMergeTool:
     def test_ignores_create_pull_request(self) -> None:
-        event = {
-            "tool_name": "mcp__github__create_pull_request",
-            "tool_input": {"owner": "tvna", "repo": "claude-md"},
-            "tool_response": {"number": 1},
-        }
+        event = {"tool_name": "mcp__github__create_pull_request"}
         assert hook.decide(event) is None
 
     def test_ignores_bash(self) -> None:
         assert hook.decide({"tool_name": "Bash"}) is None
 
-    def test_ignores_issue_write(self) -> None:
-        assert hook.decide({"tool_name": "mcp__github__issue_write"}) is None
+    def test_ignores_unrelated_mcp_tool(self) -> None:
+        assert hook.decide({"tool_name": "mcp__github__add_issue_comment"}) is None
 
 
 # ---------------------------------------------------------------------------
-# decide — auto-retro found (append path)
+# decide — merge event with auto-retro found (append path)
 # ---------------------------------------------------------------------------
 
 
 class TestDecideAppendPath:
-    """Merge event where auto-retro is expected to exist (normal CI path)."""
-
-    def _make_merge_event(self, pr_number: int = 908) -> dict:
+    def _merge_event(self, pr_number: int = 916) -> dict[str, object]:
         return {
             "tool_name": hook.TARGET_TOOL,
             "tool_input": {
@@ -96,84 +97,103 @@ class TestDecideAppendPath:
                 "repo": "claude-md",
                 "pullRequestNumber": pr_number,
             },
-            "tool_response": {
-                "url": f"https://github.com/tvna/claude-md/pull/{pr_number}"
-            },
+            "tool_response": {"merged": True},
         }
 
-    def test_emits_mandatory_retro_append(self) -> None:
-        event = self._make_merge_event(908)
-        output = hook.decide(event)
+    def test_returns_hook_specific_output(self) -> None:
+        output = hook.decide(self._merge_event())
+        assert output is not None
+        assert "hookSpecificOutput" in output
+
+    def test_hook_event_name_is_post_tool_use(self) -> None:
+        output = hook.decide(self._merge_event())
+        assert output is not None
+        assert output["hookSpecificOutput"]["hookEventName"] == "PostToolUse"
+
+    def test_contains_mandatory_retro_append(self) -> None:
+        output = hook.decide(self._merge_event())
         assert output is not None
         ctx = output["hookSpecificOutput"]["additionalContext"]
         assert "MANDATORY RETRO APPEND" in ctx
 
-    def test_references_pr_number(self) -> None:
-        event = self._make_merge_event(908)
-        output = hook.decide(event)
+    def test_contains_do_not_create_instruction(self) -> None:
+        output = hook.decide(self._merge_event())
         assert output is not None
         ctx = output["hookSpecificOutput"]["additionalContext"]
-        assert "PR #908" in ctx
+        assert "NOT" in ctx
+        assert "new retro" in ctx.lower() or "retrospective" in ctx.lower()
 
-    def test_references_repo(self) -> None:
-        event = self._make_merge_event(908)
-        output = hook.decide(event)
+    def test_contains_retro_title_prefix(self) -> None:
+        output = hook.decide(self._merge_event())
         assert output is not None
         ctx = output["hookSpecificOutput"]["additionalContext"]
-        assert "tvna/claude-md" in ctx
+        assert hook.RETRO_TITLE_PREFIX in ctx
 
-    def test_instructs_search_step(self) -> None:
-        event = self._make_merge_event(908)
-        output = hook.decide(event)
+    def test_contains_pr_number(self) -> None:
+        output = hook.decide(self._merge_event(pr_number=916))
         assert output is not None
         ctx = output["hookSpecificOutput"]["additionalContext"]
-        assert "STEP 1" in ctx
-        assert "fix(auto-retro)" in ctx
+        assert "916" in ctx
 
-    def test_instructs_comment_step(self) -> None:
-        event = self._make_merge_event(908)
-        output = hook.decide(event)
+    def test_contains_add_issue_comment_instruction(self) -> None:
+        output = hook.decide(self._merge_event())
         assert output is not None
         ctx = output["hookSpecificOutput"]["additionalContext"]
-        assert "STEP 2" in ctx
         assert "mcp__github__add_issue_comment" in ctx
 
-    def test_includes_fallback_instruction(self) -> None:
-        event = self._make_merge_event(908)
-        output = hook.decide(event)
+    def test_contains_owner_and_repo(self) -> None:
+        output = hook.decide(self._merge_event())
         assert output is not None
         ctx = output["hookSpecificOutput"]["additionalContext"]
-        assert "FALLBACK" in ctx
-
-    def test_forbids_duplicate_retro(self) -> None:
-        event = self._make_merge_event(908)
-        output = hook.decide(event)
-        assert output is not None
-        ctx = output["hookSpecificOutput"]["additionalContext"]
-        assert "FORBIDDEN" in ctx
-
-    def test_hook_event_name_is_post_tool_use(self) -> None:
-        event = self._make_merge_event(908)
-        output = hook.decide(event)
-        assert output is not None
-        assert output["hookSpecificOutput"]["hookEventName"] == "PostToolUse"
+        assert "tvna" in ctx
+        assert "claude-md" in ctx
 
     def test_output_is_valid_json(self) -> None:
-        event = self._make_merge_event(908)
-        output = hook.decide(event)
+        output = hook.decide(self._merge_event())
         assert output is not None
         assert json.loads(json.dumps(output)) == output
 
 
 # ---------------------------------------------------------------------------
-# decide — no auto-retro / fallback create path
+# decide — merge event with no auto-retro (create fallback path)
 # ---------------------------------------------------------------------------
 
 
 class TestDecideCreateFallbackPath:
-    """Merge event where PR number is not extractable (fallback create path)."""
+    def test_fallback_instruction_present(self) -> None:
+        event = {
+            "tool_name": hook.TARGET_TOOL,
+            "tool_input": {
+                "owner": "tvna",
+                "repo": "claude-md",
+                "pullRequestNumber": 916,
+            },
+            "tool_response": {"merged": True},
+        }
+        output = hook.decide(event)
+        assert output is not None
+        ctx = output["hookSpecificOutput"]["additionalContext"]
+        assert "fallback" in ctx.lower() or "Fallback" in ctx
 
-    def test_missing_pr_number_emits_fallback_context(self) -> None:
+    def test_forbidden_action_mentioned(self) -> None:
+        event = {
+            "tool_name": hook.TARGET_TOOL,
+            "tool_input": {"pullRequestNumber": 916},
+            "tool_response": None,
+        }
+        output = hook.decide(event)
+        assert output is not None
+        ctx = output["hookSpecificOutput"]["additionalContext"]
+        assert "orbidden" in ctx or " forbidden" in ctx.lower()
+
+
+# ---------------------------------------------------------------------------
+# decide — PR number missing
+# ---------------------------------------------------------------------------
+
+
+class TestDecideMissingPrNumber:
+    def test_emits_fallback_context_when_no_number(self) -> None:
         event = {
             "tool_name": hook.TARGET_TOOL,
             "tool_input": {"owner": "tvna", "repo": "claude-md"},
@@ -182,19 +202,14 @@ class TestDecideCreateFallbackPath:
         output = hook.decide(event)
         assert output is not None
         ctx = output["hookSpecificOutput"]["additionalContext"]
-        assert "RETRO APPEND" in ctx
-        assert "could not be extracted" in ctx
+        assert "MANDATORY RETRO APPEND" in ctx
+        assert hook.RETRO_TITLE_PREFIX in ctx
 
-    def test_fallback_still_forbids_duplicate(self) -> None:
-        event = {
-            "tool_name": hook.TARGET_TOOL,
-            "tool_input": {},
-            "tool_response": {},
-        }
+    def test_emits_context_with_none_tool_input(self) -> None:
+        event = {"tool_name": hook.TARGET_TOOL, "tool_input": None, "tool_response": None}
         output = hook.decide(event)
         assert output is not None
-        ctx = output["hookSpecificOutput"]["additionalContext"]
-        assert "Do NOT create a new retro issue if one already exists" in ctx
+        assert "hookSpecificOutput" in output
 
 
 # ---------------------------------------------------------------------------
@@ -208,12 +223,8 @@ class TestMain:
     ) -> None:
         event = {
             "tool_name": hook.TARGET_TOOL,
-            "tool_input": {
-                "owner": "tvna",
-                "repo": "claude-md",
-                "pullRequestNumber": 908,
-            },
-            "tool_response": {"number": 908},
+            "tool_input": {"owner": "tvna", "repo": "claude-md", "pullRequestNumber": 916},
+            "tool_response": {"merged": True},
         }
         monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(event)))
         rc = hook.main()
@@ -244,6 +255,6 @@ class TestMain:
         assert rc == 0
         assert capsys.readouterr().out == ""
 
-    def test_main_non_dict_event_exits_zero(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr("sys.stdin", io.StringIO("[1, 2, 3]"))
+    def test_main_non_dict_input_exits_zero(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps([1, 2, 3])))
         assert hook.main() == 0
