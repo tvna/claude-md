@@ -38,27 +38,36 @@ Nix package outputs, and link the GitHub CLI to `/usr/local/bin/gh`:
 | Claude | `claude --version` and `gh --version` |
 | Codex | `codex --version` and `gh --version` |
 
-Each agent entrypoint mounts container-engine named volumes for login
-state. These volumes are scoped to the local Podman or Docker host, not
-to the repository and not to the macOS filesystem:
+Each agent entrypoint uses a mix of named volumes and host bind mounts
+for login state:
 
-| Agent | Persistent paths |
-|---|---|
-| Claude | `/home/claude/.claude`, `/home/claude/.config/gh` |
-| Codex | `/home/codex/.codex`, `/home/codex/.config/gh` |
+| Agent | Path | Mechanism |
+|---|---|---|
+| Claude | `/home/claude/.claude` | named volume `claude-md-claude-session` |
+| Claude | `/home/claude/.config/gh` | bind mount from `~/.config/gh` on the host |
+| Codex | `/home/codex/.codex` | named volume `claude-md-codex-session` |
+| Codex | `/home/codex/.config/gh` | bind mount from `~/.config/gh` on the host |
 
-Rebuilding or recreating the same devcontainer keeps the corresponding
-agent and GitHub CLI login state as long as the same container host keeps
-those volumes. Removing the named volume resets that login state. Do not
-copy these directories into the repository or into host dotfiles; they
-may contain tokens or session material.
+The agent session volume is scoped to the local Podman or Docker host.
+The GitHub CLI login state is sourced directly from the host path
+`~/.config/gh` so it survives container rebuilds and codex container
+replacements without re-authentication (issue #902). Do not copy these
+directories into the repository; they may contain tokens or session material.
 
-To reset the persisted sessions, stop the affected containers first,
-then remove the agent-specific volumes from the container host:
+To reset the persisted agent session, stop the affected container first,
+then remove the agent-specific session volume from the container host:
 
 ```sh
-podman volume rm claude-md-claude-session claude-md-claude-gh
-podman volume rm claude-md-codex-session claude-md-codex-gh
+podman volume rm claude-md-claude-session
+podman volume rm claude-md-codex-session
+```
+
+To reset the GitHub CLI login state, run `gh auth logout` inside the
+container, or delete `~/.config/gh/hosts.yml` on the host. If upgrading
+from a configuration that used named gh volumes, prune the orphans:
+
+```sh
+podman volume rm claude-md-claude-gh claude-md-codex-gh 2>/dev/null || true
 ```
 
 The runtime setup writes DevContainer-local defaults into the mounted
