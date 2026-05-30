@@ -6,7 +6,8 @@
   "remoteUser": "codex",
   "updateRemoteUserUID": false,
   "runArgs": [
-    "--cap-add=NET_ADMIN"
+    "--cap-add=NET_ADMIN",
+    "--security-opt=seccomp=unconfined"
   ],
   "mounts": [
     "source=claude-md-codex-session,target=/home/codex/.codex,type=volume",
