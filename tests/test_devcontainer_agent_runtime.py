@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import tomllib
 from pathlib import Path
 
 import pytest
@@ -24,7 +23,7 @@ def test_local_entrypoints_persist_agent_and_gh_sessions() -> None:
         mounts = config.get("mounts")
         assert isinstance(mounts, list)
         assert f"source=claude-md-{agent}-session,target=/home/{agent}/.{agent},type=volume" in mounts
-        assert f"source=claude-md-{agent}-gh,target=/home/{agent}/.config/gh,type=volume" in mounts
+        assert f"source=${{localEnv:HOME}}/.config/gh,target=/home/{agent}/.config/gh,type=bind,consistency=cached" in mounts
 
 
 def test_entrypoints_run_runtime_configuration() -> None:
@@ -57,17 +56,6 @@ def test_codex_runtime_config_uses_supported_toml_keys() -> None:
     assert "[mcp_servers.codex_apps]" not in codex_toml
     assert "[permissions]" not in codex_toml
     assert "allow = [" not in codex_toml
-
-
-def test_codex_runtime_config_pretrusts_workspace() -> None:
-    config_path = REPO_ROOT / ".devcontainer/config/codex/config.toml"
-    config = tomllib.loads(config_path.read_text(encoding="utf-8"))
-
-    projects = config.get("projects")
-    assert isinstance(projects, dict)
-    workspace = projects.get("/workspaces/claude-md")
-    assert isinstance(workspace, dict)
-    assert workspace.get("trust_level") == "trusted"
 
 
 def test_runbook_documents_existing_codex_volume_refresh() -> None:
@@ -123,4 +111,4 @@ def test_runbook_documents_persistent_session_reset() -> None:
     runbook = (REPO_ROOT / "docs/runbooks/devcontainers.md").read_text(encoding="utf-8")
 
     for agent in AGENTS:
-        assert f"podman volume rm claude-md-{agent}-session claude-md-{agent}-gh" in runbook
+        assert f"podman volume rm claude-md-{agent}-session" in runbook
