@@ -1,6 +1,6 @@
 {
   "name": "claude-md Claude",
-  "image": "ghcr.io/tvna/claude-md-devcontainer-claude:bb41e8f4721c8c8a7d56cb7671812d579f0e5888",
+  "image": "ghcr.io/tvna/claude-md-devcontainer-claude:9af12b82090376e8273a6ec1792af8c0ed1225c0",
   "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
   "initializeCommand": "bash .devcontainer/scripts/ensure-agent-image.sh claude",
   "remoteUser": "claude",
