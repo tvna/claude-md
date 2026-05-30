@@ -45,6 +45,7 @@ import ruleset_drift
 import rulesets_apply
 import scan_apm_portability
 import scan_design_philosophy_drift
+import scan_docs_inventory
 import scan_hook_coverage_drift
 import scan_maintainability_metrics
 import scan_markdown_links
@@ -124,6 +125,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("rulesets_apply.py", "auto-delete"): "test_rulesets_apply_plan_and_auto_delete_match_workflow_args",
     ("scan_apm_portability.py", "verify"): "test_scan_apm_portability_verify_matches_workflow_paths",
     ("scan_design_philosophy_drift.py", "verify"): "test_scan_design_philosophy_drift_verify_matches_workflow_paths",
+    ("scan_docs_inventory.py", "verify"): "test_scan_docs_inventory_verify_matches_workflow_args",
     ("scan_markdown_links.py", "verify"): "test_scan_markdown_links_verify_matches_workflow_args",
     ("scan_maintainability_metrics.py", "verify"): "test_scan_maintainability_metrics_verify_matches_workflow_args",
     ("scan_non_ascii.py", "run"): "test_scan_non_ascii_run_matches_workflow_env",
@@ -816,6 +818,11 @@ def test_scan_secret_runbooks_verify_matches_workflow_args() -> None:
 def test_scan_markdown_links_verify_matches_workflow_args() -> None:
     """Mirrors the ``Assert local Markdown links resolve`` step."""
     assert scan_markdown_links.main(["verify"]) == 0
+
+
+def test_scan_docs_inventory_verify_matches_workflow_args() -> None:
+    """Mirrors the ``Assert docs index and lane placement`` step."""
+    assert scan_docs_inventory.main(["verify"]) == 0
 
 
 def test_scan_maintainability_metrics_verify_matches_workflow_args() -> None:

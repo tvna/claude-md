@@ -12,7 +12,7 @@ scanner under ``scripts/scan_retro_followup_drift.py``) record whether
 a given retro was a true positive or a false positive once its
 follow-ups settle.
 
-Operator convention (see ``docs/retro-labels.md``):
+Operator convention (see ``docs/runbooks/retro-labels.md``):
 
 * ``retro:tp``             -- operator-confirmed true positive: the
   follow-up gate or instruction change has landed and is producing the
