@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Client-side preflight for issue and PR title rules (Layer 2.5).
+"""Client-side preflight for issue and PR title rules.
 
 PreToolUse hook invoked by Claude Code on the matcher configured in
 ``.claude/settings.json``. Reads a PreToolUse event JSON from stdin and,
@@ -93,7 +93,7 @@ def extract_title(tool_input: dict[str, Any]) -> str:
     """Return the ``title`` field as a string, or ``""`` if absent / wrong type.
 
     Mirrors :func:`preflight_non_ascii.extract_text_fields` shape so the
-    Layer 2.5 hooks behave consistently on missing payload keys.
+    client-side preflight hooks behave consistently on missing payload keys.
     ``issue_write`` with ``method="update"`` and no title change goes
     through this branch and is allowed.
     """
@@ -152,7 +152,8 @@ def build_non_ascii_deny_reason(tool_name: str, kind: str, title: str, findings:
     """Return the deny reason text for the ASCII-only rule."""
     details = ", ".join(findings)
     return (
-        f"Blocked by scripts/preflight_title_policy.py (Layer 2.5): "
+        f"Blocked by scripts/preflight_title_policy.py "
+        f"(client-side preflight): "
         f"`{tool_name}` {kind} title contains non-ASCII code points "
         f"({details}). The server-side gate scripts/title_policy.py "
         f"(verify-title-policy.yml) rejects this per #155: titles are "
@@ -169,7 +170,8 @@ def build_invalid_type_deny_reason(tool_name: str, kind: str, title: str, offend
     hint = naming_convention_hint(kind)
     types_csv = allowed_types_csv()
     return (
-        f"Blocked by scripts/preflight_title_policy.py (Layer 2.5): "
+        f"Blocked by scripts/preflight_title_policy.py "
+        f"(client-side preflight): "
         f"`{tool_name}` {kind} title does not follow the conventional-"
         f"commit shape required by scripts/title_policy.py "
         f"(verify-title-policy.yml). Offending prefix: {offending!r}. "
@@ -188,7 +190,8 @@ def build_issue_ref_deny_reason(tool_name: str, title: str, refs: list[str], sug
     """Return the deny reason text for the issue-ref rule (PRs only)."""
     refs_csv = ", ".join(refs)
     return (
-        f"Blocked by scripts/preflight_title_policy.py (Layer 2.5): "
+        f"Blocked by scripts/preflight_title_policy.py "
+        f"(client-side preflight): "
         f"`{tool_name}` pull_request title contains issue-reference "
         f"token(s) {refs_csv}. The server-side gate "
         f"scripts/title_policy.py (verify-title-policy.yml) rejects "
@@ -208,7 +211,8 @@ def build_issue_ref_deny_reason(tool_name: str, title: str, refs: list[str], sug
 def build_type_fit_deny_reason(tool_name: str, kind: str, title: str, finding_text: str) -> str:
     """Return the deny reason text for semantic type/title mismatch."""
     return (
-        f"Blocked by scripts/preflight_title_policy.py (Layer 2.5): "
+        f"Blocked by scripts/preflight_title_policy.py "
+        f"(client-side preflight): "
         f"`{tool_name}` {kind} title uses a Conventional Commit type "
         f"that does not fit the detected work category. "
         f"{finding_text}\n\n"

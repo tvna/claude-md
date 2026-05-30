@@ -157,7 +157,7 @@ class TestBuildContextMessage:
     def test_contains_github_carveout(self) -> None:
         msg = plc.build_context_message("@tvna", "ja")
         # The carve-out must name the tool prefix AND the ASCII rule so
-        # the model cannot misread the policy as relaxing Layer 2.5.
+        # the model cannot misread the policy as relaxing the ASCII gate.
         assert "mcp__github__" in msg
         assert "ASCII" in msg
         assert "preflight_non_ascii.py" in msg

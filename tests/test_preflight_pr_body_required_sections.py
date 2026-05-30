@@ -1,4 +1,4 @@
-"""Tests for ``scripts/preflight_pr_body_required_sections.py`` (Layer 2.5 hook).
+"""Tests for ``scripts/preflight_pr_body_required_sections.py``.
 
 The ``scripts/`` directory is added to ``sys.path`` via the ``pythonpath``
 key under ``[tool.pytest.ini_options]`` in ``pyproject.toml``.
@@ -14,7 +14,7 @@ Acceptance criteria from issue #382:
 * multiple sections missing -> deny, reason lists all,
 * empty body -> deny.
 
-Refs #382. Builds on PR #350 (title-side Layer 2.5 precedent) and
+Refs #382. Builds on PR #350 (title-side preflight precedent) and
 PR #372 (sibling shape preflight ``preflight_pr_template_shape.py``).
 """
 

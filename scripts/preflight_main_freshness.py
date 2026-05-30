@@ -145,9 +145,11 @@ def fetch_and_record(
     remote: str = "origin",
     branch: str = "main",
     repo: Path = REPO_ROOT,
-    stamp_path: Path = STAMP_FILE,
+    stamp_path: Path | None = None,
 ) -> FreshnessStamp:
     """Fetch origin/main, resolve SHA, write stamp, and return it."""
+    if stamp_path is None:
+        stamp_path = STAMP_FILE
     git = shutil.which("git")
     if git is None:
         raise RuntimeError("git executable not found on PATH")
@@ -178,7 +180,8 @@ def fetch_and_record(
 def build_deny_reason(tool_name: str, result: FreshnessResult) -> str:
     """Return the deny reason for a stale or missing freshness stamp."""
     return (
-        f"Blocked by scripts/preflight_main_freshness.py (Layer 2.5): "
+        f"Blocked by scripts/preflight_main_freshness.py "
+        f"(client-side preflight): "
         f"`{tool_name}` was called without a current observation of "
         f"origin/main. {result.detail}.\n\n"
         f"To record freshness and unblock:\n"

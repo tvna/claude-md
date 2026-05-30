@@ -4,7 +4,7 @@ Claude Code exposes GitHub write operations as ``mcp__github__<tool>``.
 The Codex GitHub connector exposes the same operations under a different
 naming shape, ``mcp__codex_apps__github._<tool>`` (note the ``codex_apps``
 segment, the ``github.`` dot separator, and the leading underscore on the
-verb). The Layer 2.5 preflight hooks classify a call by its Claude-style
+verb). The client-side preflight hooks classify a call by its Claude-style
 tool name, so connector names must be folded back onto that form before
 the ``_TARGET_TOOLS`` membership checks run -- otherwise a Codex-shaped
 PR/issue write slips past the preflight and is only caught after it has
@@ -20,7 +20,7 @@ recognize is left alone for the server-side gate to handle.
 from __future__ import annotations
 
 # Codex GitHub connector tool name -> Claude-style canonical tool name.
-# Each entry mirrors an operation the Layer 2.5 preflights already gate on
+# Each entry mirrors an operation the client-side preflights already gate on
 # the Claude side; keep this in sync with the connector matcher groups in
 # ``.codex/hooks.json`` and ``.claude/settings.json``.
 CODEX_GITHUB_TOOL_ALIASES: dict[str, str] = {
