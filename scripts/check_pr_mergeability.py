@@ -260,12 +260,13 @@ def run_session_start(
     runner: _Runner = subprocess.run,
     sleeper: Callable[[float], None] = time.sleep,
 ) -> None:
-    """Scan open PRs for dirty mergeability and print a banner if any found."""
+    """Scan open PRs for dirty/behind mergeability and print banners if any found."""
     prs = _list_open_prs(runner=runner)
     if not prs:
         return
 
     dirty: list[str] = []
+    behind: list[str] = []
     for pr in prs:
         number = str(pr.get("number") or "")
         if not number:
@@ -280,15 +281,28 @@ def run_session_start(
         if pr_data is None:
             continue
         state = str(pr_data.get("mergeable_state") or "").lower()
+        url = pr.get("url") or f"{owner}/{repo}#{number}"
         if state == "dirty":
-            url = pr.get("url") or f"{owner}/{repo}#{number}"
             dirty.append(url)
+        elif state == "behind":
+            behind.append(url)
 
     if dirty:
         lines = ["MERGE CONFLICT WARNING: the following open PRs have merge conflicts (mergeable_state=dirty):"]
         for url in dirty:
             lines.append(f"  - {url}")
         lines.append("Rebase or merge the base branch into each branch before continuing work.")
+        print("\n".join(lines))
+
+    if behind:
+        lines = ["OUT-OF-DATE WARNING: the following open PRs are behind their base branch (mergeable_state=behind):"]
+        for url in behind:
+            lines.append(f"  - {url}")
+        lines.append(
+            "Update each branch before pushing new commits: "
+            "`git fetch origin && git rebase origin/<base>` (or `git merge origin/<base>`), "
+            "then force-push."
+        )
         print("\n".join(lines))
 
 
