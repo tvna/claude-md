@@ -324,7 +324,6 @@ class TestDependencyDiscovery:
     def test_parse_transient_uv_run_ignores_non_executable_prose(
         self, tmp_path: Path
     ) -> None:
-        # Per #176: README / runbook prose is not an executable input.
         docs_dir = tmp_path / "docs"
         docs_dir.mkdir(parents=True)
         (docs_dir / "note.md").write_text(
@@ -803,13 +802,6 @@ class TestExternalFindings:
 
 
 class TestEpssEnrichment:
-    """FIRST EPSS enrichment is advisory-only per #173.
-
-    EPSS scores enrich the summary table but never escalate
-    ``threat:response-needed`` on their own; KEV correlation and GHSA
-    malware advisories remain the authoritative response signals.
-    """
-
     @staticmethod
     def _write_empty_kev(path: Path) -> None:
         path.write_text(json.dumps({"vulnerabilities": []}), encoding="utf-8")
@@ -855,11 +847,9 @@ class TestEpssEnrichment:
         assert len(findings) == 1
         assert findings[0].epss_score == 0.4213
         assert findings[0].epss_percentile == 0.9521
-        # Advisory-only: high EPSS without KEV/malware does not escalate.
         assert result["intel_needed"] is True
         assert result["response_needed"] is False
         assert result["recommended_labels"] == [triage.INTEL_LABEL]
-        # finding_to_dict surfaces EPSS for downstream consumers.
         assert result["findings"][0]["epss_score"] == 0.4213
         assert result["findings"][0]["epss_percentile"] == 0.9521
 
@@ -923,7 +913,6 @@ class TestEpssEnrichment:
 
         assert findings[0].known_exploited is True
         assert findings[0].epss_score == 0.88
-        # KEV remains the authoritative response signal; EPSS rides along.
         assert result["response_needed"] is True
         assert result["recommended_labels"] == [
             triage.INTEL_LABEL,
@@ -936,8 +925,6 @@ class TestEpssEnrichment:
         epss = tmp_path / "epss.json"
         self._write_osv_with_cve(osv, "GHSA-abcd-1234-wxyz", "CVE-2026-1111")
         self._write_empty_kev(kev)
-        # EPSS payload omits the relevant CVE -- FIRST returns no row when
-        # the score is not yet published.
         epss.write_text(json.dumps({"data": []}), encoding="utf-8")
 
         findings = triage.fetch_external_findings(
@@ -965,18 +952,10 @@ class TestEpssEnrichment:
     def test_fetch_epss_soft_fails_on_broken_fixture(self, tmp_path: Path) -> None:
         epss = tmp_path / "epss.json"
         epss.write_text("not json", encoding="utf-8")
-        # Soft-fail returns an empty mapping so callers keep working.
         assert triage.fetch_epss_scores(["CVE-2026-1111"], epss_file=epss) == {}
 
 
 class TestNvdEnrichment:
-    """NVD CVE metadata enrichment (#174).
-
-    NVD is a *supplemental* enrichment source -- it must never widen the
-    finding set, never suppress findings on missing data, and never be
-    treated as evidence-of-absence for response decisions.
-    """
-
     def _osv_payload_with_cve_alias(self) -> dict[str, object]:
         return {
             "results": [{"vulns": [{"id": "GHSA-aaaa-bbbb-cccc"}]}],
@@ -1128,7 +1107,6 @@ class TestNvdEnrichment:
         assert result_v2.cvss_score == 5.0
 
     def test_nvd_does_not_alter_findings_without_cve_aliases(self, tmp_path: Path) -> None:
-        """GHSA findings without a CVE alias must not be erased when NVD data is absent."""
         osv = tmp_path / "osv.json"
         kev = tmp_path / "kev.json"
         ghsa = tmp_path / "ghsa.json"
@@ -1513,9 +1491,152 @@ class TestCli:
         result = json.loads(captured.out)
 
         assert rc == 0
-        # EPSS is advisory-only and must not flip response_needed.
         assert result["response_needed"] is False
         summary_text = summary.read_text(encoding="utf-8")
         assert "FIRST EPSS" in summary_text
         assert "| EPSS |" in summary_text
         assert "0.421 (p95.2%)" in summary_text
+
+
+# ---------------------------------------------------------------------------
+# Missing line coverage
+# ---------------------------------------------------------------------------
+
+
+class TestParseOsvBatchResultsBranches:
+    def test_non_dict_result_yields_empty(self) -> None:
+        dep = triage.Dependency("demo", "1.0.0", "PyPI", "lock")
+        data: dict[str, object] = {"results": ["not-a-dict"]}
+        out = triage.parse_osv_batch_results([dep], data)
+        assert out == [(dep, [])]
+
+    def test_non_list_vulns_yields_empty(self) -> None:
+        dep = triage.Dependency("demo", "1.0.0", "PyPI", "lock")
+        data: dict[str, object] = {"results": [{"vulns": "bad"}]}
+        out = triage.parse_osv_batch_results([dep], data)
+        assert out == [(dep, [])]
+
+    def test_non_list_results_raises(self) -> None:
+        dep = triage.Dependency("demo", "1.0.0", "PyPI", "lock")
+        import pytest as _pytest
+        with _pytest.raises(ValueError, match="results array"):
+            triage.parse_osv_batch_results([dep], {"results": "not-a-list"})
+
+
+class TestParseKevCvesBranches:
+    def test_non_list_vulnerabilities_raises(self) -> None:
+        import pytest as _pytest
+        with _pytest.raises(ValueError, match="vulnerabilities array"):
+            triage.parse_kev_cves({"vulnerabilities": "bad"})
+
+    def test_non_dict_vulnerability_entry_is_skipped(self) -> None:
+        result = triage.parse_kev_cves({"vulnerabilities": ["not-a-dict", {"cveID": "CVE-1"}]})
+        assert result == {"CVE-1"}
+
+
+class TestParseEpssPayloadBranches:
+    def test_non_list_data_returns_empty(self) -> None:
+        assert triage._parse_epss_payload({"data": "bad"}) == {}
+
+    def test_non_dict_row_is_skipped(self) -> None:
+        assert triage._parse_epss_payload({"data": ["not-a-dict"]}) == {}
+
+
+class TestCoerceEpssFloat:
+    def test_int_input(self) -> None:
+        assert triage._coerce_epss_float(1) == 1.0
+
+    def test_str_input_valid(self) -> None:
+        assert triage._coerce_epss_float("0.5") == 0.5
+
+    def test_str_input_invalid(self) -> None:
+        assert triage._coerce_epss_float("notfloat") is None
+
+    def test_none_input(self) -> None:
+        assert triage._coerce_epss_float(None) is None
+
+
+class TestAttachEpss:
+    def test_no_scores_returns_finding_unchanged(self) -> None:
+        finding = triage.Finding(
+            dependency=triage.Dependency("demo", "1.0.0", "PyPI", "lock"),
+            vuln_id="CVE-1",
+            aliases=(),
+            source=triage.SOURCE_OSV,
+            known_exploited=False,
+        )
+        assert triage._attach_epss(finding, {}) is finding
+
+    def test_no_match_returns_finding_unchanged(self) -> None:
+        finding = triage.Finding(
+            dependency=triage.Dependency("demo", "1.0.0", "PyPI", "lock"),
+            vuln_id="CVE-1",
+            aliases=(),
+            source=triage.SOURCE_OSV,
+            known_exploited=False,
+        )
+        result = triage._attach_epss(finding, {"CVE-2": (0.5, 0.9)})
+        assert result is finding
+
+
+class TestFetchEpssLivePath:
+    def test_live_mode_calls_request_json_and_returns_scores(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            triage,
+            "request_json",
+            lambda _url: {"data": [{"cve": "CVE-2026-1111", "epss": "0.5", "percentile": "0.9"}]},
+        )
+        result = triage.fetch_epss_scores(["CVE-2026-1111"], epss_live=True)
+        assert result == {"CVE-2026-1111": (0.5, 0.9)}
+
+    def test_live_mode_soft_fails_on_error(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        def raise_err(_url: str) -> dict:
+            raise OSError("network error")
+
+        monkeypatch.setattr(triage, "request_json", raise_err)
+        result = triage.fetch_epss_scores(["CVE-1"], epss_live=True)
+        assert result == {}
+
+
+class TestQueryOsvBatch:
+    def test_calls_request_json(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        captured: dict = {}
+        monkeypatch.setattr(
+            triage,
+            "request_json",
+            lambda url, payload=None, **kw: captured.update({"url": url, "payload": payload}) or {"results": []},
+        )
+        dep = triage.Dependency("demo", "1.0.0", "PyPI", "lock")
+        result = triage.query_osv_batch([dep])
+        assert "results" in result
+        assert captured["payload"] == {
+            "queries": [{"version": "1.0.0", "package": {"name": "demo", "ecosystem": "PyPI"}}]
+        }
+
+
+class TestFetchCisaKev:
+    def test_calls_request_json(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(
+            triage, "request_json", lambda url: {"vulnerabilities": []}
+        )
+        result = triage.fetch_cisa_kev()
+        assert result == {"vulnerabilities": []}
+
+
+class TestFetchOsvDetailsLivePath:
+    def test_live_fetches_each_vuln(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        calls: list[str] = []
+
+        def fake_request(url: str) -> dict:
+            calls.append(url)
+            return {"id": url.split("/")[-1]}
+
+        monkeypatch.setattr(triage, "request_json", fake_request)
+        dep = triage.Dependency("demo", "1.0.0", "PyPI", "lock")
+        result = triage.fetch_osv_details([(dep, ["GHSA-aaaa", "GHSA-bbbb"])])
+        assert set(result.keys()) == {"GHSA-aaaa", "GHSA-bbbb"}
+        assert len(calls) == 2

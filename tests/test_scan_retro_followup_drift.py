@@ -615,3 +615,237 @@ class TestBuildSummary:
     def test_summary_is_ascii(self) -> None:
         out = srfd.build_summary(0, {}, 0)
         out.encode("ascii")  # raises UnicodeEncodeError on any non-ASCII
+
+
+# ---------------------------------------------------------------------------
+# _parse_iso
+# ---------------------------------------------------------------------------
+
+
+class TestParseIso:
+    def test_empty_string_returns_none(self) -> None:
+        # Line 108: early return when text is empty
+        assert srfd._parse_iso("") is None
+
+    def test_whitespace_only_returns_none(self) -> None:
+        assert srfd._parse_iso("   ") is None
+
+
+# ---------------------------------------------------------------------------
+# decide_target_label: fp_candidate aggregate with no existing labels
+# ---------------------------------------------------------------------------
+
+
+class TestDecideTargetLabelFpCandidateAlreadyPresent:
+    def test_fp_candidate_already_present_returns_none(self) -> None:
+        result = srfd.decide_target_label("fp_candidate", [RETRO_FP_CANDIDATE])
+        assert result is None
+
+
+# ---------------------------------------------------------------------------
+# gh_api: exercises subprocess branches (lines 272-293)
+# ---------------------------------------------------------------------------
+
+
+class TestGhApi:
+    def test_get_without_body_calls_subprocess(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import subprocess as sp
+
+        def fake_run(cmd, **kwargs):
+            return sp.CompletedProcess(args=cmd, returncode=0, stdout='{"ok":true}', stderr="")
+
+        monkeypatch.setattr(srfd.subprocess, "run", fake_run)
+        result = srfd.gh_api("GET", "/repos/o/r/issues")
+        assert result == '{"ok":true}'
+
+    def test_post_with_body_uses_input_flag(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import subprocess as sp
+
+        captured: dict[str, Any] = {}
+
+        def fake_run(cmd, **kwargs):
+            captured["cmd"] = cmd
+            captured["input"] = kwargs.get("input")
+            return sp.CompletedProcess(args=cmd, returncode=0, stdout='{"id":1}', stderr="")
+
+        monkeypatch.setattr(srfd.subprocess, "run", fake_run)
+        result = srfd.gh_api("POST", "/repos/o/r/issues/1/labels", {"labels": ["x"]})
+        assert result == '{"id":1}'
+        assert "--input" in captured["cmd"]
+        assert captured["input"] == '{"labels": ["x"]}'
+
+
+# ---------------------------------------------------------------------------
+# search_retro_issues: exercises lines 316-320
+# ---------------------------------------------------------------------------
+
+
+class TestSearchRetroIssues:
+    def test_returns_items_list(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            srfd,
+            "gh_api",
+            lambda *_a, **_kw: '{"items": [{"number": 1}]}',
+        )
+        result = srfd.search_retro_issues("o/r")
+        assert result == [{"number": 1}]
+
+    def test_empty_response_returns_empty_list(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(srfd, "gh_api", lambda *_a, **_kw: "")
+        assert srfd.search_retro_issues("o/r") == []
+
+
+# ---------------------------------------------------------------------------
+# fetch_issue_or_pr: lines 330-336
+# ---------------------------------------------------------------------------
+
+
+class TestFetchIssueOrPr:
+    def test_returns_parsed_json(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            srfd, "gh_api", lambda *_a, **_kw: '{"number": 42}'
+        )
+        result = srfd.fetch_issue_or_pr("o/r", 42)
+        assert result == {"number": 42}
+
+    def test_404_returns_none(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        def raise_404(*_a: Any, **_kw: Any) -> str:
+            exc = subprocess.CalledProcessError(1, ["gh"])
+            exc.stderr = "HTTP 404: Not Found"
+            exc.stdout = ""
+            raise exc
+
+        monkeypatch.setattr(srfd, "gh_api", raise_404)
+        assert srfd.fetch_issue_or_pr("o/r", 999) is None
+
+    def test_non_404_error_propagates(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        def raise_500(*_a: Any, **_kw: Any) -> str:
+            exc = subprocess.CalledProcessError(1, ["gh"])
+            exc.stderr = "HTTP 500: Server Error"
+            exc.stdout = ""
+            raise exc
+
+        monkeypatch.setattr(srfd, "gh_api", raise_500)
+        with pytest.raises(subprocess.CalledProcessError):
+            srfd.fetch_issue_or_pr("o/r", 1)
+
+
+# ---------------------------------------------------------------------------
+# fetch_pr_merged: lines 349-351
+# ---------------------------------------------------------------------------
+
+
+class TestFetchPrMerged:
+    def test_merged_true(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(
+            srfd, "gh_api", lambda *_a, **_kw: '{"merged": true}'
+        )
+        assert srfd.fetch_pr_merged("o/r", 5) is True
+
+    def test_merged_false(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(
+            srfd, "gh_api", lambda *_a, **_kw: '{"merged": false}'
+        )
+        assert srfd.fetch_pr_merged("o/r", 5) is False
+
+
+# ---------------------------------------------------------------------------
+# apply_label: line 356
+# ---------------------------------------------------------------------------
+
+
+class TestApplyLabel:
+    def test_calls_gh_api(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        calls: list[tuple[str, ...]] = []
+        monkeypatch.setattr(
+            srfd,
+            "gh_api",
+            lambda method, path, body=None, **_kw: calls.append((method, path)) or "",
+        )
+        srfd.apply_label("o/r", 1, "retro:fp")
+        assert calls == [("POST", "/repos/o/r/issues/1/labels")]
+
+
+# ---------------------------------------------------------------------------
+# run: retro with non-int number is skipped (line 443)
+# ---------------------------------------------------------------------------
+
+
+class TestRunNonIntRetroNumber:
+    def test_non_int_retro_number_is_skipped(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        fake = _FakeApi(
+            retros=[{"number": "not-an-int", "body": "- [ ] #500", "labels": []}],
+            followups={},
+        )
+        _install_fakes(monkeypatch, fake)
+        assert srfd.run("o/r", today="2026-05-02") == 0
+        assert fake.label_calls == []
+
+
+# ---------------------------------------------------------------------------
+# _cmd_run and main CLI
+# ---------------------------------------------------------------------------
+
+
+class TestCmdRunCli:
+    def test_missing_repo_returns_1(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv("REPO", raising=False)
+        monkeypatch.delenv("GITHUB_REPOSITORY", raising=False)
+        rc = srfd.main(["run"])
+        assert rc == 1
+
+    def test_repo_from_env(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("REPO", "o/r")
+        fake = _FakeApi(retros=[], followups={})
+        _install_fakes(monkeypatch, fake)
+        rc = srfd.main(["run"])
+        assert rc == 0
+
+    def test_main_propagates_called_process_error(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("REPO", "o/r")
+
+        def raise_cpe(*_a: Any, **_kw: Any) -> list[dict[str, Any]]:
+            exc = subprocess.CalledProcessError(1, ["gh"])
+            exc.stderr = "HTTP 500"
+            exc.stdout = ""
+            raise exc
+
+        monkeypatch.setattr(srfd, "search_retro_issues", raise_cpe)
+        rc = srfd.main(["run"])
+        assert rc == 1
+
+    def test_main_if_name(self) -> None:
+        # Line 537: __main__ guard
+        import runpy
+
+        with pytest.raises(SystemExit):
+            runpy.run_path(
+                str(
+                    __import__("pathlib").Path(__file__).parent.parent
+                    / "scripts"
+                    / "scan_retro_followup_drift.py"
+                ),
+                run_name="__main__",
+            )
