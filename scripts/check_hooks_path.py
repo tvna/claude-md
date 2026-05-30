@@ -1,15 +1,24 @@
 #!/usr/bin/env python3
-"""SessionStart hook: surface missing core.hooksPath configuration.
+"""SessionStart hook: ensure core.hooksPath is configured to .githooks.
 
-Refs #760. The pre-push hook at .githooks/pre-push runs the stale-base and
-preflight checks before a push leaves the worktree, but Git only honours it
-when core.hooksPath is pointed at .githooks.  Without that config the hook is
-silently skipped, allowing stale-base branches to reach GitHub.
+Refs #961, #760. The pre-push hook at .githooks/pre-push runs the stale-base
+and preflight checks before a push leaves the worktree, but Git only honours
+it when core.hooksPath is pointed at .githooks.  Without that config the hook
+is silently skipped, allowing stale-base branches to reach GitHub.
 
-This script emits an additionalContext warning when core.hooksPath is not set
-to .githooks so the operator notices at session start rather than after a
-failed PR review.  Fails open (exit 0) on any error so a broken git install
+This script auto-configures core.hooksPath when it is missing or wrong, and
+emits an informational additionalContext message so the operator knows what
+changed.  If the git config write fails, it falls back to a warning with the
+manual fix command.  Fails open (exit 0) on any error so a broken git install
 never wedges a session.
+
+Defense-in-depth note: two complementary local pre-push layers exist.
+  core.hooksPath=.githooks  -> .githooks/pre-push (broad gate, preflight_all.py).
+                               Auto-configured here for remote sessions.
+  pre-commit stages:pre-push -> .git/hooks/pre-push (targeted gate).
+                               Active for local dev clones without core.hooksPath.
+When core.hooksPath is set, git ignores .git/hooks/ entirely so they never
+double-fire.  See docs/runbooks/preflight.md for the full design.
 """
 
 from __future__ import annotations
@@ -40,22 +49,39 @@ def _git_config(key: str) -> str | None:
     return result.stdout.strip()
 
 
+def _git_config_set(key: str, value: str) -> bool:
+    """Run `git config <key> <value>`; return True on success."""
+    git = shutil.which("git")
+    if git is None:
+        return False
+    result = subprocess.run(  # noqa: S603 -- argv built from shutil.which + caller-controlled literals
+        [git, "config", key, value],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return result.returncode == 0
+
+
 def check() -> dict[str, Any] | None:
-    """Return a hook output dict when core.hooksPath is misconfigured, else None."""
+    """Auto-configure core.hooksPath if needed; return hook output dict or None."""
     current = _git_config("core.hooksPath")
     if current == _EXPECTED:
         return None
 
-    if current is None:
-        detail = "core.hooksPath is not set"
-    else:
-        detail = f"core.hooksPath is '{current}', expected '{_EXPECTED}'"
+    detail = "core.hooksPath was not set" if current is None else f"core.hooksPath was '{current}'"
 
-    message = (
-        f"WARNING: {detail}. The pre-push hook at {_HOOKS_FILE} (stale-base + "
-        "preflight checks) will not run before git push. "
-        "Fix with: git config core.hooksPath .githooks"
-    )
+    if _git_config_set("core.hooksPath", _EXPECTED):
+        message = (
+            f"core.hooksPath: {detail}, auto-configured to '{_EXPECTED}'. "
+            f"The pre-push hook at {_HOOKS_FILE} is now active."
+        )
+    else:
+        message = (
+            f"WARNING: {detail}. Could not auto-configure core.hooksPath. "
+            f"Fix manually: git config core.hooksPath {_EXPECTED}"
+        )
+
     return {
         "hookSpecificOutput": {
             "additionalContext": message,

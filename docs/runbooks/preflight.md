@@ -51,16 +51,51 @@ The drift gate (`scripts/scan_preflight_drift.py`) tracks this allowlist
 explicitly. Adding a new CI script without a matching preflight step
 fails the drift gate at `verify-agents.yml / lint-scripts-static`.
 
-## Activating the pre-push hook
+## Local pre-push defense-in-depth
 
-The repo ships `.githooks/pre-push`. Activate it per clone with:
+Two complementary local gates exist; which one fires depends on environment
+setup. Both run on the developer's machine before a push reaches GitHub, so
+failures surface within seconds rather than minutes later in CI.
+
+| Mechanism | When active | Scope |
+|---|---|---|
+| `.githooks/pre-push` | `core.hooksPath=.githooks` is set | Broad: runs `preflight_all.py` (full CI mirror) |
+| pre-commit `stages: [pre-push]` | `pre-commit install --hook-type pre-push` done | Targeted: single-commit + branch-base + coverage |
+
+These are **complementary, not redundant**: they serve different environments.
+
+* **Remote sessions (Claude Code on the Web):** the SessionStart hook
+  (`scripts/check_hooks_path.py`) auto-sets `core.hooksPath=.githooks`, so
+  `.githooks/pre-push` fires automatically on every push. No manual setup
+  required.
+* **Local development clones:** `core.hooksPath` is not set by default.
+  Run `pre-commit install --hook-type pre-push` once per clone to activate
+  the targeted pre-commit gate. Optionally, `git config core.hooksPath
+  .githooks` upgrades to the broader `.githooks/pre-push` gate instead.
+
+When `core.hooksPath` is set, git ignores `.git/hooks/` entirely, so the two
+gates never double-fire. CI (`verify-github-content.yml`) remains the final
+backstop regardless of which local gate is active.
+
+Do **not** remove the `stages: [pre-push]` hooks from `.pre-commit-config.yaml`:
+they are the local gate for developers without `core.hooksPath` set and are
+not dead code.
+
+### Activation
+
+**Remote sessions:** automatic via SessionStart hook -- no action needed.
+
+**Local clones (targeted gate):**
+
+```sh
+pre-commit install --hook-type pre-push
+```
+
+**Local clones (broad gate):**
 
 ```sh
 git config core.hooksPath .githooks
 ```
-
-Once active, `git push` runs `scripts/preflight_all.py` and aborts the
-push on failure.
 
 ### Emergency bypass
 
@@ -83,8 +118,11 @@ retrospectives. Do not configure it permanently in your shell rc.
   adds a gate that preflight does not mirror.
 * `scripts/scan_docs_inventory.py` -- docs inventory and lane-placement
   gate mirrored from `verify-agents.yml`.
-* `.githooks/pre-push` -- invokes the entrypoint, opt-in via
-  `core.hooksPath`.
+* `.githooks/pre-push` -- broad local gate, opt-in via `core.hooksPath`;
+  auto-activated in remote sessions by `scripts/check_hooks_path.py`.
+* `.pre-commit-config.yaml` `stages: [pre-push]` -- targeted local gate
+  for environments without `core.hooksPath` set; opt-in via
+  `pre-commit install --hook-type pre-push`.
 * `.github/workflows/verify-agents.yml` -- runs the drift gate in
   the `lint-scripts-static` job so silent drift fails CI before it
   reaches main.
