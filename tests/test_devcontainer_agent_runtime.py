@@ -66,6 +66,16 @@ def test_runbook_documents_existing_codex_volume_refresh() -> None:
     assert "command -v bwrap" in runbook
 
 
+def test_runbook_documents_codex_transport_timeout_diagnostics() -> None:
+    runbook = (REPO_ROOT / "docs/runbooks/devcontainers.md").read_text(encoding="utf-8")
+
+    assert "Falling back from WebSockets to HTTPS transport" in runbook
+    assert "Conversation interrupted" in runbook
+    assert "getent hosts api.openai.com auth.openai.com" in runbook
+    assert "curl -I --max-time 20 https://api.openai.com" in runbook
+    assert "DEVCONTAINER_APPLY_EGRESS_ALLOWLIST=0" in runbook
+
+
 def test_flake_exposes_gh_cli_package_for_runtime_symlink() -> None:
     flake = (REPO_ROOT / "flake.nix").read_text(encoding="utf-8")
 
