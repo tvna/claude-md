@@ -28,6 +28,7 @@ Tested by ``tests/test_body_policy.py``. Refs #205.
 from __future__ import annotations
 
 import argparse
+import html
 import os
 import re
 import sys
@@ -113,6 +114,10 @@ def extract_headings(body: str) -> list[tuple[int, str]]:
     for match in _HEADING_RE.finditer(cleaned):
         level = len(match.group(1))
         text = _TRAILING_COLON_RE.sub("", match.group(2)).strip()
+        # MCP write tools (create_pull_request / update_pull_request) HTML-encode
+        # & as &amp; before storing. Decode here so "Risk &amp; blast radius"
+        # matches the required "Risk & blast radius" entry. Refs #892.
+        text = html.unescape(text)
         if text:
             out.append((level, text))
     return out
