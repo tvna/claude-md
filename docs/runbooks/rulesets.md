@@ -4,25 +4,6 @@ This document is the operator-facing companion to the JSON source of truth in `.
 
 The rulesets are introduced incrementally per the phased rollout in [#18](https://github.com/tvna/claude-md/issues/18). The JSON files do not auto-apply -- the **primary path** is the [`Apply rulesets`](../../.github/workflows/apply-rulesets.yml) workflow ([#51](https://github.com/tvna/claude-md/issues/51)); a manual `gh api` fallback is preserved below each section as an escape hatch.
 
-## Operational hold
-
-**Hold**: do not dispatch `apply-rulesets.yml` (`workflow_dispatch`) until [#56](https://github.com/tvna/claude-md/issues/56) P0-a (move `RULESETS_PAT` to an Environment-scoped secret) and P0-b (ref-guard step) are live on `main`.
-
-`RULESETS_PAT` is a repo-scoped fine-grained PAT with no ref guard, so a `workflow_dispatch` from a non-`main` ref can print the secret into the public Actions log; the [#56](https://github.com/tvna/claude-md/issues/56) threat-model table names this vector "Branch-ref exfil". The hold is documentary; the deterministic guard ships with P0.
-
-Triage rationale: Wave -1 ([#178](https://github.com/tvna/claude-md/issues/178)) sequenced the issue / PR template harness bootstrap (Issue Forms in [#203](https://github.com/tvna/claude-md/issues/203), PR template in [#204](https://github.com/tvna/claude-md/issues/204), body-policy gate in [#205](https://github.com/tvna/claude-md/issues/205), body-standard runbook in [#206](https://github.com/tvna/claude-md/issues/206)) ahead of P0 above. That bootstrap has merged; the only remaining blocker on the lift is P0-a / P0-b.
-
-Override condition: a security-urgent dispatch may proceed only after P0-a and P0-b have shipped first. Comment-only dispatch requests during the hold window are refused on the same grounds as the existing [Dispatch authorization criteria](#dispatch-authorization-criteria); the hold raises the bar further by requiring P0-a and P0-b to be live before any new dispatch is authorized.
-
-### Lift criteria
-
-Remove this section in the same PR that closes [#56](https://github.com/tvna/claude-md/issues/56) P0 by ticking both checkboxes:
-
-- [ ] **P0-a** Move `RULESETS_PAT` from repo secret to Environment secret `ruleset-apply` with required reviewers = repo admin and deployment branch policy = `Selected branches` to `main` only. Add `environment: ruleset-apply` to the `apply` job in `.github/workflows/apply-rulesets.yml`.
-- [ ] **P0-b** Add an early ref-guard step (`if: github.ref != 'refs/heads/main'` then `::error::` + `exit 1`) as the first step of the `apply` job, before checkout, as belt-and-suspenders for P0-a.
-
-Until both ship, treat any `dry_run=false` dispatch (and any dispatch against a non-`main` ref) as out of policy.
-
 ## SoT layout
 
 | File | Target | Purpose |
@@ -203,6 +184,18 @@ Smoke tests for the live behaviour (from [#18 §Verification](https://github.com
 4. A PR where `Verify repository scripts / gate` is failing is blocked at merge (after Phase 3-A).
 5. A PR whose title contains Japanese, emoji, zero-width, RTL, fullwidth, or any other non-ASCII code point is blocked by `Verify title policy / gate` (after [#155](https://github.com/tvna/claude-md/issues/155)).
 6. The PR merge UI exposes only the "Squash and merge" button.
+
+### Non-owner UI smoke test decision
+
+**Decision (2026-05-30, [#861](https://github.com/tvna/claude-md/issues/861)): not required for this repository.**
+
+The original [#56](https://github.com/tvna/claude-md/issues/56) threat model required confirming that a non-`@tvna` actor cannot bypass the ruleset. The Rulesets API evidence collected on 2026-05-30 against live ruleset id `16796610` shows:
+
+- `require_code_owner_review: true`
+- `bypass_actors: []`
+- `current_user_can_bypass: "never"`
+
+These three fields together are sufficient evidence: no actor — owner or otherwise — holds a bypass, and the field is machine-readable and not editable without a `RULESETS_PAT`-authorized PUT. A controlled PR from a non-owner actor would only confirm that the UI reflects the same state already verified by the API. Given that this repository has a single human contributor (`@tvna`), the cost of provisioning a controlled non-owner test account is disproportionate to the marginal assurance gained over the API evidence. The decision may be revisited if additional contributors are added or if the bypass actor list changes.
 
 ### Title policy boundary
 
