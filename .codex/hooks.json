@@ -65,6 +65,16 @@
         ]
       },
       {
+        "matcher": "^mcp__github__create_branch$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 scripts/preflight_main_freshness.py",
+            "statusMessage": "Checking origin/main freshness"
+          }
+        ]
+      },
+      {
         "matcher": "^mcp__github__(create_pull_request|update_pull_request)$",
         "hooks": [
           {
