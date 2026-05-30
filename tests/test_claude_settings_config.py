@@ -68,7 +68,20 @@ def test_claude_post_tool_use_starts_ci_monitor_after_mcp_pr_create() -> None:
                 {
                     "type": "command",
                     "command": "python3 scripts/post_pr_create_ci_monitor.py",
-                }
+                },
+                {
+                    "type": "command",
+                    "command": "python3 scripts/check_pr_mergeability.py",
+                },
+            ],
+        },
+        {
+            "matcher": "mcp__github__update_pull_request_branch",
+            "hooks": [
+                {
+                    "type": "command",
+                    "command": "python3 scripts/check_pr_mergeability.py",
+                },
             ],
         },
         {
@@ -77,7 +90,11 @@ def test_claude_post_tool_use_starts_ci_monitor_after_mcp_pr_create() -> None:
                 {
                     "type": "command",
                     "command": "python3 scripts/post_pr_create_ci_monitor.py",
-                }
+                },
+                {
+                    "type": "command",
+                    "command": "python3 scripts/check_pr_mergeability.py",
+                },
             ],
         },
     ]

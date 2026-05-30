@@ -32,6 +32,16 @@
         ]
       },
       {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 scripts/check_pr_mergeability.py session-start",
+            "statusMessage": "Checking open PR mergeability"
+          }
+        ]
+      },
+      {
         "matcher": "startup|clear|compact",
         "hooks": [
           {
@@ -168,6 +178,21 @@
             "type": "command",
             "command": "python3 scripts/ci_early_status_probe.py",
             "statusMessage": "Checking early CI status"
+          },
+          {
+            "type": "command",
+            "command": "python3 scripts/check_pr_mergeability.py",
+            "statusMessage": "Checking PR mergeability"
+          }
+        ]
+      },
+      {
+        "matcher": "^mcp__github__update_pull_request_branch$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 scripts/check_pr_mergeability.py",
+            "statusMessage": "Checking PR mergeability"
           }
         ]
       },
@@ -183,6 +208,11 @@
             "type": "command",
             "command": "python3 scripts/ci_early_status_probe.py",
             "statusMessage": "Checking early CI status"
+          },
+          {
+            "type": "command",
+            "command": "python3 scripts/check_pr_mergeability.py",
+            "statusMessage": "Checking PR mergeability"
           }
         ]
       }
