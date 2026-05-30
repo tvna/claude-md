@@ -43,6 +43,7 @@ HOOK_COVERED_TOOLS: frozenset[str] = frozenset(
         "mcp__github__add_comment_to_pending_review",
         "mcp__github__sub_issue_write",
         "mcp__github__create_branch",
+        "mcp__github__merge_pull_request",
     }
 )
 
