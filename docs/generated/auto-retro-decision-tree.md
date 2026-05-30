@@ -62,58 +62,61 @@ flowchart TD
     N056["msg = f'no repair signal fired ({signal_summary})'"]
     N057["print(...)"]
     N058["_append_summary(...)"]
-    N059["return 0"]
-    N060["past_retros = fetch_past_retro_labels(...)"]
-    N061["prior = compute_prior_from_labels(...)"]
-    N062["(prior_skip, prior_reason) = should_skip_by_prior(...)"]
-    N063["if prior_skip"]
-    N064["print(...)"]
-    N065["_append_summary(...)"]
-    N066["return 0"]
-    N067["tentative = is_tentative_by_prior(...)"]
-    N068["if commit_subjects is None"]
-    N069["commit_subjects = fetch_pr_commits(...)"]
-    N070["check_runs_unknown = False"]
-    N071["try"]
-    N072["check_runs = fetch_check_runs(...)"]
-    N073["except subprocess.CalledProcessError"]
-    N074["print(...)"]
-    N075["check_runs = []"]
-    N076["check_runs_unknown = True"]
-    N077["verification_pairs = extract_verification_pairs(...)"]
-    N078["pr_type = (extract_type_scope(pr.title) or '').split('(', 1)[0]"]
-    N079["repair_rows = _repair_history_rows(...)"]
-    N080["if not check_runs_unknown and (not repair_rows or (not has_inline_comments and _has_only_exempt_policy_artifact_rows(repair_rows)))"]
-    N081["if repair_rows"]
-    N082["msg = f'only policy-artifact repair rows generated ({signal_summary})'"]
-    N083["msg = f'no standalone repair workload ({signal_summary})'"]
-    N084["print(...)"]
-    N085["_append_summary(...)"]
-    N086["return 0"]
-    N087["title = build_retro_title(...)"]
-    N088["body = build_retro_body(...)"]
-    N089["labels = issue_labels(...)"]
-    N090["created = create_issue(...)"]
-    N091["new_number = get(...)"]
-    N092["new_url = created.get('html_url') or ''"]
-    N093["back_link_status = 'skipped'"]
-    N094["terminal_label_status = 'skipped'"]
-    N095["if isinstance(new_number, int)"]
-    N096["try"]
-    N097["back_link_status = post_back_link_comment(...)"]
-    N098["except subprocess.CalledProcessError"]
-    N099["print(...)"]
-    N100["back_link_status = 'failed'"]
-    N101["try"]
-    N102["apply_terminal_label(...)"]
-    N103["terminal_label_status = 'applied'"]
-    N104["except subprocess.CalledProcessError"]
-    N105["print(...)"]
-    N106["terminal_label_status = 'failed'"]
-    N107["msg = f'created retro issue #{new_number} ({new_url}); back-link={back_link_status}; terminal-label={terminal_label_status}'"]
+    N059["_post_skip_comment_soft(...)"]
+    N060["return 0"]
+    N061["past_retros = fetch_past_retro_labels(...)"]
+    N062["prior = compute_prior_from_labels(...)"]
+    N063["(prior_skip, prior_reason) = should_skip_by_prior(...)"]
+    N064["if prior_skip"]
+    N065["print(...)"]
+    N066["_append_summary(...)"]
+    N067["_post_skip_comment_soft(...)"]
+    N068["return 0"]
+    N069["tentative = is_tentative_by_prior(...)"]
+    N070["if commit_subjects is None"]
+    N071["commit_subjects = fetch_pr_commits(...)"]
+    N072["check_runs_unknown = False"]
+    N073["try"]
+    N074["check_runs = fetch_check_runs(...)"]
+    N075["except subprocess.CalledProcessError"]
+    N076["print(...)"]
+    N077["check_runs = []"]
+    N078["check_runs_unknown = True"]
+    N079["verification_pairs = extract_verification_pairs(...)"]
+    N080["pr_type = (extract_type_scope(pr.title) or '').split('(', 1)[0]"]
+    N081["repair_rows = _repair_history_rows(...)"]
+    N082["if not check_runs_unknown and (not repair_rows or (not has_inline_comments and _has_only_exempt_policy_artifact_rows(repair_rows)))"]
+    N083["if repair_rows"]
+    N084["msg = f'only policy-artifact repair rows generated ({signal_summary})'"]
+    N085["msg = f'no standalone repair workload ({signal_summary})'"]
+    N086["print(...)"]
+    N087["_append_summary(...)"]
+    N088["_post_skip_comment_soft(...)"]
+    N089["return 0"]
+    N090["title = build_retro_title(...)"]
+    N091["body = build_retro_body(...)"]
+    N092["labels = issue_labels(...)"]
+    N093["created = create_issue(...)"]
+    N094["new_number = get(...)"]
+    N095["new_url = created.get('html_url') or ''"]
+    N096["back_link_status = 'skipped'"]
+    N097["terminal_label_status = 'skipped'"]
+    N098["if isinstance(new_number, int)"]
+    N099["try"]
+    N100["back_link_status = post_back_link_comment(...)"]
+    N101["except subprocess.CalledProcessError"]
+    N102["print(...)"]
+    N103["back_link_status = 'failed'"]
+    N104["try"]
+    N105["apply_terminal_label(...)"]
+    N106["terminal_label_status = 'applied'"]
+    N107["except subprocess.CalledProcessError"]
     N108["print(...)"]
-    N109["_append_summary(...)"]
-    N110["return 0"]
+    N109["terminal_label_status = 'failed'"]
+    N110["msg = f'created retro issue #{new_number} ({new_url}); back-link={back_link_status}; terminal-label={terminal_label_status}'"]
+    N111["print(...)"]
+    N112["_append_summary(...)"]
+    N113["return 0"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 -->|"true"| N004
@@ -178,61 +181,64 @@ flowchart TD
     N056 --> N057
     N057 --> N058
     N058 --> N059
-    N055 -->|"false"| N060
-    N060 --> N061
+    N059 --> N060
+    N055 -->|"false"| N061
     N061 --> N062
     N062 --> N063
-    N063 -->|"true"| N064
-    N064 --> N065
+    N063 --> N064
+    N064 -->|"true"| N065
     N065 --> N066
-    N063 -->|"false"| N067
+    N066 --> N067
     N067 --> N068
-    N068 -->|"true"| N069
+    N064 -->|"false"| N069
     N069 --> N070
-    N068 -->|"false"| N070
-    N070 --> N071
-    N071 -->|"try"| N072
-    N071 -->|"raises"| N073
-    N073 --> N074
-    N074 --> N075
+    N070 -->|"true"| N071
+    N071 --> N072
+    N070 -->|"false"| N072
+    N072 --> N073
+    N073 -->|"try"| N074
+    N073 -->|"raises"| N075
     N075 --> N076
-    N072 --> N077
     N076 --> N077
     N077 --> N078
+    N074 --> N079
     N078 --> N079
     N079 --> N080
-    N080 -->|"true"| N081
-    N081 -->|"true"| N082
-    N081 -->|"false"| N083
-    N082 --> N084
-    N083 --> N084
-    N084 --> N085
+    N080 --> N081
+    N081 --> N082
+    N082 -->|"true"| N083
+    N083 -->|"true"| N084
+    N083 -->|"false"| N085
+    N084 --> N086
     N085 --> N086
-    N080 -->|"false"| N087
+    N086 --> N087
     N087 --> N088
     N088 --> N089
-    N089 --> N090
+    N082 -->|"false"| N090
     N090 --> N091
     N091 --> N092
     N092 --> N093
     N093 --> N094
     N094 --> N095
-    N095 -->|"true"| N096
-    N096 -->|"try"| N097
-    N096 -->|"raises"| N098
-    N098 --> N099
-    N099 --> N100
-    N097 --> N101
-    N100 --> N101
-    N101 -->|"try"| N102
+    N095 --> N096
+    N096 --> N097
+    N097 --> N098
+    N098 -->|"true"| N099
+    N099 -->|"try"| N100
+    N099 -->|"raises"| N101
+    N101 --> N102
     N102 --> N103
-    N101 -->|"raises"| N104
-    N104 --> N105
+    N100 --> N104
+    N103 --> N104
+    N104 -->|"try"| N105
     N105 --> N106
-    N103 --> N107
-    N106 --> N107
-    N095 -->|"false"| N107
+    N104 -->|"raises"| N107
     N107 --> N108
     N108 --> N109
+    N106 --> N110
     N109 --> N110
+    N098 -->|"false"| N110
+    N110 --> N111
+    N111 --> N112
+    N112 --> N113
 ```
