@@ -36,6 +36,16 @@
         "hooks": [
           {
             "type": "command",
+            "command": "python3 scripts/check_session_branch.py",
+            "statusMessage": "Checking session push target"
+          }
+        ]
+      },
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
             "command": "python3 scripts/check_pr_mergeability.py session-start",
             "statusMessage": "Checking open PR mergeability"
           }
@@ -121,6 +131,16 @@
             "type": "command",
             "command": "python3 scripts/preflight_push_base.py",
             "statusMessage": "Checking branch base before push"
+          }
+        ]
+      },
+      {
+        "matcher": "^Bash$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 scripts/preflight_push_session_branch.py",
+            "statusMessage": "Checking session push target before push"
           }
         ]
       },
