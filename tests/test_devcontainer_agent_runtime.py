@@ -101,6 +101,15 @@ def test_codex_runtime_installs_bubblewrap_for_sandbox() -> None:
     assert "install_nix_binary bubblewrap bwrap" in script
 
 
+def test_codex_devcontainer_permits_seccomp_for_bwrap() -> None:
+    config = load_json(REPO_ROOT / ".devcontainer" / "codex" / "devcontainer.json")
+    run_args = config.get("runArgs", [])
+    assert isinstance(run_args, list)
+    assert "--security-opt=seccomp=unconfined" in run_args
+    runbook = (REPO_ROOT / "docs/runbooks/devcontainers.md").read_text(encoding="utf-8")
+    assert "seccomp=unconfined" in runbook
+
+
 def test_devcontainer_publish_watches_runtime_script() -> None:
     workflow = (REPO_ROOT / ".github/workflows/publish-devcontainer-images.yml").read_text(encoding="utf-8")
 
