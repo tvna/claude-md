@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import io
 import json
-import subprocess
 import unittest.mock as mock
+import urllib.error
+import urllib.request
 from typing import Any
 
 import issue_closure_fast_path as subject
@@ -11,22 +12,36 @@ import pytest
 
 pytestmark = pytest.mark.shard_preflight
 
+_TOKEN = "test-token"
+
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
 
-def _completed(data: Any, returncode: int = 0) -> subprocess.CompletedProcess[str]:
-    if isinstance(data, str):
-        stdout = data
-    else:
-        # jq --jq outputs one JSON object per line
-        if isinstance(data, list):
-            stdout = "\n".join(json.dumps(item) for item in data)
-        else:
-            stdout = json.dumps(data)
-    return subprocess.CompletedProcess(["gh"], returncode, stdout=stdout, stderr="")
+class _FakeResponse:
+    def __init__(self, data: Any, status: int = 200) -> None:
+        self.status = status
+        self._body = json.dumps(data).encode()
+
+    def read(self) -> bytes:
+        return self._body
+
+    def __enter__(self) -> _FakeResponse:
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        pass
+
+
+def _opener(data: Any, status: int = 200) -> Any:
+    resp = _FakeResponse(data, status)
+
+    def fake(req: urllib.request.Request) -> _FakeResponse:
+        return resp
+
+    return fake
 
 
 def _event(tool_name: str, tool_input: dict[str, Any]) -> dict[str, Any]:
@@ -120,10 +135,12 @@ def test_format_context_multiple_prs_lists_all() -> None:
 
 
 def test_decide_returns_advisory_no_prs() -> None:
-    def runner(cmd: list[str], **kw: Any) -> subprocess.CompletedProcess[str]:
-        return _completed("", returncode=0)
-
-    out = subject.decide("mcp__github__issue_write", _close_input(), runner=runner)
+    out = subject.decide(
+        "mcp__github__issue_write",
+        _close_input(),
+        opener=_opener({"items": []}),
+        token=_TOKEN,
+    )
     assert out is not None
     ctx = out["hookSpecificOutput"]["additionalContext"]
     assert "WARNING" in ctx
@@ -132,10 +149,12 @@ def test_decide_returns_advisory_no_prs() -> None:
 def test_decide_returns_advisory_one_pr() -> None:
     pr = {"number": 200, "title": "fix: close #187", "html_url": "https://github.com/tvna/claude-md/pull/200", "closed_at": "2026-05-01T10:00:00Z"}
 
-    def runner(cmd: list[str], **kw: Any) -> subprocess.CompletedProcess[str]:
-        return _completed([pr])
-
-    out = subject.decide("mcp__github__issue_write", _close_input(), runner=runner)
+    out = subject.decide(
+        "mcp__github__issue_write",
+        _close_input(),
+        opener=_opener({"items": [pr]}),
+        token=_TOKEN,
+    )
     assert out is not None
     ctx = out["hookSpecificOutput"]["additionalContext"]
     assert "FAST-PATH OK" in ctx
@@ -143,27 +162,33 @@ def test_decide_returns_advisory_one_pr() -> None:
 
 
 def test_decide_returns_none_on_api_error() -> None:
-    def runner(cmd: list[str], **kw: Any) -> subprocess.CompletedProcess[str]:
-        return _completed("", returncode=1)
-
-    out = subject.decide("mcp__github__issue_write", _close_input(), runner=runner)
+    out = subject.decide(
+        "mcp__github__issue_write",
+        _close_input(),
+        opener=_opener({}, status=422),
+        token=_TOKEN,
+    )
     assert out is None
 
 
 def test_decide_returns_none_for_non_close_tool() -> None:
-    def runner(cmd: list[str], **kw: Any) -> subprocess.CompletedProcess[str]:  # pragma: no cover
-        return _completed([])
-
-    out = subject.decide("mcp__github__create_pull_request", {"owner": "tvna", "repo": "claude-md"}, runner=runner)
+    out = subject.decide(
+        "mcp__github__create_pull_request",
+        {"owner": "tvna", "repo": "claude-md"},
+        opener=_opener({"items": []}),
+        token=_TOKEN,
+    )
     assert out is None
 
 
 def test_decide_returns_none_for_open_state() -> None:
-    def runner(cmd: list[str], **kw: Any) -> subprocess.CompletedProcess[str]:  # pragma: no cover
-        return _completed([])
-
     inp = {**_close_input(), "state": "open"}
-    out = subject.decide("mcp__github__issue_write", inp, runner=runner)
+    out = subject.decide(
+        "mcp__github__issue_write",
+        inp,
+        opener=_opener({"items": []}),
+        token=_TOKEN,
+    )
     assert out is None
 
 
@@ -179,9 +204,12 @@ def test_main_writes_json_on_close(capsys: pytest.CaptureFixture[str]) -> None:
     original_decide = subject.decide
 
     def patched_decide(tool_name: str, tool_input: dict[str, Any], **kw: Any) -> dict[str, Any] | None:
-        def runner(cmd: list[str], **inner_kw: Any) -> subprocess.CompletedProcess[str]:
-            return _completed([pr])
-        return original_decide(tool_name, tool_input, runner=runner)
+        return original_decide(
+            tool_name,
+            tool_input,
+            opener=_opener({"items": [pr]}),
+            token=_TOKEN,
+        )
 
     with mock.patch.object(subject, "decide", patched_decide), \
          mock.patch("sys.stdin", io.StringIO(json.dumps(event))):
@@ -221,30 +249,44 @@ def test_main_non_dict_tool_input_treated_as_empty(capsys: pytest.CaptureFixture
 
 
 class TestSearchMergedPrs:
-    def test_os_error_returns_none(self) -> None:
-        def bad_runner(*_args, **_kwargs):
-            raise OSError("gh not found")
+    def test_exception_returns_none(self) -> None:
+        def bad_opener(req: urllib.request.Request) -> None:
+            raise OSError("network error")
 
-        result = subject._search_merged_prs("o", "r", 1, runner=bad_runner)
+        result = subject._search_merged_prs("o", "r", 1, opener=bad_opener, token=_TOKEN)
         assert result is None
 
-    def test_blank_lines_in_stdout_are_skipped(self) -> None:
-        import json as _json
-        obj = {"number": 5, "title": "t", "html_url": "u", "closed_at": "2026-01-01"}
-        raw = f"\n{_json.dumps(obj)}\n\n"
+    def test_non_200_returns_none(self) -> None:
         result = subject._search_merged_prs(
             "o", "r", 1,
-            runner=lambda *_a, **_kw: _completed(raw),
+            opener=_opener({}, status=404),
+            token=_TOKEN,
+        )
+        assert result is None
+
+    def test_items_parsed_correctly(self) -> None:
+        obj = {"number": 5, "title": "t", "html_url": "u", "closed_at": "2026-01-01"}
+        result = subject._search_merged_prs(
+            "o", "r", 1,
+            opener=_opener({"items": [obj]}),
+            token=_TOKEN,
+        )
+        assert result is not None
+        assert len(result) == 1
+        assert result[0]["number"] == 5
+
+    def test_non_dict_items_skipped(self) -> None:
+        result = subject._search_merged_prs(
+            "o", "r", 1,
+            opener=_opener({"items": ["not-a-dict", {"number": 2}]}),
+            token=_TOKEN,
         )
         assert result is not None
         assert len(result) == 1
 
-    def test_invalid_json_lines_are_skipped(self) -> None:
-        result = subject._search_merged_prs(
-            "o", "r", 1,
-            runner=lambda *_a, **_kw: _completed("not json\n"),
-        )
-        assert result == []
+    def test_no_token_returns_none(self) -> None:
+        result = subject._search_merged_prs("o", "r", 1, token="")
+        assert result is None
 
 
 class TestExtractCloseTarget:
