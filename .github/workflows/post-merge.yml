@@ -172,7 +172,7 @@ jobs:
 
           - speculation: The post-merge generator ran because a merged change affected the auto-retro decision tree surface.
 
-          ## Risk & blast radius
+          ## Risk and blast radius
 
           - Documentation-only generated artifact under `docs/generated/`; no runtime workflow behavior changes.
 
@@ -190,7 +190,7 @@ jobs:
           ### Bootstrap
 
           - [x] Facts vs. Assumptions split is honest
-          - [x] Risk & blast radius assessed; Rollback steps are runnable
+          - [x] Risk and blast radius assessed; Rollback steps are runnable
           - [x] Issue number recorded on the `Closes #` line above
           - [x] Branch carries exactly one commit ahead of `main`
 
