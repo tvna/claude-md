@@ -74,15 +74,17 @@ git branch without the long VS Code default prefix.
 
 For Codex, the same runtime setup also writes
 `[mcp_servers.codex_apps].startup_timeout_sec = 120` and links
-`/usr/local/bin/bwrap`. Existing Codex session volumes keep their old
-`/home/codex/.codex/config.toml` until the post-create setup runs again.
-If Codex still reports `codex_apps` MCP startup timeout or missing
-`bubblewrap`, run this inside the Codex DevContainer, then restart
-Codex:
+`/usr/local/bin/bwrap` and `/usr/local/bin/python3`. Existing Codex
+session volumes keep their old `/home/codex/.codex/config.toml` until
+the post-create setup runs again.
+If Codex still reports `codex_apps` MCP startup timeout, missing
+`bubblewrap`, or SessionStart hook failures with exit code 127 (python3
+not found), run this inside the Codex DevContainer, then restart Codex:
 
 ```sh
 bash .devcontainer/scripts/configure-agent-runtime.sh codex
 command -v bwrap
+command -v python3
 ```
 
 After the container opens, verify the runtime identity and workspace
