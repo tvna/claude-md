@@ -60,8 +60,9 @@ jobs:
 
           ARCHIVE="${OUTDIR}/originals-${TIMESTAMP}.json.gz"
 
+          export TIMESTAMP REPO
           python3 - <<'EOF'
-          import gzip, json, os, pathlib, sys
+          import gzip, json, os, pathlib
 
           outdir = pathlib.Path("/tmp/backup")
           timestamp = os.environ["TIMESTAMP"]
@@ -83,7 +84,6 @@ jobs:
 
           print(f"Archive: {archive}", flush=True)
           EOF
-          env TIMESTAMP="${TIMESTAMP}"
 
           SHA256=$(sha256sum "${ARCHIVE}" | awk '{print $1}')
           ARCHIVE_BASENAME=$(basename "${ARCHIVE}")
