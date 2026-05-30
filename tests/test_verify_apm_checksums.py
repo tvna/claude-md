@@ -108,3 +108,70 @@ def test_cli_update_success(tmp_path: Path, capsys: pytest.CaptureFixture[str]) 
     assert rc == 0
     assert "Updated .apm/CHECKSUMS." in captured.out
     assert (root / ".apm/CHECKSUMS").exists()
+
+
+def test_parse_lockfile_ignores_blank_lines() -> None:
+    digest = "a" * 64
+    text = f"\n{digest}  .apm/instructions/file.md\n\n"
+    rows, errors = vac.parse_lockfile(text)
+    assert not errors
+    from pathlib import Path as _Path
+    assert _Path(".apm/instructions/file.md") in rows
+
+
+def test_parse_lockfile_reports_duplicate_path() -> None:
+    digest = "a" * 64
+    path = ".apm/instructions/file.md"
+    text = f"{digest}  {path}\n{digest}  {path}\n"
+    _rows, errors = vac.parse_lockfile(text)
+    assert any("duplicate path" in e for e in errors)
+
+
+def test_cli_verify_handles_file_not_found_error(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def _raises(root: object) -> object:
+        raise FileNotFoundError("missing APM directory: .apm")
+
+    monkeypatch.setattr(vac, "verify", _raises)
+    rc = vac.main(["--root", str(tmp_path), "verify"])
+    assert rc == 1
+    assert "missing APM directory" in capsys.readouterr().err
+
+
+def test_cli_update_handles_file_not_found_error(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def _raises(root: object) -> None:
+        raise FileNotFoundError("missing APM directory: .apm")
+
+    monkeypatch.setattr(vac, "update", _raises)
+    rc = vac.main(["--root", str(tmp_path), "update"])
+    assert rc == 1
+    assert "missing APM directory" in capsys.readouterr().err
+
+
+def test_build_checksums_raises_when_apm_dir_missing(tmp_path: Path) -> None:
+    with pytest.raises(FileNotFoundError, match="missing APM directory"):
+        vac.build_checksums(tmp_path)
+
+
+def test_verify_reports_missing_lockfile(tmp_path: Path) -> None:
+    root = _make_repo(tmp_path)
+    # .apm/instructions/ exists but CHECKSUMS was never written.
+    errors = vac.verify(root)
+    assert any("missing lockfile" in e for e in errors)
+
+
+def test_main_block_exits_via_runpy(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    import runpy
+    import sys
+
+    root = _make_repo(tmp_path)
+    vac.update(root)
+    monkeypatch.setattr(sys, "argv", ["verify_apm_checksums", "--root", str(root), "verify"])
+    with pytest.raises(SystemExit) as exc_info:
+        runpy.run_module("verify_apm_checksums", run_name="__main__")
+    assert exc_info.value.code == 0

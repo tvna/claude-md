@@ -44,6 +44,10 @@ class TestValidateSot:
     def test_happy_path(self) -> None:
         labels_apply.validate_sot(VALID_SOT)
 
+    def test_non_list_raises(self) -> None:
+        with pytest.raises(ValueError, match="JSON array"):
+            labels_apply.validate_sot({"name": "x"})  # type: ignore[arg-type]
+
     def test_missing_name(self) -> None:
         with pytest.raises(ValueError, match="name"):
             labels_apply.validate_sot([{"color": "ffffff", "description": ""}])
@@ -51,6 +55,10 @@ class TestValidateSot:
     def test_bad_color(self) -> None:
         with pytest.raises(ValueError, match="type:fix"):
             labels_apply.validate_sot([{"name": "type:fix", "color": "fff", "description": ""}])
+
+    def test_non_string_description_raises(self) -> None:
+        with pytest.raises(ValueError, match="description must be a string"):
+            labels_apply.validate_sot([{"name": "type:fix", "color": "ffffff", "description": 42}])
 
     def test_description_over_100_chars_names_offender(self) -> None:
         with pytest.raises(ValueError, match="type:fix"):

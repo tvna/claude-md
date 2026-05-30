@@ -141,3 +141,46 @@ class TestMain:
             "import pytest\npytestmark = pytest.mark.shard_default\n"
         )
         assert vtsm.main(["--tests-dir", str(tmp_path)]) == 0
+
+
+class TestExtractShardMarkersEdgeCases:
+    def test_non_attribute_value_ignored(self) -> None:
+        # pytestmark = foo.shard_default -- foo is a Name, not an Attribute chain
+        source = "pytestmark = foo.shard_default\n"
+        assert vtsm.extract_shard_markers(source) == []
+
+    def test_wrong_intermediate_attr_ignored(self) -> None:
+        # pytestmark = foo.bar.shard_default -- "bar" != "mark"
+        source = "pytestmark = foo.bar.shard_default\n"
+        assert vtsm.extract_shard_markers(source) == []
+
+    def test_wrong_library_name_ignored(self) -> None:
+        # pytestmark = mylib.mark.shard_default -- "mylib" != "pytest"
+        source = "pytestmark = mylib.mark.shard_default\n"
+        assert vtsm.extract_shard_markers(source) == []
+
+
+class TestVerifyFileEdgeCases:
+    def test_oserror_on_missing_file_returns_error(self, tmp_path: Path) -> None:
+        p = tmp_path / "nonexistent_test.py"
+        errors = vtsm.verify_file(p)
+        assert len(errors) == 1
+        assert "cannot read file" in errors[0]
+
+
+class TestMainBlock:
+    def test_main_block_exits_via_runpy(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        import runpy
+        import sys
+
+        (tmp_path / "test_a.py").write_text(
+            "import pytest\npytestmark = pytest.mark.shard_default\n"
+        )
+        monkeypatch.setattr(
+            sys, "argv", ["verify_test_shard_markers", "--tests-dir", str(tmp_path)]
+        )
+        with pytest.raises(SystemExit) as exc_info:
+            runpy.run_module("verify_test_shard_markers", run_name="__main__")
+        assert exc_info.value.code == 0

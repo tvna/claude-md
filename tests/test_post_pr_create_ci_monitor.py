@@ -156,3 +156,89 @@ def test_main_emits_post_tool_context(monkeypatch: pytest.MonkeyPatch, capsys: p
 
     out = json.loads(capsys.readouterr().out)
     assert out["hookSpecificOutput"]["hookEventName"] == "PostToolUse"
+
+
+# ---------------------------------------------------------------------------
+# _walk() -- list branch
+# ---------------------------------------------------------------------------
+
+
+def test_walk_traverses_nested_list() -> None:
+    result = monitor._walk([[1, 2], [3]])
+    assert 1 in result
+    assert 2 in result
+    assert 3 in result
+
+
+# ---------------------------------------------------------------------------
+# extract_pr_number() -- string decimal branch
+# ---------------------------------------------------------------------------
+
+
+def test_extract_pr_number_from_string_decimal() -> None:
+    response = {"pullRequestNumber": "456"}
+    assert monitor.extract_pr_number(response) == "456"
+
+
+# ---------------------------------------------------------------------------
+# extract_repo() -- non-dict skip and REPO_KEYS branch
+# ---------------------------------------------------------------------------
+
+
+def test_extract_repo_skips_non_dict_items() -> None:
+    result = monitor.extract_repo(["not-a-dict", 42, None])
+    assert result is None
+
+
+def test_extract_repo_finds_nameWithOwner_key() -> None:
+    response = {"nameWithOwner": "tvna/claude-md"}
+    assert monitor.extract_repo(response) == "tvna/claude-md"
+
+
+def test_extract_repo_finds_repository_full_name_key() -> None:
+    response = {"repository_full_name": "tvna/claude-md"}
+    assert monitor.extract_repo(response) == "tvna/claude-md"
+
+
+# ---------------------------------------------------------------------------
+# main() -- malformed JSON and non-dict event
+# ---------------------------------------------------------------------------
+
+
+def test_main_returns_zero_on_malformed_json(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr("sys.stdin", type("Input", (), {"read": lambda self: "{not valid json"})())
+    assert monitor.main([]) == 0
+    assert "malformed stdin JSON" in capsys.readouterr().err
+
+
+def test_main_returns_zero_on_json_array_event(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("sys.stdin", type("Input", (), {"read": lambda self: "[1, 2, 3]"})())
+    assert monitor.main([]) == 0
+
+
+def test_start_monitor_propagates_popen_exception(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    def failing_popen(*args: object, **kwargs: object) -> None:
+        raise OSError("permission denied")
+
+    monkeypatch.setattr(subprocess, "Popen", failing_popen)
+    monkeypatch.setattr(monitor.tempfile, "gettempdir", lambda: str(tmp_path))
+
+    with pytest.raises(OSError, match="permission denied"):
+        monitor.start_monitor([sys.executable, _CI_WATCH_SCRIPT, "--pr", "999"])
+
+
+def test_main_block_exits_via_runpy(monkeypatch: pytest.MonkeyPatch) -> None:
+    import runpy
+
+    monkeypatch.setattr(
+        "sys.stdin", type("Input", (), {"read": lambda self: "{not valid json"})()
+    )
+    with pytest.raises(SystemExit) as exc_info:
+        runpy.run_module("post_pr_create_ci_monitor", run_name="__main__")
+    assert exc_info.value.code == 0

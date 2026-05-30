@@ -261,3 +261,66 @@ def test_real_config_files_pass_drift_check() -> None:
         ]
     )
     assert rc == 0
+
+
+# ---------------------------------------------------------------------------
+# _collect_hooks() defensive isinstance guards
+# ---------------------------------------------------------------------------
+
+
+def test_collect_claude_hooks_non_dict_hooks_section() -> None:
+    settings: dict[str, object] = {"hooks": "not-a-dict"}
+    assert shcd.collect_claude_hooks(settings) == set()
+
+
+def test_collect_claude_hooks_non_list_event_groups() -> None:
+    settings: dict[str, object] = {"hooks": {"SessionStart": "not-a-list", "PreToolUse": [], "PostToolUse": []}}
+    assert shcd.collect_claude_hooks(settings) == set()
+
+
+def test_collect_claude_hooks_non_dict_group_entry() -> None:
+    settings: dict[str, object] = {"hooks": {"SessionStart": ["not-a-dict"], "PreToolUse": [], "PostToolUse": []}}
+    assert shcd.collect_claude_hooks(settings) == set()
+
+
+def test_collect_claude_hooks_non_list_handlers() -> None:
+    settings: dict[str, object] = {
+        "hooks": {
+            "SessionStart": [{"hooks": "not-a-list"}],
+            "PreToolUse": [],
+            "PostToolUse": [],
+        }
+    }
+    assert shcd.collect_claude_hooks(settings) == set()
+
+
+def test_collect_claude_hooks_non_dict_handler_entry() -> None:
+    settings: dict[str, object] = {
+        "hooks": {
+            "SessionStart": [{"hooks": ["not-a-dict"]}],
+            "PreToolUse": [],
+            "PostToolUse": [],
+        }
+    }
+    assert shcd.collect_claude_hooks(settings) == set()
+
+
+def test_collect_claude_hooks_non_str_command() -> None:
+    settings: dict[str, object] = {
+        "hooks": {
+            "SessionStart": [{"hooks": [{"type": "command", "command": 123}]}],
+            "PreToolUse": [],
+            "PostToolUse": [],
+        }
+    }
+    assert shcd.collect_claude_hooks(settings) == set()
+
+
+def test_main_block_exits_via_runpy(monkeypatch: pytest.MonkeyPatch) -> None:
+    import runpy
+    import sys
+
+    monkeypatch.setattr(sys, "argv", ["scan_hook_coverage_drift", "--help"])
+    with pytest.raises(SystemExit) as exc_info:
+        runpy.run_module("scan_hook_coverage_drift", run_name="__main__")
+    assert exc_info.value.code == 0

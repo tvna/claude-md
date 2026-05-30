@@ -615,3 +615,207 @@ class TestBuildSummary:
     def test_summary_is_ascii(self) -> None:
         out = srfd.build_summary(0, {}, 0)
         out.encode("ascii")  # raises UnicodeEncodeError on any non-ASCII
+
+
+# ---------------------------------------------------------------------------
+# _parse_iso() -- empty string branch (line 108)
+# ---------------------------------------------------------------------------
+
+
+class TestParseIso:
+    def test_empty_string_returns_none(self) -> None:
+        assert srfd._parse_iso("") is None
+
+    def test_date_without_tz_gets_utc(self) -> None:
+        result = srfd._parse_iso("2026-05-01")
+        assert result is not None
+        assert result.tzinfo is not None
+
+
+# ---------------------------------------------------------------------------
+# decide_target_label() -- unknown aggregate returns None (line 220)
+# ---------------------------------------------------------------------------
+
+
+class TestDecideTargetLabelUnknownAggregate:
+    def test_unknown_aggregate_returns_none(self) -> None:
+        assert srfd.decide_target_label("unexpected_value", []) is None
+
+
+# ---------------------------------------------------------------------------
+# gh_api() -- mock subprocess.run (lines 272-293)
+# ---------------------------------------------------------------------------
+
+
+class TestGhApi:
+    def test_get_request_without_body(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        import subprocess as _subprocess
+
+        fake = _subprocess.CompletedProcess(
+            args=[], returncode=0, stdout='{"items":[]}', stderr=""
+        )
+        calls: list[Any] = []
+
+        def fake_run(cmd: Any, **kwargs: Any) -> Any:
+            calls.append(cmd)
+            return fake
+
+        monkeypatch.setattr(_subprocess, "run", fake_run)
+        result = srfd.gh_api("GET", "/repos/test/test/issues/1")
+        assert result == '{"items":[]}'
+        assert "--input" not in calls[0]
+
+    def test_post_request_with_json_body(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        import subprocess as _subprocess
+
+        fake = _subprocess.CompletedProcess(
+            args=[], returncode=0, stdout='{}', stderr=""
+        )
+
+        def fake_run(cmd: Any, **kwargs: Any) -> Any:
+            return fake
+
+        monkeypatch.setattr(_subprocess, "run", fake_run)
+        result = srfd.gh_api("POST", "/path", {"labels": ["x"]})
+        assert result == '{}'
+
+
+# ---------------------------------------------------------------------------
+# search_retro_issues() / fetch_issue_or_pr() / fetch_pr_merged() / apply_label()
+# -- mock gh_api (lines 316-320, 330-336, 349-351, 356)
+# ---------------------------------------------------------------------------
+
+
+class TestBoundaryFunctions:
+    def test_search_retro_issues_parses_items(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        import json as _json
+        payload = _json.dumps({"items": [{"number": 1, "body": "- [ ] follow #500", "labels": []}]})
+        monkeypatch.setattr(srfd, "gh_api", lambda *a, **kw: payload)
+        result = srfd.search_retro_issues("owner/repo")
+        assert len(result) == 1
+        assert result[0]["number"] == 1
+
+    def test_search_retro_issues_handles_empty_raw(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(srfd, "gh_api", lambda *a, **kw: "  ")
+        result = srfd.search_retro_issues("owner/repo")
+        assert result == []
+
+    def test_fetch_issue_or_pr_returns_dict(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        import json as _json
+        payload = _json.dumps({"number": 42, "state": "open", "updated_at": "2026-05-01T00:00:00Z"})
+        monkeypatch.setattr(srfd, "gh_api", lambda *a, **kw: payload)
+        result = srfd.fetch_issue_or_pr("owner/repo", 42)
+        assert result is not None
+        assert result["number"] == 42
+
+    def test_fetch_issue_or_pr_returns_none_on_404(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        exc = _called_process_error("HTTP 404: Not Found")
+
+        def _raise(*a: Any, **kw: Any) -> Any:
+            raise exc
+
+        monkeypatch.setattr(srfd, "gh_api", _raise)
+        assert srfd.fetch_issue_or_pr("owner/repo", 999) is None
+
+    def test_fetch_issue_or_pr_propagates_non_404(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        exc = _called_process_error("HTTP 500: Server Error")
+
+        def _raise(*a: Any, **kw: Any) -> Any:
+            raise exc
+
+        monkeypatch.setattr(srfd, "gh_api", _raise)
+        with pytest.raises(subprocess.CalledProcessError):
+            srfd.fetch_issue_or_pr("owner/repo", 1)
+
+    def test_fetch_pr_merged_returns_bool(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        import json as _json
+        monkeypatch.setattr(srfd, "gh_api", lambda *a, **kw: _json.dumps({"merged": True}))
+        assert srfd.fetch_pr_merged("owner/repo", 42) is True
+
+    def test_apply_label_calls_post(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        calls: list[tuple[Any, ...]] = []
+
+        def fake_gh_api(method: str, path: str, body: Any = None, **kw: Any) -> str:
+            calls.append((method, path, body))
+            return "{}"
+
+        monkeypatch.setattr(srfd, "gh_api", fake_gh_api)
+        srfd.apply_label("owner/repo", 42, RETRO_FP_CANDIDATE)
+        assert calls[0][0] == "POST"
+        assert "42/labels" in calls[0][1]
+
+
+# ---------------------------------------------------------------------------
+# run() -- non-int retro_number skip (line 443)
+# ---------------------------------------------------------------------------
+
+
+class TestRunNonIntRetroNumber:
+    def test_non_int_retro_number_is_skipped(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        fake = _FakeApi(
+            retros=[{"number": "not-an-int", "body": "- [ ] follow #500", "labels": []}],
+            followups={},
+        )
+        _install_fakes(monkeypatch, fake)
+        assert srfd.run("o/r", today="2026-05-02") == 0
+        assert fake.label_calls == []
+
+
+# ---------------------------------------------------------------------------
+# _cmd_run() -- missing repo (lines 487-491)
+# ---------------------------------------------------------------------------
+
+
+class TestCmdRunMissingRepo:
+    def test_missing_repo_returns_1(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        monkeypatch.delenv("REPO", raising=False)
+        monkeypatch.delenv("GITHUB_REPOSITORY", raising=False)
+        rc = srfd.main(["run"])
+        assert rc == 1
+        assert "missing" in capsys.readouterr().err.lower()
+
+
+# ---------------------------------------------------------------------------
+# main() -- CalledProcessError handler (lines 525-533)
+# ---------------------------------------------------------------------------
+
+
+class TestMainExceptionHandlers:
+    def test_main_catches_subprocess_error_from_run(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        exc = subprocess.CalledProcessError(1, ["gh"])
+        exc.stderr = "network error"
+        exc.stdout = ""
+
+        def _raise(repo: str, **kw: Any) -> int:
+            raise exc
+
+        monkeypatch.setattr(srfd, "run", _raise)
+        rc = srfd.main(["run", "--repo", "owner/repo"])
+        assert rc == 1
+        err = capsys.readouterr().err
+        assert "gh api failed" in err
+
+    def test_main_catches_value_error_from_run(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        def _raise(repo: str, **kw: Any) -> int:
+            raise ValueError("invalid config value")
+
+        monkeypatch.setattr(srfd, "run", _raise)
+        rc = srfd.main(["run", "--repo", "owner/repo"])
+        assert rc == 1
+        err = capsys.readouterr().err
+        assert "invalid config value" in err
+
+    def test_main_block_exits_via_runpy(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        import runpy
+        import sys
+
+        monkeypatch.setattr(sys, "argv", ["scan_retro_followup_drift", "--help"])
+        with pytest.raises(SystemExit) as exc_info:
+            runpy.run_module("scan_retro_followup_drift", run_name="__main__")
+        assert exc_info.value.code == 0

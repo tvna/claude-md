@@ -182,3 +182,12 @@ class TestMain:
         stdout, stderr = self._run({"tool_input": {}}, monkeypatch)
         assert stdout == ""
         assert "tool_name" in stderr
+
+
+def test_main_block_exits_via_runpy(monkeypatch: pytest.MonkeyPatch) -> None:
+    import runpy
+
+    monkeypatch.setattr("sys.stdin", type("Input", (), {"read": lambda self: ""})())
+    with pytest.raises(SystemExit) as exc_info:
+        runpy.run_module("gate_mcp_github_uncovered", run_name="__main__")
+    assert exc_info.value.code == 0

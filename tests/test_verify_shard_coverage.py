@@ -240,3 +240,51 @@ class TestMain:
         j1 = tmp_path / "junit-a.xml"
         j1.write_text(_junit([("tests.test_a", "test_one")]))
         assert vsc.main(["--collected", str(collected), "--junit", str(j1)]) == 0
+
+
+class TestJunitNodeIdSinglePart:
+    def test_single_segment_classname_returned_verbatim(self) -> None:
+        # Classname with only one part (no dot separator) triggers len(parts) < 2 guard.
+        assert vsc.junit_node_id("onlyone", "test_x") == "onlyone::test_x"
+
+
+class TestParseJunitEdgeCases:
+    def test_skips_testcase_with_empty_classname_and_name(self) -> None:
+        xml = """<?xml version="1.0"?>
+<testsuites><testsuite name="pytest" tests="2">
+<testcase classname="" name=""/>
+<testcase classname="tests.test_a" name="test_one"/>
+</testsuite></testsuites>"""
+        assert vsc.parse_junit(xml) == {"tests/test_a.py::test_one"}
+
+
+class TestVerifyJunitReadError:
+    def test_oserror_reading_junit_file(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        collected = tmp_path / "collected.txt"
+        collected.write_text("")
+        rc = vsc.verify(collected, [tmp_path / "nonexistent.xml"])
+        assert rc == 1
+        assert "cannot read JUnit file" in capsys.readouterr().err
+
+
+class TestMainBlock:
+    def test_main_block_exits_via_runpy(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        import runpy
+        import sys
+
+        collected = tmp_path / "c.txt"
+        collected.write_text("tests/test_a.py::test_one\n")
+        j1 = tmp_path / "j.xml"
+        j1.write_text(_junit([("tests.test_a", "test_one")]))
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            ["verify_shard_coverage", "--collected", str(collected), "--junit", str(j1)],
+        )
+        with pytest.raises(SystemExit) as exc_info:
+            runpy.run_module("verify_shard_coverage", run_name="__main__")
+        assert exc_info.value.code == 0
