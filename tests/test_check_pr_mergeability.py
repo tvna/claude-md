@@ -260,6 +260,65 @@ def test_session_start_silent_when_all_clean(capsys: pytest.CaptureFixture[str])
     assert out == ""
 
 
+def test_session_start_emits_banner_for_behind_pr(capsys: pytest.CaptureFixture[str]) -> None:
+    pr_list = [
+        {
+            "number": 70,
+            "url": "https://github.com/tvna/claude-md/pull/70",
+            "headRepositoryOwner": {"login": "tvna"},
+            "headRepository": {"name": "claude-md"},
+        }
+    ]
+
+    def fake_runner(cmd: list[str], **_: Any) -> subprocess.CompletedProcess[str]:
+        if "pr" in cmd and "list" in cmd:
+            return _completed(pr_list)
+        return _completed({"mergeable": True, "mergeable_state": "behind"})
+
+    subject.run_session_start(runner=fake_runner, sleeper=lambda _: None)
+
+    out = capsys.readouterr().out
+    assert "OUT-OF-DATE WARNING" in out
+    assert "pull/70" in out
+    assert "MERGE CONFLICT" not in out
+
+
+def test_session_start_emits_both_banners_for_dirty_and_behind(capsys: pytest.CaptureFixture[str]) -> None:
+    pr_list = [
+        {
+            "number": 71,
+            "url": "https://github.com/tvna/claude-md/pull/71",
+            "headRepositoryOwner": {"login": "tvna"},
+            "headRepository": {"name": "claude-md"},
+        },
+        {
+            "number": 72,
+            "url": "https://github.com/tvna/claude-md/pull/72",
+            "headRepositoryOwner": {"login": "tvna"},
+            "headRepository": {"name": "claude-md"},
+        },
+    ]
+    states = {"71": "dirty", "72": "behind"}
+
+    def fake_runner(cmd: list[str], **_: Any) -> subprocess.CompletedProcess[str]:
+        if "pr" in cmd and "list" in cmd:
+            return _completed(pr_list)
+        # Identify PR by URL path component in the API path argument
+        path_arg = next((a for a in cmd if "/pulls/" in a), "")
+        number = path_arg.split("/pulls/")[-1] if path_arg else ""
+        state = states.get(number, "clean")
+        mergeable = state != "dirty"
+        return _completed({"mergeable": mergeable, "mergeable_state": state})
+
+    subject.run_session_start(runner=fake_runner, sleeper=lambda _: None)
+
+    out = capsys.readouterr().out
+    assert "MERGE CONFLICT WARNING" in out
+    assert "OUT-OF-DATE WARNING" in out
+    assert "pull/71" in out
+    assert "pull/72" in out
+
+
 def test_session_start_silent_when_no_open_prs(capsys: pytest.CaptureFixture[str]) -> None:
     def fake_runner(cmd: list[str], **_: Any) -> subprocess.CompletedProcess[str]:
         return _completed([])
