@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+config_dir="${script_dir}/../config"
+
 if [[ $# -ne 1 ]]; then
   echo "usage: $0 claude|codex" >&2
   exit 64
@@ -60,61 +63,17 @@ fi
 case "$agent" in
   claude)
     "${sudo_command[@]}" mkdir -p "$home_dir/.claude"
-    "${sudo_command[@]}" tee "$home_dir/.claude/settings.json" >/dev/null <<'JSON'
-{
-  "permissions": {
-    "allow": [
-      "Bash(*)",
-      "mcp__github__*"
-    ]
-  }
-}
-JSON
+    "${sudo_command[@]}" cp "${config_dir}/claude/settings.json" "$home_dir/.claude/settings.json"
     ;;
   codex)
     "${sudo_command[@]}" mkdir -p "$home_dir/.codex"
-    "${sudo_command[@]}" tee "$home_dir/.codex/config.toml" >/dev/null <<'TOML'
-# Devcontainer-local defaults. This file lives on a container-engine
-# named volume and is not read by the macOS/container host.
-approval_policy = "never"
-
-[mcp_servers.codex_apps]
-startup_timeout_sec = 120
-TOML
+    "${sudo_command[@]}" cp "${config_dir}/codex/config.toml" "$home_dir/.codex/config.toml"
     ;;
 esac
 
 "${sudo_command[@]}" chown -R "$agent:$agent" "$home_dir/.config" "$home_dir/.$agent"
 
-"${sudo_command[@]}" tee /etc/profile.d/claude-md-nix-path.sh >/dev/null <<'BASH'
-# Make binaries linked from Nix-built packages available in plain terminals.
-case ":${PATH}:" in
-  *:/usr/local/bin:*) ;;
-  *) export PATH="/usr/local/bin:${PATH}" ;;
-esac
-BASH
-
-"${sudo_command[@]}" tee /etc/profile.d/claude-md-agent-prompt.sh >/dev/null <<'BASH'
-# Short, devcontainer-local prompt: agent:repo(branch)$
-__claude_md_git_branch() {
-  git symbolic-ref --quiet --short HEAD 2>/dev/null || git rev-parse --short HEAD 2>/dev/null
-}
-
-__claude_md_agent_prompt() {
-  local agent="${AGENT_CONTAINER:-agent}"
-  local dir="${PWD##*/}"
-  local branch
-  branch="$(__claude_md_git_branch)"
-  if [ -n "$branch" ]; then
-    printf '%s:%s(%s)\\$ ' "$agent" "$dir" "$branch"
-  else
-    printf '%s:%s\\$ ' "$agent" "$dir"
-  fi
-}
-
-case "$-" in
-  *i*) PS1='$(__claude_md_agent_prompt)' ;;
-esac
-BASH
+"${sudo_command[@]}" cp "${config_dir}/profile.d/claude-md-nix-path.sh" /etc/profile.d/claude-md-nix-path.sh
+"${sudo_command[@]}" cp "${config_dir}/profile.d/claude-md-agent-prompt.sh" /etc/profile.d/claude-md-agent-prompt.sh
 
 echo "configured devcontainer runtime for $agent"
