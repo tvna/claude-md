@@ -2,12 +2,15 @@ from __future__ import annotations
 
 import json
 import subprocess
+import sys
 from pathlib import Path
 
 import post_pr_create_ci_monitor as monitor
 import pytest
 
 pytestmark = pytest.mark.shard_preflight
+
+_CI_WATCH_SCRIPT = str(Path(__file__).resolve().parent.parent / "scripts" / "_ci_watch.py")
 
 
 def test_extract_pr_url_from_string_response() -> None:
@@ -22,11 +25,12 @@ def test_build_watch_command_prefers_pr_url() -> None:
         "tool_response": {"url": "https://github.com/tvna/claude-md/pull/723"},
         "tool_input": {"owner": "tvna", "repo": "claude-md"},
     }
+    result = monitor.build_watch_command(event)
+    assert result is not None
+    cmd, ref = result
 
-    assert monitor.build_watch_command(event) == (
-        ["gh", "pr", "checks", "https://github.com/tvna/claude-md/pull/723", "--watch"],
-        "https://github.com/tvna/claude-md/pull/723",
-    )
+    assert cmd == [sys.executable, _CI_WATCH_SCRIPT, "--pr", "https://github.com/tvna/claude-md/pull/723"]
+    assert ref == "https://github.com/tvna/claude-md/pull/723"
 
 
 def test_build_watch_command_uses_number_and_repo() -> None:
@@ -35,11 +39,12 @@ def test_build_watch_command_uses_number_and_repo() -> None:
         "tool_response": {"number": 723},
         "tool_input": {"owner": "tvna", "repo": "claude-md"},
     }
+    result = monitor.build_watch_command(event)
+    assert result is not None
+    cmd, ref = result
 
-    assert monitor.build_watch_command(event) == (
-        ["gh", "pr", "checks", "723", "--watch", "--repo", "tvna/claude-md"],
-        "723",
-    )
+    assert cmd == [sys.executable, _CI_WATCH_SCRIPT, "--pr", "723", "--repo", "tvna/claude-md"]
+    assert ref == "723"
 
 
 def test_decide_ignores_non_target_tool(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -70,7 +75,7 @@ def test_decide_starts_monitor_and_returns_context(monkeypatch: pytest.MonkeyPat
 
     assert calls == [
         (
-            ["gh", "pr", "checks", "https://github.com/tvna/claude-md/pull/723", "--watch"],
+            [sys.executable, _CI_WATCH_SCRIPT, "--pr", "https://github.com/tvna/claude-md/pull/723"],
             "/repo",
         )
     ]
@@ -93,7 +98,6 @@ def test_decide_reports_missing_pr_reference() -> None:
     assert output is not None
     ctx = output["hookSpecificOutput"]["additionalContext"]
     assert "did not contain a PR URL or number" in ctx
-    assert "polling" in ctx
     assert "subscribe_pr_activity" in ctx
     assert "early-failure watch phase" in ctx
     assert "steady-state heartbeat" in ctx
@@ -101,7 +105,7 @@ def test_decide_reports_missing_pr_reference() -> None:
 
 def test_decide_reports_start_failure_with_early_failure_phase(monkeypatch: pytest.MonkeyPatch) -> None:
     def boom(argv: list[str], *, cwd: str | None = None) -> Path:
-        raise OSError("no gh on PATH")
+        raise OSError("no python on PATH")
 
     monkeypatch.setattr(monitor, "start_monitor", boom)
     event = {
@@ -129,10 +133,11 @@ def test_start_monitor_launches_detached_process(monkeypatch: pytest.MonkeyPatch
     monkeypatch.setattr(subprocess, "Popen", FakePopen)
     monkeypatch.setattr(monitor.tempfile, "gettempdir", lambda: str(tmp_path))
 
-    log_path = monitor.start_monitor(["gh", "pr", "checks", "723", "--watch"], cwd="/repo")
+    argv = [sys.executable, _CI_WATCH_SCRIPT, "--pr", "723"]
+    log_path = monitor.start_monitor(argv, cwd="/repo")
 
     assert log_path == tmp_path / "claude-md-pr-ci-monitor-723.log"
-    assert popen_calls[0]["argv"] == ["gh", "pr", "checks", "723", "--watch"]
+    assert popen_calls[0]["argv"] == argv
     assert popen_calls[0]["cwd"] == "/repo"
     assert popen_calls[0]["stdin"] == subprocess.DEVNULL
     assert popen_calls[0]["stderr"] == subprocess.STDOUT
