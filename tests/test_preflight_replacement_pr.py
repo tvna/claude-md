@@ -219,3 +219,196 @@ class TestCli:
         ])
         assert exit_code == 0
         assert "replacement_pr=#625" in capsys.readouterr().out
+
+
+# ---------------------------------------------------------------------------
+# Missing coverage: parse_candidate edge cases
+# ---------------------------------------------------------------------------
+
+
+class TestParseCandidateEdgeCases:
+    def test_invalid_state_raises(self) -> None:
+        # Line 86: state is not a str
+        raw = {"number": 1, "state": None, "created_at": "2026-05-28T00:00:00Z"}
+        with pytest.raises(ValueError, match="invalid state"):
+            gate.parse_candidate(raw)
+
+    def test_invalid_created_at_raises(self) -> None:
+        # Line 89: created_at is not a non-empty str
+        raw = {"number": 1, "state": "open", "created_at": ""}
+        with pytest.raises(ValueError, match="invalid created_at"):
+            gate.parse_candidate(raw)
+
+    def test_parse_candidates_non_list_items_raises(self) -> None:
+        # Line 106: items is not a list
+        with pytest.raises(ValueError, match="list or an object"):
+            gate.parse_candidates({"items": "not-a-list"})
+
+
+# ---------------------------------------------------------------------------
+# Missing coverage: load_root_cause_note
+# ---------------------------------------------------------------------------
+
+
+class TestLoadRootCauseNote:
+    def test_path_only(self, tmp_path: Path) -> None:
+        # Line 210: path branch
+
+        p = tmp_path / "note.txt"
+        p.write_text("Root cause:\nfoo\n", encoding="utf-8")
+        result = gate.load_root_cause_note(str(p), None)
+        assert "Root cause:" in result
+
+    def test_inline_only(self) -> None:
+        # Line 212: inline branch
+        result = gate.load_root_cause_note(None, "inline text")
+        assert result == "inline text"
+
+
+# ---------------------------------------------------------------------------
+# Missing coverage: fetch_candidates error paths
+# ---------------------------------------------------------------------------
+
+
+class TestFetchCandidatesErrors:
+    def test_non_2xx_search_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # Line 236: search response not 2xx
+        monkeypatch.setattr(
+            gate, "apply_call",
+            lambda *, method, url, payload, token: (404, "not found"),
+        )
+        import pytest as _pytest
+        with _pytest.raises(RuntimeError, match="GitHub search failed"):
+            gate.fetch_candidates("o/r", 1, token="t")
+
+    def test_non_list_items_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # Line 240: search items is not a list
+        import json
+        monkeypatch.setattr(
+            gate, "apply_call",
+            lambda *, method, url, payload, token: (200, json.dumps({"items": "bad"})),
+        )
+        import pytest as _pytest
+        with _pytest.raises(ValueError, match="items list"):
+            gate.fetch_candidates("o/r", 1, token="t")
+
+
+# ---------------------------------------------------------------------------
+# Missing coverage: fetch_pr_detail error paths
+# ---------------------------------------------------------------------------
+
+
+class TestFetchPrDetailErrors:
+    def test_non_2xx_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # Line 254: fetch_pr_detail non-2xx
+        monkeypatch.setattr(
+            gate, "apply_call",
+            lambda *, method, url, payload, token: (500, "server error"),
+        )
+        import pytest as _pytest
+        with _pytest.raises(RuntimeError, match="PR detail fetch"):
+            gate.fetch_pr_detail("o/r", 1, token="t")
+
+    def test_non_dict_response_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # Line 257: fetch_pr_detail non-dict JSON
+        import json
+        monkeypatch.setattr(
+            gate, "apply_call",
+            lambda *, method, url, payload, token: (200, json.dumps([1, 2])),
+        )
+        import pytest as _pytest
+        with _pytest.raises(ValueError, match="non-object JSON"):
+            gate.fetch_pr_detail("o/r", 1, token="t")
+
+
+# ---------------------------------------------------------------------------
+# Missing coverage: parse_now (line 270)
+# ---------------------------------------------------------------------------
+
+
+class TestParseNow:
+    def test_none_returns_none(self) -> None:
+        assert gate.parse_now(None) is None
+
+    def test_iso_string_returns_datetime(self) -> None:
+        dt = gate.parse_now("2026-05-28T13:01:00Z")
+        assert dt is not None
+        assert dt.year == 2026
+
+
+# ---------------------------------------------------------------------------
+# Missing coverage: CLI without --candidates-json (lines 306-313)
+# ---------------------------------------------------------------------------
+
+
+class TestCliWithoutCandidatesJson:
+    def test_missing_token_returns_1(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Lines 307-312: no token env var
+        monkeypatch.delenv("GH_TOKEN", raising=False)
+        monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+        rc = gate.main([
+            "verify",
+            "--repo", "tvna/claude-md",
+            "--issue", "632",
+        ])
+        assert rc == 1
+
+    def test_with_token_calls_fetch_candidates(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        # Line 313: fetch_candidates is called when token is present
+        monkeypatch.setenv("GH_TOKEN", "fake-token")
+        monkeypatch.setattr(gate, "fetch_candidates", lambda repo, issue, token: [])
+        rc = gate.main([
+            "verify",
+            "--repo", "tvna/claude-md",
+            "--issue", "632",
+        ])
+        assert rc == 0
+
+
+# ---------------------------------------------------------------------------
+# Missing coverage: OSError in load_root_cause_note (lines 321-323)
+# ---------------------------------------------------------------------------
+
+
+class TestCliRootCauseNoteOsError:
+    def test_root_cause_note_path_missing_returns_1(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        # Lines 321-323: OSError when root-cause-note file does not exist
+        import json as _json
+
+        fixture = tmp_path / "candidates.json"
+        fixture.write_text(_json.dumps([_candidate(624)]), encoding="utf-8")
+        rc = gate.main([
+            "verify",
+            "--repo", "tvna/claude-md",
+            "--issue", "632",
+            "--candidates-json", str(fixture),
+            "--root-cause-note", str(tmp_path / "missing_note.txt"),
+        ])
+        assert rc == 1
+        assert "::error::" in capsys.readouterr().err
+
+
+# ---------------------------------------------------------------------------
+# Missing coverage: __main__ guard (line 332)
+# ---------------------------------------------------------------------------
+
+
+class TestMainIfName:
+    def test_main_if_name(self) -> None:
+        import runpy
+
+        with __import__("pytest").raises(SystemExit):
+            runpy.run_path(
+                str(
+                    __import__("pathlib").Path(__file__).parent.parent
+                    / "scripts"
+                    / "preflight_replacement_pr.py"
+                ),
+                run_name="__main__",
+            )
