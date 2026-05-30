@@ -87,6 +87,33 @@ command -v bwrap
 command -v python3
 ```
 
+If Codex starts but later reports
+`Falling back from WebSockets to HTTPS transport. request timed out`
+followed by `Conversation interrupted`, treat that as a Codex CLI
+transport failure, not a SessionStart or MCP startup failure. Do not
+paste Codex logs or tokens into issues. First capture only the network
+boundary checks below from inside the Codex DevContainer:
+
+```sh
+getent hosts api.openai.com auth.openai.com
+curl -I --max-time 20 https://api.openai.com
+curl -I --max-time 20 https://auth.openai.com
+```
+
+If those fail, compare with the egress allowlist disabled for one
+container start:
+
+```sh
+DEVCONTAINER_APPLY_EGRESS_ALLOWLIST=0
+```
+
+Then reopen the Codex DevContainer and retry the same `getent` and
+`curl -I` commands. If disabling the allowlist changes the result, the
+next fix belongs in `.devcontainer/network/codex.allowlist` or the
+allowlist apply script. If the checks pass with and without the
+allowlist, keep the issue scoped to Codex CLI transport behavior or the
+upstream service path rather than changing repository network policy.
+
 After the container opens, verify the runtime identity and workspace
 write access before starting agent work:
 
