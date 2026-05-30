@@ -32,6 +32,7 @@ Repo-local hooks (`language: system`, run via `uv run python`):
 - `scan-workflow-pip` — wraps `scripts/scan_workflow_pip.py verify`; triggers on `^\.github/workflows/.*\.ya?ml$`.
 - `preflight-pr-single-commit` — pre-push hook wrapping `scripts/preflight_pr_single_commit.py`; blocks PR branches that are not exactly one commit ahead of `origin/main`.
 - `preflight-branch-base` — pre-push hook wrapping `scripts/preflight_branch_base.py verify`; fetches `origin/main` and blocks pushes when `HEAD` does not contain the current base branch.
+- `preflight-coverage` — pre-push hook wrapping `scripts/preflight_coverage.py`; checks that every changed `scripts/*.py` file meets the 90% per-file line-coverage floor. Reuses `coverage.json` if present; otherwise runs `pytest --cov --cov-report=json`. Blocks pushes when any file is absent from the coverage report or falls below the floor. Refs #952.
 
 ## CI gate
 

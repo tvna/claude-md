@@ -160,6 +160,16 @@
         ]
       },
       {
+        "matcher": "^mcp__github__(create_pull_request|update_pull_request)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 scripts/preflight_coverage.py",
+            "statusMessage": "Checking per-file script coverage"
+          }
+        ]
+      },
+      {
         "matcher": "^mcp__github__(issue_write|create_pull_request|update_pull_request)$",
         "hooks": [
           {
