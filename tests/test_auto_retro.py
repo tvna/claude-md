@@ -2527,6 +2527,73 @@ class TestExtractVerificationPairs:
         pairs = ar.extract_verification_pairs(body)
         assert pairs and pairs[0].passed is False
 
+    @pytest.mark.parametrize(
+        "result",
+        [
+            # #742 corpus: nix eval quoted-string output. nix eval on a
+            # string-typed attribute wraps the value in double-quotes;
+            # evaluation errors use the un-quoted `error: ...` prefix.
+            '`"0.11.11"`',
+            '`"sha256-p2eEglQ5GFXJbfJx6cqLf3LdFy0xBGBEeFPSXZB7muA="`',
+            '`"sha256-FV/k07PLS/zhGKtLE4D3FRWuh00T2YWBcbT5wm4WaE0="`',
+            # #742 corpus: tarball content observation.
+            "`tarball contains uv-x86_64-unknown-linux-gnu/uv and uv-x86_64-unknown-linux-gnu/uvx`",
+            # #788 corpus: nix eval --raw output (package name-version, shell name).
+            "`bubblewrap-0.11.0`",
+            "`nix-shell`",
+            # #802 corpus: grep -n match output (line-number:content).
+            "`18:aka.ms`",
+            # #807 corpus: sha256sum output and nix sha256 hash prefix.
+            "`a0b896e8cbdd10441125e989aa19d180c62052eda7c8aa850feb367805d1256f  apm-linux-x86_64.tar.gz`",
+            "`364a651b8e383331cf0ae996d3d57b7f164b38de345634ae08fe7114c4f9e3a7  apm-linux-arm64.tar.gz`",
+            "`sha256-oLiW6MvdEEQRJemJqhm+FakeTestHashValue=`",
+            # #810 corpus: grep output with "guard block present" observation.
+            (
+                'guard block present -- `if [[ ! -x "/usr/local/bin/apm" ]];'
+                " then install_nix_binary apm-cli apm;"
+                " else echo apm already present; fi`"
+            ),
+            # #829 corpus: "compiled successfully" short form and "all gates pass".
+            "`compiled successfully; CLAUDE.md and AGENTS.md regenerated from the edited master source.`",
+            "all gates pass except preflight_pr_single_commit (expected before squash-commit)",
+            # #900 corpus: truncated hex hash from python hashlib output.
+            "`15e7b5dfd8e654725ff0`",
+        ],
+    )
+    def test_issue_927_corpus_observations_are_passing(
+        self, result: str
+    ) -> None:
+        """#927 corpus: successful verification observations must not be Verification fail.
+
+        Each result string is taken from retros #742, #788, #802, #807,
+        #810, #829, #900 where the auto-retro generator incorrectly
+        emitted Verification-fail rows for passing verifications. Refs #927.
+        """
+        body = "## Verification\n\n- command: `verify`\n  result: " + result + "\n"
+        pairs = ar.extract_verification_pairs(body)
+        assert pairs and pairs[0].passed is True
+
+    @pytest.mark.parametrize(
+        "result",
+        [
+            "`error: attribute 'foo' missing`",
+            "`fatal: not a git repository`",
+            "`exit 1`",
+            "`3 failed in 0.5s`",
+        ],
+    )
+    def test_issue_927_canonical_failures_still_fail(
+        self, result: str
+    ) -> None:
+        """Canonical failure results must remain False after the #927 fixes."""
+        body = (
+            "## Verification\n\n"
+            "- command: `verify`\n"
+            f"  result: {result}\n"
+        )
+        pairs = ar.extract_verification_pairs(body)
+        assert pairs and pairs[0].passed is False
+
 
 class TestExtractPostMergeChecklist:
     def test_empty_body_returns_empty(self) -> None:
@@ -2738,6 +2805,174 @@ class TestIssue592Corpus:
             (567, "G4", {"verification_pairs_failed": True}, ["ci: x"], ["`not run; local uv 0.11.16 does not match repository required-version ==0.11.11`"], "", True),
             (570, "G4", {"verification_pairs_failed": True}, ["feat: x"], ["`blocked: ModuleNotFoundError: No module named 'hypothesis'`"], "", True),
             (543, "G5", {"fix_typed_title": True}, ["fix(harness): remove gate"], ["`378 passed in 200.38s`"], "fix", False),
+        ],
+    )
+    def test_corpus_standalone_work_disposition(
+        self,
+        issue: int,
+        group: str,
+        signals: dict[str, bool],
+        commits: list[str],
+        results: list[str],
+        pr_type: str,
+        expected: bool,
+    ) -> None:
+        merged_signals = dict(self._BASE_SIGNALS)
+        merged_signals.update(signals)
+        pairs = [self._pair(result) for result in results]
+        assert merged_signals["verification_pairs_failed"] is any(
+            not pair.passed for pair in pairs
+        )
+        rows = ar._repair_history_rows([], commits, len(commits), pairs, pr_type)
+        standalone = bool(rows) and not ar._has_only_exempt_policy_artifact_rows(
+            rows
+        )
+        assert standalone is expected, f"issue #{issue} ({group})"
+
+
+class TestIssue927Corpus:
+    """#927 corpus: verification false-positive repair.
+
+    Each case encodes a retro from the open-retro set referenced in issue
+    #927 (#742, #788, #802, #807, #810, #829, #900). Before the #927 fix,
+    ``_result_is_passing`` returned False for the verification result strings
+    listed below, causing the generator to emit spurious Verification-fail
+    rows. After the fix each result must be classified as passing, which
+    changes the standalone-work disposition from True to False for the
+    cases where the false-positive was the only non-policy-artifact row.
+
+    #788 is included to document that its retro was CORRECTLY created (the
+    source PR had an Iteration commit on a build-typed PR), even though the
+    Verification rows in the table were false positives.
+
+    Refs #927.
+    """
+
+    _BASE_SIGNALS: ClassVar[dict[str, bool]] = {
+        "inline_review_comments": False,
+        "body_cites_refs": False,
+        "fix_typed_title": False,
+        "multi_commit_pr": False,
+        "verification_pairs_failed": False,
+    }
+
+    @staticmethod
+    def _pair(result: str) -> ar.VerificationPair:
+        passed = ar.extract_verification_pairs(
+            "## Verification\n\n"
+            "- command: `representative`\n"
+            f"  result: {result}\n"
+        )[0].passed
+        return ar.VerificationPair("`representative`", result, passed)
+
+    @pytest.mark.parametrize(
+        "issue,group,signals,commits,results,pr_type,expected",
+        [
+            # #742 (PR #736 fix(devcontainer)): nix eval quoted hash + tarball.
+            # After fix: verification pairs pass → only policy-artifact rows → skip.
+            (
+                742,
+                "G3-927",
+                {"body_cites_refs": True, "fix_typed_title": True},
+                [
+                    "fix(devcontainer): pin nix uv to repo version (#734)",
+                    "Merge remote-tracking branch 'origin/main' into codex/fix-devcontainer-uv-pin",
+                ],
+                [
+                    '`"0.11.11"`',
+                    '`"sha256-p2eEglQ5GFXJbfJx6cqLf3LdFy0xBGBEeFPSXZB7muA="`',
+                    "`tarball contains uv-x86_64-unknown-linux-gnu/uv`",
+                ],
+                "fix",
+                False,
+            ),
+            # #788 (PR #778 build(devcontainer)): nix eval --raw output.
+            # Retro was CORRECTLY created: fix(devcontainer) commit on build-typed
+            # PR is an Iteration commit (not a policy artifact). After fix:
+            # verification pairs pass but Iteration commit row remains → standalone.
+            (
+                788,
+                "G4-927-correct",
+                {"body_cites_refs": True},
+                [
+                    "fix(devcontainer): provide Codex bubblewrap",
+                    "Merge branch 'main' into codex/fix-codex-bubblewrap",
+                ],
+                ["`bubblewrap-0.11.0`", "`nix-shell`"],
+                "build",
+                True,
+            ),
+            # #802 (PR #801 build(devcontainer)): grep -n match output.
+            # After fix: verification pair passes → no rows → skip.
+            (
+                802,
+                "G3-927",
+                {"body_cites_refs": True},
+                ["build(devcontainer): allowlist aka.ms for microsoft/apm installer"],
+                ["`18:aka.ms`"],
+                "build",
+                False,
+            ),
+            # #807 (PR #806 feat(nix)): sha256sum output + nix sha256 prefix.
+            # After fix: verification pairs pass → no rows → skip.
+            (
+                807,
+                "G3-927",
+                {"body_cites_refs": True},
+                ["feat(nix): add microsoft/apm as pinned Nix derivation (#804)"],
+                [
+                    "`a0b896e8cbdd10441125e989aa19d180c62052eda7c8aa850feb367805d1256f  apm-linux-x86_64.tar.gz`",
+                    "`sha256-oLiW6MvdEEQRJemJqhm+FakeTestHashValue=`",
+                ],
+                "feat",
+                False,
+            ),
+            # #810 (PR #809 build(devcontainer)): grep "guard block present" output.
+            # After fix: verification pair passes → no rows → skip.
+            (
+                810,
+                "G3-927",
+                {"body_cites_refs": True},
+                ["build(devcontainer): skip apm install when already baked into image (#805)"],
+                [
+                    'guard block present -- `if [[ ! -x "/usr/local/bin/apm" ]];'
+                    " then install_nix_binary apm-cli apm;"
+                    " else echo apm already present; fi`"
+                ],
+                "build",
+                False,
+            ),
+            # #829 (PR #825 fix(language)): "compiled successfully" + "all gates pass".
+            # After fix: verification pairs pass → only policy-artifact rows → skip.
+            (
+                829,
+                "G3-927",
+                {"body_cites_refs": True, "fix_typed_title": True},
+                [
+                    "fix(language): bind operator-facing chat to owner language in every mode (#817)",
+                    "Merge branch 'main' into claude/claude-md-pr-812-wjih3",
+                ],
+                [
+                    "`compiled successfully; CLAUDE.md and AGENTS.md regenerated from the edited master source.`",
+                    "all gates pass except preflight_pr_single_commit (expected before squash-commit)",
+                ],
+                "fix",
+                False,
+            ),
+            # #900 (PR #898 fix(non-ascii)): truncated hex hash.
+            # After fix: verification pair passes → only policy-artifact rows → skip.
+            (
+                900,
+                "G3-927",
+                {"body_cites_refs": True, "fix_typed_title": True},
+                [
+                    "fix(non-ascii): update translations.json issue #9 original to match live body drift",
+                    "Merge branch 'main' into claude/zealous-pascal-TbCXe",
+                ],
+                ["`15e7b5dfd8e654725ff0`"],
+                "fix",
+                False,
+            ),
         ],
     )
     def test_corpus_standalone_work_disposition(
