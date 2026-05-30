@@ -103,6 +103,15 @@ def test_claude_post_tool_use_starts_ci_monitor_after_mcp_pr_create() -> None:
             ],
         },
         {
+            "matcher": "mcp__github__merge_pull_request",
+            "hooks": [
+                {
+                    "type": "command",
+                    "command": "python3 scripts/post_merge_retro_append.py",
+                },
+            ],
+        },
+        {
             "matcher": "mcp__codex_apps__github\\._create_pull_request",
             "hooks": [
                 {

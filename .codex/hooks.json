@@ -125,16 +125,6 @@
         ]
       },
       {
-        "matcher": "^Bash$",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python3 scripts/preflight_push_prek.py",
-            "statusMessage": "Checking prek and single-commit before push"
-          }
-        ]
-      },
-      {
         "matcher": "^mcp__github__(create_pull_request|update_pull_request)$",
         "hooks": [
           {
@@ -268,6 +258,16 @@
             "type": "command",
             "command": "python3 scripts/check_pr_mergeability.py",
             "statusMessage": "Checking PR mergeability"
+          }
+        ]
+      },
+      {
+        "matcher": "^mcp__github__merge_pull_request$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 scripts/post_merge_retro_append.py",
+            "statusMessage": "Directing agent to append repair analysis to auto-retro"
           }
         ]
       },
