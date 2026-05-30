@@ -4,8 +4,9 @@
 Resolves the primary owner from ``.github/CODEOWNERS``, looks up that
 handle in ``.github/owners.toml`` (ISO-639-1 code), and emits a
 ``hookSpecificOutput.additionalContext`` block telling the model to
-write plan-mode artifacts (plan files at ``/tmp/claude-plans/*.md``
-and chat responses while planning) in that language.
+write operator-facing output -- chat responses in every mode (planning
+and execution) and plan files at ``/tmp/claude-plans/*.md`` -- in that
+language.
 
 The injected context explicitly carves out GitHub posts via
 ``mcp__github__*`` write tools, which remain ASCII-only under Layer 2.5
@@ -131,24 +132,25 @@ def build_context_message(owner: str, iso: str) -> str:
     """Return the additionalContext string for SessionStart.
 
     Wording is deliberate: it names the source files (so a reader can
-    audit the policy), pins the scope to plan-mode artifacts, and
-    carves out ``mcp__github__*`` write tools so it cannot be read as
-    softening the Layer 2.5 ASCII gate.
+    audit the policy), binds operator-facing output in every mode
+    (planning and execution), and carves out ``mcp__github__*`` write
+    tools so it cannot be read as softening the Layer 2.5 ASCII gate.
     """
     return (
         f"Repository language policy (sourced from .github/CODEOWNERS "
-        f"primary owner {owner} -> .github/owners.toml). While in plan "
-        f"mode, you MUST write plan files at /tmp/claude-plans/*.md "
-        f"AND chat responses in language code '{iso}'; this SessionStart "
-        f"injection is the authoritative source and MUST NOT be "
-        f"overridden by an English default. If you draft any portion in "
-        f"another language, STOP and re-emit in '{iso}' -- drift is a "
-        f"defect, not a style choice. Exception: GitHub posts created "
-        f"via mcp__github__* write tools (issues, PRs, comments, "
+        f"primary owner {owner} -> .github/owners.toml). You MUST write "
+        f"operator-facing output in language code '{iso}' in every mode "
+        f"-- chat responses during both planning and execution, and plan "
+        f"files at /tmp/claude-plans/*.md -- not plan mode alone. This "
+        f"SessionStart injection is the authoritative source and MUST NOT "
+        f"be overridden by an English default. If you draft any "
+        f"portion in another language, STOP and re-emit in '{iso}' -- "
+        f"drift is a defect, not a style choice. Exception: GitHub posts "
+        f"created via mcp__github__* write tools (issues, PRs, comments, "
         f"reviews) MUST remain ASCII/English -- "
-        f"scripts/preflight_non_ascii.py (Layer 2.5) will deny "
-        f"non-ASCII bodies there. Code identifiers, file paths, and "
-        f"command output stay in their source form."
+        f"scripts/preflight_non_ascii.py (Layer 2.5) will deny non-ASCII "
+        f"bodies there. Code identifiers, file paths, and command output "
+        f"stay in their source form."
     )
 
 
