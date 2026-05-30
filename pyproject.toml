@@ -72,7 +72,7 @@ source = ["scripts"]
 # `fail_under` is the authoritative blocking gate (#188); Codecov status
 # remains informational only. Graduation PRs may raise this floor but
 # never lower it (G4 invariant in workflow-script-quality.md, #198).
-fail_under = 92.71
+fail_under = 95.00
 show_missing = true
 # No scripts are omitted: the initial threshold is the measured baseline from
 # the full test suite, so every runtime script remains visible in CI output.
