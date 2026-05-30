@@ -40,17 +40,6 @@
             "statusMessage": "Checking open PR mergeability"
           }
         ]
-      },
-      {
-        "matcher": "startup|clear|compact",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd\" session-start",
-            "async": false
-          }
-        ],
-        "_apm_source": "superpowers"
       }
     ],
     "PreToolUse": [
@@ -255,12 +244,6 @@
             "statusMessage": "Checking PR mergeability"
           }
         ]
-      }
-    ],
-    "sessionStart": [
-      {
-        "command": "./hooks/run-hook.cmd session-start",
-        "_apm_source": "superpowers"
       }
     ]
   }

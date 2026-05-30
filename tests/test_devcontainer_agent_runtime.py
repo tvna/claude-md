@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import re
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -11,10 +13,34 @@ pytestmark = pytest.mark.shard_ci_ops
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 AGENTS = ("claude", "codex")
+CODEX_WORKSPACE = "/workspaces/claude-md"
+CODEX_TRUSTED_HASH_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
 
 
 def load_json(path: Path) -> dict[str, object]:
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _codex_hook_state_keys() -> set[str]:
+    event_names = {
+        "SessionStart": "session_start",
+        "PreToolUse": "pre_tool_use",
+        "PostToolUse": "post_tool_use",
+    }
+    hooks = load_json(REPO_ROOT / ".codex/hooks.json")["hooks"]
+    assert isinstance(hooks, dict)
+
+    keys: set[str] = set()
+    for event_name, state_event_name in event_names.items():
+        groups = hooks[event_name]
+        assert isinstance(groups, list)
+        for group_index, group in enumerate(groups):
+            assert isinstance(group, dict)
+            handlers = group["hooks"]
+            assert isinstance(handlers, list)
+            for hook_index, _handler in enumerate(handlers):
+                keys.add(f"{CODEX_WORKSPACE}/.codex/hooks.json:{state_event_name}:{group_index}:{hook_index}")
+    return keys
 
 
 def test_local_entrypoints_persist_agent_and_gh_sessions() -> None:
@@ -53,15 +79,43 @@ def test_codex_runtime_config_uses_supported_toml_keys() -> None:
     codex_toml = (REPO_ROOT / ".devcontainer/config/codex/config.toml").read_text(encoding="utf-8")
 
     assert 'approval_policy = "never"' in codex_toml
-    assert "[mcp_servers.codex_apps]" not in codex_toml
+    assert "[mcp_servers.codex_apps]" in codex_toml
+    assert "startup_timeout_sec = 120" in codex_toml
     assert "[permissions]" not in codex_toml
     assert "allow = [" not in codex_toml
+
+
+def test_codex_runtime_config_pretrusts_workspace_and_hooks() -> None:
+    config_path = REPO_ROOT / ".devcontainer/config/codex/config.toml"
+    config = tomllib.loads(config_path.read_text(encoding="utf-8"))
+
+    projects = config["projects"]
+    assert isinstance(projects, dict)
+    workspace = projects[CODEX_WORKSPACE]
+    assert isinstance(workspace, dict)
+    assert workspace["trust_level"] == "trusted"
+
+    hooks = config["hooks"]
+    assert isinstance(hooks, dict)
+    state = hooks["state"]
+    assert isinstance(state, dict)
+
+    expected_keys = _codex_hook_state_keys()
+    assert set(state) == expected_keys
+    for hook_key, hook_state in state.items():
+        assert hook_key in expected_keys
+        assert isinstance(hook_state, dict)
+        trusted_hash = hook_state["trusted_hash"]
+        assert isinstance(trusted_hash, str)
+        assert CODEX_TRUSTED_HASH_RE.match(trusted_hash)
 
 
 def test_runbook_documents_existing_codex_volume_refresh() -> None:
     runbook = (REPO_ROOT / "docs/runbooks/devcontainers.md").read_text(encoding="utf-8")
 
     assert "startup_timeout_sec" in runbook
+    assert 'trust_level = "trusted"' in runbook
+    assert "[hooks.state]" in runbook
     assert "bash .devcontainer/scripts/configure-agent-runtime.sh codex" in runbook
     assert "command -v bwrap" in runbook
 
