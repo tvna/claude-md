@@ -163,6 +163,15 @@
             "command": "python3 scripts/preflight_pr_template_shape.py"
           }
         ]
+      },
+      {
+        "matcher": "mcp__github__",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 scripts/gate_mcp_github_uncovered.py"
+          }
+        ]
       }
     ],
     "PostToolUse": [

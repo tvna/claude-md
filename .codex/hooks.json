@@ -193,6 +193,16 @@
             "statusMessage": "Checking PR template"
           }
         ]
+      },
+      {
+        "matcher": "^mcp__github__",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 scripts/gate_mcp_github_uncovered.py",
+            "statusMessage": "Checking GitHub MCP tool coverage"
+          }
+        ]
       }
     ],
     "PostToolUse": [
