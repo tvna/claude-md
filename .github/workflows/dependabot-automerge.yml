@@ -25,9 +25,12 @@ jobs:
       - name: Collect changed files
         env:
           GH_TOKEN: ${{ github.token }}
-          PR_URL: ${{ github.event.pull_request.html_url }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
-          gh pr diff "$PR_URL" --name-only > changed-files.txt
+          python3 scripts/dependabot_automerge.py list-files \
+            --pr-number "$PR_NUMBER" \
+            --output changed-files.txt
 
       - name: Audit policy
         id: audit
@@ -43,6 +46,8 @@ jobs:
         if: steps.audit.outputs.should_enable == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-          PR_URL: ${{ github.event.pull_request.html_url }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
-          gh pr merge "$PR_URL" --auto --squash
+          python3 scripts/dependabot_automerge.py request-automerge \
+            --pr-number "$PR_NUMBER"

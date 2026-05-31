@@ -115,6 +115,8 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("branch_cleanup.py", "survey"): "test_branch_cleanup_survey_matches_workflow_args",
     ("coverage_failure_issue.py", "run"): "test_coverage_failure_issue_run_matches_workflow_env",
     ("dependabot_automerge.py", "audit"): "test_dependabot_automerge_audit_matches_workflow_files",
+    ("dependabot_automerge.py", "list-files"): "test_dependabot_list_files_matches_workflow_args",
+    ("dependabot_automerge.py", "request-automerge"): "test_dependabot_request_automerge_matches_workflow_args",
     ("dependabot_labels.py", "verify"): "test_dependabot_labels_verify_matches_workflow_paths",
     ("issue_link.py", "verify"): "test_issue_link_verify_matches_workflow_body_file_and_author",
     ("labels_apply.py", "$COMMAND"): "test_labels_apply_validate_and_plan_match_workflow_args",
@@ -519,6 +521,26 @@ def test_dependabot_automerge_audit_matches_workflow_files(tmp_path: Path) -> No
             str(tmp_path / "output"),
         ]
     ) == 0
+
+
+def test_dependabot_list_files_matches_workflow_args(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("GH_TOKEN", "tok")
+    monkeypatch.setenv("REPO", "owner/repo")
+    monkeypatch.setattr(dependabot_automerge, "_list_pr_files", lambda **kw: ["uv.lock"])
+    out = tmp_path / "changed-files.txt"
+    assert dependabot_automerge.main(["list-files", "--pr-number", "42", "--output", str(out)]) == 0
+    assert out.read_text(encoding="utf-8") == "uv.lock\n"
+
+
+def test_dependabot_request_automerge_matches_workflow_args(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("GH_TOKEN", "tok")
+    monkeypatch.setenv("REPO", "owner/repo")
+    monkeypatch.setattr(dependabot_automerge, "_enable_auto_merge", lambda **kw: None)
+    assert dependabot_automerge.main(["request-automerge", "--pr-number", "42"]) == 0
 
 
 def test_dependabot_labels_verify_matches_workflow_paths(tmp_path: Path) -> None:

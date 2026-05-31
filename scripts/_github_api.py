@@ -59,5 +59,37 @@ def apply_call(
     return last_code, last_body
 
 
+def graphql_call(
+    *,
+    query: str,
+    variables: dict[str, Any],
+    token: str,
+    opener: Callable[[urllib.request.Request], Any] = urllib.request.urlopen,
+) -> tuple[int, dict[str, Any]]:
+    """Execute a GitHub GraphQL query/mutation. Returns (http_status, response_dict)."""
+    payload = json.dumps({"query": query, "variables": variables}, separators=(",", ":"))
+    request = urllib.request.Request(
+        "https://api.github.com/graphql",
+        data=payload.encode("utf-8"),
+        method="POST",
+    )
+    request.add_header("Authorization", f"Bearer {token}")
+    request.add_header("Accept", "application/vnd.github+json")
+    request.add_header("X-GitHub-Api-Version", API_VERSION)
+    request.add_header("Content-Type", "application/json")
+    try:
+        with opener(request) as response:
+            code = int(response.status)
+            body_str = response.read().decode("utf-8", errors="replace")
+    except urllib.error.HTTPError as error:
+        code = int(error.code)
+        body_str = error.read().decode("utf-8", errors="replace")
+    try:
+        body = json.loads(body_str)
+    except (json.JSONDecodeError, UnboundLocalError):
+        body = {}
+    return code, body if isinstance(body, dict) else {}
+
+
 def _format_code(code: int) -> str:
     return "000" if code == 0 else str(code)
