@@ -38,11 +38,6 @@ def _hook_groups(data: dict[str, object], name: str) -> list[dict[str, object]]:
 def _commands_for_groups(groups: list[dict[str, object]]) -> list[str]:
     commands: list[str] = []
     for group in groups:
-        if group.get("_apm_source") == "superpowers" and "command" in group:
-            command = group["command"]
-            assert isinstance(command, str)
-            commands.append(command)
-            continue
         handlers = group["hooks"]
         assert isinstance(handlers, list)
         for handler in handlers:
@@ -81,8 +76,26 @@ def test_devin_hooks_json_is_valid() -> None:
     hooks = data.get("hooks")
     assert isinstance(hooks, dict)
     assert set(hooks) >= CORE_HOOK_EVENTS
-    unexpected = set(hooks) - CORE_HOOK_EVENTS - {"sessionStart"}
+    unexpected = set(hooks) - CORE_HOOK_EVENTS
     assert not unexpected
+
+
+def test_devin_hooks_use_pascalcase_event_keys() -> None:
+    """Hook event keys must be PascalCase; camelCase keys never fire.
+
+    Refs #1030. The Devin adapter mirrors the Claude/Codex hook configs,
+    whose lifecycle events are matched case-sensitively in PascalCase, so a
+    camelCase key such as ``sessionStart`` is dead config. A stray
+    ``sessionStart`` duplicate previously shipped next to the real
+    ``SessionStart`` array; this guards its reintroduction.
+    """
+    data = _load_hooks()
+    hooks = data["hooks"]
+    assert isinstance(hooks, dict)
+    assert "sessionStart" not in hooks
+    for key in hooks:
+        assert isinstance(key, str)
+        assert key[0].isupper(), f"hook event key must be PascalCase: {key!r}"
 
 
 def test_all_devin_hook_commands_point_to_repo_files() -> None:
@@ -96,7 +109,7 @@ def test_all_devin_hook_commands_point_to_repo_files() -> None:
 
     assert commands
     for command in commands:
-        if "CLAUDE_PLUGIN_ROOT" in command or command == "./hooks/run-hook.cmd session-start":
+        if "CLAUDE_PLUGIN_ROOT" in command:
             continue
         path = _repo_script_from_command(command)
         assert not path.startswith("/")
