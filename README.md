@@ -60,6 +60,11 @@ For Codex or other tools that read `AGENTS.md`:
 ln -s .claude-md-master/AGENTS.md AGENTS.md
 ```
 
+### Devin
+
+Devin can use the APM-deployed skills from `.agents/skills/`. For hook parity,
+vendor `.devin/hooks.v1.json` alongside the repository instructions.
+
 ### 2. Add project-specific rules
 
 Create a local project instructions file in the parent project and import the master at the top, then list only the project-specific delta below.

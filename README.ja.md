@@ -60,6 +60,10 @@ Codex など `AGENTS.md` を読むツール向けには、次も追加します�
 ln -s .claude-md-master/AGENTS.md AGENTS.md
 ```
 
+### Devin
+
+Devin は APM が展開した `.agents/skills/` の skills を利用できます。hooks の parity が必要な場合は、リポジトリ指示と一緒に `.devin/hooks.v1.json` を取り込んでください。
+
 ### 2. プロジェクト固有ルールを追加する
 
 親プロジェクト側でローカルなプロジェクト指示ファイルを作成し、先頭でこのマスターを読み込んでから、プロジェクト固有の差分だけを書きます。
