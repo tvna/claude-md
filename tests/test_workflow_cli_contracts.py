@@ -67,6 +67,7 @@ import verify_required_check_contexts
 import verify_ruleset_sync
 import verify_shard_coverage
 import verify_test_shard_markers
+import workflow_diagram
 import yaml
 
 pytestmark = pytest.mark.shard_ci_ops
@@ -104,6 +105,7 @@ class WorkflowInvocation(NamedTuple):
 CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("analyze_ci_timings.py", None): "test_analyze_ci_timings_matches_workflow_args",
     ("auto_retro.py", "decision-tree-doc"): "test_auto_retro_decision_tree_doc_matches_workflow_args",
+    ("workflow_diagram.py", "diagram-doc"): "test_workflow_diagram_doc_matches_workflow_args",
     ("auto_retro.py", "run"): "test_auto_retro_run_matches_workflow_env",
     ("auto_retro.py", "post-merge-rescan"): "test_auto_retro_post_merge_rescan_matches_workflow_env",
     ("auto_retro.py", "sentinel"): "test_auto_retro_sentinel_matches_workflow_env",
@@ -358,12 +360,38 @@ def test_auto_retro_decision_tree_doc_matches_workflow_args(
 ) -> None:
     """Mirror the default-output shape used by the generated-doc workflow."""
     monkeypatch.chdir(tmp_path)
-    output = Path("docs/generated/auto-retro-decision-tree.md")
+    output = Path("docs/generated/scripts/auto-retro-decision-tree.md")
 
     assert auto_retro.main(["decision-tree-doc"]) == 0
 
     assert output.read_text(encoding="utf-8") == (
         auto_retro.render_decision_tree_markdown()
+    )
+
+
+def test_workflow_diagram_doc_matches_workflow_args(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Mirror the default-output shape used by the generate-docs workflow."""
+    import shutil
+
+    # Resolve source path before chdir so it stays absolute.
+    src_wf_abs = Path(".github/workflows/post-merge.yml").resolve()
+
+    monkeypatch.chdir(tmp_path)
+    wf_dir = tmp_path / ".github" / "workflows"
+    wf_dir.mkdir(parents=True)
+    shutil.copy(src_wf_abs, wf_dir / src_wf_abs.name)
+
+    out_dir = tmp_path / "docs" / "generated" / "workflows"
+    assert workflow_diagram.main(["diagram-doc", "--output-dir", str(out_dir)]) == 0
+
+    expected = out_dir / "post-merge-if-branches.md"
+    assert expected.exists()
+    # diagram-doc uses a relative path glob; compare against the same relative path
+    # so the preamble source field matches.
+    assert expected.read_text(encoding="utf-8") == workflow_diagram.render_markdown(
+        workflow_diagram.parse_workflow(Path(".github/workflows") / src_wf_abs.name)
     )
 
 

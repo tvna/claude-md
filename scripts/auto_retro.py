@@ -64,7 +64,7 @@ from _retro_labels import (
 from _trusted_bots import _TRUSTED_BOT_LOGINS
 from issue_link import extract_refs, strip_html_comments
 
-_DECISION_TREE_DOC_PATH = Path("docs/generated/auto-retro-decision-tree.md")
+_DECISION_TREE_DOC_PATH = Path("docs/generated/scripts/auto-retro-decision-tree.md")
 
 # Refs issue #380: GitHub may not finalize merge_commit_sha by the time
 # pull_request_target.closed fires; retry the PR-detail fetch with

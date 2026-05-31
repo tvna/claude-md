@@ -1,0 +1,26 @@
+# Workflow if-branches: Issue and PR triage
+
+This file is generated from `.github/workflows/issue-pr-triage.yml` by `python3 scripts/workflow_diagram.py diagram-doc`. Do not edit it by hand; update the workflow YAML and regenerate instead.
+
+```mermaid
+flowchart TD
+
+    T_issues(["on: issues\ntypes: ['opened', 'edited', 'labeled', 'unla..."])
+    T_pull_request_target(["on: pull_request_target\ntypes: ['opened', 'edited', 'synchronize', '..."])
+    T_issue_comment(["on: issue_comment\ntypes: ['created', 'edited']"])
+    T_pull_request_review_comment(["on: pull_request_review_comment\ntypes: ['created', 'edited']"])
+
+    J_scan["scan"]
+    J_triage["triage"]
+    S_J_triage_0(("Apply threat labels"))
+    S_J_triage_1(("Remove stale threat labels"))
+
+    T_issues -->|"github.actor != 'github-actions[bot]' && (   (github.event_name == 'iss~"| J_scan
+    T_pull_request_target -->|"github.actor != 'github-actions[bot]' && (   (github.event_name == 'iss~"| J_scan
+    T_issue_comment -->|"github.actor != 'github-actions[bot]' && (   (github.event_name == 'iss~"| J_scan
+    T_pull_request_review_comment -->|"github.actor != 'github-actions[bot]' && (   (github.event_name == 'iss~"| J_scan
+    T_issues -->|"github.event_name == 'issues' || (   github.event_name == 'pull_request~"| J_triage
+    T_pull_request_target -->|"github.event_name == 'issues' || (   github.event_name == 'pull_request~"| J_triage
+    J_triage -->|"steps.triage.outputs.recommended_labels != ''"| S_J_triage_0
+    J_triage -->|"steps.triage.outputs.remove_labels != ''"| S_J_triage_1
+```
