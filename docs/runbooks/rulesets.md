@@ -67,11 +67,13 @@ One-time setup for `RULESETS_PAT`:
     confirm the guard step passes and the job emits a plan without
     mutating live rulesets.
 
-The weekly drift jobs currently also read `RULESETS_PAT` without an
-Environment boundary, as recorded in
-[`workflow-permissions-audit.md`](workflow-permissions-audit.md). Until
-that residual exposure is closed, any repo-level `RULESETS_PAT` must use
-the same fine-grained token properties above.
+The weekly drift jobs (`ruleset-drift`, `security-control-drift`) read
+`RULESETS_PAT` through the `ruleset-verify` GitHub Environment boundary
+([#996](https://github.com/tvna/claude-md/issues/996)), the same
+Environment used by the PR-time sync gate, so they no longer require a
+repo-level secret. The earlier residual exposure recorded in
+[`workflow-permissions-audit.md`](workflow-permissions-audit.md) is
+closed by that scoping.
 
 **Rotation**: Record the PAT expiry in your calendar. When rotating,
 generate a new PAT first, update the `RULESETS_PAT` secret in every
