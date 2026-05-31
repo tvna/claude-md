@@ -14,6 +14,7 @@ pytestmark = pytest.mark.shard_preflight
 
 ROOT = Path(__file__).resolve().parents[1]
 DEVIN_HOOKS = ROOT / ".devin" / "hooks.v1.json"
+CODEX_HOOKS = ROOT / ".codex" / "hooks.json"
 CORE_HOOK_EVENTS = {"SessionStart", "PreToolUse", "PostToolUse"}
 
 
@@ -161,3 +162,20 @@ def test_devin_post_tool_use_starts_pr_monitoring() -> None:
         legacy_pr_create
     ]
     assert connector_pr_create in matcher_to_commands
+
+
+def test_devin_hooks_match_codex_hooks_exactly() -> None:
+    """The Devin adapter must stay byte-for-byte in sync with the Codex config.
+
+    Refs #1030. ``.devin/hooks.v1.json`` mirrors ``.codex/hooks.json`` (see
+    docs/standards/devin-apm-compatibility.md). A one-sided edit -- such as
+    fixing a bad hook key in one file but not the other -- would silently
+    diverge the two adapters. Asserting full equality of the parsed configs
+    forces every hook change to land in both files together.
+    """
+    devin = json.loads(DEVIN_HOOKS.read_text(encoding="utf-8"))
+    codex = json.loads(CODEX_HOOKS.read_text(encoding="utf-8"))
+    assert devin == codex, (
+        ".devin/hooks.v1.json and .codex/hooks.json have diverged; "
+        "hook changes must be applied to both adapters together"
+    )
