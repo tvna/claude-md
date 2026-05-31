@@ -219,7 +219,7 @@ class TestCmdUpsert:
         monkeypatch.setattr(pu, "_upsert_pr", lambda **kw: ("created", 42))
         rc = pu.main(["upsert", "--head", "chore/x", "--base", "main", "--title", "t", "--body-file", str(body_file)])
         assert rc == 0
-        assert "42" in capsys.readouterr().out
+        assert capsys.readouterr().out.strip() == "42"
 
     def test_success_update(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
@@ -231,7 +231,7 @@ class TestCmdUpsert:
         monkeypatch.setattr(pu, "_upsert_pr", lambda **kw: ("updated", 7))
         rc = pu.main(["upsert", "--head", "chore/x", "--base", "main", "--title", "t", "--body-file", str(body_file)])
         assert rc == 0
-        assert "7" in capsys.readouterr().out
+        assert capsys.readouterr().out.strip() == "7"
 
     def test_missing_token_returns_1(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
@@ -263,3 +263,62 @@ class TestCmdUpsert:
         rc = pu.main(["upsert", "--head", "x", "--base", "main", "--title", "t", "--body-file", str(tmp_path / "nonexistent.md")])
         assert rc == 1
         assert "body" in capsys.readouterr().err.lower()
+
+
+# ---------------------------------------------------------------------------
+# _cmd_find() / find subcommand
+# ---------------------------------------------------------------------------
+
+
+class TestCmdFind:
+    def test_found_prints_pr_number(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        monkeypatch.setenv("GH_TOKEN", "tok")
+        monkeypatch.setenv("REPO", "owner/repo")
+        monkeypatch.setattr(pu, "_list_open_prs", lambda **kw: [{"number": 55}])
+        rc = pu.main(["find", "--head", "chore/x"])
+        assert rc == 0
+        assert capsys.readouterr().out.strip() == "55"
+
+    def test_not_found_prints_nothing(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        monkeypatch.setenv("GH_TOKEN", "tok")
+        monkeypatch.setenv("REPO", "owner/repo")
+        monkeypatch.setattr(pu, "_list_open_prs", lambda **kw: [])
+        rc = pu.main(["find", "--head", "chore/x"])
+        assert rc == 0
+        assert capsys.readouterr().out.strip() == ""
+
+    def test_missing_token_returns_1(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        monkeypatch.delenv("GH_TOKEN", raising=False)
+        monkeypatch.setenv("REPO", "owner/repo")
+        rc = pu.main(["find", "--head", "chore/x"])
+        assert rc == 1
+        assert "GH_TOKEN" in capsys.readouterr().err
+
+    def test_missing_repo_returns_1(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        monkeypatch.setenv("GH_TOKEN", "tok")
+        monkeypatch.delenv("REPO", raising=False)
+        rc = pu.main(["find", "--head", "chore/x"])
+        assert rc == 1
+        assert "REPO" in capsys.readouterr().err
+
+    def test_api_error_returns_1(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        monkeypatch.setenv("GH_TOKEN", "tok")
+        monkeypatch.setenv("REPO", "owner/repo")
+
+        def raise_error(**kw: object) -> list[dict[str, Any]]:
+            raise RuntimeError("API failed")
+
+        monkeypatch.setattr(pu, "_list_open_prs", raise_error)
+        rc = pu.main(["find", "--head", "chore/x"])
+        assert rc == 1
+        assert "API failed" in capsys.readouterr().err
