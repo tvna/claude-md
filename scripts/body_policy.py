@@ -54,16 +54,29 @@ _DEVIN_REVIEW_BADGE_RE = re.compile(
     re.DOTALL,
 )
 
+# "Requested by: @<login>" line injected by the Devin platform after the
+# agent-attribution footer.  Must be stripped so the footer remains the
+# final non-empty line for ``verify_pr_agent_attribution_footer``.
+_DEVIN_REQUESTED_BY_RE = re.compile(
+    r"^Requested by: @[A-Za-z0-9._-]+\s*$",
+    re.MULTILINE,
+)
+
 
 def strip_devin_review_badge(body: str) -> str:
-    """Remove the Devin Review badge block from *body*.
+    """Remove Devin-platform-injected content from *body*.
 
-    The block spans from ``<!-- devin-review-badge-begin -->`` through
-    ``<!-- devin-review-badge-end -->`` inclusive of all non-comment HTML
-    between the two markers.  Returns *body* unchanged when no badge is
-    present.
+    Strips:
+    1. The Devin Review badge block (``<!-- devin-review-badge-begin -->``
+       through ``<!-- devin-review-badge-end -->`` inclusive).
+    2. The ``Requested by: @<login>`` line appended by the Devin platform
+       after the agent-attribution footer.
+
+    Returns *body* unchanged when neither pattern is present.
     """
-    return _DEVIN_REVIEW_BADGE_RE.sub("", body)
+    result = _DEVIN_REVIEW_BADGE_RE.sub("", body)
+    result = _DEVIN_REQUESTED_BY_RE.sub("", result)
+    return result
 
 
 _PR_REQUIRED: tuple[str, ...] = (
@@ -359,7 +372,9 @@ def verify_pr_agent_attribution_footer(body: str) -> list[str]:
     auto-append would otherwise yield a duplicate that this gate must
     catch. Refs #784.
     """
-    cleaned = strip_html_comments(body.replace("\r", "")).rstrip()
+    cleaned = strip_devin_review_badge(
+        strip_html_comments(body.replace("\r", ""))
+    ).rstrip()
     lines = cleaned.splitlines()
     matching = [
         line for line in lines if _AGENT_ATTRIBUTION_FOOTER_RE.fullmatch(line)
