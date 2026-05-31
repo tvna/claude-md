@@ -36,6 +36,7 @@ from typing import Any
 
 from _github_tool_names import canonical_github_tool
 from body_policy import (
+    strip_devin_review_badge,
     verify_pr_agent_attribution_footer,
     verify_pr_checklist_subsections,
     verify_pr_verification_pairs,
@@ -51,6 +52,7 @@ _TARGET_TOOLS: frozenset[str] = frozenset(
 
 def evaluate(body: str) -> list[str]:
     """Return list of ``::error::`` strings; empty list means OK."""
+    body = strip_devin_review_badge(body)
     return verify_pr_verification_pairs(body) + verify_pr_checklist_subsections(
         body
     ) + verify_pr_agent_attribution_footer(body)

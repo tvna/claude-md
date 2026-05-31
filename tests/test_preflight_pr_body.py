@@ -163,6 +163,28 @@ class TestEvaluate:
         for e in errors:
             assert e.isascii(), f"error message is not ASCII: {e!r}"
 
+    def test_devin_badge_stripped_before_validation(self) -> None:
+        """Devin Review badge block does not interfere with footer detection. Refs #994."""
+        badge = (
+            "<!-- devin-review-badge-begin -->\n"
+            "\n---\n\n"
+            '<a href="https://app.devin.ai/review/x/y/pull/1" target="_blank">\n'
+            "  <picture>\n"
+            '    <source media="(prefers-color-scheme: dark)"'
+            ' srcset="https://static.devin.ai/assets/dark.svg">\n'
+            '    <img src="https://static.devin.ai/assets/light.svg"'
+            ' alt="Open in Devin Review">\n'
+            "  </picture>\n"
+            "</a>\n"
+            "<!-- devin-review-badge-end -->"
+        )
+        body = _GOOD_BODY.replace(
+            _FOOTER_OK,
+            badge + "\n\n" + _FOOTER_OK,
+        )
+        errors = prb.evaluate(body)
+        assert errors == [], errors
+
 
 # ---------------------------------------------------------------------------
 # TestMain - CLI subcommand verify

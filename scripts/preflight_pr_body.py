@@ -37,6 +37,7 @@ from body_policy import (
     extract_headings,
     missing_sections,
     required_sections,
+    strip_devin_review_badge,
     verify_pr_agent_attribution_footer,
     verify_pr_checklist_subsections,
     verify_pr_verification_pairs,
@@ -50,6 +51,11 @@ def evaluate(body: str, *, issue: int | None = None) -> list[str]:
     Checks are ordered from cheapest to most specific so the list is
     readable top-to-bottom (structure first, content second).
     """
+    # Strip bot-injected badge blocks before validation so that
+    # Devin Review badge HTML does not interfere with footer detection
+    # or trigger false-positive ASCII violations.  Refs #994.
+    body = strip_devin_review_badge(body)
+
     errors: list[str] = []
 
     # 1. Required H2/H3 sections.

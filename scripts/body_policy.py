@@ -43,6 +43,29 @@ _TRAILING_COLON_RE = re.compile(r":+\s*$")
 _AMPERSAND_RE = re.compile(r"\s*&\s*")
 _TRACKING_MARKER = "Initial child issues"
 
+# Devin Review badge block: the integration injects a badge between two
+# HTML comment markers.  The content between the markers is raw HTML (not
+# inside a comment), so ``strip_html_comments`` only removes the markers
+# themselves.  This regex captures everything from the opening marker
+# through the closing marker (inclusive) so all bot-injected badge
+# content is removed before validation.  Refs #994.
+_DEVIN_REVIEW_BADGE_RE = re.compile(
+    r"<!-- devin-review-badge-begin -->.*?<!-- devin-review-badge-end -->",
+    re.DOTALL,
+)
+
+
+def strip_devin_review_badge(body: str) -> str:
+    """Remove the Devin Review badge block from *body*.
+
+    The block spans from ``<!-- devin-review-badge-begin -->`` through
+    ``<!-- devin-review-badge-end -->`` inclusive of all non-comment HTML
+    between the two markers.  Returns *body* unchanged when no badge is
+    present.
+    """
+    return _DEVIN_REVIEW_BADGE_RE.sub("", body)
+
+
 _PR_REQUIRED: tuple[str, ...] = (
     "Facts",
     "Assumptions",
@@ -439,6 +462,11 @@ def _verify(
             f"{cutoff}."
         )
         return 0
+
+    # Strip bot-injected badge blocks before validation so that
+    # Devin Review badge HTML does not pollute section extraction or
+    # footer detection.  Refs #994.
+    body = strip_devin_review_badge(body)
 
     required = required_sections(kind, body=body)
     headings = extract_headings(body)
