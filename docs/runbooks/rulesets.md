@@ -8,7 +8,7 @@ The rulesets are introduced incrementally per the phased rollout in [#18](https:
 
 | File | Target | Purpose |
 |---|---|---|
-| `.github/rulesets/main.json` | `~DEFAULT_BRANCH` | Strict `main` protection (PR-only, squash-only, required status check, linear history) |
+| `.github/rulesets/main.json` | `~DEFAULT_BRANCH` | Strict `main` protection (PR-only, squash-only, required status check, linear history, squash merge queue) |
 | `.github/rulesets/all-branches.json` | `~ALL` except `~DEFAULT_BRANCH`, `refs/heads/dependabot/*`, and `refs/heads/claude/*` | `non_fast_forward` only (deletion intentionally omitted; see [#18 comment 2](https://github.com/tvna/claude-md/issues/18#issuecomment-4482555311)). `refs/heads/claude/*` is excluded per [#507](https://github.com/tvna/claude-md/issues/507) so agent branches can recover from rebase via `git commit --amend` + `git push --force-with-lease`; agent branches are short-lived personal staging space, not shared. |
 | `.github/rulesets/dependabot.json` | `refs/heads/dependabot/*` | `non_fast_forward` with no bypass actors. Originally granted the Dependabot Integration `actor_id: 49699333` a bypass per [#140](https://github.com/tvna/claude-md/issues/140), but GitHub deprecated the standalone Dependabot GitHub App and the Rulesets API now returns HTTP 422 for that bypass actor — see [#273](https://github.com/tvna/claude-md/issues/273); `@dependabot rebase` is therefore blocked and Dependabot falls back to closing + reopening the PR with a freshly rebased branch. The admin `RepositoryRole` bypass was also removed across all three rulesets so the "Merge without waiting for requirements" path is no longer reachable. |
 | `docs/runbooks/rulesets.md` *(this file)* | — | Runbook |
@@ -24,10 +24,38 @@ The apply step is split across phases so that the strictest rule (`commit_messag
 | **3-B** ([#42](https://github.com/tvna/claude-md/issues/42)) | `main.json` (after adding `commit_message_pattern`) | `ruleset=main`, `dry_run=false`, `enable_auto_delete=false` (PUT path, ≥7 days after 3-A) |
 | **P4-dependabot** ([#140](https://github.com/tvna/claude-md/issues/140)) | `all-branches.json` (PUT: adds `refs/heads/dependabot/*` to `exclude`) + `dependabot.json` (POST) | `ruleset=all-branches`, then `ruleset=dependabot`, both `dry_run=false`, `enable_auto_delete=false` |
 | **P5-claude** ([#507](https://github.com/tvna/claude-md/issues/507)) | `all-branches.json` (PUT: adds `refs/heads/claude/*` to `exclude`) | `ruleset=all-branches`, `dry_run=false`, `enable_auto_delete=false` |
+| **P6-merge-queue** ([#895](https://github.com/tvna/claude-md/issues/895)) | `main.json` (PUT: adds the `merge_queue` rule) | `ruleset=main`, `dry_run=false`, `enable_auto_delete=false` |
 
 ¹ Phase 3-A applies `main.json` as committed — including `require_code_owner_review: true` ([#56](https://github.com/tvna/claude-md/issues/56) P1-b). No separate dispatch is needed to activate code-owner enforcement; it ships in the same PUT as the rest of `main.json`.
 
 Run with `dry_run=true` first for every phase to inspect the planned POST/PUT and the per-field diff in the job summary.
+
+## Merge queue rule (`merge_queue`)
+
+The `main.json` SoT carries a `merge_queue` rule ([#895](https://github.com/tvna/claude-md/issues/895)) so approved PRs land through GitHub Merge Queue instead of an author-side rebase-then-merge. The queue builds a transient `merge_group` integration ref, runs the required status checks against it, and squash-merges when they pass. This removes the up-to-date-branch pressure that produced the force-push recovery trap in #895.
+
+Rule parameters (GitHub Rulesets API casing):
+
+| Parameter | Value | Why |
+|---|---|---|
+| `merge_method` | `SQUASH` | Matches the single squash commit the repository already lands on `main` (`allowed_merge_methods: ["squash"]`). |
+| `grouping_strategy` | `ALLGREEN` | Every entry in a build group must be green; a red entry fails the whole group rather than letting a sibling regress `main`. |
+| `max_entries_to_build` | `5` | Cap on entries stacked into one integration build. |
+| `min_entries_to_merge` / `max_entries_to_merge` | `1` / `5` | Merge as soon as one entry is ready; never merge more than five at once. |
+| `min_entries_to_merge_wait_minutes` | `5` | Short batching window so a lone PR still lands promptly. |
+| `check_response_timeout_minutes` | `60` | A required check that never reports on the `merge_group` ref times out the entry after an hour instead of stalling the queue forever. |
+
+**Cross-dependency**: every workflow that produces a required status-check context MUST also trigger on `merge_group`, or the queue stalls waiting for a context that never reports on the integration ref. Those triggers were added in the same #895 rollout; see [`merge-queue-failures.md`](https://github.com/tvna/claude-md/blob/main/docs/runbooks/merge-queue-failures.md) for the trigger inventory and red-queue triage. The required context **names** are unchanged by the merge-queue rollout, so `Verify ruleset sync / gate` (the PR-time required-checks sync gate) stays green without a contexts edit.
+
+### Activation order
+
+The `merge_queue` rule only takes effect once the producing workflows already emit their checks on `merge_group`. Apply in this order:
+
+1. Land the workflow `merge_group:` triggers (PR for the four required-check workflows plus `portable-pr-policy.yml`).
+2. Confirm a draft PR's required checks report on a `merge_group` run (open a PR, add it to the queue, watch the `merge_group` check_runs appear under the same context names).
+3. Then dispatch `Apply rulesets` with `ruleset=main, dry_run=true`, confirm the planned PUT diff is only the added `merge_queue` rule, and re-dispatch with `dry_run=false` (Phase **P6-merge-queue** above).
+
+Applying the rule before step 1 would gate merges on a queue whose required checks never report, blocking every PR. The deterministic `Apply rulesets` dispatch authorization criteria below still apply.
 
 ## Required secret: `RULESETS_PAT`
 
