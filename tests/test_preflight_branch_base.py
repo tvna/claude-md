@@ -100,7 +100,7 @@ class TestCli:
 
 class TestRunGit:
     def test_raises_when_git_not_found(self, tmp_path: Path) -> None:
-        with patch("preflight_branch_base.shutil.which", return_value=None), pytest.raises(RuntimeError, match="git executable not found"):
+        with patch("_git.shutil.which", return_value=None), pytest.raises(RuntimeError, match="git executable not found"):
             gate.run_git(tmp_path, ["status"])
 
 

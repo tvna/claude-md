@@ -10,11 +10,12 @@ review loop or replacement PR starts.
 from __future__ import annotations
 
 import argparse
-import shutil
 import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
+
+from _git import run_git as _run_git
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -29,16 +30,7 @@ class BranchBaseResult:
 
 def run_git(repo: Path, args: list[str]) -> subprocess.CompletedProcess[str]:
     """Run git with captured output under *repo*."""
-    git = shutil.which("git")
-    if git is None:
-        raise RuntimeError("git executable not found on PATH")
-    return subprocess.run(  # noqa: S603 -- git argv is built from parser-controlled refs.
-        [git, *args],
-        cwd=repo,
-        check=False,
-        capture_output=True,
-        text=True,
-    )
+    return _run_git(args, cwd=repo)
 
 
 def fetch_base(repo: Path, *, remote: str, base_branch: str) -> str:

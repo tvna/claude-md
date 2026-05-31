@@ -26,13 +26,13 @@ Tested by ``tests/test_scan_area_path_coverage.py``.
 from __future__ import annotations
 
 import argparse
-import shutil
-import subprocess
 import sys
 import tomllib
 from collections.abc import Callable
 from pathlib import Path, PurePosixPath
 from typing import Any
+
+from _git import run_git
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 POLICY_PATH = Path(".github/label-policy.toml")
@@ -46,17 +46,7 @@ GitRunner = Callable[[list[str], Path], str]
 
 def _run_git(args: list[str], cwd: Path) -> str:
     """Run ``git <args>`` in *cwd* and return stdout, raising on failure."""
-    git = shutil.which("git")
-    if git is None:
-        raise RuntimeError("git executable not found on PATH")
-    completed = subprocess.run(  # noqa: S603 -- argv built from hard-coded literals
-        [git, *args],
-        cwd=cwd,
-        capture_output=True,
-        text=True,
-        check=False,
-        timeout=_GIT_TIMEOUT_SECONDS,
-    )
+    completed = run_git(args, cwd=cwd, timeout=_GIT_TIMEOUT_SECONDS)
     if completed.returncode != 0:
         detail = (completed.stderr or completed.stdout).strip()
         raise RuntimeError(f"git {' '.join(args)} failed: {detail}")
