@@ -140,19 +140,15 @@ jobs:
 
           branch="codex/devcontainer-image-pins-${GITHUB_SHA}"
           enable_auto_merge() {
-            pr_url="$1"
-            if gh pr view "$pr_url" --json autoMergeRequest --jq '.autoMergeRequest != null' | grep -qx true; then
-              echo "auto-merge already enabled: $pr_url"
-              return 0
-            fi
-            gh pr merge "$pr_url" --auto --squash \
-              || echo "::warning::auto-merge request failed for $pr_url; enable it manually if needed"
+            pr_number="$1"
+            python3 scripts/dependabot_automerge.py request-automerge --pr-number "$pr_number" \
+              || echo "::warning::auto-merge request failed for PR #${pr_number}; enable it manually if needed"
           }
 
           if git ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
-            existing_pr="$(gh pr list --head "$branch" --state open --json url --jq '.[0].url // ""')"
+            existing_pr="$(python3 scripts/pr_upsert.py find --head "$branch")"
             if [ -n "$existing_pr" ]; then
-              echo "pin update PR already exists: $existing_pr"
+              echo "pin update PR already exists: #${existing_pr}"
               enable_auto_merge "$existing_pr"
               exit 0
             fi
@@ -168,9 +164,9 @@ jobs:
 
           sed "s/__GITHUB_SHA__/${GITHUB_SHA}/g" \
             .github/pr-body-templates/devcontainer-image-pins.md > pr-body.md
-          pr_url="$(gh pr create \
+          pr_number="$(python3 scripts/pr_upsert.py upsert \
             --base main \
             --head "$branch" \
             --title "fix(devcontainer): pin published agent images" \
             --body-file pr-body.md)"
-          enable_auto_merge "$pr_url"
+          enable_auto_merge "$pr_number"

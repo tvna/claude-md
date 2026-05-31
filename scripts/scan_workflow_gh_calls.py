@@ -65,11 +65,6 @@ class Violation(NamedTuple):
 # ---------------------------------------------------------------------------
 ALLOWLIST_ENTRIES: list[dict[str, str]] = [
     {
-        "workflow": "publish-devcontainer-images.yml",
-        "step": "Open pin update PR",
-        "rationale": "gh pr view/list/create/merge for pin-update PR management; migration tracked in #911",
-    },
-    {
         "workflow": "weekly-maintenance.yml",
         "step": "Resolve default branch",
         "rationale": "gh api to resolve default_branch name; migration tracked in #911",

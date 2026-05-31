@@ -1,17 +1,23 @@
 #!/usr/bin/env python3
-"""Create or update (upsert) a pull request via the GitHub REST API.
+"""Create, update, or find pull requests via the GitHub REST API.
 
 Usage::
 
     python3 scripts/pr_upsert.py upsert \\
         --head BRANCH --base BASE --title TITLE --body-file FILE
 
+    python3 scripts/pr_upsert.py find --head BRANCH
+
+``upsert`` prints the PR number to stdout (one integer, no decoration).
+``find`` prints the PR number to stdout if an open PR exists for the head
+branch, or nothing if none is found.
+
 Environment variables:
     GH_TOKEN  GitHub token with pull-requests:write scope.
     REPO      Repository in ``owner/repo`` format.
 
 Exit codes:
-    0  Success (PR created or updated).
+    0  Success.
     1  Missing env var, missing body file, or API error.
 """
 
@@ -134,12 +140,32 @@ def _cmd_upsert(args: argparse.Namespace) -> int:
     except RuntimeError as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 1
-    print(f"PR #{number} {action}.")
+    print(f"PR #{number} {action}.", file=sys.stderr)
+    print(number)
+    return 0
+
+
+def _cmd_find(args: argparse.Namespace) -> int:
+    token = os.environ.get("GH_TOKEN", "")
+    if not token:
+        print("Error: GH_TOKEN environment variable is required", file=sys.stderr)
+        return 1
+    repo = os.environ.get("REPO", "")
+    if not repo:
+        print("Error: REPO environment variable is required", file=sys.stderr)
+        return 1
+    try:
+        prs = _list_open_prs(repo=repo, head=args.head, token=token)
+    except RuntimeError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+    if prs:
+        print(prs[0]["number"])
     return 0
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Create or update a pull request.")
+    parser = argparse.ArgumentParser(description="Create, update, or find a pull request.")
     sub = parser.add_subparsers(dest="cmd", required=True)
 
     upsert_p = sub.add_parser("upsert", help="Create or update a PR for a branch")
@@ -148,10 +174,15 @@ def main(argv: list[str] | None = None) -> int:
     upsert_p.add_argument("--title", required=True, help="PR title")
     upsert_p.add_argument("--body-file", required=True, dest="body_file", help="Path to file containing PR body")
 
+    find_p = sub.add_parser("find", help="Print the open PR number for a head branch, or nothing if not found")
+    find_p.add_argument("--head", required=True, help="Head branch name")
+
     args = parser.parse_args(argv)
 
     if args.cmd == "upsert":
         return _cmd_upsert(args)
+    if args.cmd == "find":
+        return _cmd_find(args)
 
     return 0
 

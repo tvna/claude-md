@@ -161,6 +161,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("verify_ruleset_sync.py", "verify"): "test_verify_ruleset_sync_matches_workflow_args",
     ("github_paginate.py", "fetch"): "test_github_paginate_fetch_matches_workflow_args",
     ("post_issue_comment.py", "create"): "test_post_issue_comment_create_matches_workflow_args",
+    ("pr_upsert.py", "find"): "test_pr_upsert_find_matches_workflow_args",
     ("pr_upsert.py", "upsert"): "test_pr_upsert_matches_workflow_args",
     ("verify_shard_coverage.py", None): "test_verify_shard_coverage_matches_workflow_args",
     ("verify_test_shard_markers.py", None): "test_verify_test_shard_markers_matches_workflow_args",
@@ -1072,6 +1073,16 @@ def test_threat_intel_apply_labels_matches_workflow_args(
     assert threat_intel_triage.main(["apply-labels"]) == 0
 
 
+def test_pr_upsert_find_matches_workflow_args(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """find subcommand accepts --head used by publish-devcontainer-images.yml. Refs #911."""
+    monkeypatch.setenv("GH_TOKEN", "tok")
+    monkeypatch.setenv("REPO", "owner/repo")
+    monkeypatch.setattr(pr_upsert, "_list_open_prs", lambda **kw: [{"number": 55}])
+    assert pr_upsert.main(["find", "--head", "codex/devcontainer-image-pins-abc123"]) == 0
+
+
 def test_pr_upsert_matches_workflow_args(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -1231,6 +1242,7 @@ def test_devcontainer_pin_pr_uses_environment_secret_token() -> None:
 
 
 def test_devcontainer_pin_pr_requests_automerge_after_create() -> None:
+    """Verify the Open pin update PR step uses Python scripts (not gh CLI). Refs #911."""
     workflow_path = Path(".github/workflows/publish-devcontainer-images.yml")
     workflow = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
     update_pins = workflow["jobs"]["update-pins"]
@@ -1238,8 +1250,9 @@ def test_devcontainer_pin_pr_requests_automerge_after_create() -> None:
         step for step in update_pins["steps"] if step.get("name") == "Open pin update PR"
     )
 
-    assert 'pr_url="$(gh pr create \\' in open_pr["run"]
-    assert 'gh pr merge "$pr_url" --auto --squash' in open_pr["run"]
+    assert 'scripts/pr_upsert.py upsert' in open_pr["run"]
+    assert 'scripts/dependabot_automerge.py request-automerge' in open_pr["run"]
+    assert 'scripts/pr_upsert.py find' in open_pr["run"]
     assert "pin update PR already exists" in open_pr["run"]
     assert 'enable_auto_merge "$existing_pr"' in open_pr["run"]
 
