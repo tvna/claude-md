@@ -54,6 +54,7 @@ import scan_preflight_drift
 import scan_retro_followup_drift
 import scan_secret_runbooks
 import scan_workflow_action_pins
+import scan_workflow_gh_calls
 import scan_workflow_pip
 import security_drift_report
 import threat_intel_triage
@@ -137,6 +138,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("scan_retro_followup_drift.py", "run"): "test_scan_retro_followup_drift_run_matches_workflow_env",
     ("scan_secret_runbooks.py", "verify"): "test_scan_secret_runbooks_verify_matches_workflow_args",
     ("scan_workflow_action_pins.py", "verify"): "test_scan_workflow_action_pins_verify_matches_workflow_args",
+    ("scan_workflow_gh_calls.py", "verify"): "test_scan_workflow_gh_calls_verify_matches_workflow_args",
     ("scan_workflow_pip.py", "verify"): "test_scan_workflow_pip_verify_matches_workflow_args",
     ("security_drift_report.py", "aggregate"): "test_security_drift_report_aggregate_and_post_comment_match_workflow_args",
     ("security_drift_report.py", "post-comment"): "test_security_drift_report_aggregate_and_post_comment_match_workflow_args",
@@ -869,6 +871,15 @@ def test_scan_workflow_action_pins_verify_matches_workflow_args() -> None:
     assert scan_workflow_action_pins.main(["verify", "--repo-root", "."]) == 0
 
 
+def test_scan_workflow_gh_calls_verify_matches_workflow_args() -> None:
+    """Mirrors the ``Assert no unallowlisted gh CLI calls in workflows`` step
+    in ``.github/workflows/verify-agents.yml`` and ``weekly-maintenance.yml``.
+
+    Refs #911.
+    """
+    assert scan_workflow_gh_calls.main(["verify"]) == 0
+
+
 def test_scan_secret_runbooks_verify_matches_workflow_args() -> None:
     """Mirrors the ``Assert workflow secrets have concrete runbooks`` step."""
     assert scan_secret_runbooks.main(["verify"]) == 0
@@ -1445,3 +1456,21 @@ def _ruleset_for_id(ruleset_id: int) -> dict[str, Any]:
             }
         ],
     }
+
+
+def test_no_unallowlisted_gh_calls_in_workflows() -> None:
+    """Deterministic gate: any new direct gh CLI call in a workflow run: block must have an
+    allowlist entry in scan_workflow_gh_calls.ALLOWLIST_ENTRIES before it lands.
+
+    Refs #911.
+    """
+    violations = scan_workflow_gh_calls.find_violations()
+    assert violations == [], (
+        "Unallowlisted gh CLI calls found in .github/workflows/:\n"
+        + "\n".join(
+            f"  {v.workflow} / {v.job} / {v.step!r}: {v.fragment!r}"
+            for v in violations
+        )
+        + "\n\nMigrate the gh call to a tested Python script, or add an allowlist entry "
+        "with rationale in scripts/scan_workflow_gh_calls.py ALLOWLIST_ENTRIES."
+    )
