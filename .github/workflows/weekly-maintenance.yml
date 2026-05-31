@@ -291,6 +291,7 @@ jobs:
   ruleset-drift:
     if: github.event_name == 'schedule' || inputs.task == 'all' || inputs.task == 'ruleset-drift'
     runs-on: ubuntu-latest
+    environment: ruleset-verify
     permissions:
       contents: read
       issues: write
@@ -361,6 +362,7 @@ jobs:
   security-control-drift:
     if: github.event_name == 'schedule' || inputs.task == 'all' || inputs.task == 'security-control-drift'
     runs-on: ubuntu-latest
+    environment: ruleset-verify
     permissions:
       contents: read
       issues: write
