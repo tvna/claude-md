@@ -136,3 +136,114 @@ class TestCmdFetch:
         rc = gp.main(["fetch", "--path", "repos/o/r/issues", "--output", str(out)])
         assert rc == 1
         assert "GH_TOKEN" in capsys.readouterr().err
+
+
+# ---------------------------------------------------------------------------
+# _get_single()
+# ---------------------------------------------------------------------------
+
+
+class TestGetSingle:
+    def test_returns_body_as_string(self) -> None:
+        body = json.dumps({"default_branch": "main"}).encode("utf-8")
+        opener = _make_opener(_FakeResponse(200, body))
+        result = gp._get_single(url="https://api.github.com/repos/o/r", token="tok", opener=opener)
+        assert result == json.dumps({"default_branch": "main"})
+
+    def test_http_error_raises_runtime_error(self) -> None:
+        body = json.dumps({"message": "Not Found"}).encode("utf-8")
+        opener = _make_opener(_FakeResponse(404, body))
+        with pytest.raises(RuntimeError, match="404"):
+            gp._get_single(url="https://api.github.com/repos/o/r", token="tok", opener=opener)
+
+
+# ---------------------------------------------------------------------------
+# _cmd_get() / get subcommand
+# ---------------------------------------------------------------------------
+
+
+class TestCmdGet:
+    def test_writes_output_file(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("GH_TOKEN", "tok")
+        payload = {"default_branch": "main", "id": 1}
+        monkeypatch.setattr(gp, "_get_single", lambda **kw: json.dumps(payload))
+        out = tmp_path / "repo.json"
+        rc = gp.main(["get", "--path", "repos/o/r", "--output", str(out)])
+        assert rc == 0
+        assert json.loads(out.read_text(encoding="utf-8")) == payload
+
+    def test_prints_field_to_stdout(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        monkeypatch.setenv("GH_TOKEN", "tok")
+        monkeypatch.setattr(gp, "_get_single", lambda **kw: json.dumps({"default_branch": "main"}))
+        rc = gp.main(["get", "--path", "repos/o/r", "--field", "default_branch"])
+        assert rc == 0
+        assert capsys.readouterr().out.strip() == "main"
+
+    def test_output_and_field_together(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        monkeypatch.setenv("GH_TOKEN", "tok")
+        payload = {"default_branch": "main"}
+        monkeypatch.setattr(gp, "_get_single", lambda **kw: json.dumps(payload))
+        out = tmp_path / "repo.json"
+        rc = gp.main(["get", "--path", "repos/o/r", "--output", str(out), "--field", "default_branch"])
+        assert rc == 0
+        assert json.loads(out.read_text(encoding="utf-8")) == payload
+        assert capsys.readouterr().out.strip() == "main"
+
+    def test_path_prepends_api_root(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("GH_TOKEN", "tok")
+        captured_urls: list[str] = []
+
+        def fake_get(*, url: str, token: str, **kw: Any) -> str:
+            captured_urls.append(url)
+            return json.dumps({"default_branch": "main"})
+
+        monkeypatch.setattr(gp, "_get_single", fake_get)
+        gp.main(["get", "--path", "repos/o/r", "--field", "default_branch"])
+        assert captured_urls[0].startswith("https://api.github.com/")
+        assert "repos/o/r" in captured_urls[0]
+
+    def test_missing_token_returns_1(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        monkeypatch.delenv("GH_TOKEN", raising=False)
+        rc = gp.main(["get", "--path", "repos/o/r", "--field", "default_branch"])
+        assert rc == 1
+        assert "GH_TOKEN" in capsys.readouterr().err
+
+    def test_no_output_no_field_returns_1(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        monkeypatch.setenv("GH_TOKEN", "tok")
+        rc = gp.main(["get", "--path", "repos/o/r"])
+        assert rc == 1
+        assert capsys.readouterr().err
+
+    def test_missing_field_returns_1(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        monkeypatch.setenv("GH_TOKEN", "tok")
+        monkeypatch.setattr(gp, "_get_single", lambda **kw: json.dumps({"other": "value"}))
+        rc = gp.main(["get", "--path", "repos/o/r", "--field", "nonexistent"])
+        assert rc == 1
+        assert "nonexistent" in capsys.readouterr().err
+
+    def test_api_error_returns_1(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        monkeypatch.setenv("GH_TOKEN", "tok")
+
+        def raise_error(**kw: Any) -> str:
+            raise RuntimeError("HTTP 404: Not Found")
+
+        monkeypatch.setattr(gp, "_get_single", raise_error)
+        rc = gp.main(["get", "--path", "repos/o/r", "--field", "default_branch"])
+        assert rc == 1
+        assert "404" in capsys.readouterr().err

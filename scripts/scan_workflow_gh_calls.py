@@ -63,28 +63,7 @@ class Violation(NamedTuple):
 # Remove entries as each ``gh`` call is replaced by a tested Python script.
 # When the list is empty the gate enforces zero direct gh usage.
 # ---------------------------------------------------------------------------
-ALLOWLIST_ENTRIES: list[dict[str, str]] = [
-    {
-        "workflow": "weekly-maintenance.yml",
-        "step": "Resolve default branch",
-        "rationale": "gh api to resolve default_branch name; migration tracked in #911",
-    },
-    {
-        "workflow": "weekly-maintenance.yml",
-        "step": "Fetch verify-agents.yml runs",
-        "rationale": "gh api for CI timing data collection; migration tracked in #911",
-    },
-    {
-        "workflow": "weekly-maintenance.yml",
-        "step": "Fetch per-run jobs",
-        "rationale": "gh api for per-run job timing data; migration tracked in #911",
-    },
-    {
-        "workflow": "weekly-maintenance.yml",
-        "step": "Post report as comment on dispatch issue",
-        "rationale": "gh issue comment to post timing report; migration tracked in #911",
-    },
-]
+ALLOWLIST_ENTRIES: list[dict[str, str]] = []
 
 _ALLOWLIST_KEYS: frozenset[tuple[str, str]] = frozenset(
     (e["workflow"], e["step"]) for e in ALLOWLIST_ENTRIES

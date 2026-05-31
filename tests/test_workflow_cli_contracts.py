@@ -160,6 +160,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("verify_required_check_contexts.py", "verify"): "test_verify_required_check_contexts_matches_workflow_args",
     ("verify_ruleset_sync.py", "verify"): "test_verify_ruleset_sync_matches_workflow_args",
     ("github_paginate.py", "fetch"): "test_github_paginate_fetch_matches_workflow_args",
+    ("github_paginate.py", "get"): "test_github_paginate_get_matches_workflow_args",
     ("post_issue_comment.py", "create"): "test_post_issue_comment_create_matches_workflow_args",
     ("pr_upsert.py", "find"): "test_pr_upsert_find_matches_workflow_args",
     ("pr_upsert.py", "upsert"): "test_pr_upsert_matches_workflow_args",
@@ -1115,6 +1116,32 @@ def test_github_paginate_fetch_matches_workflow_args(
         "--output", str(out),
     ])
     assert rc == 0
+
+
+def test_github_paginate_get_matches_workflow_args(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """get subcommand accepts --path/--output/--field args used by weekly-maintenance.yml. Refs #911."""
+    import json as _json
+    monkeypatch.setenv("GH_TOKEN", "tok")
+
+    # --field form: used by "Resolve default branch" step
+    monkeypatch.setattr(github_paginate, "_get_single", lambda **kw: _json.dumps({"default_branch": "main"}))
+    rc = github_paginate.main(["get", "--path", "repos/owner/repo", "--field", "default_branch"])
+    assert rc == 0
+    assert capsys.readouterr().out.strip() == "main"
+
+    # --output form: used by "Fetch verify-agents.yml runs" and "Fetch per-run jobs" steps
+    out = tmp_path / "runs.json"
+    payload = {"total_count": 1, "workflow_runs": [{"id": 42}]}
+    monkeypatch.setattr(github_paginate, "_get_single", lambda **kw: _json.dumps(payload))
+    rc = github_paginate.main([
+        "get",
+        "--path", "repos/owner/repo/actions/workflows/verify-agents.yml/runs?per_page=100",
+        "--output", str(out),
+    ])
+    assert rc == 0
+    assert _json.loads(out.read_text(encoding="utf-8")) == payload
 
 
 def test_post_issue_comment_create_matches_workflow_args(
