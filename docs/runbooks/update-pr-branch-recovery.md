@@ -7,11 +7,12 @@
 
 The GitHub API for `update_pull_request_branch` performs a server-side
 **merge** from the base branch into the feature branch -- not a rebase.
-This adds a merge commit to the branch. Even though
-`scripts/preflight_pr_single_commit.py` excludes merge commits via
-`--no-merges`, the branch history diverges from the clean single-commit
-pattern the harness is built around, and it creates unnecessary
-complexity in the squash-merge history.
+This adds a merge commit to the branch, which conflicts with the
+`required_linear_history` rule on `main` (see
+`.github/rulesets/main.json`). Catching up with `main` this way is also
+unnecessary: GitHub Merge Queue validates the up-to-date base state at
+merge time (issue #895), so the feature branch does not need to absorb
+`main` before merge.
 
 ## Recovery procedure
 
@@ -21,7 +22,7 @@ merges into `main`), use the following steps instead of calling
 
 ### Prerequisites
 
-- The PR's original single commit is available in the local branch or
+- The PR's original commit(s) are available in the local branch or
   can be identified via `git log`.
 - You have `GH_TOKEN` set (for re-targeting the PR via `mcp__github__`
   tools if needed).
@@ -42,7 +43,7 @@ merges into `main`), use the following steps instead of calling
    git checkout -b <issue-slug>-v2 origin/main
    ```
 
-3. **Re-apply the PR change as a single commit.**
+3. **Re-apply the PR change on top of `main`.**
 
    If the original commit is in a local branch `<old-branch>`:
 
@@ -80,6 +81,6 @@ merges into `main`), use the following steps instead of calling
 ## Companion
 
 - `scripts/gate_update_pr_branch.py` -- PreToolUse hook that blocks the call
-- `scripts/preflight_pr_single_commit.py` -- enforces single non-merge commit ahead of base
+- `.github/rulesets/main.json` -- `required_linear_history` rule the merge commit would violate
 - `docs/runbooks/replacement-pr-preflight.md` -- replacement-PR closure gate
-- Refs #893
+- Refs #893, #895

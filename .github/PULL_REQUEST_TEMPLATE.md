@@ -103,7 +103,6 @@ author has not yet finished bounding the change.
 - [ ] Facts vs. Assumptions split is honest (no speculation lurking in Facts)
 - [ ] Risk and blast radius assessed; Rollback steps are runnable
 - [ ] Issue number recorded on the `Closes #` line above (or `Refs #` with rationale per the template comment)
-- [ ] Branch carries exactly one commit ahead of `main` (`scripts/preflight_pr_single_commit.py` exits 0, Issue #492)
 - [ ] Replacement PR preflight passed when this PR replaces another PR for the same issue/session (`scripts/preflight_replacement_pr.py verify`, Issue #632)
 
 ### After-merge (CI)
