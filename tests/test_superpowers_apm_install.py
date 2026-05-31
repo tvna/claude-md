@@ -68,3 +68,14 @@ def test_superpowers_agent_skills_are_deployed() -> None:
         for path in skills_root.glob("*/SKILL.md")
     }
     assert deployed == SUPERPOWERS_SKILLS
+
+
+def test_superpowers_skills_are_devin_compatible_agent_skills() -> None:
+    skills_root = ROOT / ".agents" / "skills"
+    for skill in SUPERPOWERS_SKILLS:
+        skill_file = skills_root / skill / "SKILL.md"
+        assert skill_file.exists()
+        text = skill_file.read_text(encoding="utf-8")
+        assert text.startswith("---\n")
+        assert "\nname:" in text
+        assert "\ndescription:" in text
