@@ -36,9 +36,11 @@ import branch_cleanup
 import coverage_failure_issue
 import dependabot_automerge
 import dependabot_labels
+import github_paginate
 import issue_link
 import labels_apply
 import nixpkgs_cooldown
+import post_issue_comment
 import pr_upsert
 import preflight_pr_single_commit
 import pytest
@@ -157,6 +159,8 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("verify_readme_translation.py", "verify"): "test_verify_readme_translation_matches_workflow_args",
     ("verify_required_check_contexts.py", "verify"): "test_verify_required_check_contexts_matches_workflow_args",
     ("verify_ruleset_sync.py", "verify"): "test_verify_ruleset_sync_matches_workflow_args",
+    ("github_paginate.py", "fetch"): "test_github_paginate_fetch_matches_workflow_args",
+    ("post_issue_comment.py", "create"): "test_post_issue_comment_create_matches_workflow_args",
     ("pr_upsert.py", "upsert"): "test_pr_upsert_matches_workflow_args",
     ("verify_shard_coverage.py", None): "test_verify_shard_coverage_matches_workflow_args",
     ("verify_test_shard_markers.py", None): "test_verify_test_shard_markers_matches_workflow_args",
@@ -1085,6 +1089,32 @@ def test_pr_upsert_matches_workflow_args(
         "--title", "chore: regenerate agent instructions (#18)",
         "--body-file", str(body_file),
     ]) == 0
+
+
+def test_github_paginate_fetch_matches_workflow_args(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """fetch subcommand accepts --path/--output args used by backup-non-ascii-originals.yml."""
+    monkeypatch.setenv("GH_TOKEN", "tok")
+    out = tmp_path / "issues.json"
+    monkeypatch.setattr(github_paginate, "_paginate_get", lambda **kw: [{"id": 1}])
+    rc = github_paginate.main([
+        "fetch",
+        "--path", "repos/owner/repo/issues?state=all&per_page=100",
+        "--output", str(out),
+    ])
+    assert rc == 0
+
+
+def test_post_issue_comment_create_matches_workflow_args(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """create subcommand accepts --issue-number/--body args used by backup-non-ascii-originals.yml."""
+    monkeypatch.setenv("GH_TOKEN", "tok")
+    monkeypatch.setenv("REPO", "owner/repo")
+    monkeypatch.setattr(post_issue_comment, "_post_comment", lambda **kw: None)
+    rc = post_issue_comment.main(["create", "--issue-number", "42", "--body", "test body"])
+    assert rc == 0
 
 
 def test_pr_label_mutation_jobs_have_pull_request_write() -> None:

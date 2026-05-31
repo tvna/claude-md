@@ -65,16 +65,6 @@ class Violation(NamedTuple):
 # ---------------------------------------------------------------------------
 ALLOWLIST_ENTRIES: list[dict[str, str]] = [
     {
-        "workflow": "backup-non-ascii-originals.yml",
-        "step": "Capture issues, PRs, and comments",
-        "rationale": "gh api --paginate for issues/PRs/comments bulk fetch; migration tracked in #911",
-    },
-    {
-        "workflow": "backup-non-ascii-originals.yml",
-        "step": "Post SHA-256 to issue",
-        "rationale": "gh issue comment to post backup summary; migration tracked in #911",
-    },
-    {
         "workflow": "publish-devcontainer-images.yml",
         "step": "Open pin update PR",
         "rationale": "gh pr view/list/create/merge for pin-update PR management; migration tracked in #911",
