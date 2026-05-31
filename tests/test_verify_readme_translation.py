@@ -1,9 +1,8 @@
 """Tests for ``scripts/verify_readme_translation.py``.
 
-Mirrors the table-driven style of ``tests/test_preflight_pr_single_commit.py``:
-pure functions get parametrize cases, the subprocess boundary is
-exercised via a fake ``runner`` injected through the kwarg the
-production code already exposes.
+Table-driven style: pure functions get parametrize cases, the
+subprocess boundary is exercised via a fake ``runner`` injected through
+the kwarg the production code already exposes.
 
 The ``scripts/`` directory is on ``sys.path`` via ``pythonpath`` under
 ``[tool.pytest.ini_options]`` in ``pyproject.toml``.

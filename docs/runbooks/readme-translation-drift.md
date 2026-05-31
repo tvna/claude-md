@@ -54,9 +54,8 @@ required-status-check context `Portable PR policy / gate` (pinned in
 `.github/rulesets/main.json`) covers this step too -- no ruleset
 change was needed when the gate landed.
 
-The job already checks out with `fetch-depth: 0` for the single-commit
-gate (Issue #492), so `git diff origin/<base>..HEAD` is reachable
-without an extra checkout step.
+The job already checks out with `fetch-depth: 0`, so
+`git diff origin/<base>..HEAD` is reachable without an extra checkout step.
 
 ### Failure surface
 

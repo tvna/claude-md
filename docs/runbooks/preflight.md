@@ -60,7 +60,7 @@ failures surface within seconds rather than minutes later in CI.
 | Mechanism | When active | Scope |
 |---|---|---|
 | `.githooks/pre-push` | `core.hooksPath=.githooks` is set | Broad: runs `preflight_all.py` (full CI mirror) |
-| pre-commit `stages: [pre-push]` | `pre-commit install --hook-type pre-push` done | Targeted: single-commit + branch-base + coverage |
+| pre-commit `stages: [pre-push]` | `pre-commit install --hook-type pre-push` done | Targeted: branch-base + coverage |
 
 These are **complementary, not redundant**: they serve different environments.
 

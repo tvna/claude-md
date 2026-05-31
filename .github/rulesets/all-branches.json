@@ -7,8 +7,7 @@
       "include": ["~ALL"],
       "exclude": [
         "~DEFAULT_BRANCH",
-        "refs/heads/dependabot/*",
-        "refs/heads/claude/*"
+        "refs/heads/dependabot/*"
       ]
     }
   },

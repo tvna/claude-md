@@ -7,10 +7,8 @@
 
 The GitHub API for `update_pull_request_branch` performs a server-side
 **merge** from the base branch into the feature branch -- not a rebase.
-This adds a merge commit to the branch. Even though
-`scripts/preflight_pr_single_commit.py` excludes merge commits via
-`--no-merges`, the branch history diverges from the clean single-commit
-pattern the harness is built around, and it creates unnecessary
+This adds a merge commit to the branch, which diverges from the clean
+linear history the harness is built around and creates unnecessary
 complexity in the squash-merge history.
 
 ## Recovery procedure
@@ -80,6 +78,5 @@ merges into `main`), use the following steps instead of calling
 ## Companion
 
 - `scripts/gate_update_pr_branch.py` -- PreToolUse hook that blocks the call
-- `scripts/preflight_pr_single_commit.py` -- enforces single non-merge commit ahead of base
 - `docs/runbooks/replacement-pr-preflight.md` -- replacement-PR closure gate
 - Refs #893

@@ -35,8 +35,7 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           # fetch-depth: 0 makes origin/<base> reachable from HEAD so the
-          # single-commit and README translation checks can compare
-          # <base>..HEAD.
+          # README translation check can compare <base>..HEAD.
           fetch-depth: 0
 
       - name: Validate title policy
@@ -44,9 +43,6 @@ jobs:
           body_file="$(mktemp)"
           printf '%s' "$PR_BODY" > "$body_file"
           python3 scripts/title_policy.py verify --kind "$KIND" --body-file "$body_file"
-
-      - name: Validate single-commit PR rule
-        run: python3 scripts/preflight_pr_single_commit.py
 
       - name: Validate body section structure
         run: |

@@ -2,11 +2,9 @@
 """PreToolUse gate: deny mcp__github__update_pull_request_branch.
 
 ``update_pull_request_branch`` performs a server-side **merge** (not a
-rebase). On branches that enforce the single-commit contract, merging
-main into the feature branch adds a merge commit. Even though
-``preflight_pr_single_commit.py`` excludes merge commits via
-``--no-merges``, the branch history diverges from the clean
-single-commit pattern the harness is designed around.
+rebase). Merging main into the feature branch adds a merge commit, so the
+branch history diverges from the clean linear pattern the harness is
+designed around.
 
 Recovery path: see ``docs/runbooks/update-pr-branch-recovery.md``.
 
@@ -31,7 +29,7 @@ _DENY_REASON = (
     "`mcp__github__update_pull_request_branch` is blocked. "
     "The GitHub API performs a server-side merge (not a rebase), which "
     "adds a merge commit to the branch and diverges from the "
-    "single-commit harness pattern.\n\n"
+    "clean linear harness pattern.\n\n"
     "Recovery path:\n"
     "  1. git fetch origin main\n"
     "  2. git checkout -b <replacement-branch> origin/main\n"
