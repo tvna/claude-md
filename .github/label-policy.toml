@@ -1,0 +1,360 @@
+schema_version = 1
+status = "adopted-design"
+tracking_issue = 970
+migration_issue = 972
+live_catalog = ".github/labels.json"
+apply_workflow = ".github/workflows/apply-labels.yml"
+
+[rollout]
+phase = "documentation-only"
+note = "This file records the final design. Live label mutation is out of scope until issue 972."
+pr_requires_scoped_issue = true
+
+[[families]]
+name = "layer"
+purpose = "CLAUDE.md principle responsibility."
+cardinality = "one_or_more"
+
+[[families]]
+name = "type"
+purpose = "Issue purpose or structural kind."
+cardinality = "exactly_one_for_normal_issues"
+
+[[families]]
+name = "state"
+purpose = "Issue lifecycle and actionability."
+cardinality = "zero_or_one"
+
+[[families]]
+name = "severity"
+purpose = "Human safety or content sensitivity flag."
+cardinality = "zero_or_one"
+
+[[families]]
+name = "threat"
+purpose = "Threat-intelligence overlay state."
+cardinality = "zero_to_two"
+
+[[families]]
+name = "area"
+purpose = "File and directory ownership or conflict domain."
+cardinality = "one_or_more_for_active_implementation"
+
+[[families]]
+name = "ops"
+purpose = "Workflow, bot, or maintenance state outside normal triage taxonomy."
+cardinality = "unbounded_but_each_label_requires_writer_reader_lifecycle"
+
+[[labels]]
+name = "layer:p1-goal-plan"
+family = "layer"
+status = "keep"
+description = "CLAUDE.md section 1: goal, plan, and verification structure."
+color = "1d76db"
+
+[[labels]]
+name = "layer:p2-input-boundary"
+family = "layer"
+status = "rename"
+rename_from = "layer:p2-precode"
+description = "CLAUDE.md section 2: trusted inputs, unknowns, facts, assumptions, and ambiguity."
+color = "5319e7"
+
+[[labels]]
+name = "layer:p3-harness"
+family = "layer"
+status = "keep"
+description = "CLAUDE.md section 3: issues, CI, hooks, dependencies, and PR loop."
+color = "0e8a16"
+
+[[labels]]
+name = "layer:p4-safety-boundary"
+family = "layer"
+status = "rename"
+rename_from = "layer:p4-artifact"
+description = "CLAUDE.md section 4: simplicity bounded by safety, tool scope, and secret exposure."
+color = "fbca04"
+
+[[labels]]
+name = "layer:p5-scale-quality"
+family = "layer"
+status = "rename"
+rename_from = "layer:p5-scope-split"
+description = "CLAUDE.md section 5: change scope, agent split, and quality proportional to scale."
+color = "d93f0b"
+
+[[labels]]
+name = "layer:p6-handoff"
+family = "layer"
+status = "keep"
+description = "CLAUDE.md section 6: handoff, communication, and operator-language output."
+color = "b60205"
+
+[[labels]]
+name = "type:feat"
+family = "type"
+status = "keep"
+description = "New behavior or rule."
+color = "a2eeef"
+
+[[labels]]
+name = "type:fix"
+family = "type"
+status = "keep"
+description = "Defect or broken workflow."
+color = "d73a4a"
+
+[[labels]]
+name = "type:refactor"
+family = "type"
+status = "keep"
+description = "Restructure without behavior change."
+color = "f9d0c4"
+
+[[labels]]
+name = "type:docs"
+family = "type"
+status = "keep"
+description = "Operator docs, standards, or README changes."
+color = "0075ca"
+
+[[labels]]
+name = "type:tracking"
+family = "type"
+status = "keep"
+description = "Umbrella issue coordinating scoped child issues."
+color = "e4e669"
+
+[[labels]]
+name = "state:rfc"
+family = "state"
+status = "keep"
+description = "Proposal is open but not yet actionable."
+color = "bfd4f2"
+
+[[labels]]
+name = "state:parked"
+family = "state"
+status = "keep"
+description = "Explicitly deferred until new evidence or owner decision."
+color = "cfd3d7"
+
+[[labels]]
+name = "severity:security"
+family = "severity"
+status = "keep"
+description = "Security-sensitive work requiring investigation bias."
+color = "ee0701"
+
+[[labels]]
+name = "severity:non-ascii-content"
+family = "severity"
+status = "keep"
+description = "Non-ASCII content boundary signal for issue, PR, or comment text."
+color = "ff7619"
+
+[[labels]]
+name = "threat:intel-needed"
+family = "threat"
+status = "keep"
+description = "Threat intelligence collection is required before ordinary routing."
+color = "b4a7d6"
+
+[[labels]]
+name = "threat:response-needed"
+family = "threat"
+status = "keep"
+description = "Security response planning is required before autonomous PR work."
+color = "cc0000"
+
+[[labels]]
+name = "area:agent-instructions"
+family = "area"
+status = "add"
+description = "CLAUDE.md, AGENTS.md, and agent instruction source behavior."
+color = "5319e7"
+
+[[labels]]
+name = "area:apm"
+family = "area"
+status = "add"
+description = "APM primitives, checksums, compile inputs, and generated instruction outputs."
+color = "5319e7"
+
+[[labels]]
+name = "area:hooks"
+family = "area"
+status = "add"
+description = "Claude, Codex, git, and prek hook surfaces."
+color = "0e8a16"
+
+[[labels]]
+name = "area:preflight"
+family = "area"
+status = "add"
+description = "Local and CI preflight gates before push, PR, or privileged action."
+color = "0e8a16"
+
+[[labels]]
+name = "area:github-workflows"
+family = "area"
+status = "add"
+description = "GitHub Actions workflows, rulesets, issue templates, and repo metadata."
+color = "0e8a16"
+
+[[labels]]
+name = "area:scripts-tests"
+family = "area"
+status = "add"
+description = "Python scripts, tests, fixtures, and script quality gates."
+color = "0075ca"
+
+[[labels]]
+name = "area:docs"
+family = "area"
+status = "add"
+description = "Docs, standards, runbooks, generated docs, archive, and README files."
+color = "0075ca"
+
+[[labels]]
+name = "area:toolchain"
+family = "area"
+status = "add"
+description = "uv, Python, Nix, lockfiles, dependency freshness, and tool version pins."
+color = "0366d6"
+
+[[labels]]
+name = "area:devcontainer"
+family = "area"
+status = "add"
+description = "Devcontainer images, scripts, network allowlists, and runtime setup."
+color = "0366d6"
+
+[[labels]]
+name = "area:security-intel"
+family = "area"
+status = "add"
+description = "Threat triage, security drift, non-ASCII defense, and security runbooks."
+color = "ee0701"
+
+[[labels]]
+name = "area:metrics"
+family = "area"
+status = "add"
+description = "Metrics storage, performance measurement, and maintainability signals."
+color = "7057ff"
+
+[[labels]]
+name = "area:area-policy"
+family = "area"
+status = "add"
+description = "Label policy, area mapping, coverage rules, and taxonomy documentation."
+color = "c5def5"
+
+[[labels]]
+name = "ops:dependencies"
+family = "ops"
+status = "rename"
+rename_from = "dependencies"
+description = "Dependency update workflow state from Dependabot or equivalent automation."
+color = "0366d6"
+writer = "Dependabot and dependency-maintenance workflows"
+reader = "dependency automerge, dependency freshness, and operator queues"
+lifecycle = "Added on dependency update creation; removed by PR closure or merge lifecycle."
+
+[[labels]]
+name = "ops:retro-opened"
+family = "ops"
+status = "rename"
+rename_from = "harness:retro-opened"
+description = "auto-retro opened or reused the retrospective for a terminal PR."
+color = "0e8a16"
+writer = "auto-retro and post-merge retrospective automation"
+reader = "auto-retro sentinel, rescan, and duplicate-retro prevention"
+lifecycle = "Added after retrospective creation is confirmed; retained as durable PR audit state."
+
+[[labels]]
+name = "ops:coverage-failure"
+family = "ops"
+status = "add"
+description = "Post-merge coverage threshold failure has an open operational repair queue."
+color = "d73a4a"
+writer = ".github/workflows/post-merge.yml and scripts/coverage_failure_issue.py"
+reader = "coverage repair queues and post-merge operational triage"
+lifecycle = "Added when the coverage gate opens or updates a repair issue; closed or cleared after repair."
+
+[[retired_labels]]
+name = "layer:meta"
+reason = "Responsibility is unstable and overlaps the typed axes."
+
+[[retired_labels]]
+name = "agent:*"
+reason = "Old routing design replaced by type, state, severity, threat, area, and layer axes."
+
+[[retired_labels]]
+name = "bug"
+reason = "Noisy duplicate of type:fix."
+
+[[retired_labels]]
+name = "question"
+reason = "Noisy state; use state:rfc, state:parked, or a scoped issue type."
+
+[[retired_labels]]
+name = "enhancement"
+reason = "Noisy duplicate of type:feat."
+
+[[retired_labels]]
+name = "fix"
+reason = "Noisy duplicate of type:fix."
+
+[[retired_labels]]
+name = "governance"
+reason = "Recreates retired layer:meta ambiguity."
+
+[[area_paths]]
+area = "area:agent-instructions"
+paths = ["CLAUDE.md", "AGENTS.md", ".agents/**"]
+
+[[area_paths]]
+area = "area:apm"
+paths = [".apm/**", "apm.yml", "apm.lock.yaml"]
+
+[[area_paths]]
+area = "area:hooks"
+paths = [".claude/settings.json", ".codex/hooks.json", ".githooks/**", ".pre-commit-config.yaml", "docs/runbooks/prek.md"]
+
+[[area_paths]]
+area = "area:preflight"
+paths = ["scripts/preflight_*.py", "scripts/gate_*.py", "scripts/check_*.py", "docs/runbooks/preflight.md", "docs/runbooks/replacement-pr-preflight.md"]
+
+[[area_paths]]
+area = "area:github-workflows"
+paths = [".github/**", "docs/runbooks/rulesets.md", "docs/runbooks/workflow-permissions-audit.md", "docs/generated/workflows/**"]
+
+[[area_paths]]
+area = "area:scripts-tests"
+paths = ["scripts/**", "tests/**"]
+
+[[area_paths]]
+area = "area:docs"
+paths = ["README*.md", "docs/**"]
+
+[[area_paths]]
+area = "area:toolchain"
+paths = ["pyproject.toml", "uv.lock", "flake.nix", "flake.lock", "scripts/install-uv.sh", "scripts/uv_pin.py", "docs/standards/remote-environment.md", "docs/standards/dependency-freshness.md"]
+
+[[area_paths]]
+area = "area:devcontainer"
+paths = [".devcontainer/**", "docs/runbooks/devcontainers.md"]
+
+[[area_paths]]
+area = "area:security-intel"
+paths = ["scripts/threat_intel_triage.py", "scripts/security_drift_report.py", "scripts/scan_non_ascii.py", "scripts/preflight_non_ascii.py", "docs/prd/security-control-inventory.md", "docs/prd/non-ascii-defense.md", "docs/runbooks/security-control-drift-report.md", "docs/runbooks/attack-coverage-review-cadence.md", "docs/runbooks/downstream-instruction-review-checklist.md"]
+
+[[area_paths]]
+area = "area:metrics"
+paths = ["metrics/**", "docs/standards/performance-metrics.md", "docs/standards/maintainability-metrics.md", "docs/standards/host-unit-duckdb-metrics.md", "scripts/scan_maintainability_metrics.py"]
+
+[[area_paths]]
+area = "area:area-policy"
+paths = [".github/label-policy.toml", ".github/labels.json", "docs/standards/label-taxonomy.md", "docs/runbooks/issue-triage.md", "scripts/labels_apply.py", "tests/test_labels_apply.py"]
