@@ -321,7 +321,7 @@ paths = [".apm/**", "apm.yml", "apm.lock.yaml"]
 
 [[area_paths]]
 area = "area:hooks"
-paths = [".claude/settings.json", ".codex/hooks.json", ".githooks/**", ".pre-commit-config.yaml", "docs/runbooks/prek.md"]
+paths = [".claude/settings.json", ".codex/hooks.json", ".devin/**", ".githooks/**", ".pre-commit-config.yaml", "docs/runbooks/prek.md"]
 
 [[area_paths]]
 area = "area:preflight"
