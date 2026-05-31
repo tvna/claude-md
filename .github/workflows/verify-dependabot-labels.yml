@@ -2,6 +2,11 @@ name: Verify dependabot labels
 
 on:
   pull_request:
+  # merge_group lets the required "Verify dependabot labels / verify" check
+  # resolve on the queued integration ref (GitHub Merge Queue, issue #895).
+  # The job is a static working-tree check with no pull_request payload
+  # dependency, so it runs unchanged on merge_group.
+  merge_group:
 
 permissions:
   contents: read
