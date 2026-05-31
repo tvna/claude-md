@@ -204,6 +204,47 @@ deterministic and auditable; an operator looking at any
 `retro:fp-candidate` label can trace it to exactly one of the five
 rules above and verify the signal on the linked follow-up.
 
+## Triage report (cross-retro analysis, refs #1042)
+
+A single retro issue cannot show whether the auto-retro gate is healthy:
+the TP/FP picture only emerges across the whole retro population. The
+`triage-report` subcommand aggregates that population into a checked-in
+visualization so an operator can judge it by inspection (CLAUDE.md
+section 5/6) rather than by reading every issue:
+
+```sh
+python3 scripts/auto_retro.py triage-report
+# writes docs/generated/scripts/auto-retro-triage-report.md
+```
+
+The report has three parts:
+
+- **Anomalies** (top): every signal whose prior FP rate is at or above
+  `PRIOR_SKIP_THRESHOLD` with at least `PRIOR_MIN_SAMPLE_SIZE`
+  observations -- i.e. the signals that `should_skip_by_prior` now
+  suppresses. This is the headline an operator should act on.
+- **Triage status**: a Mermaid pie of the `retro:tp` / `retro:fp` /
+  `retro:fp-candidate` / `retro:tentative` / unlabelled mix. Label
+  counts are independent tallies (one retro may carry several), so they
+  need not sum to the total.
+- **Signal occurrence and FP rates**: per-signal fire count, fire rate,
+  FP count, FP rate, and sample size, with anomalies flagged `!!`.
+
+The numbers come verbatim from `compute_prior_from_labels`, so the
+report can never disagree with the live skip decision.
+
+Unlike the decision-tree doc, this report depends on live GitHub label
+state, so it is **non-deterministic** and is NOT part of the
+`generate-docs.yml` drift gate. It is refreshed weekly by
+`.github/workflows/auto-retro-triage-report.yml`, which opens a pull
+request when the snapshot drifts. The git history of the committed
+snapshot is the time series.
+
+When an anomaly appears, treat it as the CLAUDE.md section 5 stop
+signal: the gate is opening retros that operators keep marking
+`retro:fp` on that signal. Re-plan the signal (tighten or retire it)
+rather than letting the FP rate climb.
+
 ## Verify
 
 ```sh

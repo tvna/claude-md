@@ -109,6 +109,7 @@ class WorkflowInvocation(NamedTuple):
 CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("analyze_ci_timings.py", None): "test_analyze_ci_timings_matches_workflow_args",
     ("auto_retro.py", "decision-tree-doc"): "test_auto_retro_decision_tree_doc_matches_workflow_args",
+    ("auto_retro.py", "triage-report"): "test_auto_retro_triage_report_matches_workflow_env",
     ("workflow_diagram.py", "diagram-doc"): "test_workflow_diagram_doc_matches_workflow_args",
     ("auto_retro.py", "run"): "test_auto_retro_run_matches_workflow_env",
     ("auto_retro.py", "post-merge-rescan"): "test_auto_retro_post_merge_rescan_matches_workflow_env",
@@ -379,6 +380,28 @@ def test_auto_retro_decision_tree_doc_matches_workflow_args(
 
     assert output.read_text(encoding="utf-8") == (
         auto_retro.render_decision_tree_markdown()
+    )
+
+
+def test_auto_retro_triage_report_matches_workflow_env(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Mirror the env + default-output shape used by the triage-report workflow."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("REPO", REPO)
+    # The workflow shells out to `gh api`; stub it so the contract test is
+    # hermetic. An empty population still exercises the full write path.
+    monkeypatch.setattr(
+        auto_retro, "gh_api", lambda *_a, **_kw: json.dumps({"items": []})
+    )
+
+    assert auto_retro.main(["triage-report"]) == 0
+
+    output = Path("docs/generated/scripts/auto-retro-triage-report.md")
+    assert output.read_text(encoding="utf-8") == (
+        auto_retro.render_triage_report_markdown(
+            auto_retro.compute_triage_report([])
+        )
     )
 
 
