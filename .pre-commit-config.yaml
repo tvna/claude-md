@@ -23,6 +23,12 @@ repos:
         language: system
         pass_filenames: false
         files: ^\.github/workflows/.*\.ya?ml$
+      - id: preflight-hook-event-keys
+        name: preflight hook event keys (scripts/preflight_hook_event_keys.py verify)
+        entry: uv run python scripts/preflight_hook_event_keys.py verify
+        language: system
+        pass_filenames: false
+        files: ^\.(claude/settings|codex/hooks|devin/hooks\.v1)\.json$
 
       - id: preflight-branch-base
         name: preflight branch base (scripts/preflight_branch_base.py verify)
