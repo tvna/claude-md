@@ -2,6 +2,8 @@
 # Syntax: one hostname per line. Blank lines and comments are ignored.
 github.com
 api.github.com
+# GitHub remote MCP server endpoint used when apm installs the GitHub MCP server.
+api.mcp.github.com
 objects.githubusercontent.com
 raw.githubusercontent.com
 release-assets.githubusercontent.com

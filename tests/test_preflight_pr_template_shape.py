@@ -18,6 +18,20 @@ import preflight_pr_template_shape as shape
 import pytest
 
 pytestmark = pytest.mark.shard_preflight
+
+
+@pytest.fixture(autouse=True)
+def _clear_remote_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Isolate from the ambient CLAUDE_CODE_REMOTE signal (#1025).
+
+    The footer relaxation keys off this var; clearing it keeps the
+    non-harness tests deterministic regardless of where the suite runs
+    (the remote Claude web harness sets it to ``true``). Tests that
+    exercise the harness path set it explicitly.
+    """
+    monkeypatch.delenv("CLAUDE_CODE_REMOTE", raising=False)
+
+
 # ---------------------------------------------------------------------------
 # Fixture bodies
 # ---------------------------------------------------------------------------
@@ -146,6 +160,111 @@ class TestDecide:
         assert decision is not None
         reason = decision["hookSpecificOutput"]["permissionDecisionReason"]
         assert "Verification" in reason
+
+
+# ---------------------------------------------------------------------------
+# Claude web harness footer relaxation (create-only, #1025)
+# ---------------------------------------------------------------------------
+
+
+_NO_FOOTER_BODY = _VERIFICATION_OK + "\n" + _CHECKLIST_OK
+_HARNESS_ENV = {"CLAUDE_CODE_REMOTE": "true"}
+
+
+class TestClaudeWebHarnessFooter:
+    def test_create_under_harness_accepts_no_footer(self) -> None:
+        # Agent submits no footer; the harness will append exactly one.
+        assert (
+            shape.decide(
+                "mcp__github__create_pull_request",
+                {"body": _NO_FOOTER_BODY},
+                environ=_HARNESS_ENV,
+            )
+            is None
+        )
+
+    def test_create_under_harness_rejects_pre_added_footer(self) -> None:
+        # A pre-added footer duplicates against the auto-appended one.
+        decision = shape.decide(
+            "mcp__github__create_pull_request",
+            {"body": _GOOD_BODY},
+            environ=_HARNESS_ENV,
+        )
+        assert decision is not None
+        reason = decision["hookSpecificOutput"]["permissionDecisionReason"]
+        assert "auto-appends" in reason
+        assert reason.isascii()
+
+    def test_update_under_harness_still_requires_footer(self) -> None:
+        # Relaxation is create-only: update is not auto-appended.
+        decision = shape.decide(
+            "mcp__github__update_pull_request",
+            {"body": _NO_FOOTER_BODY},
+            environ=_HARNESS_ENV,
+        )
+        assert decision is not None
+        reason = decision["hookSpecificOutput"]["permissionDecisionReason"]
+        assert "agent-attribution footer" in reason
+
+    def test_update_under_harness_accepts_single_footer(self) -> None:
+        assert (
+            shape.decide(
+                "mcp__github__update_pull_request",
+                {"body": _GOOD_BODY},
+                environ=_HARNESS_ENV,
+            )
+            is None
+        )
+
+    def test_create_without_harness_still_requires_footer(self) -> None:
+        decision = shape.decide(
+            "mcp__github__create_pull_request",
+            {"body": _NO_FOOTER_BODY},
+            environ={},
+        )
+        assert decision is not None
+        reason = decision["hookSpecificOutput"]["permissionDecisionReason"]
+        assert "agent-attribution footer" in reason
+
+    def test_create_without_harness_accepts_footer(self) -> None:
+        assert (
+            shape.decide(
+                "mcp__github__create_pull_request",
+                {"body": _GOOD_BODY},
+                environ={},
+            )
+            is None
+        )
+
+    def test_env_other_than_true_is_not_harness(self) -> None:
+        # Only the literal "true" (case-insensitive) enables the relaxation.
+        decision = shape.decide(
+            "mcp__github__create_pull_request",
+            {"body": _NO_FOOTER_BODY},
+            environ={"CLAUDE_CODE_REMOTE": "1"},
+        )
+        assert decision is not None
+        reason = decision["hookSpecificOutput"]["permissionDecisionReason"]
+        assert "agent-attribution footer" in reason
+
+    def test_main_reads_ambient_env(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        # main() resolves the harness from os.environ; create + env=true
+        # accepts a no-footer body silently.
+        monkeypatch.setenv("CLAUDE_CODE_REMOTE", "true")
+        rc, out, _ = _run_main(
+            monkeypatch,
+            {
+                "tool_name": "mcp__github__create_pull_request",
+                "tool_input": {"body": _NO_FOOTER_BODY},
+            },
+            capsys,
+        )
+        assert rc == 0
+        assert out == ""
 
 
 # ---------------------------------------------------------------------------
