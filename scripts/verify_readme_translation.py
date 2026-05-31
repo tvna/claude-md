@@ -15,9 +15,8 @@ Contract:
 * Read the PR body from ``--body-file`` when supplied, otherwise from
   ``PR_BODY``.
 
-Architecture mirrors :mod:`preflight_pr_single_commit`: pure functions
-on top, one thin :func:`_run` subprocess boundary at the bottom that
-tests monkeypatch via the ``runner`` kwarg.
+Architecture: pure functions on top, one thin :func:`_run` subprocess
+boundary at the bottom that tests monkeypatch via the ``runner`` kwarg.
 
 Wiring:
 
@@ -26,8 +25,8 @@ Wiring:
   required-status-check context (``Portable PR policy / gate``,
   pinned in ``.github/rulesets/main.json``) covers this step too --
   no ruleset change needed. The job already checks out with
-  ``fetch-depth: 0`` for the single-commit gate (#492), so the diff
-  range is reachable without an extra checkout step.
+  ``fetch-depth: 0``, so the diff range is reachable without an extra
+  checkout step.
 
 Failure policy: gate per CLAUDE.md section 4 -- exits 1 with
 ``::error::`` annotations when drift is detected or git invocation
@@ -65,7 +64,7 @@ _SKIP_MARKER_RE = re.compile(
 def resolve_base() -> str:
     """Return the base ref the gate compares HEAD against.
 
-    Resolution order mirrors :func:`preflight_pr_single_commit.resolve_base`:
+    Resolution order:
 
     1. ``BASE_REF`` (explicit override the workflow / CLI passes).
     2. ``GITHUB_BASE_REF`` (set by GitHub Actions on ``pull_request``
