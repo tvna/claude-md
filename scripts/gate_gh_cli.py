@@ -23,10 +23,11 @@ Refs #887.
 
 from __future__ import annotations
 
-import json
 import re
 import sys
 from typing import Any
+
+from _hook_runtime import emit_decision, read_event
 
 # Matches: gh followed by a subcommand word at a word boundary,
 # possibly preceded by whitespace, semicolon, pipe, or ampersand.
@@ -87,14 +88,8 @@ def decide(tool_name: str, command: str) -> dict[str, Any] | None:
 def main(argv: list[str] | None = None) -> int:
     """Read PreToolUse JSON from stdin, write deny decision to stdout if needed."""
     del argv
-    raw = sys.stdin.read()
-    try:
-        event = json.loads(raw) if raw.strip() else {}
-    except json.JSONDecodeError as exc:
-        print(
-            f"::error::gate_gh_cli: malformed stdin JSON: {exc}",
-            file=sys.stderr,
-        )
+    event = read_event("gate_gh_cli")
+    if event is None:
         return 0
 
     tool_name = event.get("tool_name")
@@ -106,9 +101,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     command = str((event.get("tool_input") or {}).get("command") or "")
-    decision = decide(tool_name, command)
-    if decision is not None:
-        sys.stdout.write(json.dumps(decision))
+    emit_decision(decide(tool_name, command))
     return 0
 
 

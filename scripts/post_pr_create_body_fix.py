@@ -17,10 +17,10 @@ Refs: issue #892.
 
 from __future__ import annotations
 
-import json
 import re
-import sys
 from typing import Any
+
+from _hook_runtime import emit_decision, read_event
 
 TARGET_TOOL = "mcp__github__create_pull_request"
 
@@ -121,17 +121,12 @@ def decide(event: dict[str, Any]) -> dict[str, Any] | None:
 
 def main(argv: list[str] | None = None) -> int:
     del argv
-    raw = sys.stdin.read()
-    try:
-        event = json.loads(raw) if raw.strip() else {}
-    except json.JSONDecodeError as exc:
-        print(f"::error::post_pr_create_body_fix: malformed stdin JSON: {exc}", file=sys.stderr)
+    event = read_event("post_pr_create_body_fix")
+    if event is None:
         return 0
     if not isinstance(event, dict):
         return 0
-    output = decide(event)
-    if output is not None:
-        sys.stdout.write(json.dumps(output))
+    emit_decision(decide(event))
     return 0
 
 

@@ -41,12 +41,12 @@ Refs #496. Supersedes ``scripts/preflight_pr_title_issue_ref.py``
 
 from __future__ import annotations
 
-import json
 import re
 import sys
 from typing import Any
 
 from _github_tool_names import canonical_github_tool
+from _hook_runtime import emit_decision, read_event
 from title_policy import (
     allowed_types_csv,
     describe_non_ascii,
@@ -300,14 +300,8 @@ def main(argv: list[str] | None = None) -> int:
     ``verify-title-policy.yml`` workflow remains as backstop.
     """
     del argv  # not used; the harness pipes the event on stdin
-    raw = sys.stdin.read()
-    try:
-        event = json.loads(raw) if raw.strip() else {}
-    except json.JSONDecodeError as exc:
-        print(
-            f"::error::preflight_title_policy: malformed stdin JSON: {exc}",
-            file=sys.stderr,
-        )
+    event = read_event("preflight_title_policy")
+    if event is None:
         return 0
 
     tool_name = event.get("tool_name")
@@ -319,11 +313,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 0
 
-    decision = decide(tool_name, tool_input)
-    if decision is None:
-        return 0
-
-    sys.stdout.write(json.dumps(decision))
+    emit_decision(decide(tool_name, tool_input))
     return 0
 
 

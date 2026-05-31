@@ -23,9 +23,10 @@ Refs #870, #887.
 
 from __future__ import annotations
 
-import json
 import sys
 from typing import Any
+
+from _hook_runtime import emit_decision, read_event
 
 # Tools that already have dedicated PreToolUse hooks in
 # .claude/settings.json. Calls to these tools are allowed through;
@@ -84,14 +85,8 @@ def decide(tool_name: str) -> dict[str, Any] | None:
 def main(argv: list[str] | None = None) -> int:
     """Read PreToolUse JSON from stdin, write deny decision to stdout if needed."""
     del argv
-    raw = sys.stdin.read()
-    try:
-        event = json.loads(raw) if raw.strip() else {}
-    except json.JSONDecodeError as exc:
-        print(
-            f"::error::gate_mcp_github_uncovered: malformed stdin JSON: {exc}",
-            file=sys.stderr,
-        )
+    event = read_event("gate_mcp_github_uncovered")
+    if event is None:
         return 0
 
     tool_name = event.get("tool_name")
@@ -102,9 +97,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 0
 
-    decision = decide(tool_name)
-    if decision is not None:
-        sys.stdout.write(json.dumps(decision))
+    emit_decision(decide(tool_name))
     return 0
 
 

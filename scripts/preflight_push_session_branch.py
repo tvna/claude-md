@@ -21,13 +21,13 @@ Architecture mirrors preflight_push_base.py:
 
 from __future__ import annotations
 
-import json
 import os
 import re
 import shlex
-import sys
 from pathlib import Path
 from typing import Any
+
+from _hook_runtime import emit_decision, read_event
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 _SESSION_BRANCH_FILE = REPO_ROOT / ".git" / "CLAUDE_SESSION_BRANCH"
@@ -167,20 +167,12 @@ def decide(event: dict[str, Any]) -> dict[str, Any] | None:
 
 def main(argv: list[str] | None = None) -> int:
     del argv
-    raw = sys.stdin.read()
-    try:
-        event = json.loads(raw) if raw.strip() else {}
-    except json.JSONDecodeError as exc:
-        print(
-            f"::error::preflight_push_session_branch: malformed stdin JSON: {exc}",
-            file=sys.stderr,
-        )
+    event = read_event("preflight_push_session_branch")
+    if event is None:
         return 0
     if not isinstance(event, dict):
         return 0
-    output = decide(event)
-    if output is not None:
-        sys.stdout.write(json.dumps(output))
+    emit_decision(decide(event))
     return 0
 
 

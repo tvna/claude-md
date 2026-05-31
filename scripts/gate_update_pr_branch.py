@@ -19,9 +19,10 @@ Refs #893.
 
 from __future__ import annotations
 
-import json
 import sys
 from typing import Any
+
+from _hook_runtime import emit_decision, read_event
 
 _TARGET_TOOL = "mcp__github__update_pull_request_branch"
 
@@ -54,14 +55,8 @@ def decide(tool_name: str) -> dict[str, Any] | None:
 def main(argv: list[str] | None = None) -> int:
     """Read PreToolUse JSON from stdin, write deny decision to stdout if blocked."""
     del argv
-    raw = sys.stdin.read()
-    try:
-        event = json.loads(raw) if raw.strip() else {}
-    except json.JSONDecodeError as exc:
-        print(
-            f"::error::gate_update_pr_branch: malformed stdin JSON: {exc}",
-            file=sys.stderr,
-        )
+    event = read_event("gate_update_pr_branch")
+    if event is None:
         return 0
 
     tool_name = event.get("tool_name")
@@ -72,9 +67,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 0
 
-    decision = decide(tool_name)
-    if decision is not None:
-        sys.stdout.write(json.dumps(decision))
+    emit_decision(decide(tool_name))
     return 0
 
 

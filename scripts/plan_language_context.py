@@ -33,6 +33,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from _hook_runtime import emit_decision
+
 _CODEOWNERS_PATH = Path(".github") / "CODEOWNERS"
 _OWNERS_TOML_PATH = Path(".github") / "owners.toml"
 
@@ -240,10 +242,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 0
 
-    if decision is None:
-        return 0
-
-    sys.stdout.write(json.dumps(decision))
+    emit_decision(decision)
     return 0
 
 

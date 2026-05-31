@@ -27,7 +27,6 @@ Refs #654.
 from __future__ import annotations
 
 import argparse
-import json
 import shutil
 import subprocess
 import sys
@@ -35,6 +34,8 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
+
+from _hook_runtime import emit_decision, read_event
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 STAMP_FILE = REPO_ROOT / ".git" / "MAIN_FRESHNESS_STAMP"
@@ -244,14 +245,8 @@ def _cmd_check(args: argparse.Namespace) -> int:
 
 
 def _hook_mode() -> int:
-    raw = sys.stdin.read()
-    try:
-        event = json.loads(raw) if raw.strip() else {}
-    except json.JSONDecodeError as exc:
-        print(
-            f"::error::preflight_main_freshness: malformed stdin JSON: {exc}",
-            file=sys.stderr,
-        )
+    event = read_event("preflight_main_freshness")
+    if event is None:
         return 0
 
     tool_name = event.get("tool_name")
@@ -263,11 +258,7 @@ def _hook_mode() -> int:
         )
         return 0
 
-    decision = decide(tool_name, tool_input)
-    if decision is None:
-        return 0
-
-    sys.stdout.write(json.dumps(decision))
+    emit_decision(decide(tool_name, tool_input))
     return 0
 
 

@@ -53,11 +53,11 @@ since the cutoff exists only to exempt the back-catalog at the server.
 
 from __future__ import annotations
 
-import json
 import sys
 from typing import Any
 
 from _github_tool_names import canonical_github_tool
+from _hook_runtime import emit_decision, read_event
 from body_policy import (
     extract_headings,
     missing_sections,
@@ -151,15 +151,8 @@ def main(argv: list[str] | None = None) -> int:
     ``verify-body-policy.yml`` workflow remains as backstop.
     """
     del argv
-    raw = sys.stdin.read()
-    try:
-        event = json.loads(raw) if raw.strip() else {}
-    except json.JSONDecodeError as exc:
-        print(
-            f"::error::preflight_pr_body_required_sections: malformed "
-            f"stdin JSON: {exc}",
-            file=sys.stderr,
-        )
+    event = read_event("preflight_pr_body_required_sections")
+    if event is None:
         return 0
 
     tool_name = event.get("tool_name")
@@ -172,11 +165,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 0
 
-    decision = decide(tool_name, tool_input)
-    if decision is None:
-        return 0
-
-    sys.stdout.write(json.dumps(decision))
+    emit_decision(decide(tool_name, tool_input))
     return 0
 
 
