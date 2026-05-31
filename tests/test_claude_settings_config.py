@@ -44,8 +44,25 @@ def test_claude_settings_json_is_valid() -> None:
     hooks = data.get("hooks")
     assert isinstance(hooks, dict)
     assert set(hooks) >= CORE_HOOK_EVENTS
-    unexpected = set(hooks) - CORE_HOOK_EVENTS - {"sessionStart"}
+    unexpected = set(hooks) - CORE_HOOK_EVENTS
     assert not unexpected
+
+
+def test_claude_hooks_use_pascalcase_event_keys() -> None:
+    """Hook event keys must be PascalCase; camelCase keys never fire.
+
+    Refs #1030. Claude Code matches lifecycle hook events case-sensitively
+    in PascalCase, so a camelCase key such as ``sessionStart`` is dead
+    config. A stray ``sessionStart`` duplicate previously shipped next to
+    the real ``SessionStart`` array; this guards its reintroduction.
+    """
+    data = _load_settings()
+    hooks = data["hooks"]
+    assert isinstance(hooks, dict)
+    assert "sessionStart" not in hooks
+    for key in hooks:
+        assert isinstance(key, str)
+        assert key[0].isupper(), f"hook event key must be PascalCase: {key!r}"
 
 
 def test_claude_post_tool_use_starts_ci_monitor_after_mcp_pr_create() -> None:
@@ -137,9 +154,6 @@ def test_all_claude_hook_commands_point_to_repo_files() -> None:
         assert isinstance(groups, list)
         for group in groups:
             assert isinstance(group, dict)
-            if group.get("_apm_source") == "superpowers" and "command" in group:
-                commands.append(group["command"])
-                continue
             handlers = group["hooks"]
             assert isinstance(handlers, list)
             for handler in handlers:
@@ -149,7 +163,7 @@ def test_all_claude_hook_commands_point_to_repo_files() -> None:
                 commands.append(command)
 
     for command in commands:
-        if "CLAUDE_PLUGIN_ROOT" in command or command == "./hooks/run-hook.cmd session-start":
+        if "CLAUDE_PLUGIN_ROOT" in command:
             continue
         path = _repo_script_from_command(command)
         assert (ROOT / path).exists()
@@ -170,14 +184,11 @@ def test_claude_superpowers_hooks_are_apm_managed() -> None:
         for group in session_start
     )
 
-    legacy_session_start = hooks.get("sessionStart")
-    assert isinstance(legacy_session_start, list)
-    assert legacy_session_start == [
-        {
-            "command": "./hooks/run-hook.cmd session-start",
-            "_apm_source": "superpowers",
-        }
-    ]
+    assert "sessionStart" not in hooks, (
+        "camelCase sessionStart is not a recognized Claude Code hook event "
+        "(events are PascalCase); the superpowers session-start hook lives "
+        "in the SessionStart array only (Refs #1030)"
+    )
 
 
 def test_claude_session_start_surfaces_hooks_path_gap() -> None:
