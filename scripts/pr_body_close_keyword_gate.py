@@ -36,6 +36,7 @@ from typing import Any, Literal
 
 from _github_api import apply_call
 from _github_tool_names import canonical_github_tool
+from _hook_runtime import emit_decision, read_event
 from _ref_classifier import (
     TRACKING_LABEL,
     body_has_partial_marker,
@@ -229,14 +230,8 @@ def _deny(tool_name: str, reason: str) -> dict[str, Any]:
 
 def main(argv: list[str] | None = None) -> int:
     del argv
-    raw = sys.stdin.read()
-    try:
-        event = json.loads(raw) if raw.strip() else {}
-    except json.JSONDecodeError as exc:
-        print(
-            f"::error::pr_body_close_keyword_gate: malformed stdin JSON: {exc}",
-            file=sys.stderr,
-        )
+    event = read_event("pr_body_close_keyword_gate")
+    if event is None:
         return 0
 
     tool_name = event.get("tool_name")
@@ -257,16 +252,14 @@ def main(argv: list[str] | None = None) -> int:
             return None
         return fetch_labels(owner, repo, number, token=token)
 
-    decision = decide(
-        tool_name,
-        tool_input,
-        token_getter=_token_getter,
-        label_getter=_label_getter,
+    emit_decision(
+        decide(
+            tool_name,
+            tool_input,
+            token_getter=_token_getter,
+            label_getter=_label_getter,
+        )
     )
-    if decision is None:
-        return 0
-
-    sys.stdout.write(json.dumps(decision))
     return 0
 
 
