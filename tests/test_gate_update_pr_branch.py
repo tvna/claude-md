@@ -30,7 +30,7 @@ class TestDecide:
         reason = decision["decisionReason"]
         assert "origin/main" in reason
         assert "replacement-branch" in reason
-        assert "squash-only merge queue" in reason
+        assert "single commit" in reason
 
     def test_deny_reason_references_runbook(self) -> None:
         decision = gub.decide("mcp__github__update_pull_request_branch")
@@ -40,9 +40,7 @@ class TestDecide:
     def test_deny_reason_references_issue(self) -> None:
         decision = gub.decide("mcp__github__update_pull_request_branch")
         assert decision is not None
-        reason = decision["decisionReason"]
-        assert "#893" in reason
-        assert "#895" in reason
+        assert "#893" in decision["decisionReason"]
 
     @pytest.mark.parametrize(
         "tool_name",

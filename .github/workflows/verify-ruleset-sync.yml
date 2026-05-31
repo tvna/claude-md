@@ -3,11 +3,6 @@ name: Verify ruleset sync
 on:
   pull_request:
     types: [opened, edited, synchronize, reopened, ready_for_review]
-  # merge_group lets the required "Verify ruleset sync / gate" check resolve
-  # on the queued integration ref (GitHub Merge Queue, issue #895). On
-  # merge_group there is no pull_request payload, so BASE_REF falls back to
-  # the default branch the queue always integrates against (main).
-  merge_group:
 
 permissions:
   contents: read
@@ -15,7 +10,7 @@ permissions:
 env:
   GH_TOKEN_API: ${{ secrets.RULESETS_PAT }}
   REPO: ${{ github.repository }}
-  BASE_REF: ${{ github.event.pull_request.base.ref || 'main' }}
+  BASE_REF: ${{ github.event.pull_request.base.ref }}
 
 jobs:
   gate:

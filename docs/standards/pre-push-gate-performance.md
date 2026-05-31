@@ -93,9 +93,9 @@ full run and refreshes the fingerprint.
 
 ### 4. Fail-fast: cheap gates before the heavy suite
 
-`preflight_all.run_all` runs all cheap, sub-second gates first (branch-base,
-ruff, mypy, static scans). Heavy steps (`heavy=True`, i.e. pytest)
-run **only** when every cheap step passed. A branch-base or static-scan
+`preflight_all.run_all` runs all cheap, sub-second gates first (single-commit,
+branch-base, ruff, mypy, static scans). Heavy steps (`heavy=True`, i.e. pytest)
+run **only** when every cheap step passed. A single-commit or branch-base
 failure now short-circuits in under a second instead of after the suite -- the
 PR #983 "5 minutes then rejected for an unrelated reason" failure mode.
 

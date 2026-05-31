@@ -3,13 +3,6 @@ name: Portable PR policy
 on:
   pull_request:
     types: [opened, edited, synchronize, reopened, ready_for_review]
-  # merge_group lets this required check resolve on the queued integration
-  # ref so GitHub Merge Queue validates the final base state, not just the
-  # PR head (issue #895). Body/title-dependent steps below are skipped on
-  # merge_group because no pull_request payload exists there; the working
-  # tree checks (APM portability, compile drift, checksums, prek) still run
-  # against the integrated state.
-  merge_group:
 
 permissions:
   contents: read
@@ -42,18 +35,20 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           # fetch-depth: 0 makes origin/<base> reachable from HEAD so the
-          # README translation check can compare <base>..HEAD.
+          # single-commit and README translation checks can compare
+          # <base>..HEAD.
           fetch-depth: 0
 
       - name: Validate title policy
-        if: ${{ github.event_name != 'merge_group' }}
         run: |
           body_file="$(mktemp)"
           printf '%s' "$PR_BODY" > "$body_file"
           python3 scripts/title_policy.py verify --kind "$KIND" --body-file "$body_file"
 
+      - name: Validate single-commit PR rule
+        run: python3 scripts/preflight_pr_single_commit.py
+
       - name: Validate body section structure
-        if: ${{ github.event_name != 'merge_group' }}
         run: |
           body_file="$(mktemp)"
           printf '%s' "$PR_BODY" > "$body_file"
@@ -62,21 +57,18 @@ jobs:
             --body-file "$body_file"
 
       - name: Validate PR-issue link
-        if: ${{ github.event_name != 'merge_group' }}
         run: |
           body_file="$(mktemp)"
           printf '%s' "$PR_BODY" > "$body_file"
           python3 scripts/issue_link.py verify --repo "$REPO" --body-file "$body_file" --author "$PR_AUTHOR"
 
       - name: Validate linked issue titles
-        if: ${{ github.event_name != 'merge_group' }}
         run: |
           body_file="$(mktemp)"
           printf '%s' "$PR_BODY" > "$body_file"
           python3 scripts/verify_linked_issue_titles.py verify --repo "$REPO" --body-file "$body_file"
 
       - name: Validate README translation parity
-        if: ${{ github.event_name != 'merge_group' }}
         run: |
           body_file="$(mktemp)"
           printf '%s' "$PR_BODY" > "$body_file"
