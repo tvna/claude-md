@@ -21,17 +21,16 @@ fi
 
 repo_root="$(git rev-parse --show-toplevel)"
 preflight="${repo_root}/scripts/preflight_all.py"
-base_preflight="${repo_root}/scripts/preflight_branch_base.py"
 
 if [ ! -f "${preflight}" ]; then
     echo "pre-push: ${preflight} not found, skipping." >&2
     exit 0
 fi
 
-if [ -f "${base_preflight}" ]; then
-    echo "pre-push: checking branch contains latest origin/main" >&2
-    python3 "${base_preflight}" verify
-fi
-
+# preflight_branch_base.py is intentionally NOT invoked directly here: it is a
+# cheap step inside preflight_all.py, which now runs the whole cheap tier
+# (single-commit, branch-base, ruff, mypy, ...) before the heavy pytest suite
+# and short-circuits the suite on any cheap failure. Calling it twice was pure
+# redundant fetch overhead (issue #985, Codex CI-log analysis).
 echo "pre-push: running scripts/preflight_all.py" >&2
 python3 "${preflight}"

@@ -10,7 +10,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 
-from _github_api import apply_call
+from _github_api import apply_call, graphql_call
 
 pytestmark = pytest.mark.shard_ci_ops
 
@@ -220,3 +220,69 @@ def test_apply_call_returns_body_verbatim_when_not_json() -> None:
 
     assert code == 200
     assert body == "{not valid json"
+
+
+# ---------------------------------------------------------------------------
+# graphql_call -- previously untested (#985 coverage top-up alongside the
+# apply_call sleeper-seam change that lifts _github_api into the changed-set).
+# ---------------------------------------------------------------------------
+
+
+def test_graphql_call_happy_returns_parsed_dict() -> None:
+    requests: list[urllib.request.Request] = []
+
+    def opener(request: urllib.request.Request) -> Response:
+        requests.append(request)
+        return Response(200, '{"data":{"x":1}}')
+
+    code, body = graphql_call(
+        query="query { viewer { login } }",
+        variables={"a": 1},
+        token="token",
+        opener=opener,
+    )
+
+    assert code == 200
+    assert body == {"data": {"x": 1}}
+    assert requests[0].method == "POST"
+    assert requests[0].full_url == "https://api.github.com/graphql"
+    assert requests[0].headers["Authorization"] == "Bearer token"
+    assert json.loads(requests[0].data.decode()) == {
+        "query": "query { viewer { login } }",
+        "variables": {"a": 1},
+    }
+
+
+def test_graphql_call_http_error_returns_code_and_error_body() -> None:
+    def opener(request: urllib.request.Request) -> Response:
+        raise http_error(400, '{"message":"bad"}')
+
+    code, body = graphql_call(
+        query="mutation { x }",
+        variables={},
+        token="token",
+        opener=opener,
+    )
+
+    assert code == 400
+    assert body == {"message": "bad"}
+
+
+def test_graphql_call_non_dict_json_yields_empty_dict() -> None:
+    def opener(request: urllib.request.Request) -> Response:
+        return Response(200, "[1, 2, 3]")
+
+    code, body = graphql_call(query="q", variables={}, token="t", opener=opener)
+
+    assert code == 200
+    assert body == {}
+
+
+def test_graphql_call_invalid_json_yields_empty_dict() -> None:
+    def opener(request: urllib.request.Request) -> Response:
+        return Response(200, "{not json")
+
+    code, body = graphql_call(query="q", variables={}, token="t", opener=opener)
+
+    assert code == 200
+    assert body == {}
