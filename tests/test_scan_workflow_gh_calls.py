@@ -140,6 +140,8 @@ class TestFindViolations:
         assert "gh pr" in v.fragment
 
     def test_allowlisted_step_produces_no_violation(self, tmp_path: Path) -> None:
+        if not swgc.ALLOWLIST_ENTRIES:
+            pytest.skip("ALLOWLIST_ENTRIES is empty — no entries to validate")
         first = swgc.ALLOWLIST_ENTRIES[0]
         content = yaml.dump(
             {

@@ -1,21 +1,29 @@
 #!/usr/bin/env python3
-"""Fetch paginated GitHub REST API list endpoints.
+"""Fetch GitHub REST API endpoints.
 
 Usage::
 
     python3 scripts/github_paginate.py fetch \\
         --path PATH --output FILE
 
-``PATH`` is appended to ``https://api.github.com/``.  The script follows
-``Link: <next>; rel="next"`` headers until all pages are consumed, writes the
-combined JSON array to ``FILE``.
+    python3 scripts/github_paginate.py get \\
+        --path PATH [--output FILE] [--field NAME]
+
+``fetch`` follows ``Link: <next>; rel="next"`` headers until all pages are
+consumed and writes the combined JSON array to ``FILE``.
+
+``get`` makes a single request to a non-paginated endpoint.  Use ``--output``
+to write the raw JSON body to a file, ``--field`` to print one top-level JSON
+field to stdout; at least one of the two is required.
+
+``PATH`` is appended to ``https://api.github.com/`` in both subcommands.
 
 Environment variables:
     GH_TOKEN  GitHub token with repo read scope.
 
 Exit codes:
     0  Success.
-    1  Missing env var or API error.
+    1  Missing env var, missing argument, or API error.
 """
 
 from __future__ import annotations
@@ -86,6 +94,65 @@ def _paginate_get(
     return results
 
 
+def _get_single(
+    *,
+    url: str,
+    token: str,
+    opener: Callable[..., Any] = urllib.request.urlopen,
+) -> str:
+    """Make a single GET request and return the raw response body as a string."""
+    request = urllib.request.Request(url, method="GET")  # noqa: S310 — fixed https://api.github.com endpoint
+    request.add_header("Authorization", f"Bearer {token}")
+    request.add_header("Accept", "application/vnd.github+json")
+    request.add_header("X-GitHub-Api-Version", _API_VERSION)
+
+    try:
+        with opener(request) as response:
+            code = int(response.status)
+            body_str = response.read().decode("utf-8", errors="replace")
+    except urllib.error.HTTPError as error:
+        code = int(error.code)
+        body_str = error.read().decode("utf-8", errors="replace")
+
+    if not (200 <= code < 300):
+        raise RuntimeError(f"Request failed: HTTP {code}: {body_str[:200]}")
+    return body_str
+
+
+def _cmd_get(args: argparse.Namespace) -> int:
+    token = os.environ.get("GH_TOKEN", "")
+    if not token:
+        print("Error: GH_TOKEN environment variable is required", file=sys.stderr)
+        return 1
+    if not args.output and not args.field:
+        print("Error: at least one of --output or --field is required", file=sys.stderr)
+        return 1
+
+    url = f"{_API_ROOT}/{args.path.lstrip('/')}"
+    try:
+        body_str = _get_single(url=url, token=token)
+    except RuntimeError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+
+    if args.output:
+        Path(args.output).write_text(body_str, encoding="utf-8")
+
+    if args.field:
+        try:
+            data = json.loads(body_str)
+        except json.JSONDecodeError as exc:
+            print(f"Error: invalid JSON response: {exc}", file=sys.stderr)
+            return 1
+        value = data.get(args.field)
+        if value is None:
+            print(f"Error: field '{args.field}' not found in response", file=sys.stderr)
+            return 1
+        print(value)
+
+    return 0
+
+
 def _cmd_fetch(args: argparse.Namespace) -> int:
     token = os.environ.get("GH_TOKEN", "")
     if not token:
@@ -112,10 +179,17 @@ def main(argv: list[str] | None = None) -> int:
     fetch_p.add_argument("--path", required=True, help="API path (appended to https://api.github.com/)")
     fetch_p.add_argument("--output", required=True, help="Output file path for JSON array")
 
+    get_p = sub.add_parser("get", help="Fetch a single-page endpoint; write JSON to --output and/or print --field to stdout")
+    get_p.add_argument("--path", required=True, help="API path (appended to https://api.github.com/)")
+    get_p.add_argument("--output", default=None, help="Output file path for raw JSON response body")
+    get_p.add_argument("--field", default=None, help="Top-level JSON field name to print to stdout")
+
     args = parser.parse_args(argv)
 
     if args.cmd == "fetch":
         return _cmd_fetch(args)
+    if args.cmd == "get":
+        return _cmd_get(args)
 
     return 0
 

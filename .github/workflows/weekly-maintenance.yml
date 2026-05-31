@@ -79,7 +79,9 @@ jobs:
         id: defaults
         run: |
           set -euo pipefail
-          DEFAULT_BRANCH=$(gh api "/repos/${REPO}" --jq .default_branch)
+          DEFAULT_BRANCH=$(python3 scripts/github_paginate.py get \
+            --path "repos/${REPO}" \
+            --field default_branch)
           echo "default_branch=${DEFAULT_BRANCH}" >> "$GITHUB_OUTPUT"
           echo "Default branch: ${DEFAULT_BRANCH}"
 
@@ -234,14 +236,18 @@ jobs:
       - name: Fetch verify-agents.yml runs
         run: |
           set -euo pipefail
-          gh api "repos/${REPO}/actions/workflows/verify-agents.yml/runs?per_page=100" > runs.json
+          python3 scripts/github_paginate.py get \
+            --path "repos/${REPO}/actions/workflows/verify-agents.yml/runs?per_page=100" \
+            --output runs.json
 
       - name: Fetch per-run jobs
         run: |
           set -euo pipefail
           mkdir -p jobs
           for id in $(jq -r '.workflow_runs[].id' runs.json); do
-            gh api "repos/${REPO}/actions/runs/${id}/jobs" > "jobs/${id}.json"
+            python3 scripts/github_paginate.py get \
+              --path "repos/${REPO}/actions/runs/${id}/jobs" \
+              --output "jobs/${id}.json"
           done
 
       - name: Generate timing report
@@ -278,8 +284,8 @@ jobs:
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.measure_issue_number != '' }}
         run: |
           set -euo pipefail
-          gh issue comment "${{ inputs.measure_issue_number }}" \
-            --repo "${REPO}" \
+          python3 scripts/post_issue_comment.py create \
+            --issue-number "${{ inputs.measure_issue_number }}" \
             --body-file report.md
 
   ruleset-drift:
