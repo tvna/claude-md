@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 import dependabot_automerge as da
 import pytest
@@ -317,3 +319,252 @@ def test_main_block_raises_system_exit(tmp_path: Path) -> None:
         assert exc_info.value.code == 0
     finally:
         sys.argv = original_argv
+
+
+# ---------------------------------------------------------------------------
+# _list_pr_files() and _cmd_list_files() / list-files subcommand
+# ---------------------------------------------------------------------------
+
+
+class _FakeHTTPResponse:
+    def __init__(self, status: int, body: bytes) -> None:
+        self.status = status
+        self._body = body
+
+    def read(self) -> bytes:
+        return self._body
+
+    def __enter__(self) -> _FakeHTTPResponse:
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        pass
+
+
+class TestListPrFiles:
+    def _make_apply_call(self, status: int, filenames: list[str]) -> Callable[..., tuple[int, str]]:
+        body = json.dumps([{"filename": f} for f in filenames]).encode("utf-8")
+
+        def apply_call(*, method: str, url: str, payload: object, token: str) -> tuple[int, str]:
+            assert method == "GET"
+            assert "pulls" in url and "files" in url
+            return status, body.decode("utf-8")
+
+        return apply_call
+
+    def test_returns_filenames_from_api(self) -> None:
+        apply_call = self._make_apply_call(200, ["uv.lock", "pyproject.toml"])
+        result = da._list_pr_files(repo="owner/repo", pr_number=7, token="tok", apply_call=apply_call)
+        assert result == ["uv.lock", "pyproject.toml"]
+
+    def test_includes_pr_number_in_url(self) -> None:
+        captured_urls: list[str] = []
+
+        def apply_call(*, method: str, url: str, payload: object, token: str) -> tuple[int, str]:
+            captured_urls.append(url)
+            return 200, json.dumps([{"filename": "a.txt"}])
+
+        da._list_pr_files(repo="owner/repo", pr_number=42, token="tok", apply_call=apply_call)
+        assert "42" in captured_urls[0]
+
+    def test_http_error_raises_runtime_error(self) -> None:
+        def apply_call(*, method: str, url: str, payload: object, token: str) -> tuple[int, str]:
+            return 422, '{"message":"error"}'
+
+        with pytest.raises(RuntimeError, match="422"):
+            da._list_pr_files(repo="owner/repo", pr_number=1, token="tok", apply_call=apply_call)
+
+    def test_malformed_json_raises_runtime_error(self) -> None:
+        def apply_call(*, method: str, url: str, payload: object, token: str) -> tuple[int, str]:
+            return 200, "not-json"
+
+        with pytest.raises(RuntimeError):
+            da._list_pr_files(repo="owner/repo", pr_number=1, token="tok", apply_call=apply_call)
+
+    def test_non_array_response_raises_runtime_error(self) -> None:
+        def apply_call(*, method: str, url: str, payload: object, token: str) -> tuple[int, str]:
+            return 200, '{"number": 1}'
+
+        with pytest.raises(RuntimeError):
+            da._list_pr_files(repo="owner/repo", pr_number=1, token="tok", apply_call=apply_call)
+
+    def test_empty_file_list(self) -> None:
+        def apply_call(*, method: str, url: str, payload: object, token: str) -> tuple[int, str]:
+            return 200, "[]"
+
+        assert da._list_pr_files(repo="owner/repo", pr_number=1, token="tok", apply_call=apply_call) == []
+
+
+class TestCmdListFiles:
+    def test_writes_filenames_to_output(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("GH_TOKEN", "tok")
+        monkeypatch.setenv("REPO", "owner/repo")
+        monkeypatch.setattr(
+            da, "_list_pr_files", lambda **kw: ["uv.lock", "pyproject.toml"]
+        )
+        out = tmp_path / "files.txt"
+        assert da.main(["list-files", "--pr-number", "7", "--output", str(out)]) == 0
+        assert out.read_text(encoding="utf-8") == "uv.lock\npyproject.toml\n"
+
+    def test_missing_token_returns_1(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        monkeypatch.delenv("GH_TOKEN", raising=False)
+        monkeypatch.setenv("REPO", "owner/repo")
+        assert da.main(["list-files", "--pr-number", "1", "--output", "/dev/null"]) == 1
+        assert "GH_TOKEN" in capsys.readouterr().err
+
+    def test_missing_repo_returns_1(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        monkeypatch.setenv("GH_TOKEN", "tok")
+        monkeypatch.delenv("REPO", raising=False)
+        assert da.main(["list-files", "--pr-number", "1", "--output", "/dev/null"]) == 1
+        assert "REPO" in capsys.readouterr().err
+
+    def test_invalid_pr_number_returns_1(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        monkeypatch.setenv("GH_TOKEN", "tok")
+        monkeypatch.setenv("REPO", "owner/repo")
+        assert da.main(["list-files", "--pr-number", "bad", "--output", "/dev/null"]) == 1
+        assert "PR number" in capsys.readouterr().err
+
+    def test_api_error_returns_1(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        monkeypatch.setenv("GH_TOKEN", "tok")
+        monkeypatch.setenv("REPO", "owner/repo")
+        monkeypatch.setattr(da, "_list_pr_files", lambda **kw: (_ for _ in ()).throw(RuntimeError("HTTP 500")))
+        assert da.main(["list-files", "--pr-number", "1", "--output", str(tmp_path / "f.txt")]) == 1
+        assert "HTTP 500" in capsys.readouterr().err
+
+
+# ---------------------------------------------------------------------------
+# _enable_auto_merge() and _cmd_request_automerge() / request-automerge subcommand
+# ---------------------------------------------------------------------------
+
+
+class TestEnableAutoMerge:
+    def _make_apply_call(self, pr_node_id: str, pr_status: int = 200) -> Callable[..., tuple[int, str]]:
+        pr_body = json.dumps({"node_id": pr_node_id, "number": 42})
+
+        def apply_call(*, method: str, url: str, payload: object, token: str) -> tuple[int, str]:
+            assert method == "GET"
+            return pr_status, pr_body
+
+        return apply_call
+
+    def _make_graphql_call(self, http_status: int = 200, errors: list | None = None) -> Callable[..., tuple[int, dict[str, Any]]]:
+        def graphql_call(*, query: str, variables: dict, token: str) -> tuple[int, dict]:
+            body: dict = {"data": {"enablePullRequestAutoMerge": {"pullRequest": {"number": 42}}}}
+            if errors is not None:
+                body["errors"] = errors
+            return http_status, body
+
+        return graphql_call
+
+    def test_calls_graphql_with_node_id(self) -> None:
+        captured_vars: list[dict] = []
+
+        def graphql_call(*, query: str, variables: dict, token: str) -> tuple[int, dict]:
+            captured_vars.append(variables)
+            return 200, {"data": {}}
+
+        da._enable_auto_merge(
+            repo="owner/repo",
+            pr_number=42,
+            merge_method="SQUASH",
+            token="tok",
+            apply_call=self._make_apply_call("PR_node_123"),
+            graphql_call=graphql_call,
+        )
+        assert captured_vars[0]["pullRequestId"] == "PR_node_123"
+        assert captured_vars[0]["mergeMethod"] == "SQUASH"
+
+    def test_pr_get_http_error_raises(self) -> None:
+        def apply_call(*, method: str, url: str, payload: object, token: str) -> tuple[int, str]:
+            return 404, '{"message":"not found"}'
+
+        with pytest.raises(RuntimeError, match="404"):
+            da._enable_auto_merge(
+                repo="owner/repo",
+                pr_number=1,
+                merge_method="SQUASH",
+                token="tok",
+                apply_call=apply_call,
+                graphql_call=self._make_graphql_call(),
+            )
+
+    def test_missing_node_id_raises(self) -> None:
+        def apply_call(*, method: str, url: str, payload: object, token: str) -> tuple[int, str]:
+            return 200, '{"number": 1}'
+
+        with pytest.raises(RuntimeError, match="node_id"):
+            da._enable_auto_merge(
+                repo="owner/repo",
+                pr_number=1,
+                merge_method="SQUASH",
+                token="tok",
+                apply_call=apply_call,
+                graphql_call=self._make_graphql_call(),
+            )
+
+    def test_graphql_http_error_raises(self) -> None:
+        with pytest.raises(RuntimeError, match="HTTP 401"):
+            da._enable_auto_merge(
+                repo="owner/repo",
+                pr_number=42,
+                merge_method="SQUASH",
+                token="tok",
+                apply_call=self._make_apply_call("node_abc"),
+                graphql_call=self._make_graphql_call(http_status=401),
+            )
+
+    def test_graphql_errors_raise(self) -> None:
+        with pytest.raises(RuntimeError, match="errors"):
+            da._enable_auto_merge(
+                repo="owner/repo",
+                pr_number=42,
+                merge_method="SQUASH",
+                token="tok",
+                apply_call=self._make_apply_call("node_abc"),
+                graphql_call=self._make_graphql_call(errors=[{"message": "bad"}]),
+            )
+
+
+class TestCmdRequestAutomerge:
+    def test_success(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("GH_TOKEN", "tok")
+        monkeypatch.setenv("REPO", "owner/repo")
+        monkeypatch.setattr(da, "_enable_auto_merge", lambda **kw: None)
+        assert da.main(["request-automerge", "--pr-number", "7"]) == 0
+
+    def test_missing_token_returns_1(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        monkeypatch.delenv("GH_TOKEN", raising=False)
+        monkeypatch.setenv("REPO", "owner/repo")
+        assert da.main(["request-automerge", "--pr-number", "1"]) == 1
+        assert "GH_TOKEN" in capsys.readouterr().err
+
+    def test_missing_repo_returns_1(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        monkeypatch.setenv("GH_TOKEN", "tok")
+        monkeypatch.delenv("REPO", raising=False)
+        assert da.main(["request-automerge", "--pr-number", "1"]) == 1
+        assert "REPO" in capsys.readouterr().err
+
+    def test_runtime_error_returns_1(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        monkeypatch.setenv("GH_TOKEN", "tok")
+        monkeypatch.setenv("REPO", "owner/repo")
+        monkeypatch.setattr(
+            da, "_enable_auto_merge", lambda **kw: (_ for _ in ()).throw(RuntimeError("GraphQL error"))
+        )
+        assert da.main(["request-automerge", "--pr-number", "1"]) == 1
+        assert "GraphQL error" in capsys.readouterr().err
