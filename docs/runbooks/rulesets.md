@@ -45,6 +45,8 @@ Rule parameters (GitHub Rulesets API casing):
 | `min_entries_to_merge_wait_minutes` | `5` | Short batching window so a lone PR still lands promptly. |
 | `check_response_timeout_minutes` | `60` | A required check that never reports on the `merge_group` ref times out the entry after an hour instead of stalling the queue forever. |
 
+**Incompatibility with strict required status checks**: a `merge_queue` rule MUST NOT coexist with `strict_required_status_checks_policy: true` (the "require branches to be up to date before merging" flag). GitHub rejects the combination with `HTTP 422` on the ruleset PUT, because the merge queue already builds each entry on top of the current base and runs the required checks on that integration ref -- the strict flag is redundant and conflicting. So `main.json` keeps `strict_required_status_checks_policy: false` while the `merge_queue` rule is present; the up-to-date guarantee moves from the strict flag to the queue, not removed (issue #895). See [`merge-queue-failures.md`](https://github.com/tvna/claude-md/blob/main/docs/runbooks/merge-queue-failures.md) for the apply-time triage.
+
 **Cross-dependency**: every workflow that produces a required status-check context MUST also trigger on `merge_group`, or the queue stalls waiting for a context that never reports on the integration ref. Those triggers were added in the same #895 rollout; see [`merge-queue-failures.md`](https://github.com/tvna/claude-md/blob/main/docs/runbooks/merge-queue-failures.md) for the trigger inventory and red-queue triage. The required context **names** are unchanged by the merge-queue rollout, so `Verify ruleset sync / gate` (the PR-time required-checks sync gate) stays green without a contexts edit.
 
 ### Activation order
@@ -53,7 +55,7 @@ The `merge_queue` rule only takes effect once the producing workflows already em
 
 1. Land the workflow `merge_group:` triggers (PR for the four required-check workflows plus `portable-pr-policy.yml`).
 2. Confirm a draft PR's required checks report on a `merge_group` run (open a PR, add it to the queue, watch the `merge_group` check_runs appear under the same context names).
-3. Then dispatch `Apply rulesets` with `ruleset=main, dry_run=true`, confirm the planned PUT diff is only the added `merge_queue` rule, and re-dispatch with `dry_run=false` (Phase **P6-merge-queue** above).
+3. Then dispatch `Apply rulesets` with `ruleset=main, dry_run=true`, confirm the planned PUT diff is the added `merge_queue` rule together with `strict_required_status_checks_policy` flipping to `false` (the two are inseparable -- see the incompatibility note above), and re-dispatch with `dry_run=false` (Phase **P6-merge-queue** above).
 
 Applying the rule before step 1 would gate merges on a queue whose required checks never report, blocking every PR. The deterministic `Apply rulesets` dispatch authorization criteria below still apply.
 
