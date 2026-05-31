@@ -6,8 +6,10 @@ This file is generated from `.github/workflows/verify-ruleset-sync.yml` by `pyth
 flowchart TD
 
     T_pull_request(["on: pull_request\ntypes: ['opened', 'edited', 'synchronize', '..."])
+    T_merge_group(["on: merge_group"])
 
     J_gate["gate"]
 
     T_pull_request --> J_gate
+    T_merge_group --> J_gate
 ```
