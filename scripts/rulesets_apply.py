@@ -328,14 +328,6 @@ def apply_rulesets(
                 f"::error::Failed to {action} {item['file']} "
                 f"(last HTTP {display_code})."
             )
-            # Echo the API response body to the console log too, not just the
-            # step summary. A 422 whose validation message lived only in the
-            # summary stalled the merge-queue apply diagnosis (issue #895);
-            # surfacing it inline keeps the failure debuggable from the raw log.
-            if body:
-                print(
-                    f"::error::API response body for {action} {item['file']}: {body}"
-                )
             raise SystemExit(1)
         response = json.loads(body or "{}")
         _append_summary(

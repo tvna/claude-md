@@ -402,57 +402,6 @@ class TestCliFlows:
         assert "| main.json | main | 0 | POST applied | 99 |" in text
         assert "plan-only" not in text
 
-    def test_apply_put_error_echoes_response_body_to_log(
-        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
-    ) -> None:
-        # Refs #895: a failed PUT must surface the API response body in the
-        # console log, not only the step summary, so a 422 validation
-        # message is debuggable from the raw log.
-        sot_dir = tmp_path / "rulesets"
-        sot_dir.mkdir()
-        write_sot(sot_dir / "main.json", "main")
-        summary = tmp_path / "summary.md"
-        body = '{"message":"Validation Failed","errors":["Invalid rule \'merge_queue\': "],"status":"422"}'
-
-        def opener(request):
-            method = request.get_method()
-            if method == "GET" and request.full_url.endswith("/rulesets"):
-                return Response(200, [{"id": 42, "name": "main"}])
-            if method == "GET":
-                return Response(
-                    200,
-                    {
-                        "id": 42,
-                        "name": "main",
-                        "target": "branch",
-                        "enforcement": "active",
-                        "conditions": {},
-                        "bypass_actors": [],
-                        "rules": [],
-                    },
-                )
-            raise urllib.error.HTTPError(
-                request.full_url, 422, "Unprocessable", {}, io.BytesIO(body.encode())
-            )
-
-        with pytest.raises(SystemExit) as exc_info:
-            ra.apply_rulesets(
-                repo="o/r",
-                sot_dir=sot_dir,
-                choice="main",
-                summary_file=summary,
-                token="tok",
-                enable_auto_delete=False,
-                opener=opener,
-                sleeper=lambda _seconds: None,
-            )
-        assert exc_info.value.code == 1
-        out = capsys.readouterr().out
-        assert "Invalid rule 'merge_queue'" in out
-        assert "API response body for PUT main.json" in out
-        # Summary still carries the body block too.
-        assert "Error applying main.json (HTTP 422)" in summary.read_text(encoding="utf-8")
-
     def test_auto_delete_dry_run_and_apply(
         self, tmp_path: Path
     ) -> None:
