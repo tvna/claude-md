@@ -22,8 +22,8 @@ code is read.
 | `docs/standards/issue-pr-body-standard.md` *(this file)* | - | Body-shape runbook |
 | `.github/PULL_REQUEST_TEMPLATE.md` | new PRs | PR template the standard describes |
 | `.github/labels.json` | `/repos/tvna/claude-md/labels` | `type:*` axis the standard partitions on |
-| `scripts/issue_link.py` | `verify-issue-link.yml` | Refs check (one piece of body policy that is already enforced) |
-| `scripts/title_policy.py` | `verify-title-policy.yml` | ASCII-only and conventional-title check (titles, not bodies) |
+| `scripts/issue_link.py` | `portable-pr-policy.yml` (job: `Validate PR-issue link`) | Refs check (one piece of body policy that is already enforced) |
+| `scripts/title_policy.py` | `portable-pr-policy.yml` (job: `Validate title policy`) | ASCII-only and conventional-title check (titles, not bodies) |
 | `scripts/_trusted_bots.py` | shared by gates | Single source of truth for the trusted-bot allowlist |
 
 ## Status
@@ -225,7 +225,7 @@ Two layers of the body-shape contract are enforced today.
 
 ### Enforced today: H2 section presence (baseline gate)
 
-`.github/workflows/verify-body-policy.yml` shells out to
+`.github/workflows/portable-pr-policy.yml` (job: `Validate body section structure`) shells out to
 `scripts/body_policy.py verify` and checks that every required H2 (or
 H3 for Issue Forms) heading from the lists above is present in the
 body. Bodies whose `created_at` predates `BODY_POLICY_CUTOFF`
@@ -273,7 +273,7 @@ model metadata is available from the hook event or the
 
 ### Enforced today: Refs check
 
-`.github/workflows/verify-issue-link.yml` shells out to
+`.github/workflows/portable-pr-policy.yml` (job: `Validate PR-issue link`) shells out to
 `scripts/issue_link.py verify`. The script:
 
 - strips HTML comments from the PR body (so `<!-- Refs #1 -->` is ignored);
@@ -310,10 +310,10 @@ are recorded here so future contributors do not need to re-derive them.
 
 | Surface | Status | Rationale |
 |---|---|---|
-| PR body | Enforced. | `verify-issue-link.yml` runs `scripts/issue_link.py verify`, which calls `gh api /repos/<repo>/issues/<N>` per ref and fails with `Referenced #N does not exist in <repo>.` for unresolved numbers. |
-| PR title | Inversely enforced. | `scripts/preflight_title_policy.py` (client-side preflight) and `scripts/title_policy.py` (`verify-title-policy.yml`) deny any `(#NNN)` token in the title per [#167](https://github.com/tvna/claude-md/issues/167) / [#214](https://github.com/tvna/claude-md/issues/214). With the token forbidden, no number reaches the title to existence-check. |
+| PR body | Enforced. | `portable-pr-policy.yml` (`Validate PR-issue link` job) runs `scripts/issue_link.py verify`, which calls `gh api /repos/<repo>/issues/<N>` per ref and fails with `Referenced #N does not exist in <repo>.` for unresolved numbers. |
+| PR title | Inversely enforced. | `scripts/preflight_title_policy.py` (client-side preflight) and `scripts/title_policy.py` (`portable-pr-policy.yml` `Validate title policy` job) deny any `(#NNN)` token in the title per [#167](https://github.com/tvna/claude-md/issues/167) / [#214](https://github.com/tvna/claude-md/issues/214). With the token forbidden, no number reaches the title to existence-check. |
 | Squash commit subject | Transitively covered. | GitHub's squash-merge default forms the subject as `<PR title> (#<PR-number>)`. The PR title is already gated, and `(#<PR-number>)` is the merge-event-issued PR number for this repository, so a separate existence check would be redundant. |
-| Individual commit message | Intentionally not enforced. | Only one commit lands on `main` per PR (squash merge), and that commit carries a PR body that has already passed `verify-issue-link.yml`. Gating every intermediate commit would (a) force a `Refs #N` line into commits whose link is already covered transitively, and (b) duplicate a check that the squash step makes structurally guaranteed. |
+| Individual commit message | Intentionally not enforced. | Only one commit lands on `main` per PR (squash merge), and that commit carries a PR body that has already passed the `Validate PR-issue link` job in `portable-pr-policy.yml`. Gating every intermediate commit would (a) force a `Refs #N` line into commits whose link is already covered transitively, and (b) duplicate a check that the squash step makes structurally guaranteed. |
 
 If the squash-merge default on `main` is ever loosened (for example,
 allowing merge commits or rebase merges), the "transitively covered" and

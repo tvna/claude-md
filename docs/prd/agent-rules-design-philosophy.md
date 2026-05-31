@@ -250,7 +250,7 @@ candidates are tracked by the procedure in
 Take row P3. The universal text owns the abstract principle ("open a
 GitHub issue before any branch, commit, or PR; cite its number in
 every commit and PR"). The harness owns the deterministic enforcement
-(`scripts/issue_link.py` plus `verify-issue-link.yml` plus
+(`scripts/issue_link.py` plus `portable-pr-policy.yml` (`Validate PR-issue link` job) plus
 `tests/test_issue_link.py`). The repo-local doc owns the operator
 runbook (`docs/standards/issue-pr-body-standard.md` tells contributors exactly
 what to put in the body). The project-local lane is the consumer's
