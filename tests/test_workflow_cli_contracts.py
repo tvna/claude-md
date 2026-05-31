@@ -39,6 +39,7 @@ import dependabot_labels
 import issue_link
 import labels_apply
 import nixpkgs_cooldown
+import pr_upsert
 import preflight_pr_single_commit
 import pytest
 import ruleset_drift
@@ -115,6 +116,8 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("branch_cleanup.py", "survey"): "test_branch_cleanup_survey_matches_workflow_args",
     ("coverage_failure_issue.py", "run"): "test_coverage_failure_issue_run_matches_workflow_env",
     ("dependabot_automerge.py", "audit"): "test_dependabot_automerge_audit_matches_workflow_files",
+    ("dependabot_automerge.py", "list-files"): "test_dependabot_list_files_matches_workflow_args",
+    ("dependabot_automerge.py", "request-automerge"): "test_dependabot_request_automerge_matches_workflow_args",
     ("dependabot_labels.py", "verify"): "test_dependabot_labels_verify_matches_workflow_paths",
     ("issue_link.py", "verify"): "test_issue_link_verify_matches_workflow_body_file_and_author",
     ("labels_apply.py", "$COMMAND"): "test_labels_apply_validate_and_plan_match_workflow_args",
@@ -154,6 +157,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("verify_readme_translation.py", "verify"): "test_verify_readme_translation_matches_workflow_args",
     ("verify_required_check_contexts.py", "verify"): "test_verify_required_check_contexts_matches_workflow_args",
     ("verify_ruleset_sync.py", "verify"): "test_verify_ruleset_sync_matches_workflow_args",
+    ("pr_upsert.py", "upsert"): "test_pr_upsert_matches_workflow_args",
     ("verify_shard_coverage.py", None): "test_verify_shard_coverage_matches_workflow_args",
     ("verify_test_shard_markers.py", None): "test_verify_test_shard_markers_matches_workflow_args",
 }
@@ -519,6 +523,26 @@ def test_dependabot_automerge_audit_matches_workflow_files(tmp_path: Path) -> No
             str(tmp_path / "output"),
         ]
     ) == 0
+
+
+def test_dependabot_list_files_matches_workflow_args(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("GH_TOKEN", "tok")
+    monkeypatch.setenv("REPO", "owner/repo")
+    monkeypatch.setattr(dependabot_automerge, "_list_pr_files", lambda **kw: ["uv.lock"])
+    out = tmp_path / "changed-files.txt"
+    assert dependabot_automerge.main(["list-files", "--pr-number", "42", "--output", str(out)]) == 0
+    assert out.read_text(encoding="utf-8") == "uv.lock\n"
+
+
+def test_dependabot_request_automerge_matches_workflow_args(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("GH_TOKEN", "tok")
+    monkeypatch.setenv("REPO", "owner/repo")
+    monkeypatch.setattr(dependabot_automerge, "_enable_auto_merge", lambda **kw: None)
+    assert dependabot_automerge.main(["request-automerge", "--pr-number", "42"]) == 0
 
 
 def test_dependabot_labels_verify_matches_workflow_paths(tmp_path: Path) -> None:
@@ -1042,6 +1066,25 @@ def test_threat_intel_apply_labels_matches_workflow_args(
     assert threat_intel_triage.main(["apply-labels", "--add-labels", "threat:intel-needed"]) == 0
     assert threat_intel_triage.main(["apply-labels", "--remove-labels", "threat:response-needed"]) == 0
     assert threat_intel_triage.main(["apply-labels"]) == 0
+
+
+def test_pr_upsert_matches_workflow_args(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """upsert subcommand accepts the --head/--base/--title/--body-file args used by generate-agents.yml and post-merge.yml."""
+    monkeypatch.setenv("GH_TOKEN", "tok")
+    monkeypatch.setenv("REPO", "owner/repo")
+    body_file = tmp_path / "pr-body.md"
+    body_file.write_text("body content", encoding="utf-8")
+    monkeypatch.setattr(pr_upsert, "_upsert_pr", lambda **kw: ("created", 99))
+
+    assert pr_upsert.main([
+        "upsert",
+        "--head", "chore/regenerate-agent-instructions",
+        "--base", "main",
+        "--title", "chore: regenerate agent instructions (#18)",
+        "--body-file", str(body_file),
+    ]) == 0
 
 
 def test_pr_label_mutation_jobs_have_pull_request_write() -> None:

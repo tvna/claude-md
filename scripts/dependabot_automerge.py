@@ -14,12 +14,33 @@ from __future__ import annotations
 import argparse
 import fnmatch
 import json
+import os
 import re
+import sys
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from _github_api import apply_call as _github_apply_call
+from _github_api import graphql_call as _github_graphql_call
 from _trusted_bots import _TRUSTED_BOT_LOGINS
+
+_API_ROOT = "https://api.github.com"
+
+_ENABLE_AUTO_MERGE_MUTATION = """
+mutation EnableAutoMerge($pullRequestId: ID!, $mergeMethod: PullRequestMergeMethod!) {
+  enablePullRequestAutoMerge(input: {
+    pullRequestId: $pullRequestId,
+    mergeMethod: $mergeMethod
+  }) {
+    pullRequest {
+      number
+      autoMergeRequest { mergeMethod }
+    }
+  }
+}
+"""
 
 _BUMP_RE = re.compile(
     r"\bfrom\s+v?(?P<old>\d+(?:\.\d+){0,2})\s+to\s+v?(?P<new>\d+(?:\.\d+){0,2})\b",
@@ -228,6 +249,107 @@ def _write_outputs(path: Path, result: AuditResult) -> None:
         handle.write(f"should_enable={str(result.should_enable).lower()}\n")
 
 
+def _list_pr_files(
+    *,
+    repo: str,
+    pr_number: int,
+    token: str,
+    apply_call: Callable[..., tuple[int, str]] = _github_apply_call,
+) -> list[str]:
+    """Return the list of changed filenames in a pull request."""
+    url = f"{_API_ROOT}/repos/{repo}/pulls/{pr_number}/files?per_page=100"
+    code, body = apply_call(method="GET", url=url, payload=None, token=token)
+    if not 200 <= code < 300:
+        raise RuntimeError(f"list PR files HTTP {code}")
+    try:
+        items = json.loads(body)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"list PR files: malformed JSON: {exc}") from exc
+    if not isinstance(items, list):
+        raise RuntimeError("list PR files: expected JSON array")
+    return [str(item["filename"]) for item in items if isinstance(item, dict) and "filename" in item]
+
+
+def _enable_auto_merge(
+    *,
+    repo: str,
+    pr_number: int,
+    merge_method: str,
+    token: str,
+    apply_call: Callable[..., tuple[int, str]] = _github_apply_call,
+    graphql_call: Callable[..., tuple[int, dict[str, Any]]] = _github_graphql_call,
+) -> None:
+    """Enable auto-merge on a pull request via the GitHub GraphQL API."""
+    url = f"{_API_ROOT}/repos/{repo}/pulls/{pr_number}"
+    code, body = apply_call(method="GET", url=url, payload=None, token=token)
+    if not 200 <= code < 300:
+        raise RuntimeError(f"get PR HTTP {code}")
+    try:
+        pr_data = json.loads(body)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"get PR: malformed JSON: {exc}") from exc
+    node_id = pr_data.get("node_id") if isinstance(pr_data, dict) else None
+    if not isinstance(node_id, str) or not node_id:
+        raise RuntimeError("get PR: missing node_id")
+
+    gql_code, response = graphql_call(
+        query=_ENABLE_AUTO_MERGE_MUTATION,
+        variables={"pullRequestId": node_id, "mergeMethod": merge_method.upper()},
+        token=token,
+    )
+    if not 200 <= gql_code < 300:
+        raise RuntimeError(f"enablePullRequestAutoMerge HTTP {gql_code}")
+    if "errors" in response:
+        raise RuntimeError(f"enablePullRequestAutoMerge errors: {response['errors']}")
+
+
+def _cmd_list_files(args: argparse.Namespace) -> int:
+    token = os.environ.get("GH_TOKEN", "")
+    repo = os.environ.get("REPO", "")
+    if not token:
+        print("::error::GH_TOKEN is not set", file=sys.stderr)
+        return 1
+    if not repo:
+        print("::error::REPO is not set", file=sys.stderr)
+        return 1
+    try:
+        pr_number = int(args.pr_number)
+    except (TypeError, ValueError):
+        print(f"::error::invalid PR number: {args.pr_number!r}", file=sys.stderr)
+        return 1
+    try:
+        files = _list_pr_files(repo=repo, pr_number=pr_number, token=token)
+    except RuntimeError as exc:
+        print(f"::error::{exc}", file=sys.stderr)
+        return 1
+    output = Path(args.output)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text("\n".join(files) + ("\n" if files else ""), encoding="utf-8")
+    return 0
+
+
+def _cmd_request_automerge(args: argparse.Namespace) -> int:
+    token = os.environ.get("GH_TOKEN", "")
+    repo = os.environ.get("REPO", "")
+    if not token:
+        print("::error::GH_TOKEN is not set", file=sys.stderr)
+        return 1
+    if not repo:
+        print("::error::REPO is not set", file=sys.stderr)
+        return 1
+    try:
+        pr_number = int(args.pr_number)
+    except (TypeError, ValueError):
+        print(f"::error::invalid PR number: {args.pr_number!r}", file=sys.stderr)
+        return 1
+    try:
+        _enable_auto_merge(repo=repo, pr_number=pr_number, merge_method="SQUASH", token=token)
+    except RuntimeError as exc:
+        print(f"::error::{exc}", file=sys.stderr)
+        return 1
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -243,6 +365,15 @@ def main(argv: list[str] | None = None) -> int:
     p_audit.add_argument("--summary-file", help="Optional Markdown summary path.")
     p_audit.add_argument("--output", help="Optional GitHub Actions output file.")
     p_audit.set_defaults(func=_cmd_audit)
+
+    p_list_files = sub.add_parser("list-files", help="List changed files in a PR to a file.")
+    p_list_files.add_argument("--pr-number", required=True, help="Pull request number.")
+    p_list_files.add_argument("--output", default="changed-files.txt", help="Output file path.")
+    p_list_files.set_defaults(func=_cmd_list_files)
+
+    p_automerge = sub.add_parser("request-automerge", help="Enable GitHub auto-merge on a PR.")
+    p_automerge.add_argument("--pr-number", required=True, help="Pull request number.")
+    p_automerge.set_defaults(func=_cmd_request_automerge)
 
     args = parser.parse_args(argv)
     return args.func(args)

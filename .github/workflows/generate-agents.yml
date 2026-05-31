@@ -63,6 +63,7 @@ jobs:
         if: ${{ inputs.mode != 'verify' }}
         env:
           GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
           PR_BRANCH: chore/regenerate-agent-instructions
           PR_TITLE: "chore: regenerate agent instructions (#18)"
         run: |
@@ -84,8 +85,8 @@ jobs:
           git commit -m "$PR_TITLE"
           git push --force-with-lease origin "$PR_BRANCH"
 
-          if gh pr view "$PR_BRANCH" --json number --jq .number >/dev/null 2>&1; then
-            gh pr edit "$PR_BRANCH" --title "$PR_TITLE" --body-file /tmp/pr-body.md
-          else
-            gh pr create --base "$GITHUB_REF_NAME" --head "$PR_BRANCH" --title "$PR_TITLE" --body-file /tmp/pr-body.md
-          fi
+          python3 scripts/pr_upsert.py upsert \
+            --head "$PR_BRANCH" \
+            --base "$GITHUB_REF_NAME" \
+            --title "$PR_TITLE" \
+            --body-file /tmp/pr-body.md
