@@ -22,11 +22,12 @@ from __future__ import annotations
 import contextlib
 import json
 import os
-import shutil
 import subprocess
 import sys
 from pathlib import Path
 from typing import Any
+
+from _git import run_git
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 _REMOTE_ENV_VAR = "CLAUDE_CODE_REMOTE"
@@ -34,20 +35,11 @@ _SESSION_BRANCH_FILE = REPO_ROOT / ".git" / "CLAUDE_SESSION_BRANCH"
 
 
 def _current_branch() -> str | None:
-    git = shutil.which("git")
-    if git is None:
-        return None
     try:
-        result = subprocess.run(  # noqa: S603
-            [git, "branch", "--show-current"],
-            capture_output=True,
-            text=True,
-            check=False,
-            timeout=10,
-        )
+        result = run_git(["branch", "--show-current"], timeout=10)
         branch = result.stdout.strip()
         return branch if branch else None
-    except (OSError, subprocess.SubprocessError):
+    except (OSError, subprocess.SubprocessError, RuntimeError):
         return None
 
 

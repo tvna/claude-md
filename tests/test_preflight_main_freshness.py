@@ -299,13 +299,13 @@ class TestMain:
 
 class TestFetchAndRecord:
     def test_raises_when_git_not_found(self, tmp_path: Path) -> None:
-        with patch("preflight_main_freshness.shutil.which", return_value=None), pytest.raises(RuntimeError, match="git executable not found"):
+        with patch("_git.shutil.which", return_value=None), pytest.raises(RuntimeError, match="git executable not found"):
             gate.fetch_and_record(repo=tmp_path, stamp_path=tmp_path / "stamp")
 
     def test_raises_on_fetch_failure(self, tmp_path: Path) -> None:
         import subprocess
         fake_fail = subprocess.CompletedProcess(["git"], returncode=1, stdout="", stderr="network error")
-        with patch("preflight_main_freshness.subprocess.run", return_value=fake_fail), pytest.raises(RuntimeError, match="git fetch origin main failed"):
+        with patch("_git.subprocess.run", return_value=fake_fail), pytest.raises(RuntimeError, match="git fetch origin main failed"):
             gate.fetch_and_record(repo=tmp_path, stamp_path=tmp_path / "stamp")
 
     def test_raises_on_rev_parse_failure(self, tmp_path: Path) -> None:
@@ -319,7 +319,7 @@ class TestFetchAndRecord:
             call_count += 1
             return fetch_ok if call_count == 1 else rev_fail
 
-        with patch("preflight_main_freshness.subprocess.run", side_effect=fake_run), pytest.raises(RuntimeError, match="git rev-parse"):
+        with patch("_git.subprocess.run", side_effect=fake_run), pytest.raises(RuntimeError, match="git rev-parse"):
             gate.fetch_and_record(repo=tmp_path, stamp_path=tmp_path / "stamp")
 
     def test_success_returns_stamp(self, tmp_path: Path) -> None:
@@ -334,7 +334,7 @@ class TestFetchAndRecord:
             return fetch_ok if call_count == 1 else rev_ok
 
         stamp_path = tmp_path / "stamp"
-        with patch("preflight_main_freshness.subprocess.run", side_effect=fake_run):
+        with patch("_git.subprocess.run", side_effect=fake_run):
             stamp = gate.fetch_and_record(repo=tmp_path, stamp_path=stamp_path)
         assert stamp.sha == "abc1234567890"
 
@@ -368,7 +368,7 @@ class TestCmdRecord:
             return fetch_ok if call_count == 1 else rev_ok
 
         stamp_path = tmp_path / "stamp"
-        with patch("preflight_main_freshness.subprocess.run", side_effect=fake_run), patch.object(gate, "STAMP_FILE", stamp_path):
+        with patch("_git.subprocess.run", side_effect=fake_run), patch.object(gate, "STAMP_FILE", stamp_path):
             exit_code = gate.main(["record"])
         assert exit_code == 0
         assert "OK: recorded" in capsys.readouterr().out

@@ -94,7 +94,7 @@ def test_run_git_raises_on_failure() -> None:
 
 
 def test_run_git_raises_when_git_missing(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    monkeypatch.setattr(scan_area_path_coverage.shutil, "which", lambda _name: None)
+    monkeypatch.setattr("_git.shutil.which", lambda _name: None)
     with pytest.raises(RuntimeError, match="git executable not found"):
         scan_area_path_coverage._run_git(["status"], tmp_path)
 

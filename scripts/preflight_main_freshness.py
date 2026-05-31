@@ -27,14 +27,13 @@ Refs #654.
 from __future__ import annotations
 
 import argparse
-import shutil
-import subprocess
 import sys
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from _git import run_git
 from _hook_runtime import emit_decision, read_event
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -151,26 +150,11 @@ def fetch_and_record(
     """Fetch origin/main, resolve SHA, write stamp, and return it."""
     if stamp_path is None:
         stamp_path = STAMP_FILE
-    git = shutil.which("git")
-    if git is None:
-        raise RuntimeError("git executable not found on PATH")
-    fetch = subprocess.run(  # noqa: S603
-        [git, "fetch", "--quiet", remote, branch],
-        cwd=repo,
-        check=False,
-        capture_output=True,
-        text=True,
-    )
+    fetch = run_git(["fetch", "--quiet", remote, branch], cwd=repo)
     if fetch.returncode != 0:
         detail = (fetch.stderr or fetch.stdout).strip()
         raise RuntimeError(f"git fetch {remote} {branch} failed: {detail}")
-    rev = subprocess.run(  # noqa: S603
-        [git, "rev-parse", f"{remote}/{branch}"],
-        cwd=repo,
-        check=False,
-        capture_output=True,
-        text=True,
-    )
+    rev = run_git(["rev-parse", f"{remote}/{branch}"], cwd=repo)
     if rev.returncode != 0:
         detail = (rev.stderr or rev.stdout).strip()
         raise RuntimeError(f"git rev-parse {remote}/{branch} failed: {detail}")
