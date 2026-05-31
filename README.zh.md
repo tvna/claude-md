@@ -60,6 +60,10 @@ ln -s .claude-md-master/CLAUDE.md CLAUDE.md
 ln -s .claude-md-master/AGENTS.md AGENTS.md
 ```
 
+### Devin
+
+Devin 可以使用 APM 展开到 `.agents/skills/` 的 skills。需要 hooks parity 时，请把 `.devin/hooks.v1.json` 与仓库指令一起引入。
+
 ### 2. 添加项目专属规则
 
 在父项目中创建本地项目指令文件，在开头导入这个主仓库，然后只写项目专属的差异部分。
