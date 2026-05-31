@@ -24,6 +24,17 @@ repos:
         pass_filenames: false
         files: ^\.github/workflows/.*\.ya?ml$
 
+      # Pre-push gate: a PR carries exactly one commit ahead of origin/main.
+      # Issue #492. Requires `pre-commit install --hook-type pre-push` once
+      # per checkout; the CI step in verify-github-content.yml is the
+      # backstop when the local hook is not installed.
+      - id: preflight-pr-single-commit
+        name: preflight pr single commit (scripts/preflight_pr_single_commit.py)
+        entry: uv run python scripts/preflight_pr_single_commit.py
+        language: system
+        pass_filenames: false
+        stages: [pre-push]
+        always_run: true
       - id: preflight-branch-base
         name: preflight branch base (scripts/preflight_branch_base.py verify)
         entry: uv run python scripts/preflight_branch_base.py verify

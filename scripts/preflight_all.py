@@ -205,6 +205,13 @@ STEPS: tuple[Step, ...] = (
         argv=("python3", "scripts/verify_test_shard_markers.py"),
     ),
     Step(
+        # Refs #492. Also wired via .pre-commit-config.yaml pre-push stage;
+        # mirroring here keeps the single ``preflight_all.py`` entrypoint
+        # truthful for contributors who use only the .githooks/pre-push hook.
+        name="preflight_pr_single_commit",
+        argv=("python3", "scripts/preflight_pr_single_commit.py"),
+    ),
+    Step(
         # Refs #745. Fetches the live base branch and fails before push when
         # HEAD does not contain it, matching GitHub's out-of-date branch gate.
         name="preflight_branch_base",
@@ -368,7 +375,7 @@ def run_all(
     Cheap steps run first, in declaration order, and all of them run so a single
     invocation reports every cheap failure at once. Heavy steps (the ~5-min
     pytest suite) then run only when **every** cheap step passed -- a sub-second
-    gate failure (branch-base, ruff, mypy) short-circuits the
+    gate failure (single-commit, branch-base, ruff, mypy) short-circuits the
     suite instead of wasting it (refs #985, the PR #983 "5 minutes then rejected
     for an unrelated reason" failure mode).
 

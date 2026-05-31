@@ -42,6 +42,7 @@ import labels_apply
 import nixpkgs_cooldown
 import post_issue_comment
 import pr_upsert
+import preflight_pr_single_commit
 import pytest
 import ruleset_drift
 import rulesets_apply
@@ -125,6 +126,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("labels_apply.py", "plan"): "test_labels_apply_validate_and_plan_match_workflow_args",
     ("labels_apply.py", "validate"): "test_labels_apply_validate_and_plan_match_workflow_args",
     ("nixpkgs_cooldown.py", "verify"): "test_nixpkgs_cooldown_verify_matches_workflow_args",
+    ("preflight_pr_single_commit.py", None): "test_preflight_pr_single_commit_matches_workflow_env",
     ("ruleset_drift.py", "detect"): "test_ruleset_drift_detect_and_file_issue_match_workflow_args",
     ("ruleset_drift.py", "file-sot-issue"): "test_ruleset_drift_detect_and_file_issue_match_workflow_args",
     ("ruleset_drift.py", "file-unknown-issue"): "test_ruleset_drift_detect_and_file_issue_match_workflow_args",
@@ -1372,6 +1374,31 @@ def test_verify_shard_coverage_matches_workflow_args(tmp_path: Path) -> None:
     assert verify_shard_coverage.main(
         ["--collected", str(collected), "--junit", str(junit)]
     ) == 0
+
+
+def test_preflight_pr_single_commit_matches_workflow_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Mirror the env shape used by .github/workflows/portable-pr-policy.yml.
+
+    The workflow shells to ``python3 scripts/preflight_pr_single_commit.py``
+    with only BASE_REF in the env (no argv). Exercise the same shape:
+    BASE_REF set, list_subjects + count_commits stubbed to a clean
+    single-commit branch, expect exit 0.
+    """
+    monkeypatch.setenv("BASE_REF", "origin/main")
+    monkeypatch.setattr(
+        preflight_pr_single_commit,
+        "list_subjects",
+        lambda base, head="HEAD", **kwargs: ["abc1234 feat: single commit"],
+    )
+    monkeypatch.setattr(
+        preflight_pr_single_commit,
+        "count_commits",
+        lambda base, head="HEAD", **kwargs: 1,
+    )
+
+    assert preflight_pr_single_commit.main() == 0
 
 
 def test_uv_pin_workflow_subcommands_match_ci_usage(

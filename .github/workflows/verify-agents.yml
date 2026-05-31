@@ -2,11 +2,6 @@ name: Verify repository scripts
 
 on:
   pull_request:
-  # merge_group lets the required "Verify repository scripts / *" checks
-  # resolve on the queued integration ref (GitHub Merge Queue, issue #895).
-  # Every job here is a static working-tree check with no pull_request
-  # payload dependency, so the same jobs run unchanged on merge_group.
-  merge_group:
 
 permissions:
   contents: read

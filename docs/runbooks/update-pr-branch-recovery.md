@@ -7,12 +7,11 @@
 
 The GitHub API for `update_pull_request_branch` performs a server-side
 **merge** from the base branch into the feature branch -- not a rebase.
-This adds a merge commit to the branch that the squash-only merge queue
-would just flatten again (`main` is squash-only:
-`allowed_merge_methods: ["squash"]`). Catching up with `main` this way is
-also unnecessary: GitHub Merge Queue validates the up-to-date base state
-at merge time (issue #895), so the feature branch does not need to absorb
-`main` before merge.
+This adds a merge commit to the branch. Even though
+`scripts/preflight_pr_single_commit.py` excludes merge commits via
+`--no-merges`, the branch history diverges from the clean single-commit
+pattern the harness is built around, and it creates unnecessary
+complexity in the squash-merge history.
 
 ## Recovery procedure
 
@@ -22,7 +21,7 @@ merges into `main`), use the following steps instead of calling
 
 ### Prerequisites
 
-- The PR's original commit(s) are available in the local branch or
+- The PR's original single commit is available in the local branch or
   can be identified via `git log`.
 - You have `GH_TOKEN` set (for re-targeting the PR via `mcp__github__`
   tools if needed).
@@ -43,7 +42,7 @@ merges into `main`), use the following steps instead of calling
    git checkout -b <issue-slug>-v2 origin/main
    ```
 
-3. **Re-apply the PR change on top of `main`.**
+3. **Re-apply the PR change as a single commit.**
 
    If the original commit is in a local branch `<old-branch>`:
 
@@ -81,6 +80,6 @@ merges into `main`), use the following steps instead of calling
 ## Companion
 
 - `scripts/gate_update_pr_branch.py` -- PreToolUse hook that blocks the call
-- `.github/rulesets/main.json` -- squash-only `allowed_merge_methods` and the `merge_queue` rule that make a catch-up merge unnecessary
+- `scripts/preflight_pr_single_commit.py` -- enforces single non-merge commit ahead of base
 - `docs/runbooks/replacement-pr-preflight.md` -- replacement-PR closure gate
-- Refs #893, #895
+- Refs #893
