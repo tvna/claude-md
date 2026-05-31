@@ -43,20 +43,24 @@ jobs:
           mkdir -p "${OUTDIR}"
 
           echo "Fetching issues..."
-          gh api --paginate "repos/${REPO}/issues?state=all&per_page=100" \
-            > "${OUTDIR}/issues.json"
+          python3 scripts/github_paginate.py fetch \
+            --path "repos/${REPO}/issues?state=all&per_page=100" \
+            --output "${OUTDIR}/issues.json"
 
           echo "Fetching pull requests..."
-          gh api --paginate "repos/${REPO}/pulls?state=all&per_page=100" \
-            > "${OUTDIR}/pull_requests.json"
+          python3 scripts/github_paginate.py fetch \
+            --path "repos/${REPO}/pulls?state=all&per_page=100" \
+            --output "${OUTDIR}/pull_requests.json"
 
           echo "Fetching issue comments..."
-          gh api --paginate "repos/${REPO}/issues/comments?per_page=100" \
-            > "${OUTDIR}/issue_comments.json"
+          python3 scripts/github_paginate.py fetch \
+            --path "repos/${REPO}/issues/comments?per_page=100" \
+            --output "${OUTDIR}/issue_comments.json"
 
           echo "Fetching pull request review comments..."
-          gh api --paginate "repos/${REPO}/pulls/comments?per_page=100" \
-            > "${OUTDIR}/pull_request_review_comments.json"
+          python3 scripts/github_paginate.py fetch \
+            --path "repos/${REPO}/pulls/comments?per_page=100" \
+            --output "${OUTDIR}/pull_request_review_comments.json"
 
           ARCHIVE="${OUTDIR}/originals-${TIMESTAMP}.json.gz"
 
@@ -145,6 +149,6 @@ jobs:
 
           Record these values in the issue body backup section."
 
-          gh issue comment "${ISSUE_NUMBER}" \
-            --repo "${REPO}" \
+          python3 scripts/post_issue_comment.py create \
+            --issue-number "${ISSUE_NUMBER}" \
             --body "${BODY}"
