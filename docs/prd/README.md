@@ -17,6 +17,12 @@ reviewers or CI use to decide yes/no, move it to `docs/standards/`.
 Once a document primarily tells an operator how to perform a task, move
 it to `docs/runbooks/`.
 
+Do not put an undecided evaluation here either. If a document still
+carries an open question that blocks a yes/no decision (for example one
+awaiting human follow-up or a live API response), it belongs in
+[`docs/proposals/`](../proposals/README.md) until the question resolves;
+it graduates into this lane once it becomes a settled decision record.
+
 Current compatibility notes:
 
 - `agent-rules-design-philosophy.md` belongs here because it defines the

@@ -2,7 +2,8 @@
 
 This file enumerates every document under `docs/` by the lane that owns
 it. Lanes are the buckets that `ls docs/` already shows:
-`prd/` (design-stage rationale and decision records), `standards/`
+`proposals/` (pre-decision evaluations with open questions), `prd/`
+(design-stage rationale and decision records), `standards/`
 (adopted rules, schemas, and contracts), `runbooks/` (operator
 procedures), `generated/` (checked-in generated views), `archive/`
 (frozen historical evidence).
@@ -13,10 +14,18 @@ scan the `Territory` column for the domain you care about and follow
 the `Companion` column to the workflow or script that implements it.
 
 Lane README files define the detailed placement rules:
-[`prd/README.md`](prd/README.md), [`standards/README.md`](standards/README.md),
+[`proposals/README.md`](proposals/README.md), [`prd/README.md`](prd/README.md),
+[`standards/README.md`](standards/README.md),
 and [`runbooks/README.md`](runbooks/README.md). The append-only policy
 for `archive/` is documented separately in
 [`archive/RETENTION.md`](archive/RETENTION.md).
+
+## proposals/ -- pre-decision evaluations with open questions
+
+| File | Territory | Tracking issues | Companion |
+|---|---|---|---|
+| [README.md](proposals/README.md) | Placement rules for pre-decision evaluations whose requirements are not yet decidable, and their graduation path into `prd/` / `standards/` / `runbooks/`. | #1001 | `docs/INDEX.md`; `docs/prd/README.md` |
+| [renovate-evaluation.md](proposals/renovate-evaluation.md) | Evaluation of switching from Dependabot to Mend Renovate: documented conclusion, open-question status (Q1 pending, Q2-Q4 answered), and one-shot cutover migration sketch with phased sub-issues. Pending Q1 human follow-up, so it stays a proposal rather than a `prd/` decision record. | #276, #273, #279 | `docs/archive/renovate-poc-279.md`; `.github/rulesets/dependabot.json`; `.github/dependabot.yml` |
 
 ## prd/ -- design-stage rationale and decision records
 
