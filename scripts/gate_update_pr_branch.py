@@ -2,10 +2,12 @@
 """PreToolUse gate: deny mcp__github__update_pull_request_branch.
 
 ``update_pull_request_branch`` performs a server-side **merge** (not a
-rebase). Merging main into the feature branch adds a merge commit, which
-conflicts with the ``required_linear_history`` rule on ``main`` (see
-``.github/rulesets/main.json``) and is unnecessary now that GitHub Merge
-Queue validates the up-to-date base state at merge time (issue #895).
+rebase). Merging main into the feature branch adds a merge commit to the
+PR history, which the squash-only merge queue would just flatten again,
+and is unnecessary now that GitHub Merge Queue validates the up-to-date
+base state at merge time (issue #895). ``main`` is squash-only
+(``allowed_merge_methods: ["squash"]``), so the branch never needs a
+catch-up merge to land cleanly.
 
 Recovery path: see ``docs/runbooks/update-pr-branch-recovery.md``.
 
@@ -29,9 +31,9 @@ _TARGET_TOOL = "mcp__github__update_pull_request_branch"
 _DENY_REASON = (
     "`mcp__github__update_pull_request_branch` is blocked. "
     "The GitHub API performs a server-side merge (not a rebase), which "
-    "adds a merge commit that conflicts with the required_linear_history "
-    "rule on main. Catching up with main is unnecessary: GitHub Merge "
-    "Queue validates the up-to-date base state at merge time (issue #895).\n\n"
+    "adds a merge commit that the squash-only merge queue would flatten "
+    "again. Catching up with main is unnecessary: GitHub Merge Queue "
+    "validates the up-to-date base state at merge time (issue #895).\n\n"
     "Recovery path (only when the branch is genuinely stale and conflicting):\n"
     "  1. git fetch origin main\n"
     "  2. git checkout -b <replacement-branch> origin/main\n"

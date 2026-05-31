@@ -30,7 +30,7 @@ class TestDecide:
         reason = decision["decisionReason"]
         assert "origin/main" in reason
         assert "replacement-branch" in reason
-        assert "required_linear_history" in reason
+        assert "squash-only merge queue" in reason
 
     def test_deny_reason_references_runbook(self) -> None:
         decision = gub.decide("mcp__github__update_pull_request_branch")
