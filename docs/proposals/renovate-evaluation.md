@@ -1,5 +1,7 @@
 # Renovate as Dependabot Replacement -- Evaluation and Migration Sketch
 
+> **Status: DECLINED (2026-05-31, [#1014](https://github.com/tvna/claude-md/issues/1014)).** The Renovate migration path evaluated here (the #276 / #279 cutover) was **not** adopted. The #273 rebase gap was instead closed by deleting the dedicated `non_fast_forward` ruleset on `refs/heads/dependabot/*` (mirroring the `refs/heads/claude/*` treatment) so `@dependabot rebase` force-pushes in place again, plus a deterministic author-verification gate (`scripts/verify_dependabot_author.py`) that fails any `dependabot/*` PR whose author is not a trusted bot login. That fix restores in-place rebase without adopting a third-party dependency bot, expanding write scope (Renovate's `Workflows: write`, Q4), or depending on the still-unconfirmed Q1 (whether the Mend Renovate Installation actor is accepted by the Rulesets API). This document is retained as the record of the evaluation; the sub-issue chain #280-#284 is superseded.
+
 Parent issue: [#276](https://github.com/tvna/claude-md/issues/276)
 Gap tracker: [#273](https://github.com/tvna/claude-md/issues/273)
 PoC evidence: [docs/archive/renovate-poc-279.md](../archive/renovate-poc-279.md) ([#279](https://github.com/tvna/claude-md/issues/279))
