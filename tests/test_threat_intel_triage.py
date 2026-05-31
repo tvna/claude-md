@@ -2393,3 +2393,216 @@ class TestThreatIntelMainExceptionHandler:
         with pytest.raises(SystemExit) as exc_info:
             runpy.run_module("threat_intel_triage", run_name="__main__")
         assert exc_info.value.code == 0
+
+
+# ---------------------------------------------------------------------------
+# _apply_labels() and _cmd_apply_labels() -- apply-labels subcommand
+# ---------------------------------------------------------------------------
+
+
+class _FakeResponse:
+    def __init__(self, status: int = 200, body: bytes = b"[]") -> None:
+        self.status = status
+        self._body = body
+
+    def read(self) -> bytes:
+        return self._body
+
+    def __enter__(self) -> _FakeResponse:
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        pass
+
+
+class TestApplyLabels:
+    def _make_opener(self, responses: list[int]) -> object:
+        """Return an opener that returns successive HTTP status codes."""
+        import urllib.error
+        import urllib.request
+
+        codes = iter(responses)
+
+        def opener(req: urllib.request.Request) -> _FakeResponse:
+            code = next(codes)
+            if 200 <= code < 300:
+                return _FakeResponse(status=code)
+            raise urllib.error.HTTPError(req.full_url, code, "error", {}, None)  # type: ignore[arg-type]
+
+        return opener
+
+    def test_add_labels_posts_to_github_api(self) -> None:
+        import urllib.request
+
+        captured: list[urllib.request.Request] = []
+
+        def opener(req: urllib.request.Request) -> _FakeResponse:
+            captured.append(req)
+            return _FakeResponse(status=200, body=b'[{"name":"threat:intel-needed"}]')
+
+        assert triage._apply_labels(
+            add_labels=["threat:intel-needed"],
+            remove_labels=[],
+            repo="owner/repo",
+            number=42,
+            token="tok",
+            opener=opener,
+        ) == 0
+
+        assert len(captured) == 1
+        req = captured[0]
+        assert "issues/42/labels" in req.full_url
+        assert req.method == "POST"
+
+    def test_remove_label_deletes_from_github_api(self) -> None:
+        import urllib.request
+
+        captured: list[urllib.request.Request] = []
+
+        def opener(req: urllib.request.Request) -> _FakeResponse:
+            captured.append(req)
+            return _FakeResponse(status=200, body=b'[]')
+
+        assert triage._apply_labels(
+            add_labels=[],
+            remove_labels=["threat:response-needed"],
+            repo="owner/repo",
+            number=7,
+            token="tok",
+            opener=opener,
+        ) == 0
+
+        assert len(captured) == 1
+        req = captured[0]
+        assert "issues/7/labels/threat%3Aresponse-needed" in req.full_url
+        assert req.method == "DELETE"
+
+    def test_remove_label_404_is_not_an_error(self) -> None:
+        import urllib.error
+        import urllib.request
+
+        def opener(req: urllib.request.Request) -> _FakeResponse:
+            raise urllib.error.HTTPError(req.full_url, 404, "not found", {}, None)  # type: ignore[arg-type]
+
+        assert triage._apply_labels(
+            add_labels=[],
+            remove_labels=["not-there"],
+            repo="owner/repo",
+            number=1,
+            token="tok",
+            opener=opener,
+        ) == 0
+
+    def test_add_labels_api_error_returns_1(self, capsys: pytest.CaptureFixture[str]) -> None:
+        opener = self._make_opener([422])
+        assert triage._apply_labels(
+            add_labels=["bad-label"],
+            remove_labels=[],
+            repo="owner/repo",
+            number=1,
+            token="tok",
+            opener=opener,
+        ) == 1
+        assert "422" in capsys.readouterr().err
+
+    def test_remove_label_api_error_returns_1(self, capsys: pytest.CaptureFixture[str]) -> None:
+        opener = self._make_opener([500])
+        assert triage._apply_labels(
+            add_labels=[],
+            remove_labels=["bad"],
+            repo="owner/repo",
+            number=1,
+            token="tok",
+            opener=opener,
+        ) == 1
+        assert "500" in capsys.readouterr().err
+
+    def test_empty_lists_do_nothing(self) -> None:
+        called = []
+
+        def opener(req: object) -> _FakeResponse:
+            called.append(req)
+            return _FakeResponse()
+
+        assert triage._apply_labels(
+            add_labels=[], remove_labels=[], repo="owner/repo", number=1, token="tok", opener=opener
+        ) == 0
+        assert called == []
+
+    def test_bearer_token_in_header(self) -> None:
+        import urllib.request
+
+        captured: list[urllib.request.Request] = []
+
+        def opener(req: urllib.request.Request) -> _FakeResponse:
+            captured.append(req)
+            return _FakeResponse()
+
+        triage._apply_labels(
+            add_labels=["x"], remove_labels=[], repo="r/r", number=1, token="secret", opener=opener
+        )
+        assert "Bearer secret" in captured[0].get_header("Authorization")
+
+
+class TestCmdApplyLabels:
+    def test_missing_gh_token_returns_1(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        monkeypatch.delenv("GH_TOKEN", raising=False)
+        monkeypatch.setenv("REPO", "owner/repo")
+        monkeypatch.setenv("NUMBER", "1")
+        assert triage.main(["apply-labels", "--add-labels", "threat:intel-needed"]) == 1
+        assert "GH_TOKEN" in capsys.readouterr().err
+
+    def test_missing_repo_returns_1(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        monkeypatch.setenv("GH_TOKEN", "tok")
+        monkeypatch.delenv("REPO", raising=False)
+        monkeypatch.setenv("NUMBER", "1")
+        assert triage.main(["apply-labels", "--add-labels", "threat:intel-needed"]) == 1
+        assert "REPO" in capsys.readouterr().err
+
+    def test_missing_number_returns_1(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        monkeypatch.setenv("GH_TOKEN", "tok")
+        monkeypatch.setenv("REPO", "owner/repo")
+        monkeypatch.delenv("NUMBER", raising=False)
+        assert triage.main(["apply-labels", "--add-labels", "threat:intel-needed"]) == 1
+        assert "NUMBER" in capsys.readouterr().err
+
+    def test_non_integer_number_returns_1(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        monkeypatch.setenv("GH_TOKEN", "tok")
+        monkeypatch.setenv("REPO", "owner/repo")
+        monkeypatch.setenv("NUMBER", "not-a-number")
+        assert triage.main(["apply-labels", "--add-labels", "threat:intel-needed"]) == 1
+        assert "NUMBER" in capsys.readouterr().err
+
+    def test_comma_separated_add_labels(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("GH_TOKEN", "tok")
+        monkeypatch.setenv("REPO", "owner/repo")
+        monkeypatch.setenv("NUMBER", "5")
+
+        captured_labels: list[list[str]] = []
+
+        def fake_apply(**kw: object) -> int:
+            captured_labels.append(kw["add_labels"])  # type: ignore[arg-type]
+            return 0
+
+        monkeypatch.setattr(triage, "_apply_labels", fake_apply)
+        assert triage.main(["apply-labels", "--add-labels", "threat:intel-needed,threat:response-needed"]) == 0
+        assert captured_labels == [["threat:intel-needed", "threat:response-needed"]]
+
+    def test_no_labels_args_is_valid(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("GH_TOKEN", "tok")
+        monkeypatch.setenv("REPO", "owner/repo")
+        monkeypatch.setenv("NUMBER", "5")
+        monkeypatch.setattr(triage, "_apply_labels", lambda **kw: 0)
+        assert triage.main(["apply-labels"]) == 0
