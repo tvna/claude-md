@@ -30,6 +30,7 @@ for `archive/` is documented separately in
 | [privileged-operation-runbooks.md](prd/privileged-operation-runbooks.md) | Six-control contract (authorizing issue, dry-run, live apply, rollback, audit, secret-leak evidence) for every privileged operation. | #182, #178 | `.github/workflows/apply-rulesets.yml`; `.github/workflows/apply-labels.yml`; `.github/workflows/weekly-maintenance.yml` |
 | [non-ascii-defense.md](prd/non-ascii-defense.md) | Three-layer ASCII discipline at the GitHub-post boundary. | #102 | `scripts/scan_non_ascii.py`; `scripts/preflight_non_ascii.py`; `scripts/sanitize_history.py`; `.github/workflows/issue-pr-triage.yml` |
 | [freshness-precondition-gate.md](prd/freshness-precondition-gate.md) | Concrete companion to the universal time-boxed-gate refresh rule: the create_branch freshness preflight, the interim per-operation refresh, and the future auto-refresh skill. | #894, #654, #859 | `scripts/preflight_main_freshness.py`; `.claude/settings.json`; `.apm/instructions/master.instructions.md` (section 3) |
+| [renovate-evaluation.md](prd/renovate-evaluation.md) | Evaluation of switching from Dependabot to Mend Renovate: documented conclusion, open-question status (Q1 pending, Q2-Q4 answered), and one-shot cutover migration sketch with phased sub-issues. | #276, #273, #279 | `docs/archive/renovate-poc-279.md`; `.github/rulesets/dependabot.json`; `.github/dependabot.yml` |
 
 The last three `prd/` entries are adopted contracts with legacy
 placement. They should move to `standards/` in a scoped follow-up rather
