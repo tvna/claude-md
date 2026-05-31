@@ -48,8 +48,12 @@ import os
 import shutil
 import subprocess
 import sys
+import time
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
+
+import preflight_cache
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -69,6 +73,12 @@ class Step:
     # External executables that must resolve on PATH for the step to run.
     # Treated the same as ``required_env`` for skip semantics.
     required_bin: tuple[str, ...] = field(default_factory=tuple)
+    # When True, the step is expensive (the full pytest suite). Heavy steps run
+    # only after every cheap step has passed (fail-fast: a sub-second gate
+    # failure short-circuits the ~5-min suite, refs #985) and are gated by the
+    # content-addressed skip cache in ``scripts/preflight_cache.py`` so an
+    # unchanged working tree skips the re-run while keeping CI coverage parity.
+    heavy: bool = False
 
 
 # Order matches the order CI gates fire on a typical PR run: static
@@ -252,10 +262,17 @@ STEPS: tuple[Step, ...] = (
         soft=True,
     ),
     Step(
+        # Refs #985. Parallelised across cores with pytest-xdist (``-n auto``)
+        # to cut the ~290s serial wall-clock without dropping a single test --
+        # the same full universe CI runs (sharded across matrix legs) runs here
+        # (sharded across local workers). xdist lives in the ``local`` uv group,
+        # so the run activates it explicitly. ``heavy=True`` routes this step
+        # through the fail-fast + skip-cache path in ``main``.
         name="pytest",
-        argv=("uv", "run", "python", "-m", "pytest", "-q"),
+        argv=("uv", "run", "--group", "local", "python", "-m", "pytest", "-q", "-n", "auto"),
         required_bin=("uv",),
         soft=True,
+        heavy=True,
     ),
     Step(
         name="prek",
@@ -273,6 +290,10 @@ class StepResult:
     name: str
     status: str  # "pass" | "fail" | "skip"
     detail: str = ""
+    # Wall-clock seconds the step took. 0.0 for steps that never executed
+    # (prereq skip, cache hit, upstream-failure skip). Surfaced per-step so the
+    # slow gate is identifiable from the summary alone (refs #985).
+    duration_s: float = 0.0
 
 
 def missing_prereqs(step: Step, environ: dict[str, str]) -> list[str]:
@@ -311,18 +332,107 @@ def run_step(step: Step, cwd: Path, environ: dict[str, str]) -> StepResult:
             detail=detail,
         )
 
+    start = time.monotonic()
     completed = subprocess.run(  # noqa: S603 -- argv is hard-coded in STEPS
         list(step.argv),
         cwd=cwd,
         check=False,
     )
+    elapsed = time.monotonic() - start
     if completed.returncode == 0:
-        return StepResult(name=step.name, status="pass")
+        return StepResult(name=step.name, status="pass", duration_s=elapsed)
     return StepResult(
         name=step.name,
         status="fail",
         detail=f"exit={completed.returncode}",
+        duration_s=elapsed,
     )
+
+
+def _heavy_fingerprint(heavy: Sequence[Step], cwd: Path) -> str | None:
+    """Best-effort content fingerprint for the heavy tier, or ``None`` on error.
+
+    The fingerprint folds in every heavy step's argv so a command change (e.g.
+    adding ``-n auto``) busts a cache recorded under the old command. Any git or
+    filesystem error degrades to ``None`` -- the caller then runs the full suite
+    rather than trusting a fingerprint it could not compute (fail-open to the
+    *slower, safer* path, never to a skip).
+    """
+    extra = tuple(token for step in heavy for token in step.argv)
+    try:
+        return preflight_cache.compute_fingerprint(cwd, extra=extra)
+    except (OSError, subprocess.SubprocessError):
+        return None
+
+
+def run_all(
+    steps: Sequence[Step],
+    cwd: Path,
+    environ: dict[str, str],
+) -> list[StepResult]:
+    """Run *steps* with fail-fast cheap-tier gating and a heavy-tier skip cache.
+
+    Cheap steps run first, in declaration order, and all of them run so a single
+    invocation reports every cheap failure at once. Heavy steps (the ~5-min
+    pytest suite) then run only when **every** cheap step passed -- a sub-second
+    gate failure (single-commit, branch-base, ruff, mypy) short-circuits the
+    suite instead of wasting it (refs #985, the PR #983 "5 minutes then rejected
+    for an unrelated reason" failure mode).
+
+    When the cheap tier is green, each heavy step is gated by the
+    content-addressed cache: if the test-relevant working tree is byte-identical
+    to the last recorded green run, the step is reported ``pass (cached)`` and
+    not re-executed. This preserves CI coverage parity (the same full suite is
+    what produced the cached pass) while killing the multi-push re-run multiplier
+    on an unchanged tree. After a heavy tier that actually executed and passed,
+    the fingerprint is recorded for the next push.
+    """
+    cheap = [s for s in steps if not s.heavy]
+    heavy = [s for s in steps if s.heavy]
+
+    cheap_results = [run_step(step, cwd, environ) for step in cheap]
+    cheap_failed = [r.name for r in cheap_results if r.status == "fail"]
+
+    if not heavy:
+        return cheap_results
+
+    if cheap_failed:
+        blocked = "upstream gate failed: " + ", ".join(cheap_failed)
+        heavy_results = [
+            StepResult(name=step.name, status="skip", detail=blocked) for step in heavy
+        ]
+        return cheap_results + heavy_results
+
+    fingerprint = _heavy_fingerprint(heavy, cwd)
+    cache_file = preflight_cache.cache_path(cwd)
+    cache = preflight_cache.load(cache_file)
+    disabled = preflight_cache.cache_disabled(environ)
+    fresh = (
+        not disabled
+        and fingerprint is not None
+        and preflight_cache.is_fresh(cache, fingerprint)
+    )
+
+    heavy_results = []
+    ran_any = False
+    for step in heavy:
+        if fresh:
+            ts = cache.get("recorded_at", "?") if cache else "?"
+            heavy_results.append(
+                StepResult(
+                    name=step.name,
+                    status="pass",
+                    detail=f"cached: tree unchanged since last green run at {ts}",
+                )
+            )
+        else:
+            heavy_results.append(run_step(step, cwd, environ))
+            ran_any = True
+
+    if ran_any and fingerprint is not None and all(r.status == "pass" for r in heavy_results):
+        preflight_cache.record(cache_file, fingerprint)
+
+    return cheap_results + heavy_results
 
 
 def emit_summary(results: list[StepResult], stream) -> None:
@@ -334,10 +444,12 @@ def emit_summary(results: list[StepResult], stream) -> None:
     """
     width = max((len(r.name) for r in results), default=0)
     for result in results:
-        line = f"{result.status:<5}  {result.name:<{width}}"
+        line = f"{result.status:<5}  {result.name:<{width}}  {result.duration_s:7.2f}s"
         if result.detail:
             line = f"{line}  {result.detail}"
         print(line, file=stream)
+    total = sum(r.duration_s for r in results)
+    print(f"{'total':<5}  {'':<{width}}  {total:7.2f}s", file=stream)
 
 
 def emit_annotations(results: list[StepResult], stream) -> None:
@@ -367,6 +479,7 @@ def list_manifest() -> list[dict[str, object]]:
             "required_env": list(step.required_env),
             "required_bin": list(step.required_bin),
             "soft": step.soft,
+            "heavy": step.heavy,
         }
         for step in STEPS
     ]
@@ -389,7 +502,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     environ = dict(os.environ)
-    results = [run_step(step, REPO_ROOT, environ) for step in STEPS]
+    results = run_all(STEPS, REPO_ROOT, environ)
     emit_summary(results, sys.stdout)
     emit_annotations(results, sys.stderr)
     fails = sum(1 for r in results if r.status == "fail")

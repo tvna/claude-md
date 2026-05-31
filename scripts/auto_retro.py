@@ -1684,7 +1684,7 @@ def fetch_check_runs(
     repo: str,
     pr_number: int,
     *,
-    sleeper: Callable[[float], None] = time.sleep,
+    sleeper: Callable[[float], None] | None = None,
 ) -> list[dict[str, Any]]:
     """Return failed check_run entries for the PR's merge commit.
 
@@ -1715,6 +1715,9 @@ def fetch_check_runs(
     when the annotation API fails, or beyond the
     :data:`_CHECK_RUN_DISPLAY_CAP` enrichment ceiling). Refs issue #381.
     """
+    # Resolve at call time so a ``time.sleep`` patch neutralises the backoff
+    # wait that ``run``-level tests would otherwise pay in full (refs #985).
+    sleeper = sleeper if sleeper is not None else time.sleep
     sha: str | None = None
     for attempt in range(1, _MERGE_SHA_RETRY_ATTEMPTS + 1):
         raw = gh_api("GET", f"/repos/{repo}/pulls/{pr_number}")

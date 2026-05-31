@@ -17,8 +17,11 @@ def apply_call(
     payload: dict[str, Any] | None,
     token: str,
     opener: Callable[[urllib.request.Request], Any] = urllib.request.urlopen,
-    sleeper: Callable[[float], None] = time.sleep,
+    sleeper: Callable[[float], None] | None = None,
 ) -> tuple[int, str]:
+    # Resolve the sleeper at call time (not as a captured default) so tests can
+    # neutralise the real 5xx-retry backoff by patching ``time.sleep`` (#985).
+    sleeper = sleeper if sleeper is not None else time.sleep
     last_code = 0
     last_body = ""
 

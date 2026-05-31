@@ -108,7 +108,10 @@ class TestRunStep:
     def test_pass(self, tmp_path: Path) -> None:
         step = pa.Step(name="ok", argv=("true",))
         result = pa.run_step(step, cwd=tmp_path, environ={})
-        assert result == pa.StepResult(name="ok", status="pass")
+        assert result.name == "ok"
+        assert result.status == "pass"
+        assert result.detail == ""
+        assert result.duration_s >= 0.0
 
     def test_fail_returns_exit_code_detail(self, tmp_path: Path) -> None:
         step = pa.Step(name="ng", argv=("false",))
@@ -169,7 +172,14 @@ class TestMainCli:
             "nixpkgs_cooldown",
         } <= names
         for entry in manifest:
-            assert set(entry.keys()) == {"name", "argv", "required_env", "required_bin", "soft"}
+            assert set(entry.keys()) == {
+                "name",
+                "argv",
+                "required_env",
+                "required_bin",
+                "soft",
+                "heavy",
+            }
 
     def test_main_returns_one_when_step_fails(
         self,
@@ -213,3 +223,109 @@ class TestMainCli:
         captured = capsys.readouterr()
         assert "skip" in captured.out
         assert "needs_secret" in captured.err  # ::warning:: annotation
+
+
+# ---------------------------------------------------------------------------
+# run_all -- fail-fast cheap tier + heavy-tier skip cache (refs #985)
+# ---------------------------------------------------------------------------
+
+
+class TestRunAll:
+    @pytest.fixture(autouse=True)
+    def _no_cache_io(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+        # Default: cache miss + cheap fingerprint + no-op record/path so the
+        # heavy tier always executes unless a test opts into a fresh cache.
+        monkeypatch.setattr(pa.preflight_cache, "cache_path", lambda *a, **k: tmp_path / "c.json")
+        monkeypatch.setattr(pa.preflight_cache, "compute_fingerprint", lambda *a, **k: "fp")
+        monkeypatch.setattr(pa.preflight_cache, "load", lambda *_a, **_k: None)
+        self.recorded: list[str] = []
+        monkeypatch.setattr(
+            pa.preflight_cache,
+            "record",
+            lambda _p, fp: self.recorded.append(fp),
+        )
+
+    def test_cheap_failure_short_circuits_heavy(self) -> None:
+        cheap_fail = pa.Step(name="cheap", argv=("false",))
+        # ``true`` would pass if executed; the skip proves it never ran.
+        heavy = pa.Step(name="heavy", argv=("true",), heavy=True)
+        results = pa.run_all((cheap_fail, heavy), pa.REPO_ROOT, {})
+        by_name = {r.name: r for r in results}
+        assert by_name["cheap"].status == "fail"
+        assert by_name["heavy"].status == "skip"
+        assert "upstream gate failed" in by_name["heavy"].detail
+        assert self.recorded == []
+
+    def test_all_cheap_pass_runs_and_records_heavy(self) -> None:
+        cheap = pa.Step(name="cheap", argv=("true",))
+        heavy = pa.Step(name="heavy", argv=("true",), heavy=True)
+        results = pa.run_all((cheap, heavy), pa.REPO_ROOT, {})
+        by_name = {r.name: r for r in results}
+        assert by_name["heavy"].status == "pass"
+        assert "cached" not in by_name["heavy"].detail
+        assert self.recorded == ["fp"]  # fingerprint recorded after green run
+
+    def test_fresh_cache_skips_heavy_execution(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(
+            pa.preflight_cache,
+            "load",
+            lambda *_a, **_k: {"fingerprint": "fp", "status": "pass", "recorded_at": "T"},
+        )
+        cheap = pa.Step(name="cheap", argv=("true",))
+        # ``false`` would FAIL if executed; a pass proves the cache skipped it.
+        heavy = pa.Step(name="heavy", argv=("false",), heavy=True)
+        results = pa.run_all((cheap, heavy), pa.REPO_ROOT, {})
+        by_name = {r.name: r for r in results}
+        assert by_name["heavy"].status == "pass"
+        assert "cached" in by_name["heavy"].detail
+        assert self.recorded == []  # nothing executed, no re-record
+
+    def test_disabled_cache_forces_run_even_when_fresh(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            pa.preflight_cache,
+            "load",
+            lambda *_a, **_k: {"fingerprint": "fp", "status": "pass", "recorded_at": "T"},
+        )
+        cheap = pa.Step(name="cheap", argv=("true",))
+        heavy = pa.Step(name="heavy", argv=("false",), heavy=True)
+        results = pa.run_all((cheap, heavy), pa.REPO_ROOT, {"PREFLIGHT_NO_CACHE": "1"})
+        by_name = {r.name: r for r in results}
+        # Forced run executes ``false`` -> fail, and a failed run is not recorded.
+        assert by_name["heavy"].status == "fail"
+        assert self.recorded == []
+
+    def test_no_heavy_steps_returns_cheap_only(self) -> None:
+        cheap = pa.Step(name="cheap", argv=("true",))
+        results = pa.run_all((cheap,), pa.REPO_ROOT, {})
+        assert [r.name for r in results] == ["cheap"]
+
+    def test_heavy_soft_skip_not_recorded(self) -> None:
+        cheap = pa.Step(name="cheap", argv=("true",))
+        heavy = pa.Step(
+            name="heavy",
+            argv=("true",),
+            required_bin=("definitely-not-on-path-zzz",),
+            soft=True,
+            heavy=True,
+        )
+        results = pa.run_all((cheap, heavy), pa.REPO_ROOT, {})
+        by_name = {r.name: r for r in results}
+        assert by_name["heavy"].status == "skip"
+        assert self.recorded == []  # suite never ran -> must not cache a pass
+
+    def test_fingerprint_none_runs_but_does_not_record(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # git/filesystem error -> fingerprint None -> run the suite, never cache.
+        def boom(*_a: object, **_k: object) -> str:
+            raise OSError("boom")
+
+        monkeypatch.setattr(pa.preflight_cache, "compute_fingerprint", boom)
+        cheap = pa.Step(name="cheap", argv=("true",))
+        heavy = pa.Step(name="heavy", argv=("true",), heavy=True)
+        results = pa.run_all((cheap, heavy), pa.REPO_ROOT, {})
+        by_name = {r.name: r for r in results}
+        assert by_name["heavy"].status == "pass"
+        assert self.recorded == []
