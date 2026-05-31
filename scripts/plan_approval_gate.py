@@ -15,6 +15,8 @@ import json
 import sys
 from typing import Any
 
+from _hook_runtime import emit_decision
+
 _PLAN_DIR = "/tmp/claude-plans/"  # noqa: S108
 
 
@@ -60,9 +62,7 @@ def main() -> int:
                 file=sys.stderr,
             )
             return 0
-        result = decide(event)
-        if result is not None:
-            sys.stdout.write(json.dumps(result))
+        emit_decision(decide(event))
     except (json.JSONDecodeError, ValueError) as exc:
         print(f"::error::plan_approval_gate: {exc}", file=sys.stderr)
     return 0
