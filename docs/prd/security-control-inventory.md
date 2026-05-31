@@ -66,12 +66,12 @@ Notes:
 | Surface | ATT&CK | Existing defense | Evidence | Status | Gap |
 |---|---|---|---|---|---|
 | `main.json` | IA, Persist, Impact | Default-branch ruleset: required status checks including `Verify repository scripts / gate` and `Portable PR policy / gate`; blocks force-push; requires PR + linear history + resolved threads + code-owner review; squash-only merge; blocks deletion. | `docs/runbooks/rulesets.md`, `weekly-maintenance.yml`, #18, #27, #120 | partially covered | #120 (required-checks-vs-ruleset live sync) |
-| `all-branches.json` | IA, Impact | Non-default branch ruleset: blocks force-push on every branch except the default branch; deletion intentionally NOT blocked (relies on `delete_branch_on_merge: true`). | `docs/runbooks/rulesets.md`, `docs/runbooks/branch-cleanup.md`, #27, #59 | covered | — |
-| `dependabot.json` | IA, RD | `dependabot/*` ruleset: blocks force-push; no bypass actors. (Originally granted Dependabot Integration `actor_id: 49699333` a bypass per #140, but GitHub deprecated the standalone Dependabot GitHub App and the Rulesets API rejects that bypass actor — see #273. The admin `RepositoryRole` bypass was also removed across all three rulesets.) | `docs/runbooks/rulesets.md`, #18, #273 | partially covered | #273 (no automation can rebase `dependabot/*` branches; Dependabot falls back to close + reopen) |
+| `all-branches.json` | IA, Impact | Non-default branch ruleset: blocks force-push on every branch except the default branch and `refs/heads/dependabot/*` (kept excluded so `@dependabot rebase` can force-push in place); deletion intentionally NOT blocked (relies on `delete_branch_on_merge: true`). | `docs/runbooks/rulesets.md`, `docs/runbooks/branch-cleanup.md`, #27, #59, #1014 | covered | — |
 
 Notes:
 
-- `bypass_actors` is `[]` on all three rulesets — the "Merge without waiting for requirements" UI path is unreachable. Emergency escape requires the [Emergency disable / re-enable procedure](../runbooks/rulesets.md#emergency-disable--re-enable-procedure), which leaves `repository_ruleset.update` audit events and is detected by `weekly-maintenance.yml` if the re-enable step is forgotten.
+- The dedicated `dependabot.json` ruleset (`non_fast_forward` on `dependabot/*`, no bypass actors) was **removed in #1014**. After GitHub deprecated the standalone Dependabot App the Rulesets API rejected the bypass actor (#273), so with `bypass_actors: []` the rule blocked `@dependabot rebase` and forced close + reopen. The branch namespace is no longer ruleset-protected — `non_fast_forward` never gated branch creation or actor identity. Auto-merge trust stays anchored on the author login `dependabot[bot]` (`scripts/dependabot_automerge.py`), and the deterministic gate `scripts/verify_dependabot_author.py` (wired into `issue-pr-triage.yml`, tested by `tests/test_verify_dependabot_author.py`) now fails any `dependabot/*` PR whose author is not a trusted bot login. This closes the #273 rebase gap (RD/IA) without re-protecting the branch.
+- `bypass_actors` is `[]` on both remaining rulesets — the "Merge without waiting for requirements" UI path is unreachable. Emergency escape requires the [Emergency disable / re-enable procedure](../runbooks/rulesets.md#emergency-disable--re-enable-procedure), which leaves `repository_ruleset.update` audit events and is detected by `weekly-maintenance.yml` if the re-enable step is forgotten.
 - The drift gate is the `ruleset-drift` job in `weekly-maintenance.yml`; the cross-family aggregator is the `security-control-drift` job (#180), which wires that drift output into #178 as evidence rather than duplicating the detector.
 
 ## 3. Label source of truth (`.github/labels.json`)
@@ -160,8 +160,8 @@ This table answers, for each row of #178's coverage table: which surfaces in thi
 | ATT&CK | Contributing surfaces | Aggregate status | Gap |
 |---|---|---|---|
 | Recon | `docs/runbooks/issue-triage.md`, `docs/runbooks/rulesets.md`, `docs/standards/remote-environment.md`, `threat_intel_triage.py` | partially covered | #170, #181 (no scheduled secret scan beyond GitHub default) |
-| RD | `portable-pr-policy.yml`, `verify-github-content.yml`, `issue-pr-triage.yml`, `.github/dependabot.yml`, `uv.lock`, `pyproject.toml`, `dependabot.json` ruleset, `docs/runbooks/agent-provenance.md` | covered | — |
-| IA | `main.json`, `all-branches.json`, `dependabot.json`, `portable-pr-policy.yml`, `verify-github-content.yml`, `weekly-maintenance.yml` | partially covered | #120 |
+| RD | `portable-pr-policy.yml`, `verify-github-content.yml`, `issue-pr-triage.yml`, `verify_dependabot_author.py`, `.github/dependabot.yml`, `uv.lock`, `pyproject.toml`, `docs/runbooks/agent-provenance.md` | covered | — |
+| IA | `main.json`, `all-branches.json`, `verify_dependabot_author.py`, `portable-pr-policy.yml`, `verify-github-content.yml`, `weekly-maintenance.yml` | partially covered | #120 |
 | Exec | `verify-agents.yml`, `portable-pr-policy.yml`, `install-uv.sh`, `pyproject.toml`, `uv.lock`, `.claude/settings.json` carve-out, `docs/runbooks/agent-provenance.md` | partially covered | #181 (workflow `permissions:` audit) |
 | Persist | `portable-pr-policy.yml`, `weekly-maintenance.yml`, `apply-labels.yml`, `apply-rulesets.yml`, `verify-github-content.yml` | covered | — |
 | PrivEsc | `apply-labels.yml`, `apply-rulesets.yml`, `weekly-maintenance.yml`, `docs/runbooks/issue-triage.md`, `docs/runbooks/rulesets.md` | partially covered | #56, #181 |
@@ -215,7 +215,7 @@ Expected behavior:
 Reviewers should also confirm:
 
 - `ls .github/workflows/` matches the 15 rows in section 1.
-- `ls .github/rulesets/` matches the 3 rows in section 2.
+- `ls .github/rulesets/` matches the 2 rows in section 2.
 - `ls scripts/` matches the 22 rows in section 6 (`__pycache__` is excluded; not security-relevant).
 - `ls docs/` matches the 11 rows in section 7.
 

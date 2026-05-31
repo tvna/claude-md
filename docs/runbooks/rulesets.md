@@ -9,9 +9,10 @@ The rulesets are introduced incrementally per the phased rollout in [#18](https:
 | File | Target | Purpose |
 |---|---|---|
 | `.github/rulesets/main.json` | `~DEFAULT_BRANCH` | Strict `main` protection (PR-only, squash-only, required status check, linear history) |
-| `.github/rulesets/all-branches.json` | `~ALL` except `~DEFAULT_BRANCH` and `refs/heads/dependabot/*` | `non_fast_forward` only (deletion intentionally omitted; see [#18 comment 2](https://github.com/tvna/claude-md/issues/18#issuecomment-4482555311)). `refs/heads/claude/*` was previously excluded per [#507](https://github.com/tvna/claude-md/issues/507) so agent branches could recover from rebase via `git commit --amend` + `git push --force-with-lease`. That exclusion was removed in [#1022](https://github.com/tvna/claude-md/issues/1022): the single-commit PR gate that drove the amend + force-push recovery is gone, so agent branches no longer need force-push, and `non_fast_forward` now applies to `refs/heads/claude/*` too. |
-| `.github/rulesets/dependabot.json` | `refs/heads/dependabot/*` | `non_fast_forward` with no bypass actors. Originally granted the Dependabot Integration `actor_id: 49699333` a bypass per [#140](https://github.com/tvna/claude-md/issues/140), but GitHub deprecated the standalone Dependabot GitHub App and the Rulesets API now returns HTTP 422 for that bypass actor — see [#273](https://github.com/tvna/claude-md/issues/273); `@dependabot rebase` is therefore blocked and Dependabot falls back to closing + reopening the PR with a freshly rebased branch. The admin `RepositoryRole` bypass was also removed across all three rulesets so the "Merge without waiting for requirements" path is no longer reachable. |
+| `.github/rulesets/all-branches.json` | `~ALL` except `~DEFAULT_BRANCH` and `refs/heads/dependabot/*` | `non_fast_forward` only (deletion intentionally omitted; see [#18 comment 2](https://github.com/tvna/claude-md/issues/18#issuecomment-4482555311)). `refs/heads/dependabot/*` stays excluded per [#1014](https://github.com/tvna/claude-md/issues/1014) so `@dependabot rebase` can force-push in place; re-including it would re-break rebase exactly as the dedicated ruleset did (see [#273](https://github.com/tvna/claude-md/issues/273)). `refs/heads/claude/*` was previously excluded per [#507](https://github.com/tvna/claude-md/issues/507) so agent branches could recover from rebase via `git commit --amend` + `git push --force-with-lease`. That exclusion was removed in [#1022](https://github.com/tvna/claude-md/issues/1022): the single-commit PR gate that drove the amend + force-push recovery is gone, so agent branches no longer need force-push, and `non_fast_forward` now applies to `refs/heads/claude/*` too. |
 | `docs/runbooks/rulesets.md` *(this file)* | — | Runbook |
+
+The dedicated `dependabot.json` ruleset (`non_fast_forward` on `refs/heads/dependabot/*` with no bypass actors) was **removed** in [#1014](https://github.com/tvna/claude-md/issues/1014). It originally granted the Dependabot Integration `actor_id: 49699333` a bypass per [#140](https://github.com/tvna/claude-md/issues/140), but GitHub deprecated the standalone Dependabot GitHub App and the Rulesets API began returning HTTP 422 for that bypass actor ([#273](https://github.com/tvna/claude-md/issues/273)); with `bypass_actors: []` the rule blocked `@dependabot rebase`, forcing Dependabot to close + reopen the PR with a freshly rebased branch. Removing the ruleset leaves `refs/heads/dependabot/*` unprotected exactly like `refs/heads/claude/*` once was — `non_fast_forward` never gated branch creation, normal pushes, or actor identity, so removing it does not widen who can create a `dependabot/*` branch. Auto-merge trust remains anchored on the author login `dependabot[bot]` (`scripts/dependabot_automerge.py`), and the deterministic gate `scripts/verify_dependabot_author.py` (wired into `issue-pr-triage.yml`) now fails any `dependabot/*` PR whose author is not a trusted bot login. `main.json` still requires PR + required status checks + code-owner review + linear history + squash-only.
 
 ## Phase mapping
 
@@ -22,7 +23,7 @@ The apply step is split across phases so that the strictest rule (`commit_messag
 | **2-A** ([#27](https://github.com/tvna/claude-md/issues/27)) | `all-branches.json` | `ruleset=all-branches`, `dry_run=false`, `enable_auto_delete=true` |
 | **3-A** ([#41](https://github.com/tvna/claude-md/issues/41)) | `main.json` (incl. `require_code_owner_review: true`¹; without `commit_message_pattern`) | `ruleset=main`, `dry_run=false`, `enable_auto_delete=false` |
 | **3-B** ([#42](https://github.com/tvna/claude-md/issues/42)) | `main.json` (after adding `commit_message_pattern`) | `ruleset=main`, `dry_run=false`, `enable_auto_delete=false` (PUT path, ≥7 days after 3-A) |
-| **P4-dependabot** ([#140](https://github.com/tvna/claude-md/issues/140)) | `all-branches.json` (PUT: adds `refs/heads/dependabot/*` to `exclude`) + `dependabot.json` (POST) | `ruleset=all-branches`, then `ruleset=dependabot`, both `dry_run=false`, `enable_auto_delete=false` |
+| **P4-dependabot** ([#140](https://github.com/tvna/claude-md/issues/140); `dependabot.json` POST superseded by [#1014](https://github.com/tvna/claude-md/issues/1014)) | `all-branches.json` (PUT: adds `refs/heads/dependabot/*` to `exclude`) — the `dependabot.json` POST is no longer part of the plan; that ruleset was deleted in #1014 to restore `@dependabot rebase` (see SoT layout note above) | `ruleset=all-branches`, `dry_run=false`, `enable_auto_delete=false`. The live `dependabot-branches` ruleset is deleted via `Apply rulesets` with `enable_auto_delete` / the `DELETE` fallback under [Rollback](#rollback). |
 | **P5-claude** ([#507](https://github.com/tvna/claude-md/issues/507)) | `all-branches.json` (PUT: adds `refs/heads/claude/*` to `exclude`) | `ruleset=all-branches`, `dry_run=false`, `enable_auto_delete=false` |
 | **P6-claude-revert** ([#1022](https://github.com/tvna/claude-md/issues/1022)) | `all-branches.json` (PUT: removes `refs/heads/claude/*` from `exclude` so `non_fast_forward` covers agent branches) | `ruleset=all-branches`, `dry_run=false`, `enable_auto_delete=false` |
 
@@ -111,7 +112,7 @@ The workflow performs deterministic safety checks before any state change:
 - `jq empty` JSON syntax check
 - Name-collision check (`>1` existing ruleset with the same name → fail; never guess)
 
-`bypass_actors` is `[]` in all three SoT files; no admin role id reconciliation is required. If a future change re-introduces a bypass actor, restore the reconciliation step described under [Prerequisite — retrieve bypass actor ids](#prerequisite--retrieve-bypass-actor-ids) and pre-check the live admin role id against the JSON.
+`bypass_actors` is `[]` in both SoT files; no admin role id reconciliation is required. If a future change re-introduces a bypass actor, restore the reconciliation step described under [Prerequisite — retrieve bypass actor ids](#prerequisite--retrieve-bypass-actor-ids) and pre-check the live admin role id against the JSON.
 
 <details>
 <summary>Manual fallback (only if the workflow is unavailable)</summary>
@@ -161,7 +162,7 @@ gh api \
 
 ## Prerequisite — retrieve bypass actor ids
 
-`bypass_actors` is currently `[]` across all three rulesets, so this step is **not required for routine apply**. The recipe is retained for the rare case of re-introducing a bypass actor (for example, to grant a service identity time-bounded write access during a migration).
+`bypass_actors` is currently `[]` across both rulesets, so this step is **not required for routine apply**. The recipe is retained for the rare case of re-introducing a bypass actor (for example, to grant a service identity time-bounded write access during a migration).
 
 ```sh
 gh api /repos/tvna/claude-md/roles

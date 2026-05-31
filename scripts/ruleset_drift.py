@@ -28,7 +28,7 @@ from _github_api import API_VERSION
 API_ROOT = "https://api.github.com"
 SOT_PROJECTION_KEYS = ("name", "target", "enforcement", "conditions", "bypass_actors", "rules")
 ISSUE_LABELS = ("layer:meta", "type:fix")
-DEFAULT_SOT_FILES = ("main.json", "all-branches.json", "dependabot.json")
+DEFAULT_SOT_FILES = ("main.json", "all-branches.json")
 
 
 # ---------------------------------------------------------------------------
@@ -471,8 +471,8 @@ def main(argv: list[str] | None = None) -> int:
         action="append",
         default=None,
         help=(
-            "Repeatable. Defaults to main.json + all-branches.json + "
-            "dependabot.json when omitted."
+            "Repeatable. Defaults to main.json + all-branches.json "
+            "when omitted."
         ),
     )
     p_detect.add_argument("--run-url", required=True)

@@ -85,3 +85,23 @@ jobs:
         env:
           REMOVE_LABELS: ${{ steps.triage.outputs.remove_labels }}
         run: python3 scripts/threat_intel_triage.py apply-labels --remove-labels "$REMOVE_LABELS"
+
+  dependabot-author:
+    if: >-
+      github.event_name == 'pull_request_target' &&
+      startsWith(github.event.pull_request.head.ref, 'dependabot/')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      HEAD_REF: ${{ github.event.pull_request.head.ref }}
+      AUTHOR: ${{ github.event.pull_request.user.login }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Verify dependabot/* PR author is a trusted bot
+        run: |
+          python3 scripts/verify_dependabot_author.py verify \
+            --head-ref "$HEAD_REF" \
+            --author "$AUTHOR"

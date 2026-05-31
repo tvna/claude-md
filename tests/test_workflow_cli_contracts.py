@@ -64,6 +64,7 @@ import title_policy
 import update_devcontainer_image_pins
 import uv_pin
 import verify_apm_checksums
+import verify_dependabot_author
 import verify_linked_issue_titles
 import verify_readme_translation
 import verify_required_check_contexts
@@ -153,6 +154,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("uv_pin.py", "read"): "test_uv_pin_workflow_subcommands_match_ci_usage",
     ("uv_pin.py", "stale"): "test_uv_pin_workflow_subcommands_match_ci_usage",
     ("verify_apm_checksums.py", "verify"): "test_verify_apm_checksums_matches_workflow_args",
+    ("verify_dependabot_author.py", "verify"): "test_verify_dependabot_author_verify_matches_workflow_args",
     ("verify_linked_issue_titles.py", "verify"): "test_verify_linked_issue_titles_verify_matches_workflow_args",
     ("verify_readme_translation.py", "verify"): "test_verify_readme_translation_matches_workflow_args",
     ("verify_required_check_contexts.py", "verify"): "test_verify_required_check_contexts_matches_workflow_args",
@@ -620,7 +622,6 @@ def test_ruleset_drift_detect_and_file_issue_match_workflow_args(
         lambda repo, token: [
             {"id": 1, "name": "main-protection", "target": "branch", "enforcement": "active"},
             {"id": 2, "name": "all-branches-no-force-push", "target": "branch", "enforcement": "active"},
-            {"id": 3, "name": "dependabot-protection", "target": "branch", "enforcement": "active"},
         ],
     )
     monkeypatch.setattr(
@@ -767,6 +768,34 @@ def test_verify_apm_checksums_matches_workflow_args(tmp_path: Path) -> None:
 
     assert verify_apm_checksums.main(["--root", str(tmp_path), "update"]) == 0
     assert verify_apm_checksums.main(["--root", str(tmp_path), "verify"]) == 0
+
+
+def test_verify_dependabot_author_verify_matches_workflow_args() -> None:
+    """Mirror the env+argv shape used by issue-pr-triage.yml.
+
+    The workflow shells to
+    ``python3 scripts/verify_dependabot_author.py verify
+    --head-ref "$HEAD_REF" --author "$AUTHOR"``. A trusted bot on a
+    dependabot/* branch passes; a non-bot author fails.
+    """
+    assert verify_dependabot_author.main(
+        [
+            "verify",
+            "--head-ref",
+            "dependabot/github_actions/actions/checkout-6",
+            "--author",
+            "dependabot[bot]",
+        ]
+    ) == 0
+    assert verify_dependabot_author.main(
+        [
+            "verify",
+            "--head-ref",
+            "dependabot/github_actions/actions/checkout-6",
+            "--author",
+            "mallory",
+        ]
+    ) == 1
 
 
 def test_verify_linked_issue_titles_verify_matches_workflow_args(
@@ -1526,7 +1555,6 @@ def _write_ruleset_sot(tmp_path: Path) -> Path:
     for filename, ruleset in {
         "main.json": _ruleset_for_id(1),
         "all-branches.json": _ruleset_for_id(2),
-        "dependabot.json": _ruleset_for_id(3),
     }.items():
         (sot_dir / filename).write_text(json.dumps(ruleset), encoding="utf-8")
     return sot_dir
@@ -1536,7 +1564,6 @@ def _ruleset_for_id(ruleset_id: int) -> dict[str, Any]:
     names = {
         1: "main-protection",
         2: "all-branches-no-force-push",
-        3: "dependabot-protection",
     }
     return {
         "id": ruleset_id,

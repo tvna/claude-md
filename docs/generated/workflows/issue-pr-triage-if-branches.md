@@ -14,6 +14,7 @@ flowchart TD
     J_triage["triage"]
     S_J_triage_0(("Apply threat labels"))
     S_J_triage_1(("Remove stale threat labels"))
+    J_dependabot_author["dependabot-author"]
 
     T_issues -->|"github.actor != 'github-actions[bot]' && (   (github.event_name == 'iss~"| J_scan
     T_pull_request_target -->|"github.actor != 'github-actions[bot]' && (   (github.event_name == 'iss~"| J_scan
@@ -23,4 +24,5 @@ flowchart TD
     T_pull_request_target -->|"github.event_name == 'issues' || (   github.event_name == 'pull_request~"| J_triage
     J_triage -->|"steps.triage.outputs.recommended_labels != ''"| S_J_triage_0
     J_triage -->|"steps.triage.outputs.remove_labels != ''"| S_J_triage_1
+    T_pull_request_target -->|"github.event_name == 'pull_request_target' && startsWith(github.event.p~"| J_dependabot_author
 ```
