@@ -29,6 +29,19 @@ import pytest
 
 pytestmark = pytest.mark.shard_preflight
 
+
+@pytest.fixture(autouse=True)
+def _clear_remote_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Isolate from the ambient CLAUDE_CODE_REMOTE signal (#1025).
+
+    ``main()`` resolves the harness footer relaxation from this var;
+    clearing it keeps the default-path tests deterministic regardless of
+    where the suite runs (the remote Claude web harness sets it to
+    ``true``). Harness-path tests set it explicitly.
+    """
+    monkeypatch.delenv("CLAUDE_CODE_REMOTE", raising=False)
+
+
 # ---------------------------------------------------------------------------
 # Fixture bodies
 # ---------------------------------------------------------------------------
@@ -162,6 +175,79 @@ class TestEvaluate:
         errors = prb.evaluate(body)
         for e in errors:
             assert e.isascii(), f"error message is not ASCII: {e!r}"
+
+    # -- harness_appends_footer path (Claude web harness create, #1025) --
+
+    def test_harness_mode_no_footer_passes(self) -> None:
+        body = _SECTIONS_OK + _VERIFICATION_OK + "\n" + _CHECKLIST_OK
+        body = (
+            "## Summary\n\nx\n\n## Related Issue\n\nCloses #1025\n\n" + body
+        )
+        errors = prb.evaluate(body, harness_appends_footer=True)
+        assert errors == [], errors
+
+    def test_harness_mode_with_footer_rejected(self) -> None:
+        errors = prb.evaluate(_GOOD_BODY, harness_appends_footer=True)
+        assert any("auto-appends" in e for e in errors), errors
+
+
+class TestHarnessEnvResolution:
+    """main() resolves the relaxation from CLAUDE_CODE_REMOTE (#1025)."""
+
+    def test_main_under_harness_accepts_no_footer(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        monkeypatch.setenv("CLAUDE_CODE_REMOTE", "true")
+        body = (
+            "## Summary\n\nx\n\n## Related Issue\n\nCloses #1025\n\n"
+            + _SECTIONS_OK
+            + _VERIFICATION_OK
+            + "\n"
+            + _CHECKLIST_OK
+        )
+        f = tmp_path / "body.md"
+        f.write_text(body, encoding="utf-8")
+        rc = prb.main(["verify", "--body-file", str(f)])
+        captured = capsys.readouterr()
+        assert rc == 0, captured.out
+        assert "OK" in captured.out
+
+    def test_main_under_harness_rejects_footer(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        monkeypatch.setenv("CLAUDE_CODE_REMOTE", "true")
+        f = tmp_path / "body.md"
+        f.write_text(_GOOD_BODY, encoding="utf-8")
+        rc = prb.main(["verify", "--body-file", str(f)])
+        captured = capsys.readouterr()
+        assert rc == 1
+        assert "auto-appends" in captured.out
+
+    def test_main_without_harness_requires_footer(
+        self,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        # CLAUDE_CODE_REMOTE cleared by autouse fixture.
+        body = (
+            "## Summary\n\nx\n\n## Related Issue\n\nCloses #1025\n\n"
+            + _SECTIONS_OK
+            + _VERIFICATION_OK
+            + "\n"
+            + _CHECKLIST_OK
+        )
+        f = tmp_path / "body.md"
+        f.write_text(body, encoding="utf-8")
+        rc = prb.main(["verify", "--body-file", str(f)])
+        captured = capsys.readouterr()
+        assert rc == 1
+        assert "footer" in captured.out
 
 
 # ---------------------------------------------------------------------------

@@ -30,6 +30,7 @@ drift. Refs #938.
 from __future__ import annotations
 
 import argparse
+import os
 from pathlib import Path
 
 from _ref_classifier import classify_refs, strip_html_comments
@@ -43,8 +44,29 @@ from body_policy import (
 )
 from scan_non_ascii import detect_non_ascii, has_ack_marker
 
+# Refs #1025. This validator is documented as a pre-*create* check (see
+# module docstring), and under the remote Claude web harness the
+# create_pull_request call auto-appends exactly one session footer. So in
+# that environment the candidate create body must carry NO footer, mirroring
+# the create gate in preflight_pr_template_shape.py; requiring one here would
+# push the agent to add a footer that the harness then duplicates. The signal
+# is the same CLAUDE_CODE_REMOTE env var; local Claude CLI and CI leave it
+# unset and keep requiring exactly one trailing footer.
+_REMOTE_ENV_VAR = "CLAUDE_CODE_REMOTE"
 
-def evaluate(body: str, *, issue: int | None = None) -> list[str]:
+
+def _claude_web_harness(environ: dict[str, str] | None = None) -> bool:
+    """Return True when running under the remote Claude web harness."""
+    env = os.environ if environ is None else environ
+    return env.get(_REMOTE_ENV_VAR, "").strip().lower() == "true"
+
+
+def evaluate(
+    body: str,
+    *,
+    issue: int | None = None,
+    harness_appends_footer: bool = False,
+) -> list[str]:
     """Return ``::error::`` strings for every policy violation; empty list means OK.
 
     Checks are ordered from cheapest to most specific so the list is
@@ -68,7 +90,11 @@ def evaluate(body: str, *, issue: int | None = None) -> list[str]:
     errors.extend(verify_pr_checklist_subsections(body))
 
     # 4. Agent attribution footer (post-2026-05-26 shape gate).
-    errors.extend(verify_pr_agent_attribution_footer(body))
+    errors.extend(
+        verify_pr_agent_attribution_footer(
+            body, harness_appends_footer=harness_appends_footer
+        )
+    )
 
     # 5. ASCII-only content.  Honor the operator ack marker so bodies
     #    with <!-- non-ascii-ack --> are not false-positively flagged.
@@ -125,7 +151,11 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     body = Path(args.body_file).read_text(encoding="utf-8")
-    errors = evaluate(body, issue=args.issue)
+    errors = evaluate(
+        body,
+        issue=args.issue,
+        harness_appends_footer=_claude_web_harness(),
+    )
 
     for msg in errors:
         print(msg)

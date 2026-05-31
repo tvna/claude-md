@@ -271,6 +271,24 @@ model metadata is available from the hook event or the
 `CODEX_GITHUB_FOOTER_MODEL` / `CODEX_MODEL` / `OPENAI_MODEL` /
 `AI_MODEL` environment variables.
 
+Symmetric to that Codex env-keyed path, the remote Claude web harness
+has its own footer exception keyed off `CLAUDE_CODE_REMOTE=true` (the
+same signal `scripts/preflight_push_session_branch.py` reads). In that
+environment a `create_pull_request` MCP call auto-appends exactly one
+session footer to the stored body, so a footer the agent adds first
+would become a duplicate that fails the server gate and forces a manual
+`update_pull_request` repair. Under `CLAUDE_CODE_REMOTE=true`,
+`scripts/preflight_pr_template_shape.py` therefore requires the
+`create_pull_request` body to carry **no** footer and denies one that
+does; the harness then supplies the single footer. The exception is
+deliberately create-only: `update_pull_request` is not auto-appended
+(that is how the single-footer repair works), so it keeps requiring
+exactly one trailing footer. Local Claude CLI and CI leave
+`CLAUDE_CODE_REMOTE` unset and are unaffected -- they keep requiring a
+trailing footer. The server-side `verify_pr_agent_attribution_footer`
+gate is unchanged, so a genuine duplicate (two footers) still fails.
+Refs #1025.
+
 ### Enforced today: Refs check
 
 `.github/workflows/portable-pr-policy.yml` (job: `Validate PR-issue link`) shells out to

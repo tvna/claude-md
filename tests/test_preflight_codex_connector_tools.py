@@ -26,6 +26,20 @@ import pytest
 
 pytestmark = pytest.mark.shard_preflight
 
+
+@pytest.fixture(autouse=True)
+def _clear_remote_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Isolate from the ambient CLAUDE_CODE_REMOTE signal (#1025).
+
+    ``preflight_pr_template_shape.decide`` relaxes the footer requirement
+    on the create path under ``CLAUDE_CODE_REMOTE=true``. These connector
+    tests assert the default footer behavior, so clear the var to stay
+    deterministic regardless of where the suite runs (the remote Claude
+    web harness sets it to ``true``).
+    """
+    monkeypatch.delenv("CLAUDE_CODE_REMOTE", raising=False)
+
+
 # Codex GitHub connector tool names (issue #740 Facts).
 CODEX_CREATE_PR = "mcp__codex_apps__github._create_pull_request"
 CODEX_UPDATE_PR = "mcp__codex_apps__github._update_pull_request"
