@@ -44,6 +44,7 @@ HOOK_COVERED_TOOLS: frozenset[str] = frozenset(
         "mcp__github__sub_issue_write",
         "mcp__github__create_branch",
         "mcp__github__merge_pull_request",
+        "mcp__github__update_pull_request_branch",
     }
 )
 

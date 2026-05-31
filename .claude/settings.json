@@ -90,6 +90,15 @@
         ]
       },
       {
+        "matcher": "mcp__github__update_pull_request_branch",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 scripts/gate_update_pr_branch.py"
+          }
+        ]
+      },
+      {
         "matcher": "mcp__github__create_branch",
         "hooks": [
           {
