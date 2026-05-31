@@ -75,16 +75,6 @@ ALLOWLIST_ENTRIES: list[dict[str, str]] = [
         "rationale": "gh pr view/edit/create for automated PR upsert; migration tracked in #911",
     },
     {
-        "workflow": "issue-pr-triage.yml",
-        "step": "Apply threat labels",
-        "rationale": "gh issue edit --add-label for threat label application; migration tracked in #911",
-    },
-    {
-        "workflow": "issue-pr-triage.yml",
-        "step": "Remove stale threat labels",
-        "rationale": "gh issue edit --remove-label for stale label cleanup; migration tracked in #911",
-    },
-    {
         "workflow": "dependabot-automerge.yml",
         "step": "Collect changed files",
         "rationale": "gh pr diff --name-only to collect PR file list; migration tracked in #911",
