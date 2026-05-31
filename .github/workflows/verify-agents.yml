@@ -55,6 +55,9 @@ jobs:
       - name: Assert workflows pin actions to SHA + tag comment
         run: uv run python scripts/scan_workflow_action_pins.py verify
 
+      - name: Assert no unallowlisted gh CLI calls in workflows
+        run: uv run python scripts/scan_workflow_gh_calls.py verify
+
       - name: Assert workflow secrets have concrete runbooks
         run: uv run python scripts/scan_secret_runbooks.py verify
 

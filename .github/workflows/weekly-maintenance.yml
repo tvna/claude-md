@@ -159,6 +159,9 @@ jobs:
       - name: Assert workflows pin actions to SHA + tag comment
         run: uv run python scripts/scan_workflow_action_pins.py verify
 
+      - name: Assert no unallowlisted gh CLI calls in workflows
+        run: uv run python scripts/scan_workflow_gh_calls.py verify
+
       - name: Warn if uv pin trails upstream
         env:
           GH_TOKEN: ${{ github.token }}
@@ -173,6 +176,7 @@ jobs:
             echo "- uv pin drift: \`scripts/uv_pin.py drift\`"
             echo "- Workflow dependency install drift: \`scripts/scan_workflow_pip.py verify\`"
             echo "- GitHub Action pin drift: \`scripts/scan_workflow_action_pins.py verify\`"
+            echo "- Workflow gh CLI policy: \`scripts/scan_workflow_gh_calls.py verify\`"
             echo "- Upstream uv staleness: warning-only \`scripts/uv_pin.py stale\`"
             echo
             echo "Policy: \`docs/standards/dependency-freshness.md\`"
