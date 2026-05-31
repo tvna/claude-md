@@ -1,0 +1,265 @@
+from __future__ import annotations
+
+import json
+import sys
+from collections.abc import Callable
+from pathlib import Path
+from typing import Any
+
+import pytest
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+
+import pr_upsert as pu
+
+pytestmark = pytest.mark.shard_ci_ops
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def _make_apply_call(
+    status: int,
+    body: dict[str, Any] | list[Any],
+) -> Callable[..., tuple[int, str]]:
+    encoded = json.dumps(body)
+
+    def apply_call(*, method: str, url: str, payload: object, token: str) -> tuple[int, str]:
+        return status, encoded
+
+    return apply_call
+
+
+# ---------------------------------------------------------------------------
+# _list_open_prs()
+# ---------------------------------------------------------------------------
+
+
+class TestListOpenPrs:
+    def test_returns_pr_list(self) -> None:
+        apply_call = _make_apply_call(200, [{"number": 7, "title": "chore: regen"}])
+        result = pu._list_open_prs(repo="owner/repo", head="feat/x", token="tok", apply_call=apply_call)
+        assert result == [{"number": 7, "title": "chore: regen"}]
+
+    def test_includes_owner_and_head_in_url(self) -> None:
+        captured: list[str] = []
+
+        def apply_call(*, method: str, url: str, payload: object, token: str) -> tuple[int, str]:
+            captured.append(url)
+            return 200, "[]"
+
+        pu._list_open_prs(repo="myorg/myrepo", head="chore/regen", token="tok", apply_call=apply_call)
+        assert "myorg:chore/regen" in captured[0]
+        assert "state=open" in captured[0]
+
+    def test_http_error_raises_runtime_error(self) -> None:
+        apply_call = _make_apply_call(403, {"message": "forbidden"})
+        with pytest.raises(RuntimeError, match="403"):
+            pu._list_open_prs(repo="owner/repo", head="x", token="tok", apply_call=apply_call)
+
+    def test_non_array_response_raises(self) -> None:
+        apply_call = _make_apply_call(200, {"unexpected": "dict"})
+        with pytest.raises(RuntimeError):
+            pu._list_open_prs(repo="owner/repo", head="x", token="tok", apply_call=apply_call)
+
+
+# ---------------------------------------------------------------------------
+# _create_pr()
+# ---------------------------------------------------------------------------
+
+
+class TestCreatePr:
+    def test_returns_pr_number(self) -> None:
+        apply_call = _make_apply_call(201, {"number": 42, "html_url": "https://example.com/pr/42"})
+        number = pu._create_pr(
+            repo="owner/repo", head="feat/x", base="main",
+            title="chore: regen", body="body text", token="tok",
+            apply_call=apply_call,
+        )
+        assert number == 42
+
+    def test_posts_correct_payload(self) -> None:
+        captured_payloads: list[Any] = []
+
+        def apply_call(*, method: str, url: str, payload: object, token: str) -> tuple[int, str]:
+            captured_payloads.append(payload)
+            return 201, json.dumps({"number": 1})
+
+        pu._create_pr(
+            repo="owner/repo", head="chore/regen", base="main",
+            title="My PR", body="body", token="tok",
+            apply_call=apply_call,
+        )
+        assert captured_payloads[0]["title"] == "My PR"
+        assert captured_payloads[0]["head"] == "chore/regen"
+        assert captured_payloads[0]["base"] == "main"
+        assert captured_payloads[0]["body"] == "body"
+
+    def test_http_error_raises_runtime_error(self) -> None:
+        apply_call = _make_apply_call(422, {"message": "validation failed"})
+        with pytest.raises(RuntimeError, match="422"):
+            pu._create_pr(
+                repo="owner/repo", head="x", base="main",
+                title="t", body="b", token="tok",
+                apply_call=apply_call,
+            )
+
+
+# ---------------------------------------------------------------------------
+# _update_pr()
+# ---------------------------------------------------------------------------
+
+
+class TestUpdatePr:
+    def test_patches_correct_payload(self) -> None:
+        captured_payloads: list[Any] = []
+
+        def apply_call(*, method: str, url: str, payload: object, token: str) -> tuple[int, str]:
+            captured_payloads.append(payload)
+            return 200, json.dumps({"number": 7})
+
+        pu._update_pr(repo="owner/repo", number=7, title="new title", body="new body", token="tok", apply_call=apply_call)
+        assert captured_payloads[0]["title"] == "new title"
+        assert captured_payloads[0]["body"] == "new body"
+
+    def test_includes_pr_number_in_url(self) -> None:
+        captured_urls: list[str] = []
+
+        def apply_call(*, method: str, url: str, payload: object, token: str) -> tuple[int, str]:
+            captured_urls.append(url)
+            return 200, json.dumps({"number": 99})
+
+        pu._update_pr(repo="owner/repo", number=99, title="t", body="b", token="tok", apply_call=apply_call)
+        assert "/pulls/99" in captured_urls[0]
+
+    def test_http_error_raises_runtime_error(self) -> None:
+        apply_call = _make_apply_call(404, {"message": "not found"})
+        with pytest.raises(RuntimeError, match="404"):
+            pu._update_pr(repo="owner/repo", number=1, title="t", body="b", token="tok", apply_call=apply_call)
+
+
+# ---------------------------------------------------------------------------
+# _upsert_pr()
+# ---------------------------------------------------------------------------
+
+
+class TestUpsertPr:
+    def _make_list_call(self, prs: list[dict[str, Any]]) -> Callable[..., tuple[int, str]]:
+        list_body = json.dumps(prs)
+        create_or_update_body = json.dumps({"number": prs[0]["number"] if prs else 55})
+        call_count = [0]
+
+        def apply_call(*, method: str, url: str, payload: object, token: str) -> tuple[int, str]:
+            call_count[0] += 1
+            if call_count[0] == 1:  # list call
+                return 200, list_body
+            return 200 if method == "PATCH" else 201, create_or_update_body
+
+        return apply_call
+
+    def test_creates_when_no_existing_pr(self) -> None:
+        prs_returned: list[list[dict[str, Any]]] = [[]]
+        create_result = {"number": 55}
+        calls: list[tuple[str, str]] = []
+
+        def apply_call(*, method: str, url: str, payload: object, token: str) -> tuple[int, str]:
+            calls.append((method, url))
+            if method == "GET":
+                return 200, json.dumps(prs_returned.pop(0))
+            return 201, json.dumps(create_result)
+
+        action, number = pu._upsert_pr(
+            repo="owner/repo", head="chore/x", base="main",
+            title="t", body="b", token="tok",
+            apply_call=apply_call,
+        )
+        assert action == "created"
+        assert number == 55
+        methods = [c[0] for c in calls]
+        assert "GET" in methods
+        assert "POST" in methods
+
+    def test_updates_when_existing_pr(self) -> None:
+        prs_returned: list[list[dict[str, Any]]] = [[{"number": 7}]]
+        calls: list[tuple[str, str]] = []
+
+        def apply_call(*, method: str, url: str, payload: object, token: str) -> tuple[int, str]:
+            calls.append((method, url))
+            if method == "GET":
+                return 200, json.dumps(prs_returned.pop(0))
+            return 200, json.dumps({"number": 7})
+
+        action, number = pu._upsert_pr(
+            repo="owner/repo", head="chore/x", base="main",
+            title="t", body="b", token="tok",
+            apply_call=apply_call,
+        )
+        assert action == "updated"
+        assert number == 7
+        methods = [c[0] for c in calls]
+        assert "GET" in methods
+        assert "PATCH" in methods
+
+
+# ---------------------------------------------------------------------------
+# _cmd_upsert() / upsert subcommand
+# ---------------------------------------------------------------------------
+
+
+class TestCmdUpsert:
+    def test_success_create(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        monkeypatch.setenv("GH_TOKEN", "tok")
+        monkeypatch.setenv("REPO", "owner/repo")
+        body_file = tmp_path / "body.md"
+        body_file.write_text("PR body content", encoding="utf-8")
+        monkeypatch.setattr(pu, "_upsert_pr", lambda **kw: ("created", 42))
+        rc = pu.main(["upsert", "--head", "chore/x", "--base", "main", "--title", "t", "--body-file", str(body_file)])
+        assert rc == 0
+        assert "42" in capsys.readouterr().out
+
+    def test_success_update(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        monkeypatch.setenv("GH_TOKEN", "tok")
+        monkeypatch.setenv("REPO", "owner/repo")
+        body_file = tmp_path / "body.md"
+        body_file.write_text("body", encoding="utf-8")
+        monkeypatch.setattr(pu, "_upsert_pr", lambda **kw: ("updated", 7))
+        rc = pu.main(["upsert", "--head", "chore/x", "--base", "main", "--title", "t", "--body-file", str(body_file)])
+        assert rc == 0
+        assert "7" in capsys.readouterr().out
+
+    def test_missing_token_returns_1(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        monkeypatch.delenv("GH_TOKEN", raising=False)
+        monkeypatch.setenv("REPO", "owner/repo")
+        body_file = tmp_path / "body.md"
+        body_file.write_text("body", encoding="utf-8")
+        rc = pu.main(["upsert", "--head", "x", "--base", "main", "--title", "t", "--body-file", str(body_file)])
+        assert rc == 1
+        assert "GH_TOKEN" in capsys.readouterr().err
+
+    def test_missing_repo_returns_1(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        monkeypatch.setenv("GH_TOKEN", "tok")
+        monkeypatch.delenv("REPO", raising=False)
+        body_file = tmp_path / "body.md"
+        body_file.write_text("body", encoding="utf-8")
+        rc = pu.main(["upsert", "--head", "x", "--base", "main", "--title", "t", "--body-file", str(body_file)])
+        assert rc == 1
+        assert "REPO" in capsys.readouterr().err
+
+    def test_missing_body_file_returns_1(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        monkeypatch.setenv("GH_TOKEN", "tok")
+        monkeypatch.setenv("REPO", "owner/repo")
+        rc = pu.main(["upsert", "--head", "x", "--base", "main", "--title", "t", "--body-file", str(tmp_path / "nonexistent.md")])
+        assert rc == 1
+        assert "body" in capsys.readouterr().err.lower()

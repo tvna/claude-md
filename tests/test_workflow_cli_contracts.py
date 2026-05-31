@@ -39,6 +39,7 @@ import dependabot_labels
 import issue_link
 import labels_apply
 import nixpkgs_cooldown
+import pr_upsert
 import preflight_pr_single_commit
 import pytest
 import ruleset_drift
@@ -156,6 +157,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("verify_readme_translation.py", "verify"): "test_verify_readme_translation_matches_workflow_args",
     ("verify_required_check_contexts.py", "verify"): "test_verify_required_check_contexts_matches_workflow_args",
     ("verify_ruleset_sync.py", "verify"): "test_verify_ruleset_sync_matches_workflow_args",
+    ("pr_upsert.py", "upsert"): "test_pr_upsert_matches_workflow_args",
     ("verify_shard_coverage.py", None): "test_verify_shard_coverage_matches_workflow_args",
     ("verify_test_shard_markers.py", None): "test_verify_test_shard_markers_matches_workflow_args",
 }
@@ -1064,6 +1066,25 @@ def test_threat_intel_apply_labels_matches_workflow_args(
     assert threat_intel_triage.main(["apply-labels", "--add-labels", "threat:intel-needed"]) == 0
     assert threat_intel_triage.main(["apply-labels", "--remove-labels", "threat:response-needed"]) == 0
     assert threat_intel_triage.main(["apply-labels"]) == 0
+
+
+def test_pr_upsert_matches_workflow_args(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """upsert subcommand accepts the --head/--base/--title/--body-file args used by generate-agents.yml and post-merge.yml."""
+    monkeypatch.setenv("GH_TOKEN", "tok")
+    monkeypatch.setenv("REPO", "owner/repo")
+    body_file = tmp_path / "pr-body.md"
+    body_file.write_text("body content", encoding="utf-8")
+    monkeypatch.setattr(pr_upsert, "_upsert_pr", lambda **kw: ("created", 99))
+
+    assert pr_upsert.main([
+        "upsert",
+        "--head", "chore/regenerate-agent-instructions",
+        "--base", "main",
+        "--title", "chore: regenerate agent instructions (#18)",
+        "--body-file", str(body_file),
+    ]) == 0
 
 
 def test_pr_label_mutation_jobs_have_pull_request_write() -> None:

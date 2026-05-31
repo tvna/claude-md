@@ -65,16 +65,6 @@ class Violation(NamedTuple):
 # ---------------------------------------------------------------------------
 ALLOWLIST_ENTRIES: list[dict[str, str]] = [
     {
-        "workflow": "generate-agents.yml",
-        "step": "Open pull request if generated instructions changed",
-        "rationale": "gh pr view/edit/create for automated PR upsert; migration tracked in #911",
-    },
-    {
-        "workflow": "post-merge.yml",
-        "step": "Open pull request if any generated doc changed",
-        "rationale": "gh pr view/edit/create for automated PR upsert; migration tracked in #911",
-    },
-    {
         "workflow": "backup-non-ascii-originals.yml",
         "step": "Capture issues, PRs, and comments",
         "rationale": "gh api --paginate for issues/PRs/comments bulk fetch; migration tracked in #911",
