@@ -168,6 +168,10 @@ STEPS: tuple[Step, ...] = (
         argv=("python3", "scripts/auto_retro.py", "decision-tree-doc"),
     ),
     Step(
+        name="workflow_diagram_doc",
+        argv=("python3", "scripts/workflow_diagram.py", "diagram-doc"),
+    ),
+    Step(
         name="scan_preflight_drift",
         argv=("python3", "scripts/scan_preflight_drift.py", "verify"),
     ),

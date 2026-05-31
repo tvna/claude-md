@@ -134,47 +134,53 @@ jobs:
       contents: write
       pull-requests: write
     concurrency:
-      group: auto-retro-decision-tree-${{ github.ref }}
+      group: generate-docs-${{ github.ref }}
       cancel-in-progress: true
     steps:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - name: Generate decision tree document
+      - name: Generate auto-retro script decision tree
         run: python3 scripts/auto_retro.py decision-tree-doc
 
-      - name: Open pull request if generated decision tree changed
+      - name: Generate workflow if-branch diagrams
+        run: python3 scripts/workflow_diagram.py diagram-doc
+
+      - name: Open pull request if any generated doc changed
         env:
           GH_TOKEN: ${{ github.token }}
-          PR_BRANCH: chore/update-auto-retro-decision-tree
-          PR_TITLE: "docs(auto-retro): update generated decision tree (#605)"
+          PR_BRANCH: chore/update-generated-docs
+          PR_TITLE: "docs(generated): regenerate decision tree and workflow diagrams (#960)"
         run: |
-          if git diff --quiet -- docs/generated/auto-retro-decision-tree.md; then
-            echo "Auto-retro decision tree document is already up to date."
+          if git diff --quiet -- docs/generated/; then
+            echo "All generated docs are already up to date."
             exit 0
           fi
 
           cat > /tmp/pr-body.md <<'EOF'
           ## Summary
 
-          Regenerates `docs/generated/auto-retro-decision-tree.md` from `scripts/auto_retro.py::run`.
+          Regenerates `docs/generated/` artifacts from source after a change merged to `main`:
+
+          - `docs/generated/scripts/auto-retro-decision-tree.md` from `scripts/auto_retro.py::run` AST.
+          - `docs/generated/workflows/*-if-branches.md` from `.github/workflows/*.yml` if-branch analysis.
 
           ## Related Issue
 
-          Closes #605
+          Closes #960
 
           ## Facts
 
-          - `python3 scripts/auto_retro.py decision-tree-doc` changed `docs/generated/auto-retro-decision-tree.md`.
-          - The generated document contains Mermaid produced from the `auto_retro.run()` AST.
+          - `python3 scripts/auto_retro.py decision-tree-doc` and/or `python3 scripts/workflow_diagram.py diagram-doc` changed one or more files under `docs/generated/`.
+          - The generated documents contain Mermaid diagrams produced from script AST or workflow YAML parsing.
 
           ## Assumptions
 
-          - speculation: The post-merge generator ran because a merged change affected the auto-retro decision tree surface.
+          - speculation: A merged change affected the auto-retro decision tree surface or a workflow YAML if-branch.
 
           ## Risk and blast radius
 
-          - Documentation-only generated artifact under `docs/generated/`; no runtime workflow behavior changes.
+          - Documentation-only generated artifacts under `docs/generated/`; no runtime workflow behavior changes.
 
           ## Rollback
 
@@ -183,6 +189,8 @@ jobs:
           ## Verification
 
           - command: `python3 scripts/auto_retro.py decision-tree-doc`
+            result: `exit 0`
+          - command: `python3 scripts/workflow_diagram.py diagram-doc`
             result: `exit 0`
 
           ## Checklist
@@ -196,7 +204,7 @@ jobs:
 
           ### After-merge (CI)
 
-          - [x] Generated decision tree drift check exits 0
+          - [x] Generated docs drift check exits 0
           - [ ] CI green on the merge commit
 
           ### Post-merge
@@ -211,7 +219,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git checkout -B "$PR_BRANCH"
-          git add docs/generated/auto-retro-decision-tree.md
+          git add docs/generated/
           git commit -m "$PR_TITLE"
           git push --force-with-lease origin "$PR_BRANCH"
 

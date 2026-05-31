@@ -78,9 +78,40 @@ than serving as precedent for new PRD files.
 
 ## generated/ -- checked-in generated views
 
+### generated/scripts/ -- script AST decision trees
+
 | File | Subject | Source | Tracking issues |
 |---|---|---|---|
-| [auto-retro-decision-tree.md](generated/auto-retro-decision-tree.md) | Mermaid decision tree for the current `auto_retro.run()` control flow. | `python3 scripts/auto_retro.py decision-tree-doc` | #598, #605 |
+| [scripts/auto-retro-decision-tree.md](generated/scripts/auto-retro-decision-tree.md) | Mermaid decision tree for the current `auto_retro.run()` control flow. | `python3 scripts/auto_retro.py decision-tree-doc` | #598, #605, #960 |
+
+### generated/workflows/ -- workflow if-branch diagrams
+
+One file per `.github/workflows/*.yml`. Each diagram shows job-level `if:` conditions,
+`needs:` dependency edges, and step-level `if:` branches.
+Source: `python3 scripts/workflow_diagram.py diagram-doc`. Tracking issue: #960.
+
+| File | Workflow |
+|---|---|
+| [workflows/apply-labels-if-branches.md](generated/workflows/apply-labels-if-branches.md) | `apply-labels.yml` |
+| [workflows/apply-rulesets-if-branches.md](generated/workflows/apply-rulesets-if-branches.md) | `apply-rulesets.yml` |
+| [workflows/attack-coverage-review-reminder-if-branches.md](generated/workflows/attack-coverage-review-reminder-if-branches.md) | `attack-coverage-review-reminder.yml` |
+| [workflows/auto-retro-post-merge-rescan-if-branches.md](generated/workflows/auto-retro-post-merge-rescan-if-branches.md) | `auto-retro-post-merge-rescan.yml` |
+| [workflows/auto-retro-sentinel-if-branches.md](generated/workflows/auto-retro-sentinel-if-branches.md) | `auto-retro-sentinel.yml` |
+| [workflows/backup-non-ascii-originals-if-branches.md](generated/workflows/backup-non-ascii-originals-if-branches.md) | `backup-non-ascii-originals.yml` |
+| [workflows/dependabot-automerge-if-branches.md](generated/workflows/dependabot-automerge-if-branches.md) | `dependabot-automerge.yml` |
+| [workflows/generate-agents-if-branches.md](generated/workflows/generate-agents-if-branches.md) | `generate-agents.yml` |
+| [workflows/generate-docs-if-branches.md](generated/workflows/generate-docs-if-branches.md) | `generate-docs.yml` |
+| [workflows/issue-pr-triage-if-branches.md](generated/workflows/issue-pr-triage-if-branches.md) | `issue-pr-triage.yml` |
+| [workflows/portable-pr-policy-if-branches.md](generated/workflows/portable-pr-policy-if-branches.md) | `portable-pr-policy.yml` |
+| [workflows/post-merge-if-branches.md](generated/workflows/post-merge-if-branches.md) | `post-merge.yml` |
+| [workflows/publish-devcontainer-images-if-branches.md](generated/workflows/publish-devcontainer-images-if-branches.md) | `publish-devcontainer-images.yml` |
+| [workflows/retro-followup-drift-if-branches.md](generated/workflows/retro-followup-drift-if-branches.md) | `retro-followup-drift.yml` |
+| [workflows/verify-agents-if-branches.md](generated/workflows/verify-agents-if-branches.md) | `verify-agents.yml` |
+| [workflows/verify-dependabot-labels-if-branches.md](generated/workflows/verify-dependabot-labels-if-branches.md) | `verify-dependabot-labels.yml` |
+| [workflows/verify-design-philosophy-if-branches.md](generated/workflows/verify-design-philosophy-if-branches.md) | `verify-design-philosophy.yml` |
+| [workflows/verify-github-content-if-branches.md](generated/workflows/verify-github-content-if-branches.md) | `verify-github-content.yml` |
+| [workflows/verify-ruleset-sync-if-branches.md](generated/workflows/verify-ruleset-sync-if-branches.md) | `verify-ruleset-sync.yml` |
+| [workflows/weekly-maintenance-if-branches.md](generated/workflows/weekly-maintenance-if-branches.md) | `weekly-maintenance.yml` |
 
 ## archive/ -- frozen historical evidence
 

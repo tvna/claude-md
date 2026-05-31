@@ -51,5 +51,5 @@ class TestDecisionTree:
         assert output.read_text(encoding="utf-8") == ar.render_decision_tree_markdown()
 
     def test_checked_in_decision_tree_doc_is_current(self) -> None:
-        path = Path("docs/generated/auto-retro-decision-tree.md")
+        path = Path("docs/generated/scripts/auto-retro-decision-tree.md")
         assert path.read_text(encoding="utf-8") == ar.render_decision_tree_markdown()
