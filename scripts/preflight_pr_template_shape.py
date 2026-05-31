@@ -31,6 +31,7 @@ since the cutoff exists only to exempt the back-catalog at the server.
 from __future__ import annotations
 
 import json
+import os
 import sys
 from typing import Any
 
@@ -48,24 +49,59 @@ _TARGET_TOOLS: frozenset[str] = frozenset(
     }
 )
 
+# Refs #1025. The remote Claude web harness (CLAUDE_CODE_REMOTE=true, the
+# same signal preflight_push_session_branch.py keys off) auto-appends
+# exactly one session footer when a PR is *created* via MCP. Only the
+# create path is auto-appended -- update_pull_request is not (that is how
+# the manual single-footer repair worked), so the footer relaxation below
+# is deliberately create-only. Under those two conditions the agent must
+# NOT pre-add a footer (the harness supplies it); any other invocation
+# keeps requiring exactly one trailing footer.
+#
+# Discriminator note: CLAUDECODE=1 is set under BOTH the local Claude CLI
+# and the remote web harness, so it cannot tell them apart. Only
+# CLAUDE_CODE_REMOTE=true is remote-only, and only the remote harness
+# auto-appends, so it is the correct (and sole) signal here. The local
+# CLI leaves CLAUDE_CODE_REMOTE unset and keeps requiring a footer.
+_REMOTE_ENV_VAR = "CLAUDE_CODE_REMOTE"
+_HARNESS_FOOTER_APPEND_TOOL = "mcp__github__create_pull_request"
 
-def evaluate(body: str) -> list[str]:
+
+def _claude_web_harness(environ: dict[str, str] | None = None) -> bool:
+    """Return True when running under the remote Claude web harness."""
+    env = os.environ if environ is None else environ
+    return env.get(_REMOTE_ENV_VAR, "").strip().lower() == "true"
+
+
+def evaluate(body: str, *, harness_appends_footer: bool = False) -> list[str]:
     """Return list of ``::error::`` strings; empty list means OK."""
-    return verify_pr_verification_pairs(body) + verify_pr_checklist_subsections(
-        body
-    ) + verify_pr_agent_attribution_footer(body)
+    return (
+        verify_pr_verification_pairs(body)
+        + verify_pr_checklist_subsections(body)
+        + verify_pr_agent_attribution_footer(
+            body, harness_appends_footer=harness_appends_footer
+        )
+    )
 
 
 def decide(
-    tool_name: str, tool_input: dict[str, Any]
+    tool_name: str,
+    tool_input: dict[str, Any],
+    *,
+    environ: dict[str, str] | None = None,
 ) -> dict[str, Any] | None:
     """Return the hook output dict, or ``None`` if the call should proceed."""
-    if canonical_github_tool(tool_name) not in _TARGET_TOOLS:
+    canonical = canonical_github_tool(tool_name)
+    if canonical not in _TARGET_TOOLS:
         return None
     body = tool_input.get("body")
     if not isinstance(body, str):
         return None
-    errors = evaluate(body)
+    harness_appends_footer = (
+        canonical == _HARNESS_FOOTER_APPEND_TOOL
+        and _claude_web_harness(environ)
+    )
+    errors = evaluate(body, harness_appends_footer=harness_appends_footer)
     if not errors:
         return None
     joined = "\n".join(errors)

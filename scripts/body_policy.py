@@ -323,7 +323,9 @@ def verify_pr_checklist_subsections(body: str) -> list[str]:
     return errors
 
 
-def verify_pr_agent_attribution_footer(body: str) -> list[str]:
+def verify_pr_agent_attribution_footer(
+    body: str, *, harness_appends_footer: bool = False
+) -> list[str]:
     """Return errors when the PR body lacks a trailing agent footer.
 
     The footer is agent-agnostic by design: ``Claude Code``, ``Codex``,
@@ -335,12 +337,35 @@ def verify_pr_agent_attribution_footer(body: str) -> list[str]:
     auto-appends a session footer, so a manually added footer plus the
     auto-append would otherwise yield a duplicate that this gate must
     catch. Refs #784.
+
+    ``harness_appends_footer`` inverts the requirement for the Claude web
+    harness ``create_pull_request`` path (Refs #1025). That harness
+    auto-appends exactly one session footer to the stored body, so a
+    footer the agent adds before the call becomes a duplicate that fails
+    the server gate and forces a manual ``update_pull_request`` repair.
+    When the flag is set the body must carry NO footer (the harness
+    supplies the single one); any footer present is rejected so the
+    no-duplicate guarantee is deterministic rather than repaired per PR.
+    The server-side gate and the ``update_pull_request`` path (which the
+    harness does not auto-append to) leave the flag False, so they keep
+    requiring exactly one trailing footer. This mirrors the env-keyed
+    Codex footer path so the two agent paths stay symmetric and auditable.
     """
     cleaned = strip_html_comments(body.replace("\r", "")).rstrip()
     lines = cleaned.splitlines()
     matching = [
         line for line in lines if _AGENT_ATTRIBUTION_FOOTER_RE.fullmatch(line)
     ]
+    if harness_appends_footer:
+        if matching:
+            return [
+                "::error::Under the Claude web harness (CLAUDE_CODE_REMOTE), "
+                "create_pull_request auto-appends exactly one session footer. "
+                "Do not add an agent-attribution footer to the create body -- "
+                "the manual footer plus the auto-appended footer produces a "
+                "duplicate. Remove the trailing footer line."
+            ]
+        return []
     if len(matching) > 1:
         return [
             "::error::PR body has multiple agent-attribution footers. "
