@@ -24,26 +24,21 @@ double-fire.  See docs/runbooks/preflight.md for the full design.
 from __future__ import annotations
 
 import json
-import shutil
-import subprocess
 import sys
 from pathlib import Path
 from typing import Any
+
+from _git import run_git
 
 _EXPECTED = ".githooks"
 _HOOKS_FILE = Path(".githooks") / "pre-push"
 
 
 def _git_config(key: str) -> str | None:
-    git = shutil.which("git")
-    if git is None:
+    try:
+        result = run_git(["config", "--local", key])
+    except RuntimeError:
         return None
-    result = subprocess.run(  # noqa: S603 -- git argv is built from shutil.which + parser-controlled key
-        [git, "config", "--local", key],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
     if result.returncode != 0:
         return None
     return result.stdout.strip()
@@ -51,15 +46,10 @@ def _git_config(key: str) -> str | None:
 
 def _git_config_set(key: str, value: str) -> bool:
     """Run `git config <key> <value>`; return True on success."""
-    git = shutil.which("git")
-    if git is None:
+    try:
+        result = run_git(["config", key, value])
+    except RuntimeError:
         return False
-    result = subprocess.run(  # noqa: S603 -- argv built from shutil.which + caller-controlled literals
-        [git, "config", key, value],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
     return result.returncode == 0
 
 

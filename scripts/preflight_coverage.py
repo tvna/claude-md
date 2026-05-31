@@ -25,6 +25,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from _git import run_git
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 # Per-file line-coverage floor (percentage). Each public scripts/*.py file
@@ -41,16 +43,7 @@ def changed_scripts(repo: Path, *, base_ref: str = "origin/main") -> list[str]:
     they are always exercised indirectly through their public callers and
     lack standalone CLI entry points.
     """
-    git = shutil.which("git")
-    if git is None:
-        raise RuntimeError("git executable not found on PATH")
-    completed = subprocess.run(  # noqa: S603 -- argv built from hard-coded literals
-        [git, "diff", "--name-only", base_ref, "--", "scripts/"],
-        cwd=repo,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    completed = run_git(["diff", "--name-only", base_ref, "--", "scripts/"], cwd=repo)
     if completed.returncode != 0:
         detail = (completed.stderr or completed.stdout).strip()
         raise RuntimeError(f"git diff failed ({base_ref}): {detail}")

@@ -39,6 +39,8 @@ from collections.abc import Iterable, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 
+from _git import run_git
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 # Tracked path globs whose working-tree contents determine the pytest outcome.
@@ -63,13 +65,7 @@ def _git_dir(repo_root: Path) -> Path:
     pointing elsewhere) and submodules resolve correctly. The path is made
     absolute against *repo_root* when git returns a relative answer.
     """
-    out = subprocess.run(  # noqa: S603 -- fixed argv, no shell
-        ["git", "rev-parse", "--git-dir"],  # noqa: S607 -- git resolved from PATH, repo convention
-        cwd=repo_root,
-        capture_output=True,
-        text=True,
-        check=True,
-    ).stdout.strip()
+    out = run_git(["rev-parse", "--git-dir"], cwd=repo_root, check=True).stdout.strip()
     git_dir = Path(out)
     if not git_dir.is_absolute():
         git_dir = (repo_root / git_dir).resolve()
@@ -88,13 +84,7 @@ def _tracked_input_files(repo_root: Path) -> list[Path]:
     fingerprint (they cannot affect a committed test run) and the set is
     deterministic across machines.
     """
-    out = subprocess.run(  # noqa: S603 -- fixed argv, no shell
-        ["git", "ls-files", "-z", "--", *INPUT_PATHSPECS],  # noqa: S607 -- git resolved from PATH, repo convention
-        cwd=repo_root,
-        capture_output=True,
-        text=True,
-        check=True,
-    ).stdout
+    out = run_git(["ls-files", "-z", "--", *INPUT_PATHSPECS], cwd=repo_root, check=True).stdout
     rels = [chunk for chunk in out.split("\0") if chunk]
     files = [repo_root / rel for rel in rels]
     # ``git ls-files`` can list a path whose blob was removed from the working
