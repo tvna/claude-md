@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import io
 import json
 import urllib.request
 from typing import Any
@@ -448,3 +449,278 @@ def test_main_posttooluse_mode_emits_json(monkeypatch: pytest.MonkeyPatch) -> No
     assert output
     parsed = json.loads("".join(output))
     assert "hookSpecificOutput" in parsed
+
+
+# ---------------------------------------------------------------------------
+# Raw-body / raising opener helpers (for REST-layer error paths)
+# ---------------------------------------------------------------------------
+
+
+class _RawResponse:
+    """Response-like object returning arbitrary (possibly non-JSON) bytes."""
+
+    def __init__(self, body: bytes, status: int = 200) -> None:
+        self.status = status
+        self._body = body
+
+    def read(self) -> bytes:
+        return self._body
+
+    def __enter__(self) -> _RawResponse:
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        pass
+
+
+def _raw_opener(body: bytes, status: int = 200) -> Any:
+    def fake(req: urllib.request.Request) -> _RawResponse:
+        return _RawResponse(body, status)
+
+    return fake
+
+
+def _raising_opener() -> Any:
+    def fake(req: urllib.request.Request) -> _RawResponse:
+        raise ValueError("boom")  # not an HTTPError/URLError -> propagates past apply_call
+
+    return fake
+
+
+# ---------------------------------------------------------------------------
+# _rest_get
+# ---------------------------------------------------------------------------
+
+
+class TestRestGet:
+    def test_no_token_returns_none(self) -> None:
+        assert subject._rest_get("user", token="") is None
+
+    def test_exception_returns_none(self) -> None:
+        assert subject._rest_get("user", token=_TOKEN, opener=_raising_opener()) is None
+
+    def test_bad_json_returns_none(self) -> None:
+        assert subject._rest_get("user", token=_TOKEN, opener=_raw_opener(b"not json")) is None
+
+    def test_non_dict_json_returns_none(self) -> None:
+        assert subject._rest_get("user", token=_TOKEN, opener=_raw_opener(b"[1, 2]")) is None
+
+    def test_success_returns_dict(self) -> None:
+        assert subject._rest_get("user", token=_TOKEN, opener=_opener({"login": "tvna"})) == {"login": "tvna"}
+
+
+# ---------------------------------------------------------------------------
+# _rest_get_list
+# ---------------------------------------------------------------------------
+
+
+class TestRestGetList:
+    def test_no_token_returns_none(self) -> None:
+        assert subject._rest_get_list("repos/o/r/pulls", token="") is None
+
+    def test_exception_returns_none(self) -> None:
+        assert subject._rest_get_list("repos/o/r/pulls", token=_TOKEN, opener=_raising_opener()) is None
+
+    def test_non_2xx_returns_none(self) -> None:
+        # 404 makes apply_call stop retrying immediately (4xx); helper returns None.
+        assert subject._rest_get_list("repos/o/r/pulls", token=_TOKEN, opener=_raw_opener(b"[]", status=404)) is None
+
+    def test_bad_json_returns_none(self) -> None:
+        assert subject._rest_get_list("repos/o/r/pulls", token=_TOKEN, opener=_raw_opener(b"nope")) is None
+
+    def test_non_list_json_returns_none(self) -> None:
+        assert subject._rest_get_list("repos/o/r/pulls", token=_TOKEN, opener=_raw_opener(b'{"a": 1}')) is None
+
+    def test_success_returns_list(self) -> None:
+        assert subject._rest_get_list("repos/o/r/pulls", token=_TOKEN, opener=_opener([1, 2])) == [1, 2]
+
+
+# ---------------------------------------------------------------------------
+# _detect_repo
+# ---------------------------------------------------------------------------
+
+
+class TestDetectRepo:
+    def test_from_env_var(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("GITHUB_REPOSITORY", "tvna/claude-md")
+        assert subject._detect_repo() == "tvna/claude-md"
+
+    def test_from_git_remote_when_env_absent(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("GITHUB_REPOSITORY", raising=False)
+
+        class _Result:
+            returncode = 0
+            stdout = "git@github.com:tvna/claude-md.git\n"
+
+        monkeypatch.setattr(subject.subprocess, "run", lambda *a, **k: _Result())
+        assert subject._detect_repo() == "tvna/claude-md"
+
+    def test_none_when_remote_nonzero(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("GITHUB_REPOSITORY", raising=False)
+
+        class _Result:
+            returncode = 1
+            stdout = ""
+
+        monkeypatch.setattr(subject.subprocess, "run", lambda *a, **k: _Result())
+        assert subject._detect_repo() is None
+
+    def test_none_on_subprocess_error(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("GITHUB_REPOSITORY", raising=False)
+
+        def _boom(*a: object, **k: object) -> None:
+            raise OSError("git missing")
+
+        monkeypatch.setattr(subject.subprocess, "run", _boom)
+        assert subject._detect_repo() is None
+
+
+# ---------------------------------------------------------------------------
+# _extract_pr_info — structured fallbacks and _walk list branch
+# ---------------------------------------------------------------------------
+
+
+def test_extract_pr_info_structured_string_number() -> None:
+    event = {
+        "tool_name": "mcp__github__create_pull_request",
+        "tool_input": {"owner": "o", "repo": "r"},
+        "tool_response": {"pull_request_number": "123"},
+    }
+    assert subject._extract_pr_info(event) == ("o", "r", "123")
+
+
+def test_extract_pr_info_walks_nested_list() -> None:
+    event = {
+        "tool_name": "mcp__github__create_pull_request",
+        "tool_input": {"owner": "o", "repo": "r"},
+        "tool_response": {"items": [{"pr_number": 7}]},
+    }
+    assert subject._extract_pr_info(event) == ("o", "r", "7")
+
+
+# ---------------------------------------------------------------------------
+# decide_post_tool_use — owner/repo undetermined branch
+# ---------------------------------------------------------------------------
+
+
+def test_decide_skips_when_owner_repo_missing() -> None:
+    event = {
+        "tool_name": "mcp__github__create_pull_request",
+        "tool_input": {},
+        "tool_response": {"number": 9},
+    }
+    result = subject.decide_post_tool_use(event, token=_TOKEN)
+    assert result is not None
+    ctx = result["hookSpecificOutput"]["additionalContext"]
+    assert "owner/repo could not be" in ctx
+
+
+# ---------------------------------------------------------------------------
+# _list_open_prs
+# ---------------------------------------------------------------------------
+
+
+class TestListOpenPrs:
+    def test_empty_without_token(self) -> None:
+        assert subject._list_open_prs(token="") == []
+
+    def test_empty_when_user_lookup_fails(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(subject, "_rest_get", lambda *a, **k: None)
+        assert subject._list_open_prs(token=_TOKEN) == []
+
+    def test_empty_when_login_missing(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(subject, "_rest_get", lambda *a, **k: {"no_login": True})
+        assert subject._list_open_prs(token=_TOKEN) == []
+
+    def test_empty_when_repo_undetected(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(subject, "_rest_get", lambda *a, **k: {"login": "tvna"})
+        monkeypatch.setattr(subject, "_detect_repo", lambda: None)
+        assert subject._list_open_prs(token=_TOKEN) == []
+
+    def test_empty_when_pulls_lookup_fails(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(subject, "_rest_get", lambda *a, **k: {"login": "tvna"})
+        monkeypatch.setattr(subject, "_detect_repo", lambda: "tvna/claude-md")
+        monkeypatch.setattr(subject, "_rest_get_list", lambda *a, **k: None)
+        assert subject._list_open_prs(token=_TOKEN) == []
+
+    def test_filters_to_session_user(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(subject, "_rest_get", lambda *a, **k: {"login": "tvna"})
+        monkeypatch.setattr(subject, "_detect_repo", lambda: "tvna/claude-md")
+        prs = [
+            {"number": 1, "user": {"login": "someone-else"}},
+            "not-a-dict",
+            {
+                "number": 2,
+                "html_url": "https://github.com/tvna/claude-md/pull/2",
+                "user": {"login": "tvna"},
+                "head": {"repo": {"name": "claude-md", "owner": {"login": "tvna"}}},
+            },
+        ]
+        monkeypatch.setattr(subject, "_rest_get_list", lambda *a, **k: prs)
+        out = subject._list_open_prs(token=_TOKEN)
+        assert len(out) == 1
+        assert out[0]["number"] == 2
+
+
+# ---------------------------------------------------------------------------
+# run_session_start — per-PR skip branches
+# ---------------------------------------------------------------------------
+
+
+def test_session_start_skips_entry_without_number(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(subject, "_list_open_prs", lambda **k: [{"headRepositoryOwner": {"login": "o"}}])
+    subject.run_session_start(token=_TOKEN, sleeper=lambda _: None)
+    assert capsys.readouterr().out == ""
+
+
+def test_session_start_skips_entry_without_owner_repo(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(
+        subject,
+        "_list_open_prs",
+        lambda **k: [{"number": 5, "headRepositoryOwner": {}, "headRepository": {}}],
+    )
+    subject.run_session_start(token=_TOKEN, sleeper=lambda _: None)
+    assert capsys.readouterr().out == ""
+
+
+def test_session_start_skips_when_poll_returns_none(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(
+        subject,
+        "_list_open_prs",
+        lambda **k: [
+            {
+                "number": 5,
+                "url": "https://github.com/tvna/claude-md/pull/5",
+                "headRepositoryOwner": {"login": "tvna"},
+                "headRepository": {"name": "claude-md"},
+            }
+        ],
+    )
+    monkeypatch.setattr(subject, "_poll_mergeability", lambda *a, **k: None)
+    subject.run_session_start(token=_TOKEN, sleeper=lambda _: None)
+    assert capsys.readouterr().out == ""
+
+
+# ---------------------------------------------------------------------------
+# main() — stdin error paths (PostToolUse mode)
+# ---------------------------------------------------------------------------
+
+
+def test_main_malformed_stdin_is_fail_open(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    monkeypatch.setattr("sys.stdin", io.StringIO("not json {{{"))
+    rc = subject.main([])
+    assert rc == 0
+    assert capsys.readouterr().out == ""
+
+
+def test_main_non_dict_stdin_is_fail_open(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    monkeypatch.setattr("sys.stdin", io.StringIO('"a string"'))
+    rc = subject.main([])
+    assert rc == 0
+    assert capsys.readouterr().out == ""

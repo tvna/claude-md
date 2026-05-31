@@ -14,6 +14,7 @@ from __future__ import annotations
 import io
 import json
 import sys
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -155,3 +156,62 @@ class TestRunRecord:
             gic._COMMENT_DIR = original
         assert rc == 0
         assert (marker_dir / "11").exists()
+
+    def test_non_dict_event_is_fail_open(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # A JSON scalar parses fine but is not a dict event -> early return 0.
+        monkeypatch.setattr("sys.stdin", io.StringIO('"just-a-string"'))
+        assert gic.run_record() == 0
+
+    def test_non_dict_tool_input_is_skipped(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        payload = json.dumps({"tool_name": "mcp__github__add_issue_comment", "tool_input": ["nope"]})
+        monkeypatch.setattr("sys.stdin", io.StringIO(payload))
+        assert gic.run_record() == 0
+
+
+class TestExtractCloseTarget:
+    def test_invalid_issue_number_yields_none(self, tmp_path: Path) -> None:
+        # state==closed on the target tool, but issue_number is non-numeric:
+        # decide() must fall through to allow (None), exercising the final
+        # return in _extract_close_target.
+        result = gic.decide("mcp__github__issue_write", {"state": "closed", "issue_number": "not-a-number"})
+        assert result is None
+
+    def test_zero_issue_number_yields_none(self) -> None:
+        result = gic.decide("mcp__github__issue_write", {"state": "closed", "issue_number": 0})
+        assert result is None
+
+
+class TestRunGateGuards:
+    def test_non_dict_event_is_fail_open(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr("sys.stdin", io.StringIO('"a-string"'))
+        assert gic.run_gate() == 0
+
+    def test_non_dict_tool_input_is_coerced(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # tool_input is a list; the gate coerces it to {} and allows the call.
+        payload = json.dumps({"tool_name": "mcp__github__issue_write", "tool_input": ["bad"]})
+        monkeypatch.setattr("sys.stdin", io.StringIO(payload))
+        assert gic.run_gate() == 0
+
+
+class TestMain:
+    @staticmethod
+    def _spy(called: list[str], label: str) -> Callable[[], int]:
+        def _fn() -> int:
+            called.append(label)
+            return 0
+
+        return _fn
+
+    def test_default_dispatches_to_gate(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        called: list[str] = []
+        monkeypatch.setattr(gic, "run_gate", self._spy(called, "gate"))
+        monkeypatch.setattr(gic, "run_record", self._spy(called, "record"))
+        assert gic.main([]) == 0
+        assert called == ["gate"]
+
+    def test_record_flag_dispatches_to_recorder(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        called: list[str] = []
+        monkeypatch.setattr(gic, "run_gate", self._spy(called, "gate"))
+        monkeypatch.setattr(gic, "run_record", self._spy(called, "record"))
+        assert gic.main(["--record"]) == 0
+        assert called == ["record"]
