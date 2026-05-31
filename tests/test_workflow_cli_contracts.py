@@ -142,6 +142,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("scan_workflow_pip.py", "verify"): "test_scan_workflow_pip_verify_matches_workflow_args",
     ("security_drift_report.py", "aggregate"): "test_security_drift_report_aggregate_and_post_comment_match_workflow_args",
     ("security_drift_report.py", "post-comment"): "test_security_drift_report_aggregate_and_post_comment_match_workflow_args",
+    ("threat_intel_triage.py", "apply-labels"): "test_threat_intel_apply_labels_matches_workflow_args",
     ("threat_intel_triage.py", "scan"): "test_threat_intel_scan_matches_workflow_args",
     ("title_policy.py", "verify"): "test_title_policy_verify_matches_workflow_kind_env",
     ("update_devcontainer_image_pins.py", "$GITHUB_SHA"): "test_update_devcontainer_image_pins_matches_workflow_args",
@@ -1029,6 +1030,20 @@ def test_threat_intel_scan_matches_workflow_args(
     ) == 0
 
 
+def test_threat_intel_apply_labels_matches_workflow_args(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """apply-labels subcommand accepts the --add-labels/--remove-labels args used by the workflow."""
+    monkeypatch.setenv("GH_TOKEN", "tok")
+    monkeypatch.setenv("REPO", "owner/repo")
+    monkeypatch.setenv("NUMBER", "42")
+    monkeypatch.setattr(threat_intel_triage, "_apply_labels", lambda **kw: 0)
+
+    assert threat_intel_triage.main(["apply-labels", "--add-labels", "threat:intel-needed"]) == 0
+    assert threat_intel_triage.main(["apply-labels", "--remove-labels", "threat:response-needed"]) == 0
+    assert threat_intel_triage.main(["apply-labels"]) == 0
+
+
 def test_pr_label_mutation_jobs_have_pull_request_write() -> None:
     offenders: list[str] = []
     for workflow in sorted(_WORKFLOWS_DIR.glob("*.yml")):
@@ -1055,10 +1070,7 @@ def test_pr_label_mutation_jobs_have_pull_request_write() -> None:
                 run_text = step.get("run")
                 if not isinstance(run_text, str):
                     continue
-                if (
-                    "gh issue edit" in run_text
-                    and ("--add-label" in run_text or "--remove-label" in run_text)
-                ):
+                if "threat_intel_triage.py" in run_text and "apply-labels" in run_text:
                     mutates_pr_labels = True
             if not mutates_pr_labels:
                 continue

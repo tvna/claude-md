@@ -19,11 +19,14 @@ import argparse
 import json
 import os
 import re
+import sys
 import tomllib
+import urllib.error
 import urllib.parse
 import urllib.request
+from collections.abc import Callable
 from pathlib import Path
-from typing import NamedTuple
+from typing import Any, NamedTuple
 
 INTEL_LABEL = "threat:intel-needed"
 RESPONSE_LABEL = "threat:response-needed"
@@ -1488,6 +1491,94 @@ def request_json_any(
         return json.loads(response.read().decode("utf-8"))
 
 
+_GITHUB_API_VERSION = "2022-11-28"
+
+
+def _apply_labels(
+    *,
+    add_labels: list[str],
+    remove_labels: list[str],
+    repo: str,
+    number: int,
+    token: str,
+    opener: Callable[[urllib.request.Request], Any] = urllib.request.urlopen,
+) -> int:
+    """Add and remove labels on a GitHub issue/PR via the REST API.
+
+    Returns 0 on success, 1 on API failure (not counting 404 on removes).
+    """
+    base_url = f"https://api.github.com/repos/{repo}/issues/{number}/labels"
+    auth_header = f"Bearer {token}"
+
+    if add_labels:
+        data = json.dumps({"labels": add_labels}, separators=(",", ":")).encode("utf-8")
+        req = urllib.request.Request(  # noqa: S310 -- fixed https://api.github.com endpoint
+            base_url, data=data, method="POST"
+        )
+        req.add_header("Authorization", auth_header)
+        req.add_header("Accept", "application/vnd.github+json")
+        req.add_header("X-GitHub-Api-Version", _GITHUB_API_VERSION)
+        req.add_header("Content-Type", "application/json")
+        try:
+            with opener(req) as resp:
+                code = int(resp.status)
+        except urllib.error.HTTPError as exc:
+            code = int(exc.code)
+        if not 200 <= code < 300:
+            print(f"::error::add-labels HTTP {code}", file=sys.stderr)
+            return 1
+
+    for label in remove_labels:
+        url = f"{base_url}/{urllib.parse.quote(label, safe='')}"
+        req = urllib.request.Request(url, method="DELETE")  # noqa: S310 -- fixed https://api.github.com endpoint
+        req.add_header("Authorization", auth_header)
+        req.add_header("Accept", "application/vnd.github+json")
+        req.add_header("X-GitHub-Api-Version", _GITHUB_API_VERSION)
+        try:
+            with opener(req) as resp:
+                code = int(resp.status)
+        except urllib.error.HTTPError as exc:
+            code = int(exc.code)
+        if code == 404:
+            continue  # label was already absent — not an error
+        if not 200 <= code < 300:
+            print(f"::error::remove-label {label!r} HTTP {code}", file=sys.stderr)
+            return 1
+
+    return 0
+
+
+def _cmd_apply_labels(args: argparse.Namespace) -> int:
+    token = os.environ.get("GH_TOKEN", "")
+    repo = os.environ.get("REPO", "")
+    number_str = os.environ.get("NUMBER", "")
+
+    if not token:
+        print("::error::GH_TOKEN is not set", file=sys.stderr)
+        return 1
+    if not repo:
+        print("::error::REPO is not set", file=sys.stderr)
+        return 1
+    if not number_str:
+        print("::error::NUMBER is not set", file=sys.stderr)
+        return 1
+    try:
+        number = int(number_str)
+    except ValueError:
+        print(f"::error::NUMBER must be an integer: {number_str!r}", file=sys.stderr)
+        return 1
+
+    add_labels = [lbl.strip() for lbl in (args.add_labels or "").split(",") if lbl.strip()]
+    remove_labels = [lbl.strip() for lbl in (args.remove_labels or "").split(",") if lbl.strip()]
+    return _apply_labels(
+        add_labels=add_labels,
+        remove_labels=remove_labels,
+        repo=repo,
+        number=number,
+        token=token,
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -1613,6 +1704,22 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
     p_scan.set_defaults(func=_cmd_scan)
+
+    p_apply = sub.add_parser(
+        "apply-labels",
+        help="Add/remove labels on a GitHub issue or PR via the REST API.",
+    )
+    p_apply.add_argument(
+        "--add-labels",
+        default="",
+        help="Comma-separated label names to add. Reads REPO, NUMBER, GH_TOKEN from env.",
+    )
+    p_apply.add_argument(
+        "--remove-labels",
+        default="",
+        help="Comma-separated label names to remove.",
+    )
+    p_apply.set_defaults(func=_cmd_apply_labels)
 
     args = parser.parse_args(argv)
     try:

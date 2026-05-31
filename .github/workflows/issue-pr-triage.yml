@@ -76,8 +76,12 @@ jobs:
 
       - name: Apply threat labels
         if: steps.triage.outputs.recommended_labels != ''
-        run: gh issue edit "$NUMBER" --repo "$REPO" --add-label "${{ steps.triage.outputs.recommended_labels }}"
+        env:
+          ADD_LABELS: ${{ steps.triage.outputs.recommended_labels }}
+        run: python3 scripts/threat_intel_triage.py apply-labels --add-labels "$ADD_LABELS"
 
       - name: Remove stale threat labels
         if: steps.triage.outputs.remove_labels != ''
-        run: gh issue edit "$NUMBER" --repo "$REPO" --remove-label "${{ steps.triage.outputs.remove_labels }}"
+        env:
+          REMOVE_LABELS: ${{ steps.triage.outputs.remove_labels }}
+        run: python3 scripts/threat_intel_triage.py apply-labels --remove-labels "$REMOVE_LABELS"
