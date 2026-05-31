@@ -40,6 +40,7 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _github_api import apply_call
+from _hook_runtime import emit_decision, read_event
 
 _TARGET_TOOL = "mcp__github__issue_write"
 _CLOSE_STATE = "closed"
@@ -206,14 +207,8 @@ def decide(
 
 def main(argv: list[str] | None = None) -> int:
     del argv
-    raw = sys.stdin.read()
-    try:
-        event = json.loads(raw) if raw.strip() else {}
-    except json.JSONDecodeError as exc:
-        print(
-            f"::error::issue_closure_fast_path: malformed stdin JSON: {exc}",
-            file=sys.stderr,
-        )
+    event = read_event("issue_closure_fast_path")
+    if event is None:
         return 0
     if not isinstance(event, dict):
         return 0
@@ -223,9 +218,7 @@ def main(argv: list[str] | None = None) -> int:
     if not isinstance(tool_input, dict):
         tool_input = {}
 
-    output = decide(tool_name, tool_input)
-    if output is not None:
-        sys.stdout.write(json.dumps(output))
+    emit_decision(decide(tool_name, tool_input))
     return 0
 
 

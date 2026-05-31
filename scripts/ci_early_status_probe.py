@@ -20,6 +20,7 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _github_api import apply_call
+from _hook_runtime import emit_decision, read_event
 
 _TARGET_TOOLS: frozenset[str] = frozenset(
     {
@@ -268,17 +269,12 @@ def decide(
 
 def main(argv: list[str] | None = None) -> int:
     del argv
-    raw = sys.stdin.read()
-    try:
-        event = json.loads(raw) if raw.strip() else {}
-    except json.JSONDecodeError as exc:
-        print(f"::error::ci_early_status_probe: malformed stdin JSON: {exc}", file=sys.stderr)
+    event = read_event("ci_early_status_probe")
+    if event is None:
         return 0
     if not isinstance(event, dict):
         return 0
-    decision = decide(event)
-    if decision is not None:
-        sys.stdout.write(json.dumps(decision))
+    emit_decision(decide(event))
     return 0
 
 
