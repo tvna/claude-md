@@ -26,7 +26,9 @@ from __future__ import annotations
 
 import argparse
 import json
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 
 def parse_dependabot_labels(yaml_text: str) -> list[str]:
@@ -66,20 +68,57 @@ def parse_dependabot_labels(yaml_text: str) -> list[str]:
     return labels
 
 
+@dataclass(frozen=True)
+class LabelDefinition:
+    """Typed boundary model for one .github/labels.json entry."""
+
+    name: str
+    color: str
+    description: str
+
+    @classmethod
+    def from_raw(cls, raw: Any, index: int) -> LabelDefinition:
+        path = f"labels.json[{index}]"
+        if not isinstance(raw, dict):
+            raise ValueError(f"{path} must be an object")
+
+        expected = {"name", "color", "description"}
+        missing = sorted(expected - raw.keys())
+        if missing:
+            raise ValueError(
+                f"{path} missing required field(s): {', '.join(missing)}"
+            )
+        unexpected = sorted(raw.keys() - expected)
+        if unexpected:
+            raise ValueError(
+                f"{path} has unsupported field(s): {', '.join(unexpected)}"
+            )
+
+        name = _required_string(raw, "name", path)
+        color = _required_string(raw, "color", path)
+        description = _required_string(raw, "description", path, allow_empty=True)
+        if len(color) != 6 or any(
+            char not in "0123456789abcdefABCDEF" for char in color
+        ):
+            raise ValueError(f"{path}.color must be exactly six hexadecimal digits")
+
+        return cls(name=name, color=color, description=description)
+
+
+def load_sot_labels(json_text: str) -> list[LabelDefinition]:
+    """Return typed label definitions from a labels.json document."""
+    raw_labels = json.loads(json_text)
+    if not isinstance(raw_labels, list):
+        raise ValueError("labels.json must be a JSON array")
+    return [
+        LabelDefinition.from_raw(raw_label, index)
+        for index, raw_label in enumerate(raw_labels)
+    ]
+
+
 def load_sot_label_names(json_text: str) -> set[str]:
     """Return the set of ``name`` fields from a labels.json document."""
-    data = json.loads(json_text)
-    if not isinstance(data, list):
-        raise ValueError("labels.json must be a JSON array")
-    names: set[str] = set()
-    for entry in data:
-        if not isinstance(entry, dict):
-            raise ValueError("labels.json entries must be objects")
-        name = entry.get("name")
-        if not isinstance(name, str) or not name:
-            raise ValueError("labels.json entry missing non-empty 'name'")
-        names.add(name)
-    return names
+    return {label.name for label in load_sot_labels(json_text)}
 
 
 def find_drift(referenced: list[str], defined: set[str]) -> list[str]:
@@ -90,6 +129,20 @@ def find_drift(referenced: list[str], defined: set[str]) -> list[str]:
 def _unquote(value: str) -> str:
     if len(value) >= 2 and value[0] == value[-1] and value[0] in ('"', "'"):
         return value[1:-1]
+    return value
+
+
+def _required_string(
+    raw: dict[str, Any],
+    key: str,
+    path: str,
+    *,
+    allow_empty: bool = False,
+) -> str:
+    value = raw[key]
+    if not isinstance(value, str) or (not allow_empty and not value):
+        empty = "" if allow_empty else "non-empty "
+        raise ValueError(f"{path}.{key} must be a {empty}string")
     return value
 
 
