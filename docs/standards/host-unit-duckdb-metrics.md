@@ -50,7 +50,7 @@ Two consequences follow and bound everything below:
   | devcontainer (claude) | `/home/claude/.claude/metrics.duckdb` |
   | devcontainer (codex) | `/home/codex/.codex/metrics.duckdb` |
   | local machine / Codespaces / other persistent host | `$HOME/.local/state/claude-md/metrics.duckdb` |
-  | CI runners (GitHub Actions etc.) | — (ephemeral; no write path in v1) |
+  | CI runners / Claude agent / web sessions (ephemeral) | -- (out of measurement scope; see *Ephemeral-environment measurement boundary*) |
 
   The devcontainer paths land inside the named Docker volumes
   (`claude-md-claude-session` and `claude-md-codex-session`) that are already
@@ -77,10 +77,68 @@ Two consequences follow and bound everything below:
   measured change). No rotation is required for v1; if a host's file is lost it
   is rebuilt by re-recording from `main`'s history. Because it is host-local
   state, losing it costs reproducible work, not irreplaceable data.
+- **Ephemeral environments record nothing -- by decision, not by accident.**
+  Claude agent / web / CI sessions are explicitly out of measurement scope; see
+  *Ephemeral-environment measurement boundary* below for the recorded decision
+  and the options it resolves (Refs #826).
 - **duckdb is intentionally NOT a repository dependency.** The only runtime
   Python dependency stays `pyyaml`. The schema is plain SQL executed by the
   DuckDB CLI (or any DuckDB binding) that the operator already has. This keeps
   the strict `uv` dependency surface untouched (see *Out of scope*).
+
+## Ephemeral-environment measurement boundary (decision, Refs #826)
+
+The write path above is operator-local by design: one durable DuckDB file per
+host, written by an operator-local step, with no CI write path in v1. That
+leaves an implicit gap -- measurement produced inside an **ephemeral** Claude
+agent / web / CI environment persists nowhere. This section records the
+deliberate decision that closes the gap as an explicit, documented boundary
+rather than a silent exception to the "collect early, do not abandon early
+collection" premise that motivates this contract (Refs #815).
+
+**Facts that bound the decision (measured on the agent container):**
+
+- No `duckdb` runtime is installed (no CLI, no Python module, none in the `uv`
+  env), and `duckdb` is intentionally not a repository dependency.
+- No `.duckdb` file exists, and the container filesystem is ephemeral: the repo
+  is cloned fresh on start and reclaimed on inactivity / session end.
+- `*.duckdb` is git-ignored (Refs #88), so a database file is never committed.
+
+An agent / web / CI session therefore cannot contribute a measurement row to any
+durable store today: the data would be lost twice over (ephemeral filesystem
+plus git-ignore).
+
+**Options considered:**
+
+- **(A) Accept and document the boundary.** Agent / web / CI sessions are
+  explicitly out of measurement scope; only durable operator hosts record rows.
+  Lowest cost; no new infrastructure; the proportionality signal is openly
+  partial.
+- (B) Per-session export at session end -- emit OTLP-shaped rows to an external
+  sink or OTLP collector before the container is reclaimed. Requires an egress
+  destination and must honour the #88 anonymization and #824 redaction
+  contracts.
+- (C) Commit a redacted, aggregated row to a durable branch or artifact (never
+  the raw `*.duckdb`). Requires a reviewed write path.
+
+**Decision: (A) -- accept and document the boundary.** Ephemeral agent / web /
+CI sessions are explicitly **out of measurement scope**; only durable operator
+hosts record rows. This is consistent with the v1 "no CI write path" stance
+(see the lifecycle table and *Out of scope*): the same ephemerality that
+excludes CI runners excludes agent / web sessions. The signal is therefore
+**openly partial by record** -- changes made in an ephemeral session are
+knowingly absent from the store, not silently dropped -- which removes the
+silent bias an undocumented boundary would introduce toward changes made on
+durable hosts.
+
+Options (B) and (C) are **not adopted now**: each requires infrastructure this
+contract deliberately excludes (an egress destination, or a reviewed
+commit-a-row write path) and would re-open the anonymization / redaction surface
+(#88, #824) without a present need. They remain available re-entry points if the
+partial signal ever proves insufficient; revisiting either is a fresh decision,
+not an implicit default. Because option (A) records no rows from ephemeral
+environments, **no implementation follow-up is required and none is opened** --
+#826 closes as "boundary accepted and documented".
 
 ## OTLP-compatible schema
 
@@ -261,7 +319,11 @@ their still-valid requirements are carried into the columns above.
   schema is dependency-free plain SQL. Revisit only if an in-repo automated
   recorder is ever justified.
 - **A CI write path or a CI gate over the store.** Excluded for v1 (ephemeral
-  runners, no host-local DB). A future phase could add a host-scheduled recorder.
+  runners, no host-local DB). The ephemeral agent / web / CI measurement
+  boundary is now an explicit recorded decision -- option (A), accept and
+  document -- not an implicit gap (Refs #826; see *Ephemeral-environment
+  measurement boundary*). A future phase could still add a host-scheduled
+  recorder, or re-open option (B)/(C) as a fresh decision.
 - **The cross-host OTLP collector and its aggregation pipeline.** The export
   view makes this a later, additive step.
 - **The OTLP *logs* signal (operational session logs, e.g. commit-signing
@@ -309,6 +371,7 @@ unrelated regression is introduced (`pytest`).
 
 - [#815](https://github.com/tvna/claude-md/issues/815) -- this contract (host-unit DuckDB store).
 - [#824](https://github.com/tvna/claude-md/issues/824) -- OTLP logs extension (schema v2: redacted operational session logs).
+- [#826](https://github.com/tvna/claude-md/issues/826) -- ephemeral-environment measurement boundary (decision: option (A), accept and document).
 - [#814](https://github.com/tvna/claude-md/issues/814) -- parent: Section 5 quality-scalability proportionality reframe.
 - [#226](https://github.com/tvna/claude-md/issues/226) -- CLAUDE.md / AGENTS.md evolution tracker.
 - [#89](https://github.com/tvna/claude-md/issues/89) -- instruction-source versioning (OPEN; provides `compiled_source_version`).
