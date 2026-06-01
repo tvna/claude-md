@@ -243,6 +243,15 @@ _AUTO_FILLED_CLOSE = "<!-- /auto-filled:repair-history -->"
 _APPENDED_OPEN = "<!-- appended-follow-up-fixes -->"
 _APPENDED_CLOSE = "<!-- /appended-follow-up-fixes -->"
 
+# Visible sentinels marking an unfilled Repair history Cause / Next action
+# cell. They let verify_retro_repair_completeness mechanically detect rows
+# the operator has not yet completed. Static strings keep build_retro_body
+# byte-identical on event re-run.
+_REPAIR_CAUSE_FILL = "(fill: cause -- how this repair arose)"
+_REPAIR_NEXT_ACTION_FILL = (
+    "(fill: next action -- gate or issue to prevent recurrence)"
+)
+
 
 @dataclass(frozen=True)
 class VerificationPair:
@@ -381,6 +390,7 @@ class RepairHistoryRow:
     repair: str
     detail: str
     policy_artifact: bool = False
+    next_action: str = ""
 
 
 def _count_merge_from_main(subjects: list[str]) -> int:
@@ -1331,7 +1341,14 @@ def _repair_history_rows(
             parts.append(f"logs: {html_url}")
         if summary:
             parts.append(f"annotation: {summary}")
-        rows.append(RepairHistoryRow(f"CI fail: {name}", "; ".join(parts)))
+        detail = "; ".join(parts) or _REPAIR_CAUSE_FILL
+        rows.append(
+            RepairHistoryRow(
+                f"CI fail: {name}",
+                detail,
+                next_action=_REPAIR_NEXT_ACTION_FILL,
+            )
+        )
 
     overflow = total_failed - _CHECK_RUN_DISPLAY_CAP
     if overflow > 0:
@@ -1339,6 +1356,7 @@ def _repair_history_rows(
             RepairHistoryRow(
                 f"CI fail: + {overflow} more failures",
                 "see PR check-run list (truncated)",
+                next_action=_REPAIR_NEXT_ACTION_FILL,
             )
         )
 
@@ -1371,6 +1389,7 @@ def _repair_history_rows(
                     f"{_POLICY_ARTIFACT_MARKER} `{subject}` -- "
                     "canonical fix commit on fix-typed PR",
                     policy_artifact=True,
+                    next_action="--",
                 )
             )
             continue
@@ -1385,6 +1404,7 @@ def _repair_history_rows(
                     f"{_POLICY_ARTIFACT_MARKER} `{subject}` -- "
                     "signals an earlier silent failure",
                     policy_artifact=True,
+                    next_action="--",
                 )
             )
 
@@ -1399,6 +1419,7 @@ def _repair_history_rows(
                     f"{_POLICY_ARTIFACT_MARKER} `{subject}` -- "
                     "rebase debt before merge",
                     policy_artifact=True,
+                    next_action="--",
                 )
             )
 
@@ -1409,6 +1430,7 @@ def _repair_history_rows(
                 f"{_POLICY_ARTIFACT_MARKER} {pr_commit_count} "
                 "commits squash-merged",
                 policy_artifact=True,
+                next_action="--",
             )
         )
 
@@ -1419,6 +1441,7 @@ def _repair_history_rows(
             RepairHistoryRow(
                 f"Verification fail: {pair.command}",
                 f"observed: {pair.result}",
+                next_action=_REPAIR_NEXT_ACTION_FILL,
             )
         )
 
@@ -1457,18 +1480,20 @@ def _build_repair_history_table(
     )
 
     header = (
-        "| # | Repair | What the reviewer / gate caught |\n"
-        "|---|--------|----------------------------------|\n"
+        "| # | Repair | Cause | Next action |\n"
+        "|---|--------|-------|-------------|\n"
     )
     if not rows:
         return (
             header
             + "| -- | (no automated repair signals detected) "
-            "| positive-control: no repair taxonomy classification requested |\n"
+            "| positive-control: no repair taxonomy classification requested "
+            "| -- |\n"
         )
     body_rows = "".join(
         f"| {idx} | {_escape_table_cell(row.repair)} "
-        f"| {_escape_table_cell(row.detail)} |\n"
+        f"| {_escape_table_cell(row.detail)} "
+        f"| {_escape_table_cell(row.next_action)} |\n"
         for idx, row in enumerate(rows, start=1)
     )
     footnote = ""
@@ -1555,6 +1580,8 @@ def build_retro_body(
     verification_block = (
         "- Every repair in the table has a classification from the "
         "section 3 taxonomy.\n"
+        "- Every non-artifact repair row has a non-empty Cause and Next "
+        "action cell (no '(fill: ...)' sentinel remains).\n"
         "- Every repair has a named earliest prevention point.\n"
         "- The no-repair reproduction path matches what would happen if "
         "the deterministic gates from this retrospective were in place.\n"
@@ -1563,6 +1590,8 @@ def build_retro_body(
     )
     acceptance_block = (
         "- [ ] Repair history table complete.\n"
+        "- [ ] Every non-artifact repair row has Cause and Next action "
+        "filled.\n"
         "- [ ] Each repair classified with the section 3 taxonomy.\n"
         "- [ ] Each repair has an earliest prevention point.\n"
         "- [ ] No-repair reproduction path stated.\n"
@@ -1609,7 +1638,9 @@ def build_retro_body(
         "\n"
         "<!-- auto-filled:repair-history -->\n"
         "1. Repair history -- the table below is pre-filled from "
-        "check_runs + commit subjects. Edit only to add missed repairs.\n"
+        "check_runs + commit subjects. Fill the Next action cell of every "
+        "non-artifact row; edit Cause only to correct or add missed "
+        "repairs.\n"
         "\n"
         f"{repair_table}"
         "<!-- /auto-filled:repair-history -->\n"
@@ -1634,6 +1665,83 @@ def build_retro_body(
         "rows: classification, prevention point, no-repair path, "
         "follow-ups)._\n"
     )
+
+
+def verify_retro_repair_completeness(body: str) -> list[str]:
+    """Return ``::error::`` strings for unfilled Repair history rows.
+
+    Scans the ``<!-- auto-filled:repair-history -->`` block of a retro
+    issue body and flags every non-artifact data row whose Cause cell
+    (column 3) or Next action cell (column 4) is empty or still carries
+    a ``(fill: ...)`` sentinel. Pure function consumed by the
+    ``verify-retro-completeness`` CLI gate.
+
+    Fail-safe by construction:
+
+    - When the auto-filled block is absent the body is not a generated
+      retro, so ``[]`` is returned (nothing to enforce).
+    - Header and separator rows are skipped.
+    - Rows carrying the ``[policy-artifact]`` marker are exempt (forced
+      by repository merge policy, not actionable repairs), as is the
+      positive-control no-signal sentinel row.
+
+    A row with fewer than four cells is malformed and itself reported as
+    an ``::error::``. Returns ``[]`` when the table is well-formed.
+    """
+    open_idx = body.find(_AUTO_FILLED_OPEN)
+    close_idx = body.find(_AUTO_FILLED_CLOSE)
+    if open_idx == -1 or close_idx == -1 or close_idx < open_idx:
+        return []
+    block = body[open_idx:close_idx]
+    errors: list[str] = []
+    for line in block.splitlines():
+        stripped = line.strip()
+        if not (stripped.startswith("|") and stripped.endswith("|")):
+            continue
+        # Header row.
+        if "# | Repair" in stripped:
+            continue
+        # Separator row: only dashes / pipes / spaces / colons.
+        if set(stripped) <= set("|-: "):
+            continue
+        # Exemptions: policy-artifact rows and the positive-control row.
+        if _POLICY_ARTIFACT_MARKER in stripped:
+            continue
+        if "(no automated repair signals detected)" in stripped:
+            continue
+        # Split into cells: drop the leading/trailing pipe, then split on
+        # UNescaped pipes only. _escape_table_cell renders an in-cell pipe
+        # (e.g. a verification command like `grep x | wc -l`) as ``\|``;
+        # a naive split("|") would over-split that row and shift the Cause
+        # / Next action columns, silently passing an unfilled retro. The
+        # negative lookbehind keeps escaped pipes inside their cell, and we
+        # unescape them back for the emptiness / sentinel checks.
+        cells = [
+            cell.strip().replace("\\|", "|")
+            for cell in re.split(r"(?<!\\)\|", stripped[1:-1])
+        ]
+        repair_name = cells[1] if len(cells) > 1 else "(unknown)"
+        if len(cells) < 4:
+            errors.append(
+                f"::error::repair row '{repair_name}' is malformed: "
+                f"expected 4 cells (# | Repair | Cause | Next action), "
+                f"got {len(cells)}."
+            )
+            continue
+        cause = cells[2]
+        next_action = cells[3]
+        if not cause or "(fill:" in cause:
+            errors.append(
+                f"::error::repair row '{repair_name}' has an empty or "
+                f"unfilled Cause cell (a '(fill: ...)' sentinel remains)."
+            )
+        if not next_action or "(fill:" in next_action:
+            errors.append(
+                f"::error::repair row '{repair_name}' has an empty or "
+                f"unfilled Next action cell (a '(fill: ...)' sentinel "
+                f"remains)."
+            )
+    return errors
 
 
 def find_target_retro_from_refs(
@@ -1668,11 +1776,12 @@ def find_target_retro_from_refs(
     return None
 
 
-def render_appended_row(pr: MergedPR) -> tuple[str, str]:
-    """Render the (left, right) markdown cells for a follow-up fix row."""
+def render_appended_row(pr: MergedPR) -> tuple[str, str, str]:
+    """Render the (repair, cause, next_action) cells for a follow-up fix row."""
     return (
         _escape_table_cell(f"Follow-up fix PR: #{pr.number}"),
         _escape_table_cell(f"`{pr.title}` merged at {pr.merged_at}"),
+        _escape_table_cell(_REPAIR_NEXT_ACTION_FILL),
     )
 
 
@@ -1688,7 +1797,7 @@ def _next_table_index(table_text: str) -> int:
 
 
 def _insert_appended_row(
-    body: str, row: tuple[str, str], pr_number: int
+    body: str, row: tuple[str, str, str], pr_number: int
 ) -> tuple[str, bool]:
     """Append a row to the retro body's auto-filled block.
 
@@ -1708,7 +1817,7 @@ def _insert_appended_row(
     if needle.search(block):
         return body, False
     next_idx = _next_table_index(block)
-    new_line = f"| {next_idx} | {row[0]} | {row[1]} |\n"
+    new_line = f"| {next_idx} | {row[0]} | {row[1]} | {row[2]} |\n"
     new_body = body[:close_idx] + new_line + body[close_idx:]
     return new_body, True
 
@@ -3417,6 +3526,73 @@ def _cmd_triage_report(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_verify_retro_completeness(args: argparse.Namespace) -> int:
+    """Gate a ``fix(auto-retro):`` PR on Repair history Cause/Next action.
+
+    Skips (exit 0) for any PR that is not a retro-close PR, or whose body
+    links no retro issue, or whose linked retro cannot be fetched -- the
+    gate must never block an unrelated PR or a transient API failure. When
+    the linked retro is readable, it fails (exit 1) only if a non-artifact
+    repair row still carries an empty / sentinel Cause or Next action cell.
+    """
+    repo = (
+        args.repo
+        or os.environ.get("REPO")
+        or os.environ.get("GITHUB_REPOSITORY")
+    )
+    if not repo:
+        print(
+            "::error::missing --repo / $REPO / $GITHUB_REPOSITORY",
+            file=sys.stderr,
+        )
+        return 1
+    pr_title = args.pr_title or os.environ.get("TITLE") or ""
+    if not is_retro_pr(pr_title):
+        print("skip: not a retro-close PR")
+        return 0
+    if args.pr_body_file:
+        try:
+            pr_body = Path(args.pr_body_file).read_text(encoding="utf-8")
+        except OSError as exc:
+            print(
+                f"::error::cannot read --pr-body-file "
+                f"{args.pr_body_file}: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+    else:
+        pr_body = os.environ.get("PR_BODY") or ""
+
+    refs = extract_refs(strip_html_comments(pr_body))
+    titles = fetch_issue_titles(repo, refs)
+    target: int | None = None
+    for number in refs:
+        title = titles.get(number)
+        if title is not None and is_retro_issue_title(title):
+            target = number
+            break
+    if target is None:
+        print("skip: no linked retro issue")
+        return 0
+
+    body = fetch_issue_body(repo, target)
+    if not body:
+        # fail-safe: a retro we cannot read must not block the PR.
+        print(f"skip: retro issue #{target} body unavailable")
+        return 0
+
+    errors = verify_retro_repair_completeness(body)
+    if errors:
+        for error in errors:
+            print(error)
+        return 1
+    print(
+        f"OK: retro issue #{target} repair history has Cause and "
+        f"Next action filled for every non-artifact row."
+    )
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -3511,6 +3687,24 @@ def main(argv: list[str] | None = None) -> int:
         help=f"Markdown output path (default {_TRIAGE_REPORT_DOC_PATH}).",
     )
     p_triage.set_defaults(func=_cmd_triage_report)
+
+    p_verify = sub.add_parser(
+        "verify-retro-completeness",
+        help=(
+            "Gate a fix(auto-retro): PR on its linked retro issue having "
+            "Cause + Next action filled for every non-artifact repair row. "
+            "Skips (exit 0) for non-retro-close PRs. Refs #1058."
+        ),
+    )
+    p_verify.add_argument("--repo", help="Override $REPO (owner/name).")
+    p_verify.add_argument(
+        "--pr-title", help="Override $TITLE (the PR title)."
+    )
+    p_verify.add_argument(
+        "--pr-body-file",
+        help="Path to a file holding the PR body (else env $PR_BODY).",
+    )
+    p_verify.set_defaults(func=_cmd_verify_retro_completeness)
 
     args = parser.parse_args(argv)
     try:
