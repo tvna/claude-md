@@ -108,6 +108,28 @@ Do not apply `type:tracking` to an issue that a single PR closes via
 pick the conventional type that fits the work (for example `chore`, `docs`,
 or `ci`) and mark the umbrella with the label, not with the title prefix.
 
+### Retrospective Issue Kind Label
+
+One-off retrospective issues (`fix(auto-retro): review PR #N repair loops`,
+detected by `scripts/auto_retro.py:is_retro_issue_title`) are closed by a
+single retro PR, so they are normal issues under the `type:*` exactly-one
+rule. Their canonical kind label is `type:docs`: a retrospective records an
+operator-facing process finding and none of `feat`/`fix`/`refactor` fits.
+They must not carry `type:tracking` (a single PR closes them; see the
+`type:tracking` rule above), and the ad-hoc `retrospective` and
+`type:retrospective` labels are not declared families and must not be used.
+
+Today `scripts/auto_retro.py:issue_labels` still emits the retired
+`layer:meta` alongside `type:docs`, and the retro-discovery queries in
+`fetch_past_retro_labels`, `search_open_retro_issues`, and
+`scripts/scan_retro_followup_drift.py` use `label:layer:meta` as the retro
+identity key. Because `type:docs` is not retro-unique, dropping `layer:meta`
+requires re-keying retro discovery on the title predicate
+(`is_retro_issue_title`) rather than the label. That re-key, the `layer:meta`
+removal, and the backfill of existing retros are migration work owned by #972
+(see Migration Boundary); this section records the design decision only.
+Refs #1060, #1050.
+
 ## Severity And Threat Labels
 
 `threat:*` is retained as an overlay axis because it records security
@@ -194,3 +216,12 @@ Issue #972 owns rollout. It must update label writers, readers, issue
 templates, tests, backfill assignments, and then run `apply-labels.yml` with
 `prune=true` only after the dry-run plan contains exactly the authorized
 delete set.
+
+For retrospectives specifically, #972 must: stop `scripts/auto_retro.py:issue_labels`
+emitting `layer:meta`; re-key retro discovery in `scripts/auto_retro.py`
+(`fetch_past_retro_labels`, `search_open_retro_issues`) and
+`scripts/scan_retro_followup_drift.py` off the `is_retro_issue_title`
+predicate instead of `label:layer:meta`; backfill #963, #929, and #957 to
+`type:docs` (removing `type:tracking`, `retrospective`, and
+`type:retrospective`); and prune the undeclared `retrospective` and
+`type:retrospective` labels. Refs #1060.
