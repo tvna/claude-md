@@ -89,6 +89,7 @@ than serving as precedent for new PRD files.
 | [readme-translation-drift.md](runbooks/readme-translation-drift.md) | Deterministic gate that fails a PR when `README.md` changes without matching `README.ja.md` / `README.zh.md` updates, plus the opt-out marker procedure. | #476 | `scripts/verify_readme_translation.py`; `.github/workflows/portable-pr-policy.yml` (`gate` job); `README.md`; `README.ja.md`; `README.zh.md` |
 | [update-pr-branch-recovery.md](runbooks/update-pr-branch-recovery.md) | Recovery procedure for when a PR branch falls behind `main`; replaces the blocked `mcp__github__update_pull_request_branch` with a new-branch-from-main approach. | #893 | `scripts/gate_update_pr_branch.py` |
 | [revert-first-rollback.md](runbooks/revert-first-rollback.md) | Default-to-`git revert` procedure for rollback / undo intents: identifying the commit/PR set, revert ordering, tree-parity verification, and the conditions that justify a manual fallback. Knowledge source for the planned rollback skill. | #1020 | `.apm/instructions/master.instructions.md` (section 3) |
+| [pre-merge-retro-survey.md](runbooks/pre-merge-retro-survey.md) | Claude-only PreToolUse gate that blocks merge until a satisfaction-first, scenario-branched retro survey runs via `AskUserQuestion`, with a Mermaid diagram of the branching flow. | #1052 | `scripts/gate_merge_retro_survey_askuserquestion.py`; `.claude/settings.json`; `scripts/scan_hook_coverage_drift.py`; `scripts/gate_decision_handoff_askuserquestion.py` |
 
 ## generated/ -- checked-in generated views
 
@@ -111,6 +112,7 @@ Source: `python3 scripts/workflow_diagram.py diagram-doc`. Tracking issue: #960.
 | [workflows/attack-coverage-review-reminder-if-branches.md](generated/workflows/attack-coverage-review-reminder-if-branches.md) | `attack-coverage-review-reminder.yml` |
 | [workflows/auto-retro-post-merge-rescan-if-branches.md](generated/workflows/auto-retro-post-merge-rescan-if-branches.md) | `auto-retro-post-merge-rescan.yml` |
 | [workflows/auto-retro-sentinel-if-branches.md](generated/workflows/auto-retro-sentinel-if-branches.md) | `auto-retro-sentinel.yml` |
+| [workflows/auto-retro-triage-report-if-branches.md](generated/workflows/auto-retro-triage-report-if-branches.md) | `auto-retro-triage-report.yml` |
 | [workflows/backup-non-ascii-originals-if-branches.md](generated/workflows/backup-non-ascii-originals-if-branches.md) | `backup-non-ascii-originals.yml` |
 | [workflows/dependabot-automerge-if-branches.md](generated/workflows/dependabot-automerge-if-branches.md) | `dependabot-automerge.yml` |
 | [workflows/generate-agents-if-branches.md](generated/workflows/generate-agents-if-branches.md) | `generate-agents.yml` |

@@ -109,10 +109,12 @@ class WorkflowInvocation(NamedTuple):
 CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("analyze_ci_timings.py", None): "test_analyze_ci_timings_matches_workflow_args",
     ("auto_retro.py", "decision-tree-doc"): "test_auto_retro_decision_tree_doc_matches_workflow_args",
+    ("auto_retro.py", "triage-report"): "test_auto_retro_triage_report_matches_workflow_env",
     ("workflow_diagram.py", "diagram-doc"): "test_workflow_diagram_doc_matches_workflow_args",
     ("auto_retro.py", "run"): "test_auto_retro_run_matches_workflow_env",
     ("auto_retro.py", "post-merge-rescan"): "test_auto_retro_post_merge_rescan_matches_workflow_env",
     ("auto_retro.py", "sentinel"): "test_auto_retro_sentinel_matches_workflow_env",
+    ("auto_retro.py", "verify-retro-completeness"): "test_auto_retro_verify_retro_completeness_matches_workflow_args",
     ("body_policy.py", "verify"): "test_body_policy_verify_matches_workflow_body_file",
     ("branch_cleanup.py", "reconcile"): "test_branch_cleanup_reconcile_matches_workflow_args",
     ("branch_cleanup.py", "survey"): "test_branch_cleanup_survey_matches_workflow_args",
@@ -350,6 +352,40 @@ def test_auto_retro_sentinel_matches_workflow_env(
     assert auto_retro.main(["sentinel"]) == 0
 
 
+def test_auto_retro_verify_retro_completeness_matches_workflow_args(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Mirror the argv + env shape used by portable-pr-policy.yml.
+
+    The workflow shells to ``python3 scripts/auto_retro.py
+    verify-retro-completeness --repo "$REPO" --pr-title "$TITLE"
+    --pr-body-file "$body_file"``. A non-retro PR title must skip
+    (exit 0) without touching the gh_api boundary. Refs #1058.
+    """
+    body_file = tmp_path / "body.md"
+    body_file.write_text("Refs #1\n", encoding="utf-8")
+    monkeypatch.setattr(
+        auto_retro,
+        "gh_api",
+        lambda *_a, **_kw: pytest.fail("gh_api must not be called for a non-retro PR"),
+    )
+
+    assert (
+        auto_retro.main(
+            [
+                "verify-retro-completeness",
+                "--repo",
+                REPO,
+                "--pr-title",
+                "feat(x): unrelated change",
+                "--pr-body-file",
+                str(body_file),
+            ]
+        )
+        == 0
+    )
+
+
 def test_auto_retro_post_merge_rescan_matches_workflow_env(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -379,6 +415,28 @@ def test_auto_retro_decision_tree_doc_matches_workflow_args(
 
     assert output.read_text(encoding="utf-8") == (
         auto_retro.render_decision_tree_markdown()
+    )
+
+
+def test_auto_retro_triage_report_matches_workflow_env(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Mirror the env + default-output shape used by the triage-report workflow."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("REPO", REPO)
+    # The workflow shells out to `gh api`; stub it so the contract test is
+    # hermetic. An empty population still exercises the full write path.
+    monkeypatch.setattr(
+        auto_retro, "gh_api", lambda *_a, **_kw: json.dumps({"items": []})
+    )
+
+    assert auto_retro.main(["triage-report"]) == 0
+
+    output = Path("docs/generated/scripts/auto-retro-triage-report.md")
+    assert output.read_text(encoding="utf-8") == (
+        auto_retro.render_triage_report_markdown(
+            auto_retro.compute_triage_report([])
+        )
     )
 
 

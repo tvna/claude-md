@@ -218,6 +218,15 @@
         ]
       },
       {
+        "matcher": "mcp__github__merge_pull_request",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 scripts/gate_merge_retro_survey_askuserquestion.py"
+          }
+        ]
+      },
+      {
         "matcher": "mcp__github__",
         "hooks": [
           {
