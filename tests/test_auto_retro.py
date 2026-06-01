@@ -258,15 +258,17 @@ class TestBuildRetroTitle:
             (9, "Freeform title"),
         ],
     )
-    def test_emits_canonical_fix_auto_retro_title(
+    def test_emits_canonical_chore_auto_retro_title(
         self, number: int, source_title: str
     ) -> None:
-        """The retro title is a fixed fix(auto-retro) token regardless of
-        the source PR's own type(scope)."""
+        """The retro title is a fixed chore(auto-retro) token regardless of
+        the source PR's own type(scope). The neutral chore prefix avoids the
+        fix(...) reading that invited direct PRs off un-triaged retros
+        (Refs #1069)."""
         pr = _make_pr(number=number, title=source_title)
         assert (
             ar.build_retro_title(pr)
-            == f"fix(auto-retro): review PR #{number} repair loops"
+            == f"chore(auto-retro): review PR #{number} repair loops"
         )
 
     @pytest.mark.parametrize(
@@ -945,6 +947,44 @@ class TestFindExistingRetro:
             {"number": 12, "title": "Fix(Auto-Retro): review PR #42 repair loops"}
         ]
         assert ar.find_existing_retro(items, 42) == 12
+
+    def test_matches_new_chore_prefix(self) -> None:
+        """New auto-retros use the chore(auto-retro) prefix (Refs #1069)."""
+        items = [
+            {"number": 13, "title": "chore(auto-retro): review PR #42 repair loops"}
+        ]
+        assert ar.find_existing_retro(items, 42) == 13
+
+
+class TestIsRetroIssueTitle:
+    @pytest.mark.parametrize(
+        "title",
+        [
+            "chore(auto-retro): review PR #42 repair loops",
+            "fix(auto-retro): review PR #42 repair loops",
+            "Chore(Auto-Retro): review PR #42 repair loops",
+            "  chore(auto-retro): leading whitespace",
+        ],
+    )
+    def test_matches_current_and_legacy_prefix(self, title: str) -> None:
+        """Both the new chore prefix and the legacy fix prefix are
+        recognized so dedup and the gate keep covering unrenamed closed
+        retros (Refs #1069)."""
+        assert ar.is_retro_issue_title(title) is True
+
+    @pytest.mark.parametrize(
+        "title",
+        [
+            "retro: review PR #42 repair loops",
+            "retro(fix): review PR #42 repair loops",
+            "feat(auto-retro): not a retro issue shape",
+            "docs(auto-retro): record repair-free merge",
+            "feat: unrelated",
+            "",
+        ],
+    )
+    def test_rejects_non_retro_titles(self, title: str) -> None:
+        assert ar.is_retro_issue_title(title) is False
 
 
 class TestIssueLabels:
@@ -3357,6 +3397,157 @@ class TestVerifyRetroCompletenessCli:
         )
         assert rc == 0
         assert "body unavailable" in capsys.readouterr().out
+
+
+class TestFindLinkedRetroRefs:
+    def test_returns_retro_refs_only(self) -> None:
+        body = "Closes #5\nRefs #900\n"
+        titles = {
+            5: "feat(x): unrelated follow-up",
+            900: "chore(auto-retro): review PR #898 repair loops",
+        }
+        assert ar.find_linked_retro_refs(body, titles) == [900]
+
+    def test_matches_legacy_fix_prefix(self) -> None:
+        body = "Closes #900\n"
+        titles = {900: "fix(auto-retro): review PR #898 repair loops"}
+        assert ar.find_linked_retro_refs(body, titles) == [900]
+
+    def test_skips_unfetched_titles(self) -> None:
+        body = "Closes #900\n"
+        assert ar.find_linked_retro_refs(body, {}) == []
+
+    def test_empty_when_no_retro(self) -> None:
+        body = "Closes #5\n"
+        titles = {5: "feat(x): real work"}
+        assert ar.find_linked_retro_refs(body, titles) == []
+
+
+class TestVerifyNoDirectRetroPrCli:
+    """The verify-no-direct-retro-pr subcommand skip/fail/pass paths (Refs #1069)."""
+
+    _RETRO_TITLE = "chore(auto-retro): review PR #900 repair loops"
+
+    def test_skip_when_pr_is_retro_close(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        rc = ar.main(
+            [
+                "verify-no-direct-retro-pr",
+                "--repo",
+                "o/r",
+                "--pr-title",
+                "docs(auto-retro): record repair-free merge",
+                "--pr-body-file",
+                "/dev/null",
+            ]
+        )
+        assert rc == 0
+        assert "skip: PR is a retro-close PR" in capsys.readouterr().out
+
+    def test_skip_when_no_linked_issue(
+        self, tmp_path: Any, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        body_file = tmp_path / "body.md"
+        body_file.write_text("No issue link here.\n", encoding="utf-8")
+        rc = ar.main(
+            [
+                "verify-no-direct-retro-pr",
+                "--repo",
+                "o/r",
+                "--pr-title",
+                "fix(x): real work",
+                "--pr-body-file",
+                str(body_file),
+            ]
+        )
+        assert rc == 0
+        assert "links no issue" in capsys.readouterr().out
+
+    def test_skip_when_linked_issue_not_retro(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Any,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        body_file = tmp_path / "body.md"
+        body_file.write_text("Closes #5\n", encoding="utf-8")
+
+        def fake_api(method, path, body=None, **_kw):
+            return json.dumps({"title": "feat(x): a normal issue"})
+
+        monkeypatch.setattr(ar, "gh_api", fake_api)
+        rc = ar.main(
+            [
+                "verify-no-direct-retro-pr",
+                "--repo",
+                "o/r",
+                "--pr-title",
+                "fix(x): real work",
+                "--pr-body-file",
+                str(body_file),
+            ]
+        )
+        assert rc == 0
+        assert "skip: no linked retro issue" in capsys.readouterr().out
+
+    def test_fail_when_normal_pr_links_retro(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Any,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        body_file = tmp_path / "body.md"
+        body_file.write_text("Closes #900\n", encoding="utf-8")
+
+        def fake_api(method, path, body=None, **_kw):
+            return json.dumps({"title": self._RETRO_TITLE})
+
+        monkeypatch.setattr(ar, "gh_api", fake_api)
+        rc = ar.main(
+            [
+                "verify-no-direct-retro-pr",
+                "--repo",
+                "o/r",
+                "--pr-title",
+                "fix(x): directly fix the retro",
+                "--pr-body-file",
+                str(body_file),
+            ]
+        )
+        assert rc == 1
+        out = capsys.readouterr().out
+        assert "::error::" in out
+        assert "#900" in out
+
+    def test_fail_when_legacy_fix_retro_linked(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Any,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        body_file = tmp_path / "body.md"
+        body_file.write_text("Refs #900\n", encoding="utf-8")
+
+        def fake_api(method, path, body=None, **_kw):
+            return json.dumps(
+                {"title": "fix(auto-retro): review PR #898 repair loops"}
+            )
+
+        monkeypatch.setattr(ar, "gh_api", fake_api)
+        rc = ar.main(
+            [
+                "verify-no-direct-retro-pr",
+                "--repo",
+                "o/r",
+                "--pr-title",
+                "feat(x): build on the retro",
+                "--pr-body-file",
+                str(body_file),
+            ]
+        )
+        assert rc == 1
+        assert "#900" in capsys.readouterr().out
 
 
 class TestInsertAppendedRow:

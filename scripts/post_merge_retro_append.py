@@ -32,7 +32,12 @@ TARGET_TOOL = "mcp__github__merge_pull_request"
 _PR_URL_RE = re.compile(
     r"https://github\.com/([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+)/pull/(\d+)"
 )
-RETRO_TITLE_PREFIX = "fix(auto-retro)"
+# Auto-retro issues are titled ``chore(auto-retro): review PR #N repair
+# loops`` (Refs #1069). Closed historical retros use the legacy
+# ``fix(auto-retro)`` prefix; ``scripts/auto_retro.py:is_retro_issue_title``
+# recognizes both, but the open auto-retro the agent searches for here
+# carries the current prefix.
+RETRO_TITLE_PREFIX = "chore(auto-retro)"
 
 
 def _walk(value: Any) -> list[Any]:
