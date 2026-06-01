@@ -111,6 +111,7 @@ Source: `python3 scripts/workflow_diagram.py diagram-doc`. Tracking issue: #960.
 | [workflows/attack-coverage-review-reminder-if-branches.md](generated/workflows/attack-coverage-review-reminder-if-branches.md) | `attack-coverage-review-reminder.yml` |
 | [workflows/auto-retro-post-merge-rescan-if-branches.md](generated/workflows/auto-retro-post-merge-rescan-if-branches.md) | `auto-retro-post-merge-rescan.yml` |
 | [workflows/auto-retro-sentinel-if-branches.md](generated/workflows/auto-retro-sentinel-if-branches.md) | `auto-retro-sentinel.yml` |
+| [workflows/auto-retro-triage-report-if-branches.md](generated/workflows/auto-retro-triage-report-if-branches.md) | `auto-retro-triage-report.yml` |
 | [workflows/backup-non-ascii-originals-if-branches.md](generated/workflows/backup-non-ascii-originals-if-branches.md) | `backup-non-ascii-originals.yml` |
 | [workflows/dependabot-automerge-if-branches.md](generated/workflows/dependabot-automerge-if-branches.md) | `dependabot-automerge.yml` |
 | [workflows/generate-agents-if-branches.md](generated/workflows/generate-agents-if-branches.md) | `generate-agents.yml` |
