@@ -1,6 +1,6 @@
 name: Tracking
 description: Umbrella issue coordinating phased sub-issues. The umbrella itself does not get implementation work -- it tracks completion of its children.
-title: "tracking(<scope>): <summary>"
+title: "chore(<scope>): <summary>"
 labels:
   - "type:tracking"
 body:

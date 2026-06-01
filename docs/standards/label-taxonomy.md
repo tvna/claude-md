@@ -92,6 +92,22 @@ parked.
 No-action routes are `state:rfc`, `state:parked`, and `type:tracking`.
 Tracking issues may carry broad areas, but agents act on children.
 
+Apply `type:tracking` only when both conditions hold:
+
+1. **Sub-issue umbrella** -- the issue coordinates one or more child issues
+   and takes no direct implementation commit itself; it closes only when all
+   children close.
+2. **1-issue/N-PR** -- multiple PRs reference it with non-closing `Refs #N`
+   and none of them closes it on its own. The label is the structural
+   requirement that lets those Refs-only PRs pass `verify-issue-link.yml`
+   (`scripts/issue_link.py`), which otherwise rejects a Refs-only body unless
+   the referenced issue carries `type:tracking`.
+
+Do not apply `type:tracking` to an issue that a single PR closes via
+`Closes #N`, including a one-off retrospective. The title type is independent:
+pick the conventional type that fits the work (for example `chore`, `docs`,
+or `ci`) and mark the umbrella with the label, not with the title prefix.
+
 ## Severity And Threat Labels
 
 `threat:*` is retained as an overlay axis because it records security

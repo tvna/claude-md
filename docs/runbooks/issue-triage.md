@@ -60,6 +60,14 @@ Multi-layer issues (e.g. an RFC that moves a rule from §1 to §3) carry every a
 
 Maps 1:1 to the Conventional Commit prefixes used in this repo (`docs(...)`, `fix:`, etc.).
 
+Apply `type:tracking` only when the issue is a sub-issue umbrella (coordinates
+children, takes no direct implementation commit) AND is referenced by multiple
+PRs via non-closing `Refs #N` (1-issue/N-PR). The label is what lets those
+Refs-only PRs pass `verify-issue-link.yml`. Do not apply it to an issue a
+single PR closes via `Closes #N`, including a one-off retrospective. There is
+no `tracking` title type; pick the conventional type that fits the work and
+mark the umbrella with the label.
+
 ### `state:*` (0 or 1; absent = active)
 
 | Label | Meaning |

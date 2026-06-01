@@ -94,7 +94,6 @@ class TestFindInvalidType:
             "revert: undo prior change",
             "style: format",
             "test: add coverage",
-            "tracking: umbrella",
             "build: pin dep",
         ],
     )
@@ -104,7 +103,7 @@ class TestFindInvalidType:
     @pytest.mark.parametrize(
         "title",
         [
-            "tracking: umbrella for triage round",
+            "chore: umbrella for triage round",
             "ci(ops): preflight hook for title-policy",
             "feat(scripts): add helper",
         ],
@@ -196,7 +195,7 @@ class TestBuildInvalidTypeDenyReason:
         # Full allowed-type list so the agent does not need to re-read
         # title_policy.py to recover.
         assert "feat" in reason
-        assert "tracking" in reason
+        assert "revert" in reason
 
     def test_cites_server_side_authority(self) -> None:
         reason = preflight.build_invalid_type_deny_reason(
@@ -287,7 +286,7 @@ class TestDecideIssueWrite:
             "mcp__github__issue_write",
             {
                 "method": "create",
-                "title": "tracking: umbrella for triage 2026-05-27",
+                "title": "chore: umbrella for triage 2026-05-27",
                 "body": "...",
             },
         )
@@ -335,7 +334,7 @@ class TestDecideIssueWrite:
         # carry it (rare, but consistent with title_policy.verify_title).
         out = preflight.decide(
             "mcp__github__issue_write",
-            {"method": "create", "title": "tracking: parent for #491 (#491)"},
+            {"method": "create", "title": "chore: parent for #491 (#491)"},
         )
         assert out is None
 
@@ -559,7 +558,7 @@ class TestMain:
     ) -> None:
         event = {
             "tool_name": "mcp__github__issue_write",
-            "tool_input": {"method": "create", "title": "tracking: x", "body": "..."},
+            "tool_input": {"method": "create", "title": "chore: x", "body": "..."},
         }
         rc, out, err = self._run(monkeypatch, capsys, json.dumps(event))
         assert rc == 0

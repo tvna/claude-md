@@ -180,9 +180,9 @@ def build_invalid_type_deny_reason(tool_name: str, kind: str, title: str, offend
         f"If the change is security-flavored, use `feat(<scope>): ...` "
         f"and put the security context in the body. If it adds or "
         f"changes a CI gate, `ci(<scope>): ...` also fits. For "
-        f"operational tracking issues, `tracking: ...` or "
-        f"`ci(ops): ...` are the conventional fits (the 2026-05-27 "
-        f"triage round repaired three `ops:` issues to `ci(ops): ...`)."
+        f"operational umbrella issues, pick the type that fits the work "
+        f"(for example `chore(<scope>): ...` or `ci(ops): ...`) and apply "
+        f"the `type:tracking` label to mark the umbrella."
     )
 
 
