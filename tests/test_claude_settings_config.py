@@ -12,6 +12,10 @@ pytestmark = pytest.mark.shard_preflight
 ROOT = Path(__file__).resolve().parents[1]
 CLAUDE_SETTINGS = ROOT / ".claude" / "settings.json"
 CORE_HOOK_EVENTS = {"SessionStart", "PreToolUse", "PostToolUse"}
+# Claude-only events with no Codex/Devin counterpart (outside the
+# scan_hook_coverage_drift parity scope). Stop hosts the decision-handoff
+# nudge toward AskUserQuestion (#1044).
+OPTIONAL_HOOK_EVENTS = {"Stop"}
 
 
 def _load_settings() -> dict[str, object]:
@@ -44,8 +48,23 @@ def test_claude_settings_json_is_valid() -> None:
     hooks = data.get("hooks")
     assert isinstance(hooks, dict)
     assert set(hooks) >= CORE_HOOK_EVENTS
-    unexpected = set(hooks) - CORE_HOOK_EVENTS
+    unexpected = set(hooks) - CORE_HOOK_EVENTS - OPTIONAL_HOOK_EVENTS
     assert not unexpected
+
+
+def test_stop_hook_registers_decision_handoff_gate() -> None:
+    """The Stop event wires the Claude-only AskUserQuestion nudge (#1044)."""
+    data = _load_settings()
+    commands: list[str] = []
+    for group in _hook_groups(data, "Stop"):
+        hooks = group["hooks"]
+        assert isinstance(hooks, list)
+        for hook in hooks:
+            assert isinstance(hook, dict)
+            command = hook.get("command")
+            if isinstance(command, str):
+                commands.append(command)
+    assert any("gate_decision_handoff_askuserquestion.py" in cmd for cmd in commands)
 
 
 def test_claude_hooks_use_pascalcase_event_keys() -> None:

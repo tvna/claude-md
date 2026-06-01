@@ -148,6 +148,14 @@ ignore = [
     "B011", "B017", "RUF001",
     "S101", "S105", "S106", "S108", "S404", "S603", "S607",
 ]
+# The decision-handoff Stop hook detects Japanese choice cues and the
+# fullwidth question mark by construction, so both the gate and its test
+# must contain the very codepoints RUF001 would flag.
+"scripts/gate_decision_handoff_askuserquestion.py" = ["RUF001"]
+"tests/test_gate_decision_handoff_askuserquestion.py" = [
+    "B011", "B017", "RUF001",
+    "S101", "S105", "S106", "S108", "S404", "S603", "S607",
+]
 
 [tool.ruff.lint.isort]
 known-first-party = ["scripts"]
