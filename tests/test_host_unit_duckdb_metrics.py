@@ -25,6 +25,7 @@ pytestmark = pytest.mark.shard_ci_ops
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCHEMA_PATH = REPO_ROOT / "metrics" / "duckdb" / "schema" / "v1" / "schema.sql"
+SCHEMA_V2_PATH = REPO_ROOT / "metrics" / "duckdb" / "schema" / "v2" / "schema.sql"
 INIT_PATH = REPO_ROOT / "metrics" / "duckdb" / "init.sh"
 GITIGNORE_PATH = REPO_ROOT / ".gitignore"
 DOC_PATH = REPO_ROOT / "docs" / "standards" / "host-unit-duckdb-metrics.md"
@@ -96,6 +97,80 @@ class TestSchemaFile:
         assert "not a repo dependency" in text.lower()
 
 
+class TestLogsSchemaV2:
+    """OTLP-logs extension contract (Refs #824)."""
+
+    def test_schema_v2_file_exists(self) -> None:
+        assert SCHEMA_V2_PATH.is_file(), f"schema v2 must exist at {SCHEMA_V2_PATH}"
+
+    def test_schema_v2_references_issue_824(self) -> None:
+        assert "#824" in SCHEMA_V2_PATH.read_text(encoding="utf-8")
+
+    def test_schema_v2_records_migration_version(self) -> None:
+        text = SCHEMA_V2_PATH.read_text(encoding="utf-8")
+        assert "INSERT INTO schema_meta" in text
+        assert "'2'" in text
+
+    def test_schema_v2_contains_session_log_table(self) -> None:
+        text = SCHEMA_V2_PATH.read_text(encoding="utf-8")
+        assert "CREATE TABLE IF NOT EXISTS session_log" in text
+
+    def test_schema_v2_contains_otlp_log_export_view(self) -> None:
+        text = SCHEMA_V2_PATH.read_text(encoding="utf-8")
+        assert "CREATE OR REPLACE VIEW otlp_log_record" in text
+
+    def test_schema_v2_contains_logrecord_columns(self) -> None:
+        text = SCHEMA_V2_PATH.read_text(encoding="utf-8")
+        for column in (
+            "event_code",
+            "severity_number",
+            "severity_text",
+            "body",
+            "scope_name",
+            "scope_version",
+            "time_unix_nano",
+            "observed_time_unix_nano",
+            "resource_attributes",
+            "attributes",
+        ):
+            assert column in text, f"v2 logs table missing column: {column}"
+
+    def test_schema_v2_resource_attributes_is_map(self) -> None:
+        text = SCHEMA_V2_PATH.read_text(encoding="utf-8")
+        assert "resource_attributes      MAP(VARCHAR, VARCHAR)" in text
+
+    def test_schema_v2_bounds_severity_to_otlp_range(self) -> None:
+        text = SCHEMA_V2_PATH.read_text(encoding="utf-8")
+        assert "severity_number BETWEEN 1 AND 24" in text
+
+    def test_schema_v2_has_body_redaction_backstop_check(self) -> None:
+        text = SCHEMA_V2_PATH.read_text(encoding="utf-8")
+        # Coarse last-line guard: reject path separators in body.
+        assert "body_has_no_path_separators" in text
+        assert "contains(body, '/')" in text
+
+    def test_schema_v2_documents_redaction_field_classes(self) -> None:
+        text = SCHEMA_V2_PATH.read_text(encoding="utf-8").lower()
+        for field_class in (
+            "filesystem path",
+            "key location",
+            "token",
+            "request id",
+            "hostname",
+            "raw error payload",
+        ):
+            assert field_class in text, f"redaction contract omits: {field_class}"
+
+    def test_schema_v2_cites_88_and_section_4(self) -> None:
+        text = SCHEMA_V2_PATH.read_text(encoding="utf-8")
+        assert "#88" in text
+        assert "Section 4" in text
+
+    def test_schema_v2_provides_redacted_write_template(self) -> None:
+        text = SCHEMA_V2_PATH.read_text(encoding="utf-8")
+        assert "INSERT INTO session_log" in text
+
+
 class TestInitHelper:
     def test_init_sh_exists(self) -> None:
         assert INIT_PATH.is_file(), f"init.sh must exist at {INIT_PATH}"
@@ -109,6 +184,10 @@ class TestInitHelper:
     def test_init_sh_references_schema(self) -> None:
         text = INIT_PATH.read_text(encoding="utf-8")
         assert "schema/v1/schema.sql" in text
+
+    def test_init_sh_applies_v2_schema(self) -> None:
+        text = INIT_PATH.read_text(encoding="utf-8")
+        assert "schema/v2/schema.sql" in text
 
     def test_init_sh_detects_claude_container(self) -> None:
         text = INIT_PATH.read_text(encoding="utf-8")
@@ -163,3 +242,30 @@ class TestDesignDoc:
         assert "host.id" in text
         # "MUST NOT" may be line-wrapped; check prohibition by keyword
         assert "raw hostname" in text
+
+    def test_doc_documents_otlp_logs_extension(self) -> None:
+        text = DOC_PATH.read_text(encoding="utf-8")
+        assert "#824" in text
+        assert "session_log" in text
+        assert "otlp_log_record" in text
+
+    def test_doc_references_schema_v2(self) -> None:
+        text = DOC_PATH.read_text(encoding="utf-8")
+        assert "schema/v2/schema.sql" in text
+
+    def test_doc_redaction_contract_names_field_classes(self) -> None:
+        text = DOC_PATH.read_text(encoding="utf-8").lower()
+        for field_class in (
+            "filesystem path",
+            "key location",
+            "token",
+            "request id",
+            "hostname",
+            "raw error payload",
+        ):
+            assert field_class in text, f"doc redaction contract omits: {field_class}"
+
+    def test_doc_redaction_cites_88_and_section_4(self) -> None:
+        text = DOC_PATH.read_text(encoding="utf-8")
+        assert "#88" in text
+        assert "Section 4" in text

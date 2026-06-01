@@ -33,8 +33,9 @@ Two consequences follow and bound everything below:
 | File / path | Target | Purpose |
 |---|---|---|
 | `docs/standards/host-unit-duckdb-metrics.md` *(this file)* | -- | Adopted contract: trade-off, lifecycle, schema, write path, observation, export |
-| [`metrics/duckdb/schema/v1/schema.sql`](../../metrics/duckdb/schema/v1/schema.sql) | host-local `*.duckdb` | Versioned init path: tables, OTLP export view, read-back view, baseline template |
-| [`metrics/duckdb/init.sh`](../../metrics/duckdb/init.sh) | operator shell | Environment-aware init helper: detects devcontainer vs. local path, supports `CLAUDE_MD_METRICS_DB` override |
+| [`metrics/duckdb/schema/v1/schema.sql`](../../metrics/duckdb/schema/v1/schema.sql) | host-local `*.duckdb` | Versioned init path: metrics tables, OTLP gauge export view, read-back view, baseline template |
+| [`metrics/duckdb/schema/v2/schema.sql`](../../metrics/duckdb/schema/v2/schema.sql) | host-local `*.duckdb` | Additive migration: OTLP-logs `session_log` table, `otlp_log_record` export view, read-back view, redacted write template (Refs #824) |
+| [`metrics/duckdb/init.sh`](../../metrics/duckdb/init.sh) | operator shell | Environment-aware init helper: applies v1 then v2 in order, detects devcontainer vs. local path, supports `CLAUDE_MD_METRICS_DB` override |
 | `*.duckdb` (host-local, git-ignored) | each host | The database itself -- local measurement state, never committed (Refs #88) |
 
 ## Storage location and lifecycle
@@ -68,8 +69,9 @@ Two consequences follow and bound everything below:
   CLAUDE_MD_METRICS_DB=/custom/path.duckdb ./metrics/duckdb/init.sh
   ```
 
-  The helper calls `duckdb … < metrics/duckdb/schema/v1/schema.sql`, which is
-  idempotent (`IF NOT EXISTS` on every object), so re-running is safe.
+  The helper applies the schema versions in order (`schema/v1/schema.sql` then
+  `schema/v2/schema.sql`); every object uses `IF NOT EXISTS` / `CREATE OR
+  REPLACE`, so re-running is safe.
 
 - **Retention / rotation.** The database is append-mostly and small (one row per
   measured change). No rotation is required for v1; if a host's file is lost it
@@ -154,6 +156,80 @@ anonymization obligation lives at write time.
   wiring are **out of scope here** -- the point of this contract is that they
   can be added later without changing how any host collects.
 
+## OTLP logs extension (Refs #824)
+
+Schema v2 ([`metrics/duckdb/schema/v2/schema.sql`](../../metrics/duckdb/schema/v2/schema.sql))
+adds an OpenTelemetry-**logs**-shaped surface next to the metrics. Where v1
+records OTLP **gauge data points** (one measurement per change), v2 records
+**redacted operational session events** -- for example a commit-signing
+failure -- as OTLP `LogRecord`s. It is an additive migration: it touches no v1
+object, records a `'2'` row in `schema_meta`, and is idempotent.
+
+The motivation is concrete. A commit-signing failure observed during the #815
+work exposed a host-local filesystem path to a signing key, a signing-server
+request identifier, and a raw error payload. Capturing severity-tagged events
+next to the metrics makes such anomalies noticeable by intuition (CLAUDE.md
+Section 6) without re-collection -- **but only if every host-identifying field
+is removed first.**
+
+### Storage form (`session_log`)
+
+One append-only row per event (operational events are distinct occurrences, not
+idempotent measurements, so there is no de-duplication key). Columns mirror the
+OTLP LogRecord data model:
+
+| Column | OTLP field | Notes |
+|---|---|---|
+| `event_code` | (classified attribute) | **Required** classified, non-identifying code from a controlled vocabulary (e.g. `commit_signing.failure`). This replaces raw text as the descriptor. |
+| `severity_number` | `SeverityNumber` | Integer `1..24` (TRACE=1..FATAL=24), CHECK-bounded |
+| `severity_text` | `SeverityText` | e.g. `ERROR` |
+| `body` | `Body` | **Redacted** summary only, or NULL -- never a raw payload |
+| `scope_name` / `scope_version` | InstrumentationScope | who emitted it |
+| `time_unix_nano` | `TimeUnixNano` | when the event occurred |
+| `observed_time_unix_nano` | `ObservedTimeUnixNano` | when it was recorded |
+| `resource_attributes` | Resource | anonymized `host.id` only (same rule as the metrics table) |
+| `attributes` | LogRecord attributes | redacted, non-identifying keys only |
+
+### Export form (`otlp_log_record`) and observation (`v_session_log`)
+
+`otlp_log_record` renames the stored columns to the OpenTelemetry
+ClickHouse-exporter / DuckDB OTLP-extension **logs** layout (`Timestamp`,
+`ObservedTimestamp`, `SeverityText`, `SeverityNumber`, `ServiceName`, `Body`,
+`ResourceAttributes`, `ScopeName`, `ScopeVersion`, `LogAttributes`), so
+cross-host aggregation stays an export step. `v_session_log` is the human
+read-back view: one row per event over time with timestamps rendered to UTC.
+
+Export (later cross-host aggregation):
+`COPY (SELECT * FROM otlp_log_record) TO 'logs.parquet' (FORMAT parquet);`
+
+### Redaction contract (mandatory, before any row is written)
+
+Storing raw operational logs verbatim would violate
+[#88](https://github.com/tvna/claude-md/issues/88) (no repo names, paths, URLs,
+raw prompts, or raw model output in any exported row) and **CLAUDE.md Section
+4** (debug instrumentation is an attack surface; redact credentials, tokens, and
+PII before logging). Therefore, **before** the `INSERT`, the writer MUST drop or
+hash every one of these field classes:
+
+- **filesystem paths** (e.g. the signing-key path),
+- **key locations** (key files, keyring entries, agent socket paths),
+- **tokens** (signing tokens, credentials, secrets of any kind),
+- **request identifiers** (signing-server request ids, correlation ids),
+- **hostnames** (and any raw host identity -- only an opaque `host.id` survives),
+- **raw error payloads** (the verbatim error string or server response).
+
+What survives is **only** a severity (`severity_number` + `severity_text`) and a
+classified, non-identifying `event_code`. **No raw free text reaches the table.**
+The raw signing-server error -- and every operational log like it -- is stored
+**only** in this redacted form, citing #88 and CLAUDE.md Section 4.
+
+This contract is enforced primarily at the source (redact before insert). As
+defense-in-depth (CLAUDE.md Section 4), the `session_log` table adds a coarse
+CHECK that rejects the most unambiguous un-redacted marker -- a path separator
+in `body` -- so an un-redacted write **fails loudly** rather than being silently
+stored. The CHECK is a backstop, not the contract: it cannot detect a hostname
+or a token, so the writer remains responsible for full redaction.
+
 ## Reproducibility contract (carried from performance-metrics.md)
 
 - **Deterministic signals** (e.g. `scope_compiled_tokens`): the same
@@ -189,12 +265,13 @@ their still-valid requirements are carried into the columns above.
 - **The cross-host OTLP collector and its aggregation pipeline.** The export
   view makes this a later, additive step.
 - **The OTLP *logs* signal (operational session logs, e.g. commit-signing
-  failures).** This store is metrics-only (OTLP gauge data points). Capturing
-  redacted operational logs is deferred to
-  [#824](https://github.com/tvna/claude-md/issues/824), which must define the
-  redaction contract -- drop or hash paths, key locations, tokens, request ids,
-  hostnames, and raw payloads -- before any such row is written (Refs #88,
-  CLAUDE.md Section 4).
+  failures).** Landed in schema v2 (Refs
+  [#824](https://github.com/tvna/claude-md/issues/824)); see *OTLP logs
+  extension* above. The redaction contract -- drop or hash paths, key locations,
+  tokens, request ids, hostnames, and raw payloads before any row is written
+  (Refs #88, CLAUDE.md Section 4) -- is defined there. Still deferred: a runtime
+  recorder that emits these events automatically (the write path stays
+  operator-local, and `duckdb` stays out of the repo dependency set).
 - **The structure-sensitive task signal** (Refs #90/#83): a candidate quality
   input once the schema exists; added additively as a new signal column.
 - **`compiled_source_version` population** (Refs #89): the column exists now and
@@ -219,8 +296,9 @@ CLAUDE_MD_METRICS_DB=/custom/path.duckdb ./metrics/duckdb/init.sh
 DB="${CLAUDE_MD_METRICS_DB:-$HOME/.local/state/claude-md/metrics.duckdb}"
 duckdb "$DB" -c "SELECT * FROM v_proportionality;"
 
-# 3. Confirm the OTLP export surface is populated:
+# 3. Confirm the OTLP export surfaces are populated:
 duckdb "$DB" -c "SELECT MetricName, Value FROM otlp_metric_data_point;"
+duckdb "$DB" -c "SELECT SeverityText, Body FROM otlp_log_record;"  # redacted logs (v2)
 ```
 
 What CI *does* verify deterministically: this document's local links and the
@@ -230,6 +308,7 @@ unrelated regression is introduced (`pytest`).
 ## References
 
 - [#815](https://github.com/tvna/claude-md/issues/815) -- this contract (host-unit DuckDB store).
+- [#824](https://github.com/tvna/claude-md/issues/824) -- OTLP logs extension (schema v2: redacted operational session logs).
 - [#814](https://github.com/tvna/claude-md/issues/814) -- parent: Section 5 quality-scalability proportionality reframe.
 - [#226](https://github.com/tvna/claude-md/issues/226) -- CLAUDE.md / AGENTS.md evolution tracker.
 - [#89](https://github.com/tvna/claude-md/issues/89) -- instruction-source versioning (OPEN; provides `compiled_source_version`).
