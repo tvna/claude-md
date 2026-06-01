@@ -299,6 +299,16 @@
           }
         ]
       }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 scripts/gate_decision_handoff_askuserquestion.py"
+          }
+        ]
+      }
     ]
   }
 }
