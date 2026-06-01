@@ -20,3 +20,5 @@ __pycache__/
 .github/copilot-instructions.md
 .windsurfrules
 .codeium/
+# Generated MCP client config; SoT is apm.yml. Committed mirror prohibited (#58, #1067, #1063).
+.mcp.json

@@ -32,8 +32,13 @@ Agent-tool-specific configuration files and directories MUST NOT be committed to
 | `.github/copilot-instructions.md` | GitHub Copilot |
 | `.windsurfrules` | Windsurf |
 | `.codeium/` | Codeium |
+| `.mcp.json` | MCP clients (Claude Code, Cursor, etc.) — generated locally by `apm install` from the `apm.yml` mcp declaration; the committed mirror is prohibited (parallel to `.claude/skills/`). See [#1067](https://github.com/tvna/claude-md/issues/1067), [#1063](https://github.com/tvna/claude-md/issues/1063). |
 
 The list is non-exhaustive. When a new tool emerges, follow the *Update procedure* below.
+
+### MCP servers are declared in `apm.yml`, not in a committed `.mcp.json`
+
+The local GitHub MCP server added by special exception in [#1063](https://github.com/tvna/claude-md/issues/1063) is declared in `apm.yml`'s `mcp` section — the APM source of truth that `apm install` reproduces into every client. This mirrors the `.agents/skills/` carve-out: the SoT lives in `apm.yml` plus `apm.lock.yaml`, while the local tool-specific artifact (`.mcp.json`, like `.claude/skills/`) stays prohibited. The launch wrapper and token minter that the server runs live under `scripts/` (already permitted) and are covered by tests; no committed `.mcp.json` is required.
 
 ### Open Q1 resolution — `docs/` is also covered
 

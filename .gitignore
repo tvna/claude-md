@@ -51,3 +51,7 @@ apm_modules/
 .github/copilot-instructions.md
 .windsurfrules
 .codeium/
+# .mcp.json is the MCP client config generated locally by `apm install` from
+# the `apm.yml` mcp declaration (the SoT). The committed mirror is prohibited,
+# parallel to `.claude/skills/`; the server lives in apm.yml. See #58, #1067, #1063.
+.mcp.json

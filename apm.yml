@@ -7,3 +7,17 @@ target:
 dependencies:
   apm:
   - obra/superpowers#f2cbfbefebbfef77321e4c9abc9e949826bea9d7
+# Local GitHub MCP server, added by special exception for CLI use (#1063).
+# This apm.yml block is the source of truth. `apm install` generates each
+# client's local .mcp.json from it; that generated mirror is gitignored and
+# never committed (prohibited per docs/standards/repo-scope.md, #1067).
+# The server launches via scripts/mcp_github_launch.sh, which mints a fresh
+# GitHub App installation token at every start, so no PAT is handed over by
+# hand and no secret is written to any file. Regenerate client wiring with:
+#   apm install --mcp github -- scripts/mcp_github_launch.sh
+mcp:
+  servers:
+    github:
+      transport: stdio
+      command: scripts/mcp_github_launch.sh
+      args: []
