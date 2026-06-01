@@ -11,6 +11,5 @@ types = [
     "revert",
     "style",
     "test",
-    "tracking",
 ]
 scope_pattern = "[a-z0-9][a-z0-9-]*"
