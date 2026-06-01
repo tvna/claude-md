@@ -114,6 +114,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("auto_retro.py", "run"): "test_auto_retro_run_matches_workflow_env",
     ("auto_retro.py", "post-merge-rescan"): "test_auto_retro_post_merge_rescan_matches_workflow_env",
     ("auto_retro.py", "sentinel"): "test_auto_retro_sentinel_matches_workflow_env",
+    ("auto_retro.py", "verify-retro-completeness"): "test_auto_retro_verify_retro_completeness_matches_workflow_args",
     ("body_policy.py", "verify"): "test_body_policy_verify_matches_workflow_body_file",
     ("branch_cleanup.py", "reconcile"): "test_branch_cleanup_reconcile_matches_workflow_args",
     ("branch_cleanup.py", "survey"): "test_branch_cleanup_survey_matches_workflow_args",
@@ -349,6 +350,40 @@ def test_auto_retro_sentinel_matches_workflow_env(
     )
 
     assert auto_retro.main(["sentinel"]) == 0
+
+
+def test_auto_retro_verify_retro_completeness_matches_workflow_args(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Mirror the argv + env shape used by portable-pr-policy.yml.
+
+    The workflow shells to ``python3 scripts/auto_retro.py
+    verify-retro-completeness --repo "$REPO" --pr-title "$TITLE"
+    --pr-body-file "$body_file"``. A non-retro PR title must skip
+    (exit 0) without touching the gh_api boundary. Refs #1058.
+    """
+    body_file = tmp_path / "body.md"
+    body_file.write_text("Refs #1\n", encoding="utf-8")
+    monkeypatch.setattr(
+        auto_retro,
+        "gh_api",
+        lambda *_a, **_kw: pytest.fail("gh_api must not be called for a non-retro PR"),
+    )
+
+    assert (
+        auto_retro.main(
+            [
+                "verify-retro-completeness",
+                "--repo",
+                REPO,
+                "--pr-title",
+                "feat(x): unrelated change",
+                "--pr-body-file",
+                str(body_file),
+            ]
+        )
+        == 0
+    )
 
 
 def test_auto_retro_post_merge_rescan_matches_workflow_env(

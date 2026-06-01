@@ -100,7 +100,7 @@ class TestFollowsNamingConvention:
         "title",
         [
             "fix(non-ascii): notify title policy violations",
-            "tracking: coordinate non-ascii defense",
+            "chore: coordinate non-ascii defense",
         ],
     )
     def test_issue_titles_pass(self, title: str) -> None:

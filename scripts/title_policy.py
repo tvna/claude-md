@@ -82,7 +82,7 @@ _PERFORMANCE_PHRASES = (
     "reduce runtime",
     "speed up",
 )
-_PERF_ADJACENT_ALLOWED_TYPES = frozenset({"build", "ci", "docs", "perf", "test", "tracking"})
+_PERF_ADJACENT_ALLOWED_TYPES = frozenset({"build", "ci", "docs", "perf", "test"})
 _PERF_FIX_TERMS = frozenset({"bug", "defect", "error", "fail", "failure", "regression"})
 _CI_INFRA_TERMS = frozenset({"action", "actions", "ci", "gate", "workflow", "workflows"})
 _BUILD_INFRA_TERMS = frozenset({"build", "container", "image", "images", "package", "publish"})
@@ -256,7 +256,7 @@ def _performance_type_findings(parts: TitleParts, text: str) -> list[TypeFitFind
     words = _words(text)
     if parts.type == "perf":
         return []
-    if parts.type in {"docs", "test", "tracking"}:
+    if parts.type in {"docs", "test"}:
         return []
     if parts.type == "ci" and words & _CI_INFRA_TERMS:
         return []
