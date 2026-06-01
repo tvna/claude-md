@@ -405,7 +405,11 @@ Extension to non-`scripts/` Python packages is governed by the
 For scripts that accept rich nested input (JSON event payloads, multi-
 field configs), modelling the input with pydantic gives a single
 declarative validation surface and better error messages than hand-
-written `isinstance` checks. Tracked by issue #191.
+written `isinstance` checks. For narrow, stable repository policy
+files, a frozen dataclass plus explicit validators can provide the
+same typed boundary without adding a runtime dependency; document the
+choice in the PR body when pydantic is not added. Tracked by issue
+#191.
 
 ### O6. GitHub API boundary contract tests
 
