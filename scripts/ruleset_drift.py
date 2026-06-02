@@ -6,7 +6,10 @@ the workflow uses for `$GITHUB_STEP_SUMMARY` and `gh issue create --body-file`.
 Side-effect wrappers (HTTP GETs against the rulesets API, and `gh issue create`)
 take injectable boundaries so the CLI is fully unit-testable.
 
-See #126 (refactor) and #30 / #116 (origin) for context.
+See #126 (refactor) and #30 / #116 (origin) for context. #1004 added
+server-default parameter normalization and canonical rule-list ordering to the
+projection (superseding the #30 / #116 "preserve raw rule order" decision, which
+predated the evidence that GitHub re-orders rules on PUT — see #1036).
 """
 
 from __future__ import annotations
@@ -28,6 +31,18 @@ from _github_api import API_VERSION
 API_ROOT = "https://api.github.com"
 SOT_PROJECTION_KEYS = ("name", "target", "enforcement", "conditions", "bypass_actors", "rules")
 ISSUE_LABELS = ("layer:meta", "type:fix")
+
+# Documented GitHub server-populated rule parameters, keyed by rule type (#1004).
+# GitHub echoes these onto the live ruleset even when the SoT file omits them,
+# which produced non-convergent false-positive drift (#998 / #1000 / #1002).
+# A parameter is stripped only when its value equals the documented default, so a
+# live value that diverges from the default still surfaces as genuine drift.
+# Extend this map (with the documented default) when a new server-default
+# parameter is observed; do not strip keys whose default is unknown.
+SERVER_DEFAULT_PARAMETERS: dict[str, dict[str, Any]] = {
+    "pull_request": {"required_reviewers": []},
+    "required_status_checks": {"do_not_enforce_on_create": False},
+}
 DEFAULT_SOT_FILES = ("main.json", "all-branches.json")
 
 
@@ -35,14 +50,69 @@ DEFAULT_SOT_FILES = ("main.json", "all-branches.json")
 # Pure functions
 # ---------------------------------------------------------------------------
 
+def _normalize_rule(rule: Any) -> Any:
+    """Strip server-default parameters from a single rule (#1004).
+
+    Returns non-dict input unchanged. Removes a parameter only when its value
+    equals the documented default for the rule's ``type``; a parameter whose
+    value diverges from the default is preserved so real drift still surfaces.
+    A ``parameters`` object that becomes empty after pruning is dropped so the
+    rule matches the bare ``{"type": ...}`` shape the SoT files use. The input
+    rule is not mutated.
+    """
+    if not isinstance(rule, dict):
+        return rule
+    rule_type = rule.get("type")
+    defaults = SERVER_DEFAULT_PARAMETERS.get(rule_type, {}) if isinstance(rule_type, str) else {}
+    params = rule.get("parameters")
+    if not defaults or not isinstance(params, dict):
+        return rule
+    pruned = {
+        key: value
+        for key, value in params.items()
+        if not (key in defaults and value == defaults[key])
+    }
+    result = dict(rule)
+    if pruned:
+        result["parameters"] = pruned
+    else:
+        result.pop("parameters", None)
+    return result
+
+
+def _normalize_rules(rules: Any) -> Any:
+    """Prune server defaults and sort rules into a canonical order (#1004).
+
+    Returns non-list input unchanged (mirrors jq emitting the raw value when a
+    side omits ``rules``). Rules are sorted by ``(type, canonical-serialization)``
+    so a reorder applied by GitHub on PUT (#1036) no longer reads as drift while
+    a genuine add/remove/change still does.
+    """
+    if not isinstance(rules, list):
+        return rules
+    normalized = [_normalize_rule(rule) for rule in rules]
+    normalized.sort(
+        key=lambda rule: (
+            str(rule.get("type", "")) if isinstance(rule, dict) else "",
+            json.dumps(rule, sort_keys=True, ensure_ascii=False),
+        )
+    )
+    return normalized
+
+
 def canonical_projection(ruleset: dict[str, Any]) -> dict[str, Any]:
     """Return the subset {name, target, enforcement, conditions, bypass_actors, rules}.
 
     Mirrors `jq '{name, target, enforcement, conditions, bypass_actors, rules}'`.
     Missing keys are emitted as None (jq emits null for missing keys), so the
-    canonical text stays comparable when one side omits an optional field.
+    canonical text stays comparable when one side omits an optional field. The
+    ``rules`` list is normalized (server defaults pruned, canonical order) so
+    server-populated fields and GitHub-applied reordering do not read as drift
+    (#1004); both SoT and live pass through the same normalization.
     """
-    return {key: ruleset.get(key) for key in SOT_PROJECTION_KEYS}
+    projection = {key: ruleset.get(key) for key in SOT_PROJECTION_KEYS}
+    projection["rules"] = _normalize_rules(projection["rules"])
+    return projection
 
 
 def canonical_json(ruleset: dict[str, Any]) -> str:
