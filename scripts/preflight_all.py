@@ -211,6 +211,13 @@ STEPS: tuple[Step, ...] = (
         argv=("python3", "scripts/scan_hook_coverage_drift.py", "verify"),
     ),
     Step(
+        # Refs #1103. Fails when a tool a gate needs at runtime (a Step
+        # required_bin) is not provisioned in flake.nix, so the devcontainer
+        # cannot silently lack a tool the gates depend on.
+        name="scan_devcontainer_tool_drift",
+        argv=("python3", "scripts/scan_devcontainer_tool_drift.py", "verify"),
+    ),
+    Step(
         # Refs #1099. Runs waza spec-compliance over every skill under
         # .agents/skills. spec failure = fail, token budget = warning only.
         # Needs the pinned waza binary (scripts/install_waza.sh); soft so a

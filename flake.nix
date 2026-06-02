@@ -24,6 +24,7 @@
           claudeCodeVersion = "2.1.154";
           codexCliVersion = "0.135.0";
           apmVersion = "0.12.1";
+          wazaVersion = "0.33.0";
           claudeCodeNative = {
             aarch64-linux = {
               package = "claude-code-linux-arm64";
@@ -64,6 +65,16 @@
             x86_64-linux = {
               target = "x86_64-unknown-linux-gnu";
               hash = "sha256-p2eEglQ5GFXJbfJx6cqLf3LdFy0xBGBEeFPSXZB7muA=";
+            };
+          }.${system};
+          wazaNative = {
+            aarch64-linux = {
+              asset = "waza-linux-arm64";
+              hash = "sha256-VSuk9F5fc+PpwMk0KeLFniHxpN6LmJX5j1Te6n8D36g=";
+            };
+            x86_64-linux = {
+              asset = "waza-linux-amd64";
+              hash = "sha256-waMaFdlZ0s1Tb+tBz3sg+UsENKjoaUnT3j0hweP7b/M=";
             };
           }.${system};
           pinned-uv = pkgs.stdenvNoCC.mkDerivation {
@@ -150,9 +161,33 @@ EOF
               runHook postInstall
             '';
           };
+          # waza ships a single prebuilt release binary (no archive), so the
+          # source is fetched verbatim and installed without unpacking. Mirrors
+          # the apm-cli ELF handling (no strip / no patchelf): the devcontainer
+          # image is a standard FHS distro, so the dynamic loader resolves
+          # normally. Pinned by SHA256 for supply-chain hardening. Refs #1103.
+          waza-cli = pkgs.stdenvNoCC.mkDerivation {
+            pname = "waza";
+            version = wazaVersion;
+            src = pkgs.fetchurl {
+              url = "https://github.com/microsoft/waza/releases/download/v${wazaVersion}/${wazaNative.asset}";
+              hash = wazaNative.hash;
+            };
+            dontUnpack = true;
+            dontBuild = true;
+            dontStrip = true;
+            dontPatchELF = true;
+            installPhase = ''
+              runHook preInstall
+
+              install -Dm755 $src $out/bin/waza
+
+              runHook postInstall
+            '';
+          };
         in
         {
-          inherit claude-cli codex-cli pinned-uv apm-cli;
+          inherit claude-cli codex-cli pinned-uv apm-cli waza-cli;
           bubblewrap = pkgs.bubblewrap;
           gh-cli = pkgs.gh;
           python-runtime = pkgs.python311;
@@ -175,6 +210,7 @@ EOF
             python311
             ripgrep
             agentPackages.pinned-uv
+            agentPackages.waza-cli
           ];
           pythonQualityPackages = with pkgs; [
             mypy
