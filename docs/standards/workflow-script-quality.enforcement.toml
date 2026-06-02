@@ -26,12 +26,12 @@ status = "doc-only"
 backing = []
 
 [M2]
-status = "partial"
-backing = ["tool:pytest", "tool:coverage"]
+status = "enforced"
+backing = ["tool:pytest", "tool:coverage", "script:scan_test_presence_drift"]
 
 [M3]
 status = "enforced"
-backing = ["test:test_workflow_cli_contracts"]
+backing = ["test:test_workflow_cli_contracts", "script:scan_test_presence_drift"]
 
 [M4]
 status = "partial"
