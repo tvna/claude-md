@@ -43,6 +43,9 @@ install_nix_binary() {
 install_nix_binary gh-cli gh
 install_nix_binary pinned-uv uv
 install_nix_binary python-runtime python3
+# GitHub MCP server binary for the Docker-less stdio launch path (#1063):
+# scripts/mcp_github_launch.sh execs this when no Docker daemon is present.
+install_nix_binary github-mcp-server github-mcp-server
 if [[ ! -x "/usr/local/bin/apm" ]]; then
   install_nix_binary apm-cli apm
 else

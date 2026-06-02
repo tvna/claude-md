@@ -12,8 +12,24 @@ secret is ever written to a tracked file.
 |---|---|
 | [`apm.yml`](../../apm.yml) | **Source of truth.** Declares the `github` stdio server (under `mcp.servers`) whose `command` is the launch wrapper. `apm install` reproduces it into every detected client. The `github` name keeps the server's tools under `mcp__github__*`, so the existing PreToolUse gates in [`.claude/settings.json`](../../.claude/settings.json) continue to cover them. |
 | `.mcp.json` | The per-client mirror that `apm install` generates locally from `apm.yml`. It is gitignored and never committed (prohibited per [`repo-scope.md`](repo-scope.md), #1067); operators generate their own. |
-| [`scripts/mcp_github_launch.sh`](../../scripts/mcp_github_launch.sh) | Validates credentials, mints a token, and `exec`s `docker run` passing the token by environment (never on argv). Fails loudly naming any missing variable. |
+| [`scripts/mcp_github_launch.sh`](../../scripts/mcp_github_launch.sh) | Validates credentials, mints a token, and launches the server passing the token by environment (never on argv). Auto-selects a backend: Docker on a local host, the `github-mcp-server` binary where there is no Docker daemon. Fails loudly naming any missing variable or backend. |
 | [`scripts/mint_github_app_token.py`](../../scripts/mint_github_app_token.py) | Builds an RS256 JWT (signed via `openssl`), exchanges it for an installation token, and prints the token to stdout only. |
+
+## Runtime backends (local host and devcontainer)
+
+The wrapper serves both environments from one launch path, selecting a backend at
+runtime so the credential model is identical everywhere:
+
+| Environment | Backend | How the binary/daemon is provided |
+|---|---|---|
+| Local host | `docker run ghcr.io/github/github-mcp-server` | Docker Desktop / Engine on the host |
+| Devcontainer | `github-mcp-server stdio` | The `mcr.microsoft.com/devcontainers/base:ubuntu-24.04` devcontainer has no Docker daemon, so [`flake.nix`](../../flake.nix) pins `pkgs.github-mcp-server` (nixpkgs `nixos-25.05`, v0.3.0) and [`.devcontainer/scripts/configure-agent-runtime.sh`](../../.devcontainer/scripts/configure-agent-runtime.sh) installs it onto `/usr/local/bin` via `install_nix_binary`. |
+
+`openssl` (for JWT signing) is present in the Ubuntu 24.04 base image; the
+devcontainer egress allowlist already permits `api.github.com`, so token minting
+and the server's API calls work without an allowlist change. Selection is
+overridable for tests and edge cases via `MCP_GITHUB_DOCKER`, `MCP_GITHUB_BIN`,
+`MCP_GITHUB_IMAGE`, and `MCP_GITHUB_MINT`.
 
 ## Why a launch wrapper, not a SessionStart hook
 

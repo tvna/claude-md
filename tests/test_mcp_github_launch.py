@@ -70,6 +70,51 @@ def test_token_passed_by_env_not_argv(tmp_path: Path) -> None:
     assert "run -i --rm -e GITHUB_PERSONAL_ACCESS_TOKEN example/image" in recorded
 
 
+def test_binary_backend_used_when_docker_absent(tmp_path: Path) -> None:
+    """With no Docker (the devcontainer case), the wrapper execs the binary."""
+    record = tmp_path / "record.txt"
+    binary_stub = tmp_path / "github-mcp-server"
+    _write_docker_stub(binary_stub, record)  # same recorder: logs argv + token env
+
+    env = _base_env(
+        {
+            "GITHUB_APP_ID": "1",
+            "GITHUB_APP_INSTALLATION_ID": "2",
+            "GITHUB_APP_PRIVATE_KEY": "pem-text",
+            # Point the Docker seam at a path that does not exist so the wrapper
+            # falls through to the binary backend.
+            "MCP_GITHUB_DOCKER": str(tmp_path / "no-such-docker"),
+            "MCP_GITHUB_BIN": str(binary_stub),
+            "MCP_GITHUB_MINT": "printf SECRET_TOKEN",
+        }
+    )
+    result = subprocess.run(["bash", str(WRAPPER)], env=env, capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+
+    recorded = record.read_text()
+    assert "TOKENENV:SECRET_TOKEN" in recorded
+    assert recorded.split("ARGV:", 1)[1].split("\n", 1)[0].strip() == "stdio"
+    # The token reaches the binary only by environment, never on argv.
+    assert "SECRET_TOKEN" not in recorded.split("ARGV:", 1)[1].split("\n", 1)[0]
+
+
+def test_fails_loudly_when_no_backend_available(tmp_path: Path) -> None:
+    env = _base_env(
+        {
+            "GITHUB_APP_ID": "1",
+            "GITHUB_APP_INSTALLATION_ID": "2",
+            "GITHUB_APP_PRIVATE_KEY": "pem-text",
+            "MCP_GITHUB_DOCKER": str(tmp_path / "no-such-docker"),
+            "MCP_GITHUB_BIN": str(tmp_path / "no-such-binary"),
+            "MCP_GITHUB_MINT": "printf SECRET_TOKEN",
+        }
+    )
+    result = subprocess.run(["bash", str(WRAPPER)], env=env, capture_output=True, text=True)
+    assert result.returncode == 1
+    assert "Docker" in result.stderr
+    assert "github-mcp-server" in result.stderr
+
+
 @pytest.mark.parametrize("missing", ["GITHUB_APP_ID", "GITHUB_APP_INSTALLATION_ID", "GITHUB_APP_PRIVATE_KEY"])
 def test_missing_credential_fails_loudly_without_launch(tmp_path: Path, missing: str) -> None:
     record = tmp_path / "record.txt"

@@ -156,6 +156,11 @@ EOF
           bubblewrap = pkgs.bubblewrap;
           gh-cli = pkgs.gh;
           python-runtime = pkgs.python311;
+          # GitHub MCP server binary for the local-stdio launch path used by
+          # scripts/mcp_github_launch.sh (#1063). In the devcontainer there is no
+          # Docker daemon, so the wrapper execs this Nix-pinned binary instead of
+          # `docker run`. Pinned transitively through the nixos-25.05 nixpkgs input.
+          github-mcp-server = pkgs.github-mcp-server;
         };
       mkShells = system:
         let
