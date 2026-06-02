@@ -30,12 +30,15 @@ from pathlib import Path
 from typing import Any, NamedTuple
 
 import analyze_ci_timings
+import attack_review_reminder
 import auto_retro
+import backup_archive
 import body_policy
 import branch_cleanup
 import coverage_failure_issue
 import dependabot_automerge
 import dependabot_labels
+import devcontainer_pin_pr
 import github_paginate
 import issue_link
 import labels_apply
@@ -47,22 +50,27 @@ import ruleset_drift
 import rulesets_apply
 import scan_apm_portability
 import scan_design_philosophy_drift
+import scan_devcontainer_tool_drift
 import scan_docs_inventory
 import scan_hook_coverage_drift
+import scan_input_contract_drift
 import scan_maintainability_metrics
 import scan_markdown_links
 import scan_non_ascii
 import scan_preflight_drift
+import scan_quality_standard_drift
 import scan_retro_followup_drift
 import scan_secret_runbooks
 import scan_workflow_action_pins
 import scan_workflow_gh_calls
 import scan_workflow_pip
 import security_drift_report
+import skill_quality_gate
 import threat_intel_triage
 import title_policy
 import update_devcontainer_image_pins
 import uv_pin
+import validate_json_syntax
 import verify_apm_checksums
 import verify_dependabot_author
 import verify_linked_issue_titles
@@ -108,6 +116,10 @@ class WorkflowInvocation(NamedTuple):
 # enforce that in both directions.
 CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("analyze_ci_timings.py", None): "test_analyze_ci_timings_matches_workflow_args",
+    ("attack_review_reminder.py", "assemble"): "test_attack_review_reminder_assemble_matches_workflow_args",
+    ("backup_archive.py", "build"): "test_backup_archive_build_matches_workflow_args",
+    ("github_paginate.py", "fetch-run-jobs"): "test_github_paginate_fetch_run_jobs_matches_workflow_args",
+    ("validate_json_syntax.py", "verify"): "test_validate_json_syntax_verify_matches_workflow_args",
     ("auto_retro.py", "decision-tree-doc"): "test_auto_retro_decision_tree_doc_matches_workflow_args",
     ("auto_retro.py", "triage-report"): "test_auto_retro_triage_report_matches_workflow_env",
     ("workflow_diagram.py", "diagram-doc"): "test_workflow_diagram_doc_matches_workflow_args",
@@ -115,10 +127,12 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("auto_retro.py", "post-merge-rescan"): "test_auto_retro_post_merge_rescan_matches_workflow_env",
     ("auto_retro.py", "sentinel"): "test_auto_retro_sentinel_matches_workflow_env",
     ("auto_retro.py", "verify-retro-completeness"): "test_auto_retro_verify_retro_completeness_matches_workflow_args",
+    ("auto_retro.py", "verify-no-direct-retro-pr"): "test_auto_retro_verify_no_direct_retro_pr_matches_workflow_args",
     ("body_policy.py", "verify"): "test_body_policy_verify_matches_workflow_body_file",
     ("branch_cleanup.py", "reconcile"): "test_branch_cleanup_reconcile_matches_workflow_args",
     ("branch_cleanup.py", "survey"): "test_branch_cleanup_survey_matches_workflow_args",
     ("coverage_failure_issue.py", "run"): "test_coverage_failure_issue_run_matches_workflow_env",
+    ("devcontainer_pin_pr.py", "open"): "test_devcontainer_pin_pr_open_matches_workflow_args",
     ("dependabot_automerge.py", "audit"): "test_dependabot_automerge_audit_matches_workflow_files",
     ("dependabot_automerge.py", "list-files"): "test_dependabot_list_files_matches_workflow_args",
     ("dependabot_automerge.py", "request-automerge"): "test_dependabot_request_automerge_matches_workflow_args",
@@ -135,12 +149,15 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("rulesets_apply.py", "auto-delete"): "test_rulesets_apply_plan_and_auto_delete_match_workflow_args",
     ("scan_apm_portability.py", "verify"): "test_scan_apm_portability_verify_matches_workflow_paths",
     ("scan_design_philosophy_drift.py", "verify"): "test_scan_design_philosophy_drift_verify_matches_workflow_paths",
+    ("scan_devcontainer_tool_drift.py", "verify"): "test_scan_devcontainer_tool_drift_verify_matches_workflow_args",
     ("scan_docs_inventory.py", "verify"): "test_scan_docs_inventory_verify_matches_workflow_args",
     ("scan_markdown_links.py", "verify"): "test_scan_markdown_links_verify_matches_workflow_args",
     ("scan_maintainability_metrics.py", "verify"): "test_scan_maintainability_metrics_verify_matches_workflow_args",
     ("scan_non_ascii.py", "run"): "test_scan_non_ascii_run_matches_workflow_env",
     ("scan_hook_coverage_drift.py", "verify"): "test_scan_hook_coverage_drift_verify_matches_workflow_args",
+    ("scan_input_contract_drift.py", "verify"): "test_scan_input_contract_drift_verify_matches_workflow_args",
     ("scan_preflight_drift.py", "verify"): "test_scan_preflight_drift_verify_matches_workflow_args",
+    ("scan_quality_standard_drift.py", "verify"): "test_scan_quality_standard_drift_verify_matches_workflow_args",
     ("scan_retro_followup_drift.py", "run"): "test_scan_retro_followup_drift_run_matches_workflow_env",
     ("scan_secret_runbooks.py", "verify"): "test_scan_secret_runbooks_verify_matches_workflow_args",
     ("scan_workflow_action_pins.py", "verify"): "test_scan_workflow_action_pins_verify_matches_workflow_args",
@@ -148,6 +165,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("scan_workflow_pip.py", "verify"): "test_scan_workflow_pip_verify_matches_workflow_args",
     ("security_drift_report.py", "aggregate"): "test_security_drift_report_aggregate_and_post_comment_match_workflow_args",
     ("security_drift_report.py", "post-comment"): "test_security_drift_report_aggregate_and_post_comment_match_workflow_args",
+    ("skill_quality_gate.py", "verify"): "test_skill_quality_gate_verify_matches_workflow_args",
     ("threat_intel_triage.py", "apply-labels"): "test_threat_intel_apply_labels_matches_workflow_args",
     ("threat_intel_triage.py", "scan"): "test_threat_intel_scan_matches_workflow_args",
     ("title_policy.py", "verify"): "test_title_policy_verify_matches_workflow_kind_env",
@@ -164,7 +182,6 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("github_paginate.py", "fetch"): "test_github_paginate_fetch_matches_workflow_args",
     ("github_paginate.py", "get"): "test_github_paginate_get_matches_workflow_args",
     ("post_issue_comment.py", "create"): "test_post_issue_comment_create_matches_workflow_args",
-    ("pr_upsert.py", "find"): "test_pr_upsert_find_matches_workflow_args",
     ("pr_upsert.py", "upsert"): "test_pr_upsert_matches_workflow_args",
     ("verify_shard_coverage.py", None): "test_verify_shard_coverage_matches_workflow_args",
     ("verify_test_shard_markers.py", None): "test_verify_test_shard_markers_matches_workflow_args",
@@ -378,6 +395,42 @@ def test_auto_retro_verify_retro_completeness_matches_workflow_args(
                 REPO,
                 "--pr-title",
                 "feat(x): unrelated change",
+                "--pr-body-file",
+                str(body_file),
+            ]
+        )
+        == 0
+    )
+
+
+def test_auto_retro_verify_no_direct_retro_pr_matches_workflow_args(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Mirror the argv + env shape used by portable-pr-policy.yml.
+
+    The workflow shells to ``python3 scripts/auto_retro.py
+    verify-no-direct-retro-pr --repo "$REPO" --pr-title "$TITLE"
+    --pr-body-file "$body_file"``. A retro-close PR title must skip
+    (exit 0) without touching the gh_api boundary. Refs #1069.
+    """
+    body_file = tmp_path / "body.md"
+    body_file.write_text("Refs #1\n", encoding="utf-8")
+    monkeypatch.setattr(
+        auto_retro,
+        "gh_api",
+        lambda *_a, **_kw: pytest.fail(
+            "gh_api must not be called for a retro-close PR"
+        ),
+    )
+
+    assert (
+        auto_retro.main(
+            [
+                "verify-no-direct-retro-pr",
+                "--repo",
+                REPO,
+                "--pr-title",
+                "docs(auto-retro): record repair-free merge",
                 "--pr-body-file",
                 str(body_file),
             ]
@@ -1006,9 +1059,27 @@ def test_scan_secret_runbooks_verify_matches_workflow_args() -> None:
     assert scan_secret_runbooks.main(["verify"]) == 0
 
 
+def test_scan_input_contract_drift_verify_matches_workflow_args() -> None:
+    """Mirrors the ``Verify workflow-script input contracts`` step in
+    ``.github/workflows/verify-agents.yml``. Refs #1087."""
+    assert scan_input_contract_drift.main(["verify"]) == 0
+
+
+def test_scan_quality_standard_drift_verify_matches_workflow_args() -> None:
+    """Mirrors the ``Verify quality-standard enforcement map`` step in
+    ``.github/workflows/verify-agents.yml``. Refs #1089."""
+    assert scan_quality_standard_drift.main(["verify"]) == 0
+
+
 def test_scan_markdown_links_verify_matches_workflow_args() -> None:
     """Mirrors the ``Assert local Markdown links resolve`` step."""
     assert scan_markdown_links.main(["verify"]) == 0
+
+
+def test_scan_devcontainer_tool_drift_verify_matches_workflow_args() -> None:
+    """Mirrors the ``Verify devcontainer provisions gate-required tools``
+    step in ``.github/workflows/verify-agents.yml``."""
+    assert scan_devcontainer_tool_drift.main(["verify"]) == 0
 
 
 def test_scan_docs_inventory_verify_matches_workflow_args() -> None:
@@ -1026,6 +1097,21 @@ def test_scan_workflow_pip_verify_matches_workflow_args() -> None:
     """Mirrors the ``Assert workflows install Python deps via uv only``
     step in ``.github/workflows/verify-agents.yml``."""
     assert scan_workflow_pip.main(["verify", "--repo-root", "."]) == 0
+
+
+def test_skill_quality_gate_verify_matches_workflow_args(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Mirrors the ``Run skill quality gate`` step in
+    ``.github/workflows/skill-quality.yml``. waza is an external Go binary
+    installed by the workflow but absent from the pytest matrix, so its
+    discovery and execution are stubbed; this asserts the ``verify`` argv
+    shape is accepted and exits 0, not waza itself."""
+    monkeypatch.setattr(skill_quality_gate, "find_waza", lambda: "waza")
+    monkeypatch.setattr(
+        skill_quality_gate, "run_waza_check", lambda _w, _sd: {"skills": []}
+    )
+    assert skill_quality_gate.main(["verify"]) == 0
 
 
 def test_nixpkgs_cooldown_verify_matches_workflow_args(tmp_path: Path) -> None:
@@ -1237,12 +1323,92 @@ def test_github_paginate_get_matches_workflow_args(
 def test_post_issue_comment_create_matches_workflow_args(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """create subcommand accepts --issue-number/--body args used by backup-non-ascii-originals.yml."""
+    """create subcommand accepts --issue-number/--body args used by backup-non-ascii-originals.yml.
+
+    The ``Post review reminder comment`` step in
+    ``attack-coverage-review-reminder.yml`` also invokes the ``--body-file``
+    form. Refs #184, #911.
+    """
     monkeypatch.setenv("GH_TOKEN", "tok")
     monkeypatch.setenv("REPO", "owner/repo")
     monkeypatch.setattr(post_issue_comment, "_post_comment", lambda **kw: None)
     rc = post_issue_comment.main(["create", "--issue-number", "42", "--body", "test body"])
     assert rc == 0
+    body_file = tmp_path / "comment.md"
+    body_file.write_text("assembled comment", encoding="utf-8")
+    rc = post_issue_comment.main(["create", "--issue-number", "178", "--body-file", str(body_file)])
+    assert rc == 0
+
+
+def test_attack_review_reminder_assemble_matches_workflow_args(tmp_path: Path) -> None:
+    """assemble subcommand accepts the args used by the ``Assemble review
+    reminder comment`` step in ``attack-coverage-review-reminder.yml``. Refs #184."""
+    runbook = tmp_path / "rb.md"
+    runbook.write_text(
+        f"{attack_review_reminder.BEGIN_MARKER}\n### A\n### B\n{attack_review_reminder.END_MARKER}\n",
+        encoding="utf-8",
+    )
+    out = tmp_path / "review-comment.md"
+    summary = tmp_path / "summary.md"
+    rc = attack_review_reminder.main([
+        "assemble",
+        "--runbook", str(runbook),
+        "--out", str(out),
+        "--summary-file", str(summary),
+        "--repo", "owner/repo",
+        "--run-url", "https://example/run/1",
+        "--expected-h3", "2",
+    ])
+    assert rc == 0
+    assert out.exists()
+
+
+def test_backup_archive_build_matches_workflow_args(tmp_path: Path) -> None:
+    """build subcommand accepts the --indir/--timestamp/--repo/--archive args
+    used by the ``Capture issues, PRs, and comments`` step in
+    ``backup-non-ascii-originals.yml``."""
+    for fname in ("issues.json", "pull_requests.json", "issue_comments.json", "pull_request_review_comments.json"):
+        (tmp_path / fname).write_text("[]", encoding="utf-8")
+    archive = tmp_path / "originals.json.gz"
+    rc = backup_archive.main([
+        "build",
+        "--indir", str(tmp_path),
+        "--timestamp", "20260602T0000Z",
+        "--repo", "owner/repo",
+        "--archive", str(archive),
+    ])
+    assert rc == 0
+    assert archive.exists()
+
+
+def test_github_paginate_fetch_run_jobs_matches_workflow_args(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """fetch-run-jobs subcommand accepts the --runs/--repo/--outdir args used by
+    the ``Fetch per-run jobs`` step in ``weekly-maintenance.yml``. Refs #911."""
+    monkeypatch.setenv("GH_TOKEN", "tok")
+    runs = tmp_path / "runs.json"
+    runs.write_text(json.dumps({"workflow_runs": [{"id": 42}]}), encoding="utf-8")
+    monkeypatch.setattr(github_paginate, "_get_single", lambda **kw: json.dumps({"jobs": []}))
+    rc = github_paginate.main([
+        "fetch-run-jobs",
+        "--runs", str(runs),
+        "--repo", "owner/repo",
+        "--outdir", str(tmp_path / "jobs"),
+    ])
+    assert rc == 0
+    assert (tmp_path / "jobs" / "42.json").exists()
+
+
+def test_validate_json_syntax_verify_matches_workflow_args() -> None:
+    """verify subcommand accepts the repeated --file args used by the
+    ``Validate ruleset JSON syntax`` steps in apply-rulesets.yml and
+    weekly-maintenance.yml."""
+    assert validate_json_syntax.main([
+        "verify",
+        "--file", ".github/rulesets/main.json",
+        "--file", ".github/rulesets/all-branches.json",
+    ]) == 0
 
 
 def test_pr_label_mutation_jobs_have_pull_request_write() -> None:
@@ -1350,28 +1516,52 @@ def test_devcontainer_pin_pr_uses_environment_secret_token() -> None:
     open_pr = next(
         step for step in update_pins["steps"] if step.get("name") == "Open pin update PR"
     )
+    # Thin orchestration: GH_TOKEN comes from the environment secret, REPO from
+    # the workflow context (both consumed by scripts/devcontainer_pin_pr.py).
     assert open_pr["env"] == {
-        "GH_TOKEN": "${{ secrets.DEVCONTAINER_PIN_PR_TOKEN }}"
+        "GH_TOKEN": "${{ secrets.DEVCONTAINER_PIN_PR_TOKEN }}",
+        "REPO": "${{ github.repository }}",
     }
-    assert "DEVCONTAINER_PIN_PR_TOKEN is required" in open_pr["run"]
-    assert 'github-actions[bot]"' in open_pr["run"]
+    assert "scripts/devcontainer_pin_pr.py open" in open_pr["run"]
     assert "Refs #696" in open_pr["run"]
 
 
-def test_devcontainer_pin_pr_requests_automerge_after_create() -> None:
-    """Verify the Open pin update PR step uses Python scripts (not gh CLI). Refs #911."""
-    workflow_path = Path(".github/workflows/publish-devcontainer-images.yml")
-    workflow = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
-    update_pins = workflow["jobs"]["update-pins"]
-    open_pr = next(
-        step for step in update_pins["steps"] if step.get("name") == "Open pin update PR"
-    )
+def test_devcontainer_pin_pr_open_matches_workflow_args(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """open subcommand accepts the args used by the Open pin update PR step.
 
-    assert 'scripts/pr_upsert.py upsert' in open_pr["run"]
-    assert 'scripts/dependabot_automerge.py request-automerge' in open_pr["run"]
-    assert 'scripts/pr_upsert.py find' in open_pr["run"]
-    assert "pin update PR already exists" in open_pr["run"]
-    assert 'enable_auto_merge "$existing_pr"' in open_pr["run"]
+    The branch/PR decision flow and auto-merge request are exercised by
+    tests/test_devcontainer_pin_pr.py; here we pin the workflow argv shape.
+    Refs #696, #911.
+    """
+    monkeypatch.setenv("GH_TOKEN", "tok")
+    monkeypatch.setenv("REPO", REPO)
+    template = tmp_path / "tmpl.md"
+    template.write_text("Pinned to __GITHUB_SHA__.\n", encoding="utf-8")
+    # Branch absent -> create branch + upsert; mock git and the GitHub API helpers.
+    monkeypatch.setattr(
+        devcontainer_pin_pr,
+        "run_git",
+        lambda args, **kw: __import__("subprocess").CompletedProcess(
+            ["git", *args], 1 if args[0] == "diff" else 2 if args[0] == "ls-remote" else 0
+        ),
+    )
+    monkeypatch.setattr(devcontainer_pin_pr, "_upsert_pr", lambda **kw: ("created", 42))
+    monkeypatch.setattr(devcontainer_pin_pr, "_enable_auto_merge", lambda **kw: None)
+    rc = devcontainer_pin_pr.main([
+        "open",
+        "--github-sha", "abc123",
+        "--base", "main",
+        "--title", "fix(devcontainer): pin published agent images",
+        "--commit-subject", "fix(devcontainer): pin published agent images",
+        "--commit-trailer", "Refs #696",
+        "--template", str(template),
+        "--file", ".devcontainer/claude/devcontainer.json",
+        "--file", ".devcontainer/codex/devcontainer.json",
+        "--file", "docs/runbooks/devcontainers.md",
+    ])
+    assert rc == 0
 
 
 def test_analyze_ci_timings_matches_workflow_args(

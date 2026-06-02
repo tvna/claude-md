@@ -21,7 +21,7 @@
 | 2 | Bound Inputs and Unknowns Before Coding | 実装前の認識整理 | 外部テキストを未信頼データとして扱い、事実、仮定、曖昧さを分けてから実装する。 |
 | 3 | Use Git Ecosystem Effectively | デリバリーハーネス | スケールさせる前に、hooks、CI/CD、宣言的依存管理などのハーネスを整える。 |
 | 4 | Simplicity, Bounded by Safety | 安全境界 | 要求を満たす最小限にする。ただし安全性、ツール範囲、秘密情報の扱いを犠牲にしない。 |
-| 5 | Accelerate Scale with Quality | 変更スコープと役割分担 | 必要な箇所だけ触り、実装・検証・探索を別エージェントに分ける。 |
+| 5 | Accelerate Scale with Quality | 品質がスケールを可能にする | 品質こそが出力のスケールを可能にし、両者は比例して伸びる。変更面は狭く保ち、品質が劣化したら止めて再計画する。 |
 | 6 | Be a Force Multiplier | 引き渡しと伝達 | "LGTM" で終わらせず、トレードオフを明示して他者が判断を追えるようにする。 |
 
 コンパイル後の全文は [`CLAUDE.md`](./CLAUDE.md) または [`AGENTS.md`](./AGENTS.md) を参照してください。
@@ -54,16 +54,6 @@ git submodule add https://github.com/tvna/claude-md .claude-md-master
 ln -s .claude-md-master/CLAUDE.md CLAUDE.md
 ```
 
-Codex など `AGENTS.md` を読むツール向けには、次も追加します。
-
-```bash
-ln -s .claude-md-master/AGENTS.md AGENTS.md
-```
-
-### Devin
-
-Devin は APM が展開した `.agents/skills/` の skills を利用できます。hooks の parity が必要な場合は、リポジトリ指示と一緒に `.devin/hooks.v1.json` を取り込んでください。
-
 ### 2. プロジェクト固有ルールを追加する
 
 親プロジェクト側でローカルなプロジェクト指示ファイルを作成し、先頭でこのマスターを読み込んでから、プロジェクト固有の差分だけを書きます。
@@ -80,6 +70,16 @@ Devin は APM が展開した `.agents/skills/` の skills を利用できます
 ```bash
 git submodule update --remote .claude-md-master
 ```
+
+### ツール別の補足
+
+- **Codex など `AGENTS.md` を読むツール** 向けには、コンパイル済みの `AGENTS.md` も symlink します。
+
+  ```bash
+  ln -s .claude-md-master/AGENTS.md AGENTS.md
+  ```
+
+- **Devin** は APM が展開した `.agents/skills/` の skills を利用できます。hooks の parity が必要な場合は、リポジトリ指示と一緒に `.devin/hooks.v1.json` を取り込んでください。詳細は [`docs/standards/devin-apm-compatibility.md`](./docs/standards/devin-apm-compatibility.md) を参照してください。
 
 ## 変更ポリシー
 

@@ -76,10 +76,30 @@ jobs:
         # `scripts/preflight_all.py`. See docs/runbooks/preflight.md.
         run: uv run python scripts/scan_preflight_drift.py verify
 
+      - name: Verify workflow-script input contracts
+        # Refs #1087: every workflow-called script must declare a Contract:
+        # docstring block (Inputs / Outputs / Failure policy loud|open),
+        # enforcing M4 (boundary validation) and M9 (fail policy)
+        # deterministically. Baseline debt in the script's
+        # BASELINE_MISSING_CONTRACT must shrink, never grow.
+        run: uv run python scripts/scan_input_contract_drift.py verify
+
+      - name: Verify quality-standard enforcement map
+        # Refs #1089: every M1-M10 must-have in
+        # docs/standards/workflow-script-quality.md has a registry entry,
+        # and every `enforced`/`partial` row resolves its backing gate.
+        run: uv run python scripts/scan_quality_standard_drift.py verify
+
       - name: Verify Claude/Codex hook coverage parity
         # Refs #615: fails when a Claude hook script is absent from Codex
         # coverage and is not in the explicit allowlist.
         run: uv run python scripts/scan_hook_coverage_drift.py verify
+
+      - name: Verify devcontainer provisions gate-required tools
+        # Refs #1103: fails when a tool a gate needs at runtime (a
+        # preflight_all.py Step required_bin) is not provisioned in flake.nix,
+        # so the devcontainer cannot silently lack a tool the gates depend on.
+        run: uv run python scripts/scan_devcontainer_tool_drift.py verify
 
       - name: Verify test shard markers
         # Refs #545: each tests/test_*.py must declare exactly one

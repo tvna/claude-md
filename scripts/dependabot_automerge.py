@@ -6,6 +6,18 @@ sets ``enabled`` to true. Eligibility and enablement are separate on purpose:
 operators can observe what would have been auto-merged before allowing the
 workflow to request GitHub auto-merge.
 
+Contract:
+- Inputs: the ``audit`` subcommand (``--event`` GitHub event JSON,
+  ``--policy`` policy JSON, optional ``--summary-file`` / ``--output``),
+  the ``list-files`` and ``request-automerge`` subcommands
+  (``--pr-number``); ``GH_TOKEN`` and ``REPO`` env vars for the API
+  boundary.
+- Outputs: ``::error::`` annotations on the audit result, an optional
+  Markdown summary, and ``name=value`` lines to the GitHub Actions output
+  file; exit 0 on success, exit 1 on malformed input or an API failure.
+- Failure policy: fails loud per CLAUDE.md section 4 (gate: an invalid PR
+  number, missing token, or unreadable event/policy exits non-zero).
+
 Tracked by #185.
 """
 

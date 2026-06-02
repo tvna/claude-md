@@ -80,6 +80,23 @@ class TestClassifyAction:
         assert numbers == []
 
     @pytest.mark.parametrize(
+        "marker",
+        [
+            "partial-pr",
+            "PARTIAL-PR",
+            "  partial-pr  ",
+            "partial-pr: first of two stacked PRs",
+        ],
+    )
+    def test_plaintext_partial_marker_passes(self, marker: str) -> None:
+        # #1035: the MCP write path strips HTML comments, so the gate
+        # must also honor the plain-text 'partial-pr' opt-out spelling.
+        body = f"Refs #214\n\n{marker}\n"
+        action, numbers = gate.classify_action(body)
+        assert action == "pass"
+        assert numbers == []
+
+    @pytest.mark.parametrize(
         "body",
         [
             "",
@@ -360,6 +377,17 @@ class TestDecide:
         decision = gate.decide(
             "mcp__github__create_pull_request",
             _make_input(body="Refs #205\n\n<!-- partial -->\n"),
+            token_getter=lambda: "t",
+            label_getter=lambda *_a: ["type:fix"],
+        )
+        assert decision is None
+
+    def test_plaintext_partial_marker_returns_none(self) -> None:
+        # #1035: 'partial-pr' line opts out even through the MCP path,
+        # which would have stripped the legacy HTML-comment marker.
+        decision = gate.decide(
+            "mcp__github__create_pull_request",
+            _make_input(body="Refs #205\n\npartial-pr\n"),
             token_getter=lambda: "t",
             label_getter=lambda *_a: ["type:fix"],
         )

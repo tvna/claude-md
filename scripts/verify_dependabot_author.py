@@ -17,6 +17,16 @@ loudly, so a non-bot actor cannot pose as Dependabot by pushing a
 The check is intentionally narrow: it only fires when the head ref matches
 ``dependabot/*``. PRs on any other branch are out of scope and pass through.
 
+Contract:
+- Inputs: the ``verify`` subcommand; the PR head ref and author login
+  from ``--head-ref`` / ``--author`` (or their env-var fallbacks); the
+  trusted-bot allowlist ``_trusted_bots._TRUSTED_BOT_LOGINS``.
+- Outputs: a ``::error::`` annotation on stderr when an untrusted author
+  poses as Dependabot; exit 0 when in scope and trusted (or out of
+  scope), exit 1 otherwise.
+- Failure policy: fails loud per CLAUDE.md section 4 (gate: an untrusted
+  ``dependabot/*`` author exits non-zero).
+
 Exit codes:
 * ``0`` -- head ref is not ``dependabot/*``, or it is and the author is trusted.
 * ``1`` -- head ref is ``dependabot/*`` and the author login is not trusted.

@@ -59,6 +59,13 @@ jobs:
           python3 scripts/auto_retro.py verify-retro-completeness \
             --repo "$REPO" --pr-title "$TITLE" --pr-body-file "$body_file"
 
+      - name: Block direct PR from retro issue
+        run: |
+          body_file="$(mktemp)"
+          printf '%s' "$PR_BODY" > "$body_file"
+          python3 scripts/auto_retro.py verify-no-direct-retro-pr \
+            --repo "$REPO" --pr-title "$TITLE" --pr-body-file "$body_file"
+
       - name: Validate PR-issue link
         run: |
           body_file="$(mktemp)"

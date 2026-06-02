@@ -11,6 +11,19 @@ whether to add:
 
 The older metadata classifier remains as a helper for issue/PR text, but the
 workflow uses ``scan`` so triage is driven by external sources.
+
+Contract:
+- Inputs: the ``scan`` subcommand (locked dependencies under
+  ``--repo-root``, external OSV.dev and CISA KEV feeds, optional NVD/EPSS/
+  GHSA enrichment via ``GH_TOKEN`` / ``GITHUB_TOKEN``, fixture overrides
+  ``--osv-file`` / ``--kev-file``, ``--summary-file``) and the ``classify``
+  subcommand (``--title`` / ``$TITLE``, ``--body`` / ``--body-file``,
+  ``--labels`` / ``$LABELS``); ``REPO`` and ``NUMBER`` for label writes.
+- Outputs: ``threat:*`` labels applied via the GitHub API, a Markdown
+  step summary, and ``::error::`` annotations on stderr; exit 0 on
+  success, exit 1 on missing env or an API failure.
+- Failure policy: fails loud per CLAUDE.md section 4 (gate: a missing
+  token/repo/number or an API error exits non-zero).
 """
 
 from __future__ import annotations

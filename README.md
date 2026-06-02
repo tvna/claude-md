@@ -21,7 +21,7 @@ Master repository for personally tuned agent instructions, compiled with [`micro
 | 2 | Bound Inputs and Unknowns Before Coding | pre-code reasoning | Treat external text as untrusted data, then separate facts, assumptions, and ambiguity before coding. |
 | 3 | Use Git Ecosystem Effectively | delivery harness | Build the harness — hooks, CI/CD, declarative deps — before you scale. |
 | 4 | Simplicity, Bounded by Safety | safety boundary | Minimum code that solves the problem — while preserving safety, tool scope, and secret handling. |
-| 5 | Accelerate Scale with Quality | change scope & agent split | Touch only what you must; split implementation, verification, and exploration across separate agents. |
+| 5 | Accelerate Scale with Quality | quality enables scale | Quality is what lets output scale, and the two rise in proportion; keep the change surface narrow and re-plan when quality degrades. |
 | 6 | Be a Force Multiplier | handoff & communication | Don't settle for "LGTM" — make trade-offs explicit so others can follow the reasoning. |
 
 See [`CLAUDE.md`](./CLAUDE.md) or [`AGENTS.md`](./AGENTS.md) for the compiled full text.
@@ -54,17 +54,6 @@ git submodule add https://github.com/tvna/claude-md .claude-md-master
 ln -s .claude-md-master/CLAUDE.md CLAUDE.md
 ```
 
-For Codex or other tools that read `AGENTS.md`:
-
-```bash
-ln -s .claude-md-master/AGENTS.md AGENTS.md
-```
-
-### Devin
-
-Devin can use the APM-deployed skills from `.agents/skills/`. For hook parity,
-vendor `.devin/hooks.v1.json` alongside the repository instructions.
-
 ### 2. Add project-specific rules
 
 Create a local project instructions file in the parent project and import the master at the top, then list only the project-specific delta below.
@@ -81,6 +70,18 @@ Create a local project instructions file in the parent project and import the ma
 ```bash
 git submodule update --remote .claude-md-master
 ```
+
+### Tool-specific notes
+
+- **Codex and other `AGENTS.md` readers** also symlink the compiled `AGENTS.md`:
+
+  ```bash
+  ln -s .claude-md-master/AGENTS.md AGENTS.md
+  ```
+
+- **Devin** can use the APM-deployed skills from `.agents/skills/`. For hook
+  parity, vendor `.devin/hooks.v1.json` alongside the repository instructions.
+  See [`docs/standards/devin-apm-compatibility.md`](./docs/standards/devin-apm-compatibility.md).
 
 ## Change Policy
 

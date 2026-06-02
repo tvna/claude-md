@@ -11,6 +11,22 @@ The labels live as a single source of truth in
 [`scripts/_retro_labels.py`](../../scripts/_retro_labels.py), alongside
 the four prior thresholds consumed by the signal gate.
 
+## Retro issues are triage signals, not direct work
+
+An auto-opened retro is titled `chore(auto-retro): review PR #N repair loops`
+(Refs #1069). The neutral `chore` prefix is deliberate: a retro is a triage
+signal, not a unit of work to implement directly. Do **not** open an
+implementation PR straight off a retro issue. Decide TP/FP first; when a real
+repair loop is confirmed, open a separate follow-up issue for the fix. The
+retro itself is closed by a retro-close PR (a `type(auto-retro): ...` title,
+for example `docs(auto-retro): ...`) that records the triage outcome.
+
+This is enforced deterministically: `scripts/auto_retro.py verify-no-direct-retro-pr`
+(wired into `.github/workflows/portable-pr-policy.yml`) fails any PR that
+closes or references a retro issue unless that PR is itself a retro-close PR.
+`is_retro_issue_title` recognizes both the `chore(auto-retro)` prefix and the
+legacy `fix(auto-retro)` prefix used by closed historical retros.
+
 ## SoT layout
 
 | File | Purpose |

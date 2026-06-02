@@ -190,10 +190,43 @@ STEPS: tuple[Step, ...] = (
         argv=("python3", "scripts/scan_preflight_drift.py", "verify"),
     ),
     Step(
+        # Refs #1087. Static gate enforcing M4 (boundary validation) and M9
+        # (fail-loud/open) by requiring every workflow-called script to declare
+        # a Contract: docstring block. Baseline debt lives in the script's
+        # BASELINE_MISSING_CONTRACT and may only shrink.
+        name="scan_input_contract_drift",
+        argv=("python3", "scripts/scan_input_contract_drift.py", "verify"),
+    ),
+    Step(
+        # Refs #1089. Fails when the workflow-script-quality standard and its
+        # enforcement registry drift, or an `enforced`/`partial` must-have
+        # names a backing gate that does not resolve.
+        name="scan_quality_standard_drift",
+        argv=("python3", "scripts/scan_quality_standard_drift.py", "verify"),
+    ),
+    Step(
         # Refs #615. Fails when a Claude hook script is absent from Codex
         # coverage and is not in the explicit allowlist in the script.
         name="scan_hook_coverage_drift",
         argv=("python3", "scripts/scan_hook_coverage_drift.py", "verify"),
+    ),
+    Step(
+        # Refs #1103. Fails when a tool a gate needs at runtime (a Step
+        # required_bin) is not provisioned in flake.nix, so the devcontainer
+        # cannot silently lack a tool the gates depend on.
+        name="scan_devcontainer_tool_drift",
+        argv=("python3", "scripts/scan_devcontainer_tool_drift.py", "verify"),
+    ),
+    Step(
+        # Refs #1099. Runs waza spec-compliance over every skill under
+        # .agents/skills. spec failure = fail, token budget = warning only.
+        # Needs the pinned waza binary (scripts/install_waza.sh); soft so a
+        # contributor laptop without waza/Go warns-and-skips while CI, which
+        # installs waza first, enforces it.
+        name="skill_quality_gate",
+        argv=("python3", "scripts/skill_quality_gate.py", "verify"),
+        required_bin=("waza",),
+        soft=True,
     ),
     Step(
         # Refs #545. Static check that every tests/test_*.py declares

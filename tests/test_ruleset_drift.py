@@ -81,12 +81,60 @@ class TestCanonicalProjection:
         assert projected["enforcement"] is None
         assert projected["rules"] is None
 
-    def test_preserves_rules_list_order(self) -> None:
+    def test_sorts_rules_into_canonical_order(self) -> None:
+        # #1004: GitHub re-orders rules on PUT (#1036), so the projection sorts
+        # them by type to keep the comparison stable.
         ruleset = {**SOT_MAIN, "rules": [{"type": "b"}, {"type": "a"}, {"type": "c"}]}
 
         projected = ruleset_drift.canonical_projection(ruleset)
 
-        assert [rule["type"] for rule in projected["rules"]] == ["b", "a", "c"]
+        assert [rule["type"] for rule in projected["rules"]] == ["a", "b", "c"]
+
+    def test_strips_server_default_parameters(self) -> None:
+        # #1004: GitHub echoes required_reviewers=[] / do_not_enforce_on_create=false
+        # onto live; stripping the documented defaults keeps the projection equal
+        # to the SoT shape that omits them.
+        ruleset = {
+            **SOT_MAIN,
+            "rules": [
+                {
+                    "type": "pull_request",
+                    "parameters": {
+                        "require_code_owner_review": True,
+                        "required_reviewers": [],
+                    },
+                },
+                {
+                    "type": "required_status_checks",
+                    "parameters": {"do_not_enforce_on_create": False},
+                },
+            ],
+        }
+
+        projected = ruleset_drift.canonical_projection(ruleset)
+        by_type = {rule["type"]: rule for rule in projected["rules"]}
+
+        assert by_type["pull_request"]["parameters"] == {"require_code_owner_review": True}
+        # parameters emptied by pruning is dropped to match the bare-type SoT shape.
+        assert "parameters" not in by_type["required_status_checks"]
+
+    def test_keeps_parameter_that_diverges_from_default(self) -> None:
+        # A non-default value is genuine drift and must NOT be stripped.
+        ruleset = {
+            **SOT_MAIN,
+            "rules": [
+                {
+                    "type": "pull_request",
+                    "parameters": {"required_reviewers": [{"reviewer_id": 7}]},
+                }
+            ],
+        }
+
+        projected = ruleset_drift.canonical_projection(ruleset)
+
+        assert projected["rules"][0]["parameters"]["required_reviewers"] == [
+            {"reviewer_id": 7}
+        ]
 
 
 class TestCanonicalJson:
@@ -161,7 +209,9 @@ class TestDiffCanonical:
         assert '-  "enforcement": "disabled",\n' in diff
         assert '+  "enforcement": "active",\n' in diff
 
-    def test_rules_reorder_shows_drift(self) -> None:
+    def test_rules_reorder_is_not_drift(self) -> None:
+        # #1004 / #1036: a rule reorder applied by GitHub on PUT canonicalizes
+        # to the same order and must not read as drift.
         live = {
             **SOT_MAIN,
             "rules": list(reversed(SOT_MAIN["rules"])),
@@ -169,6 +219,55 @@ class TestDiffCanonical:
 
         diff = ruleset_drift.diff_canonical(
             sot=SOT_MAIN, live=live, sot_path="a", live_path="b"
+        )
+
+        assert diff == ""
+
+    def test_server_default_parameters_are_not_drift(self) -> None:
+        # #1004: live carrying GitHub's server defaults while SoT omits them is
+        # in-sync, not drift.
+        sot = {
+            **SOT_MAIN,
+            "rules": [
+                {"type": "pull_request", "parameters": {"require_code_owner_review": True}},
+            ],
+        }
+        live = {
+            **SOT_MAIN,
+            "rules": [
+                {
+                    "type": "pull_request",
+                    "parameters": {
+                        "require_code_owner_review": True,
+                        "required_reviewers": [],
+                    },
+                },
+            ],
+        }
+
+        diff = ruleset_drift.diff_canonical(
+            sot=sot, live=live, sot_path="a", live_path="b"
+        )
+
+        assert diff == ""
+
+    def test_diverging_parameter_value_shows_drift(self) -> None:
+        sot = {
+            **SOT_MAIN,
+            "rules": [{"type": "pull_request", "parameters": {"required_reviewers": []}}],
+        }
+        live = {
+            **SOT_MAIN,
+            "rules": [
+                {
+                    "type": "pull_request",
+                    "parameters": {"required_reviewers": [{"reviewer_id": 7}]},
+                }
+            ],
+        }
+
+        diff = ruleset_drift.diff_canonical(
+            sot=sot, live=live, sot_path="a", live_path="b"
         )
 
         assert diff != ""
@@ -443,6 +542,46 @@ class TestDetect:
         assert sot_body is not None
         assert "actor_id" in sot_body
         assert "RepositoryRole" in sot_body
+
+    def test_live_server_defaults_and_reorder_are_in_sync(self, tmp_path: Path) -> None:
+        # #1004 regression: live echoes GitHub server defaults and re-orders the
+        # rules array; the SoT omits the defaults and uses a different order.
+        # Normalization must report in-sync (drift=0), not a recurring false drift.
+        sot_main = {
+            **SOT_MAIN,
+            "rules": [
+                {"type": "required_linear_history"},
+                {"type": "non_fast_forward"},
+                {
+                    "type": "pull_request",
+                    "parameters": {"require_code_owner_review": True},
+                },
+            ],
+        }
+        live_main = {
+            **sot_main,
+            "rules": [
+                {
+                    "type": "pull_request",
+                    "parameters": {
+                        "require_code_owner_review": True,
+                        "required_reviewers": [],
+                    },
+                },
+                {"type": "non_fast_forward"},
+                {"type": "required_linear_history"},
+            ],
+        }
+        drift, unknown, summary, sot_body, _u = _detect(
+            tmp_path,
+            sot_files={"main.json": sot_main, "all-branches.json": SOT_ALL},
+            live_list=[{"id": 1, **sot_main}, {"id": 2, **SOT_ALL}],
+            live_by_id={1: live_main, 2: SOT_ALL},
+        )
+
+        assert drift == 0
+        assert "in-sync" in summary
+        assert sot_body is None
 
     def test_unknown_only(self, tmp_path: Path) -> None:
         ghost = {"id": 99, "name": "ghost", "target": "branch", "enforcement": "active"}
