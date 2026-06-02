@@ -103,5 +103,25 @@
     "name": "retro:tp",
     "description": "Operator-confirmed true positive: follow-up landed and is reducing repair loops.",
     "color": "0e8a16"
+  },
+  {
+    "name": "retro:fp",
+    "description": "Confirmed false positive: retro fired on weak signals with no genuine repair loop.",
+    "color": "ededed"
+  },
+  {
+    "name": "retro:fp-candidate",
+    "description": "Scanner-detected drift: follow-up stale or unresolved; operator confirms fp or relabels tp.",
+    "color": "fbca04"
+  },
+  {
+    "name": "retro:tentative",
+    "description": "Auto-opened with low prior confidence (label-derived prior below the skip threshold).",
+    "color": "d4c5f9"
+  },
+  {
+    "name": "type:retrospective",
+    "description": "Auto-opened retrospective reviewing repair-free merge reproducibility after a merge.",
+    "color": "c5def5"
   }
 ]
