@@ -211,6 +211,17 @@ STEPS: tuple[Step, ...] = (
         argv=("python3", "scripts/scan_hook_coverage_drift.py", "verify"),
     ),
     Step(
+        # Refs #1099. Runs waza spec-compliance over every skill under
+        # .agents/skills. spec failure = fail, token budget = warning only.
+        # Needs the pinned waza binary (scripts/install_waza.sh); soft so a
+        # contributor laptop without waza/Go warns-and-skips while CI, which
+        # installs waza first, enforces it.
+        name="skill_quality_gate",
+        argv=("python3", "scripts/skill_quality_gate.py", "verify"),
+        required_bin=("waza",),
+        soft=True,
+    ),
+    Step(
         # Refs #545. Static check that every tests/test_*.py declares
         # exactly one module-scope shard marker so the lint-scripts-pytest
         # matrix neither skips a file nor double-counts one. Runs before

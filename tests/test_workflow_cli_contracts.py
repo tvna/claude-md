@@ -64,6 +64,7 @@ import scan_workflow_action_pins
 import scan_workflow_gh_calls
 import scan_workflow_pip
 import security_drift_report
+import skill_quality_gate
 import threat_intel_triage
 import title_policy
 import update_devcontainer_image_pins
@@ -162,6 +163,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("scan_workflow_pip.py", "verify"): "test_scan_workflow_pip_verify_matches_workflow_args",
     ("security_drift_report.py", "aggregate"): "test_security_drift_report_aggregate_and_post_comment_match_workflow_args",
     ("security_drift_report.py", "post-comment"): "test_security_drift_report_aggregate_and_post_comment_match_workflow_args",
+    ("skill_quality_gate.py", "verify"): "test_skill_quality_gate_verify_matches_workflow_args",
     ("threat_intel_triage.py", "apply-labels"): "test_threat_intel_apply_labels_matches_workflow_args",
     ("threat_intel_triage.py", "scan"): "test_threat_intel_scan_matches_workflow_args",
     ("title_policy.py", "verify"): "test_title_policy_verify_matches_workflow_kind_env",
@@ -1087,6 +1089,21 @@ def test_scan_workflow_pip_verify_matches_workflow_args() -> None:
     """Mirrors the ``Assert workflows install Python deps via uv only``
     step in ``.github/workflows/verify-agents.yml``."""
     assert scan_workflow_pip.main(["verify", "--repo-root", "."]) == 0
+
+
+def test_skill_quality_gate_verify_matches_workflow_args(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Mirrors the ``Run skill quality gate`` step in
+    ``.github/workflows/skill-quality.yml``. waza is an external Go binary
+    installed by the workflow but absent from the pytest matrix, so its
+    discovery and execution are stubbed; this asserts the ``verify`` argv
+    shape is accepted and exits 0, not waza itself."""
+    monkeypatch.setattr(skill_quality_gate, "find_waza", lambda: "waza")
+    monkeypatch.setattr(
+        skill_quality_gate, "run_waza_check", lambda _w, _sd: {"skills": []}
+    )
+    assert skill_quality_gate.main(["verify"]) == 0
 
 
 def test_nixpkgs_cooldown_verify_matches_workflow_args(tmp_path: Path) -> None:

@@ -29,6 +29,11 @@ repos:
         language: system
         pass_filenames: false
         files: ^\.(claude/settings|codex/hooks|devin/hooks\.v1)\.json$
+      - id: skill-quality-gate
+        name: skill quality gate (waza check spec-compliance)
+        entry: bash -c 'scripts/install_waza.sh >&2 && uv run python scripts/skill_quality_gate.py verify "$@"' --
+        language: system
+        files: ^\.agents/skills/.*/SKILL\.md$
 
       - id: preflight-branch-base
         name: preflight branch base (scripts/preflight_branch_base.py verify)
