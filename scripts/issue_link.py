@@ -97,13 +97,14 @@ def classify_refs(body: str) -> list[tuple[str, int]]:
 
 
 def body_has_partial_marker(raw_body: str) -> bool:
-    """Return True if *raw_body* contains a ``<!-- partial -->`` marker.
+    """Return True if *raw_body* carries a partial-work opt-out marker.
 
-    Checked against the raw body BEFORE :func:`strip_html_comments`,
-    because the marker itself is an HTML comment that would otherwise be
-    removed. The marker opts the PR out of the closing-keyword gate
-    (per #216 PR-A) for legitimate partial work against a non-umbrella
-    issue.
+    Accepts the legacy ``<!-- partial -->`` HTML comment (#216 PR-A) or
+    the MCP-safe plain-text ``partial-pr`` line (#1035). Checked against
+    the raw body BEFORE :func:`strip_html_comments`, because the legacy
+    form is itself an HTML comment that would otherwise be removed. The
+    marker opts the PR out of the closing-keyword gate for legitimate
+    partial work against a non-umbrella issue.
     """
     return _shared_body_has_partial_marker(raw_body)
 
@@ -217,7 +218,7 @@ def _verify(repo: str, body: str, author: str | None = None) -> int:
     # All references are non-closing 'Refs'. Allow opt-out via marker.
     if body_has_partial_marker(raw_body):
         print(
-            "note: PR body has '<!-- partial -->' marker; "
+            "note: PR body has a partial-work opt-out marker; "
             "closing-keyword check skipped."
         )
         return 0

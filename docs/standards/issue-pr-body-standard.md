@@ -319,6 +319,81 @@ The fix for either failure is to add or correct the `Refs #<number>` line
 in the `Related Issue` section of the PR body, then push a new commit (or
 edit the PR description, which re-runs the workflow).
 
+### Enforced today: closing-keyword gate and the partial-work opt-out
+
+When a PR cites only non-closing `Refs #N` references (no `Closes`,
+`Fixes`, or `Resolves`), `scripts/issue_link.py` and its client-side
+mirror `scripts/pr_body_close_keyword_gate.py` require one of:
+
+- at least one referenced issue carries the `type:tracking` label
+  (the umbrella path), or
+- the body carries a partial-work opt-out marker (per #216).
+
+The opt-out has two interchangeable spellings:
+
+- `<!-- partial -->` - the legacy HTML-comment form.
+- `partial-pr` - an MCP-safe plain-text line (per #1035). The matcher
+  accepts a line that, after optional indentation, begins with the word
+  `partial-pr` (case-insensitive), so `partial-pr: first of two stacked
+  PRs` also qualifies.
+
+Either spelling opts the PR out of the closing-keyword gate for
+legitimate partial work against a non-umbrella issue.
+
+### MCP PR-body HTML handling (why `partial-pr` exists)
+
+The GitHub MCP write tools (`mcp__github__create_pull_request` and
+`mcp__github__update_pull_request`) rewrite the PR body before storing
+it. Two transforms matter for PR-body authors (verified on PRs #1033 and
+#1034, per #1035):
+
+- HTML comments are stripped. A `<!-- partial -->` line written through
+  the MCP layer is deleted from the stored body, so the legacy opt-out is
+  unreachable for any agent that authors PR bodies through these tools.
+  Use the plain-text `partial-pr` line instead - it survives because it
+  contains no comment delimiters.
+- Plain text is HTML-encoded. A hyphen immediately followed by `>` (an
+  arrow) becomes an entity reference, and double quotes become numeric
+  entities. PR bodies authored through the MCP layer should therefore
+  avoid literal arrow sequences and double quotes in prose, or accept
+  that they will render as entities. The `partial-pr` marker is safe
+  because it uses only a single hyphen between two letters.
+
+Local Claude CLI, Codex, and CI do not pass bodies through the MCP write
+path, so a `<!-- partial -->` line authored there is preserved; both
+spellings are accepted on every surface.
+
+### N-PR delivery strategy: deterministic tracking classification
+
+When a single issue is deliberately delivered as N stacked or sibling
+PRs, the first-merged PR must not close the issue. Because the MCP layer
+deletes the body marker, the deterministic opt-out is the
+`type:tracking` label on the referenced issue. `scripts/np_strategy_tracking.py`
+makes that relabel a deterministic step instead of a manual one:
+
+```sh
+# Dry-run: show the label swap and rationale, mutate nothing.
+python scripts/np_strategy_tracking.py plan \
+  --repo tvna/claude-md --issue 1005 --prs 1033,1034
+
+# Apply: swap the type:* label to type:tracking and record the rationale
+# as an issue comment (requires GH_TOKEN with issues:write).
+python scripts/np_strategy_tracking.py apply \
+  --repo tvna/claude-md --issue 1005 --prs 1033,1034
+```
+
+The swap honors `.github/label-policy.toml` (the `type` family is
+`exactly_one_for_normal_issues`): it removes the prior `type:*` label
+rather than adding a second one. The label decision is a pure function
+(`plan_label_swap`), so it is tested offline in
+`tests/test_np_strategy_tracking.py`; only `apply` mode touches GitHub.
+
+The token for `apply` mode needs `issues:write` on the target
+repository. Supply it via `GH_TOKEN` (or `GITHUB_TOKEN`) in the
+environment; the script never echoes the value. No new long-lived secret
+is introduced - the same token the harness already uses for issue
+operations is sufficient.
+
 ### Enforcement surfaces for issue-number existence checks
 
 Per [#314](https://github.com/tvna/claude-md/issues/314), the existence
