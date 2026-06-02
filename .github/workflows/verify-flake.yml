@@ -1,0 +1,43 @@
+# Verify the devcontainer flake at PR time.
+#
+# publish-devcontainer-images.yml only runs `nix build` on push to main, so a
+# flake.nix syntax or pinned-hash error would otherwise surface post-merge.
+# This gate evaluates the flake (both systems) and realises the dev shells on
+# every PR that touches the flake, validating each fetchurl derivation's hash
+# before merge. Refs #1104, #1107.
+name: Verify flake
+
+on:
+  pull_request:
+    paths:
+      - "flake.nix"
+      - "flake.lock"
+      - ".github/workflows/verify-flake.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@ef8a148080ab6020fd15196c2084a2eea5ff2d25 # v22
+
+      - name: Evaluate flake (all declared systems)
+        # Catches syntax / eval errors and confirms every package and dev
+        # shell instantiates, for both aarch64-linux and x86_64-linux.
+        run: nix flake check --show-trace
+
+      - name: Build dev shells (realise pinned derivations)
+        # Realising the shells downloads and hash-checks every pinned
+        # fetchurl derivation (waza-cli, pinned-uv, apm-cli, claude-cli,
+        # codex-cli) that the devcontainer depends on.
+        run: |
+          nix build --no-link --print-build-logs \
+            ".#devShells.x86_64-linux.default" \
+            ".#devShells.x86_64-linux.claude" \
+            ".#devShells.x86_64-linux.codex"
