@@ -59,7 +59,9 @@ def classify_action(body: str) -> tuple[Action, list[int]]:
     Returns ``(action, refs_only_numbers)``:
 
     * ``"pass"`` -- the body satisfies the server gate (closing keyword
-      present, or ``<!-- partial -->`` opt-out marker present).
+      present, or a partial-work opt-out marker present -- either the
+      legacy ``<!-- partial -->`` HTML comment or the MCP-safe plain-text
+      ``partial-pr`` line, #1035).
     * ``"needs_label_check"`` -- the body cites only ``Refs`` keywords;
       the hook must look up ``type:tracking`` labels to decide pass/deny.
     * ``"skip"`` -- the body has no recognized references at all; the

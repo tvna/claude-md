@@ -563,6 +563,15 @@ class TestBodyHasPartialMarker:
             "<!-- PARTIAL -->",
             "<!-- Partial -->",
             "head\n<!-- partial -->\ntail",
+            # MCP-safe plain-text spelling (#1035): MCP strips HTML
+            # comments, so the legacy form is unreachable through it.
+            "partial-pr",
+            "partial-pr\n",
+            "  partial-pr  \n",
+            "\tpartial-pr\n",
+            "PARTIAL-PR\n",
+            "partial-pr: first of two stacked PRs\n",
+            "head\npartial-pr\ntail\n",
         ],
     )
     def test_marker_detected(self, body: str) -> None:
@@ -577,6 +586,10 @@ class TestBodyHasPartialMarker:
             "<!-- partia -->",
             "partial without comment delimiters",
             "<!-- partial work -->",
+            # Plain-text form is a whole-word, line-anchored token:
+            "partial-prefix line",  # word boundary: not 'partial-pr'
+            "see partial-pr inline",  # mid-line: not line-anchored
+            "partialpr",  # missing the hyphen
         ],
     )
     def test_marker_absent(self, body: str) -> None:
@@ -796,7 +809,26 @@ class TestClosingKeywordGate:
             issue_link.main(["verify", "--repo", "owner/repo"]) == 0
         )
         out = capsys.readouterr().out
-        assert "'<!-- partial -->' marker" in out
+        assert "partial-work opt-out marker" in out
+
+    def test_plaintext_partial_marker_opts_out(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture,
+    ) -> None:
+        # The MCP-safe plain-text 'partial-pr' line opts out of the gate
+        # even though no referenced issue carries the tracking label
+        # (#1035: MCP strips the HTML-comment form).
+        self._setup_mocks(monkeypatch, labels_for={214: ["type:fix"]})
+        monkeypatch.setenv(
+            "PR_BODY",
+            "Refs #214\n\npartial-pr: first of two stacked PRs\n",
+        )
+        assert (
+            issue_link.main(["verify", "--repo", "owner/repo"]) == 0
+        )
+        out = capsys.readouterr().out
+        assert "partial-work opt-out marker" in out
 
     def test_get_issue_labels_failure_treated_as_not_tracking(
         self,
