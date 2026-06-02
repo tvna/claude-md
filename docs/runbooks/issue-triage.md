@@ -164,13 +164,74 @@ when it affects confidence.
 
 Source quality is reviewed during the retrospective for every PR that changes
 `scripts/threat_intel_triage.py`, `.github/workflows/issue-pr-triage.yml`, or
-this runbook, and at least quarterly while #170 remains open. The review records
+this runbook, and on the quarterly cadence defined under
+[Threat-intel triage review cadence](#threat-intel-triage-review-cadence) below.
+The review records
 false positives, false negatives, stale-label removals, rate-limit failures, and
 terms or schema changes. A source that repeatedly produces unactionable findings
 or cannot be fixture-tested is parked until a narrower query, better
 normalization, or removal plan is documented.
 
 Any external finding adds `threat:intel-needed`. Any KEV-correlated finding, any GHSA advisory whose `type` is `malware`, *or* any finding whose ID starts with `MAL-` (OSSF malicious-packages) also adds `threat:response-needed`. Fixture inputs (`--osv-file`, `--kev-file`, `--ghsa-file`, `--malpkg-file`, `--epss-file`, `--nvd-file`) exist for tests so CI can verify the routing logic without live network access; the same fixture path is the documented fallback when OSV.dev or GitHub Advisory is unreachable -- an operator can dispatch the workflow with a pre-fetched fixture instead of the corresponding `--*-live` flag. The triage summary lists which sources actually surfaced findings and tags each row with its source string (e.g. `OSV.dev, OSSF malicious-packages`); when EPSS scores are attached, an `EPSS` column shows `<score> (p<percentile>%)` per finding and `FIRST EPSS` appears in the `Sources:` line. NVD never appears in the source string because it is enrichment, not a finding source; when NVD data is attached the row gains `NVD CVSS` and `NVD CWE` columns and a `### NVD references (supplemental)` block lists per-CVE detail.
+
+### Threat-intel triage review cadence
+
+The source-quality paragraph above runs per-retrospective; this section is the
+recurring, calendar-driven companion that keeps the triage effective once the
+one-time completion gates of [#170](https://github.com/tvna/claude-md/issues/170)
+have closed. The standing anchor for review records is
+[#1076](https://github.com/tvna/claude-md/issues/1076); each cycle is logged
+there as a dated comment, the same way the ATT&CK coverage cadence logs to its
+tracker (see [`attack-coverage-review-cadence.md`](attack-coverage-review-cadence.md)).
+
+**Frequency.** Quarterly (first Monday of January, April, July, and October, to
+align with the ATT&CK coverage review), **plus** a per-retrospective check for
+any PR that touches the triage surface — `scripts/threat_intel_triage.py`,
+`.github/workflows/issue-pr-triage.yml`, or this runbook. Quarterly is the
+floor; the per-retrospective check catches drift between quarters. This cadence
+is currently a **manual procedure** — there is no scheduled reminder workflow —
+so the owner runs it and records the result on #1076.
+
+**Each cycle checks four things:**
+
+1. **True positives.** Open findings that received `threat:intel-needed` or
+   `threat:response-needed` and were acted on. Confirm each acted-on finding had
+   a real repository-relevant cause: a locked dependency, a workflow `uses:`
+   pin, or a transient `uv run --with` pin actually present in the tree.
+2. **False positives.** Findings that received a threat label but were
+   dismissed. Record the *systemic* cause (over-broad query, stale fixture,
+   ecosystem mismatch) rather than only the individual dismissal, so the rule or
+   its fixtures can be narrowed.
+3. **Stale labels.** Issues or PRs carrying `threat:intel-needed` or
+   `threat:response-needed` with no follow-up activity beyond **one full
+   quarter** (the review window). See *Stale-label handling* below.
+4. **Source coverage.** Confirm OSV.dev, CISA KEV, GitHub Advisory Database,
+   OSSF malicious-packages, FIRST EPSS, and NVD are reachable and return the
+   expected data shapes; note any upstream schema or terms change. Per *Missing
+   source data is never evidence of safety* above, an unreachable source is
+   recorded as reduced confidence for that cycle, never as an all-clear.
+
+**Stale-label handling (manual procedure, owner @tvna).** Stale-label detection
+is **not** automated; it is a deliberate manual sweep performed each cycle by
+the repository owner (`@tvna`, the CODEOWNERS primary owner):
+
+1. List open issues and PRs carrying a `threat:*` label (for example
+   `gh issue list --label threat:intel-needed` and
+   `gh issue list --label threat:response-needed`, plus the PR equivalents).
+2. For each, decide whether the underlying finding still fires. The triage
+   workflow re-applies and removes labels on each issue/PR event via
+   `scripts/threat_intel_triage.py apply-labels`, so a label that no longer
+   reflects a live finding but persists — typically on a closed or long-idle
+   item the workflow no longer re-evaluates — is stale.
+3. Remove a confirmed-stale label manually. `threat:response-needed` is removed
+   only when the finding stops firing or a human-reviewed remediation lands —
+   per *Response handoff* below, a missed window never clears it on its own.
+4. Record the sweep — items reviewed, labels removed, and any systemic cause —
+   in that cycle's comment on #1076.
+
+Automating stale-label detection as a scheduled workflow step (mirroring
+`attack-coverage-review-reminder.yml`) is deferred future work tracked on #1076;
+until it lands, this manual sweep is the enforcement surface.
 
 ### Why EPSS is advisory-only (no auto-escalation threshold)
 
@@ -192,7 +253,7 @@ The `threat:*` labels are routing flags, not remediation triggers. No workflow i
 
 **Notification path.** When `scripts/threat_intel_triage.py` adds `threat:response-needed`, the alert surfaces in three deterministic places, none of which require reading the issue body: (1) the `labeled` event in the issue/PR timeline; (2) the OSV / GHSA / OSSF / KEV correlation table written to `$GITHUB_STEP_SUMMARY` by the `triage` job, which names each finding, its source string, and the matched dependency surface; and (3) GitHub's watch/subscription notifications to the repository owner (`@tvna`, the CODEOWNERS primary owner). The owner is the responsible responder; assigning a finding to a specific person is a manual step the owner takes when delegating.
 
-**Escalation when a KEV-correlated finding has no response.** The acknowledgement target is **3 business days** from the `threat:response-needed` label being applied; the remediation target is the CISA KEV catalog's published remediation due date for the correlated CVE, or **14 calendar days** from label application when the catalog lists no due date. No deterministic timer enforces these windows yet, so escalation is operator-driven and the interim contract is procedural: open `threat:response-needed` findings are reviewed at every retrospective that touches the triage surface (`scripts/threat_intel_triage.py`, `.github/workflows/issue-pr-triage.yml`, or this runbook) and at the quarterly source-quality review described under [Source-selection policy](#source-selection-policy) while [#170](https://github.com/tvna/claude-md/issues/170) remains open. A missed window never relaxes the gate: autonomous fixes stay blocked, and per *"Missing source data is never evidence of safety"* above, the absence of a response never downgrades or clears the label. The label is removed only when the underlying finding stops firing (for example, the flagged dependency is bumped by a human-reviewed PR). The durable fix — an automated SLA timer that re-pings the owner and records breaches — is future work tracked under [#170](https://github.com/tvna/claude-md/issues/170); until it lands, the per-retrospective review is the enforcement surface.
+**Escalation when a KEV-correlated finding has no response.** The acknowledgement target is **3 business days** from the `threat:response-needed` label being applied; the remediation target is the CISA KEV catalog's published remediation due date for the correlated CVE, or **14 calendar days** from label application when the catalog lists no due date. No deterministic timer enforces these windows yet, so escalation is operator-driven and the interim contract is procedural: open `threat:response-needed` findings are reviewed at every retrospective that touches the triage surface (`scripts/threat_intel_triage.py`, `.github/workflows/issue-pr-triage.yml`, or this runbook) and on the quarterly cadence described under [Threat-intel triage review cadence](#threat-intel-triage-review-cadence), recorded on [#1076](https://github.com/tvna/claude-md/issues/1076). A missed window never relaxes the gate: autonomous fixes stay blocked, and per *"Missing source data is never evidence of safety"* above, the absence of a response never downgrades or clears the label. The label is removed only when the underlying finding stops firing (for example, the flagged dependency is bumped by a human-reviewed PR). The durable fix — an automated SLA timer that re-pings the owner and records breaches — is future work tracked on [#1076](https://github.com/tvna/claude-md/issues/1076); until it lands, the per-retrospective review is the enforcement surface.
 
 ## Agent routing
 
