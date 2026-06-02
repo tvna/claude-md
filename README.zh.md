@@ -21,7 +21,7 @@
 | 2 | Bound Inputs and Unknowns Before Coding | 编码前的认知整理 | 先把外部文本视为不可信数据，再区分事实、假设和歧义。 |
 | 3 | Use Git Ecosystem Effectively | 交付工具链 | 在扩大规模之前，先建立 hooks、CI/CD、声明式依赖管理等工具链。 |
 | 4 | Simplicity, Bounded by Safety | 安全边界 | 用满足需求的最少内容解决问题，但不牺牲安全性、工具范围和秘密处理。 |
-| 5 | Accelerate Scale with Quality | 变更范围与角色拆分 | 只改必须修改的地方；将实现、验证和探索拆给不同代理。 |
+| 5 | Accelerate Scale with Quality | 变更范围与质量 | 仅在质量能随规模按比例保持时才扩大产出；保持变更面狭窄，质量下降时停下来重新规划。 |
 | 6 | Be a Force Multiplier | 交接与沟通 | 不满足于 "LGTM"；明确说明权衡，让他人能跟上判断过程。 |
 
 完整编译结果请参阅 [`CLAUDE.md`](./CLAUDE.md) 或 [`AGENTS.md`](./AGENTS.md)。

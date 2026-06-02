@@ -21,7 +21,7 @@
 | 2 | Bound Inputs and Unknowns Before Coding | 実装前の認識整理 | 外部テキストを未信頼データとして扱い、事実、仮定、曖昧さを分けてから実装する。 |
 | 3 | Use Git Ecosystem Effectively | デリバリーハーネス | スケールさせる前に、hooks、CI/CD、宣言的依存管理などのハーネスを整える。 |
 | 4 | Simplicity, Bounded by Safety | 安全境界 | 要求を満たす最小限にする。ただし安全性、ツール範囲、秘密情報の扱いを犠牲にしない。 |
-| 5 | Accelerate Scale with Quality | 変更スコープと役割分担 | 必要な箇所だけ触り、実装・検証・探索を別エージェントに分ける。 |
+| 5 | Accelerate Scale with Quality | 変更スコープと品質 | 品質がスケールに比例して保てる範囲でだけ出力を拡大し、変更面は狭く保ち、品質が劣化したら止めて再計画する。 |
 | 6 | Be a Force Multiplier | 引き渡しと伝達 | "LGTM" で終わらせず、トレードオフを明示して他者が判断を追えるようにする。 |
 
 コンパイル後の全文は [`CLAUDE.md`](./CLAUDE.md) または [`AGENTS.md`](./AGENTS.md) を参照してください。
