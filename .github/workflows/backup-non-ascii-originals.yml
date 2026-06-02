@@ -64,30 +64,11 @@ jobs:
 
           ARCHIVE="${OUTDIR}/originals-${TIMESTAMP}.json.gz"
 
-          export TIMESTAMP REPO
-          python3 - <<'EOF'
-          import gzip, json, os, pathlib
-
-          outdir = pathlib.Path("/tmp/backup")
-          timestamp = os.environ["TIMESTAMP"]
-
-          payload = {"captured_at": timestamp, "repo": os.environ["REPO"]}
-          for key, fname in [
-              ("issues",                    "issues.json"),
-              ("pull_requests",             "pull_requests.json"),
-              ("issue_comments",            "issue_comments.json"),
-              ("pull_request_review_comments", "pull_request_review_comments.json"),
-          ]:
-              data = json.loads((outdir / fname).read_text())
-              payload[key] = data
-              print(f"{key}: {len(data)} items", flush=True)
-
-          archive = outdir / f"originals-{timestamp}.json.gz"
-          with gzip.open(archive, "wt", encoding="utf-8") as fh:
-              json.dump(payload, fh, ensure_ascii=True, indent=None)
-
-          print(f"Archive: {archive}", flush=True)
-          EOF
+          python3 scripts/backup_archive.py build \
+            --indir "${OUTDIR}" \
+            --timestamp "${TIMESTAMP}" \
+            --repo "${REPO}" \
+            --archive "${ARCHIVE}"
 
           SHA256=$(sha256sum "${ARCHIVE}" | awk '{print $1}')
           ARCHIVE_BASENAME=$(basename "${ARCHIVE}")

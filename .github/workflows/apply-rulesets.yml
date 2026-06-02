@@ -54,12 +54,9 @@ jobs:
       - name: Validate ruleset JSON syntax
         run: |
           set -euo pipefail
-          for f in .github/rulesets/main.json .github/rulesets/all-branches.json; do
-            if ! jq empty < "$f"; then
-              echo "::error file=$f::Invalid JSON syntax."
-              exit 1
-            fi
-          done
+          python3 scripts/validate_json_syntax.py verify \
+            --file .github/rulesets/main.json \
+            --file .github/rulesets/all-branches.json
 
       - name: Plan and apply rulesets
         env:

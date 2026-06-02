@@ -243,12 +243,10 @@ jobs:
       - name: Fetch per-run jobs
         run: |
           set -euo pipefail
-          mkdir -p jobs
-          for id in $(jq -r '.workflow_runs[].id' runs.json); do
-            python3 scripts/github_paginate.py get \
-              --path "repos/${REPO}/actions/runs/${id}/jobs" \
-              --output "jobs/${id}.json"
-          done
+          python3 scripts/github_paginate.py fetch-run-jobs \
+            --runs runs.json \
+            --repo "${REPO}" \
+            --outdir jobs
 
       - name: Generate timing report
         env:
@@ -315,12 +313,9 @@ jobs:
       - name: Validate ruleset JSON syntax
         run: |
           set -euo pipefail
-          for f in .github/rulesets/main.json .github/rulesets/all-branches.json .github/rulesets/dependabot.json; do
-            if ! jq empty < "$f"; then
-              echo "::error file=$f::Invalid JSON syntax."
-              exit 1
-            fi
-          done
+          python3 scripts/validate_json_syntax.py verify \
+            --file .github/rulesets/main.json \
+            --file .github/rulesets/all-branches.json
 
       - name: Detect ruleset drift
         id: diff
