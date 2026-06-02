@@ -90,6 +90,16 @@ module simply imports the script by basename:
 import issue_link
 ```
 
+Presence of the matching test module is enforced deterministically by
+`scripts/scan_test_presence_drift.py` (#1088): every `scripts/<name>.py`
+must have a `tests/test_<name>.py` (private `_<name>.py` helpers are also
+satisfied by `tests/test_<name>.py`). Private helpers tested only through
+their callers are listed in that script's `ALLOW_NO_TEST_MODULE` with a
+per-entry rationale; the allowlist is a ratchet that may only shrink. This
+sustains #189/#194 as a continuous gate instead of a one-time addition,
+because aggregate `fail_under` alone cannot catch a single new untested
+file (the snapshot problem flagged for #191).
+
 ### M3. CLI contract tests
 
 The argparse subcommand surface, required and optional flags, and
@@ -101,6 +111,14 @@ must have a test.
 
 Reference: `tests/test_issue_link.py` covers both the body-file path
 and the env-var fallback path of `scripts/issue_link.py`.
+
+The contract-test inventory is locked by
+`tests/test_workflow_cli_contracts.py` (its `CONTRACT_REGISTRY` maps every
+workflow `(script, subcommand)` to a contract test, #193). As an earlier,
+cheaper backstop in the `lint-scripts-static` lane,
+`scripts/scan_test_presence_drift.py` (#1088) statically asserts that every
+public script invoked by a workflow appears in that registry, so a missing
+contract test surfaces before the pytest matrix runs.
 
 ### M4. Input validation at boundaries
 
@@ -474,6 +492,17 @@ single-uv-channel install path. The continuous enforcement gap that
 For scripts that talk to the GitHub API, contract tests that record
 the request shape (method, URL, headers, body keys) catch regressions
 when the boundary helper changes. Tracked by issue #194.
+
+Promotion (#1088): the *set* of GitHub-API-touching scripts is now a
+deterministic registry. `scripts/scan_test_presence_drift.py`
+auto-detects every public script that imports the GitHub API boundary
+(`_github_api` / `github_api`, per M7) and fails CI when that detected set
+drifts from the `GITHUB_API_SCRIPTS` registry in either direction. A new
+API-touching script therefore cannot land without being registered, which
+forces the author to acknowledge the boundary-test expectation; the
+matching test module itself is guaranteed by the M2 presence gate above.
+The per-request-shape assertions remain optional and concentrate on the
+shared boundary helper (`tests/test_github_api.py`).
 
 Note: the original O7 placeholder ("Standardised dependency and tool
 installation") was promoted to must-have rule M10 above in #195. It is

@@ -205,6 +205,13 @@ STEPS: tuple[Step, ...] = (
         argv=("python3", "scripts/scan_quality_standard_drift.py", "verify"),
     ),
     Step(
+        # Refs #1088. Fails when a scripts/*.py lacks its matching test module
+        # (M2), a new GitHub-API script is absent from the boundary registry
+        # (O6), or a workflow-invoked script has no CLI contract test (M3).
+        name="scan_test_presence_drift",
+        argv=("python3", "scripts/scan_test_presence_drift.py", "verify"),
+    ),
+    Step(
         # Refs #615. Fails when a Claude hook script is absent from Codex
         # coverage and is not in the explicit allowlist in the script.
         name="scan_hook_coverage_drift",
