@@ -6,6 +6,13 @@ event and enforced as a required status check on `main` via the
 `Portable PR policy / gate` context (see
 .github/rulesets/main.json).
 
+The reference lives on the `Closes #<number>` / `Refs #<number>` line in
+this body ONLY -- it must NOT be duplicated in the PR title. A `(#NNN)`
+token in the title is rejected by scripts/title_policy.py
+(verify-title-policy.yml) per #167 / #214, because this body line is the
+single source of truth for the issue link. "Cite the issue number in every
+PR" (CLAUDE.md section 3) means this body line, not the title.
+
 Default: `Closes #<number>` so the linked issue auto-closes on merge.
 GitHub auto-closes on: Closes, Closed, Fixes, Fixed, Resolves, Resolved
 (case-insensitive, including conjugations).
