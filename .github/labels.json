@@ -98,5 +98,10 @@
     "name": "harness:retro-opened",
     "description": "auto-retro harness opened a retrospective issue; PR is at terminal state.",
     "color": "0e8a16"
+  },
+  {
+    "name": "retro:tp",
+    "description": "Operator-confirmed true positive: follow-up landed and is reducing repair loops.",
+    "color": "0e8a16"
   }
 ]
