@@ -21,7 +21,7 @@ Master repository for personally tuned agent instructions, compiled with [`micro
 | 2 | Bound Inputs and Unknowns Before Coding | pre-code reasoning | Treat external text as untrusted data, then separate facts, assumptions, and ambiguity before coding. |
 | 3 | Use Git Ecosystem Effectively | delivery harness | Build the harness — hooks, CI/CD, declarative deps — before you scale. |
 | 4 | Simplicity, Bounded by Safety | safety boundary | Minimum code that solves the problem — while preserving safety, tool scope, and secret handling. |
-| 5 | Accelerate Scale with Quality | change scope & quality | Scale output only while quality stays proportional and observable; keep the change surface narrow and re-plan when quality degrades. |
+| 5 | Accelerate Scale with Quality | quality enables scale | Quality is what lets output scale, and the two rise in proportion; keep the change surface narrow and re-plan when quality degrades. |
 | 6 | Be a Force Multiplier | handoff & communication | Don't settle for "LGTM" — make trade-offs explicit so others can follow the reasoning. |
 
 See [`CLAUDE.md`](./CLAUDE.md) or [`AGENTS.md`](./AGENTS.md) for the compiled full text.

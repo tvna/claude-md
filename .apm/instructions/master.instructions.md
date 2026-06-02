@@ -72,7 +72,7 @@ Ask yourself: "Would a senior engineer say this is overcomplicated — or unsafe
 
 ## 5. Accelerate Scale with Quality
 
-*Layer: change scope & quality — how much you change and whether quality scales with it.*
+*Layer: quality enables scale — quality is what lets output scale; they rise in proportion.*
 
 Scaling output is only worth it when quality scales with it: as the volume and scope of change grow, quality must stay proportional and observable over time. When the measured proportion degrades, stop and re-plan. Keep the change surface narrow: touch only what the active task requires, and clean up only artifacts your change made obsolete.
 
