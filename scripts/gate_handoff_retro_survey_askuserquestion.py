@@ -45,7 +45,10 @@ the survey. The flow is satisfaction-first, then scenario-branched:
    marker lets a later stop in the same session pass.
 
 **Gate mode** (default): block the stop when a created PR has no marker.
-**Recorder mode** (``--record <pullNumber>``): write the marker.
+**Recorder mode** (``--record <pullNumber>``): write the marker. Optional
+``--satisfaction <2..5>`` and ``--problem <text>`` persist the survey answers
+in the marker body -- the non-interactive fallback for when the interactive
+``AskUserQuestion`` confirmation cannot be submitted (issue #1081).
 
 Fail-open per CLAUDE.md section 4: any malformed event, unreadable
 transcript, or unexpected exception exits 0 with no output. A gate bug
@@ -70,6 +73,8 @@ _SCRIPT_NAME = "gate_handoff_retro_survey_askuserquestion"
 _CREATE_PR_TOOL = "mcp__github__create_pull_request"
 _MARKER_DIR = Path("/tmp/claude-pre-merge-retro-survey")  # noqa: S108
 _PULL_URL_RE = re.compile(r"/pull/(\d+)")
+_MIN_SATISFACTION = 2
+_MAX_SATISFACTION = 5
 
 _BLOCK_REASON = (
     "GATE BLOCK: this session opened PR #{pr} and is handing it off for a "
@@ -110,6 +115,27 @@ def _coerce_pr_number(raw: object) -> int | None:
     if isinstance(raw, str) and raw.isdecimal() and int(raw) > 0:
         return int(raw)
     return None
+
+
+def _coerce_satisfaction(raw: object) -> int | None:
+    """Return an integer satisfaction score in ``2..5`` from *raw*, or ``None``.
+
+    Accepts an int, an integral float, or a decimal string, mirroring
+    ``_coerce_pr_number``. ``bool`` and out-of-range values are rejected so
+    a bad ``--satisfaction`` never records a meaningless score.
+    """
+    if isinstance(raw, bool):  # bool is an int subclass; reject it explicitly
+        return None
+    value: int | None = None
+    if isinstance(raw, int):
+        value = raw
+    elif (isinstance(raw, float) and raw.is_integer()) or (
+        isinstance(raw, str) and raw.isdecimal()
+    ):
+        value = int(raw)
+    if value is None or not (_MIN_SATISFACTION <= value <= _MAX_SATISFACTION):
+        return None
+    return value
 
 
 def _content_blocks(entry: object) -> list[dict[str, Any]]:
@@ -212,10 +238,29 @@ def load_transcript(path_value: object) -> list[Any]:
     return entries
 
 
-def record(pr_number: int) -> bool:
-    """Write the survey marker for *pr_number*; return ``True`` on success."""
+def record(
+    pr_number: int,
+    *,
+    satisfaction: int | None = None,
+    problem: str | None = None,
+) -> bool:
+    """Write the survey marker for *pr_number*; return ``True`` on success.
+
+    The marker's *existence* is all the gate checks, so a bare ``--record``
+    stays valid. When ``satisfaction`` and/or ``problem`` answers are given
+    (the non-interactive fallback for when ``AskUserQuestion`` cannot be
+    confirmed -- issue #1081), they are persisted as JSON in the marker body
+    so a real signal is captured instead of an empty file.
+    """
     _MARKER_DIR.mkdir(parents=True, exist_ok=True)
-    _marker_path(pr_number).touch()
+    payload: dict[str, Any] = {"pr": pr_number}
+    if satisfaction is not None:
+        payload["satisfaction"] = satisfaction
+    if problem is not None:
+        payload["problem"] = problem
+    _marker_path(pr_number).write_text(
+        json.dumps(payload, sort_keys=True), encoding="utf-8"
+    )
     return True
 
 
@@ -235,7 +280,11 @@ def run_gate() -> int:
     return 0
 
 
-def run_record(raw_pr: str | None) -> int:
+def run_record(
+    raw_pr: str | None,
+    raw_satisfaction: str | None = None,
+    raw_problem: str | None = None,
+) -> int:
     pr_number = _coerce_pr_number(raw_pr)
     if pr_number is None:
         print(
@@ -243,8 +292,20 @@ def run_record(raw_pr: str | None) -> int:
             file=sys.stderr,
         )
         return 0
+    satisfaction: int | None = None
+    if raw_satisfaction is not None:
+        satisfaction = _coerce_satisfaction(raw_satisfaction)
+        if satisfaction is None:
+            # Reject loudly and leave the marker unwritten so the gate stays
+            # blocked rather than recording the handoff as done with bad data.
+            print(
+                f"::error::{_SCRIPT_NAME}: --satisfaction must be an integer "
+                f"{_MIN_SATISFACTION}..{_MAX_SATISFACTION}",
+                file=sys.stderr,
+            )
+            return 0
     with contextlib.suppress(OSError):
-        record(pr_number)
+        record(pr_number, satisfaction=satisfaction, problem=raw_problem)
     return 0
 
 
@@ -258,9 +319,25 @@ def main(argv: list[str] | None = None) -> int:
         metavar="PR_NUMBER",
         help="Recorder mode: mark a PR's pre-merge survey as completed.",
     )
+    parser.add_argument(
+        "--satisfaction",
+        metavar="SCORE",
+        help=(
+            "Optional non-interactive answer: satisfaction score "
+            f"{_MIN_SATISFACTION}..{_MAX_SATISFACTION}, persisted with --record."
+        ),
+    )
+    parser.add_argument(
+        "--problem",
+        metavar="TEXT",
+        help=(
+            "Optional non-interactive answer: problem / pain-point note, "
+            "persisted with --record."
+        ),
+    )
     args = parser.parse_args(argv)
     if args.record is not None:
-        return run_record(args.record)
+        return run_record(args.record, args.satisfaction, args.problem)
     return run_gate()
 
 

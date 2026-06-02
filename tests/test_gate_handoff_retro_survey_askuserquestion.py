@@ -84,6 +84,31 @@ class TestCoercePrNumber:
 
 
 # ---------------------------------------------------------------------------
+# _coerce_satisfaction
+# ---------------------------------------------------------------------------
+
+
+class TestCoerceSatisfaction:
+    def test_in_range_int(self) -> None:
+        assert gate._coerce_satisfaction(5) == 5
+        assert gate._coerce_satisfaction(2) == 2
+
+    def test_decimal_string_and_integral_float(self) -> None:
+        assert gate._coerce_satisfaction("3") == 3
+        assert gate._coerce_satisfaction(4.0) == 4
+
+    def test_out_of_range_rejected(self) -> None:
+        assert gate._coerce_satisfaction(1) is None
+        assert gate._coerce_satisfaction(6) is None
+        assert gate._coerce_satisfaction("0") is None
+
+    def test_bool_and_non_numeric_rejected(self) -> None:
+        assert gate._coerce_satisfaction(True) is None
+        assert gate._coerce_satisfaction(4.5) is None
+        assert gate._coerce_satisfaction("nope") is None
+
+
+# ---------------------------------------------------------------------------
 # created_pr_numbers
 # ---------------------------------------------------------------------------
 
@@ -212,6 +237,35 @@ class TestRecord:
         assert gate.run_record("nope") == 0
         assert not marker_dir.exists()
 
+    def test_record_persists_answers_as_json(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+        monkeypatch.setattr(gate, "_MARKER_DIR", tmp_path)
+        assert gate.record(7, satisfaction=4, problem="flaky CI") is True
+        payload = json.loads((tmp_path / "7").read_text())
+        assert payload == {"pr": 7, "satisfaction": 4, "problem": "flaky CI"}
+
+    def test_record_without_answers_writes_pr_only(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+        monkeypatch.setattr(gate, "_MARKER_DIR", tmp_path)
+        assert gate.record(9) is True
+        assert json.loads((tmp_path / "9").read_text()) == {"pr": 9}
+
+    def test_run_record_passes_answers(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+        monkeypatch.setattr(gate, "_MARKER_DIR", tmp_path)
+        assert gate.run_record("12", "5", "none") == 0
+        assert json.loads((tmp_path / "12").read_text()) == {
+            "pr": 12,
+            "satisfaction": 5,
+            "problem": "none",
+        }
+
+    def test_run_record_invalid_satisfaction_writes_no_marker(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        marker_dir = tmp_path / "survey"
+        monkeypatch.setattr(gate, "_MARKER_DIR", marker_dir)
+        assert gate.run_record("12", "9", "x") == 0
+        assert not (marker_dir / "12").exists()
+        assert "--satisfaction" in capsys.readouterr().err
+
 
 # ---------------------------------------------------------------------------
 # run_gate
@@ -263,7 +317,7 @@ class TestMain:
             called.append("gate")
             return 0
 
-        def _record(_pr: str) -> int:
+        def _record(_pr: str, *_answers: object) -> int:
             called.append("record")
             return 0
 
@@ -281,3 +335,14 @@ class TestMain:
         self._spies(monkeypatch, called)
         assert gate.main(["--record", "12"]) == 0
         assert called == ["record"]
+
+    def test_answer_flags_forwarded_to_recorder(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        seen: list[tuple[object, ...]] = []
+
+        def _record(*args: object) -> int:
+            seen.append(args)
+            return 0
+
+        monkeypatch.setattr(gate, "run_record", _record)
+        assert gate.main(["--record", "12", "--satisfaction", "5", "--problem", "none"]) == 0
+        assert seen == [("12", "5", "none")]
