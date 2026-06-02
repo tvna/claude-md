@@ -42,7 +42,7 @@ jobs:
         run: |
           body_file="$(mktemp)"
           printf '%s' "$PR_BODY" > "$body_file"
-          python3 scripts/title_policy.py verify --kind "$KIND" --body-file "$body_file"
+          python3 scripts/title_policy.py verify --kind "$KIND" --body-file "$body_file" --author "$PR_AUTHOR"
 
       - name: Validate body section structure
         run: |
