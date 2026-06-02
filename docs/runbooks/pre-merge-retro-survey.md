@@ -1,29 +1,36 @@
-# Pre-merge retro/satisfaction survey gate
+# Pre-merge retro/satisfaction survey gate (handoff Stop hook)
 
-Operator runbook for `scripts/gate_merge_retro_survey_askuserquestion.py`, the
-Claude-only PreToolUse gate that blocks `mcp__github__merge_pull_request` until a
+Operator runbook for `scripts/gate_handoff_retro_survey_askuserquestion.py`, the
+Claude-only `Stop` hook that blocks the agent's end-of-turn handoff until a
 structured retro/satisfaction survey has been presented through the
-`AskUserQuestion` tool for the same PR. Refs #1052.
+`AskUserQuestion` tool for every PR the session created. Refs #1073.
 
-## Why this gate exists
+## Why a Stop hook, not a merge-tool gate
 
-CLAUDE.md section 3 requires a retrospective and prefers deterministic gates over
-operator-recall steps. `AskUserQuestion` is a Claude-only harness tool with no
-Codex/Devin equivalent, so the gate lives only in `.claude/settings.json` and is
-allowlisted in `scripts/scan_hook_coverage_drift.py` (PreToolUse is in the parity
-scan scope), mirroring `scripts/gate_decision_handoff_askuserquestion.py`.
+The earlier design (#1052 / PR #1053) gated `mcp__github__merge_pull_request`.
+That only fires when the agent merges through the tool. The repository UX is that
+a human reviews and merges through the GitHub UI, so the agent never calls the
+merge tool and the survey never appeared (observed on PR #1062). The agent's only
+in-session moment that matches a human UI merge is the *handoff*: it has opened a
+PR and is ending its turn. #1073 moves the trigger to the `Stop` event.
 
-A hook cannot call `AskUserQuestion` itself; the only lever is to deny the merge
-and feed the survey flow back to the agent through the deny reason. The agent runs
-the survey, records completion, and re-calls the merge.
+`AskUserQuestion` is a Claude-only harness tool with no Codex/Devin equivalent, so
+the gate lives only in `.claude/settings.json`, mirroring
+`scripts/gate_decision_handoff_askuserquestion.py`. The `Stop` event is outside the
+`scripts/scan_hook_coverage_drift.py` parity scope (SessionStart / PreToolUse /
+PostToolUse), so it needs no allowlist entry.
+
+A hook cannot call `AskUserQuestion` itself; the only lever is to block the stop
+and feed the survey flow back to the agent through the block reason. The agent runs
+the survey, records completion, and ends its turn for the human to merge.
 
 ## Branching scenario
 
 ```mermaid
 flowchart TD
-    A["merge_pull_request call (pre-merge)"] --> B{"PreToolUse gate:<br/>survey marker recorded?"}
-    B -- "recorded" --> Z["Allow merge (gate passes)"]
-    B -- "not recorded" --> D["deny -> launch AskUserQuestion<br/>(present consecutively, no prose between)"]
+    A["Stop (handoff): session opened a PR"] --> B{"Stop gate:<br/>survey marker recorded for the PR?"}
+    B -- "recorded" --> Z["Allow stop (gate passes)"]
+    B -- "not recorded" --> D["block -> launch AskUserQuestion<br/>(present consecutively, no prose between)"]
 
     D --> Q1["Q1 SATISFACTION first, single-select<br/>5 very / 4 satisfied / 3 neutral / 2 dissatisfied"]
     Q1 --> SW{"branch on satisfaction"}
@@ -41,7 +48,7 @@ flowchart TD
     R2 --> REC
     R3 --> REC
     R4 --> REC
-    REC --> M["re-call merge_pull_request -> passes"]
+    REC --> M["end turn -> human merges PR via GitHub UI"]
 
     classDef gate fill:#fde68a,stroke:#b45309,color:#000;
     classDef ask fill:#bfdbfe,stroke:#1d4ed8,color:#000;
@@ -55,9 +62,9 @@ flowchart TD
 
 ## Operator steps
 
-1. Attempt the merge as usual (`mcp__github__merge_pull_request`).
-2. The gate denies with a reason that spells out the satisfaction-first,
-   scenario-branched flow. Run `AskUserQuestion` accordingly:
+1. Open the PR as usual (`mcp__github__create_pull_request`) and let the turn end.
+2. The Stop gate blocks with a reason that spells out the satisfaction-first,
+   scenario-branched flow for each unrecorded PR. Run `AskUserQuestion` accordingly:
    - Ask satisfaction first (single-select).
    - Emit the branched follow-up immediately after the answer, with no prose in
      between, so the survey reads as one continuous flow (plan-mode style).
@@ -65,18 +72,19 @@ flowchart TD
      necessity (repair-free -> skip; minor -> note; problem -> open a retro).
    - Low satisfaction (2-3): ask the main pain points (multi-select) and open a
      retro seeded with the answers.
-3. Record the survey: `python3 scripts/gate_merge_retro_survey_askuserquestion.py --record <pullNumber>`.
-4. Re-call the merge; the gate now passes.
+3. Record the survey: `python3 scripts/gate_handoff_retro_survey_askuserquestion.py --record <pullNumber>`.
+4. End the turn. The human merges the PR through the GitHub UI; do NOT call
+   `merge_pull_request`. A later stop in the same session passes for that PR.
 
 ## Failure modes
 
-Fails open (CLAUDE.md section 4): malformed stdin, a non-dict event, a missing or
-non-numeric `pullNumber`, or any exception in `decide()` exits 0 with no output, so
-a gate bug never wedges a merge. The server-side merge protections remain the
-backstop.
+Fails open (CLAUDE.md section 4): malformed stdin, a non-dict event, an unreadable
+transcript, or any exception in `evaluate()` exits 0 with no output, so a gate bug
+never wedges the session. The server-side post-merge retro
+(`.github/workflows/post-merge.yml`) remains the backstop.
 
 ## Verification
 
-- `uv run python -m pytest tests/test_gate_merge_retro_survey_askuserquestion.py -q`
-- `uv run python scripts/scan_hook_coverage_drift.py verify` (the gate appears as an
-  allowlisted gap)
+- `uv run python -m pytest tests/test_gate_handoff_retro_survey_askuserquestion.py -q`
+- `uv run python scripts/scan_hook_coverage_drift.py verify` (the `Stop` event is
+  outside parity scope, so this gate is not expected in the allowlist)
