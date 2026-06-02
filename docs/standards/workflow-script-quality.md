@@ -116,6 +116,16 @@ Reference: `scripts/branch_cleanup.py` `parse_dry_run` and
 `scripts/preflight_non_ascii.py` `_TARGET_TOOLS` is a `frozenset`
 allowlist.
 
+This boundary-declaration contract is enforced deterministically by
+`scripts/scan_input_contract_drift.py` (#1087): every script referenced
+by a workflow must declare a `Contract:` block (`Inputs:`, `Outputs:`,
+`Failure policy:`) in its module docstring, so the boundaries are
+enumerated rather than left implicit. Scripts that predate the gate are
+listed in that script's `BASELINE_MISSING_CONTRACT` with a rationale and
+may only be removed (never added) as they are backfilled. The gate proves
+the contract is *declared*; the runtime validation itself remains covered
+by the M2/M3 tests and review.
+
 ### M5. GitHub output and summary contracts
 
 Scripts that need to surface results to GitHub Actions use the
@@ -222,6 +232,11 @@ Per CLAUDE.md section 4, "when a check IS warranted, fail loudly".
 The hook exception exists only because a session-blocking hook bug
 would be worse than the gate it backs up; the server-side gate
 remains as backstop.
+
+The fail-loud/open declaration is enforced by
+`scripts/scan_input_contract_drift.py` (#1087): the `Failure policy:`
+line of the `Contract:` block must name `loud` or `open`, so the posture
+is explicit and machine-checkable rather than inferred from the code.
 
 ### M10. Standardised dependency and tool installation
 
@@ -410,6 +425,20 @@ files, a frozen dataclass plus explicit validators can provide the
 same typed boundary without adding a runtime dependency; document the
 choice in the PR body when pydantic is not added. Tracked by issue
 #191.
+
+Decision of record (#191, completed): this repository does **not** adopt
+pydantic. It has zero pydantic usage and a deliberately minimal
+dependency surface (`pyproject.toml`); the workflow inputs are narrow,
+stable CLI flags, env vars, and small policy JSON, which `parse_dry_run`-
+style explicit validators, `frozenset` allowlists, and frozen dataclasses
+cover without a runtime dependency. Open Policy Agent (OPA/conftest) was
+also evaluated and rejected for the same boundary: it parses structured
+config (YAML/JSON), not Python docstrings, so it cannot enforce the
+`Contract:` convention, and adopting a Go binary would breach the M10
+single-uv-channel install path. The continuous enforcement gap that
+#191 surfaced is closed not by a validation library but by the
+`scan_input_contract_drift.py` gate documented in M4 and M9 above
+(#1087).
 
 ### O6. GitHub API boundary contract tests
 
@@ -650,6 +679,9 @@ silent regression on either side.
   - #189 test(scripts): add CLI contract tests for workflows
   - #190 security(scripts): add workflow script security scans
   - #191 refactor(scripts): model workflow inputs with pydantic
+    (completed; pydantic not adopted, see O5 decision of record)
+  - #1087 ci(scripts): enforce Contract: docstring (M4/M9) via
+    `scan_input_contract_drift` (continuous enforcement of M4/M9)
   - #192 ci(scripts): add static typing and lint gates
   - #193 ci(workflows): verify script invocation drift
   - #194 test(scripts): add GitHub API boundary tests
