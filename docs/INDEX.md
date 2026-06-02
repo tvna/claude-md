@@ -128,6 +128,7 @@ Source: `python3 scripts/workflow_diagram.py diagram-doc`. Tracking issue: #960.
 | [workflows/verify-agents-if-branches.md](generated/workflows/verify-agents-if-branches.md) | `verify-agents.yml` |
 | [workflows/verify-dependabot-labels-if-branches.md](generated/workflows/verify-dependabot-labels-if-branches.md) | `verify-dependabot-labels.yml` |
 | [workflows/verify-design-philosophy-if-branches.md](generated/workflows/verify-design-philosophy-if-branches.md) | `verify-design-philosophy.yml` |
+| [workflows/verify-flake-if-branches.md](generated/workflows/verify-flake-if-branches.md) | `verify-flake.yml` |
 | [workflows/verify-github-content-if-branches.md](generated/workflows/verify-github-content-if-branches.md) | `verify-github-content.yml` |
 | [workflows/verify-ruleset-sync-if-branches.md](generated/workflows/verify-ruleset-sync-if-branches.md) | `verify-ruleset-sync.yml` |
 | [workflows/weekly-maintenance-if-branches.md](generated/workflows/weekly-maintenance-if-branches.md) | `weekly-maintenance.yml` |
