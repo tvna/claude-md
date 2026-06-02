@@ -54,16 +54,6 @@ git submodule add https://github.com/tvna/claude-md .claude-md-master
 ln -s .claude-md-master/CLAUDE.md CLAUDE.md
 ```
 
-对于 Codex 或其他读取 `AGENTS.md` 的工具，再添加：
-
-```bash
-ln -s .claude-md-master/AGENTS.md AGENTS.md
-```
-
-### Devin
-
-Devin 可以使用 APM 展开到 `.agents/skills/` 的 skills。需要 hooks parity 时，请把 `.devin/hooks.v1.json` 与仓库指令一起引入。
-
 ### 2. 添加项目专属规则
 
 在父项目中创建本地项目指令文件，在开头导入这个主仓库，然后只写项目专属的差异部分。
@@ -80,6 +70,16 @@ Devin 可以使用 APM 展开到 `.agents/skills/` 的 skills。需要 hooks par
 ```bash
 git submodule update --remote .claude-md-master
 ```
+
+### 工具特定说明
+
+- **Codex 或其他读取 `AGENTS.md` 的工具**，再 symlink 编译产物 `AGENTS.md`：
+
+  ```bash
+  ln -s .claude-md-master/AGENTS.md AGENTS.md
+  ```
+
+- **Devin** 可以使用 APM 展开到 `.agents/skills/` 的 skills。需要 hooks parity 时，请把 `.devin/hooks.v1.json` 与仓库指令一起引入。详见 [`docs/standards/devin-apm-compatibility.md`](./docs/standards/devin-apm-compatibility.md)。
 
 ## 变更策略
 

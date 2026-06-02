@@ -54,17 +54,6 @@ git submodule add https://github.com/tvna/claude-md .claude-md-master
 ln -s .claude-md-master/CLAUDE.md CLAUDE.md
 ```
 
-For Codex or other tools that read `AGENTS.md`:
-
-```bash
-ln -s .claude-md-master/AGENTS.md AGENTS.md
-```
-
-### Devin
-
-Devin can use the APM-deployed skills from `.agents/skills/`. For hook parity,
-vendor `.devin/hooks.v1.json` alongside the repository instructions.
-
 ### 2. Add project-specific rules
 
 Create a local project instructions file in the parent project and import the master at the top, then list only the project-specific delta below.
@@ -81,6 +70,18 @@ Create a local project instructions file in the parent project and import the ma
 ```bash
 git submodule update --remote .claude-md-master
 ```
+
+### Tool-specific notes
+
+- **Codex and other `AGENTS.md` readers** also symlink the compiled `AGENTS.md`:
+
+  ```bash
+  ln -s .claude-md-master/AGENTS.md AGENTS.md
+  ```
+
+- **Devin** can use the APM-deployed skills from `.agents/skills/`. For hook
+  parity, vendor `.devin/hooks.v1.json` alongside the repository instructions.
+  See [`docs/standards/devin-apm-compatibility.md`](./docs/standards/devin-apm-compatibility.md).
 
 ## Change Policy
 
