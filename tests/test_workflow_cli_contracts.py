@@ -57,6 +57,7 @@ import scan_maintainability_metrics
 import scan_markdown_links
 import scan_non_ascii
 import scan_preflight_drift
+import scan_quality_standard_drift
 import scan_retro_followup_drift
 import scan_secret_runbooks
 import scan_workflow_action_pins
@@ -153,6 +154,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("scan_hook_coverage_drift.py", "verify"): "test_scan_hook_coverage_drift_verify_matches_workflow_args",
     ("scan_input_contract_drift.py", "verify"): "test_scan_input_contract_drift_verify_matches_workflow_args",
     ("scan_preflight_drift.py", "verify"): "test_scan_preflight_drift_verify_matches_workflow_args",
+    ("scan_quality_standard_drift.py", "verify"): "test_scan_quality_standard_drift_verify_matches_workflow_args",
     ("scan_retro_followup_drift.py", "run"): "test_scan_retro_followup_drift_run_matches_workflow_env",
     ("scan_secret_runbooks.py", "verify"): "test_scan_secret_runbooks_verify_matches_workflow_args",
     ("scan_workflow_action_pins.py", "verify"): "test_scan_workflow_action_pins_verify_matches_workflow_args",
@@ -1057,6 +1059,12 @@ def test_scan_input_contract_drift_verify_matches_workflow_args() -> None:
     """Mirrors the ``Verify workflow-script input contracts`` step in
     ``.github/workflows/verify-agents.yml``. Refs #1087."""
     assert scan_input_contract_drift.main(["verify"]) == 0
+
+
+def test_scan_quality_standard_drift_verify_matches_workflow_args() -> None:
+    """Mirrors the ``Verify quality-standard enforcement map`` step in
+    ``.github/workflows/verify-agents.yml``. Refs #1089."""
+    assert scan_quality_standard_drift.main(["verify"]) == 0
 
 
 def test_scan_markdown_links_verify_matches_workflow_args() -> None:

@@ -84,6 +84,12 @@ jobs:
         # BASELINE_MISSING_CONTRACT must shrink, never grow.
         run: uv run python scripts/scan_input_contract_drift.py verify
 
+      - name: Verify quality-standard enforcement map
+        # Refs #1089: every M1-M10 must-have in
+        # docs/standards/workflow-script-quality.md has a registry entry,
+        # and every `enforced`/`partial` row resolves its backing gate.
+        run: uv run python scripts/scan_quality_standard_drift.py verify
+
       - name: Verify Claude/Codex hook coverage parity
         # Refs #615: fails when a Claude hook script is absent from Codex
         # coverage and is not in the explicit allowlist.
