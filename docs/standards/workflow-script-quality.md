@@ -287,6 +287,35 @@ Reference: `pyproject.toml` `[dependency-groups].dev` and
 `scripts/scan_workflow_pip.py` jointly enforce this gate today
 (#192, #289, #195).
 
+## Security weakness coverage (CWE)
+
+This table records which Common Weakness Enumeration (CWE) classes apply
+to the workflow-called scripts (Python modules processing untrusted
+GitHub webhook payloads and external API responses inside GitHub
+Actions), and how each is handled. It is a point-in-time review captured
+under #1087; the continuous enforcement lives in the `ruff` `S`
+(flake8-bandit) gate (M8), the M4/M9 contract gate
+(`scan_input_contract_drift.py`), and the per-boundary tests (M2/M3),
+not in this document. "Handled (gap fixed #1087)" marks a real gap this
+review found and closed.
+
+| CWE class | Applicable? | Status | Where / rationale |
+|---|---|---|---|
+| CWE-119/120/787 buffer overflow, CWE-416 use-after-free, CWE-476 null deref | No | N/A | CPython manages memory; there are no manual buffers or pointers. Adding defenses here would be dead code forbidden by CLAUDE.md section 4. |
+| CWE-78/88 OS-command / argument injection | Yes | Handled | `subprocess` calls use list-form argv with no `shell=True`; enforced by `ruff` `S602/S603/S607` and `tests/test_ruff_security_gate.py`. |
+| CWE-918 SSRF | Yes | Handled | Every HTTP boundary targets a hardcoded https host (OSV, CISA KEV, GHSA, EPSS, NVD, api.github.com); the `# S310` justifications record the fixed-scheme audit. |
+| CWE-400/770 uncontrolled resource consumption (stalled connection) | Yes | Handled (gap fixed #1087) | `scripts/_github_api.py` now bounds every call with `_HTTP_TIMEOUT_SECONDS` via `_default_opener`; `threat_intel_triage.py` uses `timeout=30`. |
+| CWE-703 improper check / fragile error handling | Yes | Handled (gap fixed #1087) | `graphql_call` now catches `URLError` and degrades to `(0, {})` like `apply_call`, instead of relying on catching `UnboundLocalError`. |
+| CWE-1333 ReDoS | Yes | Handled | Regexes applied to untrusted title/body/comment text are line-anchored with bounded character classes and no nested quantifiers. |
+| CWE-117/94 workflow-command injection | Yes | Handled | Scripts never echo raw untrusted title/body into `::error::` or `GITHUB_OUTPUT`; they emit only code-point indices, the enum `kind`, code-defined reasons, and boolean outputs. GitHub titles are newline-free, so a `::`-prefixed command cannot be smuggled through them. |
+| CWE-22 path traversal | Yes | Handled | File paths come from runner-provided env (`$GITHUB_EVENT_PATH`) or CLI flags, never from a webhook payload field. |
+| CWE-502 unsafe deserialization | Yes | Handled | JSON is parsed with `json.loads`; YAML uses `yaml.safe_load` only. No `pickle`, `eval`, `exec`, or `yaml.load`. |
+| CWE-20 improper input validation | Yes | Handled | `json.loads` results are `isinstance`-checked before use; the M4/M9 `Contract:` declaration is now enforced by `scan_input_contract_drift.py`. |
+
+When a new script introduces a boundary not covered above (a new HTTP
+host, a new deserialization format, a regex over untrusted input), the PR
+must extend this table and confirm the applicable row stays "Handled".
+
 ## Optional enhancements
 
 The items below are not gates. Add them when the script's blast

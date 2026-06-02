@@ -9,6 +9,23 @@ from typing import Any
 
 API_VERSION = "2022-11-28"
 
+# Bound every GitHub API call so a stalled connection cannot hang the
+# workflow job until the runner-level timeout fires (CWE-400 / CWE-770).
+# Matches the 30s used at the threat-intel HTTP boundary.
+_HTTP_TIMEOUT_SECONDS = 30
+
+
+def _default_opener(request: urllib.request.Request) -> Any:
+    """Open *request* against the fixed https GitHub API with a timeout.
+
+    Baking the timeout into the default opener keeps the injected test
+    openers single-argument while ensuring production calls never block
+    without bound.
+    """
+    # S310 justification: the request URL is always the fixed
+    # https://api.github.com endpoint built by the callers in this module.
+    return urllib.request.urlopen(request, timeout=_HTTP_TIMEOUT_SECONDS)  # noqa: S310 — fixed https://api.github.com endpoint
+
 
 def apply_call(
     *,
@@ -16,7 +33,7 @@ def apply_call(
     url: str,
     payload: dict[str, Any] | None,
     token: str,
-    opener: Callable[[urllib.request.Request], Any] = urllib.request.urlopen,
+    opener: Callable[[urllib.request.Request], Any] = _default_opener,
     sleeper: Callable[[float], None] | None = None,
 ) -> tuple[int, str]:
     # Resolve the sleeper at call time (not as a captured default) so tests can
@@ -67,7 +84,7 @@ def graphql_call(
     query: str,
     variables: dict[str, Any],
     token: str,
-    opener: Callable[[urllib.request.Request], Any] = urllib.request.urlopen,
+    opener: Callable[[urllib.request.Request], Any] = _default_opener,
 ) -> tuple[int, dict[str, Any]]:
     """Execute a GitHub GraphQL query/mutation. Returns (http_status, response_dict)."""
     payload = json.dumps({"query": query, "variables": variables}, separators=(",", ":"))
@@ -87,9 +104,14 @@ def graphql_call(
     except urllib.error.HTTPError as error:
         code = int(error.code)
         body_str = error.read().decode("utf-8", errors="replace")
+    except urllib.error.URLError:
+        # Network-level failure (DNS, connection reset, timeout). Mirror
+        # apply_call's curl-level 000 so a transient outage degrades to an
+        # empty result instead of an unhandled traceback (CWE-703).
+        return 0, {}
     try:
-        body = json.loads(body_str)
-    except (json.JSONDecodeError, UnboundLocalError):
+        body = json.loads(body_str) if body_str else {}
+    except json.JSONDecodeError:
         body = {}
     return code, body if isinstance(body, dict) else {}
 
