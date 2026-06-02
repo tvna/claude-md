@@ -58,8 +58,19 @@ jobs:
       - name: Assert no unallowlisted gh CLI calls in workflows
         run: uv run python scripts/scan_workflow_gh_calls.py verify
 
+      - name: Assert no untrusted context in workflow run blocks
+        # Refs #1129: untrusted GitHub contexts (github.event.*,
+        # github.head_ref, github.head_commit) must not be interpolated
+        # directly into run: shell bodies; route them through env: instead.
+        run: uv run python scripts/scan_workflow_injection.py verify
+
       - name: Assert workflow secrets have concrete runbooks
         run: uv run python scripts/scan_secret_runbooks.py verify
+
+      - name: Assert no hardcoded secrets in tracked non-Python files
+        # Refs #1129: ruff's S family covers *.py; this closes the gap for
+        # JSON/YAML/shell/TOML/workflow files with high-confidence rules.
+        run: uv run python scripts/scan_secrets.py verify
 
       - name: Assert local Markdown links resolve
         run: uv run python scripts/scan_markdown_links.py verify
