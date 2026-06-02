@@ -83,9 +83,32 @@ def test_major_update_is_blocked() -> None:
 
 
 def test_severity_label_blocks() -> None:
-    result = da.audit(event(labels=["severity:non-ascii-content"]), POLICY, ["uv.lock"])
+    result = da.audit(event(labels=["severity:security"]), POLICY, ["uv.lock"])
     assert result.eligible is False
-    assert "manual-review label present: severity:non-ascii-content" in result.reasons
+    assert "manual-review label present: severity:security" in result.reasons
+
+
+def test_advisory_non_ascii_label_does_not_block() -> None:
+    # #1122: dependabot relays release notes whose @mentions carry zero-width
+    # spaces, so scan_non_ascii applies severity:non-ascii-content (advisory
+    # for trusted bots) on nearly every PR. It must not block auto-merge.
+    result = da.audit(
+        event(labels=["severity:non-ascii-content"]),
+        POLICY,
+        [".github/workflows/verify.yml"],
+    )
+    assert result.eligible is True
+    assert not any("manual-review label present" in reason for reason in result.reasons)
+
+
+def test_advisory_label_does_not_mask_real_severity_block() -> None:
+    result = da.audit(
+        event(labels=["severity:non-ascii-content", "severity:security"]),
+        POLICY,
+        [".github/workflows/verify.yml"],
+    )
+    assert result.eligible is False
+    assert "manual-review label present: severity:security" in result.reasons
 
 
 def test_unexpected_path_blocks() -> None:

@@ -30,6 +30,8 @@ import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
+from _trusted_bots import _TRUSTED_BOT_LOGINS
+
 _DEFAULT_MAX_FINDINGS = 10
 TITLE_POLICY_CONFIG = Path(__file__).resolve().parents[1] / ".github" / "title-policy.toml"
 
@@ -215,8 +217,16 @@ def describe_non_ascii(title: str, limit: int = _DEFAULT_MAX_FINDINGS) -> list[s
     return findings
 
 
-def verify_title(title: str, *, kind: str, body: str = "") -> int:
-    """Print a GitHub Actions annotation and return a process exit code."""
+def verify_title(title: str, *, kind: str, body: str = "", author: str = "") -> int:
+    """Print a GitHub Actions annotation and return a process exit code.
+
+    When *author* is a trusted bot (``_trusted_bots._TRUSTED_BOT_LOGINS``),
+    the body is dropped from the type-fit heuristic (#1127): a dependabot PR
+    relays upstream release notes whose ``cache`` / ``memory`` wording would
+    otherwise mis-classify a correct ``chore(deps):`` title as performance
+    work. The title-only checks (ASCII, naming convention, issue-ref) still
+    apply to every author including bots.
+    """
     fail = 0
     if not is_ascii_title(title):
         details = ", ".join(describe_non_ascii(title))
@@ -229,7 +239,7 @@ def verify_title(title: str, *, kind: str, body: str = "") -> int:
         print(f"::error::{kind} title must follow repository naming convention: " f"{naming_convention_hint(kind)}.")
         fail = 1
     else:
-        policy_body = body or _body_from_env()
+        policy_body = "" if _is_trusted_bot_author(author) else (body or _body_from_env())
         for finding in type_fit_findings(title, kind=kind, body=policy_body):
             print(f"::error::{kind} title type does not fit the work: {format_type_fit_finding(finding)}")
             fail = 1
@@ -291,12 +301,21 @@ def _body_from_env() -> str:
     return os.environ.get("PR_BODY") or os.environ.get("ISSUE_BODY") or ""
 
 
+def _author_from_env() -> str:
+    return os.environ.get("PR_AUTHOR") or ""
+
+
+def _is_trusted_bot_author(author: str) -> bool:
+    return bool(author) and author in _TRUSTED_BOT_LOGINS
+
+
 def _cmd_verify(args: argparse.Namespace) -> int:
     title = args.title
     if title is None:
         title = os.environ.get("TITLE", "")
     body = _read_body_arg(args)
-    return verify_title(title, kind=args.kind, body=body or "")
+    author = args.author if args.author is not None else _author_from_env()
+    return verify_title(title, kind=args.kind, body=body or "", author=author)
 
 
 def _read_body_arg(args: argparse.Namespace) -> str | None:
@@ -332,6 +351,13 @@ def main(argv: list[str] | None = None) -> int:
     p_verify.add_argument(
         "--body-file",
         help="Optional file containing the issue or PR body used for type-fit checks.",
+    )
+    p_verify.add_argument(
+        "--author",
+        help=(
+            "Optional PR/issue author login. Defaults to the PR_AUTHOR env var. "
+            "A trusted-bot author drops the body from the type-fit heuristic."
+        ),
     )
     p_verify.set_defaults(func=_cmd_verify)
 
