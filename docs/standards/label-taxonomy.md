@@ -110,7 +110,7 @@ or `ci`) and mark the umbrella with the label, not with the title prefix.
 
 ### Retrospective Issue Kind Label
 
-One-off retrospective issues (`fix(auto-retro): review PR #N repair loops`,
+One-off retrospective issues (`chore(auto-retro): review PR #N repair loops`,
 detected by `scripts/auto_retro.py:is_retro_issue_title`) are closed by a
 single retro PR, so they are normal issues under the `type:*` exactly-one
 rule. Their canonical kind label is `type:docs`: a retrospective records an
@@ -118,6 +118,16 @@ operator-facing process finding and none of `feat`/`fix`/`refactor` fits.
 They must not carry `type:tracking` (a single PR closes them; see the
 `type:tracking` rule above), and the ad-hoc `retrospective` and
 `type:retrospective` labels are not declared families and must not be used.
+
+The title prefix is `chore(auto-retro)`, not `fix(auto-retro)` (Refs #1069).
+A retro issue is a triage signal, not a unit of work to implement directly,
+so the neutral `chore` prefix avoids the `fix(...)` reading that invited a
+direct implementation PR off an un-triaged retro. `is_retro_issue_title`
+also recognizes the legacy `fix(auto-retro)` prefix for closed historical
+retros. A PR that links a retro issue must itself be a retro-close PR (a
+`type(auto-retro): ...` title); `scripts/auto_retro.py verify-no-direct-retro-pr`
+(wired into `.github/workflows/portable-pr-policy.yml`) rejects any other PR
+that closes or references a retro issue, so triage cannot be skipped.
 
 Today `scripts/auto_retro.py:issue_labels` still emits the retired
 `layer:meta` alongside `type:docs`, and the retro-discovery queries in

@@ -46,7 +46,7 @@ import subprocess
 import sys
 import textwrap
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -344,11 +344,17 @@ def is_retro_issue_title(title: str) -> bool:
     """True if *title* is an auto-opened retrospective issue title.
 
     Single source of truth for retro-issue title detection. Matches the
-    canonical ``fix(auto-retro): review PR #<N> repair loops`` prefix
-    (case-insensitive after lstrip). Legacy ``retro(`` / ``retro:`` titles
-    are migrated to this prefix, so only the new shape is recognized.
+    canonical ``chore(auto-retro): review PR #<N> repair loops`` prefix and
+    the legacy ``fix(auto-retro)`` prefix (case-insensitive after lstrip).
+    Both shapes are recognized so dedup, the sentinel, the label-derived
+    prior, and the no-direct-PR gate keep covering closed historical retros
+    that were not renamed during the prefix migration (Refs #1069). Older
+    ``retro(`` / ``retro:`` titles were fully migrated and are not matched.
     """
-    return title.lstrip().lower().startswith("fix(auto-retro)")
+    stripped = title.lstrip().lower()
+    return stripped.startswith("chore(auto-retro)") or stripped.startswith(
+        "fix(auto-retro)"
+    )
 
 
 def should_skip(
@@ -1242,16 +1248,19 @@ def is_tentative_by_prior(
 
 
 def build_retro_title(pr: MergedPR) -> str:
-    """``fix(auto-retro): review PR #<N> repair loops``.
+    """``chore(auto-retro): review PR #<N> repair loops``.
 
-    The title is a fixed ``fix(auto-retro)`` Conventional Commit token:
-    ``fix`` is an allowed type in ``.github/title-policy.toml`` and
+    The title is a fixed ``chore(auto-retro)`` Conventional Commit token:
+    ``chore`` is an allowed type in ``.github/title-policy.toml`` and
     ``auto-retro`` is the canonical scope, so the auto-opened retro title
-    is policy-conformant. The source PR's own ``type(scope)`` is no longer
-    encoded in the title; it remains recorded in the issue body's Facts
+    is policy-conformant. ``chore`` is deliberately neutral: a retro issue
+    is a triage signal, not a directly actionable fix, so the prefix must
+    not read as ``fix`` and invite a direct implementation PR off an
+    un-triaged retro (Refs #1069). The source PR's own ``type(scope)`` is
+    not encoded in the title; it remains recorded in the issue body's Facts
     section.
     """
-    return f"fix(auto-retro): review PR #{pr.number} repair loops"
+    return f"chore(auto-retro): review PR #{pr.number} repair loops"
 
 
 # check_run conclusion values that count as a repair signal. Excludes
@@ -3593,6 +3602,90 @@ def _cmd_verify_retro_completeness(args: argparse.Namespace) -> int:
     return 0
 
 
+def find_linked_retro_refs(
+    pr_body: str, titles: Mapping[int, str]
+) -> list[int]:
+    """Return the linked issue numbers in *pr_body* that are retro issues.
+
+    *titles* maps issue number to title (typically from
+    :func:`fetch_issue_titles`). A ref counts as a retro issue when its
+    fetched title satisfies :func:`is_retro_issue_title`. Refs whose title
+    could not be fetched are skipped -- the caller must not block on a
+    transient lookup failure (Refs #1069).
+    """
+    out: list[int] = []
+    for number in extract_refs(strip_html_comments(pr_body)):
+        title = titles.get(number)
+        if title is not None and is_retro_issue_title(title):
+            out.append(number)
+    return out
+
+
+def _cmd_verify_no_direct_retro_pr(args: argparse.Namespace) -> int:
+    """Block a normal PR from closing an un-triaged retro issue.
+
+    A retro issue is a triage signal, not a unit of work to implement
+    directly. A PR that links (``Closes``/``Refs``) a retro issue must
+    itself be a retro-close PR -- a title whose ``type(scope)`` token
+    carries the ``auto-retro`` scope (:func:`is_retro_pr`). Any other PR
+    that links a retro issue is rejected (exit 1) so direct PRs off
+    un-triaged retros are blocked at CI (Refs #1069).
+
+    Fail-open boundary (matches :func:`_cmd_verify_retro_completeness`):
+    the gate skips (exit 0) when the PR is itself a retro-close PR, when no
+    linked issue resolves to a retro title, or when the linked-title lookup
+    cannot run -- it must never block an unrelated PR or a transient API
+    failure.
+    """
+    repo = (
+        args.repo
+        or os.environ.get("REPO")
+        or os.environ.get("GITHUB_REPOSITORY")
+    )
+    if not repo:
+        print(
+            "::error::missing --repo / $REPO / $GITHUB_REPOSITORY",
+            file=sys.stderr,
+        )
+        return 1
+    pr_title = args.pr_title or os.environ.get("TITLE") or ""
+    if is_retro_pr(pr_title):
+        print("skip: PR is a retro-close PR")
+        return 0
+    if args.pr_body_file:
+        try:
+            pr_body = Path(args.pr_body_file).read_text(encoding="utf-8")
+        except OSError as exc:
+            print(
+                f"::error::cannot read --pr-body-file "
+                f"{args.pr_body_file}: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+    else:
+        pr_body = os.environ.get("PR_BODY") or ""
+
+    refs = extract_refs(strip_html_comments(pr_body))
+    if not refs:
+        print("skip: PR body links no issue")
+        return 0
+    titles = fetch_issue_titles(repo, refs)
+    linked = find_linked_retro_refs(pr_body, titles)
+    if not linked:
+        print("skip: no linked retro issue")
+        return 0
+
+    joined = ", ".join(f"#{n}" for n in linked)
+    print(
+        f"::error::PR links retro issue {joined} but is not a retro-close "
+        f"PR. Retro issues require triage and are not a unit of work to "
+        f"implement directly: decide TP/FP, open a follow-up issue for any "
+        f"confirmed repair loop, and let the retro be closed by a "
+        f"retro-close PR (a 'type(auto-retro): ...' title). Refs #1069."
+    )
+    return 1
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -3705,6 +3798,24 @@ def main(argv: list[str] | None = None) -> int:
         help="Path to a file holding the PR body (else env $PR_BODY).",
     )
     p_verify.set_defaults(func=_cmd_verify_retro_completeness)
+
+    p_no_direct = sub.add_parser(
+        "verify-no-direct-retro-pr",
+        help=(
+            "Block a normal PR from closing a retro issue: a PR that links "
+            "a retro issue must itself be a retro-close PR. Skips (exit 0) "
+            "for retro-close PRs and PRs with no linked retro. Refs #1069."
+        ),
+    )
+    p_no_direct.add_argument("--repo", help="Override $REPO (owner/name).")
+    p_no_direct.add_argument(
+        "--pr-title", help="Override $TITLE (the PR title)."
+    )
+    p_no_direct.add_argument(
+        "--pr-body-file",
+        help="Path to a file holding the PR body (else env $PR_BODY).",
+    )
+    p_no_direct.set_defaults(func=_cmd_verify_no_direct_retro_pr)
 
     args = parser.parse_args(argv)
     try:
