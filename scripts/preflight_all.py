@@ -190,6 +190,14 @@ STEPS: tuple[Step, ...] = (
         argv=("python3", "scripts/scan_preflight_drift.py", "verify"),
     ),
     Step(
+        # Refs #1087. Static gate enforcing M4 (boundary validation) and M9
+        # (fail-loud/open) by requiring every workflow-called script to declare
+        # a Contract: docstring block. Baseline debt lives in the script's
+        # BASELINE_MISSING_CONTRACT and may only shrink.
+        name="scan_input_contract_drift",
+        argv=("python3", "scripts/scan_input_contract_drift.py", "verify"),
+    ),
+    Step(
         # Refs #615. Fails when a Claude hook script is absent from Codex
         # coverage and is not in the explicit allowlist in the script.
         name="scan_hook_coverage_drift",

@@ -2,7 +2,19 @@
 """Verify that issue and PR bodies contain their template's required sections.
 
 The workflow ``.github/workflows/verify-body-policy.yml`` shells out to
-this module. The contract is:
+this module.
+
+Contract:
+- Inputs: the ``verify`` subcommand; ``--kind``; the body from
+  ``--body-file`` or the ``ISSUE_BODY`` / ``PR_BODY`` env var; the author
+  login and ``--created-at`` / ``--cutoff`` skip thresholds.
+- Outputs: ``::error::`` annotations naming each missing section on
+  stdout; exit 0 when every required section is present (or a skip
+  applies), exit 1 otherwise.
+- Failure policy: fails loud per CLAUDE.md section 4 (gate: a body
+  missing a required section exits non-zero).
+
+The detailed contract is:
 
 * Read the body from ``--body-file`` when supplied, otherwise from the
   ``ISSUE_BODY`` or ``PR_BODY`` env var (whichever matches ``--kind``).

@@ -8,6 +8,16 @@ agent summaries before body context is inspected. Keep it ASCII-only so
 zero-width marks, RTL controls, emoji, Japanese text, and homoglyphs are
 rejected at the boundary.
 
+Contract:
+- Inputs: the ``verify`` subcommand; ``--kind`` (``issue`` or ``pr``);
+  the title from ``--title`` or the ``TITLE`` env var; the naming policy
+  from ``.github/title-policy.toml``; PR/issue body text from ``PR_BODY``
+  / ``ISSUE_BODY`` for the issue-reference check.
+- Outputs: ``::error::`` annotations naming each violation on stdout;
+  exit 0 when the title passes, exit 1 otherwise.
+- Failure policy: fails loud per CLAUDE.md section 4 (gate: a malformed
+  or policy-violating title exits non-zero).
+
 Tracked by #155.
 """
 

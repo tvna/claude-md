@@ -116,6 +116,16 @@ Reference: `scripts/branch_cleanup.py` `parse_dry_run` and
 `scripts/preflight_non_ascii.py` `_TARGET_TOOLS` is a `frozenset`
 allowlist.
 
+This boundary-declaration contract is enforced deterministically by
+`scripts/scan_input_contract_drift.py` (#1087): every script referenced
+by a workflow must declare a `Contract:` block (`Inputs:`, `Outputs:`,
+`Failure policy:`) in its module docstring, so the boundaries are
+enumerated rather than left implicit. Scripts that predate the gate are
+listed in that script's `BASELINE_MISSING_CONTRACT` with a rationale and
+may only be removed (never added) as they are backfilled. The gate proves
+the contract is *declared*; the runtime validation itself remains covered
+by the M2/M3 tests and review.
+
 ### M5. GitHub output and summary contracts
 
 Scripts that need to surface results to GitHub Actions use the
@@ -223,6 +233,11 @@ The hook exception exists only because a session-blocking hook bug
 would be worse than the gate it backs up; the server-side gate
 remains as backstop.
 
+The fail-loud/open declaration is enforced by
+`scripts/scan_input_contract_drift.py` (#1087): the `Failure policy:`
+line of the `Contract:` block must name `loud` or `open`, so the posture
+is explicit and machine-checkable rather than inferred from the code.
+
 ### M10. Standardised dependency and tool installation
 
 Workflow jobs that run Python tooling install dependencies through a
@@ -271,6 +286,35 @@ Procedure for adding a new script-quality tool:
 Reference: `pyproject.toml` `[dependency-groups].dev` and
 `scripts/scan_workflow_pip.py` jointly enforce this gate today
 (#192, #289, #195).
+
+## Security weakness coverage (CWE)
+
+This table records which Common Weakness Enumeration (CWE) classes apply
+to the workflow-called scripts (Python modules processing untrusted
+GitHub webhook payloads and external API responses inside GitHub
+Actions), and how each is handled. It is a point-in-time review captured
+under #1087; the continuous enforcement lives in the `ruff` `S`
+(flake8-bandit) gate (M8), the M4/M9 contract gate
+(`scan_input_contract_drift.py`), and the per-boundary tests (M2/M3),
+not in this document. "Handled (gap fixed #1087)" marks a real gap this
+review found and closed.
+
+| CWE class | Applicable? | Status | Where / rationale |
+|---|---|---|---|
+| CWE-119/120/787 buffer overflow, CWE-416 use-after-free, CWE-476 null deref | No | N/A | CPython manages memory; there are no manual buffers or pointers. Adding defenses here would be dead code forbidden by CLAUDE.md section 4. |
+| CWE-78/88 OS-command / argument injection | Yes | Handled | `subprocess` calls use list-form argv with no `shell=True`; enforced by `ruff` `S602/S603/S607` and `tests/test_ruff_security_gate.py`. |
+| CWE-918 SSRF | Yes | Handled | Every HTTP boundary targets a hardcoded https host (OSV, CISA KEV, GHSA, EPSS, NVD, api.github.com); the `# S310` justifications record the fixed-scheme audit. |
+| CWE-400/770 uncontrolled resource consumption (stalled connection) | Yes | Handled (gap fixed #1087) | `scripts/_github_api.py` now bounds every call with `_HTTP_TIMEOUT_SECONDS` via `_default_opener`; `threat_intel_triage.py` uses `timeout=30`. |
+| CWE-703 improper check / fragile error handling | Yes | Handled (gap fixed #1087) | `graphql_call` now catches `URLError` and degrades to `(0, {})` like `apply_call`, instead of relying on catching `UnboundLocalError`. |
+| CWE-1333 ReDoS | Yes | Handled | Regexes applied to untrusted title/body/comment text are line-anchored with bounded character classes and no nested quantifiers. |
+| CWE-117/94 workflow-command injection | Yes | Handled | Scripts never echo raw untrusted title/body into `::error::` or `GITHUB_OUTPUT`; they emit only code-point indices, the enum `kind`, code-defined reasons, and boolean outputs. GitHub titles are newline-free, so a `::`-prefixed command cannot be smuggled through them. |
+| CWE-22 path traversal | Yes | Handled | File paths come from runner-provided env (`$GITHUB_EVENT_PATH`) or CLI flags, never from a webhook payload field. |
+| CWE-502 unsafe deserialization | Yes | Handled | JSON is parsed with `json.loads`; YAML uses `yaml.safe_load` only. No `pickle`, `eval`, `exec`, or `yaml.load`. |
+| CWE-20 improper input validation | Yes | Handled | `json.loads` results are `isinstance`-checked before use; the M4/M9 `Contract:` declaration is now enforced by `scan_input_contract_drift.py`. |
+
+When a new script introduces a boundary not covered above (a new HTTP
+host, a new deserialization format, a regex over untrusted input), the PR
+must extend this table and confirm the applicable row stays "Handled".
 
 ## Optional enhancements
 
@@ -410,6 +454,20 @@ files, a frozen dataclass plus explicit validators can provide the
 same typed boundary without adding a runtime dependency; document the
 choice in the PR body when pydantic is not added. Tracked by issue
 #191.
+
+Decision of record (#191, completed): this repository does **not** adopt
+pydantic. It has zero pydantic usage and a deliberately minimal
+dependency surface (`pyproject.toml`); the workflow inputs are narrow,
+stable CLI flags, env vars, and small policy JSON, which `parse_dry_run`-
+style explicit validators, `frozenset` allowlists, and frozen dataclasses
+cover without a runtime dependency. Open Policy Agent (OPA/conftest) was
+also evaluated and rejected for the same boundary: it parses structured
+config (YAML/JSON), not Python docstrings, so it cannot enforce the
+`Contract:` convention, and adopting a Go binary would breach the M10
+single-uv-channel install path. The continuous enforcement gap that
+#191 surfaced is closed not by a validation library but by the
+`scan_input_contract_drift.py` gate documented in M4 and M9 above
+(#1087).
 
 ### O6. GitHub API boundary contract tests
 
@@ -650,6 +708,9 @@ silent regression on either side.
   - #189 test(scripts): add CLI contract tests for workflows
   - #190 security(scripts): add workflow script security scans
   - #191 refactor(scripts): model workflow inputs with pydantic
+    (completed; pydantic not adopted, see O5 decision of record)
+  - #1087 ci(scripts): enforce Contract: docstring (M4/M9) via
+    `scan_input_contract_drift` (continuous enforcement of M4/M9)
   - #192 ci(scripts): add static typing and lint gates
   - #193 ci(workflows): verify script invocation drift
   - #194 test(scripts): add GitHub API boundary tests

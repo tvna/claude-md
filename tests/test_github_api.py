@@ -286,3 +286,60 @@ def test_graphql_call_invalid_json_yields_empty_dict() -> None:
 
     assert code == 200
     assert body == {}
+
+
+def test_graphql_call_url_error_yields_zero_and_empty_dict() -> None:
+    # A network-level failure must degrade to (0, {}) rather than raising an
+    # unhandled URLError traceback (CWE-703 regression guard).
+    def opener(request: urllib.request.Request) -> Response:
+        raise urllib.error.URLError("socket down")
+
+    code, body = graphql_call(query="q", variables={}, token="t", opener=opener)
+
+    assert code == 0
+    assert body == {}
+
+
+# ---------------------------------------------------------------------------
+# _default_opener -- the production default must bound every call with a
+# timeout so a stalled connection cannot hang the job (CWE-400 / CWE-770).
+# ---------------------------------------------------------------------------
+
+
+def test_default_opener_passes_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
+    import _github_api
+
+    captured: dict[str, object] = {}
+
+    def fake_urlopen(request: urllib.request.Request, timeout: float | None = None) -> Response:
+        captured["timeout"] = timeout
+        return Response(200, "ok")
+
+    monkeypatch.setattr(_github_api.urllib.request, "urlopen", fake_urlopen)
+    _github_api._default_opener(urllib.request.Request("https://api.github.com/x"))
+
+    assert captured["timeout"] == _github_api._HTTP_TIMEOUT_SECONDS
+
+
+def test_apply_call_uses_default_opener_with_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
+    # End-to-end: apply_call with no injected opener funnels through
+    # _default_opener and therefore sets a timeout on the live urlopen.
+    import _github_api
+
+    captured: dict[str, object] = {}
+
+    def fake_urlopen(request: urllib.request.Request, timeout: float | None = None) -> Response:
+        captured["timeout"] = timeout
+        return Response(200, "ok")
+
+    monkeypatch.setattr(_github_api.urllib.request, "urlopen", fake_urlopen)
+    code, body = apply_call(
+        method="GET",
+        url="https://api.github.com/x",
+        payload=None,
+        token="token",
+    )
+
+    assert code == 200
+    assert body == "ok"
+    assert captured["timeout"] == _github_api._HTTP_TIMEOUT_SECONDS
