@@ -296,6 +296,56 @@ class TestVerifyTitle:
         assert "OK: issue title is ASCII-only and follows naming convention." in out
 
 
+class TestTrustedBotTypeFitCarveOut:
+    """#1127: a trusted-bot author drops the relayed body from type-fit.
+
+    Dependabot relays upstream release notes whose ``cache`` / ``memory``
+    wording must not mis-classify a correct ``chore(deps):`` title as
+    performance work. Title-only checks still apply to bots.
+    """
+
+    _DEPENDABOT_TITLE = "chore(deps): bump actions/setup-go from 5.6.0 to 6.4.0"
+    _PERF_BODY = "Update default Go module caching to use go.mod; reduce memory."
+
+    def test_trusted_bot_body_does_not_trip_type_fit(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        assert (
+            title_policy.verify_title(
+                self._DEPENDABOT_TITLE,
+                kind="pull_request",
+                body=self._PERF_BODY,
+                author="dependabot[bot]",
+            )
+            == 0
+        )
+        assert "title type does not fit" not in capsys.readouterr().out
+
+    def test_non_bot_author_body_still_trips_type_fit(self) -> None:
+        assert (
+            title_policy.verify_title(
+                self._DEPENDABOT_TITLE,
+                kind="pull_request",
+                body=self._PERF_BODY,
+                author="octocat",
+            )
+            == 1
+        )
+
+    def test_trusted_bot_perf_signal_in_title_still_fails(self) -> None:
+        # The carve-out drops only the body; a perf signal in the bot's own
+        # title is still its own authored content and must be checked.
+        assert (
+            title_policy.verify_title(
+                "chore(deps): cache image builds",
+                kind="pull_request",
+                body="",
+                author="dependabot[bot]",
+            )
+            == 1
+        )
+
+
 class TestPropertyInvariants:
     """Hypothesis pilot for the four pure parsers in ``title_policy``.
 

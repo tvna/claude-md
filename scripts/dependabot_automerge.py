@@ -40,6 +40,15 @@ from _trusted_bots import _TRUSTED_BOT_LOGINS
 
 _API_ROOT = "https://api.github.com"
 
+# Advisory-only label that must NOT block auto-merge (#1122). Dependabot relays
+# upstream release notes whose @mentions carry zero-width spaces (U+200B), so
+# scripts/scan_non_ascii.py applies this label on nearly every dependabot PR.
+# For a trusted-bot author it is demoted to advisory (label only; the PR is not
+# blocked), and `audit` already gates should_enable on _TRUSTED_BOT_LOGINS, so a
+# non-trusted author can never benefit from the exemption. All other severity:*
+# labels remain manual-review blockers.
+_ADVISORY_NON_BLOCKING_LABEL = "severity:non-ascii-content"
+
 _ENABLE_AUTO_MERGE_MUTATION = """
 mutation EnableAutoMerge($pullRequestId: ID!, $mergeMethod: PullRequestMergeMethod!) {
   enablePullRequestAutoMerge(input: {
@@ -123,7 +132,11 @@ def audit(
         reasons.append(f"head branch is not dependabot/*: {head_ref or '<missing>'}")
     if draft:
         reasons.append("pull request is draft")
-    blocked_labels = sorted(label for label in labels if label.startswith("severity:"))
+    blocked_labels = sorted(
+        label
+        for label in labels
+        if label.startswith("severity:") and label != _ADVISORY_NON_BLOCKING_LABEL
+    )
     if blocked_labels:
         reasons.append(f"manual-review label present: {', '.join(blocked_labels)}")
 
