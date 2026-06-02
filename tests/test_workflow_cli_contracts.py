@@ -30,7 +30,9 @@ from pathlib import Path
 from typing import Any, NamedTuple
 
 import analyze_ci_timings
+import attack_review_reminder
 import auto_retro
+import backup_archive
 import body_policy
 import branch_cleanup
 import coverage_failure_issue
@@ -63,6 +65,7 @@ import threat_intel_triage
 import title_policy
 import update_devcontainer_image_pins
 import uv_pin
+import validate_json_syntax
 import verify_apm_checksums
 import verify_dependabot_author
 import verify_linked_issue_titles
@@ -108,6 +111,10 @@ class WorkflowInvocation(NamedTuple):
 # enforce that in both directions.
 CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("analyze_ci_timings.py", None): "test_analyze_ci_timings_matches_workflow_args",
+    ("attack_review_reminder.py", "assemble"): "test_attack_review_reminder_assemble_matches_workflow_args",
+    ("backup_archive.py", "build"): "test_backup_archive_build_matches_workflow_args",
+    ("github_paginate.py", "fetch-run-jobs"): "test_github_paginate_fetch_run_jobs_matches_workflow_args",
+    ("validate_json_syntax.py", "verify"): "test_validate_json_syntax_verify_matches_workflow_args",
     ("auto_retro.py", "decision-tree-doc"): "test_auto_retro_decision_tree_doc_matches_workflow_args",
     ("auto_retro.py", "triage-report"): "test_auto_retro_triage_report_matches_workflow_env",
     ("workflow_diagram.py", "diagram-doc"): "test_workflow_diagram_doc_matches_workflow_args",
@@ -1274,12 +1281,92 @@ def test_github_paginate_get_matches_workflow_args(
 def test_post_issue_comment_create_matches_workflow_args(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """create subcommand accepts --issue-number/--body args used by backup-non-ascii-originals.yml."""
+    """create subcommand accepts --issue-number/--body args used by backup-non-ascii-originals.yml.
+
+    The ``Post review reminder comment`` step in
+    ``attack-coverage-review-reminder.yml`` also invokes the ``--body-file``
+    form. Refs #184, #911.
+    """
     monkeypatch.setenv("GH_TOKEN", "tok")
     monkeypatch.setenv("REPO", "owner/repo")
     monkeypatch.setattr(post_issue_comment, "_post_comment", lambda **kw: None)
     rc = post_issue_comment.main(["create", "--issue-number", "42", "--body", "test body"])
     assert rc == 0
+    body_file = tmp_path / "comment.md"
+    body_file.write_text("assembled comment", encoding="utf-8")
+    rc = post_issue_comment.main(["create", "--issue-number", "178", "--body-file", str(body_file)])
+    assert rc == 0
+
+
+def test_attack_review_reminder_assemble_matches_workflow_args(tmp_path: Path) -> None:
+    """assemble subcommand accepts the args used by the ``Assemble review
+    reminder comment`` step in ``attack-coverage-review-reminder.yml``. Refs #184."""
+    runbook = tmp_path / "rb.md"
+    runbook.write_text(
+        f"{attack_review_reminder.BEGIN_MARKER}\n### A\n### B\n{attack_review_reminder.END_MARKER}\n",
+        encoding="utf-8",
+    )
+    out = tmp_path / "review-comment.md"
+    summary = tmp_path / "summary.md"
+    rc = attack_review_reminder.main([
+        "assemble",
+        "--runbook", str(runbook),
+        "--out", str(out),
+        "--summary-file", str(summary),
+        "--repo", "owner/repo",
+        "--run-url", "https://example/run/1",
+        "--expected-h3", "2",
+    ])
+    assert rc == 0
+    assert out.exists()
+
+
+def test_backup_archive_build_matches_workflow_args(tmp_path: Path) -> None:
+    """build subcommand accepts the --indir/--timestamp/--repo/--archive args
+    used by the ``Capture issues, PRs, and comments`` step in
+    ``backup-non-ascii-originals.yml``."""
+    for fname in ("issues.json", "pull_requests.json", "issue_comments.json", "pull_request_review_comments.json"):
+        (tmp_path / fname).write_text("[]", encoding="utf-8")
+    archive = tmp_path / "originals.json.gz"
+    rc = backup_archive.main([
+        "build",
+        "--indir", str(tmp_path),
+        "--timestamp", "20260602T0000Z",
+        "--repo", "owner/repo",
+        "--archive", str(archive),
+    ])
+    assert rc == 0
+    assert archive.exists()
+
+
+def test_github_paginate_fetch_run_jobs_matches_workflow_args(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """fetch-run-jobs subcommand accepts the --runs/--repo/--outdir args used by
+    the ``Fetch per-run jobs`` step in ``weekly-maintenance.yml``. Refs #911."""
+    monkeypatch.setenv("GH_TOKEN", "tok")
+    runs = tmp_path / "runs.json"
+    runs.write_text(json.dumps({"workflow_runs": [{"id": 42}]}), encoding="utf-8")
+    monkeypatch.setattr(github_paginate, "_get_single", lambda **kw: json.dumps({"jobs": []}))
+    rc = github_paginate.main([
+        "fetch-run-jobs",
+        "--runs", str(runs),
+        "--repo", "owner/repo",
+        "--outdir", str(tmp_path / "jobs"),
+    ])
+    assert rc == 0
+    assert (tmp_path / "jobs" / "42.json").exists()
+
+
+def test_validate_json_syntax_verify_matches_workflow_args() -> None:
+    """verify subcommand accepts the repeated --file args used by the
+    ``Validate ruleset JSON syntax`` steps in apply-rulesets.yml and
+    weekly-maintenance.yml."""
+    assert validate_json_syntax.main([
+        "verify",
+        "--file", ".github/rulesets/main.json",
+        "--file", ".github/rulesets/all-branches.json",
+    ]) == 0
 
 
 def test_pr_label_mutation_jobs_have_pull_request_write() -> None:

@@ -153,6 +153,49 @@ def _cmd_get(args: argparse.Namespace) -> int:
     return 0
 
 
+def extract_run_ids(runs_json_text: str) -> list[int]:
+    """Return the ``workflow_runs[].id`` values from a runs API response body.
+
+    Returns an empty list when the ``workflow_runs`` key is absent or empty.
+    Raises ValueError when the body is not valid JSON.
+    """
+    try:
+        data = json.loads(runs_json_text)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"invalid JSON: {exc}") from exc
+    runs = data.get("workflow_runs") if isinstance(data, dict) else None
+    if not isinstance(runs, list):
+        return []
+    return [int(run["id"]) for run in runs if isinstance(run, dict) and "id" in run]
+
+
+def _cmd_fetch_run_jobs(args: argparse.Namespace) -> int:
+    token = os.environ.get("GH_TOKEN", "")
+    if not token:
+        print("Error: GH_TOKEN environment variable is required", file=sys.stderr)
+        return 1
+
+    try:
+        run_ids = extract_run_ids(Path(args.runs).read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+
+    outdir = Path(args.outdir)
+    outdir.mkdir(parents=True, exist_ok=True)
+    for run_id in run_ids:
+        url = f"{_API_ROOT}/repos/{args.repo}/actions/runs/{run_id}/jobs"
+        try:
+            body_str = _get_single(url=url, token=token)
+        except RuntimeError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
+        (outdir / f"{run_id}.json").write_text(body_str, encoding="utf-8")
+
+    print(f"Wrote jobs for {len(run_ids)} runs to {outdir}")
+    return 0
+
+
 def _cmd_fetch(args: argparse.Namespace) -> int:
     token = os.environ.get("GH_TOKEN", "")
     if not token:
@@ -184,12 +227,22 @@ def main(argv: list[str] | None = None) -> int:
     get_p.add_argument("--output", default=None, help="Output file path for raw JSON response body")
     get_p.add_argument("--field", default=None, help="Top-level JSON field name to print to stdout")
 
+    jobs_p = sub.add_parser(
+        "fetch-run-jobs",
+        help="Read workflow_runs[].id from a runs JSON file and write each run's jobs to --outdir/<id>.json",
+    )
+    jobs_p.add_argument("--runs", required=True, help="Path to a runs API response JSON file")
+    jobs_p.add_argument("--repo", required=True, help="Repository in owner/repo format")
+    jobs_p.add_argument("--outdir", required=True, help="Directory to write per-run jobs JSON files")
+
     args = parser.parse_args(argv)
 
     if args.cmd == "fetch":
         return _cmd_fetch(args)
     if args.cmd == "get":
         return _cmd_get(args)
+    if args.cmd == "fetch-run-jobs":
+        return _cmd_fetch_run_jobs(args)
 
     return 0
 

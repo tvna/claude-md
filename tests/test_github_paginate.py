@@ -247,3 +247,95 @@ class TestCmdGet:
         rc = gp.main(["get", "--path", "repos/o/r", "--field", "default_branch"])
         assert rc == 1
         assert "404" in capsys.readouterr().err
+
+
+# ---------------------------------------------------------------------------
+# extract_run_ids()
+# ---------------------------------------------------------------------------
+
+
+class TestExtractRunIds:
+    def test_parses_ids(self) -> None:
+        text = json.dumps({"workflow_runs": [{"id": 11}, {"id": 22}]})
+        assert gp.extract_run_ids(text) == [11, 22]
+
+    def test_empty_when_no_runs_key(self) -> None:
+        assert gp.extract_run_ids(json.dumps({"total_count": 0})) == []
+
+    def test_empty_when_runs_empty(self) -> None:
+        assert gp.extract_run_ids(json.dumps({"workflow_runs": []})) == []
+
+    def test_skips_entries_without_id(self) -> None:
+        text = json.dumps({"workflow_runs": [{"id": 1}, {"name": "no id"}]})
+        assert gp.extract_run_ids(text) == [1]
+
+    def test_malformed_json_raises(self) -> None:
+        with pytest.raises(ValueError, match="invalid JSON"):
+            gp.extract_run_ids("not-json")
+
+
+# ---------------------------------------------------------------------------
+# _cmd_fetch_run_jobs() / fetch-run-jobs subcommand
+# ---------------------------------------------------------------------------
+
+
+class TestCmdFetchRunJobs:
+    def test_writes_per_run_files(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("GH_TOKEN", "tok")
+        runs = tmp_path / "runs.json"
+        runs.write_text(json.dumps({"workflow_runs": [{"id": 11}, {"id": 22}]}), encoding="utf-8")
+        captured_urls: list[str] = []
+
+        def fake_get(*, url: str, token: str, **kw: Any) -> str:
+            captured_urls.append(url)
+            return json.dumps({"jobs": [{"id": url}]})
+
+        monkeypatch.setattr(gp, "_get_single", fake_get)
+        outdir = tmp_path / "jobs"
+        rc = gp.main(["fetch-run-jobs", "--runs", str(runs), "--repo", "o/r", "--outdir", str(outdir)])
+        assert rc == 0
+        assert (outdir / "11.json").exists()
+        assert (outdir / "22.json").exists()
+        assert captured_urls[0] == "https://api.github.com/repos/o/r/actions/runs/11/jobs"
+
+    def test_no_runs_writes_nothing(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("GH_TOKEN", "tok")
+        runs = tmp_path / "runs.json"
+        runs.write_text(json.dumps({"workflow_runs": []}), encoding="utf-8")
+        outdir = tmp_path / "jobs"
+        rc = gp.main(["fetch-run-jobs", "--runs", str(runs), "--repo", "o/r", "--outdir", str(outdir)])
+        assert rc == 0
+        assert list(outdir.iterdir()) == []
+
+    def test_missing_token_returns_1(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        monkeypatch.delenv("GH_TOKEN", raising=False)
+        rc = gp.main(["fetch-run-jobs", "--runs", str(tmp_path / "r.json"), "--repo", "o/r", "--outdir", str(tmp_path)])
+        assert rc == 1
+        assert "GH_TOKEN" in capsys.readouterr().err
+
+    def test_unreadable_runs_file_returns_1(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        monkeypatch.setenv("GH_TOKEN", "tok")
+        rc = gp.main(
+            ["fetch-run-jobs", "--runs", str(tmp_path / "missing.json"), "--repo", "o/r", "--outdir", str(tmp_path)]
+        )
+        assert rc == 1
+        assert capsys.readouterr().err
+
+    def test_api_error_returns_1(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        monkeypatch.setenv("GH_TOKEN", "tok")
+        runs = tmp_path / "runs.json"
+        runs.write_text(json.dumps({"workflow_runs": [{"id": 11}]}), encoding="utf-8")
+
+        def raise_error(**kw: Any) -> str:
+            raise RuntimeError("HTTP 500: boom")
+
+        monkeypatch.setattr(gp, "_get_single", raise_error)
+        rc = gp.main(["fetch-run-jobs", "--runs", str(runs), "--repo", "o/r", "--outdir", str(tmp_path / "jobs")])
+        assert rc == 1
+        assert "500" in capsys.readouterr().err
