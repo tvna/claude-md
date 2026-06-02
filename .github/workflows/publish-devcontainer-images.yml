@@ -127,46 +127,16 @@ jobs:
       - name: Open pin update PR
         env:
           GH_TOKEN: ${{ secrets.DEVCONTAINER_PIN_PR_TOKEN }}
+          REPO: ${{ github.repository }}
         run: |
-          if [ -z "${GH_TOKEN:-}" ]; then
-            echo "::error::DEVCONTAINER_PIN_PR_TOKEN is required in the devcontainer-image-pins environment"
-            exit 1
-          fi
-
-          if git diff --quiet; then
-            echo "devcontainer image pins already match ${GITHUB_SHA}"
-            exit 0
-          fi
-
-          branch="codex/devcontainer-image-pins-${GITHUB_SHA}"
-          enable_auto_merge() {
-            pr_number="$1"
-            python3 scripts/dependabot_automerge.py request-automerge --pr-number "$pr_number" \
-              || echo "::warning::auto-merge request failed for PR #${pr_number}; enable it manually if needed"
-          }
-
-          if git ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
-            existing_pr="$(python3 scripts/pr_upsert.py find --head "$branch")"
-            if [ -n "$existing_pr" ]; then
-              echo "pin update PR already exists: #${existing_pr}"
-              enable_auto_merge "$existing_pr"
-              exit 0
-            fi
-            echo "pin update branch already exists without an open PR; retrying PR creation: $branch"
-          else
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git checkout -b "$branch"
-            git add .devcontainer/claude/devcontainer.json .devcontainer/codex/devcontainer.json docs/runbooks/devcontainers.md
-            git commit -m "fix(devcontainer): pin published agent images" -m "Refs #696"
-            git push origin "$branch"
-          fi
-
-          sed "s/__GITHUB_SHA__/${GITHUB_SHA}/g" \
-            .github/pr-body-templates/devcontainer-image-pins.md > pr-body.md
-          pr_number="$(python3 scripts/pr_upsert.py upsert \
+          set -euo pipefail
+          python3 scripts/devcontainer_pin_pr.py open \
+            --github-sha "$GITHUB_SHA" \
             --base main \
-            --head "$branch" \
             --title "fix(devcontainer): pin published agent images" \
-            --body-file pr-body.md)"
-          enable_auto_merge "$pr_number"
+            --commit-subject "fix(devcontainer): pin published agent images" \
+            --commit-trailer "Refs #696" \
+            --template .github/pr-body-templates/devcontainer-image-pins.md \
+            --file .devcontainer/claude/devcontainer.json \
+            --file .devcontainer/codex/devcontainer.json \
+            --file docs/runbooks/devcontainers.md

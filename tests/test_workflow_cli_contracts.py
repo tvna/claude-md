@@ -38,6 +38,7 @@ import branch_cleanup
 import coverage_failure_issue
 import dependabot_automerge
 import dependabot_labels
+import devcontainer_pin_pr
 import github_paginate
 import issue_link
 import labels_apply
@@ -127,6 +128,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("branch_cleanup.py", "reconcile"): "test_branch_cleanup_reconcile_matches_workflow_args",
     ("branch_cleanup.py", "survey"): "test_branch_cleanup_survey_matches_workflow_args",
     ("coverage_failure_issue.py", "run"): "test_coverage_failure_issue_run_matches_workflow_env",
+    ("devcontainer_pin_pr.py", "open"): "test_devcontainer_pin_pr_open_matches_workflow_args",
     ("dependabot_automerge.py", "audit"): "test_dependabot_automerge_audit_matches_workflow_files",
     ("dependabot_automerge.py", "list-files"): "test_dependabot_list_files_matches_workflow_args",
     ("dependabot_automerge.py", "request-automerge"): "test_dependabot_request_automerge_matches_workflow_args",
@@ -172,7 +174,6 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("github_paginate.py", "fetch"): "test_github_paginate_fetch_matches_workflow_args",
     ("github_paginate.py", "get"): "test_github_paginate_get_matches_workflow_args",
     ("post_issue_comment.py", "create"): "test_post_issue_comment_create_matches_workflow_args",
-    ("pr_upsert.py", "find"): "test_pr_upsert_find_matches_workflow_args",
     ("pr_upsert.py", "upsert"): "test_pr_upsert_matches_workflow_args",
     ("verify_shard_coverage.py", None): "test_verify_shard_coverage_matches_workflow_args",
     ("verify_test_shard_markers.py", None): "test_verify_test_shard_markers_matches_workflow_args",
@@ -1474,28 +1475,52 @@ def test_devcontainer_pin_pr_uses_environment_secret_token() -> None:
     open_pr = next(
         step for step in update_pins["steps"] if step.get("name") == "Open pin update PR"
     )
+    # Thin orchestration: GH_TOKEN comes from the environment secret, REPO from
+    # the workflow context (both consumed by scripts/devcontainer_pin_pr.py).
     assert open_pr["env"] == {
-        "GH_TOKEN": "${{ secrets.DEVCONTAINER_PIN_PR_TOKEN }}"
+        "GH_TOKEN": "${{ secrets.DEVCONTAINER_PIN_PR_TOKEN }}",
+        "REPO": "${{ github.repository }}",
     }
-    assert "DEVCONTAINER_PIN_PR_TOKEN is required" in open_pr["run"]
-    assert 'github-actions[bot]"' in open_pr["run"]
+    assert "scripts/devcontainer_pin_pr.py open" in open_pr["run"]
     assert "Refs #696" in open_pr["run"]
 
 
-def test_devcontainer_pin_pr_requests_automerge_after_create() -> None:
-    """Verify the Open pin update PR step uses Python scripts (not gh CLI). Refs #911."""
-    workflow_path = Path(".github/workflows/publish-devcontainer-images.yml")
-    workflow = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
-    update_pins = workflow["jobs"]["update-pins"]
-    open_pr = next(
-        step for step in update_pins["steps"] if step.get("name") == "Open pin update PR"
-    )
+def test_devcontainer_pin_pr_open_matches_workflow_args(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """open subcommand accepts the args used by the Open pin update PR step.
 
-    assert 'scripts/pr_upsert.py upsert' in open_pr["run"]
-    assert 'scripts/dependabot_automerge.py request-automerge' in open_pr["run"]
-    assert 'scripts/pr_upsert.py find' in open_pr["run"]
-    assert "pin update PR already exists" in open_pr["run"]
-    assert 'enable_auto_merge "$existing_pr"' in open_pr["run"]
+    The branch/PR decision flow and auto-merge request are exercised by
+    tests/test_devcontainer_pin_pr.py; here we pin the workflow argv shape.
+    Refs #696, #911.
+    """
+    monkeypatch.setenv("GH_TOKEN", "tok")
+    monkeypatch.setenv("REPO", REPO)
+    template = tmp_path / "tmpl.md"
+    template.write_text("Pinned to __GITHUB_SHA__.\n", encoding="utf-8")
+    # Branch absent -> create branch + upsert; mock git and the GitHub API helpers.
+    monkeypatch.setattr(
+        devcontainer_pin_pr,
+        "run_git",
+        lambda args, **kw: __import__("subprocess").CompletedProcess(
+            ["git", *args], 1 if args[0] == "diff" else 2 if args[0] == "ls-remote" else 0
+        ),
+    )
+    monkeypatch.setattr(devcontainer_pin_pr, "_upsert_pr", lambda **kw: ("created", 42))
+    monkeypatch.setattr(devcontainer_pin_pr, "_enable_auto_merge", lambda **kw: None)
+    rc = devcontainer_pin_pr.main([
+        "open",
+        "--github-sha", "abc123",
+        "--base", "main",
+        "--title", "fix(devcontainer): pin published agent images",
+        "--commit-subject", "fix(devcontainer): pin published agent images",
+        "--commit-trailer", "Refs #696",
+        "--template", str(template),
+        "--file", ".devcontainer/claude/devcontainer.json",
+        "--file", ".devcontainer/codex/devcontainer.json",
+        "--file", "docs/runbooks/devcontainers.md",
+    ])
+    assert rc == 0
 
 
 def test_analyze_ci_timings_matches_workflow_args(
