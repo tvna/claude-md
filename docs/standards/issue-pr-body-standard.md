@@ -53,14 +53,20 @@ Every issue body should contain the following H2 sections, in this order:
 - `## Scope` - one paragraph that names the unit of work the issue covers.
   Per CLAUDE.md section 1, the scope is the goal; without it there is no
   way to know when the issue is done.
-- `## Why` - one paragraph (or short bulleted list) that motivates the
+- `## Facts` - one paragraph (or short bulleted list) that motivates the
   change. Per CLAUDE.md section 2, lines that describe verified state
   must be prefixed with `Fact:` and lines that describe a hypothesis or
   predicted consequence must be prefixed with `Speculation:`. Reviewers
-  use the prefix to know which lines need pushback.
+  use the prefix to know which lines need pushback. (This section was
+  historically titled `## Why`; `scripts/body_policy.py` requires the
+  heading literally named `Facts`.)
 - `## Proposed work` - bulleted list of the concrete deliverables. Per
   CLAUDE.md section 5, this list should be the minimum that satisfies
   `Scope`; do not enumerate adjacent improvements here.
+- `## Verification` - the command or observable check that confirms the
+  work is done. Per CLAUDE.md section 1, completion needs a verification
+  step; name a runnable check (a command that exits 0, a file that now
+  exists) rather than prose.
 - `## Acceptance criteria` - bulleted list of checks that must be true
   before the issue can close. Per CLAUDE.md section 1, each criterion
   should be observable (a file exists, a command exits 0, a label is
@@ -77,7 +83,7 @@ below describe extra emphasis a body of each type should carry.
 
 ### `type:feat`
 
-`Scope` names the new behaviour or rule. `Why` calls out the gap the new
+`Scope` names the new behaviour or rule. `Facts` calls out the gap the new
 behaviour fills with a `Fact:` line citing the current state and a
 `Speculation:` line for the predicted improvement. `Acceptance criteria`
 includes at least one observable check (a workflow now exists, a label
@@ -85,7 +91,7 @@ now appears, a command now exits 0).
 
 ### `type:fix`
 
-`Why` must contain a `Fact:` line that names the defect concretely - a
+`Facts` must contain a `Fact:` line that names the defect concretely - a
 log line, an error message, a file path with an incorrect value, or a
 reproduction step. Per CLAUDE.md section 2, "evidence earns a fix":
 without a fact line, the issue is a speculative refactor request, not a
@@ -94,7 +100,7 @@ reproduces" with the reproduction command.
 
 ### `type:refactor`
 
-`Why` should make explicit that no behaviour change is intended (per the
+`Facts` should make explicit that no behaviour change is intended (per the
 label description). `Acceptance criteria` should include "existing tests
 pass unchanged" so the no-behaviour-change claim is checkable.
 
@@ -109,8 +115,9 @@ Examples in the body must be ASCII-only to keep the
 ### `type:tracking`
 
 `Scope` names the umbrella concern. The body replaces `Proposed work`
-with a `## Initial child issues` (or similar) list that links each
-scoped child, and replaces `Acceptance criteria` with a
+(and the `## Verification` step) with a `## Initial child issues` (or
+similar) list that links each scoped child, and replaces
+`Acceptance criteria` with a
 `## Completion criteria` section that names the condition under which
 the umbrella itself can close (typically "no open child issues remain"
 or "replaced by a newer tracking issue"). `Parent` is usually omitted
@@ -220,9 +227,9 @@ out of the final PR body and does not need to be preserved.
 | Body section | CLAUDE.md anchor | What it enforces |
 |---|---|---|
 | `Scope` (issue), `Summary` (PR) | section 1 | The goal is named before any work begins. |
-| `Why` with `Fact:` / `Speculation:` tags | section 2 | Facts and speculation are visibly separated; reviewers know which lines need pushback. |
+| `Facts` with `Fact:` / `Speculation:` tags | section 2 | Facts and speculation are visibly separated; reviewers know which lines need pushback. |
 | `Proposed work` (issue), `Changes` (PR) | section 5 | The change touches only what it must; adjacent cleanups are not bundled in. |
-| `Acceptance criteria` (issue), `Verification` (PR) | section 1, section 4 | Completion has an observable check; the blast radius of an unverified merge is bounded. |
+| `Verification` / `Acceptance criteria` (issue), `Verification` (PR) | section 1, section 4 | Completion has an observable check; the blast radius of an unverified merge is bounded. |
 | `Related Issue` / `Refs #N` (PR) | section 3 | Every PR cites its issue; deterministic-harness invariant. |
 | `Parent` (issue) | section 5 | Umbrella relationships are explicit, so scope creep on a child does not silently expand the umbrella. |
 
