@@ -1,6 +1,8 @@
 # Claude container egress allowlist.
 #
 # Include the shared development destinations, then append Claude-only
-# endpoints when a reviewed workflow requires them.
+# endpoints when a reviewed workflow requires them. Each host carries an
+# inline triage rationale; see
+# docs/runbooks/devcontainer-tool-network-triage.md.
 @include shared.allowlist
-api.anthropic.com
+api.anthropic.com  # Anthropic API endpoint used by the Claude CLI at runtime.
