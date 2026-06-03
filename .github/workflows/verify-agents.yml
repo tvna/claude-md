@@ -105,6 +105,13 @@ jobs:
         # so the devcontainer cannot silently lack a tool the gates depend on.
         run: uv run python scripts/scan_devcontainer_tool_drift.py verify
 
+      - name: Verify devcontainer egress hosts carry a triage rationale
+        # Refs #1170: fails when a .devcontainer/network/*.allowlist host has
+        # no inline triage rationale, so a new outbound destination cannot be
+        # admitted without the observe/evaluate/decide record in
+        # docs/runbooks/devcontainer-tool-network-triage.md.
+        run: uv run python scripts/scan_allowlist_rationale.py verify
+
       - name: Verify flake.nix is the single source of truth for pinned hashes
         # Refs #1153: fails when a pinned binary's flake.nix SHA256 is hardcoded
         # under scripts/ or .github/workflows/, so a tool bump cannot leave a

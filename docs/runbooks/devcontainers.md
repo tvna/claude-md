@@ -592,6 +592,12 @@ Set `DEVCONTAINER_APPLY_EGRESS_ALLOWLIST=0` before container start only
 for diagnosis. Any persistent broad exception needs a reviewed update to
 the allowlist file with rationale.
 
+Before adding a new outbound destination for a new tool, follow the
+observe / evaluate / decide / verify procedure in
+[`devcontainer-tool-network-triage.md`](devcontainer-tool-network-triage.md).
+Each host entry must carry an inline triage rationale comment; the
+`scripts/scan_allowlist_rationale.py` gate fails CI when one is missing.
+
 ## Verification
 
 Run the same repository checks inside each container:
