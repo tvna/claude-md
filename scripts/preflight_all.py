@@ -240,6 +240,13 @@ STEPS: tuple[Step, ...] = (
         argv=("python3", "scripts/scan_flake_pin_drift.py", "verify"),
     ),
     Step(
+        # Refs #1154. Fails when a tool is compiled from source (go/cargo
+        # install) on the CI surface instead of fetching a pinned prebuilt --
+        # the ~138s regression class from #1150. Ack a justified backstop.
+        name="scan_compile_from_source",
+        argv=("python3", "scripts/scan_compile_from_source.py", "verify"),
+    ),
+    Step(
         # Refs #1099. Runs waza spec-compliance over every skill under
         # .agents/skills. spec failure = fail, token budget = warning only.
         # Needs the pinned waza binary (scripts/install_waza.sh); soft so a

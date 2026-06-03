@@ -49,6 +49,7 @@ import pytest
 import ruleset_drift
 import rulesets_apply
 import scan_apm_portability
+import scan_compile_from_source
 import scan_design_philosophy_drift
 import scan_devcontainer_tool_drift
 import scan_docs_inventory
@@ -155,6 +156,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("rulesets_apply.py", "auto-delete"): "test_rulesets_apply_plan_and_auto_delete_match_workflow_args",
     ("scan_apm_portability.py", "verify"): "test_scan_apm_portability_verify_matches_workflow_paths",
     ("scan_design_philosophy_drift.py", "verify"): "test_scan_design_philosophy_drift_verify_matches_workflow_paths",
+    ("scan_compile_from_source.py", "verify"): "test_scan_compile_from_source_verify_matches_workflow_args",
     ("scan_devcontainer_tool_drift.py", "verify"): "test_scan_devcontainer_tool_drift_verify_matches_workflow_args",
     ("scan_docs_inventory.py", "verify"): "test_scan_docs_inventory_verify_matches_workflow_args",
     ("scan_flake_pin_drift.py", "verify"): "test_scan_flake_pin_drift_verify_matches_workflow_args",
@@ -1104,6 +1106,12 @@ def test_scan_test_presence_drift_verify_matches_workflow_args() -> None:
 def test_scan_markdown_links_verify_matches_workflow_args() -> None:
     """Mirrors the ``Assert local Markdown links resolve`` step."""
     assert scan_markdown_links.main(["verify"]) == 0
+
+
+def test_scan_compile_from_source_verify_matches_workflow_args() -> None:
+    """Mirrors the ``Verify no tool is compiled from source on the CI
+    surface`` step in ``.github/workflows/verify-agents.yml``."""
+    assert scan_compile_from_source.main(["verify"]) == 0
 
 
 def test_scan_devcontainer_tool_drift_verify_matches_workflow_args() -> None:
