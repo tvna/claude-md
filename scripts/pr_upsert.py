@@ -58,6 +58,102 @@ def _list_open_prs(
     return data
 
 
+def _list_open_prs_by_prefix(
+    *,
+    repo: str,
+    prefix: str,
+    token: str,
+    apply_call: Callable[..., tuple[int, str]] = _github_apply_call,
+) -> list[dict[str, Any]]:
+    """Return open PRs whose head branch name starts with *prefix* (paginated)."""
+    results: list[dict[str, Any]] = []
+    for page in range(1, 11):  # bound the scan; pin PRs are few
+        url = f"{_API_ROOT}/repos/{repo}/pulls?state=open&per_page=100&page={page}"
+        code, body = apply_call(method="GET", url=url, payload=None, token=token)
+        if not (200 <= code < 300):
+            raise RuntimeError(f"List PRs failed: HTTP {code}: {body[:200]}")
+        try:
+            data = json.loads(body)
+        except json.JSONDecodeError as exc:
+            raise RuntimeError(f"Unexpected response from list PRs: {body[:200]}") from exc
+        if not isinstance(data, list):
+            raise RuntimeError(f"Expected list from list PRs, got: {body[:200]}")
+        for pr in data:
+            ref = pr.get("head", {}).get("ref", "") if isinstance(pr, dict) else ""
+            if isinstance(ref, str) and ref.startswith(prefix):
+                results.append(pr)
+        if len(data) < 100:
+            break
+    return results
+
+
+def _compare_behind(
+    *,
+    repo: str,
+    base: str,
+    head: str,
+    token: str,
+    apply_call: Callable[..., tuple[int, str]] = _github_apply_call,
+) -> int:
+    """Return how many commits *head* is behind *base* (``behind_by`` from compare)."""
+    url = f"{_API_ROOT}/repos/{repo}/compare/{base}...{head}"
+    code, body = apply_call(method="GET", url=url, payload=None, token=token)
+    if not (200 <= code < 300):
+        raise RuntimeError(f"Compare {base}...{head} failed: HTTP {code}: {body[:200]}")
+    try:
+        data = json.loads(body)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"Unexpected response from compare: {body[:200]}") from exc
+    behind = data.get("behind_by") if isinstance(data, dict) else None
+    if not isinstance(behind, int):
+        raise RuntimeError(f"Compare response missing behind_by: {body[:200]}")
+    return behind
+
+
+def _close_pr(
+    *,
+    repo: str,
+    number: int,
+    token: str,
+    apply_call: Callable[..., tuple[int, str]] = _github_apply_call,
+) -> None:
+    """Close an open PR without merging it."""
+    url = f"{_API_ROOT}/repos/{repo}/pulls/{number}"
+    code, resp = apply_call(method="PATCH", url=url, payload={"state": "closed"}, token=token)
+    if not (200 <= code < 300):
+        raise RuntimeError(f"Close PR #{number} failed: HTTP {code}: {resp[:200]}")
+
+
+def _delete_branch(
+    *,
+    repo: str,
+    branch: str,
+    token: str,
+    apply_call: Callable[..., tuple[int, str]] = _github_apply_call,
+) -> None:
+    """Delete a remote branch ref. A 404/422 (already gone) is treated as success."""
+    url = f"{_API_ROOT}/repos/{repo}/git/refs/heads/{branch}"
+    code, resp = apply_call(method="DELETE", url=url, payload=None, token=token)
+    if (200 <= code < 300) or code in (404, 422):
+        return
+    raise RuntimeError(f"Delete branch {branch} failed: HTTP {code}: {resp[:200]}")
+
+
+def _comment_pr(
+    *,
+    repo: str,
+    number: int,
+    body: str,
+    token: str,
+    apply_call: Callable[..., tuple[int, str]] = _github_apply_call,
+) -> None:
+    """Post an issue comment on a PR."""
+    url = f"{_API_ROOT}/repos/{repo}/issues/{number}/comments"
+    code, resp = apply_call(method="POST", url=url, payload={"body": body}, token=token)
+    if not (200 <= code < 300):
+        raise RuntimeError(f"Comment on #{number} failed: HTTP {code}: {resp[:200]}")
+
+
 def _create_pr(
     *,
     repo: str,
