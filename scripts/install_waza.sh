@@ -21,24 +21,15 @@
 #      present. Before #1150 this was the CI path and cost ~2 minutes per run
 #      (Go toolchain fetch + compile); it is now only a portability backstop.
 #
-# Acquisition is pinned to WAZA_VERSION and a per-asset SHA256 for
-# supply-chain hardening: an unpinned `@latest` or unverified download would
-# silently pull arbitrary bytes into the gate. Fails loudly (exit != 0) on any
-# download or checksum failure -- never swallowed.
+# flake.nix is the single source of truth for the pinned version, release
+# asset, and SHA256 (wazaVersion + wazaNative.<system>). scripts/waza_pin.py
+# reads them at runtime so there is exactly one place to update on a bump --
+# no hardcoded copy here to drift (#1150). The SHA256 check below is the
+# supply-chain guard: any mismatched or truncated download fails loud.
 
 set -euo pipefail
 
-# Pinned waza release. Keep in sync with wazaVersion in flake.nix. Update
-# deliberately, in a reviewed change, alongside a re-run of
-# scripts/skill_quality_gate.py verify against all skills.
-WAZA_VERSION="v0.33.0"
-
-# Pinned SHA256 (hex) of each prebuilt release asset. These MUST stay in sync
-# with flake.nix `wazaNative.<system>.hash`, which pins the SAME bytes as SRI
-# base64 (sha256-...). The runtime `sha256sum -c` below is the supply-chain
-# guard; a mismatch fails loud.
-WAZA_SHA256_linux_amd64="c1a31a15d959d2cd536feb41cf7b20f94b0434a8e86949d3de3d21c1e3fb6ff3"
-WAZA_SHA256_linux_arm64="552ba4f45e5f73e3e9c0c93429e2c59e21f1a4de8b9895f98f54deea7f03dfa8"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # 1. Prefer an already-provisioned waza (nix devcontainer flake, or a prior
 #    install). Version pinning for this path is enforced declaratively by
@@ -48,23 +39,31 @@ if command -v waza >/dev/null 2>&1; then
   exit 0
 fi
 
-# 2. Download the pinned prebuilt binary for this platform.
+# Past step 1, the pinned coordinates are resolved from flake.nix via
+# scripts/waza_pin.py, which needs python3.
+if ! command -v python3 >/dev/null 2>&1; then
+  echo "install_waza: ERROR: python3 is required to read the pinned waza coordinates from flake.nix." >&2
+  exit 1
+fi
+
+# Map this platform to the nix system double that flake.nix's wazaNative
+# block enumerates. Empty for platforms with no pinned prebuilt asset.
 os="$(uname -s)"
 arch="$(uname -m)"
-asset=""
-sha=""
+nix_system=""
 case "${os}:${arch}" in
-  Linux:x86_64 | Linux:amd64)
-    asset="waza-linux-amd64"
-    sha="${WAZA_SHA256_linux_amd64}"
-    ;;
-  Linux:aarch64 | Linux:arm64)
-    asset="waza-linux-arm64"
-    sha="${WAZA_SHA256_linux_arm64}"
-    ;;
+  Linux:x86_64 | Linux:amd64) nix_system="x86_64-linux" ;;
+  Linux:aarch64 | Linux:arm64) nix_system="aarch64-linux" ;;
 esac
 
-if [ -n "${asset}" ]; then
+# 2. Download the pinned prebuilt binary resolved from flake.nix.
+if [ -n "${nix_system}" ]; then
+  # waza_pin.py prints three lines: version, asset, sha256-hex.
+  pin="$(python3 "${SCRIPT_DIR}/waza_pin.py" resolve --system "${nix_system}")"
+  version="$(printf '%s\n' "${pin}" | sed -n '1p')"
+  asset="$(printf '%s\n' "${pin}" | sed -n '2p')"
+  sha="$(printf '%s\n' "${pin}" | sed -n '3p')"
+
   install_dir="${HOME}/.local/bin"
   dest="${install_dir}/waza"
 
@@ -95,20 +94,21 @@ if [ -n "${asset}" ]; then
   # partial file.
   tmp="$(mktemp "${install_dir}/.waza.XXXXXX")"
   trap 'rm -f "${tmp}"' EXIT
-  url="https://github.com/microsoft/waza/releases/download/${WAZA_VERSION}/${asset}"
-  echo "install_waza: downloading pinned prebuilt ${asset} ${WAZA_VERSION} ..." >&2
+  url="https://github.com/microsoft/waza/releases/download/v${version}/${asset}"
+  echo "install_waza: downloading pinned prebuilt ${asset} v${version} ..." >&2
   curl -fsSL "${url}" -o "${tmp}"
   echo "${sha}  ${tmp}" | sha256sum -c - >&2
   chmod 0755 "${tmp}"
   mv -f "${tmp}" "${dest}"
   trap - EXIT
   add_to_path
-  echo "install_waza: waza ${WAZA_VERSION} ready at ${dest} ($("${dest}" --version 2>/dev/null | head -1))" >&2
+  echo "install_waza: waza v${version} ready at ${dest} ($("${dest}" --version 2>/dev/null | head -1))" >&2
   exit 0
 fi
 
 # 3. Portability backstop: no pinned prebuilt for this platform. Fall back to a
 #    pinned `go install` (compiles from source) when Go is available.
+version="$(python3 "${SCRIPT_DIR}/waza_pin.py" version)"
 if ! command -v go >/dev/null 2>&1; then
   echo "install_waza: ERROR: no pinned prebuilt asset for ${os}/${arch} and no 'go' toolchain to compile waza." >&2
   echo "install_waza: install waza manually, or use the devcontainer (flake.nix provides it)." >&2
@@ -124,8 +124,8 @@ case ":${PATH}:" in
   *) export PATH="${GOBIN}:${PATH}" ;;
 esac
 
-echo "install_waza: no pinned prebuilt for ${os}/${arch}; installing ${WAZA_VERSION} via go install ..." >&2
-go install "github.com/microsoft/waza/cmd/waza@${WAZA_VERSION}"
+echo "install_waza: no pinned prebuilt for ${os}/${arch}; installing v${version} via go install ..." >&2
+go install "github.com/microsoft/waza/cmd/waza@v${version}"
 
 # Verify the install produced an invocable binary. Fail loudly rather than
 # letting the gate run against nothing.
@@ -133,4 +133,4 @@ if ! command -v waza >/dev/null 2>&1; then
   echo "install_waza: ERROR: waza not found on PATH after install (looked in ${GOBIN})." >&2
   exit 1
 fi
-echo "install_waza: waza ${WAZA_VERSION} ready at ${GOBIN}/waza" >&2
+echo "install_waza: waza v${version} ready at ${GOBIN}/waza" >&2
