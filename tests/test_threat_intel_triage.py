@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 import threat_intel_triage as triage
 
-pytestmark = pytest.mark.shard_ci_ops
+pytestmark = pytest.mark.shard_ci_ops_2
 
 
 class TestParseLabels:

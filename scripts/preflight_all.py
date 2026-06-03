@@ -311,6 +311,21 @@ STEPS: tuple[Step, ...] = (
         ),
     ),
     Step(
+        # Refs #1178. PR body is optional locally (PR_BODY unset means no
+        # Text delta section, the stricter default so an instruction-text
+        # change without the section surfaces before push). The base-ref
+        # shape mirrors CI's portable-pr-policy.yml step; cutoff/created-at
+        # are omitted so the local run always enforces.
+        name="verify_text_delta_section",
+        argv=(
+            "python3",
+            "scripts/verify_text_delta_section.py",
+            "verify",
+            "--base-ref",
+            "origin/main",
+        ),
+    ),
+    Step(
         name="verify_ruleset_sync",
         argv=(
             "python3",

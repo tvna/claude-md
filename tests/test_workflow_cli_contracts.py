@@ -41,6 +41,8 @@ import coverage_failure_issue
 import dependabot_automerge
 import dependabot_labels
 import devcontainer_pin_pr
+import flake_pin
+import flake_pin_latest
 import github_paginate
 import issue_link
 import labels_apply
@@ -90,10 +92,11 @@ import verify_ruleset_sync
 import verify_security_control_floor
 import verify_shard_coverage
 import verify_test_shard_markers
+import verify_text_delta_section
 import workflow_diagram
 import yaml
 
-pytestmark = pytest.mark.shard_ci_ops
+pytestmark = pytest.mark.shard_ci_ops_2
 REPO = "owner/repo"
 
 _WORKFLOWS_DIR = Path(".github/workflows")
@@ -151,6 +154,9 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("coverage_failure_issue.py", "run"): "test_coverage_failure_issue_run_matches_workflow_env",
     ("devcontainer_pin_pr.py", "open"): "test_devcontainer_pin_pr_open_matches_workflow_args",
     ("devcontainer_pin_pr.py", "refresh"): "test_devcontainer_pin_pr_refresh_matches_workflow_args",
+    ("flake_pin.py", "asset-url"): "test_flake_pin_workflow_subcommands_match_ci_usage",
+    ("flake_pin.py", "bump"): "test_flake_pin_workflow_subcommands_match_ci_usage",
+    ("flake_pin_latest.py", "check"): "test_flake_pin_latest_check_matches_workflow_args",
     ("dependabot_automerge.py", "audit"): "test_dependabot_automerge_audit_matches_workflow_files",
     ("dependabot_automerge.py", "list-files"): "test_dependabot_list_files_matches_workflow_args",
     ("dependabot_automerge.py", "request-automerge"): "test_dependabot_request_automerge_matches_workflow_args",
@@ -204,6 +210,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("verify_dependabot_author.py", "verify"): "test_verify_dependabot_author_verify_matches_workflow_args",
     ("verify_linked_issue_titles.py", "verify"): "test_verify_linked_issue_titles_verify_matches_workflow_args",
     ("verify_readme_translation.py", "verify"): "test_verify_readme_translation_matches_workflow_args",
+    ("verify_text_delta_section.py", "verify"): "test_verify_text_delta_section_matches_workflow_args",
     ("verify_required_check_contexts.py", "verify"): "test_verify_required_check_contexts_matches_workflow_args",
     ("verify_ruleset_sync.py", "verify"): "test_verify_ruleset_sync_matches_workflow_args",
     ("verify_security_control_floor.py", None): "test_verify_security_control_floor_matches_workflow_args",
@@ -1017,6 +1024,48 @@ def test_verify_readme_translation_matches_workflow_args(
             "origin/main",
             "--body-file",
             str(body_file),
+        ]
+    ) == 0
+
+
+def test_verify_text_delta_section_matches_workflow_args(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Mirror the env+argv shape used by portable-pr-policy.yml.
+
+    The workflow shells to
+    ``python3 scripts/verify_text_delta_section.py verify
+    --base-ref "$BASE_REF" --body-file "$body_file"
+    --created-at "$PR_CREATED_AT" --cutoff "$BODY_POLICY_CUTOFF"``.
+    Stub the changed-files lookup so the test stays hermetic across CI
+    checkout depths (the lint-scripts-pytest job checks out shallow, so a
+    real ``git diff origin/main..HEAD`` would fail with exit 128).
+    """
+    monkeypatch.setattr(
+        verify_text_delta_section,
+        "changed_instruction_files",
+        lambda base, head="HEAD", **kwargs: frozenset({"CLAUDE.md"}),
+    )
+
+    body_file = tmp_path / "body.md"
+    body_file.write_text(
+        "## Text delta\n\n"
+        "- chars: +20\n"
+        "- Added context: x\n"
+        "- Removed context: y\n",
+        encoding="utf-8",
+    )
+    assert verify_text_delta_section.main(
+        [
+            "verify",
+            "--base-ref",
+            "origin/main",
+            "--body-file",
+            str(body_file),
+            "--created-at",
+            "2026-06-03T00:00:00Z",
+            "--cutoff",
+            "2026-05-26T00:00:00Z",
         ]
     ) == 0
 
@@ -1859,6 +1908,89 @@ def test_uv_pin_workflow_subcommands_match_ci_usage(
     assert uv_pin.main(["read", str(tmp_path / "pyproject.toml")]) == 0
     assert uv_pin.main(["drift", "--repo-root", str(tmp_path)]) == 0
     assert uv_pin.main(["stale", "--repo-root", str(tmp_path)]) == 0
+
+
+_FLAKE_PIN_FIXTURE = """
+{
+  outputs = { ... }:
+    let
+      apmVersion = "0.12.1";
+      wazaVersion = "0.33.0";
+      wazaNative = {
+        aarch64-linux = {
+          asset = "waza-linux-arm64";
+          hash = "sha256-VSuk9F5fc+PpwMk0KeLFniHxpN6LmJX5j1Te6n8D36g=";
+        };
+        x86_64-linux = {
+          asset = "waza-linux-amd64";
+          hash = "sha256-waMaFdlZ0s1Tb+tBz3sg+UsENKjoaUnT3j0hweP7b/M=";
+        };
+      }.${system};
+    in { };
+}
+"""
+
+
+def test_flake_pin_workflow_subcommands_match_ci_usage(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Mirror the ``asset-url`` and ``bump`` argv shapes used by the
+    ``Recompute per-system hashes and bump flake.nix`` step in
+    ``.github/workflows/flake-pin-refresh.yml``. Refs #1171."""
+    flake = tmp_path / "flake.nix"
+    flake.write_text(_FLAKE_PIN_FIXTURE, encoding="utf-8")
+    monkeypatch.setattr(flake_pin, "FLAKE_PATH", flake)
+
+    assert (
+        flake_pin.main(
+            [
+                "asset-url",
+                "--tool",
+                "waza",
+                "--system",
+                "x86_64-linux",
+                "--version",
+                "0.34.0",
+            ]
+        )
+        == 0
+    )
+    new_sri = "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+    assert (
+        flake_pin.main(
+            [
+                "bump",
+                "--tool",
+                "waza",
+                "--version",
+                "0.34.0",
+                "--hash",
+                f"x86_64-linux={new_sri}",
+                "--hash",
+                f"aarch64-linux={new_sri}",
+            ]
+        )
+        == 0
+    )
+    assert flake_pin.current_version(flake.read_text(encoding="utf-8"), "waza") == "0.34.0"
+
+
+def test_flake_pin_latest_check_matches_workflow_args(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Mirror the ``check --tool <tool>`` argv used by the
+    ``Decide target version`` step in ``.github/workflows/flake-pin-refresh.yml``.
+
+    The GitHub fetch is stubbed with a release older than the pin so the
+    decision is a deterministic "hold" (exit 0, no stdout) without touching the
+    network. Refs #1171."""
+    monkeypatch.setattr(
+        flake_pin_latest,
+        "github_latest_release",
+        lambda repo: {"tag_name": "v0.0.1", "published_at": "2000-01-01T00:00:00Z"},
+    )
+    assert flake_pin_latest.main(["check", "--tool", "waza"]) == 0
+    assert flake_pin_latest.main(["check", "--tool", "apm"]) == 0
 
 
 def test_uv_download_checksum_verify_matches_action_args(tmp_path: Path) -> None:

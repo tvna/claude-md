@@ -163,6 +163,17 @@ The required H2 sections, in order, are:
   wrong, and how reversible it is, per CLAUDE.md section 4.
 - `## Rollback` - the exact steps to revert or disable the change in
   prod.
+- `## Text delta` - **conditional**: required only when the PR diff
+  touches universal instruction text (`.apm/instructions/**`,
+  `CLAUDE.md`, or `AGENTS.md`); omitted otherwise. It states the
+  character-level effect and the semantic before/after so a reviewer
+  sees both - line count and character count can disagree (a
+  consolidation may drop a line while adding characters). It must carry
+  all three of: a signed character-count change (e.g. `+20 chars` or
+  `chars: -3`), an `Added context` part, and a `Removed context` part
+  (say `moved` when a concept only relocated). Enforced by
+  `scripts/verify_text_delta_section.py` inside `portable-pr-policy.yml`
+  (see [Body-policy gate](#body-policy-gate)). Refs #1178.
 - `## Verification` - one command/result pair per observation, in the
   shape below. Each entry is one fact about what was actually run.
   Type checks and linters verify shape, not behaviour; include at

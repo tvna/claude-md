@@ -34,6 +34,7 @@ ALLOWED_BUCKETS: frozenset[str] = frozenset({
     "shard_preflight",
     "shard_policy",
     "shard_ci_ops",
+    "shard_ci_ops_2",
     "shard_ci_ops_auto_retro_append",
     "shard_ci_ops_auto_retro_create",
     "shard_ci_ops_auto_retro_create_slow",

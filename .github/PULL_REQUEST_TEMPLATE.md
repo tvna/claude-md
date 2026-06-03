@@ -74,6 +74,22 @@ command a responder would run.
 -
 
 <!--
+Text delta -- required ONLY when this PR changes universal instruction text
+(.apm/instructions/**, CLAUDE.md, or AGENTS.md). When it does, ADD a section
+exactly like the following (heading included), filled in. It is enforced by
+scripts/verify_text_delta_section.py inside portable-pr-policy.yml, which needs
+all three: a signed character-count change, what context the change adds, and
+what context it removes (say "moved" when a concept only relocated). Omit the
+section entirely when the PR touches no instruction text.
+
+## Text delta
+
+- chars: <e.g. +20 or -3>
+- Added context: <wording/concepts introduced>
+- Removed context: <wording/concepts dropped; say "moved" if relocated>
+-->
+
+<!--
 Verification -- CLAUDE.md section 1.
 Each entry is one observed verification, listed as a `command:` line and
 its `result:` line. Treat these as Facts-tier evidence (CLAUDE.md section
