@@ -66,19 +66,44 @@ esac
 
 if [ -n "${asset}" ]; then
   install_dir="${HOME}/.local/bin"
+  dest="${install_dir}/waza"
+
+  add_to_path() {
+    case ":${PATH}:" in
+      *":${install_dir}:"*) ;;
+      *) export PATH="${install_dir}:${PATH}" ;;
+    esac
+  }
+
+  # Idempotent: reuse an already-installed binary. prek runs the
+  # skill-quality-gate hook in PARALLEL across SKILL.md batches, so several
+  # install_waza.sh processes can run at once; skipping the re-download when a
+  # complete binary already exists avoids redundant fetches.
+  if [ -x "${dest}" ]; then
+    add_to_path
+    echo "install_waza: reusing ${dest} ($("${dest}" --version 2>/dev/null | head -1))" >&2
+    exit 0
+  fi
+
   mkdir -p "${install_dir}"
-  tmp="$(mktemp)"
+  # Download + verify into a temp file in the SAME directory, then atomically
+  # rename into place. A non-atomic `install` (open + truncate + write + chmod)
+  # exposed a half-written, not-yet-executable binary to a concurrent exec
+  # under prek's parallel hook execution -> PermissionError [Errno 13] (#1150).
+  # rename(2) is atomic on one filesystem, so a concurrent reader always sees
+  # either the old binary or the fully written, executable one -- never a
+  # partial file.
+  tmp="$(mktemp "${install_dir}/.waza.XXXXXX")"
   trap 'rm -f "${tmp}"' EXIT
   url="https://github.com/microsoft/waza/releases/download/${WAZA_VERSION}/${asset}"
   echo "install_waza: downloading pinned prebuilt ${asset} ${WAZA_VERSION} ..." >&2
   curl -fsSL "${url}" -o "${tmp}"
   echo "${sha}  ${tmp}" | sha256sum -c - >&2
-  install -m 0755 "${tmp}" "${install_dir}/waza"
-  case ":${PATH}:" in
-    *":${install_dir}:"*) ;;
-    *) export PATH="${install_dir}:${PATH}" ;;
-  esac
-  echo "install_waza: waza ${WAZA_VERSION} ready at ${install_dir}/waza ($(waza --version 2>/dev/null | head -1))" >&2
+  chmod 0755 "${tmp}"
+  mv -f "${tmp}" "${dest}"
+  trap - EXIT
+  add_to_path
+  echo "install_waza: waza ${WAZA_VERSION} ready at ${dest} ($("${dest}" --version 2>/dev/null | head -1))" >&2
   exit 0
 fi
 
