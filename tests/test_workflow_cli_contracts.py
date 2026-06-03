@@ -92,7 +92,7 @@ import verify_test_shard_markers
 import workflow_diagram
 import yaml
 
-pytestmark = pytest.mark.shard_ci_ops
+pytestmark = pytest.mark.shard_ci_ops_2
 REPO = "owner/repo"
 
 _WORKFLOWS_DIR = Path(".github/workflows")

@@ -8,7 +8,7 @@ from typing import Any
 import dependabot_automerge as da
 import pytest
 
-pytestmark = pytest.mark.shard_ci_ops
+pytestmark = pytest.mark.shard_ci_ops_2
 POLICY = {
     "enabled": False,
     "allow": [
