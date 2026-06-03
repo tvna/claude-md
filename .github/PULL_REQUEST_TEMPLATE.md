@@ -11,7 +11,10 @@ this body ONLY -- it must NOT be duplicated in the PR title. A `(#NNN)`
 token in the title is rejected by scripts/title_policy.py
 (verify-title-policy.yml) per #167 / #214, because this body line is the
 single source of truth for the issue link. "Cite the issue number in every
-PR" (CLAUDE.md section 3) means this body line, not the title.
+PR" (CLAUDE.md section 3) means this body line, not the title. Exception:
+a `revert(<scope>): ...` title may keep a `(#NNN)` token that names the
+reverted PR/commit -- that reference identifies the rolled-back change, not
+a redundant copy of this issue link.
 
 Default: `Closes #<number>` so the linked issue auto-closes on merge.
 GitHub auto-closes on: Closes, Closed, Fixes, Fixed, Resolves, Resolved

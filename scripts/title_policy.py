@@ -162,6 +162,22 @@ def pr_title_strip_issue_refs(title: str) -> str:
     return re.sub(r"\s+", " ", stripped).strip()
 
 
+def pr_title_ref_is_exempt(title: str) -> bool:
+    """Return True when a ``(#NNN)`` token is allowed despite the PR ban.
+
+    A ``revert``-typed conventional title may carry a ``(#NNN)`` token that
+    names the pull request or commit being reverted; that reference
+    identifies the reverted change and is not a redundant duplicate of the
+    body's issue link, so the dedup ban (#167 / #214) does not apply. Per
+    CLAUDE.md section 3, ``git revert`` is the default rollback path and its
+    subject names the original change. The ASCII, naming-convention, and
+    type-fit checks still apply to revert titles, so this lifts only the
+    dedup rule, not the security boundary tracked by #155.
+    """
+    parts = parse_title_parts(title)
+    return parts is not None and parts.type == "revert"
+
+
 def allowed_types_csv() -> str:
     """Return the allowed conventional-commit types as a CSV string.
 
@@ -225,7 +241,9 @@ def verify_title(title: str, *, kind: str, body: str = "", author: str = "") -> 
     relays upstream release notes whose ``cache`` / ``memory`` wording would
     otherwise mis-classify a correct ``chore(deps):`` title as performance
     work. The title-only checks (ASCII, naming convention, issue-ref) still
-    apply to every author including bots.
+    apply to every author including bots, except that ``revert``-typed
+    titles are exempt from the issue-ref ban per
+    :func:`pr_title_ref_is_exempt` (the ref names the reverted change).
     """
     fail = 0
     if not is_ascii_title(title):
@@ -244,10 +262,12 @@ def verify_title(title: str, *, kind: str, body: str = "", author: str = "") -> 
             print(f"::error::{kind} title type does not fit the work: {format_type_fit_finding(finding)}")
             fail = 1
 
-    if kind == "pull_request" and pr_title_has_issue_ref(title):
+    if kind == "pull_request" and pr_title_has_issue_ref(title) and not pr_title_ref_is_exempt(title):
         print(
             "::error::pull_request title must not contain issue references "
-            "like (#NNN). Put `Refs #NNN` in the PR body instead. See #167."
+            "like (#NNN). Put `Refs #NNN` in the PR body instead. See #167. "
+            "A `revert(<scope>): ...` title may keep `(#NNN)` naming the "
+            "reverted change."
         )
         fail = 1
 

@@ -362,6 +362,24 @@ class TestDecidePullRequest:
         assert hook["permissionDecision"] == "deny"
         assert "(#289)" in hook["permissionDecisionReason"]
 
+    def test_revert_title_with_ref_allows(self) -> None:
+        # A revert title may carry ``(#NNN)`` naming the reverted change;
+        # the dedup ban is lifted for ``revert``-typed titles only.
+        out = preflight.decide(
+            "mcp__github__create_pull_request",
+            {"title": "revert(automerge): restore label exemption (#1122)", "body": ""},
+        )
+        assert out is None
+
+    def test_non_revert_title_with_ref_still_denies(self) -> None:
+        # ``revert`` outside the type slot must not unlock the exemption.
+        out = preflight.decide(
+            "mcp__github__create_pull_request",
+            {"title": "fix(revert): summary (#9)", "body": ""},
+        )
+        assert out is not None
+        assert out["hookSpecificOutput"]["permissionDecision"] == "deny"
+
     def test_update_pull_request_also_gated(self) -> None:
         out = preflight.decide(
             "mcp__github__update_pull_request",
