@@ -21,7 +21,7 @@ import auto_retro as ar
 import body_policy as bp
 import pytest
 
-pytestmark = pytest.mark.shard_ci_ops
+pytestmark = pytest.mark.shard_ci_ops_2
 # ---------------------------------------------------------------------------
 # Alignment: required sections must match body_policy
 # ---------------------------------------------------------------------------
