@@ -156,20 +156,5 @@ jobs:
           restore-keys: |
             prek-${{ runner.os }}-
 
-      # Cache the compiled waza binary so the skill-quality-gate hook reuses
-      # it instead of recompiling via `go install` every run (the dominant
-      # cost of the prek step). Keyed on scripts/install_waza.sh so a pinned
-      # WAZA_VERSION bump invalidates the cache. Refs #1146.
-      - name: Cache waza binary
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
-        with:
-          path: ~/go/bin/waza
-          key: waza-${{ runner.os }}-${{ hashFiles('scripts/install_waza.sh') }}
-
-      # Put the Go bin dir on PATH so install_waza.sh finds the cached waza
-      # via `command -v waza` and skips the go-install compile. Refs #1146.
-      - name: Put Go bin directory on PATH
-        run: echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
-
       - name: Run prek (j178/prek) against all files
         run: uv tool run prek run --all-files --show-diff-on-failure

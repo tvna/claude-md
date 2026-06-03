@@ -63,9 +63,12 @@ from pathlib import Path
 SKILLS_SUBDIR = ".agents/skills"
 
 # Locations to probe for the waza binary beyond a bare PATH lookup, so the
-# gate works whether waza was installed via scripts/install_waza.sh (Go bin)
-# or is already on PATH. Kept in sync with install_waza.sh.
+# gate works whether waza was installed via scripts/install_waza.sh or is
+# already on PATH. Kept in sync with install_waza.sh: the prebuilt-download
+# path installs to ~/.local/bin, and the go-install backstop drops it in the
+# Go bin dir.
 _GO_BIN_HINTS = (
+    Path.home() / ".local" / "bin",
     Path.home() / "go" / "bin",
     Path("/root/go/bin"),
 )
