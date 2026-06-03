@@ -233,6 +233,13 @@ STEPS: tuple[Step, ...] = (
         argv=("python3", "scripts/scan_devcontainer_tool_drift.py", "verify"),
     ),
     Step(
+        # Refs #1153. Fails when a pinned binary's flake.nix SHA256 is
+        # hardcoded under scripts/ or .github/workflows/, so flake.nix stays
+        # the single source of truth and a bump cannot leave a stale copy.
+        name="scan_flake_pin_drift",
+        argv=("python3", "scripts/scan_flake_pin_drift.py", "verify"),
+    ),
+    Step(
         # Refs #1099. Runs waza spec-compliance over every skill under
         # .agents/skills. spec failure = fail, token budget = warning only.
         # Needs the pinned waza binary (scripts/install_waza.sh); soft so a
