@@ -46,6 +46,10 @@ repos:
         entry: bash -c 'scripts/install_waza.sh >&2 && uv run python scripts/skill_quality_gate.py verify "$@"' --
         language: system
         files: ^\.agents/skills/.*/SKILL\.md$
+        # Run once over all matched files instead of in parallel batches: the
+        # entry provisions the shared waza binary via scripts/install_waza.sh,
+        # and parallel copies otherwise race + redundantly download it (#1150).
+        require_serial: true
 
       - id: preflight-branch-base
         name: preflight branch base (scripts/preflight_branch_base.py verify)
