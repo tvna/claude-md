@@ -552,3 +552,154 @@ class TestCmdPostComment:
             apply_call=fake_apply,
         )
         assert rc == 1
+
+
+# ---------------------------------------------------------------------------
+# Per-family issue helpers
+# ---------------------------------------------------------------------------
+
+def _row(family: str, status: str) -> sdr.FamilyRow:
+    return sdr.FamilyRow(
+        family=family, detector="d", status=status, evidence="e", action="a"
+    )
+
+
+class TestTargetFamiliesWithDrift:
+    def test_returns_only_target_families_in_drift(self) -> None:
+        families = [
+            _row("rulesets", sdr.STATUS_DRIFT),  # excluded: own job files it
+            _row("labels", sdr.STATUS_DRIFT),
+            _row("apm-instructions", sdr.STATUS_COVERED),  # not in drift
+            _row("uv-pin-literal", sdr.STATUS_DRIFT),
+            _row("uv-pin-staleness", sdr.STATUS_DRIFT),  # excluded: not a target
+        ]
+        assert sdr.target_families_with_drift(families) == ["labels", "uv-pin-literal"]
+
+    def test_empty_when_no_target_drift(self) -> None:
+        assert sdr.target_families_with_drift([_row("rulesets", sdr.STATUS_DRIFT)]) == []
+
+
+class TestRenderFamilyIssue:
+    def test_title_uses_family_scope(self) -> None:
+        assert sdr.render_family_issue_title("labels", "2026-06-03") == (
+            "fix(labels-drift): scheduled drift detected (2026-06-03)"
+        )
+
+    def test_body_is_ascii_and_has_parent_and_remediation(self) -> None:
+        body = sdr.render_family_issue_body(
+            "uv-pin-literal", run_url="https://x/runs/1", run_date="2026-06-03"
+        )
+        body.encode("ascii")  # raises if any non-ASCII leaked in
+        assert "Parent: #178" in body
+        assert "## Remediation" in body
+        assert "pyproject.toml" in body
+
+    def test_every_target_family_has_a_spec(self) -> None:
+        for family in sdr.TARGET_FAMILIES:
+            assert family in sdr.FAMILY_ISSUE_SPEC
+
+
+class TestAggregateEmitsDriftFamilies:
+    def test_drift_families_listed_for_each_target(self, tmp_path: Path) -> None:
+        argv = _aggregate_args(
+            tmp_path,
+            labels_summary="| `x` | plan-only (POST) | yes | no | dry-run |\n",
+            apm_rc="1",
+            uv_drift_rc="1",
+        )
+        assert sdr.main(argv) == 0
+        gh_out = (tmp_path / "out.txt").read_text(encoding="utf-8")
+        assert "drift_families=labels,apm-instructions,uv-pin-literal" in gh_out
+
+    def test_drift_families_empty_when_clean(self, tmp_path: Path) -> None:
+        assert sdr.main(_aggregate_args(tmp_path)) == 0
+        gh_out = (tmp_path / "out.txt").read_text(encoding="utf-8")
+        assert "drift_families=\n" in gh_out
+
+
+class TestCmdFileFamilyIssues:
+    def test_dry_run_does_not_call_api(self) -> None:
+        def fake_apply(**_kwargs: Any) -> tuple[int, str]:
+            raise AssertionError("should not be called")
+
+        rc = sdr.main(
+            [
+                "file-family-issues",
+                "--repo", "owner/repo",
+                "--run-url", "https://x/runs/1",
+                "--run-date", "2026-06-03",
+                "--families", "labels,uv-pin-literal",
+                "--dry-run", "true",
+            ],
+            apply_call=fake_apply,
+        )
+        assert rc == 0
+
+    def test_apply_posts_one_issue_per_family(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        calls: list[dict[str, Any]] = []
+
+        def fake_apply(**kwargs: Any) -> tuple[int, str]:
+            calls.append(kwargs)
+            return 201, "{}"
+
+        monkeypatch.setenv("GH_TOKEN", "tkn")
+        rc = sdr.main(
+            [
+                "file-family-issues",
+                "--repo", "owner/repo",
+                "--run-url", "https://x/runs/1",
+                "--run-date", "2026-06-03",
+                "--families", "labels,apm-instructions",
+                "--dry-run", "false",
+            ],
+            apply_call=fake_apply,
+        )
+        assert rc == 0
+        assert len(calls) == 2
+        assert all(c["method"] == "POST" for c in calls)
+        assert all(c["url"].endswith("/repos/owner/repo/issues") for c in calls)
+        assert calls[0]["payload"]["labels"] == list(sdr.ISSUE_LABELS)
+
+    def test_unknown_family_fails_loud(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("GH_TOKEN", "tkn")
+        rc = sdr.main(
+            [
+                "file-family-issues",
+                "--repo", "owner/repo",
+                "--run-url", "https://x/runs/1",
+                "--families", "rulesets",
+                "--dry-run", "false",
+            ],
+            apply_call=lambda **_k: (201, "{}"),
+        )
+        assert rc == 1
+
+    def test_missing_token_exits_one(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("GH_TOKEN", raising=False)
+        rc = sdr.main(
+            [
+                "file-family-issues",
+                "--repo", "owner/repo",
+                "--run-url", "https://x/runs/1",
+                "--families", "labels",
+                "--dry-run", "false",
+            ],
+            apply_call=lambda **_k: (201, "{}"),
+        )
+        assert rc == 1
+
+    def test_post_failure_exits_one(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("GH_TOKEN", "tkn")
+        rc = sdr.main(
+            [
+                "file-family-issues",
+                "--repo", "owner/repo",
+                "--run-url", "https://x/runs/1",
+                "--families", "labels",
+                "--dry-run", "false",
+            ],
+            apply_call=lambda **_k: (422, "bad"),
+        )
+        assert rc == 1

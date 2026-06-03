@@ -50,6 +50,50 @@ STATUS_PENDING = "pending"
 STATUS_ERROR = "error"
 _VALID_STATUSES = frozenset({STATUS_COVERED, STATUS_DRIFT, STATUS_PENDING, STATUS_ERROR})
 
+# Labels applied to every auto-filed per-family drift issue (mirrors
+# scripts/ruleset_drift.py so the meta-fix lane stays uniform).
+ISSUE_LABELS: tuple[str, ...] = ("layer:meta", "type:fix")
+
+# Families this aggregator auto-files an issue for when they drift, raising them
+# to the `detect-and-file` floor (.github/security-control-floor.toml). The
+# `rulesets` family is deliberately excluded -- the dedicated ruleset-drift job
+# already files its own issues, so including it here would double-file. The
+# advisory `uv-pin-staleness` signal is excluded by design (warning-only).
+TARGET_FAMILIES: tuple[str, ...] = ("labels", "apm-instructions", "uv-pin-literal")
+
+# Per-family static issue text. Detector/evidence mirror the classify_* rows;
+# remediation is the actionable next step a responder runs.
+FAMILY_ISSUE_SPEC: dict[str, dict[str, str]] = {
+    "labels": {
+        "scope": "labels-drift",
+        "detector": "scripts/labels_apply.py plan",
+        "evidence": ".github/labels.json",
+        "remediation": (
+            "Review the labels plan in the run log, then dispatch apply-labels.yml "
+            "with dry_run=false after review (docs/runbooks/issue-triage.md)."
+        ),
+    },
+    "apm-instructions": {
+        "scope": "apm-drift",
+        "detector": "apm compile + git diff --exit-code -- CLAUDE.md AGENTS.md",
+        "evidence": ".apm/instructions/master.instructions.md",
+        "remediation": (
+            "Recompile with `uv run --with apm-cli==<pin> --exclude-newer \"14 days\" "
+            "apm compile` and commit the regenerated CLAUDE.md / AGENTS.md."
+        ),
+    },
+    "uv-pin-literal": {
+        "scope": "uv-pin-drift",
+        "detector": "scripts/uv_pin.py drift",
+        "evidence": "pyproject.toml [tool.uv].required-version",
+        "remediation": (
+            "Remove the offending pin literal or update pyproject.toml so the pin "
+            "lives only in [tool.uv].required-version "
+            "(docs/standards/remote-environment.md)."
+        ),
+    },
+}
+
 
 @dataclasses.dataclass(frozen=True)
 class FamilyRow:
@@ -379,6 +423,53 @@ def build_report(
 
 
 # ---------------------------------------------------------------------------
+# Per-family issue helpers (pure)
+# ---------------------------------------------------------------------------
+
+def target_families_with_drift(families: list[FamilyRow]) -> list[str]:
+    """Return the target families currently in drift, in table order.
+
+    Only families in :data:`TARGET_FAMILIES` are returned, so `rulesets`
+    (filed by its own job) and advisory signals never appear here.
+    """
+    return [
+        row.family
+        for row in families
+        if row.family in TARGET_FAMILIES and row.status == STATUS_DRIFT
+    ]
+
+
+def render_family_issue_title(family: str, run_date: str) -> str:
+    spec = FAMILY_ISSUE_SPEC[family]
+    return f"fix({spec['scope']}): scheduled drift detected ({run_date})"
+
+
+def render_family_issue_body(family: str, *, run_url: str, run_date: str) -> str:
+    spec = FAMILY_ISSUE_SPEC[family]
+    return (
+        f"Parent: #{DEFAULT_TRACKING_ISSUE}\n"
+        "\n"
+        f"Scheduled drift detected for the `{family}` security control family by "
+        "the weekly `security-control-drift` job in "
+        "`.github/workflows/weekly-maintenance.yml`.\n"
+        "\n"
+        f"- Run: {run_url}\n"
+        f"- Detected at: {run_date}\n"
+        f"- Detector: `{spec['detector']}`\n"
+        f"- Evidence: `{spec['evidence']}`\n"
+        "\n"
+        "## Remediation\n"
+        "\n"
+        f"{spec['remediation']}\n"
+        "\n"
+        "Auto-filed to meet the `detect-and-file` floor "
+        "(`.github/security-control-floor.toml`, "
+        "`docs/prd/security-control-inventory.md`). The cross-family status is "
+        f"tracked in the rolling comment on #{DEFAULT_TRACKING_ISSUE}.\n"
+    )
+
+
+# ---------------------------------------------------------------------------
 # Comment-side pure helpers
 # ---------------------------------------------------------------------------
 
@@ -474,12 +565,77 @@ def _cmd_aggregate(args: argparse.Namespace) -> int:
         families, run_url=args.run_url, run_date=run_date, marker=args.marker
     )
 
+    drift_families = target_families_with_drift(families)
+
     _append_text(Path(args.summary_file), summary)
     _write_text(Path(args.report_file), report_body)
     _append_text(
         Path(args.github_output),
-        f"families_with_drift={families_with_drift}\nreport_date={run_date}\n",
+        f"families_with_drift={families_with_drift}\n"
+        f"report_date={run_date}\n"
+        f"drift_families={','.join(drift_families)}\n",
     )
+    return 0
+
+
+def _cmd_file_family_issues(args: argparse.Namespace) -> int:
+    """File one issue per drifting target family (idempotent per weekly run).
+
+    ``--families`` is the comma-separated list emitted as the
+    ``drift_families`` output of the ``aggregate`` subcommand. Each name must
+    be in :data:`TARGET_FAMILIES`; an unexpected name fails loud rather than
+    silently filing a mislabelled issue. Honours ``--dry-run``.
+    """
+    dry_run = parse_dry_run(args.dry_run)
+    run_date = args.run_date or _utc_today()
+    families = [name.strip() for name in args.families.split(",") if name.strip()]
+
+    unknown = [name for name in families if name not in TARGET_FAMILIES]
+    if unknown:
+        raise ValueError(
+            f"--families contains non-target families {unknown}; "
+            f"allowed: {sorted(TARGET_FAMILIES)}"
+        )
+    if not families:
+        print("No drifting families passed; nothing to file.")
+        return 0
+
+    if dry_run:
+        for family in families:
+            print(
+                f"[dry-run] Would file issue for {family!r}: "
+                f"{render_family_issue_title(family, run_date)!r}"
+            )
+        return 0
+
+    token = os.environ.get("GH_TOKEN", "")
+    if not token:
+        print("::error::GH_TOKEN is not set.", file=sys.stderr)
+        return 1
+
+    apply = args.apply_call  # injected via tests; main() wires github_apply_call.
+    for family in families:
+        payload = {
+            "title": render_family_issue_title(family, run_date),
+            "body": render_family_issue_body(
+                family, run_url=args.run_url, run_date=run_date
+            ),
+            "labels": list(ISSUE_LABELS),
+        }
+        code, response = apply(
+            method="POST",
+            url=f"{API_ROOT}/repos/{args.repo}/issues",
+            payload=payload,
+            token=token,
+        )
+        if not 200 <= code < 300:
+            print(
+                f"::error::POST issue for {family} failed (HTTP {code}); "
+                f"body: {response[:200]}",
+                file=sys.stderr,
+            )
+            return 1
+        print(f"Filed drift issue for {family} on {args.repo}.")
     return 0
 
 
@@ -607,6 +763,21 @@ def _build_parser(
     p_post.add_argument("--marker", default=DEFAULT_MARKER)
     p_post.add_argument("--dry-run", default="true")
     p_post.set_defaults(func=_cmd_post_comment, apply_call=apply_call)
+
+    p_file = sub.add_parser(
+        "file-family-issues",
+        help="File one issue per drifting target family (labels/apm/uv-pin-literal).",
+    )
+    p_file.add_argument("--repo", required=True)
+    p_file.add_argument("--run-url", required=True)
+    p_file.add_argument("--run-date", default="")
+    p_file.add_argument(
+        "--families",
+        required=True,
+        help="Comma-separated drift_families output from the aggregate subcommand.",
+    )
+    p_file.add_argument("--dry-run", default="true")
+    p_file.set_defaults(func=_cmd_file_family_issues, apply_call=apply_call)
 
     return parser
 

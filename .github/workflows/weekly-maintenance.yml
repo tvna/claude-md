@@ -546,3 +546,17 @@ jobs:
             --issue 178 \
             --report-file /tmp/security-drift-report.md \
             --dry-run "${DRY_RUN}"
+
+      - name: File per-family drift issues
+        if: always() && steps.aggregate.outputs.drift_families != ''
+        env:
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          DRY_RUN: ${{ github.event_name == 'schedule' && 'false' || inputs.security_control_dry_run }}
+        run: |
+          set -euo pipefail
+          python3 scripts/security_drift_report.py file-family-issues \
+            --repo "${REPO}" \
+            --run-url "${RUN_URL}" \
+            --run-date "${{ steps.aggregate.outputs.report_date }}" \
+            --families "${{ steps.aggregate.outputs.drift_families }}" \
+            --dry-run "${DRY_RUN}"

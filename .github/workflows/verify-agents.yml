@@ -127,6 +127,14 @@ jobs:
         # a silent missing node ID in the gate's JUnit aggregation.
         run: uv run python scripts/verify_test_shard_markers.py
 
+      - name: Verify security control families meet the auto-file floor
+        # Refs #178: every scheduled control family in
+        # .github/security-control-floor.toml must sit at the detect-and-file
+        # floor (auto-files a per-family issue on drift) unless it carries an
+        # explicit exempt_reason, so a new family cannot land below the floor
+        # on reviewer memory alone.
+        run: uv run python scripts/verify_security_control_floor.py
+
       - name: Warn if uv pin trails upstream
         env:
           GH_TOKEN: ${{ github.token }}
