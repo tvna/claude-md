@@ -17,6 +17,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 env:
   GH_TOKEN: ${{ secrets.LABELS_PAT }}
   REPO: ${{ github.repository }}
@@ -24,6 +28,7 @@ env:
 jobs:
   apply:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     environment: labels-apply
     steps:
       - name: Guard dispatch ref
@@ -41,6 +46,8 @@ jobs:
 
       - name: Checkout repository
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
 
       - name: Validate labels.json
         run: |

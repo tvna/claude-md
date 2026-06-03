@@ -20,6 +20,7 @@ jobs:
   gate:
     name: "Portable PR policy / gate"
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     env:
       GH_TOKEN: ${{ github.token }}
       REPO: ${{ github.repository }}
@@ -37,6 +38,7 @@ jobs:
           # fetch-depth: 0 makes origin/<base> reachable from HEAD so the
           # README translation check can compare <base>..HEAD.
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Validate title policy
         run: |

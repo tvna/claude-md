@@ -55,6 +55,7 @@ jobs:
   branch-cleanup:
     if: github.event_name == 'schedule' || inputs.task == 'all' || inputs.task == 'branch-cleanup'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: read
       issues: write
@@ -74,6 +75,8 @@ jobs:
 
       - name: Checkout repository
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
 
       - name: Resolve default branch
         id: defaults
@@ -125,11 +128,14 @@ jobs:
   dependency-freshness:
     if: github.event_name == 'schedule' || inputs.task == 'all' || inputs.task == 'dependency-freshness'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: read
     steps:
       - name: Checkout repository
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
 
       - name: Read uv pin from pyproject.toml
         id: uvpin
@@ -196,6 +202,7 @@ jobs:
   measure-timings:
     if: github.event_name == 'schedule' || inputs.task == 'all' || inputs.task == 'measure-timings'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: read
       issues: write
@@ -207,6 +214,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
 
       - name: Read uv pin from pyproject.toml
         id: uvpin
@@ -304,6 +313,7 @@ jobs:
   ruleset-drift:
     if: github.event_name == 'schedule' || inputs.task == 'all' || inputs.task == 'ruleset-drift'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     environment: ruleset-verify
     permissions:
       contents: read
@@ -324,6 +334,8 @@ jobs:
 
       - name: Checkout repository
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
 
       - name: Validate ruleset JSON syntax
         run: |
@@ -372,6 +384,7 @@ jobs:
   security-control-drift:
     if: github.event_name == 'schedule' || inputs.task == 'all' || inputs.task == 'security-control-drift'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     environment: ruleset-verify
     permissions:
       contents: read
@@ -392,6 +405,8 @@ jobs:
 
       - name: Checkout repository
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
 
       - name: Read uv pin from pyproject.toml
         id: uvpin

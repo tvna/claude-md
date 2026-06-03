@@ -16,10 +16,15 @@ on:
 
 permissions: {}
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   build:
     name: Build ${{ matrix.agent }} devcontainer image (${{ matrix.arch }})
     runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
     permissions:
       contents: read
       packages: write
@@ -49,6 +54,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
 
       - name: Log in to GHCR
         env:
@@ -81,6 +88,7 @@ jobs:
     name: Publish ${{ matrix.agent }} devcontainer manifest
     needs: build
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     permissions:
       packages: write
     strategy:
@@ -112,6 +120,7 @@ jobs:
     needs: publish
     if: github.event_name == 'push'
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     environment:
       name: devcontainer-image-pins
     permissions:

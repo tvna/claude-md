@@ -7,6 +7,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   GH_TOKEN_API: ${{ secrets.RULESETS_PAT }}
   REPO: ${{ github.repository }}
@@ -16,6 +20,7 @@ jobs:
   gate:
     name: "Verify ruleset sync / gate"
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     environment: ruleset-verify
     steps:
       - name: Guard RULESETS_PAT
@@ -27,6 +32,8 @@ jobs:
 
       - name: Checkout repository
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
 
       - name: Verify required-check contexts match workflow job names
         run: |
