@@ -28,6 +28,7 @@ jobs:
       TITLE: ${{ github.event.pull_request.title }}
       PR_BODY: ${{ github.event.pull_request.body }}
       PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+      PR_CREATED_AT: ${{ github.event.pull_request.created_at }}
       BODY_POLICY_CUTOFF: "2026-05-26T00:00:00Z"
       BODY_POLICY_SHAPE_CUTOFF: "2026-05-26T00:00:00Z"
       BASE_REF: origin/${{ github.event.pull_request.base.ref }}
@@ -87,6 +88,16 @@ jobs:
           python3 scripts/verify_readme_translation.py verify \
             --base-ref "$BASE_REF" \
             --body-file "$body_file"
+
+      - name: Require Text delta section for instruction changes
+        run: |
+          body_file="$(mktemp)"
+          printf '%s' "$PR_BODY" > "$body_file"
+          python3 scripts/verify_text_delta_section.py verify \
+            --base-ref "$BASE_REF" \
+            --body-file "$body_file" \
+            --created-at "$PR_CREATED_AT" \
+            --cutoff "$BODY_POLICY_CUTOFF"
 
       - name: Scan APM artifacts for repo-local references
         run: |
