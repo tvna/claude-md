@@ -126,8 +126,16 @@ STEPS: tuple[Step, ...] = (
         argv=("python3", "scripts/scan_workflow_gh_calls.py", "verify"),
     ),
     Step(
+        name="scan_workflow_injection",
+        argv=("python3", "scripts/scan_workflow_injection.py", "verify"),
+    ),
+    Step(
         name="scan_secret_runbooks",
         argv=("python3", "scripts/scan_secret_runbooks.py", "verify"),
+    ),
+    Step(
+        name="scan_secrets",
+        argv=("python3", "scripts/scan_secrets.py", "verify"),
     ),
     Step(
         name="scan_markdown_links",
