@@ -91,6 +91,7 @@ import verify_ruleset_sync
 import verify_security_control_floor
 import verify_shard_coverage
 import verify_test_shard_markers
+import verify_text_delta_section
 import workflow_diagram
 import yaml
 
@@ -207,6 +208,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("verify_dependabot_author.py", "verify"): "test_verify_dependabot_author_verify_matches_workflow_args",
     ("verify_linked_issue_titles.py", "verify"): "test_verify_linked_issue_titles_verify_matches_workflow_args",
     ("verify_readme_translation.py", "verify"): "test_verify_readme_translation_matches_workflow_args",
+    ("verify_text_delta_section.py", "verify"): "test_verify_text_delta_section_matches_workflow_args",
     ("verify_required_check_contexts.py", "verify"): "test_verify_required_check_contexts_matches_workflow_args",
     ("verify_ruleset_sync.py", "verify"): "test_verify_ruleset_sync_matches_workflow_args",
     ("verify_security_control_floor.py", None): "test_verify_security_control_floor_matches_workflow_args",
@@ -1020,6 +1022,48 @@ def test_verify_readme_translation_matches_workflow_args(
             "origin/main",
             "--body-file",
             str(body_file),
+        ]
+    ) == 0
+
+
+def test_verify_text_delta_section_matches_workflow_args(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Mirror the env+argv shape used by portable-pr-policy.yml.
+
+    The workflow shells to
+    ``python3 scripts/verify_text_delta_section.py verify
+    --base-ref "$BASE_REF" --body-file "$body_file"
+    --created-at "$PR_CREATED_AT" --cutoff "$BODY_POLICY_CUTOFF"``.
+    Stub the changed-files lookup so the test stays hermetic across CI
+    checkout depths (the lint-scripts-pytest job checks out shallow, so a
+    real ``git diff origin/main..HEAD`` would fail with exit 128).
+    """
+    monkeypatch.setattr(
+        verify_text_delta_section,
+        "changed_instruction_files",
+        lambda base, head="HEAD", **kwargs: frozenset({"CLAUDE.md"}),
+    )
+
+    body_file = tmp_path / "body.md"
+    body_file.write_text(
+        "## Text delta\n\n"
+        "- chars: +20\n"
+        "- Added context: x\n"
+        "- Removed context: y\n",
+        encoding="utf-8",
+    )
+    assert verify_text_delta_section.main(
+        [
+            "verify",
+            "--base-ref",
+            "origin/main",
+            "--body-file",
+            str(body_file),
+            "--created-at",
+            "2026-06-03T00:00:00Z",
+            "--cutoff",
+            "2026-05-26T00:00:00Z",
         ]
     ) == 0
 
