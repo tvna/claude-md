@@ -266,11 +266,25 @@ jobs:
               --workflow "Verify repository scripts" \
               --title "verify-agents.yml timings (weekly)" \
               --budget-seconds 300 \
+              --budget-output budget.json \
               > report.md
           fi
 
       - name: Append report to step summary
         run: cat report.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Open or update CI budget tracking issue
+        if: ${{ inputs.measure_cutoff == '' }}
+        env:
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          DRY_RUN: ${{ github.event_name == 'schedule' && 'false' || 'true' }}
+        run: |
+          set -euo pipefail
+          python3 scripts/ci_budget_issue.py run \
+            --repo "${REPO}" \
+            --breach-file budget.json \
+            --run-url "${RUN_URL}" \
+            --dry-run "${DRY_RUN}"
 
       - name: Upload report artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

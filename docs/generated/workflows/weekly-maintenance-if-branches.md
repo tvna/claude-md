@@ -13,7 +13,8 @@ flowchart TD
     J_dependency_freshness["dependency-freshness"]
     J_generate_agents["generate-agents"]
     J_measure_timings["measure-timings"]
-    S_J_measure_timings_0(("Post report as comment on dispatch issue"))
+    S_J_measure_timings_0(("Open or update CI budget tracking issue"))
+    S_J_measure_timings_1(("Post report as comment on dispatch issue"))
     J_ruleset_drift["ruleset-drift"]
     S_J_ruleset_drift_0(("File SoT-vs-live drift issue"))
     S_J_ruleset_drift_1(("File unknown-ruleset issue"))
@@ -32,7 +33,8 @@ flowchart TD
     T_schedule -->|"github.event_name == 'schedule' || inputs.task == 'all' || inputs.task ~"| J_dependency_freshness
     T_schedule -->|"github.event_name == 'schedule' || inputs.task == 'all' || inputs.task ~"| J_generate_agents
     T_schedule -->|"github.event_name == 'schedule' || inputs.task == 'all' || inputs.task ~"| J_measure_timings
-    J_measure_timings -->|"${{ github.event_name == 'workflow_dispatch' && inputs.measure_issue_nu~"| S_J_measure_timings_0
+    J_measure_timings -->|"${{ inputs.measure_cutoff == '' }}"| S_J_measure_timings_0
+    J_measure_timings -->|"${{ github.event_name == 'workflow_dispatch' && inputs.measure_issue_nu~"| S_J_measure_timings_1
     T_schedule -->|"github.event_name == 'schedule' || inputs.task == 'all' || inputs.task ~"| J_ruleset_drift
     J_ruleset_drift -->|"steps.diff.outputs.drift_count != '0'"| S_J_ruleset_drift_0
     J_ruleset_drift -->|"steps.diff.outputs.unknown_count != '0'"| S_J_ruleset_drift_1

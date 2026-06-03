@@ -114,6 +114,7 @@ ALLOW_NO_TEST_MODULE: dict[str, str] = {
 GITHUB_API_SCRIPTS: frozenset[str] = frozenset(
     {
         "check_pr_mergeability",
+        "ci_budget_issue",
         "ci_early_status_probe",
         "dependabot_automerge",
         "github_api",
