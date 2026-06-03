@@ -79,7 +79,7 @@ Notes:
 
 | Surface | ATT&CK | Existing defense | Evidence | Status | Gap |
 |---|---|---|---|---|---|
-| `main.json` | IA, Persist, Impact | Default-branch ruleset: required status checks including `Verify repository scripts / gate` and `Portable PR policy / gate`; blocks force-push; requires PR + linear history + resolved threads + code-owner review; squash-only merge; blocks deletion. | `docs/runbooks/rulesets.md`, `weekly-maintenance.yml`, #18, #27, #120 | partially covered | #120 (required-checks-vs-ruleset live sync) |
+| `main.json` | IA, Persist, Impact | Default-branch ruleset: required status checks including `Verify repository scripts / gate` and `Portable PR policy / gate`; blocks force-push; requires PR + linear history + resolved threads + code-owner review; squash-only merge; blocks deletion; `required_signatures` (satisfied by GitHub's squash-merge signature; keyless -- see `docs/standards/commit-signing.md`). | `docs/runbooks/rulesets.md`, `docs/standards/commit-signing.md`, `weekly-maintenance.yml`, #18, #27, #32, #120 | partially covered | #120 (required-checks-vs-ruleset live sync) |
 | `all-branches.json` | IA, Impact | Non-default branch ruleset: blocks force-push on every branch except the default branch and `refs/heads/dependabot/*` (kept excluded so `@dependabot rebase` can force-push in place); deletion intentionally NOT blocked (relies on `delete_branch_on_merge: true`). | `docs/runbooks/rulesets.md`, `docs/runbooks/branch-cleanup.md`, #27, #59, #1014 | covered | — |
 
 Notes:
