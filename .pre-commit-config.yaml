@@ -23,6 +23,18 @@ repos:
         language: system
         pass_filenames: false
         files: ^\.github/workflows/.*\.ya?ml$
+      - id: scan-workflow-injection
+        name: scan workflow injection (scripts/scan_workflow_injection.py verify)
+        entry: uv run python scripts/scan_workflow_injection.py verify
+        language: system
+        pass_filenames: false
+        files: ^\.github/workflows/.*\.ya?ml$
+      - id: scan-secrets
+        name: scan secrets (scripts/scan_secrets.py verify)
+        entry: uv run python scripts/scan_secrets.py verify
+        language: system
+        pass_filenames: false
+        always_run: true
       - id: preflight-hook-event-keys
         name: preflight hook event keys (scripts/preflight_hook_event_keys.py verify)
         entry: uv run python scripts/preflight_hook_event_keys.py verify

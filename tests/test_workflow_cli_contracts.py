@@ -61,9 +61,11 @@ import scan_preflight_drift
 import scan_quality_standard_drift
 import scan_retro_followup_drift
 import scan_secret_runbooks
+import scan_secrets
 import scan_test_presence_drift
 import scan_workflow_action_pins
 import scan_workflow_gh_calls
+import scan_workflow_injection
 import scan_workflow_pip
 import security_drift_report
 import skill_quality_gate
@@ -162,9 +164,11 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("scan_quality_standard_drift.py", "verify"): "test_scan_quality_standard_drift_verify_matches_workflow_args",
     ("scan_retro_followup_drift.py", "run"): "test_scan_retro_followup_drift_run_matches_workflow_env",
     ("scan_secret_runbooks.py", "verify"): "test_scan_secret_runbooks_verify_matches_workflow_args",
+    ("scan_secrets.py", "verify"): "test_scan_secrets_verify_matches_workflow_args",
     ("scan_test_presence_drift.py", "verify"): "test_scan_test_presence_drift_verify_matches_workflow_args",
     ("scan_workflow_action_pins.py", "verify"): "test_scan_workflow_action_pins_verify_matches_workflow_args",
     ("scan_workflow_gh_calls.py", "verify"): "test_scan_workflow_gh_calls_verify_matches_workflow_args",
+    ("scan_workflow_injection.py", "verify"): "test_scan_workflow_injection_verify_matches_workflow_args",
     ("scan_workflow_pip.py", "verify"): "test_scan_workflow_pip_verify_matches_workflow_args",
     ("security_drift_report.py", "aggregate"): "test_security_drift_report_aggregate_and_post_comment_match_workflow_args",
     ("security_drift_report.py", "post-comment"): "test_security_drift_report_aggregate_and_post_comment_match_workflow_args",
@@ -1055,6 +1059,18 @@ def test_scan_workflow_gh_calls_verify_matches_workflow_args() -> None:
     Refs #911.
     """
     assert scan_workflow_gh_calls.main(["verify"]) == 0
+
+
+def test_scan_workflow_injection_verify_matches_workflow_args() -> None:
+    """Mirrors the ``Assert no untrusted context in workflow run blocks`` step
+    in ``.github/workflows/verify-agents.yml``. Refs #1129."""
+    assert scan_workflow_injection.main(["verify"]) == 0
+
+
+def test_scan_secrets_verify_matches_workflow_args() -> None:
+    """Mirrors the ``Assert no hardcoded secrets in tracked non-Python files``
+    step in ``.github/workflows/verify-agents.yml``. Refs #1129."""
+    assert scan_secrets.main(["verify"]) == 0
 
 
 def test_scan_secret_runbooks_verify_matches_workflow_args() -> None:
