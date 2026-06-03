@@ -19,7 +19,7 @@ from typing import Any
 import pytest
 import sanitize_history as sh
 
-pytestmark = pytest.mark.shard_ci_ops
+pytestmark = pytest.mark.shard_ci_ops_2
 FIXTURE_MIN = Path(__file__).parent / "fixtures" / "translations_min.json"
 
 
