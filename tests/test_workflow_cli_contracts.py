@@ -24,6 +24,7 @@ Drift guard (issue #193):
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import re
 from pathlib import Path
@@ -76,6 +77,7 @@ import skill_quality_gate
 import threat_intel_triage
 import title_policy
 import update_devcontainer_image_pins
+import uv_download_checksum
 import uv_pin
 import validate_json_syntax
 import verify_apm_checksums
@@ -94,6 +96,11 @@ pytestmark = pytest.mark.shard_ci_ops
 REPO = "owner/repo"
 
 _WORKFLOWS_DIR = Path(".github/workflows")
+# Composite actions invoke scripts from their own ``runs.steps`` -- those calls
+# must stay under the same CLI-contract governance as workflow steps, else
+# moving a call into an action (e.g. .github/actions/setup-uv) becomes a blind
+# spot. The inventory below scans both surfaces.
+_ACTIONS_DIR = Path(".github/actions")
 
 # Matches ``python[3] scripts/<name>.py [<sub>]`` and
 # ``uv run python scripts/<name>.py [<sub>]``. The negative lookbehind
@@ -187,6 +194,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("threat_intel_triage.py", "scan"): "test_threat_intel_scan_matches_workflow_args",
     ("title_policy.py", "verify"): "test_title_policy_verify_matches_workflow_kind_env",
     ("update_devcontainer_image_pins.py", "$GITHUB_SHA"): "test_update_devcontainer_image_pins_matches_workflow_args",
+    ("uv_download_checksum.py", "verify"): "test_uv_download_checksum_verify_matches_action_args",
     ("uv_pin.py", "drift"): "test_uv_pin_workflow_subcommands_match_ci_usage",
     ("uv_pin.py", "read"): "test_uv_pin_workflow_subcommands_match_ci_usage",
     ("uv_pin.py", "stale"): "test_uv_pin_workflow_subcommands_match_ci_usage",
@@ -250,22 +258,47 @@ def _emit_invocations_from_run(
     return out
 
 
-def _iter_workflow_invocations() -> list[WorkflowInvocation]:
-    """Inventory every Python script invocation in ``.github/workflows/*.yml``.
+def _emit_steps(
+    source: str, job: str, steps: object, found: list[WorkflowInvocation]
+) -> None:
+    """Emit invocations for every ``run:`` step in *steps* (a list or not)."""
+    if not isinstance(steps, list):
+        return
+    for step in steps:
+        if not isinstance(step, dict):
+            continue
+        run_text = step.get("run")
+        if not isinstance(run_text, str):
+            continue
+        step_name = str(step.get("name", "<unnamed>"))
+        found.extend(_emit_invocations_from_run(source, job, step_name, run_text))
 
-    Walks each workflow structurally via ``yaml.safe_load`` and emits one
-    :class:`WorkflowInvocation` per matched ``run:`` line. The .github
-    workflow YAML accepts GitHub Actions extensions (e.g. POSIX heredocs
-    whose body dedents past the block scalar indent) that strict YAML
-    parsers reject; ``.pre-commit-config.yaml`` already excludes
-    ``.github/workflows/`` from ``check-yaml`` for the same reason. When
-    structured parsing fails, fall back to scanning the raw text so the
-    affected workflow still contributes to the inventory -- structured
-    walk is preferred but cannot be the only path.
+
+def _iter_workflow_invocations() -> list[WorkflowInvocation]:
+    """Inventory every Python script invocation under ``.github/``.
+
+    Covers both surfaces that GitHub Actions executes: workflow jobs
+    (``.github/workflows/*.yml`` -> ``jobs.*.steps``) and composite actions
+    (``.github/actions/**/action.yml`` -> ``runs.steps``). A script call moved
+    from a workflow step into a composite action must remain inventoried, so
+    CLI-contract governance follows the call rather than the file.
+
+    Walks each file structurally via ``yaml.safe_load`` and emits one
+    :class:`WorkflowInvocation` per matched ``run:`` line. The .github YAML
+    accepts GitHub Actions extensions (e.g. POSIX heredocs whose body dedents
+    past the block scalar indent) that strict YAML parsers reject;
+    ``.pre-commit-config.yaml`` already excludes ``.github/workflows/`` from
+    ``check-yaml`` for the same reason. When structured parsing fails, fall
+    back to scanning the raw text so the affected file still contributes to
+    the inventory -- structured walk is preferred but cannot be the only path.
     """
     found: list[WorkflowInvocation] = []
-    for path in sorted(_WORKFLOWS_DIR.glob("*.yml")):
-        workflow = str(path)
+
+    action_files = sorted(_ACTIONS_DIR.rglob("action.yml")) + sorted(
+        _ACTIONS_DIR.rglob("action.yaml")
+    )
+    for path in sorted(_WORKFLOWS_DIR.glob("*.yml")) + action_files:
+        source = str(path)
         raw = path.read_text(encoding="utf-8")
         document: object | None
         try:
@@ -274,27 +307,18 @@ def _iter_workflow_invocations() -> list[WorkflowInvocation]:
             document = None
         if isinstance(document, dict) and isinstance(document.get("jobs"), dict):
             for job_name, job in document["jobs"].items():
-                if not isinstance(job, dict):
-                    continue
-                steps = job.get("steps")
-                if not isinstance(steps, list):
-                    continue
-                for step in steps:
-                    if not isinstance(step, dict):
-                        continue
-                    run_text = step.get("run")
-                    if not isinstance(run_text, str):
-                        continue
-                    step_name = str(step.get("name", "<unnamed>"))
-                    found.extend(
-                        _emit_invocations_from_run(
-                            workflow, str(job_name), step_name, run_text
-                        )
-                    )
+                if isinstance(job, dict):
+                    _emit_steps(source, str(job_name), job.get("steps"), found)
+        elif (
+            isinstance(document, dict)
+            and isinstance(document.get("runs"), dict)
+        ):
+            # Composite action: steps live under ``runs.steps``.
+            _emit_steps(source, "<composite>", document["runs"].get("steps"), found)
         else:
             found.extend(
                 _emit_invocations_from_run(
-                    workflow, "<unparseable>", "<unparseable>", raw
+                    source, "<unparseable>", "<unparseable>", raw
                 )
             )
     return found
@@ -1827,6 +1851,43 @@ def test_uv_pin_workflow_subcommands_match_ci_usage(
     assert uv_pin.main(["read", str(tmp_path / "pyproject.toml")]) == 0
     assert uv_pin.main(["drift", "--repo-root", str(tmp_path)]) == 0
     assert uv_pin.main(["stale", "--repo-root", str(tmp_path)]) == 0
+
+
+def test_uv_download_checksum_verify_matches_action_args(tmp_path: Path) -> None:
+    """Mirror the verify call in .github/actions/setup-uv/action.yml.
+
+    The composite action runs
+    ``python3 scripts/uv_download_checksum.py verify --file <tarball>
+    --target x86_64-unknown-linux-gnu``. Exercise that argv shape against a
+    tarball whose digest matches a synthetic flake pin so the contract is
+    pinned the same way every other workflow/action script invocation is.
+    """
+    payload = b"uv-tarball-bytes"
+    tarball = tmp_path / "uv.tar.gz"
+    tarball.write_bytes(payload)
+    sri = "sha256-" + base64.b64encode(
+        hashlib.sha256(payload).digest()
+    ).decode()
+    flake = tmp_path / "flake.nix"
+    flake.write_text(
+        f'target = "x86_64-unknown-linux-gnu"; hash = "{sri}";',
+        encoding="utf-8",
+    )
+
+    assert (
+        uv_download_checksum.main(
+            [
+                "verify",
+                "--file",
+                str(tarball),
+                "--target",
+                "x86_64-unknown-linux-gnu",
+                "--flake",
+                str(flake),
+            ]
+        )
+        == 0
+    )
 
 
 def test_verify_ruleset_sync_matches_workflow_args(
