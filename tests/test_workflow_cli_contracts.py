@@ -60,6 +60,7 @@ import scan_maintainability_metrics
 import scan_markdown_links
 import scan_non_ascii
 import scan_preflight_drift
+import scan_provisioning_hook_serial
 import scan_quality_standard_drift
 import scan_retro_followup_drift
 import scan_secret_runbooks
@@ -166,6 +167,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("scan_hook_coverage_drift.py", "verify"): "test_scan_hook_coverage_drift_verify_matches_workflow_args",
     ("scan_input_contract_drift.py", "verify"): "test_scan_input_contract_drift_verify_matches_workflow_args",
     ("scan_preflight_drift.py", "verify"): "test_scan_preflight_drift_verify_matches_workflow_args",
+    ("scan_provisioning_hook_serial.py", "verify"): "test_scan_provisioning_hook_serial_verify_matches_workflow_args",
     ("scan_quality_standard_drift.py", "verify"): "test_scan_quality_standard_drift_verify_matches_workflow_args",
     ("scan_retro_followup_drift.py", "run"): "test_scan_retro_followup_drift_run_matches_workflow_env",
     ("scan_secret_runbooks.py", "verify"): "test_scan_secret_runbooks_verify_matches_workflow_args",
@@ -1836,6 +1838,12 @@ def test_scan_preflight_drift_verify_matches_workflow_args() -> None:
     """Mirrors the `Verify preflight set matches CI script invocations`
     step in `.github/workflows/verify-agents.yml` (issue #493)."""
     assert scan_preflight_drift.main(["verify"]) == 0
+
+
+def test_scan_provisioning_hook_serial_verify_matches_workflow_args() -> None:
+    """Mirrors the `Verify shared-binary provisioning hooks are serial`
+    step in `.github/workflows/verify-agents.yml` (issue #1155)."""
+    assert scan_provisioning_hook_serial.main(["verify"]) == 0
 
 
 @pytest.mark.parametrize(

@@ -247,6 +247,14 @@ STEPS: tuple[Step, ...] = (
         argv=("python3", "scripts/scan_compile_from_source.py", "verify"),
     ),
     Step(
+        # Refs #1155. Fails when a pre-commit hook that provisions a shared
+        # binary (entry runs install_*.sh) is not require_serial, so prek
+        # cannot race parallel copies on the shared path (the #1150
+        # PermissionError class).
+        name="scan_provisioning_hook_serial",
+        argv=("python3", "scripts/scan_provisioning_hook_serial.py", "verify"),
+    ),
+    Step(
         # Refs #1099. Runs waza spec-compliance over every skill under
         # .agents/skills. spec failure = fail, token budget = warning only.
         # Needs the pinned waza binary (scripts/install_waza.sh); soft so a
