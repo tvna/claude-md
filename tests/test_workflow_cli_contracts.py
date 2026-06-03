@@ -61,9 +61,11 @@ import scan_preflight_drift
 import scan_quality_standard_drift
 import scan_retro_followup_drift
 import scan_secret_runbooks
+import scan_secrets
 import scan_test_presence_drift
 import scan_workflow_action_pins
 import scan_workflow_gh_calls
+import scan_workflow_injection
 import scan_workflow_pip
 import security_drift_report
 import skill_quality_gate
@@ -78,6 +80,7 @@ import verify_linked_issue_titles
 import verify_readme_translation
 import verify_required_check_contexts
 import verify_ruleset_sync
+import verify_security_control_floor
 import verify_shard_coverage
 import verify_test_shard_markers
 import workflow_diagram
@@ -134,6 +137,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("branch_cleanup.py", "survey"): "test_branch_cleanup_survey_matches_workflow_args",
     ("coverage_failure_issue.py", "run"): "test_coverage_failure_issue_run_matches_workflow_env",
     ("devcontainer_pin_pr.py", "open"): "test_devcontainer_pin_pr_open_matches_workflow_args",
+    ("devcontainer_pin_pr.py", "refresh"): "test_devcontainer_pin_pr_refresh_matches_workflow_args",
     ("dependabot_automerge.py", "audit"): "test_dependabot_automerge_audit_matches_workflow_files",
     ("dependabot_automerge.py", "list-files"): "test_dependabot_list_files_matches_workflow_args",
     ("dependabot_automerge.py", "request-automerge"): "test_dependabot_request_automerge_matches_workflow_args",
@@ -161,12 +165,15 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("scan_quality_standard_drift.py", "verify"): "test_scan_quality_standard_drift_verify_matches_workflow_args",
     ("scan_retro_followup_drift.py", "run"): "test_scan_retro_followup_drift_run_matches_workflow_env",
     ("scan_secret_runbooks.py", "verify"): "test_scan_secret_runbooks_verify_matches_workflow_args",
+    ("scan_secrets.py", "verify"): "test_scan_secrets_verify_matches_workflow_args",
     ("scan_test_presence_drift.py", "verify"): "test_scan_test_presence_drift_verify_matches_workflow_args",
     ("scan_workflow_action_pins.py", "verify"): "test_scan_workflow_action_pins_verify_matches_workflow_args",
     ("scan_workflow_gh_calls.py", "verify"): "test_scan_workflow_gh_calls_verify_matches_workflow_args",
+    ("scan_workflow_injection.py", "verify"): "test_scan_workflow_injection_verify_matches_workflow_args",
     ("scan_workflow_pip.py", "verify"): "test_scan_workflow_pip_verify_matches_workflow_args",
     ("security_drift_report.py", "aggregate"): "test_security_drift_report_aggregate_and_post_comment_match_workflow_args",
     ("security_drift_report.py", "post-comment"): "test_security_drift_report_aggregate_and_post_comment_match_workflow_args",
+    ("security_drift_report.py", "file-family-issues"): "test_security_drift_report_file_family_issues_matches_workflow_args",
     ("skill_quality_gate.py", "verify"): "test_skill_quality_gate_verify_matches_workflow_args",
     ("threat_intel_triage.py", "apply-labels"): "test_threat_intel_apply_labels_matches_workflow_args",
     ("threat_intel_triage.py", "scan"): "test_threat_intel_scan_matches_workflow_args",
@@ -181,6 +188,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("verify_readme_translation.py", "verify"): "test_verify_readme_translation_matches_workflow_args",
     ("verify_required_check_contexts.py", "verify"): "test_verify_required_check_contexts_matches_workflow_args",
     ("verify_ruleset_sync.py", "verify"): "test_verify_ruleset_sync_matches_workflow_args",
+    ("verify_security_control_floor.py", None): "test_verify_security_control_floor_matches_workflow_args",
     ("github_paginate.py", "fetch"): "test_github_paginate_fetch_matches_workflow_args",
     ("github_paginate.py", "get"): "test_github_paginate_get_matches_workflow_args",
     ("post_issue_comment.py", "create"): "test_post_issue_comment_create_matches_workflow_args",
@@ -1056,6 +1064,18 @@ def test_scan_workflow_gh_calls_verify_matches_workflow_args() -> None:
     assert scan_workflow_gh_calls.main(["verify"]) == 0
 
 
+def test_scan_workflow_injection_verify_matches_workflow_args() -> None:
+    """Mirrors the ``Assert no untrusted context in workflow run blocks`` step
+    in ``.github/workflows/verify-agents.yml``. Refs #1129."""
+    assert scan_workflow_injection.main(["verify"]) == 0
+
+
+def test_scan_secrets_verify_matches_workflow_args() -> None:
+    """Mirrors the ``Assert no hardcoded secrets in tracked non-Python files``
+    step in ``.github/workflows/verify-agents.yml``. Refs #1129."""
+    assert scan_secrets.main(["verify"]) == 0
+
+
 def test_scan_secret_runbooks_verify_matches_workflow_args() -> None:
     """Mirrors the ``Assert workflow secrets have concrete runbooks`` step."""
     assert scan_secret_runbooks.main(["verify"]) == 0
@@ -1210,6 +1230,43 @@ def test_security_drift_report_aggregate_and_post_comment_match_workflow_args(
             "true",
         ]
     ) == 0
+
+
+def test_security_drift_report_file_family_issues_matches_workflow_args() -> None:
+    """Mirror the argv shape of the File-per-family-drift-issues step.
+
+    weekly-maintenance.yml shells to ``file-family-issues --repo R --run-url U
+    --run-date D --families <csv> --dry-run <bool>`` where ``<csv>`` is the
+    ``drift_families`` output of the aggregate step. Exercise the dry-run path
+    (no token, no network) across every target family so the contract pins the
+    accepted flag set and the family allowlist.
+    """
+    assert security_drift_report.main(
+        [
+            "file-family-issues",
+            "--repo",
+            REPO,
+            "--run-url",
+            "https://example.test/run",
+            "--run-date",
+            "2026-06-03",
+            "--families",
+            "labels,apm-instructions,uv-pin-literal",
+            "--dry-run",
+            "true",
+        ]
+    ) == 0
+
+
+def test_verify_security_control_floor_matches_workflow_args() -> None:
+    """Mirror the argv shape used by verify-agents.yml lint-scripts-static.
+
+    The workflow shells to ``uv run python
+    scripts/verify_security_control_floor.py`` with no further arguments, so
+    the gate reads the committed ``.github/security-control-floor.toml`` and
+    must exit 0 on it. Refs #178.
+    """
+    assert verify_security_control_floor.main([]) == 0
 
 
 def test_threat_intel_scan_matches_workflow_args(
@@ -1561,6 +1618,35 @@ def test_devcontainer_pin_pr_open_matches_workflow_args(
         "open",
         "--github-sha", "abc123",
         "--base", "main",
+        "--title", "fix(devcontainer): pin published agent images",
+        "--commit-subject", "fix(devcontainer): pin published agent images",
+        "--commit-trailer", "Refs #696",
+        "--template", str(template),
+        "--file", ".devcontainer/claude/devcontainer.json",
+        "--file", ".devcontainer/codex/devcontainer.json",
+        "--file", "docs/runbooks/devcontainers.md",
+    ])
+    assert rc == 0
+
+
+def test_devcontainer_pin_pr_refresh_matches_workflow_args(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """refresh subcommand accepts the args used by devcontainer-pin-refresh.yml.
+
+    The supersede flow is exercised by tests/test_devcontainer_pin_pr.py; here we
+    pin the workflow argv shape. Refs #1137.
+    """
+    monkeypatch.setenv("GH_TOKEN", "tok")
+    monkeypatch.setenv("REPO", REPO)
+    template = tmp_path / "tmpl.md"
+    template.write_text("Pinned to __GITHUB_SHA__.\n", encoding="utf-8")
+    # No open pin PR -> the command is a no-op; we only assert the argv parses.
+    monkeypatch.setattr(devcontainer_pin_pr, "_list_open_prs_by_prefix", lambda **kw: [])
+    rc = devcontainer_pin_pr.main([
+        "refresh",
+        "--base", "main",
+        "--target-sha", "b417e5833394f6f04a6e9b1eefe48026c09b4089",
         "--title", "fix(devcontainer): pin published agent images",
         "--commit-subject", "fix(devcontainer): pin published agent images",
         "--commit-trailer", "Refs #696",

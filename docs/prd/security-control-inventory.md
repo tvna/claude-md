@@ -19,6 +19,20 @@ This file is the deliverable for [#179](https://github.com/tvna/claude-md/issues
   - `not applicable` — surface is not security-relevant; included only because the #179 verification rg keyword matched incidentally.
 - **Gap** — issue number(s) for tracked follow-up. Existing issues are reused per #178's "Existing related issues reused instead of duplicated" rule. No new issues are opened by this inventory; novel gaps would be added here by a follow-up PR.
 
+### Scheduled-detection floor
+
+Every control family that has a scheduled drift detector MUST meet the
+`detect-and-file` floor: detection runs on the weekly cron AND an actionable
+drift auto-files a per-family issue (not only a rolling comment). The floor is
+declared machine-readably in [`.github/security-control-floor.toml`](../../.github/security-control-floor.toml)
+and enforced by `scripts/verify_security_control_floor.py` in the
+`lint-scripts-static` job of `verify-agents.yml`, so a new family cannot land
+below the floor on reviewer memory alone. A family may sit below the floor only
+with an explicit `exempt_reason` (advisory-only signals such as
+`uv-pin-staleness`, where a weekly issue would be noise). The `rulesets` family
+files via its own `ruleset-drift` job; `labels`, `apm-instructions`, and
+`uv-pin-literal` file via `security_drift_report.py file-family-issues`.
+
 ### Tactic abbreviations
 
 | Code | ATT&CK tactic |
@@ -49,7 +63,7 @@ This file is the deliverable for [#179](https://github.com/tvna/claude-md/issues
 | `generate-agents.yml` | Persist, LM | Dispatch + reusable compile; weekly schedule is called by `weekly-maintenance.yml`; drift check via `git diff --exit-code` on `CLAUDE.md` / `AGENTS.md`; opens PR rather than push direct. | `.apm/instructions/master.instructions.md`, `portable-pr-policy.yml`, #112 | partially covered | #183 (downstream review checklist) |
 | `weekly-maintenance.yml` / `ruleset-drift` | Persist, IA | Weekly + dispatch drift detection vs `.github/rulesets/`; opens an issue when drift is detected. | `scripts/ruleset_drift.py`, `tests/test_ruleset_drift.py`, `docs/runbooks/rulesets.md` | covered | #120 (required-checks-vs-ruleset sync, separate scope) |
 | `issue-pr-triage.yml` / `scan` | DE, Coll, Persist | Write-side scan of issues / PRs / comments; closes / requests-changes / labels; excludes trusted bots. | `docs/prd/non-ascii-defense.md`, `scripts/scan_non_ascii.py`, `tests/test_scan_non_ascii.py`, #102 | covered | — |
-| `weekly-maintenance.yml` / `security-control-drift` | Persist, Impact | Weekly + dispatch aggregator: reuses each per-family detector in read-only mode (`ruleset_drift.py detect`, `labels_apply.py plan`, `apm compile` + diff, `uv_pin.py drift` / `stale`) and posts a rolling comment on parent #178. Never opens new issues. | `scripts/security_drift_report.py`, `tests/test_security_drift_report.py`, `docs/runbooks/security-control-drift-report.md`, #180 | covered | — |
+| `weekly-maintenance.yml` / `security-control-drift` | Persist, Impact | Weekly + dispatch aggregator: reuses each per-family detector in read-only mode (`ruleset_drift.py detect`, `labels_apply.py plan`, `apm compile` + diff, `uv_pin.py drift` / `stale`) and posts a rolling comment on parent #178. Also auto-files one per-family issue (`security_drift_report.py file-family-issues`) for the `labels`, `apm-instructions`, and `uv-pin-literal` families when they drift, raising them to the `detect-and-file` floor (`rulesets` excluded -- filed by its own job; advisory `uv-pin-staleness` excluded). | `scripts/security_drift_report.py`, `tests/test_security_drift_report.py`, `.github/security-control-floor.toml`, `docs/runbooks/security-control-drift-report.md`, #180 | covered | — |
 | `issue-pr-triage.yml` / `triage` | Coll, Recon | Deterministic OSV + GHSA + OSSF malicious-packages + CISA KEV lookup over PyPI and GitHub Actions surfaces (including `uv run --with pkg==ver` transient pins in workflows / `scripts/`), plus FIRST EPSS exploit-prediction enrichment (advisory-only, never escalates `threat:response-needed`); routes labels (`threat:intel-needed`, `threat:response-needed`) before any agent. | `scripts/threat_intel_triage.py`, `tests/test_threat_intel_triage.py`, `docs/runbooks/issue-triage.md`, #170, #173, #175, #176 | partially covered | #170 (sustained ops), #63 (agent-boundary review) |
 | `verify-agents.yml` | RD, Persist, Exec | PR gate: repository-specific script lint, type, pytest-shard completeness, uv drift / staleness, workflow-shape, and maintainability checks. | `scripts/uv_pin.py`, `tests/test_uv_pin.py`, `docs/standards/remote-environment.md`, #112 | covered | — |
 | `portable-pr-policy.yml` | IA, DE, RD, Persist, LM | PR gate: title / body / issue-link checks, README translation parity, APM portability scan, `apm compile` drift, checksum verification, and `prek` in one portable required context. | `.apm/instructions/master.instructions.md`, `CLAUDE.md`, `AGENTS.md`, `scripts/scan_apm_portability.py`, `scripts/title_policy.py`, `scripts/body_policy.py`, `scripts/issue_link.py` | partially covered | #183 (downstream review checklist) |
@@ -65,7 +79,7 @@ Notes:
 
 | Surface | ATT&CK | Existing defense | Evidence | Status | Gap |
 |---|---|---|---|---|---|
-| `main.json` | IA, Persist, Impact | Default-branch ruleset: required status checks including `Verify repository scripts / gate` and `Portable PR policy / gate`; blocks force-push; requires PR + linear history + resolved threads + code-owner review; squash-only merge; blocks deletion. | `docs/runbooks/rulesets.md`, `weekly-maintenance.yml`, #18, #27, #120 | partially covered | #120 (required-checks-vs-ruleset live sync) |
+| `main.json` | IA, Persist, Impact | Default-branch ruleset: required status checks including `Verify repository scripts / gate` and `Portable PR policy / gate`; blocks force-push; requires PR + linear history + resolved threads + code-owner review; squash-only merge; blocks deletion; `required_signatures` (satisfied by GitHub's squash-merge signature; keyless -- see `docs/standards/commit-signing.md`). | `docs/runbooks/rulesets.md`, `docs/standards/commit-signing.md`, `weekly-maintenance.yml`, #18, #27, #32, #120 | partially covered | #120 (required-checks-vs-ruleset live sync) |
 | `all-branches.json` | IA, Impact | Non-default branch ruleset: blocks force-push on every branch except the default branch and `refs/heads/dependabot/*` (kept excluded so `@dependabot rebase` can force-push in place); deletion intentionally NOT blocked (relies on `delete_branch_on_merge: true`). | `docs/runbooks/rulesets.md`, `docs/runbooks/branch-cleanup.md`, #27, #59, #1014 | covered | — |
 
 Notes:
@@ -78,13 +92,13 @@ Notes:
 
 | Surface | ATT&CK | Existing defense | Evidence | Status | Gap |
 |---|---|---|---|---|---|
-| `.github/labels.json` | Persist, IA, Coll | JSON SoT; mutated only via `apply-labels.yml` with `dry_run` default; `verify-dependabot-labels.yml` ensures Dependabot label references stay resolvable; scheduled drift surfaced by `weekly-maintenance.yml` (#180). | `docs/runbooks/issue-triage.md`, `apply-labels.yml`, `verify-dependabot-labels.yml`, `weekly-maintenance.yml`, #84 | partially covered | #84 Phase 5 (label drift + coverage check) |
+| `.github/labels.json` | Persist, IA, Coll | JSON SoT; mutated only via `apply-labels.yml` with `dry_run` default; `verify-dependabot-labels.yml` ensures Dependabot label references stay resolvable; scheduled drift surfaced by `weekly-maintenance.yml` (#180) and auto-filed as a per-family issue at the `detect-and-file` floor (`security_drift_report.py file-family-issues`, #178). | `docs/runbooks/issue-triage.md`, `apply-labels.yml`, `verify-dependabot-labels.yml`, `weekly-maintenance.yml`, #84 | partially covered | #84 Phase 5 (label drift + coverage check) |
 
 ## 4. APM source and compiled instructions
 
 | Surface | ATT&CK | Existing defense | Evidence | Status | Gap |
 |---|---|---|---|---|---|
-| `.apm/instructions/master.instructions.md` | LM, Persist, Exec | Single APM source. PR gate `portable-pr-policy.yml` recompiles and diffs the output files; PR review on every change. | `portable-pr-policy.yml`, `generate-agents.yml`, `CLAUDE.md`, `AGENTS.md` | partially covered | #183 (downstream review checklist) |
+| `.apm/instructions/master.instructions.md` | LM, Persist, Exec | Single APM source. PR gate `portable-pr-policy.yml` recompiles and diffs the output files; PR review on every change; scheduled compile-then-diff drift auto-filed as a per-family issue at the `detect-and-file` floor (`security_drift_report.py file-family-issues`, #178). | `portable-pr-policy.yml`, `generate-agents.yml`, `CLAUDE.md`, `AGENTS.md` | partially covered | #183 (downstream review checklist) |
 | `CLAUDE.md` | LM, Persist | Compiled output; drift-gated by `portable-pr-policy.yml`; not hand-edited (compiled by `apm-cli==0.12.1`). | `portable-pr-policy.yml`, `.apm/instructions/master.instructions.md`, #112 | covered | — |
 | `AGENTS.md` | LM, Persist | Compiled output; drift-gated by `portable-pr-policy.yml`; byte-identical compile to `CLAUDE.md` today. | `portable-pr-policy.yml`, `.apm/instructions/master.instructions.md` | covered | — |
 
@@ -92,7 +106,7 @@ Notes:
 
 | Surface | ATT&CK | Existing defense | Evidence | Status | Gap |
 |---|---|---|---|---|---|
-| `pyproject.toml` | RD, Exec, C2 | `[tool.uv].required-version` exact pin; `pyyaml` range pin used only by SessionStart hook; `lint-uv-pin` drift gate enforces single source of truth. | `scripts/uv_pin.py`, `tests/test_uv_pin.py`, `verify-agents.yml`, `docs/standards/remote-environment.md`, #106, #112 | covered | — |
+| `pyproject.toml` | RD, Exec, C2 | `[tool.uv].required-version` exact pin; `pyyaml` range pin used only by SessionStart hook; `lint-uv-pin` drift gate enforces single source of truth; scheduled `uv-pin-literal` drift auto-filed as a per-family issue at the `detect-and-file` floor (`security_drift_report.py file-family-issues`, #178). | `scripts/uv_pin.py`, `tests/test_uv_pin.py`, `verify-agents.yml`, `docs/standards/remote-environment.md`, #106, #112 | covered | — |
 | `uv.lock` | RD, Exec, C2 | Locked transitive snapshot; CI uses `uv sync --locked`; Dependabot weekly bumps; OSV + KEV scanning via `issue-pr-triage.yml` / `triage`. | `verify-agents.yml`, `portable-pr-policy.yml`, `issue-pr-triage.yml`, `.github/dependabot.yml` | covered | — |
 | `.github/dependabot.yml` | RD, Persist | Two ecosystems (`github-actions`, `uv`); cooldown (default 7d, major 30d, minor 7d, patch 3d); auto-assigns `dependencies` label; `verify-dependabot-labels.yml` cross-checks against `labels.json`. | `dependabot-automerge.yml`, `verify-dependabot-labels.yml`, #185, #221 | covered | — |
 
@@ -133,7 +147,8 @@ rejects a deliberately unsafe sample.
 | `ruleset_drift.py` | Persist, IA | Compares live rulesets to SoT JSON; files an issue when drift is detected; reads `GH_TOKEN_API`. | `tests/test_ruleset_drift.py`, `weekly-maintenance.yml`, `docs/runbooks/rulesets.md` | covered | — |
 | `rulesets_apply.py` | PrivEsc, IA, Impact | Plan / dry-run / apply tri-state; PAT scoped to `ruleset-apply` Environment; opt-in `enable_auto_delete`; outputs ruleset-by-ruleset diff. | `tests/test_rulesets_apply.py`, `apply-rulesets.yml`, `docs/runbooks/rulesets.md` | partially covered | #56, #181, #182 |
 | `scan_non_ascii.py` | DE, Coll, Persist, Cred | Write-side scanner; closes / requests-changes / labels; trusted-bot allowlist; respects body section boundaries. | `tests/test_scan_non_ascii.py`, `issue-pr-triage.yml`, `docs/prd/non-ascii-defense.md`, #102 | covered | — |
-| `security_drift_report.py` | Persist, Impact | Aggregator: parses captured exit codes / outputs of the per-family detectors and emits a single Markdown report; posts / updates a rolling comment on parent #178 via `_github_api.apply_call`. Never opens new issues; never mutates per-family state. | `tests/test_security_drift_report.py`, `weekly-maintenance.yml`, `docs/runbooks/security-control-drift-report.md`, #180 | covered | — |
+| `security_drift_report.py` | Persist, Impact | Aggregator: parses captured exit codes / outputs of the per-family detectors and emits a single Markdown report; posts / updates a rolling comment on parent #178 via `_github_api.apply_call`. The `file-family-issues` subcommand auto-files one issue per drifting target family (`labels`, `apm-instructions`, `uv-pin-literal`) via the same `apply_call` boundary, meeting the `detect-and-file` floor; never mutates per-family state. | `tests/test_security_drift_report.py`, `weekly-maintenance.yml`, `.github/security-control-floor.toml`, `docs/runbooks/security-control-drift-report.md`, #180 | covered | — |
+| `verify_security_control_floor.py` | Persist, Impact | Deterministic gate (`lint-scripts-static`): reads `.github/security-control-floor.toml` and fails CI when a scheduled control family sits below the `detect-and-file` floor without an explicit `exempt_reason`; pure `evaluate`, no network. | `tests/test_verify_security_control_floor.py`, `.github/security-control-floor.toml`, `verify-agents.yml`, #178 | covered | — |
 | `threat_intel_triage.py` | Coll, Recon, RD | Deterministic OSV.dev + GHSA + OSSF malicious-packages + CISA KEV lookup with FIRST EPSS advisory-only enrichment (CVE-keyed score / percentile); dependency surfaces cover `uv.lock`, `pyproject.toml`, `.github/workflows/*.yml` `uses:` (`GitHub Actions` ecosystem), and `uv run --with pkg==ver` transient pins in workflows / `scripts/`; fixture inputs for offline tests; applies / removes labels only. EPSS lookups soft-fail so a transient FIRST API outage cannot block the KEV/OSV/GHSA/OSSF routing decision. | `tests/test_threat_intel_triage.py`, `issue-pr-triage.yml`, `docs/runbooks/issue-triage.md`, #170, #173, #175, #176 | partially covered | #170 |
 | `title_policy.py` | DE, RD | ASCII / format validator for issue and PR titles; pure function. | `tests/test_title_policy.py`, `portable-pr-policy.yml`, `verify-github-content.yml`, `docs/prd/non-ascii-defense.md` | covered | — |
 | `uv_pin.py` | RD, Exec, C2 | Single source of truth for the `uv` pin; drift + upstream-staleness check; emits annotations rather than mutating files. | `tests/test_uv_pin.py`, `verify-agents.yml`, `docs/standards/remote-environment.md`, #112 | covered | — |

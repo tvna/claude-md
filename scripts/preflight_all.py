@@ -126,8 +126,16 @@ STEPS: tuple[Step, ...] = (
         argv=("python3", "scripts/scan_workflow_gh_calls.py", "verify"),
     ),
     Step(
+        name="scan_workflow_injection",
+        argv=("python3", "scripts/scan_workflow_injection.py", "verify"),
+    ),
+    Step(
         name="scan_secret_runbooks",
         argv=("python3", "scripts/scan_secret_runbooks.py", "verify"),
+    ),
+    Step(
+        name="scan_secrets",
+        argv=("python3", "scripts/scan_secrets.py", "verify"),
     ),
     Step(
         name="scan_markdown_links",
@@ -243,6 +251,14 @@ STEPS: tuple[Step, ...] = (
         # failure pre-push.
         name="verify_test_shard_markers",
         argv=("python3", "scripts/verify_test_shard_markers.py"),
+    ),
+    Step(
+        # Refs #178. Fails when a scheduled control family in
+        # .github/security-control-floor.toml sits below the detect-and-file
+        # floor without an exempt_reason, mirroring the verify-agents.yml
+        # lint-scripts-static gate so the floor is checked pre-push too.
+        name="verify_security_control_floor",
+        argv=("python3", "scripts/verify_security_control_floor.py"),
     ),
     Step(
         # Refs #745. Fetches the live base branch and fails before push when
