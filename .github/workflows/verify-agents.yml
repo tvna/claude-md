@@ -6,12 +6,19 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   lint-scripts-static:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout repository
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
 
       - name: Read uv pin from pyproject.toml
         id: uvpin
@@ -165,6 +172,7 @@ jobs:
     # artifacts and asserts the union equals the universe collected by
     # `pytest --collect-only` (no test left unrun, no test double-counted).
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read
     strategy:
@@ -186,6 +194,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
 
       - name: Read uv pin from pyproject.toml
         id: uvpin
@@ -246,12 +256,15 @@ jobs:
     needs: lint-scripts-pytest
     if: always()
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read
       id-token: write  # required for codecov/test-results-action OIDC (tokenless, public repo); see #469
     steps:
       - name: Checkout repository
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
 
       - name: Read uv pin from pyproject.toml
         id: uvpin
@@ -334,6 +347,7 @@ jobs:
     needs: [lint-scripts-static, lint-scripts-pytest-gate]
     if: always()
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Aggregate verification result
         env:
@@ -355,6 +369,7 @@ jobs:
     needs: gate
     if: always()
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Mirror repository scripts result for live ruleset migration
         env:
