@@ -124,8 +124,11 @@ case ":${PATH}:" in
   *) export PATH="${GOBIN}:${PATH}" ;;
 esac
 
-echo "install_waza: no pinned prebuilt for ${os}/${arch}; installing v${version} via go install ..." >&2
-go install "github.com/microsoft/waza/cmd/waza@v${version}"
+echo "install_waza: no pinned prebuilt for ${os}/${arch}; compiling v${version} via the Go toolchain ..." >&2
+# Backstop only -- reached solely on a platform with no pinned prebuilt asset
+# in flake.nix. The CI/devcontainer hot path never compiles (it uses the
+# prebuilt download / on-PATH waza), so this never costs CI wall time.
+go install "github.com/microsoft/waza/cmd/waza@v${version}" # compile-source-ack: portability backstop, no prebuilt for this platform (#1154)
 
 # Verify the install produced an invocable binary. Fail loudly rather than
 # letting the gate run against nothing.

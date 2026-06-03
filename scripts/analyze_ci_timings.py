@@ -400,19 +400,70 @@ def _render_compare_step_table(
     return "\n".join(rows)
 
 
+def budget_breaches(
+    job_agg: dict[str, list[tuple[datetime, float]]], budget_seconds: float
+) -> list[tuple[str, float]]:
+    """Return ``(job_name, p50)`` for jobs whose median exceeds the budget.
+
+    Sorted slowest-first. p50 (median) is used rather than max so a single
+    noisy runner outlier does not trip the soft budget. Takes the same
+    ``aggregate_job_durations`` shape (``[(started_at, duration), ...]``) as
+    the report tables. Refs #1156.
+    """
+    out: list[tuple[str, float]] = []
+    for name, samples in job_agg.items():
+        durations = [v for _, v in samples]
+        if not durations:
+            continue
+        p50 = _percentile(durations, 50)
+        if p50 > budget_seconds:
+            out.append((name, p50))
+    return sorted(out, key=lambda item: item[1], reverse=True)
+
+
+def _render_budget_section(
+    job_agg: dict[str, list[tuple[datetime, float]]], budget_seconds: float
+) -> str:
+    parts: list[str] = []
+    parts.append(f"## Budget ({_fmt_seconds(budget_seconds)} per job, p50)")
+    parts.append("")
+    breaches = budget_breaches(job_agg, budget_seconds)
+    if not breaches:
+        parts.append(f"OK: no job p50 exceeds {_fmt_seconds(budget_seconds)}.")
+        return "\n".join(parts)
+    parts.append(
+        f"BUDGET BREACH: {len(breaches)} job(s) over the soft budget "
+        f"(observability, not a hard gate -- #1156):"
+    )
+    parts.append("")
+    parts.append("| job | p50 | budget |")
+    parts.append("| --- | ---: | ---: |")
+    for name, p50 in breaches:
+        parts.append(
+            f"| {name} | {_fmt_seconds(p50)} | {_fmt_seconds(budget_seconds)} |"
+        )
+    return "\n".join(parts)
+
+
 def render_report(
     jobs: list[dict[str, object]],
     *,
     title: str,
     cutoff: datetime | None = None,
+    budget_seconds: float | None = None,
 ) -> str:
     if cutoff is None:
-        return _render_single_window_report(jobs, title=title)
+        return _render_single_window_report(
+            jobs, title=title, budget_seconds=budget_seconds
+        )
     return _render_compare_report(jobs, title=title, cutoff=cutoff)
 
 
 def _render_single_window_report(
-    jobs: list[dict[str, object]], *, title: str
+    jobs: list[dict[str, object]],
+    *,
+    title: str,
+    budget_seconds: float | None = None,
 ) -> str:
     job_agg = aggregate_job_durations(jobs)
     step_agg = aggregate_step_durations(jobs)
@@ -435,6 +486,9 @@ def _render_single_window_report(
     else:
         parts.append("_no step samples_")
     parts.append("")
+    if budget_seconds is not None:
+        parts.append(_render_budget_section(job_agg, budget_seconds))
+        parts.append("")
     parts.append(
         "Trend legend: `^` = newer half >10% slower, `v` = newer half "
         ">10% faster, `=` = within +/-10%, `?` = fewer than 2 samples."
@@ -554,6 +608,16 @@ def main(argv: list[str] | None = None) -> int:
             "for performance-claiming PRs."
         ),
     )
+    parser.add_argument(
+        "--budget-seconds",
+        type=float,
+        default=None,
+        help=(
+            "Optional soft per-job wall-time budget. When supplied, the "
+            "single-window report appends a Budget section listing jobs whose "
+            "median (p50) exceeds it (observability, not a hard gate; #1156)."
+        ),
+    )
     args = parser.parse_args(argv)
 
     jobs = load_jobs(args.jobs)
@@ -563,7 +627,12 @@ def main(argv: list[str] | None = None) -> int:
         job_name=args.job,
         since=args.since,
     )
-    report = render_report(jobs, title=args.title, cutoff=args.cutoff)
+    report = render_report(
+        jobs,
+        title=args.title,
+        cutoff=args.cutoff,
+        budget_seconds=args.budget_seconds,
+    )
     print(report)
     return 0
 

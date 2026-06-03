@@ -111,19 +111,6 @@ jobs:
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
           uv --version
 
-      # Cache the uv download/build cache so `uv sync --locked`, the
-      # `uv tool run prek` install, and the `apm compile` --with download
-      # reuse resolved artifacts instead of re-fetching each CI run. Keyed
-      # on uv.lock; restore-keys gives a partial hit when the lock changes
-      # so only the delta is fetched. Refs #1146.
-      - name: Cache uv artifacts
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
-        with:
-          path: ~/.cache/uv
-          key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
-          restore-keys: |
-            uv-${{ runner.os }}-
-
       - name: Install Python
         run: uv python install
 
@@ -143,18 +130,6 @@ jobs:
 
       - name: Verify .apm checksum lockfile
         run: python3 scripts/verify_apm_checksums.py verify
-
-      # Cache the prek hook environments (the pre-commit-hooks venv) so the
-      # --all-files run reuses them instead of rebuilding each CI run. Keyed
-      # on .pre-commit-config.yaml so a hook/rev change invalidates the
-      # cache. Refs #1146.
-      - name: Cache prek hook environments
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
-        with:
-          path: ~/.cache/prek
-          key: prek-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml') }}
-          restore-keys: |
-            prek-${{ runner.os }}-
 
       - name: Run prek (j178/prek) against all files
         run: uv tool run prek run --all-files --show-diff-on-failure

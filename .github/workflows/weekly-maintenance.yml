@@ -265,6 +265,7 @@ jobs:
               --jobs jobs/ \
               --workflow "Verify repository scripts" \
               --title "verify-agents.yml timings (weekly)" \
+              --budget-seconds 300 \
               > report.md
           fi
 

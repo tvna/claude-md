@@ -49,15 +49,18 @@ import pytest
 import ruleset_drift
 import rulesets_apply
 import scan_apm_portability
+import scan_compile_from_source
 import scan_design_philosophy_drift
 import scan_devcontainer_tool_drift
 import scan_docs_inventory
+import scan_flake_pin_drift
 import scan_hook_coverage_drift
 import scan_input_contract_drift
 import scan_maintainability_metrics
 import scan_markdown_links
 import scan_non_ascii
 import scan_preflight_drift
+import scan_provisioning_hook_serial
 import scan_quality_standard_drift
 import scan_retro_followup_drift
 import scan_secret_runbooks
@@ -154,14 +157,17 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("rulesets_apply.py", "auto-delete"): "test_rulesets_apply_plan_and_auto_delete_match_workflow_args",
     ("scan_apm_portability.py", "verify"): "test_scan_apm_portability_verify_matches_workflow_paths",
     ("scan_design_philosophy_drift.py", "verify"): "test_scan_design_philosophy_drift_verify_matches_workflow_paths",
+    ("scan_compile_from_source.py", "verify"): "test_scan_compile_from_source_verify_matches_workflow_args",
     ("scan_devcontainer_tool_drift.py", "verify"): "test_scan_devcontainer_tool_drift_verify_matches_workflow_args",
     ("scan_docs_inventory.py", "verify"): "test_scan_docs_inventory_verify_matches_workflow_args",
+    ("scan_flake_pin_drift.py", "verify"): "test_scan_flake_pin_drift_verify_matches_workflow_args",
     ("scan_markdown_links.py", "verify"): "test_scan_markdown_links_verify_matches_workflow_args",
     ("scan_maintainability_metrics.py", "verify"): "test_scan_maintainability_metrics_verify_matches_workflow_args",
     ("scan_non_ascii.py", "run"): "test_scan_non_ascii_run_matches_workflow_env",
     ("scan_hook_coverage_drift.py", "verify"): "test_scan_hook_coverage_drift_verify_matches_workflow_args",
     ("scan_input_contract_drift.py", "verify"): "test_scan_input_contract_drift_verify_matches_workflow_args",
     ("scan_preflight_drift.py", "verify"): "test_scan_preflight_drift_verify_matches_workflow_args",
+    ("scan_provisioning_hook_serial.py", "verify"): "test_scan_provisioning_hook_serial_verify_matches_workflow_args",
     ("scan_quality_standard_drift.py", "verify"): "test_scan_quality_standard_drift_verify_matches_workflow_args",
     ("scan_retro_followup_drift.py", "run"): "test_scan_retro_followup_drift_run_matches_workflow_env",
     ("scan_secret_runbooks.py", "verify"): "test_scan_secret_runbooks_verify_matches_workflow_args",
@@ -1104,10 +1110,22 @@ def test_scan_markdown_links_verify_matches_workflow_args() -> None:
     assert scan_markdown_links.main(["verify"]) == 0
 
 
+def test_scan_compile_from_source_verify_matches_workflow_args() -> None:
+    """Mirrors the ``Verify no tool is compiled from source on the CI
+    surface`` step in ``.github/workflows/verify-agents.yml``."""
+    assert scan_compile_from_source.main(["verify"]) == 0
+
+
 def test_scan_devcontainer_tool_drift_verify_matches_workflow_args() -> None:
     """Mirrors the ``Verify devcontainer provisions gate-required tools``
     step in ``.github/workflows/verify-agents.yml``."""
     assert scan_devcontainer_tool_drift.main(["verify"]) == 0
+
+
+def test_scan_flake_pin_drift_verify_matches_workflow_args() -> None:
+    """Mirrors the ``Verify flake.nix is the single source of truth for pinned
+    hashes`` step in ``.github/workflows/verify-agents.yml``."""
+    assert scan_flake_pin_drift.main(["verify"]) == 0
 
 
 def test_scan_docs_inventory_verify_matches_workflow_args() -> None:
@@ -1820,6 +1838,12 @@ def test_scan_preflight_drift_verify_matches_workflow_args() -> None:
     """Mirrors the `Verify preflight set matches CI script invocations`
     step in `.github/workflows/verify-agents.yml` (issue #493)."""
     assert scan_preflight_drift.main(["verify"]) == 0
+
+
+def test_scan_provisioning_hook_serial_verify_matches_workflow_args() -> None:
+    """Mirrors the `Verify shared-binary provisioning hooks are serial`
+    step in `.github/workflows/verify-agents.yml` (issue #1155)."""
+    assert scan_provisioning_hook_serial.main(["verify"]) == 0
 
 
 @pytest.mark.parametrize(

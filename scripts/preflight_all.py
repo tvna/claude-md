@@ -233,6 +233,28 @@ STEPS: tuple[Step, ...] = (
         argv=("python3", "scripts/scan_devcontainer_tool_drift.py", "verify"),
     ),
     Step(
+        # Refs #1153. Fails when a pinned binary's flake.nix SHA256 is
+        # hardcoded under scripts/ or .github/workflows/, so flake.nix stays
+        # the single source of truth and a bump cannot leave a stale copy.
+        name="scan_flake_pin_drift",
+        argv=("python3", "scripts/scan_flake_pin_drift.py", "verify"),
+    ),
+    Step(
+        # Refs #1154. Fails when a tool is compiled from source (go/cargo
+        # install) on the CI surface instead of fetching a pinned prebuilt --
+        # the ~138s regression class from #1150. Ack a justified backstop.
+        name="scan_compile_from_source",
+        argv=("python3", "scripts/scan_compile_from_source.py", "verify"),
+    ),
+    Step(
+        # Refs #1155. Fails when a pre-commit hook that provisions a shared
+        # binary (entry runs install_*.sh) is not require_serial, so prek
+        # cannot race parallel copies on the shared path (the #1150
+        # PermissionError class).
+        name="scan_provisioning_hook_serial",
+        argv=("python3", "scripts/scan_provisioning_hook_serial.py", "verify"),
+    ),
+    Step(
         # Refs #1099. Runs waza spec-compliance over every skill under
         # .agents/skills. spec failure = fail, token budget = warning only.
         # Needs the pinned waza binary (scripts/install_waza.sh); soft so a

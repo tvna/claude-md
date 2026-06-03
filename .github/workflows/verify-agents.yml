@@ -119,6 +119,24 @@ jobs:
         # so the devcontainer cannot silently lack a tool the gates depend on.
         run: uv run python scripts/scan_devcontainer_tool_drift.py verify
 
+      - name: Verify flake.nix is the single source of truth for pinned hashes
+        # Refs #1153: fails when a pinned binary's flake.nix SHA256 is hardcoded
+        # under scripts/ or .github/workflows/, so a tool bump cannot leave a
+        # stale hardcoded copy that diverges from the flake.
+        run: uv run python scripts/scan_flake_pin_drift.py verify
+
+      - name: Verify no tool is compiled from source on the CI surface
+        # Refs #1154: fails when go/cargo install compiles a tool instead of
+        # fetching a pinned prebuilt (the ~138s #1150 regression class); a
+        # deliberate backstop is acked inline with a rationale.
+        run: uv run python scripts/scan_compile_from_source.py verify
+
+      - name: Verify shared-binary provisioning hooks are serial
+        # Refs #1155: fails when a pre-commit hook that runs an install_*.sh
+        # provisioner is not require_serial, so prek cannot race parallel
+        # copies on the shared binary path (the #1150 PermissionError class).
+        run: uv run python scripts/scan_provisioning_hook_serial.py verify
+
       - name: Verify test shard markers
         # Refs #545: each tests/test_*.py must declare exactly one
         # module-scope shard marker so the lint-scripts-pytest matrix
