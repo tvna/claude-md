@@ -1,22 +1,22 @@
 # Shared destinations required by both agent containers.
 # Syntax: one hostname per line. Blank lines and comments are ignored.
-github.com
-api.github.com
-# GitHub remote MCP server endpoint used when apm installs the GitHub MCP server.
-api.mcp.github.com
-objects.githubusercontent.com
-raw.githubusercontent.com
-release-assets.githubusercontent.com
-pypi.org
-files.pythonhosted.org
-astral.sh
-static.crates.io
-index.crates.io
-cache.nixos.org
-channels.nixos.org
-github-releases.githubusercontent.com
-ghcr.io
-mcr.microsoft.com
-# apm is now a Nix derivation fetched from release-assets.githubusercontent.com;
-# aka.ms is no longer required for apm installation.
-aka.ms
+# Each host carries an inline triage rationale; see
+# docs/runbooks/devcontainer-tool-network-triage.md and the
+# scripts/scan_allowlist_rationale.py gate.
+github.com  # Git remote operations and web endpoints for the repository host.
+api.github.com  # GitHub REST/GraphQL API used by gh and GitHub MCP tools at runtime.
+api.mcp.github.com  # GitHub remote MCP server endpoint used by the GitHub MCP tools.
+objects.githubusercontent.com  # GitHub-hosted object/LFS blobs fetched by gh and installers.
+raw.githubusercontent.com  # Raw file fetch for GitHub-hosted scripts and configs.
+release-assets.githubusercontent.com  # GitHub release assets (apm Nix derivation, pinned binaries).
+pypi.org  # Python package index metadata for uv dependency resolution.
+files.pythonhosted.org  # Python wheel/sdist downloads for uv sync.
+astral.sh  # uv installer/redirect host for the pinned uv release.
+static.crates.io  # Rust crate downloads for cargo build dependencies.
+index.crates.io  # Rust crate registry sparse index.
+cache.nixos.org  # Nix binary cache for substituting build outputs.
+channels.nixos.org  # Nixpkgs channel metadata for flake inputs.
+github-releases.githubusercontent.com  # GitHub release binary downloads used by installers.
+ghcr.io  # GitHub Container Registry pulls for the prebuilt devcontainer images.
+mcr.microsoft.com  # Microsoft Container Registry for base image and feature layers.
+aka.ms  # Microsoft redirect host historically required by the official microsoft/apm installer; see #800 (necessity disputed, candidate for re-triage).

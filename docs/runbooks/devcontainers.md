@@ -263,12 +263,12 @@ symlink.
 ## Prebuilt images
 
 Local devcontainers use immutable commit-SHA image tags. The currently
-pinned images were published from `ce238319904cb14382cd21043c49b2314956602c`:
+pinned images were published from `8e415a28e3b6e04d4433071a816d80bc66f6384e`:
 
 | Agent | Image |
 |---|---|
-| Claude | `ghcr.io/tvna/claude-md-devcontainer-claude:ce238319904cb14382cd21043c49b2314956602c` |
-| Codex | `ghcr.io/tvna/claude-md-devcontainer-codex:ce238319904cb14382cd21043c49b2314956602c` |
+| Claude | `ghcr.io/tvna/claude-md-devcontainer-claude:8e415a28e3b6e04d4433071a816d80bc66f6384e` |
+| Codex | `ghcr.io/tvna/claude-md-devcontainer-codex:8e415a28e3b6e04d4433071a816d80bc66f6384e` |
 
 The `Publish devcontainer images` workflow builds both images with the
 Dev Containers CLI and pushes them to GHCR on `main` changes to
@@ -608,6 +608,12 @@ PR with the observed failure mode.
 Set `DEVCONTAINER_APPLY_EGRESS_ALLOWLIST=0` before container start only
 for diagnosis. Any persistent broad exception needs a reviewed update to
 the allowlist file with rationale.
+
+Before adding a new outbound destination for a new tool, follow the
+observe / evaluate / decide / verify procedure in
+[`devcontainer-tool-network-triage.md`](devcontainer-tool-network-triage.md).
+Each host entry must carry an inline triage rationale comment; the
+`scripts/scan_allowlist_rationale.py` gate fails CI when one is missing.
 
 ## Verification
 
