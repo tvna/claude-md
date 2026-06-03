@@ -1,0 +1,43 @@
+# Machine-readable floor for scheduled security-control drift detection.
+# Refs #178 (parent tracking issue), docs/prd/security-control-inventory.md.
+#
+# This file is the single source of truth that scripts/verify_security_control_floor.py
+# enforces in the lint-scripts-static job of .github/workflows/verify-agents.yml.
+# It exists so that a NEW control family cannot be added below the agreed floor
+# without the addition failing CI (CLAUDE.md section 3: deterministic gate, not
+# reviewer memory).
+#
+# Tier ladder (lowest to highest capability):
+#   pr-gate-only    - enforced only at PR time; no scheduled detector runs.
+#   detect-only     - a scheduled detector runs and surfaces drift in the #178
+#                     rolling comment, but does NOT auto-file a per-family issue.
+#   detect-and-file - a scheduled detector runs AND auto-files a per-family issue
+#                     when actionable drift is detected. THIS IS THE FLOOR.
+#
+# Rule: every family listed here MUST be at "detect-and-file" or higher, UNLESS
+# it carries a non-empty `exempt_reason` justifying a lower tier (advisory-only
+# signals that must never page a human with an issue).
+
+floor = "detect-and-file"
+
+[families.rulesets]
+tier = "detect-and-file"
+# Filed by the ruleset-drift job (scripts/ruleset_drift.py file-sot-issue /
+# file-unknown-issue) in weekly-maintenance.yml.
+
+[families.labels]
+tier = "detect-and-file"
+# Filed by scripts/security_drift_report.py file-family-issues in the
+# security-control-drift job of weekly-maintenance.yml.
+
+[families.apm-instructions]
+tier = "detect-and-file"
+# Filed by scripts/security_drift_report.py file-family-issues.
+
+[families.uv-pin-literal]
+tier = "detect-and-file"
+# Filed by scripts/security_drift_report.py file-family-issues.
+
+[families.uv-pin-staleness]
+tier = "detect-only"
+exempt_reason = "Advisory-only upstream-staleness signal: warning-only, never gated. Bumping the pin is a human judgement call, so weekly auto-issues would be noise. Surfaced in the #178 rolling comment instead."

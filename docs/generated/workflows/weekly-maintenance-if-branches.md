@@ -25,6 +25,7 @@ flowchart TD
     S_J_security_control_drift_4(("Record uv stale exit code"))
     S_J_security_control_drift_5(("Aggregate drift report"))
     S_J_security_control_drift_6(("Post or update rolling comment on"))
+    S_J_security_control_drift_7(("File per-family drift issues"))
 
     T_schedule -->|"github.event_name == 'schedule' || inputs.task == 'all' || inputs.task ~"| J_branch_cleanup
     J_branch_cleanup -->|"github.event_name == 'workflow_dispatch' && github.ref != 'refs/heads/m~"| S_J_branch_cleanup_0
@@ -43,4 +44,5 @@ flowchart TD
     J_security_control_drift -->|"always()"| S_J_security_control_drift_4
     J_security_control_drift -->|"always()"| S_J_security_control_drift_5
     J_security_control_drift -->|"always()"| S_J_security_control_drift_6
+    J_security_control_drift -->|"always() && steps.aggregate.outputs.drift_families != ''"| S_J_security_control_drift_7
 ```

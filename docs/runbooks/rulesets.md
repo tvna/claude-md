@@ -26,8 +26,11 @@ The apply step is split across phases so that the strictest rule (`commit_messag
 | **P4-dependabot** ([#140](https://github.com/tvna/claude-md/issues/140); `dependabot.json` POST superseded by [#1014](https://github.com/tvna/claude-md/issues/1014)) | `all-branches.json` (PUT: adds `refs/heads/dependabot/*` to `exclude`) — the `dependabot.json` POST is no longer part of the plan; that ruleset was deleted in #1014 to restore `@dependabot rebase` (see SoT layout note above) | `ruleset=all-branches`, `dry_run=false`, `enable_auto_delete=false`. The live `dependabot-branches` ruleset is deleted via `Apply rulesets` with `enable_auto_delete` / the `DELETE` fallback under [Rollback](#rollback). |
 | **P5-claude** ([#507](https://github.com/tvna/claude-md/issues/507)) | `all-branches.json` (PUT: adds `refs/heads/claude/*` to `exclude`) | `ruleset=all-branches`, `dry_run=false`, `enable_auto_delete=false` |
 | **P6-claude-revert** ([#1022](https://github.com/tvna/claude-md/issues/1022)) | `all-branches.json` (PUT: removes `refs/heads/claude/*` from `exclude` so `non_fast_forward` covers agent branches) | `ruleset=all-branches`, `dry_run=false`, `enable_auto_delete=false` |
+| **P-sign** ([#32](https://github.com/tvna/claude-md/issues/32)) | `main.json` (after adding `{"type": "required_signatures"}`) | `ruleset=main`, `dry_run=false`, `enable_auto_delete=false` (PUT path). **Verify before enforcing** (see note ² below). |
 
 ¹ Phase 3-A applies `main.json` as committed — including `require_code_owner_review: true` ([#56](https://github.com/tvna/claude-md/issues/56) P1-b). No separate dispatch is needed to activate code-owner enforcement; it ships in the same PUT as the rest of `main.json`.
+
+² Phase **P-sign** relies on GitHub's web-flow signature on the squash-merge commit rather than on signing feature-branch commits (see [`docs/standards/commit-signing.md`](../standards/commit-signing.md)). Before applying with `dry_run=false`: (1) dispatch with `dry_run=true` and inspect the planned PUT; (2) squash-merge a throwaway PR and confirm the resulting `main` commit shows `Verified`; (3) only then apply. The keyless assumption holds **only while `main.json` stays squash-only** -- adding a non-squash merge method or a `bypass_actors` entry requires revisiting that standard. Rollback is the standard rule removal + re-PUT under [Rollback](#rollback).
 
 Run with `dry_run=true` first for every phase to inspect the planned POST/PUT and the per-field diff in the job summary.
 
@@ -81,6 +84,10 @@ closed by that scoping.
 generate a new PAT first, update the `RULESETS_PAT` secret in every
 documented storage location that still consumes it, confirm a
 `dry_run=true` dispatch passes the guard step, then revoke the old token.
+The documented storage locations are: the `ruleset-apply` Environment secret
+(Administration: Read/Write), the `ruleset-verify` Environment secret, and the
+**Dependabot** secret consumed by the PR-time gate on `dependabot/*` PRs (a
+separate read-only token; see [Dependabot secret for the gate](#dependabot-secret-for-the-gate)).
 Rotation does not require code changes; the workflow reads
 `${{ secrets.RULESETS_PAT }}` at dispatch time.
 
@@ -268,7 +275,7 @@ The PR-blocking workflow `.github/workflows/verify-ruleset-sync.yml` ([#120](htt
 - Trigger: `pull_request` (`opened`, `edited`, `synchronize`, `reopened`, `ready_for_review`); no `paths:` filter so a PR that does not itself edit the SoT still surfaces pre-existing dispatch debt.
 - Scope: only `required_status_checks[].context` in the lagging-behind direction (live missing what SoT declares). The opposite direction (live ahead of SoT) is full ruleset drift; `weekly-maintenance.yml` owns it.
 - Base-ref SoT, not PR HEAD: fetched via `GET /repos/{repo}/contents/.github/rulesets/main.json?ref=${base_ref}`. A PR that introduces a new context therefore does not self-fail — but every PR opened **after** that one merges will fail until `Apply rulesets` is dispatched.
-- Secret: reuses `RULESETS_PAT` read-only, bound as `GH_TOKEN_API`. The `gate` job is scoped to the `ruleset-verify` GitHub Environment so the secret is reachable from `pull_request` events; the Environment must be configured **without** required-reviewer approval so the gate runs unattended on every PR.
+- Secret: reuses `RULESETS_PAT` read-only, bound as `GH_TOKEN_API`. The `gate` job is scoped to the `ruleset-verify` GitHub Environment so the secret is reachable from `pull_request` events; the Environment must be configured **without** required-reviewer approval so the gate runs unattended on every PR. Dependabot-authored PRs are a special case: Dependabot-triggered runs cannot read Actions or Environment secrets, only Dependabot secrets, so `RULESETS_PAT` must **also** be registered as a Dependabot secret for the gate to pass on `dependabot/*` PRs (see [Dependabot secret for the gate](#dependabot-secret-for-the-gate) below) ([#1133](https://github.com/tvna/claude-md/issues/1133)).
 - Required status check: `Verify ruleset sync / gate` is listed in `main.json`'s `required_status_checks` so the gate blocks merge once it is itself applied to live.
 
 One-time setup for the `ruleset-verify` Environment (per [#120](https://github.com/tvna/claude-md/issues/120) PR review):
@@ -282,6 +289,36 @@ One-time setup for the `ruleset-verify` Environment (per [#120](https://github.c
    `ruleset-apply` token avoids a second rotation cadence. If a separate
    token is issued instead, follow the same fine-grained PAT issuance
    steps above and set **Administration** to Read-only.
+
+### Dependabot secret for the gate
+
+Dependabot-triggered workflow runs (`Secret source: Dependabot`) cannot read
+Actions or Environment secrets -- only **Dependabot secrets**. Because the gate
+runs on every `pull_request`, including `dependabot/*` PRs, `secrets.RULESETS_PAT`
+resolves to empty there and the guard step fails with `RULESETS_PAT secret is not
+set` unless the token is also present in the Dependabot secret store
+([#1133](https://github.com/tvna/claude-md/issues/1133)).
+
+Use a **dedicated read-only** fine-grained PAT for this store (the gate only does
+`GET` rulesets / `GET` contents), kept separate from the Administration: Read/Write
+`ruleset-apply` token so a compromised Dependabot context cannot mutate rulesets:
+
+1. Generate a fine-grained PAT following the **Required secret: `RULESETS_PAT`**
+   issuance steps above, but at step 8 set **Administration: Read-only** and
+   **Metadata: Read-only**. Resource owner `tvna`, repository access only
+   `tvna/claude-md`, expiry <=90 days. Copy it once; never paste the value into an
+   issue, PR, commit, terminal transcript, or runbook.
+2. Open `tvna/claude-md` -> **Settings** -> **Secrets and variables** ->
+   **Dependabot** -> **New repository secret**.
+3. Name it `RULESETS_PAT` and paste the read-only token value.
+4. Verify: on an open `dependabot/*` PR, comment `@dependabot rebase` (or re-run
+   the `Verify ruleset sync / gate` check) and confirm the guard step passes
+   without exposing the value. The gate references `secrets.RULESETS_PAT`, which
+   now resolves from the Dependabot store under a Dependabot trigger; no workflow
+   change is needed.
+
+This is a third storage location for `RULESETS_PAT`; include it in the rotation
+checklist under **Required secret: `RULESETS_PAT`** above.
 
 Resolution when the gate is red:
 

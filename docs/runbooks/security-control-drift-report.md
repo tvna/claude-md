@@ -16,10 +16,16 @@ read-only entry points (`ruleset_drift.py detect`, `labels_apply.py plan`,
 aggregates the outcomes into a single Markdown table and posts (or updates)
 a rolling comment on the parent tracking issue.
 
-Per-family detectors keep their own gates and own per-family issue-filing
-paths (e.g. the `ruleset-drift` weekly-maintenance job continues to file SoT drift / unknown
-ruleset issues on the existing weekly cron). This aggregator only reports;
-it never opens a new issue and never auto-remediates.
+Per-family detectors keep their own gates. The `rulesets` family files via its
+own `ruleset-drift` weekly-maintenance job (SoT drift / unknown ruleset issues).
+To meet the `detect-and-file` floor (`.github/security-control-floor.toml`), the
+`security-control-drift` job also runs `security_drift_report.py
+file-family-issues` after aggregation, which auto-files **one issue per drifting
+target family** for `labels`, `apm-instructions`, and `uv-pin-literal` (the
+`drift_families` output of the aggregate step gates the step; advisory
+`uv-pin-staleness` is excluded). The aggregator itself never auto-remediates,
+and the rolling-comment path never opens an issue -- only the `file-family-issues`
+step does.
 
 ## Trigger
 
