@@ -233,6 +233,14 @@ STEPS: tuple[Step, ...] = (
         argv=("python3", "scripts/scan_devcontainer_tool_drift.py", "verify"),
     ),
     Step(
+        # Refs #1170. Fails when a .devcontainer/network/*.allowlist host has
+        # no inline triage rationale, so a new egress destination cannot be
+        # admitted without the observe/evaluate/decide record in
+        # docs/runbooks/devcontainer-tool-network-triage.md.
+        name="scan_allowlist_rationale",
+        argv=("python3", "scripts/scan_allowlist_rationale.py", "verify"),
+    ),
+    Step(
         # Refs #1153. Fails when a pinned binary's flake.nix SHA256 is
         # hardcoded under scripts/ or .github/workflows/, so flake.nix stays
         # the single source of truth and a bump cannot leave a stale copy.

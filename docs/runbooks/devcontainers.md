@@ -364,6 +364,23 @@ repository without an open pin PR. It reuses the `devcontainer-image-pins`
 Environment and `DEVCONTAINER_PIN_PR_TOKEN`; no new secret is required. To merge
 a stuck pin PR on demand, dispatch this workflow manually. Refs #1137.
 
+### Auto-following flake tool pins (`Refresh flake tool pins`)
+
+`flake.nix` is the single source of truth for the version and per-system
+SHA256 of the GitHub-Releases-sourced tools (`waza`, `apm`). Dependabot has no
+Nix ecosystem, so those pins do not follow upstream on their own. The
+`Refresh flake tool pins` workflow (`flake-pin-refresh.yml`) closes that gap.
+Weekly (and on `workflow_dispatch`) it runs `scripts/flake_pin_latest.py` to
+find the latest release per tool, holds anything still inside the
+`[tool.uv].exclude-newer` cooldown, recomputes each per-system SHA256 with
+`nix store prefetch-file`, bumps `flake.nix` with `scripts/flake_pin.py`,
+validates it with `nix flake check`, and opens a bump PR by reusing
+`scripts/devcontainer_pin_pr.py open`. It reuses the `devcontainer-image-pins`
+Environment and `DEVCONTAINER_PIN_PR_TOKEN`; no new secret is required. The
+generated PR's `verify-flake` check is the final authenticity gate for the
+recomputed hash, and `scan_flake_pin_drift` continues to guard duplicate
+copies. Refs #1171.
+
 ### One-time setup for `DEVCONTAINER_PIN_PR_TOKEN`
 
 1. Open `tvna/claude-md` -> **Settings** -> **Environments** ->
@@ -591,6 +608,12 @@ PR with the observed failure mode.
 Set `DEVCONTAINER_APPLY_EGRESS_ALLOWLIST=0` before container start only
 for diagnosis. Any persistent broad exception needs a reviewed update to
 the allowlist file with rationale.
+
+Before adding a new outbound destination for a new tool, follow the
+observe / evaluate / decide / verify procedure in
+[`devcontainer-tool-network-triage.md`](devcontainer-tool-network-triage.md).
+Each host entry must carry an inline triage rationale comment; the
+`scripts/scan_allowlist_rationale.py` gate fails CI when one is missing.
 
 ## Verification
 

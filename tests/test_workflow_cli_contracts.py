@@ -41,6 +41,8 @@ import coverage_failure_issue
 import dependabot_automerge
 import dependabot_labels
 import devcontainer_pin_pr
+import flake_pin
+import flake_pin_latest
 import github_paginate
 import issue_link
 import labels_apply
@@ -50,6 +52,7 @@ import pr_upsert
 import pytest
 import ruleset_drift
 import rulesets_apply
+import scan_allowlist_rationale
 import scan_apm_portability
 import scan_compile_from_source
 import scan_design_philosophy_drift
@@ -151,6 +154,9 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("coverage_failure_issue.py", "run"): "test_coverage_failure_issue_run_matches_workflow_env",
     ("devcontainer_pin_pr.py", "open"): "test_devcontainer_pin_pr_open_matches_workflow_args",
     ("devcontainer_pin_pr.py", "refresh"): "test_devcontainer_pin_pr_refresh_matches_workflow_args",
+    ("flake_pin.py", "asset-url"): "test_flake_pin_workflow_subcommands_match_ci_usage",
+    ("flake_pin.py", "bump"): "test_flake_pin_workflow_subcommands_match_ci_usage",
+    ("flake_pin_latest.py", "check"): "test_flake_pin_latest_check_matches_workflow_args",
     ("dependabot_automerge.py", "audit"): "test_dependabot_automerge_audit_matches_workflow_files",
     ("dependabot_automerge.py", "list-files"): "test_dependabot_list_files_matches_workflow_args",
     ("dependabot_automerge.py", "request-automerge"): "test_dependabot_request_automerge_matches_workflow_args",
@@ -165,6 +171,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("ruleset_drift.py", "file-unknown-issue"): "test_ruleset_drift_detect_and_file_issue_match_workflow_args",
     ("rulesets_apply.py", "$MODE"): "test_rulesets_apply_plan_and_auto_delete_match_workflow_args",
     ("rulesets_apply.py", "auto-delete"): "test_rulesets_apply_plan_and_auto_delete_match_workflow_args",
+    ("scan_allowlist_rationale.py", "verify"): "test_scan_allowlist_rationale_verify_matches_workflow_args",
     ("scan_apm_portability.py", "verify"): "test_scan_apm_portability_verify_matches_workflow_paths",
     ("scan_design_philosophy_drift.py", "verify"): "test_scan_design_philosophy_drift_verify_matches_workflow_paths",
     ("scan_compile_from_source.py", "verify"): "test_scan_compile_from_source_verify_matches_workflow_args",
@@ -1192,6 +1199,12 @@ def test_scan_devcontainer_tool_drift_verify_matches_workflow_args() -> None:
     assert scan_devcontainer_tool_drift.main(["verify"]) == 0
 
 
+def test_scan_allowlist_rationale_verify_matches_workflow_args() -> None:
+    """Mirrors the ``Verify devcontainer egress hosts carry a triage
+    rationale`` step in ``.github/workflows/verify-agents.yml``. Refs #1170."""
+    assert scan_allowlist_rationale.main(["verify"]) == 0
+
+
 def test_scan_flake_pin_drift_verify_matches_workflow_args() -> None:
     """Mirrors the ``Verify flake.nix is the single source of truth for pinned
     hashes`` step in ``.github/workflows/verify-agents.yml``."""
@@ -1895,6 +1908,89 @@ def test_uv_pin_workflow_subcommands_match_ci_usage(
     assert uv_pin.main(["read", str(tmp_path / "pyproject.toml")]) == 0
     assert uv_pin.main(["drift", "--repo-root", str(tmp_path)]) == 0
     assert uv_pin.main(["stale", "--repo-root", str(tmp_path)]) == 0
+
+
+_FLAKE_PIN_FIXTURE = """
+{
+  outputs = { ... }:
+    let
+      apmVersion = "0.12.1";
+      wazaVersion = "0.33.0";
+      wazaNative = {
+        aarch64-linux = {
+          asset = "waza-linux-arm64";
+          hash = "sha256-VSuk9F5fc+PpwMk0KeLFniHxpN6LmJX5j1Te6n8D36g=";
+        };
+        x86_64-linux = {
+          asset = "waza-linux-amd64";
+          hash = "sha256-waMaFdlZ0s1Tb+tBz3sg+UsENKjoaUnT3j0hweP7b/M=";
+        };
+      }.${system};
+    in { };
+}
+"""
+
+
+def test_flake_pin_workflow_subcommands_match_ci_usage(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Mirror the ``asset-url`` and ``bump`` argv shapes used by the
+    ``Recompute per-system hashes and bump flake.nix`` step in
+    ``.github/workflows/flake-pin-refresh.yml``. Refs #1171."""
+    flake = tmp_path / "flake.nix"
+    flake.write_text(_FLAKE_PIN_FIXTURE, encoding="utf-8")
+    monkeypatch.setattr(flake_pin, "FLAKE_PATH", flake)
+
+    assert (
+        flake_pin.main(
+            [
+                "asset-url",
+                "--tool",
+                "waza",
+                "--system",
+                "x86_64-linux",
+                "--version",
+                "0.34.0",
+            ]
+        )
+        == 0
+    )
+    new_sri = "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+    assert (
+        flake_pin.main(
+            [
+                "bump",
+                "--tool",
+                "waza",
+                "--version",
+                "0.34.0",
+                "--hash",
+                f"x86_64-linux={new_sri}",
+                "--hash",
+                f"aarch64-linux={new_sri}",
+            ]
+        )
+        == 0
+    )
+    assert flake_pin.current_version(flake.read_text(encoding="utf-8"), "waza") == "0.34.0"
+
+
+def test_flake_pin_latest_check_matches_workflow_args(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Mirror the ``check --tool <tool>`` argv used by the
+    ``Decide target version`` step in ``.github/workflows/flake-pin-refresh.yml``.
+
+    The GitHub fetch is stubbed with a release older than the pin so the
+    decision is a deterministic "hold" (exit 0, no stdout) without touching the
+    network. Refs #1171."""
+    monkeypatch.setattr(
+        flake_pin_latest,
+        "github_latest_release",
+        lambda repo: {"tag_name": "v0.0.1", "published_at": "2000-01-01T00:00:00Z"},
+    )
+    assert flake_pin_latest.main(["check", "--tool", "waza"]) == 0
+    assert flake_pin_latest.main(["check", "--tool", "apm"]) == 0
 
 
 def test_uv_download_checksum_verify_matches_action_args(tmp_path: Path) -> None:
