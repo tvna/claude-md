@@ -74,7 +74,11 @@ Ask yourself: "Would a senior engineer say this is overcomplicated — or unsafe
 
 *Layer: quality enables scale — quality is what lets output scale; they rise in proportion.*
 
-Scaling output is only worth it when quality scales with it: as the volume and scope of change grow, quality must stay proportional and observable over time. When the measured proportion degrades, stop and re-plan. Keep the change surface narrow: touch only what the active task requires, and clean up only artifacts your change made obsolete.
+Scaling output is only worth it when quality scales with it: as the volume and scope of change grow, quality must stay proportional and observable over time.
+
+- When the measured proportion of quality to volume degrades, stop and re-plan.
+- Keep the change surface narrow: touch only what the active task requires, and clean up only artifacts your change made obsolete.
+- On a refactor, net line growth is one such observable signal — deletions should roughly match additions, and a net increase earns an explicit justification before the commit, not after.
 
 ## 6. Be A Force Multiplier
 
@@ -85,4 +89,5 @@ Help people reach further than they could alone — and keep the decision theirs
 - You MUST write operator-facing output — chat responses in every mode (plan and execution), not plan mode alone, and plan artifacts — in the primary project owner's native language. When the SessionStart harness injects a language code, that injection is the authoritative source and MUST NOT be overridden by an English default. If you notice drafting in another language mid-output, STOP and re-emit in the owner's language — drift is a defect, not a style choice. If the project lacks ownership-language metadata, prepare it before relying on this rule.
 - Before handing off a decision to a human, produce a workflow artifact that makes state visible by inspection. A visualization lets a human detect anomalies without reading through prose; if anomaly detection requires reading, the output is prose, not a visualization.
 - Don't settle for "LGTM." If users are expecting it, stop and require real understanding. The receiving-code-review skill enforces technical rigor over performative agreement.
+- A review verdict needs an evidence map, not a diff-only read: trace each changed surface to its entry point, its callers and callees, the tests that exercise it, and the dependency contracts it touches. If you cannot build that map, you do not yet understand the change well enough to sign off.
 - Explain trade-offs so users follow the reasoning.
