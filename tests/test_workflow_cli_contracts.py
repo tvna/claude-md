@@ -35,6 +35,7 @@ import auto_retro
 import backup_archive
 import body_policy
 import branch_cleanup
+import ci_budget_issue
 import coverage_failure_issue
 import dependabot_automerge
 import dependabot_labels
@@ -123,6 +124,7 @@ class WorkflowInvocation(NamedTuple):
 # enforce that in both directions.
 CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("analyze_ci_timings.py", None): "test_analyze_ci_timings_matches_workflow_args",
+    ("ci_budget_issue.py", "run"): "test_ci_budget_issue_run_matches_workflow_args",
     ("attack_review_reminder.py", "assemble"): "test_attack_review_reminder_assemble_matches_workflow_args",
     ("backup_archive.py", "build"): "test_backup_archive_build_matches_workflow_args",
     ("github_paginate.py", "fetch-run-jobs"): "test_github_paginate_fetch_run_jobs_matches_workflow_args",
@@ -1725,6 +1727,51 @@ def test_analyze_ci_timings_matches_workflow_args(
     assert rc == 0
     out = capsys.readouterr().out
     assert "verify-agents.yml timings (weekly)" in out
+
+
+def test_ci_budget_issue_run_matches_workflow_args(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Mirror the argv shape used by weekly-maintenance.yml.
+
+    The workflow shells to ``python3 scripts/ci_budget_issue.py run --repo
+    "${REPO}" --breach-file budget.json --run-url "${RUN_URL}" --dry-run
+    "${DRY_RUN}"``. Exercise that exact shape against a real breach file with
+    ``open_or_update_issue`` stubbed so the contract pins the flags without a
+    network call. Refs #1156.
+    """
+    breach_file = tmp_path / "budget.json"
+    breach_file.write_text(
+        json.dumps(
+            {"budget_seconds": 300.0, "breaches": [{"job": "slow", "p50": 410.0}]}
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("GH_TOKEN", "token")
+    captured: dict[str, object] = {}
+
+    def fake_open(**kwargs: object) -> str:
+        captured.update(kwargs)
+        return "created"
+
+    monkeypatch.setattr(ci_budget_issue, "open_or_update_issue", fake_open)
+
+    rc = ci_budget_issue.main(
+        [
+            "run",
+            "--repo",
+            REPO,
+            "--breach-file",
+            str(breach_file),
+            "--run-url",
+            "https://github.com/owner/repo/actions/runs/123",
+            "--dry-run",
+            "false",
+        ]
+    )
+    assert rc == 0
+    assert captured["repo"] == REPO
+    assert captured["budget_seconds"] == 300.0
 
 
 def test_verify_test_shard_markers_matches_workflow_args(tmp_path: Path) -> None:

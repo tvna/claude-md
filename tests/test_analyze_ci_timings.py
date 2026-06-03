@@ -790,3 +790,70 @@ class TestBudget:
             )
         assert rc == 0
         assert "BUDGET BREACH" in buf.getvalue()
+
+    def test_budget_breach_payload_shape(self) -> None:
+        agg = {"slow": _samples(400.0, 420.0), "fast": _samples(10.0)}
+        payload = analyze_ci_timings.budget_breach_payload(agg, 300.0)
+        assert payload == {
+            "budget_seconds": 300.0,
+            "breaches": [{"job": "slow", "p50": 410.0}],
+        }
+
+    def test_budget_breach_payload_empty_when_under(self) -> None:
+        payload = analyze_ci_timings.budget_breach_payload(
+            {"j": _samples(10.0, 20.0)}, 300.0
+        )
+        assert payload == {"budget_seconds": 300.0, "breaches": []}
+
+    def test_cli_budget_output_writes_breach_json(self, tmp_path: Path) -> None:
+        jobs = [
+            _make_job(
+                name="slow",
+                started_at="2026-05-20T12:00:00Z",
+                completed_at="2026-05-20T12:10:00Z",  # 600s
+            )
+        ]
+        _write_jobs(tmp_path, "run.json", jobs)
+        out_file = tmp_path / "budget.json"
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            rc = analyze_ci_timings.main(
+                [
+                    "--jobs",
+                    str(tmp_path),
+                    "--budget-seconds",
+                    "300",
+                    "--budget-output",
+                    str(out_file),
+                ]
+            )
+        assert rc == 0
+        payload = json.loads(out_file.read_text(encoding="utf-8"))
+        assert payload["budget_seconds"] == 300.0
+        assert payload["breaches"] == [{"job": "slow", "p50": 600.0}]
+
+    def test_cli_budget_output_empty_when_under(self, tmp_path: Path) -> None:
+        _write_jobs(tmp_path, "run.json", [_make_job(name="fast")])  # 60s
+        out_file = tmp_path / "budget.json"
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            rc = analyze_ci_timings.main(
+                [
+                    "--jobs",
+                    str(tmp_path),
+                    "--budget-seconds",
+                    "300",
+                    "--budget-output",
+                    str(out_file),
+                ]
+            )
+        assert rc == 0
+        assert json.loads(out_file.read_text(encoding="utf-8"))["breaches"] == []
+
+    def test_cli_budget_output_requires_budget_seconds(self, tmp_path: Path) -> None:
+        _write_jobs(tmp_path, "run.json", [_make_job(name="a")])
+        with pytest.raises(SystemExit) as exc:
+            analyze_ci_timings.main(
+                ["--jobs", str(tmp_path), "--budget-output", str(tmp_path / "b.json")]
+            )
+        assert exc.value.code == 2
