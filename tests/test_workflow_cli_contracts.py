@@ -135,6 +135,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("branch_cleanup.py", "survey"): "test_branch_cleanup_survey_matches_workflow_args",
     ("coverage_failure_issue.py", "run"): "test_coverage_failure_issue_run_matches_workflow_env",
     ("devcontainer_pin_pr.py", "open"): "test_devcontainer_pin_pr_open_matches_workflow_args",
+    ("devcontainer_pin_pr.py", "refresh"): "test_devcontainer_pin_pr_refresh_matches_workflow_args",
     ("dependabot_automerge.py", "audit"): "test_dependabot_automerge_audit_matches_workflow_files",
     ("dependabot_automerge.py", "list-files"): "test_dependabot_list_files_matches_workflow_args",
     ("dependabot_automerge.py", "request-automerge"): "test_dependabot_request_automerge_matches_workflow_args",
@@ -1601,6 +1602,35 @@ def test_devcontainer_pin_pr_open_matches_workflow_args(
         "open",
         "--github-sha", "abc123",
         "--base", "main",
+        "--title", "fix(devcontainer): pin published agent images",
+        "--commit-subject", "fix(devcontainer): pin published agent images",
+        "--commit-trailer", "Refs #696",
+        "--template", str(template),
+        "--file", ".devcontainer/claude/devcontainer.json",
+        "--file", ".devcontainer/codex/devcontainer.json",
+        "--file", "docs/runbooks/devcontainers.md",
+    ])
+    assert rc == 0
+
+
+def test_devcontainer_pin_pr_refresh_matches_workflow_args(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """refresh subcommand accepts the args used by devcontainer-pin-refresh.yml.
+
+    The supersede flow is exercised by tests/test_devcontainer_pin_pr.py; here we
+    pin the workflow argv shape. Refs #1137.
+    """
+    monkeypatch.setenv("GH_TOKEN", "tok")
+    monkeypatch.setenv("REPO", REPO)
+    template = tmp_path / "tmpl.md"
+    template.write_text("Pinned to __GITHUB_SHA__.\n", encoding="utf-8")
+    # No open pin PR -> the command is a no-op; we only assert the argv parses.
+    monkeypatch.setattr(devcontainer_pin_pr, "_list_open_prs_by_prefix", lambda **kw: [])
+    rc = devcontainer_pin_pr.main([
+        "refresh",
+        "--base", "main",
+        "--target-sha", "b417e5833394f6f04a6e9b1eefe48026c09b4089",
         "--title", "fix(devcontainer): pin published agent images",
         "--commit-subject", "fix(devcontainer): pin published agent images",
         "--commit-trailer", "Refs #696",
