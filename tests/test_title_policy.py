@@ -190,6 +190,33 @@ class TestPrTitleHasIssueRef:
         assert title_policy.pr_title_has_issue_ref(title) is False
 
 
+class TestPrTitleRefIsExempt:
+    @pytest.mark.parametrize(
+        "title",
+        [
+            "revert: undo prior change (#1122)",
+            "revert(automerge): restore non-ascii label exemption (#1122)",
+            "revert(scope): drop change (#203) (#213)",
+        ],
+    )
+    def test_revert_titles_are_exempt(self, title: str) -> None:
+        assert title_policy.pr_title_ref_is_exempt(title) is True
+
+    @pytest.mark.parametrize(
+        "title",
+        [
+            "fix(x): summary (#42)",
+            "feat: add gate (#7)",
+            # ``revert`` substring outside the type slot must not exempt.
+            "fix(revert): summary (#9)",
+            # Malformed shape parses to no type, so it stays banned.
+            "revert this thing (#9)",
+        ],
+    )
+    def test_non_revert_titles_are_not_exempt(self, title: str) -> None:
+        assert title_policy.pr_title_ref_is_exempt(title) is False
+
+
 class TestDescribeNonAscii:
     def test_reports_codepoint_positions(self) -> None:
         assert title_policy.describe_non_ascii("A\u200bB\u202e") == [
@@ -281,6 +308,24 @@ class TestVerifyTitle:
             == 1
         )
         assert "title type does not fit" in capsys.readouterr().out
+
+    def test_revert_pr_title_with_ref_exits_zero(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        # A revert title may name the reverted PR/commit; the dedup ban
+        # (#167 / #214) does not apply, but ASCII/naming still would.
+        assert (
+            title_policy.verify_title(
+                "revert(automerge): restore label exemption (#1122)",
+                kind="pull_request",
+            )
+            == 0
+        )
+        out = capsys.readouterr().out
+        assert (
+            "OK: pull_request title is ASCII-only and follows naming convention."
+            in out
+        )
 
     def test_issue_with_issue_ref_in_title_still_passes(
         self, capsys: pytest.CaptureFixture[str]

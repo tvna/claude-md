@@ -21,7 +21,10 @@ Three rules are mirrored from :mod:`title_policy`:
   #167 / #214: the PR body's ``Closes #NNN`` / ``Refs #NNN`` line,
   validated by ``.github/workflows/verify-issue-link.yml``, is the
   single source of truth for the issue link, so the title must not
-  duplicate it.
+  duplicate it. A ``revert(<scope>): ...`` title is exempt
+  (:func:`title_policy.pr_title_ref_is_exempt`): its ``(#NNN)`` names the
+  reverted pull request or commit, which identifies the rolled-back change
+  rather than duplicating the body's issue link.
 
 The hook evaluates the three rules in the order above; the first
 violation wins so the deny reason stays focused. Issue titles are gated
@@ -56,6 +59,7 @@ from title_policy import (
     naming_convention_hint,
     pr_title_has_issue_ref,
     pr_title_issue_refs,
+    pr_title_ref_is_exempt,
     pr_title_strip_issue_refs,
     type_fit_findings,
 )
@@ -234,7 +238,8 @@ def decide(tool_name: str, tool_input: dict[str, Any]) -> dict[str, Any] | None:
       2. No title (missing / wrong type / empty) -> allow.
       3. Title contains non-ASCII code points -> deny.
       4. Title does not match the conventional-commit shape -> deny.
-      5. (PR only) Title carries a ``(#NNN)`` token -> deny.
+      5. (PR only) Title carries a ``(#NNN)`` token, unless it is a
+         ``revert``-typed title naming the reverted change -> deny.
       6. Otherwise -> allow.
 
     The three deny rules are evaluated in the order the operator most
@@ -268,7 +273,7 @@ def decide(tool_name: str, tool_input: dict[str, Any]) -> dict[str, Any] | None:
             )
         )
 
-    if kind == "pull_request" and pr_title_has_issue_ref(title):
+    if kind == "pull_request" and pr_title_has_issue_ref(title) and not pr_title_ref_is_exempt(title):
         refs = pr_title_issue_refs(title)
         suggested = pr_title_strip_issue_refs(title)
         return _build_deny_dict(build_issue_ref_deny_reason(tool_name, title, refs, suggested))
