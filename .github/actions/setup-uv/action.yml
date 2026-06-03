@@ -1,3 +1,12 @@
+# Security invariant: this composite action runs INLINE in the calling job, so
+# it inherits that job's `permissions:`, env, and secrets. It is used by jobs
+# spanning contents:read up to contents:write / pull-requests:write /
+# id-token:write, so it effectively runs under the UNION of caller permissions.
+# To keep that safe it MUST stay permission-agnostic: it uses NO GITHUB_TOKEN
+# and NO secrets (only a public uv download + checksum verify + uv sync). Do not
+# add a step here that reads the token or a secret -- if shared steps ever need
+# their own least-privilege token/secret scope, use a reusable workflow
+# (workflow_call, own `permissions:`) instead of this composite action.
 name: Setup uv
 description: Install the pinned uv (checksum-verified against flake.nix), provision Python, and sync the locked project environment.
 
