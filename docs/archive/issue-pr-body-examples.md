@@ -7,6 +7,27 @@ This document was the "Worked examples" section of [`docs/issue-pr-body-standard
 All examples are ASCII-only so they pass the `scan-non-ascii.yml` gate
 unmodified.
 
+Each fenced example below is gated against `scripts/body_policy.py` by
+`tests/test_body_policy_examples.py` so the published examples cannot drift
+from the validator. The test reads a machine-readable directive placed
+immediately before each fenced block:
+
+- `<!-- body-policy-example: kind=issue -->` - validate the block as an
+  issue body (baseline H2/H3 required-section check).
+- `<!-- body-policy-example: kind=pull_request shape=yes -->` - validate
+  the block as a PR body (baseline required sections plus the
+  post-2026-05-26 shape: Verification command/result pairs and Checklist
+  H3 subsections). The agent-attribution footer is intentionally excluded:
+  a static documentation example must not embed a live session footer.
+- `<!-- body-policy-example: skip="reason" -->` - exclude the block from
+  validation (used for the historical pre-cutoff PR sample). The reason is
+  recorded so the exemption stays visible.
+
+Every fenced block must carry one of these directives; the test fails loudly
+if one is missing.
+
+<!-- body-policy-example: kind=issue -->
+
 ### `type:feat` issue
 
 ```
@@ -14,7 +35,7 @@ unmodified.
 Add a workflow that posts a comment on every newly opened issue with the
 routing decision derived from its labels.
 
-## Why
+## Facts
 Fact: docs/issue-triage.md defines the routing table but the decision is
 applied manually today.
 Speculation: posting the decision as a comment will shorten the time
@@ -25,6 +46,9 @@ between issue open and first agent action.
   issues:opened and issues:labeled.
 - Reuse the existing routing table; do not duplicate it in YAML.
 
+## Verification
+- actionlint .github/workflows/post-routing-comment.yml exits 0.
+
 ## Acceptance criteria
 - A new issue with type:fix receives a comment naming the auto-fix
   candidate path within five minutes of open.
@@ -34,6 +58,8 @@ between issue open and first agent action.
 Refs #197
 ```
 
+<!-- body-policy-example: kind=issue -->
+
 ### `type:fix` issue
 
 ```
@@ -41,7 +67,7 @@ Refs #197
 verify-issue-link.yml rejects PRs whose Refs line uses lowercase
 "refs" even though the script claims case-insensitive matching.
 
-## Why
+## Facts
 Fact: scripts/issue_link.py _REF_LINE uses re.IGNORECASE, but PR #NNN
 was rejected with the "no issue reference" error despite carrying
 "refs #NNN" on its own line.
@@ -53,12 +79,17 @@ the line before the match runs.
   "refs #1" on a line.
 - Fix extract_refs so the test passes.
 
+## Verification
+- python -m pytest tests/test_issue_link.py -q exits 0.
+
 ## Acceptance criteria
 - The new test passes.
 - The original symptom no longer reproduces:
   `python scripts/issue_link.py verify --repo tvna/claude-md
   --body-file <fixture>` exits 0 for the lowercase body.
 ```
+
+<!-- body-policy-example: kind=issue -->
 
 ### `type:refactor` issue
 
@@ -67,7 +98,7 @@ the line before the match runs.
 Extract the Refs-line regex and the trusted-bot lookup from
 scripts/issue_link.py into a separate scripts/_body_policy.py module.
 
-## Why
+## Facts
 Fact: scripts/issue_link.py currently owns the regex and the trusted-bot
 import side-by-side with the gh-api shelling logic.
 Speculation: pulling the policy primitives into their own module will
@@ -78,6 +109,9 @@ No behaviour change is intended.
 - Move _REF_LINE and the trusted-bot lookup into scripts/_body_policy.py.
 - Re-import them from scripts/issue_link.py.
 
+## Verification
+- python -m pytest -q exits 0 with no test changes.
+
 ## Acceptance criteria
 - pytest -q exits 0 with no test changes.
 - ripgrep finds no remaining definition of _REF_LINE outside the new
@@ -86,6 +120,8 @@ No behaviour change is intended.
 ## Parent
 Refs #197
 ```
+
+<!-- body-policy-example: kind=issue -->
 
 ### `type:docs` issue
 
@@ -97,7 +133,7 @@ body on GitHub.
 Publish a contributor-facing runbook that explains each section of the
 issue/PR templates, why it exists, and what an agent does with it.
 
-## Why
+## Facts
 Fact: docs/issue-triage.md already documents the label taxonomy and the
 routing table, but does not describe body section semantics.
 Speculation: without a written standard, the new templates become
@@ -106,6 +142,9 @@ tribal knowledge.
 ## Proposed work
 - Add docs/issue-pr-body-standard.md.
 - Link the new doc from docs/issue-triage.md.
+
+## Verification
+- python -c "import pathlib; assert pathlib.Path('docs/issue-pr-body-standard.md').exists()" exits 0.
 
 ## Acceptance criteria
 - docs/issue-pr-body-standard.md exists with required sections,
@@ -116,10 +155,12 @@ tribal knowledge.
 Refs #197
 ```
 
+<!-- body-policy-example: kind=issue -->
+
 ### `type:tracking` issue
 
 ```
-## Goal
+## Scope
 Track contributor-facing standards for issue and PR bodies, templates,
 and the body-policy gate.
 
@@ -141,6 +182,8 @@ and the body-policy gate.
 This issue can close only when every child issue has merged or been
 explicitly parked.
 ```
+
+<!-- body-policy-example: skip="historical pre-2026-05-26 PR shape, retained as a record" -->
 
 ### PR body
 
@@ -175,6 +218,8 @@ Refs #206
 - [x] CLAUDE.md / AGENTS.md regenerated if applicable
 - [x] CI green
 ```
+
+<!-- body-policy-example: kind=pull_request shape=yes -->
 
 ### PR body (post-2026-05-26 shape)
 
