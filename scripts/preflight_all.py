@@ -253,6 +253,14 @@ STEPS: tuple[Step, ...] = (
         argv=("python3", "scripts/verify_test_shard_markers.py"),
     ),
     Step(
+        # Refs #178. Fails when a scheduled control family in
+        # .github/security-control-floor.toml sits below the detect-and-file
+        # floor without an exempt_reason, mirroring the verify-agents.yml
+        # lint-scripts-static gate so the floor is checked pre-push too.
+        name="verify_security_control_floor",
+        argv=("python3", "scripts/verify_security_control_floor.py"),
+    ),
+    Step(
         # Refs #745. Fetches the live base branch and fails before push when
         # HEAD does not contain it, matching GitHub's out-of-date branch gate.
         name="preflight_branch_base",

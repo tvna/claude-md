@@ -80,6 +80,7 @@ import verify_linked_issue_titles
 import verify_readme_translation
 import verify_required_check_contexts
 import verify_ruleset_sync
+import verify_security_control_floor
 import verify_shard_coverage
 import verify_test_shard_markers
 import workflow_diagram
@@ -172,6 +173,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("scan_workflow_pip.py", "verify"): "test_scan_workflow_pip_verify_matches_workflow_args",
     ("security_drift_report.py", "aggregate"): "test_security_drift_report_aggregate_and_post_comment_match_workflow_args",
     ("security_drift_report.py", "post-comment"): "test_security_drift_report_aggregate_and_post_comment_match_workflow_args",
+    ("security_drift_report.py", "file-family-issues"): "test_security_drift_report_file_family_issues_matches_workflow_args",
     ("skill_quality_gate.py", "verify"): "test_skill_quality_gate_verify_matches_workflow_args",
     ("threat_intel_triage.py", "apply-labels"): "test_threat_intel_apply_labels_matches_workflow_args",
     ("threat_intel_triage.py", "scan"): "test_threat_intel_scan_matches_workflow_args",
@@ -186,6 +188,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("verify_readme_translation.py", "verify"): "test_verify_readme_translation_matches_workflow_args",
     ("verify_required_check_contexts.py", "verify"): "test_verify_required_check_contexts_matches_workflow_args",
     ("verify_ruleset_sync.py", "verify"): "test_verify_ruleset_sync_matches_workflow_args",
+    ("verify_security_control_floor.py", None): "test_verify_security_control_floor_matches_workflow_args",
     ("github_paginate.py", "fetch"): "test_github_paginate_fetch_matches_workflow_args",
     ("github_paginate.py", "get"): "test_github_paginate_get_matches_workflow_args",
     ("post_issue_comment.py", "create"): "test_post_issue_comment_create_matches_workflow_args",
@@ -1227,6 +1230,43 @@ def test_security_drift_report_aggregate_and_post_comment_match_workflow_args(
             "true",
         ]
     ) == 0
+
+
+def test_security_drift_report_file_family_issues_matches_workflow_args() -> None:
+    """Mirror the argv shape of the File-per-family-drift-issues step.
+
+    weekly-maintenance.yml shells to ``file-family-issues --repo R --run-url U
+    --run-date D --families <csv> --dry-run <bool>`` where ``<csv>`` is the
+    ``drift_families`` output of the aggregate step. Exercise the dry-run path
+    (no token, no network) across every target family so the contract pins the
+    accepted flag set and the family allowlist.
+    """
+    assert security_drift_report.main(
+        [
+            "file-family-issues",
+            "--repo",
+            REPO,
+            "--run-url",
+            "https://example.test/run",
+            "--run-date",
+            "2026-06-03",
+            "--families",
+            "labels,apm-instructions,uv-pin-literal",
+            "--dry-run",
+            "true",
+        ]
+    ) == 0
+
+
+def test_verify_security_control_floor_matches_workflow_args() -> None:
+    """Mirror the argv shape used by verify-agents.yml lint-scripts-static.
+
+    The workflow shells to ``uv run python
+    scripts/verify_security_control_floor.py`` with no further arguments, so
+    the gate reads the committed ``.github/security-control-floor.toml`` and
+    must exit 0 on it. Refs #178.
+    """
+    assert verify_security_control_floor.main([]) == 0
 
 
 def test_threat_intel_scan_matches_workflow_args(
