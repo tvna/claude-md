@@ -343,6 +343,27 @@ opening a duplicate. GitHub still waits for the repository's required
 checks and rulesets before merging; the workflow only enables the
 auto-merge request.
 
+### Keeping the pin PR mergeable (`Refresh devcontainer pin PR`)
+
+Native auto-merge stalls the moment `main` advances past the pin PR.
+`main-protection` sets `strict_required_status_checks_policy: true`, so the
+branch must be up to date before it can merge, while `required_linear_history`,
+the `scripts/gate_update_pr_branch.py` hook, and the `non_fast_forward` rule on
+`codex/*` all forbid rebasing or force-pushing the branch in place. The branch
+therefore becomes `behind` and never merges on its own.
+
+The `Refresh devcontainer pin PR` workflow (`devcontainer-pin-refresh.yml`)
+closes that gap. On every push to `main` (and on `workflow_dispatch`) it runs
+`python3 scripts/devcontainer_pin_pr.py refresh`: if an open pin PR is behind
+`main`, it cuts a fresh branch off the latest `main`
+(`codex/devcontainer-image-pins-<published-sha>-r-<main-short-sha>`), re-applies
+the same pins as a single commit, opens a replacement PR with auto-merge
+enabled, then comments on, closes, and deletes the stale PR/branch. The
+replacement is opened before the old PR is closed, so a failure never leaves the
+repository without an open pin PR. It reuses the `devcontainer-image-pins`
+Environment and `DEVCONTAINER_PIN_PR_TOKEN`; no new secret is required. To merge
+a stuck pin PR on demand, dispatch this workflow manually. Refs #1137.
+
 ### One-time setup for `DEVCONTAINER_PIN_PR_TOKEN`
 
 1. Open `tvna/claude-md` -> **Settings** -> **Environments** ->

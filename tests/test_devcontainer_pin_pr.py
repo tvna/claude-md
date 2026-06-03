@@ -224,3 +224,182 @@ class TestOpenFlow:
         rc = dpp.main(_open_argv(tmp_path))
         assert rc == 0
         assert "auto-merge request failed for PR #12" in capsys.readouterr().err
+
+
+# ---------------------------------------------------------------------------
+# _parse_published_sha
+# ---------------------------------------------------------------------------
+
+_PUBLISHED = "b417e5833394f6f04a6e9b1eefe48026c09b4089"
+
+
+class TestParsePublishedSha:
+    def test_original_branch(self) -> None:
+        assert dpp._parse_published_sha(f"codex/devcontainer-image-pins-{_PUBLISHED}") == _PUBLISHED
+
+    def test_refreshed_branch_strips_suffix(self) -> None:
+        branch = f"codex/devcontainer-image-pins-{_PUBLISHED}-r-0123456789ab"
+        assert dpp._parse_published_sha(branch) == _PUBLISHED
+
+    def test_unrelated_branch_returns_none(self) -> None:
+        assert dpp._parse_published_sha("claude/some-feature") is None
+        assert dpp._parse_published_sha("codex/devcontainer-image-pins-NOTHEX") is None
+
+
+# ---------------------------------------------------------------------------
+# _cmd_refresh flow
+# ---------------------------------------------------------------------------
+
+_TARGET = "0011223344556677889900aabbccddeeff001122"
+
+
+def _refresh_argv(tmp_path: Path, *, target: str = _TARGET) -> list[str]:
+    return [
+        "refresh",
+        "--base",
+        "main",
+        "--target-sha",
+        target,
+        "--title",
+        "fix(devcontainer): pin published agent images",
+        "--commit-subject",
+        "fix(devcontainer): pin published agent images",
+        "--commit-trailer",
+        "Refs #696",
+        "--template",
+        str(_template(tmp_path)),
+        "--file",
+        ".devcontainer/claude/devcontainer.json",
+        "--file",
+        "docs/runbooks/devcontainers.md",
+    ]
+
+
+def _open_pin_pr(number: int = 1132, *, sha: str = _PUBLISHED, suffix: str = "") -> dict[str, Any]:
+    ref = f"codex/devcontainer-image-pins-{sha}{suffix}"
+    return {"number": number, "head": {"ref": ref}}
+
+
+@pytest.mark.usefixtures("_env")
+class TestRefreshFlow:
+    def test_no_open_pr_is_noop(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        monkeypatch.setattr(dpp, "_list_open_prs_by_prefix", lambda **kw: [])
+        rc = dpp.main(_refresh_argv(tmp_path))
+        assert rc == 0
+        assert "nothing to refresh" in capsys.readouterr().out
+
+    def test_unparseable_branch_returns_1(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            dpp, "_list_open_prs_by_prefix", lambda **kw: [{"number": 9, "head": {"ref": "codex/odd"}}]
+        )
+        assert dpp.main(_refresh_argv(tmp_path)) == 1
+
+    def test_up_to_date_pr_only_requests_auto_merge(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(dpp, "_list_open_prs_by_prefix", lambda **kw: [_open_pin_pr(1132)])
+        monkeypatch.setattr(dpp, "_compare_behind", lambda **kw: 0)
+        enabled: list[int] = []
+        monkeypatch.setattr(dpp, "_enable_auto_merge", lambda **kw: enabled.append(kw["pr_number"]))
+        regen: list[str] = []
+
+        def _regen(sha: str) -> int:
+            regen.append(sha)
+            return 0
+
+        monkeypatch.setattr(dpp, "_regenerate_pins", _regen)
+        rc = dpp.main(_refresh_argv(tmp_path))
+        assert rc == 0
+        assert enabled == [1132]
+        assert regen == []  # no rebase work when already up to date
+
+    def test_behind_with_changes_supersedes_old_pr(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        git = _FakeGit({"diff": 1, "ls-remote": 2})  # changes present; refresh branch absent
+        monkeypatch.setattr(dpp, "run_git", git)
+        monkeypatch.setattr(dpp, "_list_open_prs_by_prefix", lambda **kw: [_open_pin_pr(1132)])
+        monkeypatch.setattr(dpp, "_compare_behind", lambda **kw: 3)
+        monkeypatch.setattr(dpp, "_regenerate_pins", lambda sha: 0)
+        captured: dict[str, Any] = {}
+
+        def _record_upsert(**kw: Any) -> tuple[str, int]:
+            captured.update(kw)
+            return ("created", 1140)
+
+        monkeypatch.setattr(dpp, "_upsert_pr", _record_upsert)
+        enabled: list[int] = []
+        monkeypatch.setattr(dpp, "_enable_auto_merge", lambda **kw: enabled.append(kw["pr_number"]))
+        comments: list[tuple[int, str]] = []
+        monkeypatch.setattr(dpp, "_comment_pr", lambda **kw: comments.append((kw["number"], kw["body"])))
+        closed: list[int] = []
+        monkeypatch.setattr(dpp, "_close_pr", lambda **kw: closed.append(kw["number"]))
+        deleted: list[str] = []
+        monkeypatch.setattr(dpp, "_delete_branch", lambda **kw: deleted.append(kw["branch"]))
+
+        rc = dpp.main(_refresh_argv(tmp_path))
+        assert rc == 0
+        expected_branch = f"codex/devcontainer-image-pins-{_PUBLISHED}-r-{_TARGET[:12]}"
+        assert captured["head"] == expected_branch
+        assert _PUBLISHED in captured["body"]  # template substituted with the published SHA
+        assert git.ran("commit") and git.ran("push")
+        assert enabled == [1140]
+        assert closed == [1132]
+        assert deleted == [f"codex/devcontainer-image-pins-{_PUBLISHED}"]
+        assert comments and comments[0][0] == 1132 and "Superseded by #1140" in comments[0][1]
+
+    def test_behind_but_pins_already_on_main_closes_redundant_pr(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(dpp, "run_git", _FakeGit({"diff": 0}))  # regen produced no diff
+        monkeypatch.setattr(dpp, "_list_open_prs_by_prefix", lambda **kw: [_open_pin_pr(1132)])
+        monkeypatch.setattr(dpp, "_compare_behind", lambda **kw: 2)
+        monkeypatch.setattr(dpp, "_regenerate_pins", lambda sha: 0)
+        upserts: list[Any] = []
+
+        def _record_upsert(**kw: Any) -> tuple[str, int]:
+            upserts.append(kw)
+            return ("created", 0)
+
+        monkeypatch.setattr(dpp, "_upsert_pr", _record_upsert)
+        monkeypatch.setattr(dpp, "_comment_pr", lambda **kw: None)
+        closed: list[int] = []
+        monkeypatch.setattr(dpp, "_close_pr", lambda **kw: closed.append(kw["number"]))
+        monkeypatch.setattr(dpp, "_delete_branch", lambda **kw: None)
+        rc = dpp.main(_refresh_argv(tmp_path))
+        assert rc == 0
+        assert closed == [1132]
+        assert upserts == []  # no replacement PR when pins already match main
+
+    def test_already_refreshed_onto_target_is_noop(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # The open PR already sits on the refresh branch for this target SHA.
+        pr = _open_pin_pr(1140, suffix=f"-r-{_TARGET[:12]}")
+        monkeypatch.setattr(dpp, "_list_open_prs_by_prefix", lambda **kw: [pr])
+        monkeypatch.setattr(dpp, "_compare_behind", lambda **kw: 1)
+        regen: list[str] = []
+
+        def _regen(sha: str) -> int:
+            regen.append(sha)
+            return 0
+
+        monkeypatch.setattr(dpp, "_regenerate_pins", _regen)
+        enabled: list[int] = []
+        monkeypatch.setattr(dpp, "_enable_auto_merge", lambda **kw: enabled.append(kw["pr_number"]))
+        rc = dpp.main(_refresh_argv(tmp_path))
+        assert rc == 0
+        assert enabled == [1140]
+        assert regen == []  # name already matches; no new branch cut
+
+    def test_regenerate_failure_returns_1(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(dpp, "_list_open_prs_by_prefix", lambda **kw: [_open_pin_pr(1132)])
+        monkeypatch.setattr(dpp, "_compare_behind", lambda **kw: 2)
+        monkeypatch.setattr(dpp, "_regenerate_pins", lambda sha: 1)
+        assert dpp.main(_refresh_argv(tmp_path)) == 1
