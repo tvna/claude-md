@@ -49,6 +49,7 @@ import labels_apply
 import nixpkgs_cooldown
 import post_issue_comment
 import pr_upsert
+import preflight_uv_version
 import pytest
 import ruleset_drift
 import rulesets_apply
@@ -204,6 +205,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("title_policy.py", "verify"): "test_title_policy_verify_matches_workflow_kind_env",
     ("update_devcontainer_image_pins.py", "$GITHUB_SHA"): "test_update_devcontainer_image_pins_matches_workflow_args",
     ("uv_download_checksum.py", "verify"): "test_uv_download_checksum_verify_matches_action_args",
+    ("preflight_uv_version.py", "verify"): "test_preflight_uv_version_verify_matches_workflow_args",
     ("uv_pin.py", "drift"): "test_uv_pin_workflow_subcommands_match_ci_usage",
     ("uv_pin.py", "read"): "test_uv_pin_workflow_subcommands_match_ci_usage",
     ("uv_pin.py", "stale"): "test_uv_pin_workflow_subcommands_match_ci_usage",
@@ -1944,6 +1946,28 @@ def test_uv_pin_workflow_subcommands_match_ci_usage(
     assert uv_pin.main(["read", str(tmp_path / "pyproject.toml")]) == 0
     assert uv_pin.main(["drift", "--repo-root", str(tmp_path)]) == 0
     assert uv_pin.main(["stale", "--repo-root", str(tmp_path)]) == 0
+
+
+def test_preflight_uv_version_verify_matches_workflow_args(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Mirror the workflow step in ``.github/workflows/verify-agents.yml``
+    that runs ``uv run python scripts/preflight_uv_version.py verify`` --
+    no extra flags, no env input. The CI step relies on the cwd being the
+    repo root and ``uv`` matching the pin (the workflow's setup-uv action
+    just installed the matching uv). Refs #1207.
+    """
+    (tmp_path / "pyproject.toml").write_text(
+        '[tool.uv]\nrequired-version = "==0.11.11"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        preflight_uv_version, "probe_uv_version", lambda: "0.11.11"
+    )
+
+    assert (
+        preflight_uv_version.main(["verify", "--repo-root", str(tmp_path)]) == 0
+    )
 
 
 _FLAKE_PIN_FIXTURE = """

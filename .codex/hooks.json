@@ -16,6 +16,16 @@
         "hooks": [
           {
             "type": "command",
+            "command": "scripts/session_uv_local_pin.sh",
+            "statusMessage": "Aligning local uv with repo pin"
+          }
+        ]
+      },
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
             "command": "python3 scripts/plan_language_context.py",
             "statusMessage": "Loading language policy"
           }
