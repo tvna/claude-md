@@ -7,3 +7,7 @@ target:
 dependencies:
   apm:
   - obra/superpowers#f2cbfbefebbfef77321e4c9abc9e949826bea9d7
+  mcp:
+  - name: context7
+    transport: http
+    url: https://mcp.context7.com/mcp
