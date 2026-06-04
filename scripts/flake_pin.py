@@ -2,11 +2,12 @@
 """Read and bump the GitHub-Releases-sourced fetchurl pins in ``flake.nix``.
 
 ``flake.nix`` is the single source of truth for the version + per-system SHA256
-of every ``fetchurl``-pinned external tool. Two of those tools share an
-identical pin shape and release source (GitHub Releases):
+of every ``fetchurl``-pinned external tool. Several of those tools share the
+same pin shape and release source (GitHub Releases):
 
 * ``waza`` (microsoft/waza): ``wazaVersion`` + ``wazaNative.<sys>.{asset,hash}``
 * ``apm``  (microsoft/apm):  ``apmVersion``  + ``apmNative.<sys>.{archive,hash}``
+* ``rtk``  (rtk-ai/rtk):     ``rtkVersion``  + ``rtkNative.<sys>.{asset,hash}``
 
 Dependabot has no Nix ecosystem, so these pins do not auto-follow upstream.
 This module is the deterministic writer half of the auto-follow loop
@@ -103,6 +104,18 @@ TOOLS: dict[str, ToolSpec] = {
         url_template=(
             "https://github.com/microsoft/apm/releases/download/"
             "v{version}/{asset}.tar.gz"
+        ),
+    ),
+    # rtk's per-system asset names differ in target (musl vs gnu), so the
+    # ``asset`` field stores the full ``.tar.gz`` filename and the template
+    # appends no extension -- mirroring the waza shape, not apm's.
+    "rtk": ToolSpec(
+        version_var="rtkVersion",
+        native_var="rtkNative",
+        github_repo="rtk-ai/rtk",
+        asset_field="asset",
+        url_template=(
+            "https://github.com/rtk-ai/rtk/releases/download/v{version}/{asset}"
         ),
     ),
 }
