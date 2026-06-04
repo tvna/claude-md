@@ -326,6 +326,22 @@ STEPS: tuple[Step, ...] = (
         ),
     ),
     Step(
+        # Refs #1190. Diff-coupling gate: a change to the principle source
+        # must touch the design-philosophy matrix (or carry a
+        # philosophy-matrix-ack line in the PR body). PR_BODY is unset
+        # locally, the stricter default, so a master edit without the
+        # matrix surfaces before push. Base-ref shape mirrors CI's
+        # portable-pr-policy.yml step.
+        name="scan_design_philosophy_drift_coupling",
+        argv=(
+            "python3",
+            "scripts/scan_design_philosophy_drift.py",
+            "verify-coupling",
+            "--base-ref",
+            "origin/main",
+        ),
+    ),
+    Step(
         name="verify_ruleset_sync",
         argv=(
             "python3",
