@@ -1,7 +1,7 @@
 """Tests for scripts/flake_pin.py -- reading and bumping flake.nix tool pins.
 
 flake.nix is the single source of truth for the version + per-system SHA256 of
-the GitHub-Releases-sourced tools (waza, apm). These tests pin the parsing and
+the GitHub-Releases-sourced tools (waza, apm, rtk). These tests pin the parsing and
 the in-place bump (version + per-system hash) against both a synthetic flake
 fragment and the real repository flake.nix, so a layout change that breaks the
 updater is caught here rather than at CI bump time. Refs #1171.
@@ -84,6 +84,22 @@ def test_version_real_flake() -> None:
 def test_repo() -> None:
     assert flake_pin.tool_spec("waza").github_repo == "microsoft/waza"
     assert flake_pin.tool_spec("apm").github_repo == "microsoft/apm"
+    assert flake_pin.tool_spec("rtk").github_repo == "rtk-ai/rtk"
+
+
+def test_version_rtk_real_flake() -> None:
+    assert flake_pin.current_version(_real_flake(), "rtk").count(".") >= 1
+
+
+def test_asset_url_rtk_keeps_full_archive_name() -> None:
+    text = _real_flake()
+    rtk_url = flake_pin.asset_url(text, "rtk", "x86_64-linux", "9.9.9")
+    assert rtk_url.startswith(
+        "https://github.com/rtk-ai/rtk/releases/download/v9.9.9/"
+    )
+    # rtk stores the full archive filename in the asset field (musl/gnu differ),
+    # so the URL ends with .tar.gz without the template adding an extension.
+    assert rtk_url.endswith(".tar.gz")
 
 
 def test_asset_url_waza_and_apm() -> None:

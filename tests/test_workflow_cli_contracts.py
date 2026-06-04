@@ -2027,6 +2027,7 @@ def test_flake_pin_latest_check_matches_workflow_args(
     )
     assert flake_pin_latest.main(["check", "--tool", "waza"]) == 0
     assert flake_pin_latest.main(["check", "--tool", "apm"]) == 0
+    assert flake_pin_latest.main(["check", "--tool", "rtk"]) == 0
 
 
 def test_uv_download_checksum_verify_matches_action_args(tmp_path: Path) -> None:
