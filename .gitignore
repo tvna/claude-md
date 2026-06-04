@@ -51,3 +51,18 @@ apm_modules/
 .github/copilot-instructions.md
 .windsurfrules
 .codeium/
+
+# Rendered MCP client config (prohibited per docs/standards/repo-scope.md).
+# .mcp.json is the Claude Code project-scope MCP file. It is a build artefact
+# rendered from apm.yml by scripts/gen_mcp_json.py (wired into the SessionStart
+# hook in .claude/settings.json), can carry per-client credentials in env
+# blocks, and is never committed. See docs/runbooks/context7-mcp.md.
+.mcp.json
+
+# Secrets / credentials. .env-style files hold tokens and API keys; they are
+# never committed. There is no .env.example carve-out because the repo ships
+# no example env file (add one with an explicit `!.env.example` line if that
+# changes). git is the canonical secret boundary, not .claudeignore
+# (docs/standards/repo-scope.md).
+.env
+.env.*

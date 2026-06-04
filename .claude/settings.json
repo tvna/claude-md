@@ -29,6 +29,14 @@
         "hooks": [
           {
             "type": "command",
+            "command": "uv run python3 scripts/gen_mcp_json.py"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
             "command": "python3 scripts/plan_language_context.py"
           }
         ]
