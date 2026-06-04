@@ -11,7 +11,7 @@ pytestmark = pytest.mark.shard_preflight
 
 ROOT = Path(__file__).resolve().parents[1]
 CLAUDE_SETTINGS = ROOT / ".claude" / "settings.json"
-CORE_HOOK_EVENTS = {"SessionStart", "PreToolUse", "PostToolUse"}
+CORE_HOOK_EVENTS = {"SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse"}
 # Claude-only events with no Codex/Devin counterpart (outside the
 # scan_hook_coverage_drift parity scope). Stop hosts the decision-handoff
 # nudge toward AskUserQuestion (#1044).
@@ -208,6 +208,20 @@ def test_claude_superpowers_hooks_are_apm_managed() -> None:
         "(events are PascalCase); the superpowers session-start hook lives "
         "in the SessionStart array only (Refs #1030)"
     )
+
+
+def test_claude_user_prompt_submit_registers_context7_gate() -> None:
+    data = _load_settings()
+    assert _hook_groups(data, "UserPromptSubmit") == [
+        {
+            "hooks": [
+                {
+                    "type": "command",
+                    "command": "python3 scripts/prompt_context7_gate.py",
+                }
+            ],
+        }
+    ]
 
 
 def test_claude_session_start_surfaces_hooks_path_gap() -> None:

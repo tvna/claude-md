@@ -15,7 +15,7 @@ pytestmark = pytest.mark.shard_preflight
 ROOT = Path(__file__).resolve().parents[1]
 DEVIN_HOOKS = ROOT / ".devin" / "hooks.v1.json"
 CODEX_HOOKS = ROOT / ".codex" / "hooks.json"
-CORE_HOOK_EVENTS = {"SessionStart", "PreToolUse", "PostToolUse"}
+CORE_HOOK_EVENTS = {"SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse"}
 
 
 def _load_hooks() -> dict[str, object]:
@@ -126,6 +126,21 @@ def test_devin_session_start_matches_required_bootstrap_gates() -> None:
     assert "python3 scripts/check_hooks_path.py" in commands
     assert "python3 scripts/check_session_branch.py" in commands
     assert "python3 scripts/check_pr_mergeability.py session-start" in commands
+
+
+def test_devin_user_prompt_submit_registers_context7_gate() -> None:
+    data = _load_hooks()
+    assert _hook_groups(data, "UserPromptSubmit") == [
+        {
+            "hooks": [
+                {
+                    "type": "command",
+                    "command": "python3 scripts/prompt_context7_gate.py",
+                    "statusMessage": "Checking context7 lookup guidance",
+                }
+            ]
+        }
+    ]
 
 
 def test_devin_pre_tool_use_covers_github_write_gates() -> None:
