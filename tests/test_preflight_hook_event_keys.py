@@ -23,11 +23,12 @@ def test_repository_hook_configs_pass_the_gate() -> None:
     assert gate.main([]) == 0
 
 
-def test_gate_targets_the_three_agent_hook_configs() -> None:
+def test_gate_targets_the_agent_hook_configs() -> None:
     assert gate.HOOK_CONFIG_FILES == (
         ".claude/settings.json",
         ".codex/hooks.json",
         ".devin/hooks.v1.json",
+        ".devcontainer/config/claude/settings.json",
     )
     for rel in gate.HOOK_CONFIG_FILES:
         assert (REPO_ROOT / rel).exists()

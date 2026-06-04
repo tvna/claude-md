@@ -31,7 +31,9 @@ from _hook_runtime import emit_decision, read_event
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 _SESSION_BRANCH_FILE = REPO_ROOT / ".git" / "CLAUDE_SESSION_BRANCH"
-_GIT_PUSH_RE = re.compile(r"(?m)^\s*git\s+push\b")
+# Optional ``rtk`` prefix: the rtk auto-rewrite PreToolUse hook rewrites
+# ``git push`` -> ``rtk git push`` (Refs #1199), so the gate must fire on both.
+_GIT_PUSH_RE = re.compile(r"(?m)^\s*(?:rtk\s+)?git\s+push\b")
 _REMOTE_ENV_VAR = "CLAUDE_CODE_REMOTE"
 
 # Flags that consume no additional token.

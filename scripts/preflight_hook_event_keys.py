@@ -39,6 +39,10 @@ HOOK_CONFIG_FILES: tuple[str, ...] = (
     ".claude/settings.json",
     ".codex/hooks.json",
     ".devin/hooks.v1.json",
+    # The devcontainer-provisioned claude config carries the rtk auto-rewrite
+    # PreToolUse hook (Refs #1199); gate its event keys too so a future
+    # camelCase typo there fails at commit time like the other agent configs.
+    ".devcontainer/config/claude/settings.json",
 )
 
 # PascalCase: a leading uppercase letter followed by letters only. This is

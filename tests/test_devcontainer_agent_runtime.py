@@ -49,6 +49,28 @@ def test_runtime_script_installs_gh_and_container_scoped_defaults() -> None:
     assert "agent:repo(branch)" in agent_prompt
 
 
+def test_runtime_provisions_rtk_for_claude_pretooluse_hook() -> None:
+    script = (REPO_ROOT / ".devcontainer/scripts/configure-agent-runtime.sh").read_text(encoding="utf-8")
+    claude_settings = load_json(REPO_ROOT / ".devcontainer/config/claude/settings.json")
+
+    # rtk must be symlinked to /usr/local/bin so the PreToolUse hook resolves it.
+    assert "install_nix_binary rtk-cli rtk" in script
+
+    # The claude config declares the rtk auto-rewrite PreToolUse Bash hook.
+    hooks = claude_settings.get("hooks")
+    assert isinstance(hooks, dict)
+    pre_tool_use = hooks.get("PreToolUse")
+    assert isinstance(pre_tool_use, list)
+    rtk_commands = [
+        inner.get("command")
+        for entry in pre_tool_use
+        if isinstance(entry, dict) and entry.get("matcher") == "Bash"
+        for inner in (entry.get("hooks") or [])
+        if isinstance(inner, dict)
+    ]
+    assert "rtk hook claude" in rtk_commands
+
+
 def test_codex_runtime_config_uses_supported_toml_keys() -> None:
     codex_toml = (REPO_ROOT / ".devcontainer/config/codex/config.toml").read_text(encoding="utf-8")
 
