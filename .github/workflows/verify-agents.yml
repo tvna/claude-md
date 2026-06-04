@@ -32,6 +32,12 @@ jobs:
       - name: Assert uv pin lives only in pyproject.toml
         run: uv run python scripts/uv_pin.py drift
 
+      - name: Assert running uv matches the pin
+        # Refs #1207. PR #1206 closed the *static* drift gap but left a runtime
+        # gap: the host uv that runs Stop hooks could still drift ahead of the
+        # pin without any deterministic gate firing. This step is that gate.
+        run: uv run python scripts/preflight_uv_version.py verify
+
       - name: Assert nixpkgs lock respects uv cooldown
         run: uv run python scripts/nixpkgs_cooldown.py verify
 

@@ -110,6 +110,20 @@ STEPS: tuple[Step, ...] = (
         argv=("python3", "scripts/uv_pin.py", "drift"),
     ),
     Step(
+        # Refs #1207. Runtime gate: fails when ``uv --version`` does not match
+        # ``[tool.uv].required-version``. Complements the static drift gate
+        # above -- that one catches literal-value drift across the source
+        # tree; this one catches the host-uv vs pin gap PR #1206 left open
+        # for Claude Code's process PATH. ``soft=True`` so a contributor
+        # laptop without uv warn-skips (the same posture as ruff/mypy below);
+        # CI provisions uv via setup-uv before this step runs, so the gate is
+        # hard there.
+        name="preflight_uv_version",
+        argv=("python3", "scripts/preflight_uv_version.py", "verify"),
+        required_bin=("uv",),
+        soft=True,
+    ),
+    Step(
         name="nixpkgs_cooldown",
         argv=("python3", "scripts/nixpkgs_cooldown.py", "verify"),
     ),
