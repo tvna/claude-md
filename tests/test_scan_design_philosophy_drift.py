@@ -630,3 +630,166 @@ class TestRepositorySelfCheck:
         assert doc.exists()
         rc = sdpd.main(["verify", "--master", str(master), "--doc", str(doc)])
         assert rc == 0
+
+
+# ---------------------------------------------------------------------------
+# verify-coupling: master edits must touch the matrix (or be acked). Refs #1190
+# ---------------------------------------------------------------------------
+
+
+class _FakeCompleted:
+    """Minimal stand-in for subprocess.CompletedProcess for runner stubs."""
+
+    def __init__(self, stdout: str) -> None:
+        self.stdout = stdout
+
+
+def _runner_returning(names: list[str]):
+    def _runner(cmd, **kwargs):
+        return _FakeCompleted("\n".join(names) + ("\n" if names else ""))
+
+    return _runner
+
+
+class TestHasMatrixAck:
+    def test_present_plain(self) -> None:
+        assert sdpd.has_matrix_ack("intro\nphilosophy-matrix-ack\nmore") is True
+
+    def test_present_with_rationale(self) -> None:
+        assert sdpd.has_matrix_ack("philosophy-matrix-ack: typo only") is True
+
+    def test_case_insensitive_and_indented(self) -> None:
+        assert sdpd.has_matrix_ack("   PHILOSOPHY-MATRIX-ACK x") is True
+
+    def test_absent(self) -> None:
+        assert sdpd.has_matrix_ack("no marker here") is False
+
+    def test_not_a_substring_match(self) -> None:
+        # The word boundary keeps an unrelated longer token from matching.
+        assert sdpd.has_matrix_ack("philosophy-matrix-acknowledged") is False
+
+
+class TestEvaluateCoupling:
+    def test_master_unchanged_passes(self) -> None:
+        code, errors = sdpd.evaluate_coupling(frozenset({"README.md"}), "")
+        assert code == 0
+        assert errors == []
+
+    def test_master_and_doc_changed_passes(self) -> None:
+        code, errors = sdpd.evaluate_coupling(
+            frozenset({sdpd.MASTER_PATH, sdpd.DOC_PATH}), ""
+        )
+        assert code == 0
+        assert errors == []
+
+    def test_master_changed_doc_missing_acked_passes(self) -> None:
+        code, errors = sdpd.evaluate_coupling(
+            frozenset({sdpd.MASTER_PATH}), "philosophy-matrix-ack: typo"
+        )
+        assert code == 0
+        assert errors == []
+
+    def test_master_changed_doc_missing_no_ack_fails(self) -> None:
+        code, errors = sdpd.evaluate_coupling(frozenset({sdpd.MASTER_PATH}), "")
+        assert code == 1
+        assert len(errors) == 1
+        assert sdpd.MASTER_PATH in errors[0]
+        assert sdpd.DOC_PATH in errors[0]
+
+
+class TestResolveBase:
+    def test_env_override(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("BASE_REF", "origin/feature")
+        assert sdpd.resolve_base() == "origin/feature"
+
+    def test_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("BASE_REF", raising=False)
+        assert sdpd.resolve_base() == "origin/main"
+
+
+class TestChangedFiles:
+    def test_parses_name_only_output(self) -> None:
+        result = sdpd.changed_files(
+            "origin/main",
+            runner=_runner_returning([sdpd.MASTER_PATH, "README.md"]),
+        )
+        assert result == frozenset({sdpd.MASTER_PATH, "README.md"})
+
+    def test_empty_diff(self) -> None:
+        result = sdpd.changed_files(
+            "origin/main", runner=_runner_returning([])
+        )
+        assert result == frozenset()
+
+
+class TestVerifyCouplingCommand:
+    def test_passes_when_master_unchanged(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        monkeypatch.setattr(
+            sdpd, "changed_files", lambda base, **k: frozenset({"README.md"})
+        )
+        rc = sdpd.main(["verify-coupling", "--base-ref", "origin/main"])
+        assert rc == 0
+        assert "no master instruction text modified" in capsys.readouterr().out
+
+    def test_passes_when_doc_also_changed(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.setattr(
+            sdpd,
+            "changed_files",
+            lambda base, **k: frozenset({sdpd.MASTER_PATH, sdpd.DOC_PATH}),
+        )
+        body = tmp_path / "body.md"
+        _write(body, "no ack needed")
+        rc = sdpd.main(
+            ["verify-coupling", "--base-ref", "origin/main", "--body-file", str(body)]
+        )
+        assert rc == 0
+
+    def test_fails_when_master_only_no_ack(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        monkeypatch.setattr(
+            sdpd, "changed_files", lambda base, **k: frozenset({sdpd.MASTER_PATH})
+        )
+        monkeypatch.delenv("PR_BODY", raising=False)
+        rc = sdpd.main(["verify-coupling", "--base-ref", "origin/main"])
+        assert rc == 1
+        assert sdpd.DOC_PATH in capsys.readouterr().out
+
+    def test_passes_with_ack_from_body_file(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.setattr(
+            sdpd, "changed_files", lambda base, **k: frozenset({sdpd.MASTER_PATH})
+        )
+        body = tmp_path / "body.md"
+        _write(body, "## Notes\n\nphilosophy-matrix-ack: typo only\n")
+        rc = sdpd.main(
+            ["verify-coupling", "--base-ref", "origin/main", "--body-file", str(body)]
+        )
+        assert rc == 0
+
+    def test_body_file_missing_fails_loud(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        rc = sdpd.main(
+            ["verify-coupling", "--base-ref", "origin/main", "--body-file", "/no/such/file"]
+        )
+        assert rc == 1
+        assert "body file not found" in capsys.readouterr().err
+
+    def test_git_failure_fails_loud(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        import subprocess as _sp
+
+        def _boom(base, **k):
+            raise _sp.CalledProcessError(128, ["git", "diff"])
+
+        monkeypatch.setattr(sdpd, "changed_files", _boom)
+        rc = sdpd.main(["verify-coupling", "--base-ref", "origin/bad"])
+        assert rc == 1
+        assert "git invocation failed" in capsys.readouterr().err

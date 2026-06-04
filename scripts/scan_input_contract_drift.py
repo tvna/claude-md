@@ -95,7 +95,6 @@ BASELINE_MISSING_CONTRACT: dict[str, str] = {
         "ruleset_drift",
         "rulesets_apply",
         "scan_apm_portability",
-        "scan_design_philosophy_drift",
         "scan_docs_inventory",
         "scan_hook_coverage_drift",
         "scan_maintainability_metrics",

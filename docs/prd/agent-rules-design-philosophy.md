@@ -226,6 +226,25 @@ invariant, a row label rename can imply a structural change to
 `master.instructions.md` without actually performing it (see retro
 [#322](https://github.com/tvna/claude-md/issues/322)).
 
+**Matrix-coupling gate.** The structural `verify` check above tracks the
+*set* of principles and their layer labels, but it cannot see whether a
+new bullet's responsibility is reflected in a row's "Universal text owns"
+cell. That per-bullet drift went unnoticed in
+[#1188](https://github.com/tvna/claude-md/issues/1188) (a primary-source
+rule was added to P2 without updating the P2 cell) and is the subject of
+retro [#1190](https://github.com/tvna/claude-md/issues/1190). The
+deterministic backstop is `scripts/scan_design_philosophy_drift.py
+verify-coupling`, wired into the `Portable PR policy / gate` job (and
+mirrored in `scripts/preflight_all.py`): when a PR changes
+`.apm/instructions/master.instructions.md` it must, in the same PR, also
+change this document so the matrix is reviewed alongside the principle
+edit. A PR that edits a principle without a responsibility change (for
+example a typo fix) opts out by adding a plain-text `philosophy-matrix-ack`
+line to the PR body -- the marker is plain text rather than an HTML
+comment because the GitHub MCP write tools strip comments from PR bodies.
+The gate forces the matrix into view; the reviewer still owns whether the
+cell wording is complete.
+
 The `Boundary risk` column records the pattern most likely to cause
 the wrong lane to absorb a concern, drawn from the historical record
 of merged PRs and closed sub-issues of #226.
