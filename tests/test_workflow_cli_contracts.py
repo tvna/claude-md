@@ -174,6 +174,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("scan_allowlist_rationale.py", "verify"): "test_scan_allowlist_rationale_verify_matches_workflow_args",
     ("scan_apm_portability.py", "verify"): "test_scan_apm_portability_verify_matches_workflow_paths",
     ("scan_design_philosophy_drift.py", "verify"): "test_scan_design_philosophy_drift_verify_matches_workflow_paths",
+    ("scan_design_philosophy_drift.py", "verify-coupling"): "test_scan_design_philosophy_drift_verify_coupling_matches_workflow_args",
     ("scan_compile_from_source.py", "verify"): "test_scan_compile_from_source_verify_matches_workflow_args",
     ("scan_devcontainer_tool_drift.py", "verify"): "test_scan_devcontainer_tool_drift_verify_matches_workflow_args",
     ("scan_docs_inventory.py", "verify"): "test_scan_docs_inventory_verify_matches_workflow_args",
@@ -1095,6 +1096,41 @@ def test_scan_design_philosophy_drift_verify_matches_workflow_paths(
     )
     assert scan_design_philosophy_drift.main(
         ["verify", "--master", str(master), "--doc", str(doc)]
+    ) == 0
+
+
+def test_scan_design_philosophy_drift_verify_coupling_matches_workflow_args(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Mirror the env+argv shape used by portable-pr-policy.yml.
+
+    The workflow shells to
+    ``python3 scripts/scan_design_philosophy_drift.py verify-coupling
+    --base-ref "$BASE_REF" --body-file "$body_file"``. Stub the
+    changed-files lookup so the test stays hermetic across CI checkout
+    depths (the lint-scripts-pytest job checks out shallow, so a real
+    ``git diff origin/main..HEAD`` would fail with exit 128).
+    """
+    monkeypatch.setattr(
+        scan_design_philosophy_drift,
+        "changed_files",
+        lambda base, **kwargs: frozenset(
+            {
+                scan_design_philosophy_drift.MASTER_PATH,
+                scan_design_philosophy_drift.DOC_PATH,
+            }
+        ),
+    )
+    body_file = tmp_path / "body.md"
+    body_file.write_text("no ack needed; doc is in the diff\n", encoding="utf-8")
+    assert scan_design_philosophy_drift.main(
+        [
+            "verify-coupling",
+            "--base-ref",
+            "origin/main",
+            "--body-file",
+            str(body_file),
+        ]
     ) == 0
 
 

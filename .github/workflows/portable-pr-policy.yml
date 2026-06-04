@@ -99,6 +99,14 @@ jobs:
             --created-at "$PR_CREATED_AT" \
             --cutoff "$BODY_POLICY_CUTOFF"
 
+      - name: Require design-philosophy matrix update for principle changes
+        run: |
+          body_file="$(mktemp)"
+          printf '%s' "$PR_BODY" > "$body_file"
+          python3 scripts/scan_design_philosophy_drift.py verify-coupling \
+            --base-ref "$BASE_REF" \
+            --body-file "$body_file"
+
       - name: Scan APM artifacts for repo-local references
         run: |
           python3 scripts/scan_apm_portability.py verify \
