@@ -16,7 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 CODEX_HOOKS = ROOT / ".codex" / "hooks.json"
 PERMISSION_REQUEST_PLAN = ROOT / "docs" / "prd" / "codex-permission-request-policy-gate.md"
 DOCS_INDEX = ROOT / "docs" / "INDEX.md"
-CORE_HOOK_EVENTS = {"SessionStart", "PreToolUse", "PostToolUse"}
+CORE_HOOK_EVENTS = {"SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse"}
 
 
 def _load_hooks() -> dict[str, object]:
@@ -107,6 +107,26 @@ def test_codex_superpowers_hooks_are_apm_managed() -> None:
         "(events are PascalCase); the superpowers session-start hook lives "
         "in the SessionStart array only (Refs #1030)"
     )
+
+
+def test_codex_user_prompt_submit_registers_context7_gate() -> None:
+    data = _load_hooks()
+    hooks = data["hooks"]
+    assert isinstance(hooks, dict)
+    user_prompt_submit = hooks["UserPromptSubmit"]
+    assert isinstance(user_prompt_submit, list)
+
+    assert user_prompt_submit == [
+        {
+            "hooks": [
+                {
+                    "type": "command",
+                    "command": "python3 scripts/prompt_context7_gate.py",
+                    "statusMessage": "Checking context7 lookup guidance",
+                }
+            ]
+        }
+    ]
 
 
 def test_codex_pre_tool_use_covers_claude_github_write_hooks() -> None:
