@@ -139,6 +139,15 @@
         "hooks": [
           {
             "type": "command",
+            "command": "python3 scripts/preflight_commit_session_branch.py"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
             "command": "python3 scripts/preflight_push_nonempty.py"
           }
         ]
