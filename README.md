@@ -83,6 +83,11 @@ git submodule update --remote .claude-md-master
   parity, vendor `.devin/hooks.v1.json` alongside the repository instructions.
   See [`docs/standards/devin-apm-compatibility.md`](./docs/standards/devin-apm-compatibility.md).
 
+- **context7 MCP** is declared in `apm.yml` (`dependencies.mcp`) as a
+  primary-source documentation accelerator. This master declares it only;
+  a consumer wires it into its own clients with `apm install --mcp context7`.
+  See [`docs/runbooks/context7-mcp.md`](./docs/runbooks/context7-mcp.md).
+
 ## Change Policy
 
 - All edits land through a PR. Run a retrospective after merge (Principle 3).

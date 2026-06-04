@@ -81,6 +81,8 @@ git submodule update --remote .claude-md-master
 
 - **Devin** は APM が展開した `.agents/skills/` の skills を利用できます。hooks の parity が必要な場合は、リポジトリ指示と一緒に `.devin/hooks.v1.json` を取り込んでください。詳細は [`docs/standards/devin-apm-compatibility.md`](./docs/standards/devin-apm-compatibility.md) を参照してください。
 
+- **context7 MCP** は一次情報ドキュメントの取得を高速化するため `apm.yml`（`dependencies.mcp`）で宣言しています。本マスターは宣言のみで、利用側が `apm install --mcp context7` で各自のクライアントに配線します。詳細は [`docs/runbooks/context7-mcp.md`](./docs/runbooks/context7-mcp.md) を参照してください。
+
 ## 変更ポリシー
 
 - すべての編集は PR 経由で取り込む。マージ後は retrospective を実施する（Principle 3）。

@@ -50,14 +50,37 @@ The contract is:
   hit emits ``::error file=<path>,line=<n>::...`` on stderr so the
   GitHub Actions UI surfaces individual violations.
 
+The ``verify-coupling`` subcommand adds a diff-aware gate (Refs #1190):
+when a PR changes ``.apm/instructions/master.instructions.md`` it must,
+in the same PR, also change ``docs/prd/agent-rules-design-philosophy.md``
+so the Section 3 responsibility matrix is reviewed alongside the
+principle edit -- or carry a plain-text ``philosophy-matrix-ack`` line in
+the PR body to consciously opt out (for example a typo-only edit that
+changes no responsibility). This catches the per-bullet matrix drift the
+structural ``verify`` check cannot see, deterministically rather than by
+reviewer memory.
+
+Contract:
+    Inputs: the ``verify`` / ``report`` subcommands (``--master`` and
+        ``--doc`` paths); the ``verify-coupling`` subcommand
+        (``--base-ref`` falling back to ``BASE_REF`` then ``origin/main``,
+        and the PR body from ``--body-file`` or the ``PR_BODY`` env var).
+    Outputs: ``::error::`` annotations on stderr; an ``OK:`` line on the
+        happy path; exit 0 when clean or not required, 1 on drift, 2 on
+        missing required args.
+    Failure policy: fails loud per CLAUDE.md section 4 (a drift or a
+        master-without-matrix change exits non-zero).
+
 Tested by ``tests/test_scan_design_philosophy_drift.py``. Refs #308,
-#322, #329.
+#322, #329, #1190.
 """
 
 from __future__ import annotations
 
 import argparse
+import os
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -102,6 +125,22 @@ REQUIRED_GLOSSARY_ENTRIES: tuple[str, ...] = (
     "P1 through P6",
     "hardness contour",
     "in-line carve-out",
+)
+
+_GIT_TIMEOUT_SECONDS: int = 15
+
+# The two files the coupling gate pairs: editing the master principle
+# source must be accompanied by a matrix review in the design-philosophy
+# doc (or an explicit ack).
+MASTER_PATH = ".apm/instructions/master.instructions.md"
+DOC_PATH = "docs/prd/agent-rules-design-philosophy.md"
+
+# Plain-text opt-out marker (MCP-safe, mirrors the `partial-pr` pattern in
+# scripts/issue_link.py): a line that, after optional indentation, begins
+# with `philosophy-matrix-ack` (case-insensitive). HTML-comment markers are
+# stripped by the GitHub MCP write tools, so a plain-text token is used.
+_MATRIX_ACK_RE = re.compile(
+    r"^\s*philosophy-matrix-ack\b", re.IGNORECASE | re.MULTILINE
 )
 
 
@@ -382,6 +421,126 @@ def _cmd_verify(args: argparse.Namespace) -> int:
     return _verify(Path(args.master), Path(args.doc))
 
 
+def resolve_base() -> str:
+    """Return the base ref verify-coupling diffs HEAD against.
+
+    Resolution order: ``BASE_REF`` env, then the local fallback
+    ``origin/main``. Empty environment values are treated as unset.
+    """
+    explicit = os.environ.get("BASE_REF")
+    if explicit:
+        return explicit
+    return "origin/main"
+
+
+def changed_files(
+    base_ref: str, head: str = "HEAD", *, runner=subprocess.run
+) -> frozenset[str]:
+    """Return the set of files modified in ``{base}..{head}``.
+
+    Uses ``git diff --name-only`` so renames and deletes also surface.
+    """
+    result = _run(
+        ["git", "diff", "--name-only", f"{base_ref}..{head}"], runner=runner
+    )
+    return frozenset(
+        line.strip() for line in result.stdout.splitlines() if line.strip()
+    )
+
+
+def has_matrix_ack(body: str) -> bool:
+    """Return True when *body* carries the philosophy-matrix-ack opt-out."""
+    return _MATRIX_ACK_RE.search(body) is not None
+
+
+def evaluate_coupling(
+    changed: frozenset[str], body: str
+) -> tuple[int, list[str]]:
+    """Return ``(exit_code, error_lines)`` for the coupling gate.
+
+    * master.instructions.md not changed -> exit 0 (coupling not required).
+    * master changed and the design-philosophy doc also changed -> exit 0.
+    * master changed, doc unchanged, ack marker present -> exit 0.
+    * master changed, doc unchanged, no ack -> exit 1.
+    """
+    if MASTER_PATH not in changed:
+        return 0, []
+    if DOC_PATH in changed:
+        return 0, []
+    if has_matrix_ack(body):
+        return 0, []
+    return 1, [
+        f"::error::This PR changes {MASTER_PATH} but not {DOC_PATH}. A "
+        "principle edit must review the Section 3 responsibility matrix in "
+        "the same PR: update the matching '| PN -' cell, or add a plain-text "
+        "'philosophy-matrix-ack' line to the PR body when the edit changes "
+        "no responsibility (for example a typo fix). See "
+        "docs/prd/agent-rules-design-philosophy.md."
+    ]
+
+
+def _resolve_coupling_body(args: argparse.Namespace) -> str:
+    if args.body_file is not None:
+        return Path(args.body_file).read_text(encoding="utf-8")
+    return os.environ.get("PR_BODY", "")
+
+
+def _cmd_verify_coupling(args: argparse.Namespace) -> int:
+    base = args.base_ref or resolve_base()
+    try:
+        body = _resolve_coupling_body(args)
+    except FileNotFoundError as exc:
+        print(
+            "::error::scan_design_philosophy_drift: body file not found: "
+            f"{exc}",
+            file=sys.stderr,
+        )
+        return 1
+    try:
+        changed = changed_files(base)
+    except (
+        subprocess.CalledProcessError,
+        subprocess.TimeoutExpired,
+        FileNotFoundError,
+        OSError,
+    ) as exc:
+        print(
+            "::error::scan_design_philosophy_drift: git invocation failed "
+            f"against base {base!r}: {exc}",
+            file=sys.stderr,
+        )
+        return 1
+    code, errors = evaluate_coupling(changed, body)
+    if code == 0:
+        if MASTER_PATH in changed:
+            print(
+                "OK: master changed and the design-philosophy matrix was "
+                "updated or the change is acked."
+            )
+        else:
+            print("OK: no master instruction text modified.")
+        return 0
+    for line in errors:
+        print(line)
+    return 1
+
+
+def _run(cmd: list[str], *, runner=subprocess.run):
+    """Thin subprocess boundary -- the only impure surface for diffing.
+
+    ``check=True`` raises ``CalledProcessError`` on non-zero exit; the
+    caller in :func:`_cmd_verify_coupling` translates that into the
+    fail-loud ``::error::`` path. Tests monkeypatch ``runner``.
+    """
+    return runner(
+        cmd,
+        capture_output=True,
+        text=True,
+        timeout=_GIT_TIMEOUT_SECONDS,
+        check=True,
+    )
+
+
 def _cmd_report(args: argparse.Namespace) -> int:
     if not args.master or not args.doc:
         print(
@@ -436,6 +595,29 @@ def main(argv: list[str] | None = None) -> int:
     p_report.add_argument("--master", required=True)
     p_report.add_argument("--doc", required=True)
     p_report.set_defaults(func=_cmd_report)
+
+    p_coupling = sub.add_parser(
+        "verify-coupling",
+        help=(
+            "Fail when a PR edits master.instructions.md without also "
+            "updating the design-philosophy matrix (or acking)."
+        ),
+    )
+    p_coupling.add_argument(
+        "--base-ref",
+        help=(
+            "Base ref to diff HEAD against. Falls back to BASE_REF, then "
+            "to origin/main."
+        ),
+    )
+    p_coupling.add_argument(
+        "--body-file",
+        help=(
+            "Path to a file containing the PR body. Falls back to the "
+            "PR_BODY env var when omitted."
+        ),
+    )
+    p_coupling.set_defaults(func=_cmd_verify_coupling)
 
     args = parser.parse_args(argv)
     return int(args.func(args))
