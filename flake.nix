@@ -213,6 +213,11 @@ EOF
               url = "https://github.com/rtk-ai/rtk/releases/download/v${rtkVersion}/${rtkNative.asset}";
               hash = rtkNative.hash;
             };
+            # The tarball holds a bare ``rtk`` binary with no enclosing
+            # directory, so the default unpackPhase fails to pick a source root
+            # ("unpacker appears to have produced no directories"). Point it at
+            # the unpack dir itself so installPhase finds ./rtk.
+            sourceRoot = ".";
             dontBuild = true;
             dontStrip = true;
             dontPatchELF = true;
