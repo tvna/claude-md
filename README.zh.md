@@ -81,6 +81,8 @@ git submodule update --remote .claude-md-master
 
 - **Devin** 可以使用 APM 展开到 `.agents/skills/` 的 skills。需要 hooks parity 时，请把 `.devin/hooks.v1.json` 与仓库指令一起引入。详见 [`docs/standards/devin-apm-compatibility.md`](./docs/standards/devin-apm-compatibility.md)。
 
+- **context7 MCP** 在 `apm.yml`（`dependencies.mcp`）中声明，用作一手文档的检索加速器。本主仓库仅声明，使用方通过 `apm install --mcp context7` 将其接入各自的客户端。详见 [`docs/runbooks/context7-mcp.md`](./docs/runbooks/context7-mcp.md)。
+
 ## 变更策略
 
 - 所有编辑都通过 PR 合入。合并后运行 retrospective（Principle 3）。
