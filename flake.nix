@@ -25,6 +25,7 @@
           codexCliVersion = "0.135.0";
           apmVersion = "0.12.1";
           wazaVersion = "0.33.0";
+          rtkVersion = "0.42.1";
           claudeCodeNative = {
             aarch64-linux = {
               package = "claude-code-linux-arm64";
@@ -75,6 +76,20 @@
             x86_64-linux = {
               asset = "waza-linux-amd64";
               hash = "sha256-waMaFdlZ0s1Tb+tBz3sg+UsENKjoaUnT3j0hweP7b/M=";
+            };
+          }.${system};
+          # rtk publishes per-target release tarballs; the asset field carries
+          # the full archive filename because the x86_64 build is musl-static
+          # while the aarch64 build is gnu-dynamic (no shared target suffix to
+          # template). Each tarball unpacks to a single ``rtk`` binary.
+          rtkNative = {
+            aarch64-linux = {
+              asset = "rtk-aarch64-unknown-linux-gnu.tar.gz";
+              hash = "sha256-MvTXh2bi9bQ3Vu/OPGmdxNqL7vUpbesC+ndW8yV+slw=";
+            };
+            x86_64-linux = {
+              asset = "rtk-x86_64-unknown-linux-musl.tar.gz";
+              hash = "sha256-o3yjAKQlEKlkRT8rwuIXdp7whyeAr4AtuKfWmPHaJGU=";
             };
           }.${system};
           pinned-uv = pkgs.stdenvNoCC.mkDerivation {
@@ -185,9 +200,33 @@ EOF
               runHook postInstall
             '';
           };
+          # rtk (rtk-ai/rtk) ships prebuilt release tarballs, each holding a
+          # single ``rtk`` binary. Mirrors the apm-cli ELF handling (no strip /
+          # no patchelf): the aarch64 build is gnu-dynamic and the devcontainer
+          # is a standard FHS distro, so the dynamic loader resolves normally;
+          # the x86_64 build is musl-static. Pinned by SHA256 for supply-chain
+          # hardening. Refs #1193.
+          rtk-cli = pkgs.stdenvNoCC.mkDerivation {
+            pname = "rtk";
+            version = rtkVersion;
+            src = pkgs.fetchurl {
+              url = "https://github.com/rtk-ai/rtk/releases/download/v${rtkVersion}/${rtkNative.asset}";
+              hash = rtkNative.hash;
+            };
+            dontBuild = true;
+            dontStrip = true;
+            dontPatchELF = true;
+            installPhase = ''
+              runHook preInstall
+
+              install -Dm755 rtk $out/bin/rtk
+
+              runHook postInstall
+            '';
+          };
         in
         {
-          inherit claude-cli codex-cli pinned-uv apm-cli waza-cli;
+          inherit claude-cli codex-cli pinned-uv apm-cli waza-cli rtk-cli;
           bubblewrap = pkgs.bubblewrap;
           gh-cli = pkgs.gh;
           python-runtime = pkgs.python311;
@@ -211,6 +250,7 @@ EOF
             ripgrep
             agentPackages.pinned-uv
             agentPackages.waza-cli
+            agentPackages.rtk-cli
           ];
           pythonQualityPackages = with pkgs; [
             mypy
