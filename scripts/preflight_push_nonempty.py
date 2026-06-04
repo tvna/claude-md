@@ -39,7 +39,9 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 # The base branch every session branch is cut from in this repo.
 BASE_REF = "origin/main"
 
-_GIT_PUSH_RE = re.compile(r"(?m)^\s*git\s+push\b")
+# Optional ``rtk`` prefix: the rtk auto-rewrite PreToolUse hook rewrites
+# ``git push`` -> ``rtk git push`` (Refs #1199), so the gate must fire on both.
+_GIT_PUSH_RE = re.compile(r"(?m)^\s*(?:rtk\s+)?git\s+push\b")
 # Pushes that do not ship HEAD: a deletion moves no commit, and a dry-run must
 # never be blocked. Either makes the HEAD-vs-base comparison irrelevant.
 _SKIP_FLAG_RE = re.compile(r"(?<!\S)(?:--delete|-d|--dry-run|-n)(?!\S)")

@@ -43,6 +43,9 @@ install_nix_binary() {
 install_nix_binary gh-cli gh
 install_nix_binary pinned-uv uv
 install_nix_binary python-runtime python3
+# rtk must resolve on PATH when the claude PreToolUse Bash hook (`rtk hook
+# claude` in config/claude/settings.json) fires; symlink it like gh/uv/python3.
+install_nix_binary rtk-cli rtk
 if [[ ! -x "/usr/local/bin/apm" ]]; then
   install_nix_binary apm-cli apm
 else

@@ -84,6 +84,17 @@ def test_decide_allows_on_runner_error() -> None:
     assert subject.decide(_bash_event("git push"), runner=fake_runner) is None
 
 
+def test_decide_detects_rtk_rewritten_push() -> None:
+    # The rtk auto-rewrite hook turns ``git push`` into ``rtk git push`` (#1199);
+    # the gate must still fire so the branch-base check is not bypassed.
+    def fake_runner(*_args: Any, **_kw: Any) -> subprocess.CompletedProcess[str]:
+        return _completed_err("::error::This branch is out-of-date with the base branch.")
+
+    result = subject.decide(_bash_event("rtk git push origin my-branch"), runner=fake_runner)
+    assert result is not None
+    assert result["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
 # ---------------------------------------------------------------------------
 # main() entry point
 # ---------------------------------------------------------------------------

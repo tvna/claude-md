@@ -24,7 +24,10 @@ from _hook_runtime import emit_decision, read_event
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
-_GIT_PUSH_RE = re.compile(r"(?m)^\s*git\s+push\b")
+# Detect a leading ``git push``, optionally prefixed by ``rtk`` when the rtk
+# auto-rewrite PreToolUse hook has rewritten ``git push`` -> ``rtk git push``
+# (Refs #1199). Keeping the prefix optional means the gate fires on both forms.
+_GIT_PUSH_RE = re.compile(r"(?m)^\s*(?:rtk\s+)?git\s+push\b")
 _Runner = Callable[..., subprocess.CompletedProcess[str]]
 
 

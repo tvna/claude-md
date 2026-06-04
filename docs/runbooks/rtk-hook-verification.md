@@ -72,13 +72,13 @@ the rewrite works:
 - If the rewrite is a no-op, every gate sees the original command -- unchanged
   behavior.
 - If the rewrite works, `git push` becomes `rtk git push`. The push gates detect
-  pushes with `_GIT_PUSH_RE = re.compile(r"(?m)^\s*git\s+push\b")`
-  (`scripts/preflight_push_base.py:27`, `preflight_push_session_branch.py:34`,
-  `preflight_push_nonempty.py:42`), which is anchored at line start and would
-  **miss** `rtk git push`. That single layer would weaken, but push safety is
-  defended in depth by the git `pre-push` hook (`preflight_all.py`) and CI,
-  which run regardless. The enablement checklist below hardens the regex so the
-  PreToolUse layer stays correct too.
+  pushes with `_GIT_PUSH_RE = re.compile(r"(?m)^\s*(?:rtk\s+)?git\s+push\b")`
+  (`scripts/preflight_push_base.py`, `preflight_push_session_branch.py`,
+  `preflight_push_nonempty.py`), whose optional `rtk` prefix matches both
+  `git push` and the rewritten `rtk git push`. The prefix was added by the
+  enablement PR (Refs #1199); before that the line-anchored regex would have
+  missed `rtk git push`. Push safety is additionally defended in depth by the
+  git `pre-push` hook (`preflight_all.py`) and CI, which run regardless.
 - `gate_gh_cli` matches `gh <subcommand>` mid-string, so `rtk gh ...` still
   triggers it -- no bypass there.
 
@@ -131,9 +131,15 @@ Record the result:
   prefer that and close / re-scope #1199 as "hook not viable at the pinned
   Claude Code version".
 
-## Enablement checklist (documented; NOT applied by this runbook's PR)
+## Enablement checklist
 
-Apply only after a multiple-hook PASS:
+> Status: applied by the rtk hook enablement PR (Refs #1199). The hook and its
+> supporting changes ship on that PR's branch so the live-session verification
+> above can be run by checking the branch out and rebuilding the claude
+> devcontainer. Do **not** merge the enablement PR until a multiple-hook PASS is
+> recorded; on a FAIL, close it and re-scope #1199 per the Decision section.
+
+Changes applied by the enablement PR:
 
 - `.devcontainer/config/claude/settings.json`: add
   `{ "matcher": "Bash", "hooks": [ { "type": "command", "command": "rtk hook claude" } ] }`

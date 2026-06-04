@@ -77,6 +77,15 @@ def test_decide_allows_push_when_head_advanced() -> None:
     assert subject.decide(_bash_event("git push origin HEAD:session"), runner=r) is None
 
 
+def test_decide_denies_rtk_rewritten_empty_push() -> None:
+    # The rtk auto-rewrite hook prefixes ``git push`` with ``rtk`` (#1199); the
+    # empty-push gate must still fire when HEAD has not advanced past the base.
+    r = _runner_for({"HEAD": "deadbeef", "origin/main": "deadbeef"})
+    result = subject.decide(_bash_event("rtk git push origin HEAD:session"), runner=r)
+    assert result is not None
+    assert result["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
 def test_decide_denies_push_with_set_upstream_flag() -> None:
     r = _runner_for({"HEAD": "deadbeef", "origin/main": "deadbeef"})
     result = subject.decide(_bash_event("git push -u origin HEAD:session"), runner=r)
