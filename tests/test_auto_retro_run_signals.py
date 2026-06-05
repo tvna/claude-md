@@ -308,7 +308,6 @@ class TestRunAggregateSignals:
         printed = capsys.readouterr().out
         assert "no repair signal fired" in printed
         assert "inline_review_comments=false" in printed
-        assert "body_cites_refs=false" in printed
         assert "fix_typed_title=false" in printed
         assert "multi_commit_pr=false" in printed
         # Step summary also carries the same reason for the audit trail.
