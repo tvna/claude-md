@@ -1,6 +1,6 @@
 {
   "name": "claude-md Claude",
-  "image": "ghcr.io/tvna/claude-md-devcontainer-claude:4b67d91bbfe75595e57a35661adeda87aa11a1fa",
+  "image": "ghcr.io/tvna/claude-md-devcontainer-claude:a5434d24cab05110b9ad8b16cfd6d94eecac76f7",
   "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
   "initializeCommand": "bash .devcontainer/scripts/check-gh-config-permissions.sh ${HOME}/.config/gh && bash .devcontainer/scripts/ensure-agent-image.sh claude",
   "remoteUser": "claude",
