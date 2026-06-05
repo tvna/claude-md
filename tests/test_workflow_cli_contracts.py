@@ -71,6 +71,7 @@ import scan_quality_standard_drift
 import scan_retro_followup_drift
 import scan_secret_runbooks
 import scan_secrets
+import scan_session_path_drift
 import scan_test_presence_drift
 import scan_workflow_action_pins
 import scan_workflow_gh_calls
@@ -191,6 +192,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("scan_retro_followup_drift.py", "run"): "test_scan_retro_followup_drift_run_matches_workflow_env",
     ("scan_secret_runbooks.py", "verify"): "test_scan_secret_runbooks_verify_matches_workflow_args",
     ("scan_secrets.py", "verify"): "test_scan_secrets_verify_matches_workflow_args",
+    ("scan_session_path_drift.py", "verify"): "test_scan_session_path_drift_verify_matches_workflow_args",
     ("scan_test_presence_drift.py", "verify"): "test_scan_test_presence_drift_verify_matches_workflow_args",
     ("scan_workflow_action_pins.py", "verify"): "test_scan_workflow_action_pins_verify_matches_workflow_args",
     ("scan_workflow_gh_calls.py", "verify"): "test_scan_workflow_gh_calls_verify_matches_workflow_args",
@@ -2153,6 +2155,12 @@ def test_scan_provisioning_hook_serial_verify_matches_workflow_args() -> None:
     """Mirrors the `Verify shared-binary provisioning hooks are serial`
     step in `.github/workflows/verify-agents.yml` (issue #1155)."""
     assert scan_provisioning_hook_serial.main(["verify"]) == 0
+
+
+def test_scan_session_path_drift_verify_matches_workflow_args() -> None:
+    """Mirrors the `$CLAUDE_ENV_FILE` persistence centralization step in
+    `.github/workflows/verify-agents.yml` (issue #1232)."""
+    assert scan_session_path_drift.main(["verify"]) == 0
 
 
 @pytest.mark.parametrize(
