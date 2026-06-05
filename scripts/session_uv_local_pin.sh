@@ -29,6 +29,8 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=scripts/_session_path.sh
+. "${SCRIPT_DIR}/_session_path.sh"
 REPO_ROOT="${CLAUDE_PROJECT_DIR:-$(cd "$SCRIPT_DIR/.." && pwd)}"
 PYPROJECT="${REPO_ROOT}/pyproject.toml"
 
@@ -62,14 +64,6 @@ fi
 
 # Persist the prefix for the rest of the session. Mirrors install-uv.sh:
 # `$CLAUDE_ENV_FILE` is sourced by the harness before the first agent step.
-case ":${PATH}:" in
-  *":${PREFIX}:"*) ;;
-  *)
-    if [ -n "${CLAUDE_ENV_FILE:-}" ]; then
-      echo "export PATH=\"${PREFIX}:\$PATH\"" >> "$CLAUDE_ENV_FILE"
-    fi
-    export PATH="${PREFIX}:$PATH"
-    ;;
-esac
+persist_session_path "${PREFIX}"
 
 uv --version >&2

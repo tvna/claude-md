@@ -31,6 +31,8 @@ if [ "${CLAUDE_CODE_REMOTE:-}" != "true" ]; then
 fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=scripts/_session_path.sh
+. "${SCRIPT_DIR}/_session_path.sh"
 
 # Map this platform to the nix system double that flake.nix's rtkNative block
 # enumerates. An unsupported arch is a non-fatal skip: the binary is an
@@ -60,26 +62,12 @@ sha="$(printf '%s\n' "${pin}" | sed -n '3p')"
 install_dir="${HOME}/.local/bin"
 dest="${install_dir}/rtk"
 
-persist_path() {
-  # Export for the current process and persist for the rest of the session via
-  # $CLAUDE_ENV_FILE (the harness sources it before the first agent step).
-  case ":${PATH}:" in
-    *":${install_dir}:"*) ;;
-    *)
-      if [ -n "${CLAUDE_ENV_FILE:-}" ]; then
-        echo "export PATH=\"${install_dir}:\$PATH\"" >> "${CLAUDE_ENV_FILE}"
-      fi
-      export PATH="${install_dir}:${PATH}"
-      ;;
-  esac
-}
-
 # Idempotent: reuse an rtk already on PATH at the pinned version (e.g. a prior
 # session-start run, or a nix-provisioned binary).
 if command -v rtk >/dev/null 2>&1; then
   current="$(rtk --version 2>/dev/null | awk '{print $NF}')"
   if [ "${current}" = "${version}" ]; then
-    persist_path
+    persist_session_path "${install_dir}"
     echo "install-rtk: rtk ${version} already present ($(command -v rtk))" >&2
     exit 0
   fi
@@ -113,5 +101,5 @@ chmod 0755 "${staged}"
 mv -f "${staged}" "${dest}"
 trap 'rm -rf "${tmpdir}"' EXIT
 
-persist_path
+persist_session_path "${install_dir}"
 echo "install-rtk: rtk v${version} ready at ${dest} ($("${dest}" --version 2>/dev/null | head -1))" >&2
