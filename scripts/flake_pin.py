@@ -30,6 +30,9 @@ CLI::
     python3 scripts/flake_pin.py asset-url --tool waza --system x86_64-linux \
             --version 0.34.0
         # -> the release download URL for that system + version
+    python3 scripts/flake_pin.py resolve --tool rtk --system x86_64-linux
+        # -> three lines: version, asset, sha256-hex (runtime reader for
+        #    install_*.sh; the SRI base64 hash is converted to hex)
     python3 scripts/flake_pin.py bump --tool waza --version 0.34.0 \
             --hash x86_64-linux=sha256-... --hash aarch64-linux=sha256-...
         # -> rewrites flake.nix in place (version + both per-system hashes)
@@ -57,6 +60,8 @@ Contract:
 from __future__ import annotations
 
 import argparse
+import base64
+import binascii
 import re
 import sys
 from collections.abc import Callable
@@ -204,6 +209,54 @@ def asset_url(text: str, tool: str, system: str, version: str) -> str:
     return spec.asset_url(version, asset_value(text, tool, system))
 
 
+def hash_value(text: str, tool: str, system: str) -> str:
+    """Return the pinned ``sha256-<base64>`` SRI hash for *system*."""
+    spec = tool_spec(tool)
+    body = _native_block(text, spec).group(1)
+    entry = _system_entry(body, system, spec.native_var)
+    match = re.search(r'hash\s*=\s*"([^"]+)"', entry)
+    if match is None:
+        raise FlakePinError(
+            f"hash not found for system '{system}' in flake.nix"
+        )
+    return match.group(1)
+
+
+def sri_to_hex(sri: str) -> str:
+    """Convert an ``sha256-<base64>`` SRI hash to a lowercase hex digest.
+
+    ``install_*.sh`` verify downloads with ``sha256sum -c``, which expects a
+    lowercase hex digest, while ``flake.nix`` pins the SRI base64 form. Fails
+    loud on any non-sha256 or malformed input rather than returning a guessed
+    value (CLAUDE.md section 4).
+    """
+    if not sri.startswith("sha256-"):
+        raise FlakePinError(f"unsupported hash format (expected sha256-...): {sri!r}")
+    b64 = sri[len("sha256-") :]
+    try:
+        raw = base64.b64decode(b64, validate=True)
+    except (binascii.Error, ValueError) as exc:
+        raise FlakePinError(f"invalid base64 in SRI hash {sri!r}: {exc}") from exc
+    if len(raw) != 32:
+        raise FlakePinError(
+            f"SRI hash {sri!r} decodes to {len(raw)} bytes, expected 32 (sha256)"
+        )
+    return raw.hex()
+
+
+def resolve(text: str, tool: str, system: str) -> tuple[str, str, str]:
+    """Return ``(version, asset, sha256_hex)`` for *tool* on *system*.
+
+    The runtime reader half consumed by the ``install_*.sh`` provisioners:
+    one call yields the three coordinates needed to download and checksum the
+    pinned release artifact, all sourced from ``flake.nix``.
+    """
+    version = current_version(text, tool)
+    asset = asset_value(text, tool, system)
+    sha = sri_to_hex(hash_value(text, tool, system))
+    return version, asset, sha
+
+
 def _replace_hash_in_entry(block_body: str, system: str, new_sri: str) -> str:
     """Return *block_body* with the ``hash`` of *system*'s entry set to SRI."""
     entry_re = re.compile(
@@ -305,6 +358,14 @@ def _cmd_asset_url(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_resolve(args: argparse.Namespace) -> int:
+    version, asset, sha = resolve(read_flake_text(), args.tool, args.system)
+    print(version)
+    print(asset)
+    print(sha)
+    return 0
+
+
 def _cmd_bump(args: argparse.Namespace) -> int:
     hashes = _parse_hash_args(args.hash)
     text = read_flake_text()
@@ -334,6 +395,13 @@ def main(argv: list[str] | None = None) -> int:
     p_url.add_argument("--system", required=True, choices=KNOWN_SYSTEMS)
     p_url.add_argument("--version", required=True)
     p_url.set_defaults(func=_cmd_asset_url)
+
+    p_resolve = sub.add_parser(
+        "resolve", help="print version, asset, and sha256-hex for a system"
+    )
+    p_resolve.add_argument("--tool", required=True, choices=sorted(TOOLS))
+    p_resolve.add_argument("--system", required=True, choices=KNOWN_SYSTEMS)
+    p_resolve.set_defaults(func=_cmd_resolve)
 
     p_bump = sub.add_parser("bump", help="rewrite version + per-system hashes")
     p_bump.add_argument("--tool", required=True, choices=sorted(TOOLS))

@@ -9,6 +9,7 @@ updater is caught here rather than at CI bump time. Refs #1171.
 
 from __future__ import annotations
 
+import base64
 import importlib.util
 import sys
 from pathlib import Path
@@ -120,6 +121,66 @@ def test_asset_url_waza_and_apm() -> None:
 def test_unknown_tool_fails_loud() -> None:
     with pytest.raises(flake_pin.FlakePinError):
         flake_pin.tool_spec("nope")
+
+
+# ---- runtime reader (resolve / sri_to_hex) -------------------------------
+# These back scripts/install-rtk.sh, which downloads the pinned rtk release
+# and verifies it with `sha256sum -c`. flake.nix stays the single source of
+# truth; the reader converts the SRI base64 hash to the hex digest sha256sum
+# expects. Refs #1218.
+
+
+def test_sri_to_hex_known_vector() -> None:
+    raw = bytes(range(32))
+    sri = "sha256-" + base64.b64encode(raw).decode()
+    assert flake_pin.sri_to_hex(sri) == raw.hex()
+
+
+@pytest.mark.parametrize("bad", ["md5-abc", "sha256-not!base64!", "sha256-AAAA"])
+def test_sri_to_hex_rejects_bad(bad: str) -> None:
+    with pytest.raises(flake_pin.FlakePinError):
+        flake_pin.sri_to_hex(bad)
+
+
+def test_resolve_rtk_real_flake() -> None:
+    version, asset, sha = flake_pin.resolve(_real_flake(), "rtk", "x86_64-linux")
+    assert version.count(".") >= 1
+    assert asset == "rtk-x86_64-unknown-linux-musl.tar.gz"
+    # 64 lowercase hex chars == 32-byte sha256 digest.
+    assert len(sha) == 64
+    int(sha, 16)  # valid hex
+
+
+def test_resolve_rtk_amd64_matches_known_digest() -> None:
+    """Guards the SRI->hex path against the actual pinned rtk x86_64 asset."""
+    _, asset, sha = flake_pin.resolve(_real_flake(), "rtk", "x86_64-linux")
+    assert asset == "rtk-x86_64-unknown-linux-musl.tar.gz"
+    assert sha == (
+        "a37ca300a42510a964453f2bc2e217769ef0872780af802db8a7d698f1da2465"
+    )
+
+
+def test_resolve_isolates_tool_from_waza() -> None:
+    """rtk and waza share the x86_64-linux key; resolve must not cross them."""
+    text = _real_flake()
+    _, rtk_asset, _ = flake_pin.resolve(text, "rtk", "x86_64-linux")
+    _, waza_asset, _ = flake_pin.resolve(text, "waza", "x86_64-linux")
+    assert rtk_asset.startswith("rtk-")
+    assert waza_asset.startswith("waza-")
+
+
+def test_resolve_unknown_tool_fails_loud() -> None:
+    with pytest.raises(flake_pin.FlakePinError):
+        flake_pin.resolve(_real_flake(), "nope", "x86_64-linux")
+
+
+def test_cli_resolve_rtk(capsys: pytest.CaptureFixture[str]) -> None:
+    rc = flake_pin.main(["resolve", "--tool", "rtk", "--system", "x86_64-linux"])
+    assert rc == 0
+    out = capsys.readouterr().out.splitlines()
+    assert len(out) == 3
+    assert out[1] == "rtk-x86_64-unknown-linux-musl.tar.gz"
+    assert len(out[2]) == 64
 
 
 # ---- bumping -------------------------------------------------------------
