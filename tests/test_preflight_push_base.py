@@ -106,7 +106,7 @@ def test_main_emits_deny_json(monkeypatch: pytest.MonkeyPatch) -> None:
     event = _bash_event("git push origin my-branch")
 
     def fake_decide(e: dict[str, Any], **_: Any) -> dict[str, Any] | None:
-        return subject._deny("test reason")
+        return subject.build_deny("test reason")
 
     monkeypatch.setattr(subject, "decide", fake_decide)
 

@@ -28,7 +28,7 @@ from __future__ import annotations
 
 import json
 import sys
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from typing import Any
 
 
@@ -65,3 +65,86 @@ def emit_decision(decision: Mapping[str, Any] | None) -> None:
     """
     if decision is not None:
         sys.stdout.write(json.dumps(decision))
+
+
+def build_deny(reason: str) -> dict[str, Any]:
+    """Return the standard PreToolUse deny payload for *reason*.
+
+    Centralises the ``hookSpecificOutput`` / ``permissionDecision="deny"`` dict
+    that the client-side gates emit to block a tool call. The literal was copied
+    byte-for-byte across gates (e.g. ``preflight_push_base._deny`` and
+    ``preflight_push_nonempty._deny`` were identical); this is the single
+    definition. The wire shape is unchanged.
+    """
+    return {
+        "hookSpecificOutput": {
+            "hookEventName": "PreToolUse",
+            "permissionDecision": "deny",
+            "permissionDecisionReason": reason,
+        }
+    }
+
+
+def split_tool_event(
+    event: Mapping[str, Any], script_name: str
+) -> tuple[str, dict[str, Any]] | None:
+    """Return ``(tool_name, tool_input)`` from a PreToolUse *event*, or ``None``.
+
+    On a missing or ill-typed ``tool_name`` / ``tool_input`` shape, emits the
+    byte-identical line
+
+        ``::error::<script_name>: event missing tool_name/tool_input``
+
+    to stderr and returns ``None`` so the caller fails open (``return 0`` per
+    CLAUDE.md section 4). Reproduces the per-gate guard exactly.
+    """
+    tool_name = event.get("tool_name")
+    tool_input = event.get("tool_input") or {}
+    if not isinstance(tool_name, str) or not isinstance(tool_input, dict):
+        print(
+            f"::error::{script_name}: event missing tool_name/tool_input",
+            file=sys.stderr,
+        )
+        return None
+    return tool_name, tool_input
+
+
+def run_event_hook(
+    script_name: str,
+    decide: Callable[[dict[str, Any]], Mapping[str, Any] | None],
+) -> int:
+    """PreToolUse entry point that passes the whole event to *decide*.
+
+    ``read_event`` -> ``decide(event)`` -> ``emit_decision``. Always returns 0
+    (fail-open): a malformed-JSON or non-dict event yields no decision (the
+    malformed-JSON stderr line is produced by :func:`read_event`). For gates
+    whose ``decide`` consumes the raw event (the push/commit family).
+    """
+    event = read_event(script_name)
+    if event is None or not isinstance(event, dict):
+        return 0
+    emit_decision(decide(event))
+    return 0
+
+
+def run_tool_hook(
+    script_name: str,
+    decide: Callable[[str, dict[str, Any]], Mapping[str, Any] | None],
+) -> int:
+    """PreToolUse entry point that splits the tool fields for *decide*.
+
+    ``read_event`` -> :func:`split_tool_event` ->
+    ``decide(tool_name, tool_input)`` -> ``emit_decision``. Always returns 0
+    (fail-open): a malformed-JSON, non-dict, or missing-shape event yields no
+    decision (the matching stderr line is produced by
+    :func:`read_event` / :func:`split_tool_event`). For gates whose ``decide``
+    takes ``(tool_name, tool_input)``.
+    """
+    event = read_event(script_name)
+    if event is None or not isinstance(event, dict):
+        return 0
+    split = split_tool_event(event, script_name)
+    if split is None:
+        return 0
+    emit_decision(decide(*split))
+    return 0

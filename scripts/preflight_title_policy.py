@@ -45,11 +45,10 @@ Refs #496. Supersedes ``scripts/preflight_pr_title_issue_ref.py``
 from __future__ import annotations
 
 import re
-import sys
 from typing import Any
 
 from _github_tool_names import canonical_github_tool
-from _hook_runtime import emit_decision, read_event
+from _hook_runtime import build_deny, run_tool_hook
 from title_policy import (
     allowed_types_csv,
     describe_non_ascii,
@@ -256,15 +255,15 @@ def decide(tool_name: str, tool_input: dict[str, Any]) -> dict[str, Any] | None:
 
     if not is_ascii_title(title):
         findings = describe_non_ascii(title)
-        return _build_deny_dict(build_non_ascii_deny_reason(tool_name, kind, title, findings))
+        return build_deny(build_non_ascii_deny_reason(tool_name, kind, title, findings))
 
     invalid_type = find_invalid_type(title, kind=kind)
     if invalid_type is not None:
-        return _build_deny_dict(build_invalid_type_deny_reason(tool_name, kind, title, invalid_type))
+        return build_deny(build_invalid_type_deny_reason(tool_name, kind, title, invalid_type))
 
     fit_findings = type_fit_findings(title, kind=kind, body=body)
     if fit_findings:
-        return _build_deny_dict(
+        return build_deny(
             build_type_fit_deny_reason(
                 tool_name,
                 kind,
@@ -276,19 +275,9 @@ def decide(tool_name: str, tool_input: dict[str, Any]) -> dict[str, Any] | None:
     if kind == "pull_request" and pr_title_has_issue_ref(title) and not pr_title_ref_is_exempt(title):
         refs = pr_title_issue_refs(title)
         suggested = pr_title_strip_issue_refs(title)
-        return _build_deny_dict(build_issue_ref_deny_reason(tool_name, title, refs, suggested))
+        return build_deny(build_issue_ref_deny_reason(tool_name, title, refs, suggested))
 
     return None
-
-
-def _build_deny_dict(reason: str) -> dict[str, Any]:
-    return {
-        "hookSpecificOutput": {
-            "hookEventName": "PreToolUse",
-            "permissionDecision": "deny",
-            "permissionDecisionReason": reason,
-        }
-    }
 
 
 # ---------------------------------------------------------------------------
@@ -305,21 +294,7 @@ def main(argv: list[str] | None = None) -> int:
     ``verify-title-policy.yml`` workflow remains as backstop.
     """
     del argv  # not used; the harness pipes the event on stdin
-    event = read_event("preflight_title_policy")
-    if event is None:
-        return 0
-
-    tool_name = event.get("tool_name")
-    tool_input = event.get("tool_input") or {}
-    if not isinstance(tool_name, str) or not isinstance(tool_input, dict):
-        print(
-            "::error::preflight_title_policy: event missing tool_name/tool_input",
-            file=sys.stderr,
-        )
-        return 0
-
-    emit_decision(decide(tool_name, tool_input))
-    return 0
+    return run_tool_hook("preflight_title_policy", decide)
 
 
 if __name__ == "__main__":

@@ -10,11 +10,10 @@ Refs #622.
 from __future__ import annotations
 
 import os
-import sys
 from typing import Any
 
 from _github_tool_names import canonical_github_tool
-from _hook_runtime import emit_decision, read_event
+from _hook_runtime import build_deny, run_event_hook, split_tool_event
 from body_policy import build_codex_attribution_footer, verify_codex_attribution_footer
 
 _TARGET_TOOLS: frozenset[str] = frozenset(
@@ -95,16 +94,6 @@ def build_deny_reason(errors: list[str], model: str | None) -> str:
     )
 
 
-def _deny(reason: str) -> dict[str, Any]:
-    return {
-        "hookSpecificOutput": {
-            "hookEventName": "PreToolUse",
-            "permissionDecision": "deny",
-            "permissionDecisionReason": reason,
-        }
-    }
-
-
 def decide(
     tool_name: str,
     tool_input: dict[str, Any],
@@ -122,32 +111,26 @@ def decide(
     event_data = {} if event is None else event
     model = resolve_model(event_data, environ)
     if model is None:
-        return _deny(build_deny_reason([], None))
+        return build_deny(build_deny_reason([], None))
 
     errors = verify_codex_attribution_footer(body, model=model)
     if not errors:
         return None
-    return _deny(build_deny_reason(errors, model))
+    return build_deny(build_deny_reason(errors, model))
 
 
 def main(argv: list[str] | None = None) -> int:
     """Read PreToolUse JSON from stdin, write decision JSON to stdout."""
     del argv
-    event = read_event("preflight_codex_github_footer")
-    if event is None:
-        return 0
 
-    tool_name = event.get("tool_name")
-    tool_input = event.get("tool_input") or {}
-    if not isinstance(tool_name, str) or not isinstance(tool_input, dict):
-        print(
-            "::error::preflight_codex_github_footer: event missing tool_name/tool_input",
-            file=sys.stderr,
-        )
-        return 0
+    def _decide(event: dict[str, Any]) -> dict[str, Any] | None:
+        split = split_tool_event(event, "preflight_codex_github_footer")
+        if split is None:
+            return None
+        tool_name, tool_input = split
+        return decide(tool_name, tool_input, event=event)
 
-    emit_decision(decide(tool_name, tool_input, event=event))
-    return 0
+    return run_event_hook("preflight_codex_github_footer", _decide)
 
 
 if __name__ == "__main__":

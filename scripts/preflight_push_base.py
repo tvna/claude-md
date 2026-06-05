@@ -20,7 +20,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from _hook_runtime import emit_decision, read_event
+from _hook_runtime import build_deny, run_event_hook
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -29,16 +29,6 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 # (Refs #1199). Keeping the prefix optional means the gate fires on both forms.
 _GIT_PUSH_RE = re.compile(r"(?m)^\s*(?:rtk\s+)?git\s+push\b")
 _Runner = Callable[..., subprocess.CompletedProcess[str]]
-
-
-def _deny(reason: str) -> dict[str, Any]:
-    return {
-        "hookSpecificOutput": {
-            "hookEventName": "PreToolUse",
-            "permissionDecision": "deny",
-            "permissionDecisionReason": reason,
-        }
-    }
 
 
 def decide(
@@ -68,7 +58,7 @@ def decide(
 
     if result.returncode != 0:
         detail = (result.stderr or result.stdout).strip()
-        return _deny(
+        return build_deny(
             "Blocked by scripts/preflight_push_base.py "
             "(client-side preflight): "
             "the branch is out-of-date with the base branch.\n\n"
@@ -80,13 +70,8 @@ def decide(
 
 
 def main(argv: list[str] | None = None) -> int:
-    event = read_event("preflight_push_base")
-    if event is None:
-        return 0
-    if not isinstance(event, dict):
-        return 0
-    emit_decision(decide(event))
-    return 0
+    del argv
+    return run_event_hook("preflight_push_base", decide)
 
 
 if __name__ == "__main__":
