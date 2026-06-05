@@ -49,9 +49,12 @@ ALL_RETRO_LABELS: Final[frozenset[str]] = frozenset(
 # ``scripts/auto_retro.py`` (PR2 of the TP/FP retrofit, refs #582).
 #
 # The prior maps each repair signal (`inline_review_comments`,
-# `body_cites_refs`, `fix_typed_title`, `multi_commit_pr`,
-# `verification_pairs_failed`) to its historical false-positive rate,
-# computed from past retros that carry ``retro:fp``. ``auto_retro.run``
+# `fix_typed_title`, `multi_commit_pr`, `verification_pairs_failed`) to
+# its historical false-positive rate, computed from past retros that
+# carry ``retro:fp``. (`body_cites_refs` was retired as a standalone
+# trigger in #1227 because it fired on nearly every PR -- CLAUDE.md
+# section 3 mandates a ``Refs #N`` line -- and dominated prior pollution.)
+# ``auto_retro.run``
 # evaluates the prior AFTER signal computation and uses the MAX
 # fp_rate across active signals to decide:
 #
@@ -70,3 +73,17 @@ PRIOR_SKIP_THRESHOLD: Final[float] = 0.5
 PRIOR_TENTATIVE_THRESHOLD: Final[float] = 0.3
 PRIOR_MIN_SAMPLE_SIZE: Final[int] = 5
 PRIOR_FETCH_LIMIT: Final[int] = 50
+
+# Prior epoch boundary (refs #1227). Retros opened before the #1227
+# signal-semantics fix measured the OLD (buggy) ``verification_pairs_failed``
+# and the now-retired ``body_cites_refs`` definitions, so their ``retro:fp``
+# labels must not drive ``should_skip_by_prior`` after the fix -- otherwise
+# the #1226 cleanup, which labels ~33 pre-fix false positives ``retro:fp``,
+# would poison the prior and suppress genuine post-fix repair retros. Only
+# retros whose issue number is at or above this boundary contribute to the
+# live skip decision (``auto_retro.run`` passes it; the descriptive
+# triage report keeps the full population). The value sits just above the
+# pre-fix retro population (highest pre-fix retro was #1225; #1226 is the
+# tracking issue, #1227 the fix issue), so the prior degrades to the
+# empty-prior safety net (open normally) until post-fix retros accumulate.
+PRIOR_EPOCH_MIN_RETRO_NUMBER: Final[int] = 1228
