@@ -40,7 +40,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-from _hook_runtime import emit_decision, read_event
+from _hook_runtime import build_deny, run_event_hook
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 _SESSION_BRANCH_FILE = REPO_ROOT / ".git" / "CLAUDE_SESSION_BRANCH"
@@ -79,16 +79,6 @@ def _current_branch() -> str | None:
     return branch or None
 
 
-def _deny(reason: str) -> dict[str, Any]:
-    return {
-        "hookSpecificOutput": {
-            "hookEventName": "PreToolUse",
-            "permissionDecision": "deny",
-            "permissionDecisionReason": reason,
-        }
-    }
-
-
 def decide(event: dict[str, Any]) -> dict[str, Any] | None:
     """Return a deny dict when committing onto a non-session branch, else None."""
     if os.environ.get(_REMOTE_ENV_VAR, "").lower() != "true":
@@ -112,7 +102,7 @@ def decide(event: dict[str, Any]) -> dict[str, Any] | None:
     if current_branch == session_branch:
         return None
 
-    return _deny(
+    return build_deny(
         f"Blocked by scripts/preflight_commit_session_branch.py: "
         f"this remote session can only push to '{session_branch}', but you are "
         f"about to commit on '{current_branch}'. A commit made here cannot be "
@@ -128,13 +118,7 @@ def decide(event: dict[str, Any]) -> dict[str, Any] | None:
 
 def main(argv: list[str] | None = None) -> int:
     del argv
-    event = read_event("preflight_commit_session_branch")
-    if event is None:
-        return 0
-    if not isinstance(event, dict):
-        return 0
-    emit_decision(decide(event))
-    return 0
+    return run_event_hook("preflight_commit_session_branch", decide)
 
 
 if __name__ == "__main__":

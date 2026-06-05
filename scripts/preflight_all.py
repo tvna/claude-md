@@ -50,6 +50,7 @@ import subprocess
 import sys
 import time
 from collections.abc import Sequence
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -496,6 +497,76 @@ def _heavy_fingerprint(heavy: Sequence[Step], cwd: Path) -> str | None:
         return None
 
 
+# Cheap steps that mutate the working tree or take a git lock; they must not
+# run concurrently with the working-tree-reading static gates, so the parallel
+# tier runs them first, sequentially (refs #1245):
+#   * preflight_branch_base -- ``git fetch`` writes .git refs and takes a lock.
+#   * auto_retro_decision_tree_doc / workflow_diagram_doc -- write tracked docs
+#     into the working tree.
+_SERIAL_CHEAP: frozenset[str] = frozenset({
+    "preflight_branch_base",
+    "auto_retro_decision_tree_doc",
+    "workflow_diagram_doc",
+})
+
+
+def _cheap_workers(n: int, environ: dict[str, str]) -> int:
+    """Return the worker count for the parallel cheap tier.
+
+    Honours ``PREFLIGHT_CHEAP_WORKERS`` (a positive int) as an override and
+    escape hatch -- ``=1`` restores the fully serial behaviour for bisecting a
+    suspected ordering bug. Otherwise scales to ``2x`` cores (the steps are
+    subprocess / I-O bound), capped at 16 to avoid a fork storm, and never
+    exceeds *n*.
+    """
+    override = environ.get("PREFLIGHT_CHEAP_WORKERS", "").strip()
+    if override:
+        try:
+            value = int(override)
+        except ValueError:
+            value = 0
+        if value >= 1:
+            return max(1, min(value, n))
+    return max(1, min(n, (os.cpu_count() or 4) * 2, 16))
+
+
+def _run_cheap(
+    cheap: Sequence[Step], cwd: Path, environ: dict[str, str]
+) -> list[StepResult]:
+    """Run the cheap tier, returning results in *cheap* declaration order.
+
+    Steps named in :data:`_SERIAL_CHEAP` mutate the working tree or take a git
+    lock, so they run first and sequentially, before any working-tree-reading
+    gate runs in parallel. The remaining steps -- pure static file reads and
+    read-only git -- run on a thread pool, where each step is a subprocess that
+    releases the GIL while it waits. The returned list is rebuilt in *cheap*
+    declaration order so ``emit_summary``, the manifest, and the drift gate are
+    byte-for-byte unaffected by the concurrency.
+    """
+    serial = [s for s in cheap if s.name in _SERIAL_CHEAP]
+    parallel = [s for s in cheap if s.name not in _SERIAL_CHEAP]
+
+    results: dict[str, StepResult] = {}
+    for step in serial:
+        results[step.name] = run_step(step, cwd, environ)
+
+    if parallel:
+        workers = _cheap_workers(len(parallel), environ)
+        if workers == 1:
+            for step in parallel:
+                results[step.name] = run_step(step, cwd, environ)
+        else:
+            with ThreadPoolExecutor(max_workers=workers) as pool:
+                futures = {
+                    pool.submit(run_step, step, cwd, environ): step.name
+                    for step in parallel
+                }
+                for future in as_completed(futures):
+                    results[futures[future]] = future.result()
+
+    return [results[step.name] for step in cheap]
+
+
 def run_all(
     steps: Sequence[Step],
     cwd: Path,
@@ -521,7 +592,7 @@ def run_all(
     cheap = [s for s in steps if not s.heavy]
     heavy = [s for s in steps if s.heavy]
 
-    cheap_results = [run_step(step, cwd, environ) for step in cheap]
+    cheap_results = _run_cheap(cheap, cwd, environ)
     cheap_failed = [r.name for r in cheap_results if r.status == "fail"]
 
     if not heavy:

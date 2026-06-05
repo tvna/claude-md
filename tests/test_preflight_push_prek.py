@@ -119,7 +119,7 @@ def test_main_emits_deny_json(monkeypatch: pytest.MonkeyPatch) -> None:
     import io
 
     event = _bash_event("git push origin main")
-    monkeypatch.setattr(subject, "decide", lambda e, **_: subject._deny("test reason"))
+    monkeypatch.setattr(subject, "decide", lambda e, **_: subject.build_deny("test reason"))
 
     output: list[str] = []
     monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(event)))

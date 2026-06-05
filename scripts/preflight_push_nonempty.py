@@ -32,7 +32,7 @@ from pathlib import Path
 from typing import Any
 
 from _git import run_git
-from _hook_runtime import emit_decision, read_event
+from _hook_runtime import build_deny, run_event_hook
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -51,16 +51,6 @@ _Runner = Callable[[list[str]], subprocess.CompletedProcess[str]]
 
 def _default_runner(args: list[str]) -> subprocess.CompletedProcess[str]:
     return run_git(args, cwd=REPO_ROOT, timeout=30)
-
-
-def _deny(reason: str) -> dict[str, Any]:
-    return {
-        "hookSpecificOutput": {
-            "hookEventName": "PreToolUse",
-            "permissionDecision": "deny",
-            "permissionDecisionReason": reason,
-        }
-    }
 
 
 def _resolve(runner: _Runner, ref: str) -> str | None:
@@ -96,7 +86,7 @@ def decide(
     if head != base:
         return None
 
-    return _deny(
+    return build_deny(
         "Blocked by scripts/preflight_push_nonempty.py "
         "(client-side preflight): local HEAD is the same commit as the base "
         f"tip ({BASE_REF}), so this push ships no new work.\n\n"
@@ -111,13 +101,7 @@ def decide(
 
 def main(argv: list[str] | None = None) -> int:
     del argv
-    event = read_event("preflight_push_nonempty")
-    if event is None:
-        return 0
-    if not isinstance(event, dict):
-        return 0
-    emit_decision(decide(event))
-    return 0
+    return run_event_hook("preflight_push_nonempty", decide)
 
 
 if __name__ == "__main__":

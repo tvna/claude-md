@@ -20,11 +20,10 @@ regex, ack-marker semantics, and escape format are imported from
 
 from __future__ import annotations
 
-import sys
 from typing import Any
 
 from _github_tool_names import canonical_github_tool
-from _hook_runtime import emit_decision, read_event
+from _hook_runtime import build_deny, run_tool_hook
 from scan_non_ascii import (
     ACK_MARKER,
     detect_non_ascii,
@@ -125,13 +124,7 @@ def decide(tool_name: str, tool_input: dict[str, Any]) -> dict[str, Any] | None:
         return None
     escaped = escape_for_comment(f"{title}\n{body}" if title else body)
     reason = build_deny_reason(tool_name, fields, escaped)
-    return {
-        "hookSpecificOutput": {
-            "hookEventName": "PreToolUse",
-            "permissionDecision": "deny",
-            "permissionDecisionReason": reason,
-        }
-    }
+    return build_deny(reason)
 
 
 # ---------------------------------------------------------------------------
@@ -148,21 +141,7 @@ def main(argv: list[str] | None = None) -> int:
     workflow remains as backstop.
     """
     del argv  # not used; the harness pipes the event on stdin
-    event = read_event("preflight_non_ascii")
-    if event is None:
-        return 0
-
-    tool_name = event.get("tool_name")
-    tool_input = event.get("tool_input") or {}
-    if not isinstance(tool_name, str) or not isinstance(tool_input, dict):
-        print(
-            "::error::preflight_non_ascii: event missing tool_name/tool_input",
-            file=sys.stderr,
-        )
-        return 0
-
-    emit_decision(decide(tool_name, tool_input))
-    return 0
+    return run_tool_hook("preflight_non_ascii", decide)
 
 
 if __name__ == "__main__":
