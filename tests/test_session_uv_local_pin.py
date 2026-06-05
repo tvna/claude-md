@@ -45,6 +45,11 @@ def _stage_repo(tmp_path: Path, pin: str) -> Path:
     # Copy the real uv_pin.py + the script under test so they live alongside
     # each other (matching the production layout).
     (scripts / "uv_pin.py").write_bytes((REPO_ROOT / "scripts" / "uv_pin.py").read_bytes())
+    # session_uv_local_pin.sh sources the shared PATH-persistence helper, so it
+    # must live alongside the script under test in the staged scripts/ dir.
+    (scripts / "_session_path.sh").write_bytes(
+        (REPO_ROOT / "scripts" / "_session_path.sh").read_bytes()
+    )
     (scripts / "session_uv_local_pin.sh").write_bytes(SCRIPT.read_bytes())
     _make_executable(scripts / "session_uv_local_pin.sh")
 

@@ -26,6 +26,8 @@ fi
 # tests/test_uv_pin.py. tomllib is stdlib on Python 3.11+; the remote env
 # ships 3.11+.
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=scripts/_session_path.sh
+. "${SCRIPT_DIR}/_session_path.sh"
 PYPROJECT="${CLAUDE_PROJECT_DIR:-$(cd "$SCRIPT_DIR/.." && pwd)}/pyproject.toml"
 UV_VERSION="$(python3 "$SCRIPT_DIR/uv_pin.py" read "$PYPROJECT")"
 INSTALL_DIR="$HOME/.local/bin"
@@ -49,15 +51,7 @@ fi
 
 # Persist PATH for the rest of the session via $CLAUDE_ENV_FILE
 # (the harness sources it before the first agent step).
-case ":${PATH}:" in
-  *":${INSTALL_DIR}:"*) ;;
-  *)
-    if [ -n "${CLAUDE_ENV_FILE:-}" ]; then
-      echo "export PATH=\"${INSTALL_DIR}:\$PATH\"" >> "$CLAUDE_ENV_FILE"
-    fi
-    export PATH="${INSTALL_DIR}:$PATH"
-    ;;
-esac
+persist_session_path "${INSTALL_DIR}"
 
 uv --version >&2
 uv sync --locked
