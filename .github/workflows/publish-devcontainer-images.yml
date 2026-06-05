@@ -28,6 +28,8 @@ jobs:
     permissions:
       contents: read
       packages: write
+      # Required by the Trivy SARIF upload below; all other scopes unchanged.
+      security-events: write
     strategy:
       fail-fast: false
       matrix:
@@ -83,6 +85,29 @@ jobs:
             --cache-from "type=registry,ref=${cache_ref}" \
             --cache-to "type=registry,ref=${cache_ref},mode=max" \
             --push
+
+      # Trivy scans the just-published per-arch image on the matching-arch
+      # runner. Informational-first posture (mirrors the CodeQL workflow):
+      # exit-code 0 means findings never fail the build, and continue-on-error
+      # means a Trivy DB-download or other infra failure never blocks the
+      # publish flow. Results surface in the Security tab via the SARIF upload.
+      # Auth to GHCR reuses the docker login performed above (~/.docker/config.json).
+      - name: Scan published image with Trivy
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        continue-on-error: true
+        with:
+          image-ref: ${{ env.IMAGE_PREFIX }}-${{ matrix.agent }}:${{ github.sha }}-${{ matrix.arch }}
+          scanners: vuln,secret,misconfig
+          format: sarif
+          output: trivy-results.sarif
+          exit-code: '0'
+
+      - name: Upload Trivy results to the Security tab
+        uses: github/codeql-action/upload-sarif@1a818fd5f97ed0ee9a823421bd5b171add01227f # v4.36.2
+        continue-on-error: true
+        with:
+          sarif_file: trivy-results.sarif
+          category: trivy-${{ matrix.agent }}-${{ matrix.arch }}
 
   publish:
     name: Publish ${{ matrix.agent }} devcontainer manifest
