@@ -97,6 +97,15 @@
     ],
     "PreToolUse": [
       {
+        "matcher": "Read",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 scripts/block_sensitive_reads.py"
+          }
+        ]
+      },
+      {
         "matcher": "mcp__github__(issue_write|add_issue_comment|create_pull_request|update_pull_request|add_reply_to_pull_request_comment|pull_request_review_write|add_comment_to_pending_review|sub_issue_write|merge_pull_request)",
         "hooks": [
           {
@@ -138,6 +147,15 @@
           {
             "type": "command",
             "command": "python3 scripts/preflight_main_freshness.py"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 scripts/block_sensitive_reads.py"
           }
         ]
       },

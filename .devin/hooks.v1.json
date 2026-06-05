@@ -150,6 +150,16 @@
         "hooks": [
           {
             "type": "command",
+            "command": "python3 scripts/block_sensitive_reads.py",
+            "statusMessage": "Blocking reads of local credential files"
+          }
+        ]
+      },
+      {
+        "matcher": "^Bash$",
+        "hooks": [
+          {
+            "type": "command",
             "command": "python3 scripts/gate_gh_cli.py",
             "statusMessage": "Checking for prohibited gh CLI usage"
           }
