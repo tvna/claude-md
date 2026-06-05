@@ -277,6 +277,13 @@ STEPS: tuple[Step, ...] = (
         argv=("python3", "scripts/scan_provisioning_hook_serial.py", "verify"),
     ),
     Step(
+        # Refs #1230. Fails when a scripts/*.sh writes $CLAUDE_ENV_FILE
+        # directly instead of persisting PATH via persist_session_path from
+        # scripts/_session_path.sh -- the duplication that refactor removed.
+        name="scan_session_path_drift",
+        argv=("python3", "scripts/scan_session_path_drift.py", "verify"),
+    ),
+    Step(
         # Refs #1099. Runs waza spec-compliance over every skill under
         # .agents/skills. spec failure = fail, token budget = warning only.
         # Needs the pinned waza binary (scripts/install_waza.sh); soft so a
