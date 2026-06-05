@@ -55,6 +55,7 @@ from urllib.parse import quote
 
 from _retro_labels import (
     ALL_RETRO_LABELS,
+    PRIOR_EPOCH_MIN_RETRO_NUMBER,
     PRIOR_FETCH_LIMIT,
     PRIOR_MIN_SAMPLE_SIZE,
     PRIOR_SKIP_THRESHOLD,
@@ -236,6 +237,32 @@ _RESULT_PASSING_NIX_TOOL_RE = re.compile(r"^nix-[a-z][a-z0-9-]*$", re.IGNORECASE
 # if the rest of the string smells like a pass (`0 passed, 3 failed`).
 # Refs #453.
 _RESULT_FAILING_COUNT_RE = re.compile(r"\b\d+\s+failed\b", re.IGNORECASE)
+
+# Zero exit / return code anywhere in the result is a pass even when the
+# surrounding text uses a non-standard prefix that the prefix allowlist
+# misses (`total preflight exit=0`, `PREFLIGHT_EXIT=0`, `skip: ... (rc=0)`).
+# Only an explicit zero matches: `exit=1` and a bare version like `0.11`
+# do not (the `0` must not be followed by a digit or a dot). Refs #1227.
+_RESULT_PASSING_EXIT_ZERO_RE = re.compile(
+    r"\b(?:exit(?:[ _-]?code)?|rc|preflight_exit)\b[ \t]*[=:]?[ \t]*0(?![.\d])",
+    re.IGNORECASE,
+)
+
+# Environment-prerequisite-unavailable markers. A verification that could
+# not run because a CI-only token or tool was absent locally is a skip, not
+# a repair signal: `blocked: GH_TOKEN unset`, `skip: PR is a retro-close PR`,
+# `skipped on missing local prereqs`, `not applicable`. A genuine local
+# failure (`blocked: ModuleNotFoundError`, `required uv ==X, local uv is Y`,
+# `not run; ... does not match`) carries none of these markers and stays a
+# failure. Refs #1227, #851.
+_RESULT_ENV_SKIP_RE = re.compile(
+    r"^[ \t]*skip(?:ped)?\b"
+    r"|\bunset\b"
+    r"|\bmissing (?:env|local prereq)"
+    r"|\bnot applicable\b"
+    r"|\bn/a\b",
+    re.IGNORECASE,
+)
 
 # Append-to-existing-retro markers used by append_repair_history_row.
 _AUTO_FILLED_OPEN = "<!-- auto-filled:repair-history -->"
@@ -477,6 +504,16 @@ def _result_is_passing(result: str) -> bool:
     quoted-string output, grep -n line results, sha256sum output, pure hex
     hashes, package name-version strings, and nix-prefixed tool names.
 
+    A zero exit / return code anywhere in the text (matched by
+    :data:`_RESULT_PASSING_EXIT_ZERO_RE`: ``exit=0``, ``rc=0``,
+    ``PREFLIGHT_EXIT=0``) is a pass even behind a non-standard prefix, and an
+    environment-prerequisite-unavailable result (matched by
+    :data:`_RESULT_ENV_SKIP_RE`: ``skip:``/``skipped``, ``... unset``,
+    ``missing env``/``missing local prereq``, ``not applicable``/``n/a``) is a
+    skip rather than a repair signal. A genuine local failure such as
+    ``blocked: ModuleNotFoundError`` carries none of these markers and stays a
+    failure. Refs #1227, #851.
+
     Anything else (including ``exit 1``, ``failed``, free-form prose) is
     treated as a failure signal. Refs #411, #417, #453, #927.
     """
@@ -517,6 +554,10 @@ def _result_is_passing(result: str) -> bool:
     if _RESULT_PASSING_PKG_VERSION_RE.match(text):
         return True
     if _RESULT_PASSING_NIX_TOOL_RE.match(text):
+        return True
+    if _RESULT_PASSING_EXIT_ZERO_RE.search(text):
+        return True
+    if _RESULT_ENV_SKIP_RE.search(text):
         return True
     lower = text.lower()
     raw_lower = raw_text.lower()
@@ -621,13 +662,17 @@ def compute_repair_signals(
     PR #275 and PR #288 merged with zero inline review comments yet
     carried substantial repair history in issues #287 and #273.
 
+    ``body_cites_refs`` was retired as a standalone trigger in #1227: it
+    fired on nearly every PR (CLAUDE.md section 3 mandates a ``Refs #N``
+    line), so it was non-discriminating and dominated label-prior
+    pollution. Repair loops captured in sibling issues are still caught by
+    the remaining signals (review comments, fix-typed titles, fix-up
+    commits, failed verification pairs).
+
     Signals returned:
 
     - ``inline_review_comments``: at least one comment on the PR's
       review thread (the legacy gate).
-    - ``body_cites_refs``: PR body has at least one line-anchored
-      ``Refs|Closes|Fixes|Resolves #N``. Reuses
-      :func:`issue_link.extract_refs`.
     - ``fix_typed_title``: PR title starts with ``fix(`` (Conventional
       Commit `fix` type).
     - ``multi_commit_pr``: source branch had more than one commit before
@@ -639,8 +684,6 @@ def compute_repair_signals(
       retained for tests that do not exercise the gate ordering in
       :func:`run`) the gate falls back to ``pr.commits > 1``.
     """
-    body_without_comments = strip_html_comments(pr.body or "")
-    refs = extract_refs(body_without_comments)
     fix_typed = pr.title.lstrip().lower().startswith("fix(")
     if commit_subjects is None:
         multi_commit = pr.commits > 1
@@ -654,7 +697,6 @@ def compute_repair_signals(
     # is deferred to the workflow tracked in #421.
     return {
         "inline_review_comments": bool(has_inline_comments),
-        "body_cites_refs": len(refs) > 0,
         "fix_typed_title": fix_typed,
         "multi_commit_pr": multi_commit,
         "verification_pairs_failed": any(
@@ -676,7 +718,6 @@ def render_repair_signals(signals: dict[str, bool]) -> str:
 # same merge event. Refs #582.
 _SIGNAL_NAMES: tuple[str, ...] = (
     "inline_review_comments",
-    "body_cites_refs",
     "fix_typed_title",
     "multi_commit_pr",
     "verification_pairs_failed",
@@ -765,28 +806,43 @@ class DecisionTreeNode:
 def compute_prior_from_labels(
     past_retros: list[PastRetro],
     signal_names: tuple[str, ...] = _SIGNAL_NAMES,
+    epoch_min_number: int = 0,
 ) -> dict[str, tuple[float, int]]:
     """For each signal name, return ``(fp_rate, sample_size)``.
 
     ``fp_rate`` is
 
-        |{r in past_retros : signal in r.signals and RETRO_FP in r.labels}|
-        / max(1, |{r in past_retros : signal in r.signals}|)
+        |{r in eligible : signal in r.signals and RETRO_FP in r.labels}|
+        / max(1, |{r in eligible : signal in r.signals}|)
 
     and ``sample_size`` is the denominator (un-floored). Empty input
     yields ``(0.0, 0)`` for every signal -- the consumer
     (:func:`should_skip_by_prior`) gates on ``sample_size >=
     PRIOR_MIN_SAMPLE_SIZE`` so the empty-prior case degrades to
     "open normally" rather than to a silent skip. Refs #582.
+
+    *epoch_min_number* drops retros whose issue ``number`` is below the
+    boundary from the population before any counting -- the live skip
+    decision in :func:`run` passes
+    :data:`PRIOR_EPOCH_MIN_RETRO_NUMBER` so retros opened under the old
+    (pre-#1227) signal semantics do not poison the prior. The default
+    ``0`` keeps the function a pure tally over the supplied population
+    (used by the descriptive triage report and by the unit tests).
+    Refs #1227.
     """
+    eligible = (
+        past_retros
+        if epoch_min_number <= 0
+        else [r for r in past_retros if r.number >= epoch_min_number]
+    )
     prior: dict[str, tuple[float, int]] = {}
     for name in signal_names:
-        denom = sum(1 for r in past_retros if name in r.signals)
+        denom = sum(1 for r in eligible if name in r.signals)
         if denom == 0:
             prior[name] = (0.0, 0)
             continue
         numer = sum(
-            1 for r in past_retros if name in r.signals and RETRO_FP in r.labels
+            1 for r in eligible if name in r.signals and RETRO_FP in r.labels
         )
         prior[name] = (numer / denom, denom)
     return prior
@@ -2743,7 +2799,9 @@ def run(event: dict[str, Any], repo: str) -> int:
     # prior to empty, which routes through the empty-prior safety
     # net (open normally).
     past_retros = fetch_past_retro_labels(repo)
-    prior = compute_prior_from_labels(past_retros)
+    prior = compute_prior_from_labels(
+        past_retros, epoch_min_number=PRIOR_EPOCH_MIN_RETRO_NUMBER
+    )
     prior_skip, prior_reason = should_skip_by_prior(signals, prior)
     if prior_skip:
         print(f"skip: {prior_reason}")

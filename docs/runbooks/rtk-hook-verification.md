@@ -8,6 +8,15 @@
 > the Web environment and must be confirmed in a live session before any hook is
 > shipped. Refs #1199.
 
+> **Web environment (Refs #1218):** Claude Code on the Web runs no nix
+> devcontainer build, so the binary is provisioned there by the SessionStart
+> hook `scripts/install-rtk.sh` (gated on `CLAUDE_CODE_REMOTE`), which resolves
+> the flake-pinned coordinates via `scripts/flake_pin.py resolve --tool rtk`,
+> downloads the release, and verifies its SHA256 before installing into
+> `~/.local/bin`. That hook ships the **binary only** -- it does not enable the
+> auto-rewrite hook this runbook governs, which remains unshipped pending the
+> live verification below.
+
 ## What the hook would do
 
 `rtk init -g` (for Claude Code) writes a `PreToolUse` hook into
@@ -171,4 +180,6 @@ Changes applied by the enablement PR:
   limitation).
 - [`.devcontainer/scripts/configure-agent-runtime.sh`](../../.devcontainer/scripts/configure-agent-runtime.sh)
   -- where `~/.claude/settings.json` is provisioned and tools are symlinked.
+- [`scripts/install-rtk.sh`](../../scripts/install-rtk.sh) -- the SessionStart
+  binary provisioner for the Claude Code on the Web environment (Refs #1218).
 - [`flake.nix`](../../flake.nix) -- the pinned `rtk-cli` derivation.

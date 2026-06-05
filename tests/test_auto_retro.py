@@ -2089,11 +2089,19 @@ class TestComputeRepairSignals:
         out = ar.compute_repair_signals(self._pr(), has_inline_comments=True)
         assert out == {
             "inline_review_comments": True,
-            "body_cites_refs": False,
             "fix_typed_title": False,
             "multi_commit_pr": False,
             "verification_pairs_failed": False,
         }
+
+    def test_body_cites_refs_signal_is_retired(self) -> None:
+        # Retired as a standalone trigger in #1227: a PR whose only
+        # evidence is a Refs line fires no signal.
+        out = ar.compute_repair_signals(
+            self._pr(body="Refs #287\nRefs #298"), has_inline_comments=False
+        )
+        assert "body_cites_refs" not in out
+        assert not any(out.values())
 
     def test_post_merge_signal_removed(self) -> None:
         """Per #418, `post_merge_unchecked` is no longer returned at merge time."""
@@ -2111,26 +2119,6 @@ class TestComputeRepairSignals:
             self._pr(body=body), has_inline_comments=False
         )
         assert not any(out.values())
-
-    def test_body_refs_signal_fires_for_refs(self) -> None:
-        out = ar.compute_repair_signals(
-            self._pr(body="Refs #287\nRefs #298"), has_inline_comments=False
-        )
-        assert out["body_cites_refs"] is True
-
-    def test_body_refs_signal_fires_for_closes_fixes_resolves(self) -> None:
-        for keyword in ["Closes", "Fixes", "Resolves"]:
-            out = ar.compute_repair_signals(
-                self._pr(body=f"{keyword} #1"), has_inline_comments=False
-            )
-            assert out["body_cites_refs"] is True, keyword
-
-    def test_body_refs_ignores_html_commented_refs(self) -> None:
-        out = ar.compute_repair_signals(
-            self._pr(body="<!-- Refs #999 -->\nplain text"),
-            has_inline_comments=False,
-        )
-        assert out["body_cites_refs"] is False
 
     def test_fix_typed_title_signal_fires(self) -> None:
         out = ar.compute_repair_signals(
@@ -2257,10 +2245,10 @@ class TestCountMergeFromMain:
 class TestRenderRepairSignals:
     def test_renders_each_signal(self) -> None:
         text = ar.render_repair_signals(
-            {"inline_review_comments": True, "body_cites_refs": False}
+            {"inline_review_comments": True, "multi_commit_pr": False}
         )
         assert "inline_review_comments=true" in text
-        assert "body_cites_refs=false" in text
+        assert "multi_commit_pr=false" in text
 
 
 _NEW_SHAPE_BODY = """## Summary
@@ -3036,6 +3024,48 @@ class TestIssue927Corpus:
             rows
         )
         assert standalone is expected, f"issue #{issue} ({group})"
+
+
+class TestIssue1227VerificationSkipCorpus:
+    """#1227 corpus: exit=0 / environment-skip false-positive repair.
+
+    Each result below was scored as a verification FAILURE before the
+    #1227 fix, firing ``verification_pairs_failed`` on a merged PR that
+    did no repair work (the dominant open-retro false positive). After
+    the fix the exit-zero and environment-skip forms classify as passing,
+    while genuine local failures keep failing. Refs #1227, #851, #1071,
+    #1074, #1110, #1216.
+    """
+
+    @pytest.mark.parametrize(
+        "result",
+        [
+            "total preflight exit=0 (skill_quality_gate skipped on missing"
+            " local prereqs: bin:waza, env:GH_TOKEN_API)",
+            "PREFLIGHT_EXIT=0 ... all pass; verify_ruleset_sync skipped",
+            "skip: PR is a retro-close PR (rc=0)",
+            "blocked: GH_TOKEN unset in this environment",
+            "exit code 0",
+            "rc=0",
+            "not applicable",
+        ],
+    )
+    def test_passing_results_no_longer_fire(self, result: str) -> None:
+        assert ar._result_is_passing(result) is True
+
+    @pytest.mark.parametrize(
+        "result",
+        [
+            "blocked: ModuleNotFoundError: No module named 'hypothesis'",
+            "not run; local uv 0.11.16 does not match repository"
+            " required-version ==0.11.11",
+            "failed: 3 tests broken",
+            "exit 1",
+            "0 passed, 3 failed",
+        ],
+    )
+    def test_genuine_failures_still_fail(self, result: str) -> None:
+        assert ar._result_is_passing(result) is False
 
 
 # ---------------------------------------------------------------------------
@@ -4562,6 +4592,31 @@ class TestComputePriorFromLabels:
         ]
         prior = ar.compute_prior_from_labels(past)
         assert prior["multi_commit_pr"] == (0.5, 2)
+
+    def test_epoch_cutoff_excludes_pre_epoch_retros(self) -> None:
+        # Refs #1227: retros below the epoch boundary measured the old
+        # signal semantics and must not drive the prior. With the cutoff,
+        # only the post-epoch retro contributes; the pre-epoch fp retro
+        # is dropped, so the signal degrades to the empty-prior net.
+        past = [
+            ar.PastRetro(
+                number=900,
+                signals=frozenset({"verification_pairs_failed"}),
+                labels=frozenset({rl.RETRO_FP}),
+            ),
+            ar.PastRetro(
+                number=1300,
+                signals=frozenset({"verification_pairs_failed"}),
+                labels=frozenset({rl.RETRO_TP}),
+            ),
+        ]
+        # Pure tally (default epoch) sees both -> 1 fp of 2.
+        assert ar.compute_prior_from_labels(past)[
+            "verification_pairs_failed"
+        ] == (0.5, 2)
+        # With the epoch boundary the pre-epoch fp retro is excluded.
+        gated = ar.compute_prior_from_labels(past, epoch_min_number=1228)
+        assert gated["verification_pairs_failed"] == (0.0, 1)
 
 
 class TestShouldSkipByPrior:
