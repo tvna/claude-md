@@ -32,8 +32,24 @@ Agent-tool-specific configuration files and directories MUST NOT be committed to
 | `.github/copilot-instructions.md` | GitHub Copilot |
 | `.windsurfrules` | Windsurf |
 | `.codeium/` | Codeium |
+| `.mcp.json` | Claude Code / MCP clients |
 
 The list is non-exhaustive. When a new tool emerges, follow the *Update procedure* below.
+
+`.mcp.json` is the Claude Code project-scope MCP client config. Unlike the
+entries above it is **generated, not authored**: `apm.yml` is the source of
+truth, and `scripts/gen_mcp_json.py` renders `.mcp.json` from it at
+`SessionStart` (wired in `.claude/settings.json`). It stays out of the tree
+for two reasons — it is a rendered build artefact, and it can carry per-client
+credentials in `env` blocks. See `docs/runbooks/context7-mcp.md`.
+
+### Secrets are also excluded (not a tool-config row)
+
+`.env` / `.env.*` are git-ignored as well, but they belong to the **secrets**
+category, not the agent-tool-config prohibition — so they live in `.gitignore`
+(canonical) and `.claudeignore` (mirror) without a row in the table above.
+There is no `.env.example` carve-out today because the repo ships no example
+env file; add an explicit `!.env.example` line if that changes.
 
 ### Open Q1 resolution — `docs/` is also covered
 
