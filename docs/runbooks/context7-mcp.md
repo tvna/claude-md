@@ -64,9 +64,31 @@ apm install --mcp context7
 ```
 
 `apm install` writes the MCP entry into each detected client config (for
-Claude Code: project-scope `.mcp.json` and user-scope `~/.claude.json`). The
-master repository deliberately does not run this step; each consumer owns its
-own client wiring.
+Claude Code: project-scope `.mcp.json` and user-scope `~/.claude.json`).
+Downstream consumers still own that wiring for their own clients.
+
+### Master-repo `.mcp.json` generation
+
+The master repository now renders its *own* project-scope `.mcp.json` so a
+Claude Code session opened against this repo can reach context7 without the
+operator running `apm install` by hand. This supersedes the earlier stance
+("the master repository deliberately does not run this step").
+
+- **Source of truth:** the `dependencies.mcp` block in `apm.yml`.
+- **Renderer:** `scripts/gen_mcp_json.py` reads `apm.yml` and writes
+  `.mcp.json` offline and idempotently. It does *not* call `apm install`,
+  reach the MCP endpoint, or touch user-scope `~/.claude.json` -- it renders
+  only the project-scope file from the in-repo declaration.
+- **Trigger:** the `SessionStart` hook chain in `.claude/settings.json`
+  (`uv run python3 scripts/gen_mcp_json.py`), so generation is guaranteed
+  every session rather than relying on operator memory.
+- **Not committed:** `.mcp.json` is a rendered build artefact and can carry
+  per-client credentials, so it stays git-ignored
+  (`docs/standards/repo-scope.md`). The secret rule above still holds -- the
+  renderer never bakes a key into the file; an authenticated server supplies
+  its key via the runtime `env` indirection.
+- **Drift check:** `scripts/gen_mcp_json.py --check` exits non-zero when the
+  on-disk `.mcp.json` no longer matches a fresh render of `apm.yml`.
 
 ## Verification
 

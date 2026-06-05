@@ -52,6 +52,11 @@ ALLOWLIST: dict[str, str] = {
         "Triggered by the Claude ``Write`` tool which has no Codex equivalent. "
         "Codex plan artifacts are managed differently and do not require this gate."
     ),
+    "gen_mcp_json": (
+        "Renders the Claude Code project-scope ``.mcp.json`` from apm.yml. "
+        "Codex resolves MCP servers from its own client config, not this file, "
+        "so there is no Codex counterpart to mirror."
+    ),
 }
 
 # Hook event keys recognised in both config files.
