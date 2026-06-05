@@ -65,6 +65,7 @@ than serving as precedent for new PRD files.
 | [remote-environment.md](standards/remote-environment.md) | Keeping the remote execution environment's `uv` aligned with what CI uses. | #106, #109 | `scripts/install-uv.sh`; `scripts/uv_pin.py`; `pyproject.toml` (`[tool.uv].required-version`) |
 | [devcontainer-tooling.md](standards/devcontainer-tooling.md) | Provisioning gate-required CLIs (waza, uv, ...) declaratively in the devcontainer flake, with a drift gate that fails when a gate needs a tool the container lacks, plus the egress-destination triage rule and its rationale gate. | #1100, #1103, #1170 | `flake.nix`; `scripts/scan_devcontainer_tool_drift.py`; `scripts/scan_allowlist_rationale.py`; `scripts/preflight_all.py`; `docs/runbooks/devcontainer-tool-network-triage.md`; `.github/workflows/verify-agents.yml` (`lint-scripts-static` job) |
 | [performance-metrics.md](standards/performance-metrics.md) | Phase 2 design-only measurement schema for the performance impact of master-source edits. No harness lands with this document. | #58, #61 | (none; Phase 3 harness tracked in #62) |
+| [sast-tooling.md](standards/sast-tooling.md) | Adopted CodeQL dataflow (taint) scan over `scripts/` (advanced setup, security-extended, informational-first) and the recorded rejection of Pyre (mypy overlap) and Pysa (pyre engine plus bespoke taint models). | #1237 | `.github/workflows/codeql.yml`; `.github/codeql/codeql-config.yml`; `pyproject.toml` (ruff `S`, mypy) |
 | [host-unit-duckdb-metrics.md](standards/host-unit-duckdb-metrics.md) | OTel-compatible per-host DuckDB store for the quality-vs-scope proportionality signal. Supersedes the orphan-branch JSON approach; collect early in DuckDB, export to OTLP later. | #815, #814, #226 | `metrics/duckdb/schema/v1/schema.sql`; `docs/standards/performance-metrics.md` |
 
 ## runbooks/ -- operator procedures
@@ -123,6 +124,7 @@ Source: `python3 scripts/workflow_diagram.py diagram-doc`. Tracking issue: #960.
 | [workflows/auto-retro-sentinel-if-branches.md](generated/workflows/auto-retro-sentinel-if-branches.md) | `auto-retro-sentinel.yml` |
 | [workflows/auto-retro-triage-report-if-branches.md](generated/workflows/auto-retro-triage-report-if-branches.md) | `auto-retro-triage-report.yml` |
 | [workflows/backup-non-ascii-originals-if-branches.md](generated/workflows/backup-non-ascii-originals-if-branches.md) | `backup-non-ascii-originals.yml` |
+| [workflows/codeql-if-branches.md](generated/workflows/codeql-if-branches.md) | `codeql.yml` |
 | [workflows/dependabot-automerge-if-branches.md](generated/workflows/dependabot-automerge-if-branches.md) | `dependabot-automerge.yml` |
 | [workflows/devcontainer-pin-refresh-if-branches.md](generated/workflows/devcontainer-pin-refresh-if-branches.md) | `devcontainer-pin-refresh.yml` |
 | [workflows/flake-pin-refresh-if-branches.md](generated/workflows/flake-pin-refresh-if-branches.md) | `flake-pin-refresh.yml` |
