@@ -21,6 +21,14 @@
         "hooks": [
           {
             "type": "command",
+            "command": "scripts/install-rtk.sh"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
             "command": "scripts/session_uv_local_pin.sh"
           }
         ]
