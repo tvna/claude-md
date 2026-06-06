@@ -362,8 +362,9 @@ legitimate partial work against a non-umbrella issue.
 
 The GitHub MCP write tools (`mcp__github__create_pull_request` and
 `mcp__github__update_pull_request`) rewrite the PR body before storing
-it. Two transforms matter for PR-body authors (verified on PRs #1033 and
-#1034, per #1035):
+it. Several transforms matter for PR-body authors (the first two
+verified on PRs #1033 and #1034, per #1035; the third in #1255 and
+#1265):
 
 - HTML comments are stripped. A `<!-- partial -->` line written through
   the MCP layer is deleted from the stored body, so the legacy opt-out is
@@ -376,6 +377,16 @@ it. Two transforms matter for PR-body authors (verified on PRs #1033 and
   avoid literal arrow sequences and double quotes in prose, or accept
   that they will render as entities. The `partial-pr` marker is safe
   because it uses only a single hyphen between two letters.
+- An angle-bracket placeholder token is stripped as an unknown HTML tag.
+  A bare token such as `<sha>` (a less-than sign, an identifier, a
+  greater-than sign) -- for example a `git revert` argument -- is
+  deleted **entirely** from the stored body, not even preserved as an
+  `&lt;...&gt;` entity, and the deletion happens inside fenced code
+  blocks too (verified in the original body of #1265, where the
+  bracketed example vanished from a fenced block). PR bodies authored
+  through the MCP layer should therefore avoid angle-bracket
+  placeholders and name the value in plain words instead. Observed in
+  #1255 and #1265.
 
 Local Claude CLI, Codex, and CI do not pass bodies through the MCP write
 path, so a `<!-- partial -->` line authored there is preserved; both
