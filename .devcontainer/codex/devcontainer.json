@@ -7,6 +7,8 @@
   "updateRemoteUserUID": false,
   "runArgs": [
     "--cap-add=NET_ADMIN",
+    "--cap-add=BPF",
+    "--cap-add=PERFMON",
     "--security-opt=seccomp=unconfined"
   ],
   "mounts": [

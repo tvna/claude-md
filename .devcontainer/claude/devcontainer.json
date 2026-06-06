@@ -6,7 +6,9 @@
   "remoteUser": "claude",
   "updateRemoteUserUID": false,
   "runArgs": [
-    "--cap-add=NET_ADMIN"
+    "--cap-add=NET_ADMIN",
+    "--cap-add=BPF",
+    "--cap-add=PERFMON"
   ],
   "mounts": [
     "source=claude-md-claude-session,target=/home/claude/.claude,type=volume",

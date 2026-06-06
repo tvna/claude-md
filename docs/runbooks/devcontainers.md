@@ -705,6 +705,47 @@ EGRESS_DNS_PROXY=1 .devcontainer/scripts/_egress-dnsproxy.sh stop
 cat /etc/resolv.conf                   # restored to the original
 ```
 
+### eBPF correlation monitor (bpftrace, best-effort, default off)
+
+`.devcontainer/scripts/_egress-ebpf.sh` runs the bpftrace program
+`.devcontainer/scripts/egress-correlation.bt`, which correlates each outbound
+TCP connect and each file open with the originating process (`pid` + `comm`).
+It records **only** the destination `IP:port` (for connect) or the file path
+(for openat) -- it **never reads syscall payload buffers**, so secrets in
+transit or on disk are not captured. The report is a **local-only** sink
+(`/tmp/egress-correlation.log` by default); nothing is sent off-box, matching
+the self-hosted, no-telemetry design of the allowlist and DNS proxy.
+
+It is **off by default**: `start` and `stop` are no-ops unless `EGRESS_EBPF=1`.
+The devcontainers add `--cap-add=BPF` and `--cap-add=PERFMON` (and deliberately
+**not** `CAP_SYS_ADMIN`) so bpftrace can attach without broad privilege.
+
+eBPF is unavailable on many hosts (Docker Desktop, most hosted CI runners). The
+`check` subcommand is a pure, unprivileged probe of the four preconditions, and
+`start` **skips gracefully** (exit 0, no boot failure) when any are missing:
+
+```sh
+# Pure detection seam (no root, no privileged calls, writes nothing):
+.devcontainer/scripts/_egress-ebpf.sh check
+# prints `supported` (exit 0) or `skip` with reasons on stderr (exit 3):
+#   - bpftrace present
+#   - kernel BTF readable (/sys/kernel/btf/vmlinux)
+#   - tracefs mounted (/sys/kernel/debug/tracing)
+#   - CAP_BPF + CAP_PERFMON held (or root)
+```
+
+End-to-end behaviour (probe attach, event capture) requires `CAP_BPF`/BTF and
+cannot be exercised in CI/sandbox. Manual steps in a capable NET_ADMIN/CAP_BPF
+devcontainer:
+
+```sh
+.devcontainer/scripts/_egress-ebpf.sh check          # expect: supported
+EGRESS_EBPF=1 .devcontainer/scripts/_egress-ebpf.sh start
+curl -s https://api.github.com >/dev/null            # generate a connect
+cat /tmp/egress-correlation.log                       # CONNECT/OPEN lines, pid+comm, dest/path only
+EGRESS_EBPF=1 .devcontainer/scripts/_egress-ebpf.sh stop
+```
+
 ### CI self-test (GitHub Actions, block mode)
 
 The same allowlist guards the CI surface through the custom composite action
@@ -738,10 +779,11 @@ work.
 
 ### Honest limitation: detection plus best-effort blocking, not a sandbox
 
-The egress allowlist, audit logging, and DNS proxy are **detection plus
-best-effort blocking, not an enforcement boundary**. The agent holds
-`NET_ADMIN` inside the devcontainer, so it can revert the controls from within:
-`iptables -P OUTPUT ACCEPT`, restore `/etc/resolv.conf`, kill `dnsmasq`, or
+The egress allowlist, audit logging, DNS proxy, and the eBPF correlation
+monitor are **detection plus best-effort blocking, not an enforcement
+boundary**. The agent holds `NET_ADMIN`/`CAP_BPF` inside the devcontainer, so
+it can revert the controls from within: `iptables -P OUTPUT ACCEPT`, restore
+`/etc/resolv.conf`, kill `dnsmasq` or `bpftrace`, detach the eBPF probes, or
 flush the `allowed-egress` ipset. CVE-2025-32955 demonstrated the same class of
 in-container bypass against step-security/harden-runner. A true enforcement
 boundary must live where the agent cannot modify it (a host-side egress proxy
@@ -783,6 +825,7 @@ python3 -m json.tool claude-md.code-workspace
 bash -n .devcontainer/scripts/apply-egress-allowlist.sh
 bash -n .devcontainer/scripts/_egress-lib.sh
 bash -n .devcontainer/scripts/_egress-dnsproxy.sh
+bash -n .devcontainer/scripts/_egress-ebpf.sh
 bash -n .devcontainer/scripts/configure-agent-runtime.sh
 bash -n .devcontainer/scripts/install-agent-cli.sh
 bash -n .devcontainer/scripts/prepare-agent-workspace.sh
