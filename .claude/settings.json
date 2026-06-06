@@ -29,6 +29,14 @@
         "hooks": [
           {
             "type": "command",
+            "command": "scripts/install-apm.sh"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
             "command": "scripts/install-actionlint.sh"
           }
         ]
