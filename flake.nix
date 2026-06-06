@@ -26,6 +26,7 @@
           apmVersion = "0.12.1";
           wazaVersion = "0.33.0";
           rtkVersion = "0.42.1";
+          actionlintVersion = "1.7.7";
           claudeCodeNative = {
             aarch64-linux = {
               package = "claude-code-linux-arm64";
@@ -90,6 +91,23 @@
             x86_64-linux = {
               asset = "rtk-x86_64-unknown-linux-musl.tar.gz";
               hash = "sha256-o3yjAKQlEKlkRT8rwuIXdp7whyeAr4AtuKfWmPHaJGU=";
+            };
+          }.${system};
+          # actionlint (rhysd/actionlint) ships per-target release tarballs, each
+          # holding a single ``actionlint`` binary. The asset filenames embed the
+          # version, but they MUST stay STATIC strings (not ``${actionlintVersion}``
+          # interpolations): scripts/flake_pin.py parses this block with a
+          # brace-naive regex, and a ``}`` inside an interpolation would truncate
+          # the match. A version bump must therefore update the filenames here
+          # alongside the version and hashes (see scripts/flake_pin.py).
+          actionlintNative = {
+            aarch64-linux = {
+              asset = "actionlint_1.7.7_linux_arm64.tar.gz";
+              hash = "sha256-QBlC+cJO1x5P5xt2x9Y49m2GM1dcQBbv0pd858KDF9A=";
+            };
+            x86_64-linux = {
+              asset = "actionlint_1.7.7_linux_amd64.tar.gz";
+              hash = "sha256-AjBwoofNjMzXFRX+3IQ/GYW/lsQ2t+/67M5nKQ5+B1c=";
             };
           }.${system};
           pinned-uv = pkgs.stdenvNoCC.mkDerivation {
@@ -229,9 +247,32 @@ EOF
               runHook postInstall
             '';
           };
+          # actionlint (rhysd/actionlint) ships prebuilt release tarballs, each
+          # holding a single bare ``actionlint`` binary (no enclosing dir), so
+          # point sourceRoot at the unpack dir itself -- mirrors rtk-cli. Pinned
+          # by SHA256 for supply-chain hardening. Refs #1263.
+          actionlint-cli = pkgs.stdenvNoCC.mkDerivation {
+            pname = "actionlint";
+            version = actionlintVersion;
+            src = pkgs.fetchurl {
+              url = "https://github.com/rhysd/actionlint/releases/download/v${actionlintVersion}/${actionlintNative.asset}";
+              hash = actionlintNative.hash;
+            };
+            sourceRoot = ".";
+            dontBuild = true;
+            dontStrip = true;
+            dontPatchELF = true;
+            installPhase = ''
+              runHook preInstall
+
+              install -Dm755 actionlint $out/bin/actionlint
+
+              runHook postInstall
+            '';
+          };
         in
         {
-          inherit claude-cli codex-cli pinned-uv apm-cli waza-cli rtk-cli;
+          inherit claude-cli codex-cli pinned-uv apm-cli waza-cli rtk-cli actionlint-cli;
           bubblewrap = pkgs.bubblewrap;
           gh-cli = pkgs.gh;
           python-runtime = pkgs.python311;
@@ -243,7 +284,6 @@ EOF
           };
           agentPackages = mkPackages system;
           sharedPackages = with pkgs; [
-            actionlint
             bashInteractive
             cacert
             coreutils
@@ -258,6 +298,7 @@ EOF
             agentPackages.pinned-uv
             agentPackages.waza-cli
             agentPackages.rtk-cli
+            agentPackages.actionlint-cli
           ];
           pythonQualityPackages = with pkgs; [
             mypy
