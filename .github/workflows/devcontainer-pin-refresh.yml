@@ -52,4 +52,8 @@ jobs:
             --template .github/pr-body-templates/devcontainer-image-pins.md \
             --file .devcontainer/claude/devcontainer.json \
             --file .devcontainer/codex/devcontainer.json \
+            --file .devcontainer/claude-amd64/devcontainer.json \
+            --file .devcontainer/claude-arm64/devcontainer.json \
+            --file .devcontainer/codex-amd64/devcontainer.json \
+            --file .devcontainer/codex-arm64/devcontainer.json \
             --file docs/runbooks/devcontainers.md

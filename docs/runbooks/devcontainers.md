@@ -20,6 +20,52 @@ the matching Nix shell, and run:
 uv sync --locked --group local
 ```
 
+### Per-architecture entrypoint overlays
+
+The base entrypoints above reference a single commit-SHA image tag that is
+a multi-platform manifest, so `podman pull` auto-resolves the host CPU
+architecture. That is the everyday path and needs no architecture choice.
+
+For cases that need an explicit architecture, generated overlay entrypoints
+pin one platform:
+
+| Entrypoint | Pins |
+|---|---|
+| `.devcontainer/claude-amd64/devcontainer.json` | `--platform=linux/amd64` |
+| `.devcontainer/claude-arm64/devcontainer.json` | `--platform=linux/arm64` |
+| `.devcontainer/codex-amd64/devcontainer.json` | `--platform=linux/amd64` |
+| `.devcontainer/codex-arm64/devcontainer.json` | `--platform=linux/arm64` |
+
+VS Code lists every `.devcontainer/<name>/devcontainer.json` subfolder in
+its "Reopen in Container" and "Switch Container" pickers, so these overlays
+appear as selectable choices alongside the base entrypoints. Each overlay
+adds `--platform=linux/<arch>` to `runArgs` and passes `--platform` to the
+host-side image check, so `podman pull` loud-fails when the requested
+architecture is absent from the manifest (the amd64-only-publish hazard
+described under [Prebuilt images](#prebuilt-images)).
+
+These overlays are **generated, not hand-edited**. The base
+`.devcontainer/<agent>/devcontainer.json` image SHA is the single source of
+truth; the pin automation regenerates the overlays after each bump, and the
+`generate_devcontainer_arch_overlays` preflight gate fails CI on drift. To
+regenerate after editing a base config:
+
+```sh
+python3 scripts/generate_devcontainer_arch_overlays.py generate
+python3 scripts/generate_devcontainer_arch_overlays.py verify
+```
+
+Running a non-host architecture goes through qemu emulation, so eBPF egress
+correlation, the egress allowlist's netfilter path, and performance differ
+from a native container. Treat the cross-architecture overlays as a
+diagnostic / verification path, not a daily driver. If a stale-container
+recovery is needed for an overlay, pass its config path explicitly:
+
+```sh
+.devcontainer/scripts/check-stale-agent-container.sh claude \
+  --config .devcontainer/claude-amd64/devcontainer.json
+```
+
 Claude terminals run as user `claude`, and Codex terminals run as user
 `codex`. The prebuilt images use `.devcontainer/images/features/agent-user`
 to provide the matching agent name with UID 0. This is intentional for
