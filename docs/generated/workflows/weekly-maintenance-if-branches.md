@@ -11,6 +11,7 @@ flowchart TD
     J_branch_cleanup["branch-cleanup"]
     S_J_branch_cleanup_0(("Guard dispatch ref"))
     J_dependency_freshness["dependency-freshness"]
+    J_dependency_threat_triage["dependency-threat-triage"]
     J_generate_agents["generate-agents"]
     J_measure_timings["measure-timings"]
     S_J_measure_timings_0(("Open or update CI budget tracking issue"))
@@ -31,6 +32,7 @@ flowchart TD
     T_schedule -->|"github.event_name == 'schedule' || inputs.task == 'all' || inputs.task ~"| J_branch_cleanup
     J_branch_cleanup -->|"github.event_name == 'workflow_dispatch' && github.ref != 'refs/heads/m~"| S_J_branch_cleanup_0
     T_schedule -->|"github.event_name == 'schedule' || inputs.task == 'all' || inputs.task ~"| J_dependency_freshness
+    T_schedule -->|"github.event_name == 'schedule' || inputs.task == 'all' || inputs.task ~"| J_dependency_threat_triage
     T_schedule -->|"github.event_name == 'schedule' || inputs.task == 'all' || inputs.task ~"| J_generate_agents
     T_schedule -->|"github.event_name == 'schedule' || inputs.task == 'all' || inputs.task ~"| J_measure_timings
     J_measure_timings -->|"${{ inputs.measure_cutoff == '' }}"| S_J_measure_timings_0
