@@ -136,6 +136,7 @@ Source: `python3 scripts/workflow_diagram.py diagram-doc`. Tracking issue: #960.
 | [workflows/publish-devcontainer-images-if-branches.md](generated/workflows/publish-devcontainer-images-if-branches.md) | `publish-devcontainer-images.yml` |
 | [workflows/retro-followup-drift-if-branches.md](generated/workflows/retro-followup-drift-if-branches.md) | `retro-followup-drift.yml` |
 | [workflows/skill-quality-if-branches.md](generated/workflows/skill-quality-if-branches.md) | `skill-quality.yml` |
+| [workflows/verify-actionlint-if-branches.md](generated/workflows/verify-actionlint-if-branches.md) | `verify-actionlint.yml` |
 | [workflows/verify-agents-if-branches.md](generated/workflows/verify-agents-if-branches.md) | `verify-agents.yml` |
 | [workflows/verify-dependabot-labels-if-branches.md](generated/workflows/verify-dependabot-labels-if-branches.md) | `verify-dependabot-labels.yml` |
 | [workflows/verify-design-philosophy-if-branches.md](generated/workflows/verify-design-philosophy-if-branches.md) | `verify-design-philosophy.yml` |

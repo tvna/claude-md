@@ -243,6 +243,7 @@ EOF
           };
           agentPackages = mkPackages system;
           sharedPackages = with pkgs; [
+            actionlint
             bashInteractive
             cacert
             coreutils
@@ -253,6 +254,7 @@ EOF
             nodejs_22
             python311
             ripgrep
+            shellcheck
             agentPackages.pinned-uv
             agentPackages.waza-cli
             agentPackages.rtk-cli

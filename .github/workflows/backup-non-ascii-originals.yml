@@ -80,11 +80,13 @@ jobs:
           SHA256=$(sha256sum "${ARCHIVE}" | awk '{print $1}')
           ARCHIVE_BASENAME=$(basename "${ARCHIVE}")
 
-          echo "artifact_name=${ARTIFACT_NAME}" >> "$GITHUB_OUTPUT"
-          echo "archive_path=${ARCHIVE}"         >> "$GITHUB_OUTPUT"
-          echo "archive_basename=${ARCHIVE_BASENAME}" >> "$GITHUB_OUTPUT"
-          echo "sha256=${SHA256}"                >> "$GITHUB_OUTPUT"
-          echo "timestamp=${TIMESTAMP}"          >> "$GITHUB_OUTPUT"
+          {
+            echo "artifact_name=${ARTIFACT_NAME}"
+            echo "archive_path=${ARCHIVE}"
+            echo "archive_basename=${ARCHIVE_BASENAME}"
+            echo "sha256=${SHA256}"
+            echo "timestamp=${TIMESTAMP}"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Write step summary
         env:

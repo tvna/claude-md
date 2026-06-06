@@ -47,6 +47,8 @@ from pathlib import Path
 TOOL_FLAKE_MARKERS: dict[str, str] = {
     "uv": "pinned-uv",
     "waza": "waza-cli",
+    "actionlint": "actionlint",
+    "shellcheck": "shellcheck",
 }
 
 # Tools a gate may require but that are intentionally NOT provisioned by the
