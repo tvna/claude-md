@@ -13,6 +13,7 @@ flowchart TD
     J_lint_scripts_pytest_gate["lint-scripts-pytest-gate"]
     S_J_lint_scripts_pytest_gate_0(("Download all shard JUnit artifacts"))
     S_J_lint_scripts_pytest_gate_1(("Upload test results to Codecov"))
+    J_egress_firewall_selftest["egress-firewall-selftest"]
     J_gate["gate"]
     J_legacy_agent_instructions_context["legacy-agent-instructions-context"]
 
@@ -22,6 +23,7 @@ flowchart TD
     J_lint_scripts_pytest -->|"always()"| J_lint_scripts_pytest_gate
     J_lint_scripts_pytest_gate -->|"always()"| S_J_lint_scripts_pytest_gate_0
     J_lint_scripts_pytest_gate -->|"always()"| S_J_lint_scripts_pytest_gate_1
+    T_pull_request --> J_egress_firewall_selftest
     J_lint_scripts_static -->|"always()"| J_gate
     J_lint_scripts_pytest_gate -->|"always()"| J_gate
     J_gate -->|"always()"| J_legacy_agent_instructions_context
