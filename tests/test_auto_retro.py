@@ -606,6 +606,19 @@ class TestRepairHistoryTable:
         assert len(multi_lines) == 1
         assert "[policy-artifact]" in multi_lines[0]
 
+    def test_revert_row_carries_policy_artifact_marker(self) -> None:
+        """Refs #1287: synthetic Revert commit row carries the marker and
+        prompts co-fire correlation."""
+        table = ar._build_repair_history_table(
+            None, ['Revert "feat: x"'], 1
+        )
+        revert_lines = [
+            line for line in table.splitlines() if "| Revert commit |" in line
+        ]
+        assert len(revert_lines) == 1
+        assert "[policy-artifact]" in revert_lines[0]
+        assert "co-firing" in revert_lines[0]
+
     def test_policy_artifact_footnote_for_synthetic_rows_without_merge(
         self,
     ) -> None:
@@ -2206,6 +2219,111 @@ class TestComputeRepairSignals:
             commit_subjects=None,
         )
         assert out["multi_commit_pr"] is True
+
+    def test_multi_commit_signal_excludes_git_standard_revert(self) -> None:
+        # A revert-only multi-commit PR must not fire on its own (#1287).
+        out = ar.compute_repair_signals(
+            self._pr(commits=2),
+            has_inline_comments=False,
+            commit_subjects=[
+                'Revert "feat(x): add x"',
+                "feat(x): add x",
+            ],
+        )
+        assert out["multi_commit_pr"] is False
+
+    def test_multi_commit_signal_excludes_conventional_revert(self) -> None:
+        for revert_subject in [
+            "revert(automerge): restore exemption",
+            "revert: restore exemption",
+            "revert!: restore exemption",
+            "revert(automerge)!: restore exemption",
+        ]:
+            out = ar.compute_repair_signals(
+                self._pr(commits=2),
+                has_inline_comments=False,
+                commit_subjects=[revert_subject, "feat(x): add x"],
+            )
+            assert out["multi_commit_pr"] is False, revert_subject
+
+    def test_multi_commit_signal_fires_when_pure_commits_exceed_one_with_revert(
+        self,
+    ) -> None:
+        out = ar.compute_repair_signals(
+            self._pr(commits=3),
+            has_inline_comments=False,
+            commit_subjects=[
+                'Revert "feat(x): add x"',
+                "feat(x): add a",
+                "feat(x): add b",
+            ],
+        )
+        assert out["multi_commit_pr"] is True
+
+    def test_multi_commit_signal_double_revert_counts_once(self) -> None:
+        out = ar.compute_repair_signals(
+            self._pr(commits=2),
+            has_inline_comments=False,
+            commit_subjects=[
+                'Revert "Revert "feat(x): add x""',
+                "feat(x): add x",
+            ],
+        )
+        assert out["multi_commit_pr"] is False
+
+    def test_multi_commit_signal_revert_in_scope_slot_not_subtracted(
+        self,
+    ) -> None:
+        # `fix(revert): ...` is a real fix commit, not a rollback: revert
+        # appears only in the scope slot, so it must NOT be subtracted.
+        out = ar.compute_repair_signals(
+            self._pr(commits=2),
+            has_inline_comments=False,
+            commit_subjects=[
+                "fix(revert): correct the revert helper",
+                "feat(x): add x",
+            ],
+        )
+        assert out["multi_commit_pr"] is True
+
+
+class TestCountRevert:
+    def test_counts_git_standard_and_conventional(self) -> None:
+        count = ar._count_revert(
+            [
+                'Revert "feat(x): add x"',
+                "feat(x): add x",
+                "revert(automerge): restore exemption",
+                "revert: plain revert",
+                "fix(scripts): tweak",
+            ]
+        )
+        assert count == 3
+
+    def test_returns_zero_when_no_revert_subjects(self) -> None:
+        count = ar._count_revert(["feat(x): a", "fix(y): b", "docs(z): c"])
+        assert count == 0
+
+    def test_double_revert_counts_once(self) -> None:
+        count = ar._count_revert(['Revert "Revert "feat: x""'])
+        assert count == 1
+
+    def test_handles_leading_whitespace(self) -> None:
+        count = ar._count_revert(['   Revert "feat: x"'])
+        assert count == 1
+
+    def test_lowercase_git_standard_does_not_count(self) -> None:
+        # Neither Git-standard (capital `Revert "`) nor Conventional.
+        count = ar._count_revert(['revert "feat: x"'])
+        assert count == 0
+
+    def test_revert_without_colon_does_not_count(self) -> None:
+        count = ar._count_revert(["revert this thing", "reverted earlier work"])
+        assert count == 0
+
+    def test_revert_in_scope_slot_does_not_count(self) -> None:
+        count = ar._count_revert(["fix(revert): correct helper"])
+        assert count == 0
 
 
 class TestCountMergeFromMain:

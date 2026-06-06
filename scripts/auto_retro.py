@@ -444,6 +444,56 @@ def _count_merge_from_main(subjects: list[str]) -> int:
     )
 
 
+# Commit-subject markers for `git revert` commits. Kept parallel to
+# _MERGE_FROM_MAIN_PREFIXES rather than merged into one matcher: the
+# Git-standard revert subject is NOT Conventional (`Revert "<subject>"`),
+# while the Conventional forms (`revert(scope): ...`) carry a type slot, so a
+# single literal-prefix list cannot cover both without muddying each. Per
+# CLAUDE.md section 3 `git revert` is the default rollback path, so a revert
+# commit is an expected artifact, not a repair loop on its own -- but unlike
+# merge-from-main (pure structural rebase debt) it is an anomaly *hint*: it
+# subtracts from the multi_commit_pr count yet is still recorded for co-fire
+# correlation (refs #1287).
+_REVERT_PREFIXES: tuple[str, ...] = ('Revert "',)
+
+# Conventional revert subjects: `revert: ...`, `revert(scope): ...`, and the
+# breaking `revert!: ` / `revert(scope)!: `. The `: ` separator is required so
+# `revert this thing` (no colon) and `fix(revert): ...` (revert only in the
+# scope slot, a real fix commit) do NOT match -- consistent with
+# title_policy.pr_title_ref_is_exempt, which only treats the *type* slot as a
+# revert. Matched case-sensitively: Git emits capital `Revert "`, Conventional
+# types are lowercase per .github/title-policy.toml `scope_pattern`
+# (kept in sync here as a self-contained literal to avoid importing
+# title_policy's regex internals).
+_REVERT_CONVENTIONAL_RE = re.compile(r"^revert(?:\([a-z0-9][a-z0-9-]*\))?!?: ")
+
+
+def _is_revert_subject(subject: str) -> bool:
+    """Return True if *subject* is a Git-standard or Conventional revert.
+
+    A double revert (``Revert "Revert "feat: x""``) is still one commit and
+    matches once; nesting depth is not counted. Lowercase ``revert "...``
+    (neither Git-standard nor Conventional) does not match, to avoid false
+    positives on prose.
+    """
+    stripped = subject.strip()
+    return any(
+        stripped.startswith(prefix) for prefix in _REVERT_PREFIXES
+    ) or bool(_REVERT_CONVENTIONAL_RE.match(stripped))
+
+
+def _count_revert(subjects: list[str]) -> int:
+    """Return the number of *subjects* that are revert commits.
+
+    Shared by :func:`compute_repair_signals` (to subtract reverts from the
+    ``multi_commit_pr`` count so a revert alone does not fire the gate) and
+    :func:`_repair_history_rows` (to render the ``Revert commit`` rows).
+    Mirrors :func:`_count_merge_from_main`; see :func:`_is_revert_subject`
+    for the per-subject predicate.
+    """
+    return sum(1 for subject in subjects if _is_revert_subject(subject))
+
+
 def _slice_section(body: str, heading: str) -> str:
     """Return the slice of ``body`` under ``## heading`` up to the next H2.
 
@@ -677,18 +727,29 @@ def compute_repair_signals(
       Commit `fix` type).
     - ``multi_commit_pr``: source branch had more than one commit before
       the merge. When *commit_subjects* is supplied, merge-from-main
-      commits (see :data:`_MERGE_FROM_MAIN_PREFIXES`) are subtracted
-      from the count so rebase debt created by the squash-only,
-      linear-history merge policy does not fire the gate on its own.
-      When *commit_subjects* is ``None`` (the legacy two-arg call shape,
-      retained for tests that do not exercise the gate ordering in
-      :func:`run`) the gate falls back to ``pr.commits > 1``.
+      commits (see :data:`_MERGE_FROM_MAIN_PREFIXES`) and revert commits
+      (see :func:`_count_revert`) are subtracted from the count. Rebase
+      debt created by the squash-only, linear-history merge policy does
+      not fire the gate on its own, and a revert -- the default rollback
+      path per CLAUDE.md section 3 -- is an anomaly *hint* that must not
+      open a retro alone: it only matters when it co-fires with another
+      signal (review comments, failed CI, failed verification). The revert
+      is still surfaced as a ``Revert commit`` row in the repair-history
+      table for that correlation (refs #1287). When *commit_subjects* is
+      ``None`` (the legacy two-arg call shape, retained for tests that do
+      not exercise the gate ordering in :func:`run`) the gate falls back
+      to ``pr.commits > 1`` -- subjects are required to subtract either
+      artifact class, so the fallback fires more readily by design.
     """
     fix_typed = pr.title.lstrip().lower().startswith("fix(")
     if commit_subjects is None:
         multi_commit = pr.commits > 1
     else:
-        pure_commits = pr.commits - _count_merge_from_main(commit_subjects)
+        pure_commits = (
+            pr.commits
+            - _count_merge_from_main(commit_subjects)
+            - _count_revert(commit_subjects)
+        )
         multi_commit = pure_commits > 1
     verification_pairs = extract_verification_pairs(pr.body or "")
     # `post_merge_unchecked` was removed in #418: the Post-merge subsection
@@ -1483,6 +1544,26 @@ def _repair_history_rows(
                     "Merge from main",
                     f"{_POLICY_ARTIFACT_MARKER} `{subject}` -- "
                     "rebase debt before merge",
+                    policy_artifact=True,
+                    next_action="--",
+                )
+            )
+
+    # Revert commits are an anomaly *hint*, not a standalone trigger (refs
+    # #1287). compute_repair_signals subtracts them from multi_commit_pr, so a
+    # revert-only PR does not fire the gate; this row keeps the revert visible
+    # for co-fire correlation. Marked policy-artifact (and not "Iteration
+    # commit") so _has_only_exempt_policy_artifact_rows skips a revert-only PR
+    # while any genuine co-firing signal still opens the retro. Revert subjects
+    # never start with fix(/fixup!/squash!, so the loops above leave them
+    # untouched.
+    for subject in commit_subjects:
+        if _is_revert_subject(subject):
+            rows.append(
+                RepairHistoryRow(
+                    "Revert commit",
+                    f"{_POLICY_ARTIFACT_MARKER} `{subject}` -- rollback; "
+                    "confirm via co-firing CI / review / verification signal",
                     policy_artifact=True,
                     next_action="--",
                 )
