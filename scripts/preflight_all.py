@@ -272,6 +272,15 @@ STEPS: tuple[Step, ...] = (
         argv=("python3", "scripts/scan_allowlist_rationale.py", "verify"),
     ),
     Step(
+        # Refs #1257. Fails when the bash read_allowlist in
+        # .devcontainer/scripts/_egress-lib.sh and scripts/_allowlist.py
+        # resolve_hosts disagree on a *.allowlist file, so the single source
+        # of truth stays single across the container start path (bash) and the
+        # CI / rationale tooling (Python).
+        name="scan_allowlist_parser_parity",
+        argv=("python3", "scripts/scan_allowlist_parser_parity.py", "verify"),
+    ),
+    Step(
         # Refs #1153. Fails when a pinned binary's flake.nix SHA256 is
         # hardcoded under scripts/ or .github/workflows/, so flake.nix stays
         # the single source of truth and a bump cannot leave a stale copy.
