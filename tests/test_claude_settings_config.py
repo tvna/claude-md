@@ -145,6 +145,10 @@ def test_claude_post_tool_use_starts_ci_monitor_after_mcp_pr_create() -> None:
                     "type": "command",
                     "command": "python3 scripts/post_merge_retro_append.py",
                 },
+                {
+                    "type": "command",
+                    "command": "python3 scripts/post_merge_new_session_prompt.py",
+                },
             ],
         },
         {

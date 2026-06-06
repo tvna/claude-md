@@ -157,6 +157,14 @@ ignore = [
     "B011", "B017", "RUF001",
     "S101", "S105", "S106", "S108", "S404", "S603", "S607",
 ]
+# The new-session-prompt hook builds a paste-ready prompt in the project
+# owner's language (ja), so the gate (and its test asserting that text) must
+# contain the fullwidth codepoints RUF001 would flag.
+"scripts/post_merge_new_session_prompt.py" = ["RUF001"]
+"tests/test_post_merge_new_session_prompt.py" = [
+    "B011", "B017", "RUF001",
+    "S101", "S105", "S106", "S108", "S404", "S603", "S607",
+]
 
 [tool.ruff.lint.isort]
 known-first-party = ["scripts"]
