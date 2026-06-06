@@ -151,6 +151,16 @@ Performance-adjacent words such as "cache", "latency", "startup",
 measurement feature, or other non-performance intent that justifies the
 type.
 
+When such a word is only incidental - a concept noun like "memory" in
+"agent memory" or "reviewer memory" - prefer the repository house idiom
+instead of coining the bare term: write "harness-enforced, not
+agent-remembered" or "deterministic, not operator-memory" (the phrasing
+already used in .apm/instructions/master.instructions.md section 3).
+That keeps a `feat` or `fix` title from tripping the performance
+heuristic without weakening the meaning. If the term is genuinely
+unavoidable, place the work under a `docs`, `test`, `perf`, or
+`ci`-infra type, which the heuristic exempts.
+
 ## PR body sections
 
 `.github/PULL_REQUEST_TEMPLATE.md` defines the required PR body shape.
