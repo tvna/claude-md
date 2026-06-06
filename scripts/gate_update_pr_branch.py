@@ -67,7 +67,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 0
 
-    emit_decision(decide(tool_name))
+    emit_decision(decide(tool_name), "gate_update_pr_branch")
     return 0
 
 

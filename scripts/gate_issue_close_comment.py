@@ -101,7 +101,7 @@ def run_gate() -> int:
     if not isinstance(tool_input, dict):
         tool_input = {}
 
-    emit_decision(decide(tool_name, tool_input))
+    emit_decision(decide(tool_name, tool_input), "gate_issue_close_comment")
     return 0
 
 

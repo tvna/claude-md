@@ -216,7 +216,7 @@ def main() -> int:
     except Exception as exc:  # fail open: never wedge the session on a hook bug
         print(f"::error::{_SCRIPT_NAME}: {exc}", file=sys.stderr)
         return 0
-    emit_decision(decision)
+    emit_decision(decision, _SCRIPT_NAME)
     return 0
 
 

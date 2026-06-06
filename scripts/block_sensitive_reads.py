@@ -199,7 +199,7 @@ def main(argv: list[str] | None = None) -> int:
     tool_input = event.get("tool_input")
     if not isinstance(tool_input, dict):
         tool_input = {}
-    emit_decision(decide(tool_name, tool_input))
+    emit_decision(decide(tool_name, tool_input), "block_sensitive_reads", auditable=False)
     return 0
 
 

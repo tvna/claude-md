@@ -71,7 +71,7 @@ def decide(
 
 def main(argv: list[str] | None = None) -> int:
     del argv
-    return run_event_hook("preflight_push_base", decide)
+    return run_event_hook("preflight_push_base", decide, auditable=False)
 
 
 if __name__ == "__main__":

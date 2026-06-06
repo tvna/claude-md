@@ -97,7 +97,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 0
 
-    emit_decision(decide(tool_name))
+    emit_decision(decide(tool_name), "gate_mcp_github_uncovered")
     return 0
 
 

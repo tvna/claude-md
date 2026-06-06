@@ -18,6 +18,17 @@ import pytest
 pytestmark = pytest.mark.shard_preflight
 
 
+@pytest.fixture(autouse=True)
+def _clear_gate_mode(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Start every test in the default ``block`` mode regardless of the host env.
+
+    ``CLAUDE_GATE_MODE`` is read from the process environment by
+    ``emit_decision``; clearing it here keeps the existing block-mode tests
+    deterministic and lets the audit tests opt in explicitly.
+    """
+    monkeypatch.delenv("CLAUDE_GATE_MODE", raising=False)
+
+
 def _fake_stdio(monkeypatch: pytest.MonkeyPatch, raw: str) -> list[str]:
     """Pipe *raw* to stdin and capture stdout writes into the returned list."""
     out: list[str] = []
@@ -116,9 +127,7 @@ def test_run_event_hook_malformed_json_fails_open(
 
 
 def test_run_tool_hook_passes_split_fields(monkeypatch: pytest.MonkeyPatch) -> None:
-    out = _fake_stdio(
-        monkeypatch, json.dumps({"tool_name": "Bash", "tool_input": {"command": "x"}})
-    )
+    out = _fake_stdio(monkeypatch, json.dumps({"tool_name": "Bash", "tool_input": {"command": "x"}}))
     seen: list[tuple[str, dict[str, Any]]] = []
 
     def decide(tool_name: str, tool_input: dict[str, Any]) -> dict[str, Any] | None:
@@ -155,3 +164,133 @@ def test_run_tool_hook_malformed_json_fails_open(
     rc = hr.run_tool_hook("gate", lambda tn, ti: hr.build_deny("x"))
     assert rc == 0
     assert "malformed stdin JSON" in capsys.readouterr().err
+
+
+# ---------------------------------------------------------------------------
+# emit_decision audit mode (CLAUDE_GATE_MODE)
+# ---------------------------------------------------------------------------
+
+_STOP_BLOCK: dict[str, Any] = {"decision": "block", "reason": "stop blocked"}
+
+
+def _capture_streams(
+    monkeypatch: pytest.MonkeyPatch,
+) -> tuple[io.StringIO, io.StringIO]:
+    """Replace stdout/stderr with StringIO buffers and return ``(out, err)``."""
+    out, err = io.StringIO(), io.StringIO()
+    monkeypatch.setattr("sys.stdout", out)
+    monkeypatch.setattr("sys.stderr", err)
+    return out, err
+
+
+def test_emit_decision_default_blocks(monkeypatch: pytest.MonkeyPatch) -> None:
+    # No CLAUDE_GATE_MODE -> original block behaviour, byte-for-byte.
+    out, err = _capture_streams(monkeypatch)
+    hr.emit_decision(_STOP_BLOCK, "mygate")
+    assert json.loads(out.getvalue()) == _STOP_BLOCK
+    assert err.getvalue() == ""
+
+
+def test_emit_decision_audit_downgrades_stop_block(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("CLAUDE_GATE_MODE", "audit")
+    out, err = _capture_streams(monkeypatch)
+    hr.emit_decision(_STOP_BLOCK, "mygate")
+    assert out.getvalue() == ""  # downgraded to pass-through
+    assert "::warning::mygate: [AUDIT] suppressed blocking decision" in err.getvalue()
+    assert "stop blocked" in err.getvalue()
+
+
+def test_emit_decision_audit_downgrades_pretooluse_deny(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("CLAUDE_GATE_MODE", "audit")
+    out, err = _capture_streams(monkeypatch)
+    hr.emit_decision(hr.build_deny("nope"), "g")
+    assert out.getvalue() == ""
+    assert "[AUDIT]" in err.getvalue()
+    assert "nope" in err.getvalue()
+
+
+def test_emit_decision_audit_downgrades_flat_deny(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The flat deny shape used by gate_gh_cli / gate_update_pr_branch /
+    # gate_mcp_github_uncovered / gate_issue_close_comment is also recognised.
+    monkeypatch.setenv("CLAUDE_GATE_MODE", "audit")
+    flat = {"permissionDecision": "deny", "decisionReason": "flat reason"}
+    out, err = _capture_streams(monkeypatch)
+    hr.emit_decision(flat, "g")
+    assert out.getvalue() == ""
+    assert "[AUDIT]" in err.getvalue()
+    assert "flat reason" in err.getvalue()
+
+
+def test_emit_decision_audit_keeps_non_auditable_blocking(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Security-boundary gates pass auditable=False -> always block.
+    monkeypatch.setenv("CLAUDE_GATE_MODE", "audit")
+    out, err = _capture_streams(monkeypatch)
+    hr.emit_decision(hr.build_deny("critical"), "secgate", auditable=False)
+    decision = json.loads(out.getvalue())
+    assert decision["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert err.getvalue() == ""
+
+
+def test_emit_decision_audit_passes_non_blocking_through(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # An allow / non-blocking decision is emitted unchanged even in audit mode.
+    monkeypatch.setenv("CLAUDE_GATE_MODE", "audit")
+    allow = {"hookSpecificOutput": {"permissionDecision": "allow"}}
+    out, err = _capture_streams(monkeypatch)
+    hr.emit_decision(allow, "g")
+    assert json.loads(out.getvalue()) == allow
+    assert err.getvalue() == ""
+
+
+def test_emit_decision_audit_default_label_without_script_name(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("CLAUDE_GATE_MODE", "audit")
+    out, err = _capture_streams(monkeypatch)
+    hr.emit_decision(_STOP_BLOCK)
+    assert out.getvalue() == ""
+    assert "::warning::gate: [AUDIT]" in err.getvalue()
+
+
+@pytest.mark.parametrize("value", ["audit", "AUDIT", " Audit "])
+def test_audit_mode_active_true(monkeypatch: pytest.MonkeyPatch, value: str) -> None:
+    monkeypatch.setenv("CLAUDE_GATE_MODE", value)
+    assert hr._audit_mode_active() is True
+
+
+@pytest.mark.parametrize("value", ["", "block", "BLOCK", "off", "1", "audited"])
+def test_audit_mode_active_false(monkeypatch: pytest.MonkeyPatch, value: str) -> None:
+    monkeypatch.setenv("CLAUDE_GATE_MODE", value)
+    assert hr._audit_mode_active() is False
+
+
+def test_run_tool_hook_auditable_false_blocks_under_audit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("CLAUDE_GATE_MODE", "audit")
+    out, _err = _capture_streams(monkeypatch)
+    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps({"tool_name": "Bash", "tool_input": {}})))
+    rc = hr.run_tool_hook("secgate", lambda tn, ti: hr.build_deny("x"), auditable=False)
+    assert rc == 0
+    assert json.loads(out.getvalue())["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+def test_run_event_hook_audit_uses_script_name_label(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("CLAUDE_GATE_MODE", "audit")
+    out, err = _capture_streams(monkeypatch)
+    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps({"tool_name": "Bash", "tool_input": {}})))
+    rc = hr.run_event_hook("mygate", lambda ev: hr.build_deny("z"))
+    assert rc == 0
+    assert out.getvalue() == ""  # auditable default -> downgraded
+    assert "::warning::mygate: [AUDIT]" in err.getvalue()
