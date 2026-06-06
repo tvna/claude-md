@@ -108,6 +108,24 @@ def _branch_exists_on_remote(branch: str) -> bool:
     return run_git(["ls-remote", "--exit-code", "--heads", "origin", branch]).returncode == 0
 
 
+def _git_error_detail(exc: subprocess.CalledProcessError) -> str:
+    """Return git's captured stderr for an error message, or ``""`` when empty.
+
+    ``run_git`` runs git with ``capture_output=True``, so a ``check=True``
+    failure carries git's own diagnostic on the exception. ``str(exc)`` shows
+    only the exit code (e.g. ``returned non-zero exit status 128``), hiding the
+    concrete rejection reason -- the ruleset rule name or
+    ``remote: Permission ...`` behind an exit-128 push failure. Surfacing the
+    stderr makes a keeper auth/ruleset regression diagnosable from the run log;
+    GitHub Actions masks registered secrets in step output, so the persisted
+    token is not exposed. Refs #1229.
+    """
+    stderr = exc.stderr
+    if isinstance(stderr, str) and stderr.strip():
+        return f": {stderr.strip()}"
+    return ""
+
+
 def _create_pin_branch(*, branch: str, files: list[str], subject: str, trailer: str) -> None:
     """Configure the bot identity, branch off, commit the pin files, and push.
 
@@ -170,7 +188,7 @@ def _cmd_open(args: argparse.Namespace) -> int:
                 trailer=args.commit_trailer,
             )
         except subprocess.CalledProcessError as exc:
-            print(f"::error::git failed creating pin branch: {exc}", file=sys.stderr)
+            print(f"::error::git failed creating pin branch: {exc}{_git_error_detail(exc)}", file=sys.stderr)
             return 1
 
     try:
@@ -272,7 +290,7 @@ def _cmd_refresh(args: argparse.Namespace) -> int:
                 trailer=args.commit_trailer,
             )
         except subprocess.CalledProcessError as exc:
-            print(f"::error::git failed creating refresh branch: {exc}", file=sys.stderr)
+            print(f"::error::git failed creating refresh branch: {exc}{_git_error_detail(exc)}", file=sys.stderr)
             return 1
 
     try:
