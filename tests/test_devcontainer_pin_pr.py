@@ -24,16 +24,22 @@ class _FakeGit:
     ``check`` is set, a CalledProcessError is raised (mirrors ``check=True``).
     """
 
-    def __init__(self, rc_map: dict[str, int] | None = None, raise_on: str | None = None) -> None:
+    def __init__(
+        self,
+        rc_map: dict[str, int] | None = None,
+        raise_on: str | None = None,
+        stderr: str | None = None,
+    ) -> None:
         self.rc_map = rc_map or {}
         self.raise_on = raise_on
+        self.stderr = stderr
         self.calls: list[list[str]] = []
 
     def __call__(self, args: list[str], *, check: bool = False, **_: Any) -> subprocess.CompletedProcess[str]:
         self.calls.append(args)
         sub = args[0]
         if check and self.raise_on == sub:
-            raise subprocess.CalledProcessError(1, ["git", *args])
+            raise subprocess.CalledProcessError(1, ["git", *args], stderr=self.stderr)
         return subprocess.CompletedProcess(["git", *args], self.rc_map.get(sub, 0))
 
     def ran(self, sub: str) -> bool:
@@ -403,3 +409,27 @@ class TestRefreshFlow:
         monkeypatch.setattr(dpp, "_compare_behind", lambda **kw: 2)
         monkeypatch.setattr(dpp, "_regenerate_pins", lambda sha: 1)
         assert dpp.main(_refresh_argv(tmp_path)) == 1
+
+    def test_push_failure_surfaces_git_stderr(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """A rejected branch push (exit 128) reports git's stderr, not just the exit code.
+
+        Regression guard for #1229: ``str(CalledProcessError)`` shows only the
+        exit status, so the concrete rejection reason (ruleset rule name or
+        ``remote: Permission ...``) was invisible in the run log.
+        """
+        git = _FakeGit(
+            {"diff": 1, "ls-remote": 2},  # changes present; refresh branch absent
+            raise_on="push",
+            stderr="remote: Permission to owner/repo.git denied to keeper-bot.",
+        )
+        monkeypatch.setattr(dpp, "run_git", git)
+        monkeypatch.setattr(dpp, "_list_open_prs_by_prefix", lambda **kw: [_open_pin_pr(1132)])
+        monkeypatch.setattr(dpp, "_compare_behind", lambda **kw: 3)
+        monkeypatch.setattr(dpp, "_regenerate_pins", lambda sha: 0)
+        rc = dpp.main(_refresh_argv(tmp_path))
+        assert rc == 1
+        err = capsys.readouterr().err
+        assert "git failed creating refresh branch" in err
+        assert "Permission to owner/repo.git denied" in err
