@@ -1,13 +1,15 @@
-"""Tests for the custom egress-firewall composite action (umbrella #1257, PR4).
+"""Tests for the custom egress-firewall composite action (umbrella #1257, PR4/PR5).
 
 These lock the two properties that make the action safe and single-sourced:
 
 * it is **permission-agnostic** -- it reads no GITHUB_TOKEN and no secrets, the
   same invariant the setup-uv action documents (it runs inline under the union
   of caller permissions);
-* its CI self-test is **isolated** -- audit mode is discovery, so the job must
-  not be a step in lint-scripts-static and must not feed the required `gate`
-  aggregation, or a log-only finding would block unrelated work.
+* its CI self-test is **isolated** -- the dedicated job exercises the egress
+  layer on its own, so it must not be a step in lint-scripts-static and must
+  not feed the required `gate` aggregation, or a runner-specific network quirk
+  would block unrelated work. PR5 promotes the job from audit to block mode
+  (deny-by-default) while keeping that isolation.
 
 The action reuses the devcontainer dispatcher (which sources _egress-lib.sh), so
 the bash parser stays the single source of truth. The runner-side kernel
@@ -70,12 +72,36 @@ def _workflow_text() -> str:
     return WORKFLOW.read_text(encoding="utf-8")
 
 
-def test_selftest_job_exists_and_uses_the_action_in_audit_mode() -> None:
+def test_selftest_job_exists_and_uses_the_action_in_block_mode() -> None:
     text = _workflow_text()
     assert "egress-firewall-selftest:" in text
     assert "uses: ./.github/actions/egress-firewall" in text
-    # Audit posture is explicit in the job, not inherited by accident.
-    assert "mode: audit" in text
+    # PR5: the block (deny-by-default) posture is explicit in the job, not
+    # inherited by accident. The action default stays audit (asserted above).
+    assert "mode: block" in text
+    assert "mode: audit" not in text
+
+
+def test_selftest_block_job_proves_both_egress_directions() -> None:
+    text = _workflow_text()
+    # Block mode is only meaningful if the job proves deny-by-default actually
+    # denies: it must assert the OUTPUT policy is DROP and that a
+    # non-allowlisted destination (example.com) is blocked, while an
+    # allowlisted one (github.com) still works.
+    assert "-P OUTPUT DROP" in text
+    assert "example.com" in text
+    assert "github.com" in text
+
+
+def test_selftest_block_job_restores_connectivity() -> None:
+    text = _workflow_text()
+    # Block sets OUTPUT DROP for every process on the runner; the isolated
+    # self-test must restore ACCEPT on always() so it never strands the runner
+    # agent's own egress (completion/telemetry) or later steps.
+    selftest_start = text.index("egress-firewall-selftest:")
+    selftest_block = text[selftest_start:]
+    assert "if: always()" in selftest_block
+    assert "iptables -P OUTPUT ACCEPT" in selftest_block
 
 
 def test_selftest_job_is_isolated_from_the_required_gate() -> None:
