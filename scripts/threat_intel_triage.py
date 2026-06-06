@@ -20,8 +20,11 @@ Contract:
   subcommand (``--title`` / ``$TITLE``, ``--body`` / ``--body-file``,
   ``--labels`` / ``$LABELS``); ``REPO`` and ``NUMBER`` for label writes.
 - Outputs: ``threat:*`` labels applied via the GitHub API, a Markdown
-  step summary, and ``::error::`` annotations on stderr; exit 0 on
-  success, exit 1 on missing env or an API failure.
+  step summary, an idempotent marker-anchored triage evidence comment on
+  the issue/PR (the ``comment`` subcommand, so the correlation table is
+  co-located with the label per CLAUDE.md section 6), and ``::error::``
+  annotations on stderr; exit 0 on success, exit 1 on missing env or an
+  API failure.
 - Failure policy: fails loud per CLAUDE.md section 4 (gate: a missing
   token/repo/number or an API error exits non-zero).
 """
@@ -29,6 +32,7 @@ Contract:
 from __future__ import annotations
 
 import argparse
+import io
 import json
 import os
 import re
@@ -414,6 +418,18 @@ def _iter_executable_inputs(repo_root: Path) -> list[Path]:
     return sorted(candidates)
 
 
+def _record_outage(outages: list[str] | None, source: str) -> None:
+    """Record a confirmed live-source outage for the triage summary.
+
+    Only the soft-fail sources (FIRST EPSS, NVD) call this: they swallow
+    transport errors and continue, so without this the confidence drop is
+    invisible. OSV / KEV / GHSA / OSSF failures stay loud (exit 1) and need
+    no accumulator. ``None`` means the caller did not opt in.
+    """
+    if outages is not None and source not in outages:
+        outages.append(source)
+
+
 def fetch_external_findings(
     dependencies: list[Dependency],
     *,
@@ -428,6 +444,7 @@ def fetch_external_findings(
     epss_live: bool = False,
     nvd_file: Path | None = None,
     nvd_live: bool = False,
+    outages: list[str] | None = None,
 ) -> list[Finding]:
     """Collect OSV, CISA KEV, GHSA, OSSF malicious-package, FIRST EPSS, and NVD intelligence.
 
@@ -503,10 +520,11 @@ def fetch_external_findings(
             _collect_cve_ids(merged),
             epss_file=epss_file,
             epss_live=epss_live,
+            outages=outages,
         )
         merged = [_attach_epss(finding, epss_scores) for finding in merged]
     if nvd_file is not None or nvd_live:
-        nvd_map = fetch_nvd_metadata(_collect_cve_ids(merged), nvd_file=nvd_file)
+        nvd_map = fetch_nvd_metadata(_collect_cve_ids(merged), nvd_file=nvd_file, outages=outages)
         merged = attach_nvd_to_findings(merged, nvd_map)
     return sorted(merged, key=lambda f: (f.dependency.name, f.vuln_id))
 
@@ -594,6 +612,7 @@ def fetch_epss_scores(
     *,
     epss_file: Path | None = None,
     epss_live: bool = False,
+    outages: list[str] | None = None,
 ) -> dict[str, tuple[float, float]]:
     """Return ``{cve: (score, percentile)}`` from FIRST EPSS for *cves*.
 
@@ -620,6 +639,7 @@ def fetch_epss_scores(
     try:
         data = request_json(f"{EPSS_URL}?{query}")
     except (OSError, ValueError, json.JSONDecodeError):
+        _record_outage(outages, SOURCE_EPSS)
         return {}
     return _parse_epss_payload(data)
 
@@ -956,6 +976,7 @@ def fetch_nvd_metadata(
     cve_ids: list[str],
     *,
     nvd_file: Path | None = None,
+    outages: list[str] | None = None,
 ) -> dict[str, NvdEnrichment]:
     """Return NVD enrichment keyed by CVE id.
 
@@ -998,6 +1019,7 @@ def fetch_nvd_metadata(
             query = urllib.parse.urlencode({"cveId": cve_id})
             data = request_json(f"{NVD_CVE_URL}?{query}")
         except (OSError, ValueError, json.JSONDecodeError):
+            _record_outage(outages, SOURCE_NVD)
             continue
         vulnerabilities = data.get("vulnerabilities") if isinstance(data, dict) else None
         if not isinstance(vulnerabilities, list) or not vulnerabilities:
@@ -1279,6 +1301,7 @@ def _cmd_scan(args: argparse.Namespace) -> int:
     repo_root = Path(args.repo_root)
     labels = parse_labels(args.labels or os.environ.get("LABELS", ""))
     dependencies = discover_dependencies(repo_root)
+    outages: list[str] = []
     findings = fetch_external_findings(
         dependencies,
         osv_file=args.osv_file,
@@ -1292,11 +1315,19 @@ def _cmd_scan(args: argparse.Namespace) -> int:
         epss_live=args.epss_live,
         nvd_file=args.nvd_file,
         nvd_live=args.nvd_live,
+        outages=outages,
     )
     result = classify_findings(findings, labels)
 
     if args.summary_file:
-        write_summary(Path(args.summary_file), dependencies, findings, result)
+        write_summary(Path(args.summary_file), dependencies, findings, result, outages=outages)
+    if args.comment_file:
+        comment_path = Path(args.comment_file)
+        comment_path.parent.mkdir(parents=True, exist_ok=True)
+        comment_path.write_text(
+            render_summary_markdown(dependencies, findings, result, outages=outages),
+            encoding="utf-8",
+        )
     if args.github_output:
         _write_github_output(Path(args.github_output), result)
 
@@ -1314,51 +1345,88 @@ def _cmd_scan(args: argparse.Namespace) -> int:
     return 0
 
 
+def render_summary_markdown(
+    dependencies: list[Dependency],
+    findings: list[Finding],
+    result: dict[str, object],
+    *,
+    outages: list[str] | None = None,
+) -> str:
+    """Render the triage correlation table as a Markdown string.
+
+    Pure: the same text is appended to ``$GITHUB_STEP_SUMMARY`` by
+    :func:`write_summary` and posted as the idempotent issue/PR evidence
+    comment by the ``comment`` subcommand, so the two surfaces cannot
+    drift. ``outages`` lists soft-fail live sources (FIRST EPSS, NVD) whose
+    absence reduced confidence this run.
+    """
+    handle = io.StringIO()
+    _write_summary_body(handle, dependencies, findings, result, outages)
+    return handle.getvalue()
+
+
 def write_summary(
     path: Path,
     dependencies: list[Dependency],
     findings: list[Finding],
     result: dict[str, object],
+    *,
+    outages: list[str] | None = None,
 ) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(render_summary_markdown(dependencies, findings, result, outages=outages))
+
+
+def _write_summary_body(
+    handle: io.StringIO,
+    dependencies: list[Dependency],
+    findings: list[Finding],
+    result: dict[str, object],
+    outages: list[str] | None,
+) -> None:
     sources_line = _summary_sources_line(findings)
     has_nvd = any(finding.nvd_metadata for finding in findings)
-    with path.open("a", encoding="utf-8") as handle:
-        handle.write("## Threat intelligence triage\n\n")
-        handle.write(f"- Sources: {sources_line}\n")
-        handle.write(f"- Dependencies checked: {len(dependencies)}\n")
-        handle.write(f"- Findings: {result['finding_count']}\n")
-        handle.write(f"- Known exploited findings: {result['known_exploited_count']}\n")
-        handle.write(f"- Recommended labels: `{','.join(result['recommended_labels'])}`\n\n")
-        if not findings:
-            handle.write("No external threat-intelligence findings matched locked dependencies.\n")
-            return
+    handle.write("## Threat intelligence triage\n\n")
+    if outages:
+        handle.write(
+            f"> Live-source outages (reduced confidence): {', '.join(outages)}. "
+            "Absent data from a source is not evidence of safety.\n\n"
+        )
+    handle.write(f"- Sources: {sources_line}\n")
+    handle.write(f"- Dependencies checked: {len(dependencies)}\n")
+    handle.write(f"- Findings: {result['finding_count']}\n")
+    handle.write(f"- Known exploited findings: {result['known_exploited_count']}\n")
+    handle.write(f"- Recommended labels: `{','.join(result['recommended_labels'])}`\n\n")
+    if not findings:
+        handle.write("No external threat-intelligence findings matched locked dependencies.\n")
+        return
+    if has_nvd:
+        handle.write(
+            "| Dependency | Version | Vulnerability | Source | Known exploited | EPSS | NVD CVSS | NVD CWE |\n"
+        )
+        handle.write("|---|---:|---|---|---|---|---|---|\n")
+    else:
+        handle.write("| Dependency | Version | Vulnerability | Source | Known exploited | EPSS |\n")
+        handle.write("|---|---:|---|---|---|---|\n")
+    for finding in findings:
+        row = (
+            f"| `{finding.dependency.name}` | `{finding.dependency.version}` | "
+            f"`{finding.vuln_id}` | {finding.source} | {_bool(finding.known_exploited)} | "
+            f"{_format_epss_cell(finding)} |"
+        )
         if has_nvd:
-            handle.write(
-                "| Dependency | Version | Vulnerability | Source | Known exploited | EPSS | NVD CVSS | NVD CWE |\n"
-            )
-            handle.write("|---|---:|---|---|---|---|---|---|\n")
-        else:
-            handle.write("| Dependency | Version | Vulnerability | Source | Known exploited | EPSS |\n")
-            handle.write("|---|---:|---|---|---|---|\n")
+            row += f" {_nvd_cvss_cell(finding)} | {_nvd_cwe_cell(finding)} |"
+        handle.write(row + "\n")
+    if has_nvd:
+        handle.write("\n### NVD references (supplemental)\n\n")
+        handle.write(
+            "NVD is consulted only for CVEs already surfaced by OSV/GitHub Advisory. "
+            "Missing NVD enrichment does not imply the underlying finding is not relevant.\n\n"
+        )
         for finding in findings:
-            row = (
-                f"| `{finding.dependency.name}` | `{finding.dependency.version}` | "
-                f"`{finding.vuln_id}` | {finding.source} | {_bool(finding.known_exploited)} | "
-                f"{_format_epss_cell(finding)} |"
-            )
-            if has_nvd:
-                row += f" {_nvd_cvss_cell(finding)} | {_nvd_cwe_cell(finding)} |"
-            handle.write(row + "\n")
-        if has_nvd:
-            handle.write("\n### NVD references (supplemental)\n\n")
-            handle.write(
-                "NVD is consulted only for CVEs already surfaced by OSV/GitHub Advisory. "
-                "Missing NVD enrichment does not imply the underlying finding is not relevant.\n\n"
-            )
-            for finding in findings:
-                for enrichment in finding.nvd_metadata:
-                    _write_nvd_detail(handle, finding, enrichment)
+            for enrichment in finding.nvd_metadata:
+                _write_nvd_detail(handle, finding, enrichment)
 
 
 def _nvd_cvss_cell(finding: Finding) -> str:
@@ -1561,25 +1629,40 @@ def _apply_labels(
     return 0
 
 
-def _cmd_apply_labels(args: argparse.Namespace) -> int:
+def _resolve_issue_target() -> tuple[str, str, int] | None:
+    """Return ``(token, repo, number)`` from env, or None after a loud error.
+
+    Shared by ``apply-labels`` and ``comment``: both write to one issue/PR
+    identified by ``REPO`` / ``NUMBER`` and authenticated by ``GH_TOKEN``.
+    Returns None (never raises) so each caller maps it to exit 1 per the
+    fail-loud policy in CLAUDE.md section 4.
+    """
     token = os.environ.get("GH_TOKEN", "")
     repo = os.environ.get("REPO", "")
     number_str = os.environ.get("NUMBER", "")
 
     if not token:
         print("::error::GH_TOKEN is not set", file=sys.stderr)
-        return 1
+        return None
     if not repo:
         print("::error::REPO is not set", file=sys.stderr)
-        return 1
+        return None
     if not number_str:
         print("::error::NUMBER is not set", file=sys.stderr)
-        return 1
+        return None
     try:
         number = int(number_str)
     except ValueError:
         print(f"::error::NUMBER must be an integer: {number_str!r}", file=sys.stderr)
+        return None
+    return token, repo, number
+
+
+def _cmd_apply_labels(args: argparse.Namespace) -> int:
+    target = _resolve_issue_target()
+    if target is None:
         return 1
+    token, repo, number = target
 
     add_labels = [lbl.strip() for lbl in (args.add_labels or "").split(",") if lbl.strip()]
     remove_labels = [lbl.strip() for lbl in (args.remove_labels or "").split(",") if lbl.strip()]
@@ -1589,6 +1672,115 @@ def _cmd_apply_labels(args: argparse.Namespace) -> int:
         repo=repo,
         number=number,
         token=token,
+    )
+
+
+_TRIAGE_COMMENT_MARKER = "<!-- threat-intel-triage v1 -->"
+
+
+def _github_comment_request(
+    url: str,
+    *,
+    method: str,
+    token: str,
+    payload: dict[str, object] | None = None,
+) -> urllib.request.Request:
+    """Build an authenticated GitHub REST request for the comments API."""
+    data = json.dumps(payload, separators=(",", ":")).encode("utf-8") if payload is not None else None
+    req = urllib.request.Request(url, data=data, method=method)  # noqa: S310 -- fixed https://api.github.com endpoint
+    req.add_header("Authorization", f"Bearer {token}")
+    req.add_header("Accept", "application/vnd.github+json")
+    req.add_header("X-GitHub-Api-Version", _GITHUB_API_VERSION)
+    if payload is not None:
+        req.add_header("Content-Type", "application/json")
+    return req
+
+
+def _find_triage_comment_id(
+    *,
+    repo: str,
+    number: int,
+    token: str,
+    marker: str,
+    opener: Callable[[urllib.request.Request], Any] = urllib.request.urlopen,
+) -> int | None:
+    """Return the id of the marker-anchored triage comment, or None.
+
+    Pages once with ``per_page=100``; the bot keeps a single comment per
+    item so the marker can only sit on the first page.
+    """
+    url = f"https://api.github.com/repos/{repo}/issues/{number}/comments?per_page=100"
+    req = _github_comment_request(url, method="GET", token=token)
+    with opener(req) as resp:
+        raw = resp.read().decode("utf-8")
+    comments = json.loads(raw) if raw.strip() else []
+    if not isinstance(comments, list):
+        return None
+    for comment in comments:
+        if not isinstance(comment, dict):
+            continue
+        body = comment.get("body") or ""
+        if isinstance(body, str) and body.startswith(marker):
+            cid = comment.get("id")
+            if isinstance(cid, int):
+                return cid
+    return None
+
+
+def _upsert_comment(
+    *,
+    body: str,
+    repo: str,
+    number: int,
+    token: str,
+    marker: str,
+    create: bool = True,
+    opener: Callable[[urllib.request.Request], Any] = urllib.request.urlopen,
+) -> int:
+    """Idempotently PATCH or POST the marker-anchored triage comment.
+
+    ``create=False`` makes the call update-only: when no marked comment
+    exists it is a no-op (returns 0) so a clean issue never gains a noise
+    comment. Returns 0 on success, 1 on API failure.
+    """
+    existing = _find_triage_comment_id(
+        repo=repo, number=number, token=token, marker=marker, opener=opener
+    )
+    if existing is None and not create:
+        return 0
+    if existing is not None:
+        url = f"https://api.github.com/repos/{repo}/issues/comments/{existing}"
+        req = _github_comment_request(url, method="PATCH", token=token, payload={"body": body})
+    else:
+        url = f"https://api.github.com/repos/{repo}/issues/{number}/comments"
+        req = _github_comment_request(url, method="POST", token=token, payload={"body": body})
+    try:
+        with opener(req) as resp:
+            code = int(resp.status)
+    except urllib.error.HTTPError as exc:
+        code = int(exc.code)
+    if not 200 <= code < 300:
+        print(f"::error::triage-comment HTTP {code}", file=sys.stderr)
+        return 1
+    return 0
+
+
+def _cmd_comment(args: argparse.Namespace) -> int:
+    target = _resolve_issue_target()
+    if target is None:
+        return 1
+    token, repo, number = target
+
+    marker = args.marker or _TRIAGE_COMMENT_MARKER
+    rendered = Path(args.body_file).read_text(encoding="utf-8")
+    body = f"{marker}\n\n{rendered}"
+    return _upsert_comment(
+        body=body,
+        repo=repo,
+        number=number,
+        token=token,
+        marker=marker,
+        create=not args.update_only,
     )
 
 
@@ -1643,6 +1835,14 @@ def main(argv: list[str] | None = None) -> int:
     p_scan.add_argument(
         "--summary-file",
         help="Append a markdown summary to this file.",
+    )
+    p_scan.add_argument(
+        "--comment-file",
+        help=(
+            "Write the rendered triage markdown (overwrite) to this path so "
+            "the `comment` subcommand can post it as the issue/PR evidence "
+            "comment."
+        ),
     )
     p_scan.add_argument(
         "--osv-file",
@@ -1733,6 +1933,31 @@ def main(argv: list[str] | None = None) -> int:
         help="Comma-separated label names to remove.",
     )
     p_apply.set_defaults(func=_cmd_apply_labels)
+
+    p_comment = sub.add_parser(
+        "comment",
+        help="Upsert the threat-intel triage evidence comment on an issue/PR.",
+    )
+    p_comment.add_argument(
+        "--body-file",
+        required=True,
+        help="Path to the rendered triage markdown (from `scan --comment-file`).",
+    )
+    p_comment.add_argument(
+        "--update-only",
+        action="store_true",
+        help=(
+            "Only update an existing marked comment; do not create one when "
+            "absent. Use when no findings fired so a clean item gains no noise "
+            "comment. Reads REPO, NUMBER, GH_TOKEN from env."
+        ),
+    )
+    p_comment.add_argument(
+        "--marker",
+        default=_TRIAGE_COMMENT_MARKER,
+        help="HTML marker anchoring the idempotent comment.",
+    )
+    p_comment.set_defaults(func=_cmd_comment)
 
     args = parser.parse_args(argv)
     try:

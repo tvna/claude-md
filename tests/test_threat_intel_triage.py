@@ -2606,3 +2606,284 @@ class TestCmdApplyLabels:
         monkeypatch.setenv("NUMBER", "5")
         monkeypatch.setattr(triage, "_apply_labels", lambda **kw: 0)
         assert triage.main(["apply-labels"]) == 0
+
+
+# ---------------------------------------------------------------------------
+# render_summary_markdown() -- the pure renderer shared by the step summary
+# and the idempotent issue/PR evidence comment (#1285).
+# ---------------------------------------------------------------------------
+
+
+def _demo_finding(**overrides: object) -> triage.Finding:
+    base: dict[str, object] = {
+        "dependency": triage.Dependency("requests", "2.31.0", "PyPI", "uv.lock"),
+        "vuln_id": "CVE-2024-0001",
+        "aliases": ("GHSA-aaaa-bbbb-cccc",),
+        "source": triage.SOURCE_OSV,
+        "known_exploited": True,
+    }
+    base.update(overrides)
+    return triage.Finding(**base)  # type: ignore[arg-type]
+
+
+class TestRenderSummaryMarkdown:
+    def test_findings_render_a_table_row(self) -> None:
+        finding = _demo_finding()
+        result = triage.classify_findings([finding], set())
+        md = triage.render_summary_markdown([finding.dependency], [finding], result)
+        assert "## Threat intelligence triage" in md
+        assert "| `requests` | `2.31.0` | `CVE-2024-0001` |" in md
+        assert "threat:intel-needed" in md
+        assert "threat:response-needed" in md  # known_exploited escalates
+
+    def test_no_findings_states_the_clear_result(self) -> None:
+        dep = triage.Dependency("requests", "2.31.0", "PyPI", "uv.lock")
+        result = triage.classify_findings([], set())
+        md = triage.render_summary_markdown([dep], [], result)
+        assert "No external threat-intelligence findings matched locked dependencies." in md
+        assert "|---" not in md  # no table when there are no findings
+
+    def test_outages_emit_reduced_confidence_note(self) -> None:
+        finding = _demo_finding()
+        result = triage.classify_findings([finding], set())
+        md = triage.render_summary_markdown(
+            [finding.dependency], [finding], result, outages=[triage.SOURCE_EPSS, triage.SOURCE_NVD]
+        )
+        assert "Live-source outages (reduced confidence): FIRST EPSS, NVD" in md
+        assert "not evidence of safety" in md
+
+    def test_no_outages_omits_the_note(self) -> None:
+        finding = _demo_finding()
+        result = triage.classify_findings([finding], set())
+        md = triage.render_summary_markdown([finding.dependency], [finding], result, outages=[])
+        assert "reduced confidence" not in md
+
+    def test_nvd_enrichment_adds_columns_and_detail(self) -> None:
+        enrichment = triage.NvdEnrichment(
+            cve_id="CVE-2024-0001",
+            cvss_severity="Critical",
+            cvss_score=9.8,
+            cvss_version="3.1",
+            cwe_ids=("CWE-79",),
+            references=("https://example.com/a",),
+            source_url=f"{triage.NVD_DETAIL_URL_PREFIX}CVE-2024-0001",
+        )
+        finding = _demo_finding(nvd_metadata=(enrichment,))
+        result = triage.classify_findings([finding], set())
+        md = triage.render_summary_markdown([finding.dependency], [finding], result)
+        assert "NVD CVSS" in md
+        assert "### NVD references (supplemental)" in md
+        assert "CWE-79" in md
+
+    def test_rendered_summary_is_ascii(self) -> None:
+        finding = _demo_finding()
+        result = triage.classify_findings([finding], set())
+        md = triage.render_summary_markdown(
+            [finding.dependency], [finding], result, outages=[triage.SOURCE_NVD]
+        )
+        assert md.isascii()
+
+    def test_write_summary_appends_rendered_text(self, tmp_path: Path) -> None:
+        finding = _demo_finding()
+        result = triage.classify_findings([finding], set())
+        path = tmp_path / "summary.md"
+        triage.write_summary(path, [finding.dependency], [finding], result, outages=[triage.SOURCE_EPSS])
+        text = path.read_text(encoding="utf-8")
+        assert text == triage.render_summary_markdown(
+            [finding.dependency], [finding], result, outages=[triage.SOURCE_EPSS]
+        )
+
+
+# ---------------------------------------------------------------------------
+# Live-source outage accumulation -- silent soft-fail sources surface their
+# outage so confidence loss is visible (#1285).
+# ---------------------------------------------------------------------------
+
+
+class TestLiveSourceOutages:
+    def test_epss_live_failure_records_outage(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        def _raise(*a: object, **kw: object) -> object:
+            raise OSError("network down")
+
+        monkeypatch.setattr(triage, "request_json", _raise)
+        outages: list[str] = []
+        triage.fetch_epss_scores(["CVE-2024-0001"], epss_live=True, outages=outages)
+        assert outages == [triage.SOURCE_EPSS]
+
+    def test_nvd_live_failure_records_outage(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        def _raise(*a: object, **kw: object) -> object:
+            raise OSError("network down")
+
+        monkeypatch.setattr(triage, "request_json", _raise)
+        outages: list[str] = []
+        triage.fetch_nvd_metadata(["CVE-2024-0001"], outages=outages)
+        assert outages == [triage.SOURCE_NVD]
+
+    def test_outage_recorded_once_despite_multiple_cves(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        def _raise(*a: object, **kw: object) -> object:
+            raise OSError("network down")
+
+        monkeypatch.setattr(triage, "request_json", _raise)
+        outages: list[str] = []
+        triage.fetch_nvd_metadata(["CVE-2024-0001", "CVE-2024-0002"], outages=outages)
+        assert outages == [triage.SOURCE_NVD]
+
+    def test_no_outage_when_caller_opts_out(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        def _raise(*a: object, **kw: object) -> object:
+            raise OSError("network down")
+
+        monkeypatch.setattr(triage, "request_json", _raise)
+        # outages=None (default) must not raise and must still soft-fail empty.
+        assert triage.fetch_epss_scores(["CVE-2024-0001"], epss_live=True) == {}
+
+
+# ---------------------------------------------------------------------------
+# _upsert_comment() -- marker-anchored idempotent comment (#1285).
+# ---------------------------------------------------------------------------
+
+
+class TestUpsertComment:
+    MARKER = triage._TRIAGE_COMMENT_MARKER
+
+    def test_creates_when_no_marked_comment_exists(self) -> None:
+        import urllib.request
+
+        captured: list[urllib.request.Request] = []
+
+        def opener(req: urllib.request.Request) -> _FakeResponse:
+            captured.append(req)
+            if req.method == "GET":
+                return _FakeResponse(status=200, body=b"[]")
+            return _FakeResponse(status=201, body=b"{}")
+
+        rc = triage._upsert_comment(
+            body=f"{self.MARKER}\n\nx", repo="o/r", number=5, token="tok",
+            marker=self.MARKER, create=True, opener=opener,
+        )
+        assert rc == 0
+        assert [r.method for r in captured] == ["GET", "POST"]
+        assert "issues/5/comments" in captured[1].full_url
+
+    def test_updates_when_marked_comment_exists(self) -> None:
+        import urllib.request
+
+        existing = json.dumps([{"id": 77, "body": f"{self.MARKER}\n\nold"}]).encode()
+        captured: list[urllib.request.Request] = []
+
+        def opener(req: urllib.request.Request) -> _FakeResponse:
+            captured.append(req)
+            if req.method == "GET":
+                return _FakeResponse(status=200, body=existing)
+            return _FakeResponse(status=200, body=b"{}")
+
+        rc = triage._upsert_comment(
+            body="new", repo="o/r", number=5, token="tok",
+            marker=self.MARKER, create=True, opener=opener,
+        )
+        assert rc == 0
+        assert captured[1].method == "PATCH"
+        assert "issues/comments/77" in captured[1].full_url
+
+    def test_update_only_with_no_existing_comment_is_a_noop(self) -> None:
+        import urllib.request
+
+        captured: list[urllib.request.Request] = []
+
+        def opener(req: urllib.request.Request) -> _FakeResponse:
+            captured.append(req)
+            if req.method == "GET":
+                return _FakeResponse(status=200, body=b"[]")
+            raise AssertionError("update-only must not write when absent")
+
+        rc = triage._upsert_comment(
+            body="x", repo="o/r", number=5, token="tok",
+            marker=self.MARKER, create=False, opener=opener,
+        )
+        assert rc == 0
+        assert [r.method for r in captured] == ["GET"]
+
+    def test_api_error_returns_1(self, capsys: pytest.CaptureFixture[str]) -> None:
+        import urllib.error
+        import urllib.request
+
+        def opener(req: urllib.request.Request) -> _FakeResponse:
+            if req.method == "GET":
+                return _FakeResponse(status=200, body=b"[]")
+            raise urllib.error.HTTPError(req.full_url, 422, "error", {}, None)  # type: ignore[arg-type]
+
+        rc = triage._upsert_comment(
+            body="x", repo="o/r", number=5, token="tok",
+            marker=self.MARKER, create=True, opener=opener,
+        )
+        assert rc == 1
+        assert "422" in capsys.readouterr().err
+
+    def test_marker_in_mid_body_is_not_matched(self) -> None:
+        import urllib.request
+
+        # A user comment that merely mentions the marker text must not be
+        # treated as the bot's anchored comment (startswith, not contains).
+        existing = json.dumps([{"id": 9, "body": f"see {self.MARKER} here"}]).encode()
+        captured: list[urllib.request.Request] = []
+
+        def opener(req: urllib.request.Request) -> _FakeResponse:
+            captured.append(req)
+            if req.method == "GET":
+                return _FakeResponse(status=200, body=existing)
+            return _FakeResponse(status=201, body=b"{}")
+
+        triage._upsert_comment(
+            body=f"{self.MARKER}\n\nx", repo="o/r", number=5, token="tok",
+            marker=self.MARKER, create=True, opener=opener,
+        )
+        assert captured[1].method == "POST"  # created, not matched the mid-body marker
+
+
+class TestCmdComment:
+    def test_missing_env_returns_1(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], tmp_path: Path
+    ) -> None:
+        monkeypatch.delenv("GH_TOKEN", raising=False)
+        monkeypatch.setenv("REPO", "owner/repo")
+        monkeypatch.setenv("NUMBER", "5")
+        body_file = tmp_path / "c.md"
+        body_file.write_text("body", encoding="utf-8")
+        assert triage.main(["comment", "--body-file", str(body_file)]) == 1
+        assert "GH_TOKEN" in capsys.readouterr().err
+
+    def test_prepends_marker_and_passes_create_flag(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.setenv("GH_TOKEN", "tok")
+        monkeypatch.setenv("REPO", "owner/repo")
+        monkeypatch.setenv("NUMBER", "5")
+        body_file = tmp_path / "c.md"
+        body_file.write_text("RENDERED", encoding="utf-8")
+
+        captured: dict[str, object] = {}
+
+        def fake_upsert(**kw: object) -> int:
+            captured.update(kw)
+            return 0
+
+        monkeypatch.setattr(triage, "_upsert_comment", fake_upsert)
+        assert triage.main(["comment", "--body-file", str(body_file)]) == 0
+        assert captured["create"] is True
+        assert str(captured["body"]).startswith(triage._TRIAGE_COMMENT_MARKER)
+        assert "RENDERED" in str(captured["body"])
+
+    def test_update_only_flag_disables_create(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.setenv("GH_TOKEN", "tok")
+        monkeypatch.setenv("REPO", "owner/repo")
+        monkeypatch.setenv("NUMBER", "5")
+        body_file = tmp_path / "c.md"
+        body_file.write_text("RENDERED", encoding="utf-8")
+
+        captured: dict[str, object] = {}
+        monkeypatch.setattr(triage, "_upsert_comment", lambda **kw: captured.update(kw) or 0)
+        assert triage.main(["comment", "--body-file", str(body_file), "--update-only"]) == 0
+        assert captured["create"] is False

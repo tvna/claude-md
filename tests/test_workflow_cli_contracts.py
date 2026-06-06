@@ -207,6 +207,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("skill_quality_gate.py", "verify"): "test_skill_quality_gate_verify_matches_workflow_args",
     ("threat_intel_triage.py", "apply-labels"): "test_threat_intel_apply_labels_matches_workflow_args",
     ("threat_intel_triage.py", "scan"): "test_threat_intel_scan_matches_workflow_args",
+    ("threat_intel_triage.py", "comment"): "test_threat_intel_comment_matches_workflow_args",
     ("title_policy.py", "verify"): "test_title_policy_verify_matches_workflow_kind_env",
     ("update_devcontainer_image_pins.py", "$GITHUB_SHA"): "test_update_devcontainer_image_pins_matches_workflow_args",
     ("uv_download_checksum.py", "verify"): "test_uv_download_checksum_verify_matches_action_args",
@@ -1452,12 +1453,19 @@ def test_threat_intel_scan_matches_workflow_args(
             "--labels",
             "type:fix",
             "--ghsa-live",
+            "--malpkg-live",
+            "--epss-live",
             "--github-output",
             str(tmp_path / "output"),
             "--summary-file",
             str(tmp_path / "summary.md"),
+            "--comment-file",
+            str(tmp_path / "triage-comment.md"),
         ]
     ) == 0
+    # scan must render the same markdown to the comment file that the
+    # comment subcommand later posts (the two surfaces share render_summary_markdown).
+    assert (tmp_path / "triage-comment.md").exists()
 
 
 def test_threat_intel_apply_labels_matches_workflow_args(
@@ -1472,6 +1480,36 @@ def test_threat_intel_apply_labels_matches_workflow_args(
     assert threat_intel_triage.main(["apply-labels", "--add-labels", "threat:intel-needed"]) == 0
     assert threat_intel_triage.main(["apply-labels", "--remove-labels", "threat:response-needed"]) == 0
     assert threat_intel_triage.main(["apply-labels"]) == 0
+
+
+def test_threat_intel_comment_matches_workflow_args(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """comment subcommand accepts the argv shapes used by issue-pr-triage.yml.
+
+    The ``Publish triage evidence comment`` step invokes both branches:
+    ``comment --body-file <f>`` when findings fired (create allowed) and
+    ``comment --body-file <f> --update-only`` when none did. The
+    _upsert_comment boundary is stubbed so the contract exercises argv/env
+    wiring without network access.
+    """
+    monkeypatch.setenv("GH_TOKEN", "tok")
+    monkeypatch.setenv("REPO", "owner/repo")
+    monkeypatch.setenv("NUMBER", "42")
+    body_file = tmp_path / "triage-comment.md"
+    body_file.write_text("## Threat intelligence triage\n", encoding="utf-8")
+
+    seen: list[bool] = []
+
+    def fake_upsert(**kw: object) -> int:
+        seen.append(bool(kw["create"]))
+        return 0
+
+    monkeypatch.setattr(threat_intel_triage, "_upsert_comment", fake_upsert)
+
+    assert threat_intel_triage.main(["comment", "--body-file", str(body_file)]) == 0
+    assert threat_intel_triage.main(["comment", "--body-file", str(body_file), "--update-only"]) == 0
+    assert seen == [True, False]
 
 
 def test_pr_upsert_find_matches_workflow_args(
