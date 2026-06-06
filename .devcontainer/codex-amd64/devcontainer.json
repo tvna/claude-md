@@ -1,7 +1,7 @@
 {
   "//": "GENERATED FILE -- do not edit. Source: .devcontainer/codex/devcontainer.json. Regenerate: python3 scripts/generate_devcontainer_arch_overlays.py generate. This overlay pins --platform=linux/amd64 for explicit cross-arch selection; see docs/runbooks/devcontainers.md.",
   "name": "claude-md Codex (linux/amd64)",
-  "image": "ghcr.io/tvna/claude-md-devcontainer-codex:ba47d2f3c2cc74c07955a03b3811ef745ff3b43a",
+  "image": "ghcr.io/tvna/claude-md-devcontainer-codex:4c085e48866c3346b64254b545f64ca501bea204",
   "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
   "initializeCommand": "bash .devcontainer/scripts/check-gh-config-permissions.sh ${HOME}/.config/gh && bash .devcontainer/scripts/ensure-agent-image.sh codex --platform linux/amd64",
   "remoteUser": "codex",
