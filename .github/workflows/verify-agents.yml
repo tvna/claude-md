@@ -118,6 +118,13 @@ jobs:
         # docs/runbooks/devcontainer-tool-network-triage.md.
         run: uv run python scripts/scan_allowlist_rationale.py verify
 
+      - name: Verify devcontainer allowlist parser parity
+        # Refs #1257: fails when the bash read_allowlist in
+        # .devcontainer/scripts/_egress-lib.sh and scripts/_allowlist.py
+        # resolve_hosts disagree on a *.allowlist file, so the single source of
+        # truth stays single across the container start path and the CI tooling.
+        run: uv run python scripts/scan_allowlist_parser_parity.py verify
+
       - name: Verify flake.nix is the single source of truth for pinned hashes
         # Refs #1153: fails when a pinned binary's flake.nix SHA256 is hardcoded
         # under scripts/ or .github/workflows/, so a tool bump cannot leave a

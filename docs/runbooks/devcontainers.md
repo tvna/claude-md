@@ -593,6 +593,34 @@ Nix network shell. Do not wrap it in `sudo`: the agent users already run
 with UID 0 for rootless Podman workspace writes, and sudo account
 validation can fail before the allowlist is applied.
 
+`apply-egress-allowlist.sh` is a thin dispatcher; the reusable parsing and
+rule-building helpers live in `.devcontainer/scripts/_egress-lib.sh`, which
+is also sourced by the CI parser-parity gate. Sourcing the library has no
+side effects (no privilege check, no firewall mutation) -- the dispatcher
+decides when to apply rules.
+
+### block vs audit mode
+
+The dispatcher reads `EGRESS_MODE` (default `block`):
+
+- `block` -- deny-by-default. Only allowlisted egress is permitted; everything
+  else is dropped by the `OUTPUT DROP` policy. This is the production posture.
+- `audit` -- discovery mode. The same ACCEPT rules are installed, but instead
+  of dropping non-allowlisted egress the dispatcher logs it (rate-limited,
+  destination IP:port header only -- no payload) and leaves the policy at
+  `ACCEPT`, so connectivity is unbroken. Use it to learn what a new workload
+  actually contacts before promoting the file to `block`:
+
+```sh
+EGRESS_MODE=audit \
+  .devcontainer/scripts/apply-egress-allowlist.sh .devcontainer/network/<agent>.allowlist
+# run the workload, then inspect the kernel log for the audited destinations
+dmesg | grep EGRESS-AUDIT
+```
+
+Add the discovered, triaged destinations to the allowlist (with rationale)
+and switch back to `block`.
+
 If startup logs show `sudo: account validation failure, is your account
 locked?` or `postStartCommand from devcontainer.json failed`, do not
 ignore it. The container and VS Code Server may still start, but the
@@ -614,6 +642,13 @@ observe / evaluate / decide / verify procedure in
 [`devcontainer-tool-network-triage.md`](devcontainer-tool-network-triage.md).
 Each host entry must carry an inline triage rationale comment; the
 `scripts/scan_allowlist_rationale.py` gate fails CI when one is missing.
+
+The allowlist is parsed by two implementations -- the bash `read_allowlist`
+in `_egress-lib.sh` (container start path) and `scripts/_allowlist.py`
+`resolve_hosts` (CI, tests, rationale gate). The
+`scripts/scan_allowlist_parser_parity.py` gate fails CI if the two resolve
+different host sets, so the single source of truth stays single across both
+languages.
 
 ## Verification
 
@@ -647,6 +682,7 @@ python3 -m json.tool .devcontainer/claude/devcontainer.json
 python3 -m json.tool .devcontainer/codex/devcontainer.json
 python3 -m json.tool claude-md.code-workspace
 bash -n .devcontainer/scripts/apply-egress-allowlist.sh
+bash -n .devcontainer/scripts/_egress-lib.sh
 bash -n .devcontainer/scripts/configure-agent-runtime.sh
 bash -n .devcontainer/scripts/install-agent-cli.sh
 bash -n .devcontainer/scripts/prepare-agent-workspace.sh
