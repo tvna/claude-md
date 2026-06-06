@@ -111,6 +111,36 @@ def test_advisory_label_does_not_mask_real_severity_block() -> None:
     assert "manual-review label present: severity:security" in result.reasons
 
 
+def test_threat_response_label_blocks() -> None:
+    result = da.audit(event(labels=["threat:response-needed"]), POLICY, ["uv.lock"])
+    assert result.eligible is False
+    assert "threat-intel label present: threat:response-needed" in result.reasons
+
+
+def test_threat_intel_label_blocks() -> None:
+    result = da.audit(event(labels=["threat:intel-needed"]), POLICY, ["uv.lock"])
+    assert result.eligible is False
+    assert "threat-intel label present: threat:intel-needed" in result.reasons
+
+
+def test_both_threat_labels_block_sorted() -> None:
+    result = da.audit(
+        event(labels=["threat:response-needed", "threat:intel-needed"]),
+        POLICY,
+        ["uv.lock"],
+    )
+    assert result.eligible is False
+    assert "threat-intel label present: threat:intel-needed, threat:response-needed" in result.reasons
+
+
+def test_threat_labels_match_triage_source_of_truth() -> None:
+    # The literals in dependabot_automerge mirror threat_intel_triage's labels;
+    # this asserts they cannot drift apart (the triage script applies them).
+    import threat_intel_triage as tit
+
+    assert set(da._THREAT_BLOCKING_LABELS) == {tit.RESPONSE_LABEL, tit.INTEL_LABEL}
+
+
 def test_unexpected_path_blocks() -> None:
     result = da.audit(event(), POLICY, [".github/workflows/verify.yml", "README.md"])
     assert result.eligible is False
@@ -590,4 +620,175 @@ class TestCmdRequestAutomerge:
             da, "_enable_auto_merge", lambda **kw: (_ for _ in ()).throw(RuntimeError("GraphQL error"))
         )
         assert da.main(["request-automerge", "--pr-number", "1"]) == 1
+        assert "GraphQL error" in capsys.readouterr().err
+
+
+# ---------------------------------------------------------------------------
+# _disable_auto_merge() and _cmd_disable_automerge() / disable-automerge subcommand
+# ---------------------------------------------------------------------------
+
+
+class TestDisableAutoMerge:
+    def _make_apply_call(
+        self, *, node_id: str = "PR_node_1", auto_merge: object = {"enabled_by": {}}, status: int = 200
+    ) -> Callable[..., tuple[int, str]]:
+        pr_body = json.dumps({"node_id": node_id, "number": 42, "auto_merge": auto_merge})
+
+        def apply_call(*, method: str, url: str, payload: object, token: str) -> tuple[int, str]:
+            assert method == "GET"
+            return status, pr_body
+
+        return apply_call
+
+    def _make_graphql_call(
+        self, http_status: int = 200, errors: list | None = None
+    ) -> Callable[..., tuple[int, dict[str, Any]]]:
+        def graphql_call(*, query: str, variables: dict, token: str) -> tuple[int, dict]:
+            body: dict = {"data": {"disablePullRequestAutoMerge": {"pullRequest": {"number": 42}}}}
+            if errors is not None:
+                body["errors"] = errors
+            return http_status, body
+
+        return graphql_call
+
+    def test_disables_when_enabled(self) -> None:
+        captured_vars: list[dict] = []
+
+        def graphql_call(*, query: str, variables: dict, token: str) -> tuple[int, dict]:
+            captured_vars.append(variables)
+            assert "disablePullRequestAutoMerge" in query
+            return 200, {"data": {}}
+
+        disabled = da._disable_auto_merge(
+            repo="owner/repo",
+            pr_number=42,
+            token="tok",
+            apply_call=self._make_apply_call(node_id="PR_node_xyz"),
+            graphql_call=graphql_call,
+        )
+        assert disabled is True
+        assert captured_vars[0]["pullRequestId"] == "PR_node_xyz"
+
+    def test_noop_when_not_enabled(self) -> None:
+        def graphql_call(*, query: str, variables: dict, token: str) -> tuple[int, dict]:
+            raise AssertionError("graphql must not be called when auto_merge is null")
+
+        disabled = da._disable_auto_merge(
+            repo="owner/repo",
+            pr_number=42,
+            token="tok",
+            apply_call=self._make_apply_call(auto_merge=None),
+            graphql_call=graphql_call,
+        )
+        assert disabled is False
+
+    def test_pr_get_http_error_raises(self) -> None:
+        with pytest.raises(RuntimeError, match="404"):
+            da._disable_auto_merge(
+                repo="owner/repo",
+                pr_number=1,
+                token="tok",
+                apply_call=self._make_apply_call(status=404),
+                graphql_call=self._make_graphql_call(),
+            )
+
+    def test_missing_node_id_raises(self) -> None:
+        def apply_call(*, method: str, url: str, payload: object, token: str) -> tuple[int, str]:
+            return 200, '{"number": 1, "auto_merge": {"enabled_by": {}}}'
+
+        with pytest.raises(RuntimeError, match="node_id"):
+            da._disable_auto_merge(
+                repo="owner/repo",
+                pr_number=1,
+                token="tok",
+                apply_call=apply_call,
+                graphql_call=self._make_graphql_call(),
+            )
+
+    def test_malformed_json_raises(self) -> None:
+        def apply_call(*, method: str, url: str, payload: object, token: str) -> tuple[int, str]:
+            return 200, "not-json"
+
+        with pytest.raises(RuntimeError, match="malformed JSON"):
+            da._disable_auto_merge(
+                repo="owner/repo",
+                pr_number=1,
+                token="tok",
+                apply_call=apply_call,
+                graphql_call=self._make_graphql_call(),
+            )
+
+    def test_graphql_http_error_raises(self) -> None:
+        with pytest.raises(RuntimeError, match="HTTP 401"):
+            da._disable_auto_merge(
+                repo="owner/repo",
+                pr_number=42,
+                token="tok",
+                apply_call=self._make_apply_call(),
+                graphql_call=self._make_graphql_call(http_status=401),
+            )
+
+    def test_graphql_errors_raise(self) -> None:
+        with pytest.raises(RuntimeError, match="errors"):
+            da._disable_auto_merge(
+                repo="owner/repo",
+                pr_number=42,
+                token="tok",
+                apply_call=self._make_apply_call(),
+                graphql_call=self._make_graphql_call(errors=[{"message": "bad"}]),
+            )
+
+
+class TestCmdDisableAutomerge:
+    def test_success_disabled(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        monkeypatch.setenv("GH_TOKEN", "tok")
+        monkeypatch.setenv("REPO", "owner/repo")
+        monkeypatch.setattr(da, "_disable_auto_merge", lambda **kw: True)
+        assert da.main(["disable-automerge", "--pr-number", "7"]) == 0
+        assert "disabled" in capsys.readouterr().out
+
+    def test_success_noop(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        monkeypatch.setenv("GH_TOKEN", "tok")
+        monkeypatch.setenv("REPO", "owner/repo")
+        monkeypatch.setattr(da, "_disable_auto_merge", lambda **kw: False)
+        assert da.main(["disable-automerge", "--pr-number", "7"]) == 0
+        assert "was not enabled" in capsys.readouterr().out
+
+    def test_missing_token_returns_1(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        monkeypatch.delenv("GH_TOKEN", raising=False)
+        monkeypatch.setenv("REPO", "owner/repo")
+        assert da.main(["disable-automerge", "--pr-number", "1"]) == 1
+        assert "GH_TOKEN" in capsys.readouterr().err
+
+    def test_missing_repo_returns_1(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        monkeypatch.setenv("GH_TOKEN", "tok")
+        monkeypatch.delenv("REPO", raising=False)
+        assert da.main(["disable-automerge", "--pr-number", "1"]) == 1
+        assert "REPO" in capsys.readouterr().err
+
+    def test_invalid_pr_number_returns_1(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        monkeypatch.setenv("GH_TOKEN", "tok")
+        monkeypatch.setenv("REPO", "owner/repo")
+        assert da.main(["disable-automerge", "--pr-number", "bad"]) == 1
+        assert "PR number" in capsys.readouterr().err
+
+    def test_runtime_error_returns_1(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        monkeypatch.setenv("GH_TOKEN", "tok")
+        monkeypatch.setenv("REPO", "owner/repo")
+        monkeypatch.setattr(
+            da, "_disable_auto_merge", lambda **kw: (_ for _ in ()).throw(RuntimeError("GraphQL error"))
+        )
+        assert da.main(["disable-automerge", "--pr-number", "1"]) == 1
         assert "GraphQL error" in capsys.readouterr().err
