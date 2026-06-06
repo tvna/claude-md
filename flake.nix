@@ -306,6 +306,7 @@ EOF
             ruff
           ];
           networkPackages = with pkgs; [
+            bpftrace
             dnsmasq
             dnsutils
             ipset
