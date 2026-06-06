@@ -302,6 +302,56 @@ jobs:
           fail_ci_if_error: false
           use_oidc: true
 
+  egress-firewall-selftest:
+    # Refs #1257 (PR4): isolated self-test of the custom egress-firewall
+    # composite action in AUDIT mode. Deliberately NOT a step in
+    # lint-scripts-static and NOT wired into the `gate` aggregation below:
+    # audit mode is discovery (log-only, OUTPUT policy stays ACCEPT), so a
+    # finding here must never block unrelated work. PR5 promotes this job to
+    # block mode once the audit logs confirm the allowlist is sufficient. The
+    # action reuses .devcontainer/scripts/_egress-lib.sh via the dispatcher, so
+    # CI and the container start path share one parser (parity-gated).
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+
+      - name: Apply egress allowlist in audit mode
+        uses: ./.github/actions/egress-firewall
+        with:
+          mode: audit
+          allowlist: .devcontainer/network/shared.allowlist
+
+      - name: Assert audit rules installed without breaking connectivity
+        run: |
+          set -euo pipefail
+          # Audit must install the rate-limited LOG rule and leave the OUTPUT
+          # policy at ACCEPT (audit records non-allowlisted egress, never drops).
+          # Capture into a variable (not `sudo ... > file`, which would redirect
+          # as the unprivileged user -- shellcheck SC2024).
+          rules="$(sudo iptables -S OUTPUT)"
+          if ! grep -q 'EGRESS-AUDIT' <<<"$rules"; then
+            echo "::error::audit LOG rule missing from OUTPUT chain"
+            printf '%s\n' "$rules"
+            exit 1
+          fi
+          if ! grep -qE '^-P OUTPUT ACCEPT' <<<"$rules"; then
+            echo "::error::OUTPUT policy is not ACCEPT in audit mode"
+            printf '%s\n' "$rules"
+            exit 1
+          fi
+          # Allowlisted egress still works: github.com is in shared.allowlist.
+          if ! curl -sfI --max-time 20 https://github.com >/dev/null; then
+            echo "::error::allowlisted egress to github.com failed under audit mode"
+            exit 1
+          fi
+          echo "egress-firewall audit selftest passed: LOG rule present, policy ACCEPT, allowlisted egress OK."
+
   gate:
     name: "Verify repository scripts / gate"
     # Refs #545: depends on `lint-scripts-pytest-gate` (the marker-matrix
