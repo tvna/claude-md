@@ -378,6 +378,10 @@
           {
             "type": "command",
             "command": "python3 scripts/post_merge_retro_append.py"
+          },
+          {
+            "type": "command",
+            "command": "python3 scripts/post_merge_new_session_prompt.py"
           }
         ]
       },

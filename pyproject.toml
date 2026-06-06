@@ -20,7 +20,7 @@ required-version = "==0.11.11"
 # Test-only dependencies for scripts and coverage gates.
 # CI and local development both resolve these through uv and uv.lock.
 dev = [
-    "pytest>=8,<9",
+    "pytest>=9.0.3,<10",
     "pytest-cov>=6,<7",
     # Lint gate (#192). Bounded major to avoid silent rule churn on upgrade.
     "ruff>=0.7,<0.9",
@@ -154,6 +154,14 @@ ignore = [
 # must contain the very codepoints RUF001 would flag.
 "scripts/gate_decision_handoff_askuserquestion.py" = ["RUF001"]
 "tests/test_gate_decision_handoff_askuserquestion.py" = [
+    "B011", "B017", "RUF001",
+    "S101", "S105", "S106", "S108", "S404", "S603", "S607",
+]
+# The new-session-prompt hook builds a paste-ready prompt in the project
+# owner's language (ja), so the gate (and its test asserting that text) must
+# contain the fullwidth codepoints RUF001 would flag.
+"scripts/post_merge_new_session_prompt.py" = ["RUF001"]
+"tests/test_post_merge_new_session_prompt.py" = [
     "B011", "B017", "RUF001",
     "S101", "S105", "S106", "S108", "S404", "S603", "S607",
 ]

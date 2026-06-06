@@ -379,6 +379,11 @@
             "type": "command",
             "command": "python3 scripts/post_merge_retro_append.py",
             "statusMessage": "Directing agent to append repair analysis to auto-retro"
+          },
+          {
+            "type": "command",
+            "command": "python3 scripts/post_merge_new_session_prompt.py",
+            "statusMessage": "Checking for session-affecting changes needing a new session"
           }
         ]
       },
