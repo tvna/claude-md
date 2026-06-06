@@ -42,6 +42,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from collections.abc import Callable
+from datetime import date
 from pathlib import Path
 from typing import Any, NamedTuple
 
@@ -73,6 +74,17 @@ ECOSYSTEM_ACTIONS = "GitHub Actions"
 ECOSYSTEM_PYPI = "PyPI"
 WORKFLOW_SUBDIR = ".github/workflows"
 SCRIPTS_SUBDIR = "scripts"
+
+# Checked-in accepted-intel suppression allowlist (#1277). Each entry is a
+# reviewed waiver keyed on (ecosystem, name, vuln_id) with a mandatory
+# reason and an ISO ``review_by`` expiry. An *unexpired* entry stops a
+# non-response finding from flipping ``threat:intel-needed``; an *expired*
+# entry re-surfaces the label (fail-loud per CLAUDE.md s4) instead of
+# silently persisting. Suppressions never apply to known-exploited or
+# malware findings -- those always escalate. Resolved relative to
+# ``--repo-root`` so the scan auto-loads it without a CLI flag, mirroring
+# ``verify_security_control_floor`` reading its committed TOML.
+SUPPRESSIONS_RELPATH = ".github/threat-intel-suppressions.json"
 
 # Pattern for CVE identifiers used to filter EPSS-eligible aliases. EPSS
 # data is keyed on CVE only; GHSA / OSV identifiers are not accepted by
@@ -139,6 +151,21 @@ class Finding(NamedTuple):
     # NVD CVE enrichment (#174). Supplemental only -- empty tuple means
     # "no NVD enrichment available", not "vulnerability not relevant".
     nvd_metadata: tuple[NvdEnrichment, ...] = ()
+
+
+class Suppression(NamedTuple):
+    """A reviewed accepted-intel waiver loaded from the checked-in allowlist (#1277).
+
+    ``review_by`` is the expiry: on or after this date the waiver no longer
+    suppresses, so the finding re-surfaces ``threat:intel-needed``. ``reason``
+    is mandatory so the record explains itself to a later reviewer.
+    """
+
+    ecosystem: str
+    name: str
+    vuln_id: str
+    reason: str
+    review_by: date
 
 
 INTEL_INDICATORS = (
@@ -1171,12 +1198,111 @@ def attach_nvd_to_findings(
     return enriched
 
 
-def classify_findings(findings: list[Finding], labels: set[str]) -> dict[str, object]:
-    intel_needed = bool(findings)
-    response_needed = any(
-        finding.known_exploited or finding.advisory_type == GHSA_MALWARE_TYPE
-        for finding in findings
-    )
+def load_suppressions(path: Path) -> list[Suppression]:
+    """Return reviewed accepted-intel waivers parsed from *path* (#1277).
+
+    Fails loud (``ValueError``) on a malformed envelope or entry -- a missing
+    required field or a non-ISO ``review_by`` date is a defect that must stop
+    the run, never be silently dropped (CLAUDE.md s4). Expiry is *not* a load
+    error: an expired entry parses successfully and is re-surfaced downstream
+    by :func:`classify_findings`.
+    """
+    data = load_json(path)
+    raw = data.get("suppressions", [])
+    if not isinstance(raw, list):
+        raise ValueError(f"{path}: 'suppressions' must be an array")
+    suppressions: list[Suppression] = []
+    required = ("ecosystem", "name", "vuln_id", "reason", "review_by")
+    for index, entry in enumerate(raw):
+        if not isinstance(entry, dict):
+            raise ValueError(f"{path}: suppression #{index} must be an object")
+        values: dict[str, str] = {}
+        for field in required:
+            value = entry.get(field)
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError(
+                    f"{path}: suppression #{index} field '{field}' must be a non-empty string"
+                )
+            values[field] = value.strip()
+        try:
+            review_by = date.fromisoformat(values["review_by"])
+        except ValueError as exc:
+            raise ValueError(
+                f"{path}: suppression #{index} 'review_by' must be ISO YYYY-MM-DD: "
+                f"{values['review_by']!r}"
+            ) from exc
+        suppressions.append(
+            Suppression(
+                ecosystem=values["ecosystem"],
+                name=values["name"],
+                vuln_id=values["vuln_id"],
+                reason=values["reason"],
+                review_by=review_by,
+            )
+        )
+    return suppressions
+
+
+def _finding_is_response_class(finding: Finding) -> bool:
+    """Return True when *finding* carries a known-exploitation/malware signal.
+
+    Response-class findings escalate ``threat:response-needed`` and must never
+    be silenced by an accepted-intel suppression (#1277): a waiver only covers
+    advisory intel gaps, not confirmed exploitation.
+    """
+    return finding.known_exploited or finding.advisory_type == GHSA_MALWARE_TYPE
+
+
+def _matching_suppression(
+    finding: Finding, suppressions: tuple[Suppression, ...] | list[Suppression]
+) -> Suppression | None:
+    """Return the first suppression whose key matches *finding*, or None.
+
+    Matched on (ecosystem, name) plus a vuln_id that equals the finding's
+    primary id or any alias, so a waiver written against a CVE still covers a
+    GHSA-primary finding that aliases it.
+    """
+    for supp in suppressions:
+        if supp.ecosystem != finding.dependency.ecosystem:
+            continue
+        if supp.name.lower() != finding.dependency.name.lower():
+            continue
+        if supp.vuln_id in {finding.vuln_id, *finding.aliases}:
+            return supp
+    return None
+
+
+def _suppression_label(supp: Suppression) -> str:
+    """Render a one-line human reference for a re-surfaced expired suppression."""
+    return f"{supp.ecosystem}/{supp.name} {supp.vuln_id} (review-by {supp.review_by.isoformat()})"
+
+
+def classify_findings(
+    findings: list[Finding],
+    labels: set[str],
+    *,
+    suppressions: tuple[Suppression, ...] | list[Suppression] = (),
+    today: date | None = None,
+) -> dict[str, object]:
+    today = today or date.today()
+    active: list[Finding] = []
+    suppressed_count = 0
+    expired_resurfaced: list[str] = []
+    for finding in findings:
+        supp = _matching_suppression(finding, suppressions)
+        if supp is None or _finding_is_response_class(finding):
+            active.append(finding)
+            continue
+        if supp.review_by <= today:
+            # Expired waiver: re-surface the label rather than silently
+            # persist the suppression (#1277, CLAUDE.md s4).
+            expired_resurfaced.append(_suppression_label(supp))
+            active.append(finding)
+            continue
+        suppressed_count += 1
+
+    intel_needed = bool(active)
+    response_needed = any(_finding_is_response_class(finding) for finding in findings)
 
     recommended_labels, remove_labels = classify_label_changes(
         labels,
@@ -1190,6 +1316,9 @@ def classify_findings(findings: list[Finding], labels: set[str]) -> dict[str, ob
         "recommended_labels": recommended_labels,
         "remove_labels": remove_labels,
         "finding_count": len(findings),
+        "active_finding_count": len(active),
+        "suppressed_count": suppressed_count,
+        "expired_suppressions": expired_resurfaced,
         "known_exploited_count": sum(1 for finding in findings if finding.known_exploited),
         "findings": [finding_to_dict(finding) for finding in findings],
     }
@@ -1301,6 +1430,7 @@ def _cmd_scan(args: argparse.Namespace) -> int:
     repo_root = Path(args.repo_root)
     labels = parse_labels(args.labels or os.environ.get("LABELS", ""))
     dependencies = discover_dependencies(repo_root)
+    suppressions = _resolve_suppressions(repo_root, args.suppressions_file)
     outages: list[str] = []
     findings = fetch_external_findings(
         dependencies,
@@ -1317,7 +1447,7 @@ def _cmd_scan(args: argparse.Namespace) -> int:
         nvd_live=args.nvd_live,
         outages=outages,
     )
-    result = classify_findings(findings, labels)
+    result = classify_findings(findings, labels, suppressions=suppressions)
 
     if args.summary_file:
         write_summary(Path(args.summary_file), dependencies, findings, result, outages=outages)
@@ -1331,9 +1461,22 @@ def _cmd_scan(args: argparse.Namespace) -> int:
     if args.github_output:
         _write_github_output(Path(args.github_output), result)
 
+    # Surface mode for the scheduled re-triage (#1277): the evidence (summary,
+    # output, comment) is always written first, then the run is failed loud so
+    # a recurring advisory or an expired suppression turns the scheduled run
+    # red. PR triage leaves --fail-on-intel off and keeps its advisory exit 0.
+    exit_code = 1 if args.fail_on_intel and result["intel_needed"] else 0
+    if exit_code:
+        print(
+            "::error::threat-intel triage reports intel_needed=true "
+            "(unsuppressed finding or expired accepted-intel suppression); "
+            "review the step summary and renew or clear the suppression record.",
+            file=sys.stderr,
+        )
+
     if args.format == "json":
         print(json.dumps(result, sort_keys=True))
-        return 0
+        return exit_code
 
     print(f"dependencies={len(dependencies)}")
     print(f"findings={result['finding_count']}")
@@ -1342,7 +1485,26 @@ def _cmd_scan(args: argparse.Namespace) -> int:
     print(f"response_needed={_bool(result['response_needed'])}")
     print(f"recommended_labels={','.join(result['recommended_labels'])}")
     print(f"remove_labels={','.join(result['remove_labels'])}")
-    return 0
+    return exit_code
+
+
+def _resolve_suppressions(
+    repo_root: Path, suppressions_file: Path | None
+) -> list[Suppression]:
+    """Return the accepted-intel suppressions for a scan (#1277).
+
+    An explicit ``--suppressions-file`` is loaded unconditionally so a typo'd
+    path fails loud rather than silently disabling every waiver. Otherwise the
+    conventional ``<repo-root>/.github/threat-intel-suppressions.json`` is
+    auto-loaded when present; its absence simply means "no waivers", which is
+    the fail-safe default (every finding still flips the label).
+    """
+    if suppressions_file is not None:
+        return load_suppressions(suppressions_file)
+    default_path = repo_root / SUPPRESSIONS_RELPATH
+    if default_path.is_file():
+        return load_suppressions(default_path)
+    return []
 
 
 def render_summary_markdown(
@@ -1397,7 +1559,19 @@ def _write_summary_body(
     handle.write(f"- Dependencies checked: {len(dependencies)}\n")
     handle.write(f"- Findings: {result['finding_count']}\n")
     handle.write(f"- Known exploited findings: {result['known_exploited_count']}\n")
-    handle.write(f"- Recommended labels: `{','.join(result['recommended_labels'])}`\n\n")
+    handle.write(f"- Recommended labels: `{','.join(result['recommended_labels'])}`\n")
+    suppressed_count = int(result.get("suppressed_count", 0) or 0)
+    if suppressed_count:
+        handle.write(f"- Accepted-intel suppressions applied: {suppressed_count}\n")
+    handle.write("\n")
+    expired = result.get("expired_suppressions") or []
+    if isinstance(expired, list) and expired:
+        handle.write(
+            "> Expired accepted-intel suppressions re-surfaced (review overdue): "
+            f"{'; '.join(str(item) for item in expired)}. "
+            "Renew or remove the suppression record in "
+            f"`{SUPPRESSIONS_RELPATH}`.\n\n"
+        )
     if not findings:
         handle.write("No external threat-intelligence findings matched locked dependencies.\n")
         return
@@ -1914,6 +2088,25 @@ def main(argv: list[str] | None = None) -> int:
             "Query services.nvd.nist.gov/rest/json/cves/2.0 live for "
             "CVEs already surfaced by OSV/GHSA. NVD enrichment is "
             "supplemental and silently skipped on transport failure."
+        ),
+    )
+    p_scan.add_argument(
+        "--suppressions-file",
+        type=Path,
+        help=(
+            "Accepted-intel suppression allowlist (#1277). Defaults to "
+            "<repo-root>/.github/threat-intel-suppressions.json when present. "
+            "An explicit path is loaded unconditionally and fails loud if "
+            "missing or malformed."
+        ),
+    )
+    p_scan.add_argument(
+        "--fail-on-intel",
+        action="store_true",
+        help=(
+            "Exit non-zero when intel_needed is true after suppressions. Used "
+            "by the scheduled re-triage so a recurring advisory or an expired "
+            "suppression turns the run red. PR triage leaves this off."
         ),
     )
     p_scan.set_defaults(func=_cmd_scan)

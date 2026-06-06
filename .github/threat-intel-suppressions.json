@@ -1,0 +1,4 @@
+{
+  "documentation": "Accepted-intel suppressions consumed by scripts/threat_intel_triage.py (issue #1277). Each entry is a reviewed waiver: {ecosystem, name, vuln_id, reason, review_by}. review_by is an ISO YYYY-MM-DD expiry. An unexpired entry stops a NON-response finding from flipping the threat:intel-needed label; on or after review_by the entry expires and the label re-surfaces (fail-loud). Suppressions never apply to known-exploited or malware findings -- those always escalate threat:response-needed. Add an entry only after verifying the dependency's intel against a primary source (OSV/GHSA) and recording why the gap is acceptable. The scheduled re-triage in weekly-maintenance.yml runs the same scan with --fail-on-intel so expired entries turn the run red.",
+  "suppressions": []
+}
