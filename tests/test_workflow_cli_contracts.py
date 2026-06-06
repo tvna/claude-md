@@ -170,9 +170,8 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("labels_apply.py", "plan"): "test_labels_apply_validate_and_plan_match_workflow_args",
     ("labels_apply.py", "validate"): "test_labels_apply_validate_and_plan_match_workflow_args",
     ("nixpkgs_cooldown.py", "verify"): "test_nixpkgs_cooldown_verify_matches_workflow_args",
-    ("ruleset_drift.py", "detect"): "test_ruleset_drift_detect_and_file_issue_match_workflow_args",
-    ("ruleset_drift.py", "file-sot-issue"): "test_ruleset_drift_detect_and_file_issue_match_workflow_args",
-    ("ruleset_drift.py", "file-unknown-issue"): "test_ruleset_drift_detect_and_file_issue_match_workflow_args",
+    ("ruleset_drift.py", "detect"): "test_ruleset_drift_detect_and_reconcile_match_workflow_args",
+    ("ruleset_drift.py", "reconcile"): "test_ruleset_drift_detect_and_reconcile_match_workflow_args",
     ("rulesets_apply.py", "$MODE"): "test_rulesets_apply_plan_and_auto_delete_match_workflow_args",
     ("rulesets_apply.py", "auto-delete"): "test_rulesets_apply_plan_and_auto_delete_match_workflow_args",
     ("scan_allowlist_parser_parity.py", "verify"): "test_scan_allowlist_parser_parity_verify_matches_workflow_args",
@@ -796,7 +795,7 @@ def test_labels_apply_validate_and_plan_match_workflow_args(
     ) == 0
 
 
-def test_ruleset_drift_detect_and_file_issue_match_workflow_args(
+def test_ruleset_drift_detect_and_reconcile_match_workflow_args(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     sot_dir = _write_ruleset_sot(tmp_path)
@@ -826,6 +825,8 @@ def test_ruleset_drift_detect_and_file_issue_match_workflow_args(
             {"repo": repo, "title": title, "body_file": body_file, "labels": labels}
         )
 
+    # No open rolling issue + capture create; reconcile must never shell out.
+    monkeypatch.setattr(ruleset_drift, "find_rolling_issue", lambda repo, title: None)
     monkeypatch.setattr(ruleset_drift, "file_issue", fake_file_issue)
 
     assert ruleset_drift.main(
@@ -840,24 +841,39 @@ def test_ruleset_drift_detect_and_file_issue_match_workflow_args(
             "--summary-file",
             str(tmp_path / "summary.md"),
             "--sot-body-file",
-            str(tmp_path / "drift-sot.md"),
+            str(tmp_path / "drift-sot-issue.md"),
             "--unknown-body-file",
-            str(tmp_path / "drift-unknown.md"),
+            str(tmp_path / "drift-unknown-issue.md"),
         ]
     ) == 0
     assert ruleset_drift.main(
         [
-            "file-sot-issue",
+            "reconcile",
             "--repo",
             REPO,
-            "--run-date",
-            "2026-05-24",
+            "--kind",
+            "sot",
+            "--detected",
+            "true",
             "--body-file",
-            str(tmp_path / "drift-sot.md"),
+            str(tmp_path / "drift-sot-issue.md"),
+        ]
+    ) == 0
+    assert ruleset_drift.main(
+        [
+            "reconcile",
+            "--repo",
+            REPO,
+            "--kind",
+            "unknown",
+            "--detected",
+            "false",
+            "--body-file",
+            str(tmp_path / "drift-unknown-issue.md"),
         ]
     ) == 0
     assert calls[-1]["repo"] == REPO
-    assert calls[-1]["title"].startswith("fix(ruleset-drift): SoT vs live drift")
+    assert calls[-1]["title"] == ruleset_drift.SOT_ISSUE_TITLE
 
 
 def test_rulesets_apply_plan_and_auto_delete_match_workflow_args(

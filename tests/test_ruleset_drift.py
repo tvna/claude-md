@@ -717,68 +717,243 @@ class TestCli:
 
         assert rc == 1
 
-    def test_file_sot_issue_invokes_gh(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    def test_reconcile_maps_kind_and_parses_detected(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         body = tmp_path / "sot.md"
         body.write_text("Parent: #30\n", encoding="utf-8")
-        calls: list[dict[str, Any]] = []
+        captured: dict[str, Any] = {}
 
-        def fake_file_issue(
-            repo: str, title: str, body_file: Path, *_args: Any, **_kwargs: Any
-        ) -> None:
-            calls.append({"repo": repo, "title": title, "body_file": body_file})
+        def fake_reconcile(**kwargs: Any) -> str:
+            captured.update(kwargs)
+            return "create"
 
-        monkeypatch.setattr(ruleset_drift, "file_issue", fake_file_issue)
+        monkeypatch.setattr(ruleset_drift, "reconcile", fake_reconcile)
 
         rc = ruleset_drift.main(
             [
-                "file-sot-issue",
+                "reconcile",
                 "--repo",
                 "owner/repo",
-                "--run-date",
-                "2026-05-22",
+                "--kind",
+                "sot",
+                "--detected",
+                "true",
                 "--body-file",
                 str(body),
             ]
         )
 
         assert rc == 0
-        assert calls == [
-            {
-                "repo": "owner/repo",
-                "title": "fix(ruleset-drift): SoT vs live drift detected (2026-05-22)",
-                "body_file": body,
-            }
-        ]
+        assert captured["repo"] == "owner/repo"
+        assert captured["title"] == ruleset_drift.SOT_ISSUE_TITLE
+        assert captured["detected"] is True
+        assert captured["body_file"] == body
+        assert captured["close_comment"] == ruleset_drift.SOT_RESOLVED_COMMENT
+        assert "action=create" in capsys.readouterr().out
 
-    def test_file_unknown_issue_title(
+    def test_reconcile_unknown_kind_false_detected(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        body = tmp_path / "unk.md"
-        body.write_text("Parent: #30\n", encoding="utf-8")
-        captured: list[str] = []
+        captured: dict[str, Any] = {}
 
-        def fake_file_issue(
-            _repo: str, title: str, _body_file: Path, *_args: Any, **_kwargs: Any
-        ) -> None:
-            captured.append(title)
+        def fake_reconcile(**kwargs: Any) -> str:
+            captured.update(kwargs)
+            return "close"
 
-        monkeypatch.setattr(ruleset_drift, "file_issue", fake_file_issue)
+        monkeypatch.setattr(ruleset_drift, "reconcile", fake_reconcile)
 
         rc = ruleset_drift.main(
             [
-                "file-unknown-issue",
+                "reconcile",
                 "--repo",
                 "owner/repo",
-                "--run-date",
-                "2026-05-22",
+                "--kind",
+                "unknown",
+                "--detected",
+                "false",
                 "--body-file",
-                str(body),
+                str(tmp_path / "missing.md"),
             ]
         )
 
         assert rc == 0
-        assert captured == [
-            "fix(ruleset-drift): unknown ruleset detected (2026-05-22)"
-        ]
+        assert captured["title"] == ruleset_drift.UNKNOWN_ISSUE_TITLE
+        assert captured["detected"] is False
+
+    def test_reconcile_invalid_detected_exits_one(self, tmp_path: Path) -> None:
+        rc = ruleset_drift.main(
+            [
+                "reconcile",
+                "--repo",
+                "owner/repo",
+                "--kind",
+                "sot",
+                "--detected",
+                "maybe",
+                "--body-file",
+                str(tmp_path / "x.md"),
+            ]
+        )
+        assert rc == 1
+
+
+class TestDriftHashAndMarker:
+    def test_hash_is_deterministic_and_short(self) -> None:
+        assert ruleset_drift.drift_hash("abc") == ruleset_drift.drift_hash("abc")
+        assert len(ruleset_drift.drift_hash("abc")) == 16
+
+    def test_hash_differs_on_content_change(self) -> None:
+        assert ruleset_drift.drift_hash("abc") != ruleset_drift.drift_hash("abd")
+
+    def test_marker_roundtrips(self) -> None:
+        body = ruleset_drift.embed_hash_marker("body text", "deadbeef")
+        assert ruleset_drift.extract_hash_marker(body) == "deadbeef"
+
+    def test_extract_returns_none_when_absent(self) -> None:
+        assert ruleset_drift.extract_hash_marker("no marker here\n") is None
+
+
+class TestDecideIssueAction:
+    def test_detected_no_issue_creates(self) -> None:
+        assert (
+            ruleset_drift.decide_issue_action(
+                detected=True, existing_issue=None, content_changed=True
+            )
+            == "create"
+        )
+
+    def test_detected_changed_content_appends(self) -> None:
+        assert (
+            ruleset_drift.decide_issue_action(
+                detected=True, existing_issue={"number": 7}, content_changed=True
+            )
+            == "append"
+        )
+
+    def test_detected_same_content_silent(self) -> None:
+        assert (
+            ruleset_drift.decide_issue_action(
+                detected=True, existing_issue={"number": 7}, content_changed=False
+            )
+            == "silent"
+        )
+
+    def test_resolved_with_issue_closes(self) -> None:
+        assert (
+            ruleset_drift.decide_issue_action(
+                detected=False, existing_issue={"number": 7}, content_changed=False
+            )
+            == "close"
+        )
+
+    def test_resolved_without_issue_silent(self) -> None:
+        assert (
+            ruleset_drift.decide_issue_action(
+                detected=False, existing_issue=None, content_changed=False
+            )
+            == "silent"
+        )
+
+
+class TestReconcile:
+    """reconcile() calls module-level gh wrappers; tests monkeypatch them so no
+    process ever runs and the chosen action is the only assertion surface."""
+
+    def _body_with_hash(self, tmp_path: Path, content_hash: str) -> Path:
+        body = tmp_path / "body.md"
+        body.write_text(
+            ruleset_drift.embed_hash_marker("Parent: #30\n", content_hash),
+            encoding="utf-8",
+        )
+        return body
+
+    def _wire(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        *,
+        existing: dict[str, Any] | None,
+        open_hash: str | None = None,
+    ) -> dict[str, list[Any]]:
+        calls: dict[str, list[Any]] = {"create": [], "comment": [], "close": []}
+        monkeypatch.setattr(ruleset_drift, "find_rolling_issue", lambda _r, _t: existing)
+        monkeypatch.setattr(
+            ruleset_drift,
+            "fetch_issue_body",
+            lambda _r, _n: ruleset_drift.embed_hash_marker("old", open_hash or ""),
+        )
+        monkeypatch.setattr(
+            ruleset_drift, "file_issue",
+            lambda r, t, _b, _l: calls["create"].append((r, t)),
+        )
+        monkeypatch.setattr(
+            ruleset_drift, "comment_on_issue",
+            lambda _r, n, _b: calls["comment"].append(n),
+        )
+        monkeypatch.setattr(
+            ruleset_drift, "close_issue_with_comment",
+            lambda _r, n, c: calls["close"].append((n, c)),
+        )
+        return calls
+
+    def _reconcile(self, *, detected: bool, body_file: Path) -> str:
+        return ruleset_drift.reconcile(
+            repo="owner/repo",
+            title=ruleset_drift.SOT_ISSUE_TITLE,
+            detected=detected,
+            body_file=body_file,
+            close_comment="resolved comment",
+        )
+
+    def test_create_when_no_open_issue(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        calls = self._wire(monkeypatch, existing=None)
+        action = self._reconcile(detected=True, body_file=self._body_with_hash(tmp_path, "abc123"))
+        assert action == "create"
+        assert calls["create"] == [("owner/repo", ruleset_drift.SOT_ISSUE_TITLE)]
+
+    def test_silent_when_same_hash(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        calls = self._wire(monkeypatch, existing={"number": 42}, open_hash="samehash")
+        action = self._reconcile(detected=True, body_file=self._body_with_hash(tmp_path, "samehash"))
+        assert action == "silent"
+        assert calls == {"create": [], "comment": [], "close": []}
+
+    def test_append_when_hash_changed(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        calls = self._wire(monkeypatch, existing={"number": 42}, open_hash="oldhash")
+        action = self._reconcile(detected=True, body_file=self._body_with_hash(tmp_path, "newhash"))
+        assert action == "append"
+        assert calls["comment"] == [42]
+
+    def test_close_when_resolved_and_issue_open(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        calls = self._wire(monkeypatch, existing={"number": 99})
+        action = self._reconcile(detected=False, body_file=tmp_path / "absent.md")
+        assert action == "close"
+        assert calls["close"] == [(99, "resolved comment")]
+
+    def test_silent_when_resolved_and_no_issue(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        calls = self._wire(monkeypatch, existing=None)
+        action = self._reconcile(detected=False, body_file=tmp_path / "absent.md")
+        assert action == "silent"
+        assert calls == {"create": [], "comment": [], "close": []}
+
+
+class TestDetectEmbedsHash:
+    def test_sot_body_carries_hash_marker(self, tmp_path: Path) -> None:
+        live = {**SOT_MAIN, "id": 5, "enforcement": "disabled"}
+        _, _, _, sot_body, _ = _detect(
+            tmp_path,
+            sot_files={"main.json": SOT_MAIN},
+            live_list=[{"id": 5, "name": "main-protection"}],
+            live_by_id={5: live},
+        )
+        assert sot_body is not None
+        assert ruleset_drift.extract_hash_marker(sot_body) is not None

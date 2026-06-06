@@ -9,7 +9,9 @@ take injectable boundaries so the CLI is fully unit-testable.
 See #126 (refactor) and #30 / #116 (origin) for context. #1004 added
 server-default parameter normalization and canonical rule-list ordering to the
 projection (superseding the #30 / #116 "preserve raw rule order" decision, which
-predated the evidence that GitHub re-orders rules on PUT — see #1036).
+predated the evidence that GitHub re-orders rules on PUT — see #1036), and the
+`reconcile` rolling-issue dedup / auto-close replacing the per-run flood
+(#998 / #1000 / #1002).
 """
 
 from __future__ import annotations
@@ -17,6 +19,7 @@ from __future__ import annotations
 import argparse
 import datetime as _dt
 import difflib
+import hashlib
 import json
 import os
 import subprocess
@@ -24,13 +27,35 @@ import sys
 import urllib.request
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from _github_api import API_VERSION
 
 API_ROOT = "https://api.github.com"
 SOT_PROJECTION_KEYS = ("name", "target", "enforcement", "conditions", "bypass_actors", "rules")
 ISSUE_LABELS = ("layer:meta", "type:fix")
+
+# Stable rolling-issue titles (#1004): ONE open issue per kind, date in the body
+# (not the title), so recurring drift updates one issue instead of stacking
+# duplicates (#998/#1000/#1002). Still satisfies `type(scope): summary`.
+SOT_ISSUE_TITLE = "fix(ruleset-drift): SoT vs live drift detected"
+UNKNOWN_ISSUE_TITLE = "fix(ruleset-drift): unknown ruleset detected"
+
+# Body marker carrying the drift-content hash; reconcile diffs it against the open
+# issue to tell changed drift (comment) from re-observed (silent).
+HASH_MARKER_PREFIX = "<!-- ruleset-drift-hash: "
+HASH_MARKER_SUFFIX = " -->"
+ReconcileAction = Literal["create", "append", "silent", "close"]
+
+# ASCII close comments posted when a rolling issue's drift/unknown clears (#1004).
+SOT_RESOLVED_COMMENT = (
+    "Auto-closed by ruleset-drift: the latest run found no SoT-vs-live drift. "
+    "If drift recurs the weekly job reopens a fresh rolling issue.\n"
+)
+UNKNOWN_RESOLVED_COMMENT = (
+    "Auto-closed by ruleset-drift: the latest run found no unknown live "
+    "rulesets. If one reappears the weekly job reopens a fresh rolling issue.\n"
+)
 
 # Documented GitHub server-populated rule parameters, keyed by rule type (#1004).
 # GitHub echoes these onto the live ruleset even when the SoT file omits them,
@@ -201,6 +226,48 @@ def find_unknown(
 
 
 # ---------------------------------------------------------------------------
+# Rolling-issue dedup / auto-close (#1004)
+# ---------------------------------------------------------------------------
+
+def drift_hash(content: str) -> str:
+    """Short hash of the run-invariant drift signature (status rows + diffs);
+    excludes run date / URL so re-observed drift hashes the same (#1004)."""
+    return hashlib.sha256(content.encode("utf-8")).hexdigest()[:16]
+
+
+def embed_hash_marker(body: str, content_hash: str) -> str:
+    """Append the drift-content hash marker to an issue body (#1004)."""
+    marker = f"{HASH_MARKER_PREFIX}{content_hash}{HASH_MARKER_SUFFIX}"
+    return f"{body}\n{marker}\n"
+
+
+def extract_hash_marker(body: str) -> str | None:
+    """Return the drift-content hash embedded in ``body``, or None (#1004)."""
+    for line in body.splitlines():
+        stripped = line.strip()
+        if stripped.startswith(HASH_MARKER_PREFIX) and stripped.endswith(HASH_MARKER_SUFFIX):
+            return stripped[len(HASH_MARKER_PREFIX):-len(HASH_MARKER_SUFFIX)].strip()
+    return None
+
+
+def decide_issue_action(
+    *,
+    detected: bool,
+    existing_issue: dict[str, Any] | None,
+    content_changed: bool,
+) -> ReconcileAction:
+    """Decide reconcile's action (#1004): present+none->create; present+changed
+    ->append; present+same->silent; resolved+issue->close; resolved+none->silent."""
+    if detected:
+        if existing_issue is None:
+            return "create"
+        return "append" if content_changed else "silent"
+    if existing_issue is None:
+        return "silent"
+    return "close"
+
+
+# ---------------------------------------------------------------------------
 # Markdown renderers
 # ---------------------------------------------------------------------------
 
@@ -332,6 +399,11 @@ def fetch_live_ruleset(
         return json.loads(response.read().decode("utf-8"))
 
 
+def _run_gh(cmd: list[str], *, runner: Callable[..., Any] = subprocess.run) -> Any:
+    """Run a `gh` CLI command with the shared capture/timeout/check policy."""
+    return runner(cmd, capture_output=True, text=True, timeout=30, check=True)
+
+
 def file_issue(
     repo: str,
     title: str,
@@ -340,20 +412,75 @@ def file_issue(
     *,
     runner: Callable[..., Any] = subprocess.run,
 ) -> None:
-    cmd = [
-        "gh",
-        "issue",
-        "create",
-        "--repo",
-        repo,
-        "--title",
-        title,
-        "--body-file",
-        str(body_file),
-    ]
+    cmd = ["gh", "issue", "create", "--repo", repo, "--title", title,
+           "--body-file", str(body_file)]
     for label in labels:
         cmd.extend(["--label", label])
-    runner(cmd, capture_output=True, text=True, timeout=30, check=True)
+    _run_gh(cmd, runner=runner)
+
+
+def find_rolling_issue(
+    repo: str,
+    title: str,
+    *,
+    runner: Callable[..., Any] = subprocess.run,
+) -> dict[str, Any] | None:
+    """Return the open issue whose title exactly equals ``title`` (#1004); the
+    ``--search`` keyword match is filtered so a superstring title is not used."""
+    result = _run_gh(
+        ["gh", "issue", "list", "--repo", repo, "--state", "open",
+         "--search", f'"{title}" in:title', "--json", "number,title"],
+        runner=runner,
+    )
+    for issue in json.loads(result.stdout or "[]"):
+        if issue.get("title") == title:
+            return {"number": int(issue["number"]), "title": issue["title"]}
+    return None
+
+
+def fetch_issue_body(
+    repo: str,
+    issue_number: int,
+    *,
+    runner: Callable[..., Any] = subprocess.run,
+) -> str:
+    """Return an issue body (used to read its embedded drift hash) (#1004)."""
+    result = _run_gh(
+        ["gh", "issue", "view", str(issue_number), "--repo", repo,
+         "--json", "body", "--jq", ".body"],
+        runner=runner,
+    )
+    return str(result.stdout)
+
+
+def comment_on_issue(
+    repo: str,
+    issue_number: int,
+    body_file: Path,
+    *,
+    runner: Callable[..., Any] = subprocess.run,
+) -> None:
+    """Append a comment (rolling update) to an existing issue (#1004)."""
+    _run_gh(
+        ["gh", "issue", "comment", str(issue_number), "--repo", repo,
+         "--body-file", str(body_file)],
+        runner=runner,
+    )
+
+
+def close_issue_with_comment(
+    repo: str,
+    issue_number: int,
+    comment: str,
+    *,
+    runner: Callable[..., Any] = subprocess.run,
+) -> None:
+    """Auto-close a rolling issue with a resolution comment (#1004)."""
+    _run_gh(
+        ["gh", "issue", "close", str(issue_number), "--repo", repo,
+         "--reason", "completed", "--comment", comment],
+        runner=runner,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -397,6 +524,7 @@ def detect(
         render_sot_issue_header(run_date=run_date, run_url=run_url, repo=repo)
     ]
     diff_blocks: list[str] = []
+    sot_rows: list[str] = []  # run-invariant rows feeding the drift hash (#1004)
     drift_count = 0
 
     for filename, sot_entry in sot_entries:
@@ -420,6 +548,7 @@ def detect(
             )
             summary_chunks.append(row)
             sot_body_chunks.append(row)
+            sot_rows.append(row)
             drift_count += 1
             continue
 
@@ -443,6 +572,7 @@ def detect(
         row = render_status_row(file=filename, name=name, live_id=live_id, status="drift")
         summary_chunks.append(row)
         sot_body_chunks.append(row)
+        sot_rows.append(row)
         drift_count += 1
         block = render_diff_block(name=name, live_id=live_id, diff_text=diff_text)
         summary_chunks.append(block)
@@ -464,17 +594,61 @@ def detect(
     _write(summary_file, "".join(summary_chunks))
 
     if drift_count > 0:
-        _write(sot_body_file, "".join(sot_body_chunks))
+        sot_hash = drift_hash("".join(sot_rows) + "".join(diff_blocks))
+        _write(sot_body_file, embed_hash_marker("".join(sot_body_chunks), sot_hash))
 
     if unknown:
         unknown_chunks: list[str] = [
             render_unknown_issue_header(run_date=run_date, run_url=run_url)
         ]
-        unknown_chunks.extend(render_unknown_row(entry) for entry in unknown)
+        unknown_rows = [render_unknown_row(entry) for entry in unknown]
+        unknown_chunks.extend(unknown_rows)
         unknown_chunks.append(render_unknown_issue_remediation(repo=repo))
-        _write(unknown_body_file, "".join(unknown_chunks))
+        unknown_hash = drift_hash("".join(unknown_rows))
+        _write(unknown_body_file, embed_hash_marker("".join(unknown_chunks), unknown_hash))
 
     return drift_count, len(unknown)
+
+
+def reconcile(
+    *,
+    repo: str,
+    title: str,
+    detected: bool,
+    body_file: Path,
+    close_comment: str,
+    labels: tuple[str, ...] = ISSUE_LABELS,
+) -> ReconcileAction:
+    """Maintain a single rolling issue for one drift kind (#1004).
+
+    Finds the open issue by exact title, compares the rendered drift hash against
+    its marker, and creates / appends / stays silent / auto-closes per
+    :func:`decide_issue_action`. Always runs so a resolved drift auto-closes.
+    """
+    current_hash = (
+        extract_hash_marker(body_file.read_text(encoding="utf-8"))
+        if detected and body_file.exists()
+        else None
+    )
+    existing = find_rolling_issue(repo, title)
+    content_changed = True
+    if existing is not None and current_hash is not None:
+        content_changed = (
+            extract_hash_marker(fetch_issue_body(repo, existing["number"])) != current_hash
+        )
+
+    action = decide_issue_action(
+        detected=detected, existing_issue=existing, content_changed=content_changed
+    )
+    if action == "create":
+        file_issue(repo, title, body_file, labels)
+    elif action == "append":
+        assert existing is not None  # noqa: S101 — invariant from decide_issue_action
+        comment_on_issue(repo, existing["number"], body_file)
+    elif action == "close":
+        assert existing is not None  # noqa: S101 — invariant from decide_issue_action
+        close_issue_with_comment(repo, existing["number"], close_comment)
+    return action
 
 
 # ---------------------------------------------------------------------------
@@ -507,21 +681,30 @@ def _cmd_detect(args: argparse.Namespace) -> int:
     return 0
 
 
-def _cmd_file_sot_issue(args: argparse.Namespace) -> int:
-    file_issue(
-        args.repo,
-        f"fix(ruleset-drift): SoT vs live drift detected ({args.run_date})",
-        Path(args.body_file),
-    )
-    return 0
+_RECONCILE_KINDS: dict[str, tuple[str, str]] = {
+    "sot": (SOT_ISSUE_TITLE, SOT_RESOLVED_COMMENT),
+    "unknown": (UNKNOWN_ISSUE_TITLE, UNKNOWN_RESOLVED_COMMENT),
+}
 
 
-def _cmd_file_unknown_issue(args: argparse.Namespace) -> int:
-    file_issue(
-        args.repo,
-        f"fix(ruleset-drift): unknown ruleset detected ({args.run_date})",
-        Path(args.body_file),
+def _parse_detected(raw: str) -> bool:
+    if raw == "true":
+        return True
+    if raw == "false":
+        return False
+    raise ValueError(f"Invalid --detected value (expected true|false): {raw}")
+
+
+def _cmd_reconcile(args: argparse.Namespace) -> int:
+    title, close_comment = _RECONCILE_KINDS[args.kind]
+    action = reconcile(
+        repo=args.repo,
+        title=title,
+        detected=_parse_detected(args.detected),
+        body_file=Path(args.body_file),
+        close_comment=close_comment,
     )
+    print(f"action={action}")
     return 0
 
 
@@ -571,21 +754,22 @@ def main(argv: list[str] | None = None) -> int:
     )
     p_detect.set_defaults(func=_cmd_detect)
 
-    p_sot = sub.add_parser(
-        "file-sot-issue", help="Create the SoT-vs-live drift issue via gh."
+    p_reconcile = sub.add_parser(
+        "reconcile",
+        help=(
+            "Maintain the single rolling drift/unknown issue: create, update "
+            "(comment), stay silent, or auto-close based on the latest run."
+        ),
     )
-    p_sot.add_argument("--repo", required=True)
-    p_sot.add_argument("--run-date", required=True)
-    p_sot.add_argument("--body-file", required=True)
-    p_sot.set_defaults(func=_cmd_file_sot_issue)
-
-    p_unk = sub.add_parser(
-        "file-unknown-issue", help="Create the unknown-ruleset issue via gh."
+    p_reconcile.add_argument("--repo", required=True)
+    p_reconcile.add_argument("--kind", required=True, choices=sorted(_RECONCILE_KINDS))
+    p_reconcile.add_argument(
+        "--detected",
+        required=True,
+        help="true when this kind was detected on the latest run, else false.",
     )
-    p_unk.add_argument("--repo", required=True)
-    p_unk.add_argument("--run-date", required=True)
-    p_unk.add_argument("--body-file", required=True)
-    p_unk.set_defaults(func=_cmd_file_unknown_issue)
+    p_reconcile.add_argument("--body-file", required=True)
+    p_reconcile.set_defaults(func=_cmd_reconcile)
 
     args = parser.parse_args(argv)
     try:

@@ -351,27 +351,30 @@ jobs:
             --unknown-body-file /tmp/drift-unknown-issue.md \
             >> "$GITHUB_OUTPUT"
 
-      - name: File SoT-vs-live drift issue
-        if: steps.diff.outputs.drift_count != '0'
-        env:
-          RUN_DATE: ${{ steps.diff.outputs.run_date }}
+      # Reconcile the single rolling issue per kind (#1004): create / update /
+      # stay silent / auto-close. Runs unconditionally so a resolved drift closes
+      # the open issue instead of stacking a fresh one each run (#998/#1000/#1002).
+      - name: Reconcile SoT-vs-live drift issue
         run: |
           set -euo pipefail
-          python3 scripts/ruleset_drift.py file-sot-issue \
+          python3 scripts/ruleset_drift.py reconcile \
             --repo "${REPO}" \
-            --run-date "${RUN_DATE}" \
+            --kind sot \
+            --detected "${DRIFT_DETECTED}" \
             --body-file /tmp/drift-sot-issue.md
-
-      - name: File unknown-ruleset issue
-        if: steps.diff.outputs.unknown_count != '0'
         env:
-          RUN_DATE: ${{ steps.diff.outputs.run_date }}
+          DRIFT_DETECTED: ${{ steps.diff.outputs.drift_count != '0' }}
+
+      - name: Reconcile unknown-ruleset issue
         run: |
           set -euo pipefail
-          python3 scripts/ruleset_drift.py file-unknown-issue \
+          python3 scripts/ruleset_drift.py reconcile \
             --repo "${REPO}" \
-            --run-date "${RUN_DATE}" \
+            --kind unknown \
+            --detected "${UNKNOWN_DETECTED}" \
             --body-file /tmp/drift-unknown-issue.md
+        env:
+          UNKNOWN_DETECTED: ${{ steps.diff.outputs.unknown_count != '0' }}
 
   security-control-drift:
     if: github.event_name == 'schedule' || inputs.task == 'all' || inputs.task == 'security-control-drift'
