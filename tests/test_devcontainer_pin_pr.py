@@ -168,7 +168,7 @@ class TestOpenFlow:
         rc = dpp.main(_open_argv(tmp_path, sha="zz"))
         assert rc == 0
         assert git.ran("commit") and git.ran("push") and git.ran("checkout")
-        assert captured["head"] == "codex/devcontainer-image-pins-zz"
+        assert captured["head"] == "devcontainer/image-pins-zz"
         assert "zz" in captured["body"]  # template placeholder substituted
 
     def test_create_branch_git_failure_returns_1(
@@ -235,15 +235,15 @@ _PUBLISHED = "b417e5833394f6f04a6e9b1eefe48026c09b4089"
 
 class TestParsePublishedSha:
     def test_original_branch(self) -> None:
-        assert dpp._parse_published_sha(f"codex/devcontainer-image-pins-{_PUBLISHED}") == _PUBLISHED
+        assert dpp._parse_published_sha(f"devcontainer/image-pins-{_PUBLISHED}") == _PUBLISHED
 
     def test_refreshed_branch_strips_suffix(self) -> None:
-        branch = f"codex/devcontainer-image-pins-{_PUBLISHED}-r-0123456789ab"
+        branch = f"devcontainer/image-pins-{_PUBLISHED}-r-0123456789ab"
         assert dpp._parse_published_sha(branch) == _PUBLISHED
 
     def test_unrelated_branch_returns_none(self) -> None:
         assert dpp._parse_published_sha("claude/some-feature") is None
-        assert dpp._parse_published_sha("codex/devcontainer-image-pins-NOTHEX") is None
+        assert dpp._parse_published_sha("devcontainer/image-pins-NOTHEX") is None
 
 
 # ---------------------------------------------------------------------------
@@ -276,7 +276,7 @@ def _refresh_argv(tmp_path: Path, *, target: str = _TARGET) -> list[str]:
 
 
 def _open_pin_pr(number: int = 1132, *, sha: str = _PUBLISHED, suffix: str = "") -> dict[str, Any]:
-    ref = f"codex/devcontainer-image-pins-{sha}{suffix}"
+    ref = f"devcontainer/image-pins-{sha}{suffix}"
     return {"number": number, "head": {"ref": ref}}
 
 
@@ -343,13 +343,13 @@ class TestRefreshFlow:
 
         rc = dpp.main(_refresh_argv(tmp_path))
         assert rc == 0
-        expected_branch = f"codex/devcontainer-image-pins-{_PUBLISHED}-r-{_TARGET[:12]}"
+        expected_branch = f"devcontainer/image-pins-{_PUBLISHED}-r-{_TARGET[:12]}"
         assert captured["head"] == expected_branch
         assert _PUBLISHED in captured["body"]  # template substituted with the published SHA
         assert git.ran("commit") and git.ran("push")
         assert enabled == [1140]
         assert closed == [1132]
-        assert deleted == [f"codex/devcontainer-image-pins-{_PUBLISHED}"]
+        assert deleted == [f"devcontainer/image-pins-{_PUBLISHED}"]
         assert comments and comments[0][0] == 1132 and "Superseded by #1140" in comments[0][1]
 
     def test_behind_but_pins_already_on_main_closes_redundant_pr(

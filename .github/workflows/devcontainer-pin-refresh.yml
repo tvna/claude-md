@@ -3,7 +3,8 @@ name: Refresh devcontainer pin PR
 # Native auto-merge on the generated "pin published agent images" PR stalls the
 # moment main advances: main-protection requires the branch to be up to date,
 # while required_linear_history, the gate_update_pr_branch.py hook, and the
-# non_fast_forward rule on codex/* all forbid rebasing it in place. This keeper
+# non_fast_forward rule on all non-default branches (all-branches.json) all
+# forbid rebasing it in place. This keeper
 # rebases the behind PR onto the latest main via a fresh superseding PR so
 # auto-merge can complete. Refs #696, #895, #1137.
 
