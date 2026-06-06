@@ -122,6 +122,7 @@ GITHUB_API_SCRIPTS: frozenset[str] = frozenset(
         "labels_apply",
         "np_strategy_tracking",
         "post_issue_comment",
+        "post_merge_new_session_prompt",
         "pr_body_close_keyword_gate",
         "pr_upsert",
         "preflight_replacement_pr",
