@@ -9,7 +9,9 @@ flowchart TD
 
     J_audit["audit"]
     S_J_audit_0(("Request GitHub auto-merge"))
+    S_J_audit_1(("Disable GitHub auto-merge if no longer eligible"))
 
     T_pull_request_target -->|"github.event.pull_request.user.login == 'dependabot[bot]'"| J_audit
     J_audit -->|"steps.audit.outputs.should_enable == 'true'"| S_J_audit_0
+    J_audit -->|"steps.audit.outputs.should_enable != 'true'"| S_J_audit_1
 ```
