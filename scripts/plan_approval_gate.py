@@ -52,7 +52,7 @@ def main() -> int:
     event = read_event("plan_approval_gate")
     if event is None or not isinstance(event, dict):
         return 0
-    emit_decision(decide(event))
+    emit_decision(decide(event), "plan_approval_gate")
     return 0
 
 

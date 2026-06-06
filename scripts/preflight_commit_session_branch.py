@@ -118,7 +118,7 @@ def decide(event: dict[str, Any]) -> dict[str, Any] | None:
 
 def main(argv: list[str] | None = None) -> int:
     del argv
-    return run_event_hook("preflight_commit_session_branch", decide)
+    return run_event_hook("preflight_commit_session_branch", decide, auditable=False)
 
 
 if __name__ == "__main__":

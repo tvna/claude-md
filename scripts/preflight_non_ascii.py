@@ -141,7 +141,7 @@ def main(argv: list[str] | None = None) -> int:
     workflow remains as backstop.
     """
     del argv  # not used; the harness pipes the event on stdin
-    return run_tool_hook("preflight_non_ascii", decide)
+    return run_tool_hook("preflight_non_ascii", decide, auditable=False)
 
 
 if __name__ == "__main__":
