@@ -15,6 +15,7 @@ on:
           - all
           - branch-cleanup
           - dependency-freshness
+          - dependency-threat-triage
           - generate-agents
           - measure-timings
           - ruleset-drift
@@ -171,6 +172,37 @@ jobs:
             echo
             echo "Policy: \`docs/standards/dependency-freshness.md\`"
           } >> "$GITHUB_STEP_SUMMARY"
+
+  # Scheduled re-triage (#1277). The PR/issue triage is event-driven and
+  # stateless, so a recurring advisory or an expired accepted-intel
+  # suppression would otherwise only resurface when the next PR happens to
+  # fire. This cadence re-evaluates the locked-dependency corpus against live
+  # threat intel and fails loud (--fail-on-intel) so the scheduled run turns
+  # red, re-surfacing the threat:intel-needed signal independent of PR traffic.
+  dependency-threat-triage:
+    if: github.event_name == 'schedule' || inputs.task == 'all' || inputs.task == 'dependency-threat-triage'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+
+      - name: Re-triage locked dependencies against live threat intel
+        run: |
+          python3 scripts/threat_intel_triage.py scan \
+            --repo-root . \
+            --labels "" \
+            --ghsa-live \
+            --malpkg-live \
+            --epss-live \
+            --summary-file "$GITHUB_STEP_SUMMARY" \
+            --fail-on-intel
 
   generate-agents:
     if: github.event_name == 'schedule' || inputs.task == 'all' || inputs.task == 'generate-agents'
