@@ -1871,6 +1871,30 @@ def test_devcontainer_pin_pr_refresh_matches_workflow_args(
     assert rc == 0
 
 
+def test_devcontainer_pin_refresh_persists_checkout_credentials() -> None:
+    """The refresh job's checkout must persist credentials for the branch push.
+
+    Regression guard for #1301: the keeper's ``git push origin <fresh-branch>``
+    in ``scripts/devcontainer_pin_pr.py`` (``_create_pin_branch``) authenticates
+    with the GITHUB_TOKEN that ``actions/checkout`` persists by default. A
+    ``persist-credentials: false`` on that checkout strips the credential, so
+    every refresh of a behind pin PR failed with git exit 128. Assert the
+    checkout step does not disable credential persistence. Refs #1229, #1301, #1303.
+    """
+    workflow = yaml.safe_load(
+        (_WORKFLOWS_DIR / "devcontainer-pin-refresh.yml").read_text(encoding="utf-8")
+    )
+    steps = workflow["jobs"]["refresh"]["steps"]
+    checkout_steps = [s for s in steps if "actions/checkout" in str(s.get("uses", ""))]
+    assert checkout_steps, "refresh job must check out the repository before pushing"
+    for step in checkout_steps:
+        persist = step.get("with", {}).get("persist-credentials", True)
+        assert persist is not False, (
+            "devcontainer-pin-refresh checkout must persist credentials so the refresh "
+            "branch push authenticates (regression #1301); remove `persist-credentials: false`."
+        )
+
+
 def test_analyze_ci_timings_matches_workflow_args(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
