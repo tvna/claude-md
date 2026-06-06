@@ -332,15 +332,17 @@ jobs:
           set -euo pipefail
           # Audit must install the rate-limited LOG rule and leave the OUTPUT
           # policy at ACCEPT (audit records non-allowlisted egress, never drops).
-          sudo iptables -S OUTPUT >/tmp/output-rules.txt
-          if ! grep -q 'EGRESS-AUDIT' /tmp/output-rules.txt; then
+          # Capture into a variable (not `sudo ... > file`, which would redirect
+          # as the unprivileged user -- shellcheck SC2024).
+          rules="$(sudo iptables -S OUTPUT)"
+          if ! grep -q 'EGRESS-AUDIT' <<<"$rules"; then
             echo "::error::audit LOG rule missing from OUTPUT chain"
-            cat /tmp/output-rules.txt
+            printf '%s\n' "$rules"
             exit 1
           fi
-          if ! grep -qE '^-P OUTPUT ACCEPT' /tmp/output-rules.txt; then
+          if ! grep -qE '^-P OUTPUT ACCEPT' <<<"$rules"; then
             echo "::error::OUTPUT policy is not ACCEPT in audit mode"
-            cat /tmp/output-rules.txt
+            printf '%s\n' "$rules"
             exit 1
           fi
           # Allowlisted egress still works: github.com is in shared.allowlist.
