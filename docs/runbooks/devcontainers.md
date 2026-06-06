@@ -653,6 +653,86 @@ in `_egress-lib.sh` (container start path) and `scripts/_allowlist.py`
 different host sets, so the single source of truth stays single across both
 languages.
 
+### DNS proxy (dnsmasq + ipset, default off)
+
+`.devcontainer/scripts/_egress-dnsproxy.sh` adds a DNS layer to the same
+allowlist. It points `/etc/resolv.conf` at a local `dnsmasq` that forwards
+**only** allowlisted domains upstream and adds each resolved IP to the
+`allowed-egress` ipset, so a companion firewall rule can permit egress to
+exactly the IPs the allowlist actually resolves to (rather than a static
+snapshot). Host enumeration reuses `read_allowlist` from `_egress-lib.sh`, so
+the proxy stays under the same single source and parser-parity gate.
+
+It is **off by default**: `start` and `stop` are no-ops unless
+`EGRESS_DNS_PROXY=1`. Generation is separated from kernel application so the
+config can be unit-tested without privileges:
+
+```sh
+# Pure, unprivileged config generation (no root, writes nothing):
+.devcontainer/scripts/_egress-dnsproxy.sh generate-config \
+  .devcontainer/network/<agent>.allowlist --upstream 1.1.1.1
+```
+
+The config emits, per allowlisted host, one `server=/<host>/<upstream>`
+(split-horizon forward) and one `ipset=/<host>/allowed-egress`. A leading
+`no-resolv` plus an explicit default `server=` keep dnsmasq from re-reading the
+rewritten `/etc/resolv.conf` (now `127.0.0.1`, i.e. itself) and looping.
+
+`start` backs up the original `/etc/resolv.conf` to
+`/etc/resolv.conf.egress-backup` **once per cycle** -- if the backup already
+exists it is the genuine original and is never clobbered by the rewritten file
+-- and derives the upstream nameservers from that backup, not the live file.
+`stop` restores from the backup and removes it, so a later `start` re-captures a
+real original. Both are idempotent.
+
+End-to-end behaviour (DNS resolution, ipset population, resolv.conf rewrite)
+requires `NET_ADMIN` and cannot be exercised in CI/sandbox. Manual steps in a
+NET_ADMIN devcontainer:
+
+```sh
+EGRESS_DNS_PROXY=1 .devcontainer/scripts/_egress-dnsproxy.sh start \
+  .devcontainer/network/claude.allowlist
+ipset list allowed-egress            # empty until first resolution
+getent hosts api.github.com          # resolves via the local dnsmasq (127.0.0.1)
+ipset list allowed-egress            # now contains api.github.com IPs
+cat /etc/resolv.conf                  # nameserver 127.0.0.1
+cat /etc/resolv.conf.egress-backup    # original upstream preserved
+# re-run start to prove the backup is not clobbered:
+EGRESS_DNS_PROXY=1 .devcontainer/scripts/_egress-dnsproxy.sh start \
+  .devcontainer/network/claude.allowlist
+cat /etc/resolv.conf.egress-backup    # STILL the original upstream
+EGRESS_DNS_PROXY=1 .devcontainer/scripts/_egress-dnsproxy.sh stop
+cat /etc/resolv.conf                   # restored to the original
+```
+
+### CI self-test (GitHub Actions, audit mode)
+
+The same allowlist guards the CI surface through the custom composite action
+`.github/actions/egress-firewall`. It is **permission-agnostic** (reads no
+`GITHUB_TOKEN`, no secrets, like `setup-uv`) and applies the allowlist by
+calling the very same `apply-egress-allowlist.sh` dispatcher -- which sources
+`_egress-lib.sh` -- so CI and the container start path share one parser
+(parity-gated). `.github/workflows/verify-agents.yml` runs it in an isolated
+`egress-firewall-selftest` job in **audit** mode: the job asserts the
+rate-limited `EGRESS-AUDIT` LOG rule is installed and the `OUTPUT` policy stays
+`ACCEPT` (audit never drops), then confirms allowlisted egress still works. The
+job is deliberately not part of the required `gate` aggregation, so an audit
+finding records a discovery without blocking unrelated work. Promotion to
+`block` mode follows once the audit logs confirm the allowlist is sufficient.
+
+### Honest limitation: detection plus best-effort blocking, not a sandbox
+
+The egress allowlist, audit logging, and DNS proxy are **detection plus
+best-effort blocking, not an enforcement boundary**. The agent holds
+`NET_ADMIN` inside the devcontainer, so it can revert the controls from within:
+`iptables -P OUTPUT ACCEPT`, restore `/etc/resolv.conf`, kill `dnsmasq`, or
+flush the `allowed-egress` ipset. CVE-2025-32955 demonstrated the same class of
+in-container bypass against step-security/harden-runner. A true enforcement
+boundary must live where the agent cannot modify it (a host-side egress proxy
+or a separate network namespace); this work complements that, it does not
+replace it. On hosted CI runners, eBPF/BTF and some netfilter features are
+often unavailable, so blocking and correlation degrade to audit/skip by design.
+
 ## Verification
 
 Run the same repository checks inside each container:
@@ -686,6 +766,7 @@ python3 -m json.tool .devcontainer/codex/devcontainer.json
 python3 -m json.tool claude-md.code-workspace
 bash -n .devcontainer/scripts/apply-egress-allowlist.sh
 bash -n .devcontainer/scripts/_egress-lib.sh
+bash -n .devcontainer/scripts/_egress-dnsproxy.sh
 bash -n .devcontainer/scripts/configure-agent-runtime.sh
 bash -n .devcontainer/scripts/install-agent-cli.sh
 bash -n .devcontainer/scripts/prepare-agent-workspace.sh
