@@ -20,7 +20,7 @@ required-version = "==0.11.11"
 # Test-only dependencies for scripts and coverage gates.
 # CI and local development both resolve these through uv and uv.lock.
 dev = [
-    "pytest>=8,<9",
+    "pytest>=9.0.3,<10",
     "pytest-cov>=6,<7",
     # Lint gate (#192). Bounded major to avoid silent rule churn on upgrade.
     "ruff>=0.7,<0.9",
