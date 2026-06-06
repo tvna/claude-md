@@ -1,0 +1,34 @@
+{
+  "//": "GENERATED FILE -- do not edit. Source: .devcontainer/codex/devcontainer.json. Regenerate: python3 scripts/generate_devcontainer_arch_overlays.py generate. This overlay pins --platform=linux/arm64 for explicit cross-arch selection; see docs/runbooks/devcontainers.md.",
+  "name": "claude-md Codex (linux/arm64)",
+  "image": "ghcr.io/tvna/claude-md-devcontainer-codex:ba47d2f3c2cc74c07955a03b3811ef745ff3b43a",
+  "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
+  "initializeCommand": "bash .devcontainer/scripts/check-gh-config-permissions.sh ${HOME}/.config/gh && bash .devcontainer/scripts/ensure-agent-image.sh codex --platform linux/arm64",
+  "remoteUser": "codex",
+  "updateRemoteUserUID": false,
+  "runArgs": [
+    "--platform=linux/arm64",
+    "--cap-add=NET_ADMIN",
+    "--cap-add=BPF",
+    "--cap-add=PERFMON",
+    "--security-opt=seccomp=unconfined"
+  ],
+  "mounts": [
+    "source=claude-md-codex-session,target=/home/codex/.codex,type=volume",
+    "source=${localEnv:HOME}/.config/gh,target=/home/codex/.config/gh,type=bind,consistency=cached"
+  ],
+  "remoteEnv": {
+    "AGENT_CONTAINER": "codex"
+  },
+  "postCreateCommand": "bash .devcontainer/scripts/prepare-agent-workspace.sh codex && nix develop .#codex --command uv sync --locked --group local && bash .devcontainer/scripts/install-agent-cli.sh codex && bash .devcontainer/scripts/configure-agent-runtime.sh codex",
+  "postStartCommand": "if [ \"${DEVCONTAINER_APPLY_EGRESS_ALLOWLIST:-1}\" = \"1\" ]; then nix develop .#network --command bash .devcontainer/scripts/apply-egress-allowlist.sh .devcontainer/network/codex.allowlist; fi",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "jnoortheen.nix-ide",
+        "ms-python.python",
+        "charliermarsh.ruff"
+      ]
+    }
+  }
+}
