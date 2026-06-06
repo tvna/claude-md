@@ -37,6 +37,14 @@
         "hooks": [
           {
             "type": "command",
+            "command": "scripts/install-waza.sh"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
             "command": "scripts/session_uv_local_pin.sh"
           }
         ]
