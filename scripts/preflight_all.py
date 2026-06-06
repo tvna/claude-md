@@ -145,6 +145,22 @@ STEPS: tuple[Step, ...] = (
         argv=("python3", "scripts/scan_workflow_injection.py", "verify"),
     ),
     Step(
+        # Refs #1256. Workflow correctness gate: actionlint validates
+        # workflow syntax, ${{ }} expressions, and -- with shellcheck on
+        # PATH -- the shell in every ``run:`` block. Complements the
+        # security-focused scan_workflow_* gates above (syntax/shell
+        # correctness is a different concern from pinning/injection). The
+        # binaries come from flake.nix (sharedPackages); soft so a
+        # contributor laptop without the nix shell warns-and-skips while CI,
+        # which provisions both via nix, enforces it. shellcheck is a
+        # required_bin because actionlint silently skips run-block linting
+        # when it is absent, so the gate is only meaningful with both.
+        name="actionlint",
+        argv=("actionlint",),
+        required_bin=("actionlint", "shellcheck"),
+        soft=True,
+    ),
+    Step(
         name="scan_secret_runbooks",
         argv=("python3", "scripts/scan_secret_runbooks.py", "verify"),
     ),

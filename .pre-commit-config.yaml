@@ -29,6 +29,21 @@ repos:
         language: system
         pass_filenames: false
         files: ^\.github/workflows/.*\.ya?ml$
+      - id: actionlint
+        name: actionlint (workflow syntax + shellcheck)
+        # System binary from flake.nix (sharedPackages). With no file args it
+        # auto-discovers .github/workflows/ and shells out to shellcheck (also
+        # in the flake) for every run: block. Guarded with `command -v` so a
+        # non-nix context (a bare contributor laptop, or a uv-only CI job such
+        # as portable-pr-policy.yml that runs prek without the nix shell)
+        # soft-skips instead of hard-failing -- this mirrors the soft=True
+        # actionlint step in preflight_all.py. The unconditional hard gate is
+        # the nix-based verify-actionlint.yml, so enforcement is not lost.
+        # Refs #1256.
+        entry: bash -c 'command -v actionlint >/dev/null 2>&1 || { echo "actionlint not on PATH; skipping (enforced by verify-actionlint.yml)" >&2; exit 0; }; exec actionlint "$@"' --
+        language: system
+        pass_filenames: false
+        files: ^\.github/workflows/.*\.ya?ml$
       - id: scan-secrets
         name: scan secrets (scripts/scan_secrets.py verify)
         entry: uv run python scripts/scan_secrets.py verify
