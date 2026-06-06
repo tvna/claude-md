@@ -705,7 +705,7 @@ EGRESS_DNS_PROXY=1 .devcontainer/scripts/_egress-dnsproxy.sh stop
 cat /etc/resolv.conf                   # restored to the original
 ```
 
-### CI self-test (GitHub Actions, audit mode)
+### CI self-test (GitHub Actions, block mode)
 
 The same allowlist guards the CI surface through the custom composite action
 `.github/actions/egress-firewall`. It is **permission-agnostic** (reads no
@@ -713,12 +713,28 @@ The same allowlist guards the CI surface through the custom composite action
 calling the very same `apply-egress-allowlist.sh` dispatcher -- which sources
 `_egress-lib.sh` -- so CI and the container start path share one parser
 (parity-gated). `.github/workflows/verify-agents.yml` runs it in an isolated
-`egress-firewall-selftest` job in **audit** mode: the job asserts the
-rate-limited `EGRESS-AUDIT` LOG rule is installed and the `OUTPUT` policy stays
-`ACCEPT` (audit never drops), then confirms allowlisted egress still works. The
-job is deliberately not part of the required `gate` aggregation, so an audit
-finding records a discovery without blocking unrelated work. Promotion to
-`block` mode follows once the audit logs confirm the allowlist is sufficient.
+`egress-firewall-selftest` job.
+
+PR4 first ran the job in **audit** mode (log-only, `OUTPUT` policy `ACCEPT`).
+Its only post-apply egress was to allowlisted `github.com`, so audit recorded
+no required-but-missing destination and confirmed the allowlist is sufficient
+for the job's scope. PR5 promotes the job to **block** mode (deny-by-default)
+and proves both directions:
+
+- it pre-resolves `github.com` and `example.com` to IPv4 **before** the
+  firewall applies, then drives `curl --resolve -4` against the pinned IPs, so
+  the assertion tests the iptables allowlist layer in isolation and does not
+  depend on the runner's resolver egress (which block mode also constrains);
+- it asserts the `OUTPUT` policy is `DROP`, that allowlisted `github.com` still
+  reaches `:443`, and that non-allowlisted `example.com` is dropped;
+- an always-run teardown restores `OUTPUT` to `ACCEPT` and flushes the chain,
+  because block sets `DROP` for **every** process on the runner -- including the
+  Actions runner agent -- so the self-test must not strand the agent's own
+  completion/telemetry egress or later steps.
+
+The job is deliberately not part of the required `gate` aggregation, so a
+runner-specific network quirk in this isolated self-test never blocks unrelated
+work.
 
 ### Honest limitation: detection plus best-effort blocking, not a sandbox
 
