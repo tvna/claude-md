@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "scripts/install-uv.sh",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && scripts/install-uv.sh",
             "statusMessage": "Checking uv pin"
           }
         ]
@@ -16,7 +16,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "scripts/session_uv_local_pin.sh",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && scripts/session_uv_local_pin.sh",
             "statusMessage": "Aligning local uv with repo pin"
           }
         ]
@@ -26,7 +26,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 scripts/plan_language_context.py",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/plan_language_context.py",
             "statusMessage": "Loading language policy"
           }
         ]
@@ -36,7 +36,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 scripts/check_hooks_path.py",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/check_hooks_path.py",
             "statusMessage": "Checking git hooks path"
           }
         ]
@@ -46,7 +46,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 scripts/check_session_branch.py",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/check_session_branch.py",
             "statusMessage": "Checking session push target"
           }
         ]
@@ -56,7 +56,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 scripts/check_pr_mergeability.py session-start",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/check_pr_mergeability.py session-start",
             "statusMessage": "Checking open PR mergeability"
           }
         ]
@@ -78,7 +78,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 scripts/prompt_context7_gate.py",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/prompt_context7_gate.py",
             "statusMessage": "Checking context7 lookup guidance"
           }
         ]
@@ -90,7 +90,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 scripts/preflight_non_ascii.py",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/preflight_non_ascii.py",
             "statusMessage": "Checking GitHub text"
           }
         ]
@@ -100,7 +100,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 scripts/issue_closure_fast_path.py",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/issue_closure_fast_path.py",
             "statusMessage": "Checking issue closure evidence"
           }
         ]
@@ -110,7 +110,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 scripts/gate_issue_close_comment.py",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/gate_issue_close_comment.py",
             "statusMessage": "Checking closing comment gate"
           }
         ]
@@ -120,7 +120,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 scripts/gate_issue_classification_labels.py",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/gate_issue_classification_labels.py",
             "statusMessage": "Checking issue classification labels"
           }
         ]
@@ -130,7 +130,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 scripts/preflight_codex_github_footer.py",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/preflight_codex_github_footer.py",
             "statusMessage": "Checking Codex GitHub footer"
           }
         ]
@@ -140,7 +140,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 scripts/gate_update_pr_branch.py",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/gate_update_pr_branch.py",
             "statusMessage": "Blocking update_pull_request_branch -- use new-branch recovery path"
           }
         ]
@@ -150,7 +150,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 scripts/preflight_main_freshness.py",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/preflight_main_freshness.py",
             "statusMessage": "Checking origin/main freshness"
           }
         ]
@@ -160,7 +160,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 scripts/block_sensitive_reads.py",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/block_sensitive_reads.py",
             "statusMessage": "Blocking reads of local credential files"
           }
         ]
@@ -170,7 +170,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 scripts/gate_gh_cli.py",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/gate_gh_cli.py",
             "statusMessage": "Checking for prohibited gh CLI usage"
           }
         ]
@@ -180,7 +180,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 scripts/preflight_push_base.py",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/preflight_push_base.py",
             "statusMessage": "Checking branch base before push"
           }
         ]
@@ -190,7 +190,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 scripts/preflight_push_session_branch.py",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/preflight_push_session_branch.py",
             "statusMessage": "Checking session push target before push"
           }
         ]
@@ -200,7 +200,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 scripts/preflight_commit_session_branch.py",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/preflight_commit_session_branch.py",
             "statusMessage": "Checking session branch before commit"
           }
         ]
@@ -210,7 +210,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 scripts/preflight_push_nonempty.py",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/preflight_push_nonempty.py",
             "statusMessage": "Checking push ships new work"
           }
         ]
@@ -220,7 +220,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 scripts/preflight_push_nonempty.py",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/preflight_push_nonempty.py",
             "statusMessage": "Checking push ships new work before push"
           }
         ]
@@ -230,12 +230,12 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 scripts/preflight_branch_base.py verify",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/preflight_branch_base.py verify",
             "statusMessage": "Checking branch base"
           },
           {
             "type": "command",
-            "command": "python3 scripts/pr_body_close_keyword_gate.py",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/pr_body_close_keyword_gate.py",
             "statusMessage": "Checking PR issue links"
           }
         ]
@@ -245,7 +245,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 scripts/preflight_coverage.py",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/preflight_coverage.py",
             "statusMessage": "Checking per-file script coverage"
           }
         ]
@@ -255,7 +255,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 scripts/preflight_title_policy.py",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/preflight_title_policy.py",
             "statusMessage": "Checking GitHub title"
           }
         ]
@@ -265,7 +265,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 scripts/preflight_pr_body_required_sections.py",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/preflight_pr_body_required_sections.py",
             "statusMessage": "Checking PR sections"
           }
         ]
@@ -275,7 +275,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 scripts/preflight_pr_template_shape.py",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/preflight_pr_template_shape.py",
             "statusMessage": "Checking PR template"
           }
         ]
@@ -285,17 +285,17 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 scripts/preflight_non_ascii.py",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/preflight_non_ascii.py",
             "statusMessage": "Checking GitHub text"
           },
           {
             "type": "command",
-            "command": "python3 scripts/preflight_codex_github_footer.py",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/preflight_codex_github_footer.py",
             "statusMessage": "Checking Codex GitHub footer"
           },
           {
             "type": "command",
-            "command": "python3 scripts/preflight_title_policy.py",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/preflight_title_policy.py",
             "statusMessage": "Checking GitHub title"
           }
         ]
@@ -305,22 +305,22 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 scripts/preflight_branch_base.py verify",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/preflight_branch_base.py verify",
             "statusMessage": "Checking branch base"
           },
           {
             "type": "command",
-            "command": "python3 scripts/pr_body_close_keyword_gate.py",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/pr_body_close_keyword_gate.py",
             "statusMessage": "Checking PR issue links"
           },
           {
             "type": "command",
-            "command": "python3 scripts/preflight_pr_body_required_sections.py",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/preflight_pr_body_required_sections.py",
             "statusMessage": "Checking PR sections"
           },
           {
             "type": "command",
-            "command": "python3 scripts/preflight_pr_template_shape.py",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/preflight_pr_template_shape.py",
             "statusMessage": "Checking PR template"
           }
         ]
@@ -330,7 +330,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 scripts/gate_mcp_github_uncovered.py",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/gate_mcp_github_uncovered.py",
             "statusMessage": "Checking GitHub MCP tool coverage"
           }
         ]
@@ -342,22 +342,22 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 scripts/post_pr_create_body_fix.py",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/post_pr_create_body_fix.py",
             "statusMessage": "Fixing PR body encoding and footer"
           },
           {
             "type": "command",
-            "command": "python3 scripts/post_pr_create_ci_monitor.py",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/post_pr_create_ci_monitor.py",
             "statusMessage": "Starting PR CI monitor"
           },
           {
             "type": "command",
-            "command": "python3 scripts/ci_early_status_probe.py",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/ci_early_status_probe.py",
             "statusMessage": "Checking early CI status"
           },
           {
             "type": "command",
-            "command": "python3 scripts/check_pr_mergeability.py",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/check_pr_mergeability.py",
             "statusMessage": "Checking PR mergeability"
           }
         ]
@@ -367,7 +367,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 scripts/check_pr_mergeability.py",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/check_pr_mergeability.py",
             "statusMessage": "Checking PR mergeability"
           }
         ]
@@ -377,12 +377,12 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 scripts/post_merge_retro_append.py",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/post_merge_retro_append.py",
             "statusMessage": "Directing agent to append repair analysis to auto-retro"
           },
           {
             "type": "command",
-            "command": "python3 scripts/post_merge_new_session_prompt.py",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/post_merge_new_session_prompt.py",
             "statusMessage": "Checking for session-affecting changes needing a new session"
           }
         ]
@@ -392,7 +392,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 scripts/gate_issue_close_comment.py --record",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/gate_issue_close_comment.py --record",
             "statusMessage": "Recording issue comment for close gate"
           }
         ]
@@ -402,17 +402,17 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 scripts/post_pr_create_ci_monitor.py",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/post_pr_create_ci_monitor.py",
             "statusMessage": "Starting PR CI monitor"
           },
           {
             "type": "command",
-            "command": "python3 scripts/ci_early_status_probe.py",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/ci_early_status_probe.py",
             "statusMessage": "Checking early CI status"
           },
           {
             "type": "command",
-            "command": "python3 scripts/check_pr_mergeability.py",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/check_pr_mergeability.py",
             "statusMessage": "Checking PR mergeability"
           }
         ]
