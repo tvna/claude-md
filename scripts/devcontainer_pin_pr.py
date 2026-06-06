@@ -21,7 +21,8 @@ auto-merge stalls forever once ``main`` advances, because the
 ``main-protection`` ruleset requires the branch to be up to date
 (``strict_required_status_checks_policy``) while ``required_linear_history``,
 the ``gate_update_pr_branch.py`` hook, and the ``non_fast_forward`` rule on
-``codex/*`` all forbid rebasing/force-pushing the branch in place. ``refresh``
+all non-default branches (``.github/rulesets/all-branches.json``) all forbid
+rebasing/force-pushing the branch in place. ``refresh``
 detects the behind PR, cuts a fresh branch off the latest ``main``, re-applies
 the same pin as a single commit, opens a new auto-merge PR, then supersedes
 (comments, closes, deletes) the stale one. This automates the #895 recovery
@@ -68,7 +69,7 @@ from pr_upsert import (
     _upsert_pr,
 )
 
-_DEFAULT_BRANCH_PREFIX = "codex/devcontainer-image-pins-"
+_DEFAULT_BRANCH_PREFIX = "devcontainer/image-pins-"
 _BOT_NAME = "github-actions[bot]"
 _BOT_EMAIL = "41898282+github-actions[bot]@users.noreply.github.com"
 
