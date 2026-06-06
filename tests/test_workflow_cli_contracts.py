@@ -163,6 +163,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("dependabot_automerge.py", "audit"): "test_dependabot_automerge_audit_matches_workflow_files",
     ("dependabot_automerge.py", "list-files"): "test_dependabot_list_files_matches_workflow_args",
     ("dependabot_automerge.py", "request-automerge"): "test_dependabot_request_automerge_matches_workflow_args",
+    ("dependabot_automerge.py", "disable-automerge"): "test_dependabot_disable_automerge_matches_workflow_args",
     ("dependabot_labels.py", "verify"): "test_dependabot_labels_verify_matches_workflow_paths",
     ("issue_link.py", "verify"): "test_issue_link_verify_matches_workflow_body_file_and_author",
     ("labels_apply.py", "$COMMAND"): "test_labels_apply_validate_and_plan_match_workflow_args",
@@ -718,6 +719,15 @@ def test_dependabot_request_automerge_matches_workflow_args(
     monkeypatch.setenv("REPO", "owner/repo")
     monkeypatch.setattr(dependabot_automerge, "_enable_auto_merge", lambda **kw: None)
     assert dependabot_automerge.main(["request-automerge", "--pr-number", "42"]) == 0
+
+
+def test_dependabot_disable_automerge_matches_workflow_args(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("GH_TOKEN", "tok")
+    monkeypatch.setenv("REPO", "owner/repo")
+    monkeypatch.setattr(dependabot_automerge, "_disable_auto_merge", lambda **kw: False)
+    assert dependabot_automerge.main(["disable-automerge", "--pr-number", "42"]) == 0
 
 
 def test_dependabot_labels_verify_matches_workflow_paths(tmp_path: Path) -> None:

@@ -333,7 +333,10 @@ PAT, rotate it before expiry, and verify the handoff by triggering
 `Publish devcontainer images` with `workflow_dispatch` and confirming
 the `Update local devcontainer image pins` job opens or reuses the
 generated image-pin PR without exposing the token value in logs.
-Record the next rotation date with the Environment secret owner.
+Record the next rotation date with the Environment secret owner. If this
+token is suspected leaked rather than rotated on schedule, follow the
+emergency revoke-then-reissue steps in
+[`compromised-action-response.md`](compromised-action-response.md).
 
 The `Update local devcontainer image pins` job requests GitHub
 auto-merge for the generated PR immediately after `gh pr create`
