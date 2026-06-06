@@ -263,12 +263,12 @@ symlink.
 ## Prebuilt images
 
 Local devcontainers use immutable commit-SHA image tags. The currently
-pinned images were published from `ed245ba12d0b1e33717bcd4e22dc6871b7242873`:
+pinned images were published from `53f46342ea7d79e7f90dee76d5ba912edfdd4db6`:
 
 | Agent | Image |
 |---|---|
-| Claude | `ghcr.io/tvna/claude-md-devcontainer-claude:ed245ba12d0b1e33717bcd4e22dc6871b7242873` |
-| Codex | `ghcr.io/tvna/claude-md-devcontainer-codex:ed245ba12d0b1e33717bcd4e22dc6871b7242873` |
+| Claude | `ghcr.io/tvna/claude-md-devcontainer-claude:53f46342ea7d79e7f90dee76d5ba912edfdd4db6` |
+| Codex | `ghcr.io/tvna/claude-md-devcontainer-codex:53f46342ea7d79e7f90dee76d5ba912edfdd4db6` |
 
 The `Publish devcontainer images` workflow builds both images with the
 Dev Containers CLI and pushes them to GHCR on `main` changes to
@@ -333,7 +333,10 @@ PAT, rotate it before expiry, and verify the handoff by triggering
 `Publish devcontainer images` with `workflow_dispatch` and confirming
 the `Update local devcontainer image pins` job opens or reuses the
 generated image-pin PR without exposing the token value in logs.
-Record the next rotation date with the Environment secret owner.
+Record the next rotation date with the Environment secret owner. If this
+token is suspected leaked rather than rotated on schedule, follow the
+emergency revoke-then-reissue steps in
+[`compromised-action-response.md`](compromised-action-response.md).
 
 The `Update local devcontainer image pins` job requests GitHub
 auto-merge for the generated PR immediately after `gh pr create`
