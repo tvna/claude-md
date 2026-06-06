@@ -8,6 +8,9 @@ same pin shape and release source (GitHub Releases):
 * ``waza`` (microsoft/waza): ``wazaVersion`` + ``wazaNative.<sys>.{asset,hash}``
 * ``apm``  (microsoft/apm):  ``apmVersion``  + ``apmNative.<sys>.{archive,hash}``
 * ``rtk``  (rtk-ai/rtk):     ``rtkVersion``  + ``rtkNative.<sys>.{asset,hash}``
+* ``actionlint`` (rhysd/actionlint): ``actionlintVersion`` +
+  ``actionlintNative.<sys>.{asset,hash}`` (excluded from the refresh matrix --
+  its asset filenames embed the version; see ``TOOLS`` and flake-pin-refresh.yml)
 
 Dependabot has no Nix ecosystem, so these pins do not auto-follow upstream.
 This module is the deterministic writer half of the auto-follow loop
@@ -121,6 +124,24 @@ TOOLS: dict[str, ToolSpec] = {
         asset_field="asset",
         url_template=(
             "https://github.com/rtk-ai/rtk/releases/download/v{version}/{asset}"
+        ),
+    ),
+    # actionlint's release assets embed the version in the filename
+    # (actionlint_<ver>_linux_<arch>.tar.gz), so the ``asset`` field stores the
+    # full ``.tar.gz`` filename and the template appends no extension -- the
+    # waza/rtk shape. NOTE: flake.nix keeps those filenames as static strings
+    # (no ``${actionlintVersion}`` interpolation) because _native_block parses
+    # with a brace-naive regex; a ``}`` inside an interpolation truncates the
+    # match. A version bump must rewrite the embedded filenames too, which is
+    # also why actionlint is excluded from the flake-pin-refresh matrix.
+    "actionlint": ToolSpec(
+        version_var="actionlintVersion",
+        native_var="actionlintNative",
+        github_repo="rhysd/actionlint",
+        asset_field="asset",
+        url_template=(
+            "https://github.com/rhysd/actionlint/releases/download/"
+            "v{version}/{asset}"
         ),
     ),
 }
