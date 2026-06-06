@@ -15,9 +15,9 @@ triage decision::
     api.anthropic.com  # Anthropic API endpoint used by the Claude CLI at runtime.
 
 ``@include`` directives, blank lines, and standalone comment lines need no
-rationale. The inline ``#`` is stripped by the allowlist parser in
-``.devcontainer/scripts/apply-egress-allowlist.sh`` and by
-``tests/test_devcontainer_allowlist.py``, so the rationale never changes the
+rationale. The inline ``#`` is stripped by the shared allowlist parser in
+``scripts/_allowlist.py`` (also used by the bash applier's mirror and by
+``tests/test_devcontainer_allowlist.py``), so the rationale never changes the
 resolved host set.
 
 CLI::
@@ -42,22 +42,10 @@ import argparse
 import sys
 from pathlib import Path
 
+from _allowlist import split_inline_comment
+
 NETWORK_SUBDIR = (".devcontainer", "network")
 ALLOWLIST_GLOB = "*.allowlist"
-
-
-def _split_inline_comment(raw: str) -> tuple[str, str]:
-    """Return ``(content, rationale)`` for an allowlist line.
-
-    ``content`` is the text before the first ``#`` (stripped); ``rationale``
-    is the text after it (stripped). A line with no ``#`` yields an empty
-    rationale. Hostnames never contain ``#``, so the first ``#`` always
-    delimits the inline comment.
-    """
-    hash_idx = raw.find("#")
-    if hash_idx == -1:
-        return raw.strip(), ""
-    return raw[:hash_idx].strip(), raw[hash_idx + 1 :].strip()
 
 
 def check_file(path: Path, repo_root: Path) -> list[str]:
@@ -73,7 +61,7 @@ def check_file(path: Path, repo_root: Path) -> list[str]:
         stripped = raw.strip()
         if not stripped or stripped.startswith("#"):
             continue  # blank line or standalone comment
-        content, rationale = _split_inline_comment(raw)
+        content, rationale = split_inline_comment(raw)
         if content.startswith("@include"):
             continue  # include directive needs no rationale of its own
         if not content:
