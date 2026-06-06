@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 import body_policy
+import generate_devcontainer_arch_overlays as overlays
 import pytest
 import update_devcontainer_image_pins as pins
 
@@ -20,9 +21,15 @@ def _write_repo(root: Path) -> None:
         config = {
             "name": f"claude-md {agent}",
             "image": f"{pins.IMAGE_PREFIX}-{agent}:{OLD_SHA}",
+            "initializeCommand": f"bash .devcontainer/scripts/ensure-agent-image.sh {agent}",
             "remoteUser": agent,
+            "runArgs": ["--cap-add=NET_ADMIN"],
         }
         (config_dir / "devcontainer.json").write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
+
+    # The per-arch overlays are part of the pin set; start them in sync so the
+    # pin updater's regeneration is exercised against an already-consistent repo.
+    overlays.generate(root)
 
     docs_dir = root / "docs" / "runbooks"
     docs_dir.mkdir(parents=True, exist_ok=True)
@@ -51,6 +58,11 @@ def test_update_pins_updates_agent_configs_and_runbook(tmp_path: Path) -> None:
     for agent in pins.AGENTS:
         config = json.loads((tmp_path / ".devcontainer" / agent / "devcontainer.json").read_text(encoding="utf-8"))
         assert config["image"] == f"{pins.IMAGE_PREFIX}-{agent}:{NEW_SHA}"
+
+    for agent in pins.AGENTS:
+        for arch in overlays.ARCHES:
+            overlay = json.loads(overlays.overlay_path(tmp_path, agent, arch).read_text(encoding="utf-8"))
+            assert overlay["image"] == f"{pins.IMAGE_PREFIX}-{agent}:{NEW_SHA}"
 
     runbook = (tmp_path / "docs" / "runbooks" / "devcontainers.md").read_text(encoding="utf-8")
     assert OLD_SHA not in runbook

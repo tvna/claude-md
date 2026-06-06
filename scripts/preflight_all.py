@@ -264,6 +264,13 @@ STEPS: tuple[Step, ...] = (
         argv=("python3", "scripts/scan_devcontainer_tool_drift.py", "verify"),
     ),
     Step(
+        # Refs #1296. Fails when a .devcontainer/<agent>-<arch>/devcontainer.json
+        # overlay is missing or drifted from its base config, so the generated
+        # per-arch entrypoints cannot diverge from the single-source base pin.
+        name="generate_devcontainer_arch_overlays",
+        argv=("python3", "scripts/generate_devcontainer_arch_overlays.py", "verify"),
+    ),
+    Step(
         # Refs #1170. Fails when a .devcontainer/network/*.allowlist host has
         # no inline triage rationale, so a new egress destination cannot be
         # admitted without the observe/evaluate/decide record in

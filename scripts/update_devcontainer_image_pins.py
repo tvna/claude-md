@@ -8,6 +8,8 @@ import json
 import re
 from pathlib import Path
 
+import generate_devcontainer_arch_overlays
+
 AGENTS = ("claude", "codex")
 IMAGE_PREFIX = "ghcr.io/tvna/claude-md-devcontainer"
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
@@ -69,6 +71,11 @@ def update_pins(repo_root: Path, sha: str) -> bool:
     for agent in AGENTS:
         changed = update_agent_config(repo_root, agent, validated_sha) or changed
     changed = update_runbook(repo_root, validated_sha) or changed
+    # The base configs are the single source of truth for the image SHA; the
+    # per-arch overlays are regenerated from them so the pin set stays in sync
+    # (the generate_devcontainer_arch_overlays verify gate fails on drift).
+    overlay_changes = generate_devcontainer_arch_overlays.generate(repo_root)
+    changed = bool(overlay_changes) or changed
     return changed
 
 
