@@ -265,7 +265,9 @@ EOF
             ruff
           ];
           networkPackages = with pkgs; [
+            dnsmasq
             dnsutils
+            ipset
             iproute2
             iptables
           ];
