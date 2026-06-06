@@ -40,6 +40,7 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _github_api import apply_call
+from _hook_runtime import emit_decision, read_event
 
 _POST_TOOL_USE_TARGETS: frozenset[str] = frozenset(
     {
@@ -397,17 +398,10 @@ def main(argv: list[str] | None = None) -> int:
         run_session_start()
         return 0
 
-    raw = sys.stdin.read()
-    try:
-        event = json.loads(raw) if raw.strip() else {}
-    except json.JSONDecodeError as exc:
-        print(f"::error::check_pr_mergeability: malformed stdin JSON: {exc}", file=sys.stderr)
+    event = read_event("check_pr_mergeability")
+    if event is None or not isinstance(event, dict):
         return 0
-    if not isinstance(event, dict):
-        return 0
-    output = decide_post_tool_use(event)
-    if output is not None:
-        sys.stdout.write(json.dumps(output))
+    emit_decision(decide_post_tool_use(event))
     return 0
 
 
