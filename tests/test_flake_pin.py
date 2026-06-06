@@ -86,6 +86,7 @@ def test_repo() -> None:
     assert flake_pin.tool_spec("waza").github_repo == "microsoft/waza"
     assert flake_pin.tool_spec("apm").github_repo == "microsoft/apm"
     assert flake_pin.tool_spec("rtk").github_repo == "rtk-ai/rtk"
+    assert flake_pin.tool_spec("actionlint").github_repo == "rhysd/actionlint"
 
 
 def test_version_rtk_real_flake() -> None:
@@ -101,6 +102,22 @@ def test_asset_url_rtk_keeps_full_archive_name() -> None:
     # rtk stores the full archive filename in the asset field (musl/gnu differ),
     # so the URL ends with .tar.gz without the template adding an extension.
     assert rtk_url.endswith(".tar.gz")
+
+
+def test_version_actionlint_real_flake() -> None:
+    assert flake_pin.current_version(_real_flake(), "actionlint").count(".") >= 1
+
+
+def test_asset_url_actionlint_keeps_full_archive_name() -> None:
+    text = _real_flake()
+    url = flake_pin.asset_url(text, "actionlint", "x86_64-linux", "9.9.9")
+    assert url.startswith(
+        "https://github.com/rhysd/actionlint/releases/download/v9.9.9/"
+    )
+    # actionlint embeds the version in the asset filename, which is stored whole
+    # in the asset field, so the URL ends with .tar.gz without the template
+    # adding an extension.
+    assert url.endswith(".tar.gz")
 
 
 def test_asset_url_waza_and_apm() -> None:
@@ -160,6 +177,26 @@ def test_resolve_rtk_amd64_matches_known_digest() -> None:
     )
 
 
+def test_resolve_actionlint_real_flake() -> None:
+    version, asset, sha = flake_pin.resolve(
+        _real_flake(), "actionlint", "x86_64-linux"
+    )
+    assert version.count(".") >= 1
+    assert asset == "actionlint_1.7.7_linux_amd64.tar.gz"
+    # 64 lowercase hex chars == 32-byte sha256 digest.
+    assert len(sha) == 64
+    int(sha, 16)  # valid hex
+
+
+def test_resolve_actionlint_amd64_matches_known_digest() -> None:
+    """Guards the SRI->hex path against the actual pinned actionlint x86_64 asset."""
+    _, asset, sha = flake_pin.resolve(_real_flake(), "actionlint", "x86_64-linux")
+    assert asset == "actionlint_1.7.7_linux_amd64.tar.gz"
+    assert sha == (
+        "023070a287cd8cccd71515fedc843f1985bf96c436b7effaecce67290e7e0757"
+    )
+
+
 def test_resolve_isolates_tool_from_waza() -> None:
     """rtk and waza share the x86_64-linux key; resolve must not cross them."""
     text = _real_flake()
@@ -180,6 +217,17 @@ def test_cli_resolve_rtk(capsys: pytest.CaptureFixture[str]) -> None:
     out = capsys.readouterr().out.splitlines()
     assert len(out) == 3
     assert out[1] == "rtk-x86_64-unknown-linux-musl.tar.gz"
+    assert len(out[2]) == 64
+
+
+def test_cli_resolve_actionlint(capsys: pytest.CaptureFixture[str]) -> None:
+    rc = flake_pin.main(
+        ["resolve", "--tool", "actionlint", "--system", "x86_64-linux"]
+    )
+    assert rc == 0
+    out = capsys.readouterr().out.splitlines()
+    assert len(out) == 3
+    assert out[1] == "actionlint_1.7.7_linux_amd64.tar.gz"
     assert len(out[2]) == 64
 
 
