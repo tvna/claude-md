@@ -28,8 +28,6 @@ jobs:
     permissions:
       contents: read
       packages: write
-      # Required by the Trivy SARIF upload below; all other scopes unchanged.
-      security-events: write
     strategy:
       fail-fast: false
       matrix:
@@ -86,12 +84,48 @@ jobs:
             --cache-to "type=registry,ref=${cache_ref},mode=max" \
             --push
 
-      # Trivy scans the just-published per-arch image on the matching-arch
+  scan:
+    name: Scan ${{ matrix.agent }} devcontainer image (${{ matrix.arch }})
+    needs: build
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    # Isolated from `build` so a compromised scanner cannot reach the GHCR write
+    # token: scan holds read-only registry access plus SARIF upload, nothing more.
+    permissions:
+      packages: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - agent: claude
+            arch: amd64
+            runner: ubuntu-24.04
+          - agent: claude
+            arch: arm64
+            runner: ubuntu-24.04-arm
+          - agent: codex
+            arch: amd64
+            runner: ubuntu-24.04
+          - agent: codex
+            arch: arm64
+            runner: ubuntu-24.04-arm
+    env:
+      IMAGE_PREFIX: ghcr.io/${{ github.repository_owner }}/claude-md-devcontainer
+    steps:
+      - name: Log in to GHCR
+        env:
+          GHCR_TOKEN: ${{ github.token }}
+        run: |
+          printf '%s' "$GHCR_TOKEN" | docker login ghcr.io \
+            --username "${{ github.actor }}" \
+            --password-stdin
+
+      # Trivy scans the per-arch image published by `build` on the matching-arch
       # runner. Informational-first posture (mirrors the CodeQL workflow):
-      # exit-code 0 means findings never fail the build, and continue-on-error
-      # means a Trivy DB-download or other infra failure never blocks the
-      # publish flow. Results surface in the Security tab via the SARIF upload.
-      # Auth to GHCR reuses the docker login performed above (~/.docker/config.json).
+      # exit-code 0 means findings never fail the run, and continue-on-error
+      # means a Trivy DB-download or other infra failure never blocks publish.
+      # Results surface in the Security tab via the SARIF upload.
       - name: Scan published image with Trivy
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         continue-on-error: true
@@ -101,6 +135,13 @@ jobs:
           format: sarif
           output: trivy-results.sarif
           exit-code: '0'
+          # Pin the Trivy binary, not just the action SHA. trivy-action downloads
+          # the scanner at runtime and the `version:` input selects which binary;
+          # leaving it unset (or `latest`) was the exposure vector in the
+          # 2026-03-19 Trivy supply-chain incident (aquasecurity/trivy#10425).
+          # v0.70.0 is the trivy-action v0.36.0 default and post-incident
+          # (>= v0.69.3). Bump in lockstep when the pinned action SHA changes.
+          version: v0.70.0
 
       - name: Upload Trivy results to the Security tab
         uses: github/codeql-action/upload-sarif@1a818fd5f97ed0ee9a823421bd5b171add01227f # v4.36.2
