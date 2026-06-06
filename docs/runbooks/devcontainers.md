@@ -702,6 +702,21 @@ EGRESS_DNS_PROXY=1 .devcontainer/scripts/_egress-dnsproxy.sh stop
 cat /etc/resolv.conf                   # restored to the original
 ```
 
+### CI self-test (GitHub Actions, audit mode)
+
+The same allowlist guards the CI surface through the custom composite action
+`.github/actions/egress-firewall`. It is **permission-agnostic** (reads no
+`GITHUB_TOKEN`, no secrets, like `setup-uv`) and applies the allowlist by
+calling the very same `apply-egress-allowlist.sh` dispatcher -- which sources
+`_egress-lib.sh` -- so CI and the container start path share one parser
+(parity-gated). `.github/workflows/verify-agents.yml` runs it in an isolated
+`egress-firewall-selftest` job in **audit** mode: the job asserts the
+rate-limited `EGRESS-AUDIT` LOG rule is installed and the `OUTPUT` policy stays
+`ACCEPT` (audit never drops), then confirms allowlisted egress still works. The
+job is deliberately not part of the required `gate` aggregation, so an audit
+finding records a discovery without blocking unrelated work. Promotion to
+`block` mode follows once the audit logs confirm the allowlist is sufficient.
+
 ### Honest limitation: detection plus best-effort blocking, not a sandbox
 
 The egress allowlist, audit logging, and DNS proxy are **detection plus
