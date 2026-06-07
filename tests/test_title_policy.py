@@ -162,6 +162,48 @@ class TestTypeFitFindings:
         )
         assert len(findings) == 1
 
+    def test_resource_consumption_section_does_not_trip_type_fit(self) -> None:
+        # The required boilerplate ## Resource Consumption section carries the
+        # word "resource" but never describes the PR's own work; a chore PR
+        # that merely carries it must not be forced onto a perf title. Refs #1413.
+        body = (
+            "## Summary\n\n- Bump a pinned dependency.\n\n"
+            "## Resource Consumption\n\n"
+            "- Elapsed (session start to PR create): 0:01:00\n"
+            "- Total tokens: 1,000 (input 1 / output 1 / cache-create 1 / cache-read 1)\n"
+            "- Cost (USD): $0.0100\n"
+            "- Model(s): claude-opus-4-8\n"
+        )
+        assert (
+            title_policy.type_fit_findings(
+                "chore(deps): bump pinned dependency",
+                kind="pull_request",
+                body=body,
+            )
+            == []
+        )
+
+    def test_resource_wording_outside_the_section_still_trips(self) -> None:
+        # Perf vocabulary in the PR's own prose still classifies the work,
+        # even when the boilerplate section is also present and stripped.
+        body = (
+            "## Summary\n\n- Speed up the resource cache for faster startup.\n\n"
+            "## Resource Consumption\n\n- Cost (USD): $0.0100\n"
+        )
+        findings = title_policy.type_fit_findings(
+            "chore(x): tidy things", kind="pull_request", body=body
+        )
+        assert len(findings) == 1
+
+    def test_strip_resource_section_stops_at_next_h2(self) -> None:
+        body = (
+            "## Resource Consumption\n\n- resource cost\n\n"
+            "## Related Issue\n\nCloses #1\n"
+        )
+        stripped = title_policy._strip_resource_consumption_section(body)
+        assert "Resource Consumption" not in stripped
+        assert "## Related Issue" in stripped
+
 
 class TestPrTitleHasIssueRef:
     @pytest.mark.parametrize(

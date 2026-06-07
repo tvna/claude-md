@@ -47,6 +47,13 @@
 
 - [ ] Reopen the devcontainer and verify Podman selects the host-native image platform.
 
+## Resource Consumption
+
+- Elapsed (session start to PR create): unavailable (no session data)
+- Total tokens: unavailable (no session data)
+- Cost (USD): unavailable (no session data)
+- Model(s): unavailable (no session data)
+
 ## Related Issue
 
 Refs #696

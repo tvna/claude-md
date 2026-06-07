@@ -201,7 +201,7 @@ def type_fit_findings(title: str, *, kind: str, body: str = "") -> list[TypeFitF
     if parts is None:
         return []
 
-    text = _normalized_policy_text(title, body)
+    text = _normalized_policy_text(title, _strip_resource_consumption_section(body))
     findings: list[TypeFitFinding] = []
     if _has_performance_signal(text):
         findings.extend(_performance_type_findings(parts, text))
@@ -281,6 +281,30 @@ def verify_title(title: str, *, kind: str, body: str = "", author: str = "") -> 
 def _normalized_policy_text(title: str, body: str) -> str:
     text = f"{title}\n{body}".lower()
     return re.sub(r"[^a-z0-9#+.-]+", " ", text)
+
+
+# The required ``## Resource Consumption`` PR section
+# (scripts/session_resource_report.py) always carries fixed ``resource``
+# wording in its heading -- it reports the session cost of producing the PR,
+# never the PR's own work. Left in the type-fit scan it would mis-classify
+# every non-bot PR that merely carries the section as performance work. This
+# is the same relayed/boilerplate-text root cause as the trusted-bot body
+# drop (#1127); strip the section here so only the PR's own prose feeds the
+# heuristic. Refs #1413.
+_RESOURCE_CONSUMPTION_SECTION_RE = re.compile(
+    r"(?ims)^[ \t]*##[ \t]+Resource[ \t]+Consumption\b.*?(?=^[ \t]*##[ \t]|\Z)"
+)
+
+
+def _strip_resource_consumption_section(body: str) -> str:
+    """Return *body* with the boilerplate ``## Resource Consumption`` H2 removed.
+
+    The section runs from its ``## Resource Consumption`` heading to the next
+    H2 heading (or end of body). A PR whose only ``resource`` wording is this
+    generated section must not be forced onto a ``perf`` title; a PR that
+    discusses resource work in its own prose still trips the heuristic.
+    """
+    return _RESOURCE_CONSUMPTION_SECTION_RE.sub("", body)
 
 
 def _words(text: str) -> set[str]:
