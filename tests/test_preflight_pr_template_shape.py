@@ -107,6 +107,20 @@ class TestEvaluate:
         errors = shape.evaluate(body)
         assert any("multiple agent-attribution footers" in e for e in errors)
 
+    def test_unknown_h2_returns_allowlist_error(self) -> None:
+        # An H2 outside the allowlist is rejected client-side. Refs #1396.
+        body = (
+            _VERIFICATION_OK
+            + "\n## Notes\n\nx\n\n"
+            + _CHECKLIST_OK
+            + "\n"
+            + _FOOTER_OK
+        )
+        errors = shape.evaluate(body)
+        assert any(
+            "outside the allowed set" in e and "## Notes" in e for e in errors
+        )
+
 
 class TestDecide:
     def test_well_formed_body_passes(self) -> None:
@@ -160,6 +174,23 @@ class TestDecide:
         assert decision is not None
         reason = decision["hookSpecificOutput"]["permissionDecisionReason"]
         assert "Verification" in reason
+
+    def test_unknown_h2_emits_deny(self) -> None:
+        # An allowlist violation denies the MCP write client-side. Refs #1396.
+        body = (
+            _VERIFICATION_OK
+            + "\n## Notes\n\nx\n\n"
+            + _CHECKLIST_OK
+            + "\n"
+            + _FOOTER_OK
+        )
+        decision = shape.decide(
+            "mcp__github__create_pull_request", {"body": body}
+        )
+        assert decision is not None
+        reason = decision["hookSpecificOutput"]["permissionDecisionReason"]
+        assert "## Notes" in reason
+        assert "outside the allowed set" in reason
 
 
 # ---------------------------------------------------------------------------

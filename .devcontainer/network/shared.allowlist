@@ -21,3 +21,8 @@ github-releases.githubusercontent.com  # GitHub release binary downloads used by
 ghcr.io  # GitHub Container Registry pulls for the prebuilt devcontainer images.
 mcr.microsoft.com  # Microsoft Container Registry for base image and feature layers.
 aka.ms  # Microsoft redirect host historically required by the official microsoft/apm installer; see #800 (necessity disputed, candidate for re-triage).
+# Threat-intelligence feeds queried by scripts/threat_intel_triage.py scan (#1277).
+api.osv.dev  # OSV.dev vulnerability feed (querybatch/query/vulns) correlated against locked dependencies by the threat-intel triage scan.
+www.cisa.gov  # CISA Known Exploited Vulnerabilities catalog feed used by the threat-intel triage scan to flag known-exploited findings.
+api.first.org  # FIRST EPSS exploit-prediction scores enriching threat-intel triage findings (advisory-only per #173).
+services.nvd.nist.gov  # NVD CVE metadata enriching threat-intel triage findings already surfaced by OSV/GHSA (supplemental per #174).

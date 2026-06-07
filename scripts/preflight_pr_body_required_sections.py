@@ -5,9 +5,9 @@ Bound in ``.claude/settings.json`` to
 ``mcp__github__(create_pull_request|update_pull_request)``. Reads the
 PreToolUse event JSON from stdin and, when the drafted PR body would
 fail the baseline H2/H3 heading existence check enforced by
-``scripts/body_policy.py`` (the ``_PR_REQUIRED`` tuple: Facts /
-Assumptions / Risk and blast radius / Rollback / Verification /
-Checklist), emits a ``permissionDecision: "deny"`` JSON on stdout so
+``scripts/body_policy.py`` (the ``_PR_REQUIRED`` tuple: Summary /
+Related Issue / Facts / Assumptions / Risk and blast radius / Rollback /
+Verification / Checklist), emits a ``permissionDecision: "deny"`` JSON on stdout so
 the operator can add the missing sections BEFORE the API call instead
 of round-tripping through ``verify-body-policy.yml``.
 

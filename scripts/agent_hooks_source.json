@@ -59,6 +59,14 @@
               "hooks": [
                 {
                   "type": "command",
+                  "command": "scripts/install-ccusage.sh"
+                }
+              ]
+            },
+            {
+              "hooks": [
+                {
+                  "type": "command",
                   "command": "scripts/session_uv_local_pin.sh"
                 }
               ]
@@ -168,6 +176,15 @@
                 {
                   "type": "command",
                   "command": "python3 scripts/gate_issue_classification_labels.py"
+                }
+              ]
+            },
+            {
+              "matcher": "mcp__github__issue_write",
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "python3 scripts/gate_reserved_retro_scope.py"
                 }
               ]
             },
@@ -569,6 +586,16 @@
                   "type": "command",
                   "command": "python3 scripts/gate_issue_classification_labels.py",
                   "statusMessage": "Checking issue classification labels"
+                }
+              ]
+            },
+            {
+              "matcher": "^mcp__github__issue_write$",
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "python3 scripts/gate_reserved_retro_scope.py",
+                  "statusMessage": "Checking reserved auto-retro scope"
                 }
               ]
             },

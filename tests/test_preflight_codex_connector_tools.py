@@ -114,6 +114,8 @@ class TestNonAsciiConnectorRouting:
 
 
 _GOOD_PR_BODY = (
+    "## Summary\n\n- conclusion\n\n"
+    "## Related Issue\n\nCloses #1\n\n"
     "## Facts\n\n- Fact: x\n\n"
     "## Assumptions\n\n- speculation: y\n\n"
     "## Risk and blast radius\n\n- Low\n\n"
