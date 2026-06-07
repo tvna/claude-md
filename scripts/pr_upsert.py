@@ -30,6 +30,7 @@ import sys
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 from _github_api import apply_call as _github_apply_call
 
@@ -129,6 +130,32 @@ def _get_pr(
     if not isinstance(data, dict):
         raise RuntimeError(f"Expected object from get PR, got: {body[:200]}")
     return data
+
+
+def _get_user_id(
+    *,
+    login: str,
+    token: str,
+    apply_call: Callable[..., tuple[int, str]] = _github_apply_call,
+) -> int:
+    """Return the numeric account id for *login*.
+
+    Used to build a GitHub App bot's canonical noreply commit email
+    (``<id>+<slug>[bot]@users.noreply.github.com``). ``login`` is URL-encoded so
+    a bot login such as ``my-app[bot]`` (with ``[``/``]``) is requested safely.
+    """
+    url = f"{_API_ROOT}/users/{quote(login)}"
+    code, body = apply_call(method="GET", url=url, payload=None, token=token)
+    if not (200 <= code < 300):
+        raise RuntimeError(f"Get user {login} failed: HTTP {code}: {body[:200]}")
+    try:
+        data = json.loads(body)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"Unexpected response from get user {login}: {body[:200]}") from exc
+    uid = data.get("id") if isinstance(data, dict) else None
+    if not isinstance(uid, int):
+        raise RuntimeError(f"Get user {login} response missing integer id: {body[:200]}")
+    return uid
 
 
 def _merge_pr(

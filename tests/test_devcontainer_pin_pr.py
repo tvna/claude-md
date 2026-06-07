@@ -95,6 +95,49 @@ class TestRenderPrBody:
 
 
 # ---------------------------------------------------------------------------
+# _resolve_bot_identity
+# ---------------------------------------------------------------------------
+
+
+class TestResolveBotIdentity:
+    def test_defaults_to_github_actions_bot(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("PIN_BOT_APP_SLUG", raising=False)
+        called: list[Any] = []
+
+        def _record(**kw: Any) -> int:
+            called.append(kw)
+            return 1
+
+        monkeypatch.setattr(dpp, "_get_user_id", _record)
+        name, email = dpp._resolve_bot_identity("tok")
+        assert name == "github-actions[bot]"
+        assert email == "41898282+github-actions[bot]@users.noreply.github.com"
+        assert called == []  # the default identity needs no API lookup
+
+    def test_app_slug_resolves_app_bot_identity(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("PIN_BOT_APP_SLUG", "my-pin-app")
+        monkeypatch.setattr(dpp, "_get_user_id", lambda *, login, token: 999 if login == "my-pin-app[bot]" else 0)
+        name, email = dpp._resolve_bot_identity("tok")
+        assert name == "my-pin-app[bot]"
+        assert email == "999+my-pin-app[bot]@users.noreply.github.com"
+
+    def test_blank_slug_falls_back_to_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("PIN_BOT_APP_SLUG", "   ")
+        name, _ = dpp._resolve_bot_identity("tok")
+        assert name == "github-actions[bot]"
+
+    def test_lookup_failure_propagates(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("PIN_BOT_APP_SLUG", "my-pin-app")
+
+        def _boom(**kw: Any) -> int:
+            raise RuntimeError("Get user my-pin-app[bot] failed")
+
+        monkeypatch.setattr(dpp, "_get_user_id", _boom)
+        with pytest.raises(RuntimeError, match="Get user my-pin-app"):
+            dpp._resolve_bot_identity("tok")
+
+
+# ---------------------------------------------------------------------------
 # _cmd_open guards
 # ---------------------------------------------------------------------------
 
@@ -177,6 +220,23 @@ class TestOpenFlow:
         assert git.ran("commit") and git.ran("push") and git.ran("checkout")
         assert captured["head"] == "devcontainer/image-pins-zz"
         assert "zz" in captured["body"]  # template placeholder substituted
+
+    def test_app_slug_authors_commit_as_app_bot(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # With the App slug set (the workflow passes the create-github-app-token
+        # app-slug output), the pin commit is authored by the App bot so it
+        # matches the App-bot PR author. Refs #1401.
+        monkeypatch.setenv("PIN_BOT_APP_SLUG", "my-pin-app")
+        monkeypatch.setattr(dpp, "_get_user_id", lambda *, login, token: 4242)
+        git = _FakeGit({"diff": 1, "ls-remote": 2})
+        monkeypatch.setattr(dpp, "run_git", git)
+        monkeypatch.setattr(dpp, "_upsert_pr", lambda **kw: ("created", 1))
+        rc = dpp.main(_open_argv(tmp_path, sha="zz"))
+        assert rc == 0
+        config_calls = [c for c in git.calls if c[0] == "config"]
+        assert ["config", "user.name", "my-pin-app[bot]"] in config_calls
+        assert ["config", "user.email", "4242+my-pin-app[bot]@users.noreply.github.com"] in config_calls
 
     def test_create_branch_git_failure_returns_1(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

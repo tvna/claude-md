@@ -1837,16 +1837,30 @@ def test_devcontainer_pin_pr_uses_environment_secret_token() -> None:
         "contents": "write",
         "pull-requests": "write",
     }
-    assert "DEVCONTAINER_PIN_PR_TOKEN" in raw
+    # The PR is authored by a GitHub App bot: the token is minted at runtime from
+    # the App ID + private key, fully replacing the old PAT. Refs #1401.
+    assert "DEVCONTAINER_PIN_APP_ID" in raw
+    assert "DEVCONTAINER_PIN_APP_PRIVATE_KEY" in raw
+    assert "DEVCONTAINER_PIN_PR_TOKEN" not in raw
+
+    app_token = next(step for step in update_pins["steps"] if step.get("id") == "app-token")
+    assert app_token["uses"].startswith("actions/create-github-app-token@")
+    assert app_token["with"] == {
+        "app-id": "${{ secrets.DEVCONTAINER_PIN_APP_ID }}",
+        "private-key": "${{ secrets.DEVCONTAINER_PIN_APP_PRIVATE_KEY }}",
+    }
 
     open_pr = next(
         step for step in update_pins["steps"] if step.get("name") == "Open pin update PR"
     )
-    # Thin orchestration: GH_TOKEN comes from the environment secret, REPO from
-    # the workflow context (both consumed by scripts/devcontainer_pin_pr.py).
+    # Thin orchestration: GH_TOKEN is the App installation token (so the PR
+    # author is the App bot), PIN_BOT_APP_SLUG carries the App slug so the commit
+    # author matches, REPO from the workflow context. All consumed by
+    # scripts/devcontainer_pin_pr.py.
     assert open_pr["env"] == {
-        "GH_TOKEN": "${{ secrets.DEVCONTAINER_PIN_PR_TOKEN }}",
+        "GH_TOKEN": "${{ steps.app-token.outputs.token }}",
         "REPO": "${{ github.repository }}",
+        "PIN_BOT_APP_SLUG": "${{ steps.app-token.outputs.app-slug }}",
     }
     assert "scripts/devcontainer_pin_pr.py open" in open_pr["run"]
     assert "Refs #696" in open_pr["run"]
@@ -1919,7 +1933,7 @@ def test_devcontainer_pin_pr_refresh_matches_workflow_args(
 
 
 def test_devcontainer_pin_automerge_workflow_contract() -> None:
-    """The pin auto-merge keeper triggers on workflow_run + schedule, prefix-gated, uses the PAT.
+    """The pin auto-merge keeper triggers on workflow_run + schedule, prefix-gated, uses an App token.
 
     The repository-level "Allow auto-merge" toggle is intentionally OFF, so the
     pin PR is completed by this dedicated keeper instead of native auto-merge.
@@ -1928,9 +1942,9 @@ def test_devcontainer_pin_automerge_workflow_contract() -> None:
     recursion -- so the keeper is driven by ``workflow_run`` on the workflows
     that own the required status checks, plus a ``schedule`` safety net. Pin the
     wiring that makes that safe and scoped: those triggers, an ``if`` guard that
-    restricts the job to the pin branch prefix, the PAT secret (so the merge's
-    push to main still triggers downstream workflows), and the ``merge``
-    subcommand. Refs #1352, #1363.
+    restricts the job to the pin branch prefix, the GitHub App token (so the
+    merge's push to main still triggers downstream workflows), and the ``merge``
+    subcommand. Refs #1352, #1363, #1401.
     """
     workflow = yaml.safe_load((_WORKFLOWS_DIR / "devcontainer-pin-automerge.yml").read_text(encoding="utf-8"))
     # ``on`` may parse to the truthy bool key True under YAML 1.1; tolerate both.
@@ -1952,9 +1966,18 @@ def test_devcontainer_pin_automerge_workflow_contract() -> None:
     assert "workflow_dispatch" in job["if"]
     assert "schedule" in job["if"]
 
+    app_token = next(s for s in job["steps"] if s.get("id") == "app-token")
+    assert app_token["uses"].startswith("actions/create-github-app-token@")
+    assert app_token["with"] == {
+        "app-id": "${{ secrets.DEVCONTAINER_PIN_APP_ID }}",
+        "private-key": "${{ secrets.DEVCONTAINER_PIN_APP_PRIVATE_KEY }}",
+    }
+
+    # The merge step needs only the App token (it merges; it does not author a
+    # commit, so no PIN_BOT_APP_SLUG). Refs #1401.
     merge_step = next(s for s in job["steps"] if "devcontainer_pin_pr.py merge" in str(s.get("run", "")))
     assert merge_step["env"] == {
-        "GH_TOKEN": "${{ secrets.DEVCONTAINER_PIN_PR_TOKEN }}",
+        "GH_TOKEN": "${{ steps.app-token.outputs.token }}",
         "REPO": "${{ github.repository }}",
     }
 
