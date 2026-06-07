@@ -37,6 +37,13 @@ dependencies:
   - .claude/skills/writing-plans
   - .claude/skills/writing-skills
   content_hash: sha256:fb4f87bfef928a6d68f5d5aaa29e3eba011961c5f03bbf171c3c348d8d161abb
+mcp_servers:
+- context7
+mcp_configs:
+  context7:
+    name: context7
+    transport: http
+    url: https://mcp.context7.com/mcp
 local_deployed_files:
 - .claude/rules/master.md
 local_deployed_file_hashes:

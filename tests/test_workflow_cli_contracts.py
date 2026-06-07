@@ -56,6 +56,7 @@ import ruleset_drift
 import rulesets_apply
 import scan_allowlist_parser_parity
 import scan_allowlist_rationale
+import scan_apm_lock_drift
 import scan_apm_portability
 import scan_compile_from_source
 import scan_design_philosophy_drift
@@ -181,6 +182,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("scan_apm_portability.py", "verify"): "test_scan_apm_portability_verify_matches_workflow_paths",
     ("scan_design_philosophy_drift.py", "verify"): "test_scan_design_philosophy_drift_verify_matches_workflow_paths",
     ("scan_design_philosophy_drift.py", "verify-coupling"): "test_scan_design_philosophy_drift_verify_coupling_matches_workflow_args",
+    ("scan_apm_lock_drift.py", "verify"): "test_scan_apm_lock_drift_verify_matches_workflow_args",
     ("scan_compile_from_source.py", "verify"): "test_scan_compile_from_source_verify_matches_workflow_args",
     ("scan_devcontainer_tool_drift.py", "verify"): "test_scan_devcontainer_tool_drift_verify_matches_workflow_args",
     ("scan_docs_inventory.py", "verify"): "test_scan_docs_inventory_verify_matches_workflow_args",
@@ -1280,6 +1282,12 @@ def test_scan_allowlist_rationale_verify_matches_workflow_args() -> None:
     """Mirrors the ``Verify devcontainer egress hosts carry a triage
     rationale`` step in ``.github/workflows/verify-agents.yml``. Refs #1170."""
     assert scan_allowlist_rationale.main(["verify"]) == 0
+
+
+def test_scan_apm_lock_drift_verify_matches_workflow_args() -> None:
+    """Mirrors the ``Verify apm.lock.yaml MCP drift`` step in
+    ``.github/workflows/portable-pr-policy.yml``."""
+    assert scan_apm_lock_drift.main(["verify"]) == 0
 
 
 def test_scan_flake_pin_drift_verify_matches_workflow_args() -> None:
