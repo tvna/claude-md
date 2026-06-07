@@ -159,6 +159,15 @@ def test_claude_post_tool_use_starts_ci_monitor_after_mcp_pr_create() -> None:
             "hooks": [
                 {
                     "type": "command",
+                    "command": "python3 scripts/session_resource_report.py checkpoint",
+                },
+            ],
+        },
+        {
+            "matcher": "mcp__github__create_pull_request",
+            "hooks": [
+                {
+                    "type": "command",
                     "command": "python3 scripts/post_pr_create_ci_monitor.py",
                 },
                 {
@@ -192,6 +201,10 @@ def test_claude_post_tool_use_starts_ci_monitor_after_mcp_pr_create() -> None:
         {
             "matcher": "mcp__codex_apps__github\\._create_pull_request",
             "hooks": [
+                {
+                    "type": "command",
+                    "command": "python3 scripts/session_resource_report.py checkpoint",
+                },
                 {
                     "type": "command",
                     "command": "python3 scripts/post_pr_create_ci_monitor.py",

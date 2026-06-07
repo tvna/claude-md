@@ -52,7 +52,7 @@ Refs #205
 
 ## Resource Consumption
 
-- Elapsed (session start to PR create): 0:06:42
+- Elapsed (since previous PR or session start): 0:06:42
 - Total tokens: 230,127
 - Cost (USD): $0.6396
 - Model(s): claude-opus-4-8
@@ -745,7 +745,7 @@ _NEW_SHAPE_CHECKLIST_OK = """## Checklist
 
 _NEW_SHAPE_RESOURCE_OK = """## Resource Consumption
 
-- Elapsed (session start to PR create): 0:06:42
+- Elapsed (since previous PR or session start): 0:06:42
 - Total tokens: 230,127
 - Cost (USD): $0.6396
 - Model(s): claude-opus-4-8
