@@ -110,11 +110,11 @@ class TestDecideAppendPath:
         assert output is not None
         assert output["hookSpecificOutput"]["hookEventName"] == "PostToolUse"
 
-    def test_contains_mandatory_retro_append(self) -> None:
+    def test_contains_dedup_guard_marker(self) -> None:
         output = hook.decide(self._merge_event())
         assert output is not None
         ctx = output["hookSpecificOutput"]["additionalContext"]
-        assert "MANDATORY RETRO APPEND" in ctx
+        assert "AUTO-RETRO DEDUP GUARD" in ctx
 
     def test_contains_do_not_create_instruction(self) -> None:
         output = hook.decide(self._merge_event())
@@ -135,11 +135,15 @@ class TestDecideAppendPath:
         ctx = output["hookSpecificOutput"]["additionalContext"]
         assert "916" in ctx
 
-    def test_contains_add_issue_comment_instruction(self) -> None:
+    def test_does_not_instruct_comment_append(self) -> None:
+        # Phase 1 of #1386: the hook no longer tells the agent to append a
+        # repair-analysis comment. It must not name the comment tool and must
+        # explicitly forbid posting a separate comment.
         output = hook.decide(self._merge_event())
         assert output is not None
         ctx = output["hookSpecificOutput"]["additionalContext"]
-        assert "mcp__github__add_issue_comment" in ctx
+        assert "mcp__github__add_issue_comment" not in ctx
+        assert "do NOT post a separate" in ctx
 
     def test_contains_owner_and_repo(self) -> None:
         output = hook.decide(self._merge_event())
@@ -202,7 +206,7 @@ class TestDecideMissingPrNumber:
         output = hook.decide(event)
         assert output is not None
         ctx = output["hookSpecificOutput"]["additionalContext"]
-        assert "MANDATORY RETRO APPEND" in ctx
+        assert "AUTO-RETRO DEDUP GUARD" in ctx
         assert hook.RETRO_TITLE_PREFIX in ctx
 
     def test_emits_context_with_none_tool_input(self) -> None:
