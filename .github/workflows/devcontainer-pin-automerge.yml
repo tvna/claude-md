@@ -18,9 +18,9 @@ name: Auto-merge devcontainer pin PR
 #     suppression because the runs are pull_request-triggered.
 #   * schedule (every 15 min) as a safety net so a missed event still converges.
 #   * workflow_dispatch for manual recovery.
-# The merge uses the PAT DEVCONTAINER_PIN_PR_TOKEN (not GITHUB_TOKEN) so the
+# The merge uses a GitHub App installation token (not GITHUB_TOKEN) so the
 # resulting push to main still triggers the downstream push workflows
-# (publish / refresh / post-merge). Refs #696, #1137, #1352, #1363.
+# (publish / refresh / post-merge). Refs #696, #1137, #1352, #1363, #1401.
 
 on:
   workflow_run:
@@ -59,13 +59,23 @@ jobs:
       pull-requests: write
     steps:
       - name: Checkout repository
-        # Persist the default token; the merge step authenticates with the PAT in
-        # GH_TOKEN, but checkout needs working credentials to fetch the scripts.
+        # Persist the default token; the merge step authenticates with the App
+        # token in GH_TOKEN, but checkout needs working credentials to fetch the
+        # scripts.
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      # Mint a short-lived GitHub App installation token so the merge's push to
+      # main still triggers the downstream push workflows. Refs #1401.
+      - name: Mint GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ secrets.DEVCONTAINER_PIN_APP_ID }}
+          private-key: ${{ secrets.DEVCONTAINER_PIN_APP_PRIVATE_KEY }}
 
       - name: Merge pin PR if mergeable
         env:
-          GH_TOKEN: ${{ secrets.DEVCONTAINER_PIN_PR_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
           REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
