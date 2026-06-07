@@ -94,6 +94,30 @@ the body edit, label repair, and behind-refresh paths above are ruled out,
 and record the required root-cause note so the replacement-PR guard
 (`scripts/preflight_replacement_pr.py`) classifies the churn correctly.
 
+## Triage label routing failure (manual repair)
+
+The original session behind #675 hit `Resource not accessible by
+integration` when the triage workflow tried to add `threat:intel-needed`.
+That was a token-scope gap in the pre-consolidation triage workflow. The
+current `issue-pr-triage.yml` `triage` job declares `issues: write` and
+`pull-requests: write` (the scope the label endpoint
+`POST /repos/<repo>/issues/<n>/labels` needs), so the failure no longer
+reproduces -- recorded as a `none` mismatch in
+[`workflow-permissions-audit.md`](workflow-permissions-audit.md).
+
+If a label-routing run still fails (for example a transient API error), add
+the label by hand with the same approved wrapper the workflow uses, rather
+than a command-line GitHub client:
+
+```sh
+REPO=tvna/claude-md NUMBER=<issue-or-pr-number> GH_TOKEN=<token> \
+  python3 scripts/threat_intel_triage.py apply-labels \
+    --add-labels threat:intel-needed
+```
+
+The token needs `issues: write` on the repository; the script reads it from
+`GH_TOKEN` and never echoes the value.
+
 ## Verify
 
 ```sh
