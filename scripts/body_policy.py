@@ -92,6 +92,14 @@ _VERIFICATION_COMMAND_RE = re.compile(
     r"^-[ \t]+command:[ \t]*`[^`\n]+`[ \t]*$",
     re.MULTILINE,
 )
+# A command line that is well-formed up to the closing backtick but
+# carries trailing non-whitespace after it (e.g. ``(pre-push hooks)``).
+# Detected only to emit a targeted deny reason -- such a line already
+# fails _VERIFICATION_COMMAND_RE, so this never widens what passes.
+# Recurring author defect: retro #1054 row 2(a), retro #1376 repair 2.
+_VERIFICATION_COMMAND_TRAILING_RE = re.compile(
+    r"^-[ \t]+command:[ \t]*`[^`\n]+`[ \t]*(?P<trailing>\S.*)$",
+)
 _VERIFICATION_RESULT_RE = re.compile(
     r"^[ \t]{2}result:[ \t]*\S.*$",
     re.MULTILINE,
@@ -255,6 +263,26 @@ def verify_pr_verification_pairs(body: str) -> list[str]:
                 continue
             pairs += 1
             i += 2
+            continue
+        trailing_match = _VERIFICATION_COMMAND_TRAILING_RE.fullmatch(line)
+        if trailing_match is not None:
+            trailing = trailing_match.group("trailing")
+            errors.append(
+                "::error::Verification 'command:' line has trailing text "
+                f"{trailing!r} after the closing backtick; the command "
+                "line must be code-only. Move the note onto the "
+                "'  result: ...' line or drop it (post-2026-05-26 PR "
+                "shape)."
+            )
+            # Consume an immediately-following result line so it is not
+            # also flagged as an orphan -- the trailing-text error is the
+            # single actionable signal.
+            if i + 1 < len(lines) and _VERIFICATION_RESULT_RE.fullmatch(
+                lines[i + 1]
+            ):
+                i += 2
+            else:
+                i += 1
             continue
         res_match = _VERIFICATION_RESULT_RE.fullmatch(line)
         if res_match is not None:
