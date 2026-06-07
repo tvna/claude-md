@@ -231,6 +231,17 @@ convention. The headings, in order, are:
   - `### Post-merge (auto-retro signal)` - read by
     `scripts/auto_retro.py`. Unchecked items become repair-history
     rows in the auto-opened retrospective issue.
+- `## Resource Consumption` - the session resource cost of producing the
+  PR: elapsed time from session start (the `CCR_SPAWN_TIMESTAMP_MS`
+  container-spawn epoch) to PR creation, the total tokens, the
+  input / output / cache-create / cache-read breakdown, the USD cost, and
+  the model(s) used. Generated deterministically by
+  `scripts/session_resource_report.py`, which reads the current Claude Code
+  session id and `ccusage session --json --id <id>`; it degrades to an
+  `unavailable (no session data)` body when no session data exists (for
+  example a human-authored PR with no ccusage session, or ccusage absent).
+  Required on every PR; trusted-bot authors (dependabot) are skipped by
+  `scripts/body_policy.py`, so their PRs need not carry it. Refs #1413.
 - `## Related Issue` - a single `Refs #<number>` (or `Closes #<number>`,
   etc.) line, kept last per GitHub convention so the conclusion stays at
   the top. Per CLAUDE.md section 3, every PR must cite its issue; this
