@@ -101,7 +101,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     command = str((event.get("tool_input") or {}).get("command") or "")
-    emit_decision(decide(tool_name, command))
+    emit_decision(decide(tool_name, command), "gate_gh_cli", auditable=False)
     return 0
 
 

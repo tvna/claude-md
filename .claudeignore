@@ -20,5 +20,12 @@ __pycache__/
 .github/copilot-instructions.md
 .windsurfrules
 .codeium/
-# Generated MCP client config; SoT is apm.yml. Committed mirror prohibited (#58, #1067, #1063).
+
+# Rendered MCP client config (mirror of .gitignore; see docs/standards/repo-scope.md).
+# .mcp.json is rendered from apm.yml by scripts/gen_mcp_json.py and never committed.
 .mcp.json
+
+# Secrets / credentials (mirror of .gitignore). Courtesy mirror only --
+# .gitignore is the canonical secret boundary.
+.env
+.env.*

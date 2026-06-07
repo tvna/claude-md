@@ -17,41 +17,22 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   skill-quality:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-
-      - name: Set up Go
-        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
-          go-version: "1.26"
+          persist-credentials: false
 
-      - name: Read uv pin from pyproject.toml
-        id: uvpin
-        run: |
-          set -euo pipefail
-          PIN="$(python3 scripts/uv_pin.py read)"
-          echo "version=${PIN}" >> "$GITHUB_OUTPUT"
-
-      - name: Install uv
-        env:
-          UV_VERSION: ${{ steps.uvpin.outputs.version }}
-        run: |
-          curl -LsSf "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/uv-x86_64-unknown-linux-gnu.tar.gz" -o /tmp/uv.tar.gz
-          tar -xzf /tmp/uv.tar.gz -C /tmp
-          mkdir -p "$HOME/.local/bin"
-          install -m 0755 /tmp/uv-x86_64-unknown-linux-gnu/uv "$HOME/.local/bin/uv"
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-          uv --version
-
-      - name: Install Python
-        run: uv python install
-
-      - name: Sync locked project environment
-        run: uv sync --locked
+      - name: Set up uv and project environment
+        uses: ./.github/actions/setup-uv
 
       - name: Install waza (pinned)
         run: scripts/install_waza.sh

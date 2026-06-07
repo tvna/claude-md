@@ -1,0 +1,68 @@
+# CodeQL dataflow (taint) analysis for the high-privilege workflow scripts.
+#
+# The scripts/ tree runs under pull_request_target and handles GITHUB_TOKEN/PAT,
+# so untrusted GitHub data (issue/PR bodies, webhook payloads, CI logs) can reach
+# dangerous sinks (subprocess, urllib/HTTP, file writes, GitHub API). ruff `S`
+# (bandit) and mypy are pattern/type checks, not interprocedural dataflow; CodeQL
+# adds the source->sink taint layer they cannot provide. Refs #1237.
+#
+# Posture: informational first. This workflow is intentionally NOT a required
+# check yet. It graduates to required only after the baseline is clean, mirroring
+# the coverage graduation policy in docs/standards/workflow-script-quality.md.
+#
+# Setup is "advanced" (this YAML is owned here) rather than default setup, because
+# the repo standard requires SHA-pinned actions and least-privilege permissions,
+# which default setup's hidden, GitHub-managed workflow cannot express.
+name: CodeQL
+
+on:
+  pull_request:
+    paths:
+      - "scripts/**"
+      - ".github/workflows/codeql.yml"
+      - ".github/codeql/codeql-config.yml"
+  push:
+    branches: [main]
+    paths:
+      - "scripts/**"
+      - ".github/workflows/codeql.yml"
+      - ".github/codeql/codeql-config.yml"
+  schedule:
+    # Weekly baseline so drift is caught even when scripts/ is untouched by PRs.
+    - cron: "23 4 * * 1"
+
+# Least privilege: security-events:write is required to upload SARIF; contents:read
+# for checkout; actions:read is the documented companion for the analyze step.
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: Analyze (python)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@1a818fd5f97ed0ee9a823421bd5b171add01227f # v4.36.2
+        with:
+          languages: python
+          # security-extended: default suite plus lower-precision/severity security
+          # queries. Passed as the init input (the documented way to select a
+          # built-in suite); path scoping lives in the config-file below.
+          queries: security-extended
+          config-file: ./.github/codeql/codeql-config.yml
+
+      - name: Perform CodeQL Analysis
+        # Python is interpreted: no autobuild step is needed.
+        uses: github/codeql-action/analyze@1a818fd5f97ed0ee9a823421bd5b171add01227f # v4.36.2

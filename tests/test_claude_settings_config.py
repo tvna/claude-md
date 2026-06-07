@@ -6,12 +6,35 @@ import json
 from pathlib import Path
 
 import pytest
+from gen_agent_hooks import unwrap_command
 
 pytestmark = pytest.mark.shard_preflight
 
 ROOT = Path(__file__).resolve().parents[1]
 CLAUDE_SETTINGS = ROOT / ".claude" / "settings.json"
-CORE_HOOK_EVENTS = {"SessionStart", "PreToolUse", "PostToolUse"}
+
+
+def _unwrap_groups(groups: list[dict[str, object]]) -> list[dict[str, object]]:
+    """Return *groups* with every hook command stripped of the CWD wrapper.
+
+    ``.claude/settings.json`` is generated from
+    ``scripts/agent_hooks_source.json`` with a
+    ``cd "$(git rev-parse --show-toplevel)" && `` prefix injected into each
+    repo-script command. Tests assert against the clean repo-relative
+    commands, so the wrapper is peeled back here before structural comparison.
+    """
+    out: list[dict[str, object]] = []
+    for group in groups:
+        clone = json.loads(json.dumps(group))
+        for handler in clone.get("hooks", []):
+            command = handler.get("command")
+            if isinstance(command, str):
+                handler["command"] = unwrap_command(command)
+        out.append(clone)
+    return out
+
+
+CORE_HOOK_EVENTS = {"SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse"}
 # Claude-only events with no Codex/Devin counterpart (outside the
 # scan_hook_coverage_drift parity scope). Stop hosts the decision-handoff
 # nudge toward AskUserQuestion (#1044).
@@ -63,8 +86,23 @@ def test_stop_hook_registers_decision_handoff_gate() -> None:
             assert isinstance(hook, dict)
             command = hook.get("command")
             if isinstance(command, str):
-                commands.append(command)
+                commands.append(unwrap_command(command))
     assert any("gate_decision_handoff_askuserquestion.py" in cmd for cmd in commands)
+
+
+def test_stop_hook_registers_new_session_handoff_prompt() -> None:
+    """Stop wires the Claude-only paste-ready handoff nudge (#1334)."""
+    data = _load_settings()
+    commands: list[str] = []
+    for group in _hook_groups(data, "Stop"):
+        hooks = group["hooks"]
+        assert isinstance(hooks, list)
+        for hook in hooks:
+            assert isinstance(hook, dict)
+            command = hook.get("command")
+            if isinstance(command, str):
+                commands.append(unwrap_command(command))
+    assert any("stop_new_session_handoff_prompt.py" in cmd for cmd in commands)
 
 
 def test_claude_hooks_use_pascalcase_event_keys() -> None:
@@ -88,7 +126,7 @@ def test_claude_post_tool_use_starts_ci_monitor_after_mcp_pr_create() -> None:
     data = _load_settings()
     post_tool_use = _hook_groups(data, "PostToolUse")
 
-    assert post_tool_use == [
+    assert _unwrap_groups(post_tool_use) == [
         {
             "matcher": "Write",
             "hooks": [
@@ -145,6 +183,10 @@ def test_claude_post_tool_use_starts_ci_monitor_after_mcp_pr_create() -> None:
                     "type": "command",
                     "command": "python3 scripts/post_merge_retro_append.py",
                 },
+                {
+                    "type": "command",
+                    "command": "python3 scripts/post_merge_new_session_prompt.py",
+                },
             ],
         },
         {
@@ -179,7 +221,7 @@ def test_all_claude_hook_commands_point_to_repo_files() -> None:
                 assert isinstance(handler, dict)
                 command = handler["command"]
                 assert isinstance(command, str)
-                commands.append(command)
+                commands.append(unwrap_command(command))
 
     for command in commands:
         if "CLAUDE_PLUGIN_ROOT" in command:
@@ -210,6 +252,20 @@ def test_claude_superpowers_hooks_are_apm_managed() -> None:
     )
 
 
+def test_claude_user_prompt_submit_registers_context7_gate() -> None:
+    data = _load_settings()
+    assert _unwrap_groups(_hook_groups(data, "UserPromptSubmit")) == [
+        {
+            "hooks": [
+                {
+                    "type": "command",
+                    "command": "python3 scripts/prompt_context7_gate.py",
+                }
+            ],
+        }
+    ]
+
+
 def test_claude_session_start_surfaces_hooks_path_gap() -> None:
     """SessionStart must include check_hooks_path.py to surface missing core.hooksPath.
 
@@ -233,9 +289,7 @@ def test_claude_session_start_surfaces_hooks_path_gap() -> None:
                 if isinstance(cmd, str):
                     commands.append(cmd)
 
-    assert any("check_hooks_path.py" in c for c in commands), (
-        "SessionStart does not include check_hooks_path.py"
-    )
+    assert any("check_hooks_path.py" in c for c in commands), "SessionStart does not include check_hooks_path.py"
 
 
 def test_claude_pre_tool_use_covers_codex_github_connector_tools() -> None:
@@ -263,11 +317,9 @@ def test_claude_pre_tool_use_covers_codex_github_connector_tools() -> None:
             assert isinstance(handler, dict)
             command = handler["command"]
             assert isinstance(command, str)
-            commands.append(command)
+            commands.append(unwrap_command(command))
 
-    title_body_matcher = (
-        "mcp__codex_apps__github\\._(create_issue|create_pull_request|update_pull_request)"
-    )
+    title_body_matcher = "mcp__codex_apps__github\\._(create_issue|create_pull_request|update_pull_request)"
     pr_matcher = "mcp__codex_apps__github\\._(create_pull_request|update_pull_request)"
 
     assert title_body_matcher in matcher_to_commands
@@ -298,8 +350,7 @@ def test_claude_pr_write_hooks_include_base_freshness_gate() -> None:
         isinstance(handlers := group.get("hooks"), list)
         and any(
             isinstance(handler, dict)
-            and handler.get("command")
-            == "python3 scripts/preflight_branch_base.py verify"
+            and unwrap_command(str(handler.get("command", ""))) == "python3 scripts/preflight_branch_base.py verify"
             for handler in handlers
         )
         for group in matching
@@ -327,6 +378,6 @@ def test_claude_hook_commands_do_not_use_claude_project_dir() -> None:
             for handler in group.get("hooks", []):
                 if isinstance(handler, dict):
                     command = handler.get("command", "")
-                    assert "$CLAUDE_PROJECT_DIR" not in command, (
-                        f"{event} hook command uses $CLAUDE_PROJECT_DIR (unset in FleetView): {command!r}"
-                    )
+                    assert (
+                        "$CLAUDE_PROJECT_DIR" not in command
+                    ), f"{event} hook command uses $CLAUDE_PROJECT_DIR (unset in FleetView): {command!r}"

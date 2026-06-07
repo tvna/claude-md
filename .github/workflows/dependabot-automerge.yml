@@ -16,11 +16,13 @@ jobs:
   audit:
     if: github.event.pull_request.user.login == 'dependabot[bot]'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
 
       - name: Collect changed files
         env:
@@ -50,4 +52,18 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           python3 scripts/dependabot_automerge.py request-automerge \
+            --pr-number "$PR_NUMBER"
+
+      # Revoke a previously enabled auto-merge when the PR is no longer eligible.
+      # The `labeled` trigger means a threat-intel/severity label added after
+      # enablement re-runs this audit; disable-automerge no-ops when auto-merge
+      # was never enabled, so it is safe to run on every non-eligible result.
+      - name: Disable GitHub auto-merge if no longer eligible
+        if: steps.audit.outputs.should_enable != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          python3 scripts/dependabot_automerge.py disable-automerge \
             --pr-number "$PR_NUMBER"

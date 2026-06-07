@@ -26,8 +26,11 @@ The apply step is split across phases so that the strictest rule (`commit_messag
 | **P4-dependabot** ([#140](https://github.com/tvna/claude-md/issues/140); `dependabot.json` POST superseded by [#1014](https://github.com/tvna/claude-md/issues/1014)) | `all-branches.json` (PUT: adds `refs/heads/dependabot/*` to `exclude`) — the `dependabot.json` POST is no longer part of the plan; that ruleset was deleted in #1014 to restore `@dependabot rebase` (see SoT layout note above) | `ruleset=all-branches`, `dry_run=false`, `enable_auto_delete=false`. The live `dependabot-branches` ruleset is deleted via `Apply rulesets` with `enable_auto_delete` / the `DELETE` fallback under [Rollback](#rollback). |
 | **P5-claude** ([#507](https://github.com/tvna/claude-md/issues/507)) | `all-branches.json` (PUT: adds `refs/heads/claude/*` to `exclude`) | `ruleset=all-branches`, `dry_run=false`, `enable_auto_delete=false` |
 | **P6-claude-revert** ([#1022](https://github.com/tvna/claude-md/issues/1022)) | `all-branches.json` (PUT: removes `refs/heads/claude/*` from `exclude` so `non_fast_forward` covers agent branches) | `ruleset=all-branches`, `dry_run=false`, `enable_auto_delete=false` |
+| **P-sign** ([#32](https://github.com/tvna/claude-md/issues/32)) | `main.json` (after adding `{"type": "required_signatures"}`) | `ruleset=main`, `dry_run=false`, `enable_auto_delete=false` (PUT path). **Verify before enforcing** (see note ² below). |
 
 ¹ Phase 3-A applies `main.json` as committed — including `require_code_owner_review: true` ([#56](https://github.com/tvna/claude-md/issues/56) P1-b). No separate dispatch is needed to activate code-owner enforcement; it ships in the same PUT as the rest of `main.json`.
+
+² Phase **P-sign** relies on GitHub's web-flow signature on the squash-merge commit rather than on signing feature-branch commits (see [`docs/standards/commit-signing.md`](../standards/commit-signing.md)). Before applying with `dry_run=false`: (1) dispatch with `dry_run=true` and inspect the planned PUT; (2) squash-merge a throwaway PR and confirm the resulting `main` commit shows `Verified`; (3) only then apply. The keyless assumption holds **only while `main.json` stays squash-only** -- adding a non-squash merge method or a `bypass_actors` entry requires revisiting that standard. Rollback is the standard rule removal + re-PUT under [Rollback](#rollback).
 
 Run with `dry_run=true` first for every phase to inspect the planned POST/PUT and the per-field diff in the job summary.
 
@@ -81,6 +84,10 @@ closed by that scoping.
 generate a new PAT first, update the `RULESETS_PAT` secret in every
 documented storage location that still consumes it, confirm a
 `dry_run=true` dispatch passes the guard step, then revoke the old token.
+The documented storage locations are: the `ruleset-apply` Environment secret
+(Administration: Read/Write), the `ruleset-verify` Environment secret, and the
+**Dependabot** secret consumed by the PR-time gate on `dependabot/*` PRs (a
+separate read-only token; see [Dependabot secret for the gate](#dependabot-secret-for-the-gate)).
 Rotation does not require code changes; the workflow reads
 `${{ secrets.RULESETS_PAT }}` at dispatch time.
 
@@ -203,7 +210,7 @@ These three fields together are sufficient evidence: no actor — owner or other
 
 ### Title policy boundary
 
-Issue and PR titles are metadata surfaces: they appear in notifications, project views, triage lists, and agent summaries before body-level context is inspected. The title boundary is therefore stricter than the body/comment non-ASCII workflow. Titles must be ASCII-only; Japanese text, emoji, zero-width marks, RTL controls, fullwidth homoglyphs, and other multi-byte control surfaces are rejected by `.github/workflows/verify-title-policy.yml`. The same gate enforces repository naming convention: issues use `type(scope): summary`, and PRs use `type(scope): summary (#issue)`.
+Issue and PR titles are metadata surfaces: they appear in notifications, project views, triage lists, and agent summaries before body-level context is inspected. The title boundary is therefore stricter than the body/comment non-ASCII workflow. Titles must be ASCII-only; Japanese text, emoji, zero-width marks, RTL controls, fullwidth homoglyphs, and other multi-byte control surfaces are rejected by `scripts/title_policy.py`, run for issue titles by `.github/workflows/verify-github-content.yml` and for PR titles by the `portable-pr-policy` job in `.github/workflows/verify-pr.yml`. The same validator enforces repository naming convention: issues use `type(scope): summary`, and PRs use `type(scope): summary (#issue)`.
 
 Ruleset smoke test for the required status check:
 
@@ -254,21 +261,21 @@ Prefer this disable / re-enable procedure over re-introducing a bypass actor —
 The `ruleset-drift` job in `.github/workflows/weekly-maintenance.yml` ([#30](https://github.com/tvna/claude-md/issues/30)) diffs each live ruleset returned by `GET /repos/{owner}/{repo}/rulesets` against the matching `.github/rulesets/*.json` SoT file and writes the result to the job summary.
 
 - Schedule: Mondays at 05:00 JST (`cron: "0 20 * * 0"` UTC); also dispatchable manually from the Actions tab with `task=ruleset-drift`. Read-only — no mutation inputs.
-- On SoT-vs-live drift: opens a new issue titled `fix(ruleset-drift): SoT vs live drift detected (YYYY-MM-DD)` with the unified diff in a collapsible block; labels `layer:meta`, `type:fix`; body cites `#30` as the parent.
-- On a live ruleset that has no SoT file (`unknown_ruleset`): opens a separate issue titled `fix(ruleset-drift): unknown ruleset detected (YYYY-MM-DD)` with the same labels.
-- New issue per drift run — no deduplication, no auto-close. Resolve by re-dispatching `Apply rulesets` (drift) or by adding/removing the SoT file (unknown), then close the issue manually.
+- On SoT-vs-live drift: maintains a single rolling issue titled `fix(ruleset-drift): SoT vs live drift detected` with the unified diff in a collapsible block; labels `layer:meta`, `type:fix`; body cites `#30` as the parent. The run date moved out of the title into the body so the issue stays stable across runs.
+- On a live ruleset that has no SoT file (`unknown_ruleset`): maintains a separate rolling issue titled `fix(ruleset-drift): unknown ruleset detected` with the same labels.
+- Rolling-issue dedup + auto-close ([#1004](https://github.com/tvna/claude-md/issues/1004)): the `Reconcile ...` steps find the open issue by exact title and compare the drift hash embedded in its body (`<!-- ruleset-drift-hash: ... -->`) against the latest run. Same drift re-observed → silent (no new issue, no comment); drift content changed → a comment updates the same issue; drift cleared → the issue is auto-closed with a resolution comment. The hash covers only the run-invariant diff content (status rows + diffs), not the run date or URL, so an unchanged drift does not churn the issue. Resolve drift by re-dispatching `Apply rulesets`; resolve an unknown ruleset by adding/removing the SoT file. Manual closing is no longer required — the next run auto-closes once the condition clears.
 - Reuses the `RULESETS_PAT` secret read-only; uses `GITHUB_TOKEN` (`issues: write`) for filing the alert issues.
 
 Ad-hoc check between scheduled runs: dispatch `Apply rulesets` with `dry_run=true` and inspect the diff section of the job summary.
 
 ## PR-time required-checks sync gate
 
-The PR-blocking workflow `.github/workflows/verify-ruleset-sync.yml` ([#120](https://github.com/tvna/claude-md/issues/120)) catches the lag window between merging a SoT change that adds a new `required_status_checks` context and dispatching `Apply rulesets` to push it live. While the `ruleset-drift` job in `weekly-maintenance.yml` (#30) detects full drift on a weekly cron, this gate runs **on every pull request** and fails if the live `main-protection` ruleset is missing any context declared by the **PR base ref's** `.github/rulesets/main.json`.
+The PR-blocking `verify-ruleset-sync` job in `.github/workflows/verify-pr.yml` ([#120](https://github.com/tvna/claude-md/issues/120)) catches the lag window between merging a SoT change that adds a new `required_status_checks` context and dispatching `Apply rulesets` to push it live. While the `ruleset-drift` job in `weekly-maintenance.yml` (#30) detects full drift on a weekly cron, this gate runs **on every pull request** and fails if the live `main-protection` ruleset is missing any context declared by the **PR base ref's** `.github/rulesets/main.json`.
 
 - Trigger: `pull_request` (`opened`, `edited`, `synchronize`, `reopened`, `ready_for_review`); no `paths:` filter so a PR that does not itself edit the SoT still surfaces pre-existing dispatch debt.
 - Scope: only `required_status_checks[].context` in the lagging-behind direction (live missing what SoT declares). The opposite direction (live ahead of SoT) is full ruleset drift; `weekly-maintenance.yml` owns it.
 - Base-ref SoT, not PR HEAD: fetched via `GET /repos/{repo}/contents/.github/rulesets/main.json?ref=${base_ref}`. A PR that introduces a new context therefore does not self-fail — but every PR opened **after** that one merges will fail until `Apply rulesets` is dispatched.
-- Secret: reuses `RULESETS_PAT` read-only, bound as `GH_TOKEN_API`. The `gate` job is scoped to the `ruleset-verify` GitHub Environment so the secret is reachable from `pull_request` events; the Environment must be configured **without** required-reviewer approval so the gate runs unattended on every PR.
+- Secret: reuses `RULESETS_PAT` read-only, bound as `GH_TOKEN_API`. The `gate` job is scoped to the `ruleset-verify` GitHub Environment so the secret is reachable from `pull_request` events; the Environment must be configured **without** required-reviewer approval so the gate runs unattended on every PR. Dependabot-authored PRs are a special case: Dependabot-triggered runs cannot read Actions or Environment secrets, only Dependabot secrets, so `RULESETS_PAT` must **also** be registered as a Dependabot secret for the gate to pass on `dependabot/*` PRs (see [Dependabot secret for the gate](#dependabot-secret-for-the-gate) below) ([#1133](https://github.com/tvna/claude-md/issues/1133)).
 - Required status check: `Verify ruleset sync / gate` is listed in `main.json`'s `required_status_checks` so the gate blocks merge once it is itself applied to live.
 
 One-time setup for the `ruleset-verify` Environment (per [#120](https://github.com/tvna/claude-md/issues/120) PR review):
@@ -282,6 +289,36 @@ One-time setup for the `ruleset-verify` Environment (per [#120](https://github.c
    `ruleset-apply` token avoids a second rotation cadence. If a separate
    token is issued instead, follow the same fine-grained PAT issuance
    steps above and set **Administration** to Read-only.
+
+### Dependabot secret for the gate
+
+Dependabot-triggered workflow runs (`Secret source: Dependabot`) cannot read
+Actions or Environment secrets -- only **Dependabot secrets**. Because the gate
+runs on every `pull_request`, including `dependabot/*` PRs, `secrets.RULESETS_PAT`
+resolves to empty there and the guard step fails with `RULESETS_PAT secret is not
+set` unless the token is also present in the Dependabot secret store
+([#1133](https://github.com/tvna/claude-md/issues/1133)).
+
+Use a **dedicated read-only** fine-grained PAT for this store (the gate only does
+`GET` rulesets / `GET` contents), kept separate from the Administration: Read/Write
+`ruleset-apply` token so a compromised Dependabot context cannot mutate rulesets:
+
+1. Generate a fine-grained PAT following the **Required secret: `RULESETS_PAT`**
+   issuance steps above, but at step 8 set **Administration: Read-only** and
+   **Metadata: Read-only**. Resource owner `tvna`, repository access only
+   `tvna/claude-md`, expiry <=90 days. Copy it once; never paste the value into an
+   issue, PR, commit, terminal transcript, or runbook.
+2. Open `tvna/claude-md` -> **Settings** -> **Secrets and variables** ->
+   **Dependabot** -> **New repository secret**.
+3. Name it `RULESETS_PAT` and paste the read-only token value.
+4. Verify: on an open `dependabot/*` PR, comment `@dependabot rebase` (or re-run
+   the `Verify ruleset sync / gate` check) and confirm the guard step passes
+   without exposing the value. The gate references `secrets.RULESETS_PAT`, which
+   now resolves from the Dependabot store under a Dependabot trigger; no workflow
+   change is needed.
+
+This is a third storage location for `RULESETS_PAT`; include it in the rotation
+checklist under **Required secret: `RULESETS_PAT`** above.
 
 Resolution when the gate is red:
 

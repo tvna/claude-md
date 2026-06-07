@@ -22,8 +22,8 @@ code is read.
 | `docs/standards/issue-pr-body-standard.md` *(this file)* | - | Body-shape runbook |
 | `.github/PULL_REQUEST_TEMPLATE.md` | new PRs | PR template the standard describes |
 | `.github/labels.json` | `/repos/tvna/claude-md/labels` | `type:*` axis the standard partitions on |
-| `scripts/issue_link.py` | `portable-pr-policy.yml` (job: `Validate PR-issue link`) | Refs check (one piece of body policy that is already enforced) |
-| `scripts/title_policy.py` | `portable-pr-policy.yml` (job: `Validate title policy`) | ASCII-only and conventional-title check (titles, not bodies) |
+| `scripts/issue_link.py` | `verify-pr.yml` (job: `Validate PR-issue link`) | Refs check (one piece of body policy that is already enforced) |
+| `scripts/title_policy.py` | `verify-pr.yml` (job: `Validate title policy`) | ASCII-only and conventional-title check (titles, not bodies) |
 | `scripts/_trusted_bots.py` | shared by gates | Single source of truth for the trusted-bot allowlist |
 
 ## Status
@@ -53,14 +53,20 @@ Every issue body should contain the following H2 sections, in this order:
 - `## Scope` - one paragraph that names the unit of work the issue covers.
   Per CLAUDE.md section 1, the scope is the goal; without it there is no
   way to know when the issue is done.
-- `## Why` - one paragraph (or short bulleted list) that motivates the
+- `## Facts` - one paragraph (or short bulleted list) that motivates the
   change. Per CLAUDE.md section 2, lines that describe verified state
   must be prefixed with `Fact:` and lines that describe a hypothesis or
   predicted consequence must be prefixed with `Speculation:`. Reviewers
-  use the prefix to know which lines need pushback.
+  use the prefix to know which lines need pushback. (This section was
+  historically titled `## Why`; `scripts/body_policy.py` requires the
+  heading literally named `Facts`.)
 - `## Proposed work` - bulleted list of the concrete deliverables. Per
   CLAUDE.md section 5, this list should be the minimum that satisfies
   `Scope`; do not enumerate adjacent improvements here.
+- `## Verification` - the command or observable check that confirms the
+  work is done. Per CLAUDE.md section 1, completion needs a verification
+  step; name a runnable check (a command that exits 0, a file that now
+  exists) rather than prose.
 - `## Acceptance criteria` - bulleted list of checks that must be true
   before the issue can close. Per CLAUDE.md section 1, each criterion
   should be observable (a file exists, a command exits 0, a label is
@@ -77,7 +83,7 @@ below describe extra emphasis a body of each type should carry.
 
 ### `type:feat`
 
-`Scope` names the new behaviour or rule. `Why` calls out the gap the new
+`Scope` names the new behaviour or rule. `Facts` calls out the gap the new
 behaviour fills with a `Fact:` line citing the current state and a
 `Speculation:` line for the predicted improvement. `Acceptance criteria`
 includes at least one observable check (a workflow now exists, a label
@@ -85,7 +91,7 @@ now appears, a command now exits 0).
 
 ### `type:fix`
 
-`Why` must contain a `Fact:` line that names the defect concretely - a
+`Facts` must contain a `Fact:` line that names the defect concretely - a
 log line, an error message, a file path with an incorrect value, or a
 reproduction step. Per CLAUDE.md section 2, "evidence earns a fix":
 without a fact line, the issue is a speculative refactor request, not a
@@ -94,7 +100,7 @@ reproduces" with the reproduction command.
 
 ### `type:refactor`
 
-`Why` should make explicit that no behaviour change is intended (per the
+`Facts` should make explicit that no behaviour change is intended (per the
 label description). `Acceptance criteria` should include "existing tests
 pass unchanged" so the no-behaviour-change claim is checkable.
 
@@ -109,8 +115,9 @@ Examples in the body must be ASCII-only to keep the
 ### `type:tracking`
 
 `Scope` names the umbrella concern. The body replaces `Proposed work`
-with a `## Initial child issues` (or similar) list that links each
-scoped child, and replaces `Acceptance criteria` with a
+(and the `## Verification` step) with a `## Initial child issues` (or
+similar) list that links each scoped child, and replaces
+`Acceptance criteria` with a
 `## Completion criteria` section that names the condition under which
 the umbrella itself can close (typically "no open child issues remain"
 or "replaced by a newer tracking issue"). `Parent` is usually omitted
@@ -144,17 +151,30 @@ Performance-adjacent words such as "cache", "latency", "startup",
 measurement feature, or other non-performance intent that justifies the
 type.
 
+When such a word is only incidental - a concept noun like "memory" in
+"agent memory" or "reviewer memory" - prefer the repository house idiom
+instead of coining the bare term: write "harness-enforced, not
+agent-remembered" or "deterministic, not operator-memory" (the phrasing
+already used in .apm/instructions/master.instructions.md section 3).
+That keeps a `feat` or `fix` title from tripping the performance
+heuristic without weakening the meaning. If the term is genuinely
+unavoidable, place the work under a `docs`, `test`, `perf`, or
+`ci`-infra type, which the heuristic exempts.
+
 ## PR body sections
 
-`.github/PULL_REQUEST_TEMPLATE.md` defines the required PR body shape.
-The required H2 sections, in order, are:
+`.github/PULL_REQUEST_TEMPLATE.md` defines the PR body shape. The H2
+headings form an allowlist enforced by `scripts/body_policy.py`
+(`unexpected_pr_sections`, mirrored client-side by
+`scripts/preflight_pr_template_shape.py`): only the headings listed below
+may appear, and a PR body carrying any other H2 is rejected. The body is
+conclusion-first (BLUF) -- `## Summary` leads, and `## Related Issue` is
+kept last, just before the agent-attribution footer, per GitHub
+convention. The headings, in order, are:
 
-- `## Summary` - one or two sentences that name what the PR changes and
-  why. Mirrors the linked issue's `Scope` and `Why`.
-- `## Related Issue` - a single `Refs #<number>` (or `Closes #<number>`,
-  etc.) line. Per CLAUDE.md section 3, every PR must cite its issue.
-  The keywords `Refs`, `Closes`, `Fixes`, and `Resolves` are accepted
-  (case-insensitive).
+- `## Summary` - the conclusion in one or two sentences: what the PR
+  changes, whether verification passed, and the risk level. Lead with the
+  outcome, not the journey. Required.
 - `## Facts` - observable evidence (diffs, command output, test names,
   log lines) per CLAUDE.md section 2. No speculation.
 - `## Assumptions` - what the author is trusting but has not verified.
@@ -163,6 +183,17 @@ The required H2 sections, in order, are:
   wrong, and how reversible it is, per CLAUDE.md section 4.
 - `## Rollback` - the exact steps to revert or disable the change in
   prod.
+- `## Text delta` - **conditional**: required only when the PR diff
+  touches universal instruction text (`.apm/instructions/**`,
+  `CLAUDE.md`, or `AGENTS.md`); omitted otherwise. It states the
+  character-level effect and the semantic before/after so a reviewer
+  sees both - line count and character count can disagree (a
+  consolidation may drop a line while adding characters). It must carry
+  all three of: a signed character-count change (e.g. `+20 chars` or
+  `chars: -3`), an `Added context` part, and a `Removed context` part
+  (say `moved` when a concept only relocated). Enforced by
+  `scripts/verify_text_delta_section.py` inside `verify-pr.yml`
+  (see [Body-policy gate](#body-policy-gate)). Refs #1178.
 - `## Verification` - one command/result pair per observation, in the
   shape below. Each entry is one fact about what was actually run.
   Type checks and linters verify shape, not behaviour; include at
@@ -200,6 +231,11 @@ The required H2 sections, in order, are:
   - `### Post-merge (auto-retro signal)` - read by
     `scripts/auto_retro.py`. Unchecked items become repair-history
     rows in the auto-opened retrospective issue.
+- `## Related Issue` - a single `Refs #<number>` (or `Closes #<number>`,
+  etc.) line, kept last per GitHub convention so the conclusion stays at
+  the top. Per CLAUDE.md section 3, every PR must cite its issue; this
+  heading is required. The keywords `Refs`, `Closes`, `Fixes`, and
+  `Resolves` are accepted (case-insensitive).
 
 The HTML comment at the top of `PULL_REQUEST_TEMPLATE.md` is rendered
 out of the final PR body and does not need to be preserved.
@@ -208,10 +244,10 @@ out of the final PR body and does not need to be preserved.
 
 | Body section | CLAUDE.md anchor | What it enforces |
 |---|---|---|
-| `Scope` (issue), `Summary` (PR) | section 1 | The goal is named before any work begins. |
-| `Why` with `Fact:` / `Speculation:` tags | section 2 | Facts and speculation are visibly separated; reviewers know which lines need pushback. |
+| `Scope` (issue), `Summary` (PR) | section 1 | The goal is named before any work begins; on a PR the `Summary` leads as the conclusion-first (BLUF) block. |
+| `Facts` with `Fact:` / `Speculation:` tags | section 2 | Facts and speculation are visibly separated; reviewers know which lines need pushback. |
 | `Proposed work` (issue), `Changes` (PR) | section 5 | The change touches only what it must; adjacent cleanups are not bundled in. |
-| `Acceptance criteria` (issue), `Verification` (PR) | section 1, section 4 | Completion has an observable check; the blast radius of an unverified merge is bounded. |
+| `Verification` / `Acceptance criteria` (issue), `Verification` (PR) | section 1, section 4 | Completion has an observable check; the blast radius of an unverified merge is bounded. |
 | `Related Issue` / `Refs #N` (PR) | section 3 | Every PR cites its issue; deterministic-harness invariant. |
 | `Parent` (issue) | section 5 | Umbrella relationships are explicit, so scope creep on a child does not silently expand the umbrella. |
 
@@ -221,16 +257,46 @@ See [`docs/archive/issue-pr-body-examples.md`](../archive/issue-pr-body-examples
 
 ## Body-policy gate
 
-Two layers of the body-shape contract are enforced today.
+Several layers of the body-shape contract are enforced today.
 
 ### Enforced today: H2 section presence (baseline gate)
 
-`.github/workflows/portable-pr-policy.yml` (job: `Validate body section structure`) shells out to
+`.github/workflows/verify-pr.yml` (job: `Validate body section structure`) shells out to
 `scripts/body_policy.py verify` and checks that every required H2 (or
 H3 for Issue Forms) heading from the lists above is present in the
-body. Bodies whose `created_at` predates `BODY_POLICY_CUTOFF`
-(currently `2026-05-26T00:00:00Z`) skip this check so the back-catalog
-stays exempt.
+body. For pull requests the required set (`_PR_REQUIRED`) includes
+`## Summary` (the conclusion-first BLUF block) and `## Related Issue`
+(consistent with the CLAUDE.md section 3 / `issue_link.py` requirement
+that every PR cite its issue). Bodies whose `created_at` predates
+`BODY_POLICY_CUTOFF` (currently `2026-05-26T00:00:00Z`) skip this check
+so the back-catalog stays exempt.
+
+### Enforced today: PR H2 allowlist
+
+For pull requests the baseline gate also rejects any H2 heading outside
+the allowlist `_PR_ALLOWED` (the `_PR_REQUIRED` set plus the conditional
+`## Text delta`). `scripts/body_policy.py:unexpected_pr_sections`
+enumerates the offending headings and `verify_pr_allowed_sections`
+renders the deny message; the same function backs both the server gate
+(`_verify`) and the client hook
+(`scripts/preflight_pr_template_shape.py`), so an unlisted section such
+as `## Notes` is blocked before the MCP call and again in CI. H3
+subsections (the Checklist's `### Bootstrap` / `### After-merge` /
+`### Post-merge`) are part of their parent section and are not
+allowlisted as standalone H2s. The check runs only for in-window bodies
+(the `created_at < cutoff` skip exempts the back-catalog). Refs #1396.
+
+### Enforced today: standard-doc / constant sync gate
+
+`tests/test_body_policy_standard_doc.py` parses the `## <Name>` headings
+listed in the "Issue body sections" and "PR body sections" sections of
+this document and asserts they match the `scripts/body_policy.py`
+constants in either direction: the PR list equals `_PR_ALLOWED`, the
+issue list equals `_ISSUE_COMMON_REQUIRED` plus the optional
+`_ISSUE_OPTIONAL` (`Parent`), and every `_ISSUE_TRACKING_REQUIRED` name
+is documented somewhere in this runbook. A change to either the prose or
+the constants that is not mirrored in the other fails the test, so the
+runbook cannot silently drift from the validator. Refs #1191, #1396.
 
 ### Enforced today: PR shape gate (post-2026-05-26)
 
@@ -291,7 +357,7 @@ Refs #1025.
 
 ### Enforced today: Refs check
 
-`.github/workflows/portable-pr-policy.yml` (job: `Validate PR-issue link`) shells out to
+`.github/workflows/verify-pr.yml` (job: `Validate PR-issue link`) shells out to
 `scripts/issue_link.py verify`. The script:
 
 - strips HTML comments from the PR body (so `<!-- Refs #1 -->` is ignored);
@@ -344,8 +410,9 @@ legitimate partial work against a non-umbrella issue.
 
 The GitHub MCP write tools (`mcp__github__create_pull_request` and
 `mcp__github__update_pull_request`) rewrite the PR body before storing
-it. Two transforms matter for PR-body authors (verified on PRs #1033 and
-#1034, per #1035):
+it. Several transforms matter for PR-body authors (the first two
+verified on PRs #1033 and #1034, per #1035; the third in #1255 and
+#1265):
 
 - HTML comments are stripped. A `<!-- partial -->` line written through
   the MCP layer is deleted from the stored body, so the legacy opt-out is
@@ -358,6 +425,16 @@ it. Two transforms matter for PR-body authors (verified on PRs #1033 and
   avoid literal arrow sequences and double quotes in prose, or accept
   that they will render as entities. The `partial-pr` marker is safe
   because it uses only a single hyphen between two letters.
+- An angle-bracket placeholder token is stripped as an unknown HTML tag.
+  A bare token such as `<sha>` (a less-than sign, an identifier, a
+  greater-than sign) -- for example a `git revert` argument -- is
+  deleted **entirely** from the stored body, not even preserved as an
+  `&lt;...&gt;` entity, and the deletion happens inside fenced code
+  blocks too (verified in the original body of #1265, where the
+  bracketed example vanished from a fenced block). PR bodies authored
+  through the MCP layer should therefore avoid angle-bracket
+  placeholders and name the value in plain words instead. Observed in
+  #1255 and #1265.
 
 Local Claude CLI, Codex, and CI do not pass bodies through the MCP write
 path, so a `<!-- partial -->` line authored there is preserved; both
@@ -403,10 +480,10 @@ are recorded here so future contributors do not need to re-derive them.
 
 | Surface | Status | Rationale |
 |---|---|---|
-| PR body | Enforced. | `portable-pr-policy.yml` (`Validate PR-issue link` job) runs `scripts/issue_link.py verify`, which calls `gh api /repos/<repo>/issues/<N>` per ref and fails with `Referenced #N does not exist in <repo>.` for unresolved numbers. |
-| PR title | Inversely enforced. | `scripts/preflight_title_policy.py` (client-side preflight) and `scripts/title_policy.py` (`portable-pr-policy.yml` `Validate title policy` job) deny any `(#NNN)` token in the title per [#167](https://github.com/tvna/claude-md/issues/167) / [#214](https://github.com/tvna/claude-md/issues/214). With the token forbidden, no number reaches the title to existence-check. |
+| PR body | Enforced. | `verify-pr.yml` (`Validate PR-issue link` job) runs `scripts/issue_link.py verify`, which calls `gh api /repos/<repo>/issues/<N>` per ref and fails with `Referenced #N does not exist in <repo>.` for unresolved numbers. |
+| PR title | Inversely enforced. | `scripts/preflight_title_policy.py` (client-side preflight) and `scripts/title_policy.py` (`verify-pr.yml` `Validate title policy` job) deny any `(#NNN)` token in the title per [#167](https://github.com/tvna/claude-md/issues/167) / [#214](https://github.com/tvna/claude-md/issues/214). With the token forbidden, no number reaches the title to existence-check. Exception: a `revert(<scope>): ...` title may keep a `(#NNN)` token (`title_policy.pr_title_ref_is_exempt`) because it names the reverted PR/commit, not a redundant copy of the body issue link -- consistent with the `git revert` rollback default in CLAUDE.md section 3. |
 | Squash commit subject | Transitively covered. | GitHub's squash-merge default forms the subject as `<PR title> (#<PR-number>)`. The PR title is already gated, and `(#<PR-number>)` is the merge-event-issued PR number for this repository, so a separate existence check would be redundant. |
-| Individual commit message | Intentionally not enforced. | Only one commit lands on `main` per PR (squash merge), and that commit carries a PR body that has already passed the `Validate PR-issue link` job in `portable-pr-policy.yml`. Gating every intermediate commit would (a) force a `Refs #N` line into commits whose link is already covered transitively, and (b) duplicate a check that the squash step makes structurally guaranteed. |
+| Individual commit message | Intentionally not enforced. | Only one commit lands on `main` per PR (squash merge), and that commit carries a PR body that has already passed the `Validate PR-issue link` job in `verify-pr.yml`. Gating every intermediate commit would (a) force a `Refs #N` line into commits whose link is already covered transitively, and (b) duplicate a check that the squash step makes structurally guaranteed. |
 
 If the squash-merge default on `main` is ever loosened (for example,
 allowing merge commits or rebase merges), the "transitively covered" and
@@ -419,6 +496,27 @@ re-evaluated.
 Commit naming convention (titles only - it does not read the body). It is
 not part of the body-policy gate, but contributors who hit a body-policy
 failure often also need to fix their title at the same time.
+
+### Commit message ASCII coverage
+
+Commit messages on `main` are ASCII by construction, not by a dedicated
+commit-message gate. The coverage mirrors the `#N` link table above:
+
+| Surface | ASCII status | Mechanism |
+|---|---|---|
+| Squash commit subject | Transitively covered. | The squash subject is `<PR title> (#<PR-number>)`. `title_policy.is_ascii_title` already denies a non-ASCII PR title in the `Validate title policy` job, so the subject cannot carry non-ASCII. |
+| Squash commit body | Covered with one residual gap. | The squash body is composed from the PR body, which passes the non-ASCII defense (`scripts/preflight_non_ascii.py` client-side preflight + `scripts/scan_non_ascii.py` server-side). That defense permits non-ASCII only behind the explicit `<!-- non-ascii-ack -->` opt-out, so an acked PR body could in principle carry non-ASCII into the squash commit body. |
+
+No separate commit-message ASCII gate is added. The subject is already
+covered; the residual body gap is low-probability (zero non-ASCII subjects
+and zero non-ASCII bodies across the last 300 `main` commits at the time of
+writing, per the [#18](https://github.com/tvna/claude-md/issues/18)
+analysis); and the squash body is editable in the merge UI, so it cannot be
+gated deterministically before merge. If a non-ASCII commit body is ever
+observed on `main`, the durable fix is a post-merge detect-and-alert on
+`main` (mirroring `ruleset-drift.yml`), not a pre-commit hook that the
+merge step can bypass. As with the link table, this reasoning assumes
+squash-merge-only on `main`; if that default is loosened, re-evaluate.
 
 ## Trusted-bot bypass
 

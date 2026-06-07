@@ -21,7 +21,7 @@ import auto_retro as ar
 import body_policy as bp
 import pytest
 
-pytestmark = pytest.mark.shard_ci_ops
+pytestmark = pytest.mark.shard_ci_ops_2
 # ---------------------------------------------------------------------------
 # Alignment: required sections must match body_policy
 # ---------------------------------------------------------------------------
@@ -605,6 +605,19 @@ class TestRepairHistoryTable:
         ]
         assert len(multi_lines) == 1
         assert "[policy-artifact]" in multi_lines[0]
+
+    def test_revert_row_carries_policy_artifact_marker(self) -> None:
+        """Refs #1287: synthetic Revert commit row carries the marker and
+        prompts co-fire correlation."""
+        table = ar._build_repair_history_table(
+            None, ['Revert "feat: x"'], 1
+        )
+        revert_lines = [
+            line for line in table.splitlines() if "| Revert commit |" in line
+        ]
+        assert len(revert_lines) == 1
+        assert "[policy-artifact]" in revert_lines[0]
+        assert "co-firing" in revert_lines[0]
 
     def test_policy_artifact_footnote_for_synthetic_rows_without_merge(
         self,
@@ -2089,11 +2102,19 @@ class TestComputeRepairSignals:
         out = ar.compute_repair_signals(self._pr(), has_inline_comments=True)
         assert out == {
             "inline_review_comments": True,
-            "body_cites_refs": False,
             "fix_typed_title": False,
             "multi_commit_pr": False,
             "verification_pairs_failed": False,
         }
+
+    def test_body_cites_refs_signal_is_retired(self) -> None:
+        # Retired as a standalone trigger in #1227: a PR whose only
+        # evidence is a Refs line fires no signal.
+        out = ar.compute_repair_signals(
+            self._pr(body="Refs #287\nRefs #298"), has_inline_comments=False
+        )
+        assert "body_cites_refs" not in out
+        assert not any(out.values())
 
     def test_post_merge_signal_removed(self) -> None:
         """Per #418, `post_merge_unchecked` is no longer returned at merge time."""
@@ -2111,26 +2132,6 @@ class TestComputeRepairSignals:
             self._pr(body=body), has_inline_comments=False
         )
         assert not any(out.values())
-
-    def test_body_refs_signal_fires_for_refs(self) -> None:
-        out = ar.compute_repair_signals(
-            self._pr(body="Refs #287\nRefs #298"), has_inline_comments=False
-        )
-        assert out["body_cites_refs"] is True
-
-    def test_body_refs_signal_fires_for_closes_fixes_resolves(self) -> None:
-        for keyword in ["Closes", "Fixes", "Resolves"]:
-            out = ar.compute_repair_signals(
-                self._pr(body=f"{keyword} #1"), has_inline_comments=False
-            )
-            assert out["body_cites_refs"] is True, keyword
-
-    def test_body_refs_ignores_html_commented_refs(self) -> None:
-        out = ar.compute_repair_signals(
-            self._pr(body="<!-- Refs #999 -->\nplain text"),
-            has_inline_comments=False,
-        )
-        assert out["body_cites_refs"] is False
 
     def test_fix_typed_title_signal_fires(self) -> None:
         out = ar.compute_repair_signals(
@@ -2219,6 +2220,111 @@ class TestComputeRepairSignals:
         )
         assert out["multi_commit_pr"] is True
 
+    def test_multi_commit_signal_excludes_git_standard_revert(self) -> None:
+        # A revert-only multi-commit PR must not fire on its own (#1287).
+        out = ar.compute_repair_signals(
+            self._pr(commits=2),
+            has_inline_comments=False,
+            commit_subjects=[
+                'Revert "feat(x): add x"',
+                "feat(x): add x",
+            ],
+        )
+        assert out["multi_commit_pr"] is False
+
+    def test_multi_commit_signal_excludes_conventional_revert(self) -> None:
+        for revert_subject in [
+            "revert(automerge): restore exemption",
+            "revert: restore exemption",
+            "revert!: restore exemption",
+            "revert(automerge)!: restore exemption",
+        ]:
+            out = ar.compute_repair_signals(
+                self._pr(commits=2),
+                has_inline_comments=False,
+                commit_subjects=[revert_subject, "feat(x): add x"],
+            )
+            assert out["multi_commit_pr"] is False, revert_subject
+
+    def test_multi_commit_signal_fires_when_pure_commits_exceed_one_with_revert(
+        self,
+    ) -> None:
+        out = ar.compute_repair_signals(
+            self._pr(commits=3),
+            has_inline_comments=False,
+            commit_subjects=[
+                'Revert "feat(x): add x"',
+                "feat(x): add a",
+                "feat(x): add b",
+            ],
+        )
+        assert out["multi_commit_pr"] is True
+
+    def test_multi_commit_signal_double_revert_counts_once(self) -> None:
+        out = ar.compute_repair_signals(
+            self._pr(commits=2),
+            has_inline_comments=False,
+            commit_subjects=[
+                'Revert "Revert "feat(x): add x""',
+                "feat(x): add x",
+            ],
+        )
+        assert out["multi_commit_pr"] is False
+
+    def test_multi_commit_signal_revert_in_scope_slot_not_subtracted(
+        self,
+    ) -> None:
+        # `fix(revert): ...` is a real fix commit, not a rollback: revert
+        # appears only in the scope slot, so it must NOT be subtracted.
+        out = ar.compute_repair_signals(
+            self._pr(commits=2),
+            has_inline_comments=False,
+            commit_subjects=[
+                "fix(revert): correct the revert helper",
+                "feat(x): add x",
+            ],
+        )
+        assert out["multi_commit_pr"] is True
+
+
+class TestCountRevert:
+    def test_counts_git_standard_and_conventional(self) -> None:
+        count = ar._count_revert(
+            [
+                'Revert "feat(x): add x"',
+                "feat(x): add x",
+                "revert(automerge): restore exemption",
+                "revert: plain revert",
+                "fix(scripts): tweak",
+            ]
+        )
+        assert count == 3
+
+    def test_returns_zero_when_no_revert_subjects(self) -> None:
+        count = ar._count_revert(["feat(x): a", "fix(y): b", "docs(z): c"])
+        assert count == 0
+
+    def test_double_revert_counts_once(self) -> None:
+        count = ar._count_revert(['Revert "Revert "feat: x""'])
+        assert count == 1
+
+    def test_handles_leading_whitespace(self) -> None:
+        count = ar._count_revert(['   Revert "feat: x"'])
+        assert count == 1
+
+    def test_lowercase_git_standard_does_not_count(self) -> None:
+        # Neither Git-standard (capital `Revert "`) nor Conventional.
+        count = ar._count_revert(['revert "feat: x"'])
+        assert count == 0
+
+    def test_revert_without_colon_does_not_count(self) -> None:
+        count = ar._count_revert(["revert this thing", "reverted earlier work"])
+        assert count == 0
+
+    def test_revert_in_scope_slot_does_not_count(self) -> None:
+        count = ar._count_revert(["fix(revert): correct helper"])
+        assert count == 0
+
 
 class TestCountMergeFromMain:
     def test_counts_both_prefix_variants(self) -> None:
@@ -2257,10 +2363,10 @@ class TestCountMergeFromMain:
 class TestRenderRepairSignals:
     def test_renders_each_signal(self) -> None:
         text = ar.render_repair_signals(
-            {"inline_review_comments": True, "body_cites_refs": False}
+            {"inline_review_comments": True, "multi_commit_pr": False}
         )
         assert "inline_review_comments=true" in text
-        assert "body_cites_refs=false" in text
+        assert "multi_commit_pr=false" in text
 
 
 _NEW_SHAPE_BODY = """## Summary
@@ -3036,6 +3142,48 @@ class TestIssue927Corpus:
             rows
         )
         assert standalone is expected, f"issue #{issue} ({group})"
+
+
+class TestIssue1227VerificationSkipCorpus:
+    """#1227 corpus: exit=0 / environment-skip false-positive repair.
+
+    Each result below was scored as a verification FAILURE before the
+    #1227 fix, firing ``verification_pairs_failed`` on a merged PR that
+    did no repair work (the dominant open-retro false positive). After
+    the fix the exit-zero and environment-skip forms classify as passing,
+    while genuine local failures keep failing. Refs #1227, #851, #1071,
+    #1074, #1110, #1216.
+    """
+
+    @pytest.mark.parametrize(
+        "result",
+        [
+            "total preflight exit=0 (skill_quality_gate skipped on missing"
+            " local prereqs: bin:waza, env:GH_TOKEN_API)",
+            "PREFLIGHT_EXIT=0 ... all pass; verify_ruleset_sync skipped",
+            "skip: PR is a retro-close PR (rc=0)",
+            "blocked: GH_TOKEN unset in this environment",
+            "exit code 0",
+            "rc=0",
+            "not applicable",
+        ],
+    )
+    def test_passing_results_no_longer_fire(self, result: str) -> None:
+        assert ar._result_is_passing(result) is True
+
+    @pytest.mark.parametrize(
+        "result",
+        [
+            "blocked: ModuleNotFoundError: No module named 'hypothesis'",
+            "not run; local uv 0.11.16 does not match repository"
+            " required-version ==0.11.11",
+            "failed: 3 tests broken",
+            "exit 1",
+            "0 passed, 3 failed",
+        ],
+    )
+    def test_genuine_failures_still_fail(self, result: str) -> None:
+        assert ar._result_is_passing(result) is False
 
 
 # ---------------------------------------------------------------------------
@@ -4289,12 +4437,16 @@ def test_sentinel_workflow_file_exists_and_runs_sentinel_subcommand() -> None:
     """The schedule workflow that backs sentinel_run must exist and
     invoke the right CLI subcommand. Drift between the script and the
     workflow would silently disable the sentinel.
+
+    The sentinel was consolidated into daily-maintenance.yml (issue #1319);
+    its scan-and-close job preserves the original cron, permissions, and CLI
+    invocation.
     """
     repo_root = Path(__file__).resolve().parent.parent
-    workflow = repo_root / ".github" / "workflows" / "auto-retro-sentinel.yml"
+    workflow = repo_root / ".github" / "workflows" / "daily-maintenance.yml"
     assert workflow.exists(), (
-        "Strategy B sentinel needs .github/workflows/auto-retro-sentinel.yml "
-        "(issue #414)"
+        "Strategy B sentinel needs .github/workflows/daily-maintenance.yml "
+        "(issue #414, consolidated in #1319)"
     )
     text = workflow.read_text(encoding="utf-8")
     assert "python3 scripts/auto_retro.py sentinel" in text
@@ -4563,6 +4715,31 @@ class TestComputePriorFromLabels:
         prior = ar.compute_prior_from_labels(past)
         assert prior["multi_commit_pr"] == (0.5, 2)
 
+    def test_epoch_cutoff_excludes_pre_epoch_retros(self) -> None:
+        # Refs #1227: retros below the epoch boundary measured the old
+        # signal semantics and must not drive the prior. With the cutoff,
+        # only the post-epoch retro contributes; the pre-epoch fp retro
+        # is dropped, so the signal degrades to the empty-prior net.
+        past = [
+            ar.PastRetro(
+                number=900,
+                signals=frozenset({"verification_pairs_failed"}),
+                labels=frozenset({rl.RETRO_FP}),
+            ),
+            ar.PastRetro(
+                number=1300,
+                signals=frozenset({"verification_pairs_failed"}),
+                labels=frozenset({rl.RETRO_TP}),
+            ),
+        ]
+        # Pure tally (default epoch) sees both -> 1 fp of 2.
+        assert ar.compute_prior_from_labels(past)[
+            "verification_pairs_failed"
+        ] == (0.5, 2)
+        # With the epoch boundary the pre-epoch fp retro is excluded.
+        gated = ar.compute_prior_from_labels(past, epoch_min_number=1228)
+        assert gated["verification_pairs_failed"] == (0.0, 1)
+
 
 class TestShouldSkipByPrior:
     """Skip-band verdict over the active signal set."""
@@ -4823,6 +5000,32 @@ class TestFetchPastRetroLabels:
         assert past[1].signals == frozenset(
             {"inline_review_comments", "fix_typed_title"}
         )
+
+    def test_parses_state_and_title_with_defaults(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """state/title populate the #1386 dashboard; absent fields default."""
+        payload = {
+            "items": [
+                {
+                    "number": 100,
+                    "labels": [],
+                    "body": "",
+                    "state": "closed",
+                    "title": "chore(auto-retro): review PR #42 repair loops",
+                },
+                {"number": 101, "labels": [], "body": ""},
+            ]
+        }
+        monkeypatch.setattr(
+            ar, "gh_api", lambda *_a, **_kw: json.dumps(payload)
+        )
+        past = ar.fetch_past_retro_labels("o/r")
+        assert past[0].state == "closed"
+        assert past[0].title == "chore(auto-retro): review PR #42 repair loops"
+        # Missing fields fall back to the pre-#1386 defaults.
+        assert past[1].state == "open"
+        assert past[1].title == ""
 
     def test_limit_truncates_items(
         self, monkeypatch: pytest.MonkeyPatch

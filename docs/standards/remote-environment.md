@@ -11,7 +11,7 @@ The Claude Code on the Web remote environment ships with a stale `uv` (`0.8.17`)
 | `pyproject.toml` `[tool.uv].required-version` | All | **Single source of truth for the pinned uv version.** Exact `==X.Y.Z` pin (see [#112](https://github.com/tvna/claude-md/issues/112) for the tradeoff). |
 | `scripts/uv_pin.py` | All | Pin reader / drift checker / upstream-staleness checker. Single implementation consumed by CI, the SessionStart hook, and `tests/test_uv_pin.py`. |
 | `tests/test_uv_pin.py` | CI | Pytest suite for `scripts/uv_pin.py` (run by the `lint-uv-pin` job before the drift check). |
-| `.github/workflows/generate-agents.yml`, `.github/workflows/portable-pr-policy.yml` | CI | Call `scripts/uv_pin.py read` to derive the version, then install via the existing `curl` flow. No version literal lives here. |
+| `.github/workflows/generate-agents.yml`, `.github/workflows/verify-pr.yml` | CI | Call `scripts/uv_pin.py read` to derive the version, then install via the existing `curl` flow. No version literal lives here. |
 | `scripts/install-uv.sh` | Remote session | Calls `scripts/uv_pin.py read` to derive the pin, then installs `uv` at SessionStart. |
 | `.claude/settings.json` | Remote session | Registers `scripts/install-uv.sh` as the `SessionStart` hook. Permitted under the [#109](https://github.com/tvna/claude-md/issues/109) carve-out in `docs/standards/repo-scope.md`. |
 | `.codex/hooks.json` | Codex session | Registers the same SessionStart hook shape for Codex. The uv installer remains Claude-remote-gated until Codex documents a stable remote-only signal; the language-context hook consumes Codex's `cwd` event field. Tracked by [#604](https://github.com/tvna/claude-md/issues/604) / [#606](https://github.com/tvna/claude-md/issues/606) / [#616](https://github.com/tvna/claude-md/issues/616). |
@@ -38,6 +38,8 @@ An earlier draft of this runbook ([#107](https://github.com/tvna/claude-md/pull/
 - The same shell-execution risk that motivated the broad `.claude/` ban applies *more* to the Web UI script, because it sits entirely outside change control.
 
 The carve-out for `.claude/settings.json` pulls the hook surface back under PR review. See `docs/standards/repo-scope.md` § "Security tradeoff for `.claude/settings.json`" for the recorded risk-acceptance.
+
+This git-external boundary is not limited to the setup-script field. Per the official docs (https://code.claude.com/docs/en/claude-code-on-the-web § "Network access"), the **network access policy** — the access level (`None` / `Trusted` / `Custom`) and any custom allowed domains — is likewise part of the environment configuration set in the Cloud environment UI at environment create/edit time, and is not stored in git. The `.claude/settings.json` carve-out only pulls the *SessionStart hook* back under PR review; the network policy remains Web-UI-managed (git-external) by design. So when reasoning about what is and is not under change control, treat network access policy the same as the setup-script field — it lives in the Web UI, not the repo.
 
 ## Codex boundary
 
@@ -104,7 +106,7 @@ uv run --with "apm-cli==0.12.1" apm compile            # must exit 0
 git diff --exit-code -- CLAUDE.md AGENTS.md            # must exit 0 (no drift vs CI)
 ```
 
-The final two commands match the CI `portable-pr-policy.yml` APM drift steps. If they pass locally, the remote session is functionally equivalent to CI.
+The final two commands match the CI `verify-pr.yml` APM drift steps. If they pass locally, the remote session is functionally equivalent to CI.
 
 Direct script test (any environment, no session needed):
 
@@ -128,6 +130,7 @@ Upstream-follow: Dependabot (`.github/dependabot.yml`) does not natively bump `[
 
 - **Outbound network policy.** The hook fetches from `github.com/astral-sh/uv/releases`. If the environment's network policy denies that, the hook fails at session start. Confirm policy before first use; see https://code.claude.com/docs/en/claude-code-on-the-web for policy options.
 - **Hook execution mode is synchronous.** The session does not become interactive until `uv sync --locked` completes (typically <10 s on a warm container, longer on a fresh one). This is intentional — it guarantees the first command sees the pinned `uv` and the locked venv. If startup latency becomes a problem, the script can switch to the async pattern (`{"async": true, "asyncTimeout": 300000}`) at the cost of a race window where early commands may see stale `uv`.
+- **The pin read must not go through `uv run`.** `scripts/install-uv.sh` reads `[tool.uv].required-version` with a bare `python3` / inline `tomllib` call (`python3 scripts/uv_pin.py read`, before the pinned binary is installed and on `PATH`); the [Verification](#verification) recipe and `scripts/session_uv_local_pin.sh` follow the same pattern. Do not redirect that read through `uv run python`. It would be circular: the stock container `uv` (`0.8.17`) does not satisfy the pin, and `uv run` aborts on a `required-version` mismatch (the failure mode this hook repairs — see [`docs/runbooks/host-uv-pin.md`](../runbooks/host-uv-pin.md)), so the read would fail at the exact moment it is meant to fix the drift. A bare-`python3` read also avoids `uv run`'s implicit project sync (venv creation, dependency install, index network access) for a step that only needs one TOML value. `uv` may run project code only *after* step 4 puts the pinned binary on `PATH`.
 
 ## References
 
@@ -136,7 +139,7 @@ Upstream-follow: Dependabot (`.github/dependabot.yml`) does not natively bump `[
 - [#58](https://github.com/tvna/claude-md/issues/58) — parent governance issue for the `.claude/` prohibition.
 - `docs/standards/repo-scope.md` § "Security tradeoff for `.claude/settings.json`" — risk-acceptance record.
 - `pyproject.toml` — canonical `[tool.uv].required-version` (the single source of truth, see [#112](https://github.com/tvna/claude-md/issues/112)).
-- `.github/workflows/generate-agents.yml`, `.github/workflows/portable-pr-policy.yml` — consumers via inline `tomllib` read.
+- `.github/workflows/generate-agents.yml`, `.github/workflows/verify-pr.yml` — consumers via inline `tomllib` read.
 - `.github/workflows/verify-agents.yml` (`lint-uv-pin` job) — drift gate that fails any reintroduction of a uv-version literal outside `pyproject.toml`.
 - `.github/dependabot.yml` — weekly bumps for `github-actions` SHAs and `uv.lock` entries.
 - https://code.claude.com/docs/en/claude-code-on-the-web — environment / network policy documentation.

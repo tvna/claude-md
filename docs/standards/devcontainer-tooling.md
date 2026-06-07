@@ -35,7 +35,8 @@ reaches the network at *runtime*, add the destination to
 | `scripts/preflight_all.py` (`Step.required_bin`) | The authoritative declaration that a gate needs a tool at runtime. |
 | `scripts/scan_devcontainer_tool_drift.py` | Deterministic gate: every `required_bin` tool must be provisioned in `flake.nix` (matched by a registered marker) or explicitly allowlisted with a rationale. |
 | `.github/workflows/verify-agents.yml` (`lint-scripts-static`) | Runs the drift gate on every PR. |
-| `.devcontainer/network/*.allowlist` | Runtime egress destinations, when a provisioned tool needs the network at runtime. |
+| `.devcontainer/network/*.allowlist` | Runtime egress destinations, when a provisioned tool needs the network at runtime. Each host carries an inline triage rationale. |
+| `scripts/scan_allowlist_rationale.py` | Deterministic gate: every allowlist host must carry an inline triage rationale recorded via the network-triage runbook. |
 
 ## How the gate works
 
@@ -57,12 +58,31 @@ reaches the network at *runtime*, add the destination to
 4. Run `python3 scripts/scan_devcontainer_tool_drift.py verify` -- it must
    pass before the change merges.
 
+## Network destination triage
+
+Provisioning a tool answers "is the binary present"; it does not answer "is
+the tool's outbound traffic safe to allow". Before a runtime destination is
+added to a `.devcontainer/network/*.allowlist` file, triage it with the
+observe -> evaluate -> decide -> verify procedure in
+[`docs/runbooks/devcontainer-tool-network-triage.md`](../runbooks/devcontainer-tool-network-triage.md).
+
+The decision is recorded as an inline trailing rationale comment on the host
+entry (`api.example.com  # why this destination is allowed`). That record is
+not optional: `scripts/scan_allowlist_rationale.py verify` fails CI (in the
+`lint-scripts-static` job) when any allowlist host lacks a rationale, so a new
+egress destination cannot be admitted on reviewer memory alone. The inline
+`#` is stripped by the allowlist parser, so the rationale never changes the
+resolved host set.
+
 ## Verification
 
 - `python3 scripts/scan_devcontainer_tool_drift.py verify` exits 0 when every
   gate-required tool is provisioned, exit 1 otherwise.
 - `tests/test_scan_devcontainer_tool_drift.py` covers the gate logic and
   asserts the live repository passes.
+- `python3 scripts/scan_allowlist_rationale.py verify` exits 0 when every
+  egress allowlist host carries an inline triage rationale, exit 1 otherwise;
+  covered by `tests/test_scan_allowlist_rationale.py`.
 - Note: `nix build` is not runnable in the Claude Code on the Web environment;
   flake derivation changes are verified by pinned SHA256 and by mirroring a
   proven derivation, with real build confirmation deferred to CI or a

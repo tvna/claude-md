@@ -329,3 +329,93 @@ class TestRunAll:
         by_name = {r.name: r for r in results}
         assert by_name["heavy"].status == "pass"
         assert self.recorded == []
+
+
+# ---------------------------------------------------------------------------
+# Cheap-tier parallelization (refs #1245)
+# ---------------------------------------------------------------------------
+
+
+class TestCheapWorkers:
+    def test_override_clamped_to_n(self) -> None:
+        assert pa._cheap_workers(3, {"PREFLIGHT_CHEAP_WORKERS": "10"}) == 3
+
+    def test_override_one_forces_serial(self) -> None:
+        assert pa._cheap_workers(5, {"PREFLIGHT_CHEAP_WORKERS": "1"}) == 1
+
+    def test_invalid_override_falls_back_to_scaled(self) -> None:
+        # A non-int override is ignored; the scaled default still clamps to n.
+        assert pa._cheap_workers(2, {"PREFLIGHT_CHEAP_WORKERS": "abc"}) == 2
+
+    def test_default_is_positive(self) -> None:
+        assert pa._cheap_workers(4, {}) >= 1
+
+
+class TestRunCheap:
+    def test_results_in_declaration_order(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # Real thread pool (no WORKERS override): every step returns, in order.
+        monkeypatch.setattr(
+            pa, "run_step", lambda step, _c, _e: pa.StepResult(name=step.name, status="pass")
+        )
+        steps = [pa.Step(name=f"s{i}", argv=("true",)) for i in range(8)]
+        results = pa._run_cheap(steps, pa.REPO_ROOT, {})
+        assert [r.name for r in results] == [f"s{i}" for i in range(8)]
+        assert all(r.status == "pass" for r in results)
+
+    def test_serial_steps_run_first_in_declaration_order(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        calls: list[str] = []
+
+        def recording(step: pa.Step, _c: Path, _e: dict[str, str]) -> pa.StepResult:
+            calls.append(step.name)
+            return pa.StepResult(name=step.name, status="pass")
+
+        monkeypatch.setattr(pa, "run_step", recording)
+        # Interleave the working-tree-mutating serial steps among parallel ones.
+        names = [
+            "a",
+            "workflow_diagram_doc",
+            "b",
+            "preflight_branch_base",
+            "c",
+            "auto_retro_decision_tree_doc",
+            "d",
+        ]
+        steps = [pa.Step(name=n, argv=("true",)) for n in names]
+        # Force the parallel tier serial so the call order is deterministic.
+        pa._run_cheap(steps, pa.REPO_ROOT, {"PREFLIGHT_CHEAP_WORKERS": "1"})
+        # The three serial steps run first, in their declaration order.
+        assert calls[:3] == [
+            "workflow_diagram_doc",
+            "preflight_branch_base",
+            "auto_retro_decision_tree_doc",
+        ]
+        # The parallel steps follow, in declaration order under WORKERS=1.
+        assert calls[3:] == ["a", "b", "c", "d"]
+
+    def test_workers_one_preserves_serial_order(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        calls: list[str] = []
+
+        def recording(step: pa.Step, _c: Path, _e: dict[str, str]) -> pa.StepResult:
+            calls.append(step.name)
+            return pa.StepResult(name=step.name, status="pass")
+
+        monkeypatch.setattr(pa, "run_step", recording)
+        steps = [pa.Step(name=f"p{i}", argv=("true",)) for i in range(5)]
+        pa._run_cheap(steps, pa.REPO_ROOT, {"PREFLIGHT_CHEAP_WORKERS": "1"})
+        assert calls == [f"p{i}" for i in range(5)]
+
+    def test_parallel_failure_surfaces(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        def fake(step: pa.Step, _c: Path, _e: dict[str, str]) -> pa.StepResult:
+            status = "fail" if step.name == "p2" else "pass"
+            return pa.StepResult(name=step.name, status=status)
+
+        monkeypatch.setattr(pa, "run_step", fake)
+        steps = [pa.Step(name=f"p{i}", argv=("true",)) for i in range(5)]
+        results = pa._run_cheap(steps, pa.REPO_ROOT, {})
+        by_name = {r.name: r for r in results}
+        assert by_name["p2"].status == "fail"
+        assert [r.name for r in results] == [f"p{i}" for i in range(5)]

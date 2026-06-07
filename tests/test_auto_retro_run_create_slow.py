@@ -46,7 +46,10 @@ class TestRunCreateFailSoft:
     ) -> None:
         """If the back-link POST fails, run() must still return 0 -- the
         retro issue is already created and rolling it back would be
-        worse than a missing back-link."""
+        worse than a missing back-link.
+
+        PR-thread comments are opt-in since #1386, so the flag is set."""
+        monkeypatch.setenv("AUTO_RETRO_PR_COMMENTS", "1")
         seen = orchestrator_recorder(
             monkeypatch,
             created_response={"number": 777, "html_url": "https://x/i/777"},
@@ -68,7 +71,10 @@ class TestRunCreateFailSoft:
     ) -> None:
         """If the label POST fails, run() must still return 0 -- the retro
         issue and back-link comment are already in place; the label is a
-        secondary signal and must not roll back the audit trail."""
+        secondary signal and must not roll back the audit trail.
+
+        PR-thread comments are opt-in since #1386, so the flag is set."""
+        monkeypatch.setenv("AUTO_RETRO_PR_COMMENTS", "1")
         seen = orchestrator_recorder(
             monkeypatch,
             created_response={"number": 777, "html_url": "https://x/i/777"},

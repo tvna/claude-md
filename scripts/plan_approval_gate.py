@@ -11,11 +11,9 @@ to stderr and exits 0. A hook bug must not block the session.
 
 from __future__ import annotations
 
-import json
-import sys
 from typing import Any
 
-from _hook_runtime import emit_decision
+from _hook_runtime import emit_decision, read_event
 
 _PLAN_DIR = "/tmp/claude-plans/"  # noqa: S108
 
@@ -51,20 +49,10 @@ def decide(event: dict[str, Any]) -> dict[str, Any] | None:
 
 
 def main() -> int:
-    try:
-        raw = sys.stdin.read()
-        if not raw.strip():
-            return 0
-        event = json.loads(raw)
-        if not isinstance(event, dict):
-            print(
-                "::error::plan_approval_gate: event must be a JSON object",
-                file=sys.stderr,
-            )
-            return 0
-        emit_decision(decide(event))
-    except (json.JSONDecodeError, ValueError) as exc:
-        print(f"::error::plan_approval_gate: {exc}", file=sys.stderr)
+    event = read_event("plan_approval_gate")
+    if event is None or not isinstance(event, dict):
+        return 0
+    emit_decision(decide(event), "plan_approval_gate")
     return 0
 
 

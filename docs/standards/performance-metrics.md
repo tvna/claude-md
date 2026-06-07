@@ -43,7 +43,7 @@ CI integration is **deferred to Phase ≥5** (e.g. a workflow that runs the harn
 - `CLAUDE.md` and `AGENTS.md` checked out at a given commit SHA on `main` (the harness reads them; it does **not** re-run `apm compile`, so the measurement matches what submodule consumers actually receive at that SHA).
 - The version-pinned benchmark spec at `benchmarks/spec/v<N>/` from that same SHA.
 
-Reading the committed compiled artifacts — rather than recompiling — means metric (a) measures what consumers see, not what the source could re-emit if `apm-cli` versions drifted. `portable-pr-policy.yml` already guarantees source and compiled artifacts stay in sync on `main`.
+Reading the committed compiled artifacts — rather than recompiling — means metric (a) measures what consumers see, not what the source could re-emit if `apm-cli` versions drifted. The `portable-pr-policy` job in `verify-pr.yml` already guarantees source and compiled artifacts stay in sync on `main`.
 
 ### What it emits
 

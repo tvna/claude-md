@@ -10,8 +10,8 @@ secret is ever written to a tracked file.
 
 | Artifact | Role |
 |---|---|
-| [`apm.yml`](../../apm.yml) | **Source of truth.** Declares the `github` stdio server (under `mcp.servers`) whose `command` is the launch wrapper. `apm install` reproduces it into every detected client. The `github` name keeps the server's tools under `mcp__github__*`, so the existing PreToolUse gates in [`.claude/settings.json`](../../.claude/settings.json) continue to cover them. |
-| `.mcp.json` | The per-client mirror that `apm install` generates locally from `apm.yml`. It is gitignored and never committed (prohibited per [`repo-scope.md`](repo-scope.md), #1067); operators generate their own. |
+| [`apm.yml`](../../apm.yml) | **Source of truth.** Declares the `github` stdio server (under `dependencies.mcp`) whose `command` is the launch wrapper. The `github` name keeps the server's tools under `mcp__github__*`, so the existing PreToolUse gates in [`.claude/settings.json`](../../.claude/settings.json) continue to cover them. |
+| `.mcp.json` | The project-scope mirror that [`scripts/gen_mcp_json.py`](../../scripts/gen_mcp_json.py) renders from `apm.yml` at `SessionStart` (wired in `.claude/settings.json`). It is gitignored and never committed (prohibited per [`repo-scope.md`](repo-scope.md), #1067); it is regenerated locally, not committed. |
 | [`scripts/mcp_github_launch.sh`](../../scripts/mcp_github_launch.sh) | Validates credentials, mints a token, and launches the server passing the token by environment (never on argv). Auto-selects a backend: Docker on a local host, the `github-mcp-server` binary where there is no Docker daemon. Fails loudly naming any missing variable or backend. |
 | [`scripts/mint_github_app_token.py`](../../scripts/mint_github_app_token.py) | Builds an RS256 JWT (signed via `openssl`), exchanges it for an installation token, and prints the token to stdout only. |
 

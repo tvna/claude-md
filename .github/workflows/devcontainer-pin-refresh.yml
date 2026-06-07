@@ -1,0 +1,71 @@
+name: Refresh devcontainer pin PR
+
+# Native auto-merge on the generated "pin published agent images" PR stalls the
+# moment main advances: main-protection requires the branch to be up to date,
+# while required_linear_history, the gate_update_pr_branch.py hook, and the
+# non_fast_forward rule on all non-default branches (all-branches.json) all
+# forbid rebasing it in place. This keeper
+# rebases the behind PR onto the latest main via a fresh superseding PR so
+# auto-merge can complete. Refs #696, #895, #1137.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: devcontainer-pin-refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    name: Refresh open devcontainer pin PR
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment:
+      name: devcontainer-image-pins
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout repository
+        # Persist the default GITHUB_TOKEN (contents: write) so the refresh step's
+        # `git push origin <fresh-branch>` in scripts/devcontainer_pin_pr.py can
+        # authenticate. `persist-credentials: false` here left the push with no
+        # credentials, failing with exit 128. This mirrors the working `open` flow
+        # in publish-devcontainer-images.yml (update-pins job). Refs #696, #1137.
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      # Mint a short-lived GitHub App installation token so the superseding pin
+      # PR is authored by the App bot (not a human PAT owner) and its push to
+      # main still triggers downstream workflows. Refs #1401.
+      - name: Mint GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ secrets.DEVCONTAINER_PIN_APP_ID }}
+          private-key: ${{ secrets.DEVCONTAINER_PIN_APP_PRIVATE_KEY }}
+
+      - name: Refresh behind pin PR onto latest main
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          REPO: ${{ github.repository }}
+          PIN_BOT_APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
+        run: |
+          set -euo pipefail
+          python3 scripts/devcontainer_pin_pr.py refresh \
+            --base main \
+            --target-sha "$GITHUB_SHA" \
+            --title "fix(devcontainer): pin published agent images" \
+            --commit-subject "fix(devcontainer): pin published agent images" \
+            --commit-trailer "Refs #696" \
+            --template .github/pr-body-templates/devcontainer-image-pins.md \
+            --file .devcontainer/claude/devcontainer.json \
+            --file .devcontainer/codex/devcontainer.json \
+            --file .devcontainer/claude-amd64/devcontainer.json \
+            --file .devcontainer/claude-arm64/devcontainer.json \
+            --file .devcontainer/codex-amd64/devcontainer.json \
+            --file .devcontainer/codex-arm64/devcontainer.json \
+            --file docs/runbooks/devcontainers.md

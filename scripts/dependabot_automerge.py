@@ -9,9 +9,10 @@ workflow to request GitHub auto-merge.
 Contract:
 - Inputs: the ``audit`` subcommand (``--event`` GitHub event JSON,
   ``--policy`` policy JSON, optional ``--summary-file`` / ``--output``),
-  the ``list-files`` and ``request-automerge`` subcommands
-  (``--pr-number``); ``GH_TOKEN`` and ``REPO`` env vars for the API
-  boundary.
+  the ``list-files``, ``request-automerge`` and ``disable-automerge``
+  subcommands (``--pr-number``); ``GH_TOKEN`` and ``REPO`` env vars for the
+  API boundary. ``disable-automerge`` revokes a previously enabled auto-merge
+  when a threat-intel or severity label lands after enablement.
 - Outputs: ``::error::`` annotations on the audit result, an optional
   Markdown summary, and ``name=value`` lines to the GitHub Actions output
   file; exit 0 on success, exit 1 on malformed input or an API failure.
@@ -40,11 +41,42 @@ from _trusted_bots import _TRUSTED_BOT_LOGINS
 
 _API_ROOT = "https://api.github.com"
 
+# Advisory-only label that must NOT block auto-merge (#1122). Dependabot relays
+# upstream release notes whose @mentions carry zero-width spaces (U+200B), so
+# scripts/scan_non_ascii.py applies this label on nearly every dependabot PR.
+# For a trusted-bot author it is demoted to advisory (label only; the PR is not
+# blocked), and `audit` already gates should_enable on _TRUSTED_BOT_LOGINS, so a
+# non-trusted author can never benefit from the exemption. All other severity:*
+# labels remain manual-review blockers.
+_ADVISORY_NON_BLOCKING_LABEL = "severity:non-ascii-content"
+
+# Threat-intel labels applied by scripts/threat_intel_triage.py (#1264). They
+# block auto-merge unconditionally: a malicious-package or response-needed
+# finding must reach a human even for an otherwise-eligible Dependabot bump, and
+# may be added *after* auto-merge was enabled (the disable-automerge path below
+# handles that race). Kept as literals to avoid importing the large triage
+# module at runtime; equality with threat_intel_triage.{RESPONSE,INTEL}_LABEL is
+# asserted in tests/test_dependabot_automerge.py so the strings cannot drift.
+_THREAT_BLOCKING_LABELS = ("threat:response-needed", "threat:intel-needed")
+
 _ENABLE_AUTO_MERGE_MUTATION = """
 mutation EnableAutoMerge($pullRequestId: ID!, $mergeMethod: PullRequestMergeMethod!) {
   enablePullRequestAutoMerge(input: {
     pullRequestId: $pullRequestId,
     mergeMethod: $mergeMethod
+  }) {
+    pullRequest {
+      number
+      autoMergeRequest { mergeMethod }
+    }
+  }
+}
+"""
+
+_DISABLE_AUTO_MERGE_MUTATION = """
+mutation DisableAutoMerge($pullRequestId: ID!) {
+  disablePullRequestAutoMerge(input: {
+    pullRequestId: $pullRequestId
   }) {
     pullRequest {
       number
@@ -123,9 +155,16 @@ def audit(
         reasons.append(f"head branch is not dependabot/*: {head_ref or '<missing>'}")
     if draft:
         reasons.append("pull request is draft")
-    blocked_labels = sorted(label for label in labels if label.startswith("severity:"))
+    blocked_labels = sorted(
+        label
+        for label in labels
+        if label.startswith("severity:") and label != _ADVISORY_NON_BLOCKING_LABEL
+    )
     if blocked_labels:
         reasons.append(f"manual-review label present: {', '.join(blocked_labels)}")
+    blocked_threat_labels = sorted(label for label in labels if label in _THREAT_BLOCKING_LABELS)
+    if blocked_threat_labels:
+        reasons.append(f"threat-intel label present: {', '.join(blocked_threat_labels)}")
 
     update_type = classify_update_type(title)
     if update_type is None:
@@ -315,6 +354,50 @@ def _enable_auto_merge(
         raise RuntimeError(f"enablePullRequestAutoMerge errors: {response['errors']}")
 
 
+def _disable_auto_merge(
+    *,
+    repo: str,
+    pr_number: int,
+    token: str,
+    apply_call: Callable[..., tuple[int, str]] = _github_apply_call,
+    graphql_call: Callable[..., tuple[int, dict[str, Any]]] = _github_graphql_call,
+) -> bool:
+    """Disable auto-merge on a PR when currently enabled.
+
+    Returns True if a disable mutation was issued, False if auto-merge was not
+    enabled (a no-op). This makes the call idempotent so the workflow can run it
+    on every non-eligible audit without erroring on PRs that never had
+    auto-merge: the race it closes is a ``threat:*``/``severity:*`` label added
+    *after* auto-merge was already enabled.
+    """
+    url = f"{_API_ROOT}/repos/{repo}/pulls/{pr_number}"
+    code, body = apply_call(method="GET", url=url, payload=None, token=token)
+    if not 200 <= code < 300:
+        raise RuntimeError(f"get PR HTTP {code}")
+    try:
+        pr_data = json.loads(body)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"get PR: malformed JSON: {exc}") from exc
+    if not isinstance(pr_data, dict):
+        raise RuntimeError("get PR: expected JSON object")
+    node_id = pr_data.get("node_id")
+    if not isinstance(node_id, str) or not node_id:
+        raise RuntimeError("get PR: missing node_id")
+    if pr_data.get("auto_merge") is None:
+        return False
+
+    gql_code, response = graphql_call(
+        query=_DISABLE_AUTO_MERGE_MUTATION,
+        variables={"pullRequestId": node_id},
+        token=token,
+    )
+    if not 200 <= gql_code < 300:
+        raise RuntimeError(f"disablePullRequestAutoMerge HTTP {gql_code}")
+    if "errors" in response:
+        raise RuntimeError(f"disablePullRequestAutoMerge errors: {response['errors']}")
+    return True
+
+
 def _cmd_list_files(args: argparse.Namespace) -> int:
     token = os.environ.get("GH_TOKEN", "")
     repo = os.environ.get("REPO", "")
@@ -362,6 +445,29 @@ def _cmd_request_automerge(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_disable_automerge(args: argparse.Namespace) -> int:
+    token = os.environ.get("GH_TOKEN", "")
+    repo = os.environ.get("REPO", "")
+    if not token:
+        print("::error::GH_TOKEN is not set", file=sys.stderr)
+        return 1
+    if not repo:
+        print("::error::REPO is not set", file=sys.stderr)
+        return 1
+    try:
+        pr_number = int(args.pr_number)
+    except (TypeError, ValueError):
+        print(f"::error::invalid PR number: {args.pr_number!r}", file=sys.stderr)
+        return 1
+    try:
+        disabled = _disable_auto_merge(repo=repo, pr_number=pr_number, token=token)
+    except RuntimeError as exc:
+        print(f"::error::{exc}", file=sys.stderr)
+        return 1
+    print(f"auto-merge {'disabled' if disabled else 'was not enabled'} for PR #{pr_number}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -386,6 +492,13 @@ def main(argv: list[str] | None = None) -> int:
     p_automerge = sub.add_parser("request-automerge", help="Enable GitHub auto-merge on a PR.")
     p_automerge.add_argument("--pr-number", required=True, help="Pull request number.")
     p_automerge.set_defaults(func=_cmd_request_automerge)
+
+    p_disable = sub.add_parser(
+        "disable-automerge",
+        help="Disable GitHub auto-merge on a PR if it is currently enabled.",
+    )
+    p_disable.add_argument("--pr-number", required=True, help="Pull request number.")
+    p_disable.set_defaults(func=_cmd_disable_automerge)
 
     args = parser.parse_args(argv)
     return args.func(args)

@@ -27,11 +27,13 @@ import shlex
 from pathlib import Path
 from typing import Any
 
-from _hook_runtime import emit_decision, read_event
+from _hook_runtime import build_deny, run_event_hook
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 _SESSION_BRANCH_FILE = REPO_ROOT / ".git" / "CLAUDE_SESSION_BRANCH"
-_GIT_PUSH_RE = re.compile(r"(?m)^\s*git\s+push\b")
+# Optional ``rtk`` prefix: the rtk auto-rewrite PreToolUse hook rewrites
+# ``git push`` -> ``rtk git push`` (Refs #1199), so the gate must fire on both.
+_GIT_PUSH_RE = re.compile(r"(?m)^\s*(?:rtk\s+)?git\s+push\b")
 _REMOTE_ENV_VAR = "CLAUDE_CODE_REMOTE"
 
 # Flags that consume no additional token.
@@ -122,16 +124,6 @@ def _extract_push_remote_ref(command: str) -> str | None:
     return refspec
 
 
-def _deny(reason: str) -> dict[str, Any]:
-    return {
-        "hookSpecificOutput": {
-            "hookEventName": "PreToolUse",
-            "permissionDecision": "deny",
-            "permissionDecisionReason": reason,
-        }
-    }
-
-
 def decide(event: dict[str, Any]) -> dict[str, Any] | None:
     """Return a deny dict when a push targets a non-session branch, else None."""
     if os.environ.get(_REMOTE_ENV_VAR, "").lower() != "true":
@@ -155,7 +147,7 @@ def decide(event: dict[str, Any]) -> dict[str, Any] | None:
     if remote_ref in (session_branch, "HEAD"):
         return None
 
-    return _deny(
+    return build_deny(
         f"Blocked by scripts/preflight_push_session_branch.py: "
         f"this remote session only permits pushes to '{session_branch}'. "
         f"The push targets '{remote_ref}'.\n\n"
@@ -167,13 +159,7 @@ def decide(event: dict[str, Any]) -> dict[str, Any] | None:
 
 def main(argv: list[str] | None = None) -> int:
     del argv
-    event = read_event("preflight_push_session_branch")
-    if event is None:
-        return 0
-    if not isinstance(event, dict):
-        return 0
-    emit_decision(decide(event))
-    return 0
+    return run_event_hook("preflight_push_session_branch", decide, auditable=False)
 
 
 if __name__ == "__main__":

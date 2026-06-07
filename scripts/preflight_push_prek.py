@@ -26,7 +26,6 @@ Architecture mirrors ``preflight_push_base.py``:
 
 from __future__ import annotations
 
-import json
 import re
 import subprocess
 import sys
@@ -34,20 +33,12 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from _hook_runtime import build_deny, run_event_hook
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 _GIT_PUSH_RE = re.compile(r"(?m)^\s*git\s+push\b")
 _TIMEOUT_PREK: int = 60
 _Runner = Callable[..., subprocess.CompletedProcess[str]]
-
-
-def _deny(reason: str) -> dict[str, Any]:
-    return {
-        "hookSpecificOutput": {
-            "hookEventName": "PreToolUse",
-            "permissionDecision": "deny",
-            "permissionDecisionReason": reason,
-        }
-    }
 
 
 def _run_prek(*, runner: _Runner = subprocess.run) -> dict[str, Any] | None:
@@ -70,7 +61,7 @@ def _run_prek(*, runner: _Runner = subprocess.run) -> dict[str, Any] | None:
 
     if result.returncode != 0:
         detail = (result.stderr or result.stdout).strip()
-        return _deny(
+        return build_deny(
             "Blocked by scripts/preflight_push_prek.py: prek found "
             "issues that must be staged and committed before push.\n\n"
             f"{detail}\n\n"
@@ -97,18 +88,7 @@ def decide(
 def main(argv: list[str] | None = None) -> int:
     """CLI entry. Configuration is via stdin JSON (PreToolUse hook event)."""
     del argv
-    raw = sys.stdin.read()
-    try:
-        event = json.loads(raw) if raw.strip() else {}
-    except json.JSONDecodeError as exc:
-        print(f"::error::preflight_push_prek: malformed stdin JSON: {exc}", file=sys.stderr)
-        return 0
-    if not isinstance(event, dict):
-        return 0
-    output = decide(event)
-    if output is not None:
-        sys.stdout.write(json.dumps(output))
-    return 0
+    return run_event_hook("preflight_push_prek", decide)
 
 
 if __name__ == "__main__":

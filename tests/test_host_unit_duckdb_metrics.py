@@ -31,6 +31,11 @@ GITIGNORE_PATH = REPO_ROOT / ".gitignore"
 DOC_PATH = REPO_ROOT / "docs" / "standards" / "host-unit-duckdb-metrics.md"
 
 
+def squashed(text: str) -> str:
+    """Return text with Markdown line wrapping normalized for phrase checks."""
+    return " ".join(text.split())
+
+
 class TestSchemaFile:
     def test_schema_file_exists(self) -> None:
         assert SCHEMA_PATH.is_file(), f"schema.sql must exist at {SCHEMA_PATH}"
@@ -269,3 +274,71 @@ class TestDesignDoc:
         text = DOC_PATH.read_text(encoding="utf-8")
         assert "#88" in text
         assert "Section 4" in text
+
+    def test_doc_records_r2_escrow_reentry_decision(self) -> None:
+        text = squashed(DOC_PATH.read_text(encoding="utf-8"))
+        assert "#1212" in text
+        assert "Decision: adopt option (B) as a manual R2 escrow runbook" in text
+        assert "temporary handoff layer" in text
+        assert "The canonical metrics store remains the per-host DuckDB database" in text
+
+    def test_doc_defines_r2_escrow_artifact_shape(self) -> None:
+        text = squashed(DOC_PATH.read_text(encoding="utf-8"))
+        assert "redacted OTLP-shaped export bundle" in text
+        assert "manifest.json" in text
+        assert "metrics.parquet" in text
+        assert "logs.parquet" in text
+        assert "*.duckdb" in text
+        assert "*.duckdb.wal" in text
+
+    def test_doc_defines_r2_escrow_object_and_lifecycle_contract(self) -> None:
+        text = squashed(DOC_PATH.read_text(encoding="utf-8"))
+        assert "escrow/session/<opaque-session-id>/<bundle-digest>/" in text
+        assert "immutable" in text
+        assert "24 hours" in text
+        assert "delete-after-import" in text
+
+    def test_doc_defines_r2_escrow_credential_issuance(self) -> None:
+        text = squashed(DOC_PATH.read_text(encoding="utf-8"))
+        for phrase in (
+            "Cloudflare dashboard or API",
+            "parent token",
+            "Workers R2 Storage Write",
+            "object-read-write",
+            "prefix-scoped",
+            "900 seconds",
+            "session token",
+            "rotate",
+        ):
+            assert phrase in text
+
+    def test_doc_defines_r2_escrow_retrieval_import_verification(self) -> None:
+        text = squashed(DOC_PATH.read_text(encoding="utf-8"))
+        for phrase in (
+            "durable macOS host",
+            "verify the manifest digest",
+            "no raw hostnames",
+            "no raw repository names",
+            "no raw paths",
+            "INSERT OR REPLACE INTO change_measurement",
+            "session_log",
+            "explicitly delete",
+        ):
+            assert phrase in text
+
+    def test_doc_defines_r2_first_time_provisioning(self) -> None:
+        text = squashed(DOC_PATH.read_text(encoding="utf-8"))
+        for phrase in (
+            "#1326",
+            "First-time R2 provisioning",
+            "Create or sign in to a Cloudflare account",
+            "R2 subscription checkout",
+            "payment method",
+            "free tier",
+            "Create bucket",
+            "Account ID",
+            "r2.cloudflarestorage.com",
+            "operator actions on the durable host",
+            "delegated to an ephemeral agent session",
+        ):
+            assert phrase in text

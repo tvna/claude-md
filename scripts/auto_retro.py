@@ -55,6 +55,7 @@ from urllib.parse import quote
 
 from _retro_labels import (
     ALL_RETRO_LABELS,
+    PRIOR_EPOCH_MIN_RETRO_NUMBER,
     PRIOR_FETCH_LIMIT,
     PRIOR_MIN_SAMPLE_SIZE,
     PRIOR_SKIP_THRESHOLD,
@@ -237,6 +238,32 @@ _RESULT_PASSING_NIX_TOOL_RE = re.compile(r"^nix-[a-z][a-z0-9-]*$", re.IGNORECASE
 # Refs #453.
 _RESULT_FAILING_COUNT_RE = re.compile(r"\b\d+\s+failed\b", re.IGNORECASE)
 
+# Zero exit / return code anywhere in the result is a pass even when the
+# surrounding text uses a non-standard prefix that the prefix allowlist
+# misses (`total preflight exit=0`, `PREFLIGHT_EXIT=0`, `skip: ... (rc=0)`).
+# Only an explicit zero matches: `exit=1` and a bare version like `0.11`
+# do not (the `0` must not be followed by a digit or a dot). Refs #1227.
+_RESULT_PASSING_EXIT_ZERO_RE = re.compile(
+    r"\b(?:exit(?:[ _-]?code)?|rc|preflight_exit)\b[ \t]*[=:]?[ \t]*0(?![.\d])",
+    re.IGNORECASE,
+)
+
+# Environment-prerequisite-unavailable markers. A verification that could
+# not run because a CI-only token or tool was absent locally is a skip, not
+# a repair signal: `blocked: GH_TOKEN unset`, `skip: PR is a retro-close PR`,
+# `skipped on missing local prereqs`, `not applicable`. A genuine local
+# failure (`blocked: ModuleNotFoundError`, `required uv ==X, local uv is Y`,
+# `not run; ... does not match`) carries none of these markers and stays a
+# failure. Refs #1227, #851.
+_RESULT_ENV_SKIP_RE = re.compile(
+    r"^[ \t]*skip(?:ped)?\b"
+    r"|\bunset\b"
+    r"|\bmissing (?:env|local prereq)"
+    r"|\bnot applicable\b"
+    r"|\bn/a\b",
+    re.IGNORECASE,
+)
+
 # Append-to-existing-retro markers used by append_repair_history_row.
 _AUTO_FILLED_OPEN = "<!-- auto-filled:repair-history -->"
 _AUTO_FILLED_CLOSE = "<!-- /auto-filled:repair-history -->"
@@ -417,6 +444,56 @@ def _count_merge_from_main(subjects: list[str]) -> int:
     )
 
 
+# Commit-subject markers for `git revert` commits. Kept parallel to
+# _MERGE_FROM_MAIN_PREFIXES rather than merged into one matcher: the
+# Git-standard revert subject is NOT Conventional (`Revert "<subject>"`),
+# while the Conventional forms (`revert(scope): ...`) carry a type slot, so a
+# single literal-prefix list cannot cover both without muddying each. Per
+# CLAUDE.md section 3 `git revert` is the default rollback path, so a revert
+# commit is an expected artifact, not a repair loop on its own -- but unlike
+# merge-from-main (pure structural rebase debt) it is an anomaly *hint*: it
+# subtracts from the multi_commit_pr count yet is still recorded for co-fire
+# correlation (refs #1287).
+_REVERT_PREFIXES: tuple[str, ...] = ('Revert "',)
+
+# Conventional revert subjects: `revert: ...`, `revert(scope): ...`, and the
+# breaking `revert!: ` / `revert(scope)!: `. The `: ` separator is required so
+# `revert this thing` (no colon) and `fix(revert): ...` (revert only in the
+# scope slot, a real fix commit) do NOT match -- consistent with
+# title_policy.pr_title_ref_is_exempt, which only treats the *type* slot as a
+# revert. Matched case-sensitively: Git emits capital `Revert "`, Conventional
+# types are lowercase per .github/title-policy.toml `scope_pattern`
+# (kept in sync here as a self-contained literal to avoid importing
+# title_policy's regex internals).
+_REVERT_CONVENTIONAL_RE = re.compile(r"^revert(?:\([a-z0-9][a-z0-9-]*\))?!?: ")
+
+
+def _is_revert_subject(subject: str) -> bool:
+    """Return True if *subject* is a Git-standard or Conventional revert.
+
+    A double revert (``Revert "Revert "feat: x""``) is still one commit and
+    matches once; nesting depth is not counted. Lowercase ``revert "...``
+    (neither Git-standard nor Conventional) does not match, to avoid false
+    positives on prose.
+    """
+    stripped = subject.strip()
+    return any(
+        stripped.startswith(prefix) for prefix in _REVERT_PREFIXES
+    ) or bool(_REVERT_CONVENTIONAL_RE.match(stripped))
+
+
+def _count_revert(subjects: list[str]) -> int:
+    """Return the number of *subjects* that are revert commits.
+
+    Shared by :func:`compute_repair_signals` (to subtract reverts from the
+    ``multi_commit_pr`` count so a revert alone does not fire the gate) and
+    :func:`_repair_history_rows` (to render the ``Revert commit`` rows).
+    Mirrors :func:`_count_merge_from_main`; see :func:`_is_revert_subject`
+    for the per-subject predicate.
+    """
+    return sum(1 for subject in subjects if _is_revert_subject(subject))
+
+
 def _slice_section(body: str, heading: str) -> str:
     """Return the slice of ``body`` under ``## heading`` up to the next H2.
 
@@ -477,6 +554,16 @@ def _result_is_passing(result: str) -> bool:
     quoted-string output, grep -n line results, sha256sum output, pure hex
     hashes, package name-version strings, and nix-prefixed tool names.
 
+    A zero exit / return code anywhere in the text (matched by
+    :data:`_RESULT_PASSING_EXIT_ZERO_RE`: ``exit=0``, ``rc=0``,
+    ``PREFLIGHT_EXIT=0``) is a pass even behind a non-standard prefix, and an
+    environment-prerequisite-unavailable result (matched by
+    :data:`_RESULT_ENV_SKIP_RE`: ``skip:``/``skipped``, ``... unset``,
+    ``missing env``/``missing local prereq``, ``not applicable``/``n/a``) is a
+    skip rather than a repair signal. A genuine local failure such as
+    ``blocked: ModuleNotFoundError`` carries none of these markers and stays a
+    failure. Refs #1227, #851.
+
     Anything else (including ``exit 1``, ``failed``, free-form prose) is
     treated as a failure signal. Refs #411, #417, #453, #927.
     """
@@ -517,6 +604,10 @@ def _result_is_passing(result: str) -> bool:
     if _RESULT_PASSING_PKG_VERSION_RE.match(text):
         return True
     if _RESULT_PASSING_NIX_TOOL_RE.match(text):
+        return True
+    if _RESULT_PASSING_EXIT_ZERO_RE.search(text):
+        return True
+    if _RESULT_ENV_SKIP_RE.search(text):
         return True
     lower = text.lower()
     raw_lower = raw_text.lower()
@@ -621,31 +712,44 @@ def compute_repair_signals(
     PR #275 and PR #288 merged with zero inline review comments yet
     carried substantial repair history in issues #287 and #273.
 
+    ``body_cites_refs`` was retired as a standalone trigger in #1227: it
+    fired on nearly every PR (CLAUDE.md section 3 mandates a ``Refs #N``
+    line), so it was non-discriminating and dominated label-prior
+    pollution. Repair loops captured in sibling issues are still caught by
+    the remaining signals (review comments, fix-typed titles, fix-up
+    commits, failed verification pairs).
+
     Signals returned:
 
     - ``inline_review_comments``: at least one comment on the PR's
       review thread (the legacy gate).
-    - ``body_cites_refs``: PR body has at least one line-anchored
-      ``Refs|Closes|Fixes|Resolves #N``. Reuses
-      :func:`issue_link.extract_refs`.
     - ``fix_typed_title``: PR title starts with ``fix(`` (Conventional
       Commit `fix` type).
     - ``multi_commit_pr``: source branch had more than one commit before
       the merge. When *commit_subjects* is supplied, merge-from-main
-      commits (see :data:`_MERGE_FROM_MAIN_PREFIXES`) are subtracted
-      from the count so rebase debt created by the squash-only,
-      linear-history merge policy does not fire the gate on its own.
-      When *commit_subjects* is ``None`` (the legacy two-arg call shape,
-      retained for tests that do not exercise the gate ordering in
-      :func:`run`) the gate falls back to ``pr.commits > 1``.
+      commits (see :data:`_MERGE_FROM_MAIN_PREFIXES`) and revert commits
+      (see :func:`_count_revert`) are subtracted from the count. Rebase
+      debt created by the squash-only, linear-history merge policy does
+      not fire the gate on its own, and a revert -- the default rollback
+      path per CLAUDE.md section 3 -- is an anomaly *hint* that must not
+      open a retro alone: it only matters when it co-fires with another
+      signal (review comments, failed CI, failed verification). The revert
+      is still surfaced as a ``Revert commit`` row in the repair-history
+      table for that correlation (refs #1287). When *commit_subjects* is
+      ``None`` (the legacy two-arg call shape, retained for tests that do
+      not exercise the gate ordering in :func:`run`) the gate falls back
+      to ``pr.commits > 1`` -- subjects are required to subtract either
+      artifact class, so the fallback fires more readily by design.
     """
-    body_without_comments = strip_html_comments(pr.body or "")
-    refs = extract_refs(body_without_comments)
     fix_typed = pr.title.lstrip().lower().startswith("fix(")
     if commit_subjects is None:
         multi_commit = pr.commits > 1
     else:
-        pure_commits = pr.commits - _count_merge_from_main(commit_subjects)
+        pure_commits = (
+            pr.commits
+            - _count_merge_from_main(commit_subjects)
+            - _count_revert(commit_subjects)
+        )
         multi_commit = pure_commits > 1
     verification_pairs = extract_verification_pairs(pr.body or "")
     # `post_merge_unchecked` was removed in #418: the Post-merge subsection
@@ -654,7 +758,6 @@ def compute_repair_signals(
     # is deferred to the workflow tracked in #421.
     return {
         "inline_review_comments": bool(has_inline_comments),
-        "body_cites_refs": len(refs) > 0,
         "fix_typed_title": fix_typed,
         "multi_commit_pr": multi_commit,
         "verification_pairs_failed": any(
@@ -676,7 +779,6 @@ def render_repair_signals(signals: dict[str, bool]) -> str:
 # same merge event. Refs #582.
 _SIGNAL_NAMES: tuple[str, ...] = (
     "inline_review_comments",
-    "body_cites_refs",
     "fix_typed_title",
     "multi_commit_pr",
     "verification_pairs_failed",
@@ -738,11 +840,19 @@ class PastRetro:
     the retro -- the prior only cares whether ``retro:fp`` is among
     them, but the full set is preserved so future retrofits can layer
     on other labels without changing the dataclass shape.
+
+    ``state`` (``"open"``/``"closed"``) and ``title`` default to the
+    pre-#1386 values so the prior/drift/sentinel construction sites and
+    every existing test keep working unchanged; the triage-report
+    dashboard (recent-retros list, open-untriaged count) reads them when
+    populated by :func:`fetch_past_retro_labels`.
     """
 
     number: int
     signals: frozenset[str]
     labels: frozenset[str]
+    state: str = "open"
+    title: str = ""
 
 
 @dataclass(frozen=True)
@@ -765,28 +875,43 @@ class DecisionTreeNode:
 def compute_prior_from_labels(
     past_retros: list[PastRetro],
     signal_names: tuple[str, ...] = _SIGNAL_NAMES,
+    epoch_min_number: int = 0,
 ) -> dict[str, tuple[float, int]]:
     """For each signal name, return ``(fp_rate, sample_size)``.
 
     ``fp_rate`` is
 
-        |{r in past_retros : signal in r.signals and RETRO_FP in r.labels}|
-        / max(1, |{r in past_retros : signal in r.signals}|)
+        |{r in eligible : signal in r.signals and RETRO_FP in r.labels}|
+        / max(1, |{r in eligible : signal in r.signals}|)
 
     and ``sample_size`` is the denominator (un-floored). Empty input
     yields ``(0.0, 0)`` for every signal -- the consumer
     (:func:`should_skip_by_prior`) gates on ``sample_size >=
     PRIOR_MIN_SAMPLE_SIZE`` so the empty-prior case degrades to
     "open normally" rather than to a silent skip. Refs #582.
+
+    *epoch_min_number* drops retros whose issue ``number`` is below the
+    boundary from the population before any counting -- the live skip
+    decision in :func:`run` passes
+    :data:`PRIOR_EPOCH_MIN_RETRO_NUMBER` so retros opened under the old
+    (pre-#1227) signal semantics do not poison the prior. The default
+    ``0`` keeps the function a pure tally over the supplied population
+    (used by the descriptive triage report and by the unit tests).
+    Refs #1227.
     """
+    eligible = (
+        past_retros
+        if epoch_min_number <= 0
+        else [r for r in past_retros if r.number >= epoch_min_number]
+    )
     prior: dict[str, tuple[float, int]] = {}
     for name in signal_names:
-        denom = sum(1 for r in past_retros if name in r.signals)
+        denom = sum(1 for r in eligible if name in r.signals)
         if denom == 0:
             prior[name] = (0.0, 0)
             continue
         numer = sum(
-            1 for r in past_retros if name in r.signals and RETRO_FP in r.labels
+            1 for r in eligible if name in r.signals and RETRO_FP in r.labels
         )
         prior[name] = (numer / denom, denom)
     return prior
@@ -802,6 +927,41 @@ _TRIAGE_LABELS: tuple[str, ...] = (
     RETRO_TENTATIVE,
 )
 _UNLABELLED_KEY: str = "unlabelled"
+
+# How many most-recent retros (by issue number) the dashboard lists, and
+# the trailing window over which it recomputes the FP rate for the trend
+# line. Numbers are the recency proxy: a higher issue number is newer.
+# Refs #1386.
+_RECENT_RETRO_COUNT: int = 10
+_FP_TREND_WINDOW: int = 20
+
+
+def _retro_status(labels: frozenset[str]) -> str:
+    """Return the single display status for a retro from its label set.
+
+    Triage labels are checked in :data:`_TRIAGE_LABELS` priority order so
+    a multi-labelled retro renders one stable status; a retro carrying no
+    triage label is ``"untriaged"``.
+    """
+    for label in _TRIAGE_LABELS:
+        if label in labels:
+            return label
+    return "untriaged"
+
+
+def _retro_fp_rate(retros: list[PastRetro]) -> tuple[float, int]:
+    """Return ``(fp_rate, triaged_count)`` over *retros*.
+
+    A retro is *triaged* iff it carries ``retro:tp`` or ``retro:fp``; the
+    rate is ``|retro:fp| / |triaged|``. An empty triaged population yields
+    ``(0.0, 0)`` so callers can render "n/a" without a zero-division guard
+    at each site.
+    """
+    triaged = [r for r in retros if (RETRO_FP in r.labels or RETRO_TP in r.labels)]
+    if not triaged:
+        return 0.0, 0
+    fp = sum(1 for r in triaged if RETRO_FP in r.labels)
+    return fp / len(triaged), len(triaged)
 
 
 @dataclass(frozen=True)
@@ -840,6 +1000,20 @@ class SignalStat:
 
 
 @dataclass(frozen=True)
+class RecentRetro:
+    """One row of the dashboard's recent-retros list.
+
+    ``status`` is the :func:`_retro_status` display label; ``state`` is the
+    GitHub issue state (``"open"``/``"closed"``).
+    """
+
+    number: int
+    title: str
+    status: str
+    state: str
+
+
+@dataclass(frozen=True)
 class TriageReport:
     """Cross-retro aggregate: triage-status counts plus per-signal stats.
 
@@ -848,11 +1022,25 @@ class TriageReport:
     number of retros carrying it -- a single retro may carry more than one
     triage label, so the label counts are independent tallies and need not
     sum to ``total``. ``signal_stats`` is ordered by :data:`_SIGNAL_NAMES`.
+
+    The remaining fields back the #1386 dashboard sections and default to
+    empty/zero so older construction sites and tests stay valid:
+    ``open_untriaged`` counts open retros carrying no triage label;
+    ``recent`` is the most-recent slice (newest first) for the recent-retros
+    table; ``fp_rate_all``/``fp_triaged`` are the all-time retro-level FP
+    rate and its triaged denominator; ``fp_rate_recent``/``fp_recent_triaged``
+    are the same over the trailing :data:`_FP_TREND_WINDOW` for the trend.
     """
 
     total: int
     label_counts: dict[str, int]
     signal_stats: tuple[SignalStat, ...]
+    open_untriaged: int = 0
+    recent: tuple[RecentRetro, ...] = ()
+    fp_rate_all: float = 0.0
+    fp_triaged: int = 0
+    fp_rate_recent: float = 0.0
+    fp_recent_triaged: int = 0
 
     @property
     def anomalies(self) -> tuple[SignalStat, ...]:
@@ -901,10 +1089,35 @@ def compute_triage_report(
                 sample_size=sample,
             )
         )
+    open_untriaged = sum(
+        1
+        for r in past_retros
+        if r.state == "open" and not (r.labels & ALL_RETRO_LABELS)
+    )
+    by_recency = sorted(past_retros, key=lambda r: r.number, reverse=True)
+    recent = tuple(
+        RecentRetro(
+            number=r.number,
+            title=r.title,
+            status=_retro_status(r.labels),
+            state=r.state,
+        )
+        for r in by_recency[:_RECENT_RETRO_COUNT]
+    )
+    fp_rate_all, fp_triaged = _retro_fp_rate(past_retros)
+    fp_rate_recent, fp_recent_triaged = _retro_fp_rate(
+        by_recency[:_FP_TREND_WINDOW]
+    )
     return TriageReport(
         total=total,
         label_counts=label_counts,
         signal_stats=tuple(signal_stats),
+        open_untriaged=open_untriaged,
+        recent=recent,
+        fp_rate_all=fp_rate_all,
+        fp_triaged=fp_triaged,
+        fp_rate_recent=fp_rate_recent,
+        fp_recent_triaged=fp_recent_triaged,
     )
 
 
@@ -913,10 +1126,11 @@ def render_triage_report_markdown(report: TriageReport) -> str:
 
     The shape lets a human detect an anomaly by inspection (CLAUDE.md
     section 6): the Anomalies block sits at the top, a Mermaid pie shows
-    the triage-status mix, and the per-signal table flags every signal
+    the triage-status mix, the FP-rate trend and recent-retros list make
+    the live backlog visible, and the per-signal table flags every signal
     whose prior would skip a future retro. The report depends on live
     GitHub label state, so it is a non-deterministic snapshot and is NOT
-    part of the ``generate-docs.yml`` drift gate. Refs #1042.
+    part of the ``generate-docs.yml`` drift gate. Refs #1042, #1386.
     """
     lines: list[str] = [
         "# Auto-retro triage report",
@@ -924,11 +1138,13 @@ def render_triage_report_markdown(report: TriageReport) -> str:
         "This file is generated from live GitHub retro-issue labels by "
         "`python3 scripts/auto_retro.py triage-report`. Do not edit it by "
         "hand. Unlike the decision-tree doc it is a non-deterministic "
-        "snapshot of repository state, so it is refreshed by the "
-        "`auto-retro-triage-report.yml` workflow rather than the "
-        "`generate-docs.yml` drift gate.",
+        "snapshot of repository state, so it is refreshed on merge by the "
+        "`post-merge.yml` workflow (which opens a pull request when the "
+        "snapshot drifts) rather than the `generate-docs.yml` drift gate.",
         "",
         f"Retros observed: **{report.total}**",
+        "",
+        f"Open untriaged: **{report.open_untriaged}**",
         "",
         "## Anomalies",
         "",
@@ -977,7 +1193,53 @@ def render_triage_report_markdown(report: TriageReport) -> str:
             f"{stat.fire_rate:.2f} | {stat.fp_count} | "
             f"{stat.fp_rate:.2f} | {stat.sample_size} | {marker} |"
         )
+    lines.extend(_render_fp_trend(report))
+    lines.extend(_render_recent_retros(report))
     return "\n".join(lines) + "\n"
+
+
+def _render_fp_trend(report: TriageReport) -> list[str]:
+    """Render the retro-level FP-rate trend section.
+
+    Compares the all-time FP rate against the trailing
+    :data:`_FP_TREND_WINDOW`-retro window so a human can see at a glance
+    whether triaged retros are trending more or less false-positive.
+    """
+    lines = ["", "## False-positive rate trend", ""]
+    if report.fp_triaged == 0:
+        lines.append("No triaged retros yet (no `retro:tp`/`retro:fp` labels).")
+        return lines
+    delta = report.fp_rate_recent - report.fp_rate_all
+    if report.fp_recent_triaged == 0:
+        direction = "n/a"
+    elif abs(delta) < 0.005:
+        direction = "flat"
+    elif delta > 0:
+        direction = "rising"
+    else:
+        direction = "falling"
+    lines.append(
+        f"- All-time: {report.fp_rate_all:.2f} (n={report.fp_triaged} triaged)"
+    )
+    lines.append(
+        f"- Last {_FP_TREND_WINDOW} retros: {report.fp_rate_recent:.2f} "
+        f"(n={report.fp_recent_triaged} triaged) -- {direction}"
+    )
+    return lines
+
+
+def _render_recent_retros(report: TriageReport) -> list[str]:
+    """Render the most-recent-retros table (newest first)."""
+    lines = ["", "## Recent retros", ""]
+    if not report.recent:
+        lines.append("No retros observed yet.")
+        return lines
+    lines.append("| # | State | Status | Title |")
+    lines.append("| --: | :-- | :-- | :-- |")
+    for r in report.recent:
+        title = r.title or "(no title)"
+        lines.append(f"| {r.number} | {r.state} | {r.status} | {title} |")
+    return lines
 
 
 def _mermaid_text(text: str) -> str:
@@ -1427,6 +1689,26 @@ def _repair_history_rows(
                     "Merge from main",
                     f"{_POLICY_ARTIFACT_MARKER} `{subject}` -- "
                     "rebase debt before merge",
+                    policy_artifact=True,
+                    next_action="--",
+                )
+            )
+
+    # Revert commits are an anomaly *hint*, not a standalone trigger (refs
+    # #1287). compute_repair_signals subtracts them from multi_commit_pr, so a
+    # revert-only PR does not fire the gate; this row keeps the revert visible
+    # for co-fire correlation. Marked policy-artifact (and not "Iteration
+    # commit") so _has_only_exempt_policy_artifact_rows skips a revert-only PR
+    # while any genuine co-firing signal still opens the retro. Revert subjects
+    # never start with fix(/fixup!/squash!, so the loops above leave them
+    # untouched.
+    for subject in commit_subjects:
+        if _is_revert_subject(subject):
+            rows.append(
+                RepairHistoryRow(
+                    "Revert commit",
+                    f"{_POLICY_ARTIFACT_MARKER} `{subject}` -- rollback; "
+                    "confirm via co-firing CI / review / verification signal",
                     policy_artifact=True,
                     next_action="--",
                 )
@@ -2217,8 +2499,18 @@ def fetch_past_retro_labels(
         if not isinstance(body, str) or not body:
             body = ""
         signals = parse_signals_from_retro_body(body)
+        state = item.get("state")
+        state = state if isinstance(state, str) and state else "open"
+        title = item.get("title")
+        title = title if isinstance(title, str) else ""
         out.append(
-            PastRetro(number=number, signals=signals, labels=frozenset(names))
+            PastRetro(
+                number=number,
+                signals=signals,
+                labels=frozenset(names),
+                state=state,
+                title=title,
+            )
         )
     return out
 
@@ -2405,6 +2697,29 @@ def find_existing_back_link_id(
     return None
 
 
+_PR_COMMENTS_ENV = "AUTO_RETRO_PR_COMMENTS"
+
+
+def _pr_comments_enabled() -> bool:
+    """True iff PR-thread auto-retro comments are opted in.
+
+    Phase 1 of #1386 makes the back-link and skip comments off by default:
+    the triage-report dashboard
+    (``docs/generated/scripts/auto-retro-triage-report.md``) is the human
+    inspection surface, so a per-PR comment on every merge is redundant
+    notification noise. The retro issue (quiet labeled ledger) and the
+    PR-side terminal label still record the audit trail. Set
+    ``AUTO_RETRO_PR_COMMENTS`` to a truthy value (``1``/``true``/``yes``/``on``)
+    to restore the legacy commenting behavior.
+    """
+    return os.environ.get(_PR_COMMENTS_ENV, "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
+
 def post_back_link_comment(
     repo: str, pr_number: int, retro_number: int
 ) -> str:
@@ -2484,7 +2799,13 @@ def _post_skip_comment_soft(repo: str, pr_number: int, reason: str) -> None:
     Fail-soft: a transient network error must NOT change the exit code --
     the skip is already recorded in the step summary and stdout log. The
     warning keeps the audit trail intact without masking the original skip.
+
+    No-op when PR-thread comments are off by default (#1386 Phase 1): the
+    skip outcome is still recorded in the step summary and stdout, so the
+    audit trail is intact without per-PR comment noise.
     """
+    if not _pr_comments_enabled():
+        return
     try:
         post_skip_comment(repo, pr_number, reason)
     except subprocess.CalledProcessError as exc:
@@ -2743,7 +3064,9 @@ def run(event: dict[str, Any], repo: str) -> int:
     # prior to empty, which routes through the empty-prior safety
     # net (open normally).
     past_retros = fetch_past_retro_labels(repo)
-    prior = compute_prior_from_labels(past_retros)
+    prior = compute_prior_from_labels(
+        past_retros, epoch_min_number=PRIOR_EPOCH_MIN_RETRO_NUMBER
+    )
     prior_skip, prior_reason = should_skip_by_prior(signals, prior)
     if prior_skip:
         print(f"skip: {prior_reason}")
@@ -2813,20 +3136,29 @@ def run(event: dict[str, Any], repo: str) -> int:
     back_link_status = "skipped"
     terminal_label_status = "skipped"
     if isinstance(new_number, int):
-        try:
-            back_link_status = post_back_link_comment(repo, pr.number, new_number)
-        except subprocess.CalledProcessError as exc:
-            # Fail-soft: the retro issue is already created. A failure to
-            # post the PR-side back-link must NOT roll the retro back --
-            # surface a warning and continue so the audit trail keeps the
-            # retro that did land.
-            print(
-                f"::warning::post_back_link_comment failed "
-                f"(exit {exc.returncode}); retro issue #{new_number} created "
-                "but source PR has no back-link comment",
-                file=sys.stderr,
-            )
-            back_link_status = "failed"
+        if not _pr_comments_enabled():
+            # Phase 1 of #1386: PR-thread comments are off by default. The
+            # retro issue carries the audit trail and the terminal label
+            # (applied below) is the quiet PR-side pointer, so the back-link
+            # comment is skipped to avoid per-merge notification noise.
+            back_link_status = "disabled"
+        else:
+            try:
+                back_link_status = post_back_link_comment(
+                    repo, pr.number, new_number
+                )
+            except subprocess.CalledProcessError as exc:
+                # Fail-soft: the retro issue is already created. A failure to
+                # post the PR-side back-link must NOT roll the retro back --
+                # surface a warning and continue so the audit trail keeps the
+                # retro that did land.
+                print(
+                    f"::warning::post_back_link_comment failed "
+                    f"(exit {exc.returncode}); retro issue #{new_number} "
+                    "created but source PR has no back-link comment",
+                    file=sys.stderr,
+                )
+                back_link_status = "failed"
 
         try:
             apply_terminal_label(repo, pr.number)

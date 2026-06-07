@@ -40,9 +40,7 @@ class TestScanLine:
             ("update owners.yaml mapping", ["owners.yaml"]),
         ],
     )
-    def test_token_detected(
-        self, line: str, expected: list[str]
-    ) -> None:
+    def test_token_detected(self, line: str, expected: list[str]) -> None:
         assert sap.scan_line(line) == expected
 
     @pytest.mark.parametrize(
@@ -70,9 +68,7 @@ class TestScanLine:
 
     def test_multiple_tokens_in_one_line(self) -> None:
         line = "see scripts/foo and CODEOWNERS for routing"
-        assert sorted(sap.scan_line(line)) == sorted(
-            ["scripts/", "CODEOWNERS"]
-        )
+        assert sorted(sap.scan_line(line)) == sorted(["scripts/", "CODEOWNERS"])
 
     def test_ack_marker_skips_line_even_with_token(self) -> None:
         line = "see scripts/foo.py <!-- portability-ack -->"
@@ -153,9 +149,7 @@ class TestScanLinePatternB:
             ),
         ],
     )
-    def test_phrase_detected(
-        self, line: str, expected_snippet: str
-    ) -> None:
+    def test_phrase_detected(self, line: str, expected_snippet: str) -> None:
         hits = sap.scan_line(line)
         assert len(hits) == 1
         assert hits[0].startswith(sap.PHRASE_HIT_PREFIX)
@@ -172,19 +166,13 @@ class TestScanLinePatternB:
             "is defined as physically impossible",
             # Existing master.instructions.md bullets the new gate must
             # not flag (selected regression corpus).
-            (
-                "Open a GitHub issue before any branch, commit, or PR; "
-                "cite its number in every commit and PR."
-            ),
+            ("Open a GitHub issue before any branch, commit, or PR; " "cite its number in every commit and PR."),
             (
                 "Push deterministic work into hooks, pre-commit, and "
                 "CI/CD (deps, codegen, file ops, secret scans). Build "
                 "the harness first if it's missing."
             ),
-            (
-                "Run expert agents at one concentrated point, only "
-                "after the deterministic gates pass."
-            ),
+            ("Run expert agents at one concentrated point, only " "after the deterministic gates pass."),
             (
                 "Keep GitHub posts ASCII. If no deterministic "
                 "preflight enforces that repository boundary, prepare "
@@ -203,26 +191,62 @@ class TestScanLinePatternB:
         assert sap.scan_line(line) == []
 
     def test_phrase_and_token_both_detected(self) -> None:
-        line = (
-            "the scripts/foo gate is documented in the companion "
-            "runbook"
-        )
+        line = "the scripts/foo gate is documented in the companion " "runbook"
         hits = sap.scan_line(line)
         assert "scripts/" in hits
-        phrase_hits = [
-            h for h in hits if h.startswith(sap.PHRASE_HIT_PREFIX)
-        ]
+        phrase_hits = [h for h in hits if h.startswith(sap.PHRASE_HIT_PREFIX)]
         assert len(phrase_hits) == 1
-        assert phrase_hits[0].endswith(
-            "is documented in the companion runbook"
-        )
+        assert phrase_hits[0].endswith("is documented in the companion runbook")
 
     def test_phrase_ack_marker_skips_line(self) -> None:
-        line = (
-            "Recovery lives in a dedicated runbook. "
-            "<!-- portability-ack -->"
-        )
+        line = "Recovery lives in a dedicated runbook. " "<!-- portability-ack -->"
         assert sap.scan_line(line) == []
+
+
+# ---------------------------------------------------------------------------
+# scan_line: Pattern C (harness-specific tool names)
+# ---------------------------------------------------------------------------
+
+
+class TestScanLinePatternC:
+    @pytest.mark.parametrize(
+        "line,tool",
+        [
+            (
+                "use the AskUserQuestion tool to confirm",
+                "AskUserQuestion",
+            ),
+            ("call ExitPlanMode when the plan is ready", "ExitPlanMode"),
+            ("switch into plan mode with EnterPlanMode", "EnterPlanMode"),
+        ],
+    )
+    def test_harness_tool_detected(self, line: str, tool: str) -> None:
+        hits = sap.scan_line(line)
+        assert hits == [f"{sap.HARNESS_HIT_PREFIX}{tool}"]
+
+    @pytest.mark.parametrize(
+        "line",
+        [
+            # Case-sensitive: lowercased prose must not match.
+            "ask the user a question before proceeding",
+            "exit plan mode once the plan is approved",
+            # Generic English near the concept but not the identifier.
+            "produce a workflow artifact for the handoff decision",
+            # The ack marker on a line that names the tool.
+            "use AskUserQuestion <!-- portability-ack -->",
+            # Empty / whitespace.
+            "",
+            "   ",
+        ],
+    )
+    def test_harness_tool_no_false_positive(self, line: str) -> None:
+        assert sap.scan_line(line) == []
+
+    def test_harness_and_token_both_detected(self) -> None:
+        line = "the scripts/foo hook calls AskUserQuestion"
+        hits = sap.scan_line(line)
+        assert "scripts/" in hits
+        assert f"{sap.HARNESS_HIT_PREFIX}AskUserQuestion" in hits
 
 
 # ---------------------------------------------------------------------------
@@ -250,11 +274,7 @@ class TestScanText:
         assert len(hits) == 2
 
     def test_ack_marker_excludes_only_marked_line(self) -> None:
-        text = (
-            "bad scripts/a here\n"
-            "ack scripts/b <!-- portability-ack -->\n"
-            "bad scripts/c here\n"
-        )
+        text = "bad scripts/a here\n" "ack scripts/b <!-- portability-ack -->\n" "bad scripts/c here\n"
         hits = sap.scan_text(text)
         line_nums = {n for n, _ in hits}
         assert line_nums == {1, 3}
@@ -313,16 +333,12 @@ class TestMain:
         tmp_path: Path,
         capsys: pytest.CaptureFixture[str],
     ) -> None:
-        rc = sap.main(
-            ["verify", "--path", str(tmp_path / "does-not-exist.md")]
-        )
+        rc = sap.main(["verify", "--path", str(tmp_path / "does-not-exist.md")])
         captured = capsys.readouterr()
         assert rc == 1
         assert "missing scan target" in captured.err
 
-    def test_no_path_returns_two(
-        self, capsys: pytest.CaptureFixture[str]
-    ) -> None:
+    def test_no_path_returns_two(self, capsys: pytest.CaptureFixture[str]) -> None:
         rc = sap.main(["verify"])
         captured = capsys.readouterr()
         assert rc == 2
@@ -361,6 +377,37 @@ class TestMain:
         assert "lives in a dedicated runbook" in captured.err
         assert "forbidden repo-local reference" not in captured.err
 
+    def test_verify_pattern_c_dirty_file_reports_harness_tool(
+        self,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        f = tmp_path / "dirty.md"
+        f.write_text(
+            "use the AskUserQuestion tool to confirm.\n",
+            encoding="utf-8",
+        )
+        rc = sap.main(["verify", "--path", str(f)])
+        captured = capsys.readouterr()
+        assert rc == 1
+        assert "harness-specific tool name" in captured.err
+        assert "AskUserQuestion" in captured.err
+        assert "forbidden repo-local reference" not in captured.err
+        assert "assertive-existence phrase" not in captured.err
+
+    def test_verify_pattern_c_ack_marker_passes(
+        self,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        f = tmp_path / "ack.md"
+        f.write_text(
+            "name AskUserQuestion <!-- portability-ack -->\n",
+            encoding="utf-8",
+        )
+        rc = sap.main(["verify", "--path", str(f)])
+        assert rc == 0
+
     def test_verify_pattern_a_error_label_unchanged(
         self,
         tmp_path: Path,
@@ -393,6 +440,4 @@ class TestRepoArtifacts:
         path = REPO_ROOT / rel
         assert path.exists(), f"expected artifact missing: {path}"
         hits = sap.scan_file(path)
-        assert hits == [], (
-            f"unexpected portability violations in {rel}: {hits}"
-        )
+        assert hits == [], f"unexpected portability violations in {rel}: {hits}"

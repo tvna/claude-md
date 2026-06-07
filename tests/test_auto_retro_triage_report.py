@@ -15,11 +15,19 @@ import pytest
 pytestmark = pytest.mark.shard_ci_ops
 
 
-def _retro(number: int, signals: set[str], labels: set[str]) -> ar.PastRetro:
+def _retro(
+    number: int,
+    signals: set[str],
+    labels: set[str],
+    state: str = "open",
+    title: str = "",
+) -> ar.PastRetro:
     return ar.PastRetro(
         number=number,
         signals=frozenset(signals),
         labels=frozenset(labels),
+        state=state,
+        title=title,
     )
 
 
@@ -197,3 +205,104 @@ class TestRenderTriageReportMarkdown:
         second = ar.render_triage_report_markdown(report)
         assert first == second
         assert first.endswith("\n")
+
+
+class TestOpenUntriaged:
+    """open_untriaged counts open retros carrying no triage label (#1386)."""
+
+    def test_counts_only_open_and_unlabelled(self) -> None:
+        past = [
+            _retro(1, {"multi_commit_pr"}, set(), state="open"),  # counts
+            _retro(2, {"multi_commit_pr"}, set(), state="closed"),  # closed
+            _retro(3, {"multi_commit_pr"}, {rl.RETRO_FP}, state="open"),  # triaged
+            _retro(4, {"multi_commit_pr"}, set(), state="open"),  # counts
+        ]
+        report = ar.compute_triage_report(past)
+        assert report.open_untriaged == 2
+
+    def test_zero_when_empty(self) -> None:
+        assert ar.compute_triage_report([]).open_untriaged == 0
+
+    def test_rendered_in_header(self) -> None:
+        past = [_retro(1, {"multi_commit_pr"}, set(), state="open")]
+        out = ar.render_triage_report_markdown(ar.compute_triage_report(past))
+        assert "Open untriaged: **1**" in out
+
+
+class TestRecentRetros:
+    """The recent-retros list is newest-first and capped (#1386)."""
+
+    def test_newest_first_order(self) -> None:
+        past = [
+            _retro(1, set(), {rl.RETRO_FP}, title="first"),
+            _retro(9, set(), set(), title="latest"),
+            _retro(5, set(), {rl.RETRO_TP}, title="middle"),
+        ]
+        report = ar.compute_triage_report(past)
+        assert [r.number for r in report.recent] == [9, 5, 1]
+        assert report.recent[0].title == "latest"
+
+    def test_capped_at_recent_count(self) -> None:
+        past = [_retro(i, set(), set()) for i in range(50)]
+        report = ar.compute_triage_report(past)
+        assert len(report.recent) == ar._RECENT_RETRO_COUNT
+
+    def test_status_priority_and_untriaged(self) -> None:
+        past = [
+            _retro(2, set(), {rl.RETRO_TP, rl.RETRO_FP}),  # tp wins (order)
+            _retro(1, set(), set()),  # untriaged
+        ]
+        report = ar.compute_triage_report(past)
+        by_num = {r.number: r for r in report.recent}
+        assert by_num[2].status == rl.RETRO_TP
+        assert by_num[1].status == "untriaged"
+
+    def test_rendered_table_and_empty(self) -> None:
+        out_empty = ar.render_triage_report_markdown(
+            ar.compute_triage_report([])
+        )
+        assert "## Recent retros" in out_empty
+        past = [_retro(7, set(), {rl.RETRO_FP}, state="open", title="t7")]
+        out = ar.render_triage_report_markdown(ar.compute_triage_report(past))
+        assert "## Recent retros" in out
+        assert "| 7 | open | retro:fp | t7 |" in out
+
+
+class TestFpTrend:
+    """Retro-level FP-rate trend: all-time vs trailing window (#1386)."""
+
+    def test_no_triaged_population(self) -> None:
+        past = [_retro(i, set(), set()) for i in range(3)]
+        report = ar.compute_triage_report(past)
+        assert report.fp_triaged == 0
+        out = ar.render_triage_report_markdown(report)
+        assert "No triaged retros yet" in out
+
+    def test_all_time_rate(self) -> None:
+        # 3 fp + 1 tp triaged -> 0.75; one unlabelled is excluded.
+        past = [
+            _retro(1, set(), {rl.RETRO_FP}),
+            _retro(2, set(), {rl.RETRO_FP}),
+            _retro(3, set(), {rl.RETRO_FP}),
+            _retro(4, set(), {rl.RETRO_TP}),
+            _retro(5, set(), set()),
+        ]
+        report = ar.compute_triage_report(past)
+        assert report.fp_triaged == 4
+        assert abs(report.fp_rate_all - 0.75) < 1e-9
+
+    def test_trend_direction_falling(self) -> None:
+        # Old retros all fp; the most recent window dominated by tp -> falling.
+        old = [_retro(i, set(), {rl.RETRO_FP}) for i in range(1, 6)]
+        recent = [_retro(i, set(), {rl.RETRO_TP}) for i in range(100, 130)]
+        report = ar.compute_triage_report(old + recent)
+        out = ar.render_triage_report_markdown(report)
+        assert report.fp_rate_recent < report.fp_rate_all
+        assert "falling" in out
+
+    def test_trend_rendered_with_counts(self) -> None:
+        past = [_retro(1, set(), {rl.RETRO_FP}), _retro(2, set(), {rl.RETRO_TP})]
+        out = ar.render_triage_report_markdown(ar.compute_triage_report(past))
+        assert "## False-positive rate trend" in out
+        assert "All-time:" in out
+        assert f"Last {ar._FP_TREND_WINDOW} retros:" in out

@@ -31,13 +31,13 @@ since the cutoff exists only to exempt the back-catalog at the server.
 from __future__ import annotations
 
 import os
-import sys
 from typing import Any
 
 from _github_tool_names import canonical_github_tool
-from _hook_runtime import emit_decision, read_event
+from _hook_runtime import build_deny, run_tool_hook
 from body_policy import (
     verify_pr_agent_attribution_footer,
+    verify_pr_allowed_sections,
     verify_pr_checklist_subsections,
     verify_pr_verification_pairs,
 )
@@ -78,6 +78,7 @@ def evaluate(body: str, *, harness_appends_footer: bool = False) -> list[str]:
     return (
         verify_pr_verification_pairs(body)
         + verify_pr_checklist_subsections(body)
+        + verify_pr_allowed_sections(body)
         + verify_pr_agent_attribution_footer(
             body, harness_appends_footer=harness_appends_footer
         )
@@ -113,32 +114,12 @@ def decide(
         "docs/standards/issue-pr-body-standard.md and "
         ".github/PULL_REQUEST_TEMPLATE.md."
     )
-    return {
-        "hookSpecificOutput": {
-            "hookEventName": "PreToolUse",
-            "permissionDecision": "deny",
-            "permissionDecisionReason": reason,
-        }
-    }
+    return build_deny(reason)
 
 
 def main(argv: list[str] | None = None) -> int:
     del argv
-    event = read_event("preflight_pr_template_shape")
-    if event is None:
-        return 0
-
-    tool_name = event.get("tool_name")
-    tool_input = event.get("tool_input") or {}
-    if not isinstance(tool_name, str) or not isinstance(tool_input, dict):
-        print(
-            "::error::preflight_pr_template_shape: event missing tool_name/tool_input",
-            file=sys.stderr,
-        )
-        return 0
-
-    emit_decision(decide(tool_name, tool_input))
-    return 0
+    return run_tool_hook("preflight_pr_template_shape", decide)
 
 
 if __name__ == "__main__":

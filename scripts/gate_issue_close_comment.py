@@ -26,10 +26,10 @@ from __future__ import annotations
 
 import argparse
 import contextlib
-import json
-import sys
 from pathlib import Path
 from typing import Any
+
+from _hook_runtime import emit_decision, read_event
 
 _TARGET_TOOL = "mcp__github__issue_write"
 _CLOSE_STATE = "closed"
@@ -43,13 +43,6 @@ _COMMENT_DIR = Path("/tmp/claude-issue-comments")  # noqa: S108
 
 def _marker_path(issue_number: int | str) -> Path:
     return _COMMENT_DIR / str(issue_number)
-
-
-def _read_stdin() -> dict[str, Any]:
-    raw = sys.stdin.read()
-    if not raw.strip():
-        return {}
-    return json.loads(raw)  # raises JSONDecodeError on bad input
 
 
 # ---------------------------------------------------------------------------
@@ -99,11 +92,8 @@ def decide(tool_name: str, tool_input: dict[str, Any]) -> dict[str, Any] | None:
 
 
 def run_gate() -> int:
-    try:
-        event = _read_stdin()
-    except (json.JSONDecodeError, Exception):
-        return 0
-    if not isinstance(event, dict):
+    event = read_event("gate_issue_close_comment")
+    if event is None or not isinstance(event, dict):
         return 0
 
     tool_name = event.get("tool_name", "")
@@ -111,9 +101,7 @@ def run_gate() -> int:
     if not isinstance(tool_input, dict):
         tool_input = {}
 
-    output = decide(tool_name, tool_input)
-    if output is not None:
-        sys.stdout.write(json.dumps(output))
+    emit_decision(decide(tool_name, tool_input), "gate_issue_close_comment")
     return 0
 
 
@@ -145,11 +133,8 @@ def record(tool_input: dict[str, Any]) -> bool:
 
 
 def run_record() -> int:
-    try:
-        event = _read_stdin()
-    except (json.JSONDecodeError, Exception):
-        return 0
-    if not isinstance(event, dict):
+    event = read_event("gate_issue_close_comment")
+    if event is None or not isinstance(event, dict):
         return 0
 
     tool_input = event.get("tool_input") or {}

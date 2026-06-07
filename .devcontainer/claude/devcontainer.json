@@ -1,12 +1,14 @@
 {
   "name": "claude-md Claude",
-  "image": "ghcr.io/tvna/claude-md-devcontainer-claude:431a0ea0df4db2adb592c559053ce51c66ed3811",
+  "image": "ghcr.io/tvna/claude-md-devcontainer-claude:edc6530f8f9cc734479e4970e5583b6785d90d9f",
   "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
   "initializeCommand": "bash .devcontainer/scripts/check-gh-config-permissions.sh ${HOME}/.config/gh && bash .devcontainer/scripts/ensure-agent-image.sh claude",
   "remoteUser": "claude",
   "updateRemoteUserUID": false,
   "runArgs": [
-    "--cap-add=NET_ADMIN"
+    "--cap-add=NET_ADMIN",
+    "--cap-add=BPF",
+    "--cap-add=PERFMON"
   ],
   "mounts": [
     "source=claude-md-claude-session,target=/home/claude/.claude,type=volume",

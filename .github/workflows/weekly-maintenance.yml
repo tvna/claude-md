@@ -1,5 +1,20 @@
 name: Weekly maintenance
 
+# Consolidated weekly-cadence maintenance (issue #1319). In addition to the
+# original weekly jobs, this file now hosts two formerly-standalone weekly
+# workflows, merged here because they share the weekly trigger class:
+#   - flake-pin-refresh.yml         -> job: flake-pin-refresh
+#   - auto-retro-triage-report.yml  -> job: auto-retro-triage-report
+#
+# Per #1319 all weekly schedules are aligned to a single slot. The former crons
+# (flake-pin-refresh: Mon 06:00 UTC; auto-retro-triage-report: Mon 07:13 UTC)
+# now run at Sun 20:00 UTC alongside the rest. flake-pin-refresh previously ran
+# "after the dependabot window"; that ordering relationship is intentionally
+# dropped in favour of the unified weekly slot (its cooldown gate, not cron
+# ordering, is what guards premature adoption). Each merged job keeps its own
+# job-level permissions, environment, concurrency, and matrix so effective
+# security permissions are unchanged.
+
 on:
   schedule:
     # 05:00 JST every Monday. GitHub Actions cron is evaluated in UTC.
@@ -15,10 +30,12 @@ on:
           - all
           - branch-cleanup
           - dependency-freshness
+          - dependency-threat-triage
           - generate-agents
           - measure-timings
           - ruleset-drift
           - security-control-drift
+          - flake-pin-refresh
       branch_cleanup_dry_run:
         description: 'Branch cleanup: plan only. The workflow currently has no delete code path.'
         type: boolean
@@ -55,6 +72,7 @@ jobs:
   branch-cleanup:
     if: github.event_name == 'schedule' || inputs.task == 'all' || inputs.task == 'branch-cleanup'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: read
       issues: write
@@ -73,7 +91,9 @@ jobs:
           exit 1
 
       - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
 
       - name: Resolve default branch
         id: defaults
@@ -125,32 +145,17 @@ jobs:
   dependency-freshness:
     if: github.event_name == 'schedule' || inputs.task == 'all' || inputs.task == 'dependency-freshness'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: read
     steps:
       - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
 
-      - name: Read uv pin from pyproject.toml
-        id: uvpin
-        run: |
-          set -euo pipefail
-          PIN="$(python3 scripts/uv_pin.py read)"
-          echo "version=${PIN}" >> "$GITHUB_OUTPUT"
-
-      - name: Install uv
-        env:
-          UV_VERSION: ${{ steps.uvpin.outputs.version }}
-        run: |
-          curl -LsSf "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/uv-x86_64-unknown-linux-gnu.tar.gz" -o /tmp/uv.tar.gz
-          tar -xzf /tmp/uv.tar.gz -C /tmp
-          mkdir -p "$HOME/.local/bin"
-          install -m 0755 /tmp/uv-x86_64-unknown-linux-gnu/uv "$HOME/.local/bin/uv"
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-          uv --version
-
-      - name: Sync locked project environment
-        run: uv sync --locked
+      - name: Set up uv and project environment
+        uses: ./.github/actions/setup-uv
 
       - name: Assert uv pin lives only in pyproject.toml
         run: uv run python scripts/uv_pin.py drift
@@ -184,6 +189,37 @@ jobs:
             echo "Policy: \`docs/standards/dependency-freshness.md\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
+  # Scheduled re-triage (#1277). The PR/issue triage is event-driven and
+  # stateless, so a recurring advisory or an expired accepted-intel
+  # suppression would otherwise only resurface when the next PR happens to
+  # fire. This cadence re-evaluates the locked-dependency corpus against live
+  # threat intel and fails loud (--fail-on-intel) so the scheduled run turns
+  # red, re-surfacing the threat:intel-needed signal independent of PR traffic.
+  dependency-threat-triage:
+    if: github.event_name == 'schedule' || inputs.task == 'all' || inputs.task == 'dependency-threat-triage'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+
+      - name: Re-triage locked dependencies against live threat intel
+        run: |
+          python3 scripts/threat_intel_triage.py scan \
+            --repo-root . \
+            --labels "" \
+            --ghsa-live \
+            --malpkg-live \
+            --epss-live \
+            --summary-file "$GITHUB_STEP_SUMMARY" \
+            --fail-on-intel
+
   generate-agents:
     if: github.event_name == 'schedule' || inputs.task == 'all' || inputs.task == 'generate-agents'
     uses: ./.github/workflows/generate-agents.yml
@@ -196,6 +232,7 @@ jobs:
   measure-timings:
     if: github.event_name == 'schedule' || inputs.task == 'all' || inputs.task == 'measure-timings'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: read
       issues: write
@@ -206,32 +243,12 @@ jobs:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
 
-      - name: Read uv pin from pyproject.toml
-        id: uvpin
-        run: |
-          set -euo pipefail
-          PIN="$(python3 scripts/uv_pin.py read)"
-          echo "version=${PIN}" >> "$GITHUB_OUTPUT"
-
-      - name: Install uv
-        env:
-          UV_VERSION: ${{ steps.uvpin.outputs.version }}
-        run: |
-          set -euo pipefail
-          curl -LsSf "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/uv-x86_64-unknown-linux-gnu.tar.gz" -o /tmp/uv.tar.gz
-          tar -xzf /tmp/uv.tar.gz -C /tmp
-          mkdir -p "$HOME/.local/bin"
-          install -m 0755 /tmp/uv-x86_64-unknown-linux-gnu/uv "$HOME/.local/bin/uv"
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-          uv --version
-
-      - name: Install Python
-        run: uv python install
-
-      - name: Sync locked project environment
-        run: uv sync --locked
+      - name: Set up uv and project environment
+        uses: ./.github/actions/setup-uv
 
       - name: Fetch verify-agents.yml runs
         run: |
@@ -265,14 +282,29 @@ jobs:
               --jobs jobs/ \
               --workflow "Verify repository scripts" \
               --title "verify-agents.yml timings (weekly)" \
+              --budget-seconds 300 \
+              --budget-output budget.json \
               > report.md
           fi
 
       - name: Append report to step summary
         run: cat report.md >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Open or update CI budget tracking issue
+        if: ${{ inputs.measure_cutoff == '' }}
+        env:
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          DRY_RUN: ${{ github.event_name == 'schedule' && 'false' || 'true' }}
+        run: |
+          set -euo pipefail
+          python3 scripts/ci_budget_issue.py run \
+            --repo "${REPO}" \
+            --breach-file budget.json \
+            --run-url "${RUN_URL}" \
+            --dry-run "${DRY_RUN}"
+
       - name: Upload report artifact
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ci-timings-report
           path: report.md
@@ -289,6 +321,7 @@ jobs:
   ruleset-drift:
     if: github.event_name == 'schedule' || inputs.task == 'all' || inputs.task == 'ruleset-drift'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     environment: ruleset-verify
     permissions:
       contents: read
@@ -308,7 +341,9 @@ jobs:
           fi
 
       - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
 
       - name: Validate ruleset JSON syntax
         run: |
@@ -332,31 +367,35 @@ jobs:
             --unknown-body-file /tmp/drift-unknown-issue.md \
             >> "$GITHUB_OUTPUT"
 
-      - name: File SoT-vs-live drift issue
-        if: steps.diff.outputs.drift_count != '0'
-        env:
-          RUN_DATE: ${{ steps.diff.outputs.run_date }}
+      # Reconcile the single rolling issue per kind (#1004): create / update /
+      # stay silent / auto-close. Runs unconditionally so a resolved drift closes
+      # the open issue instead of stacking a fresh one each run (#998/#1000/#1002).
+      - name: Reconcile SoT-vs-live drift issue
         run: |
           set -euo pipefail
-          python3 scripts/ruleset_drift.py file-sot-issue \
+          python3 scripts/ruleset_drift.py reconcile \
             --repo "${REPO}" \
-            --run-date "${RUN_DATE}" \
+            --kind sot \
+            --detected "${DRIFT_DETECTED}" \
             --body-file /tmp/drift-sot-issue.md
-
-      - name: File unknown-ruleset issue
-        if: steps.diff.outputs.unknown_count != '0'
         env:
-          RUN_DATE: ${{ steps.diff.outputs.run_date }}
+          DRIFT_DETECTED: ${{ steps.diff.outputs.drift_count != '0' }}
+
+      - name: Reconcile unknown-ruleset issue
         run: |
           set -euo pipefail
-          python3 scripts/ruleset_drift.py file-unknown-issue \
+          python3 scripts/ruleset_drift.py reconcile \
             --repo "${REPO}" \
-            --run-date "${RUN_DATE}" \
+            --kind unknown \
+            --detected "${UNKNOWN_DETECTED}" \
             --body-file /tmp/drift-unknown-issue.md
+        env:
+          UNKNOWN_DETECTED: ${{ steps.diff.outputs.unknown_count != '0' }}
 
   security-control-drift:
     if: github.event_name == 'schedule' || inputs.task == 'all' || inputs.task == 'security-control-drift'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     environment: ruleset-verify
     permissions:
       contents: read
@@ -376,32 +415,12 @@ jobs:
           fi
 
       - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
 
-      - name: Read uv pin from pyproject.toml
-        id: uvpin
-        run: |
-          set -euo pipefail
-          PIN="$(python3 scripts/uv_pin.py read)"
-          echo "version=${PIN}" >> "$GITHUB_OUTPUT"
-
-      - name: Install uv
-        env:
-          UV_VERSION: ${{ steps.uvpin.outputs.version }}
-        run: |
-          set -euo pipefail
-          curl -LsSf "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/uv-x86_64-unknown-linux-gnu.tar.gz" -o /tmp/uv.tar.gz
-          tar -xzf /tmp/uv.tar.gz -C /tmp
-          mkdir -p "$HOME/.local/bin"
-          install -m 0755 /tmp/uv-x86_64-unknown-linux-gnu/uv "$HOME/.local/bin/uv"
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-          uv --version
-
-      - name: Install Python
-        run: uv python install
-
-      - name: Sync locked project environment
-        run: uv sync --locked
+      - name: Set up uv and project environment
+        uses: ./.github/actions/setup-uv
 
       - name: Detect ruleset drift (read-only)
         id: ruleset
@@ -546,3 +565,110 @@ jobs:
             --issue 178 \
             --report-file /tmp/security-drift-report.md \
             --dry-run "${DRY_RUN}"
+
+      - name: File per-family drift issues
+        if: always() && steps.aggregate.outputs.drift_families != ''
+        env:
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          DRY_RUN: ${{ github.event_name == 'schedule' && 'false' || inputs.security_control_dry_run }}
+        run: |
+          set -euo pipefail
+          python3 scripts/security_drift_report.py file-family-issues \
+            --repo "${REPO}" \
+            --run-url "${RUN_URL}" \
+            --run-date "${{ steps.aggregate.outputs.report_date }}" \
+            --families "${{ steps.aggregate.outputs.drift_families }}" \
+            --dry-run "${DRY_RUN}"
+
+  # Merged from flake-pin-refresh.yml (#1319). flake.nix is the single source of
+  # truth for the version + per-system SHA256 of the GitHub-Releases-sourced
+  # tools (waza, apm, rtk). Dependabot has no Nix ecosystem, so these pins do
+  # not auto-follow upstream. This job checks each tool's latest release, holds
+  # anything still inside the [tool.uv].exclude-newer cooldown, recomputes the
+  # per-system SHA256 with nix, bumps flake.nix, validates it, and opens a bump
+  # PR. Refs #1171.
+  flake-pin-refresh:
+    if: github.event_name == 'schedule' || inputs.task == 'all' || inputs.task == 'flake-pin-refresh'
+    name: Auto-follow ${{ matrix.tool }} flake pin
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment:
+      name: devcontainer-image-pins
+    permissions:
+      contents: write
+      pull-requests: write
+    concurrency:
+      group: flake-pin-refresh-${{ matrix.tool }}
+      cancel-in-progress: false
+    strategy:
+      fail-fast: false
+      matrix:
+        tool: [waza, apm, rtk]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Install nix
+        uses: DeterminateSystems/nix-installer-action@ef8a148080ab6020fd15196c2084a2eea5ff2d25 # v22
+
+      - name: Decide target version (cooldown-gated)
+        id: decide
+        run: |
+          set -euo pipefail
+          target="$(python3 scripts/flake_pin_latest.py check --tool '${{ matrix.tool }}')"
+          if [ -z "$target" ]; then
+            echo "No adoptable update for ${{ matrix.tool }} (none newer, or within cooldown)."
+          else
+            echo "Adoptable target for ${{ matrix.tool }}: $target"
+          fi
+          echo "target=$target" >> "$GITHUB_OUTPUT"
+
+      - name: Recompute per-system hashes and bump flake.nix
+        if: steps.decide.outputs.target != ''
+        run: |
+          set -euo pipefail
+          tool='${{ matrix.tool }}'
+          target='${{ steps.decide.outputs.target }}'
+          hash_args=()
+          for sys in x86_64-linux aarch64-linux; do
+            url="$(python3 scripts/flake_pin.py asset-url --tool "$tool" --system "$sys" --version "$target")"
+            echo "Prefetching $sys asset: $url"
+            sri="$(nix store prefetch-file --json "$url" | python3 -c 'import json,sys; print(json.load(sys.stdin)["hash"])')"
+            hash_args+=(--hash "$sys=$sri")
+          done
+          python3 scripts/flake_pin.py bump --tool "$tool" --version "$target" "${hash_args[@]}"
+
+      - name: Validate the bumped flake
+        if: steps.decide.outputs.target != ''
+        run: nix flake check --show-trace
+
+      # Mint a short-lived GitHub App installation token so the generated flake
+      # bump PR is authored by the App bot (not a human PAT owner) and still
+      # triggers the downstream pin keepers. Refs #1401.
+      - name: Mint GitHub App token
+        if: steps.decide.outputs.target != ''
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ secrets.DEVCONTAINER_PIN_APP_ID }}
+          private-key: ${{ secrets.DEVCONTAINER_PIN_APP_PRIVATE_KEY }}
+
+      - name: Open bump PR
+        if: steps.decide.outputs.target != ''
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          REPO: ${{ github.repository }}
+          PIN_BOT_APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
+        run: |
+          set -euo pipefail
+          tool='${{ matrix.tool }}'
+          target='${{ steps.decide.outputs.target }}'
+          python3 scripts/devcontainer_pin_pr.py open \
+            --github-sha "${tool}-${target}" \
+            --branch-prefix "flake-pin-" \
+            --base main \
+            --title "chore(flake): bump ${tool} pin to ${target}" \
+            --commit-subject "chore(flake): bump ${tool} pin to ${target}" \
+            --commit-trailer "Refs #1171" \
+            --template .github/pr-body-templates/flake-pin.md \
+            --file flake.nix

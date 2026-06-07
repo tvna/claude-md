@@ -1,9 +1,10 @@
 """Contract tests for the local GitHub MCP server declaration (#1063, #1067).
 
 ``apm.yml`` is the single source of truth: it declares the `github` stdio server
-pointing at the launch wrapper. The generated ``.mcp.json`` mirror is prohibited
-from being committed (repo-scope #58/#1067); it must stay gitignored so an
-``apm install`` cannot accidentally check it in.
+(under ``dependencies.mcp``) pointing at the launch wrapper. The generated
+``.mcp.json`` mirror -- rendered by ``scripts/gen_mcp_json.py`` -- is prohibited
+from being committed (repo-scope #58/#1067); it must stay gitignored so the
+render cannot accidentally check it in.
 """
 
 from __future__ import annotations
@@ -23,7 +24,8 @@ WRAPPER = "scripts/mcp_github_launch.sh"
 
 def test_apm_yml_declares_github_stdio_server_via_wrapper() -> None:
     data = yaml.safe_load(APM_YML.read_text(encoding="utf-8"))
-    server = data["mcp"]["servers"]["github"]
+    servers = {s["name"]: s for s in data["dependencies"]["mcp"] if "name" in s}
+    server = servers["github"]
     assert server["transport"] == "stdio"
     assert server["command"] == WRAPPER
 

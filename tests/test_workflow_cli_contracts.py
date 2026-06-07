@@ -24,6 +24,7 @@ Drift guard (issue #193):
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import re
 from pathlib import Path
@@ -35,40 +36,58 @@ import auto_retro
 import backup_archive
 import body_policy
 import branch_cleanup
+import ci_budget_issue
 import coverage_failure_issue
 import dependabot_automerge
 import dependabot_labels
 import devcontainer_pin_pr
+import flake_pin
+import flake_pin_latest
 import github_paginate
 import issue_link
 import labels_apply
+import measure_devcontainer_startup
 import nixpkgs_cooldown
 import post_issue_comment
 import pr_upsert
+import preflight_uv_version
+import prune_devcontainer_images
 import pytest
 import ruleset_drift
 import rulesets_apply
+import scan_allowlist_parser_parity
+import scan_allowlist_rationale
+import scan_apm_lock_drift
 import scan_apm_portability
+import scan_compile_from_source
 import scan_design_philosophy_drift
 import scan_devcontainer_tool_drift
+import scan_doc_workflow_refs
 import scan_docs_inventory
+import scan_flake_pin_drift
 import scan_hook_coverage_drift
 import scan_input_contract_drift
 import scan_maintainability_metrics
 import scan_markdown_links
 import scan_non_ascii
 import scan_preflight_drift
+import scan_provisioning_hook_serial
 import scan_quality_standard_drift
 import scan_retro_followup_drift
 import scan_secret_runbooks
+import scan_secrets
+import scan_session_path_drift
+import scan_test_presence_drift
 import scan_workflow_action_pins
 import scan_workflow_gh_calls
+import scan_workflow_injection
 import scan_workflow_pip
 import security_drift_report
 import skill_quality_gate
 import threat_intel_triage
 import title_policy
 import update_devcontainer_image_pins
+import uv_download_checksum
 import uv_pin
 import validate_json_syntax
 import verify_apm_checksums
@@ -77,15 +96,22 @@ import verify_linked_issue_titles
 import verify_readme_translation
 import verify_required_check_contexts
 import verify_ruleset_sync
+import verify_security_control_floor
 import verify_shard_coverage
 import verify_test_shard_markers
+import verify_text_delta_section
 import workflow_diagram
 import yaml
 
-pytestmark = pytest.mark.shard_ci_ops
+pytestmark = pytest.mark.shard_ci_ops_2
 REPO = "owner/repo"
 
 _WORKFLOWS_DIR = Path(".github/workflows")
+# Composite actions invoke scripts from their own ``runs.steps`` -- those calls
+# must stay under the same CLI-contract governance as workflow steps, else
+# moving a call into an action (e.g. .github/actions/setup-uv) becomes a blind
+# spot. The inventory below scans both surfaces.
+_ACTIONS_DIR = Path(".github/actions")
 
 # Matches ``python[3] scripts/<name>.py [<sub>]`` and
 # ``uv run python scripts/<name>.py [<sub>]``. The negative lookbehind
@@ -116,6 +142,8 @@ class WorkflowInvocation(NamedTuple):
 # enforce that in both directions.
 CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("analyze_ci_timings.py", None): "test_analyze_ci_timings_matches_workflow_args",
+    ("measure_devcontainer_startup.py", None): "test_measure_devcontainer_startup_matches_workflow_args",
+    ("ci_budget_issue.py", "run"): "test_ci_budget_issue_run_matches_workflow_args",
     ("attack_review_reminder.py", "assemble"): "test_attack_review_reminder_assemble_matches_workflow_args",
     ("backup_archive.py", "build"): "test_backup_archive_build_matches_workflow_args",
     ("github_paginate.py", "fetch-run-jobs"): "test_github_paginate_fetch_run_jobs_matches_workflow_args",
@@ -133,43 +161,64 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("branch_cleanup.py", "survey"): "test_branch_cleanup_survey_matches_workflow_args",
     ("coverage_failure_issue.py", "run"): "test_coverage_failure_issue_run_matches_workflow_env",
     ("devcontainer_pin_pr.py", "open"): "test_devcontainer_pin_pr_open_matches_workflow_args",
+    ("devcontainer_pin_pr.py", "refresh"): "test_devcontainer_pin_pr_refresh_matches_workflow_args",
+    ("devcontainer_pin_pr.py", "merge"): "test_devcontainer_pin_pr_merge_matches_workflow_args",
+    ("flake_pin.py", "asset-url"): "test_flake_pin_workflow_subcommands_match_ci_usage",
+    ("flake_pin.py", "bump"): "test_flake_pin_workflow_subcommands_match_ci_usage",
+    ("flake_pin_latest.py", "check"): "test_flake_pin_latest_check_matches_workflow_args",
     ("dependabot_automerge.py", "audit"): "test_dependabot_automerge_audit_matches_workflow_files",
     ("dependabot_automerge.py", "list-files"): "test_dependabot_list_files_matches_workflow_args",
     ("dependabot_automerge.py", "request-automerge"): "test_dependabot_request_automerge_matches_workflow_args",
+    ("dependabot_automerge.py", "disable-automerge"): "test_dependabot_disable_automerge_matches_workflow_args",
     ("dependabot_labels.py", "verify"): "test_dependabot_labels_verify_matches_workflow_paths",
     ("issue_link.py", "verify"): "test_issue_link_verify_matches_workflow_body_file_and_author",
     ("labels_apply.py", "$COMMAND"): "test_labels_apply_validate_and_plan_match_workflow_args",
     ("labels_apply.py", "plan"): "test_labels_apply_validate_and_plan_match_workflow_args",
     ("labels_apply.py", "validate"): "test_labels_apply_validate_and_plan_match_workflow_args",
     ("nixpkgs_cooldown.py", "verify"): "test_nixpkgs_cooldown_verify_matches_workflow_args",
-    ("ruleset_drift.py", "detect"): "test_ruleset_drift_detect_and_file_issue_match_workflow_args",
-    ("ruleset_drift.py", "file-sot-issue"): "test_ruleset_drift_detect_and_file_issue_match_workflow_args",
-    ("ruleset_drift.py", "file-unknown-issue"): "test_ruleset_drift_detect_and_file_issue_match_workflow_args",
+    ("ruleset_drift.py", "detect"): "test_ruleset_drift_detect_and_reconcile_match_workflow_args",
+    ("ruleset_drift.py", "reconcile"): "test_ruleset_drift_detect_and_reconcile_match_workflow_args",
     ("rulesets_apply.py", "$MODE"): "test_rulesets_apply_plan_and_auto_delete_match_workflow_args",
     ("rulesets_apply.py", "auto-delete"): "test_rulesets_apply_plan_and_auto_delete_match_workflow_args",
+    ("scan_allowlist_parser_parity.py", "verify"): "test_scan_allowlist_parser_parity_verify_matches_workflow_args",
+    ("scan_allowlist_rationale.py", "verify"): "test_scan_allowlist_rationale_verify_matches_workflow_args",
     ("scan_apm_portability.py", "verify"): "test_scan_apm_portability_verify_matches_workflow_paths",
     ("scan_design_philosophy_drift.py", "verify"): "test_scan_design_philosophy_drift_verify_matches_workflow_paths",
+    ("scan_design_philosophy_drift.py", "verify-coupling"): "test_scan_design_philosophy_drift_verify_coupling_matches_workflow_args",
+    ("scan_apm_lock_drift.py", "verify"): "test_scan_apm_lock_drift_verify_matches_workflow_args",
+    ("scan_compile_from_source.py", "verify"): "test_scan_compile_from_source_verify_matches_workflow_args",
     ("scan_devcontainer_tool_drift.py", "verify"): "test_scan_devcontainer_tool_drift_verify_matches_workflow_args",
+    ("scan_doc_workflow_refs.py", "verify"): "test_scan_doc_workflow_refs_verify_matches_workflow_args",
     ("scan_docs_inventory.py", "verify"): "test_scan_docs_inventory_verify_matches_workflow_args",
+    ("scan_flake_pin_drift.py", "verify"): "test_scan_flake_pin_drift_verify_matches_workflow_args",
     ("scan_markdown_links.py", "verify"): "test_scan_markdown_links_verify_matches_workflow_args",
     ("scan_maintainability_metrics.py", "verify"): "test_scan_maintainability_metrics_verify_matches_workflow_args",
     ("scan_non_ascii.py", "run"): "test_scan_non_ascii_run_matches_workflow_env",
     ("scan_hook_coverage_drift.py", "verify"): "test_scan_hook_coverage_drift_verify_matches_workflow_args",
     ("scan_input_contract_drift.py", "verify"): "test_scan_input_contract_drift_verify_matches_workflow_args",
     ("scan_preflight_drift.py", "verify"): "test_scan_preflight_drift_verify_matches_workflow_args",
+    ("scan_provisioning_hook_serial.py", "verify"): "test_scan_provisioning_hook_serial_verify_matches_workflow_args",
     ("scan_quality_standard_drift.py", "verify"): "test_scan_quality_standard_drift_verify_matches_workflow_args",
     ("scan_retro_followup_drift.py", "run"): "test_scan_retro_followup_drift_run_matches_workflow_env",
     ("scan_secret_runbooks.py", "verify"): "test_scan_secret_runbooks_verify_matches_workflow_args",
+    ("scan_secrets.py", "verify"): "test_scan_secrets_verify_matches_workflow_args",
+    ("scan_session_path_drift.py", "verify"): "test_scan_session_path_drift_verify_matches_workflow_args",
+    ("scan_test_presence_drift.py", "verify"): "test_scan_test_presence_drift_verify_matches_workflow_args",
     ("scan_workflow_action_pins.py", "verify"): "test_scan_workflow_action_pins_verify_matches_workflow_args",
     ("scan_workflow_gh_calls.py", "verify"): "test_scan_workflow_gh_calls_verify_matches_workflow_args",
+    ("scan_workflow_injection.py", "verify"): "test_scan_workflow_injection_verify_matches_workflow_args",
     ("scan_workflow_pip.py", "verify"): "test_scan_workflow_pip_verify_matches_workflow_args",
     ("security_drift_report.py", "aggregate"): "test_security_drift_report_aggregate_and_post_comment_match_workflow_args",
     ("security_drift_report.py", "post-comment"): "test_security_drift_report_aggregate_and_post_comment_match_workflow_args",
+    ("security_drift_report.py", "file-family-issues"): "test_security_drift_report_file_family_issues_matches_workflow_args",
     ("skill_quality_gate.py", "verify"): "test_skill_quality_gate_verify_matches_workflow_args",
     ("threat_intel_triage.py", "apply-labels"): "test_threat_intel_apply_labels_matches_workflow_args",
     ("threat_intel_triage.py", "scan"): "test_threat_intel_scan_matches_workflow_args",
+    ("threat_intel_triage.py", "comment"): "test_threat_intel_comment_matches_workflow_args",
     ("title_policy.py", "verify"): "test_title_policy_verify_matches_workflow_kind_env",
     ("update_devcontainer_image_pins.py", "$GITHUB_SHA"): "test_update_devcontainer_image_pins_matches_workflow_args",
+    ("uv_download_checksum.py", "verify"): "test_uv_download_checksum_verify_matches_action_args",
+    ("preflight_uv_version.py", "verify"): "test_preflight_uv_version_verify_matches_workflow_args",
     ("uv_pin.py", "drift"): "test_uv_pin_workflow_subcommands_match_ci_usage",
     ("uv_pin.py", "read"): "test_uv_pin_workflow_subcommands_match_ci_usage",
     ("uv_pin.py", "stale"): "test_uv_pin_workflow_subcommands_match_ci_usage",
@@ -177,11 +226,14 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("verify_dependabot_author.py", "verify"): "test_verify_dependabot_author_verify_matches_workflow_args",
     ("verify_linked_issue_titles.py", "verify"): "test_verify_linked_issue_titles_verify_matches_workflow_args",
     ("verify_readme_translation.py", "verify"): "test_verify_readme_translation_matches_workflow_args",
+    ("verify_text_delta_section.py", "verify"): "test_verify_text_delta_section_matches_workflow_args",
     ("verify_required_check_contexts.py", "verify"): "test_verify_required_check_contexts_matches_workflow_args",
     ("verify_ruleset_sync.py", "verify"): "test_verify_ruleset_sync_matches_workflow_args",
+    ("verify_security_control_floor.py", None): "test_verify_security_control_floor_matches_workflow_args",
     ("github_paginate.py", "fetch"): "test_github_paginate_fetch_matches_workflow_args",
     ("github_paginate.py", "get"): "test_github_paginate_get_matches_workflow_args",
     ("post_issue_comment.py", "create"): "test_post_issue_comment_create_matches_workflow_args",
+    ("prune_devcontainer_images.py", "prune"): "test_prune_devcontainer_images_prune_matches_workflow_args",
     ("pr_upsert.py", "upsert"): "test_pr_upsert_matches_workflow_args",
     ("verify_shard_coverage.py", None): "test_verify_shard_coverage_matches_workflow_args",
     ("verify_test_shard_markers.py", None): "test_verify_test_shard_markers_matches_workflow_args",
@@ -232,22 +284,47 @@ def _emit_invocations_from_run(
     return out
 
 
-def _iter_workflow_invocations() -> list[WorkflowInvocation]:
-    """Inventory every Python script invocation in ``.github/workflows/*.yml``.
+def _emit_steps(
+    source: str, job: str, steps: object, found: list[WorkflowInvocation]
+) -> None:
+    """Emit invocations for every ``run:`` step in *steps* (a list or not)."""
+    if not isinstance(steps, list):
+        return
+    for step in steps:
+        if not isinstance(step, dict):
+            continue
+        run_text = step.get("run")
+        if not isinstance(run_text, str):
+            continue
+        step_name = str(step.get("name", "<unnamed>"))
+        found.extend(_emit_invocations_from_run(source, job, step_name, run_text))
 
-    Walks each workflow structurally via ``yaml.safe_load`` and emits one
-    :class:`WorkflowInvocation` per matched ``run:`` line. The .github
-    workflow YAML accepts GitHub Actions extensions (e.g. POSIX heredocs
-    whose body dedents past the block scalar indent) that strict YAML
-    parsers reject; ``.pre-commit-config.yaml`` already excludes
-    ``.github/workflows/`` from ``check-yaml`` for the same reason. When
-    structured parsing fails, fall back to scanning the raw text so the
-    affected workflow still contributes to the inventory -- structured
-    walk is preferred but cannot be the only path.
+
+def _iter_workflow_invocations() -> list[WorkflowInvocation]:
+    """Inventory every Python script invocation under ``.github/``.
+
+    Covers both surfaces that GitHub Actions executes: workflow jobs
+    (``.github/workflows/*.yml`` -> ``jobs.*.steps``) and composite actions
+    (``.github/actions/**/action.yml`` -> ``runs.steps``). A script call moved
+    from a workflow step into a composite action must remain inventoried, so
+    CLI-contract governance follows the call rather than the file.
+
+    Walks each file structurally via ``yaml.safe_load`` and emits one
+    :class:`WorkflowInvocation` per matched ``run:`` line. The .github YAML
+    accepts GitHub Actions extensions (e.g. POSIX heredocs whose body dedents
+    past the block scalar indent) that strict YAML parsers reject;
+    ``.pre-commit-config.yaml`` already excludes ``.github/workflows/`` from
+    ``check-yaml`` for the same reason. When structured parsing fails, fall
+    back to scanning the raw text so the affected file still contributes to
+    the inventory -- structured walk is preferred but cannot be the only path.
     """
     found: list[WorkflowInvocation] = []
-    for path in sorted(_WORKFLOWS_DIR.glob("*.yml")):
-        workflow = str(path)
+
+    action_files = sorted(_ACTIONS_DIR.rglob("action.yml")) + sorted(
+        _ACTIONS_DIR.rglob("action.yaml")
+    )
+    for path in sorted(_WORKFLOWS_DIR.glob("*.yml")) + action_files:
+        source = str(path)
         raw = path.read_text(encoding="utf-8")
         document: object | None
         try:
@@ -256,27 +333,18 @@ def _iter_workflow_invocations() -> list[WorkflowInvocation]:
             document = None
         if isinstance(document, dict) and isinstance(document.get("jobs"), dict):
             for job_name, job in document["jobs"].items():
-                if not isinstance(job, dict):
-                    continue
-                steps = job.get("steps")
-                if not isinstance(steps, list):
-                    continue
-                for step in steps:
-                    if not isinstance(step, dict):
-                        continue
-                    run_text = step.get("run")
-                    if not isinstance(run_text, str):
-                        continue
-                    step_name = str(step.get("name", "<unnamed>"))
-                    found.extend(
-                        _emit_invocations_from_run(
-                            workflow, str(job_name), step_name, run_text
-                        )
-                    )
+                if isinstance(job, dict):
+                    _emit_steps(source, str(job_name), job.get("steps"), found)
+        elif (
+            isinstance(document, dict)
+            and isinstance(document.get("runs"), dict)
+        ):
+            # Composite action: steps live under ``runs.steps``.
+            _emit_steps(source, "<composite>", document["runs"].get("steps"), found)
         else:
             found.extend(
                 _emit_invocations_from_run(
-                    workflow, "<unparseable>", "<unparseable>", raw
+                    source, "<unparseable>", "<unparseable>", raw
                 )
             )
     return found
@@ -662,6 +730,15 @@ def test_dependabot_request_automerge_matches_workflow_args(
     assert dependabot_automerge.main(["request-automerge", "--pr-number", "42"]) == 0
 
 
+def test_dependabot_disable_automerge_matches_workflow_args(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("GH_TOKEN", "tok")
+    monkeypatch.setenv("REPO", "owner/repo")
+    monkeypatch.setattr(dependabot_automerge, "_disable_auto_merge", lambda **kw: False)
+    assert dependabot_automerge.main(["disable-automerge", "--pr-number", "42"]) == 0
+
+
 def test_dependabot_labels_verify_matches_workflow_paths(tmp_path: Path) -> None:
     dependabot = tmp_path / "dependabot.yml"
     labels = tmp_path / "labels.json"
@@ -727,7 +804,7 @@ def test_labels_apply_validate_and_plan_match_workflow_args(
     ) == 0
 
 
-def test_ruleset_drift_detect_and_file_issue_match_workflow_args(
+def test_ruleset_drift_detect_and_reconcile_match_workflow_args(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     sot_dir = _write_ruleset_sot(tmp_path)
@@ -757,6 +834,8 @@ def test_ruleset_drift_detect_and_file_issue_match_workflow_args(
             {"repo": repo, "title": title, "body_file": body_file, "labels": labels}
         )
 
+    # No open rolling issue + capture create; reconcile must never shell out.
+    monkeypatch.setattr(ruleset_drift, "find_rolling_issue", lambda repo, title: None)
     monkeypatch.setattr(ruleset_drift, "file_issue", fake_file_issue)
 
     assert ruleset_drift.main(
@@ -771,24 +850,39 @@ def test_ruleset_drift_detect_and_file_issue_match_workflow_args(
             "--summary-file",
             str(tmp_path / "summary.md"),
             "--sot-body-file",
-            str(tmp_path / "drift-sot.md"),
+            str(tmp_path / "drift-sot-issue.md"),
             "--unknown-body-file",
-            str(tmp_path / "drift-unknown.md"),
+            str(tmp_path / "drift-unknown-issue.md"),
         ]
     ) == 0
     assert ruleset_drift.main(
         [
-            "file-sot-issue",
+            "reconcile",
             "--repo",
             REPO,
-            "--run-date",
-            "2026-05-24",
+            "--kind",
+            "sot",
+            "--detected",
+            "true",
             "--body-file",
-            str(tmp_path / "drift-sot.md"),
+            str(tmp_path / "drift-sot-issue.md"),
+        ]
+    ) == 0
+    assert ruleset_drift.main(
+        [
+            "reconcile",
+            "--repo",
+            REPO,
+            "--kind",
+            "unknown",
+            "--detected",
+            "false",
+            "--body-file",
+            str(tmp_path / "drift-unknown-issue.md"),
         ]
     ) == 0
     assert calls[-1]["repo"] == REPO
-    assert calls[-1]["title"].startswith("fix(ruleset-drift): SoT vs live drift")
+    assert calls[-1]["title"] == ruleset_drift.SOT_ISSUE_TITLE
 
 
 def test_rulesets_apply_plan_and_auto_delete_match_workflow_args(
@@ -977,6 +1071,48 @@ def test_verify_readme_translation_matches_workflow_args(
     ) == 0
 
 
+def test_verify_text_delta_section_matches_workflow_args(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Mirror the env+argv shape used by portable-pr-policy.yml.
+
+    The workflow shells to
+    ``python3 scripts/verify_text_delta_section.py verify
+    --base-ref "$BASE_REF" --body-file "$body_file"
+    --created-at "$PR_CREATED_AT" --cutoff "$BODY_POLICY_CUTOFF"``.
+    Stub the changed-files lookup so the test stays hermetic across CI
+    checkout depths (the lint-scripts-pytest job checks out shallow, so a
+    real ``git diff origin/main..HEAD`` would fail with exit 128).
+    """
+    monkeypatch.setattr(
+        verify_text_delta_section,
+        "changed_instruction_files",
+        lambda base, head="HEAD", **kwargs: frozenset({"CLAUDE.md"}),
+    )
+
+    body_file = tmp_path / "body.md"
+    body_file.write_text(
+        "## Text delta\n\n"
+        "- chars: +20\n"
+        "- Added context: x\n"
+        "- Removed context: y\n",
+        encoding="utf-8",
+    )
+    assert verify_text_delta_section.main(
+        [
+            "verify",
+            "--base-ref",
+            "origin/main",
+            "--body-file",
+            str(body_file),
+            "--created-at",
+            "2026-06-03T00:00:00Z",
+            "--cutoff",
+            "2026-05-26T00:00:00Z",
+        ]
+    ) == 0
+
+
 def test_scan_design_philosophy_drift_verify_matches_workflow_paths(
     tmp_path: Path,
 ) -> None:
@@ -1002,6 +1138,41 @@ def test_scan_design_philosophy_drift_verify_matches_workflow_paths(
     )
     assert scan_design_philosophy_drift.main(
         ["verify", "--master", str(master), "--doc", str(doc)]
+    ) == 0
+
+
+def test_scan_design_philosophy_drift_verify_coupling_matches_workflow_args(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Mirror the env+argv shape used by portable-pr-policy.yml.
+
+    The workflow shells to
+    ``python3 scripts/scan_design_philosophy_drift.py verify-coupling
+    --base-ref "$BASE_REF" --body-file "$body_file"``. Stub the
+    changed-files lookup so the test stays hermetic across CI checkout
+    depths (the lint-scripts-pytest job checks out shallow, so a real
+    ``git diff origin/main..HEAD`` would fail with exit 128).
+    """
+    monkeypatch.setattr(
+        scan_design_philosophy_drift,
+        "changed_files",
+        lambda base, **kwargs: frozenset(
+            {
+                scan_design_philosophy_drift.MASTER_PATH,
+                scan_design_philosophy_drift.DOC_PATH,
+            }
+        ),
+    )
+    body_file = tmp_path / "body.md"
+    body_file.write_text("no ack needed; doc is in the diff\n", encoding="utf-8")
+    assert scan_design_philosophy_drift.main(
+        [
+            "verify-coupling",
+            "--base-ref",
+            "origin/main",
+            "--body-file",
+            str(body_file),
+        ]
     ) == 0
 
 
@@ -1054,6 +1225,18 @@ def test_scan_workflow_gh_calls_verify_matches_workflow_args() -> None:
     assert scan_workflow_gh_calls.main(["verify"]) == 0
 
 
+def test_scan_workflow_injection_verify_matches_workflow_args() -> None:
+    """Mirrors the ``Assert no untrusted context in workflow run blocks`` step
+    in ``.github/workflows/verify-agents.yml``. Refs #1129."""
+    assert scan_workflow_injection.main(["verify"]) == 0
+
+
+def test_scan_secrets_verify_matches_workflow_args() -> None:
+    """Mirrors the ``Assert no hardcoded secrets in tracked non-Python files``
+    step in ``.github/workflows/verify-agents.yml``. Refs #1129."""
+    assert scan_secrets.main(["verify"]) == 0
+
+
 def test_scan_secret_runbooks_verify_matches_workflow_args() -> None:
     """Mirrors the ``Assert workflow secrets have concrete runbooks`` step."""
     assert scan_secret_runbooks.main(["verify"]) == 0
@@ -1071,9 +1254,21 @@ def test_scan_quality_standard_drift_verify_matches_workflow_args() -> None:
     assert scan_quality_standard_drift.main(["verify"]) == 0
 
 
+def test_scan_test_presence_drift_verify_matches_workflow_args() -> None:
+    """Mirrors the ``Verify scripts ship required tests`` step in
+    ``.github/workflows/verify-agents.yml``. Refs #1088."""
+    assert scan_test_presence_drift.main(["verify"]) == 0
+
+
 def test_scan_markdown_links_verify_matches_workflow_args() -> None:
     """Mirrors the ``Assert local Markdown links resolve`` step."""
     assert scan_markdown_links.main(["verify"]) == 0
+
+
+def test_scan_compile_from_source_verify_matches_workflow_args() -> None:
+    """Mirrors the ``Verify no tool is compiled from source on the CI
+    surface`` step in ``.github/workflows/verify-agents.yml``."""
+    assert scan_compile_from_source.main(["verify"]) == 0
 
 
 def test_scan_devcontainer_tool_drift_verify_matches_workflow_args() -> None:
@@ -1082,9 +1277,39 @@ def test_scan_devcontainer_tool_drift_verify_matches_workflow_args() -> None:
     assert scan_devcontainer_tool_drift.main(["verify"]) == 0
 
 
+def test_scan_allowlist_parser_parity_verify_matches_workflow_args() -> None:
+    """Mirrors the ``Verify devcontainer allowlist parser parity`` step in
+    ``.github/workflows/verify-agents.yml``. Refs #1257."""
+    assert scan_allowlist_parser_parity.main(["verify"]) == 0
+
+
+def test_scan_allowlist_rationale_verify_matches_workflow_args() -> None:
+    """Mirrors the ``Verify devcontainer egress hosts carry a triage
+    rationale`` step in ``.github/workflows/verify-agents.yml``. Refs #1170."""
+    assert scan_allowlist_rationale.main(["verify"]) == 0
+
+
+def test_scan_apm_lock_drift_verify_matches_workflow_args() -> None:
+    """Mirrors the ``Verify apm.lock.yaml MCP drift`` step in
+    ``.github/workflows/portable-pr-policy.yml``."""
+    assert scan_apm_lock_drift.main(["verify"]) == 0
+
+
+def test_scan_flake_pin_drift_verify_matches_workflow_args() -> None:
+    """Mirrors the ``Verify flake.nix is the single source of truth for pinned
+    hashes`` step in ``.github/workflows/verify-agents.yml``."""
+    assert scan_flake_pin_drift.main(["verify"]) == 0
+
+
 def test_scan_docs_inventory_verify_matches_workflow_args() -> None:
     """Mirrors the ``Assert docs index and lane placement`` step."""
     assert scan_docs_inventory.main(["verify"]) == 0
+
+
+def test_scan_doc_workflow_refs_verify_matches_workflow_args() -> None:
+    """Mirrors the ``Assert docs cite existing workflow files`` step in
+    ``.github/workflows/verify-agents.yml`` (issue #1325)."""
+    assert scan_doc_workflow_refs.main(["verify"]) == 0
 
 
 def test_scan_maintainability_metrics_verify_matches_workflow_args() -> None:
@@ -1204,6 +1429,43 @@ def test_security_drift_report_aggregate_and_post_comment_match_workflow_args(
     ) == 0
 
 
+def test_security_drift_report_file_family_issues_matches_workflow_args() -> None:
+    """Mirror the argv shape of the File-per-family-drift-issues step.
+
+    weekly-maintenance.yml shells to ``file-family-issues --repo R --run-url U
+    --run-date D --families <csv> --dry-run <bool>`` where ``<csv>`` is the
+    ``drift_families`` output of the aggregate step. Exercise the dry-run path
+    (no token, no network) across every target family so the contract pins the
+    accepted flag set and the family allowlist.
+    """
+    assert security_drift_report.main(
+        [
+            "file-family-issues",
+            "--repo",
+            REPO,
+            "--run-url",
+            "https://example.test/run",
+            "--run-date",
+            "2026-06-03",
+            "--families",
+            "labels,apm-instructions,uv-pin-literal",
+            "--dry-run",
+            "true",
+        ]
+    ) == 0
+
+
+def test_verify_security_control_floor_matches_workflow_args() -> None:
+    """Mirror the argv shape used by verify-agents.yml lint-scripts-static.
+
+    The workflow shells to ``uv run python
+    scripts/verify_security_control_floor.py`` with no further arguments, so
+    the gate reads the committed ``.github/security-control-floor.toml`` and
+    must exit 0 on it. Refs #178.
+    """
+    assert verify_security_control_floor.main([]) == 0
+
+
 def test_threat_intel_scan_matches_workflow_args(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -1228,12 +1490,19 @@ def test_threat_intel_scan_matches_workflow_args(
             "--labels",
             "type:fix",
             "--ghsa-live",
+            "--malpkg-live",
+            "--epss-live",
             "--github-output",
             str(tmp_path / "output"),
             "--summary-file",
             str(tmp_path / "summary.md"),
+            "--comment-file",
+            str(tmp_path / "triage-comment.md"),
         ]
     ) == 0
+    # scan must render the same markdown to the comment file that the
+    # comment subcommand later posts (the two surfaces share render_summary_markdown).
+    assert (tmp_path / "triage-comment.md").exists()
 
 
 def test_threat_intel_apply_labels_matches_workflow_args(
@@ -1248,6 +1517,36 @@ def test_threat_intel_apply_labels_matches_workflow_args(
     assert threat_intel_triage.main(["apply-labels", "--add-labels", "threat:intel-needed"]) == 0
     assert threat_intel_triage.main(["apply-labels", "--remove-labels", "threat:response-needed"]) == 0
     assert threat_intel_triage.main(["apply-labels"]) == 0
+
+
+def test_threat_intel_comment_matches_workflow_args(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """comment subcommand accepts the argv shapes used by issue-pr-triage.yml.
+
+    The ``Publish triage evidence comment`` step invokes both branches:
+    ``comment --body-file <f>`` when findings fired (create allowed) and
+    ``comment --body-file <f> --update-only`` when none did. The
+    _upsert_comment boundary is stubbed so the contract exercises argv/env
+    wiring without network access.
+    """
+    monkeypatch.setenv("GH_TOKEN", "tok")
+    monkeypatch.setenv("REPO", "owner/repo")
+    monkeypatch.setenv("NUMBER", "42")
+    body_file = tmp_path / "triage-comment.md"
+    body_file.write_text("## Threat intelligence triage\n", encoding="utf-8")
+
+    seen: list[bool] = []
+
+    def fake_upsert(**kw: object) -> int:
+        seen.append(bool(kw["create"]))
+        return 0
+
+    monkeypatch.setattr(threat_intel_triage, "_upsert_comment", fake_upsert)
+
+    assert threat_intel_triage.main(["comment", "--body-file", str(body_file)]) == 0
+    assert threat_intel_triage.main(["comment", "--body-file", str(body_file), "--update-only"]) == 0
+    assert seen == [True, False]
 
 
 def test_pr_upsert_find_matches_workflow_args(
@@ -1400,6 +1699,33 @@ def test_github_paginate_fetch_run_jobs_matches_workflow_args(
     assert (tmp_path / "jobs" / "42.json").exists()
 
 
+def test_prune_devcontainer_images_prune_matches_workflow_args(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """prune subcommand accepts the --owner/--package/--pinned-sha-from/--keep-recent/
+    --min-age-days/--dry-run/--summary-file args used by the ``Prune old devcontainer
+    image versions`` step in monthly-maintenance.yml. Refs #1400."""
+    monkeypatch.setenv("GH_TOKEN", "tok")
+    monkeypatch.setattr(prune_devcontainer_images, "_list_versions", lambda *a, **k: [])
+    monkeypatch.setattr(prune_devcontainer_images, "_delete_version", lambda *a, **k: (204, ""))
+    cfg = tmp_path / "devcontainer.json"
+    cfg.write_text(json.dumps({"image": "ghcr.io/tvna/x:" + "a" * 40}), encoding="utf-8")
+    summary = tmp_path / "summary.md"
+    rc = prune_devcontainer_images.main([
+        "prune",
+        "--owner", "owner",
+        "--package", "claude-md-devcontainer-claude",
+        "--package", "claude-md-devcontainer-codex",
+        "--pinned-sha-from", str(cfg),
+        "--pinned-sha-from", str(cfg),
+        "--keep-recent", "10",
+        "--min-age-days", "90",
+        "--dry-run", "true",
+        "--summary-file", str(summary),
+    ])
+    assert rc == 0
+
+
 def test_validate_json_syntax_verify_matches_workflow_args() -> None:
     """verify subcommand accepts the repeated --file args used by the
     ``Validate ruleset JSON syntax`` steps in apply-rulesets.yml and
@@ -1511,16 +1837,30 @@ def test_devcontainer_pin_pr_uses_environment_secret_token() -> None:
         "contents": "write",
         "pull-requests": "write",
     }
-    assert "DEVCONTAINER_PIN_PR_TOKEN" in raw
+    # The PR is authored by a GitHub App bot: the token is minted at runtime from
+    # the App ID + private key, fully replacing the old PAT. Refs #1401.
+    assert "DEVCONTAINER_PIN_APP_ID" in raw
+    assert "DEVCONTAINER_PIN_APP_PRIVATE_KEY" in raw
+    assert "DEVCONTAINER_PIN_PR_TOKEN" not in raw
+
+    app_token = next(step for step in update_pins["steps"] if step.get("id") == "app-token")
+    assert app_token["uses"].startswith("actions/create-github-app-token@")
+    assert app_token["with"] == {
+        "app-id": "${{ secrets.DEVCONTAINER_PIN_APP_ID }}",
+        "private-key": "${{ secrets.DEVCONTAINER_PIN_APP_PRIVATE_KEY }}",
+    }
 
     open_pr = next(
         step for step in update_pins["steps"] if step.get("name") == "Open pin update PR"
     )
-    # Thin orchestration: GH_TOKEN comes from the environment secret, REPO from
-    # the workflow context (both consumed by scripts/devcontainer_pin_pr.py).
+    # Thin orchestration: GH_TOKEN is the App installation token (so the PR
+    # author is the App bot), PIN_BOT_APP_SLUG carries the App slug so the commit
+    # author matches, REPO from the workflow context. All consumed by
+    # scripts/devcontainer_pin_pr.py.
     assert open_pr["env"] == {
-        "GH_TOKEN": "${{ secrets.DEVCONTAINER_PIN_PR_TOKEN }}",
+        "GH_TOKEN": "${{ steps.app-token.outputs.token }}",
         "REPO": "${{ github.repository }}",
+        "PIN_BOT_APP_SLUG": "${{ steps.app-token.outputs.app-slug }}",
     }
     assert "scripts/devcontainer_pin_pr.py open" in open_pr["run"]
     assert "Refs #696" in open_pr["run"]
@@ -1531,7 +1871,7 @@ def test_devcontainer_pin_pr_open_matches_workflow_args(
 ) -> None:
     """open subcommand accepts the args used by the Open pin update PR step.
 
-    The branch/PR decision flow and auto-merge request are exercised by
+    The branch/PR decision flow is exercised by
     tests/test_devcontainer_pin_pr.py; here we pin the workflow argv shape.
     Refs #696, #911.
     """
@@ -1548,7 +1888,6 @@ def test_devcontainer_pin_pr_open_matches_workflow_args(
         ),
     )
     monkeypatch.setattr(devcontainer_pin_pr, "_upsert_pr", lambda **kw: ("created", 42))
-    monkeypatch.setattr(devcontainer_pin_pr, "_enable_auto_merge", lambda **kw: None)
     rc = devcontainer_pin_pr.main([
         "open",
         "--github-sha", "abc123",
@@ -1562,6 +1901,163 @@ def test_devcontainer_pin_pr_open_matches_workflow_args(
         "--file", "docs/runbooks/devcontainers.md",
     ])
     assert rc == 0
+
+
+def test_devcontainer_pin_pr_refresh_matches_workflow_args(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """refresh subcommand accepts the args used by devcontainer-pin-refresh.yml.
+
+    The supersede flow is exercised by tests/test_devcontainer_pin_pr.py; here we
+    pin the workflow argv shape. Refs #1137.
+    """
+    monkeypatch.setenv("GH_TOKEN", "tok")
+    monkeypatch.setenv("REPO", REPO)
+    template = tmp_path / "tmpl.md"
+    template.write_text("Pinned to __GITHUB_SHA__.\n", encoding="utf-8")
+    # No open pin PR -> the command is a no-op; we only assert the argv parses.
+    monkeypatch.setattr(devcontainer_pin_pr, "_list_open_prs_by_prefix", lambda **kw: [])
+    rc = devcontainer_pin_pr.main([
+        "refresh",
+        "--base", "main",
+        "--target-sha", "b417e5833394f6f04a6e9b1eefe48026c09b4089",
+        "--title", "fix(devcontainer): pin published agent images",
+        "--commit-subject", "fix(devcontainer): pin published agent images",
+        "--commit-trailer", "Refs #696",
+        "--template", str(template),
+        "--file", ".devcontainer/claude/devcontainer.json",
+        "--file", ".devcontainer/codex/devcontainer.json",
+        "--file", "docs/runbooks/devcontainers.md",
+    ])
+    assert rc == 0
+
+
+def test_devcontainer_pin_automerge_workflow_contract() -> None:
+    """The pin auto-merge keeper triggers on workflow_run + schedule, prefix-gated, uses an App token.
+
+    The repository-level "Allow auto-merge" toggle is intentionally OFF, so the
+    pin PR is completed by this dedicated keeper instead of native auto-merge.
+    The earlier ``check_suite: completed`` trigger never fired -- GitHub
+    suppresses ``check_suite`` events for Actions-created suites to prevent
+    recursion -- so the keeper is driven by ``workflow_run`` on the workflows
+    that own the required status checks, plus a ``schedule`` safety net. Pin the
+    wiring that makes that safe and scoped: those triggers, an ``if`` guard that
+    restricts the job to the pin branch prefix, the GitHub App token (so the
+    merge's push to main still triggers downstream workflows), and the ``merge``
+    subcommand. Refs #1352, #1363, #1401.
+    """
+    workflow = yaml.safe_load((_WORKFLOWS_DIR / "devcontainer-pin-automerge.yml").read_text(encoding="utf-8"))
+    # ``on`` may parse to the truthy bool key True under YAML 1.1; tolerate both.
+    triggers = workflow.get("on", workflow.get(True))
+    # check_suite is suppressed for Actions-created suites, so it must be gone.
+    assert "check_suite" not in triggers
+    # workflow_run fires off the workflows that own the required status checks.
+    assert triggers["workflow_run"]["types"] == ["completed"]
+    assert triggers["workflow_run"]["workflows"] == ["Verify PR", "Verify repository scripts"]
+    # schedule is the safety net that converges a missed workflow_run event.
+    assert "schedule" in triggers
+    assert "workflow_dispatch" in triggers
+
+    job = workflow["jobs"]["merge"]
+    assert job["permissions"] == {"contents": "write", "pull-requests": "write"}
+    # Prefix guard keeps the job from running on every workflow_run completion.
+    assert "devcontainer/image-pins-" in job["if"]
+    assert "github.event.workflow_run.conclusion == 'success'" in job["if"]
+    assert "workflow_dispatch" in job["if"]
+    assert "schedule" in job["if"]
+
+    app_token = next(s for s in job["steps"] if s.get("id") == "app-token")
+    assert app_token["uses"].startswith("actions/create-github-app-token@")
+    assert app_token["with"] == {
+        "app-id": "${{ secrets.DEVCONTAINER_PIN_APP_ID }}",
+        "private-key": "${{ secrets.DEVCONTAINER_PIN_APP_PRIVATE_KEY }}",
+    }
+
+    # The merge step needs only the App token (it merges; it does not author a
+    # commit, so no PIN_BOT_APP_SLUG). Refs #1401.
+    merge_step = next(s for s in job["steps"] if "devcontainer_pin_pr.py merge" in str(s.get("run", "")))
+    assert merge_step["env"] == {
+        "GH_TOKEN": "${{ steps.app-token.outputs.token }}",
+        "REPO": "${{ github.repository }}",
+    }
+
+
+def test_devcontainer_pin_pr_merge_matches_workflow_args(monkeypatch: pytest.MonkeyPatch) -> None:
+    """merge subcommand accepts the args used by devcontainer-pin-automerge.yml.
+
+    The merge decision flow is exercised by tests/test_devcontainer_pin_pr.py;
+    here we pin the workflow argv shape. Refs #1352.
+    """
+    monkeypatch.setenv("GH_TOKEN", "tok")
+    monkeypatch.setenv("REPO", REPO)
+    # No open pin PR -> the command is a no-op; we only assert the argv parses.
+    monkeypatch.setattr(devcontainer_pin_pr, "_list_open_prs_by_prefix", lambda **kw: [])
+    rc = devcontainer_pin_pr.main(["merge"])
+    assert rc == 0
+
+
+def test_devcontainer_pin_refresh_persists_checkout_credentials() -> None:
+    """The refresh job's checkout must persist credentials for the branch push.
+
+    Regression guard for #1301: the keeper's ``git push origin <fresh-branch>``
+    in ``scripts/devcontainer_pin_pr.py`` (``_create_pin_branch``) authenticates
+    with the GITHUB_TOKEN that ``actions/checkout`` persists by default. A
+    ``persist-credentials: false`` on that checkout strips the credential, so
+    every refresh of a behind pin PR failed with git exit 128. Assert the
+    checkout step does not disable credential persistence. Refs #1229, #1301, #1303.
+    """
+    workflow = yaml.safe_load(
+        (_WORKFLOWS_DIR / "devcontainer-pin-refresh.yml").read_text(encoding="utf-8")
+    )
+    steps = workflow["jobs"]["refresh"]["steps"]
+    checkout_steps = [s for s in steps if "actions/checkout" in str(s.get("uses", ""))]
+    assert checkout_steps, "refresh job must check out the repository before pushing"
+    for step in checkout_steps:
+        persist = step.get("with", {}).get("persist-credentials", True)
+        assert persist is not False, (
+            "devcontainer-pin-refresh checkout must persist credentials so the refresh "
+            "branch push authenticates (regression #1301); remove `persist-credentials: false`."
+        )
+
+
+def test_force_with_lease_push_fetches_branch_first() -> None:
+    """Bot-branch ``--force-with-lease`` pushes must fetch the branch first.
+
+    Regression guard for #1412: the auto-retro/regenerate jobs check out
+    ``main`` shallowly, recreate the bot branch from ``main``, then run
+    ``git push --force-with-lease origin "$PR_BRANCH"``. With no
+    ``refs/remotes/origin/$PR_BRANCH`` tracking ref (the shallow checkout
+    never fetched it), the lease cannot be verified and git rejects the
+    overwrite with ``stale info`` whenever the branch already exists. The
+    fix fetches the branch into its tracking ref before the push. Assert
+    every ``--force-with-lease`` push step fetches ``$PR_BRANCH`` earlier in
+    the same step so the repair stays a deterministic gate.
+    """
+    offenders: list[str] = []
+    for path in sorted(_WORKFLOWS_DIR.glob("*.yml")):
+        workflow = yaml.safe_load(path.read_text(encoding="utf-8"))
+        for job_name, job in (workflow.get("jobs") or {}).items():
+            for step in job.get("steps", []):
+                run = str(step.get("run", ""))
+                if 'git push --force-with-lease origin "$PR_BRANCH"' not in run:
+                    continue
+                lines = run.splitlines()
+                push_idx = next(
+                    i
+                    for i, line in enumerate(lines)
+                    if 'git push --force-with-lease origin "$PR_BRANCH"' in line
+                )
+                fetched_before = any(
+                    "git fetch origin" in line and "$PR_BRANCH" in line
+                    for line in lines[:push_idx]
+                )
+                if not fetched_before:
+                    offenders.append(f"{path.name}::{job_name}")
+    assert not offenders, (
+        "force-with-lease push must fetch $PR_BRANCH into its tracking ref first "
+        "or git rejects the overwrite with 'stale info' (#1412); missing fetch in: "
+        + ", ".join(offenders)
+    )
 
 
 def test_analyze_ci_timings_matches_workflow_args(
@@ -1613,6 +2109,114 @@ def test_analyze_ci_timings_matches_workflow_args(
     assert rc == 0
     out = capsys.readouterr().out
     assert "verify-agents.yml timings (weekly)" in out
+
+
+def test_measure_devcontainer_startup_matches_workflow_args(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Mirror the argv shape used by measure-devcontainer-startup.yml.
+
+    The workflow shells to ``python3 scripts/measure_devcontainer_startup.py
+    --config .devcontainer/<agent>/devcontainer.json --runtime docker
+    --user <agent> --cap NET_ADMIN --probe-composition --output
+    startup-<agent>.json``. Exercise that flag-only shape (no subcommand)
+    against the real claude config, with the container runtime stubbed so no
+    daemon is needed. Refs #1322, #1332.
+    """
+
+    class _StubSession:
+        image = "stub"
+
+        def pull(self) -> measure_devcontainer_startup.RunResult:
+            return measure_devcontainer_startup.RunResult(0, "", 1.0)
+
+        def image_size(self) -> int:
+            return 1024
+
+        def start(self) -> None:
+            pass
+
+        def exec(self, segment: str) -> measure_devcontainer_startup.RunResult:
+            return measure_devcontainer_startup.RunResult(0, "", 0.5)
+
+        def close(self) -> None:
+            pass
+
+    captured: dict[str, Any] = {}
+
+    def factory(**kwargs: Any) -> _StubSession:
+        captured.update(kwargs)
+        return _StubSession()
+
+    out_path = tmp_path / "startup-claude.json"
+    rc = measure_devcontainer_startup.run(
+        [
+            "--config",
+            ".devcontainer/claude/devcontainer.json",
+            "--runtime",
+            "docker",
+            "--user",
+            "claude",
+            "--cap",
+            "NET_ADMIN",
+            "--probe-composition",
+            "--output",
+            str(out_path),
+        ],
+        session_factory=factory,
+        which=lambda _name: "/usr/bin/docker",
+    )
+    assert rc == 0
+    assert captured["runtime"] == "/usr/bin/docker"
+    assert captured["user"] == "claude"
+    assert captured["caps"] == ["NET_ADMIN"]
+    assert json.loads(out_path.read_text(encoding="utf-8"))["image"] == "stub"
+    assert json.loads(capsys.readouterr().out)["image"] == "stub"
+
+
+def test_ci_budget_issue_run_matches_workflow_args(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Mirror the argv shape used by weekly-maintenance.yml.
+
+    The workflow shells to ``python3 scripts/ci_budget_issue.py run --repo
+    "${REPO}" --breach-file budget.json --run-url "${RUN_URL}" --dry-run
+    "${DRY_RUN}"``. Exercise that exact shape against a real breach file with
+    ``open_or_update_issue`` stubbed so the contract pins the flags without a
+    network call. Refs #1156.
+    """
+    breach_file = tmp_path / "budget.json"
+    breach_file.write_text(
+        json.dumps(
+            {"budget_seconds": 300.0, "breaches": [{"job": "slow", "p50": 410.0}]}
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("GH_TOKEN", "token")
+    captured: dict[str, object] = {}
+
+    def fake_open(**kwargs: object) -> str:
+        captured.update(kwargs)
+        return "created"
+
+    monkeypatch.setattr(ci_budget_issue, "open_or_update_issue", fake_open)
+
+    rc = ci_budget_issue.main(
+        [
+            "run",
+            "--repo",
+            REPO,
+            "--breach-file",
+            str(breach_file),
+            "--run-url",
+            "https://github.com/owner/repo/actions/runs/123",
+            "--dry-run",
+            "false",
+        ]
+    )
+    assert rc == 0
+    assert captured["repo"] == REPO
+    assert captured["budget_seconds"] == 300.0
 
 
 def test_verify_test_shard_markers_matches_workflow_args(tmp_path: Path) -> None:
@@ -1668,6 +2272,149 @@ def test_uv_pin_workflow_subcommands_match_ci_usage(
     assert uv_pin.main(["read", str(tmp_path / "pyproject.toml")]) == 0
     assert uv_pin.main(["drift", "--repo-root", str(tmp_path)]) == 0
     assert uv_pin.main(["stale", "--repo-root", str(tmp_path)]) == 0
+
+
+def test_preflight_uv_version_verify_matches_workflow_args(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Mirror the workflow step in ``.github/workflows/verify-agents.yml``
+    that runs ``uv run python scripts/preflight_uv_version.py verify`` --
+    no extra flags, no env input. The CI step relies on the cwd being the
+    repo root and ``uv`` matching the pin (the workflow's setup-uv action
+    just installed the matching uv). Refs #1207.
+    """
+    (tmp_path / "pyproject.toml").write_text(
+        '[tool.uv]\nrequired-version = "==0.11.11"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        preflight_uv_version, "probe_uv_version", lambda: "0.11.11"
+    )
+
+    assert (
+        preflight_uv_version.main(["verify", "--repo-root", str(tmp_path)]) == 0
+    )
+
+
+_FLAKE_PIN_FIXTURE = """
+{
+  outputs = { ... }:
+    let
+      apmVersion = "0.12.1";
+      wazaVersion = "0.33.0";
+      wazaNative = {
+        aarch64-linux = {
+          asset = "waza-linux-arm64";
+          hash = "sha256-VSuk9F5fc+PpwMk0KeLFniHxpN6LmJX5j1Te6n8D36g=";
+        };
+        x86_64-linux = {
+          asset = "waza-linux-amd64";
+          hash = "sha256-waMaFdlZ0s1Tb+tBz3sg+UsENKjoaUnT3j0hweP7b/M=";
+        };
+      }.${system};
+    in { };
+}
+"""
+
+
+def test_flake_pin_workflow_subcommands_match_ci_usage(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Mirror the ``asset-url`` and ``bump`` argv shapes used by the
+    ``Recompute per-system hashes and bump flake.nix`` step in
+    ``.github/workflows/flake-pin-refresh.yml``. Refs #1171."""
+    flake = tmp_path / "flake.nix"
+    flake.write_text(_FLAKE_PIN_FIXTURE, encoding="utf-8")
+    monkeypatch.setattr(flake_pin, "FLAKE_PATH", flake)
+
+    assert (
+        flake_pin.main(
+            [
+                "asset-url",
+                "--tool",
+                "waza",
+                "--system",
+                "x86_64-linux",
+                "--version",
+                "0.34.0",
+            ]
+        )
+        == 0
+    )
+    new_sri = "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+    assert (
+        flake_pin.main(
+            [
+                "bump",
+                "--tool",
+                "waza",
+                "--version",
+                "0.34.0",
+                "--hash",
+                f"x86_64-linux={new_sri}",
+                "--hash",
+                f"aarch64-linux={new_sri}",
+            ]
+        )
+        == 0
+    )
+    assert flake_pin.current_version(flake.read_text(encoding="utf-8"), "waza") == "0.34.0"
+
+
+def test_flake_pin_latest_check_matches_workflow_args(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Mirror the ``check --tool <tool>`` argv used by the
+    ``Decide target version`` step in ``.github/workflows/flake-pin-refresh.yml``.
+
+    The GitHub fetch is stubbed with a release older than the pin so the
+    decision is a deterministic "hold" (exit 0, no stdout) without touching the
+    network. Refs #1171."""
+    monkeypatch.setattr(
+        flake_pin_latest,
+        "github_latest_release",
+        lambda repo: {"tag_name": "v0.0.1", "published_at": "2000-01-01T00:00:00Z"},
+    )
+    assert flake_pin_latest.main(["check", "--tool", "waza"]) == 0
+    assert flake_pin_latest.main(["check", "--tool", "apm"]) == 0
+    assert flake_pin_latest.main(["check", "--tool", "rtk"]) == 0
+
+
+def test_uv_download_checksum_verify_matches_action_args(tmp_path: Path) -> None:
+    """Mirror the verify call in .github/actions/setup-uv/action.yml.
+
+    The composite action runs
+    ``python3 scripts/uv_download_checksum.py verify --file <tarball>
+    --target x86_64-unknown-linux-gnu``. Exercise that argv shape against a
+    tarball whose digest matches a synthetic flake pin so the contract is
+    pinned the same way every other workflow/action script invocation is.
+    """
+    payload = b"uv-tarball-bytes"
+    tarball = tmp_path / "uv.tar.gz"
+    tarball.write_bytes(payload)
+    sri = "sha256-" + base64.b64encode(
+        hashlib.sha256(payload).digest()
+    ).decode()
+    flake = tmp_path / "flake.nix"
+    flake.write_text(
+        f'target = "x86_64-unknown-linux-gnu"; hash = "{sri}";',
+        encoding="utf-8",
+    )
+
+    assert (
+        uv_download_checksum.main(
+            [
+                "verify",
+                "--file",
+                str(tarball),
+                "--target",
+                "x86_64-unknown-linux-gnu",
+                "--flake",
+                str(flake),
+            ]
+        )
+        == 0
+    )
 
 
 def test_verify_ruleset_sync_matches_workflow_args(
@@ -1726,6 +2473,18 @@ def test_scan_preflight_drift_verify_matches_workflow_args() -> None:
     """Mirrors the `Verify preflight set matches CI script invocations`
     step in `.github/workflows/verify-agents.yml` (issue #493)."""
     assert scan_preflight_drift.main(["verify"]) == 0
+
+
+def test_scan_provisioning_hook_serial_verify_matches_workflow_args() -> None:
+    """Mirrors the `Verify shared-binary provisioning hooks are serial`
+    step in `.github/workflows/verify-agents.yml` (issue #1155)."""
+    assert scan_provisioning_hook_serial.main(["verify"]) == 0
+
+
+def test_scan_session_path_drift_verify_matches_workflow_args() -> None:
+    """Mirrors the `$CLAUDE_ENV_FILE` persistence centralization step in
+    `.github/workflows/verify-agents.yml` (issue #1232)."""
+    assert scan_session_path_drift.main(["verify"]) == 0
 
 
 @pytest.mark.parametrize(

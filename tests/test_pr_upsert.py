@@ -322,3 +322,243 @@ class TestCmdFind:
         rc = pu.main(["find", "--head", "chore/x"])
         assert rc == 1
         assert "API failed" in capsys.readouterr().err
+
+
+# ---------------------------------------------------------------------------
+# _list_open_prs_by_prefix()
+# ---------------------------------------------------------------------------
+
+
+def _sequence_apply_call(
+    responses: list[tuple[int, list[Any]]],
+) -> Callable[..., tuple[int, str]]:
+    """Return an apply_call yielding *responses* (status, body) per call, in order."""
+    calls = {"n": 0}
+
+    def apply_call(*, method: str, url: str, payload: object, token: str) -> tuple[int, str]:
+        status, body = responses[calls["n"]]
+        calls["n"] += 1
+        return status, json.dumps(body)
+
+    return apply_call
+
+
+class TestListOpenPrsByPrefix:
+    def test_filters_by_prefix(self) -> None:
+        page = [
+            {"number": 1, "head": {"ref": "codex/devcontainer-image-pins-aaa"}},
+            {"number": 2, "head": {"ref": "claude/other"}},
+            {"number": 3, "head": {"ref": "codex/devcontainer-image-pins-bbb"}},
+        ]
+        apply_call = _sequence_apply_call([(200, page)])
+        result = pu._list_open_prs_by_prefix(
+            repo="owner/repo", prefix="codex/devcontainer-image-pins-", token="tok", apply_call=apply_call
+        )
+        assert [p["number"] for p in result] == [1, 3]
+
+    def test_paginates_until_short_page(self) -> None:
+        full = [{"number": i, "head": {"ref": "codex/devcontainer-image-pins-x"}} for i in range(100)]
+        tail = [{"number": 100, "head": {"ref": "codex/devcontainer-image-pins-y"}}]
+        apply_call = _sequence_apply_call([(200, full), (200, tail)])
+        result = pu._list_open_prs_by_prefix(
+            repo="owner/repo", prefix="codex/devcontainer-image-pins-", token="tok", apply_call=apply_call
+        )
+        assert len(result) == 101
+
+    def test_http_error_raises(self) -> None:
+        apply_call = _make_apply_call(500, {"message": "boom"})
+        with pytest.raises(RuntimeError, match="500"):
+            pu._list_open_prs_by_prefix(repo="owner/repo", prefix="codex/", token="tok", apply_call=apply_call)
+
+
+# ---------------------------------------------------------------------------
+# _compare_behind()
+# ---------------------------------------------------------------------------
+
+
+class TestCompareBehind:
+    def test_returns_behind_by(self) -> None:
+        apply_call = _make_apply_call(200, {"behind_by": 4, "ahead_by": 1})
+        n = pu._compare_behind(repo="owner/repo", base="main", head="feat/x", token="tok", apply_call=apply_call)
+        assert n == 4
+
+    def test_missing_field_raises(self) -> None:
+        apply_call = _make_apply_call(200, {"ahead_by": 1})
+        with pytest.raises(RuntimeError, match="behind_by"):
+            pu._compare_behind(repo="owner/repo", base="main", head="x", token="tok", apply_call=apply_call)
+
+    def test_http_error_raises(self) -> None:
+        apply_call = _make_apply_call(404, {"message": "not found"})
+        with pytest.raises(RuntimeError, match="404"):
+            pu._compare_behind(repo="owner/repo", base="main", head="x", token="tok", apply_call=apply_call)
+
+
+# ---------------------------------------------------------------------------
+# _close_pr() / _delete_branch() / _comment_pr()
+# ---------------------------------------------------------------------------
+
+
+class TestCloseDeleteComment:
+    def test_close_pr_sends_closed_state(self) -> None:
+        captured: dict[str, Any] = {}
+
+        def apply_call(*, method: str, url: str, payload: object, token: str) -> tuple[int, str]:
+            captured.update(method=method, url=url, payload=payload)
+            return 200, "{}"
+
+        pu._close_pr(repo="owner/repo", number=7, token="tok", apply_call=apply_call)
+        assert captured["method"] == "PATCH"
+        assert captured["payload"] == {"state": "closed"}
+        assert captured["url"].endswith("/pulls/7")
+
+    def test_close_pr_http_error_raises(self) -> None:
+        apply_call = _make_apply_call(422, {"message": "bad"})
+        with pytest.raises(RuntimeError, match="422"):
+            pu._close_pr(repo="owner/repo", number=7, token="tok", apply_call=apply_call)
+
+    def test_delete_branch_success(self) -> None:
+        captured: dict[str, Any] = {}
+
+        def apply_call(*, method: str, url: str, payload: object, token: str) -> tuple[int, str]:
+            captured.update(method=method, url=url)
+            return 204, ""
+
+        pu._delete_branch(repo="owner/repo", branch="codex/x", token="tok", apply_call=apply_call)
+        assert captured["method"] == "DELETE"
+        assert captured["url"].endswith("/git/refs/heads/codex/x")
+
+    def test_delete_branch_already_gone_is_ok(self) -> None:
+        for code in (404, 422):
+            apply_call = _make_apply_call(code, {"message": "gone"})
+            pu._delete_branch(repo="owner/repo", branch="codex/x", token="tok", apply_call=apply_call)
+
+    def test_delete_branch_other_error_raises(self) -> None:
+        apply_call = _make_apply_call(500, {"message": "boom"})
+        with pytest.raises(RuntimeError, match="500"):
+            pu._delete_branch(repo="owner/repo", branch="codex/x", token="tok", apply_call=apply_call)
+
+    def test_comment_pr_posts_body(self) -> None:
+        captured: dict[str, Any] = {}
+
+        def apply_call(*, method: str, url: str, payload: object, token: str) -> tuple[int, str]:
+            captured.update(method=method, url=url, payload=payload)
+            return 201, "{}"
+
+        pu._comment_pr(repo="owner/repo", number=9, body="hello", token="tok", apply_call=apply_call)
+        assert captured["method"] == "POST"
+        assert captured["payload"] == {"body": "hello"}
+        assert captured["url"].endswith("/issues/9/comments")
+
+    def test_comment_pr_http_error_raises(self) -> None:
+        apply_call = _make_apply_call(403, {"message": "no"})
+        with pytest.raises(RuntimeError, match="403"):
+            pu._comment_pr(repo="owner/repo", number=9, body="x", token="tok", apply_call=apply_call)
+
+
+# ---------------------------------------------------------------------------
+# _get_pr()
+# ---------------------------------------------------------------------------
+
+
+class TestGetPr:
+    def test_returns_pr_object(self) -> None:
+        apply_call = _make_apply_call(200, {"number": 5, "mergeable_state": "clean"})
+        pr = pu._get_pr(repo="owner/repo", number=5, token="tok", apply_call=apply_call)
+        assert pr["mergeable_state"] == "clean"
+
+    def test_includes_pr_number_in_url(self) -> None:
+        captured: list[str] = []
+
+        def apply_call(*, method: str, url: str, payload: object, token: str) -> tuple[int, str]:
+            captured.append(url)
+            return 200, json.dumps({"number": 9})
+
+        pu._get_pr(repo="owner/repo", number=9, token="tok", apply_call=apply_call)
+        assert captured[0].endswith("/pulls/9")
+
+    def test_http_error_raises(self) -> None:
+        apply_call = _make_apply_call(404, {"message": "nope"})
+        with pytest.raises(RuntimeError, match="404"):
+            pu._get_pr(repo="owner/repo", number=5, token="tok", apply_call=apply_call)
+
+    def test_non_object_raises(self) -> None:
+        apply_call = _make_apply_call(200, [1, 2])
+        with pytest.raises(RuntimeError):
+            pu._get_pr(repo="owner/repo", number=5, token="tok", apply_call=apply_call)
+
+
+# ---------------------------------------------------------------------------
+# _merge_pr()
+# ---------------------------------------------------------------------------
+
+
+class TestMergePr:
+    def test_success_returns_true_and_pins_sha(self) -> None:
+        captured: dict[str, Any] = {}
+
+        def apply_call(*, method: str, url: str, payload: object, token: str) -> tuple[int, str]:
+            captured.update(method=method, url=url, payload=payload)
+            return 200, json.dumps({"merged": True})
+
+        ok = pu._merge_pr(
+            repo="owner/repo", number=7, sha="abc", merge_method="squash", token="tok", apply_call=apply_call
+        )
+        assert ok is True
+        assert captured["method"] == "PUT"
+        assert captured["url"].endswith("/pulls/7/merge")
+        assert captured["payload"] == {"merge_method": "squash", "sha": "abc"}
+
+    def test_405_not_mergeable_returns_false(self) -> None:
+        apply_call = _make_apply_call(405, {"message": "not mergeable"})
+        ok = pu._merge_pr(
+            repo="owner/repo", number=7, sha="a", merge_method="squash", token="tok", apply_call=apply_call
+        )
+        assert ok is False
+
+    def test_409_sha_mismatch_returns_false(self) -> None:
+        apply_call = _make_apply_call(409, {"message": "head changed"})
+        ok = pu._merge_pr(
+            repo="owner/repo", number=7, sha="a", merge_method="squash", token="tok", apply_call=apply_call
+        )
+        assert ok is False
+
+    def test_other_error_raises(self) -> None:
+        apply_call = _make_apply_call(500, {"message": "boom"})
+        with pytest.raises(RuntimeError, match="500"):
+            pu._merge_pr(
+                repo="owner/repo", number=7, sha="a", merge_method="squash", token="tok", apply_call=apply_call
+            )
+
+
+# ---------------------------------------------------------------------------
+# _get_user_id()
+# ---------------------------------------------------------------------------
+
+
+class TestGetUserId:
+    def test_returns_numeric_id(self) -> None:
+        apply_call = _make_apply_call(200, {"login": "my-app[bot]", "id": 12345})
+        uid = pu._get_user_id(login="my-app[bot]", token="tok", apply_call=apply_call)
+        assert uid == 12345
+
+    def test_url_encodes_bot_login_brackets(self) -> None:
+        captured: list[str] = []
+
+        def apply_call(*, method: str, url: str, payload: object, token: str) -> tuple[int, str]:
+            captured.append(url)
+            return 200, json.dumps({"id": 1})
+
+        pu._get_user_id(login="my-app[bot]", token="tok", apply_call=apply_call)
+        # The [ ] in the bot login must be percent-encoded so the path is valid.
+        assert captured[0].endswith("/users/my-app%5Bbot%5D")
+        assert "[" not in captured[0]
+
+    def test_http_error_raises(self) -> None:
+        apply_call = _make_apply_call(404, {"message": "not found"})
+        with pytest.raises(RuntimeError, match="404"):
+            pu._get_user_id(login="my-app[bot]", token="tok", apply_call=apply_call)
+
+    def test_missing_id_raises(self) -> None:
+        apply_call = _make_apply_call(200, {"login": "my-app[bot]"})
+        with pytest.raises(RuntimeError, match="missing integer id"):
+            pu._get_user_id(login="my-app[bot]", token="tok", apply_call=apply_call)

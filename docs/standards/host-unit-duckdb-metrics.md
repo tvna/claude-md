@@ -50,7 +50,7 @@ Two consequences follow and bound everything below:
   | devcontainer (claude) | `/home/claude/.claude/metrics.duckdb` |
   | devcontainer (codex) | `/home/codex/.codex/metrics.duckdb` |
   | local machine / Codespaces / other persistent host | `$HOME/.local/state/claude-md/metrics.duckdb` |
-  | CI runners / Claude agent / web sessions (ephemeral) | -- (out of measurement scope; see *Ephemeral-environment measurement boundary*) |
+  | CI runners / Claude agent / web sessions (ephemeral) | -- (out of measurement scope unless the manual R2 escrow path is used; see *Ephemeral-environment measurement boundary*) |
 
   The devcontainer paths land inside the named Docker volumes
   (`claude-md-claude-session` and `claude-md-codex-session`) that are already
@@ -78,9 +78,10 @@ Two consequences follow and bound everything below:
   is rebuilt by re-recording from `main`'s history. Because it is host-local
   state, losing it costs reproducible work, not irreplaceable data.
 - **Ephemeral environments record nothing -- by decision, not by accident.**
-  Claude agent / web / CI sessions are explicitly out of measurement scope; see
-  *Ephemeral-environment measurement boundary* below for the recorded decision
-  and the options it resolves (Refs #826).
+  Claude agent / web / CI sessions are explicitly out of measurement scope
+  unless they use the manual R2 escrow handoff path; see
+  *Ephemeral-environment measurement boundary* below for the recorded decisions
+  and the options they resolve (Refs #826, #1212).
 - **duckdb is intentionally NOT a repository dependency.** The only runtime
   Python dependency stays `pyyaml`. The schema is plain SQL executed by the
   DuckDB CLI (or any DuckDB binding) that the operator already has. This keeps
@@ -121,24 +122,126 @@ plus git-ignore).
 - (C) Commit a redacted, aggregated row to a durable branch or artifact (never
   the raw `*.duckdb`). Requires a reviewed write path.
 
-**Decision: (A) -- accept and document the boundary.** Ephemeral agent / web /
-CI sessions are explicitly **out of measurement scope**; only durable operator
-hosts record rows. This is consistent with the v1 "no CI write path" stance
-(see the lifecycle table and *Out of scope*): the same ephemerality that
-excludes CI runners excludes agent / web sessions. The signal is therefore
-**openly partial by record** -- changes made in an ephemeral session are
-knowingly absent from the store, not silently dropped -- which removes the
-silent bias an undocumented boundary would introduce toward changes made on
-durable hosts.
+**Decision for #826: (A) -- accept and document the boundary.** Ephemeral agent
+/ web / CI sessions are explicitly **out of measurement scope** by default;
+only durable operator hosts record rows. This is consistent with the v1 "no CI
+write path" stance (see the lifecycle table and *Out of scope*): the same
+ephemerality that excludes CI runners excludes agent / web sessions. The signal
+is therefore **openly partial by record** -- changes made in an ephemeral
+session are knowingly absent from the store, not silently dropped -- which
+removes the silent bias an undocumented boundary would introduce toward changes
+made on durable hosts.
 
-Options (B) and (C) are **not adopted now**: each requires infrastructure this
-contract deliberately excludes (an egress destination, or a reviewed
-commit-a-row write path) and would re-open the anonymization / redaction surface
-(#88, #824) without a present need. They remain available re-entry points if the
-partial signal ever proves insufficient; revisiting either is a fresh decision,
-not an implicit default. Because option (A) records no rows from ephemeral
-environments, **no implementation follow-up is required and none is opened** --
-#826 closes as "boundary accepted and documented".
+**Decision: adopt option (B) as a manual R2 escrow runbook (Refs #1212).** The
+default boundary above remains intact for sessions that do not use the escrow.
+When an ephemeral session deliberately needs to preserve measurement data, R2
+is allowed only as a temporary handoff layer between that session and the
+durable macOS host. The canonical metrics store remains the per-host DuckDB
+database; R2 is never the canonical store and never a shared live database.
+Option (C) remains rejected because committing rows or artifacts would reopen a
+reviewed write-path surface that this contract still avoids.
+
+### Manual R2 escrow handoff (Refs #1212)
+
+Use this path only when an ephemeral agent / web / CI session has produced
+measurement data that would otherwise be lost before the operator can retrieve
+it. It is an operator-run handoff, not an automated recorder and not a new
+repository dependency.
+
+**Artifact shape.** Upload one redacted OTLP-shaped export bundle per session or
+change. The bundle is a directory or archive containing:
+
+- `manifest.json` -- schema version, opaque session id, producing commit SHA,
+  bundle digest, generated-at time, row counts, and artifact file digests.
+- `metrics.parquet` -- rows shaped like `otlp_metric_data_point`.
+- `logs.parquet` -- optional rows shaped like `otlp_log_record` / `session_log`
+  after the #824 redaction contract is applied.
+
+Raw `*.duckdb` and `*.duckdb.wal` files are not valid escrow artifacts. A raw
+database upload may contain local state that is outside the export contract, so
+the handoff starts from the minimal export bundle and keeps DuckDB itself out of
+the repo dependency set.
+
+**R2 object contract.** Store each bundle under an immutable object prefix:
+`escrow/session/<opaque-session-id>/<bundle-digest>/`. The session id is not a
+hostname, repository name, issue title, URL, path, user name, or raw prompt
+fragment. The digest prefix prevents accidental overwrite; a corrected export
+uses a new digest prefix rather than mutating the existing object. Configure an
+R2 lifecycle rule for the escrow prefix with a 24 hours expiration. Lifecycle is
+cleanup defense-in-depth, not correctness: the durable host still uses
+delete-after-import behavior and must explicitly delete the object after
+successful verification and import.
+
+**First-time R2 provisioning (one-time, before any handoff; Refs #1326).** R2
+does not exist until the durable operator provisions it from scratch; an agent
+session never performs these steps. Cloudflare documents the path as:
+
+1. Create or sign in to a Cloudflare account.
+2. Enable R2 by completing the R2 subscription checkout in the dashboard under
+   `Storage & databases > R2`. Cloudflare requires a payment method on the
+   account to enable R2 even when usage stays within the Standard-storage free
+   tier; usage inside the free tier bills at $0.00. Treat any activation charge
+   as a billing fact the operator confirms, not an agent action.
+3. Create the dedicated escrow bucket
+   (`Storage & databases > R2 > Overview > Create bucket`). This bucket holds
+   only the escrow prefixes from *R2 object contract* above and nothing else.
+4. Add the 24 hours lifecycle expiration rule for the `escrow/session/` prefix
+   exactly as *R2 object contract* above defines it.
+5. Create the parent token as *Credential issuance* below defines it. The
+   Account ID shown in the R2 dashboard is the S3 endpoint host
+   (`https://<account-id>.r2.cloudflarestorage.com`); it is not itself a secret
+   but is still passed only through the task-specific secure channel.
+
+Account creation, R2 enablement, payment-method linkage, and the parent token
+are operator actions on the durable host; none of them are ever delegated to an
+ephemeral agent session.
+
+**Credential issuance.** The parent token lives only with the durable operator,
+created in the Cloudflare dashboard or API with the minimum Cloudflare
+permission needed to mint scoped R2 credentials and manage the escrow bucket
+lifecycle; Cloudflare documents lifecycle management as requiring the `Workers
+R2 Storage Write` permission group. The parent token is stored in the
+operator's local credential manager, never in the repository, never in an agent
+prompt, and never in CI logs. For each handoff, the operator mints a temporary
+R2 credential with `object-read-write`, bound to the escrow bucket,
+prefix-scoped to `escrow/session/<opaque-session-id>/`, and limited to 900
+seconds. The temporary credential includes access key id, secret access key, and
+session token; all three are bearer secrets and must be passed only through the
+task-specific secure channel. The operator must rotate the parent token on the
+operator's normal secret-rotation cadence or immediately after suspected
+exposure. Verify the handoff without revealing values by performing a scoped
+`PutObject`/`HeadObject` probe against only the session prefix and confirming a
+different prefix is denied.
+
+**Retrieval and import.** The durable macOS host downloads the bundle before the
+temporary credential expires or mints a separate prefix-scoped read credential
+for retrieval. Before import, the host must verify the manifest digest and row
+counts, confirm every file digest listed by `manifest.json`, and reject any row
+containing raw hostnames, raw repository names, raw paths, URLs, raw prompts,
+raw model output, credentials, request ids, or unredacted logs; the accepted
+bundle invariant is no raw hostnames, no raw repository names, and no raw
+paths. Metrics import
+uses the existing idempotent `INSERT OR REPLACE INTO change_measurement`
+contract after mapping the OTLP-shaped rows back to the host-unit schema. Log
+imports target `session_log` only after the same redaction checks pass. After a
+successful import, the operator must explicitly delete the R2 object or prefix;
+if that deletion fails, the lifecycle rule remains the backup cleanup path and
+the operator records the failed delete as an operational event.
+
+**Sources used for the decision.** Cloudflare R2 documents S3-compatible
+temporary credentials with bucket binding, operation permissions, optional
+object/prefix scope, session tokens, and TTL up to 604800 seconds; R2 object
+lifecycle rules can expire objects by prefix, with deletion typically occurring
+within 24 hours of the expiration value. DuckDB documents R2 through its
+S3-compatible `httpfs` support and an `R2` secret type, while DuckDB temporary
+secrets remain in memory by default and persistent secrets are written to a
+local unencrypted secret directory. Those facts make a short-lived export
+handoff feasible without adding DuckDB or R2 client libraries to this
+repository. Cloudflare's R2 get-started and pricing documentation further
+records that R2 must be enabled through an R2 subscription checkout and that a
+payment method is required on the account before a bucket can be created, even
+for the free tier -- the provisioning facts behind *First-time R2 provisioning*
+above.
 
 ## OTLP-compatible schema
 
@@ -322,8 +425,10 @@ their still-valid requirements are carried into the columns above.
   runners, no host-local DB). The ephemeral agent / web / CI measurement
   boundary is now an explicit recorded decision -- option (A), accept and
   document -- not an implicit gap (Refs #826; see *Ephemeral-environment
-  measurement boundary*). A future phase could still add a host-scheduled
-  recorder, or re-open option (B)/(C) as a fresh decision.
+  measurement boundary*). The #1212 R2 escrow path adopts option (B) only as a
+  manual temporary handoff; it does not create a CI write path, a shared remote
+  DuckDB database, or an automated recorder. A future phase could still add a
+  host-scheduled recorder, or re-open option (C) as a fresh decision.
 - **The cross-host OTLP collector and its aggregation pipeline.** The export
   view makes this a later, additive step.
 - **The OTLP *logs* signal (operational session logs, e.g. commit-signing
@@ -372,6 +477,8 @@ unrelated regression is introduced (`pytest`).
 - [#815](https://github.com/tvna/claude-md/issues/815) -- this contract (host-unit DuckDB store).
 - [#824](https://github.com/tvna/claude-md/issues/824) -- OTLP logs extension (schema v2: redacted operational session logs).
 - [#826](https://github.com/tvna/claude-md/issues/826) -- ephemeral-environment measurement boundary (decision: option (A), accept and document).
+- [#1212](https://github.com/tvna/claude-md/issues/1212) -- manual Cloudflare R2 escrow handoff for ephemeral measurement export.
+- [#1326](https://github.com/tvna/claude-md/issues/1326) -- from-scratch Cloudflare R2 provisioning for the escrow runbook.
 - [#814](https://github.com/tvna/claude-md/issues/814) -- parent: Section 5 quality-scalability proportionality reframe.
 - [#226](https://github.com/tvna/claude-md/issues/226) -- CLAUDE.md / AGENTS.md evolution tracker.
 - [#89](https://github.com/tvna/claude-md/issues/89) -- instruction-source versioning (OPEN; provides `compiled_source_version`).
@@ -379,3 +486,5 @@ unrelated regression is introduced (`pytest`).
 - [`docs/standards/performance-metrics.md`](performance-metrics.md) -- the superseded storage design.
 - [`docs/standards/repo-scope.md`](repo-scope.md) -- declared repo purpose (2).
 - OpenTelemetry metric data model and the ClickHouse-exporter / DuckDB OTLP-extension column layout -- the external compatibility target the schema mirrors.
+- Cloudflare R2 temporary credentials, object lifecycle, and S3 compatibility documentation -- the external escrow capability.
+- DuckDB S3 API / R2 secret and secrets manager documentation -- the compatibility and secret-storage boundary used for the decision.

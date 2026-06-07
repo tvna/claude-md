@@ -260,7 +260,8 @@ def main(argv: list[str] | None = None) -> int:
             tool_input,
             token_getter=_token_getter,
             label_getter=_label_getter,
-        )
+        ),
+        "pr_body_close_keyword_gate",
     )
     return 0
 

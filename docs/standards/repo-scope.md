@@ -32,13 +32,28 @@ Agent-tool-specific configuration files and directories MUST NOT be committed to
 | `.github/copilot-instructions.md` | GitHub Copilot |
 | `.windsurfrules` | Windsurf |
 | `.codeium/` | Codeium |
-| `.mcp.json` | MCP clients (Claude Code, Cursor, etc.) — generated locally by `apm install` from the `apm.yml` mcp declaration; the committed mirror is prohibited (parallel to `.claude/skills/`). See [#1067](https://github.com/tvna/claude-md/issues/1067), [#1063](https://github.com/tvna/claude-md/issues/1063). |
+| `.mcp.json` | Claude Code / MCP clients |
 
 The list is non-exhaustive. When a new tool emerges, follow the *Update procedure* below.
 
-### MCP servers are declared in `apm.yml`, not in a committed `.mcp.json`
+`.mcp.json` is the Claude Code project-scope MCP client config. Unlike the
+entries above it is **generated, not authored**: `apm.yml` is the source of
+truth, and `scripts/gen_mcp_json.py` renders `.mcp.json` from it at
+`SessionStart` (wired in `.claude/settings.json`). It stays out of the tree
+for two reasons — it is a rendered build artefact, and it can carry per-client
+credentials in `env` blocks. The servers it renders include the keyless
+`context7` HTTP server and the local `github` stdio server added by special
+exception ([#1063](https://github.com/tvna/claude-md/issues/1063),
+[#1067](https://github.com/tvna/claude-md/issues/1067)); see
+`docs/runbooks/context7-mcp.md` and `docs/standards/github-mcp-app-auth.md`.
 
-The local GitHub MCP server added by special exception in [#1063](https://github.com/tvna/claude-md/issues/1063) is declared in `apm.yml`'s `mcp` section — the APM source of truth that `apm install` reproduces into every client. This mirrors the `.agents/skills/` carve-out: the SoT lives in `apm.yml` plus `apm.lock.yaml`, while the local tool-specific artifact (`.mcp.json`, like `.claude/skills/`) stays prohibited. The launch wrapper and token minter that the server runs live under `scripts/` (already permitted) and are covered by tests; no committed `.mcp.json` is required.
+### Secrets are also excluded (not a tool-config row)
+
+`.env` / `.env.*` are git-ignored as well, but they belong to the **secrets**
+category, not the agent-tool-config prohibition — so they live in `.gitignore`
+(canonical) and `.claudeignore` (mirror) without a row in the table above.
+There is no `.env.example` carve-out today because the repo ships no example
+env file; add an explicit `!.env.example` line if that changes.
 
 ### Open Q1 resolution — `docs/` is also covered
 

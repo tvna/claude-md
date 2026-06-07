@@ -102,21 +102,23 @@ flowchart TD
     N096["back_link_status = 'skipped'"]
     N097["terminal_label_status = 'skipped'"]
     N098["if isinstance(new_number, int)"]
-    N099["try"]
-    N100["back_link_status = post_back_link_comment(...)"]
-    N101["except subprocess.CalledProcessError"]
-    N102["print(...)"]
-    N103["back_link_status = 'failed'"]
-    N104["try"]
-    N105["apply_terminal_label(...)"]
-    N106["terminal_label_status = 'applied'"]
-    N107["except subprocess.CalledProcessError"]
-    N108["print(...)"]
-    N109["terminal_label_status = 'failed'"]
-    N110["msg = f'created retro issue #{new_number} ({new_url}); back-link={back_link_status}; terminal-label={terminal_label_status}'"]
-    N111["print(...)"]
-    N112["_append_summary(...)"]
-    N113["return 0"]
+    N099["if not _pr_comments_enabled()"]
+    N100["back_link_status = 'disabled'"]
+    N101["try"]
+    N102["back_link_status = post_back_link_comment(...)"]
+    N103["except subprocess.CalledProcessError"]
+    N104["print(...)"]
+    N105["back_link_status = 'failed'"]
+    N106["try"]
+    N107["apply_terminal_label(...)"]
+    N108["terminal_label_status = 'applied'"]
+    N109["except subprocess.CalledProcessError"]
+    N110["print(...)"]
+    N111["terminal_label_status = 'failed'"]
+    N112["msg = f'created retro issue #{new_number} ({new_url}); back-link={back_link_status}; terminal-label={terminal_label_status}'"]
+    N113["print(...)"]
+    N114["_append_summary(...)"]
+    N115["return 0"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 -->|"true"| N004
@@ -224,21 +226,24 @@ flowchart TD
     N096 --> N097
     N097 --> N098
     N098 -->|"true"| N099
-    N099 -->|"try"| N100
-    N099 -->|"raises"| N101
-    N101 --> N102
-    N102 --> N103
-    N100 --> N104
+    N099 -->|"true"| N100
+    N099 -->|"false"| N101
+    N101 -->|"try"| N102
+    N101 -->|"raises"| N103
     N103 --> N104
-    N104 -->|"try"| N105
+    N104 --> N105
+    N100 --> N106
+    N102 --> N106
     N105 --> N106
-    N104 -->|"raises"| N107
+    N106 -->|"try"| N107
     N107 --> N108
-    N108 --> N109
-    N106 --> N110
+    N106 -->|"raises"| N109
     N109 --> N110
-    N098 -->|"false"| N110
     N110 --> N111
+    N108 --> N112
     N111 --> N112
+    N098 -->|"false"| N112
     N112 --> N113
+    N113 --> N114
+    N114 --> N115
 ```

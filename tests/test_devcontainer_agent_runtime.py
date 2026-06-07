@@ -51,6 +51,28 @@ def test_runtime_script_installs_gh_and_container_scoped_defaults() -> None:
     assert "agent:repo(branch)" in agent_prompt
 
 
+def test_runtime_provisions_rtk_for_claude_pretooluse_hook() -> None:
+    script = (REPO_ROOT / ".devcontainer/scripts/configure-agent-runtime.sh").read_text(encoding="utf-8")
+    claude_settings = load_json(REPO_ROOT / ".devcontainer/config/claude/settings.json")
+
+    # rtk must be symlinked to /usr/local/bin so the PreToolUse hook resolves it.
+    assert "install_nix_binary rtk-cli rtk" in script
+
+    # The claude config declares the rtk auto-rewrite PreToolUse Bash hook.
+    hooks = claude_settings.get("hooks")
+    assert isinstance(hooks, dict)
+    pre_tool_use = hooks.get("PreToolUse")
+    assert isinstance(pre_tool_use, list)
+    rtk_commands = [
+        inner.get("command")
+        for entry in pre_tool_use
+        if isinstance(entry, dict) and entry.get("matcher") == "Bash"
+        for inner in (entry.get("hooks") or [])
+        if isinstance(inner, dict)
+    ]
+    assert "rtk hook claude" in rtk_commands
+
+
 def test_codex_runtime_config_uses_supported_toml_keys() -> None:
     codex_toml = (REPO_ROOT / ".devcontainer/config/codex/config.toml").read_text(encoding="utf-8")
 
@@ -166,3 +188,25 @@ def test_runbook_documents_gh_bind_mount_security() -> None:
     assert "host-side" in runbook
     assert "gh auth status" in runbook
     assert "read-write" in runbook
+
+
+def test_prebuild_strips_nix_store_links_hardlink_farm() -> None:
+    # The published images are Trivy-scanned in publish-devcontainer-images.yml;
+    # its secret scanner walks /nix/store/.links (the store optimisation hardlink
+    # farm) as a duplicate path to every store file, producing redundant Code
+    # scanning alerts. The agent-user Feature deletes the farm at build time so
+    # the published image carries no .links. Refs #1348.
+    install = (REPO_ROOT / ".devcontainer/images/features/agent-user/install.sh").read_text(encoding="utf-8")
+    assert "rm -rf /nix/store/.links" in install
+
+
+def test_prebuild_runs_agent_user_feature_last() -> None:
+    # The .links removal above is only correct if the agent-user Feature is the
+    # last build-time step: it must run after the nix Feature populates the
+    # store, and `devcontainer build` runs no postCreateCommand afterwards. Guard
+    # that ordering invariant for both prebuild configs. Refs #1348.
+    for agent in AGENTS:
+        config = load_json(REPO_ROOT / ".devcontainer" / "images" / agent / "devcontainer.json")
+        order = config.get("overrideFeatureInstallOrder")
+        assert isinstance(order, list)
+        assert order[-1] == "../features/agent-user"

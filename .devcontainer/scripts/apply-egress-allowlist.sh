@@ -7,42 +7,28 @@ if [[ $# -ne 1 ]]; then
 fi
 
 ALLOWLIST_FILE="$1"
-BASE_DIR="$(cd "$(dirname "$ALLOWLIST_FILE")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=.devcontainer/scripts/_egress-lib.sh
+source "$SCRIPT_DIR/_egress-lib.sh"
 
-require_command() {
-  if ! command -v "$1" >/dev/null 2>&1; then
-    echo "missing required command: $1" >&2
-    exit 69
-  fi
-}
+# block (default): deny-by-default; only allowlisted egress is permitted.
+# audit: record non-allowlisted egress without dropping it (discovery mode).
+EGRESS_MODE="${EGRESS_MODE:-block}"
+case "$EGRESS_MODE" in
+  block | audit) ;;
+  *)
+    echo "invalid EGRESS_MODE: $EGRESS_MODE (expected 'block' or 'audit')" >&2
+    exit 64
+    ;;
+esac
 
-require_command getent
-require_command iptables
+require_command getent || exit $?
+require_command iptables || exit $?
 
 if [[ "$(id -u)" -ne 0 ]]; then
   echo "egress allowlist must run as root" >&2
   exit 77
 fi
-
-read_allowlist() {
-  local file="$1"
-  local line include
-
-  while IFS= read -r line || [[ -n "$line" ]]; do
-    line="${line%%#*}"
-    line="${line#"${line%%[![:space:]]*}"}"
-    line="${line%"${line##*[![:space:]]}"}"
-
-    [[ -z "$line" ]] && continue
-
-    if [[ "$line" == @include\ * ]]; then
-      include="${line#@include }"
-      read_allowlist "$BASE_DIR/$include"
-    else
-      printf '%s\n' "$line"
-    fi
-  done < "$file"
-}
 
 mapfile -t HOSTS < <(read_allowlist "$ALLOWLIST_FILE" | sort -u)
 
@@ -51,22 +37,19 @@ if [[ "${#HOSTS[@]}" -eq 0 ]]; then
   exit 78
 fi
 
-iptables -P OUTPUT ACCEPT
-iptables -F OUTPUT
+egress_apply_accept_rules "${HOSTS[@]}"
 
-iptables -A OUTPUT -o lo -j ACCEPT
-iptables -A OUTPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
-
-while IFS= read -r nameserver; do
-  iptables -A OUTPUT -p udp -d "$nameserver" --dport 53 -j ACCEPT
-  iptables -A OUTPUT -p tcp -d "$nameserver" --dport 53 -j ACCEPT
-done < <(awk '/^nameserver[[:space:]]+/ { print $2 }' /etc/resolv.conf | sort -u)
-
-for host in "${HOSTS[@]}"; do
-  while IFS= read -r ip; do
-    iptables -A OUTPUT -p tcp -d "$ip" -m multiport --dports 22,80,443 -j ACCEPT
-  done < <(getent ahostsv4 "$host" | awk '{ print $1 }' | sort -u)
-done
-
-iptables -P OUTPUT DROP
-echo "applied egress allowlist from $ALLOWLIST_FILE"
+if [[ "$EGRESS_MODE" == "block" ]]; then
+  iptables -P OUTPUT DROP
+  echo "applied egress allowlist (block) from $ALLOWLIST_FILE"
+else
+  # audit: the ACCEPT rules above short-circuit allowlisted traffic; anything
+  # reaching the end of OUTPUT is logged (rate-limited, IP:port header only --
+  # no payload) and then permitted by the ACCEPT policy. This records every
+  # non-allowlisted destination without breaking connectivity, so an operator
+  # can discover what a workload needs before promoting the file to block mode.
+  iptables -A OUTPUT -m limit --limit 60/min --limit-burst 100 \
+    -j LOG --log-prefix "EGRESS-AUDIT: " --log-level info
+  iptables -P OUTPUT ACCEPT
+  echo "applied egress allowlist (audit) from $ALLOWLIST_FILE"
+fi

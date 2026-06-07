@@ -1,0 +1,61 @@
+#!/usr/bin/env bpftrace
+/*
+ * egress-correlation.bt -- best-effort process<->egress correlation monitor.
+ *
+ * Records, per event, ONLY:
+ *   - the originating process (pid + comm),
+ *   - for an outbound TCP connect: the destination IP:port,
+ *   - for a file open: the path.
+ *
+ * It DELIBERATELY never reads syscall payload buffers: no write()/read()/send()
+ * buffer contents are captured, so secrets in transit or on disk are not
+ * recorded. Output is a local-only report (see _egress-ebpf.sh); nothing is
+ * sent off-box -- this is a self-hosted monitor with no third-party telemetry.
+ *
+ * Honest limitation: an agent holding NET_ADMIN/CAP_BPF can kill bpftrace or
+ * detach these probes from within the container (CVE-2025-32955 class bypass).
+ * This is detection plus correlation, NOT an enforcement boundary. On kernels
+ * without BTF / a mounted tracefs / CAP_BPF the controller skips gracefully.
+ */
+
+#include <linux/socket.h>
+#include <net/sock.h>
+
+BEGIN
+{
+  printf("egress-correlation start: pid comm -> dest|path; payload contents NOT recorded\n");
+}
+
+/*
+ * Outbound TCP connect. Read only the destination address/port off the socket;
+ * no payload is touched. dport is byte-swapped from network order.
+ */
+kprobe:tcp_connect
+{
+  $sk = (struct sock *)arg0;
+  $family = $sk->__sk_common.skc_family;
+  $dport = $sk->__sk_common.skc_dport;
+  $dport = ($dport >> 8) | (($dport << 8) & 0xff00);
+
+  if ($family == AF_INET) {
+    printf("CONNECT pid=%d comm=%s dest=%s:%d\n",
+           pid, comm, ntop(AF_INET, $sk->__sk_common.skc_daddr), $dport);
+  } else if ($family == AF_INET6) {
+    printf("CONNECT pid=%d comm=%s dest=[%s]:%d\n",
+           pid, comm, ntop(AF_INET6, $sk->__sk_common.skc_v6_daddr.in6_u.u6_addr8), $dport);
+  }
+}
+
+/*
+ * File opens. Record the path argument ONLY -- never the contents of any
+ * subsequent read()/write() against the returned fd.
+ */
+tracepoint:syscalls:sys_enter_openat
+{
+  printf("OPEN pid=%d comm=%s path=%s\n", pid, comm, str(args->filename));
+}
+
+END
+{
+  printf("egress-correlation stop\n");
+}

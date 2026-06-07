@@ -190,6 +190,33 @@ class TestPrTitleHasIssueRef:
         assert title_policy.pr_title_has_issue_ref(title) is False
 
 
+class TestPrTitleRefIsExempt:
+    @pytest.mark.parametrize(
+        "title",
+        [
+            "revert: undo prior change (#1122)",
+            "revert(automerge): restore non-ascii label exemption (#1122)",
+            "revert(scope): drop change (#203) (#213)",
+        ],
+    )
+    def test_revert_titles_are_exempt(self, title: str) -> None:
+        assert title_policy.pr_title_ref_is_exempt(title) is True
+
+    @pytest.mark.parametrize(
+        "title",
+        [
+            "fix(x): summary (#42)",
+            "feat: add gate (#7)",
+            # ``revert`` substring outside the type slot must not exempt.
+            "fix(revert): summary (#9)",
+            # Malformed shape parses to no type, so it stays banned.
+            "revert this thing (#9)",
+        ],
+    )
+    def test_non_revert_titles_are_not_exempt(self, title: str) -> None:
+        assert title_policy.pr_title_ref_is_exempt(title) is False
+
+
 class TestDescribeNonAscii:
     def test_reports_codepoint_positions(self) -> None:
         assert title_policy.describe_non_ascii("A\u200bB\u202e") == [
@@ -282,6 +309,24 @@ class TestVerifyTitle:
         )
         assert "title type does not fit" in capsys.readouterr().out
 
+    def test_revert_pr_title_with_ref_exits_zero(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        # A revert title may name the reverted PR/commit; the dedup ban
+        # (#167 / #214) does not apply, but ASCII/naming still would.
+        assert (
+            title_policy.verify_title(
+                "revert(automerge): restore label exemption (#1122)",
+                kind="pull_request",
+            )
+            == 0
+        )
+        out = capsys.readouterr().out
+        assert (
+            "OK: pull_request title is ASCII-only and follows naming convention."
+            in out
+        )
+
     def test_issue_with_issue_ref_in_title_still_passes(
         self, capsys: pytest.CaptureFixture[str]
     ) -> None:
@@ -294,6 +339,56 @@ class TestVerifyTitle:
         )
         out = capsys.readouterr().out
         assert "OK: issue title is ASCII-only and follows naming convention." in out
+
+
+class TestTrustedBotTypeFitCarveOut:
+    """#1127: a trusted-bot author drops the relayed body from type-fit.
+
+    Dependabot relays upstream release notes whose ``cache`` / ``memory``
+    wording must not mis-classify a correct ``chore(deps):`` title as
+    performance work. Title-only checks still apply to bots.
+    """
+
+    _DEPENDABOT_TITLE = "chore(deps): bump actions/setup-go from 5.6.0 to 6.4.0"
+    _PERF_BODY = "Update default Go module caching to use go.mod; reduce memory."
+
+    def test_trusted_bot_body_does_not_trip_type_fit(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        assert (
+            title_policy.verify_title(
+                self._DEPENDABOT_TITLE,
+                kind="pull_request",
+                body=self._PERF_BODY,
+                author="dependabot[bot]",
+            )
+            == 0
+        )
+        assert "title type does not fit" not in capsys.readouterr().out
+
+    def test_non_bot_author_body_still_trips_type_fit(self) -> None:
+        assert (
+            title_policy.verify_title(
+                self._DEPENDABOT_TITLE,
+                kind="pull_request",
+                body=self._PERF_BODY,
+                author="octocat",
+            )
+            == 1
+        )
+
+    def test_trusted_bot_perf_signal_in_title_still_fails(self) -> None:
+        # The carve-out drops only the body; a perf signal in the bot's own
+        # title is still its own authored content and must be checked.
+        assert (
+            title_policy.verify_title(
+                "chore(deps): cache image builds",
+                kind="pull_request",
+                body="",
+                author="dependabot[bot]",
+            )
+            == 1
+        )
 
 
 class TestPropertyInvariants:

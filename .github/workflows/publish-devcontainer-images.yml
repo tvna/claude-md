@@ -16,10 +16,15 @@ on:
 
 permissions: {}
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   build:
     name: Build ${{ matrix.agent }} devcontainer image (${{ matrix.arch }})
     runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
     permissions:
       contents: read
       packages: write
@@ -48,7 +53,9 @@ jobs:
       IMAGE_PREFIX: ghcr.io/${{ github.repository_owner }}/claude-md-devcontainer
     steps:
       - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
 
       - name: Log in to GHCR
         env:
@@ -77,10 +84,77 @@ jobs:
             --cache-to "type=registry,ref=${cache_ref},mode=max" \
             --push
 
+  scan:
+    name: Scan ${{ matrix.agent }} devcontainer image (${{ matrix.arch }})
+    needs: build
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    # Isolated from `build` so a compromised scanner cannot reach the GHCR write
+    # token: scan holds read-only registry access plus SARIF upload, nothing more.
+    permissions:
+      packages: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - agent: claude
+            arch: amd64
+            runner: ubuntu-24.04
+          - agent: claude
+            arch: arm64
+            runner: ubuntu-24.04-arm
+          - agent: codex
+            arch: amd64
+            runner: ubuntu-24.04
+          - agent: codex
+            arch: arm64
+            runner: ubuntu-24.04-arm
+    env:
+      IMAGE_PREFIX: ghcr.io/${{ github.repository_owner }}/claude-md-devcontainer
+    steps:
+      - name: Log in to GHCR
+        env:
+          GHCR_TOKEN: ${{ github.token }}
+        run: |
+          printf '%s' "$GHCR_TOKEN" | docker login ghcr.io \
+            --username "${{ github.actor }}" \
+            --password-stdin
+
+      # Trivy scans the per-arch image published by `build` on the matching-arch
+      # runner. Informational-first posture (mirrors the CodeQL workflow):
+      # exit-code 0 means findings never fail the run, and continue-on-error
+      # means a Trivy DB-download or other infra failure never blocks publish.
+      # Results surface in the Security tab via the SARIF upload.
+      - name: Scan published image with Trivy
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        continue-on-error: true
+        with:
+          image-ref: ${{ env.IMAGE_PREFIX }}-${{ matrix.agent }}:${{ github.sha }}-${{ matrix.arch }}
+          scanners: vuln,secret,misconfig
+          format: sarif
+          output: trivy-results.sarif
+          exit-code: '0'
+          # Pin the Trivy binary, not just the action SHA. trivy-action downloads
+          # the scanner at runtime and the `version:` input selects which binary;
+          # leaving it unset (or `latest`) was the exposure vector in the
+          # 2026-03-19 Trivy supply-chain incident (aquasecurity/trivy#10425).
+          # v0.70.0 is the trivy-action v0.36.0 default and post-incident
+          # (>= v0.69.3). Bump in lockstep when the pinned action SHA changes.
+          version: v0.70.0
+
+      - name: Upload Trivy results to the Security tab
+        uses: github/codeql-action/upload-sarif@1a818fd5f97ed0ee9a823421bd5b171add01227f # v4.36.2
+        continue-on-error: true
+        with:
+          sarif_file: trivy-results.sarif
+          category: trivy-${{ matrix.agent }}-${{ matrix.arch }}
+
   publish:
     name: Publish ${{ matrix.agent }} devcontainer manifest
     needs: build
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     permissions:
       packages: write
     strategy:
@@ -112,6 +186,7 @@ jobs:
     needs: publish
     if: github.event_name == 'push'
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     environment:
       name: devcontainer-image-pins
     permissions:
@@ -119,15 +194,27 @@ jobs:
       pull-requests: write
     steps:
       - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
       - name: Update pinned image SHAs
         run: python3 scripts/update_devcontainer_image_pins.py "$GITHUB_SHA"
 
+      # Mint a short-lived GitHub App installation token so the generated pin PR
+      # is authored by the App bot (not a human PAT owner). App-token events,
+      # unlike GITHUB_TOKEN, still trigger the downstream pull_request checks the
+      # auto-merge keeper waits on. Refs #1401.
+      - name: Mint GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ secrets.DEVCONTAINER_PIN_APP_ID }}
+          private-key: ${{ secrets.DEVCONTAINER_PIN_APP_PRIVATE_KEY }}
+
       - name: Open pin update PR
         env:
-          GH_TOKEN: ${{ secrets.DEVCONTAINER_PIN_PR_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
           REPO: ${{ github.repository }}
+          PIN_BOT_APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
         run: |
           set -euo pipefail
           python3 scripts/devcontainer_pin_pr.py open \
@@ -139,4 +226,8 @@ jobs:
             --template .github/pr-body-templates/devcontainer-image-pins.md \
             --file .devcontainer/claude/devcontainer.json \
             --file .devcontainer/codex/devcontainer.json \
+            --file .devcontainer/claude-amd64/devcontainer.json \
+            --file .devcontainer/claude-arm64/devcontainer.json \
+            --file .devcontainer/codex-amd64/devcontainer.json \
+            --file .devcontainer/codex-arm64/devcontainer.json \
             --file docs/runbooks/devcontainers.md

@@ -22,10 +22,12 @@ with::
     done
     python scripts/analyze_ci_timings.py --jobs jobs/ > report.md
 
-The script itself does not call the GitHub API, mutates no state, runs
-nowhere in CI, and writes outside stdout only when redirected. Single
-file addition under ``scripts/`` plus its tests under ``tests/``.
-Revert is a single ``git revert``.
+The script itself does not call the GitHub API and mutates no remote
+state. It writes outside stdout only when redirected or when
+``--budget-output FILE`` is passed (a local JSON breach set consumed by
+``scripts/ci_budget_issue.py`` -- the only side channel that touches
+GitHub, in a separate process). Single file addition under ``scripts/``
+plus its tests under ``tests/``. Revert is a single ``git revert``.
 
 Output is a markdown report (per-job and per-step aggregates) with
 columns ``count | p50 | p95 | max | trend(5)``. The trend indicator is
@@ -400,19 +402,88 @@ def _render_compare_step_table(
     return "\n".join(rows)
 
 
+def budget_breaches(
+    job_agg: dict[str, list[tuple[datetime, float]]], budget_seconds: float
+) -> list[tuple[str, float]]:
+    """Return ``(job_name, p50)`` for jobs whose median exceeds the budget.
+
+    Sorted slowest-first. p50 (median) is used rather than max so a single
+    noisy runner outlier does not trip the soft budget. Takes the same
+    ``aggregate_job_durations`` shape (``[(started_at, duration), ...]``) as
+    the report tables. Refs #1156.
+    """
+    out: list[tuple[str, float]] = []
+    for name, samples in job_agg.items():
+        durations = [v for _, v in samples]
+        if not durations:
+            continue
+        p50 = _percentile(durations, 50)
+        if p50 > budget_seconds:
+            out.append((name, p50))
+    return sorted(out, key=lambda item: item[1], reverse=True)
+
+
+def budget_breach_payload(
+    job_agg: dict[str, list[tuple[datetime, float]]], budget_seconds: float
+) -> dict[str, object]:
+    """Build the machine-readable breach set written by ``--budget-output``.
+
+    The shape is intentionally small and stable so a downstream consumer
+    (``scripts/ci_budget_issue.py``, wired into ``weekly-maintenance.yml``)
+    can decide whether to open/update a tracking issue without re-parsing the
+    markdown report. ``breaches`` is slowest-first; an empty list means no job
+    p50 crossed the soft budget. Refs #1156.
+    """
+    breaches = budget_breaches(job_agg, budget_seconds)
+    return {
+        "budget_seconds": budget_seconds,
+        "breaches": [{"job": name, "p50": p50} for name, p50 in breaches],
+    }
+
+
+def _render_budget_section(
+    job_agg: dict[str, list[tuple[datetime, float]]], budget_seconds: float
+) -> str:
+    parts: list[str] = []
+    parts.append(f"## Budget ({_fmt_seconds(budget_seconds)} per job, p50)")
+    parts.append("")
+    breaches = budget_breaches(job_agg, budget_seconds)
+    if not breaches:
+        parts.append(f"OK: no job p50 exceeds {_fmt_seconds(budget_seconds)}.")
+        return "\n".join(parts)
+    parts.append(
+        f"BUDGET BREACH: {len(breaches)} job(s) over the soft budget "
+        f"(observability, not a hard gate -- #1156):"
+    )
+    parts.append("")
+    parts.append("| job | p50 | budget |")
+    parts.append("| --- | ---: | ---: |")
+    for name, p50 in breaches:
+        parts.append(
+            f"| {name} | {_fmt_seconds(p50)} | {_fmt_seconds(budget_seconds)} |"
+        )
+    return "\n".join(parts)
+
+
 def render_report(
     jobs: list[dict[str, object]],
     *,
     title: str,
     cutoff: datetime | None = None,
+    budget_seconds: float | None = None,
 ) -> str:
     if cutoff is None:
-        return _render_single_window_report(jobs, title=title)
+        return _render_single_window_report(
+            jobs, title=title, budget_seconds=budget_seconds
+        )
     return _render_compare_report(jobs, title=title, cutoff=cutoff)
 
 
 def _render_single_window_report(
-    jobs: list[dict[str, object]], *, title: str
+    jobs: list[dict[str, object]],
+    *,
+    title: str,
+    budget_seconds: float | None = None,
 ) -> str:
     job_agg = aggregate_job_durations(jobs)
     step_agg = aggregate_step_durations(jobs)
@@ -435,6 +506,9 @@ def _render_single_window_report(
     else:
         parts.append("_no step samples_")
     parts.append("")
+    if budget_seconds is not None:
+        parts.append(_render_budget_section(job_agg, budget_seconds))
+        parts.append("")
     parts.append(
         "Trend legend: `^` = newer half >10% slower, `v` = newer half "
         ">10% faster, `=` = within +/-10%, `?` = fewer than 2 samples."
@@ -554,7 +628,31 @@ def main(argv: list[str] | None = None) -> int:
             "for performance-claiming PRs."
         ),
     )
+    parser.add_argument(
+        "--budget-seconds",
+        type=float,
+        default=None,
+        help=(
+            "Optional soft per-job wall-time budget. When supplied, the "
+            "single-window report appends a Budget section listing jobs whose "
+            "median (p50) exceeds it (observability, not a hard gate; #1156)."
+        ),
+    )
+    parser.add_argument(
+        "--budget-output",
+        type=Path,
+        default=None,
+        help=(
+            "Optional path. Requires --budget-seconds. Writes the breach set "
+            "as JSON ({\"budget_seconds\": N, \"breaches\": [{\"job\", \"p50\"}]}) "
+            "so weekly-maintenance.yml can open/update a tracking issue on a "
+            "breach without re-parsing the markdown report (#1156)."
+        ),
+    )
     args = parser.parse_args(argv)
+
+    if args.budget_output is not None and args.budget_seconds is None:
+        parser.error("--budget-output requires --budget-seconds")
 
     jobs = load_jobs(args.jobs)
     jobs = filter_jobs(
@@ -563,8 +661,20 @@ def main(argv: list[str] | None = None) -> int:
         job_name=args.job,
         since=args.since,
     )
-    report = render_report(jobs, title=args.title, cutoff=args.cutoff)
+    report = render_report(
+        jobs,
+        title=args.title,
+        cutoff=args.cutoff,
+        budget_seconds=args.budget_seconds,
+    )
     print(report)
+    if args.budget_output is not None:
+        payload = budget_breach_payload(
+            aggregate_job_durations(jobs), args.budget_seconds
+        )
+        args.budget_output.write_text(
+            json.dumps(payload, indent=2) + "\n", encoding="utf-8"
+        )
     return 0
 
 

@@ -20,7 +20,7 @@ required-version = "==0.11.11"
 # Test-only dependencies for scripts and coverage gates.
 # CI and local development both resolve these through uv and uv.lock.
 dev = [
-    "pytest>=8,<9",
+    "pytest>=9.0.3,<10",
     "pytest-cov>=6,<7",
     # Lint gate (#192). Bounded major to avoid silent rule churn on upgrade.
     "ruff>=0.7,<0.9",
@@ -51,6 +51,7 @@ markers = [
     "shard_preflight: tests for scripts/preflight_*.py and related Layer-2.5 hooks.",
     "shard_policy: body-policy, title-policy, non-ASCII, and trusted-bot tests.",
     "shard_ci_ops: CI-analysis, auto-retro, issue-link, and workflow-orchestration tests.",
+    "shard_ci_ops_2: second ci_ops leg (split from shard_ci_ops to balance matrix wall-time, #1176).",
     "shard_ci_ops_auto_retro_append: auto-retro fix-typed append branch tests.",
     "shard_ci_ops_auto_retro_create: auto-retro issue creation, backlink, and terminal-label tests.",
     "shard_ci_ops_auto_retro_create_slow: slow auto-retro create/fail-soft and run CLI tests.",
@@ -153,6 +154,14 @@ ignore = [
 # must contain the very codepoints RUF001 would flag.
 "scripts/gate_decision_handoff_askuserquestion.py" = ["RUF001"]
 "tests/test_gate_decision_handoff_askuserquestion.py" = [
+    "B011", "B017", "RUF001",
+    "S101", "S105", "S106", "S108", "S404", "S603", "S607",
+]
+# The new-session-prompt hook builds a paste-ready prompt in the project
+# owner's language (ja), so the gate (and its test asserting that text) must
+# contain the fullwidth codepoints RUF001 would flag.
+"scripts/post_merge_new_session_prompt.py" = ["RUF001"]
+"tests/test_post_merge_new_session_prompt.py" = [
     "B011", "B017", "RUF001",
     "S101", "S105", "S106", "S108", "S404", "S603", "S607",
 ]
