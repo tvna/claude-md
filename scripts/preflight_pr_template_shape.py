@@ -37,6 +37,7 @@ from _github_tool_names import canonical_github_tool
 from _hook_runtime import build_deny, run_tool_hook
 from body_policy import (
     verify_pr_agent_attribution_footer,
+    verify_pr_allowed_sections,
     verify_pr_checklist_subsections,
     verify_pr_verification_pairs,
 )
@@ -77,6 +78,7 @@ def evaluate(body: str, *, harness_appends_footer: bool = False) -> list[str]:
     return (
         verify_pr_verification_pairs(body)
         + verify_pr_checklist_subsections(body)
+        + verify_pr_allowed_sections(body)
         + verify_pr_agent_attribution_footer(
             body, harness_appends_footer=harness_appends_footer
         )

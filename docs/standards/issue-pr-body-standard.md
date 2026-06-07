@@ -163,15 +163,18 @@ unavoidable, place the work under a `docs`, `test`, `perf`, or
 
 ## PR body sections
 
-`.github/PULL_REQUEST_TEMPLATE.md` defines the required PR body shape.
-The required H2 sections, in order, are:
+`.github/PULL_REQUEST_TEMPLATE.md` defines the PR body shape. The H2
+headings form an allowlist enforced by `scripts/body_policy.py`
+(`unexpected_pr_sections`, mirrored client-side by
+`scripts/preflight_pr_template_shape.py`): only the headings listed below
+may appear, and a PR body carrying any other H2 is rejected. The body is
+conclusion-first (BLUF) -- `## Summary` leads, and `## Related Issue` is
+kept last, just before the agent-attribution footer, per GitHub
+convention. The headings, in order, are:
 
-- `## Summary` - one or two sentences that name what the PR changes and
-  why. Mirrors the linked issue's `Scope` and `Why`.
-- `## Related Issue` - a single `Refs #<number>` (or `Closes #<number>`,
-  etc.) line. Per CLAUDE.md section 3, every PR must cite its issue.
-  The keywords `Refs`, `Closes`, `Fixes`, and `Resolves` are accepted
-  (case-insensitive).
+- `## Summary` - the conclusion in one or two sentences: what the PR
+  changes, whether verification passed, and the risk level. Lead with the
+  outcome, not the journey. Required.
 - `## Facts` - observable evidence (diffs, command output, test names,
   log lines) per CLAUDE.md section 2. No speculation.
 - `## Assumptions` - what the author is trusting but has not verified.
@@ -228,6 +231,11 @@ The required H2 sections, in order, are:
   - `### Post-merge (auto-retro signal)` - read by
     `scripts/auto_retro.py`. Unchecked items become repair-history
     rows in the auto-opened retrospective issue.
+- `## Related Issue` - a single `Refs #<number>` (or `Closes #<number>`,
+  etc.) line, kept last per GitHub convention so the conclusion stays at
+  the top. Per CLAUDE.md section 3, every PR must cite its issue; this
+  heading is required. The keywords `Refs`, `Closes`, `Fixes`, and
+  `Resolves` are accepted (case-insensitive).
 
 The HTML comment at the top of `PULL_REQUEST_TEMPLATE.md` is rendered
 out of the final PR body and does not need to be preserved.
@@ -236,7 +244,7 @@ out of the final PR body and does not need to be preserved.
 
 | Body section | CLAUDE.md anchor | What it enforces |
 |---|---|---|
-| `Scope` (issue), `Summary` (PR) | section 1 | The goal is named before any work begins. |
+| `Scope` (issue), `Summary` (PR) | section 1 | The goal is named before any work begins; on a PR the `Summary` leads as the conclusion-first (BLUF) block. |
 | `Facts` with `Fact:` / `Speculation:` tags | section 2 | Facts and speculation are visibly separated; reviewers know which lines need pushback. |
 | `Proposed work` (issue), `Changes` (PR) | section 5 | The change touches only what it must; adjacent cleanups are not bundled in. |
 | `Verification` / `Acceptance criteria` (issue), `Verification` (PR) | section 1, section 4 | Completion has an observable check; the blast radius of an unverified merge is bounded. |
@@ -249,16 +257,46 @@ See [`docs/archive/issue-pr-body-examples.md`](../archive/issue-pr-body-examples
 
 ## Body-policy gate
 
-Two layers of the body-shape contract are enforced today.
+Several layers of the body-shape contract are enforced today.
 
 ### Enforced today: H2 section presence (baseline gate)
 
 `.github/workflows/verify-pr.yml` (job: `Validate body section structure`) shells out to
 `scripts/body_policy.py verify` and checks that every required H2 (or
 H3 for Issue Forms) heading from the lists above is present in the
-body. Bodies whose `created_at` predates `BODY_POLICY_CUTOFF`
-(currently `2026-05-26T00:00:00Z`) skip this check so the back-catalog
-stays exempt.
+body. For pull requests the required set (`_PR_REQUIRED`) includes
+`## Summary` (the conclusion-first BLUF block) and `## Related Issue`
+(consistent with the CLAUDE.md section 3 / `issue_link.py` requirement
+that every PR cite its issue). Bodies whose `created_at` predates
+`BODY_POLICY_CUTOFF` (currently `2026-05-26T00:00:00Z`) skip this check
+so the back-catalog stays exempt.
+
+### Enforced today: PR H2 allowlist
+
+For pull requests the baseline gate also rejects any H2 heading outside
+the allowlist `_PR_ALLOWED` (the `_PR_REQUIRED` set plus the conditional
+`## Text delta`). `scripts/body_policy.py:unexpected_pr_sections`
+enumerates the offending headings and `verify_pr_allowed_sections`
+renders the deny message; the same function backs both the server gate
+(`_verify`) and the client hook
+(`scripts/preflight_pr_template_shape.py`), so an unlisted section such
+as `## Notes` is blocked before the MCP call and again in CI. H3
+subsections (the Checklist's `### Bootstrap` / `### After-merge` /
+`### Post-merge`) are part of their parent section and are not
+allowlisted as standalone H2s. The check runs only for in-window bodies
+(the `created_at < cutoff` skip exempts the back-catalog). Refs #1396.
+
+### Enforced today: standard-doc / constant sync gate
+
+`tests/test_body_policy_standard_doc.py` parses the `## <Name>` headings
+listed in the "Issue body sections" and "PR body sections" sections of
+this document and asserts they match the `scripts/body_policy.py`
+constants in either direction: the PR list equals `_PR_ALLOWED`, the
+issue list equals `_ISSUE_COMMON_REQUIRED` plus the optional
+`_ISSUE_OPTIONAL` (`Parent`), and every `_ISSUE_TRACKING_REQUIRED` name
+is documented somewhere in this runbook. A change to either the prose or
+the constants that is not mirrored in the other fails the test, so the
+runbook cannot silently drift from the validator. Refs #1191, #1396.
 
 ### Enforced today: PR shape gate (post-2026-05-26)
 

@@ -56,6 +56,8 @@ _AMPERSAND_RE = re.compile(r"\s*&\s*")
 _TRACKING_MARKER = "Initial child issues"
 
 _PR_REQUIRED: tuple[str, ...] = (
+    "Summary",
+    "Related Issue",
     "Facts",
     "Assumptions",
     "Risk and blast radius",
@@ -63,6 +65,14 @@ _PR_REQUIRED: tuple[str, ...] = (
     "Verification",
     "Checklist",
 )
+# ``Text delta`` appears only when the diff touches universal instruction
+# text (.apm/instructions/**, CLAUDE.md, AGENTS.md), so it is allowlisted,
+# not required. A PR body may carry no H2 outside ``_PR_ALLOWED`` (see
+# :func:`unexpected_pr_sections`). ``Summary`` leads as the conclusion-first
+# (BLUF) block; ``Related Issue`` is required for parity with the CLAUDE.md
+# section 3 / ``issue_link.py`` ``Refs/Closes #N`` rule. Refs #1396.
+_PR_OPTIONAL: tuple[str, ...] = ("Text delta",)
+_PR_ALLOWED: tuple[str, ...] = _PR_REQUIRED + _PR_OPTIONAL
 _ISSUE_COMMON_REQUIRED: tuple[str, ...] = (
     "Scope",
     "Facts",
@@ -76,6 +86,12 @@ _ISSUE_TRACKING_REQUIRED: tuple[str, ...] = (
     "Initial child issues",
     "Completion criteria",
 )
+# Issue sections allowed but not required. ``Parent`` links the umbrella
+# tracking issue and is omitted when the issue is standalone, so it is
+# documented in the standard doc's section list yet cannot be required.
+# It is the single source the standard-doc sync test uses to reconcile the
+# doc's issue list with the required constants. Refs #1191, #1396.
+_ISSUE_OPTIONAL: tuple[str, ...] = ("Parent",)
 
 # Shape gate constants (PR template post-2026-05-26). The hook
 # (scripts/preflight_pr_template_shape.py) imports these so the
@@ -184,6 +200,46 @@ def missing_sections(
         name
         for name in required
         if _normalize_heading(name) not in present
+    ]
+
+
+def unexpected_pr_sections(
+    headings: list[tuple[int, str]],
+) -> list[str]:
+    """Return level-2 PR heading texts that fall outside ``_PR_ALLOWED``.
+
+    Only H2 headings are allowlisted; the Checklist's H3 subsections are
+    part of their parent section and are skipped. Matching reuses
+    :func:`_normalize_heading` (``&``/``and`` equivalent, case significant).
+    Offenders are returned in document order, de-duplicated. Refs #1396.
+    """
+    allowed = {_normalize_heading(name) for name in _PR_ALLOWED}
+    seen: set[str] = set()
+    out: list[str] = []
+    for level, text in headings:
+        if level != 2:
+            continue
+        norm = _normalize_heading(text)
+        if norm in allowed or norm in seen:
+            continue
+        seen.add(norm)
+        out.append(text)
+    return out
+
+
+def verify_pr_allowed_sections(body: str) -> list[str]:
+    """Return ``::error::`` strings for PR H2 headings outside the allowlist.
+
+    Single source of the allowlist deny message so the server gate
+    (:func:`_verify`) and the client hook
+    (``scripts/preflight_pr_template_shape.py``) cannot drift. Returns
+    ``[]`` when every H2 heading is in ``_PR_ALLOWED``. Refs #1396.
+    """
+    allowed_list = ", ".join(_PR_ALLOWED)
+    return [
+        f"::error::pull_request body has an H2 section outside the allowed "
+        f"set: ## {name}. Allowed H2 headings: {allowed_list}."
+        for name in unexpected_pr_sections(extract_headings(body))
     ]
 
 
@@ -585,6 +641,17 @@ def _verify(
                 f"## {name} (or ### {name})."
             )
         return 1
+
+    # PR H2 allowlist: a PR body may carry only the headings in
+    # _PR_ALLOWED. This runs only for in-window bodies (the created_at <
+    # cutoff skip above already returned 0 for the back-catalog), so a
+    # historical PR with an unlisted heading is not retro-failed. Refs #1396.
+    if kind == "pull_request":
+        allowlist_errors = verify_pr_allowed_sections(body)
+        if allowlist_errors:
+            for msg in allowlist_errors:
+                print(msg)
+            return 1
 
     # Shape gate: post-2026-05-26 PR template enforces Verification
     # command/result pairs and Checklist subsections. The gate is

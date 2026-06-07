@@ -1,40 +1,27 @@
 <!--
-Per CLAUDE.md section 3, every PR must reference its issue (`#<number>`).
-The line below is validated by the issue-link step inside the
-portable-pr-policy job of .github/workflows/verify-pr.yml on every
-`pull_request` event and enforced as a required status check on `main`
-via the `Portable PR policy / gate` context (see
-.github/rulesets/main.json).
+Conclusion first (BLUF: Bottom Line Up Front). The Summary below is the
+single most important block: a reviewer should be able to read it alone
+and know what changed, whether it is verified, and how risky it is. Keep
+the detail (Facts, evidence, rollback) further down; keep the issue link
+(Related Issue) at the very end per GitHub convention.
 
-The reference lives on the `Closes #<number>` / `Refs #<number>` line in
-this body ONLY -- it must NOT be duplicated in the PR title. A `(#NNN)`
-token in the title is rejected by scripts/title_policy.py
-(portable-pr-policy job of verify-pr.yml) per #167 / #214, because this
-body line is the
-single source of truth for the issue link. "Cite the issue number in every
-PR" (CLAUDE.md section 3) means this body line, not the title. Exception:
-a `revert(<scope>): ...` title may keep a `(#NNN)` token that names the
-reverted PR/commit -- that reference identifies the rolled-back change, not
-a redundant copy of this issue link.
-
-Default: `Closes #<number>` so the linked issue auto-closes on merge.
-GitHub auto-closes on: Closes, Closed, Fixes, Fixed, Resolves, Resolved
-(case-insensitive, including conjugations).
-
-Use `Refs #<number>` instead ONLY when this PR is partial work whose
-merge must NOT close the linked issue, AND one of the following holds:
-  - the linked issue carries the `type:tracking` label (umbrella issue
-    that lives on while children land), OR
-  - add a literal `<!-- partial -->` line below to opt out of the
-    closing-keyword gate (see scripts/issue_link.py and #216).
+PR body shape is enforced by scripts/body_policy.py (server-side via
+.github/workflows/verify-pr.yml, portable-pr-policy job) and mirrored
+client-side by scripts/preflight_pr_template_shape.py. The H2 headings
+are an allowlist: only the sections in this template may appear. See
+docs/standards/issue-pr-body-standard.md.
 -->
 
 ## Summary
 
+<!--
+The conclusion, in one or two sentences: what this PR changes, whether
+verification passed, and the risk level. Lead with the outcome, not the
+journey. Example: "Adds the H2 allowlist gate; pytest green (684 passed);
+low risk, CI-only, single git revert to roll back."
+-->
 
-## Related Issue
-
-Closes #
+-
 
 <!--
 Facts -- CLAUDE.md section 2.
@@ -130,7 +117,7 @@ author has not yet finished bounding the change.
 
 - [ ] Facts vs. Assumptions split is honest (no speculation lurking in Facts)
 - [ ] Risk and blast radius assessed; Rollback steps are runnable
-- [ ] Issue number recorded on the `Closes #` line above (or `Refs #` with rationale per the template comment)
+- [ ] Issue number recorded on the `Closes #` line below (or `Refs #` with rationale per the template comment)
 - [ ] Replacement PR preflight passed when this PR replaces another PR for the same issue/session (`scripts/preflight_replacement_pr.py verify`, Issue #632)
 
 ### After-merge (CI)
@@ -161,6 +148,44 @@ items that remain unchecked once the observation window has closed.
 - [ ] Linked issue closed by the merge (or `Refs #` with rationale recorded)
 - [ ] auto-retro issue opened by the open-retro job of `.github/workflows/post-merge.yml`
 - [ ] No follow-up `fix(...)` PR needed within 24h of merge
+
+<!--
+Related Issue -- CLAUDE.md section 3. Kept last (before the footer) per
+GitHub convention: the closing keyword reads naturally at the end of the
+body and the conclusion (Summary) stays at the top.
+
+Per CLAUDE.md section 3, every PR must reference its issue (`#<number>`).
+The line below is validated by the issue-link step inside the
+portable-pr-policy job of .github/workflows/verify-pr.yml on every
+`pull_request` event and enforced as a required status check on `main`
+via the `Portable PR policy / gate` context (see
+.github/rulesets/main.json).
+
+The reference lives on the `Closes #<number>` / `Refs #<number>` line in
+this body ONLY -- it must NOT be duplicated in the PR title. A `(#NNN)`
+token in the title is rejected by scripts/title_policy.py
+(portable-pr-policy job of verify-pr.yml) per #167 / #214, because this
+body line is the
+single source of truth for the issue link. "Cite the issue number in every
+PR" (CLAUDE.md section 3) means this body line, not the title. Exception:
+a `revert(<scope>): ...` title may keep a `(#NNN)` token that names the
+reverted PR/commit -- that reference identifies the rolled-back change, not
+a redundant copy of this issue link.
+
+Default: `Closes #<number>` so the linked issue auto-closes on merge.
+GitHub auto-closes on: Closes, Closed, Fixes, Fixed, Resolves, Resolved
+(case-insensitive, including conjugations).
+
+Use `Refs #<number>` instead ONLY when this PR is partial work whose
+merge must NOT close the linked issue, AND one of the following holds:
+  - the linked issue carries the `type:tracking` label (umbrella issue
+    that lives on while children land), OR
+  - add a literal `<!-- partial -->` line below to opt out of the
+    closing-keyword gate (see scripts/issue_link.py and #216).
+-->
+## Related Issue
+
+Closes #
 
 <!--
 Agent attribution -- required by scripts/body_policy.py for PRs created on

@@ -236,10 +236,6 @@ Tighten the PR body shape so Verification is recoverable evidence and
 Checklist items map cleanly onto Bootstrap / After-merge / Post-merge
 automation layers.
 
-## Related Issue
-
-Refs #343
-
 ## Facts
 
 - scripts/body_policy.py now exposes verify_pr_verification_pairs and
@@ -291,4 +287,8 @@ Refs #343
 - [ ] Linked issue closed by the merge
 - [ ] auto-retro issue opened by `.github/workflows/auto-retro.yml`
 - [ ] No follow-up `fix(...)` PR needed within 24h of merge
+
+## Related Issue
+
+Refs #343
 ```
