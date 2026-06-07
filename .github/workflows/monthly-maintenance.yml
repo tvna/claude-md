@@ -1,8 +1,10 @@
 name: Monthly maintenance
 
-# Consolidated monthly-cadence maintenance (issue #1319). Currently hosts the
+# Consolidated monthly-cadence maintenance (issue #1319). Hosts the
 # MITRE ATT&CK coverage review reminder (#178), promoted from a quarterly to a
-# monthly cadence per the consolidation request.
+# monthly cadence per the consolidation request, and the monthly GHCR
+# devcontainer image prune (#1400, child of #696) that deletes old agent image
+# versions left behind by the publish workflow.
 #
 # Migrated from attack-coverage-review-reminder.yml -> job: remind.
 # Thin orchestration: scripts/attack_review_reminder.py extracts the canonical
@@ -26,6 +28,11 @@ on:
     inputs:
       dry_run:
         description: 'Preview only (assemble template, do not post comment on #178).'
+        type: boolean
+        required: true
+        default: true
+      prune_dry_run:
+        description: 'Devcontainer image prune: preview only (list candidates, do not delete).'
         type: boolean
         required: true
         default: true
@@ -85,3 +92,58 @@ jobs:
             --issue-number "${TRACKING_ISSUE}" \
             --body-file "${COMMENT_PATH}"
           echo "Posted review reminder comment on ${REPO}#${TRACKING_ISSUE}."
+
+  # Monthly GHCR cleanup (#1400, child of #696). Each publish-devcontainer-images
+  # run leaves a new commit-SHA image version (plus per-arch tags) per agent
+  # package; they accumulate without bound. This job deletes old versions under a
+  # count+age retention policy, always preserving main, buildcache-*, and the
+  # currently pinned SHA. Deleting a user-owned container version needs a PAT with
+  # read:packages + delete:packages (the GITHUB_TOKEN cannot: no packages:delete
+  # permission, 403 from the delete endpoint) -- supplied as the GHCR_CLEANUP_TOKEN
+  # Environment secret. The schedule deletes for real; workflow_dispatch previews
+  # (dry-run) unless prune_dry_run is set to false. See docs/runbooks/devcontainers.md.
+  prune-devcontainer-images:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: devcontainer-image-cleanup
+    permissions:
+      contents: read
+    concurrency:
+      group: prune-devcontainer-images
+      cancel-in-progress: false
+    env:
+      OWNER: ${{ github.repository_owner }}
+      KEEP_RECENT: "10"
+      MIN_AGE_DAYS: "90"
+    steps:
+      - name: Guard GHCR_CLEANUP_TOKEN
+        env:
+          GHCR_CLEANUP_TOKEN: ${{ secrets.GHCR_CLEANUP_TOKEN }}
+        run: |
+          if [ -z "${GHCR_CLEANUP_TOKEN}" ]; then
+            echo "::error::GHCR_CLEANUP_TOKEN secret is not set. See docs/runbooks/devcontainers.md section \"One-time setup for GHCR_CLEANUP_TOKEN\"."
+            exit 1
+          fi
+
+      - name: Checkout repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+
+      - name: Prune old devcontainer image versions
+        env:
+          GH_TOKEN: ${{ secrets.GHCR_CLEANUP_TOKEN }}
+          DRY_RUN: ${{ github.event_name == 'schedule' && 'false' || inputs.prune_dry_run }}
+        run: |
+          set -euo pipefail
+          python3 scripts/prune_devcontainer_images.py prune \
+            --owner "${OWNER}" \
+            --package claude-md-devcontainer-claude \
+            --package claude-md-devcontainer-codex \
+            --pinned-sha-from .devcontainer/claude/devcontainer.json \
+            --pinned-sha-from .devcontainer/codex/devcontainer.json \
+            --keep-recent "${KEEP_RECENT}" \
+            --min-age-days "${MIN_AGE_DAYS}" \
+            --dry-run "${DRY_RUN}" \
+            --summary-file "${GITHUB_STEP_SUMMARY}"
