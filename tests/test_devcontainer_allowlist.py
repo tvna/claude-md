@@ -11,7 +11,9 @@ ROOT = Path(__file__).resolve().parents[1]
 NETWORK_DIR = ROOT / ".devcontainer" / "network"
 
 
-def test_codex_allowlist_includes_openai_api_and_oauth_hosts() -> None:
-    hosts = resolve_hosts(NETWORK_DIR / "codex.allowlist")
+def test_shared_allowlist_includes_consolidated_agent_api_hosts() -> None:
+    # The per-agent claude/codex allowlists were consolidated into the single
+    # shared.allowlist (#1420), so every agent endpoint resolves from it.
+    hosts = resolve_hosts(NETWORK_DIR / "shared.allowlist")
 
-    assert {"api.openai.com", "auth.openai.com"} <= hosts
+    assert {"api.anthropic.com", "api.openai.com", "auth.openai.com"} <= hosts

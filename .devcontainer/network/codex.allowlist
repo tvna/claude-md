@@ -1,9 +1,0 @@
-# Codex container egress allowlist.
-#
-# Include the shared development destinations, then append Codex-only
-# endpoints when a reviewed workflow requires them. Each host carries an
-# inline triage rationale; see
-# docs/runbooks/devcontainer-tool-network-triage.md.
-@include shared.allowlist
-api.openai.com  # OpenAI API endpoint used by the Codex CLI at runtime.
-auth.openai.com  # ChatGPT-mediated OAuth token exchange during `codex login`.

@@ -75,8 +75,9 @@ def test_resolve_hosts_dedups_across_includes(tmp_path: Path) -> None:
     assert resolve_hosts(f) == {"github.com"}
 
 
-def test_resolve_hosts_matches_committed_codex_allowlist() -> None:
+def test_resolve_hosts_matches_committed_shared_allowlist() -> None:
     network_dir = Path(__file__).resolve().parents[1] / ".devcontainer" / "network"
-    hosts = resolve_hosts(network_dir / "codex.allowlist")
-    # The codex allowlist includes shared.allowlist plus its own OpenAI hosts.
-    assert {"api.openai.com", "auth.openai.com", "github.com"} <= hosts
+    hosts = resolve_hosts(network_dir / "shared.allowlist")
+    # The consolidated allowlist (#1420) carries the shared hosts plus every
+    # agent's API endpoints (Anthropic and OpenAI), shared by all containers.
+    assert {"api.anthropic.com", "api.openai.com", "auth.openai.com", "github.com"} <= hosts

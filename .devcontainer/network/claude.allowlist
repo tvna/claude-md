@@ -1,9 +1,0 @@
-# Claude container egress allowlist.
-#
-# Include the shared development destinations, then append Claude-only
-# endpoints when a reviewed workflow requires them. Each host carries an
-# inline triage rationale; see
-# docs/runbooks/devcontainer-tool-network-triage.md.
-@include shared.allowlist
-api.anthropic.com  # Anthropic API endpoint used by the Claude CLI at runtime.
-cdn.prod.website-files.com  # Webflow CDN (Cloudflare-fronted) serving Anthropic "Zero Trust for AI Agents" eBook PDF; read-only public GET re-grounds the parent #178 premise from a primary source (#1383); no credentials sent.
