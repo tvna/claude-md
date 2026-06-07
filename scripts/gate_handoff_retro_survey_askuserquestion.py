@@ -172,8 +172,15 @@ def created_pr_numbers(entries: list[Any]) -> list[int]:
     """Return PR numbers this session created, oldest first, de-duplicated.
 
     A PR is "created" when an assistant ``tool_use`` of
-    ``create_pull_request`` has a matching ``tool_result`` whose body
-    carries a ``/pull/<n>`` URL.
+    ``create_pull_request`` has a matching ``tool_result`` that did NOT
+    error and whose body carries a ``/pull/<n>`` URL.
+
+    A failed ``create_pull_request`` call is marked ``is_error: true`` by
+    the harness regardless of its body, and a common failure -- "A pull
+    request already exists for owner:branch .../pull/<n>" -- carries a
+    ``/pull/<n>`` URL pointing at the *existing* PR. Counting that as a
+    creation would fire the handoff survey for a PR this session never
+    opened (#1374), so error results are skipped.
     """
     create_ids: set[str] = set()
     for entry in entries:
@@ -192,6 +199,8 @@ def created_pr_numbers(entries: list[Any]) -> list[int]:
             if block.get("type") != "tool_result":
                 continue
             if block.get("tool_use_id") not in create_ids:
+                continue
+            if block.get("is_error"):  # failed creation: not a real PR (#1374)
                 continue
             match = _PULL_URL_RE.search(_result_text(block))
             if not match:

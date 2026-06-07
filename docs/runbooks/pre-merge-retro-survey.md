@@ -110,6 +110,15 @@ loudly with no marker written, so the handoff is never marked done on bad data.
 `--problem` is free text. A bare `--record` stays valid because the gate only
 checks marker existence. The answers are persisted as JSON in the marker body.
 
+## Only successfully created PRs count (#1374)
+
+A PR counts as "created" only when the `create_pull_request` tool_result did not
+error. A failed creation is marked `is_error: true` by the harness, and a common
+failure ("A pull request already exists for owner:branch .../pull/<n>") still
+carries a `/pull/<n>` URL pointing at the *existing* PR. The gate skips
+`is_error` results so the handoff survey is not fired for a PR this session never
+opened.
+
 ## Failure modes
 
 Fails open (CLAUDE.md section 4): malformed stdin, a non-dict event, an unreadable
