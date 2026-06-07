@@ -8,16 +8,26 @@ name: Auto-merge devcontainer pin PR
 # squash-merged via the REST merge API. Branch protection (main-protection) still
 # gates the merge -- a non-clean PR is left for the next trigger.
 #
-# Triggered on check_suite completion so the merge fires promptly when the pin
-# PR's required checks go green. The job is gated to pin-PR branches to avoid
-# running on every repository check suite. The merge uses the PAT
-# DEVCONTAINER_PIN_PR_TOKEN (not GITHUB_TOKEN) so the resulting push to main
-# still triggers the downstream push workflows (publish / refresh / post-merge).
-# Refs #696, #1137, #1352.
+# Triggers (#1363): the earlier check_suite:completed trigger never fired -- per
+# GitHub docs, "the check_suite event does not trigger workflows if the check
+# suite was created by GitHub Actions" (recursion prevention), and every pin-PR
+# check is Actions-created. So the keeper is driven instead by:
+#   * workflow_run on the two workflows that own the required status checks
+#     (Verify PR, Verify repository scripts) completing -- the last to finish
+#     finds the PR clean and merges. Not subject to the Actions-suite
+#     suppression because the runs are pull_request-triggered.
+#   * schedule (every 15 min) as a safety net so a missed event still converges.
+#   * workflow_dispatch for manual recovery.
+# The merge uses the PAT DEVCONTAINER_PIN_PR_TOKEN (not GITHUB_TOKEN) so the
+# resulting push to main still triggers the downstream push workflows
+# (publish / refresh / post-merge). Refs #696, #1137, #1352, #1363.
 
 on:
-  check_suite:
+  workflow_run:
+    workflows: ["Verify PR", "Verify repository scripts"]
     types: [completed]
+  schedule:
+    - cron: "*/15 * * * *"
   workflow_dispatch:
 
 permissions: {}
@@ -29,12 +39,17 @@ concurrency:
 jobs:
   merge:
     name: Merge open devcontainer pin PR when green
-    # check_suite.head_branch is the branch the suite ran on; restrict to the pin
-    # branch prefix so unrelated suites do not spin up this job. workflow_dispatch
-    # carries no check_suite payload, so allow it through unconditionally.
+    # For workflow_run, head_branch is the branch CI ran on; restrict to the pin
+    # branch prefix and a successful run so unrelated CI does not spin up this
+    # job. schedule and workflow_dispatch carry no workflow_run payload, so allow
+    # them through unconditionally -- the merge subcommand is a no-op when no
+    # clean pin PR is open.
     if: >-
       github.event_name == 'workflow_dispatch' ||
-      startsWith(github.event.check_suite.head_branch, 'devcontainer/image-pins-')
+      github.event_name == 'schedule' ||
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       startsWith(github.event.workflow_run.head_branch, 'devcontainer/image-pins-'))
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     environment:

@@ -323,12 +323,12 @@ actionlint) continue to come from the Nix devShell, not the base.
 ## Prebuilt images
 
 Local devcontainers use immutable commit-SHA image tags. The currently
-pinned images were published from `491cd83c1a243161becca5cf12541b129b372228`:
+pinned images were published from `3e242af518f1b77aa5917108ca15779edc6d45b7`:
 
 | Agent | Image |
 |---|---|
-| Claude | `ghcr.io/tvna/claude-md-devcontainer-claude:491cd83c1a243161becca5cf12541b129b372228` |
-| Codex | `ghcr.io/tvna/claude-md-devcontainer-codex:491cd83c1a243161becca5cf12541b129b372228` |
+| Claude | `ghcr.io/tvna/claude-md-devcontainer-claude:3e242af518f1b77aa5917108ca15779edc6d45b7` |
+| Codex | `ghcr.io/tvna/claude-md-devcontainer-codex:3e242af518f1b77aa5917108ca15779edc6d45b7` |
 
 The `Publish devcontainer images` workflow builds both images with the
 Dev Containers CLI and pushes them to GHCR on `main` changes to
@@ -410,18 +410,30 @@ the pin PR is therefore delegated to the dedicated keeper below.
 Because repo-wide auto-merge is off by design, the
 `Auto-merge devcontainer pin PR` workflow (`devcontainer-pin-automerge.yml`)
 merges the generated pin PR on its behalf -- scoped strictly to the pin
-branch prefix `devcontainer/image-pins-`. It triggers on `check_suite:
-completed` (gated by an `if` on `check_suite.head_branch` so it only runs for
-pin-PR branches) and runs `python3 scripts/devcontainer_pin_pr.py merge`: it
-finds the open pin PR, and once GitHub reports `mergeable_state == clean`
-(all required checks green and the branch up to date) it squash-merges the PR
-via the REST merge API and deletes the branch. A PR that is not yet `clean`,
-or that loses the head-SHA race, is left untouched for the next trigger.
+branch prefix `devcontainer/image-pins-`. It runs
+`python3 scripts/devcontainer_pin_pr.py merge`: it finds the open pin PR, and
+once GitHub reports `mergeable_state == clean` (all required checks green and
+the branch up to date) it squash-merges the PR via the REST merge API and
+deletes the branch. A PR that is not yet `clean`, or that loses the head-SHA
+race, is left untouched for the next trigger.
+
+The keeper originally triggered on `check_suite: completed`, but that event
+never fired: GitHub suppresses `check_suite` events for suites created by
+GitHub Actions (recursion prevention), and every pin-PR check is
+Actions-created, so the keeper never ran and clean pin PRs stalled (#1363). It
+is now driven by `workflow_run` on the two workflows that own the required
+status checks (`Verify PR`, `Verify repository scripts`) completing -- gated by
+an `if` on `workflow_run.head_branch` and `conclusion == 'success'` so it only
+runs for a green pin-PR CI -- with a `schedule` cron (every 15 min) as a safety
+net so a missed event still converges, and `workflow_dispatch` for manual
+recovery. Because `workflow_run` and `schedule` only run from the default
+branch, the trigger fix takes effect once merged to `main`.
+
 Branch protection (`main-protection`) still gates the merge; the keeper never
 bypasses required checks or rulesets. The merge uses `DEVCONTAINER_PIN_PR_TOKEN`
 (not `GITHUB_TOKEN`) so the resulting push to `main` still triggers the
 downstream push workflows (publish / refresh / post-merge). To merge a stuck
-pin PR on demand, dispatch this workflow manually. Refs #1352.
+pin PR on demand, dispatch this workflow manually. Refs #1352, #1363.
 
 ### Keeping the pin PR mergeable (`Refresh devcontainer pin PR`)
 
@@ -442,7 +454,7 @@ closes, and deletes the stale PR/branch. The replacement is opened before the
 old PR is closed, so a failure never leaves the repository without an open pin
 PR. When the open pin PR is already up to date, `refresh` instead attempts a
 direct merge (the same path the auto-merge keeper uses), so a green, up-to-date
-PR still completes even between `check_suite` events. It reuses the
+PR still completes even between the keeper's `workflow_run` events. It reuses the
 `devcontainer-image-pins` Environment and `DEVCONTAINER_PIN_PR_TOKEN`; no new
 secret is required. To merge a stuck pin PR on demand, dispatch this workflow
 manually. Refs #1137.

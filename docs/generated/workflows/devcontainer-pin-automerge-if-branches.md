@@ -5,10 +5,13 @@ This file is generated from `.github/workflows/devcontainer-pin-automerge.yml` b
 ```mermaid
 flowchart TD
 
-    T_check_suite(["on: check_suite\ntypes: ['completed']"])
+    T_workflow_run(["on: workflow_run\nworkflows: ['Verify PR', 'Verify repository scri...\ntypes: ['completed']"])
+    T_schedule(["on: schedule"])
     T_workflow_dispatch(["on: workflow_dispatch"])
 
     J_merge["merge"]
 
-    T_workflow_dispatch -->|"github.event_name == 'workflow_dispatch' || startsWith(github.event.che~"| J_merge
+    T_workflow_run -->|"github.event_name == 'workflow_dispatch' || github.event_name == 'sched~"| J_merge
+    T_schedule -->|"github.event_name == 'workflow_dispatch' || github.event_name == 'sched~"| J_merge
+    T_workflow_dispatch -->|"github.event_name == 'workflow_dispatch' || github.event_name == 'sched~"| J_merge
 ```
