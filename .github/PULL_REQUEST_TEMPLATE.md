@@ -1,15 +1,16 @@
 <!--
 Per CLAUDE.md section 3, every PR must reference its issue (`#<number>`).
-The line below is validated by the issue-link step inside
-.github/workflows/portable-pr-policy.yml on every `pull_request`
-event and enforced as a required status check on `main` via the
-`Portable PR policy / gate` context (see
+The line below is validated by the issue-link step inside the
+portable-pr-policy job of .github/workflows/verify-pr.yml on every
+`pull_request` event and enforced as a required status check on `main`
+via the `Portable PR policy / gate` context (see
 .github/rulesets/main.json).
 
 The reference lives on the `Closes #<number>` / `Refs #<number>` line in
 this body ONLY -- it must NOT be duplicated in the PR title. A `(#NNN)`
 token in the title is rejected by scripts/title_policy.py
-(verify-title-policy.yml) per #167 / #214, because this body line is the
+(portable-pr-policy job of verify-pr.yml) per #167 / #214, because this
+body line is the
 single source of truth for the issue link. "Cite the issue number in every
 PR" (CLAUDE.md section 3) means this body line, not the title. Exception:
 a `revert(<scope>): ...` title may keep a `(#NNN)` token that names the
@@ -80,7 +81,8 @@ command a responder would run.
 Text delta -- required ONLY when this PR changes universal instruction text
 (.apm/instructions/**, CLAUDE.md, or AGENTS.md). When it does, ADD a section
 exactly like the following (heading included), filled in. It is enforced by
-scripts/verify_text_delta_section.py inside portable-pr-policy.yml, which needs
+scripts/verify_text_delta_section.py inside the portable-pr-policy job of
+verify-pr.yml, which needs
 all three: a signed character-count change, what context the change adds, and
 what context it removes (say "moved" when a concept only relocated). Omit the
 section entirely when the PR touches no instruction text.
@@ -142,13 +144,13 @@ Check the box only when the matching pair is present.
 - [ ] `uv run python -m pytest -q` exits 0 (paired in Verification above)
 - [ ] CI green on the merge commit (all required status checks)
 - [ ] CLAUDE.md / AGENTS.md regenerated if applicable (`apm compile` produced no diff)
-- [ ] If this PR touches `.apm/instructions/**`, `CLAUDE.md`, or `AGENTS.md`: `portable-pr-policy.yml` green (covers both portability scan and `apm compile` drift); any `portability-ack:` marker cites its authorizing sub-issue and reviewer applied `docs/runbooks/downstream-instruction-review-checklist.md`
+- [ ] If this PR touches `.apm/instructions/**`, `CLAUDE.md`, or `AGENTS.md`: `verify-pr.yml` (`portable-pr-policy` job) green (covers both portability scan and `apm compile` drift); any `portability-ack:` marker cites its authorizing sub-issue and reviewer applied `docs/runbooks/downstream-instruction-review-checklist.md`
 
 ### Post-merge (auto-retro signal)
 
 <!--
 Operator checklist filled AFTER observing the merge. The merge-time
-auto-retro (.github/workflows/auto-retro.yml) no longer scans this
+auto-retro (the open-retro job of .github/workflows/post-merge.yml) no longer scans this
 subsection -- per #418, the items below are unchecked at merge time by
 design, so treating them as repair signals at that moment produced
 structural false positives. A deferred re-scan workflow (#421) will
@@ -157,7 +159,7 @@ items that remain unchecked once the observation window has closed.
 -->
 
 - [ ] Linked issue closed by the merge (or `Refs #` with rationale recorded)
-- [ ] auto-retro issue opened by `.github/workflows/auto-retro.yml`
+- [ ] auto-retro issue opened by the open-retro job of `.github/workflows/post-merge.yml`
 - [ ] No follow-up `fix(...)` PR needed within 24h of merge
 
 <!--

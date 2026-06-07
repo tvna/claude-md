@@ -43,7 +43,7 @@ JST Monday 05:00 trigger to reduce scheduled workflow sprawl.
 |---|---|---|
 | `rulesets` | `scripts/ruleset_drift.py detect` | Requires `RULESETS_PAT` (read-only PAT, same secret as the `ruleset-drift` job). Outputs `drift_count` / `unknown_count`. |
 | `labels` | `scripts/labels_apply.py plan` | Uses `GITHUB_TOKEN` (metadata read suffices). Summary file is parsed for `plan-only` / `report-only` rows. |
-| `apm-instructions` | `apm compile` + `git diff --exit-code -- CLAUDE.md AGENTS.md` | Compile is pinned via `APM_CLI_VERSION` env (`0.12.1`) and `uv run --with apm-cli==<pin> --exclude-newer "14 days"` to suppress transient drift, mirroring `portable-pr-policy.yml`. |
+| `apm-instructions` | `apm compile` + `git diff --exit-code -- CLAUDE.md AGENTS.md` | Compile is pinned via `APM_CLI_VERSION` env (`0.12.1`) and `uv run --with apm-cli==<pin> --exclude-newer "14 days"` to suppress transient drift, mirroring `verify-pr.yml`. |
 | `uv-pin-literal` | `scripts/uv_pin.py drift` | Asserts the pin literal lives only in `pyproject.toml`. |
 | `uv-pin-staleness` | `scripts/uv_pin.py stale` | Informational; emits `::warning::` when the pin trails upstream latest. |
 
@@ -51,9 +51,9 @@ JST Monday 05:00 trigger to reduce scheduled workflow sprawl.
 
 | Family | Status reason |
 |---|---|
-| `title-policy` (`verify-title-policy.yml`) | PR-gate only; no scheduled drift surface beyond PR review. |
+| `title-policy` (`verify-pr.yml` `portable-pr-policy` job for PR titles; `verify-github-content.yml` for issue titles) | PR-gate only; no scheduled drift surface beyond PR review. |
 | `non-ascii` (`issue-pr-triage.yml` / `scan`, `preflight_non_ascii.py`) | PR-gate only. |
-| `dependabot-labels` (`verify-dependabot-labels.yml`) | PR-gate only. |
+| `dependabot-labels` (`verify-pr.yml`) | PR-gate only. |
 | `required-checks` (live vs `.github/rulesets/main.json`) | Tracked separately by [#120](https://github.com/tvna/claude-md/issues/120); intentionally out of scope here. |
 
 ## Rolling comment

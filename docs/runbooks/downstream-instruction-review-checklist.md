@@ -28,19 +28,19 @@ A PR is in scope for this checklist if and only if its diff includes at least on
 
 PRs that touch only `docs/`, `scripts/`, `tests/`, or `.github/workflows/` are out of scope; they have their own review surfaces (`docs/standards/workflow-script-quality.md` for harness changes; the body and title policies for every PR).
 
-If the diff touches `CLAUDE.md` or `AGENTS.md` directly without a corresponding `.apm/instructions/master.instructions.md` change, request changes immediately: those files are compiled artifacts and the source of truth must move first. This is identical to the rule in `docs/prd/agent-rules-design-philosophy.md` section 7.3 and is enforced by `portable-pr-policy.yml`.
+If the diff touches `CLAUDE.md` or `AGENTS.md` directly without a corresponding `.apm/instructions/master.instructions.md` change, request changes immediately: those files are compiled artifacts and the source of truth must move first. This is identical to the rule in `docs/prd/agent-rules-design-philosophy.md` section 7.3 and is enforced by `verify-pr.yml`.
 
 ## 1. Universal vs project-specific
 
 - **Question.** Does the wording in the diff hold for every downstream consumer of this repository, or only for `tvna/claude-md`?
-- **Evidence.** Walk the decision tree (Q1 through Q5) in [`docs/prd/agent-rules-design-philosophy.md` section 4](../prd/agent-rules-design-philosophy.md#4-decision-tree---where-does-a-new-candidate-rule-belong). The `portable-pr-policy.yml` gate runs `scripts/scan_apm_portability.py` and automatically blocks two violation classes: Pattern A (literal repo-local tokens such as issue numbers, doc paths, script names, tool product names) and Pattern B (assertive-existence phrasing such as "lives in a dedicated runbook" or "see the companion guide" -- introduced by #535 after the #530 -> #533 regression where the same defect was repaired twice at different abstraction levels). The reviewer still inspects sentences that name no token and use no assertive-existence verb yet still encode a `tvna/claude-md`-only assumption; the automation backs the manual step rather than replacing it.
-- **Hard block.** Q4 = yes in the decision tree, or `portable-pr-policy.yml` red on either Pattern A or Pattern B, or any `portability-ack:` marker introduced without the section 7.4 escape-hatch conditions met. Request demotion to a repo-local doc or a harness check.
+- **Evidence.** Walk the decision tree (Q1 through Q5) in [`docs/prd/agent-rules-design-philosophy.md` section 4](../prd/agent-rules-design-philosophy.md#4-decision-tree---where-does-a-new-candidate-rule-belong). The `verify-pr.yml` gate runs `scripts/scan_apm_portability.py` and automatically blocks two violation classes: Pattern A (literal repo-local tokens such as issue numbers, doc paths, script names, tool product names) and Pattern B (assertive-existence phrasing such as "lives in a dedicated runbook" or "see the companion guide" -- introduced by #535 after the #530 -> #533 regression where the same defect was repaired twice at different abstraction levels). The reviewer still inspects sentences that name no token and use no assertive-existence verb yet still encode a `tvna/claude-md`-only assumption; the automation backs the manual step rather than replacing it.
+- **Hard block.** Q4 = yes in the decision tree, or `verify-pr.yml` red on either Pattern A or Pattern B, or any `portability-ack:` marker introduced without the section 7.4 escape-hatch conditions met. Request demotion to a repo-local doc or a harness check.
 
 ## 2. Compiled-output drift
 
 - **Question.** Are `CLAUDE.md` and `AGENTS.md` byte-identical to the output of `apm compile` for the diff's `.apm/instructions/master.instructions.md`?
-- **Evidence.** `portable-pr-policy.yml` runs `apm compile` and `git diff --exit-code -- CLAUDE.md AGENTS.md` on every PR. The reviewer confirms the gate is green; no manual diff is required.
-- **Hard block.** `portable-pr-policy.yml` red. The author must regenerate the artifacts (`uv run --with "apm-cli==<pin>" --exclude-newer "14 days" apm compile`) and commit the result. Do not advance to dimensions 3 through 5 until this gate is green.
+- **Evidence.** `verify-pr.yml` runs `apm compile` and `git diff --exit-code -- CLAUDE.md AGENTS.md` on every PR. The reviewer confirms the gate is green; no manual diff is required.
+- **Hard block.** `verify-pr.yml` red. The author must regenerate the artifacts (`uv run --with "apm-cli==<pin>" --exclude-newer "14 days" apm compile`) and commit the result. Do not advance to dimensions 3 through 5 until this gate is green.
 
 ## 3. Unsafe agent behavior
 
@@ -68,7 +68,7 @@ If the diff touches `CLAUDE.md` or `AGENTS.md` directly without a corresponding 
 - **Evidence.** Three artifacts the reviewer looks for:
   - **`severity:security` label** on the PR (or its `Closes #` / `Refs #` target). The label is the routing signal that this dimension applies.
   - **Authorizing or parked-follow-up issue link** in the PR body. Either an open sub-issue of #178 / #63 that authorizes the change with explicit rationale and verification, or a parked follow-up issue documenting the residual risk and the re-open condition (calendar date, evidence threshold, or upstream event).
-  - **Verification evidence** in the PR body's `## Verification` section. For a security-sensitive change, the reviewer requires output from at least one deterministic gate (`portable-pr-policy.yml`, `issue-pr-triage.yml` / `scan`) or an explicit "this gate cannot run for this category" statement that names the residual risk.
+  - **Verification evidence** in the PR body's `## Verification` section. For a security-sensitive change, the reviewer requires output from at least one deterministic gate (`verify-pr.yml`, `issue-pr-triage.yml` / `scan`) or an explicit "this gate cannot run for this category" statement that names the residual risk.
 - **Hard block.** The PR is security-sensitive and any of the three artifacts is missing. Request changes; do not accept "trust me" as evidence.
 
 ## Verify
@@ -85,8 +85,8 @@ Expected outcome: exit 0 and no diff. A diff means either the PR forgot to regen
 
 For a PR that adds, removes, or modifies a wording-level rule, also confirm:
 
-- `portable-pr-policy.yml` is green for portability (dimension 1).
-- `portable-pr-policy.yml` is green for compile drift (dimension 2).
+- `verify-pr.yml` is green for portability (dimension 1).
+- `verify-pr.yml` is green for compile drift (dimension 2).
 - The reviewer has walked dimensions 3 through 5 explicitly and noted the outcome in a review comment or PR thread.
 
 ## Rollback
@@ -98,7 +98,7 @@ If a merged change later proves unsafe, the rollback is:
 3. Run `apm compile` locally and confirm no incidental drift from intervening commits.
 4. Open the rollback PR with `Refs #<follow-up>` and re-run this checklist on the revert.
 
-Doc-only updates to this checklist (without an instruction change) revert via the same `git revert <merge-sha>` path; they do not affect the APM drift steps in `portable-pr-policy.yml` because they do not touch `.apm/` or the compiled artifacts.
+Doc-only updates to this checklist (without an instruction change) revert via the same `git revert <merge-sha>` path; they do not affect the APM drift steps in `verify-pr.yml` because they do not touch `.apm/` or the compiled artifacts.
 
 ## References
 

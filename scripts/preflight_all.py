@@ -181,6 +181,13 @@ STEPS: tuple[Step, ...] = (
         argv=("python3", "scripts/scan_docs_inventory.py", "verify"),
     ),
     Step(
+        # Refs #1325. Fails when a Markdown doc outside docs/archive/ cites a
+        # .github/workflows/<name>.yml path that no longer exists -- the drift
+        # class #1319's workflow consolidation left behind.
+        name="scan_doc_workflow_refs",
+        argv=("python3", "scripts/scan_doc_workflow_refs.py", "verify"),
+    ),
+    Step(
         name="scan_maintainability_metrics",
         argv=("python3", "scripts/scan_maintainability_metrics.py", "verify"),
     ),

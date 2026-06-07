@@ -126,7 +126,7 @@ direct implementation PR off an un-triaged retro. `is_retro_issue_title`
 also recognizes the legacy `fix(auto-retro)` prefix for closed historical
 retros. A PR that links a retro issue must itself be a retro-close PR (a
 `type(auto-retro): ...` title); `scripts/auto_retro.py verify-no-direct-retro-pr`
-(wired into `.github/workflows/portable-pr-policy.yml`) rejects any other PR
+(wired into `.github/workflows/verify-pr.yml`) rejects any other PR
 that closes or references a retro issue, so triage cannot be skipped.
 
 Today `scripts/auto_retro.py:issue_labels` still emits the retired

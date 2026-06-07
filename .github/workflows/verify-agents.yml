@@ -70,6 +70,13 @@ jobs:
       - name: Assert docs index and lane placement
         run: uv run python scripts/scan_docs_inventory.py verify
 
+      - name: Assert docs cite existing workflow files
+        # Refs #1325: fails when a Markdown doc outside docs/archive/ cites a
+        # .github/workflows/<name>.yml path that no longer exists -- the drift
+        # class #1319's workflow consolidation left behind. Path form only;
+        # bare filenames are repaired by hand and not gated.
+        run: uv run python scripts/scan_doc_workflow_refs.py verify
+
       - name: Assert script maintainability metrics
         run: uv run python scripts/scan_maintainability_metrics.py verify
 
