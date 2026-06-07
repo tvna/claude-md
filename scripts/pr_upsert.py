@@ -110,6 +110,60 @@ def _compare_behind(
     return behind
 
 
+def _get_pr(
+    *,
+    repo: str,
+    number: int,
+    token: str,
+    apply_call: Callable[..., tuple[int, str]] = _github_apply_call,
+) -> dict[str, Any]:
+    """Return the full PR object for *number* (includes ``mergeable``/``mergeable_state``)."""
+    url = f"{_API_ROOT}/repos/{repo}/pulls/{number}"
+    code, body = apply_call(method="GET", url=url, payload=None, token=token)
+    if not (200 <= code < 300):
+        raise RuntimeError(f"Get PR #{number} failed: HTTP {code}: {body[:200]}")
+    try:
+        data = json.loads(body)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"Unexpected response from get PR: {body[:200]}") from exc
+    if not isinstance(data, dict):
+        raise RuntimeError(f"Expected object from get PR, got: {body[:200]}")
+    return data
+
+
+def _merge_pr(
+    *,
+    repo: str,
+    number: int,
+    sha: str,
+    merge_method: str,
+    token: str,
+    apply_call: Callable[..., tuple[int, str]] = _github_apply_call,
+) -> bool:
+    """Merge a PR via the REST merge API, pinning the head *sha*.
+
+    Returns ``True`` when the merge succeeded. Returns ``False`` for the two
+    expected "not mergeable right now" races, which the caller retries on the
+    next keeper trigger instead of failing the run:
+
+    - ``405 Method Not Allowed`` -- base-branch protection is not yet satisfied
+      (a required check still pending, the branch is behind, etc.).
+    - ``409 Conflict`` -- the provided *sha* no longer matches the PR head (a
+      newer commit landed); pinning the sha guarantees we never merge a stale
+      tree.
+
+    Any other non-2xx response is a real error and raises ``RuntimeError``.
+    """
+    url = f"{_API_ROOT}/repos/{repo}/pulls/{number}/merge"
+    payload = {"merge_method": merge_method, "sha": sha}
+    code, resp = apply_call(method="PUT", url=url, payload=payload, token=token)
+    if 200 <= code < 300:
+        return True
+    if code in (405, 409):
+        return False
+    raise RuntimeError(f"Merge PR #{number} failed: HTTP {code}: {resp[:200]}")
+
+
 def _close_pr(
     *,
     repo: str,

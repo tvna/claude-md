@@ -4,9 +4,9 @@
 Replaces the inline bash in the "Open pin update PR" step of
 ``.github/workflows/publish-devcontainer-images.yml``: detect whether the pin
 update changed anything, create the pin branch and commit when needed, render
-the PR body template, upsert the PR, and request auto-merge. Keeping this logic
-in a tested script (rather than YAML) lets the branch/PR decision flow be
-unit-tested and run anywhere ``gh`` may be absent.
+the PR body template, and upsert the PR. Keeping this logic in a tested script
+(rather than YAML) lets the branch/PR decision flow be unit-tested and run
+anywhere ``gh`` may be absent.
 
 Usage::
 
@@ -16,16 +16,17 @@ Usage::
         --template .github/pr-body-templates/devcontainer-image-pins.md \\
         --file PATH [--file PATH ...]
 
-The ``refresh`` subcommand keeps an already-open pin PR mergeable. Native
-auto-merge stalls forever once ``main`` advances, because the
-``main-protection`` ruleset requires the branch to be up to date
+The ``refresh`` subcommand keeps an already-open pin PR mergeable. Once
+``main`` advances the branch falls behind, because the ``main-protection``
+ruleset requires the branch to be up to date
 (``strict_required_status_checks_policy``) while ``required_linear_history``,
 the ``gate_update_pr_branch.py`` hook, and the ``non_fast_forward`` rule on
 all non-default branches (``.github/rulesets/all-branches.json``) all forbid
 rebasing/force-pushing the branch in place. ``refresh``
 detects the behind PR, cuts a fresh branch off the latest ``main``, re-applies
-the same pin as a single commit, opens a new auto-merge PR, then supersedes
-(comments, closes, deletes) the stale one. This automates the #895 recovery
+the same pin as a single commit, opens a new superseding PR, then supersedes
+(comments, closes, deletes) the stale one. When the open PR is already up to
+date it instead attempts a direct merge. This automates the #895 recovery
 path for the generated pin PR. Refs #1137.
 
     python3 scripts/devcontainer_pin_pr.py refresh \\
@@ -34,17 +35,30 @@ path for the generated pin PR. Refs #1137.
         --template .github/pr-body-templates/devcontainer-image-pins.md \\
         --file PATH [--file PATH ...]
 
+The ``merge`` subcommand completes the pin PR. The repository-level "Allow
+auto-merge" toggle is intentionally OFF (so agents cannot enable native
+auto-merge on arbitrary PRs), and native auto-merge cannot be scoped to a
+single PR. Instead, ``merge`` finds the open pin PR by branch prefix and, when
+it has reached ``mergeable_state == clean`` (all required checks green and the
+branch up to date), squash-merges it via the REST merge API and deletes the
+branch. Branch protection still gates the merge: a non-clean PR is left for the
+next trigger. Driven by ``.github/workflows/devcontainer-pin-automerge.yml`` on
+``check_suite: completed``. Refs #1352.
+
+    python3 scripts/devcontainer_pin_pr.py merge
+
 Environment variables:
     GH_TOKEN  Token with contents:write + pull-requests:write
               (DEVCONTAINER_PIN_PR_TOKEN).
     REPO      Repository in ``owner/repo`` format.
 
 Exit codes:
-    0  PR opened/updated, already up to date, or already open.
+    0  PR opened/updated/merged, already up to date, already open, or not yet
+       mergeable (left for the next trigger).
     1  Missing env var, git failure, or GitHub API error.
     2  Usage error.
 
-Refs #696, #911, #1137.
+Refs #696, #911, #1137, #1352.
 """
 
 from __future__ import annotations
@@ -54,18 +68,22 @@ import os
 import re
 import subprocess
 import sys
+import time
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 import update_devcontainer_image_pins
 from _git import run_git
-from dependabot_automerge import _enable_auto_merge
 from pr_upsert import (
     _close_pr,
     _comment_pr,
     _compare_behind,
     _delete_branch,
+    _get_pr,
     _list_open_prs,
     _list_open_prs_by_prefix,
+    _merge_pr,
     _upsert_pr,
 )
 
@@ -139,15 +157,56 @@ def _create_pin_branch(*, branch: str, files: list[str], subject: str, trailer: 
     run_git(["push", "origin", branch], check=True)
 
 
-def _request_auto_merge_soft(*, repo: str, pr_number: int, token: str) -> None:
-    """Request auto-merge, downgrading any failure to a warning (matches prior bash)."""
-    try:
-        _enable_auto_merge(repo=repo, pr_number=pr_number, merge_method="SQUASH", token=token)
-    except RuntimeError as exc:
-        print(
-            f"::warning::auto-merge request failed for PR #{pr_number}; enable it manually if needed ({exc})",
-            file=sys.stderr,
-        )
+# Mergeability is computed asynchronously by GitHub, so the ``mergeable`` field
+# is null for a short window after a push or check completes. Poll a bounded
+# number of times before giving up and leaving the merge for the next trigger.
+_MERGE_POLL_ATTEMPTS = 6
+_MERGE_POLL_INTERVAL_SECONDS = 5.0
+
+
+def _poll_pr_mergeability(
+    *,
+    repo: str,
+    number: int,
+    token: str,
+    sleeper: Callable[[float], None] = time.sleep,
+) -> dict[str, Any]:
+    """Return the PR object once GitHub has computed ``mergeable`` (or the last poll)."""
+    pr: dict[str, Any] = {}
+    for attempt in range(_MERGE_POLL_ATTEMPTS):
+        if attempt:
+            sleeper(_MERGE_POLL_INTERVAL_SECONDS)
+        pr = _get_pr(repo=repo, number=number, token=token)
+        if pr.get("mergeable") is not None:
+            break
+    return pr
+
+
+def _merge_pin_pr_if_clean(*, repo: str, number: int, head_ref: str, token: str) -> bool:
+    """Squash-merge pin PR *number* iff it is ``mergeable_state == clean``.
+
+    Returns True when the PR was merged. A PR that is not yet clean (required
+    checks pending, branch behind, conflicts) or that loses the merge race is a
+    no-op left for the next trigger; only an API error raises.
+    """
+    pr = _poll_pr_mergeability(repo=repo, number=number, token=token)
+    state = str(pr.get("mergeable_state") or "unknown").lower()
+    if state != "clean":
+        print(f"pin PR #{number} not mergeable yet (mergeable_state={state}); leaving for the next trigger")
+        return False
+    head_sha = pr.get("head", {}).get("sha", "") if isinstance(pr.get("head"), dict) else ""
+    if not head_sha:
+        raise RuntimeError(f"pin PR #{number} is clean but has no head sha")
+    if not _merge_pr(repo=repo, number=number, sha=head_sha, merge_method="squash", token=token):
+        print(f"pin PR #{number} was not mergeable at merge time; leaving for the next trigger")
+        return False
+    print(f"merged pin PR #{number}")
+    if head_ref:
+        try:
+            _delete_branch(repo=repo, branch=head_ref, token=token)
+        except RuntimeError as exc:
+            print(f"::warning::merged PR #{number} but branch cleanup failed: {exc}", file=sys.stderr)
+    return True
 
 
 def _cmd_open(args: argparse.Namespace) -> int:
@@ -176,7 +235,6 @@ def _cmd_open(args: argparse.Namespace) -> int:
         if prs:
             existing = int(prs[0]["number"])
             print(f"pin update PR already exists: #{existing}")
-            _request_auto_merge_soft(repo=repo, pr_number=existing, token=token)
             return 0
         print(f"pin update branch already exists without an open PR; retrying PR creation: {branch}")
     else:
@@ -205,8 +263,7 @@ def _cmd_open(args: argparse.Namespace) -> int:
     except RuntimeError as exc:
         print(f"::error::{exc}", file=sys.stderr)
         return 1
-    print(f"PR #{pr_number} {action}.")
-    _request_auto_merge_soft(repo=repo, pr_number=pr_number, token=token)
+    print(f"PR #{pr_number} {action}. The pin auto-merge keeper merges it once checks pass.")
     return 0
 
 
@@ -246,15 +303,23 @@ def _cmd_refresh(args: argparse.Namespace) -> int:
         print(f"::error::{exc}", file=sys.stderr)
         return 1
     if behind <= 0:
-        print(f"pin PR #{old_number} is up to date with {args.base}; re-requesting auto-merge")
-        _request_auto_merge_soft(repo=repo, pr_number=old_number, token=token)
+        print(f"pin PR #{old_number} is up to date with {args.base}; attempting merge")
+        try:
+            _merge_pin_pr_if_clean(repo=repo, number=old_number, head_ref=head_ref, token=token)
+        except RuntimeError as exc:
+            print(f"::error::{exc}", file=sys.stderr)
+            return 1
         return 0
 
     target_short = args.target_sha[:12]
     new_branch = f"{prefix}{published_sha}{_REFRESH_SEPARATOR}{target_short}"
     if new_branch == head_ref:
-        print(f"pin PR #{old_number} already refreshed onto {target_short}; re-requesting auto-merge")
-        _request_auto_merge_soft(repo=repo, pr_number=old_number, token=token)
+        print(f"pin PR #{old_number} already refreshed onto {target_short}; attempting merge")
+        try:
+            _merge_pin_pr_if_clean(repo=repo, number=old_number, head_ref=head_ref, token=token)
+        except RuntimeError as exc:
+            print(f"::error::{exc}", file=sys.stderr)
+            return 1
         return 0
 
     # Working tree is a fresh checkout of the latest base; rewrite the pins for
@@ -307,8 +372,7 @@ def _cmd_refresh(args: argparse.Namespace) -> int:
     except RuntimeError as exc:
         print(f"::error::{exc}", file=sys.stderr)
         return 1
-    print(f"refresh PR #{new_number} {action} from {new_branch}")
-    _request_auto_merge_soft(repo=repo, pr_number=new_number, token=token)
+    print(f"refresh PR #{new_number} {action} from {new_branch}; the pin auto-merge keeper merges it once checks pass")
 
     # Supersede the stale PR only after the replacement exists, so a failure here
     # never leaves the repository without an open pin PR. Cleanup is best-effort.
@@ -318,8 +382,8 @@ def _cmd_refresh(args: argparse.Namespace) -> int:
                 repo=repo,
                 number=old_number,
                 body=(
-                    f"Superseded by #{new_number}: refreshed onto {args.base} so native auto-merge "
-                    "can complete (the branch was behind and cannot be rebased in place). "
+                    f"Superseded by #{new_number}: refreshed onto {args.base} so the pin auto-merge "
+                    "keeper can complete (the branch was behind and cannot be rebased in place). "
                     "Closing this stale pin PR."
                 ),
                 token=token,
@@ -328,6 +392,39 @@ def _cmd_refresh(args: argparse.Namespace) -> int:
             _delete_branch(repo=repo, branch=head_ref, token=token)
         except RuntimeError as exc:
             print(f"::warning::failed to fully supersede PR #{old_number}: {exc}", file=sys.stderr)
+    return 0
+
+
+def _cmd_merge(args: argparse.Namespace) -> int:
+    token = os.environ.get("GH_TOKEN", "")
+    if not token:
+        print("::error::GH_TOKEN (DEVCONTAINER_PIN_PR_TOKEN) is required", file=sys.stderr)
+        return 1
+    repo = os.environ.get("REPO", "")
+    if not repo:
+        print("::error::REPO is not set", file=sys.stderr)
+        return 1
+
+    prefix = args.branch_prefix
+    try:
+        open_prs = _list_open_prs_by_prefix(repo=repo, prefix=prefix, token=token)
+    except RuntimeError as exc:
+        print(f"::error::{exc}", file=sys.stderr)
+        return 1
+    if not open_prs:
+        print("no open devcontainer pin PR; nothing to merge")
+        return 0
+
+    # At most one pin PR is expected; if several exist, merge the newest and let
+    # the refresh keeper supersede the rest.
+    pr = max(open_prs, key=lambda p: int(p["number"]))
+    number = int(pr["number"])
+    head_ref = pr.get("head", {}).get("ref", "") if isinstance(pr.get("head"), dict) else ""
+    try:
+        _merge_pin_pr_if_clean(repo=repo, number=number, head_ref=head_ref, token=token)
+    except RuntimeError as exc:
+        print(f"::error::{exc}", file=sys.stderr)
+        return 1
     return 0
 
 
@@ -373,12 +470,25 @@ def main(argv: list[str] | None = None) -> int:
     )
     refresh_p.add_argument("--file", action="append", default=[], required=True, help="File to commit (repeatable)")
 
+    merge_p = sub.add_parser(
+        "merge",
+        help="Squash-merge the open pin PR once it has reached mergeable_state=clean",
+    )
+    merge_p.add_argument(
+        "--branch-prefix",
+        default=_DEFAULT_BRANCH_PREFIX,
+        dest="branch_prefix",
+        help="Branch name prefix shared with the open command",
+    )
+
     args = parser.parse_args(argv)
 
     if args.cmd == "open":
         return _cmd_open(args)
     if args.cmd == "refresh":
         return _cmd_refresh(args)
+    if args.cmd == "merge":
+        return _cmd_merge(args)
 
     return 0
 

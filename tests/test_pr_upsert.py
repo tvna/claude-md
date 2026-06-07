@@ -453,3 +453,78 @@ class TestCloseDeleteComment:
         apply_call = _make_apply_call(403, {"message": "no"})
         with pytest.raises(RuntimeError, match="403"):
             pu._comment_pr(repo="owner/repo", number=9, body="x", token="tok", apply_call=apply_call)
+
+
+# ---------------------------------------------------------------------------
+# _get_pr()
+# ---------------------------------------------------------------------------
+
+
+class TestGetPr:
+    def test_returns_pr_object(self) -> None:
+        apply_call = _make_apply_call(200, {"number": 5, "mergeable_state": "clean"})
+        pr = pu._get_pr(repo="owner/repo", number=5, token="tok", apply_call=apply_call)
+        assert pr["mergeable_state"] == "clean"
+
+    def test_includes_pr_number_in_url(self) -> None:
+        captured: list[str] = []
+
+        def apply_call(*, method: str, url: str, payload: object, token: str) -> tuple[int, str]:
+            captured.append(url)
+            return 200, json.dumps({"number": 9})
+
+        pu._get_pr(repo="owner/repo", number=9, token="tok", apply_call=apply_call)
+        assert captured[0].endswith("/pulls/9")
+
+    def test_http_error_raises(self) -> None:
+        apply_call = _make_apply_call(404, {"message": "nope"})
+        with pytest.raises(RuntimeError, match="404"):
+            pu._get_pr(repo="owner/repo", number=5, token="tok", apply_call=apply_call)
+
+    def test_non_object_raises(self) -> None:
+        apply_call = _make_apply_call(200, [1, 2])
+        with pytest.raises(RuntimeError):
+            pu._get_pr(repo="owner/repo", number=5, token="tok", apply_call=apply_call)
+
+
+# ---------------------------------------------------------------------------
+# _merge_pr()
+# ---------------------------------------------------------------------------
+
+
+class TestMergePr:
+    def test_success_returns_true_and_pins_sha(self) -> None:
+        captured: dict[str, Any] = {}
+
+        def apply_call(*, method: str, url: str, payload: object, token: str) -> tuple[int, str]:
+            captured.update(method=method, url=url, payload=payload)
+            return 200, json.dumps({"merged": True})
+
+        ok = pu._merge_pr(
+            repo="owner/repo", number=7, sha="abc", merge_method="squash", token="tok", apply_call=apply_call
+        )
+        assert ok is True
+        assert captured["method"] == "PUT"
+        assert captured["url"].endswith("/pulls/7/merge")
+        assert captured["payload"] == {"merge_method": "squash", "sha": "abc"}
+
+    def test_405_not_mergeable_returns_false(self) -> None:
+        apply_call = _make_apply_call(405, {"message": "not mergeable"})
+        ok = pu._merge_pr(
+            repo="owner/repo", number=7, sha="a", merge_method="squash", token="tok", apply_call=apply_call
+        )
+        assert ok is False
+
+    def test_409_sha_mismatch_returns_false(self) -> None:
+        apply_call = _make_apply_call(409, {"message": "head changed"})
+        ok = pu._merge_pr(
+            repo="owner/repo", number=7, sha="a", merge_method="squash", token="tok", apply_call=apply_call
+        )
+        assert ok is False
+
+    def test_other_error_raises(self) -> None:
+        apply_call = _make_apply_call(500, {"message": "boom"})
+        with pytest.raises(RuntimeError, match="500"):
+            pu._merge_pr(
+                repo="owner/repo", number=7, sha="a", merge_method="squash", token="tok", apply_call=apply_call
+            )
