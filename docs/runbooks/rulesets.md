@@ -210,7 +210,7 @@ These three fields together are sufficient evidence: no actor — owner or other
 
 ### Title policy boundary
 
-Issue and PR titles are metadata surfaces: they appear in notifications, project views, triage lists, and agent summaries before body-level context is inspected. The title boundary is therefore stricter than the body/comment non-ASCII workflow. Titles must be ASCII-only; Japanese text, emoji, zero-width marks, RTL controls, fullwidth homoglyphs, and other multi-byte control surfaces are rejected by `.github/workflows/verify-title-policy.yml`. The same gate enforces repository naming convention: issues use `type(scope): summary`, and PRs use `type(scope): summary (#issue)`.
+Issue and PR titles are metadata surfaces: they appear in notifications, project views, triage lists, and agent summaries before body-level context is inspected. The title boundary is therefore stricter than the body/comment non-ASCII workflow. Titles must be ASCII-only; Japanese text, emoji, zero-width marks, RTL controls, fullwidth homoglyphs, and other multi-byte control surfaces are rejected by `scripts/title_policy.py`, run for issue titles by `.github/workflows/verify-github-content.yml` and for PR titles by the `portable-pr-policy` job in `.github/workflows/verify-pr.yml`. The same validator enforces repository naming convention: issues use `type(scope): summary`, and PRs use `type(scope): summary (#issue)`.
 
 Ruleset smoke test for the required status check:
 
@@ -270,7 +270,7 @@ Ad-hoc check between scheduled runs: dispatch `Apply rulesets` with `dry_run=tru
 
 ## PR-time required-checks sync gate
 
-The PR-blocking workflow `.github/workflows/verify-ruleset-sync.yml` ([#120](https://github.com/tvna/claude-md/issues/120)) catches the lag window between merging a SoT change that adds a new `required_status_checks` context and dispatching `Apply rulesets` to push it live. While the `ruleset-drift` job in `weekly-maintenance.yml` (#30) detects full drift on a weekly cron, this gate runs **on every pull request** and fails if the live `main-protection` ruleset is missing any context declared by the **PR base ref's** `.github/rulesets/main.json`.
+The PR-blocking `verify-ruleset-sync` job in `.github/workflows/verify-pr.yml` ([#120](https://github.com/tvna/claude-md/issues/120)) catches the lag window between merging a SoT change that adds a new `required_status_checks` context and dispatching `Apply rulesets` to push it live. While the `ruleset-drift` job in `weekly-maintenance.yml` (#30) detects full drift on a weekly cron, this gate runs **on every pull request** and fails if the live `main-protection` ruleset is missing any context declared by the **PR base ref's** `.github/rulesets/main.json`.
 
 - Trigger: `pull_request` (`opened`, `edited`, `synchronize`, `reopened`, `ready_for_review`); no `paths:` filter so a PR that does not itself edit the SoT still surfaces pre-existing dispatch debt.
 - Scope: only `required_status_checks[].context` in the lagging-behind direction (live missing what SoT declares). The opposite direction (live ahead of SoT) is full ruleset drift; `weekly-maintenance.yml` owns it.

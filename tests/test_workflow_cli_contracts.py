@@ -61,6 +61,7 @@ import scan_apm_portability
 import scan_compile_from_source
 import scan_design_philosophy_drift
 import scan_devcontainer_tool_drift
+import scan_doc_workflow_refs
 import scan_docs_inventory
 import scan_flake_pin_drift
 import scan_hook_coverage_drift
@@ -185,6 +186,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("scan_apm_lock_drift.py", "verify"): "test_scan_apm_lock_drift_verify_matches_workflow_args",
     ("scan_compile_from_source.py", "verify"): "test_scan_compile_from_source_verify_matches_workflow_args",
     ("scan_devcontainer_tool_drift.py", "verify"): "test_scan_devcontainer_tool_drift_verify_matches_workflow_args",
+    ("scan_doc_workflow_refs.py", "verify"): "test_scan_doc_workflow_refs_verify_matches_workflow_args",
     ("scan_docs_inventory.py", "verify"): "test_scan_docs_inventory_verify_matches_workflow_args",
     ("scan_flake_pin_drift.py", "verify"): "test_scan_flake_pin_drift_verify_matches_workflow_args",
     ("scan_markdown_links.py", "verify"): "test_scan_markdown_links_verify_matches_workflow_args",
@@ -1299,6 +1301,12 @@ def test_scan_flake_pin_drift_verify_matches_workflow_args() -> None:
 def test_scan_docs_inventory_verify_matches_workflow_args() -> None:
     """Mirrors the ``Assert docs index and lane placement`` step."""
     assert scan_docs_inventory.main(["verify"]) == 0
+
+
+def test_scan_doc_workflow_refs_verify_matches_workflow_args() -> None:
+    """Mirrors the ``Assert docs cite existing workflow files`` step in
+    ``.github/workflows/verify-agents.yml`` (issue #1325)."""
+    assert scan_doc_workflow_refs.main(["verify"]) == 0
 
 
 def test_scan_maintainability_metrics_verify_matches_workflow_args() -> None:

@@ -418,7 +418,7 @@ a stuck pin PR on demand, dispatch this workflow manually. Refs #1137.
 `flake.nix` is the single source of truth for the version and per-system
 SHA256 of the GitHub-Releases-sourced tools (`waza`, `apm`). Dependabot has no
 Nix ecosystem, so those pins do not follow upstream on their own. The
-`Refresh flake tool pins` workflow (`flake-pin-refresh.yml`) closes that gap.
+`Refresh flake tool pins` workflow (`weekly-maintenance.yml`) closes that gap.
 Weekly (and on `workflow_dispatch`) it runs `scripts/flake_pin_latest.py` to
 find the latest release per tool, holds anything still inside the
 `[tool.uv].exclude-newer` cooldown, recomputes each per-system SHA256 with

@@ -134,7 +134,7 @@ Residual: `pull_request_target` runs with a write-capable token on every closed 
 
 ## Common pattern: secret-not-logged evidence
 
-All token-using workflows (`apply-rulesets.yml`, `apply-labels.yml`, `weekly-maintenance.yml`, `verify-ruleset-sync.yml`) bind the token only through `env.GH_TOKEN: ${{ secrets.NAME }}` at the workflow or job level. GitHub Actions automatically masks any value passed through `${{ secrets.* }}` from job logs, replacing it with `***`. The repo-wide check is:
+All token-using workflows (`apply-rulesets.yml`, `apply-labels.yml`, `weekly-maintenance.yml`, and the `verify-ruleset-sync` job in `verify-pr.yml`) bind the token only through `env.GH_TOKEN: ${{ secrets.NAME }}` at the workflow or job level. GitHub Actions automatically masks any value passed through `${{ secrets.* }}` from job logs, replacing it with `***`. The repo-wide check is:
 
 ```sh
 rg -n 'echo[[:space:]]+["$].*(GH_TOKEN|RULESETS_PAT|LABELS_PAT)|set -x' .github/workflows scripts
@@ -142,7 +142,7 @@ rg -n 'echo[[:space:]]+["$].*(GH_TOKEN|RULESETS_PAT|LABELS_PAT)|set -x' .github/
 
 At the time this audit was written, every match is one of:
 
-- `echo "::error::RULESETS_PAT secret is not set..."` -- prints the secret **name** as a literal string inside a guard step that runs only when the secret is absent (`apply-rulesets.yml:48`, `weekly-maintenance.yml`, `verify-ruleset-sync.yml:23`).
+- `echo "::error::RULESETS_PAT secret is not set..."` -- prints the secret **name** as a literal string inside a guard step that runs only when the secret is absent (`apply-rulesets.yml:48`, `weekly-maintenance.yml`, and the `Guard RULESETS_PAT` step of the `verify-ruleset-sync` job in `verify-pr.yml`).
 - `echo "::error::LABELS_PAT secret is not set..."` -- same pattern in `apply-labels.yml:38`.
 - `echo "$HOME/.local/bin" >> "$GITHUB_PATH"` -- appends a directory to PATH; does not touch the token.
 

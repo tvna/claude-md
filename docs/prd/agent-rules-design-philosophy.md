@@ -42,7 +42,7 @@ harness gets a chance to enforce or fail to enforce it.
   instruction text stays free of DDD terminology and
   repository-specific case studies.
 - Becoming a hard gate. The repository already has
-  `portable-pr-policy.yml`, `verify-github-content.yml`,
+  `verify-pr.yml`, `verify-github-content.yml`,
   `issue-pr-triage.yml` / `scan`, and the `preflight_non_ascii.py`
   `PreToolUse` hook for the deterministic checks. This document does
   not duplicate those gates; it tells reviewers which lane each gate
@@ -69,7 +69,7 @@ changes.
 
 | Lane | Source of truth | Audience | Change mechanism |
 |---|---|---|---|
-| Universal text | `.apm/instructions/master.instructions.md` | Every agent in every project that imports this repository | Edit the APM source; `apm compile` regenerates `CLAUDE.md` / `AGENTS.md`; `portable-pr-policy.yml` enforces no drift |
+| Universal text | `.apm/instructions/master.instructions.md` | Every agent in every project that imports this repository | Edit the APM source; `apm compile` regenerates `CLAUDE.md` / `AGENTS.md`; `verify-pr.yml` enforces no drift |
 | Harness | `scripts/*.py` + `.github/workflows/*.yml` + Claude Code hooks declared in `.claude/settings.json` | The repository itself; runs without agent involvement | Edit the script or workflow; add or update a paired test in `tests/test_<name>.py` per `docs/standards/workflow-script-quality.md` |
 | Repo-local doc | `docs/*.md` in this repository | Contributors and reviewers of this repository; not exported to downstream consumers | Edit the doc; cross-link from the universal text only by abstract reference, never by literal example |
 | Project-local instructions | Downstream consumer projects (`.apm/`, `CLAUDE.md` delta, project-specific runbooks) | Agents working in that one project | Owned entirely by the downstream consumer; this repository neither ships nor reviews it |
@@ -269,7 +269,7 @@ candidates are tracked by the procedure in
 Take row P3. The universal text owns the abstract principle ("open a
 GitHub issue before any branch, commit, or PR; cite its number in
 every commit and PR"). The harness owns the deterministic enforcement
-(`scripts/issue_link.py` plus `portable-pr-policy.yml` (`Validate PR-issue link` job) plus
+(`scripts/issue_link.py` plus `verify-pr.yml` (`Validate PR-issue link` job) plus
 `tests/test_issue_link.py`). The repo-local doc owns the operator
 runbook (`docs/standards/issue-pr-body-standard.md` tells contributors exactly
 what to put in the body). The project-local lane is the consumer's
@@ -330,7 +330,7 @@ Q4. Does the rule need a repository-specific noun (a file path, a
 
     No  -> Universal text lane. Edit
            .apm/instructions/master.instructions.md; apm compile;
-           portable-pr-policy.yml enforces the drift gate.
+           verify-pr.yml enforces the drift gate.
 
 Q5. Is the rule a description of a past event (a retrospective, a
     repaired wording, an audit finding)?
@@ -591,16 +591,16 @@ the body and title policies for every PR).
 Before any manual review begins, confirm the following automated
 gates are green on the PR head commit:
 
-- `portable-pr-policy.yml` confirms that `CLAUDE.md` and `AGENTS.md`
+- `verify-pr.yml` confirms that `CLAUDE.md` and `AGENTS.md`
   are the verbatim output of `apm compile` for the current
   `.apm/instructions/master.instructions.md`.
-- `portable-pr-policy.yml` runs `scripts/scan_apm_portability.py`
+- `verify-pr.yml` runs `scripts/scan_apm_portability.py`
   and blocks repository-specific
   references (`#NNN` issue numbers, `docs/<name>.md` paths, script
   names, tool product names) inside universal text unless an
   explicit `portability-ack:` marker on the same line cites the
   authorizing sub-issue.
-- `portable-pr-policy.yml` confirms the PR body and title follow
+- `verify-pr.yml` confirms the PR body and title follow
   `docs/standards/issue-pr-body-standard.md`.
 - `issue-pr-triage.yml` / `scan` confirms no non-ASCII characters slipped
   into files that must remain ASCII.
@@ -746,7 +746,7 @@ This document is valid only if:
   potential follow-up.
 - **No universal-text change.** This document does not modify
   `.apm/instructions/master.instructions.md` and does not cause
-  `portable-pr-policy.yml` to fail. It is a repo-local doc and lives
+  `verify-pr.yml` to fail. It is a repo-local doc and lives
   entirely in the repo-local lane.
 
 If any of the four conditions starts failing, this document is the
