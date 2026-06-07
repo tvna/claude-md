@@ -1,0 +1,76 @@
+# Measure devcontainer startup phase timings on demand (Refs #1322, #1173).
+#
+# Phase 0 of the "devcontainer startup is slow" investigation: produce
+# reproducible per-phase numbers (image pull, image size, each postCreate /
+# postStart segment) so the eventual fix rests on measurement, not the
+# "caching is the cause" hypothesis. The web remote session cannot run a
+# container runtime, so the measurement runs here -- matching the
+# reproducible-in-CI posture #1173 set for the uv caching decision.
+#
+# Manual only: this is a diagnostic, not a gate. It pulls the prebuilt image,
+# replays the container-side lifecycle, and uploads the JSON report.
+name: Measure devcontainer startup
+
+on:
+  workflow_dispatch:
+    inputs:
+      agent:
+        description: Which devcontainer entrypoint to measure.
+        type: choice
+        options:
+          - claude
+          - codex
+        default: claude
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ inputs.agent }}
+  cancel-in-progress: true
+
+jobs:
+  measure:
+    name: Measure ${{ inputs.agent }} startup
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+
+      - name: Log in to GHCR
+        env:
+          GHCR_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$GHCR_TOKEN" | docker login ghcr.io \
+            --username "${{ github.actor }}" \
+            --password-stdin
+
+      - name: Measure startup phases
+        env:
+          AGENT: ${{ inputs.agent }}
+        run: |
+          set -euo pipefail
+          config=".devcontainer/${AGENT}/devcontainer.json"
+          # postStart applies the egress allowlist, which needs NET_ADMIN; the
+          # eBPF caps are unavailable on the runner, so that segment is
+          # best-effort and its (possibly non-zero) exit is recorded as data.
+          python3 scripts/measure_devcontainer_startup.py \
+            --config "$config" \
+            --runtime docker \
+            --user "$AGENT" \
+            --cap NET_ADMIN \
+            --output "startup-${AGENT}.json" \
+            2>> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload measurement report
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: devcontainer-startup-${{ inputs.agent }}
+          path: startup-${{ inputs.agent }}.json
+          if-no-files-found: error
