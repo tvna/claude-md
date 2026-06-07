@@ -43,6 +43,8 @@ def test_runtime_script_installs_gh_and_container_scoped_defaults() -> None:
     agent_prompt = (REPO_ROOT / ".devcontainer/config/profile.d/claude-md-agent-prompt.sh").read_text(encoding="utf-8")
 
     assert "install_nix_binary gh-cli gh" in script
+    # The GitHub MCP server binary backs the Docker-less stdio launch path (#1063).
+    assert "install_nix_binary github-mcp-server github-mcp-server" in script
     assert '"Bash(*)"' in claude_settings
     assert '"mcp__github__*"' in claude_settings
     assert "/etc/profile.d/claude-md-agent-prompt.sh" in script

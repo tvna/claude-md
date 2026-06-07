@@ -41,7 +41,11 @@ entries above it is **generated, not authored**: `apm.yml` is the source of
 truth, and `scripts/gen_mcp_json.py` renders `.mcp.json` from it at
 `SessionStart` (wired in `.claude/settings.json`). It stays out of the tree
 for two reasons — it is a rendered build artefact, and it can carry per-client
-credentials in `env` blocks. See `docs/runbooks/context7-mcp.md`.
+credentials in `env` blocks. The servers it renders include the keyless
+`context7` HTTP server and the local `github` stdio server added by special
+exception ([#1063](https://github.com/tvna/claude-md/issues/1063),
+[#1067](https://github.com/tvna/claude-md/issues/1067)); see
+`docs/runbooks/context7-mcp.md` and `docs/standards/github-mcp-app-auth.md`.
 
 ### Secrets are also excluded (not a tool-config row)
 
