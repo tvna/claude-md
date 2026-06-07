@@ -39,6 +39,8 @@ An earlier draft of this runbook ([#107](https://github.com/tvna/claude-md/pull/
 
 The carve-out for `.claude/settings.json` pulls the hook surface back under PR review. See `docs/standards/repo-scope.md` § "Security tradeoff for `.claude/settings.json`" for the recorded risk-acceptance.
 
+This git-external boundary is not limited to the setup-script field. Per the official docs (https://code.claude.com/docs/en/claude-code-on-the-web § "Network access"), the **network access policy** — the access level (`None` / `Trusted` / `Custom`) and any custom allowed domains — is likewise part of the environment configuration set in the Cloud environment UI at environment create/edit time, and is not stored in git. The `.claude/settings.json` carve-out only pulls the *SessionStart hook* back under PR review; the network policy remains Web-UI-managed (git-external) by design. So when reasoning about what is and is not under change control, treat network access policy the same as the setup-script field — it lives in the Web UI, not the repo.
+
 ## Codex boundary
 
 Codex consumes this repository's universal instruction surface through `AGENTS.md`. Issue [#604](https://github.com/tvna/claude-md/issues/604) establishes the narrow `.codex/hooks.json` carve-out for repository-owned deterministic hooks, and [#606](https://github.com/tvna/claude-md/issues/606) lands the first implementation slice.
