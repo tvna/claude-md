@@ -133,6 +133,7 @@ Source: `python3 scripts/workflow_diagram.py diagram-doc`. Tracking issue: #960.
 | [workflows/generate-agents-if-branches.md](generated/workflows/generate-agents-if-branches.md) | `generate-agents.yml` |
 | [workflows/generate-docs-if-branches.md](generated/workflows/generate-docs-if-branches.md) | `generate-docs.yml` |
 | [workflows/issue-pr-triage-if-branches.md](generated/workflows/issue-pr-triage-if-branches.md) | `issue-pr-triage.yml` |
+| [workflows/measure-devcontainer-startup-if-branches.md](generated/workflows/measure-devcontainer-startup-if-branches.md) | `measure-devcontainer-startup.yml` |
 | [workflows/portable-pr-policy-if-branches.md](generated/workflows/portable-pr-policy-if-branches.md) | `portable-pr-policy.yml` |
 | [workflows/post-merge-if-branches.md](generated/workflows/post-merge-if-branches.md) | `post-merge.yml` |
 | [workflows/publish-devcontainer-images-if-branches.md](generated/workflows/publish-devcontainer-images-if-branches.md) | `publish-devcontainer-images.yml` |
