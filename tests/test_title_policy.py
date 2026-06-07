@@ -154,11 +154,13 @@ class TestTypeFitFindings:
         assert "performance" in findings[0].reason
         assert "perf" in findings[0].expected_types
 
-    def test_body_can_supply_performance_signal(self) -> None:
+    def test_body_phrase_supplies_performance_signal(self) -> None:
+        # The body escalates only on a multi-word performance phrase, not on a
+        # lone word (#1424). "speed up" is in _PERFORMANCE_PHRASES.
         findings = title_policy.type_fit_findings(
             "fix(devcontainer): improve image setup",
             kind="issue",
-            body="Fact: this speeds up devcontainer startup by caching images.",
+            body="Fact: this is a clear speed up of devcontainer image setup.",
         )
         assert len(findings) == 1
 
@@ -203,6 +205,23 @@ class TestTypeFitFindings:
         stripped = title_policy._strip_resource_consumption_section(body)
         assert "Resource Consumption" not in stripped
         assert "## Related Issue" in stripped
+
+    @pytest.mark.parametrize(
+        "title",
+        [
+            "chore(harness): tidy operator notes",
+            "feat(harness): add operator notes",
+        ],
+    )
+    def test_lone_body_word_does_not_trip(self, title: str) -> None:
+        # #1424 / #1054: a lone performance word in the body ("memory" here) is
+        # too weak a signal and must not misclassify a non-performance title.
+        findings = title_policy.type_fit_findings(
+            title,
+            kind="issue",
+            body="This improves operator memory of past runs.",
+        )
+        assert findings == []
 
 
 class TestPrTitleHasIssueRef:
@@ -345,7 +364,7 @@ class TestVerifyTitle:
             title_policy.verify_title(
                 "fix(devcontainer): improve image setup",
                 kind="issue",
-                body="Fact: this speeds up startup by caching images.",
+                body="Fact: this is a clear speed up of devcontainer image setup.",
             )
             == 1
         )
@@ -386,13 +405,16 @@ class TestVerifyTitle:
 class TestTrustedBotTypeFitCarveOut:
     """#1127: a trusted-bot author drops the relayed body from type-fit.
 
-    Dependabot relays upstream release notes whose ``cache`` / ``memory``
-    wording must not mis-classify a correct ``chore(deps):`` title as
-    performance work. Title-only checks still apply to bots.
+    Dependabot relays upstream release notes whose performance wording must
+    not mis-classify a correct ``chore(deps):`` title as performance work.
+    Title-only checks still apply to bots. The body carries a performance
+    *phrase* ("build cache") so that a non-bot author still trips the gate --
+    that contrast is what proves the carve-out drops the bot body (#1424
+    narrowed body signal to phrases, so a lone word no longer trips either).
     """
 
     _DEPENDABOT_TITLE = "chore(deps): bump actions/setup-go from 5.6.0 to 6.4.0"
-    _PERF_BODY = "Update default Go module caching to use go.mod; reduce memory."
+    _PERF_BODY = "Update the Go module build cache to use go.mod."
 
     def test_trusted_bot_body_does_not_trip_type_fit(
         self, capsys: pytest.CaptureFixture[str]
