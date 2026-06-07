@@ -1,6 +1,6 @@
 {
   "name": "claude-md Codex",
-  "image": "ghcr.io/tvna/claude-md-devcontainer-codex:cd593d4f1aa5c5784102592d9141b837c3549b6c",
+  "image": "ghcr.io/tvna/claude-md-devcontainer-codex:edc6530f8f9cc734479e4970e5583b6785d90d9f",
   "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
   "initializeCommand": "bash .devcontainer/scripts/check-gh-config-permissions.sh ${HOME}/.config/gh && bash .devcontainer/scripts/ensure-agent-image.sh codex",
   "remoteUser": "codex",
