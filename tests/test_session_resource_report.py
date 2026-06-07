@@ -15,6 +15,7 @@ Refs #1413.
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 
 import body_policy
@@ -75,6 +76,22 @@ def _row(period: str, **over: object) -> dict[str, object]:
 
 def _grouped(*rows: dict[str, object]) -> str:
     return json.dumps({"session": list(rows), "totals": {}})
+
+
+def _coerce_row(row: dict[str, object]) -> srr.Usage:
+    """Build a :class:`Usage` from a ccusage row dict via the real parser."""
+    period = row["period"]
+    assert isinstance(period, str)
+    usage = srr.parse_usage(_grouped(row), period)
+    assert usage is not None
+    return usage
+
+
+def _extract_total(section: str) -> int:
+    """Return the integer from the ``- Total tokens: N (input ...)`` line."""
+    match = re.search(r"- Total tokens: ([\d,]+)", section)
+    assert match is not None, section
+    return int(match.group(1).replace(",", ""))
 
 
 class TestParseUsage:
@@ -143,6 +160,9 @@ _USAGE: srr.Usage = {
 }
 
 
+_ELAPSED_LABEL = "Elapsed (since previous PR or session start)"
+
+
 class TestRenderSection:
     def test_heading_present_and_first(self) -> None:
         out = srr.render_section("0:09:11", _USAGE)
@@ -160,12 +180,12 @@ class TestRenderSection:
     def test_usage_none_renders_unavailable(self) -> None:
         out = srr.render_section("0:09:11", None)
         # Elapsed still shown; the token/cost/model lines degrade.
-        assert "Elapsed (session start to PR create): 0:09:11" in out
+        assert f"{_ELAPSED_LABEL}: 0:09:11" in out
         assert out.count(srr._UNAVAILABLE) == 3
 
     def test_elapsed_none_renders_unavailable(self) -> None:
         out = srr.render_section(None, _USAGE)
-        assert f"Elapsed (session start to PR create): {srr._UNAVAILABLE}" in out
+        assert f"{_ELAPSED_LABEL}: {srr._UNAVAILABLE}" in out
         assert "2,920,887" in out
 
     def test_both_none_all_unavailable(self) -> None:
@@ -211,16 +231,21 @@ class TestBodyPolicyContract:
 
 
 class TestGather:
-    def test_live_path(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_live_path(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: pytest.TempPathFactory
+    ) -> None:
+        # First PR of the session: no checkpoint, so the cumulative total is
+        # the window and elapsed runs from the spawn timestamp.
         monkeypatch.setattr(
             srr, "_run_ccusage", lambda _sid: _grouped(_row("sess-1"))
         )
         env = {
             "CCR_SPAWN_TIMESTAMP_MS": "1000",
             "CLAUDE_CODE_SESSION_ID": "sess-1",
+            "CCR_CCUSAGE_CHECKPOINT_DIR": str(tmp_path),
         }
         out = srr.gather(env=env, now_ms=1000.0 + 90_000)
-        assert "Elapsed (session start to PR create): 0:01:30" in out
+        assert f"{_ELAPSED_LABEL}: 0:01:30" in out
         assert "2,558,807" in out
         assert "$3.7231" in out
 
@@ -236,7 +261,7 @@ class TestGather:
         monkeypatch.setattr(srr, "_run_ccusage", _fake)
         env = {"CCR_SPAWN_TIMESTAMP_MS": "1000"}
         out = srr.gather(env=env, now_ms=1000.0 + 1_000)
-        assert "Elapsed (session start to PR create): 0:00:01" in out
+        assert f"{_ELAPSED_LABEL}: 0:00:01" in out
         assert out.count(srr._UNAVAILABLE) == 3
 
     def test_ccusage_absent_degrades(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -245,6 +270,175 @@ class TestGather:
         out = srr.gather(env=env, now_ms=5_000.0)
         # No spawn ts and no ccusage -> the full unavailable form.
         assert out.count(srr._UNAVAILABLE) == 4
+
+
+# ---------------------------------------------------------------------------
+# Per-PR checkpoint: write_checkpoint + delta_usage + multi-PR gather (#1435)
+# ---------------------------------------------------------------------------
+
+
+class TestDeltaUsage:
+    def test_no_baseline_returns_cumulative(self) -> None:
+        cumulative = _coerce_row(_row("x"))
+        assert srr.delta_usage(cumulative, None) == cumulative
+
+    def test_subtracts_baseline_per_field(self) -> None:
+        baseline = _coerce_row(_row("x"))
+        cumulative = _coerce_row(
+            _row(
+                "x",
+                inputTokens=4058,
+                outputTokens=56836,
+                cacheCreationTokens=185694,
+                cacheReadTokens=2316219,
+                totalTokens=2562807,
+                totalCost=4.723137,
+            )
+        )
+        delta = srr.delta_usage(cumulative, baseline)
+        assert delta["input"] == 1000
+        assert delta["output"] == 1000
+        assert delta["cache_create"] == 1000
+        assert delta["cache_read"] == 1000
+        assert delta["total"] == 4000
+        assert delta["cost"] == pytest.approx(1.0)
+
+    def test_negative_field_falls_back_to_cumulative(self) -> None:
+        # A stale checkpoint whose totals exceed the current cumulative (e.g. a
+        # different session) must not produce a negative delta.
+        baseline = _coerce_row(_row("x", totalTokens=9_000_000))
+        cumulative = _coerce_row(_row("x"))
+        assert srr.delta_usage(cumulative, baseline) == cumulative
+
+
+class TestCheckpointRoundTrip:
+    def test_save_then_load(self, tmp_path: pytest.TempPathFactory) -> None:
+        env = {"CCR_CCUSAGE_CHECKPOINT_DIR": str(tmp_path)}
+        usage = _coerce_row(_row("sess-1"))
+        srr.save_checkpoint("sess-1", 1234.0, usage, env)
+        loaded = srr.load_checkpoint("sess-1", env)
+        assert loaded is not None
+        assert loaded["ts_ms"] == 1234.0
+        assert loaded["usage"] == usage
+
+    def test_load_missing_returns_none(self, tmp_path: pytest.TempPathFactory) -> None:
+        env = {"CCR_CCUSAGE_CHECKPOINT_DIR": str(tmp_path)}
+        assert srr.load_checkpoint("never-written", env) is None
+
+    def test_no_session_id_no_path(self) -> None:
+        assert srr._checkpoint_path("", {}) is None
+        assert srr.load_checkpoint("", {}) is None
+
+    def test_corrupt_file_returns_none(self, tmp_path: pytest.TempPathFactory) -> None:
+        env = {"CCR_CCUSAGE_CHECKPOINT_DIR": str(tmp_path)}
+        path = srr._checkpoint_path("sess-1", env)
+        assert path is not None
+        path.write_text("{not json", encoding="utf-8")
+        assert srr.load_checkpoint("sess-1", env) is None
+
+    def test_write_checkpoint_records_current_cumulative(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: pytest.TempPathFactory
+    ) -> None:
+        monkeypatch.setattr(
+            srr, "_run_ccusage", lambda _sid: _grouped(_row("sess-1"))
+        )
+        env = {
+            "CLAUDE_CODE_SESSION_ID": "sess-1",
+            "CCR_CCUSAGE_CHECKPOINT_DIR": str(tmp_path),
+        }
+        srr.write_checkpoint(env=env, now_ms=5000.0)
+        loaded = srr.load_checkpoint("sess-1", env)
+        assert loaded is not None
+        assert loaded["ts_ms"] == 5000.0
+        assert loaded["usage"]["total"] == 2558807
+
+    def test_write_checkpoint_no_ccusage_is_noop(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: pytest.TempPathFactory
+    ) -> None:
+        # ccusage unavailable -> any prior checkpoint is left intact, not blanked.
+        env = {
+            "CLAUDE_CODE_SESSION_ID": "sess-1",
+            "CCR_CCUSAGE_CHECKPOINT_DIR": str(tmp_path),
+        }
+        srr.save_checkpoint("sess-1", 1.0, _coerce_row(_row("sess-1")), env)
+        monkeypatch.setattr(srr, "_run_ccusage", lambda _sid: None)
+        srr.write_checkpoint(env=env, now_ms=9999.0)
+        loaded = srr.load_checkpoint("sess-1", env)
+        assert loaded is not None
+        assert loaded["ts_ms"] == 1.0  # unchanged
+
+
+class TestMultiPRWindowing:
+    """The #1435 regression: a second PR in one session must report the delta
+    since the first PR-create, and the two deltas must sum to the session
+    total -- no double-counting of the first PR's tokens."""
+
+    def test_second_pr_reports_delta_not_cumulative(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: pytest.TempPathFactory
+    ) -> None:
+        env = {
+            "CCR_SPAWN_TIMESTAMP_MS": "1000",
+            "CLAUDE_CODE_SESSION_ID": "sess-1",
+            "CCR_CCUSAGE_CHECKPOINT_DIR": str(tmp_path),
+        }
+
+        # --- PR #1: cumulative 1,000,000 total tokens, cost $1.0 ---
+        pr1 = _row(
+            "sess-1",
+            inputTokens=100,
+            outputTokens=200,
+            cacheCreationTokens=300,
+            cacheReadTokens=400,
+            totalTokens=1_000_000,
+            totalCost=1.0,
+        )
+        monkeypatch.setattr(srr, "_run_ccusage", lambda _sid: _grouped(pr1))
+        out1 = srr.gather(env=env, now_ms=1000.0 + 60_000)
+        assert "1,000,000" in out1
+        assert "$1.0000" in out1
+        assert f"{_ELAPSED_LABEL}: 0:01:00" in out1  # from spawn (no checkpoint yet)
+
+        # The PostToolUse create hook advances the checkpoint at PR #1 create.
+        srr.write_checkpoint(env=env, now_ms=1000.0 + 60_000)
+
+        # --- PR #2: cumulative grew to 1,500,000 total, cost $1.6 ---
+        pr2 = _row(
+            "sess-1",
+            inputTokens=150,
+            outputTokens=260,
+            cacheCreationTokens=360,
+            cacheReadTokens=470,
+            totalTokens=1_500_000,
+            totalCost=1.6,
+        )
+        monkeypatch.setattr(srr, "_run_ccusage", lambda _sid: _grouped(pr2))
+        out2 = srr.gather(env=env, now_ms=1000.0 + 60_000 + 120_000)
+
+        # PR #2 must report its own slice, not the cumulative 1,500,000.
+        assert "500,000" in out2
+        assert "1,500,000" not in out2
+        assert "$0.6000" in out2
+        # Elapsed for PR #2 runs from the PR #1 checkpoint, not session spawn.
+        assert f"{_ELAPSED_LABEL}: 0:02:00" in out2
+
+    def test_per_pr_deltas_sum_to_session_total(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: pytest.TempPathFactory
+    ) -> None:
+        env = {
+            "CCR_SPAWN_TIMESTAMP_MS": "0",
+            "CLAUDE_CODE_SESSION_ID": "sess-1",
+            "CCR_CCUSAGE_CHECKPOINT_DIR": str(tmp_path),
+        }
+        cumulatives = [300_000, 700_000, 1_200_000]
+        reported: list[int] = []
+        for i, total in enumerate(cumulatives):
+            row = _row("sess-1", totalTokens=total, totalCost=float(total) / 1e6)
+            monkeypatch.setattr(srr, "_run_ccusage", lambda _sid, r=row: _grouped(r))
+            out = srr.gather(env=env, now_ms=float((i + 1) * 1000))
+            reported.append(_extract_total(out))
+            srr.write_checkpoint(env=env, now_ms=float((i + 1) * 1000))
+        assert sum(reported) == cumulatives[-1]
+        assert reported == [300_000, 400_000, 500_000]
 
 
 # ---------------------------------------------------------------------------

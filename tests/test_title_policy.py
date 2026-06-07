@@ -171,7 +171,7 @@ class TestTypeFitFindings:
         body = (
             "## Summary\n\n- Bump a pinned dependency.\n\n"
             "## Resource Consumption\n\n"
-            "- Elapsed (session start to PR create): 0:01:00\n"
+            "- Elapsed (since previous PR or session start): 0:01:00\n"
             "- Total tokens: 1,000 (input 1 / output 1 / cache-create 1 / cache-read 1)\n"
             "- Cost (USD): $0.0100\n"
             "- Model(s): claude-opus-4-8\n"

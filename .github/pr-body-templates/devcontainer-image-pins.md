@@ -49,7 +49,7 @@
 
 ## Resource Consumption
 
-- Elapsed (session start to PR create): unavailable (no session data)
+- Elapsed (since previous PR or session start): unavailable (no session data)
 - Total tokens: unavailable (no session data)
 - Cost (USD): unavailable (no session data)
 - Model(s): unavailable (no session data)
