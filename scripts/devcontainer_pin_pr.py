@@ -47,17 +47,19 @@ next trigger. Driven by ``.github/workflows/devcontainer-pin-automerge.yml`` on
 
     python3 scripts/devcontainer_pin_pr.py merge
 
+The pin commit is created through the GitHub API (GraphQL
+``createCommitOnBranch``), not a local ``git commit``: API commits are signed by
+GitHub and shown as Verified, with the App-bot token as author. A local runner
+commit is always unsigned -- and an App bot cannot hold a GPG/SSH signing key --
+so the ``required_signatures`` rule on ``main`` would block it. Refs #1437.
+
 Environment variables:
     GH_TOKEN           Token with contents:write + pull-requests:write. The
                        workflows mint it at runtime from a GitHub App via
                        actions/create-github-app-token, so the generated PR's
-                       author is the App bot rather than a human PAT owner.
+                       author is the App bot rather than a human PAT owner, and
+                       the API-created pin commit is authored by that same bot.
     REPO               Repository in ``owner/repo`` format.
-    PIN_BOT_APP_SLUG   Optional. The App slug (``app-slug`` output of
-                       create-github-app-token). When set, ``open``/``refresh``
-                       author the pin commit as ``<slug>[bot]`` so the commit
-                       author matches the App-bot PR author; unset falls back to
-                       github-actions[bot].
 
 Exit codes:
     0  PR opened/updated/merged, already up to date, already open, or not yet
@@ -71,9 +73,9 @@ Refs #696, #911, #1137, #1352.
 from __future__ import annotations
 
 import argparse
+import base64
 import os
 import re
-import subprocess
 import sys
 import time
 from collections.abc import Callable
@@ -86,9 +88,11 @@ from pr_upsert import (
     _close_pr,
     _comment_pr,
     _compare_behind,
+    _create_branch_ref,
+    _create_commit_on_branch,
     _delete_branch,
     _get_pr,
-    _get_user_id,
+    _get_ref_sha,
     _list_open_prs,
     _list_open_prs_by_prefix,
     _merge_pr,
@@ -96,14 +100,6 @@ from pr_upsert import (
 )
 
 _DEFAULT_BRANCH_PREFIX = "devcontainer/image-pins-"
-_BOT_NAME = "github-actions[bot]"
-_BOT_EMAIL = "41898282+github-actions[bot]@users.noreply.github.com"
-
-# When the pin PR is opened with a GitHub App installation token (so the PR
-# author is the App bot rather than a human PAT owner), this env var carries the
-# App slug (the ``app-slug`` output of actions/create-github-app-token) so the
-# commit author can be matched to that same bot. See ``_resolve_bot_identity``.
-_BOT_APP_SLUG_ENV = "PIN_BOT_APP_SLUG"
 
 # Original branches are ``<prefix><40-hex-sha>``; refreshed branches append
 # ``-r-<main-short-sha>`` so each main advance yields a fresh, unique name (no
@@ -140,58 +136,33 @@ def _branch_exists_on_remote(branch: str) -> bool:
     return run_git(["ls-remote", "--exit-code", "--heads", "origin", branch]).returncode == 0
 
 
-def _git_error_detail(exc: subprocess.CalledProcessError) -> str:
-    """Return git's captured stderr for an error message, or ``""`` when empty.
-
-    ``run_git`` runs git with ``capture_output=True``, so a ``check=True``
-    failure carries git's own diagnostic on the exception. ``str(exc)`` shows
-    only the exit code (e.g. ``returned non-zero exit status 128``), hiding the
-    concrete rejection reason -- the ruleset rule name or
-    ``remote: Permission ...`` behind an exit-128 push failure. Surfacing the
-    stderr makes a keeper auth/ruleset regression diagnosable from the run log;
-    GitHub Actions masks registered secrets in step output, so the persisted
-    token is not exposed. Refs #1229.
-    """
-    stderr = exc.stderr
-    if isinstance(stderr, str) and stderr.strip():
-        return f": {stderr.strip()}"
-    return ""
-
-
-def _resolve_bot_identity(token: str) -> tuple[str, str]:
-    """Return the ``(name, email)`` git identity for pin commits.
-
-    Defaults to ``github-actions[bot]``. When ``PIN_BOT_APP_SLUG`` is set -- the
-    ``app-slug`` output of ``actions/create-github-app-token`` -- resolve the
-    GitHub App bot's identity so the commit author matches the PR author (the PR
-    is opened with the App installation token, so its author is the App bot):
-    name ``<slug>[bot]`` and the canonical noreply email
-    ``<user-id>+<slug>[bot]@users.noreply.github.com``. The numeric user id, the
-    documented way to commit as an App bot, links the commit back to the bot
-    account. A lookup failure raises so the run fails loudly rather than silently
-    committing under the wrong identity. Refs #1401.
-    """
-    slug = os.environ.get(_BOT_APP_SLUG_ENV, "").strip()
-    if not slug:
-        return _BOT_NAME, _BOT_EMAIL
-    login = f"{slug}[bot]"
-    user_id = _get_user_id(login=login, token=token)
-    return login, f"{user_id}+{login}@users.noreply.github.com"
-
-
 def _create_pin_branch(
-    *, branch: str, files: list[str], subject: str, trailer: str, bot_name: str, bot_email: str
+    *, repo: str, base: str, branch: str, files: list[str], subject: str, trailer: str, token: str
 ) -> None:
-    """Configure the bot identity, branch off, commit the pin files, and push.
+    """Create *branch* off *base* and add a signed pin commit via the GitHub API.
 
-    Raises :class:`subprocess.CalledProcessError` if any git step fails.
+    The commit is authored through GraphQL ``createCommitOnBranch`` rather than a
+    local ``git commit``/``git push`` so GitHub signs it (Verified) with the App
+    bot as author -- the only way to satisfy the ``required_signatures`` rule on
+    ``main`` for an App-bot author, which cannot hold a signing key. The pin
+    files are read from the working tree (already rewritten by the caller) and
+    sent as base64 additions. Raises :class:`RuntimeError` on any API failure.
+    Refs #1437.
     """
-    run_git(["config", "user.name", bot_name], check=True)
-    run_git(["config", "user.email", bot_email], check=True)
-    run_git(["checkout", "-b", branch], check=True)
-    run_git(["add", *files], check=True)
-    run_git(["commit", "-m", subject, "-m", trailer], check=True)
-    run_git(["push", "origin", branch], check=True)
+    base_sha = _get_ref_sha(repo=repo, ref=f"heads/{base}", token=token)
+    _create_branch_ref(repo=repo, branch=branch, sha=base_sha, token=token)
+    additions = [
+        {"path": path, "contents": base64.b64encode(Path(path).read_bytes()).decode("ascii")} for path in files
+    ]
+    _create_commit_on_branch(
+        repo=repo,
+        branch=branch,
+        expected_head_oid=base_sha,
+        headline=subject,
+        body=trailer,
+        additions=additions,
+        token=token,
+    )
 
 
 # Mergeability is computed asynchronously by GitHub, so the ``mergeable`` field
@@ -276,21 +247,17 @@ def _cmd_open(args: argparse.Namespace) -> int:
         print(f"pin update branch already exists without an open PR; retrying PR creation: {branch}")
     else:
         try:
-            bot_name, bot_email = _resolve_bot_identity(token)
-        except RuntimeError as exc:
-            print(f"::error::{exc}", file=sys.stderr)
-            return 1
-        try:
             _create_pin_branch(
+                repo=repo,
+                base=args.base,
                 branch=branch,
                 files=args.file,
                 subject=args.commit_subject,
                 trailer=args.commit_trailer,
-                bot_name=bot_name,
-                bot_email=bot_email,
+                token=token,
             )
-        except subprocess.CalledProcessError as exc:
-            print(f"::error::git failed creating pin branch: {exc}{_git_error_detail(exc)}", file=sys.stderr)
+        except RuntimeError as exc:
+            print(f"::error::failed creating pin branch: {exc}", file=sys.stderr)
             return 1
 
     try:
@@ -392,21 +359,17 @@ def _cmd_refresh(args: argparse.Namespace) -> int:
 
     if not _branch_exists_on_remote(new_branch):
         try:
-            bot_name, bot_email = _resolve_bot_identity(token)
-        except RuntimeError as exc:
-            print(f"::error::{exc}", file=sys.stderr)
-            return 1
-        try:
             _create_pin_branch(
+                repo=repo,
+                base=args.base,
                 branch=new_branch,
                 files=args.file,
                 subject=args.commit_subject,
                 trailer=args.commit_trailer,
-                bot_name=bot_name,
-                bot_email=bot_email,
+                token=token,
             )
-        except subprocess.CalledProcessError as exc:
-            print(f"::error::git failed creating refresh branch: {exc}{_git_error_detail(exc)}", file=sys.stderr)
+        except RuntimeError as exc:
+            print(f"::error::failed creating refresh branch: {exc}", file=sys.stderr)
             return 1
 
     try:

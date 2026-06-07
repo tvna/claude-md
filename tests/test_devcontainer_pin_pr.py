@@ -20,27 +20,18 @@ class _FakeGit:
     """Stand-in for ``run_git``: returns a configurable returncode per subcommand.
 
     ``rc_map`` maps the first git arg (e.g. ``"diff"``) to a returncode;
-    unmapped subcommands return 0. When ``raise_on`` matches a subcommand and
-    ``check`` is set, a CalledProcessError is raised (mirrors ``check=True``).
+    unmapped subcommands return 0. Only the local read-only probes remain in the
+    script (``diff`` for working-tree changes, ``ls-remote`` for branch
+    existence); the pin commit itself is created via the GitHub API. Refs #1437.
     """
 
-    def __init__(
-        self,
-        rc_map: dict[str, int] | None = None,
-        raise_on: str | None = None,
-        stderr: str | None = None,
-    ) -> None:
+    def __init__(self, rc_map: dict[str, int] | None = None) -> None:
         self.rc_map = rc_map or {}
-        self.raise_on = raise_on
-        self.stderr = stderr
         self.calls: list[list[str]] = []
 
     def __call__(self, args: list[str], *, check: bool = False, **_: Any) -> subprocess.CompletedProcess[str]:
         self.calls.append(args)
-        sub = args[0]
-        if check and self.raise_on == sub:
-            raise subprocess.CalledProcessError(1, ["git", *args], stderr=self.stderr)
-        return subprocess.CompletedProcess(["git", *args], self.rc_map.get(sub, 0))
+        return subprocess.CompletedProcess(["git", *args], self.rc_map.get(args[0], 0))
 
     def ran(self, sub: str) -> bool:
         return any(c[0] == sub for c in self.calls)
@@ -95,46 +86,50 @@ class TestRenderPrBody:
 
 
 # ---------------------------------------------------------------------------
-# _resolve_bot_identity
+# _create_pin_branch
 # ---------------------------------------------------------------------------
 
 
-class TestResolveBotIdentity:
-    def test_defaults_to_github_actions_bot(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.delenv("PIN_BOT_APP_SLUG", raising=False)
-        called: list[Any] = []
+class TestCreatePinBranch:
+    def test_creates_ref_and_signed_commit_from_working_tree(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import base64
 
-        def _record(**kw: Any) -> int:
-            called.append(kw)
-            return 1
+        pin = tmp_path / "pin.json"
+        pin.write_text("contents", encoding="utf-8")
+        monkeypatch.setattr(dpp, "_get_ref_sha", lambda **kw: "base-oid")
+        created_ref: dict[str, Any] = {}
+        monkeypatch.setattr(dpp, "_create_branch_ref", lambda **kw: created_ref.update(kw))
+        commit: dict[str, Any] = {}
 
-        monkeypatch.setattr(dpp, "_get_user_id", _record)
-        name, email = dpp._resolve_bot_identity("tok")
-        assert name == "github-actions[bot]"
-        assert email == "41898282+github-actions[bot]@users.noreply.github.com"
-        assert called == []  # the default identity needs no API lookup
+        def _commit(**kw: Any) -> str:
+            commit.update(kw)
+            return "new-oid"
 
-    def test_app_slug_resolves_app_bot_identity(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("PIN_BOT_APP_SLUG", "my-pin-app")
-        monkeypatch.setattr(dpp, "_get_user_id", lambda *, login, token: 999 if login == "my-pin-app[bot]" else 0)
-        name, email = dpp._resolve_bot_identity("tok")
-        assert name == "my-pin-app[bot]"
-        assert email == "999+my-pin-app[bot]@users.noreply.github.com"
+        monkeypatch.setattr(dpp, "_create_commit_on_branch", _commit)
+        dpp._create_pin_branch(
+            repo="o/r", base="main", branch="b", files=[str(pin)], subject="subj", trailer="Refs #1", token="tok"
+        )
+        # Branch is cut at the base ref head, and the commit pins that same oid as
+        # expectedHeadOid so a racing write to the new branch is rejected.
+        assert created_ref == {"repo": "o/r", "branch": "b", "sha": "base-oid", "token": "tok"}
+        assert commit["expected_head_oid"] == "base-oid"
+        assert commit["headline"] == "subj"
+        assert commit["body"] == "Refs #1"
+        assert commit["additions"] == [
+            {"path": str(pin), "contents": base64.b64encode(b"contents").decode("ascii")}
+        ]
 
-    def test_blank_slug_falls_back_to_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("PIN_BOT_APP_SLUG", "   ")
-        name, _ = dpp._resolve_bot_identity("tok")
-        assert name == "github-actions[bot]"
+    def test_ref_lookup_failure_propagates(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        def _boom(**kw: Any) -> str:
+            raise RuntimeError("Get ref heads/main failed")
 
-    def test_lookup_failure_propagates(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("PIN_BOT_APP_SLUG", "my-pin-app")
-
-        def _boom(**kw: Any) -> int:
-            raise RuntimeError("Get user my-pin-app[bot] failed")
-
-        monkeypatch.setattr(dpp, "_get_user_id", _boom)
-        with pytest.raises(RuntimeError, match="Get user my-pin-app"):
-            dpp._resolve_bot_identity("tok")
+        monkeypatch.setattr(dpp, "_get_ref_sha", _boom)
+        with pytest.raises(RuntimeError, match="Get ref"):
+            dpp._create_pin_branch(
+                repo="o/r", base="main", branch="b", files=[], subject="s", trailer="t", token="tok"
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -208,6 +203,8 @@ class TestOpenFlow:
     ) -> None:
         git = _FakeGit({"diff": 1, "ls-remote": 2})  # ls-remote --exit-code: 2 == no match
         monkeypatch.setattr(dpp, "run_git", git)
+        pin_calls: list[dict[str, Any]] = []
+        monkeypatch.setattr(dpp, "_create_pin_branch", lambda **kw: pin_calls.append(kw))
         captured: dict[str, Any] = {}
 
         def _record_upsert(**kw: Any) -> tuple[str, int]:
@@ -217,33 +214,25 @@ class TestOpenFlow:
         monkeypatch.setattr(dpp, "_upsert_pr", _record_upsert)
         rc = dpp.main(_open_argv(tmp_path, sha="zz"))
         assert rc == 0
-        assert git.ran("commit") and git.ran("push") and git.ran("checkout")
+        # The absent branch is created via the signed-commit API path, then upserted.
+        assert len(pin_calls) == 1
+        assert pin_calls[0]["branch"] == "devcontainer/image-pins-zz"
+        assert pin_calls[0]["base"] == "main"
         assert captured["head"] == "devcontainer/image-pins-zz"
         assert "zz" in captured["body"]  # template placeholder substituted
 
-    def test_app_slug_authors_commit_as_app_bot(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    def test_create_branch_api_failure_returns_1(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        # With the App slug set (the workflow passes the create-github-app-token
-        # app-slug output), the pin commit is authored by the App bot so it
-        # matches the App-bot PR author. Refs #1401.
-        monkeypatch.setenv("PIN_BOT_APP_SLUG", "my-pin-app")
-        monkeypatch.setattr(dpp, "_get_user_id", lambda *, login, token: 4242)
-        git = _FakeGit({"diff": 1, "ls-remote": 2})
-        monkeypatch.setattr(dpp, "run_git", git)
-        monkeypatch.setattr(dpp, "_upsert_pr", lambda **kw: ("created", 1))
-        rc = dpp.main(_open_argv(tmp_path, sha="zz"))
-        assert rc == 0
-        config_calls = [c for c in git.calls if c[0] == "config"]
-        assert ["config", "user.name", "my-pin-app[bot]"] in config_calls
-        assert ["config", "user.email", "4242+my-pin-app[bot]@users.noreply.github.com"] in config_calls
+        monkeypatch.setattr(dpp, "run_git", _FakeGit({"diff": 1, "ls-remote": 2}))
 
-    def test_create_branch_git_failure_returns_1(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.setattr(dpp, "run_git", _FakeGit({"diff": 1, "ls-remote": 2}, raise_on="commit"))
+        def _boom(**kw: Any) -> None:
+            raise RuntimeError("createCommitOnBranch errors: [stale expectedHeadOid]")
+
+        monkeypatch.setattr(dpp, "_create_pin_branch", _boom)
         rc = dpp.main(_open_argv(tmp_path))
         assert rc == 1
+        assert "failed creating pin branch" in capsys.readouterr().err
 
     def test_list_open_prs_error_returns_1(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -399,6 +388,8 @@ class TestRefreshFlow:
         monkeypatch.setattr(dpp, "_list_open_prs_by_prefix", lambda **kw: [_open_pin_pr(1132)])
         monkeypatch.setattr(dpp, "_compare_behind", lambda **kw: 3)
         monkeypatch.setattr(dpp, "_regenerate_pins", lambda sha: 0)
+        pin_calls: list[dict[str, Any]] = []
+        monkeypatch.setattr(dpp, "_create_pin_branch", lambda **kw: pin_calls.append(kw))
         captured: dict[str, Any] = {}
 
         def _record_upsert(**kw: Any) -> tuple[str, int]:
@@ -425,7 +416,7 @@ class TestRefreshFlow:
         expected_branch = f"devcontainer/image-pins-{_PUBLISHED}-r-{_TARGET[:12]}"
         assert captured["head"] == expected_branch
         assert _PUBLISHED in captured["body"]  # template substituted with the published SHA
-        assert git.ran("commit") and git.ran("push")
+        assert len(pin_calls) == 1 and pin_calls[0]["branch"] == expected_branch
         # A freshly cut superseding PR has no checks yet; refresh defers its merge
         # to the auto-merge keeper rather than merging inline.
         assert merged == []
@@ -490,29 +481,30 @@ class TestRefreshFlow:
         monkeypatch.setattr(dpp, "_regenerate_pins", lambda sha: 1)
         assert dpp.main(_refresh_argv(tmp_path)) == 1
 
-    def test_push_failure_surfaces_git_stderr(
+    def test_create_branch_api_failure_surfaces_error(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        """A rejected branch push (exit 128) reports git's stderr, not just the exit code.
+        """A failed signed-commit API call reports the concrete reason in the run log.
 
-        Regression guard for #1229: ``str(CalledProcessError)`` shows only the
-        exit status, so the concrete rejection reason (ruleset rule name or
-        ``remote: Permission ...``) was invisible in the run log.
+        The commit is created via the GitHub API, so a rejection (e.g. a stale
+        ``expectedHeadOid`` or a permission error) surfaces as a ``RuntimeError``
+        whose message must reach stderr so a keeper regression is diagnosable.
+        Refs #1437 (supersedes the #1229 git-stderr guard).
         """
-        git = _FakeGit(
-            {"diff": 1, "ls-remote": 2},  # changes present; refresh branch absent
-            raise_on="push",
-            stderr="remote: Permission to owner/repo.git denied to keeper-bot.",
-        )
-        monkeypatch.setattr(dpp, "run_git", git)
+        monkeypatch.setattr(dpp, "run_git", _FakeGit({"diff": 1, "ls-remote": 2}))
         monkeypatch.setattr(dpp, "_list_open_prs_by_prefix", lambda **kw: [_open_pin_pr(1132)])
         monkeypatch.setattr(dpp, "_compare_behind", lambda **kw: 3)
         monkeypatch.setattr(dpp, "_regenerate_pins", lambda sha: 0)
+
+        def _boom(**kw: Any) -> None:
+            raise RuntimeError("Create branch ref failed: HTTP 403: forbidden")
+
+        monkeypatch.setattr(dpp, "_create_pin_branch", _boom)
         rc = dpp.main(_refresh_argv(tmp_path))
         assert rc == 1
         err = capsys.readouterr().err
-        assert "git failed creating refresh branch" in err
-        assert "Permission to owner/repo.git denied" in err
+        assert "failed creating refresh branch" in err
+        assert "HTTP 403" in err
 
 
 # ---------------------------------------------------------------------------

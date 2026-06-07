@@ -531,34 +531,162 @@ class TestMergePr:
 
 
 # ---------------------------------------------------------------------------
-# _get_user_id()
+# _get_ref_sha()
 # ---------------------------------------------------------------------------
 
 
-class TestGetUserId:
-    def test_returns_numeric_id(self) -> None:
-        apply_call = _make_apply_call(200, {"login": "my-app[bot]", "id": 12345})
-        uid = pu._get_user_id(login="my-app[bot]", token="tok", apply_call=apply_call)
-        assert uid == 12345
+class TestGetRefSha:
+    def test_returns_object_sha(self) -> None:
+        apply_call = _make_apply_call(200, {"object": {"sha": "deadbeef"}})
+        sha = pu._get_ref_sha(repo="owner/repo", ref="heads/main", token="tok", apply_call=apply_call)
+        assert sha == "deadbeef"
 
-    def test_url_encodes_bot_login_brackets(self) -> None:
+    def test_requests_single_ref_endpoint(self) -> None:
         captured: list[str] = []
 
         def apply_call(*, method: str, url: str, payload: object, token: str) -> tuple[int, str]:
             captured.append(url)
-            return 200, json.dumps({"id": 1})
+            return 200, json.dumps({"object": {"sha": "s"}})
 
-        pu._get_user_id(login="my-app[bot]", token="tok", apply_call=apply_call)
-        # The [ ] in the bot login must be percent-encoded so the path is valid.
-        assert captured[0].endswith("/users/my-app%5Bbot%5D")
-        assert "[" not in captured[0]
+        pu._get_ref_sha(repo="o/r", ref="heads/main", token="tok", apply_call=apply_call)
+        assert captured[0].endswith("/repos/o/r/git/ref/heads/main")
 
     def test_http_error_raises(self) -> None:
         apply_call = _make_apply_call(404, {"message": "not found"})
         with pytest.raises(RuntimeError, match="404"):
-            pu._get_user_id(login="my-app[bot]", token="tok", apply_call=apply_call)
+            pu._get_ref_sha(repo="owner/repo", ref="heads/main", token="tok", apply_call=apply_call)
 
-    def test_missing_id_raises(self) -> None:
-        apply_call = _make_apply_call(200, {"login": "my-app[bot]"})
-        with pytest.raises(RuntimeError, match="missing integer id"):
-            pu._get_user_id(login="my-app[bot]", token="tok", apply_call=apply_call)
+    def test_missing_sha_raises(self) -> None:
+        apply_call = _make_apply_call(200, {"object": {}})
+        with pytest.raises(RuntimeError, match="missing object.sha"):
+            pu._get_ref_sha(repo="owner/repo", ref="heads/main", token="tok", apply_call=apply_call)
+
+
+# ---------------------------------------------------------------------------
+# _create_branch_ref()
+# ---------------------------------------------------------------------------
+
+
+class TestCreateBranchRef:
+    def test_posts_fully_qualified_ref(self) -> None:
+        captured: dict[str, Any] = {}
+
+        def apply_call(*, method: str, url: str, payload: Any, token: str) -> tuple[int, str]:
+            captured["method"] = method
+            captured["url"] = url
+            captured["payload"] = payload
+            return 201, "{}"
+
+        pu._create_branch_ref(repo="o/r", branch="feat/x", sha="abc", token="tok", apply_call=apply_call)
+        assert captured["method"] == "POST"
+        assert captured["url"].endswith("/repos/o/r/git/refs")
+        assert captured["payload"] == {"ref": "refs/heads/feat/x", "sha": "abc"}
+
+    def test_http_error_raises(self) -> None:
+        apply_call = _make_apply_call(422, {"message": "Reference already exists"})
+        with pytest.raises(RuntimeError, match="422"):
+            pu._create_branch_ref(repo="o/r", branch="feat/x", sha="abc", token="tok", apply_call=apply_call)
+
+
+# ---------------------------------------------------------------------------
+# _create_commit_on_branch()
+# ---------------------------------------------------------------------------
+
+
+def _make_graphql_call(
+    status: int, response: dict[str, Any]
+) -> Callable[..., tuple[int, dict[str, Any]]]:
+    def graphql_call(*, query: str, variables: dict[str, Any], token: str) -> tuple[int, dict[str, Any]]:
+        return status, response
+
+    return graphql_call
+
+
+class TestCreateCommitOnBranch:
+    def test_returns_commit_oid(self) -> None:
+        graphql_call = _make_graphql_call(200, {"data": {"createCommitOnBranch": {"commit": {"oid": "c0ffee"}}}})
+        oid = pu._create_commit_on_branch(
+            repo="o/r",
+            branch="feat/x",
+            expected_head_oid="base",
+            headline="subj",
+            body="Refs #1",
+            additions=[{"path": "a.txt", "contents": "Zm9v"}],
+            token="tok",
+            graphql_call=graphql_call,
+        )
+        assert oid == "c0ffee"
+
+    def test_builds_expected_input_variables(self) -> None:
+        captured: dict[str, Any] = {}
+
+        def graphql_call(*, query: str, variables: dict[str, Any], token: str) -> tuple[int, dict[str, Any]]:
+            captured.update(variables)
+            return 200, {"data": {"createCommitOnBranch": {"commit": {"oid": "x"}}}}
+
+        pu._create_commit_on_branch(
+            repo="o/r",
+            branch="feat/x",
+            expected_head_oid="base-sha",
+            headline="subj",
+            body="Refs #1",
+            additions=[{"path": "a.txt", "contents": "Zm9v"}],
+            token="tok",
+            graphql_call=graphql_call,
+        )
+        inp = captured["input"]
+        assert inp["branch"] == {"repositoryNameWithOwner": "o/r", "branchName": "feat/x"}
+        assert inp["expectedHeadOid"] == "base-sha"
+        assert inp["message"] == {"headline": "subj", "body": "Refs #1"}
+        assert inp["fileChanges"] == {"additions": [{"path": "a.txt", "contents": "Zm9v"}]}
+
+    def test_omits_empty_message_body(self) -> None:
+        captured: dict[str, Any] = {}
+
+        def graphql_call(*, query: str, variables: dict[str, Any], token: str) -> tuple[int, dict[str, Any]]:
+            captured.update(variables)
+            return 200, {"data": {"createCommitOnBranch": {"commit": {"oid": "x"}}}}
+
+        pu._create_commit_on_branch(
+            repo="o/r",
+            branch="b",
+            expected_head_oid="s",
+            headline="subj",
+            body="",
+            additions=[],
+            token="tok",
+            graphql_call=graphql_call,
+        )
+        assert captured["input"]["message"] == {"headline": "subj"}
+
+    def test_http_error_raises(self) -> None:
+        graphql_call = _make_graphql_call(500, {})
+        with pytest.raises(RuntimeError, match="createCommitOnBranch HTTP 500"):
+            pu._create_commit_on_branch(
+                repo="o/r", branch="b", expected_head_oid="s", headline="h", body="", additions=[],
+                token="tok", graphql_call=graphql_call,
+            )
+
+    def test_graphql_errors_raise(self) -> None:
+        graphql_call = _make_graphql_call(200, {"errors": [{"message": "stale expectedHeadOid"}]})
+        with pytest.raises(RuntimeError, match="createCommitOnBranch errors"):
+            pu._create_commit_on_branch(
+                repo="o/r", branch="b", expected_head_oid="s", headline="h", body="", additions=[],
+                token="tok", graphql_call=graphql_call,
+            )
+
+    def test_empty_oid_raises(self) -> None:
+        graphql_call = _make_graphql_call(200, {"data": {"createCommitOnBranch": {"commit": {"oid": ""}}}})
+        with pytest.raises(RuntimeError, match="missing commit oid"):
+            pu._create_commit_on_branch(
+                repo="o/r", branch="b", expected_head_oid="s", headline="h", body="", additions=[],
+                token="tok", graphql_call=graphql_call,
+            )
+
+    def test_malformed_response_raises(self) -> None:
+        graphql_call = _make_graphql_call(200, {"data": {"createCommitOnBranch": {"commit": {}}}})
+        with pytest.raises(RuntimeError, match="unexpected response"):
+            pu._create_commit_on_branch(
+                repo="o/r", branch="b", expected_head_oid="s", headline="h", body="", additions=[],
+                token="tok", graphql_call=graphql_call,
+            )

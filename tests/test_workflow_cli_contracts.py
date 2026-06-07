@@ -1854,13 +1854,12 @@ def test_devcontainer_pin_pr_uses_environment_secret_token() -> None:
         step for step in update_pins["steps"] if step.get("name") == "Open pin update PR"
     )
     # Thin orchestration: GH_TOKEN is the App installation token (so the PR
-    # author is the App bot), PIN_BOT_APP_SLUG carries the App slug so the commit
-    # author matches, REPO from the workflow context. All consumed by
-    # scripts/devcontainer_pin_pr.py.
+    # author is the App bot and the API-created pin commit is signed under that
+    # same bot), REPO from the workflow context. Both consumed by
+    # scripts/devcontainer_pin_pr.py. Refs #1437.
     assert open_pr["env"] == {
         "GH_TOKEN": "${{ steps.app-token.outputs.token }}",
         "REPO": "${{ github.repository }}",
-        "PIN_BOT_APP_SLUG": "${{ steps.app-token.outputs.app-slug }}",
     }
     assert "scripts/devcontainer_pin_pr.py open" in open_pr["run"]
     assert "Refs #696" in open_pr["run"]
@@ -1879,7 +1878,8 @@ def test_devcontainer_pin_pr_open_matches_workflow_args(
     monkeypatch.setenv("REPO", REPO)
     template = tmp_path / "tmpl.md"
     template.write_text("Pinned to __GITHUB_SHA__.\n", encoding="utf-8")
-    # Branch absent -> create branch + upsert; mock git and the GitHub API helpers.
+    # Branch absent -> create branch + upsert; mock the git probes, the signed
+    # commit API path, and the PR upsert. Refs #1437.
     monkeypatch.setattr(
         devcontainer_pin_pr,
         "run_git",
@@ -1887,6 +1887,7 @@ def test_devcontainer_pin_pr_open_matches_workflow_args(
             ["git", *args], 1 if args[0] == "diff" else 2 if args[0] == "ls-remote" else 0
         ),
     )
+    monkeypatch.setattr(devcontainer_pin_pr, "_create_pin_branch", lambda **kw: None)
     monkeypatch.setattr(devcontainer_pin_pr, "_upsert_pr", lambda **kw: ("created", 42))
     rc = devcontainer_pin_pr.main([
         "open",
@@ -1997,26 +1998,28 @@ def test_devcontainer_pin_pr_merge_matches_workflow_args(monkeypatch: pytest.Mon
 
 
 def test_devcontainer_pin_refresh_persists_checkout_credentials() -> None:
-    """The refresh job's checkout must persist credentials for the branch push.
+    """The refresh job's checkout must persist credentials for the remote probe.
 
-    Regression guard for #1301: the keeper's ``git push origin <fresh-branch>``
-    in ``scripts/devcontainer_pin_pr.py`` (``_create_pin_branch``) authenticates
-    with the GITHUB_TOKEN that ``actions/checkout`` persists by default. A
-    ``persist-credentials: false`` on that checkout strips the credential, so
-    every refresh of a behind pin PR failed with git exit 128. Assert the
-    checkout step does not disable credential persistence. Refs #1229, #1301, #1303.
+    Regression guard for #1301: ``scripts/devcontainer_pin_pr.py`` still runs
+    ``git ls-remote origin <fresh-branch>`` (the branch-existence check) which
+    authenticates with the GITHUB_TOKEN that ``actions/checkout`` persists by
+    default. The pin commit itself is now created via the GitHub API
+    (createCommitOnBranch), not ``git push``, so it is signed -- but a
+    ``persist-credentials: false`` on this checkout would still strip the
+    ls-remote credential. Assert the checkout step does not disable credential
+    persistence. Refs #1229, #1301, #1303, #1437.
     """
     workflow = yaml.safe_load(
         (_WORKFLOWS_DIR / "devcontainer-pin-refresh.yml").read_text(encoding="utf-8")
     )
     steps = workflow["jobs"]["refresh"]["steps"]
     checkout_steps = [s for s in steps if "actions/checkout" in str(s.get("uses", ""))]
-    assert checkout_steps, "refresh job must check out the repository before pushing"
+    assert checkout_steps, "refresh job must check out the repository before probing the remote"
     for step in checkout_steps:
         persist = step.get("with", {}).get("persist-credentials", True)
         assert persist is not False, (
             "devcontainer-pin-refresh checkout must persist credentials so the refresh "
-            "branch push authenticates (regression #1301); remove `persist-credentials: false`."
+            "ls-remote probe authenticates (regression #1301); remove `persist-credentials: false`."
         )
 
 
