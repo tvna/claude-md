@@ -20,6 +20,38 @@ renewal. The only on-host credential is the Agent's AppRole identity
 (`role_id` / `secret_id` files, `0600`) -- not the PEM, and not a long-lived
 env secret.
 
+## 0. Provision the HCP account and Vault cluster (first time only)
+
+Skip this section if you already have an HCP Vault Dedicated cluster -- merging
+this change does not require an HCP account, and the existing
+`GITHUB_APP_PRIVATE_KEY` env path is unaffected. Do this only to exercise the
+file-source path on a new local host. Verified against HashiCorp's primary docs
+(see References); confirm the portal labels against the live UI, which can drift.
+
+1. **Sign up / open the portal.** Go to the HCP Portal
+   (`https://portal.cloud.hashicorp.com`). HCP provisions your account with one
+   organization automatically.
+2. **Select organization and project.** Click the HashiCorp icon to list your
+   organizations and select one. Click **Projects** and pick the target project,
+   or **+ Create project** -> enter *Project name* and *Project description* ->
+   **Create project**.
+3. **Create the cluster.** From the project **Overview**, click **Get started
+   with Vault**; on **Set up your cluster**, click **Create cluster** in the
+   **Start from scratch** pane. Select a cloud provider (AWS or Azure), set the
+   **Vault tier** pull-down to **Development** (size **Extra Small** is the only
+   dev option). Under **Network** accept or edit the Network ID / Region / CIDR
+   for the HVN; under **Basics** the default Cluster ID is `vault-cluster`. Click
+   **Create cluster** and wait for provisioning to finish.
+4. **Read the address, namespace, and admin token.** On the cluster page use the
+   **Cluster URLs** links to copy the **public** address -- this is the
+   `VAULT_ADDR` in step 1 (`https://<cluster>.vault.<region>.hashicorp.cloud:8200`).
+   HCP Vault Dedicated clusters operate from the `admin` namespace
+   (`VAULT_NAMESPACE="admin"`). Use the **Generate token** link to mint the admin
+   token for `vault login` in step 1; it is for initial configuration only.
+
+> Development tier is not for production workloads, and dev-tier clusters are
+> publicly accessible by default. Restrict access before storing a real key.
+
 ## 1. Store the key in HCP Vault
 
 ```sh
@@ -118,3 +150,12 @@ No repository egress allowlist change is needed -- the allowlist files under
   sink on the next lease renewal once the new value is stored with `vault kv put`.
 - The AppRole `secret_id` is short-lived (`secret_id_ttl`); reissue it and update
   `/etc/github-app/secret_id` on its cadence.
+
+## References
+
+- HCP Vault Dedicated, create a cluster:
+  https://developer.hashicorp.com/vault/tutorials/get-started-hcp-vault-dedicated/create-cluster
+- HCP Vault Dedicated, access a cluster (URLs, admin token, `admin` namespace):
+  https://developer.hashicorp.com/hcp/docs/vault/get-started/access-cluster
+- Generate an admin token:
+  https://developer.hashicorp.com/hcp/docs/vault/get-started/generate-admin-token
