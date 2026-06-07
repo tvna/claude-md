@@ -51,6 +51,7 @@ import nixpkgs_cooldown
 import post_issue_comment
 import pr_upsert
 import preflight_uv_version
+import prune_devcontainer_images
 import pytest
 import ruleset_drift
 import rulesets_apply
@@ -232,6 +233,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("github_paginate.py", "fetch"): "test_github_paginate_fetch_matches_workflow_args",
     ("github_paginate.py", "get"): "test_github_paginate_get_matches_workflow_args",
     ("post_issue_comment.py", "create"): "test_post_issue_comment_create_matches_workflow_args",
+    ("prune_devcontainer_images.py", "prune"): "test_prune_devcontainer_images_prune_matches_workflow_args",
     ("pr_upsert.py", "upsert"): "test_pr_upsert_matches_workflow_args",
     ("verify_shard_coverage.py", None): "test_verify_shard_coverage_matches_workflow_args",
     ("verify_test_shard_markers.py", None): "test_verify_test_shard_markers_matches_workflow_args",
@@ -1697,6 +1699,33 @@ def test_github_paginate_fetch_run_jobs_matches_workflow_args(
     assert (tmp_path / "jobs" / "42.json").exists()
 
 
+def test_prune_devcontainer_images_prune_matches_workflow_args(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """prune subcommand accepts the --owner/--package/--pinned-sha-from/--keep-recent/
+    --min-age-days/--dry-run/--summary-file args used by the ``Prune old devcontainer
+    image versions`` step in monthly-maintenance.yml. Refs #1400."""
+    monkeypatch.setenv("GH_TOKEN", "tok")
+    monkeypatch.setattr(prune_devcontainer_images, "_list_versions", lambda *a, **k: [])
+    monkeypatch.setattr(prune_devcontainer_images, "_delete_version", lambda *a, **k: (204, ""))
+    cfg = tmp_path / "devcontainer.json"
+    cfg.write_text(json.dumps({"image": "ghcr.io/tvna/x:" + "a" * 40}), encoding="utf-8")
+    summary = tmp_path / "summary.md"
+    rc = prune_devcontainer_images.main([
+        "prune",
+        "--owner", "owner",
+        "--package", "claude-md-devcontainer-claude",
+        "--package", "claude-md-devcontainer-codex",
+        "--pinned-sha-from", str(cfg),
+        "--pinned-sha-from", str(cfg),
+        "--keep-recent", "10",
+        "--min-age-days", "90",
+        "--dry-run", "true",
+        "--summary-file", str(summary),
+    ])
+    assert rc == 0
+
+
 def test_validate_json_syntax_verify_matches_workflow_args() -> None:
     """verify subcommand accepts the repeated --file args used by the
     ``Validate ruleset JSON syntax`` steps in apply-rulesets.yml and
@@ -1989,6 +2018,46 @@ def test_devcontainer_pin_refresh_persists_checkout_credentials() -> None:
             "devcontainer-pin-refresh checkout must persist credentials so the refresh "
             "branch push authenticates (regression #1301); remove `persist-credentials: false`."
         )
+
+
+def test_force_with_lease_push_fetches_branch_first() -> None:
+    """Bot-branch ``--force-with-lease`` pushes must fetch the branch first.
+
+    Regression guard for #1412: the auto-retro/regenerate jobs check out
+    ``main`` shallowly, recreate the bot branch from ``main``, then run
+    ``git push --force-with-lease origin "$PR_BRANCH"``. With no
+    ``refs/remotes/origin/$PR_BRANCH`` tracking ref (the shallow checkout
+    never fetched it), the lease cannot be verified and git rejects the
+    overwrite with ``stale info`` whenever the branch already exists. The
+    fix fetches the branch into its tracking ref before the push. Assert
+    every ``--force-with-lease`` push step fetches ``$PR_BRANCH`` earlier in
+    the same step so the repair stays a deterministic gate.
+    """
+    offenders: list[str] = []
+    for path in sorted(_WORKFLOWS_DIR.glob("*.yml")):
+        workflow = yaml.safe_load(path.read_text(encoding="utf-8"))
+        for job_name, job in (workflow.get("jobs") or {}).items():
+            for step in job.get("steps", []):
+                run = str(step.get("run", ""))
+                if 'git push --force-with-lease origin "$PR_BRANCH"' not in run:
+                    continue
+                lines = run.splitlines()
+                push_idx = next(
+                    i
+                    for i, line in enumerate(lines)
+                    if 'git push --force-with-lease origin "$PR_BRANCH"' in line
+                )
+                fetched_before = any(
+                    "git fetch origin" in line and "$PR_BRANCH" in line
+                    for line in lines[:push_idx]
+                )
+                if not fetched_before:
+                    offenders.append(f"{path.name}::{job_name}")
+    assert not offenders, (
+        "force-with-lease push must fetch $PR_BRANCH into its tracking ref first "
+        "or git rejects the overwrite with 'stale info' (#1412); missing fetch in: "
+        + ", ".join(offenders)
+    )
 
 
 def test_analyze_ci_timings_matches_workflow_args(
