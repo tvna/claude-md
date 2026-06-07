@@ -161,6 +161,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("coverage_failure_issue.py", "run"): "test_coverage_failure_issue_run_matches_workflow_env",
     ("devcontainer_pin_pr.py", "open"): "test_devcontainer_pin_pr_open_matches_workflow_args",
     ("devcontainer_pin_pr.py", "refresh"): "test_devcontainer_pin_pr_refresh_matches_workflow_args",
+    ("devcontainer_pin_pr.py", "merge"): "test_devcontainer_pin_pr_merge_matches_workflow_args",
     ("flake_pin.py", "asset-url"): "test_flake_pin_workflow_subcommands_match_ci_usage",
     ("flake_pin.py", "bump"): "test_flake_pin_workflow_subcommands_match_ci_usage",
     ("flake_pin_latest.py", "check"): "test_flake_pin_latest_check_matches_workflow_args",
@@ -1827,7 +1828,7 @@ def test_devcontainer_pin_pr_open_matches_workflow_args(
 ) -> None:
     """open subcommand accepts the args used by the Open pin update PR step.
 
-    The branch/PR decision flow and auto-merge request are exercised by
+    The branch/PR decision flow is exercised by
     tests/test_devcontainer_pin_pr.py; here we pin the workflow argv shape.
     Refs #696, #911.
     """
@@ -1844,7 +1845,6 @@ def test_devcontainer_pin_pr_open_matches_workflow_args(
         ),
     )
     monkeypatch.setattr(devcontainer_pin_pr, "_upsert_pr", lambda **kw: ("created", 42))
-    monkeypatch.setattr(devcontainer_pin_pr, "_enable_auto_merge", lambda **kw: None)
     rc = devcontainer_pin_pr.main([
         "open",
         "--github-sha", "abc123",
@@ -1886,6 +1886,49 @@ def test_devcontainer_pin_pr_refresh_matches_workflow_args(
         "--file", ".devcontainer/codex/devcontainer.json",
         "--file", "docs/runbooks/devcontainers.md",
     ])
+    assert rc == 0
+
+
+def test_devcontainer_pin_automerge_workflow_contract() -> None:
+    """The pin auto-merge keeper triggers on check_suite, is prefix-gated, uses the PAT.
+
+    The repository-level "Allow auto-merge" toggle is intentionally OFF, so the
+    pin PR is completed by this dedicated keeper instead of native auto-merge.
+    Pin the wiring that makes that safe and scoped: a check_suite trigger, an
+    ``if`` guard that restricts the job to the pin branch prefix, the PAT secret
+    (so the merge's push to main still triggers downstream workflows), and the
+    ``merge`` subcommand. Refs #1352.
+    """
+    workflow = yaml.safe_load((_WORKFLOWS_DIR / "devcontainer-pin-automerge.yml").read_text(encoding="utf-8"))
+    # ``on`` may parse to the truthy bool key True under YAML 1.1; tolerate both.
+    triggers = workflow.get("on", workflow.get(True))
+    assert "check_suite" in triggers
+    assert triggers["check_suite"]["types"] == ["completed"]
+
+    job = workflow["jobs"]["merge"]
+    assert job["permissions"] == {"contents": "write", "pull-requests": "write"}
+    # Prefix guard keeps the job from running on every repository check suite.
+    assert "devcontainer/image-pins-" in job["if"]
+    assert "workflow_dispatch" in job["if"]
+
+    merge_step = next(s for s in job["steps"] if "devcontainer_pin_pr.py merge" in str(s.get("run", "")))
+    assert merge_step["env"] == {
+        "GH_TOKEN": "${{ secrets.DEVCONTAINER_PIN_PR_TOKEN }}",
+        "REPO": "${{ github.repository }}",
+    }
+
+
+def test_devcontainer_pin_pr_merge_matches_workflow_args(monkeypatch: pytest.MonkeyPatch) -> None:
+    """merge subcommand accepts the args used by devcontainer-pin-automerge.yml.
+
+    The merge decision flow is exercised by tests/test_devcontainer_pin_pr.py;
+    here we pin the workflow argv shape. Refs #1352.
+    """
+    monkeypatch.setenv("GH_TOKEN", "tok")
+    monkeypatch.setenv("REPO", REPO)
+    # No open pin PR -> the command is a no-op; we only assert the argv parses.
+    monkeypatch.setattr(devcontainer_pin_pr, "_list_open_prs_by_prefix", lambda **kw: [])
+    rc = devcontainer_pin_pr.main(["merge"])
     assert rc == 0
 
 

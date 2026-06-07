@@ -398,34 +398,54 @@ token is suspected leaked rather than rotated on schedule, follow the
 emergency revoke-then-reissue steps in
 [`compromised-action-response.md`](compromised-action-response.md).
 
-The `Update local devcontainer image pins` job requests GitHub
-auto-merge for the generated PR immediately after `gh pr create`
-succeeds. If a retry finds that the image-pin branch already exists with
-an open PR, it requests auto-merge for that existing PR instead of
-opening a duplicate. GitHub still waits for the repository's required
-checks and rulesets before merging; the workflow only enables the
-auto-merge request.
+The `Update local devcontainer image pins` job creates (or reuses) the
+generated PR but does **not** request GitHub native auto-merge. The
+repository-level "Allow auto-merge" toggle is intentionally OFF so that
+agents cannot enable native auto-merge on arbitrary PRs, and native
+auto-merge is repo-wide -- it cannot be scoped to a single PR. Completing
+the pin PR is therefore delegated to the dedicated keeper below.
+
+### Merging the pin PR when green (`Auto-merge devcontainer pin PR`)
+
+Because repo-wide auto-merge is off by design, the
+`Auto-merge devcontainer pin PR` workflow (`devcontainer-pin-automerge.yml`)
+merges the generated pin PR on its behalf -- scoped strictly to the pin
+branch prefix `devcontainer/image-pins-`. It triggers on `check_suite:
+completed` (gated by an `if` on `check_suite.head_branch` so it only runs for
+pin-PR branches) and runs `python3 scripts/devcontainer_pin_pr.py merge`: it
+finds the open pin PR, and once GitHub reports `mergeable_state == clean`
+(all required checks green and the branch up to date) it squash-merges the PR
+via the REST merge API and deletes the branch. A PR that is not yet `clean`,
+or that loses the head-SHA race, is left untouched for the next trigger.
+Branch protection (`main-protection`) still gates the merge; the keeper never
+bypasses required checks or rulesets. The merge uses `DEVCONTAINER_PIN_PR_TOKEN`
+(not `GITHUB_TOKEN`) so the resulting push to `main` still triggers the
+downstream push workflows (publish / refresh / post-merge). To merge a stuck
+pin PR on demand, dispatch this workflow manually. Refs #1352.
 
 ### Keeping the pin PR mergeable (`Refresh devcontainer pin PR`)
 
-Native auto-merge stalls the moment `main` advances past the pin PR.
+The pin PR stalls the moment `main` advances past it.
 `main-protection` sets `strict_required_status_checks_policy: true`, so the
 branch must be up to date before it can merge, while `required_linear_history`,
 the `scripts/gate_update_pr_branch.py` hook, and the `non_fast_forward` rule on
-`codex/*` all forbid rebasing or force-pushing the branch in place. The branch
-therefore becomes `behind` and never merges on its own.
+non-default branches all forbid rebasing or force-pushing the branch in place.
+The branch therefore becomes `behind` and never merges on its own.
 
 The `Refresh devcontainer pin PR` workflow (`devcontainer-pin-refresh.yml`)
 closes that gap. On every push to `main` (and on `workflow_dispatch`) it runs
 `python3 scripts/devcontainer_pin_pr.py refresh`: if an open pin PR is behind
 `main`, it cuts a fresh branch off the latest `main`
-(`codex/devcontainer-image-pins-<published-sha>-r-<main-short-sha>`), re-applies
-the same pins as a single commit, opens a replacement PR with auto-merge
-enabled, then comments on, closes, and deletes the stale PR/branch. The
-replacement is opened before the old PR is closed, so a failure never leaves the
-repository without an open pin PR. It reuses the `devcontainer-image-pins`
-Environment and `DEVCONTAINER_PIN_PR_TOKEN`; no new secret is required. To merge
-a stuck pin PR on demand, dispatch this workflow manually. Refs #1137.
+(`devcontainer/image-pins-<published-sha>-r-<main-short-sha>`), re-applies
+the same pins as a single commit, opens a replacement PR, then comments on,
+closes, and deletes the stale PR/branch. The replacement is opened before the
+old PR is closed, so a failure never leaves the repository without an open pin
+PR. When the open pin PR is already up to date, `refresh` instead attempts a
+direct merge (the same path the auto-merge keeper uses), so a green, up-to-date
+PR still completes even between `check_suite` events. It reuses the
+`devcontainer-image-pins` Environment and `DEVCONTAINER_PIN_PR_TOKEN`; no new
+secret is required. To merge a stuck pin PR on demand, dispatch this workflow
+manually. Refs #1137.
 
 ### Auto-following flake tool pins (`Refresh flake tool pins`)
 
@@ -458,7 +478,9 @@ copies. Refs #1171.
    `Update local devcontainer image pins` job opens or reuses the
    generated image-pin PR.
 5. Confirm the generated branch commit shows `github-actions[bot]` as
-   the author and the generated PR has auto-merge enabled.
+   the author. The PR is completed by the `Auto-merge devcontainer pin PR`
+   keeper once its checks go green (repo-wide native auto-merge stays OFF
+   by design).
 
 The publish workflow intentionally watches only image-build inputs such
 as `.devcontainer/images/**`, `.devcontainer/scripts/install-agent-cli.sh`,

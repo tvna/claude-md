@@ -124,6 +124,7 @@ Source: `python3 scripts/workflow_diagram.py diagram-doc`. Tracking issue: #960.
 | [workflows/codeql-if-branches.md](generated/workflows/codeql-if-branches.md) | `codeql.yml` |
 | [workflows/daily-maintenance-if-branches.md](generated/workflows/daily-maintenance-if-branches.md) | `daily-maintenance.yml` |
 | [workflows/dependabot-automerge-if-branches.md](generated/workflows/dependabot-automerge-if-branches.md) | `dependabot-automerge.yml` |
+| [workflows/devcontainer-pin-automerge-if-branches.md](generated/workflows/devcontainer-pin-automerge-if-branches.md) | `devcontainer-pin-automerge.yml` |
 | [workflows/devcontainer-pin-refresh-if-branches.md](generated/workflows/devcontainer-pin-refresh-if-branches.md) | `devcontainer-pin-refresh.yml` |
 | [workflows/generate-agents-if-branches.md](generated/workflows/generate-agents-if-branches.md) | `generate-agents.yml` |
 | [workflows/generate-docs-if-branches.md](generated/workflows/generate-docs-if-branches.md) | `generate-docs.yml` |

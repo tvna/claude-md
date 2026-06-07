@@ -1,0 +1,57 @@
+name: Auto-merge devcontainer pin PR
+
+# The repository-level "Allow auto-merge" toggle is intentionally OFF so agents
+# cannot enable GitHub native auto-merge on arbitrary PRs. Native auto-merge is
+# repo-wide and cannot be scoped to a single PR, so this keeper provides the same
+# outcome strictly for the generated pin PR (branch prefix
+# devcontainer/image-pins-): once it reaches mergeable_state=clean it is
+# squash-merged via the REST merge API. Branch protection (main-protection) still
+# gates the merge -- a non-clean PR is left for the next trigger.
+#
+# Triggered on check_suite completion so the merge fires promptly when the pin
+# PR's required checks go green. The job is gated to pin-PR branches to avoid
+# running on every repository check suite. The merge uses the PAT
+# DEVCONTAINER_PIN_PR_TOKEN (not GITHUB_TOKEN) so the resulting push to main
+# still triggers the downstream push workflows (publish / refresh / post-merge).
+# Refs #696, #1137, #1352.
+
+on:
+  check_suite:
+    types: [completed]
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: devcontainer-pin-automerge
+  cancel-in-progress: false
+
+jobs:
+  merge:
+    name: Merge open devcontainer pin PR when green
+    # check_suite.head_branch is the branch the suite ran on; restrict to the pin
+    # branch prefix so unrelated suites do not spin up this job. workflow_dispatch
+    # carries no check_suite payload, so allow it through unconditionally.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      startsWith(github.event.check_suite.head_branch, 'devcontainer/image-pins-')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment:
+      name: devcontainer-image-pins
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout repository
+        # Persist the default token; the merge step authenticates with the PAT in
+        # GH_TOKEN, but checkout needs working credentials to fetch the scripts.
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Merge pin PR if mergeable
+        env:
+          GH_TOKEN: ${{ secrets.DEVCONTAINER_PIN_PR_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          python3 scripts/devcontainer_pin_pr.py merge
