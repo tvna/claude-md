@@ -8,6 +8,7 @@ api.github.com  # GitHub REST/GraphQL API used by gh and GitHub MCP tools at run
 api.mcp.github.com  # GitHub remote MCP server endpoint used by the GitHub MCP tools.
 objects.githubusercontent.com  # GitHub-hosted object/LFS blobs fetched by gh and installers.
 raw.githubusercontent.com  # Raw file fetch for GitHub-hosted scripts and configs.
+docs.github.com  # GitHub product documentation fetched as a primary source during agent lookups; public read-only docs, no secrets sent.
 release-assets.githubusercontent.com  # GitHub release assets (apm Nix derivation, pinned binaries).
 pypi.org  # Python package index metadata for uv dependency resolution.
 files.pythonhosted.org  # Python wheel/sdist downloads for uv sync.
