@@ -17,6 +17,7 @@ Refs #1230.
 from __future__ import annotations
 
 import re
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -25,6 +26,7 @@ import pytest
 pytestmark = pytest.mark.shard_ci_ops
 REPO_ROOT = Path(__file__).resolve().parents[1]
 HELPER = REPO_ROOT / "scripts" / "_session_path.sh"
+BASH = str(Path("/bin/bash") if Path("/bin/bash").exists() else shutil.which("bash") or "bash")
 
 
 def _run(dir_arg: str, *, path: str, env_file: str | None) -> subprocess.CompletedProcess[str]:
@@ -39,7 +41,7 @@ def _run(dir_arg: str, *, path: str, env_file: str | None) -> subprocess.Complet
         'printf "PATH=%s\\n" "$PATH"\n'
     )
     return subprocess.run(
-        ["bash", "-c", script],
+        [BASH, "-c", script],
         env=env,
         check=False,
         capture_output=True,

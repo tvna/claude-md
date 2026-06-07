@@ -13,12 +13,12 @@ runbook docs. ``scan_markdown_links.py`` did not catch them because they are
 not Markdown links, and ``scan_docs_inventory.py`` only validates the docs
 index -- so the drift class was invisible to every deterministic gate.
 
-This gate closes that gap. It scans every tracked Markdown file (outside
-``docs/archive/``, which is a historical record of past state) for the literal
-path form ``.github/workflows/<name>.yml`` and fails when the referenced file
-does not exist under ``.github/workflows/``. The path form is unambiguous: a
-referenced workflow path either resolves to a real file or it does not, so the
-gate carries no false-positive risk and needs no per-file registry.
+This gate closes that gap. It scans every tracked or addable Markdown file
+(outside ``docs/archive/``, which is a historical record of past state) for the
+literal path form ``.github/workflows/<name>.yml`` and fails when the referenced
+file does not exist under ``.github/workflows/``. The path form is unambiguous:
+a referenced workflow path either resolves to a real file or it does not, so
+the gate carries no false-positive risk and needs no per-file registry.
 
 Scope is deliberately the *path* form only (``.github/workflows/<name>.yml``),
 matching the #1325 acceptance criterion. A bare filename such as
@@ -44,8 +44,9 @@ Fails loud per CLAUDE.md section 4. Tested by
 
 Contract:
     Inputs: the ``verify`` or ``list`` subcommand. The scanned surface is every
-        ``*.md`` file tracked under the repository root except those under
-        ``docs/archive/``; the existence oracle is the set of files under
+        tracked or addable ``*.md`` file under the repository root except those
+        under ``docs/archive/``; ignored dependency trees are excluded by Git's
+        ignore rules. The existence oracle is the set of files under
         ``.github/workflows/``. No stdin, no env input, no network.
     Outputs: ``verify`` prints ``::error file=...,line=...::`` annotations on
         stderr per stale reference plus a one-line summary, exit 0 when clean
@@ -59,6 +60,7 @@ from __future__ import annotations
 
 import argparse
 import re
+import subprocess
 import sys
 from collections.abc import Iterator
 from dataclasses import dataclass
@@ -100,14 +102,36 @@ def _is_excluded(rel_posix: str) -> bool:
 
 
 def iter_markdown(repo_root: Path) -> Iterator[Path]:
-    """Yield every tracked ``*.md`` file outside the excluded trees.
+    """Yield every non-ignored ``*.md`` file outside the excluded trees.
 
     ``.git`` is skipped structurally (it holds no tracked Markdown), and the
     excluded-tree filter is applied on the repository-relative POSIX path so the
     same rule reads identically here and in the docstring.
     """
-    for path in sorted(repo_root.rglob("*.md")):
-        if ".git" in path.parts:
+    try:
+        result = subprocess.run(  # noqa: S603 -- fixed argv, shell=False
+            [  # noqa: S607 -- git is resolved from PATH like the repo's git helpers
+                "git",
+                "ls-files",
+                "--cached",
+                "--others",
+                "--exclude-standard",
+                "--",
+                "*.md",
+            ],
+            cwd=repo_root,
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+        )
+    except (OSError, subprocess.CalledProcessError):
+        candidates = sorted(repo_root.rglob("*.md"))
+    else:
+        candidates = [repo_root / line for line in result.stdout.splitlines() if line]
+
+    for path in sorted(candidates):
+        if not path.is_file() or ".git" in path.parts:
             continue
         rel = path.relative_to(repo_root).as_posix()
         if _is_excluded(rel):

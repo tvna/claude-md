@@ -154,6 +154,7 @@ naming convention and the per-30-entries year-folder cutover.
 | [label-migration-2026-05-26.md](archive/label-migration-2026-05-26.md) | Append-only operation log for the 2026-05-26 label backfill and prune preparation. |
 | [renovate-evaluation.md](archive/renovate-evaluation.md) | DECLINED (#1014) evaluation of switching Dependabot to Mend Renovate, with the one-shot cutover migration sketch and phased sub-issue chain (#280-#284, superseded). Retained as the record of the evaluation; references the pre-consolidation workflow names in its migration sketch as historical state. |
 | [renovate-poc-279.md](archive/renovate-poc-279.md) | Renovate migration PoC primary-source evidence for issue #279 (Q2/Q3/Q4 answered from Renovate docs; Q1 pending human Mend Renovate App install). Two documentary candidate ruleset shapes captured against the post-PR-#454 SoT. |
+| [retrospective-pr-1329.md](archive/retrospective-pr-1329.md) | Retrospective for PR #1329 (workflow consolidation by trigger class, repair audit). |
 | [retrospective-pr-229.md](archive/retrospective-pr-229.md) | Retrospective for PR #229 (layer responsibility boundary repair loops). |
 | [retrospective-pr-235.md](archive/retrospective-pr-235.md) | Retrospective for PR #235 (security control inventory, repair-free). |
 | [retrospective-pr-237.md](archive/retrospective-pr-237.md) | Retrospective for PR #237 (auto-retro workflow, repair-free). |

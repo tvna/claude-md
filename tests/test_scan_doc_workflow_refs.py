@@ -10,6 +10,8 @@ self-check.
 
 from __future__ import annotations
 
+import subprocess
+
 import pytest
 import scan_doc_workflow_refs as gate
 
@@ -86,6 +88,38 @@ def test_iter_markdown_skips_archive_and_finds_docs(tmp_path) -> None:
     rels = {p.relative_to(repo).as_posix() for p in gate.iter_markdown(repo)}
     assert "docs/runbooks/x.md" in rels
     assert "docs/archive/old.md" not in rels
+
+
+def test_iter_markdown_skips_ignored_dependency_markdown(tmp_path) -> None:
+    repo = _make_repo(tmp_path)
+    (repo / ".gitignore").write_text("apm_modules/\n")
+    (repo / "docs" / "runbooks" / "x.md").write_text("x\n")
+    ignored = (
+        repo
+        / "apm_modules"
+        / "anthropics"
+        / "claude-plugins-official"
+        / "plugins"
+        / "plugin-dev"
+        / "skills"
+        / "command-development"
+        / "references"
+    )
+    ignored.mkdir(parents=True)
+    (ignored / "testing-strategies.md").write_text(
+        "example: `.github/workflows/test-commands.yml`\n"
+    )
+    subprocess.run(["git", "init", "--quiet"], cwd=repo, check=True)
+    subprocess.run(
+        ["git", "add", ".gitignore", ".github", "docs"],
+        cwd=repo,
+        check=True,
+    )
+
+    rels = {p.relative_to(repo).as_posix() for p in gate.iter_markdown(repo)}
+
+    assert "docs/runbooks/x.md" in rels
+    assert not any(rel.startswith("apm_modules/") for rel in rels)
 
 
 def test_real_repo_is_clean() -> None:
