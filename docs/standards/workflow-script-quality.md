@@ -377,7 +377,7 @@ module, never replace its parametrized cases.
 **Mutation testing is deferred (#199).** Tools such as `mutmut` and
 `cosmic-ray` were evaluated alongside this pilot and not adopted now:
 
-- Coverage is already at `fail_under = 92.71` (#188) and the
+- Coverage is already at `fail_under = 95.00` (#188) and the
   workflow-called scripts are small, single-responsibility modules
   with explicit fail-loud / fail-open contracts (M9). Mutation score
   would mostly re-prove the existing parametrized cases.
@@ -431,11 +431,12 @@ file ships with zero coverage while all gates appear green.
 **Gate 1: aggregate post-merge threshold**
 
 The repository-wide aggregate threshold lands with #188 and is
-enforced by `.github/workflows/post-merge.yml` via
-`pytest --cov-fail-under=<value>`. It is the final backstop:
+enforced by `.github/workflows/post-merge.yml`, which runs
+`pytest --cov` with no `--cov-fail-under` flag so pytest-cov reads the
+threshold from `[tool.coverage.report].fail_under` in `pyproject.toml`
+(the single source of truth, #1354). It is the final backstop:
 it fires after merge and opens a tracking issue via
 `scripts/coverage_failure_issue.py` when coverage regresses.
-Configuration: `[tool.coverage.report].fail_under` in `pyproject.toml`.
 
 **Gate 2: per-file PreToolUse hook (landed #952)**
 
@@ -643,8 +644,9 @@ script-specific gate (#188) is never weakened by the expansion (#198).
 ### G1. Current footprint
 
 The coverage gate of record is `[tool.coverage.report].fail_under` in
-`pyproject.toml`, enforced by `.github/workflows/post-merge.yml` via
-`pytest --cov-fail-under=<value>`. The measured tree is
+`pyproject.toml`, enforced by `.github/workflows/post-merge.yml`, which
+runs `pytest --cov` and lets pytest-cov read that config value rather
+than passing a `--cov-fail-under` override (#1354). The measured tree is
 `[tool.coverage.run].source = ["scripts"]` because every Python
 runtime module in this repository currently lives under `scripts/`
 (workflow-called entry points and underscore-prefixed shared

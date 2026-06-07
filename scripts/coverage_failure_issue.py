@@ -16,7 +16,7 @@ PARENT_ISSUE = 749
 ISSUE_MARKER = "<!-- coverage-failure-issue -->"
 ISSUE_TITLE = "ci(coverage): post-merge coverage threshold failed"
 ISSUE_LABELS = ("type:fix", "layer:p3-harness")
-COVERAGE_GATE = "pytest --cov-fail-under=92.71"
+COVERAGE_GATE = "pytest --cov (threshold: [tool.coverage.report].fail_under in pyproject.toml)"
 
 Runner = Callable[..., subprocess.CompletedProcess[str]]
 
