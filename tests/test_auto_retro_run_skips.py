@@ -128,7 +128,8 @@ class TestSkipComment:
     def test_skip_comment_posted_for_no_signal(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """No repair signals -> skip comment on source PR."""
+        """No repair signals -> skip comment on source PR (opt-in #1386)."""
+        monkeypatch.setenv("AUTO_RETRO_PR_COMMENTS", "1")
         seen = orchestrator_recorder(monkeypatch, review_comments=[])
         assert ar.run(merged_event(number=42), "o/r") == 0
         assert any(self._is_skip_comment_post(*t) for t in seen)
@@ -136,7 +137,8 @@ class TestSkipComment:
     def test_skip_comment_posted_for_prior_skip(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Prior FP rate skip also posts a skip comment on the source PR."""
+        """Prior FP rate skip also posts a skip comment (opt-in #1386)."""
+        monkeypatch.setenv("AUTO_RETRO_PR_COMMENTS", "1")
         monkeypatch.setattr(
             ar,
             "should_skip_by_prior",
@@ -149,7 +151,10 @@ class TestSkipComment:
     def test_skip_comment_idempotent_patches_existing(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Rerun updates an existing skip comment via PATCH, not a new POST."""
+        """Rerun updates an existing skip comment via PATCH, not a new POST.
+
+        PR-thread comments are opt-in since #1386, so the flag is set."""
+        monkeypatch.setenv("AUTO_RETRO_PR_COMMENTS", "1")
         seen = orchestrator_recorder(
             monkeypatch,
             review_comments=[],
@@ -173,7 +178,10 @@ class TestSkipComment:
     def test_skip_comment_fail_soft(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Network error posting skip comment must not change the exit code."""
+        """Network error posting skip comment must not change the exit code.
+
+        PR-thread comments are opt-in since #1386, so the flag is set."""
+        monkeypatch.setenv("AUTO_RETRO_PR_COMMENTS", "1")
         orchestrator_recorder(
             monkeypatch, review_comments=[], back_link_post_error=True
         )
@@ -209,5 +217,29 @@ class TestSkipComment:
                 }
             ],
         )
+        assert ar.run(merged_event(number=42), "o/r") == 0
+        assert not any(self._is_skip_comment_post(*t) for t in seen)
+
+    def test_skip_comment_off_by_default_no_signal(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Default (no AUTO_RETRO_PR_COMMENTS): an evaluation skip posts no
+        comment -- the skip is recorded only in the step summary (#1386)."""
+        monkeypatch.delenv("AUTO_RETRO_PR_COMMENTS", raising=False)
+        seen = orchestrator_recorder(monkeypatch, review_comments=[])
+        assert ar.run(merged_event(number=42), "o/r") == 0
+        assert not any(self._is_skip_comment_post(*t) for t in seen)
+
+    def test_skip_comment_off_by_default_prior_skip(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Default: a prior-FP skip also posts no comment (#1386)."""
+        monkeypatch.delenv("AUTO_RETRO_PR_COMMENTS", raising=False)
+        monkeypatch.setattr(
+            ar,
+            "should_skip_by_prior",
+            lambda *_: (True, "prior FP rate 0.90 (n=50)"),
+        )
+        seen = orchestrator_recorder(monkeypatch)
         assert ar.run(merged_event(number=42), "o/r") == 0
         assert not any(self._is_skip_comment_post(*t) for t in seen)

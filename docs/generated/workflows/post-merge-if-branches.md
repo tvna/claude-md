@@ -16,6 +16,7 @@ flowchart TD
     S_J_coverage_2(("Fail coverage job when coverage gate failed"))
     J_coverage_failure_issue["coverage-failure-issue"]
     J_decision_tree["decision-tree"]
+    J_triage_report["triage-report"]
 
     T_pull_request_target -->|"github.event_name == 'pull_request_target' && github.event.pull_request~"| J_open_retro
     T_push -->|"github.event_name == 'push' || (github.event_name == 'workflow_dispatch~"| J_coverage
@@ -26,4 +27,6 @@ flowchart TD
     J_coverage -->|"always() && needs.coverage.outputs.coverage_gate_result == 'failure'"| J_coverage_failure_issue
     T_push -->|"github.event_name == 'push' || (github.event_name == 'workflow_dispatch~"| J_decision_tree
     T_workflow_dispatch -->|"github.event_name == 'push' || (github.event_name == 'workflow_dispatch~"| J_decision_tree
+    T_push -->|"github.event_name == 'push' || (github.event_name == 'workflow_dispatch~"| J_triage_report
+    T_workflow_dispatch -->|"github.event_name == 'push' || (github.event_name == 'workflow_dispatch~"| J_triage_report
 ```
