@@ -252,7 +252,7 @@ DEVCONTAINER_APPLY_EGRESS_ALLOWLIST=0
 
 Then reopen the Codex DevContainer and retry the same `getent` and
 `curl -I` commands. If disabling the allowlist changes the result, the
-next fix belongs in `.devcontainer/network/codex.allowlist` or the
+next fix belongs in `.devcontainer/network/shared.allowlist` or the
 allowlist apply script. If the checks pass with and without the
 allowlist, keep the issue scoped to Codex CLI transport behavior or the
 upstream service path rather than changing repository network policy.
@@ -746,16 +746,18 @@ The target network posture is denied by default with explicit outbound
 destinations. Each agent entrypoint runs:
 
 ```sh
-.devcontainer/scripts/apply-egress-allowlist.sh .devcontainer/network/<agent>.allowlist
+.devcontainer/scripts/apply-egress-allowlist.sh .devcontainer/network/shared.allowlist
 ```
 
-The agent allowlist may include `.devcontainer/network/shared.allowlist`
-with `@include shared.allowlist`, then append agent-specific endpoints.
-Claude and Codex can therefore carry different service requirements.
-For Codex, keep both `api.openai.com` and `auth.openai.com` in
-`.devcontainer/network/codex.allowlist`: the former covers API calls,
-and the latter covers ChatGPT-mediated OAuth token exchange during
-`codex login`.
+Every container now applies the single
+`.devcontainer/network/shared.allowlist`; the former per-agent
+`claude.allowlist` / `codex.allowlist` files were consolidated into it
+(#1420), so Claude and Codex share one deny-by-default list. The `@include`
+directive still works (the CI egress self-test builds an
+`egress-selftest.allowlist` with `@include shared.allowlist`), but the agent
+entrypoints no longer need it. For Codex, `shared.allowlist` keeps both
+`api.openai.com` and `auth.openai.com`: the former covers API calls, and the
+latter covers ChatGPT-mediated OAuth token exchange during `codex login`.
 
 The enforcement script resolves hostnames at container start and allows
 TCP ports `22`, `80`, and `443` to those IPs, plus DNS to the container
@@ -785,7 +787,7 @@ The dispatcher reads `EGRESS_MODE` (default `block`):
 
 ```sh
 EGRESS_MODE=audit \
-  .devcontainer/scripts/apply-egress-allowlist.sh .devcontainer/network/<agent>.allowlist
+  .devcontainer/scripts/apply-egress-allowlist.sh .devcontainer/network/shared.allowlist
 # run the workload, then inspect the kernel log for the audited destinations
 dmesg | grep EGRESS-AUDIT
 ```
@@ -839,7 +841,7 @@ config can be unit-tested without privileges:
 ```sh
 # Pure, unprivileged config generation (no root, writes nothing):
 .devcontainer/scripts/_egress-dnsproxy.sh generate-config \
-  .devcontainer/network/<agent>.allowlist --upstream 1.1.1.1
+  .devcontainer/network/shared.allowlist --upstream 1.1.1.1
 ```
 
 The config emits, per allowlisted host, one `server=/<host>/<upstream>`
@@ -860,7 +862,7 @@ NET_ADMIN devcontainer:
 
 ```sh
 EGRESS_DNS_PROXY=1 .devcontainer/scripts/_egress-dnsproxy.sh start \
-  .devcontainer/network/claude.allowlist
+  .devcontainer/network/shared.allowlist
 ipset list allowed-egress            # empty until first resolution
 getent hosts api.github.com          # resolves via the local dnsmasq (127.0.0.1)
 ipset list allowed-egress            # now contains api.github.com IPs
@@ -868,7 +870,7 @@ cat /etc/resolv.conf                  # nameserver 127.0.0.1
 cat /etc/resolv.conf.egress-backup    # original upstream preserved
 # re-run start to prove the backup is not clobbered:
 EGRESS_DNS_PROXY=1 .devcontainer/scripts/_egress-dnsproxy.sh start \
-  .devcontainer/network/claude.allowlist
+  .devcontainer/network/shared.allowlist
 cat /etc/resolv.conf.egress-backup    # STILL the original upstream
 EGRESS_DNS_PROXY=1 .devcontainer/scripts/_egress-dnsproxy.sh stop
 cat /etc/resolv.conf                   # restored to the original
