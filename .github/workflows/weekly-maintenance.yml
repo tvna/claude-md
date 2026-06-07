@@ -1,5 +1,20 @@
 name: Weekly maintenance
 
+# Consolidated weekly-cadence maintenance (issue #1319). In addition to the
+# original weekly jobs, this file now hosts two formerly-standalone weekly
+# workflows, merged here because they share the weekly trigger class:
+#   - flake-pin-refresh.yml         -> job: flake-pin-refresh
+#   - auto-retro-triage-report.yml  -> job: auto-retro-triage-report
+#
+# Per #1319 all weekly schedules are aligned to a single slot. The former crons
+# (flake-pin-refresh: Mon 06:00 UTC; auto-retro-triage-report: Mon 07:13 UTC)
+# now run at Sun 20:00 UTC alongside the rest. flake-pin-refresh previously ran
+# "after the dependabot window"; that ordering relationship is intentionally
+# dropped in favour of the unified weekly slot (its cooldown gate, not cron
+# ordering, is what guards premature adoption). Each merged job keeps its own
+# job-level permissions, environment, concurrency, and matrix so effective
+# security permissions are unchanged.
+
 on:
   schedule:
     # 05:00 JST every Monday. GitHub Actions cron is evaluated in UTC.
@@ -20,6 +35,8 @@ on:
           - measure-timings
           - ruleset-drift
           - security-control-drift
+          - flake-pin-refresh
+          - auto-retro-triage-report
       branch_cleanup_dry_run:
         description: 'Branch cleanup: plan only. The workflow currently has no delete code path.'
         type: boolean
@@ -563,3 +580,150 @@ jobs:
             --run-date "${{ steps.aggregate.outputs.report_date }}" \
             --families "${{ steps.aggregate.outputs.drift_families }}" \
             --dry-run "${DRY_RUN}"
+
+  # Merged from flake-pin-refresh.yml (#1319). flake.nix is the single source of
+  # truth for the version + per-system SHA256 of the GitHub-Releases-sourced
+  # tools (waza, apm, rtk). Dependabot has no Nix ecosystem, so these pins do
+  # not auto-follow upstream. This job checks each tool's latest release, holds
+  # anything still inside the [tool.uv].exclude-newer cooldown, recomputes the
+  # per-system SHA256 with nix, bumps flake.nix, validates it, and opens a bump
+  # PR. Refs #1171.
+  flake-pin-refresh:
+    if: github.event_name == 'schedule' || inputs.task == 'all' || inputs.task == 'flake-pin-refresh'
+    name: Auto-follow ${{ matrix.tool }} flake pin
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment:
+      name: devcontainer-image-pins
+    permissions:
+      contents: write
+      pull-requests: write
+    concurrency:
+      group: flake-pin-refresh-${{ matrix.tool }}
+      cancel-in-progress: false
+    strategy:
+      fail-fast: false
+      matrix:
+        tool: [waza, apm, rtk]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Install nix
+        uses: DeterminateSystems/nix-installer-action@ef8a148080ab6020fd15196c2084a2eea5ff2d25 # v22
+
+      - name: Decide target version (cooldown-gated)
+        id: decide
+        run: |
+          set -euo pipefail
+          target="$(python3 scripts/flake_pin_latest.py check --tool '${{ matrix.tool }}')"
+          if [ -z "$target" ]; then
+            echo "No adoptable update for ${{ matrix.tool }} (none newer, or within cooldown)."
+          else
+            echo "Adoptable target for ${{ matrix.tool }}: $target"
+          fi
+          echo "target=$target" >> "$GITHUB_OUTPUT"
+
+      - name: Recompute per-system hashes and bump flake.nix
+        if: steps.decide.outputs.target != ''
+        run: |
+          set -euo pipefail
+          tool='${{ matrix.tool }}'
+          target='${{ steps.decide.outputs.target }}'
+          hash_args=()
+          for sys in x86_64-linux aarch64-linux; do
+            url="$(python3 scripts/flake_pin.py asset-url --tool "$tool" --system "$sys" --version "$target")"
+            echo "Prefetching $sys asset: $url"
+            sri="$(nix store prefetch-file --json "$url" | python3 -c 'import json,sys; print(json.load(sys.stdin)["hash"])')"
+            hash_args+=(--hash "$sys=$sri")
+          done
+          python3 scripts/flake_pin.py bump --tool "$tool" --version "$target" "${hash_args[@]}"
+
+      - name: Validate the bumped flake
+        if: steps.decide.outputs.target != ''
+        run: nix flake check --show-trace
+
+      - name: Open bump PR
+        if: steps.decide.outputs.target != ''
+        env:
+          GH_TOKEN: ${{ secrets.DEVCONTAINER_PIN_PR_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          tool='${{ matrix.tool }}'
+          target='${{ steps.decide.outputs.target }}'
+          python3 scripts/devcontainer_pin_pr.py open \
+            --github-sha "${tool}-${target}" \
+            --branch-prefix "flake-pin-" \
+            --base main \
+            --title "chore(flake): bump ${tool} pin to ${target}" \
+            --commit-subject "chore(flake): bump ${tool} pin to ${target}" \
+            --commit-trailer "Refs #1171" \
+            --template .github/pr-body-templates/flake-pin.md \
+            --file flake.nix
+
+  # Merged from auto-retro-triage-report.yml (#1319). Regenerates
+  # docs/generated/scripts/auto-retro-triage-report.md from the live retro-issue
+  # label state and opens a PR when the snapshot drifts. Unlike generate-docs.yml
+  # this report is non-deterministic (it depends on GitHub state, not just
+  # source), so it cannot live in that PR drift gate; it is refreshed on this
+  # schedule instead. The git history of the committed snapshot is the time
+  # series. Refs #1042.
+  auto-retro-triage-report:
+    if: github.event_name == 'schedule' || inputs.task == 'all' || inputs.task == 'auto-retro-triage-report'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      issues: read
+      pull-requests: write
+    concurrency:
+      group: auto-retro-triage-report
+      cancel-in-progress: false
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Regenerate triage report
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: python3 scripts/auto_retro.py triage-report
+
+      - name: Open pull request if the snapshot drifted
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_BRANCH: chore/refresh-auto-retro-triage-report
+          PR_TITLE: "chore(auto-retro): refresh triage report (#1042)"
+        run: |
+          REPORT_PATH=docs/generated/scripts/auto-retro-triage-report.md
+          # --porcelain reports both modified and new (untracked) files, so
+          # the check fires on the first run too, when the snapshot does not
+          # yet exist in the tree and `git diff` alone would miss it.
+          if [ -z "$(git status --porcelain -- "$REPORT_PATH")" ]; then
+            echo "Triage report is already up to date."
+            exit 0
+          fi
+
+          cat > /tmp/pr-body.md <<'EOF'
+          Refreshes the auto-retro triage report snapshot from the current
+          retro-issue label state.
+
+          This report is non-deterministic (it depends on live GitHub state),
+          so it is refreshed on a schedule and opened as a pull request rather
+          than enforced by the generate-docs.yml drift gate. Refs #1042.
+          EOF
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$PR_BRANCH"
+          git add "$REPORT_PATH"
+          git commit -m "$PR_TITLE"
+          git push --force-with-lease origin "$PR_BRANCH"
+
+          python3 scripts/pr_upsert.py upsert \
+            --head "$PR_BRANCH" \
+            --base "$GITHUB_REF_NAME" \
+            --title "$PR_TITLE" \
+            --body-file /tmp/pr-body.md

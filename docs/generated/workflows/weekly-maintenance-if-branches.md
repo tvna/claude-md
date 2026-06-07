@@ -26,6 +26,11 @@ flowchart TD
     S_J_security_control_drift_5(("Aggregate drift report"))
     S_J_security_control_drift_6(("Post or update rolling comment on"))
     S_J_security_control_drift_7(("File per-family drift issues"))
+    J_flake_pin_refresh["flake-pin-refresh"]
+    S_J_flake_pin_refresh_0(("Recompute per-system hashes and bump flake.nix"))
+    S_J_flake_pin_refresh_1(("Validate the bumped flake"))
+    S_J_flake_pin_refresh_2(("Open bump PR"))
+    J_auto_retro_triage_report["auto-retro-triage-report"]
 
     T_schedule -->|"github.event_name == 'schedule' || inputs.task == 'all' || inputs.task ~"| J_branch_cleanup
     J_branch_cleanup -->|"github.event_name == 'workflow_dispatch' && github.ref != 'refs/heads/m~"| S_J_branch_cleanup_0
@@ -45,4 +50,9 @@ flowchart TD
     J_security_control_drift -->|"always()"| S_J_security_control_drift_5
     J_security_control_drift -->|"always()"| S_J_security_control_drift_6
     J_security_control_drift -->|"always() && steps.aggregate.outputs.drift_families != ''"| S_J_security_control_drift_7
+    T_schedule -->|"github.event_name == 'schedule' || inputs.task == 'all' || inputs.task ~"| J_flake_pin_refresh
+    J_flake_pin_refresh -->|"steps.decide.outputs.target != ''"| S_J_flake_pin_refresh_0
+    J_flake_pin_refresh -->|"steps.decide.outputs.target != ''"| S_J_flake_pin_refresh_1
+    J_flake_pin_refresh -->|"steps.decide.outputs.target != ''"| S_J_flake_pin_refresh_2
+    T_schedule -->|"github.event_name == 'schedule' || inputs.task == 'all' || inputs.task ~"| J_auto_retro_triage_report
 ```

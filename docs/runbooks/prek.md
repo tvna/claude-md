@@ -1,6 +1,6 @@
 # Pre-commit hooks (prek) — runbook
 
-Operator-facing companion to [`.pre-commit-config.yaml`](../../.pre-commit-config.yaml) and the `Run prek` step in [`.github/workflows/portable-pr-policy.yml`](../../.github/workflows/portable-pr-policy.yml). Tracking issue: [#408](https://github.com/tvna/claude-md/issues/408).
+Operator-facing companion to [`.pre-commit-config.yaml`](../../.pre-commit-config.yaml) and the `Run prek` step in the `portable-pr-policy` job of [`.github/workflows/verify-pr.yml`](../../.github/workflows/verify-pr.yml). Tracking issue: [#408](https://github.com/tvna/claude-md/issues/408).
 
 ## Overview
 

@@ -1,26 +1,44 @@
-name: Portable PR policy
+name: Verify PR
+
+# Consolidated PR-verification gates (issue #1319). This file groups the
+# pull_request validation workflows that previously lived as separate files:
+#   - portable-pr-policy.yml      -> job: portable-pr-policy
+#   - verify-design-philosophy.yml-> job: verify-design-philosophy
+#   - verify-dependabot-labels.yml-> job: verify-dependabot-labels
+#   - verify-ruleset-sync.yml     -> job: verify-ruleset-sync
+#
+# Each job keeps its original `name:` so the required_status_check contexts in
+# .github/rulesets/main.json keep resolving (scripts/verify_required_check_contexts.py
+# matches on job `name:`, not file name). Job-level permissions, concurrency,
+# environment, and env are preserved per job to keep effective security
+# permissions identical to the pre-consolidation state.
+#
+# Trigger note (intentional widening, documented per #1319): the merged
+# on.pull_request.types is the UNION of the source triggers
+# ([opened, edited, synchronize, reopened, ready_for_review]). The two jobs that
+# previously used the default types (verify-design-philosophy, verify-dependabot-labels)
+# now also run on `edited` and `ready_for_review`. This is a superset of their
+# old triggers; it never narrows their coverage and keeps the required gates
+# resolvable on title/body edits.
 
 on:
   pull_request:
     types: [opened, edited, synchronize, reopened, ready_for_review]
 
-permissions:
-  contents: read
-  issues: read
-  pull-requests: read
-
-concurrency:
-  group: portable-pr-policy-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
-
-env:
-  APM_CLI_VERSION: "0.12.1"
+permissions: {}
 
 jobs:
-  gate:
+  portable-pr-policy:
     name: "Portable PR policy / gate"
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+    concurrency:
+      group: portable-pr-policy-${{ github.event.pull_request.number || github.ref }}
+      cancel-in-progress: true
     env:
       GH_TOKEN: ${{ github.token }}
       REPO: ${{ github.repository }}
@@ -32,6 +50,7 @@ jobs:
       BODY_POLICY_CUTOFF: "2026-05-26T00:00:00Z"
       BODY_POLICY_SHAPE_CUTOFF: "2026-05-26T00:00:00Z"
       BASE_REF: origin/${{ github.event.pull_request.base.ref }}
+      APM_CLI_VERSION: "0.12.1"
     steps:
       - name: Checkout repository
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
@@ -136,3 +155,86 @@ jobs:
 
       - name: Run prek (j178/prek) against all files
         run: uv tool run prek run --all-files --show-diff-on-failure
+
+  verify-design-philosophy:
+    name: "Verify design philosophy doc / verify"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    concurrency:
+      group: verify-design-philosophy-${{ github.ref }}
+      cancel-in-progress: true
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+
+      - name: Scan design-philosophy doc for drift against APM master
+        run: |
+          python3 scripts/scan_design_philosophy_drift.py verify \
+            --master .apm/instructions/master.instructions.md \
+            --doc docs/prd/agent-rules-design-philosophy.md
+
+  verify-dependabot-labels:
+    name: "Verify dependabot labels / verify"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    concurrency:
+      group: verify-dependabot-labels-${{ github.ref }}
+      cancel-in-progress: true
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+
+      - name: Verify dependabot.yml labels resolve in labels.json
+        run: |
+          python3 scripts/dependabot_labels.py verify \
+            --dependabot .github/dependabot.yml \
+            --labels .github/labels.json
+
+  verify-ruleset-sync:
+    name: "Verify ruleset sync / gate"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: ruleset-verify
+    permissions:
+      contents: read
+    concurrency:
+      group: verify-ruleset-sync-${{ github.ref }}
+      cancel-in-progress: true
+    env:
+      GH_TOKEN_API: ${{ secrets.RULESETS_PAT }}
+      REPO: ${{ github.repository }}
+      BASE_REF: ${{ github.event.pull_request.base.ref }}
+    steps:
+      - name: Guard RULESETS_PAT
+        run: |
+          if [ -z "${GH_TOKEN_API}" ]; then
+            echo "::error::RULESETS_PAT secret is not set. Configure the 'ruleset-verify' environment with the RULESETS_PAT secret. See docs/runbooks/rulesets.md \"Required secret\" and \"PR-time required-checks sync gate\"."
+            exit 1
+          fi
+
+      - name: Checkout repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+
+      - name: Verify required-check contexts match workflow job names
+        run: |
+          python3 scripts/verify_required_check_contexts.py verify \
+            --sot-path .github/rulesets/main.json \
+            --workflows-dir .github/workflows
+
+      - name: Verify ruleset sync
+        run: |
+          python3 scripts/verify_ruleset_sync.py verify \
+            --repo "${REPO}" \
+            --base-ref "${BASE_REF}" \
+            --sot-path .github/rulesets/main.json \
+            --ruleset-name main-protection

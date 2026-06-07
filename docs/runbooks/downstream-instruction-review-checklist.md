@@ -111,4 +111,4 @@ Doc-only updates to this checklist (without an instruction change) revert via th
 - [`docs/prd/non-ascii-defense.md`](../prd/non-ascii-defense.md) -- non-ASCII defense layers.
 - [`.github/PULL_REQUEST_TEMPLATE.md`](../../.github/PULL_REQUEST_TEMPLATE.md) -- links this checklist in the merge checklist.
 - [`scripts/scan_apm_portability.py`](../../scripts/scan_apm_portability.py) -- deterministic gate for dimension 1.
-- [`.github/workflows/portable-pr-policy.yml`](../../.github/workflows/portable-pr-policy.yml) -- deterministic gate for dimensions 1 and 2.
+- [`.github/workflows/verify-pr.yml`](../../.github/workflows/verify-pr.yml) -- deterministic gate for dimensions 1 and 2 (`portable-pr-policy` job).
