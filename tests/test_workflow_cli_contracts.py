@@ -1890,26 +1890,38 @@ def test_devcontainer_pin_pr_refresh_matches_workflow_args(
 
 
 def test_devcontainer_pin_automerge_workflow_contract() -> None:
-    """The pin auto-merge keeper triggers on check_suite, is prefix-gated, uses the PAT.
+    """The pin auto-merge keeper triggers on workflow_run + schedule, prefix-gated, uses the PAT.
 
     The repository-level "Allow auto-merge" toggle is intentionally OFF, so the
     pin PR is completed by this dedicated keeper instead of native auto-merge.
-    Pin the wiring that makes that safe and scoped: a check_suite trigger, an
-    ``if`` guard that restricts the job to the pin branch prefix, the PAT secret
-    (so the merge's push to main still triggers downstream workflows), and the
-    ``merge`` subcommand. Refs #1352.
+    The earlier ``check_suite: completed`` trigger never fired -- GitHub
+    suppresses ``check_suite`` events for Actions-created suites to prevent
+    recursion -- so the keeper is driven by ``workflow_run`` on the workflows
+    that own the required status checks, plus a ``schedule`` safety net. Pin the
+    wiring that makes that safe and scoped: those triggers, an ``if`` guard that
+    restricts the job to the pin branch prefix, the PAT secret (so the merge's
+    push to main still triggers downstream workflows), and the ``merge``
+    subcommand. Refs #1352, #1363.
     """
     workflow = yaml.safe_load((_WORKFLOWS_DIR / "devcontainer-pin-automerge.yml").read_text(encoding="utf-8"))
     # ``on`` may parse to the truthy bool key True under YAML 1.1; tolerate both.
     triggers = workflow.get("on", workflow.get(True))
-    assert "check_suite" in triggers
-    assert triggers["check_suite"]["types"] == ["completed"]
+    # check_suite is suppressed for Actions-created suites, so it must be gone.
+    assert "check_suite" not in triggers
+    # workflow_run fires off the workflows that own the required status checks.
+    assert triggers["workflow_run"]["types"] == ["completed"]
+    assert triggers["workflow_run"]["workflows"] == ["Verify PR", "Verify repository scripts"]
+    # schedule is the safety net that converges a missed workflow_run event.
+    assert "schedule" in triggers
+    assert "workflow_dispatch" in triggers
 
     job = workflow["jobs"]["merge"]
     assert job["permissions"] == {"contents": "write", "pull-requests": "write"}
-    # Prefix guard keeps the job from running on every repository check suite.
+    # Prefix guard keeps the job from running on every workflow_run completion.
     assert "devcontainer/image-pins-" in job["if"]
+    assert "github.event.workflow_run.conclusion == 'success'" in job["if"]
     assert "workflow_dispatch" in job["if"]
+    assert "schedule" in job["if"]
 
     merge_step = next(s for s in job["steps"] if "devcontainer_pin_pr.py merge" in str(s.get("run", "")))
     assert merge_step["env"] == {
