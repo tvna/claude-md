@@ -48,7 +48,7 @@ def test_render_issue_body_links_run_and_names_threshold() -> None:
     assert "<!-- coverage-failure-issue -->" in body
     assert "Refs #749" in body
     assert "https://github.com/owner/repo/actions/runs/123/attempts/2" in body
-    assert "pytest --cov-fail-under=92.71" in body
+    assert "[tool.coverage.report].fail_under in pyproject.toml" in body
     assert "Speculation:" in body
 
 

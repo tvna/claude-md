@@ -60,7 +60,10 @@ jobs:
       - name: Run script unit tests with coverage
         id: coverage-tests
         continue-on-error: true
-        run: uv run python -m pytest --cov --cov-report=term-missing --cov-report=xml --cov-fail-under=92.71 -v --junitxml=junit.xml -o junit_family=legacy
+        # No --cov-fail-under here: the threshold lives only in
+        # [tool.coverage.report].fail_under (pyproject.toml), the
+        # authoritative gate (#1354). pytest-cov enforces that config value.
+        run: uv run python -m pytest --cov --cov-report=term-missing --cov-report=xml -v --junitxml=junit.xml -o junit_family=legacy
 
       - name: Upload coverage to Codecov
         if: always()
