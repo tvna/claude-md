@@ -267,8 +267,8 @@ own sub-issue.
 The Q1 escalation produced [#414](https://github.com/tvna/claude-md/issues/414)
 after the 17-retro batch of 2026-05-24 to 2026-05-26 surfaced a
 noise-dominated stream. The deterministic follow-up is the
-**Strategy B sentinel** wired in
-[`.github/workflows/auto-retro-sentinel.yml`](../../.github/workflows/auto-retro-sentinel.yml)
+**Strategy B sentinel** wired in the `scan-and-close` job of
+[`.github/workflows/daily-maintenance.yml`](../../.github/workflows/daily-maintenance.yml)
 and backed by `sentinel_run` in
 [`scripts/auto_retro.py`](../../scripts/auto_retro.py).
 

@@ -1,0 +1,120 @@
+name: Daily maintenance
+
+# Consolidated daily retrospective-maintenance jobs (issue #1319). This file
+# groups the schedule-driven retro workflows that previously lived as separate
+# files:
+#   - auto-retro-sentinel.yml          -> job: scan-and-close
+#   - auto-retro-post-merge-rescan.yml -> job: rescan
+#   - retro-followup-drift.yml         -> job: scan
+#
+# Per #1319 the three daily crons (03:00 / 04:00 / 06:37 UTC) are unified into a
+# single daily schedule. Each job keeps its own concurrency group, job-level
+# permissions, and env so effective security permissions are unchanged. All jobs
+# act only on retro/issue state; none touch source-PR labels. Cron drift is
+# acceptable for all three -- each acts on items already past an inactivity /
+# lookback threshold, so a few hours of lateness has no operator impact.
+
+on:
+  schedule:
+    # Daily at 04:00 UTC (unified slot for the former 03:00/04:00/06:37 crons).
+    - cron: "0 4 * * *"
+  workflow_dispatch:
+    inputs:
+      days:
+        description: 'scan-and-close: inactivity threshold in days (overrides AUTO_RETRO_SENTINEL_DAYS).'
+        type: number
+        required: false
+      hours:
+        description: 'rescan: lookback window in hours (overrides default 48).'
+        type: number
+        required: false
+
+permissions: {}
+
+jobs:
+  scan-and-close:
+    # Strategy B sentinel for issue #414: an open retro that has stayed
+    # untouched (no acceptance-criteria checkbox flipped, no operator comment)
+    # beyond the inactivity window is auto-closed with state_reason=not_planned.
+    # The audit trail (the retro existed) is preserved; the operator can reopen
+    # if a missed repair surfaces. Logic lives in scripts/auto_retro.py
+    # (sentinel_run + helpers), unit-tested in tests/test_auto_retro.py.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      # write needed to PATCH the retro to closed/not_planned and POST the
+      # sentinel comment. pull-requests:write is intentionally NOT granted --
+      # the sentinel touches retro issues only; source-PR labels were already
+      # applied by .github/workflows/post-merge.yml.
+      issues: write
+    concurrency:
+      # One sentinel run at a time across the repo; the script is idempotent per
+      # retro (sentinel marker check) so cancel-in-progress is unnecessary and
+      # would risk leaving a posted comment without the matching close.
+      group: auto-retro-sentinel
+      cancel-in-progress: false
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+
+      - name: Close untouched retrospective issues
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          AUTO_RETRO_SENTINEL_DAYS: ${{ inputs.days }}
+        run: python3 scripts/auto_retro.py sentinel
+
+  rescan:
+    # Deferred follow-up to #418. Re-scans each merged PR's Post-merge checklist
+    # subsection 24-48h after merge and appends a row to the existing retro issue
+    # when an observation gate remains unsatisfied. Logic lives in
+    # scripts/auto_retro.py (post_merge_rescan_run + helpers), unit-tested in
+    # tests/test_auto_retro_post_merge_rescan.py. Refs #421.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: read
+    concurrency:
+      group: auto-retro-post-merge-rescan
+      cancel-in-progress: false
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+
+      - name: Re-scan Post-merge checklist gates
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          AUTO_RETRO_RESCAN_HOURS: ${{ inputs.hours }}
+        run: python3 scripts/auto_retro.py post-merge-rescan
+
+  scan:
+    # Labels retro issues whose follow-ups have drifted, closing the TP/FP
+    # convergence loop. Logic lives in scripts/scan_retro_followup_drift.py,
+    # unit-tested in tests/test_scan_retro_followup_drift.py. Refs #558.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+    concurrency:
+      group: retro-followup-drift
+      cancel-in-progress: false
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+
+      - name: Scan retro/follow-up drift
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: python3 scripts/scan_retro_followup_drift.py run

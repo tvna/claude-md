@@ -1,7 +1,7 @@
 # ATT&CK coverage review cadence -- Runbook
 
-Operator-facing companion to
-[`.github/workflows/attack-coverage-review-reminder.yml`](../../.github/workflows/attack-coverage-review-reminder.yml).
+Operator-facing companion to the `remind` job in
+[`.github/workflows/monthly-maintenance.yml`](../../.github/workflows/monthly-maintenance.yml).
 Tracks [#184](https://github.com/tvna/claude-md/issues/184) under parent
 [#178](https://github.com/tvna/claude-md/issues/178) (MITRE ATT&CK
 coverage).
@@ -217,8 +217,8 @@ python3 -c "import yaml; yaml.safe_load(open('.github/workflows/attack-coverage-
 
 ## References
 
-- [`.github/workflows/attack-coverage-review-reminder.yml`](../../.github/workflows/attack-coverage-review-reminder.yml) --
-  the reminder workflow this runbook drives.
+- [`.github/workflows/monthly-maintenance.yml`](../../.github/workflows/monthly-maintenance.yml) --
+  the `remind` job (monthly cadence) this runbook drives.
 - [#178](https://github.com/tvna/claude-md/issues/178) -- ATT&CK coverage
   tracking issue (target of every review comment).
 - [#184](https://github.com/tvna/claude-md/issues/184) -- the sub-issue

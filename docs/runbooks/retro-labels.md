@@ -279,7 +279,7 @@ uv run pytest tests/test_scan_retro_followup_drift.py -v
 
 - [`scripts/_retro_labels.py`](../../scripts/_retro_labels.py) -- label SoT.
 - [`scripts/scan_retro_followup_drift.py`](../../scripts/scan_retro_followup_drift.py) -- scanner.
-- [`.github/workflows/retro-followup-drift.yml`](../../.github/workflows/retro-followup-drift.yml) -- cron driver.
+- [`.github/workflows/daily-maintenance.yml`](../../.github/workflows/daily-maintenance.yml) -- cron driver (`scan` job).
 - [`scripts/auto_retro.py`](../../scripts/auto_retro.py) -- the retro generator the labels feed back into.
 - [CLAUDE.md](../../CLAUDE.md) section 3 -- retro framework rationale.
 - [#558](https://github.com/tvna/claude-md/issues/558) -- PR1 issue.

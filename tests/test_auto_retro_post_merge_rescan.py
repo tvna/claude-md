@@ -608,16 +608,20 @@ class TestPostMergeRescanCli:
 def test_rescan_workflow_file_exists_and_runs_rescan_subcommand() -> None:
     """The schedule workflow that backs post_merge_rescan_run must exist
     and invoke the right CLI subcommand.
+
+    The rescan was consolidated into daily-maintenance.yml (issue #1319);
+    its rescan job preserves the original cron, permissions, and CLI
+    invocation.
     """
     repo_root = Path(__file__).resolve().parent.parent
     workflow = (
         repo_root / ".github" / "workflows"
-        / "auto-retro-post-merge-rescan.yml"
+        / "daily-maintenance.yml"
     )
     assert workflow.exists(), (
         "Deferred Post-merge rescan needs "
-        ".github/workflows/auto-retro-post-merge-rescan.yml "
-        "(issue #421)"
+        ".github/workflows/daily-maintenance.yml "
+        "(issue #421, consolidated in #1319)"
     )
     text = workflow.read_text(encoding="utf-8")
     assert "python3 scripts/auto_retro.py post-merge-rescan" in text

@@ -4437,12 +4437,16 @@ def test_sentinel_workflow_file_exists_and_runs_sentinel_subcommand() -> None:
     """The schedule workflow that backs sentinel_run must exist and
     invoke the right CLI subcommand. Drift between the script and the
     workflow would silently disable the sentinel.
+
+    The sentinel was consolidated into daily-maintenance.yml (issue #1319);
+    its scan-and-close job preserves the original cron, permissions, and CLI
+    invocation.
     """
     repo_root = Path(__file__).resolve().parent.parent
-    workflow = repo_root / ".github" / "workflows" / "auto-retro-sentinel.yml"
+    workflow = repo_root / ".github" / "workflows" / "daily-maintenance.yml"
     assert workflow.exists(), (
-        "Strategy B sentinel needs .github/workflows/auto-retro-sentinel.yml "
-        "(issue #414)"
+        "Strategy B sentinel needs .github/workflows/daily-maintenance.yml "
+        "(issue #414, consolidated in #1319)"
     )
     text = workflow.read_text(encoding="utf-8")
     assert "python3 scripts/auto_retro.py sentinel" in text
