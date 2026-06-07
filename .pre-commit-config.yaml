@@ -56,6 +56,18 @@ repos:
         language: system
         pass_filenames: false
         files: ^\.(claude/settings|codex/hooks|devin/hooks\.v1)\.json$
+      - id: gen-agent-hooks
+        name: agent hooks generation drift (scripts/gen_agent_hooks.py --check)
+        # The per-agent hook configs are generated from
+        # scripts/agent_hooks_source.json so the CWD-independence wrapper is
+        # injected uniformly (#783-safe; no $CLAUDE_PROJECT_DIR). This gate
+        # fails when a committed config is hand-edited instead of regenerated,
+        # which is how a CWD-relative command would regress. Regenerate with
+        # `uv run python scripts/gen_agent_hooks.py`.
+        entry: uv run python scripts/gen_agent_hooks.py --check
+        language: system
+        pass_filenames: false
+        files: ^(scripts/agent_hooks_source\.json|\.claude/settings\.json|\.codex/hooks\.json|\.devin/hooks\.v1\.json)$
       - id: skill-quality-gate
         name: skill quality gate (waza check spec-compliance)
         entry: bash -c 'scripts/install_waza.sh >&2 && uv run python scripts/skill_quality_gate.py verify "$@"' --
