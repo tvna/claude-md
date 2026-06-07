@@ -357,6 +357,11 @@
           },
           {
             "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/session_resource_report.py checkpoint",
+            "statusMessage": "Recording per-PR ccusage checkpoint"
+          },
+          {
+            "type": "command",
             "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/post_pr_create_ci_monitor.py",
             "statusMessage": "Starting PR CI monitor"
           },
