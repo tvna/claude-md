@@ -107,6 +107,10 @@ STEPS: tuple[Step, ...] = (
         argv=("python3", "scripts/verify_apm_checksums.py", "verify"),
     ),
     Step(
+        name="scan_apm_lock_drift",
+        argv=("python3", "scripts/scan_apm_lock_drift.py", "verify"),
+    ),
+    Step(
         name="uv_pin_drift",
         argv=("python3", "scripts/uv_pin.py", "drift"),
     ),
