@@ -300,6 +300,82 @@ def test_measure_closes_on_exec_error() -> None:
 
 
 # --------------------------------------------------------------------------- #
+# _parse_du / probe_composition
+# --------------------------------------------------------------------------- #
+
+
+def test_parse_du_extracts_size_and_path() -> None:
+    out = "12345\t/nix/store/aaa-foo\n6789\t/nix/store/bbb-bar\n"
+    assert mod._parse_du(out) == [
+        {"bytes": 12345, "path": "/nix/store/aaa-foo"},
+        {"bytes": 6789, "path": "/nix/store/bbb-bar"},
+    ]
+
+
+def test_parse_du_skips_blank_and_malformed() -> None:
+    out = "\n  \nnotanumber /x\n42 /ok\nonlyonefield\n"
+    assert mod._parse_du(out) == [{"bytes": 42, "path": "/ok"}]
+
+
+def test_probe_composition_splits_total_top_and_base() -> None:
+    store_out = "\n".join(
+        [
+            "900\t/nix/store",  # total line, excluded from top
+            "500\t/nix/store/aaa-python",
+            "300\t/nix/store/bbb-node",
+            "100\t/nix/store/ccc-ruff",
+        ]
+    )
+    base_out = "200\t/usr\n50\t/opt\n"
+    session = FakeSession(
+        exec_results={
+            mod._STORE_DU_CMD: mod.RunResult(0, store_out, 0.1),
+            mod._BASE_DU_CMD: mod.RunResult(0, base_out, 0.1),
+        }
+    )
+    result = mod.probe_composition(session, top_n=2)
+    assert result["nix_store_bytes"] == 900
+    assert result["top_store_paths"] == [
+        {"bytes": 500, "path": "/nix/store/aaa-python"},
+        {"bytes": 300, "path": "/nix/store/bbb-node"},
+    ]
+    assert result["base_dirs"] == [{"bytes": 200, "path": "/usr"}, {"bytes": 50, "path": "/opt"}]
+
+
+def test_probe_composition_missing_total_defaults_zero() -> None:
+    session = FakeSession(
+        exec_results={
+            mod._STORE_DU_CMD: mod.RunResult(0, "500\t/nix/store/aaa", 0.1),
+            mod._BASE_DU_CMD: mod.RunResult(0, "", 0.1),
+        }
+    )
+    result = mod.probe_composition(session)
+    assert result["nix_store_bytes"] == 0
+    assert result["base_dirs"] == []
+
+
+def test_measure_with_probe_adds_composition() -> None:
+    session = FakeSession(
+        exec_results={
+            "uv sync": mod.RunResult(0, "", 1.0),
+            mod._STORE_DU_CMD: mod.RunResult(0, "900\t/nix/store\n500\t/nix/store/aaa", 0.1),
+            mod._BASE_DU_CMD: mod.RunResult(0, "200\t/usr", 0.1),
+        }
+    )
+    report = mod.measure(session, post_create=["uv sync"], post_start=[], do_pull=False, probe=True)
+    assert report["composition"]["nix_store_bytes"] == 900
+    assert report["composition"]["top_store_paths"] == [{"bytes": 500, "path": "/nix/store/aaa"}]
+    # Probe runs while the container is up, before close.
+    assert session.events[-3:] == [f"exec:{mod._STORE_DU_CMD}", f"exec:{mod._BASE_DU_CMD}", "close"]
+
+
+def test_measure_without_probe_has_no_composition() -> None:
+    session = FakeSession(exec_results={})
+    report = mod.measure(session, post_create=[], post_start=[], do_pull=False)
+    assert "composition" not in report
+
+
+# --------------------------------------------------------------------------- #
 # _human_size / format_summary
 # --------------------------------------------------------------------------- #
 
@@ -354,6 +430,36 @@ def test_format_summary_without_pull() -> None:
     }
     summary = mod.format_summary(report)
     assert "pull:" not in summary
+
+
+def test_format_summary_renders_composition() -> None:
+    report = {
+        "image": "img:sha",
+        "image_size_bytes": 10,
+        "total_phase_seconds": 0.0,
+        "phases": [],
+        "composition": {
+            "nix_store_bytes": 3 * 1024 * 1024 * 1024,
+            "top_store_paths": [{"bytes": 500 * 1024 * 1024, "path": "/nix/store/aaa-python"}],
+            "base_dirs": [{"bytes": 2 * 1024 * 1024, "path": "/usr"}],
+        },
+    }
+    summary = mod.format_summary(report)
+    assert "## Image composition" in summary
+    assert "/nix/store: 3.00 GiB" in summary
+    assert "| /usr | 2.0 MiB |" in summary
+    assert "| /nix/store/aaa-python | 500.0 MiB |" in summary
+    assert summary.isascii()
+
+
+def test_format_summary_without_composition_has_no_section() -> None:
+    report = {
+        "image": "img:sha",
+        "image_size_bytes": 10,
+        "total_phase_seconds": 0.0,
+        "phases": [],
+    }
+    assert "Image composition" not in mod.format_summary(report)
 
 
 # --------------------------------------------------------------------------- #
@@ -425,3 +531,27 @@ def test_run_no_pull(tmp_path: Path) -> None:
     )
     assert rc == 0
     assert "pull" not in sessions[0].events
+
+
+def test_run_probe_composition_end_to_end(tmp_path: Path) -> None:
+    def factory(**_kwargs: Any) -> FakeSession:
+        return FakeSession(
+            exec_results={
+                "uv sync": mod.RunResult(0, "", 1.0),
+                "install cli": mod.RunResult(0, "", 2.0),
+                "egress": mod.RunResult(0, "", 0.5),
+                mod._STORE_DU_CMD: mod.RunResult(0, "900\t/nix/store\n500\t/nix/store/aaa", 0.1),
+                mod._BASE_DU_CMD: mod.RunResult(0, "200\t/usr", 0.1),
+            }
+        )
+
+    out = tmp_path / "report.json"
+    rc = mod.run(
+        ["--config", str(write_config(tmp_path)), "--output", str(out), "--probe-composition", "--top-n", "5"],
+        session_factory=factory,
+        which=lambda _name: "/usr/bin/docker",
+    )
+    assert rc == 0
+    report = json.loads(out.read_text(encoding="utf-8"))
+    assert report["composition"]["nix_store_bytes"] == 900
+    assert report["composition"]["top_store_paths"] == [{"bytes": 500, "path": "/nix/store/aaa"}]
