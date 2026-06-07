@@ -306,6 +306,16 @@ entrypoints listed above. The prebuild definitions also run the agent
 CLI install script so GHCR images already contain the Nix-built CLI
 symlink.
 
+The prebuild base is `ubuntu:24.04` plus the `common-utils` feature (with
+zsh / oh-my-zsh disabled) for `git`, `sudo`, and CA certificates, then the
+`nix` and `agent-user` features. This replaced
+`mcr.microsoft.com/devcontainers/base:ubuntu-24.04`, whose base distro
+(`/usr` ~644 MiB) dominated the ~1.034 GiB image and the cold-start pull;
+the composition probe (Refs #1332) showed the agent toolchain is supplied by
+Nix at runtime, so the heavier base added pull cost without a runtime
+benefit. The agent quality-gate tools (ruff, mypy, pytest, shellcheck,
+actionlint) continue to come from the Nix devShell, not the base.
+
 ## Prebuilt images
 
 Local devcontainers use immutable commit-SHA image tags. The currently
