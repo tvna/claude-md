@@ -122,10 +122,10 @@ the destination is admitted.
 
 ## Decision and Record
 
-- Admit: add the hostname to the correct allowlist file -- `shared.allowlist`
-  when both agents need it, or the agent-specific
-  `claude.allowlist` / `codex.allowlist` -- with an inline trailing rationale
-  comment:
+- Admit: add the hostname to the single egress allowlist --
+  `.devcontainer/network/shared.allowlist`, applied by every agent container
+  (the former per-agent `claude.allowlist` / `codex.allowlist` were
+  consolidated into it, #1420) -- with an inline trailing rationale comment:
 
   ```
   api.example.com  # Why this destination is required at runtime.
