@@ -302,9 +302,13 @@ opening VS Code, run:
 
 The prebuild definitions live under `.devcontainer/images/<agent>/`.
 Those files are CI inputs only; local users should open the agent
-entrypoints listed above. The prebuild definitions also run the agent
-CLI install script so GHCR images already contain the Nix-built CLI
-symlink.
+entrypoints listed above. The prebuild bakes only the base image plus the
+`common-utils`, `nix`, and `agent-user` Features. `devcontainer build` does
+not run `postCreateCommand`, so the agent CLI symlink and the Nix/uv
+closures are NOT baked into the GHCR image -- `install-agent-cli.sh` and
+`uv sync` run at container start as `postCreateCommand` steps. This is why
+the startup probe (Refs #1322, #1332) measures them as a post-pull startup
+phase rather than image content.
 
 The prebuild base is `ubuntu:24.04` plus the `common-utils` feature (with
 zsh / oh-my-zsh disabled) for `git`, `sudo`, and CA certificates, then the
