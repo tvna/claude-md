@@ -15,6 +15,9 @@ Inputs come from the environment only -- nothing is read from a tracked file:
 * ``GITHUB_APP_PRIVATE_KEY`` -- the App private key, PEM text. This is the only
   root secret; it is held in memory, written to a ``0600`` temp file only for
   the duration of the openssl signing call, and removed immediately after.
+* ``GITHUB_APP_PRIVATE_KEY_FILE`` -- optional path to a file holding the PEM
+  (e.g. a Vault Agent template sink). Used only when ``GITHUB_APP_PRIVATE_KEY``
+  is unset; the literal env var takes precedence.
 * ``GITHUB_API_URL`` -- optional API base (default ``https://api.github.com``)
   for GitHub Enterprise Server installs.
 
@@ -176,11 +179,39 @@ def _require_env(name: str) -> str:
     return value
 
 
+def _require_private_key() -> str:
+    """Return the App private key PEM from the env literal or a file.
+
+    Precedence: ``GITHUB_APP_PRIVATE_KEY`` (literal) wins; otherwise
+    ``GITHUB_APP_PRIVATE_KEY_FILE`` (a path, e.g. a Vault Agent template sink)
+    is read. Fails loudly naming the missing input. Only the path -- never the
+    file contents -- is named on error, so the key cannot leak into a log.
+    """
+    literal = os.environ.get("GITHUB_APP_PRIVATE_KEY", "")
+    if literal.strip():
+        return literal
+    path = os.environ.get("GITHUB_APP_PRIVATE_KEY_FILE", "")
+    if path.strip():
+        try:
+            pem = Path(path).read_text(encoding="utf-8")
+        except OSError as exc:
+            raise MintError(
+                f"GITHUB_APP_PRIVATE_KEY_FILE ({path}) could not be read: {exc.__class__.__name__}"
+            ) from None
+        if not pem.strip():
+            raise MintError(f"GITHUB_APP_PRIVATE_KEY_FILE ({path}) is empty")
+        return pem
+    raise MintError(
+        "neither GITHUB_APP_PRIVATE_KEY nor GITHUB_APP_PRIVATE_KEY_FILE is set; "
+        "cannot mint a GitHub App token"
+    )
+
+
 def mint_from_env() -> str:
     """Read credentials from the environment and return an installation token."""
     app_id = _require_env("GITHUB_APP_ID")
     installation_id = _require_env("GITHUB_APP_INSTALLATION_ID")
-    private_key_pem = _require_env("GITHUB_APP_PRIVATE_KEY")
+    private_key_pem = _require_private_key()
     api_url = os.environ.get("GITHUB_API_URL", DEFAULT_API_URL)
 
     jwt_token = build_jwt(app_id, private_key_pem)
