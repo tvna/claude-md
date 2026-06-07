@@ -15,6 +15,7 @@ on:
         options:
           - decision-tree
           - coverage
+          - triage-report
           - all
 
 permissions: {}
@@ -207,6 +208,73 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git checkout -B "$PR_BRANCH"
           git add docs/generated/
+          git commit -m "$PR_TITLE"
+          git push --force-with-lease origin "$PR_BRANCH"
+
+          python3 scripts/pr_upsert.py upsert \
+            --head "$PR_BRANCH" \
+            --base "$GITHUB_REF_NAME" \
+            --title "$PR_TITLE" \
+            --body-file /tmp/pr-body.md
+
+  # Moved here from weekly-maintenance.yml (#1386) so the triage-report
+  # dashboard -- now the primary human inspection surface for auto-retro --
+  # refreshes on every merge instead of weekly. Regenerates
+  # docs/generated/scripts/auto-retro-triage-report.md from the live
+  # retro-issue label state and opens a PR when the snapshot drifts. The
+  # report is non-deterministic (it depends on GitHub state, not just
+  # source), so it cannot live in the generate-docs.yml drift gate; the git
+  # history of the committed snapshot is the time series. Refs #1042, #1386.
+  triage-report:
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && (inputs.task == 'triage-report' || inputs.task == 'all'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      issues: read
+      pull-requests: write
+    concurrency:
+      group: auto-retro-triage-report
+      cancel-in-progress: false
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Regenerate triage report
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: python3 scripts/auto_retro.py triage-report
+
+      - name: Open pull request if the snapshot drifted
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_BRANCH: chore/refresh-auto-retro-triage-report
+          PR_TITLE: "chore(auto-retro): refresh triage report (#1042)"
+        run: |
+          REPORT_PATH=docs/generated/scripts/auto-retro-triage-report.md
+          # --porcelain reports both modified and new (untracked) files, so
+          # the check fires on the first run too, when the snapshot does not
+          # yet exist in the tree and `git diff` alone would miss it.
+          if [ -z "$(git status --porcelain -- "$REPORT_PATH")" ]; then
+            echo "Triage report is already up to date."
+            exit 0
+          fi
+
+          cat > /tmp/pr-body.md <<'EOF'
+          Refreshes the auto-retro triage report snapshot from the current
+          retro-issue label state after a merge to `main`.
+
+          This report is non-deterministic (it depends on live GitHub state),
+          so it is refreshed on merge and opened as a pull request rather
+          than enforced by the generate-docs.yml drift gate. Refs #1042, #1386.
+          EOF
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$PR_BRANCH"
+          git add "$REPORT_PATH"
           git commit -m "$PR_TITLE"
           git push --force-with-lease origin "$PR_BRANCH"
 

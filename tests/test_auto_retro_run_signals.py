@@ -256,6 +256,8 @@ class TestRunAggregateSignals:
         """
         summary = tmp_path / "summary.md"
         monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(summary))
+        # PR-thread skip comments are opt-in since #1386.
+        monkeypatch.setenv("AUTO_RETRO_PR_COMMENTS", "1")
         seen = orchestrator_recorder(
             monkeypatch,
             review_comments=[],

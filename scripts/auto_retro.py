@@ -840,11 +840,19 @@ class PastRetro:
     the retro -- the prior only cares whether ``retro:fp`` is among
     them, but the full set is preserved so future retrofits can layer
     on other labels without changing the dataclass shape.
+
+    ``state`` (``"open"``/``"closed"``) and ``title`` default to the
+    pre-#1386 values so the prior/drift/sentinel construction sites and
+    every existing test keep working unchanged; the triage-report
+    dashboard (recent-retros list, open-untriaged count) reads them when
+    populated by :func:`fetch_past_retro_labels`.
     """
 
     number: int
     signals: frozenset[str]
     labels: frozenset[str]
+    state: str = "open"
+    title: str = ""
 
 
 @dataclass(frozen=True)
@@ -920,6 +928,41 @@ _TRIAGE_LABELS: tuple[str, ...] = (
 )
 _UNLABELLED_KEY: str = "unlabelled"
 
+# How many most-recent retros (by issue number) the dashboard lists, and
+# the trailing window over which it recomputes the FP rate for the trend
+# line. Numbers are the recency proxy: a higher issue number is newer.
+# Refs #1386.
+_RECENT_RETRO_COUNT: int = 10
+_FP_TREND_WINDOW: int = 20
+
+
+def _retro_status(labels: frozenset[str]) -> str:
+    """Return the single display status for a retro from its label set.
+
+    Triage labels are checked in :data:`_TRIAGE_LABELS` priority order so
+    a multi-labelled retro renders one stable status; a retro carrying no
+    triage label is ``"untriaged"``.
+    """
+    for label in _TRIAGE_LABELS:
+        if label in labels:
+            return label
+    return "untriaged"
+
+
+def _retro_fp_rate(retros: list[PastRetro]) -> tuple[float, int]:
+    """Return ``(fp_rate, triaged_count)`` over *retros*.
+
+    A retro is *triaged* iff it carries ``retro:tp`` or ``retro:fp``; the
+    rate is ``|retro:fp| / |triaged|``. An empty triaged population yields
+    ``(0.0, 0)`` so callers can render "n/a" without a zero-division guard
+    at each site.
+    """
+    triaged = [r for r in retros if (RETRO_FP in r.labels or RETRO_TP in r.labels)]
+    if not triaged:
+        return 0.0, 0
+    fp = sum(1 for r in triaged if RETRO_FP in r.labels)
+    return fp / len(triaged), len(triaged)
+
 
 @dataclass(frozen=True)
 class SignalStat:
@@ -957,6 +1000,20 @@ class SignalStat:
 
 
 @dataclass(frozen=True)
+class RecentRetro:
+    """One row of the dashboard's recent-retros list.
+
+    ``status`` is the :func:`_retro_status` display label; ``state`` is the
+    GitHub issue state (``"open"``/``"closed"``).
+    """
+
+    number: int
+    title: str
+    status: str
+    state: str
+
+
+@dataclass(frozen=True)
 class TriageReport:
     """Cross-retro aggregate: triage-status counts plus per-signal stats.
 
@@ -965,11 +1022,25 @@ class TriageReport:
     number of retros carrying it -- a single retro may carry more than one
     triage label, so the label counts are independent tallies and need not
     sum to ``total``. ``signal_stats`` is ordered by :data:`_SIGNAL_NAMES`.
+
+    The remaining fields back the #1386 dashboard sections and default to
+    empty/zero so older construction sites and tests stay valid:
+    ``open_untriaged`` counts open retros carrying no triage label;
+    ``recent`` is the most-recent slice (newest first) for the recent-retros
+    table; ``fp_rate_all``/``fp_triaged`` are the all-time retro-level FP
+    rate and its triaged denominator; ``fp_rate_recent``/``fp_recent_triaged``
+    are the same over the trailing :data:`_FP_TREND_WINDOW` for the trend.
     """
 
     total: int
     label_counts: dict[str, int]
     signal_stats: tuple[SignalStat, ...]
+    open_untriaged: int = 0
+    recent: tuple[RecentRetro, ...] = ()
+    fp_rate_all: float = 0.0
+    fp_triaged: int = 0
+    fp_rate_recent: float = 0.0
+    fp_recent_triaged: int = 0
 
     @property
     def anomalies(self) -> tuple[SignalStat, ...]:
@@ -1018,10 +1089,35 @@ def compute_triage_report(
                 sample_size=sample,
             )
         )
+    open_untriaged = sum(
+        1
+        for r in past_retros
+        if r.state == "open" and not (r.labels & ALL_RETRO_LABELS)
+    )
+    by_recency = sorted(past_retros, key=lambda r: r.number, reverse=True)
+    recent = tuple(
+        RecentRetro(
+            number=r.number,
+            title=r.title,
+            status=_retro_status(r.labels),
+            state=r.state,
+        )
+        for r in by_recency[:_RECENT_RETRO_COUNT]
+    )
+    fp_rate_all, fp_triaged = _retro_fp_rate(past_retros)
+    fp_rate_recent, fp_recent_triaged = _retro_fp_rate(
+        by_recency[:_FP_TREND_WINDOW]
+    )
     return TriageReport(
         total=total,
         label_counts=label_counts,
         signal_stats=tuple(signal_stats),
+        open_untriaged=open_untriaged,
+        recent=recent,
+        fp_rate_all=fp_rate_all,
+        fp_triaged=fp_triaged,
+        fp_rate_recent=fp_rate_recent,
+        fp_recent_triaged=fp_recent_triaged,
     )
 
 
@@ -1030,10 +1126,11 @@ def render_triage_report_markdown(report: TriageReport) -> str:
 
     The shape lets a human detect an anomaly by inspection (CLAUDE.md
     section 6): the Anomalies block sits at the top, a Mermaid pie shows
-    the triage-status mix, and the per-signal table flags every signal
+    the triage-status mix, the FP-rate trend and recent-retros list make
+    the live backlog visible, and the per-signal table flags every signal
     whose prior would skip a future retro. The report depends on live
     GitHub label state, so it is a non-deterministic snapshot and is NOT
-    part of the ``generate-docs.yml`` drift gate. Refs #1042.
+    part of the ``generate-docs.yml`` drift gate. Refs #1042, #1386.
     """
     lines: list[str] = [
         "# Auto-retro triage report",
@@ -1041,11 +1138,13 @@ def render_triage_report_markdown(report: TriageReport) -> str:
         "This file is generated from live GitHub retro-issue labels by "
         "`python3 scripts/auto_retro.py triage-report`. Do not edit it by "
         "hand. Unlike the decision-tree doc it is a non-deterministic "
-        "snapshot of repository state, so it is refreshed by the "
-        "`auto-retro-triage-report.yml` workflow rather than the "
-        "`generate-docs.yml` drift gate.",
+        "snapshot of repository state, so it is refreshed on merge by the "
+        "`post-merge.yml` workflow (which opens a pull request when the "
+        "snapshot drifts) rather than the `generate-docs.yml` drift gate.",
         "",
         f"Retros observed: **{report.total}**",
+        "",
+        f"Open untriaged: **{report.open_untriaged}**",
         "",
         "## Anomalies",
         "",
@@ -1094,7 +1193,53 @@ def render_triage_report_markdown(report: TriageReport) -> str:
             f"{stat.fire_rate:.2f} | {stat.fp_count} | "
             f"{stat.fp_rate:.2f} | {stat.sample_size} | {marker} |"
         )
+    lines.extend(_render_fp_trend(report))
+    lines.extend(_render_recent_retros(report))
     return "\n".join(lines) + "\n"
+
+
+def _render_fp_trend(report: TriageReport) -> list[str]:
+    """Render the retro-level FP-rate trend section.
+
+    Compares the all-time FP rate against the trailing
+    :data:`_FP_TREND_WINDOW`-retro window so a human can see at a glance
+    whether triaged retros are trending more or less false-positive.
+    """
+    lines = ["", "## False-positive rate trend", ""]
+    if report.fp_triaged == 0:
+        lines.append("No triaged retros yet (no `retro:tp`/`retro:fp` labels).")
+        return lines
+    delta = report.fp_rate_recent - report.fp_rate_all
+    if report.fp_recent_triaged == 0:
+        direction = "n/a"
+    elif abs(delta) < 0.005:
+        direction = "flat"
+    elif delta > 0:
+        direction = "rising"
+    else:
+        direction = "falling"
+    lines.append(
+        f"- All-time: {report.fp_rate_all:.2f} (n={report.fp_triaged} triaged)"
+    )
+    lines.append(
+        f"- Last {_FP_TREND_WINDOW} retros: {report.fp_rate_recent:.2f} "
+        f"(n={report.fp_recent_triaged} triaged) -- {direction}"
+    )
+    return lines
+
+
+def _render_recent_retros(report: TriageReport) -> list[str]:
+    """Render the most-recent-retros table (newest first)."""
+    lines = ["", "## Recent retros", ""]
+    if not report.recent:
+        lines.append("No retros observed yet.")
+        return lines
+    lines.append("| # | State | Status | Title |")
+    lines.append("| --: | :-- | :-- | :-- |")
+    for r in report.recent:
+        title = r.title or "(no title)"
+        lines.append(f"| {r.number} | {r.state} | {r.status} | {title} |")
+    return lines
 
 
 def _mermaid_text(text: str) -> str:
@@ -2354,8 +2499,18 @@ def fetch_past_retro_labels(
         if not isinstance(body, str) or not body:
             body = ""
         signals = parse_signals_from_retro_body(body)
+        state = item.get("state")
+        state = state if isinstance(state, str) and state else "open"
+        title = item.get("title")
+        title = title if isinstance(title, str) else ""
         out.append(
-            PastRetro(number=number, signals=signals, labels=frozenset(names))
+            PastRetro(
+                number=number,
+                signals=signals,
+                labels=frozenset(names),
+                state=state,
+                title=title,
+            )
         )
     return out
 
@@ -2542,6 +2697,29 @@ def find_existing_back_link_id(
     return None
 
 
+_PR_COMMENTS_ENV = "AUTO_RETRO_PR_COMMENTS"
+
+
+def _pr_comments_enabled() -> bool:
+    """True iff PR-thread auto-retro comments are opted in.
+
+    Phase 1 of #1386 makes the back-link and skip comments off by default:
+    the triage-report dashboard
+    (``docs/generated/scripts/auto-retro-triage-report.md``) is the human
+    inspection surface, so a per-PR comment on every merge is redundant
+    notification noise. The retro issue (quiet labeled ledger) and the
+    PR-side terminal label still record the audit trail. Set
+    ``AUTO_RETRO_PR_COMMENTS`` to a truthy value (``1``/``true``/``yes``/``on``)
+    to restore the legacy commenting behavior.
+    """
+    return os.environ.get(_PR_COMMENTS_ENV, "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
+
 def post_back_link_comment(
     repo: str, pr_number: int, retro_number: int
 ) -> str:
@@ -2621,7 +2799,13 @@ def _post_skip_comment_soft(repo: str, pr_number: int, reason: str) -> None:
     Fail-soft: a transient network error must NOT change the exit code --
     the skip is already recorded in the step summary and stdout log. The
     warning keeps the audit trail intact without masking the original skip.
+
+    No-op when PR-thread comments are off by default (#1386 Phase 1): the
+    skip outcome is still recorded in the step summary and stdout, so the
+    audit trail is intact without per-PR comment noise.
     """
+    if not _pr_comments_enabled():
+        return
     try:
         post_skip_comment(repo, pr_number, reason)
     except subprocess.CalledProcessError as exc:
@@ -2952,20 +3136,29 @@ def run(event: dict[str, Any], repo: str) -> int:
     back_link_status = "skipped"
     terminal_label_status = "skipped"
     if isinstance(new_number, int):
-        try:
-            back_link_status = post_back_link_comment(repo, pr.number, new_number)
-        except subprocess.CalledProcessError as exc:
-            # Fail-soft: the retro issue is already created. A failure to
-            # post the PR-side back-link must NOT roll the retro back --
-            # surface a warning and continue so the audit trail keeps the
-            # retro that did land.
-            print(
-                f"::warning::post_back_link_comment failed "
-                f"(exit {exc.returncode}); retro issue #{new_number} created "
-                "but source PR has no back-link comment",
-                file=sys.stderr,
-            )
-            back_link_status = "failed"
+        if not _pr_comments_enabled():
+            # Phase 1 of #1386: PR-thread comments are off by default. The
+            # retro issue carries the audit trail and the terminal label
+            # (applied below) is the quiet PR-side pointer, so the back-link
+            # comment is skipped to avoid per-merge notification noise.
+            back_link_status = "disabled"
+        else:
+            try:
+                back_link_status = post_back_link_comment(
+                    repo, pr.number, new_number
+                )
+            except subprocess.CalledProcessError as exc:
+                # Fail-soft: the retro issue is already created. A failure to
+                # post the PR-side back-link must NOT roll the retro back --
+                # surface a warning and continue so the audit trail keeps the
+                # retro that did land.
+                print(
+                    f"::warning::post_back_link_comment failed "
+                    f"(exit {exc.returncode}); retro issue #{new_number} "
+                    "created but source PR has no back-link comment",
+                    file=sys.stderr,
+                )
+                back_link_status = "failed"
 
         try:
             apply_terminal_label(repo, pr.number)

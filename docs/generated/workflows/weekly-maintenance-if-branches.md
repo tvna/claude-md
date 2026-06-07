@@ -31,7 +31,6 @@ flowchart TD
     S_J_flake_pin_refresh_1(("Validate the bumped flake"))
     S_J_flake_pin_refresh_2(("Mint GitHub App token"))
     S_J_flake_pin_refresh_3(("Open bump PR"))
-    J_auto_retro_triage_report["auto-retro-triage-report"]
 
     T_schedule -->|"github.event_name == 'schedule' || inputs.task == 'all' || inputs.task ~"| J_branch_cleanup
     J_branch_cleanup -->|"github.event_name == 'workflow_dispatch' && github.ref != 'refs/heads/m~"| S_J_branch_cleanup_0
@@ -56,5 +55,4 @@ flowchart TD
     J_flake_pin_refresh -->|"steps.decide.outputs.target != ''"| S_J_flake_pin_refresh_1
     J_flake_pin_refresh -->|"steps.decide.outputs.target != ''"| S_J_flake_pin_refresh_2
     J_flake_pin_refresh -->|"steps.decide.outputs.target != ''"| S_J_flake_pin_refresh_3
-    T_schedule -->|"github.event_name == 'schedule' || inputs.task == 'all' || inputs.task ~"| J_auto_retro_triage_report
 ```

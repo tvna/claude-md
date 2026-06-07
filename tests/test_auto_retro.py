@@ -5001,6 +5001,32 @@ class TestFetchPastRetroLabels:
             {"inline_review_comments", "fix_typed_title"}
         )
 
+    def test_parses_state_and_title_with_defaults(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """state/title populate the #1386 dashboard; absent fields default."""
+        payload = {
+            "items": [
+                {
+                    "number": 100,
+                    "labels": [],
+                    "body": "",
+                    "state": "closed",
+                    "title": "chore(auto-retro): review PR #42 repair loops",
+                },
+                {"number": 101, "labels": [], "body": ""},
+            ]
+        }
+        monkeypatch.setattr(
+            ar, "gh_api", lambda *_a, **_kw: json.dumps(payload)
+        )
+        past = ar.fetch_past_retro_labels("o/r")
+        assert past[0].state == "closed"
+        assert past[0].title == "chore(auto-retro): review PR #42 repair loops"
+        # Missing fields fall back to the pre-#1386 defaults.
+        assert past[1].state == "open"
+        assert past[1].title == ""
+
     def test_limit_truncates_items(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:

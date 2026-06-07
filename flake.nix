@@ -27,6 +27,7 @@
           wazaVersion = "0.33.0";
           rtkVersion = "0.42.1";
           actionlintVersion = "1.7.7";
+          ccusageVersion = "20.0.6";
           claudeCodeNative = {
             aarch64-linux = {
               package = "claude-code-linux-arm64";
@@ -108,6 +109,26 @@
             x86_64-linux = {
               asset = "actionlint_1.7.7_linux_amd64.tar.gz";
               hash = "sha256-AjBwoofNjMzXFRX+3IQ/GYW/lsQ2t+/67M5nKQ5+B1c=";
+            };
+          }.${system};
+          # ccusage (ryoppippi/ccusage) ships platform-specific native binaries
+          # via npm scoped packages (@ccusage/ccusage-linux-<arch>), each a
+          # self-contained static-pie ELF holding ``package/bin/ccusage`` (no
+          # Node runtime needed). The main ``ccusage`` npm package declares them
+          # as optionalDependencies; we fetch the per-system binary package
+          # directly, mirroring claude-cli / codex-cli. The ``pkg`` field is the
+          # scoped package basename and drives both the registry URL and the
+          # tarball filename. Pinned by SHA256 for supply-chain hardening (the
+          # npm sha512 integrity was verified against these tarballs first);
+          # SHA256 keeps the pin in scan_flake_pin_drift.py's coverage. Refs #1404.
+          ccusageNative = {
+            aarch64-linux = {
+              pkg = "ccusage-linux-arm64";
+              hash = "sha256-vcXhHYK2+CkKcq/u5WQZhAUs5FNXq36HSgJ8fKWZ2zE=";
+            };
+            x86_64-linux = {
+              pkg = "ccusage-linux-x64";
+              hash = "sha256-Wl94vPpOZ4A74sG3AFDz64grUmUxPTF/PIWze7yO/xw=";
             };
           }.${system};
           pinned-uv = pkgs.stdenvNoCC.mkDerivation {
@@ -270,9 +291,30 @@ EOF
               runHook postInstall
             '';
           };
+          # ccusage's per-system npm tarball unpacks to the standard npm
+          # ``package/`` source root holding ``bin/ccusage`` (a self-contained
+          # ELF). Mirrors claude-cli minus the bin path: install that binary.
+          ccusage-cli = pkgs.stdenvNoCC.mkDerivation {
+            pname = "ccusage";
+            version = ccusageVersion;
+            src = pkgs.fetchurl {
+              url = "https://registry.npmjs.org/@ccusage/${ccusageNative.pkg}/-/${ccusageNative.pkg}-${ccusageVersion}.tgz";
+              hash = ccusageNative.hash;
+            };
+            dontBuild = true;
+            dontStrip = true;
+            dontPatchELF = true;
+            installPhase = ''
+              runHook preInstall
+
+              install -Dm755 bin/ccusage $out/bin/ccusage
+
+              runHook postInstall
+            '';
+          };
         in
         {
-          inherit claude-cli codex-cli pinned-uv apm-cli waza-cli rtk-cli actionlint-cli;
+          inherit claude-cli codex-cli pinned-uv apm-cli waza-cli rtk-cli actionlint-cli ccusage-cli;
           bubblewrap = pkgs.bubblewrap;
           gh-cli = pkgs.gh;
           python-runtime = pkgs.python311;
@@ -325,6 +367,7 @@ EOF
           default = mkAgentShell "shared" [ ];
           claude = mkAgentShell "claude" [
             agentPackages.claude-cli
+            agentPackages.ccusage-cli
             pkgs.nodePackages.npm
           ];
           codex = mkAgentShell "codex" [
