@@ -33,6 +33,8 @@ services.nvd.nist.gov  # NVD CVE metadata enriching threat-intel triage findings
 # Agent runtime API endpoints. Consolidated from the former per-agent
 # claude.allowlist / codex.allowlist (#1420); admitted on every container.
 api.anthropic.com  # Anthropic API endpoint used by the Claude CLI at runtime.
+docs.anthropic.com  # Anthropic API/model documentation and changelog fetched as a primary source during agent lookups (#1429); public read-only docs, no secrets sent.
 cdn.prod.website-files.com  # Webflow CDN (Cloudflare-fronted) serving Anthropic "Zero Trust for AI Agents" eBook PDF; read-only public GET re-grounds the parent #178 premise from a primary source (#1383); no credentials sent.
 api.openai.com  # OpenAI API endpoint used by the Codex CLI at runtime.
+platform.openai.com  # OpenAI API/model/pricing documentation fetched as a primary source during agent lookups (#1429); public read-only docs, no secrets sent.
 auth.openai.com  # ChatGPT-mediated OAuth token exchange during `codex login`.
