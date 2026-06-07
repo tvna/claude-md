@@ -805,6 +805,36 @@ class TestVerifyPrVerificationPairs:
         )
         assert body_policy.verify_pr_verification_pairs(body) == []
 
+    def test_trailing_text_after_backtick_is_named(self) -> None:
+        # Recurrence from retro #1054 / #1376: trailing text after the
+        # closing backtick must be named, not collapsed into the generic
+        # "no command/result pairs" message.
+        body = (
+            "## Verification\n\n"
+            "- command: `git push` (pre-push hooks)\n"
+            "  result: `exit 0`\n"
+        )
+        errors = body_policy.verify_pr_verification_pairs(body)
+        assert any("trailing text" in e for e in errors)
+        assert any("(pre-push hooks)" in e for e in errors)
+
+    def test_trailing_text_does_not_also_flag_result_as_orphan(self) -> None:
+        body = (
+            "## Verification\n\n"
+            "- command: `git push` (pre-push hooks)\n"
+            "  result: `exit 0`\n"
+        )
+        errors = body_policy.verify_pr_verification_pairs(body)
+        assert len(errors) == 1
+        assert "without a preceding" not in errors[0]
+        assert "no command/result pairs" not in errors[0]
+
+    def test_trailing_text_without_result_reports_only_trailing(self) -> None:
+        body = "## Verification\n\n- command: `git push` (pre-push hooks)\n"
+        errors = body_policy.verify_pr_verification_pairs(body)
+        assert len(errors) == 1
+        assert "trailing text" in errors[0]
+
 
 class TestVerifyPrChecklistSubsections:
     def test_well_formed_passes(self) -> None:
