@@ -46,6 +46,7 @@ import flake_pin_latest
 import github_paginate
 import issue_link
 import labels_apply
+import measure_devcontainer_startup
 import nixpkgs_cooldown
 import post_issue_comment
 import pr_upsert
@@ -139,6 +140,7 @@ class WorkflowInvocation(NamedTuple):
 # enforce that in both directions.
 CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("analyze_ci_timings.py", None): "test_analyze_ci_timings_matches_workflow_args",
+    ("measure_devcontainer_startup.py", None): "test_measure_devcontainer_startup_matches_workflow_args",
     ("ci_budget_issue.py", "run"): "test_ci_budget_issue_run_matches_workflow_args",
     ("attack_review_reminder.py", "assemble"): "test_attack_review_reminder_assemble_matches_workflow_args",
     ("backup_archive.py", "build"): "test_backup_archive_build_matches_workflow_args",
@@ -1952,6 +1954,67 @@ def test_analyze_ci_timings_matches_workflow_args(
     assert rc == 0
     out = capsys.readouterr().out
     assert "verify-agents.yml timings (weekly)" in out
+
+
+def test_measure_devcontainer_startup_matches_workflow_args(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Mirror the argv shape used by measure-devcontainer-startup.yml.
+
+    The workflow shells to ``python3 scripts/measure_devcontainer_startup.py
+    --config .devcontainer/<agent>/devcontainer.json --runtime docker
+    --user <agent> --cap NET_ADMIN --output startup-<agent>.json``. Exercise
+    that flag-only shape (no subcommand) against the real claude config, with
+    the container runtime stubbed so no daemon is needed. Refs #1322.
+    """
+
+    class _StubSession:
+        image = "stub"
+
+        def pull(self) -> measure_devcontainer_startup.RunResult:
+            return measure_devcontainer_startup.RunResult(0, "", 1.0)
+
+        def image_size(self) -> int:
+            return 1024
+
+        def start(self) -> None:
+            pass
+
+        def exec(self, segment: str) -> measure_devcontainer_startup.RunResult:
+            return measure_devcontainer_startup.RunResult(0, "", 0.5)
+
+        def close(self) -> None:
+            pass
+
+    captured: dict[str, Any] = {}
+
+    def factory(**kwargs: Any) -> _StubSession:
+        captured.update(kwargs)
+        return _StubSession()
+
+    out_path = tmp_path / "startup-claude.json"
+    rc = measure_devcontainer_startup.run(
+        [
+            "--config",
+            ".devcontainer/claude/devcontainer.json",
+            "--runtime",
+            "docker",
+            "--user",
+            "claude",
+            "--cap",
+            "NET_ADMIN",
+            "--output",
+            str(out_path),
+        ],
+        session_factory=factory,
+        which=lambda _name: "/usr/bin/docker",
+    )
+    assert rc == 0
+    assert captured["runtime"] == "/usr/bin/docker"
+    assert captured["user"] == "claude"
+    assert captured["caps"] == ["NET_ADMIN"]
+    assert json.loads(out_path.read_text(encoding="utf-8"))["image"] == "stub"
+    assert json.loads(capsys.readouterr().out)["image"] == "stub"
 
 
 def test_ci_budget_issue_run_matches_workflow_args(

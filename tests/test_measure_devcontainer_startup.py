@@ -1,0 +1,427 @@
+"""Unit tests for scripts/measure_devcontainer_startup.py (Refs #1322).
+
+All container interaction is funnelled through an injectable runner/session, so
+these tests exercise the parsing, argv-building, aggregation, and CLI wiring
+with fakes and never touch a real container runtime.
+"""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from typing import Any
+
+import measure_devcontainer_startup as mod
+import pytest
+
+pytestmark = pytest.mark.shard_ci_ops
+
+
+class FakeProc:
+    """Stand-in for subprocess.CompletedProcess."""
+
+    def __init__(self, returncode: int = 0, stdout: str = "") -> None:
+        self.returncode = returncode
+        self.stdout = stdout
+
+
+def make_runner(results: list[FakeProc]) -> tuple[Any, list[list[str]]]:
+    """Return a runner that yields ``results`` in order, plus a calls log."""
+    calls: list[list[str]] = []
+    iterator = iter(results)
+
+    def runner(cmd: list[str], **_kwargs: Any) -> FakeProc:
+        calls.append(cmd)
+        return next(iterator)
+
+    return runner, calls
+
+
+def make_clock(values: list[float]) -> Any:
+    """Return a clock callable that yields ``values`` in order."""
+    iterator = iter(values)
+    return lambda: next(iterator)
+
+
+# --------------------------------------------------------------------------- #
+# _run
+# --------------------------------------------------------------------------- #
+
+
+def test_run_times_and_wraps_result() -> None:
+    runner, calls = make_runner([FakeProc(returncode=3, stdout="hi")])
+    result = mod._run(["docker", "ps"], runner=runner, clock=make_clock([10.0, 10.75]))
+    assert result == mod.RunResult(returncode=3, stdout="hi", seconds=0.75)
+    assert calls == [["docker", "ps"]]
+
+
+# --------------------------------------------------------------------------- #
+# resolve_runtime
+# --------------------------------------------------------------------------- #
+
+
+def test_resolve_runtime_returns_path() -> None:
+    assert mod.resolve_runtime("docker", which=lambda _name: "/usr/bin/docker") == "/usr/bin/docker"
+
+
+def test_resolve_runtime_missing_raises() -> None:
+    with pytest.raises(ValueError, match="container runtime not found"):
+        mod.resolve_runtime("docker", which=lambda _name: None)
+
+
+# --------------------------------------------------------------------------- #
+# load_config / get_image / split_segments
+# --------------------------------------------------------------------------- #
+
+
+def test_load_config_reads_json(tmp_path: Path) -> None:
+    cfg = tmp_path / "devcontainer.json"
+    cfg.write_text('{"image": "x"}', encoding="utf-8")
+    assert mod.load_config(cfg) == {"image": "x"}
+
+
+def test_load_config_missing_file_raises(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="cannot read devcontainer config"):
+        mod.load_config(tmp_path / "absent.json")
+
+
+def test_load_config_malformed_raises(tmp_path: Path) -> None:
+    cfg = tmp_path / "bad.json"
+    cfg.write_text("{not json", encoding="utf-8")
+    with pytest.raises(ValueError, match="malformed JSON"):
+        mod.load_config(cfg)
+
+
+def test_load_config_non_object_raises(tmp_path: Path) -> None:
+    cfg = tmp_path / "arr.json"
+    cfg.write_text("[1, 2]", encoding="utf-8")
+    with pytest.raises(ValueError, match="not an object"):
+        mod.load_config(cfg)
+
+
+def test_get_image_ok() -> None:
+    assert mod.get_image({"image": "ghcr.io/x/y:abc123"}) == "ghcr.io/x/y:abc123"
+
+
+@pytest.mark.parametrize("image", ["ghcr.io/x/y:main", "ghcr.io/x/y:latest"])
+def test_get_image_rejects_mutable_tag(image: str) -> None:
+    with pytest.raises(ValueError, match="mutable image tag"):
+        mod.get_image({"image": image})
+
+
+@pytest.mark.parametrize("config", [{}, {"image": ""}, {"image": 5}])
+def test_get_image_missing_raises(config: dict[str, Any]) -> None:
+    with pytest.raises(ValueError, match="no string 'image'"):
+        mod.get_image(config)
+
+
+def test_split_segments_splits_on_and() -> None:
+    assert mod.split_segments("a && b && c") == ["a", "b", "c"]
+
+
+def test_split_segments_trims_and_drops_empty() -> None:
+    assert mod.split_segments("  a &&  && b ") == ["a", "b"]
+
+
+@pytest.mark.parametrize("value", [None, "", "   "])
+def test_split_segments_empty(value: str | None) -> None:
+    assert mod.split_segments(value) == []
+
+
+def test_split_segments_no_separator_returns_whole() -> None:
+    cmd = 'if [ "$X" = "1" ]; then run; fi'
+    assert mod.split_segments(cmd) == [cmd]
+
+
+# --------------------------------------------------------------------------- #
+# DockerSession argv builders
+# --------------------------------------------------------------------------- #
+
+
+def make_session(results: list[FakeProc], **overrides: Any) -> tuple[mod.DockerSession, list[list[str]]]:
+    runner, calls = make_runner(results)
+    defaults: dict[str, Any] = {
+        "runtime": "/usr/bin/docker",
+        "image": "img:sha",
+        "workspace": "/workspaces/claude-md",
+        "user": "claude",
+        "host_dir": "/host/repo",
+        "caps": [],
+        "runner": runner,
+        "clock": make_clock([0.0] * 20),
+    }
+    defaults.update(overrides)
+    return mod.DockerSession(**defaults), calls
+
+
+def test_session_pull_argv() -> None:
+    session, calls = make_session([FakeProc(stdout="")])
+    session.pull()
+    assert calls == [["/usr/bin/docker", "pull", "img:sha"]]
+
+
+def test_session_image_size_parses_int() -> None:
+    session, _calls = make_session([FakeProc(stdout="12345\n")])
+    assert session.image_size() == 12345
+
+
+def test_session_image_size_failure_raises() -> None:
+    session, _calls = make_session([FakeProc(returncode=1, stdout="")])
+    with pytest.raises(ValueError, match="image inspect failed"):
+        session.image_size()
+
+
+def test_session_start_argv_and_id() -> None:
+    session, calls = make_session([FakeProc(stdout="container99\n")], caps=["NET_ADMIN"])
+    session.start()
+    assert session.container_id == "container99"
+    assert calls[0] == [
+        "/usr/bin/docker", "run", "-d", "--rm",
+        "-w", "/workspaces/claude-md",
+        "-v", "/host/repo:/workspaces/claude-md",
+        "--user", "claude",
+        "--cap-add", "NET_ADMIN",
+        "img:sha", "sleep", "infinity",
+    ]
+
+
+def test_session_start_without_user_omits_flag() -> None:
+    session, calls = make_session([FakeProc(stdout="c1")], user="")
+    session.start()
+    assert "--user" not in calls[0]
+
+
+def test_session_start_failure_raises() -> None:
+    session, _calls = make_session([FakeProc(returncode=1, stdout="")])
+    with pytest.raises(ValueError, match="failed to start container"):
+        session.start()
+
+
+def test_session_exec_before_start_raises() -> None:
+    session, _calls = make_session([])
+    with pytest.raises(ValueError, match="exec called before start"):
+        session.exec("echo hi")
+
+
+def test_session_exec_argv() -> None:
+    session, calls = make_session([FakeProc(stdout="cid"), FakeProc(stdout="ok")])
+    session.start()
+    session.exec("uv sync")
+    assert calls[1] == ["/usr/bin/docker", "exec", "cid", "bash", "-lc", "uv sync"]
+
+
+def test_session_close_removes_container() -> None:
+    session, calls = make_session([FakeProc(stdout="cid"), FakeProc(stdout="")])
+    session.start()
+    session.close()
+    assert calls[1] == ["/usr/bin/docker", "rm", "-f", "cid"]
+    assert session.container_id is None
+
+
+def test_session_close_without_start_is_noop() -> None:
+    session, calls = make_session([])
+    session.close()
+    assert calls == []
+
+
+# --------------------------------------------------------------------------- #
+# measure
+# --------------------------------------------------------------------------- #
+
+
+class FakeSession:
+    """In-memory Session for measure() tests."""
+
+    def __init__(self, *, exec_results: dict[str, mod.RunResult], size: int = 100) -> None:
+        self.image = "img:sha"
+        self._exec_results = exec_results
+        self._size = size
+        self.events: list[str] = []
+
+    def pull(self) -> mod.RunResult:
+        self.events.append("pull")
+        return mod.RunResult(returncode=0, stdout="", seconds=2.5)
+
+    def image_size(self) -> int:
+        return self._size
+
+    def start(self) -> None:
+        self.events.append("start")
+
+    def exec(self, segment: str) -> mod.RunResult:
+        self.events.append(f"exec:{segment}")
+        return self._exec_results[segment]
+
+    def close(self) -> None:
+        self.events.append("close")
+
+
+def test_measure_full_report() -> None:
+    session = FakeSession(
+        exec_results={
+            "uv sync": mod.RunResult(0, "", 4.0),
+            "egress": mod.RunResult(7, "", 0.2),
+        },
+        size=2_000_000,
+    )
+    report = measure_report = mod.measure(
+        session, post_create=["uv sync"], post_start=["egress"], do_pull=True
+    )
+    assert report["image"] == "img:sha"
+    assert report["pull_seconds"] == 2.5
+    assert report["pull_returncode"] == 0
+    assert report["image_size_bytes"] == 2_000_000
+    assert report["phases"] == [
+        {"phase": "postCreate", "command": "uv sync", "seconds": 4.0, "returncode": 0},
+        {"phase": "postStart", "command": "egress", "seconds": 0.2, "returncode": 7},
+    ]
+    assert report["total_phase_seconds"] == 4.2
+    assert session.events == ["pull", "start", "exec:uv sync", "exec:egress", "close"]
+    assert measure_report is report
+
+
+def test_measure_skips_pull() -> None:
+    session = FakeSession(exec_results={})
+    report = mod.measure(session, post_create=[], post_start=[], do_pull=False)
+    assert "pull_seconds" not in report
+    assert session.events == ["start", "close"]
+
+
+def test_measure_closes_on_exec_error() -> None:
+    class Boom(FakeSession):
+        def exec(self, segment: str) -> mod.RunResult:
+            self.events.append("exec")
+            raise RuntimeError("boom")
+
+    session = Boom(exec_results={})
+    with pytest.raises(RuntimeError, match="boom"):
+        mod.measure(session, post_create=["x"], post_start=[], do_pull=False)
+    assert session.events[-1] == "close"
+
+
+# --------------------------------------------------------------------------- #
+# _human_size / format_summary
+# --------------------------------------------------------------------------- #
+
+
+def test_human_size_mib() -> None:
+    assert mod._human_size(5 * 1024 * 1024) == "5.0 MiB"
+
+
+def test_human_size_gib() -> None:
+    assert mod._human_size(3 * 1024 * 1024 * 1024) == "3.00 GiB"
+
+
+def test_format_summary_includes_rows_and_pull() -> None:
+    report = {
+        "image": "img:sha",
+        "image_size_bytes": 2 * 1024 * 1024,
+        "pull_seconds": 1.234,
+        "pull_returncode": 0,
+        "total_phase_seconds": 4.0,
+        "phases": [{"phase": "postCreate", "command": "uv sync", "seconds": 4.0, "returncode": 0}],
+    }
+    summary = mod.format_summary(report)
+    assert "image: `img:sha`" in summary
+    assert "2.0 MiB" in summary
+    assert "pull: 1.234s" in summary
+    assert "| postCreate | 4.000 | 0 | uv sync |" in summary
+    assert summary.isascii()
+
+
+def test_format_summary_flags_failed_pull_and_truncates() -> None:
+    long_cmd = "x" * 120
+    report = {
+        "image": "img:sha",
+        "image_size_bytes": 10,
+        "pull_seconds": 0.5,
+        "pull_returncode": 1,
+        "total_phase_seconds": 0.0,
+        "phases": [{"phase": "postStart", "command": long_cmd, "seconds": 0.0, "returncode": 0}],
+    }
+    summary = mod.format_summary(report)
+    assert "pull: 0.500s (FAILED)" in summary
+    assert "..." in summary
+    assert long_cmd not in summary
+
+
+def test_format_summary_without_pull() -> None:
+    report = {
+        "image": "img:sha",
+        "image_size_bytes": 10,
+        "total_phase_seconds": 0.0,
+        "phases": [],
+    }
+    summary = mod.format_summary(report)
+    assert "pull:" not in summary
+
+
+# --------------------------------------------------------------------------- #
+# run (CLI)
+# --------------------------------------------------------------------------- #
+
+
+def write_config(tmp_path: Path) -> Path:
+    cfg = tmp_path / "devcontainer.json"
+    cfg.write_text(
+        json.dumps(
+            {
+                "image": "ghcr.io/x/y:abc",
+                "postCreateCommand": "uv sync && install cli",
+                "postStartCommand": "egress",
+            }
+        ),
+        encoding="utf-8",
+    )
+    return cfg
+
+
+def test_run_end_to_end(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    captured: dict[str, Any] = {}
+
+    def factory(**kwargs: Any) -> FakeSession:
+        captured.update(kwargs)
+        return FakeSession(
+            exec_results={
+                "uv sync": mod.RunResult(0, "", 1.0),
+                "install cli": mod.RunResult(0, "", 2.0),
+                "egress": mod.RunResult(0, "", 0.5),
+            }
+        )
+
+    out = tmp_path / "report.json"
+    rc = mod.run(
+        ["--config", str(write_config(tmp_path)), "--output", str(out), "--cap", "NET_ADMIN"],
+        session_factory=factory,
+        which=lambda _name: "/usr/bin/docker",
+    )
+    assert rc == 0
+    assert captured["runtime"] == "/usr/bin/docker"
+    assert captured["image"] == "ghcr.io/x/y:abc"
+    assert captured["caps"] == ["NET_ADMIN"]
+    report = json.loads(out.read_text(encoding="utf-8"))
+    assert report["total_phase_seconds"] == 3.5
+    assert json.loads(capsys.readouterr().out)["total_phase_seconds"] == 3.5
+
+
+def test_run_no_pull(tmp_path: Path) -> None:
+    sessions: list[FakeSession] = []
+
+    def factory(**_kwargs: Any) -> FakeSession:
+        session = FakeSession(
+            exec_results={
+                "uv sync": mod.RunResult(0, "", 1.0),
+                "install cli": mod.RunResult(0, "", 2.0),
+                "egress": mod.RunResult(0, "", 0.5),
+            }
+        )
+        sessions.append(session)
+        return session
+
+    rc = mod.run(
+        ["--config", str(write_config(tmp_path)), "--no-pull"],
+        session_factory=factory,
+        which=lambda _name: "/usr/bin/docker",
+    )
+    assert rc == 0
+    assert "pull" not in sessions[0].events
