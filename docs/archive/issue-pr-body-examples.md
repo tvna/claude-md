@@ -288,6 +288,13 @@ automation layers.
 - [ ] auto-retro issue opened by `.github/workflows/auto-retro.yml`
 - [ ] No follow-up `fix(...)` PR needed within 24h of merge
 
+## Resource Consumption
+
+- Elapsed (session start to PR create): 0:06:42
+- Total tokens: 230,127 (input 2,859 / output 7,480 / cache-create 57,108 / cache-read 162,680)
+- Cost (USD): $0.6396
+- Model(s): claude-opus-4-8
+
 ## Related Issue
 
 Refs #343

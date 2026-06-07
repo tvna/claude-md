@@ -64,6 +64,7 @@ _PR_REQUIRED: tuple[str, ...] = (
     "Rollback",
     "Verification",
     "Checklist",
+    "Resource Consumption",
 )
 # ``Text delta`` appears only when the diff touches universal instruction
 # text (.apm/instructions/**, CLAUDE.md, AGENTS.md), so it is allowlisted,
