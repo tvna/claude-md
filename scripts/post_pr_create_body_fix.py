@@ -17,21 +17,65 @@ against the stored body and warns about each dropped <...> token so the
 agent can rephrase (e.g. wrap it in backticks) rather than ship missing
 content.
 
+Footer carry-forward (Refs #1427): under the remote web harness
+(``CLAUDE_CODE_REMOTE=true``) the create call auto-appends one session
+footer to the *stored* body, but the agent's authored body carries none
+(``preflight_pr_template_shape`` relaxes the footer on the create path
+only). The mandated fix-up ``update_pull_request`` is NOT auto-appended and
+its footer gate still requires one, so resending the footerless normalized
+body would be denied. This hook therefore lifts the harness-appended footer
+out of the stored body and re-appends it to the normalized body it hands
+back, collapsing the create-vs-update asymmetry without relaxing any gate
+and without relying on PreToolUse ``updatedInput`` (unreliable under the
+multiple-hook PR matcher; see docs/runbooks/rtk-hook-verification.md). It
+appends only when the normalized body lacks a trailing footer, so no
+duplicate is produced.
+
 Fail-open: malformed input, missing fields, or off-target tools exit 0 with
 no output so a hook bug cannot wedge unrelated tool calls.
 
-Refs: issue #892, #1361 (R1).
+Refs: issue #892, #1361 (R1), #1427.
 """
 
 from __future__ import annotations
 
+import html
 import re
 from typing import Any
 
 from _hook_runtime import emit_decision, read_event
-from body_policy import detect_dropped_angle_tokens, normalize_pr_body
+
+# Import the footer regex from body_policy (rather than recompiling it here)
+# so the carry-forward detection cannot drift from the gate that enforces the
+# footer. Refs #1427.
+from body_policy import (
+    _AGENT_ATTRIBUTION_FOOTER_RE,
+    detect_dropped_angle_tokens,
+    normalize_pr_body,
+)
 
 TARGET_TOOL = "mcp__github__create_pull_request"
+
+
+def has_trailing_agent_footer(body: str) -> bool:
+    """Return True when *body*'s last non-empty line is an agent footer."""
+    lines = body.replace("\r", "").rstrip().splitlines()
+    return bool(lines and _AGENT_ATTRIBUTION_FOOTER_RE.fullmatch(lines[-1].strip()))
+
+
+def extract_trailing_agent_footer(body: str) -> str | None:
+    """Return the last agent-attribution footer line in *body*, or None.
+
+    HTML entities are unescaped first so a footer the MCP write tool stored
+    as ``&amp;`` is returned in authored form; the *last* match is returned
+    because the remote web harness appends its session footer last.
+    """
+    found: str | None = None
+    for line in html.unescape(body.replace("\r", "")).splitlines():
+        stripped = line.strip()
+        if _AGENT_ATTRIBUTION_FOOTER_RE.fullmatch(stripped):
+            found = stripped
+    return found
 
 _PR_URL_RE = re.compile(r"https://github\.com/([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+)/pull/(\d+)")
 _NUMBER_KEYS = frozenset({"number", "pullRequestNumber", "pull_request_number", "pr_number"})
@@ -134,12 +178,22 @@ def decide(event: dict[str, Any]) -> dict[str, Any] | None:
 
     pr_label = f"{owner}/{repo}#{pr_number}" if owner and repo else f"PR #{pr_number}"
     normalized = normalize_pr_body(body)
+
+    stored = extract_stored_body(tool_response)
+    # Refs #1427: carry the harness-appended session footer forward from the
+    # stored body so the mandated update_pull_request (whose footer gate is
+    # not relaxed) is not denied for a missing footer. Append only when the
+    # normalized body lacks one, so no duplicate is produced.
+    if stored is not None and not has_trailing_agent_footer(normalized):
+        carried_footer = extract_trailing_agent_footer(stored)
+        if carried_footer is not None:
+            normalized = f"{normalized.rstrip()}\n\n{carried_footer}"
+
     body_repr = (
         normalized if len(normalized) <= _MAX_BODY_PREVIEW
         else normalized[:_MAX_BODY_PREVIEW] + "\n…(truncated)"
     )
 
-    stored = extract_stored_body(tool_response)
     dropped = detect_dropped_angle_tokens(body, stored) if stored is not None else []
     warning = ""
     if dropped:
