@@ -423,6 +423,14 @@
             "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/gate_handoff_retro_survey_askuserquestion.py"
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/stop_new_session_handoff_prompt.py"
+          }
+        ]
       }
     ]
   }

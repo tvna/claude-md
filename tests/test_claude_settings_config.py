@@ -90,6 +90,21 @@ def test_stop_hook_registers_decision_handoff_gate() -> None:
     assert any("gate_decision_handoff_askuserquestion.py" in cmd for cmd in commands)
 
 
+def test_stop_hook_registers_new_session_handoff_prompt() -> None:
+    """Stop wires the Claude-only paste-ready handoff nudge (#1334)."""
+    data = _load_settings()
+    commands: list[str] = []
+    for group in _hook_groups(data, "Stop"):
+        hooks = group["hooks"]
+        assert isinstance(hooks, list)
+        for hook in hooks:
+            assert isinstance(hook, dict)
+            command = hook.get("command")
+            if isinstance(command, str):
+                commands.append(unwrap_command(command))
+    assert any("stop_new_session_handoff_prompt.py" in cmd for cmd in commands)
+
+
 def test_claude_hooks_use_pascalcase_event_keys() -> None:
     """Hook event keys must be PascalCase; camelCase keys never fire.
 
