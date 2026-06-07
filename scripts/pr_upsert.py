@@ -30,11 +30,25 @@ import sys
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
-from urllib.parse import quote
 
 from _github_api import apply_call as _github_apply_call
+from _github_api import graphql_call as _github_graphql_call
 
 _API_ROOT = "https://api.github.com"
+
+# Commits authored through this mutation are signed by GitHub and shown as
+# Verified, with the authenticated token's identity (the App bot) as author.
+# This is the only way to produce a verified commit for an App-bot author: a
+# GitHub App account cannot hold its own GPG/SSH signing key, so a local
+# ``git commit`` on the runner is always unsigned and rejected by the
+# ``required_signatures`` rule on ``main``. Refs #1437.
+_CREATE_COMMIT_ON_BRANCH_MUTATION = """
+mutation($input: CreateCommitOnBranchInput!) {
+  createCommitOnBranch(input: $input) {
+    commit { oid }
+  }
+}
+"""
 
 
 def _list_open_prs(
@@ -132,30 +146,86 @@ def _get_pr(
     return data
 
 
-def _get_user_id(
+def _get_ref_sha(
     *,
-    login: str,
+    repo: str,
+    ref: str,
     token: str,
     apply_call: Callable[..., tuple[int, str]] = _github_apply_call,
-) -> int:
-    """Return the numeric account id for *login*.
-
-    Used to build a GitHub App bot's canonical noreply commit email
-    (``<id>+<slug>[bot]@users.noreply.github.com``). ``login`` is URL-encoded so
-    a bot login such as ``my-app[bot]`` (with ``[``/``]``) is requested safely.
-    """
-    url = f"{_API_ROOT}/users/{quote(login)}"
+) -> str:
+    """Return the commit sha that ``refs/{ref}`` points at (e.g. ``ref='heads/main'``)."""
+    url = f"{_API_ROOT}/repos/{repo}/git/ref/{ref}"
     code, body = apply_call(method="GET", url=url, payload=None, token=token)
     if not (200 <= code < 300):
-        raise RuntimeError(f"Get user {login} failed: HTTP {code}: {body[:200]}")
+        raise RuntimeError(f"Get ref {ref} failed: HTTP {code}: {body[:200]}")
     try:
         data = json.loads(body)
     except json.JSONDecodeError as exc:
-        raise RuntimeError(f"Unexpected response from get user {login}: {body[:200]}") from exc
-    uid = data.get("id") if isinstance(data, dict) else None
-    if not isinstance(uid, int):
-        raise RuntimeError(f"Get user {login} response missing integer id: {body[:200]}")
-    return uid
+        raise RuntimeError(f"Unexpected response from get ref {ref}: {body[:200]}") from exc
+    sha = data.get("object", {}).get("sha") if isinstance(data, dict) else None
+    if not isinstance(sha, str) or not sha:
+        raise RuntimeError(f"Get ref {ref} response missing object.sha: {body[:200]}")
+    return sha
+
+
+def _create_branch_ref(
+    *,
+    repo: str,
+    branch: str,
+    sha: str,
+    token: str,
+    apply_call: Callable[..., tuple[int, str]] = _github_apply_call,
+) -> None:
+    """Create ``refs/heads/{branch}`` pointing at *sha*."""
+    url = f"{_API_ROOT}/repos/{repo}/git/refs"
+    payload = {"ref": f"refs/heads/{branch}", "sha": sha}
+    code, resp = apply_call(method="POST", url=url, payload=payload, token=token)
+    if not (200 <= code < 300):
+        raise RuntimeError(f"Create branch ref {branch} failed: HTTP {code}: {resp[:200]}")
+
+
+def _create_commit_on_branch(
+    *,
+    repo: str,
+    branch: str,
+    expected_head_oid: str,
+    headline: str,
+    body: str,
+    additions: list[dict[str, str]],
+    token: str,
+    graphql_call: Callable[..., tuple[int, dict[str, Any]]] = _github_graphql_call,
+) -> str:
+    """Create a signed commit on *branch* via GraphQL; return the new commit oid.
+
+    *additions* is a list of ``{"path", "contents"}`` where ``contents`` is the
+    base64-encoded file bytes. *expected_head_oid* must equal the current head of
+    *branch* or GitHub rejects the mutation (guarding against a racing write).
+    See ``_CREATE_COMMIT_ON_BRANCH_MUTATION`` for why this path is required for a
+    verified App-bot commit. Refs #1437.
+    """
+    message: dict[str, str] = {"headline": headline}
+    if body:
+        message["body"] = body
+    variables = {
+        "input": {
+            "branch": {"repositoryNameWithOwner": repo, "branchName": branch},
+            "message": message,
+            "expectedHeadOid": expected_head_oid,
+            "fileChanges": {"additions": additions},
+        }
+    }
+    code, response = graphql_call(query=_CREATE_COMMIT_ON_BRANCH_MUTATION, variables=variables, token=token)
+    if not (200 <= code < 300):
+        raise RuntimeError(f"createCommitOnBranch HTTP {code}")
+    if "errors" in response:
+        raise RuntimeError(f"createCommitOnBranch errors: {response['errors']}")
+    try:
+        oid = response["data"]["createCommitOnBranch"]["commit"]["oid"]
+    except (KeyError, TypeError) as exc:
+        raise RuntimeError(f"createCommitOnBranch: unexpected response: {str(response)[:200]}") from exc
+    if not isinstance(oid, str) or not oid:
+        raise RuntimeError(f"createCommitOnBranch: missing commit oid: {str(response)[:200]}")
+    return oid
 
 
 def _merge_pr(
