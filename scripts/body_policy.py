@@ -393,6 +393,75 @@ def verify_pr_agent_attribution_footer(
     ]
 
 
+_ANGLE_TOKEN_RE = re.compile(r"<[^<>\n]+>")
+_BLANK_RUN_RE = re.compile(r"\n{3,}")
+
+
+def collapse_duplicate_footer(body: str) -> str:
+    """Return *body* with a trailing run of agent-attribution footers collapsed.
+
+    ``mcp__github__create_pull_request`` auto-appends a session footer even
+    when the authored body already ends with one, producing two footer
+    lines. This keeps the last footer (the harness-appended session footer
+    is authoritative) and drops earlier agent-attribution footer lines, then
+    collapses any blank-line run a removal left behind. A body with zero or
+    one footer is returned unchanged (modulo ``\\r`` stripping). Refs #1361.
+    """
+    text = body.replace("\r", "")
+    lines = text.split("\n")
+    footer_idxs = [
+        i for i, line in enumerate(lines)
+        if _AGENT_ATTRIBUTION_FOOTER_RE.fullmatch(line.strip())
+    ]
+    if len(footer_idxs) <= 1:
+        return text
+    drop = set(footer_idxs[:-1])
+    kept = [line for i, line in enumerate(lines) if i not in drop]
+    return _BLANK_RUN_RE.sub("\n\n", "\n".join(kept))
+
+
+def normalize_pr_body(body: str) -> str:
+    """Return *body* with MCP write-tool corruption deterministically undone.
+
+    ``mcp__github__create_pull_request`` / ``update_pull_request`` store the
+    body with HTML-entity encoding applied (``&`` -> ``&amp;``, ``"`` ->
+    ``&#34;``, ``>`` -> ``&gt;``, ``<`` -> ``&lt;``) and append a duplicate
+    agent-attribution footer. This reverses the encoding via
+    :func:`html.unescape` and collapses the duplicate footer via
+    :func:`collapse_duplicate_footer`, so the normalized text matches the
+    body the agent authored. The function is idempotent on an already-clean
+    body. Refs #1361 (R1), #892.
+
+    Angle-bracket *content* the tool dropped entirely (e.g. the
+    ``<sha>`` token in ``git revert <sha>``) is unrecoverable from the
+    stored body; use :func:`detect_dropped_angle_tokens` against the
+    authored body to detect that separately.
+    """
+    return collapse_duplicate_footer(html.unescape(body))
+
+
+def detect_dropped_angle_tokens(authored: str, stored: str) -> list[str]:
+    """Return ``<...>`` tokens present in *authored* but absent from *stored*.
+
+    The MCP write tools drop angle-bracket-delimited tokens entirely rather
+    than HTML-encoding them, which is unrecoverable by
+    :func:`normalize_pr_body`. Comparing the authored body (still intact in
+    the PostToolUse ``tool_input``) against the stored body surfaces each
+    dropped token so the agent can rephrase (e.g. wrap the token in
+    backticks) instead of silently shipping a body with missing content.
+    The stored side is HTML-unescaped first so a token that survived only as
+    ``&lt;sha&gt;`` is not falsely reported as dropped. Refs #1361 (R1).
+    """
+    stored_norm = html.unescape(stored)
+    seen: set[str] = set()
+    dropped: list[str] = []
+    for token in _ANGLE_TOKEN_RE.findall(authored):
+        if token not in stored_norm and token not in seen:
+            seen.add(token)
+            dropped.append(token)
+    return dropped
+
+
 def build_codex_attribution_footer(model: str) -> str:
     """Return the canonical Codex GitHub provenance footer."""
     normalized = model.strip()

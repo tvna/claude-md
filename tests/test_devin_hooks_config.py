@@ -188,7 +188,10 @@ def test_devin_post_tool_use_starts_pr_monitoring() -> None:
 
     assert legacy_pr_create in matcher_to_commands
     assert "python3 scripts/post_pr_create_ci_monitor.py" in matcher_to_commands[legacy_pr_create]
+    # Merge-readiness loop must surface mergeability for every agent (Refs #1361).
+    assert "python3 scripts/check_pr_mergeability.py" in matcher_to_commands[legacy_pr_create]
     assert connector_pr_create in matcher_to_commands
+    assert "python3 scripts/check_pr_mergeability.py" in matcher_to_commands[connector_pr_create]
 
 
 def test_devin_hooks_match_codex_hooks_exactly() -> None:
