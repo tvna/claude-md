@@ -14,6 +14,11 @@ What it measures, reading the lifecycle straight from a devcontainer config:
   ``configure-agent-runtime`` ...), run sequentially in one container so each
   segment builds on the previous one exactly as a real start does.
 * ``postStart``      -- time of each segment of ``postStartCommand``.
+* ``composition``    -- (opt-in ``--probe-composition``) on-disk byte split of
+  the pulled image: total ``/nix/store`` bytes vs the base-distro dirs, plus
+  the largest store entries. Measured with ``du`` (coreutils, always present)
+  so it works even where ``nix develop`` does not in the CI exec context. This
+  is the Phase 1 (#1332) cut-target signal: it names what dominates the image.
 
 The web remote session cannot run a container runtime, so this is driven from
 CI (``.github/workflows/measure-devcontainer-startup.yml``) -- mirroring the
@@ -28,9 +33,11 @@ funnelled through one injectable :func:`_run`, so :func:`measure` and the
 Contract:
 - Inputs: ``--config`` (required, path to a devcontainer.json); ``--runtime``
   (default ``docker``), ``--workspace``, ``--user``, ``--host-dir``, ``--cap``
-  (repeatable), ``--no-pull``, ``--output``. No env-var fallbacks.
+  (repeatable), ``--no-pull``, ``--probe-composition``, ``--top-n`` (default
+  30), ``--output``. No env-var fallbacks.
 - Outputs: the JSON report on stdout (and to ``--output`` when given), an ASCII
   markdown summary on stderr (for ``$GITHUB_STEP_SUMMARY``); exit 0 on success.
+  With ``--probe-composition`` the report gains a ``composition`` block.
 - Failure policy: fails loud per CLAUDE.md section 4 -- a missing runtime,
   unreadable/malformed config, mutable image tag, or failed pull/start/inspect
   raises and exits non-zero. A per-segment non-zero exit is recorded as data
@@ -135,6 +142,56 @@ def split_segments(command: str | None) -> list[str]:
     return [segment.strip() for segment in command.split(_SEGMENT_SEP) if segment.strip()]
 
 
+# Base-distro directories whose byte total is reported separately from the nix
+# closure, so the summary splits "image bloat from the base" from "image bloat
+# from the nix store" -- the two have different cut levers.
+_COMPOSITION_BASE_DIRS = ("/usr", "/opt", "/var", "/home", "/etc", "/root", "/bin", "/lib")
+# ``du -d1`` lists each immediate child of /nix/store plus the store total on
+# its own line, so no shell glob expansion (which would blow past ARG_MAX on a
+# store with thousands of entries). ``|| true`` keeps a transient du error
+# (e.g. a path vanishing mid-walk) from failing the whole measurement.
+_STORE_DU_CMD = "du -b -d1 /nix/store 2>/dev/null | sort -rn || true"
+_BASE_DU_CMD = "du -sb " + " ".join(_COMPOSITION_BASE_DIRS) + " 2>/dev/null || true"
+
+
+def _parse_du(stdout: str) -> list[dict[str, Any]]:
+    """Parse ``du -b`` output (``<bytes>\\t<path>`` per line) into entries.
+
+    Lines that are blank or not ``<int> <path>`` are skipped rather than raised
+    on: du writes only well-formed size/path pairs to stdout, so a stray line
+    is noise, not a measurement failure.
+    """
+    entries: list[dict[str, Any]] = []
+    for raw in stdout.splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        parts = line.split(None, 1)
+        if len(parts) != 2:
+            continue
+        size_text, path = parts
+        try:
+            size = int(size_text)
+        except ValueError:
+            continue
+        entries.append({"bytes": size, "path": path})
+    return entries
+
+
+def probe_composition(session: Session, *, top_n: int = 30) -> dict[str, Any]:
+    """Probe the on-disk byte composition of the started container image.
+
+    Returns the ``/nix/store`` total, the ``top_n`` largest store entries, and
+    the base-distro dir sizes -- the evidence that names the image's dominant
+    cost so Phase 1 (#1332) cuts the right thing instead of guessing.
+    """
+    store = _parse_du(session.exec(_STORE_DU_CMD).stdout)
+    total = next((entry["bytes"] for entry in store if entry["path"] == "/nix/store"), 0)
+    top = [entry for entry in store if entry["path"] != "/nix/store"][:top_n]
+    base = _parse_du(session.exec(_BASE_DU_CMD).stdout)
+    return {"nix_store_bytes": total, "top_store_paths": top, "base_dirs": base}
+
+
 class Session(Protocol):
     """Container session protocol used by :func:`measure` (see DockerSession)."""
 
@@ -208,13 +265,17 @@ def measure(
     post_create: list[str],
     post_start: list[str],
     do_pull: bool = True,
+    probe: bool = False,
+    top_n: int = 30,
 ) -> dict[str, Any]:
     """Run the measurement against ``session`` and return a JSON-able report.
 
     A non-zero segment exit is recorded (returncode + time-to-failure), not
     swallowed: in a measurement a failure is data, and the postStart egress
     step is expected to be only best-effort outside the real host (no eBPF).
-    The container is always cleaned up.
+    With ``probe`` the report also carries an image ``composition`` block
+    (gathered while the container is still up). The container is always cleaned
+    up.
     """
     report: dict[str, Any] = {"image": session.image, "phases": []}
 
@@ -238,6 +299,8 @@ def measure(
                         "returncode": result.returncode,
                     }
                 )
+        if probe:
+            report["composition"] = probe_composition(session, top_n=top_n)
     finally:
         session.close()
 
@@ -276,6 +339,25 @@ def format_summary(report: dict[str, Any]) -> str:
         if len(command) > 70:
             command = command[:67] + "..."
         lines.append(f"| {entry['phase']} | {entry['seconds']:.3f} | {entry['returncode']} | {command} |")
+    composition = report.get("composition")
+    if composition:
+        lines += [
+            "",
+            "## Image composition",
+            "",
+            f"- /nix/store: {_human_size(composition['nix_store_bytes'])} "
+            f"({composition['nix_store_bytes']} bytes)",
+            "",
+            "| base dir | size |",
+            "| --- | ---: |",
+        ]
+        lines += [f"| {entry['path']} | {_human_size(entry['bytes'])} |" for entry in composition["base_dirs"]]
+        lines += [
+            "",
+            "| store path | size |",
+            "| --- | ---: |",
+        ]
+        lines += [f"| {entry['path']} | {_human_size(entry['bytes'])} |" for entry in composition["top_store_paths"]]
     return "\n".join(lines) + "\n"
 
 
@@ -294,6 +376,12 @@ def run(
     parser.add_argument("--host-dir", default=".", help="Host directory bind-mounted to --workspace.")
     parser.add_argument("--cap", action="append", default=[], help="--cap-add value (repeatable).")
     parser.add_argument("--no-pull", action="store_true", help="Skip the pull step (image already local).")
+    parser.add_argument(
+        "--probe-composition",
+        action="store_true",
+        help="Also probe the image's on-disk byte composition (nix store vs base, top entries).",
+    )
+    parser.add_argument("--top-n", type=int, default=30, help="How many largest store entries to report.")
     parser.add_argument("--output", type=Path, help="Write the JSON report to this path.")
     args = parser.parse_args(argv)
 
@@ -312,7 +400,14 @@ def run(
         caps=list(args.cap),
     )
 
-    report = measure(session, post_create=post_create, post_start=post_start, do_pull=not args.no_pull)
+    report = measure(
+        session,
+        post_create=post_create,
+        post_start=post_start,
+        do_pull=not args.no_pull,
+        probe=args.probe_composition,
+        top_n=args.top_n,
+    )
 
     payload = json.dumps(report, indent=2, sort_keys=True)
     if args.output is not None:
