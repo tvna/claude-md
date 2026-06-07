@@ -1963,9 +1963,10 @@ def test_measure_devcontainer_startup_matches_workflow_args(
 
     The workflow shells to ``python3 scripts/measure_devcontainer_startup.py
     --config .devcontainer/<agent>/devcontainer.json --runtime docker
-    --user <agent> --cap NET_ADMIN --output startup-<agent>.json``. Exercise
-    that flag-only shape (no subcommand) against the real claude config, with
-    the container runtime stubbed so no daemon is needed. Refs #1322.
+    --user <agent> --cap NET_ADMIN --probe-composition --output
+    startup-<agent>.json``. Exercise that flag-only shape (no subcommand)
+    against the real claude config, with the container runtime stubbed so no
+    daemon is needed. Refs #1322, #1332.
     """
 
     class _StubSession:
@@ -2003,6 +2004,7 @@ def test_measure_devcontainer_startup_matches_workflow_args(
             "claude",
             "--cap",
             "NET_ADMIN",
+            "--probe-composition",
             "--output",
             str(out_path),
         ],
