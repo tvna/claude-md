@@ -556,6 +556,38 @@ Hand-authored retrospective `.md` files land under
 write to disk happens when a contributor lands the retrospective doc
 in the next PR, and that PR puts the file in `docs/archive/`.
 
+The retrospective's purpose is recursive self-improvement: each cycle
+must leave the harness measurably better than the last, so reproducing
+the no-repair path (master section 3) is one means toward that goal,
+not the goal itself. Master section 3 states that purpose at principle
+altitude; the loop's mechanism lives here, expressed as variation,
+selection, and heredity over the git flow so the universal text carries
+no repo-specific implementation:
+
+- **Variation** - a "missing deterministic gate" finding becomes an
+  executable contract, not a prose promise: a check that goes red on
+  the recorded repair and green once the fix lands, born as a new
+  `scripts/` gate or test (the primary lane the 6.4 table routes to).
+- **Selection** - a new gate enters advisory (`continue-on-error`) and
+  is promoted to a required status check (`.github/rulesets/`) only
+  after it earns a low false-positive rate across successive merges,
+  reusing the TP/FP prior pattern (`scripts/_retro_labels.py`) that
+  already governs retro opening; a regressing gate is demoted by
+  `git revert` of its promotion commit (master section 3 revert-first).
+- **Heredity** - repairs-per-merge and the repair-class distribution
+  are tracked across epochs (the `PRIOR_EPOCH_MIN_RETRO_NUMBER`
+  boundary already partitions the prior) and persisted to the metrics
+  store so each cycle compounds on the last and the trend that proves
+  evolution stays observable.
+
+Safety bounds the loop: variation and measurement are automated, but
+any selection that would weaken a safety control stays human-gated and
+code-owner-reviewed, and the security-control floor
+(`.github/security-control-floor.toml`, tracked in
+[security-control-inventory](security-control-inventory.md)) is outside
+the self-modifying loop's reach. This preserves the master section 4
+defense-in-depth lanes rather than letting the loop optimize them away.
+
 ### 6.5 Cadence
 
 Run all three sweeps at least once per merge that touches
