@@ -121,31 +121,24 @@ Source: `python3 scripts/workflow_diagram.py diagram-doc`. Tracking issue: #960.
 |---|---|
 | [workflows/apply-labels-if-branches.md](generated/workflows/apply-labels-if-branches.md) | `apply-labels.yml` |
 | [workflows/apply-rulesets-if-branches.md](generated/workflows/apply-rulesets-if-branches.md) | `apply-rulesets.yml` |
-| [workflows/attack-coverage-review-reminder-if-branches.md](generated/workflows/attack-coverage-review-reminder-if-branches.md) | `attack-coverage-review-reminder.yml` |
-| [workflows/auto-retro-post-merge-rescan-if-branches.md](generated/workflows/auto-retro-post-merge-rescan-if-branches.md) | `auto-retro-post-merge-rescan.yml` |
-| [workflows/auto-retro-sentinel-if-branches.md](generated/workflows/auto-retro-sentinel-if-branches.md) | `auto-retro-sentinel.yml` |
-| [workflows/auto-retro-triage-report-if-branches.md](generated/workflows/auto-retro-triage-report-if-branches.md) | `auto-retro-triage-report.yml` |
 | [workflows/backup-non-ascii-originals-if-branches.md](generated/workflows/backup-non-ascii-originals-if-branches.md) | `backup-non-ascii-originals.yml` |
 | [workflows/codeql-if-branches.md](generated/workflows/codeql-if-branches.md) | `codeql.yml` |
+| [workflows/daily-maintenance-if-branches.md](generated/workflows/daily-maintenance-if-branches.md) | `daily-maintenance.yml` |
 | [workflows/dependabot-automerge-if-branches.md](generated/workflows/dependabot-automerge-if-branches.md) | `dependabot-automerge.yml` |
 | [workflows/devcontainer-pin-refresh-if-branches.md](generated/workflows/devcontainer-pin-refresh-if-branches.md) | `devcontainer-pin-refresh.yml` |
-| [workflows/flake-pin-refresh-if-branches.md](generated/workflows/flake-pin-refresh-if-branches.md) | `flake-pin-refresh.yml` |
 | [workflows/generate-agents-if-branches.md](generated/workflows/generate-agents-if-branches.md) | `generate-agents.yml` |
 | [workflows/generate-docs-if-branches.md](generated/workflows/generate-docs-if-branches.md) | `generate-docs.yml` |
 | [workflows/issue-pr-triage-if-branches.md](generated/workflows/issue-pr-triage-if-branches.md) | `issue-pr-triage.yml` |
 | [workflows/measure-devcontainer-startup-if-branches.md](generated/workflows/measure-devcontainer-startup-if-branches.md) | `measure-devcontainer-startup.yml` |
-| [workflows/portable-pr-policy-if-branches.md](generated/workflows/portable-pr-policy-if-branches.md) | `portable-pr-policy.yml` |
+| [workflows/monthly-maintenance-if-branches.md](generated/workflows/monthly-maintenance-if-branches.md) | `monthly-maintenance.yml` |
 | [workflows/post-merge-if-branches.md](generated/workflows/post-merge-if-branches.md) | `post-merge.yml` |
 | [workflows/publish-devcontainer-images-if-branches.md](generated/workflows/publish-devcontainer-images-if-branches.md) | `publish-devcontainer-images.yml` |
-| [workflows/retro-followup-drift-if-branches.md](generated/workflows/retro-followup-drift-if-branches.md) | `retro-followup-drift.yml` |
 | [workflows/skill-quality-if-branches.md](generated/workflows/skill-quality-if-branches.md) | `skill-quality.yml` |
 | [workflows/verify-actionlint-if-branches.md](generated/workflows/verify-actionlint-if-branches.md) | `verify-actionlint.yml` |
 | [workflows/verify-agents-if-branches.md](generated/workflows/verify-agents-if-branches.md) | `verify-agents.yml` |
-| [workflows/verify-dependabot-labels-if-branches.md](generated/workflows/verify-dependabot-labels-if-branches.md) | `verify-dependabot-labels.yml` |
-| [workflows/verify-design-philosophy-if-branches.md](generated/workflows/verify-design-philosophy-if-branches.md) | `verify-design-philosophy.yml` |
 | [workflows/verify-flake-if-branches.md](generated/workflows/verify-flake-if-branches.md) | `verify-flake.yml` |
 | [workflows/verify-github-content-if-branches.md](generated/workflows/verify-github-content-if-branches.md) | `verify-github-content.yml` |
-| [workflows/verify-ruleset-sync-if-branches.md](generated/workflows/verify-ruleset-sync-if-branches.md) | `verify-ruleset-sync.yml` |
+| [workflows/verify-pr-if-branches.md](generated/workflows/verify-pr-if-branches.md) | `verify-pr.yml` |
 | [workflows/weekly-maintenance-if-branches.md](generated/workflows/weekly-maintenance-if-branches.md) | `weekly-maintenance.yml` |
 
 ## archive/ -- frozen historical evidence
