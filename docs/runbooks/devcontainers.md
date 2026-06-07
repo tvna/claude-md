@@ -538,6 +538,58 @@ packages require an explicit host login before VS Code can pull them:
 /opt/podman/bin/podman login ghcr.io
 ```
 
+## Monthly GHCR image cleanup
+
+Every `Publish devcontainer images` run pushes a new commit-SHA image version
+per agent package (plus per-arch `*-amd64` / `*-arm64` tags), so the
+`claude-md-devcontainer-claude` and `claude-md-devcontainer-codex` GHCR
+packages grow without bound. The `prune-devcontainer-images` job in
+`monthly-maintenance.yml` deletes old versions on a monthly cadence
+(`scripts/prune_devcontainer_images.py`, [#1400](https://github.com/tvna/claude-md/issues/1400)).
+
+Retention policy (count + age). For each package a version is **protected** --
+never deleted -- when any of its tags is:
+
+- `main` (the moving convenience alias),
+- a `buildcache-*` BuildKit cache tag, or
+- the currently pinned SHA (read from `.devcontainer/<agent>/devcontainer.json`)
+  or its `-amd64` / `-arm64` variant.
+
+Among the remaining tagged versions the newest 10 are kept unconditionally; of
+the rest, only versions older than 90 days are deleted. Untagged versions are
+skipped, because they may be the child manifests of a retained multi-platform
+manifest list. The schedule run deletes for real; a `workflow_dispatch` run
+previews (dry-run) unless `prune_dry_run` is set to `false`.
+
+### One-time setup for `GHCR_CLEANUP_TOKEN`
+
+Deleting a user-owned container package version is **not** possible with the
+Actions `GITHUB_TOKEN`: there is no `packages: delete` Actions permission, and
+the token is an app installation token rather than a user token, so the delete
+endpoint returns `403`. The job therefore authenticates with a dedicated
+personal access token.
+
+1. Create a **classic** PAT at `github.com/settings/tokens` with the minimum
+   permissions `read:packages` and `delete:packages` (admin on the
+   `claude-md-devcontainer-*` containers, which the repository owner already
+   holds). Do not grant `repo`, `write:packages`, or any broader scope.
+2. Store it as the `GHCR_CLEANUP_TOKEN` Environment secret in a dedicated
+   `devcontainer-image-cleanup` GitHub Environment (Settings -> Environments).
+   Keep it out of repository-wide secrets so the delete-capable token stays
+   isolated from the `devcontainer-image-pins` Environment.
+3. Set an expiry of 90 days or less. Record the next rotation date with the
+   Environment secret owner and rotate the token before expiry.
+4. Verify the handoff: dispatch `Monthly maintenance` with
+   `workflow_dispatch` leaving `prune_dry_run` at its default `true`, and
+   confirm the `prune-devcontainer-images` job lists prune candidates without
+   error and without deleting anything. The `Guard GHCR_CLEANUP_TOKEN` step
+   fails loud if the secret is unset, so nothing is deleted until the handoff
+   is complete. Never print the token value in logs.
+
+If this token is suspected leaked rather than rotated on schedule, follow the
+emergency revoke-then-reissue steps in
+[`compromised-action-response.md`](compromised-action-response.md).
+
 ## Runtime
 
 Podman is the supported local runtime for these devcontainers. VS Code's
