@@ -358,13 +358,29 @@ would become a duplicate that fails the server gate and forces a manual
 `scripts/preflight_pr_template_shape.py` therefore requires the
 `create_pull_request` body to carry **no** footer and denies one that
 does; the harness then supplies the single footer. The exception is
-deliberately create-only: `update_pull_request` is not auto-appended
-(that is how the single-footer repair works), so it keeps requiring
-exactly one trailing footer. Local Claude CLI and CI leave
-`CLAUDE_CODE_REMOTE` unset and are unaffected -- they keep requiring a
-trailing footer. The server-side `verify_pr_agent_attribution_footer`
+deliberately create-only: `update_pull_request` is not auto-appended, so
+it keeps requiring exactly one trailing footer. Local Claude CLI and CI
+leave `CLAUDE_CODE_REMOTE` unset and are unaffected -- they keep requiring
+a trailing footer. The server-side `verify_pr_agent_attribution_footer`
 gate is unchanged, so a genuine duplicate (two footers) still fails.
 Refs #1025.
+
+That create-only relaxation used to force a manual footer repair on the
+very next call: the create-path PostToolUse fixer
+(`scripts/post_pr_create_body_fix.py`) always asks the agent to resend a
+normalized body via `update_pull_request`, and under the harness that
+normalized body (built from the footerless authored body) lacked the
+footer the update gate requires. The fixer now lifts the
+harness-appended footer out of the stored body and re-appends it to the
+normalized body it hands back, so the mandated update already carries
+exactly one footer -- the create-vs-update asymmetry is bridged
+harness-enforced, not agent-remembered, without relaxing the update gate
+and without relying on PreToolUse `updatedInput` (unreliable under the
+multiple-hook PR matcher; see
+[`docs/runbooks/rtk-hook-verification.md`](../runbooks/rtk-hook-verification.md)).
+A *standalone* `update_pull_request` (one not driven by that fixer) still
+requires the footer, and the `preflight_pr_template_shape.py` deny reason
+names the asymmetry so it is a single self-correcting step. Refs #1427.
 
 ### Enforced today: Refs check
 
