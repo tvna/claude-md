@@ -325,3 +325,20 @@ class TestDesignDoc:
             "explicitly delete",
         ):
             assert phrase in text
+
+    def test_doc_defines_r2_first_time_provisioning(self) -> None:
+        text = squashed(DOC_PATH.read_text(encoding="utf-8"))
+        for phrase in (
+            "#1326",
+            "First-time R2 provisioning",
+            "Create or sign in to a Cloudflare account",
+            "R2 subscription checkout",
+            "payment method",
+            "free tier",
+            "Create bucket",
+            "Account ID",
+            "r2.cloudflarestorage.com",
+            "operator actions on the durable host",
+            "delegated to an ephemeral agent session",
+        ):
+            assert phrase in text

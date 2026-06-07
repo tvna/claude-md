@@ -172,6 +172,30 @@ cleanup defense-in-depth, not correctness: the durable host still uses
 delete-after-import behavior and must explicitly delete the object after
 successful verification and import.
 
+**First-time R2 provisioning (one-time, before any handoff; Refs #1326).** R2
+does not exist until the durable operator provisions it from scratch; an agent
+session never performs these steps. Cloudflare documents the path as:
+
+1. Create or sign in to a Cloudflare account.
+2. Enable R2 by completing the R2 subscription checkout in the dashboard under
+   `Storage & databases > R2`. Cloudflare requires a payment method on the
+   account to enable R2 even when usage stays within the Standard-storage free
+   tier; usage inside the free tier bills at $0.00. Treat any activation charge
+   as a billing fact the operator confirms, not an agent action.
+3. Create the dedicated escrow bucket
+   (`Storage & databases > R2 > Overview > Create bucket`). This bucket holds
+   only the escrow prefixes from *R2 object contract* above and nothing else.
+4. Add the 24 hours lifecycle expiration rule for the `escrow/session/` prefix
+   exactly as *R2 object contract* above defines it.
+5. Create the parent token as *Credential issuance* below defines it. The
+   Account ID shown in the R2 dashboard is the S3 endpoint host
+   (`https://<account-id>.r2.cloudflarestorage.com`); it is not itself a secret
+   but is still passed only through the task-specific secure channel.
+
+Account creation, R2 enablement, payment-method linkage, and the parent token
+are operator actions on the durable host; none of them are ever delegated to an
+ephemeral agent session.
+
 **Credential issuance.** The parent token lives only with the durable operator,
 created in the Cloudflare dashboard or API with the minimum Cloudflare
 permission needed to mint scoped R2 credentials and manage the escrow bucket
@@ -213,7 +237,11 @@ S3-compatible `httpfs` support and an `R2` secret type, while DuckDB temporary
 secrets remain in memory by default and persistent secrets are written to a
 local unencrypted secret directory. Those facts make a short-lived export
 handoff feasible without adding DuckDB or R2 client libraries to this
-repository.
+repository. Cloudflare's R2 get-started and pricing documentation further
+records that R2 must be enabled through an R2 subscription checkout and that a
+payment method is required on the account before a bucket can be created, even
+for the free tier -- the provisioning facts behind *First-time R2 provisioning*
+above.
 
 ## OTLP-compatible schema
 
@@ -450,6 +478,7 @@ unrelated regression is introduced (`pytest`).
 - [#824](https://github.com/tvna/claude-md/issues/824) -- OTLP logs extension (schema v2: redacted operational session logs).
 - [#826](https://github.com/tvna/claude-md/issues/826) -- ephemeral-environment measurement boundary (decision: option (A), accept and document).
 - [#1212](https://github.com/tvna/claude-md/issues/1212) -- manual Cloudflare R2 escrow handoff for ephemeral measurement export.
+- [#1326](https://github.com/tvna/claude-md/issues/1326) -- from-scratch Cloudflare R2 provisioning for the escrow runbook.
 - [#814](https://github.com/tvna/claude-md/issues/814) -- parent: Section 5 quality-scalability proportionality reframe.
 - [#226](https://github.com/tvna/claude-md/issues/226) -- CLAUDE.md / AGENTS.md evolution tracker.
 - [#89](https://github.com/tvna/claude-md/issues/89) -- instruction-source versioning (OPEN; provides `compiled_source_version`).
