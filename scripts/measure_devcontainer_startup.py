@@ -19,6 +19,12 @@ What it measures, reading the lifecycle straight from a devcontainer config:
   the largest store entries. Measured with ``du`` (coreutils, always present)
   so it works even where ``nix develop`` does not in the CI exec context. This
   is the Phase 1 (#1332) cut-target signal: it names what dominates the image.
+  The store walk excludes ``/nix/store/.links`` so the per-derivation sizes
+  resolve: nix store optimisation is a content-addressed hardlink farm, and
+  without the exclude ``du`` attributes nearly the whole closure to ``.links``
+  (it sorts first) and reports the real package dirs as ~0 bytes, which hides
+  exactly the cut target. Excluding it counts each inode once in its package
+  dir instead, so the top entries name the dominant derivations (Refs #1332).
 
 The web remote session cannot run a container runtime, so this is driven from
 CI (``.github/workflows/measure-devcontainer-startup.yml``) -- mirroring the
@@ -148,9 +154,17 @@ def split_segments(command: str | None) -> list[str]:
 _COMPOSITION_BASE_DIRS = ("/usr", "/opt", "/var", "/home", "/etc", "/root", "/bin", "/lib")
 # ``du -d1`` lists each immediate child of /nix/store plus the store total on
 # its own line, so no shell glob expansion (which would blow past ARG_MAX on a
-# store with thousands of entries). ``|| true`` keeps a transient du error
-# (e.g. a path vanishing mid-walk) from failing the whole measurement.
-_STORE_DU_CMD = "du -b -d1 /nix/store 2>/dev/null | sort -rn || true"
+# store with thousands of entries). ``--exclude=.links`` drops the
+# content-addressed hardlink farm (/nix/store/.links) from the walk: with
+# store optimisation every store file is hardlinked into .links, and because
+# du counts each inode once at first encounter and .links sorts first, an
+# un-excluded walk piles the whole closure onto the .links line and reports
+# the real package dirs as ~0 bytes -- hiding the per-derivation cut target.
+# Excluding .links makes du meet each inode first in its own package dir, so
+# the depth-1 lines name the dominant derivations while the /nix/store total
+# stays the true (deduplicated) closure size. ``|| true`` keeps a transient
+# du error (e.g. a path vanishing mid-walk) from failing the whole measurement.
+_STORE_DU_CMD = "du -b -d1 --exclude=.links /nix/store 2>/dev/null | sort -rn || true"
 _BASE_DU_CMD = "du -sb " + " ".join(_COMPOSITION_BASE_DIRS) + " 2>/dev/null || true"
 
 
@@ -183,7 +197,9 @@ def probe_composition(session: Session, *, top_n: int = 30) -> dict[str, Any]:
 
     Returns the ``/nix/store`` total, the ``top_n`` largest store entries, and
     the base-distro dir sizes -- the evidence that names the image's dominant
-    cost so Phase 1 (#1332) cuts the right thing instead of guessing.
+    cost so Phase 1 (#1332) cuts the right thing instead of guessing. The store
+    walk excludes ``/nix/store/.links`` (see ``_STORE_DU_CMD``) so the per-entry
+    sizes resolve real derivations instead of collapsing into the hardlink farm.
     """
     store = _parse_du(session.exec(_STORE_DU_CMD).stdout)
     total = next((entry["bytes"] for entry in store if entry["path"] == "/nix/store"), 0)

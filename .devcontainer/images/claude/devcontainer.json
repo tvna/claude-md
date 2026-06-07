@@ -1,7 +1,14 @@
 {
   "name": "claude-md Claude prebuild",
-  "image": "mcr.microsoft.com/devcontainers/base:ubuntu-24.04",
+  "image": "ubuntu:24.04",
   "features": {
+    "ghcr.io/devcontainers/features/common-utils:2": {
+      "installZsh": false,
+      "installOhMyZsh": false,
+      "installOhMyZshConfig": false,
+      "upgradePackages": false,
+      "username": "none"
+    },
     "ghcr.io/devcontainers/features/nix:1": {
       "extraNixConfig": "experimental-features = nix-command flakes\naccept-flake-config = true"
     },
@@ -10,6 +17,7 @@
     }
   },
   "overrideFeatureInstallOrder": [
+    "ghcr.io/devcontainers/features/common-utils",
     "ghcr.io/devcontainers/features/nix",
     "../features/agent-user"
   ],
