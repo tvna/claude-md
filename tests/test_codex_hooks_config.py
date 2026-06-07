@@ -285,6 +285,8 @@ def test_codex_post_tool_use_starts_ci_monitor_after_mcp_pr_create() -> None:
     assert "^mcp__github__create_pull_request$" in matchers
     assert "python3 scripts/post_pr_create_ci_monitor.py" in commands
     assert "python3 scripts/ci_early_status_probe.py" in commands
+    # Merge-readiness loop must surface mergeability for every agent (Refs #1361).
+    assert "python3 scripts/check_pr_mergeability.py" in commands
 
 
 def test_codex_post_tool_use_starts_ci_monitor_after_codex_connector_pr_create() -> None:
@@ -321,6 +323,8 @@ def test_codex_post_tool_use_starts_ci_monitor_after_codex_connector_pr_create()
     ), "PostToolUse has no entry for the Codex connector create_pull_request path"
     assert "python3 scripts/post_pr_create_ci_monitor.py" in matcher_to_commands[connector_matcher]
     assert "python3 scripts/ci_early_status_probe.py" in matcher_to_commands[connector_matcher]
+    # Merge-readiness loop must surface mergeability for every agent (Refs #1361).
+    assert "python3 scripts/check_pr_mergeability.py" in matcher_to_commands[connector_matcher]
 
 
 def test_codex_session_start_surfaces_hooks_path_gap() -> None:

@@ -160,6 +160,29 @@ def test_decide_returns_dirty_warning() -> None:
     ctx = result["hookSpecificOutput"]["additionalContext"]
     assert "MERGE CONFLICT" in ctx
     assert "dirty" in ctx
+    # Conflict path points at the replacement-branch runbook, never force-push.
+    assert "update-pr-branch-recovery.md" in ctx
+    assert "then force-push" not in ctx
+
+
+def test_decide_returns_behind_refresh_advice() -> None:
+    event = _pr_event(
+        "mcp__github__create_pull_request",
+        {"html_url": "https://github.com/tvna/claude-md/pull/6"},
+    )
+    result = subject.decide_post_tool_use(
+        event,
+        opener=_opener({"mergeable": True, "mergeable_state": "behind"}),
+        token=_TOKEN,
+        sleeper=lambda _: None,
+    )
+
+    assert result is not None
+    ctx = result["hookSpecificOutput"]["additionalContext"]
+    assert "behind" in ctx
+    assert "refresh_pr_branch.py" in ctx
+    assert "refresh-behind-pr.md" in ctx
+    assert "MERGE CONFLICT" not in ctx
 
 
 def test_decide_returns_clean_ok() -> None:
@@ -348,6 +371,8 @@ def test_session_start_emits_banner_for_behind_pr(
     assert "OUT-OF-DATE WARNING" in out
     assert "pull/70" in out
     assert "MERGE CONFLICT" not in out
+    assert "refresh_pr_branch.py" in out
+    assert "then force-push" not in out
 
 
 def test_session_start_emits_both_banners_for_dirty_and_behind(
