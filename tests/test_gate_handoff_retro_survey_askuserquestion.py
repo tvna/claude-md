@@ -10,7 +10,8 @@ Covers:
   bool, negative, non-integral float, non-decimal str rejected.
 - ``created_pr_numbers``: pairs a ``create_pull_request`` tool_use with
   its ``tool_result`` ``/pull/<n>`` URL, canonicalises Codex names,
-  ignores unmatched results, and de-duplicates oldest-first.
+  ignores unmatched results, skips ``is_error`` results (failed creation,
+  #1374), and de-duplicates oldest-first.
 - ``evaluate``: blocks an unrecorded created PR; no-op with a marker,
   with ``stop_hook_active``, off-target event, or no created PR.
 - ``load_transcript``: missing / unreadable / bad-line tolerance.
@@ -42,8 +43,17 @@ def _create_pr_use(tool_id: str, *, name: str = gate._CREATE_PR_TOOL) -> dict[st
     return {"type": "tool_use", "name": name, "id": tool_id, "input": {}}
 
 
-def _result(tool_use_id: str, content: Any) -> dict[str, Any]:
-    return {"type": "tool_result", "tool_use_id": tool_use_id, "content": content}
+def _result(
+    tool_use_id: str, content: Any, *, is_error: bool = False
+) -> dict[str, Any]:
+    block: dict[str, Any] = {
+        "type": "tool_result",
+        "tool_use_id": tool_use_id,
+        "content": content,
+    }
+    if is_error:
+        block["is_error"] = True
+    return block
 
 
 def _pr_transcript(tool_id: str = "t1", number: int = 42) -> list[Any]:
@@ -141,6 +151,23 @@ class TestCreatedPrNumbers:
             _msg("user", _result("t1", [{"type": "text", "text": "ok /pull/21"}])),
         ]
         assert gate.created_pr_numbers(entries) == [21]
+
+    def test_failed_creation_with_pull_url_is_skipped(self) -> None:
+        # A failed create_pull_request is marked is_error; its body often
+        # carries the existing PR's /pull/<n> URL ("already exists"). It must
+        # not be counted as a created PR (#1374).
+        entries = [
+            _msg("assistant", _create_pr_use("t1")),
+            _msg(
+                "user",
+                _result(
+                    "t1",
+                    "A pull request already exists for o:branch /pull/123",
+                    is_error=True,
+                ),
+            ),
+        ]
+        assert gate.created_pr_numbers(entries) == []
 
     def test_result_without_pull_url_is_skipped(self) -> None:
         entries = [
