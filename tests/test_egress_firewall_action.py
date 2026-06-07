@@ -21,6 +21,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+import yaml
 
 pytestmark = pytest.mark.shard_ci_ops
 
@@ -72,6 +73,10 @@ def _workflow_text() -> str:
     return WORKFLOW.read_text(encoding="utf-8")
 
 
+def test_workflow_yaml_is_parseable() -> None:
+    assert yaml.safe_load(_workflow_text()) is not None
+
+
 def test_selftest_job_exists_and_uses_the_action_in_block_mode() -> None:
     text = _workflow_text()
     assert "egress-firewall-selftest:" in text
@@ -84,13 +89,20 @@ def test_selftest_job_exists_and_uses_the_action_in_block_mode() -> None:
 
 def test_selftest_block_job_proves_both_egress_directions() -> None:
     text = _workflow_text()
+    selftest_start = text.index("egress-firewall-selftest:")
+    selftest_block = text[selftest_start:text.index("\n  gate:", selftest_start)]
     # Block mode is only meaningful if the job proves deny-by-default actually
     # denies: it must assert the OUTPUT policy is DROP and that a
-    # non-allowlisted destination (example.com) is blocked, while an
-    # allowlisted one (github.com) still works.
-    assert "-P OUTPUT DROP" in text
-    assert "example.com" in text
-    assert "github.com" in text
+    # non-allowlisted destination (example.com) is blocked, while github.com is
+    # allowed by FQDN OR by the exact IP pre-resolved for this assertion.
+    assert "-P OUTPUT DROP" in selftest_block
+    assert 'allow_host="github.com"' in selftest_block
+    assert "example.com" in selftest_block
+    assert "@include shared.allowlist" in selftest_block
+    assert "${ALLOW_IP}" in selftest_block
+    assert "allowlist: .devcontainer/network/egress-selftest.allowlist" in selftest_block
+    assert "${ALLOW_HOST}:443" in selftest_block
+    assert "raw.githubusercontent.com" not in selftest_block
 
 
 def test_selftest_block_job_restores_connectivity() -> None:
