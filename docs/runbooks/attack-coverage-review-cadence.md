@@ -212,7 +212,7 @@ awk -v b="${begin_marker}" -v e="${end_marker}" '$0 ~ b, $0 ~ e' \
 # Expected: 7
 
 # 3. The reminder workflow file is well-formed YAML.
-python3 -c "import yaml; yaml.safe_load(open('.github/workflows/attack-coverage-review-reminder.yml'))"
+python3 -c "import yaml; yaml.safe_load(open('.github/workflows/monthly-maintenance.yml'))"
 ```
 
 ## References

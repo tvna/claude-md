@@ -230,7 +230,7 @@ the repository owner (`@tvna`, the CODEOWNERS primary owner):
    in that cycle's comment on #1076.
 
 Automating stale-label detection as a scheduled workflow step (mirroring
-`attack-coverage-review-reminder.yml`) is deferred future work tracked on #1076;
+`monthly-maintenance.yml`) is deferred future work tracked on #1076;
 until it lands, this manual sweep is the enforcement surface.
 
 ### Why EPSS is advisory-only (no auto-escalation threshold)

@@ -4,7 +4,7 @@
 
 Parent issue: [#276](https://github.com/tvna/claude-md/issues/276)
 Gap tracker: [#273](https://github.com/tvna/claude-md/issues/273)
-PoC evidence: [docs/archive/renovate-poc-279.md](../archive/renovate-poc-279.md) ([#279](https://github.com/tvna/claude-md/issues/279))
+PoC evidence: [docs/archive/renovate-poc-279.md](renovate-poc-279.md) ([#279](https://github.com/tvna/claude-md/issues/279))
 
 ## Scope
 

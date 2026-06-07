@@ -11,8 +11,8 @@ This document is the operator-facing companion to [#102](https://github.com/tvna
 | `.github/workflows/issue-pr-triage.yml` / `scan` | GitHub Actions | Write-side trigger; marshals env vars and shells out to the Python entry point below |
 | `scripts/scan_non_ascii.py` | repo working tree | All Layer 2 logic (extract / classify / label / advisory / block). Per the refactor strategy in [#123](https://github.com/tvna/claude-md/issues/123) — mirrors `scripts/uv_pin.py` |
 | `tests/test_scan_non_ascii.py` | repo working tree | pytest coverage for the above; runs in `verify-agents.yml` on every PR |
-| `.github/workflows/verify-title-policy.yml` | GitHub Actions | Title-boundary gate for ASCII-only, convention-compliant issue and PR titles ([#155](https://github.com/tvna/claude-md/issues/155)) |
-| `scripts/title_policy.py` | repo working tree | Pure title policy validator used by the workflow above |
+| `.github/workflows/verify-github-content.yml` (issue titles); `.github/workflows/verify-pr.yml` `portable-pr-policy` job (PR titles) | GitHub Actions | Title-boundary gate for ASCII-only, convention-compliant issue and PR titles ([#155](https://github.com/tvna/claude-md/issues/155)) |
+| `scripts/title_policy.py` | repo working tree | Pure title policy validator used by the workflows above |
 | `tests/test_title_policy.py` | repo working tree | pytest coverage for Japanese, emoji, zero-width, RTL, and fullwidth title rejection |
 | `.github/labels.json` entry `severity:non-ascii-content` | repo labels | Applied by the workflow above; surfaces hits in triage filters |
 | `scripts/backup_non_ascii.py` | repo working tree | P1 reproducible capture + SHA-256 emitter; operator runs `capture` before the release asset upload |
@@ -96,7 +96,7 @@ The file is committed (same exposure reasoning as the backup) and lands in a rev
 
 ## Layer 2 — Write-side detection (`issue-pr-triage.yml` / `scan` + `scripts/scan_non_ascii.py`)
 
-### Title boundary (`verify-title-policy.yml` + `scripts/title_policy.py`)
+### Title boundary (`verify-github-content.yml` / `verify-pr.yml` + `scripts/title_policy.py`)
 
 Titles are stricter than bodies and comments. They must be ASCII-only because issue and PR titles are header-level metadata read by notifications, project boards, triage lists, and agents before body context or opt-out markers can be inspected. The `Verify title policy / gate` workflow rejects any non-ASCII code point in issue and PR titles, including Japanese text, emoji, zero-width marks, RTL controls, fullwidth homoglyphs, and other multi-byte control surfaces. It also enforces repository naming convention: issue titles use `type(scope): summary`, while PR titles use `type(scope): summary (#issue)`. The issue-side check runs on `issues`; the PR-side check runs on `pull_request` and is required by `.github/rulesets/main.json`. The `Issue and PR triage` workflow's `scan` job also posts the normal label/advisory notification for non-ASCII issue/PR title violations, and the body-level `<!-- non-ascii-ack -->` opt-out does not dismiss a non-ASCII title.
 
