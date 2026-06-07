@@ -459,6 +459,27 @@ Commit naming convention (titles only - it does not read the body). It is
 not part of the body-policy gate, but contributors who hit a body-policy
 failure often also need to fix their title at the same time.
 
+### Commit message ASCII coverage
+
+Commit messages on `main` are ASCII by construction, not by a dedicated
+commit-message gate. The coverage mirrors the `#N` link table above:
+
+| Surface | ASCII status | Mechanism |
+|---|---|---|
+| Squash commit subject | Transitively covered. | The squash subject is `<PR title> (#<PR-number>)`. `title_policy.is_ascii_title` already denies a non-ASCII PR title in the `Validate title policy` job, so the subject cannot carry non-ASCII. |
+| Squash commit body | Covered with one residual gap. | The squash body is composed from the PR body, which passes the non-ASCII defense (`scripts/preflight_non_ascii.py` client-side preflight + `scripts/scan_non_ascii.py` server-side). That defense permits non-ASCII only behind the explicit `<!-- non-ascii-ack -->` opt-out, so an acked PR body could in principle carry non-ASCII into the squash commit body. |
+
+No separate commit-message ASCII gate is added. The subject is already
+covered; the residual body gap is low-probability (zero non-ASCII subjects
+and zero non-ASCII bodies across the last 300 `main` commits at the time of
+writing, per the [#18](https://github.com/tvna/claude-md/issues/18)
+analysis); and the squash body is editable in the merge UI, so it cannot be
+gated deterministically before merge. If a non-ASCII commit body is ever
+observed on `main`, the durable fix is a post-merge detect-and-alert on
+`main` (mirroring `ruleset-drift.yml`), not a pre-commit hook that the
+merge step can bypass. As with the link table, this reasoning assumes
+squash-merge-only on `main`; if that default is loosened, re-evaluate.
+
 ## Trusted-bot bypass
 
 `scripts/_trusted_bots.py` is the single source of truth for the
