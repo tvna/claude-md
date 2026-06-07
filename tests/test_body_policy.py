@@ -179,6 +179,8 @@ class TestRequiredSections:
         assert body_policy.required_sections(
             "pull_request", body=""
         ) == (
+            "Summary",
+            "Related Issue",
             "Facts",
             "Assumptions",
             "Risk and blast radius",
@@ -290,6 +292,49 @@ class TestMissingSections:
         assert body_policy.missing_sections(
             ("Risk and blast radius",), headings
         ) == ["Risk and blast radius"]
+
+
+class TestUnexpectedPrSections:
+    """PR H2 allowlist (`unexpected_pr_sections`). Refs #1396."""
+
+    def test_all_allowed_headings_pass(self) -> None:
+        headings = [(2, name) for name in body_policy._PR_ALLOWED]
+        assert body_policy.unexpected_pr_sections(headings) == []
+
+    def test_unknown_h2_is_flagged(self) -> None:
+        headings = [(2, name) for name in body_policy._PR_REQUIRED]
+        headings.append((2, "Notes"))
+        assert body_policy.unexpected_pr_sections(headings) == ["Notes"]
+
+    def test_h3_subsections_are_not_flagged(self) -> None:
+        # Checklist H3 subsections are part of their parent, not H2s.
+        headings = [(2, name) for name in body_policy._PR_REQUIRED]
+        headings += [(3, "Bootstrap"), (3, "After-merge"), (3, "Post-merge")]
+        assert body_policy.unexpected_pr_sections(headings) == []
+
+    def test_ampersand_spelling_not_flagged(self) -> None:
+        # "Risk & blast radius" is the allowed "Risk and blast radius".
+        headings = [(2, "Risk & blast radius")]
+        assert body_policy.unexpected_pr_sections(headings) == []
+
+    def test_text_delta_optional_allowed(self) -> None:
+        headings = [(2, name) for name in body_policy._PR_REQUIRED]
+        headings.append((2, "Text delta"))
+        assert body_policy.unexpected_pr_sections(headings) == []
+
+    def test_offenders_returned_in_order_deduped(self) -> None:
+        headings = [(2, "Notes"), (2, "Notes"), (2, "TODO")]
+        assert body_policy.unexpected_pr_sections(headings) == ["Notes", "TODO"]
+
+    def test_verify_pr_allowed_sections_emits_error(self) -> None:
+        body = "## Summary\n\nx\n\n## Notes\n\ny\n"
+        errors = body_policy.verify_pr_allowed_sections(body)
+        assert len(errors) == 1
+        assert errors[0].startswith("::error::")
+        assert "## Notes" in errors[0]
+
+    def test_verify_pr_allowed_sections_clean_body(self) -> None:
+        assert body_policy.verify_pr_allowed_sections(_CANONICAL_PR_BODY) == []
 
 
 # ---------------------------------------------------------------------------
