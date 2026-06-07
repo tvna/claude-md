@@ -528,3 +528,37 @@ class TestMergePr:
             pu._merge_pr(
                 repo="owner/repo", number=7, sha="a", merge_method="squash", token="tok", apply_call=apply_call
             )
+
+
+# ---------------------------------------------------------------------------
+# _get_user_id()
+# ---------------------------------------------------------------------------
+
+
+class TestGetUserId:
+    def test_returns_numeric_id(self) -> None:
+        apply_call = _make_apply_call(200, {"login": "my-app[bot]", "id": 12345})
+        uid = pu._get_user_id(login="my-app[bot]", token="tok", apply_call=apply_call)
+        assert uid == 12345
+
+    def test_url_encodes_bot_login_brackets(self) -> None:
+        captured: list[str] = []
+
+        def apply_call(*, method: str, url: str, payload: object, token: str) -> tuple[int, str]:
+            captured.append(url)
+            return 200, json.dumps({"id": 1})
+
+        pu._get_user_id(login="my-app[bot]", token="tok", apply_call=apply_call)
+        # The [ ] in the bot login must be percent-encoded so the path is valid.
+        assert captured[0].endswith("/users/my-app%5Bbot%5D")
+        assert "[" not in captured[0]
+
+    def test_http_error_raises(self) -> None:
+        apply_call = _make_apply_call(404, {"message": "not found"})
+        with pytest.raises(RuntimeError, match="404"):
+            pu._get_user_id(login="my-app[bot]", token="tok", apply_call=apply_call)
+
+    def test_missing_id_raises(self) -> None:
+        apply_call = _make_apply_call(200, {"login": "my-app[bot]"})
+        with pytest.raises(RuntimeError, match="missing integer id"):
+            pu._get_user_id(login="my-app[bot]", token="tok", apply_call=apply_call)

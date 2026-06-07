@@ -29,7 +29,8 @@ flowchart TD
     J_flake_pin_refresh["flake-pin-refresh"]
     S_J_flake_pin_refresh_0(("Recompute per-system hashes and bump flake.nix"))
     S_J_flake_pin_refresh_1(("Validate the bumped flake"))
-    S_J_flake_pin_refresh_2(("Open bump PR"))
+    S_J_flake_pin_refresh_2(("Mint GitHub App token"))
+    S_J_flake_pin_refresh_3(("Open bump PR"))
 
     T_schedule -->|"github.event_name == 'schedule' || inputs.task == 'all' || inputs.task ~"| J_branch_cleanup
     J_branch_cleanup -->|"github.event_name == 'workflow_dispatch' && github.ref != 'refs/heads/m~"| S_J_branch_cleanup_0
@@ -53,4 +54,5 @@ flowchart TD
     J_flake_pin_refresh -->|"steps.decide.outputs.target != ''"| S_J_flake_pin_refresh_0
     J_flake_pin_refresh -->|"steps.decide.outputs.target != ''"| S_J_flake_pin_refresh_1
     J_flake_pin_refresh -->|"steps.decide.outputs.target != ''"| S_J_flake_pin_refresh_2
+    J_flake_pin_refresh -->|"steps.decide.outputs.target != ''"| S_J_flake_pin_refresh_3
 ```

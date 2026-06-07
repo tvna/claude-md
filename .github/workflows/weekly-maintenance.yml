@@ -642,11 +642,23 @@ jobs:
         if: steps.decide.outputs.target != ''
         run: nix flake check --show-trace
 
+      # Mint a short-lived GitHub App installation token so the generated flake
+      # bump PR is authored by the App bot (not a human PAT owner) and still
+      # triggers the downstream pin keepers. Refs #1401.
+      - name: Mint GitHub App token
+        if: steps.decide.outputs.target != ''
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ secrets.DEVCONTAINER_PIN_APP_ID }}
+          private-key: ${{ secrets.DEVCONTAINER_PIN_APP_PRIVATE_KEY }}
+
       - name: Open bump PR
         if: steps.decide.outputs.target != ''
         env:
-          GH_TOKEN: ${{ secrets.DEVCONTAINER_PIN_PR_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
           REPO: ${{ github.repository }}
+          PIN_BOT_APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
         run: |
           set -euo pipefail
           tool='${{ matrix.tool }}'

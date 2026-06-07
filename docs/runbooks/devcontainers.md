@@ -379,23 +379,30 @@ Recurring DevContainer maintenance is tracked in
 [#696](https://github.com/tvna/claude-md/issues/696). Generated image-pin
 PRs reference that tracking issue instead of the resolved implementation
 issue that originally introduced pin automation. The follow-up PR is
-created with the `DEVCONTAINER_PIN_PR_TOKEN` environment secret because
-this repository does not rely on the repository-level setting that lets
-the default `GITHUB_TOKEN` create pull requests.
+created by a dedicated **GitHub App** rather than the default
+`GITHUB_TOKEN`, because `GITHUB_TOKEN`-authored PRs and pushes do not
+trigger the downstream `pull_request` checks the auto-merge keeper waits
+on (GitHub recursion prevention). The workflows mint a short-lived App
+installation token at runtime with `actions/create-github-app-token`, so
+the generated PR's author is the App bot (`<app-slug>[bot]`) -- a natural,
+recognizable bot identity -- while still triggering downstream workflows.
+The pin commit is authored under the same App bot identity, resolved from
+the App slug and the bot's numeric user id. Refs #1401.
 
-Issue and rotate that token as a fine-grained personal access token or a
-GitHub App installation token with access limited to `tvna/claude-md`.
-The minimum repository permissions are Metadata read, Contents read and
-write, and Pull requests read and write. Store it only as
-`DEVCONTAINER_PIN_PR_TOKEN` in the `devcontainer-image-pins` Environment,
-not as a repository-wide secret. Set an expiry of 90 days or less for a
-PAT, rotate it before expiry, and verify the handoff by triggering
-`Publish devcontainer images` with `workflow_dispatch` and confirming
-the `Update local devcontainer image pins` job opens or reuses the
-generated image-pin PR without exposing the token value in logs.
-Record the next rotation date with the Environment secret owner. If this
-token is suspected leaked rather than rotated on schedule, follow the
-emergency revoke-then-reissue steps in
+Create the App with access limited to `tvna/claude-md`. The minimum
+repository permissions are Metadata read, Contents read and write, and
+Pull requests read and write. Store the App's credentials only in the
+`devcontainer-image-pins` Environment, not as repository-wide secrets:
+`DEVCONTAINER_PIN_APP_ID` (the App ID) and `DEVCONTAINER_PIN_APP_PRIVATE_KEY`
+(a generated private key). Installation tokens expire in <= 1 hour, so they
+are never stored -- only the private key is, and it must be rotated on a fixed
+cadence (regenerate the key, update the Environment secret, then delete the old
+key). Verify the handoff by triggering `Publish devcontainer images` with
+`workflow_dispatch` and confirming the `Update local devcontainer image pins`
+job opens or reuses the generated image-pin PR -- authored by the App bot --
+without exposing the key value in logs. Record the next rotation date with the
+Environment secret owner. If the private key is suspected leaked rather than
+rotated on schedule, follow the emergency revoke-then-reissue steps in
 [`compromised-action-response.md`](compromised-action-response.md).
 
 The `Update local devcontainer image pins` job creates (or reuses) the
@@ -430,10 +437,10 @@ recovery. Because `workflow_run` and `schedule` only run from the default
 branch, the trigger fix takes effect once merged to `main`.
 
 Branch protection (`main-protection`) still gates the merge; the keeper never
-bypasses required checks or rulesets. The merge uses `DEVCONTAINER_PIN_PR_TOKEN`
-(not `GITHUB_TOKEN`) so the resulting push to `main` still triggers the
+bypasses required checks or rulesets. The merge uses the GitHub App installation
+token (not `GITHUB_TOKEN`) so the resulting push to `main` still triggers the
 downstream push workflows (publish / refresh / post-merge). To merge a stuck
-pin PR on demand, dispatch this workflow manually. Refs #1352, #1363.
+pin PR on demand, dispatch this workflow manually. Refs #1352, #1363, #1401.
 
 ### Keeping the pin PR mergeable (`Refresh devcontainer pin PR`)
 
@@ -455,7 +462,7 @@ old PR is closed, so a failure never leaves the repository without an open pin
 PR. When the open pin PR is already up to date, `refresh` instead attempts a
 direct merge (the same path the auto-merge keeper uses), so a green, up-to-date
 PR still completes even between the keeper's `workflow_run` events. It reuses the
-`devcontainer-image-pins` Environment and `DEVCONTAINER_PIN_PR_TOKEN`; no new
+`devcontainer-image-pins` Environment and the same GitHub App secrets; no new
 secret is required. To merge a stuck pin PR on demand, dispatch this workflow
 manually. Refs #1137.
 
@@ -471,28 +478,44 @@ find the latest release per tool, holds anything still inside the
 `nix store prefetch-file`, bumps `flake.nix` with `scripts/flake_pin.py`,
 validates it with `nix flake check`, and opens a bump PR by reusing
 `scripts/devcontainer_pin_pr.py open`. It reuses the `devcontainer-image-pins`
-Environment and `DEVCONTAINER_PIN_PR_TOKEN`; no new secret is required. The
+Environment and the same GitHub App secrets; no new secret is required. The
 generated PR's `verify-flake` check is the final authenticity gate for the
 recomputed hash, and `scan_flake_pin_drift` continues to guard duplicate
 copies. Refs #1171.
 
-### One-time setup for `DEVCONTAINER_PIN_PR_TOKEN`
+### One-time setup for `DEVCONTAINER_PIN_APP_ID`
 
-1. Open `tvna/claude-md` -> **Settings** -> **Environments** ->
+1. Create (or reuse) a GitHub App owned by `tvna` with the minimum
+   repository permissions above, installed only on `tvna/claude-md`.
+2. Open `tvna/claude-md` -> **Settings** -> **Environments** ->
    `devcontainer-image-pins`.
-2. Add the `DEVCONTAINER_PIN_PR_TOKEN` Environment secret described
-   above.
-3. Confirm the repository rulesets allow `github-actions[bot]` to push
-   non-default generated branches such as
-   `codex/devcontainer-image-pins-<sha>`.
-4. Trigger `Publish devcontainer images` with `workflow_dispatch`, or
+3. Add the App's numeric App ID as the `DEVCONTAINER_PIN_APP_ID`
+   Environment secret.
+4. Generate a private key for the App and add it as the
+   `DEVCONTAINER_PIN_APP_PRIVATE_KEY` Environment secret (next section).
+5. Confirm the repository rulesets allow the generated branches
+   (`devcontainer/image-pins-<sha>`, `flake-pin-<...>`) to be pushed -- the
+   branch push still uses the persisted-checkout `github-actions[bot]`
+   identity -- and allow the App bot to merge the pin PR through required
+   checks.
+6. Trigger `Publish devcontainer images` with `workflow_dispatch`, or
    wait for the next `main` publish, and confirm the
    `Update local devcontainer image pins` job opens or reuses the
    generated image-pin PR.
-5. Confirm the generated branch commit shows `github-actions[bot]` as
-   the author. The PR is completed by the `Auto-merge devcontainer pin PR`
-   keeper once its checks go green (repo-wide native auto-merge stays OFF
-   by design).
+7. Confirm the generated PR and its commit show the App bot
+   (`<app-slug>[bot]`) as the author. The PR is completed by the
+   `Auto-merge devcontainer pin PR` keeper once its checks go green
+   (repo-wide native auto-merge stays OFF by design).
+
+### One-time setup for `DEVCONTAINER_PIN_APP_PRIVATE_KEY`
+
+This Environment secret is created together with `DEVCONTAINER_PIN_APP_ID`
+in the steps above: generate a private key from the GitHub App and store the
+downloaded PEM as the `DEVCONTAINER_PIN_APP_PRIVATE_KEY` Environment secret in
+`devcontainer-image-pins` (never a repository-wide secret). The same minimum
+permissions, rotation cadence, and verification step apply -- rotate the key by
+generating a new one, updating the secret, and confirming the next pin run still
+opens the App-bot PR before deleting the old key.
 
 The publish workflow intentionally watches only image-build inputs such
 as `.devcontainer/images/**`, `.devcontainer/scripts/install-agent-cli.sh`,

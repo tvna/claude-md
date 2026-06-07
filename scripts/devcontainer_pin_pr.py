@@ -48,9 +48,16 @@ next trigger. Driven by ``.github/workflows/devcontainer-pin-automerge.yml`` on
     python3 scripts/devcontainer_pin_pr.py merge
 
 Environment variables:
-    GH_TOKEN  Token with contents:write + pull-requests:write
-              (DEVCONTAINER_PIN_PR_TOKEN).
-    REPO      Repository in ``owner/repo`` format.
+    GH_TOKEN           Token with contents:write + pull-requests:write. The
+                       workflows mint it at runtime from a GitHub App via
+                       actions/create-github-app-token, so the generated PR's
+                       author is the App bot rather than a human PAT owner.
+    REPO               Repository in ``owner/repo`` format.
+    PIN_BOT_APP_SLUG   Optional. The App slug (``app-slug`` output of
+                       create-github-app-token). When set, ``open``/``refresh``
+                       author the pin commit as ``<slug>[bot]`` so the commit
+                       author matches the App-bot PR author; unset falls back to
+                       github-actions[bot].
 
 Exit codes:
     0  PR opened/updated/merged, already up to date, already open, or not yet
@@ -81,6 +88,7 @@ from pr_upsert import (
     _compare_behind,
     _delete_branch,
     _get_pr,
+    _get_user_id,
     _list_open_prs,
     _list_open_prs_by_prefix,
     _merge_pr,
@@ -90,6 +98,12 @@ from pr_upsert import (
 _DEFAULT_BRANCH_PREFIX = "devcontainer/image-pins-"
 _BOT_NAME = "github-actions[bot]"
 _BOT_EMAIL = "41898282+github-actions[bot]@users.noreply.github.com"
+
+# When the pin PR is opened with a GitHub App installation token (so the PR
+# author is the App bot rather than a human PAT owner), this env var carries the
+# App slug (the ``app-slug`` output of actions/create-github-app-token) so the
+# commit author can be matched to that same bot. See ``_resolve_bot_identity``.
+_BOT_APP_SLUG_ENV = "PIN_BOT_APP_SLUG"
 
 # Original branches are ``<prefix><40-hex-sha>``; refreshed branches append
 # ``-r-<main-short-sha>`` so each main advance yields a fresh, unique name (no
@@ -144,13 +158,36 @@ def _git_error_detail(exc: subprocess.CalledProcessError) -> str:
     return ""
 
 
-def _create_pin_branch(*, branch: str, files: list[str], subject: str, trailer: str) -> None:
+def _resolve_bot_identity(token: str) -> tuple[str, str]:
+    """Return the ``(name, email)`` git identity for pin commits.
+
+    Defaults to ``github-actions[bot]``. When ``PIN_BOT_APP_SLUG`` is set -- the
+    ``app-slug`` output of ``actions/create-github-app-token`` -- resolve the
+    GitHub App bot's identity so the commit author matches the PR author (the PR
+    is opened with the App installation token, so its author is the App bot):
+    name ``<slug>[bot]`` and the canonical noreply email
+    ``<user-id>+<slug>[bot]@users.noreply.github.com``. The numeric user id, the
+    documented way to commit as an App bot, links the commit back to the bot
+    account. A lookup failure raises so the run fails loudly rather than silently
+    committing under the wrong identity. Refs #1401.
+    """
+    slug = os.environ.get(_BOT_APP_SLUG_ENV, "").strip()
+    if not slug:
+        return _BOT_NAME, _BOT_EMAIL
+    login = f"{slug}[bot]"
+    user_id = _get_user_id(login=login, token=token)
+    return login, f"{user_id}+{login}@users.noreply.github.com"
+
+
+def _create_pin_branch(
+    *, branch: str, files: list[str], subject: str, trailer: str, bot_name: str, bot_email: str
+) -> None:
     """Configure the bot identity, branch off, commit the pin files, and push.
 
     Raises :class:`subprocess.CalledProcessError` if any git step fails.
     """
-    run_git(["config", "user.name", _BOT_NAME], check=True)
-    run_git(["config", "user.email", _BOT_EMAIL], check=True)
+    run_git(["config", "user.name", bot_name], check=True)
+    run_git(["config", "user.email", bot_email], check=True)
     run_git(["checkout", "-b", branch], check=True)
     run_git(["add", *files], check=True)
     run_git(["commit", "-m", subject, "-m", trailer], check=True)
@@ -212,7 +249,7 @@ def _merge_pin_pr_if_clean(*, repo: str, number: int, head_ref: str, token: str)
 def _cmd_open(args: argparse.Namespace) -> int:
     token = os.environ.get("GH_TOKEN", "")
     if not token:
-        print("::error::GH_TOKEN (DEVCONTAINER_PIN_PR_TOKEN) is required", file=sys.stderr)
+        print("::error::GH_TOKEN (GitHub App installation token) is required", file=sys.stderr)
         return 1
     repo = os.environ.get("REPO", "")
     if not repo:
@@ -239,11 +276,18 @@ def _cmd_open(args: argparse.Namespace) -> int:
         print(f"pin update branch already exists without an open PR; retrying PR creation: {branch}")
     else:
         try:
+            bot_name, bot_email = _resolve_bot_identity(token)
+        except RuntimeError as exc:
+            print(f"::error::{exc}", file=sys.stderr)
+            return 1
+        try:
             _create_pin_branch(
                 branch=branch,
                 files=args.file,
                 subject=args.commit_subject,
                 trailer=args.commit_trailer,
+                bot_name=bot_name,
+                bot_email=bot_email,
             )
         except subprocess.CalledProcessError as exc:
             print(f"::error::git failed creating pin branch: {exc}{_git_error_detail(exc)}", file=sys.stderr)
@@ -270,7 +314,7 @@ def _cmd_open(args: argparse.Namespace) -> int:
 def _cmd_refresh(args: argparse.Namespace) -> int:
     token = os.environ.get("GH_TOKEN", "")
     if not token:
-        print("::error::GH_TOKEN (DEVCONTAINER_PIN_PR_TOKEN) is required", file=sys.stderr)
+        print("::error::GH_TOKEN (GitHub App installation token) is required", file=sys.stderr)
         return 1
     repo = os.environ.get("REPO", "")
     if not repo:
@@ -348,11 +392,18 @@ def _cmd_refresh(args: argparse.Namespace) -> int:
 
     if not _branch_exists_on_remote(new_branch):
         try:
+            bot_name, bot_email = _resolve_bot_identity(token)
+        except RuntimeError as exc:
+            print(f"::error::{exc}", file=sys.stderr)
+            return 1
+        try:
             _create_pin_branch(
                 branch=new_branch,
                 files=args.file,
                 subject=args.commit_subject,
                 trailer=args.commit_trailer,
+                bot_name=bot_name,
+                bot_email=bot_email,
             )
         except subprocess.CalledProcessError as exc:
             print(f"::error::git failed creating refresh branch: {exc}{_git_error_detail(exc)}", file=sys.stderr)
@@ -398,7 +449,7 @@ def _cmd_refresh(args: argparse.Namespace) -> int:
 def _cmd_merge(args: argparse.Namespace) -> int:
     token = os.environ.get("GH_TOKEN", "")
     if not token:
-        print("::error::GH_TOKEN (DEVCONTAINER_PIN_PR_TOKEN) is required", file=sys.stderr)
+        print("::error::GH_TOKEN (GitHub App installation token) is required", file=sys.stderr)
         return 1
     repo = os.environ.get("REPO", "")
     if not repo:
