@@ -54,6 +54,11 @@ fi
 if [[ "$agent" == "codex" ]]; then
   install_nix_binary bubblewrap bwrap
 fi
+# ccusage is provisioned for the claude agent only, matching its SessionStart
+# install-ccusage.sh registration (claude target) and the claude devShell.
+if [[ "$agent" == "claude" ]]; then
+  install_nix_binary ccusage-cli ccusage
+fi
 
 home_dir="$(getent passwd "$agent" | cut -d: -f6)"
 if [[ -z "$home_dir" ]]; then
