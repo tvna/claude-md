@@ -150,6 +150,28 @@ items that remain unchecked once the observation window has closed.
 - [ ] No follow-up `fix(...)` PR needed within 24h of merge
 
 <!--
+Resource Consumption -- CLAUDE.md section 3 / section 6.
+The session resource cost of producing this PR: how long the session ran
+and how many tokens it spent. Generate it with
+`python3 scripts/session_resource_report.py` (which reads the current
+Claude Code session id, the CCR_SPAWN_TIMESTAMP_MS session-start epoch, and
+`ccusage session --json`) and paste the output over the lines below.
+
+When no session data is available -- a human-authored PR with no ccusage
+session, or ccusage absent -- the generator emits the
+`unavailable (no session data)` form shown below; keep that marker rather
+than deleting the section. The section is required on every PR; trusted-bot
+authors (dependabot) are skipped by scripts/body_policy.py, so their PRs
+need not carry it.
+-->
+## Resource Consumption
+
+- Elapsed (session start to PR create): unavailable (no session data)
+- Total tokens: unavailable (no session data)
+- Cost (USD): unavailable (no session data)
+- Model(s): unavailable (no session data)
+
+<!--
 Related Issue -- CLAUDE.md section 3. Kept last (before the footer) per
 GitHub convention: the closing keyword reads naturally at the end of the
 body and the conclusion (Summary) stays at the top.
