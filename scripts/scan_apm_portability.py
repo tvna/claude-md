@@ -16,7 +16,7 @@ The contract is:
   ``.apm/instructions/master.instructions.md``, ``CLAUDE.md``, and
   ``AGENTS.md`` (defense in depth: scan source and both compiled
   outputs).
-* Each line is scanned for two violation classes:
+* Each line is scanned for three violation classes:
 
   - **Pattern A** -- forbidden literal substrings in
     :data:`FORBIDDEN_TOKENS` (case-sensitive). Concrete repo-local
@@ -30,8 +30,19 @@ The contract is:
     Introduced by #535 after the #530 -> #533 regression where
     Chapter 3 was repaired twice for the same defect at different
     abstraction levels.
+  - **Pattern C** -- harness-specific tool names in
+    :data:`FORBIDDEN_HARNESS_TOOLS` (case-sensitive). Concrete
+    Claude-only tool identifiers such as ``AskUserQuestion`` or
+    ``ExitPlanMode`` that have no meaning to other harnesses (Codex /
+    Devin read ``AGENTS.md`` and have no such tool), so naming one in
+    the universal text breaks portability the same way a repo-local
+    reference does. Introduced by #1048 after the #1044 retrospective:
+    "approach A" named ``AskUserQuestion`` in the universal text, passed
+    Pattern A/B, and was caught only by owner review. Claude-only hook
+    scripts and settings may name these tools freely; this layer scans
+    only the universal/compiled artifacts.
 
-* Lines containing :data:`ACK_MARKER` are skipped for both layers. This
+* Lines containing :data:`ACK_MARKER` are skipped for all layers. This
   mirrors the ``ACK_MARKER`` escape hatch in
   ``scripts/scan_non_ascii.py`` for the rare case a normative downstream
   rule must reference a repo-local artifact by name or by assertive
@@ -39,11 +50,11 @@ The contract is:
 * Exit 0 when every scanned file is clean; exit 1 on any violation; the
   argparse layer returns 2 when no ``--path`` was supplied. Each hit
   emits ``::error file=<path>,line=<n>::...`` on stderr so the GitHub
-  Actions UI surfaces individual violations. Pattern A and Pattern B
-  hits identify themselves in the error message so the operator knows
-  which layer fired.
+  Actions UI surfaces individual violations. Each pattern class
+  identifies itself in the error message so the operator knows which
+  layer fired.
 
-Tested by ``tests/test_scan_apm_portability.py``. Refs #230, #535.
+Tested by ``tests/test_scan_apm_portability.py``. Refs #230, #535, #1048.
 """
 
 from __future__ import annotations
@@ -79,24 +90,35 @@ FORBIDDEN_TOKENS: tuple[str, ...] = (
 # like a Pattern A token.
 PHRASE_HIT_PREFIX = "phrase:"
 
+# Prefix marking Pattern C (harness-specific tool name) hits, mirroring
+# :data:`PHRASE_HIT_PREFIX`. The bare tool name follows the prefix so
+# callers recover it by stripping the prefix.
+HARNESS_HIT_PREFIX = "harness:"
+
+# Harness-specific tool identifiers forbidden in the universal artifacts.
+# Case-sensitive CamelCase identifiers, matched as literal substrings
+# like :data:`FORBIDDEN_TOKENS`. ``EnterPlanMode`` is the documented
+# companion to ``ExitPlanMode``; both are included so either spelling is
+# caught.
+FORBIDDEN_HARNESS_TOOLS: tuple[str, ...] = (
+    "AskUserQuestion",
+    "ExitPlanMode",
+    "EnterPlanMode",
+)
+
 # Curated artifact nouns whose "existence assertion" in
 # ``.apm/instructions/**`` / ``CLAUDE.md`` / ``AGENTS.md`` reads as a
 # repo-local pointer once the file lands in a downstream consumer. Kept
 # narrow on purpose: each entry must be a thing a downstream consumer is
 # not guaranteed to ship. Generic nouns (e.g. "process", "policy",
 # "rule") are intentionally excluded to keep false positives low.
-_ARTIFACT_NOUN = (
-    r"runbook|doc(?:ument(?:ation)?)?|checklist|script|file|"
-    r"guide|spec|note"
-)
+_ARTIFACT_NOUN = r"runbook|doc(?:ument(?:ation)?)?|checklist|script|file|" r"guide|spec|note"
 
 # Optional qualifier that narrows the assertion to a specific instance.
 # All qualifiers are pure adjectives so the regex stays anchored to an
 # artifact noun and does not match generic English (e.g. "live in CI"
 # has no qualifier-noun pair).
-_QUALIFIER = (
-    r"dedicated|local|repo[- ]local|specific|separate|companion|sibling"
-)
+_QUALIFIER = r"dedicated|local|repo[- ]local|specific|separate|companion|sibling"
 
 # Regex patterns matching Pattern B (assertive-existence phrasing).
 # Each pattern fires only when an article + (optional qualifier) +
@@ -129,21 +151,21 @@ def scan_line(line: str) -> list[str]:
 
     Pattern A hits are returned as the matching literal token from
     :data:`FORBIDDEN_TOKENS`. Pattern B hits are returned as
-    ``f"{PHRASE_HIT_PREFIX}{matched-snippet}"`` so callers can tell the
-    two layers apart without a second pass.
+    ``f"{PHRASE_HIT_PREFIX}{matched-snippet}"`` and Pattern C hits as
+    ``f"{HARNESS_HIT_PREFIX}{tool-name}"`` so callers can tell the
+    layers apart without a second pass.
 
     Lines carrying :data:`ACK_MARKER` are treated as explicitly allowed
     and return an empty list.
     """
     if ACK_MARKER in line:
         return []
-    hits: list[str] = [
-        token for token in FORBIDDEN_TOKENS if token in line
-    ]
+    hits: list[str] = [token for token in FORBIDDEN_TOKENS if token in line]
     for pattern in FORBIDDEN_PHRASE_PATTERNS:
         match = pattern.search(line)
         if match is not None:
             hits.append(f"{PHRASE_HIT_PREFIX}{match.group(0)}")
+    hits.extend(f"{HARNESS_HIT_PREFIX}{tool}" for tool in FORBIDDEN_HARNESS_TOOLS if tool in line)
     return hits
 
 
@@ -179,6 +201,10 @@ def _verify(paths: Iterable[Path]) -> int:
             if hit.startswith(PHRASE_HIT_PREFIX):
                 snippet = hit[len(PHRASE_HIT_PREFIX) :]
                 kind = "assertive-existence phrase"
+                payload = repr(snippet)
+            elif hit.startswith(HARNESS_HIT_PREFIX):
+                snippet = hit[len(HARNESS_HIT_PREFIX) :]
+                kind = "harness-specific tool name"
                 payload = repr(snippet)
             else:
                 kind = "forbidden repo-local reference"
