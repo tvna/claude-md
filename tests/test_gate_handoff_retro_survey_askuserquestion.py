@@ -268,21 +268,31 @@ class TestRecord:
         monkeypatch.setattr(gate, "_MARKER_DIR", tmp_path)
         assert gate.record(7, satisfaction=4, problem="flaky CI") is True
         payload = json.loads((tmp_path / "7").read_text())
-        assert payload == {"pr": 7, "satisfaction": 4, "problem": "flaky CI"}
+        assert payload["pr"] == 7
+        assert payload["satisfaction"] == 4
+        assert payload["problem"] == "flaky CI"
+        # Refs #1192: every marker stamps the lifecycle phase and timepoint.
+        assert payload["phase"] == "pre-merge-handoff"
+        assert payload["recorded_at"].endswith("+00:00")
 
-    def test_record_without_answers_writes_pr_only(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    def test_record_without_answers_writes_pr_and_timepoint(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         monkeypatch.setattr(gate, "_MARKER_DIR", tmp_path)
         assert gate.record(9) is True
-        assert json.loads((tmp_path / "9").read_text()) == {"pr": 9}
+        payload = json.loads((tmp_path / "9").read_text())
+        assert payload["pr"] == 9
+        assert "satisfaction" not in payload
+        assert payload["phase"] == "pre-merge-handoff"
+        assert payload["recorded_at"]  # ISO-8601 UTC timestamp present (#1192)
 
     def test_run_record_passes_answers(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         monkeypatch.setattr(gate, "_MARKER_DIR", tmp_path)
         assert gate.run_record("12", "5", "none") == 0
-        assert json.loads((tmp_path / "12").read_text()) == {
-            "pr": 12,
-            "satisfaction": 5,
-            "problem": "none",
-        }
+        payload = json.loads((tmp_path / "12").read_text())
+        assert payload["pr"] == 12
+        assert payload["satisfaction"] == 5
+        assert payload["problem"] == "none"
+        assert payload["phase"] == "pre-merge-handoff"
+        assert payload["recorded_at"]
 
     def test_run_record_invalid_satisfaction_writes_no_marker(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
@@ -292,6 +302,19 @@ class TestRecord:
         assert gate.run_record("12", "9", "x") == 0
         assert not (marker_dir / "12").exists()
         assert "--satisfaction" in capsys.readouterr().err
+
+    def test_run_record_marker_write_failure_is_loud(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        # Refs #1140: a marker-write failure must NOT exit 0 as a phantom
+        # success (which double-fires the survey); it surfaces loudly and
+        # exits non-zero so the caller knows the handoff is unrecorded.
+        def _boom(*_args: object, **_kwargs: object) -> bool:
+            raise OSError("read-only marker dir")
+
+        monkeypatch.setattr(gate, "record", _boom)
+        assert gate.run_record("13") == 1
+        assert "NOT recorded" in capsys.readouterr().err
 
 
 # ---------------------------------------------------------------------------
