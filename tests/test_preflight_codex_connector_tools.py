@@ -128,7 +128,7 @@ _GOOD_PR_BODY = (
     "### After-merge (CI)\n\n- [ ] CI green\n\n"
     "### Post-merge (auto-retro signal)\n\n- [ ] linked issue closed\n\n"
     "## Resource Consumption\n\n"
-    "- Elapsed (session start to PR create): 0:06:42\n"
+    "- Elapsed (since previous PR or session start): 0:06:42\n"
     "- Total tokens: 230,127\n"
     "- Cost (USD): $0.6396\n"
     "- Model(s): claude-opus-4-8\n\n"
