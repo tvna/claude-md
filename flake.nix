@@ -348,7 +348,13 @@ EOF
             agentPackages.actionlint-cli
           ];
           pythonQualityPackages = with pkgs; [
-            mypy
+            # mypy built against python311 (the interpreter already in
+            # sharedPackages), NOT the bare `mypy` attr: in nixpkgs 25.05 the
+            # default `python3` is 3.12, so `pkgs.mypy` drags a SECOND ~113 MB
+            # interpreter (python3.12) into the devShell closure. Pinning to
+            # python311Packages.mypy reuses the present 3.11 and keeps the closure
+            # (and the baked claude image, #1491) free of a duplicate Python.
+            python311Packages.mypy
             python311Packages.pytest-xdist
             ruff
           ];
@@ -360,8 +366,16 @@ EOF
             iproute2
             iptables
           ];
+          # mkShellNoCC, not mkShell: mkShell pulls the full stdenv C toolchain
+          # (gcc ~256 MB + binutils ~62 MB) into every agent devShell closure.
+          # This repo's `uv sync` installs only wheels (pyyaml/pytest/ruff/mypy/
+          # hypothesis/pytest-xdist all ship manylinux wheels), and the agents run
+          # no from-source C/native builds, so the compiler is dead weight in the
+          # closure -- and in the baked claude image (#1491). Drop it with the
+          # NoCC stdenv. If a future dependency needs to compile from sdist,
+          # restore mkShell (or add a cc to packages) and document the need.
           mkAgentShell = name: extraPackages:
-            pkgs.mkShell {
+            pkgs.mkShellNoCC {
               packages = sharedPackages ++ pythonQualityPackages ++ extraPackages;
               shellHook = ''
                 export AGENT_CONTAINER="${name}"
