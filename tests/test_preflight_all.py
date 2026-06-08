@@ -381,18 +381,21 @@ class TestRunCheap:
             "c",
             "auto_retro_decision_tree_doc",
             "d",
+            "script_ast_graphs_doc",
+            "e",
         ]
         steps = [pa.Step(name=n, argv=("true",)) for n in names]
         # Force the parallel tier serial so the call order is deterministic.
         pa._run_cheap(steps, pa.REPO_ROOT, {"PREFLIGHT_CHEAP_WORKERS": "1"})
-        # The three serial steps run first, in their declaration order.
-        assert calls[:3] == [
+        # The serial steps run first, in their declaration order.
+        assert calls[:4] == [
             "workflow_diagram_doc",
             "preflight_branch_base",
             "auto_retro_decision_tree_doc",
+            "script_ast_graphs_doc",
         ]
         # The parallel steps follow, in declaration order under WORKERS=1.
-        assert calls[3:] == ["a", "b", "c", "d"]
+        assert calls[4:] == ["a", "b", "c", "d", "e"]
 
     def test_workers_one_preserves_serial_order(
         self, monkeypatch: pytest.MonkeyPatch

@@ -114,7 +114,8 @@ than serving as precedent for new PRD files.
 
 | File | Subject | Source | Tracking issues |
 |---|---|---|---|
-| [scripts/auto-retro-decision-tree.md](generated/scripts/auto-retro-decision-tree.md) | Mermaid decision tree for the current `auto_retro.run()` control flow. | `python3 scripts/auto_retro.py decision-tree-doc` | #598, #605, #960 |
+| [scripts/auto-retro-decision-tree.md](generated/scripts/auto-retro-decision-tree.md) | Mermaid decision tree for the current `auto_retro.run()` control flow. | `python3 scripts/script_ast_graph.py auto-retro-decision-tree-doc` | #598, #605, #960 |
+| [scripts/python-script-ast-graphs.md](generated/scripts/python-script-ast-graphs.md) | Mermaid AST graphs for top-level functions in every `scripts/*.py` file. | `python3 scripts/script_ast_graph.py all-doc` | #598, #605, #960 |
 
 ### generated/workflows/ -- workflow if-branch diagrams
 
