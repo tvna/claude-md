@@ -198,7 +198,6 @@ lifecycle, human meaning, and failure behavior.
 |---|---|---|---|
 | `ops:dependencies` | rename from `dependencies` | Dependabot and dependency-maintenance workflows | dependency automerge, dependency freshness, operator queues |
 | `ops:retro-opened` | rename from `harness:retro-opened` | auto-retro and post-merge retrospective automation | auto-retro sentinel, rescan, duplicate-retro prevention |
-| `ops:coverage-failure` | add | `post-merge.yml` and `scripts/coverage_failure_issue.py` | coverage repair queues and post-merge operational triage |
 
 Do not add broad labels such as `ops:quality`. Lint, type, security,
 maintainability, and coverage checks are quality gates. They become `ops:*`
