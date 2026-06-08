@@ -38,6 +38,14 @@ tier = "detect-and-file"
 tier = "detect-and-file"
 # Filed by scripts/security_drift_report.py file-family-issues.
 
+[families.workflow-permissions]
+tier = "detect-and-file"
+# SoT .github/actions-permissions/workflow.json governs the repo-level default
+# workflow permissions (GET/PUT /repos/{repo}/actions/permissions/workflow).
+# Detected read-only by scripts/rulesets_apply.py workflow-permissions --mode
+# drift in the security-control-drift job; filed by
+# scripts/security_drift_report.py file-family-issues. Refs #1488 / #178.
+
 [families.uv-pin-staleness]
 tier = "detect-only"
 exempt_reason = "Advisory-only upstream-staleness signal: warning-only, never gated. Bumping the pin is a human judgement call, so weekly auto-issues would be noise. Surfaced in the #178 rolling comment instead."

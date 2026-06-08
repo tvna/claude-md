@@ -22,6 +22,11 @@ on:
         type: boolean
         required: true
         default: false
+      enable_workflow_permissions:
+        description: 'Also reconcile repo "default workflow permissions" from .github/actions-permissions/workflow.json (plans when dry_run)'
+        type: boolean
+        required: true
+        default: false
 
 permissions:
   contents: read
@@ -63,7 +68,8 @@ jobs:
           set -euo pipefail
           python3 scripts/validate_json_syntax.py verify \
             --file .github/rulesets/main.json \
-            --file .github/rulesets/all-branches.json
+            --file .github/rulesets/all-branches.json \
+            --file .github/actions-permissions/workflow.json
 
       - name: Plan and apply rulesets
         env:
@@ -84,4 +90,16 @@ jobs:
           python3 scripts/rulesets_apply.py auto-delete \
             --repo "${REPO}" \
             --dry-run "${{ inputs.dry_run }}" \
+            --summary-file "$GITHUB_STEP_SUMMARY"
+
+      - name: Reconcile default workflow permissions
+        if: ${{ inputs.enable_workflow_permissions }}
+        env:
+          MODE: ${{ inputs.dry_run && 'plan' || 'apply' }}
+        run: |
+          set -euo pipefail
+          python3 scripts/rulesets_apply.py workflow-permissions \
+            --repo "${REPO}" \
+            --sot-file .github/actions-permissions/workflow.json \
+            --mode "$MODE" \
             --summary-file "$GITHUB_STEP_SUMMARY"

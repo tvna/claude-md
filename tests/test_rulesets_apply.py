@@ -429,3 +429,286 @@ class TestCliFlows:
         assert "- Before: `true`" in text
         assert "- After: `true`" in text
         assert methods == ["GET", "GET", "PATCH", "GET"]
+
+
+def write_wfperm_sot(
+    path: Path, *, perm: str = "read", approve: bool = True
+) -> Path:
+    path.write_text(
+        json.dumps(
+            {
+                "default_workflow_permissions": perm,
+                "can_approve_pull_request_reviews": approve,
+            }
+        ),
+        encoding="utf-8",
+    )
+    return path
+
+
+class TestWorkflowPermissions:
+    def test_diff_empty_when_in_sync_ignoring_extra_keys(self) -> None:
+        sot = {
+            "default_workflow_permissions": "read",
+            "can_approve_pull_request_reviews": True,
+        }
+        live = {**sot, "an_unrelated_future_field": 1}
+        assert ra.workflow_permissions_diff(sot=sot, live=live) == ""
+
+    def test_diff_nonempty_on_drift(self) -> None:
+        sot = {
+            "default_workflow_permissions": "read",
+            "can_approve_pull_request_reviews": True,
+        }
+        live = {
+            "default_workflow_permissions": "write",
+            "can_approve_pull_request_reviews": False,
+        }
+        diff = ra.workflow_permissions_diff(sot=sot, live=live)
+        assert '-  "can_approve_pull_request_reviews": false' in diff
+        assert '+  "can_approve_pull_request_reviews": true' in diff
+        assert '-  "default_workflow_permissions": "write"' in diff
+        assert '+  "default_workflow_permissions": "read"' in diff
+
+    def test_get_sends_auth_and_endpoint(self) -> None:
+        captured: dict[str, str] = {}
+
+        def opener(request):
+            captured["url"] = request.full_url
+            captured["auth"] = request.headers["Authorization"]
+            return Response(
+                200,
+                {
+                    "default_workflow_permissions": "read",
+                    "can_approve_pull_request_reviews": True,
+                },
+            )
+
+        out = ra.get_workflow_permissions("o/r", "tok", opener=opener)
+        assert out["default_workflow_permissions"] == "read"
+        assert (
+            captured["url"]
+            == "https://api.github.com/repos/o/r/actions/permissions/workflow"
+        )
+        assert captured["auth"] == "Bearer tok"
+
+    def test_plan_renders_drift_status_rc0(self, tmp_path: Path) -> None:
+        sot = write_wfperm_sot(tmp_path / "workflow.json")
+        summary = tmp_path / "s.md"
+
+        def opener(request):
+            assert request.get_method() == "GET"
+            return Response(
+                200,
+                {
+                    "default_workflow_permissions": "write",
+                    "can_approve_pull_request_reviews": False,
+                },
+            )
+
+        rc = ra.apply_workflow_permissions(
+            repo="o/r",
+            sot_path=sot,
+            mode="plan",
+            summary_file=summary,
+            token="tok",
+            opener=opener,
+        )
+        assert rc == 0
+        text = summary.read_text(encoding="utf-8")
+        assert "workflow permissions (plan)" in text
+        assert "Status: `drift`" in text
+
+    def test_drift_mode_rc_reflects_divergence(self, tmp_path: Path) -> None:
+        sot = write_wfperm_sot(tmp_path / "workflow.json")
+        summary = tmp_path / "s.md"
+
+        def drift_opener(request):
+            return Response(
+                200,
+                {
+                    "default_workflow_permissions": "write",
+                    "can_approve_pull_request_reviews": True,
+                },
+            )
+
+        def sync_opener(request):
+            return Response(
+                200,
+                {
+                    "default_workflow_permissions": "read",
+                    "can_approve_pull_request_reviews": True,
+                },
+            )
+
+        assert (
+            ra.apply_workflow_permissions(
+                repo="o/r",
+                sot_path=sot,
+                mode="drift",
+                summary_file=summary,
+                token="tok",
+                opener=drift_opener,
+            )
+            == 1
+        )
+        assert (
+            ra.apply_workflow_permissions(
+                repo="o/r",
+                sot_path=sot,
+                mode="drift",
+                summary_file=summary,
+                token="tok",
+                opener=sync_opener,
+            )
+            == 0
+        )
+
+    def test_apply_puts_on_drift_then_reads_back(self, tmp_path: Path) -> None:
+        sot = write_wfperm_sot(tmp_path / "workflow.json")
+        summary = tmp_path / "s.md"
+        methods: list[str] = []
+
+        def opener(request):
+            methods.append(request.get_method())
+            if request.get_method() == "PUT":
+                assert json.loads(request.data) == {
+                    "default_workflow_permissions": "read",
+                    "can_approve_pull_request_reviews": True,
+                }
+                return Response(200, {})
+            value = "read" if len(methods) > 1 else "write"
+            return Response(
+                200,
+                {
+                    "default_workflow_permissions": value,
+                    "can_approve_pull_request_reviews": True,
+                },
+            )
+
+        rc = ra.apply_workflow_permissions(
+            repo="o/r",
+            sot_path=sot,
+            mode="apply",
+            summary_file=summary,
+            token="tok",
+            opener=opener,
+        )
+        assert rc == 0
+        assert methods == ["GET", "PUT", "GET"]
+        assert "Applied PUT" in summary.read_text(encoding="utf-8")
+
+    def test_apply_noops_when_in_sync(self, tmp_path: Path) -> None:
+        sot = write_wfperm_sot(tmp_path / "workflow.json")
+        summary = tmp_path / "s.md"
+        methods: list[str] = []
+
+        def opener(request):
+            methods.append(request.get_method())
+            return Response(
+                200,
+                {
+                    "default_workflow_permissions": "read",
+                    "can_approve_pull_request_reviews": True,
+                },
+            )
+
+        rc = ra.apply_workflow_permissions(
+            repo="o/r",
+            sot_path=sot,
+            mode="apply",
+            summary_file=summary,
+            token="tok",
+            opener=opener,
+        )
+        assert rc == 0
+        assert methods == ["GET"]
+        assert "No change" in summary.read_text(encoding="utf-8")
+
+    def test_sot_validation_rejects_bad_shapes(self, tmp_path: Path) -> None:
+        bad = tmp_path / "b.json"
+        bad.write_text(
+            json.dumps({"default_workflow_permissions": "read"}),
+            encoding="utf-8",
+        )
+        with pytest.raises(ValueError, match="missing required keys"):
+            ra._read_workflow_permissions_sot(bad)
+
+        bad.write_text(
+            json.dumps(
+                {
+                    "default_workflow_permissions": "nope",
+                    "can_approve_pull_request_reviews": True,
+                }
+            ),
+            encoding="utf-8",
+        )
+        with pytest.raises(ValueError, match="must be 'read' or 'write'"):
+            ra._read_workflow_permissions_sot(bad)
+
+        bad.write_text(
+            json.dumps(
+                {
+                    "default_workflow_permissions": "read",
+                    "can_approve_pull_request_reviews": "yes",
+                }
+            ),
+            encoding="utf-8",
+        )
+        with pytest.raises(ValueError, match="must be a boolean"):
+            ra._read_workflow_permissions_sot(bad)
+
+        bad.write_text(
+            json.dumps(
+                {
+                    "default_workflow_permissions": "read",
+                    "can_approve_pull_request_reviews": True,
+                    "x": 1,
+                }
+            ),
+            encoding="utf-8",
+        )
+        with pytest.raises(ValueError, match="unexpected keys"):
+            ra._read_workflow_permissions_sot(bad)
+
+    def test_cli_drift_mode_returns_exit_1(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        sot = write_wfperm_sot(tmp_path / "workflow.json")
+        summary = tmp_path / "s.md"
+        monkeypatch.setenv("GH_TOKEN", "tok")
+        monkeypatch.setattr(
+            ra,
+            "get_workflow_permissions",
+            lambda *_a, **_k: {
+                "default_workflow_permissions": "write",
+                "can_approve_pull_request_reviews": True,
+            },
+        )
+        rc = ra.main(
+            [
+                "workflow-permissions",
+                "--repo",
+                "o/r",
+                "--sot-file",
+                str(sot),
+                "--mode",
+                "drift",
+                "--summary-file",
+                str(summary),
+            ]
+        )
+        assert rc == 1
+
+    def test_repo_sot_file_matches_governed_shape(self) -> None:
+        repo_sot = (
+            Path(__file__).resolve().parents[1]
+            / ".github"
+            / "actions-permissions"
+            / "workflow.json"
+        )
+        data = ra._read_workflow_permissions_sot(repo_sot)
+        assert data == {
+            "default_workflow_permissions": "read",
+            "can_approve_pull_request_reviews": True,
+        }

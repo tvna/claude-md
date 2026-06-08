@@ -10,8 +10,10 @@ flowchart TD
     J_apply["apply"]
     S_J_apply_0(("Guard dispatch ref"))
     S_J_apply_1(("Enable auto-delete head branches"))
+    S_J_apply_2(("Reconcile default workflow permissions"))
 
     T_workflow_dispatch --> J_apply
     J_apply -->|"github.ref != 'refs/heads/main'"| S_J_apply_0
     J_apply -->|"${{ inputs.enable_auto_delete }}"| S_J_apply_1
+    J_apply -->|"${{ inputs.enable_workflow_permissions }}"| S_J_apply_2
 ```
