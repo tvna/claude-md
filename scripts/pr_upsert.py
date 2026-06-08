@@ -24,6 +24,7 @@ Exit codes:
 from __future__ import annotations
 
 import argparse
+import base64
 import json
 import os
 import sys
@@ -226,6 +227,149 @@ def _create_commit_on_branch(
     if not isinstance(oid, str) or not oid:
         raise RuntimeError(f"createCommitOnBranch: missing commit oid: {str(response)[:200]}")
     return oid
+
+
+def _get_branch_head_oid(
+    *,
+    repo: str,
+    branch: str,
+    token: str,
+    apply_call: Callable[..., tuple[int, str]] = _github_apply_call,
+) -> str | None:
+    """Return the head commit oid of ``refs/heads/{branch}``, or ``None`` if absent.
+
+    A 404 means the branch does not exist yet -- the first run, or a prior run's
+    branch that was merged and deleted -- so the caller creates it off the base
+    instead. Any other non-2xx is a real error and raises.
+    """
+    url = f"{_API_ROOT}/repos/{repo}/git/ref/heads/{branch}"
+    code, body = apply_call(method="GET", url=url, payload=None, token=token)
+    if code == 404:
+        return None
+    if not (200 <= code < 300):
+        raise RuntimeError(f"Get branch ref {branch} failed: HTTP {code}: {body[:200]}")
+    try:
+        data = json.loads(body)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"Unexpected response from get branch ref {branch}: {body[:200]}") from exc
+    sha = data.get("object", {}).get("sha") if isinstance(data, dict) else None
+    if not isinstance(sha, str) or not sha:
+        raise RuntimeError(f"Get branch ref {branch} response missing object.sha: {body[:200]}")
+    return sha
+
+
+def _get_file_bytes(
+    *,
+    repo: str,
+    path: str,
+    ref: str,
+    token: str,
+    apply_call: Callable[..., tuple[int, str]] = _github_apply_call,
+) -> bytes | None:
+    """Return the decoded bytes of *path* at *ref*, or ``None`` when absent there.
+
+    Uses the contents API, which returns the file base64-encoded. A 404 means the
+    path does not exist at *ref* (the snapshot has never been committed, or the
+    branch is absent). A non-base64 encoding -- the API returns ``encoding: "none"``
+    for blobs over 1 MB -- raises, so a silently truncated body can never
+    masquerade as matching content. Any other non-2xx is a real error and raises.
+    """
+    url = f"{_API_ROOT}/repos/{repo}/contents/{path}?ref={ref}"
+    code, body = apply_call(method="GET", url=url, payload=None, token=token)
+    if code == 404:
+        return None
+    if not (200 <= code < 300):
+        raise RuntimeError(f"Get contents {path}@{ref} failed: HTTP {code}: {body[:200]}")
+    try:
+        data = json.loads(body)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"Unexpected response from get contents {path}@{ref}: {body[:200]}") from exc
+    if not isinstance(data, dict):
+        raise RuntimeError(f"Expected object from get contents {path}@{ref}: {body[:200]}")
+    encoding = data.get("encoding")
+    content = data.get("content")
+    if encoding != "base64" or not isinstance(content, str):
+        raise RuntimeError(f"Get contents {path}@{ref}: unexpected encoding {encoding!r}")
+    return base64.b64decode(content)
+
+
+def upsert_single_file_pr(
+    *,
+    repo: str,
+    path: str,
+    content: bytes,
+    base: str,
+    branch: str,
+    title: str,
+    body: str,
+    commit_subject: str,
+    commit_body: str,
+    token: str,
+    apply_call: Callable[..., tuple[int, str]] = _github_apply_call,
+    graphql_call: Callable[..., tuple[int, dict[str, Any]]] = _github_graphql_call,
+) -> str:
+    """Publish *content* to *path* on *branch* and upsert a PR into *base*, never force-pushing.
+
+    Replaces the ``git checkout -B`` + ``git push --force-with-lease`` pattern that
+    the all-branches ``non_fast_forward`` ruleset rejects once the fixed *branch*
+    already exists (the #1466 reused-branch failure). The commit is created server
+    side via GraphQL ``createCommitOnBranch`` (Refs #1437), which is signed/Verified
+    and, by construction, a fast-forward append:
+
+    * When *path* on *base* already equals *content*, there is no drift to publish;
+      returns ``"up-to-date"`` without touching the branch or any PR.
+    * When *branch* is absent, it is created off *base* and the commit is added on
+      top -- a plain create, no force.
+    * When *branch* already exists, the commit is appended onto its current tip
+      (``expectedHeadOid`` = the branch head), so the ``non_fast_forward`` rule is
+      satisfied. If the tip already carries *content*, no commit is made; the open
+      PR (if any) is still reconciled.
+
+    Returns ``"up-to-date"``, or ``"<verb>:<pr_number>"`` where *verb* is
+    ``created`` (new branch), ``committed`` (appended onto an existing branch), or
+    ``branch-current`` (branch tip already matched, PR reconciled only).
+    """
+    base_bytes = _get_file_bytes(repo=repo, path=path, ref=base, token=token, apply_call=apply_call)
+    if base_bytes is not None and base_bytes == content:
+        return "up-to-date"
+
+    additions = [{"path": path, "contents": base64.b64encode(content).decode("ascii")}]
+    head_oid = _get_branch_head_oid(repo=repo, branch=branch, token=token, apply_call=apply_call)
+    if head_oid is None:
+        base_sha = _get_ref_sha(repo=repo, ref=f"heads/{base}", token=token, apply_call=apply_call)
+        _create_branch_ref(repo=repo, branch=branch, sha=base_sha, token=token, apply_call=apply_call)
+        _create_commit_on_branch(
+            repo=repo,
+            branch=branch,
+            expected_head_oid=base_sha,
+            headline=commit_subject,
+            body=commit_body,
+            additions=additions,
+            token=token,
+            graphql_call=graphql_call,
+        )
+        verb = "created"
+    else:
+        branch_bytes = _get_file_bytes(repo=repo, path=path, ref=branch, token=token, apply_call=apply_call)
+        if branch_bytes == content:
+            verb = "branch-current"
+        else:
+            _create_commit_on_branch(
+                repo=repo,
+                branch=branch,
+                expected_head_oid=head_oid,
+                headline=commit_subject,
+                body=commit_body,
+                additions=additions,
+                token=token,
+                graphql_call=graphql_call,
+            )
+            verb = "committed"
+
+    _, number = _upsert_pr(
+        repo=repo, head=branch, base=base, title=title, body=body, token=token, apply_call=apply_call
+    )
+    return f"{verb}:{number}"
 
 
 def _merge_pr(
