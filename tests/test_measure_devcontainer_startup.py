@@ -132,6 +132,16 @@ def test_get_image_missing_raises(config: dict[str, Any]) -> None:
         mod.get_image(config)
 
 
+def test_reject_mutable_tag_passes_immutable() -> None:
+    assert mod.reject_mutable_tag("claude-md-measure:local") == "claude-md-measure:local"
+
+
+@pytest.mark.parametrize("image", ["x:main", "x:latest"])
+def test_reject_mutable_tag_rejects(image: str) -> None:
+    with pytest.raises(ValueError, match="mutable image tag"):
+        mod.reject_mutable_tag(image)
+
+
 def test_split_segments_splits_on_and() -> None:
     assert mod.split_segments("a && b && c") == ["a", "b", "c"]
 
@@ -677,6 +687,40 @@ def test_run_no_pull(tmp_path: Path) -> None:
     )
     assert rc == 0
     assert "pull" not in sessions[0].events
+
+
+def test_run_image_override_replaces_config_image(tmp_path: Path) -> None:
+    # --image overrides the config's image (used to measure a locally built
+    # image from .devcontainer/images/<agent>) while the lifecycle segments
+    # still come from --config. Refs #1491.
+    captured: dict[str, Any] = {}
+
+    def factory(**kwargs: Any) -> FakeSession:
+        captured.update(kwargs)
+        return FakeSession(
+            exec_results={
+                "uv sync": mod.RunResult(0, "", 1.0),
+                "install cli": mod.RunResult(0, "", 2.0),
+                "egress": mod.RunResult(0, "", 0.5),
+            }
+        )
+
+    rc = mod.run(
+        ["--config", str(write_config(tmp_path)), "--image", "claude-md-measure:local", "--no-pull"],
+        session_factory=factory,
+        which=lambda _name: "/usr/bin/docker",
+    )
+    assert rc == 0
+    assert captured["image"] == "claude-md-measure:local"
+
+
+def test_run_image_override_rejects_mutable_tag(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="mutable image tag"):
+        mod.run(
+            ["--config", str(write_config(tmp_path)), "--image", "x:latest", "--no-pull"],
+            session_factory=lambda **_kwargs: FakeSession(exec_results={}),
+            which=lambda _name: "/usr/bin/docker",
+        )
 
 
 def test_run_probe_composition_end_to_end(tmp_path: Path) -> None:

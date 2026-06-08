@@ -140,14 +140,23 @@ def load_config(path: Path) -> dict[str, Any]:
     return data
 
 
+def reject_mutable_tag(image: str) -> str:
+    """Return *image* unchanged, rejecting mutable tags (``:main``/``:latest``).
+
+    A measurement must name an immutable reference so the number is reproducible
+    and attributable to a known image; a moving tag would silently re-point.
+    """
+    if image.endswith((":main", ":latest")):
+        raise ValueError(f"refusing to measure a mutable image tag: {image}")
+    return image
+
+
 def get_image(config: dict[str, Any]) -> str:
     """Return the ``image`` reference, rejecting mutable tags."""
     image = config.get("image")
     if not isinstance(image, str) or not image:
         raise ValueError("devcontainer config has no string 'image'")
-    if image.endswith((":main", ":latest")):
-        raise ValueError(f"refusing to measure a mutable image tag: {image}")
-    return image
+    return reject_mutable_tag(image)
 
 
 def split_segments(command: str | None) -> list[str]:
@@ -465,11 +474,21 @@ def run(
             "realisation from the postCreate work that follows."
         ),
     )
+    parser.add_argument(
+        "--image",
+        default="",
+        help=(
+            "Override the image reference taken from --config (e.g. an image "
+            "built locally from .devcontainer/images/<agent>). Pair with "
+            "--no-pull. Mutable tags (:main/:latest) are rejected. The "
+            "lifecycle segments still come from --config."
+        ),
+    )
     parser.add_argument("--output", type=Path, help="Write the JSON report to this path.")
     args = parser.parse_args(argv)
 
     config = load_config(args.config)
-    image = get_image(config)
+    image = reject_mutable_tag(args.image) if args.image else get_image(config)
     post_create = split_segments(config.get("postCreateCommand"))
     post_start = split_segments(config.get("postStartCommand"))
 

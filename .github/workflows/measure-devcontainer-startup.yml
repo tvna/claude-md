@@ -28,6 +28,14 @@ on:
           uv sync that the postCreate nix-develop segment otherwise conflates.
         type: boolean
         default: false
+      build_from_source:
+        description: >-
+          Build the image locally from .devcontainer/images/<agent> (running
+          the build-time Features, incl. nix-warm-claude) and measure that
+          instead of pulling the published pin. Use to verify a closure-bake
+          change on a branch before it is published to GHCR (#1491).
+        type: boolean
+        default: false
 
 permissions: {}
 
@@ -58,10 +66,36 @@ jobs:
             --username "${{ github.actor }}" \
             --password-stdin
 
+      # Build the image locally from the prebuild definition so a branch's
+      # build-time Features (here nix-warm-claude, which bakes the .#claude
+      # devShell closure) can be measured before they are published to GHCR. The
+      # workspace is NOT mounted during Feature install, so stage the flake files
+      # the nix-warm-claude Feature realises into the Feature dir, exactly as the
+      # publish workflow does for the claude legs. Native platform only (no
+      # --platform / --push): we measure on the matching-arch runner. Refs #1491.
+      - name: Build image from source
+        if: inputs.build_from_source
+        env:
+          AGENT: ${{ inputs.agent }}
+          DEVCONTAINERS_CLI_VERSION: "0.86.1"
+          MEASURE_IMAGE: claude-md-measure:local
+        run: |
+          set -euo pipefail
+          if [ "${AGENT}" = "claude" ]; then
+            cp flake.nix flake.lock pyproject.toml \
+              .devcontainer/images/features/nix-warm-claude/
+          fi
+          npx --yes "@devcontainers/cli@${DEVCONTAINERS_CLI_VERSION}" build \
+            --workspace-folder . \
+            --config ".devcontainer/images/${AGENT}/devcontainer.json" \
+            --image-name "${MEASURE_IMAGE}"
+
       - name: Measure startup phases
         env:
           AGENT: ${{ inputs.agent }}
           SPLIT_NIX_DEVELOP: ${{ inputs.split_nix_develop }}
+          BUILD_FROM_SOURCE: ${{ inputs.build_from_source }}
+          MEASURE_IMAGE: claude-md-measure:local
         run: |
           set -euo pipefail
           config=".devcontainer/${AGENT}/devcontainer.json"
@@ -88,6 +122,13 @@ jobs:
           if [ "${SPLIT_NIX_DEVELOP}" = "true" ]; then
             warmup_args+=(--warmup "nix develop .#${AGENT} --command true")
           fi
+          # When the image was built from source above, measure that local image
+          # (immutable local tag) and skip the pull. Otherwise measure the
+          # published pin named in --config. Refs #1491.
+          image_args=()
+          if [ "${BUILD_FROM_SOURCE}" = "true" ]; then
+            image_args+=(--image "${MEASURE_IMAGE}" --no-pull)
+          fi
           # postStart applies the egress allowlist, which needs NET_ADMIN; the
           # eBPF caps are unavailable on the runner, so that segment is
           # best-effort and its (possibly non-zero) exit is recorded as data.
@@ -99,6 +140,7 @@ jobs:
             --cap NET_ADMIN \
             --probe-composition \
             "${warmup_args[@]}" \
+            "${image_args[@]}" \
             --output "startup-${AGENT}.json" \
             2>> "$GITHUB_STEP_SUMMARY"
 
