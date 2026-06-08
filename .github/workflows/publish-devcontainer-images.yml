@@ -132,6 +132,17 @@ jobs:
         with:
           image-ref: ${{ env.IMAGE_PREFIX }}-${{ matrix.agent }}:${{ github.sha }}-${{ matrix.arch }}
           scanners: vuln,secret,misconfig
+          # Skip the Nix store optimisation hardlink farm. /nix/store/.links is a
+          # content-addressed mirror in which every store file is hardlinked under
+          # a second path; Trivy's secret scanner walks it and reports findings
+          # (e.g. a HIGH "Asymmetric Private Key") against the .links/<hash> path,
+          # and also emits a 15 MB large-file warning. Skipping the farm loses no
+          # detection coverage: each .links entry is a hardlink to a file that is
+          # still scanned at its real /nix/store/<hash> path. Verified against
+          # Trivy v0.70.0 pkg/fanal/utils/utils.go SkipPath: skip-dirs patterns are
+          # matched on the leading-slash-trimmed path with doublestar, so the
+          # relative pattern below prunes the whole subtree. Refs #1473, #1348.
+          skip-dirs: nix/store/.links
           format: sarif
           output: trivy-results.sarif
           exit-code: '0'

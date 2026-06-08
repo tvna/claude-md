@@ -104,6 +104,11 @@ ALLOW_NO_TEST_MODULE: dict[str, str] = {
         "Retrospective label constants; exercised indirectly via "
         "tests/test_auto_retro.py and tests/test_scan_retro_followup_drift.py."
     ),
+    "_secret_patterns": (
+        "Shared high-confidence secret-pattern detector; exercised indirectly "
+        "via tests/test_scan_secrets.py and tests/test_preflight_github_secrets.py, "
+        "which drive scan_line / scan_text through their callers."
+    ),
 }
 
 # Public scripts that import the GitHub API boundary (O6, #194). The gate
