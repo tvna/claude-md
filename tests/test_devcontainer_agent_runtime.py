@@ -112,7 +112,7 @@ def test_runtime_script_links_python3_for_hook_subprocesses() -> None:
     flake = (REPO_ROOT / "flake.nix").read_text(encoding="utf-8")
     script = (REPO_ROOT / ".devcontainer/scripts/configure-agent-runtime.sh").read_text(encoding="utf-8")
 
-    assert "python-runtime = pkgs.python311;" in flake
+    assert "python-runtime = pkgs.python312;" in flake
     assert "install_nix_binary python-runtime python3" in script
 
 

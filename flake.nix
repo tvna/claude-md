@@ -317,7 +317,7 @@ EOF
           inherit claude-cli codex-cli pinned-uv apm-cli waza-cli rtk-cli actionlint-cli ccusage-cli;
           bubblewrap = pkgs.bubblewrap;
           gh-cli = pkgs.gh;
-          python-runtime = pkgs.python311;
+          python-runtime = pkgs.python312;
           # GitHub MCP server binary for the local-stdio launch path used by
           # scripts/mcp_github_launch.sh (#1063). In the devcontainer there is no
           # Docker daemon, so the wrapper execs this Nix-pinned binary instead of
@@ -339,7 +339,7 @@ EOF
             git
             jq
             nodejs_22
-            python311
+            python312
             ripgrep
             shellcheck
             agentPackages.pinned-uv
@@ -348,14 +348,15 @@ EOF
             agentPackages.actionlint-cli
           ];
           pythonQualityPackages = with pkgs; [
-            # mypy built against python311 (the interpreter already in
-            # sharedPackages), NOT the bare `mypy` attr: in nixpkgs 25.05 the
-            # default `python3` is 3.12, so `pkgs.mypy` drags a SECOND ~113 MB
-            # interpreter (python3.12) into the devShell closure. Pinning to
-            # python311Packages.mypy reuses the present 3.11 and keeps the closure
-            # (and the baked claude image, #1491) free of a duplicate Python.
-            python311Packages.mypy
-            python311Packages.pytest-xdist
+            # Bare `mypy` (= pkgs.mypy) is built against the nixpkgs-default
+            # interpreter, which in nixpkgs 25.05 is python312 -- the same
+            # interpreter the project now targets (pyproject requires-python
+            # >=3.12) and that sharedPackages provides. So mypy shares the one
+            # python in the closure; there is no duplicate interpreter to avoid,
+            # and no python312Packages override is needed for mypy. Keeps the
+            # baked claude image (#1491) to a single Python.
+            mypy
+            python312Packages.pytest-xdist
             ruff
           ];
           networkPackages = with pkgs; [
