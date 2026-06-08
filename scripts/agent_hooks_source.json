@@ -484,6 +484,14 @@
                   "command": "python3 scripts/stop_new_session_handoff_prompt.py"
                 }
               ]
+            },
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "python3 scripts/gate_cache_regime_advisor.py"
+                }
+              ]
             }
           ]
         }
