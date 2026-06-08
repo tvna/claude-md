@@ -151,6 +151,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("validate_json_syntax.py", "verify"): "test_validate_json_syntax_verify_matches_workflow_args",
     ("auto_retro.py", "decision-tree-doc"): "test_auto_retro_decision_tree_doc_matches_workflow_args",
     ("auto_retro.py", "triage-report"): "test_auto_retro_triage_report_matches_workflow_env",
+    ("auto_retro.py", "triage-report-pr"): "test_auto_retro_triage_report_pr_matches_workflow_env",
     ("workflow_diagram.py", "diagram-doc"): "test_workflow_diagram_doc_matches_workflow_args",
     ("auto_retro.py", "run"): "test_auto_retro_run_matches_workflow_env",
     ("auto_retro.py", "post-merge-rescan"): "test_auto_retro_post_merge_rescan_matches_workflow_env",
@@ -561,6 +562,43 @@ def test_auto_retro_triage_report_matches_workflow_env(
             auto_retro.compute_triage_report([])
         )
     )
+
+
+def test_auto_retro_triage_report_pr_matches_workflow_env(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Mirror the env shape used by the post-merge triage-report-pr step.
+
+    The workflow shells to ``python3 scripts/auto_retro.py triage-report-pr``
+    with REPO + GH_TOKEN + GITHUB_REF_NAME in the env, reading the snapshot the
+    preceding triage-report step wrote. The PR-upsert boundary is stubbed so the
+    contract exercises the argv/env wiring (report read, base resolution) without
+    network access. Refs #1466.
+    """
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("REPO", REPO)
+    monkeypatch.setenv("GH_TOKEN", "tok")
+    monkeypatch.setenv("GITHUB_REF_NAME", "main")
+
+    report_path = Path("docs/generated/scripts/auto-retro-triage-report.md")
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    report_path.write_text("# snapshot\n", encoding="utf-8")
+
+    captured: dict[str, Any] = {}
+
+    def fake_upsert(**kwargs: Any) -> str:
+        captured.update(kwargs)
+        return "created:99"
+
+    monkeypatch.setattr(auto_retro, "upsert_single_file_pr", fake_upsert)
+
+    assert auto_retro.main(["triage-report-pr"]) == 0
+
+    assert captured["repo"] == REPO
+    assert captured["base"] == "main"
+    assert captured["branch"] == "chore/refresh-auto-retro-triage-report"
+    assert captured["path"] == "docs/generated/scripts/auto-retro-triage-report.md"
+    assert captured["content"] == b"# snapshot\n"
 
 
 def test_workflow_diagram_doc_matches_workflow_args(

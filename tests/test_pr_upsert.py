@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import json
 import sys
 from collections.abc import Callable
@@ -690,3 +691,198 @@ class TestCreateCommitOnBranch:
                 repo="o/r", branch="b", expected_head_oid="s", headline="h", body="", additions=[],
                 token="tok", graphql_call=graphql_call,
             )
+
+
+# ---------------------------------------------------------------------------
+# _get_branch_head_oid()
+# ---------------------------------------------------------------------------
+
+
+class TestGetBranchHeadOid:
+    def test_returns_object_sha(self) -> None:
+        apply_call = _make_apply_call(200, {"object": {"sha": "feedface"}})
+        sha = pu._get_branch_head_oid(repo="o/r", branch="chore/x", token="tok", apply_call=apply_call)
+        assert sha == "feedface"
+
+    def test_absent_branch_returns_none(self) -> None:
+        apply_call = _make_apply_call(404, {"message": "Not Found"})
+        sha = pu._get_branch_head_oid(repo="o/r", branch="chore/x", token="tok", apply_call=apply_call)
+        assert sha is None
+
+    def test_queries_branch_ref_endpoint(self) -> None:
+        captured: list[str] = []
+
+        def apply_call(*, method: str, url: str, payload: object, token: str) -> tuple[int, str]:
+            captured.append(url)
+            return 200, json.dumps({"object": {"sha": "s"}})
+
+        pu._get_branch_head_oid(repo="o/r", branch="chore/x", token="tok", apply_call=apply_call)
+        assert captured[0].endswith("/repos/o/r/git/ref/heads/chore/x")
+
+    def test_other_error_raises(self) -> None:
+        apply_call = _make_apply_call(500, {"message": "boom"})
+        with pytest.raises(RuntimeError, match="500"):
+            pu._get_branch_head_oid(repo="o/r", branch="chore/x", token="tok", apply_call=apply_call)
+
+    def test_missing_sha_raises(self) -> None:
+        apply_call = _make_apply_call(200, {"object": {}})
+        with pytest.raises(RuntimeError, match="missing object.sha"):
+            pu._get_branch_head_oid(repo="o/r", branch="chore/x", token="tok", apply_call=apply_call)
+
+
+# ---------------------------------------------------------------------------
+# _get_file_bytes()
+# ---------------------------------------------------------------------------
+
+
+def _contents_response(raw: bytes) -> dict[str, Any]:
+    return {"encoding": "base64", "content": base64.b64encode(raw).decode("ascii")}
+
+
+class TestGetFileBytes:
+    def test_decodes_base64_content(self) -> None:
+        apply_call = _make_apply_call(200, _contents_response(b"hello\nworld\n"))
+        out = pu._get_file_bytes(repo="o/r", path="a/b.md", ref="main", token="tok", apply_call=apply_call)
+        assert out == b"hello\nworld\n"
+
+    def test_absent_path_returns_none(self) -> None:
+        apply_call = _make_apply_call(404, {"message": "Not Found"})
+        out = pu._get_file_bytes(repo="o/r", path="a/b.md", ref="main", token="tok", apply_call=apply_call)
+        assert out is None
+
+    def test_includes_ref_in_url(self) -> None:
+        captured: list[str] = []
+
+        def apply_call(*, method: str, url: str, payload: object, token: str) -> tuple[int, str]:
+            captured.append(url)
+            return 200, json.dumps(_contents_response(b"x"))
+
+        pu._get_file_bytes(repo="o/r", path="a/b.md", ref="chore/x", token="tok", apply_call=apply_call)
+        assert "/repos/o/r/contents/a/b.md?ref=chore/x" in captured[0]
+
+    def test_non_base64_encoding_raises(self) -> None:
+        # Blobs over 1 MB come back with encoding "none" and an empty body; a
+        # truncated body must never masquerade as matching content.
+        apply_call = _make_apply_call(200, {"encoding": "none", "content": ""})
+        with pytest.raises(RuntimeError, match="unexpected encoding"):
+            pu._get_file_bytes(repo="o/r", path="a/b.md", ref="main", token="tok", apply_call=apply_call)
+
+    def test_http_error_raises(self) -> None:
+        apply_call = _make_apply_call(403, {"message": "forbidden"})
+        with pytest.raises(RuntimeError, match="403"):
+            pu._get_file_bytes(repo="o/r", path="a/b.md", ref="main", token="tok", apply_call=apply_call)
+
+
+# ---------------------------------------------------------------------------
+# upsert_single_file_pr()  (the #1466 reuse-safe publish path)
+# ---------------------------------------------------------------------------
+
+
+class _Router:
+    """Route apply_call requests by (method, url-substring) to canned responses.
+
+    Records the ordered request log so tests can assert which endpoints were hit
+    (e.g. that the reused-branch path never creates a ref or touches the base).
+    """
+
+    def __init__(self, routes: list[tuple[str, str, int, Any]]) -> None:
+        # routes: (method, url_substring, status, body) matched in order.
+        self._routes = routes
+        self.log: list[tuple[str, str, Any]] = []
+
+    def apply_call(self, *, method: str, url: str, payload: object, token: str) -> tuple[int, str]:
+        self.log.append((method, url, payload))
+        for m, sub, status, body in self._routes:
+            if m == method and sub in url:
+                encoded = body if isinstance(body, str) else json.dumps(body)
+                return status, encoded
+        raise AssertionError(f"unrouted request: {method} {url}")
+
+
+class _RecordingGraphql:
+    def __init__(self) -> None:
+        self.calls: list[dict[str, Any]] = []
+
+    def graphql_call(self, *, query: str, variables: dict[str, Any], token: str) -> tuple[int, dict[str, Any]]:
+        self.calls.append(variables)
+        return 200, {"data": {"createCommitOnBranch": {"commit": {"oid": "newoid"}}}}
+
+
+class TestUpsertSingleFilePr:
+    _CONTENT = b"# report\nrow\n"
+
+    def test_no_drift_vs_base_is_noop(self) -> None:
+        router = _Router([("GET", "/contents/", 200, _contents_response(self._CONTENT))])
+        gql = _RecordingGraphql()
+        result = pu.upsert_single_file_pr(
+            repo="o/r", path="docs/r.md", content=self._CONTENT, base="main",
+            branch="chore/refresh", title="t", body="b",
+            commit_subject="s", commit_body="Refs #1", token="tok",
+            apply_call=router.apply_call, graphql_call=gql.graphql_call,
+        )
+        assert result == "up-to-date"
+        assert gql.calls == []
+        # Only the base-drift probe ran; no branch ref / commit / PR calls.
+        assert len(router.log) == 1
+
+    def test_branch_absent_creates_branch_and_commit(self) -> None:
+        router = _Router([
+            ("GET", "/contents/docs/r.md?ref=main", 404, {"message": "Not Found"}),
+            ("GET", "/git/ref/heads/chore/refresh", 404, {"message": "Not Found"}),
+            ("GET", "/git/ref/heads/main", 200, {"object": {"sha": "basesha"}}),
+            ("POST", "/git/refs", 201, {}),
+            ("GET", "/pulls?", 200, []),
+            ("POST", "/pulls", 201, {"number": 77}),
+        ])
+        gql = _RecordingGraphql()
+        result = pu.upsert_single_file_pr(
+            repo="o/r", path="docs/r.md", content=self._CONTENT, base="main",
+            branch="chore/refresh", title="t", body="b",
+            commit_subject="s", commit_body="Refs #1", token="tok",
+            apply_call=router.apply_call, graphql_call=gql.graphql_call,
+        )
+        assert result == "created:77"
+        # New branch was cut off main and the commit anchored to the base sha.
+        assert gql.calls[0]["input"]["expectedHeadOid"] == "basesha"
+        assert gql.calls[0]["input"]["fileChanges"]["additions"][0]["path"] == "docs/r.md"
+
+    def test_reused_branch_appends_onto_tip_without_force_push(self) -> None:
+        # Acceptance criterion (#1466): the fixed branch already exists with a
+        # stale snapshot. The commit must append onto the branch tip
+        # (expectedHeadOid = branch head), never create a ref or force-push.
+        router = _Router([
+            ("GET", "/contents/docs/r.md?ref=main", 200, _contents_response(b"# stale main\n")),
+            ("GET", "/git/ref/heads/chore/refresh", 200, {"object": {"sha": "branchtip"}}),
+            ("GET", "/contents/docs/r.md?ref=chore/refresh", 200, _contents_response(b"# stale branch\n")),
+            ("GET", "/pulls?", 200, [{"number": 7}]),
+            ("PATCH", "/pulls/7", 200, {"number": 7}),
+        ])
+        gql = _RecordingGraphql()
+        result = pu.upsert_single_file_pr(
+            repo="o/r", path="docs/r.md", content=self._CONTENT, base="main",
+            branch="chore/refresh", title="t", body="b",
+            commit_subject="s", commit_body="Refs #1", token="tok",
+            apply_call=router.apply_call, graphql_call=gql.graphql_call,
+        )
+        assert result == "committed:7"
+        assert gql.calls[0]["input"]["expectedHeadOid"] == "branchtip"
+        # No branch ref was created and no force-push occurred.
+        assert not any(method == "POST" and "/git/refs" in url for method, url, _ in router.log)
+
+    def test_reused_branch_tip_already_current_skips_commit(self) -> None:
+        router = _Router([
+            ("GET", "/contents/docs/r.md?ref=main", 200, _contents_response(b"# stale main\n")),
+            ("GET", "/git/ref/heads/chore/refresh", 200, {"object": {"sha": "branchtip"}}),
+            ("GET", "/contents/docs/r.md?ref=chore/refresh", 200, _contents_response(self._CONTENT)),
+            ("GET", "/pulls?", 200, [{"number": 7}]),
+            ("PATCH", "/pulls/7", 200, {"number": 7}),
+        ])
+        gql = _RecordingGraphql()
+        result = pu.upsert_single_file_pr(
+            repo="o/r", path="docs/r.md", content=self._CONTENT, base="main",
+            branch="chore/refresh", title="t", body="b",
+            commit_subject="s", commit_body="Refs #1", token="tok",
+            apply_call=router.apply_call, graphql_call=gql.graphql_call,
+        )
+        assert result == "branch-current:7"
+        assert gql.calls == []
