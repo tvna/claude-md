@@ -7062,6 +7062,152 @@ flowchart TD
     N008 --> N009
 ```
 
+## scripts/compare_cache_regimes.py
+
+### _as_number(...)
+
+```mermaid
+flowchart TD
+    N001["_as_number(...)"]
+    N002["if isinstance(value, bool) or not isinstance(value, int | float)"]
+    N003["raise InputError(f'{where}<str>{value!r}')"]
+    N004["return float(value)"]
+    N001 -->|"start"| N002
+    N002 -->|"true"| N003
+    N002 -->|"false"| N004
+```
+
+### parse_regimes(...)
+
+```mermaid
+flowchart TD
+    N001["parse_regimes(...)"]
+    N002["if not isinstance(data, dict)"]
+    N003["raise InputError('<str>')"]
+    N004["regimes = get(...)"]
+    N005["if not isinstance(regimes, list) or not regimes"]
+    N006["raise InputError('<str>')"]
+    N007["summaries = []"]
+    N008["for idx, regime in enumerate(regimes):
+    if not isinstance(regime, dict):
+        raise InputError(f'<str>{idx}<str>')
+    name = regime.get('<str>')
+    if not isinstance(name, str) or not name:
+        raise InputError(f'<str>{idx}<str>')
+    prs = regime.get('<str>')
+    if not isinstance(prs, list) or not prs:
+        raise InputError(f'<str>{name!r}<str>')
+    total_cost = 0.0
+    total_repairs = 0.0
+    for j, pr in enumerate(prs):
+        if not isinstance(pr, dict):
+            raise InputError(f'<str>{name!r}<str>{j}<str>')
+        total_cost += _as_number(pr.get('<str>'), f'<str>{name!r}<str>{j}<str>')
+        total_repairs += _as_number(pr.get('<str>'), f'<str>{name!r}<str>{j}<str>')
+    n = len(prs)
+    summaries.append(RegimeSummary(name=name, n=n, cost_per_pr=total_cost / n, repairs_per_pr=total_repairs / n))"]
+    N009["return summaries"]
+    N001 -->|"start"| N002
+    N002 -->|"true"| N003
+    N002 -->|"false"| N004
+    N004 --> N005
+    N005 -->|"true"| N006
+    N005 -->|"false"| N007
+    N007 --> N008
+    N008 --> N009
+```
+
+### _delta(...)
+
+```mermaid
+flowchart TD
+    N001["_delta(...)"]
+    N002["diff = value - baseline"]
+    N003["return f'{diff:<str>}'"]
+    N001 -->|"start"| N002
+    N002 --> N003
+```
+
+### render_comparison(...)
+
+```mermaid
+flowchart TD
+    N001["render_comparison(...)"]
+    N002["baseline = summaries[0]"]
+    N003["lines = ['<str>', '<str>', f'<str>{'<str>':<str>}<str>{'<str>':<str>}<str>{'<str>':<str>}<str>{'<str>':<str>}<str>{'<str>':<str>}<str>{'<str>':<str>}']"]
+    N004["for s in summaries:
+    if s is baseline:
+        d_cost = d_rep = '<str>'
+    else:
+        d_cost = _delta(s.cost_per_pr, baseline.cost_per_pr)
+        d_rep = _delta(s.repairs_per_pr, baseline.repairs_per_pr)
+    lines.append(f'<str>{s.name:<str>}<str>{s.n:<str>}<str>{s.cost_per_pr:<str>}<str>{d_cost:<str>}<str>{s.repairs_per_pr:<str>}<str>{d_rep:<str>}')"]
+    N005["return '<str>'.join(lines) + '<str>'"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 --> N004
+    N004 --> N005
+```
+
+### _load_input(...)
+
+```mermaid
+flowchart TD
+    N001["_load_input(...)"]
+    N002["try"]
+    N003["raw = path.read_text(encoding='<str>') if path is not None else sys.stdin.read()"]
+    N004["except OSError"]
+    N005["raise InputError(f'<str>{exc}')"]
+    N006["try"]
+    N007["return json.loads(raw)"]
+    N008["except (TypeError, ValueError)"]
+    N009["raise InputError(f'<str>{exc}')"]
+    N001 -->|"start"| N002
+    N002 -->|"try"| N003
+    N002 -->|"raises"| N004
+    N004 --> N005
+    N003 --> N006
+    N006 -->|"try"| N007
+    N006 -->|"raises"| N008
+    N008 --> N009
+```
+
+### _parse_args(...)
+
+```mermaid
+flowchart TD
+    N001["_parse_args(...)"]
+    N002["parser = ArgumentParser(...)"]
+    N003["add_argument(...)"]
+    N004["return parser.parse_args(argv)"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 --> N004
+```
+
+### main(...)
+
+```mermaid
+flowchart TD
+    N001["main(...)"]
+    N002["args = _parse_args(...)"]
+    N003["try"]
+    N004["summaries = parse_regimes(...)"]
+    N005["except InputError"]
+    N006["print(...)"]
+    N007["return 1"]
+    N008["write(...)"]
+    N009["return 0"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 -->|"try"| N004
+    N003 -->|"raises"| N005
+    N005 --> N006
+    N006 --> N007
+    N004 --> N008
+    N008 --> N009
+```
+
 ## scripts/coverage_failure_issue.py
 
 ### _require_env(...)
@@ -9123,6 +9269,88 @@ flowchart TD
     N008 -->|"raises"| N010
     N010 --> N011
     N011 --> N012
+```
+
+## scripts/gate_cache_regime_advisor.py
+
+### amortization_advice(...)
+
+```mermaid
+flowchart TD
+    N001["amortization_advice(...)"]
+    N002["if write_tokens < _MIN_WRITE_TOKENS"]
+    N003["return None"]
+    N004["ratio = read_tokens / write_tokens if write_tokens else 0.0"]
+    N005["if ratio >= _MIN_AMORTIZATION_RATIO"]
+    N006["return None"]
+    N007["return f'<str>{ratio:<str>}<str>{read_tokens:<str>}<str>{write_tokens:<str>}<str>{_MIN_AMORTIZATION_RATIO:<str>}<str>'"]
+    N001 -->|"start"| N002
+    N002 -->|"true"| N003
+    N002 -->|"false"| N004
+    N004 --> N005
+    N005 -->|"true"| N006
+    N005 -->|"false"| N007
+```
+
+### evaluate(...)
+
+```mermaid
+flowchart TD
+    N001["evaluate(...)"]
+    N002["if event.get('hook_event_name') not in (None, 'Stop')"]
+    N003["return None"]
+    N004["if event.get('stop_hook_active')"]
+    N005["return None"]
+    N006["transcript_path = get(...)"]
+    N007["if not isinstance(transcript_path, str) or not transcript_path"]
+    N008["return None"]
+    N009["entries = load_transcript(...)"]
+    N010["tokens = aggregate_usages(...)"]
+    N011["write_tokens = tokens.cache_write_5m + tokens.cache_write_1h"]
+    N012["return amortization_advice(tokens.cache_read, write_tokens)"]
+    N001 -->|"start"| N002
+    N002 -->|"true"| N003
+    N002 -->|"false"| N004
+    N004 -->|"true"| N005
+    N004 -->|"false"| N006
+    N006 --> N007
+    N007 -->|"true"| N008
+    N007 -->|"false"| N009
+    N009 --> N010
+    N010 --> N011
+    N011 --> N012
+```
+
+### main(...)
+
+```mermaid
+flowchart TD
+    N001["main(...)"]
+    N002["event = read_event(...)"]
+    N003["if event is None"]
+    N004["return 0"]
+    N005["try"]
+    N006["advice = evaluate(...)"]
+    N007["except Exception"]
+    N008["print(...)"]
+    N009["return 0"]
+    N010["if advice is not None"]
+    N011["print(...)"]
+    N012["emit_decision(...)"]
+    N013["return 0"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 -->|"true"| N004
+    N003 -->|"false"| N005
+    N005 -->|"try"| N006
+    N005 -->|"raises"| N007
+    N007 --> N008
+    N008 --> N009
+    N006 --> N010
+    N010 -->|"true"| N011
+    N011 --> N012
+    N010 -->|"false"| N012
+    N012 --> N013
 ```
 
 ## scripts/gate_decision_handoff_askuserquestion.py
@@ -26253,6 +26481,322 @@ flowchart TD
     N004 -->|"raises"| N006
     N006 --> N007
     N007 --> N008
+```
+
+## scripts/session_cost_structure.py
+
+### _coerce_int(...)
+
+```mermaid
+flowchart TD
+    N001["_coerce_int(...)"]
+    N002["if isinstance(value, bool) or not isinstance(value, int | float)"]
+    N003["return 0"]
+    N004["return max(0, int(value))"]
+    N001 -->|"start"| N002
+    N002 -->|"true"| N003
+    N002 -->|"false"| N004
+```
+
+### _message_usage(...)
+
+```mermaid
+flowchart TD
+    N001["_message_usage(...)"]
+    N002["if not isinstance(entry, dict)"]
+    N003["return None"]
+    N004["message = get(...)"]
+    N005["if not isinstance(message, dict)"]
+    N006["return None"]
+    N007["usage = get(...)"]
+    N008["if not isinstance(usage, dict)"]
+    N009["return None"]
+    N010["message_id = get(...)"]
+    N011["return (message_id if isinstance(message_id, str) else '<str>', usage)"]
+    N001 -->|"start"| N002
+    N002 -->|"true"| N003
+    N002 -->|"false"| N004
+    N004 --> N005
+    N005 -->|"true"| N006
+    N005 -->|"false"| N007
+    N007 --> N008
+    N008 -->|"true"| N009
+    N008 -->|"false"| N010
+    N010 --> N011
+```
+
+### aggregate_usages(...)
+
+```mermaid
+flowchart TD
+    N001["aggregate_usages(...)"]
+    N002["by_id = {}"]
+    N003["for entry in entries:
+    found = _message_usage(entry)
+    if found is not None:
+        by_id[found[0]] = found[1]"]
+    N004["input_t, output_t, read_t, write_5m, write_1h = 0"]
+    N005["for usage in by_id.values():
+    input_t += _coerce_int(usage.get('<str>'))
+    output_t += _coerce_int(usage.get('<str>'))
+    read_t += _coerce_int(usage.get('<str>'))
+    creation = usage.get('<str>')
+    if isinstance(creation, dict):
+        write_5m += _coerce_int(creation.get('<str>'))
+        write_1h += _coerce_int(creation.get('<str>'))
+    else:
+        write_5m += _coerce_int(usage.get('<str>'))"]
+    N006["return Tokens(input=input_t, output=output_t, cache_read=read_t, cache_write_5m=write_5m, cache_write_1h=write_1h)"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 --> N004
+    N004 --> N005
+    N005 --> N006
+```
+
+### compute_costs(...)
+
+```mermaid
+flowchart TD
+    N001["compute_costs(...)"]
+    N002["input_c = tokens.input / 1000000.0 * rates['<str>']"]
+    N003["output_c = tokens.output / 1000000.0 * rates['<str>']"]
+    N004["read_c = tokens.cache_read / 1000000.0 * rates['<str>']"]
+    N005["write_5m_c = tokens.cache_write_5m / 1000000.0 * rates['<str>']"]
+    N006["write_1h_c = tokens.cache_write_1h / 1000000.0 * rates['<str>']"]
+    N007["return Costs(input=input_c, output=output_c, cache_read=read_c, cache_write_5m=write_5m_c, cache_write_1h=write_1h_c, total=input_c + output_c + read_c + write_5m_c + write_1h_c)"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 --> N004
+    N004 --> N005
+    N005 --> N006
+    N006 --> N007
+```
+
+### load_transcript(...)
+
+```mermaid
+flowchart TD
+    N001["load_transcript(...)"]
+    N002["try"]
+    N003["raw = read_text(...)"]
+    N004["except OSError"]
+    N005["return []"]
+    N006["entries = []"]
+    N007["for line in raw.splitlines():
+    line = line.strip()
+    if not line:
+        continue
+    try:
+        entries.append(json.loads(line))
+    except json.JSONDecodeError:
+        continue"]
+    N008["return entries"]
+    N001 -->|"start"| N002
+    N002 -->|"try"| N003
+    N002 -->|"raises"| N004
+    N004 --> N005
+    N003 --> N006
+    N006 --> N007
+    N007 --> N008
+```
+
+### _slug_for(...)
+
+```mermaid
+flowchart TD
+    N001["_slug_for(...)"]
+    N002["return str(cwd).replace('<str>', '<str>')"]
+    N001 -->|"start"| N002
+```
+
+### discover_transcript(...)
+
+```mermaid
+flowchart TD
+    N001["discover_transcript(...)"]
+    N002["session_dir = projects_dir / _slug_for(cwd)"]
+    N003["try"]
+    N004["candidates = [p for p in session_dir.glob('<str>') if p.is_file()]"]
+    N005["except OSError"]
+    N006["return None"]
+    N007["if not candidates"]
+    N008["return None"]
+    N009["return max(candidates, key=lambda p: p.stat().st_mtime)"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 -->|"try"| N004
+    N003 -->|"raises"| N005
+    N005 --> N006
+    N004 --> N007
+    N007 -->|"true"| N008
+    N007 -->|"false"| N009
+```
+
+### _run_ccusage_total(...)
+
+```mermaid
+flowchart TD
+    N001["_run_ccusage_total(...)"]
+    N002["if not session_id"]
+    N003["return None"]
+    N004["binary = which(...)"]
+    N005["if binary is None"]
+    N006["return None"]
+    N007["try"]
+    N008["proc = run(...)"]
+    N009["except (OSError, subprocess.SubprocessError)"]
+    N010["return None"]
+    N011["if proc.returncode != 0"]
+    N012["return None"]
+    N013["try"]
+    N014["data = loads(...)"]
+    N015["except (TypeError, ValueError)"]
+    N016["return None"]
+    N017["rows = data.get('<str>') if isinstance(data, dict) else None"]
+    N018["if not isinstance(rows, list)"]
+    N019["return None"]
+    N020["for row in rows:
+    if isinstance(row, dict) and row.get('<str>') == session_id:
+        cost = row.get('<str>')
+        if isinstance(cost, int | float) and (not isinstance(cost, bool)):
+            return float(cost)"]
+    N021["return None"]
+    N001 -->|"start"| N002
+    N002 -->|"true"| N003
+    N002 -->|"false"| N004
+    N004 --> N005
+    N005 -->|"true"| N006
+    N005 -->|"false"| N007
+    N007 -->|"try"| N008
+    N007 -->|"raises"| N009
+    N009 --> N010
+    N008 --> N011
+    N011 -->|"true"| N012
+    N011 -->|"false"| N013
+    N013 -->|"try"| N014
+    N013 -->|"raises"| N015
+    N015 --> N016
+    N014 --> N017
+    N017 --> N018
+    N018 -->|"true"| N019
+    N018 -->|"false"| N020
+    N020 --> N021
+```
+
+### agreement_pct(...)
+
+```mermaid
+flowchart TD
+    N001["agreement_pct(...)"]
+    N002["if reference <= 0"]
+    N003["return None"]
+    N004["return 100.0 - abs(derived - reference) / reference * 100.0"]
+    N001 -->|"start"| N002
+    N002 -->|"true"| N003
+    N002 -->|"false"| N004
+```
+
+### render_report(...)
+
+```mermaid
+flowchart TD
+    N001["render_report(...)"]
+    N002["lines = ['<str>', '<str>']"]
+    N003["total = costs.total"]
+    N004["for key, label in _CATEGORY_LABELS:
+    tok = getattr(tokens, key)
+    cost = getattr(costs, key)
+    share = cost / total * 100.0 if total > 0 else 0.0
+    lines.append(f'<str>{label:<str>}<str>{tok:<str>}<str>{cost:<str>}<str>{share:<str>}<str>')"]
+    N005["append(...)"]
+    N006["append(...)"]
+    N007["if ccusage_total is not None"]
+    N008["pct = agreement_pct(...)"]
+    N009["pct_txt = f'{pct:<str>}<str>' if pct is not None else '<str>'"]
+    N010["append(...)"]
+    N011["append(...)"]
+    N012["return '<str>'.join(lines) + '<str>'"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 --> N004
+    N004 --> N005
+    N005 --> N006
+    N006 --> N007
+    N007 -->|"true"| N008
+    N008 --> N009
+    N009 --> N010
+    N010 --> N011
+    N011 --> N012
+    N007 -->|"false"| N012
+```
+
+### _build_rates(...)
+
+```mermaid
+flowchart TD
+    N001["_build_rates(...)"]
+    N002["rates = dict(...)"]
+    N003["for key in rates:
+    override = getattr(args, f'{key}<str>', None)
+    if override is not None:
+        rates[key] = override"]
+    N004["return rates"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 --> N004
+```
+
+### _parse_args(...)
+
+```mermaid
+flowchart TD
+    N001["_parse_args(...)"]
+    N002["parser = ArgumentParser(...)"]
+    N003["add_argument(...)"]
+    N004["add_argument(...)"]
+    N005["add_argument(...)"]
+    N006["add_argument(...)"]
+    N007["for key in _DEFAULT_RATES:
+    parser.add_argument(f'<str>{key.replace('<str>', '<str>')}<str>', dest=f'{key}<str>', type=float, default=None, help=f'<str>{key}<str>{_DEFAULT_RATES[key]}<str>')"]
+    N008["return parser.parse_args(argv)"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 --> N004
+    N004 --> N005
+    N005 --> N006
+    N006 --> N007
+    N007 --> N008
+```
+
+### main(...)
+
+```mermaid
+flowchart TD
+    N001["main(...)"]
+    N002["args = _parse_args(...)"]
+    N003["transcript = args.transcript"]
+    N004["if transcript is None"]
+    N005["transcript = discover_transcript(...)"]
+    N006["entries = load_transcript(transcript) if transcript is not None else []"]
+    N007["tokens = aggregate_usages(...)"]
+    N008["rates = _build_rates(...)"]
+    N009["costs = compute_costs(...)"]
+    N010["ccusage_total = _run_ccusage_total(args.session_id) if args.ccusage_check else None"]
+    N011["write(...)"]
+    N012["return 0"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 --> N004
+    N004 -->|"true"| N005
+    N005 --> N006
+    N004 -->|"false"| N006
+    N006 --> N007
+    N007 --> N008
+    N008 --> N009
+    N009 --> N010
+    N010 --> N011
+    N011 --> N012
 ```
 
 ## scripts/session_resource_report.py
