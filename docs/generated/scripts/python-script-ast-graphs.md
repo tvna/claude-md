@@ -95,7 +95,7 @@ flowchart TD
     failed = [r for r in runs if str(r.get('<str>') or '<str>').lower() in _FAIL_CONCLUSIONS]
     print(f'<str>{poll + 1}<str>{completed}<str>{total}<str>{len(failed)}<str>', flush=True)
     for r in failed:
-        print(f\"<str>{r.get('<str>')}<str>{r.get('<str>')}<str>\", flush=True)
+        print(f'<str>{r.get('<str>')}<str>{r.get('<str>')}<str>', flush=True)
     if total > 0 and completed == total:
         if failed:
             print(f'<str>{len(failed)}<str>', flush=True)
@@ -567,6 +567,10 @@ flowchart TD
     N002 --> N003
     N003 --> N004
 ```
+
+## scripts/_security_drift_families.py
+
+No top-level functions found.
 
 ## scripts/_trusted_bots.py
 
@@ -2270,7 +2274,7 @@ flowchart TD
     N016["proposed_work_tail = '<str>'"]
     N017["verification_block = '<str>'"]
     N018["acceptance_block = '<str>'"]
-    N019["return f\"<str>{pr.number}<str>{pr.title}<str>{pr.number}<str>{pr.title}<str>{pr.html_url}<str>{pr.merged_at}<str>{pr.merged_by_login or '<str>'}<str>{pr.user_login or '<str>'}<str>{layer_str}<str>{render_signals_fired_line(signals or {})}<str>{commits_block}<str>{fallback_note}<str>{repair_table}<str>{proposed_work_tail}<str>{verification_block}<str>{acceptance_block}<str>{pr.number}<str>{triage_date}<str>\""]
+    N019["return f'<str>{pr.number}<str>{pr.title}<str>{pr.number}<str>{pr.title}<str>{pr.html_url}<str>{pr.merged_at}<str>{pr.merged_by_login or '<str>'}<str>{pr.user_login or '<str>'}<str>{layer_str}<str>{render_signals_fired_line(signals or {})}<str>{commits_block}<str>{fallback_note}<str>{repair_table}<str>{proposed_work_tail}<str>{verification_block}<str>{acceptance_block}<str>{pr.number}<str>{triage_date}<str>'"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 --> N004
@@ -6561,7 +6565,7 @@ flowchart TD
     N001["render_breach_table(...)"]
     N002["rows = ['<str>', '<str>']"]
     N003["for entry in breaches:
-    rows.append(f\"<str>{entry['<str>']}<str>{float(entry['<str>']):<str>}<str>\")"]
+    rows.append(f'<str>{entry['<str>']}<str>{float(entry['<str>']):<str>}<str>')"]
     N004["return '<str>'.join(rows)"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -7067,7 +7071,7 @@ flowchart TD
     N001["_require_env(...)"]
     N002["missing = [name for name in names if not env.get(name)]"]
     N003["if missing"]
-    N004["raise RuntimeError(f\"<str>{'<str>'.join(missing)}\")"]
+    N004["raise RuntimeError(f'<str>{'<str>'.join(missing)}')"]
     N005["end"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -7330,7 +7334,7 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["render_markdown(...)"]
-    N002["lines = ['<str>', '<str>', f'<str>{str(result.enabled).lower()}<str>', f'<str>{str(result.eligible).lower()}<str>', f'<str>{str(result.should_enable).lower()}<str>', f\"<str>{result.ecosystem or '<str>'}<str>\", f\"<str>{result.update_type or '<str>'}<str>\", '<str>']"]
+    N002["lines = ['<str>', '<str>', f'<str>{str(result.enabled).lower()}<str>', f'<str>{str(result.eligible).lower()}<str>', f'<str>{str(result.should_enable).lower()}<str>', f'<str>{result.ecosystem or '<str>'}<str>', f'<str>{result.update_type or '<str>'}<str>', '<str>']"]
     N003["if result.reasons"]
     N004["append(...)"]
     N005["extend(...)"]
@@ -7563,7 +7567,7 @@ flowchart TD
     N014["if not 200 <= gql_code < 300"]
     N015["raise RuntimeError(f'<str>{gql_code}')"]
     N016["if 'errors' in response"]
-    N017["raise RuntimeError(f\"<str>{response['<str>']}\")"]
+    N017["raise RuntimeError(f'<str>{response['<str>']}')"]
     N018["end"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -7608,7 +7612,7 @@ flowchart TD
     N018["if not 200 <= gql_code < 300"]
     N019["raise RuntimeError(f'<str>{gql_code}')"]
     N020["if 'errors' in response"]
-    N021["raise RuntimeError(f\"<str>{response['<str>']}\")"]
+    N021["raise RuntimeError(f'<str>{response['<str>']}')"]
     N022["return True"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -8965,7 +8969,7 @@ flowchart TD
     N003["url = f'<str>{repo}<str>'"]
     N004["(code, body) = apply_call(...)"]
     N005["if not 200 <= code < 300"]
-    N006["raise LatestPinError(f\"<str>{code or '<str>'}<str>{repo}<str>\")"]
+    N006["raise LatestPinError(f'<str>{code or '<str>'}<str>{repo}<str>')"]
     N007["try"]
     N008["payload = loads(...)"]
     N009["except json.JSONDecodeError"]
@@ -9969,7 +9973,7 @@ flowchart TD
     N002["parts = []"]
     N003["for axis in missing:
     valid = sorted(axes.get(axis) or frozenset())
-    parts.append(f\"<str>{axis}<str>{'<str>'.join(valid)}<str>\")"]
+    parts.append(f'<str>{axis}<str>{'<str>'.join(valid)}<str>')"]
     N004["needed = join(...)"]
     N005["return f'<str>{_TARGET_TOOL}<str>{needed}<str>'"]
     N001 -->|"start"| N002
@@ -10210,7 +10214,7 @@ flowchart TD
     N004["if tool_name in HOOK_COVERED_TOOLS"]
     N005["return None"]
     N006["short = tool_name[len(_MCP_GITHUB_PREFIX):]"]
-    N007["return {'<str>': '<str>', '<str>': f\"<str>{tool_name}<str>{short.replace('<str>', '<str>')}<str>\"}"]
+    N007["return {'<str>': '<str>', '<str>': f'<str>{tool_name}<str>{short.replace('<str>', '<str>')}<str>'}"]
     N001 -->|"start"| N002
     N002 -->|"true"| N003
     N002 -->|"false"| N004
@@ -10567,18 +10571,18 @@ flowchart TD
     N003["if transport in ('http', 'sse')"]
     N004["url = get(...)"]
     N005["if not isinstance(url, str) or not url"]
-    N006["raise ValueError(f\"<str>{server.get('<str>')!r}<str>{transport}<str>\")"]
+    N006["raise ValueError(f'<str>{server.get('<str>')!r}<str>{transport}<str>')"]
     N007["return {'<str>': transport, '<str>': url}"]
     N008["if transport == 'stdio'"]
     N009["command = get(...)"]
     N010["if not isinstance(command, str) or not command"]
-    N011["raise ValueError(f\"<str>{server.get('<str>')!r}<str>\")"]
+    N011["raise ValueError(f'<str>{server.get('<str>')!r}<str>')"]
     N012["entry = {'<str>': '<str>', '<str>': command}"]
     N013["args = get(...)"]
     N014["if args is not None"]
     N015["entry['<str>'] = args"]
     N016["return entry"]
-    N017["raise ValueError(f\"<str>{server.get('<str>')!r}<str>{transport!r}\")"]
+    N017["raise ValueError(f'<str>{server.get('<str>')!r}<str>{transport!r}')"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 -->|"true"| N004
@@ -11112,7 +11116,7 @@ flowchart TD
     N006["if not args.output and (not args.field)"]
     N007["print(...)"]
     N008["return 1"]
-    N009["url = f\"{_API_ROOT}<str>{args.path.lstrip('<str>')}\""]
+    N009["url = f'{_API_ROOT}<str>{args.path.lstrip('<str>')}'"]
     N010["try"]
     N011["body_str = _get_single(...)"]
     N012["except RuntimeError"]
@@ -11237,7 +11241,7 @@ flowchart TD
     N003["if not token"]
     N004["print(...)"]
     N005["return 1"]
-    N006["url = f\"{_API_ROOT}<str>{args.path.lstrip('<str>')}\""]
+    N006["url = f'{_API_ROOT}<str>{args.path.lstrip('<str>')}'"]
     N007["try"]
     N008["data = _paginate_get(...)"]
     N009["except RuntimeError"]
@@ -11410,13 +11414,13 @@ flowchart TD
     N004["return f'<str>{issue_ref}<str>'"]
     N005["if len(prs) == 1"]
     N006["pr = prs[0]"]
-    N007["url = pr.get('<str>') or f\"{owner}<str>{repo}<str>{pr.get('<str>')}\""]
+    N007["url = pr.get('<str>') or f'{owner}<str>{repo}<str>{pr.get('<str>')}'"]
     N008["title = pr.get('<str>') or '<str>'"]
     N009["closed_at = pr.get('<str>') or '<str>'"]
     N010["return f'<str>{issue_ref}<str>{title}<str>{url}<str>{closed_at}<str>'"]
     N011["lines = [f'<str>{len(prs)}<str>{issue_ref}<str>']"]
     N012["for pr in prs:
-    url = pr.get('<str>') or f\"<str>{pr.get('<str>')}\"
+    url = pr.get('<str>') or f'<str>{pr.get('<str>')}'
     title = pr.get('<str>') or '<str>'
     lines.append(f'<str>{url}<str>{title}')"]
     N013["append(...)"]
@@ -11758,7 +11762,7 @@ flowchart TD
     N008["desc_changed = (live_entry.get('<str>') or '<str>') != description"]
     N009["if not color_changed and (not desc_changed)"]
     N010["return {'<str>': '<str>', '<str>': '<str>', '<str>': '<str>', '<str>': None, '<str>': False, '<str>': False}"]
-    N011["return {'<str>': '<str>', '<str>': '<str>', '<str>': f\"<str>{urllib.parse.quote(name, safe='<str>')}\", '<str>': {'<str>': color, '<str>': description}, '<str>': color_changed, '<str>': desc_changed}"]
+    N011["return {'<str>': '<str>', '<str>': '<str>', '<str>': f'<str>{urllib.parse.quote(name, safe='<str>')}', '<str>': {'<str>': color, '<str>': description}, '<str>': color_changed, '<str>': desc_changed}"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 --> N004
@@ -11864,11 +11868,11 @@ flowchart TD
     if mode == '<str>' or dry_run:
         rows.append(render_action_row(name, f'<str>{action}<str>', color_changed, desc_changed, '<str>'))
         continue
-    code, body = apply_call(method=str(decision['<str>']), url=f\"{API_ROOT}<str>{repo}{decision['<str>']}\", payload=decision['<str>'], token=token)
+    code, body = apply_call(method=str(decision['<str>']), url=f'{API_ROOT}<str>{repo}{decision['<str>']}', payload=decision['<str>'], token=token)
     if not 200 <= code < 300:
         _append_rows(summary_file, rows)
-        _append_error(summary_file, f\"<str>{name}<str>{decision['<str>']}<str>{_format_code(code)}<str>\", body)
-        print(f\"<str>{decision['<str>']}<str>{name}<str>{_format_code(code)}<str>\")
+        _append_error(summary_file, f'<str>{name}<str>{decision['<str>']}<str>{_format_code(code)}<str>', body)
+        print(f'<str>{decision['<str>']}<str>{name}<str>{_format_code(code)}<str>')
         return 1
     rows.append(render_action_row(name, f'{action}<str>', color_changed, desc_changed, f'<str>{code}'))"]
     N009["for live_entry in live:
@@ -11882,7 +11886,7 @@ flowchart TD
     if prune_action == '<str>':
         rows.append(render_action_row(live_name, '<str>', '<str>', '<str>', '<str>'))
         continue
-    code, body = apply_call(method='<str>', url=f\"{API_ROOT}<str>{repo}<str>{urllib.parse.quote(live_name, safe='<str>')}\", payload=None, token=token)
+    code, body = apply_call(method='<str>', url=f'{API_ROOT}<str>{repo}<str>{urllib.parse.quote(live_name, safe='<str>')}', payload=None, token=token)
     if not 200 <= code < 300:
         _append_rows(summary_file, rows)
         _append_error(summary_file, f'<str>{live_name}<str>{_format_code(code)}<str>', body)
@@ -12262,22 +12266,22 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["format_summary(...)"]
-    N002["lines = ['<str>', '<str>', f\"<str>{report['<str>']}<str>\", f\"<str>{_human_size(report['<str>'])}<str>{report['<str>']}<str>\"]"]
+    N002["lines = ['<str>', '<str>', f'<str>{report['<str>']}<str>', f'<str>{_human_size(report['<str>'])}<str>{report['<str>']}<str>']"]
     N003["if 'pull_seconds' in report"]
     N004["flag = '<str>' if report['<str>'] == 0 else '<str>'"]
     N005["append(...)"]
-    N006["lines += [f\"<str>{report['<str>']:<str>}<str>\", '<str>', '<str>', '<str>']"]
+    N006["lines += [f'<str>{report['<str>']:<str>}<str>', '<str>', '<str>', '<str>']"]
     N007["for entry in report['<str>']:
     command = entry['<str>']
     if len(command) > 70:
         command = command[:67] + '<str>'
-    lines.append(f\"<str>{entry['<str>']}<str>{entry['<str>']:<str>}<str>{entry['<str>']}<str>{command}<str>\")"]
+    lines.append(f'<str>{entry['<str>']}<str>{entry['<str>']:<str>}<str>{entry['<str>']}<str>{command}<str>')"]
     N008["composition = get(...)"]
     N009["if composition"]
-    N010["lines += ['<str>', '<str>', '<str>', f\"<str>{_human_size(composition['<str>'])}<str>{composition['<str>']}<str>\", '<str>', '<str>', '<str>']"]
-    N011["lines += [f\"<str>{entry['<str>']}<str>{_human_size(entry['<str>'])}<str>\" for entry in composition['<str>']]"]
+    N010["lines += ['<str>', '<str>', '<str>', f'<str>{_human_size(composition['<str>'])}<str>{composition['<str>']}<str>', '<str>', '<str>', '<str>']"]
+    N011["lines += [f'<str>{entry['<str>']}<str>{_human_size(entry['<str>'])}<str>' for entry in composition['<str>']]"]
     N012["lines += ['<str>', '<str>', '<str>']"]
-    N013["lines += [f\"<str>{entry['<str>']}<str>{_human_size(entry['<str>'])}<str>\" for entry in composition['<str>']]"]
+    N013["lines += [f'<str>{entry['<str>']}<str>{_human_size(entry['<str>'])}<str>' for entry in composition['<str>']]"]
     N014["return '<str>'.join(lines) + '<str>'"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -12635,7 +12639,7 @@ flowchart TD
     N001["request_installation_token(...)"]
     N002["if not api_url.startswith('https://')"]
     N003["raise MintError('<str>')"]
-    N004["url = f\"{api_url.rstrip('<str>')}<str>{installation_id}<str>\""]
+    N004["url = f'{api_url.rstrip('<str>')}<str>{installation_id}<str>'"]
     N005["request = Request(...)"]
     N006["try"]
     N007["with urllib.request.urlopen(request, timeout=30) as response:
@@ -13987,7 +13991,7 @@ flowchart TD
     N022["if dropped"]
     N023["tokens = join(...)"]
     N024["warning = f'<str>{tokens}<str>'"]
-    N025["return _build_context(f\"<str>{pr_label}<str>{owner or '<str>'}<str>{repo or '<str>'}<str>{pr_number}<str>{warning}<str>{body_repr}<str>\")"]
+    N025["return _build_context(f'<str>{pr_label}<str>{owner or '<str>'}<str>{repo or '<str>'}<str>{pr_number}<str>{warning}<str>{body_repr}<str>')"]
     N001 -->|"start"| N002
     N002 -->|"true"| N003
     N002 -->|"false"| N004
@@ -14742,7 +14746,7 @@ flowchart TD
     N007["if not 200 <= code < 300"]
     N008["raise RuntimeError(f'<str>{code}')"]
     N009["if 'errors' in response"]
-    N010["raise RuntimeError(f\"<str>{response['<str>']}\")"]
+    N010["raise RuntimeError(f'<str>{response['<str>']}')"]
     N011["try"]
     N012["oid = response['<str>']['<str>']['<str>']['<str>']"]
     N013["except (KeyError, TypeError)"]
@@ -15336,7 +15340,7 @@ flowchart TD
     N001["emit_summary(...)"]
     N002["width = max(...)"]
     N003["for result in results:
-    line = f'{result.status:<str>}<str>{result.name:<str>{width}}<str>{result.duration_s:<str>}<str>'
+    line = f'{result.status:<str>}<str>{result.name:<str>{width}<str>}<str>{result.duration_s:<str>}<str>'
     if result.detail:
         line = f'{line}<str>{result.detail}'
     print(line, file=stream)"]
@@ -17347,7 +17351,7 @@ flowchart TD
 flowchart TD
     N001["render_report(...)"]
     N002["metrics = decision.metrics"]
-    N003["lines = [f'<str>{decision.kind}', f'<str>{metrics.candidate_count}', f'<str>{metrics.replacement_count}', f'<str>{metrics.closed_superseded_count}', '<str>' + ('<str>'.join((f'<str>{n}' for n in metrics.merged_numbers)) if metrics.merged_numbers else '<str>'), f\"<str>{metrics.first_pr_created_at or '<str>'}\", f\"<str>{(metrics.elapsed_seconds if metrics.elapsed_seconds is not None else '<str>')}\"]"]
+    N003["lines = [f'<str>{decision.kind}', f'<str>{metrics.candidate_count}', f'<str>{metrics.replacement_count}', f'<str>{metrics.closed_superseded_count}', '<str>' + ('<str>'.join((f'<str>{n}' for n in metrics.merged_numbers)) if metrics.merged_numbers else '<str>'), f'<str>{metrics.first_pr_created_at or '<str>'}', f'<str>{(metrics.elapsed_seconds if metrics.elapsed_seconds is not None else '<str>')}']"]
     N004["extend(...)"]
     N005["if decision.kind == 'allow'"]
     N006["insert(...)"]
@@ -18100,7 +18104,7 @@ flowchart TD
     N007["for version in to_delete:
     tags = '<str>'.join(version_tags(version)) or '<str>'
     created = version.get('<str>', '<str>')
-    lines.append(f\"<str>{version.get('<str>')}<str>{created}<str>{tags}\")"]
+    lines.append(f'<str>{version.get('<str>')}<str>{created}<str>{tags}')"]
     N008["append(...)"]
     N009["return lines"]
     N001 -->|"start"| N002
@@ -18643,7 +18647,7 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["render_unknown_row(...)"]
-    N002["return f\"<str>{entry['<str>']}<str>{entry['<str>']}<str>{entry['<str>']}<str>{entry['<str>']}<str>\""]
+    N002["return f'<str>{entry['<str>']}<str>{entry['<str>']}<str>{entry['<str>']}<str>{entry['<str>']}<str>'"]
     N001 -->|"start"| N002
 ```
 
@@ -18806,7 +18810,7 @@ flowchart TD
         ambiguous_row = render_status_row(file=filename, name=name, live_id='<str>', status='<str>')
         summary_chunks.append(ambiguous_row)
         _append(summary_file, '<str>'.join(summary_chunks))
-        raise RuntimeError(f\"<str>{name}<str>{decision['<str>']}<str>\")
+        raise RuntimeError(f'<str>{name}<str>{decision['<str>']}<str>')
     if decision['<str>'] == '<str>':
         row = render_status_row(file=filename, name=name, live_id='<str>', status='<str>')
         summary_chunks.append(row)
@@ -19264,7 +19268,7 @@ flowchart TD
     item, detail_rows = _plan_one_ruleset(file=file, repo=repo, sot_dir=sot_dir, live_rulesets=live_rulesets, token=token, opener=opener, pending_rows=rows, summary_file=summary_file)
     rows.extend(detail_rows)
     if dry_run:
-        rows.append(render_summary_row(file, str(item['<str>']), int(item['<str>']), f\"<str>{item['<str>']}<str>\", item['<str>']))
+        rows.append(render_summary_row(file, str(item['<str>']), int(item['<str>']), f'<str>{item['<str>']}<str>', item['<str>']))
     planned.append(item)"]
     N007["_append_summary(...)"]
     N008["return planned"]
@@ -19292,12 +19296,12 @@ flowchart TD
     action = str(item['<str>'])
     url = f'{API_ROOT}<str>{repo}<str>'
     if action == '<str>':
-        url = f\"{url}<str>{item['<str>']}\"
+        url = f'{url}<str>{item['<str>']}'
     code, body = apply_call(method=action, url=url, payload_path=item['<str>'], token=token, opener=opener, sleeper=sleeper)
     if not 200 <= code < 300:
         display_code = _display_http_code(code)
-        _append_summary(summary_file, ['<str>', f\"<str>{item['<str>']}<str>{display_code}<str>\", '<str>', body, '<str>'])
-        print(f\"<str>{action}<str>{item['<str>']}<str>{display_code}<str>\")
+        _append_summary(summary_file, ['<str>', f'<str>{item['<str>']}<str>{display_code}<str>', '<str>', body, '<str>'])
+        print(f'<str>{action}<str>{item['<str>']}<str>{display_code}<str>')
         raise SystemExit(1)
     response = json.loads(body or '<str>')
     _append_summary(summary_file, [render_summary_row(str(item['<str>']), str(item['<str>']), int(item['<str>']), f'{action}<str>', response.get('<str>'))])"]
@@ -19330,6 +19334,153 @@ flowchart TD
     N006 --> N007
     N007 --> N008
     N008 --> N009
+```
+
+### workflow_permissions_projection(...)
+
+```mermaid
+flowchart TD
+    N001["workflow_permissions_projection(...)"]
+    N002["return {key: data.get(key) for key in WORKFLOW_PERMISSIONS_KEYS}"]
+    N001 -->|"start"| N002
+```
+
+### get_workflow_permissions(...)
+
+```mermaid
+flowchart TD
+    N001["get_workflow_permissions(...)"]
+    N002["body = _request_json(...)"]
+    N003["if not isinstance(body, dict)"]
+    N004["raise ValueError('<str>')"]
+    N005["return body"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 -->|"true"| N004
+    N003 -->|"false"| N005
+```
+
+### set_workflow_permissions(...)
+
+```mermaid
+flowchart TD
+    N001["set_workflow_permissions(...)"]
+    N002["(code, body) = _request(...)"]
+    N003["if not 200 <= code < 300"]
+    N004["raise RuntimeError(f'<str>{_display_http_code(code)}<str>{body}')"]
+    N005["end"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 -->|"true"| N004
+    N003 -->|"false"| N005
+```
+
+### workflow_permissions_diff(...)
+
+```mermaid
+flowchart TD
+    N001["workflow_permissions_diff(...)"]
+    N002["sot_text = _canonical_json_lines(...)"]
+    N003["live_text = _canonical_json_lines(...)"]
+    N004["if sot_text == live_text"]
+    N005["return '<str>'"]
+    N006["return '<str>'.join(difflib.unified_diff(live_text, sot_text, fromfile='<str>', tofile='<str>'))"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 --> N004
+    N004 -->|"true"| N005
+    N004 -->|"false"| N006
+```
+
+### apply_workflow_permissions(...)
+
+```mermaid
+flowchart TD
+    N001["apply_workflow_permissions(...)"]
+    N002["if mode not in ('plan', 'apply', 'drift')"]
+    N003["raise ValueError(f'<str>{mode}')"]
+    N004["sot = _read_workflow_permissions_sot(...)"]
+    N005["live = get_workflow_permissions(...)"]
+    N006["diff = workflow_permissions_diff(...)"]
+    N007["proj_sot = workflow_permissions_projection(...)"]
+    N008["proj_live = workflow_permissions_projection(...)"]
+    N009["lines = ['<str>', f'<str>{mode}<str>', f'<str>{sot_path}<str>', f'<str>{('<str>' if diff else '<str>')}<str>']"]
+    N010["for key in WORKFLOW_PERMISSIONS_KEYS:
+    lines.append(f'<str>{key}<str>{_json_scalar(proj_live[key])}<str>{_json_scalar(proj_sot[key])}<str>')"]
+    N011["if diff"]
+    N012["extend(...)"]
+    N013["if mode in ('plan', 'drift')"]
+    N014["_append_summary(...)"]
+    N015["return 1 if mode == '<str>' and diff else 0"]
+    N016["if not diff"]
+    N017["append(...)"]
+    N018["_append_summary(...)"]
+    N019["return 0"]
+    N020["set_workflow_permissions(...)"]
+    N021["after = workflow_permissions_projection(...)"]
+    N022["extend(...)"]
+    N023["for key in WORKFLOW_PERMISSIONS_KEYS:
+    lines.append(f'<str>{key}<str>{_json_scalar(after[key])}<str>')"]
+    N024["_append_summary(...)"]
+    N025["return 0"]
+    N001 -->|"start"| N002
+    N002 -->|"true"| N003
+    N002 -->|"false"| N004
+    N004 --> N005
+    N005 --> N006
+    N006 --> N007
+    N007 --> N008
+    N008 --> N009
+    N009 --> N010
+    N010 --> N011
+    N011 -->|"true"| N012
+    N012 --> N013
+    N011 -->|"false"| N013
+    N013 -->|"true"| N014
+    N014 --> N015
+    N013 -->|"false"| N016
+    N016 -->|"true"| N017
+    N017 --> N018
+    N018 --> N019
+    N016 -->|"false"| N020
+    N020 --> N021
+    N021 --> N022
+    N022 --> N023
+    N023 --> N024
+    N024 --> N025
+```
+
+### _read_workflow_permissions_sot(...)
+
+```mermaid
+flowchart TD
+    N001["_read_workflow_permissions_sot(...)"]
+    N002["data = _read_json_file(...)"]
+    N003["missing = [key for key in WORKFLOW_PERMISSIONS_KEYS if key not in data]"]
+    N004["if missing"]
+    N005["raise ValueError(f'{path}<str>{missing}')"]
+    N006["extra = [key for key in data if key not in WORKFLOW_PERMISSIONS_KEYS]"]
+    N007["if extra"]
+    N008["raise ValueError(f'{path}<str>{extra}')"]
+    N009["perm = data['<str>']"]
+    N010["if perm not in ('read', 'write')"]
+    N011["raise ValueError(f'<str>{perm!r}')"]
+    N012["if not isinstance(data['can_approve_pull_request_reviews'], bool)"]
+    N013["raise ValueError('<str>')"]
+    N014["return data"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 --> N004
+    N004 -->|"true"| N005
+    N004 -->|"false"| N006
+    N006 --> N007
+    N007 -->|"true"| N008
+    N007 -->|"false"| N009
+    N009 --> N010
+    N010 -->|"true"| N011
+    N010 -->|"false"| N012
+    N012 -->|"true"| N013
+    N012 -->|"false"| N014
 ```
 
 ### _dispatch_header_for(...)
@@ -19569,15 +19720,19 @@ flowchart TD
     N015["auto = add_parser(...)"]
     N016["add_argument(...)"]
     N017["set_defaults(...)"]
-    N018["args = parse_args(...)"]
-    N019["try"]
-    N020["func(...)"]
-    N021["except ValueError"]
-    N022["print(...)"]
-    N023["return 1"]
-    N024["except SystemExit"]
-    N025["return int(exc.code or 0)"]
-    N026["return 0"]
+    N018["wfperm = add_parser(...)"]
+    N019["add_argument(...)"]
+    N020["add_argument(...)"]
+    N021["set_defaults(...)"]
+    N022["args = parse_args(...)"]
+    N023["try"]
+    N024["func(...)"]
+    N025["except ValueError"]
+    N026["print(...)"]
+    N027["return 1"]
+    N028["except SystemExit"]
+    N029["return int(exc.code or 0)"]
+    N030["return 0"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 --> N004
@@ -19596,13 +19751,17 @@ flowchart TD
     N016 --> N017
     N017 --> N018
     N018 --> N019
-    N019 -->|"try"| N020
-    N019 -->|"raises"| N021
+    N019 --> N020
+    N020 --> N021
     N021 --> N022
     N022 --> N023
-    N019 -->|"raises"| N024
-    N024 --> N025
-    N020 --> N026
+    N023 -->|"try"| N024
+    N023 -->|"raises"| N025
+    N025 --> N026
+    N026 --> N027
+    N023 -->|"raises"| N028
+    N028 --> N029
+    N024 --> N030
 ```
 
 ### _cmd_plan(...)
@@ -19636,6 +19795,21 @@ flowchart TD
     N003["end"]
     N001 -->|"start"| N002
     N002 --> N003
+```
+
+### _cmd_workflow_permissions(...)
+
+```mermaid
+flowchart TD
+    N001["_cmd_workflow_permissions(...)"]
+    N002["rc = apply_workflow_permissions(...)"]
+    N003["if rc != 0"]
+    N004["raise SystemExit(rc)"]
+    N005["end"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 -->|"true"| N004
+    N003 -->|"false"| N005
 ```
 
 ## scripts/sanitize_history.py
@@ -19704,17 +19878,17 @@ flowchart TD
     N001["item_endpoint(...)"]
     N002["kind = item['<str>']"]
     N003["if kind == 'issue'"]
-    N004["return f\"{API_ROOT}<str>{repo}<str>{item['<str>']}\""]
+    N004["return f'{API_ROOT}<str>{repo}<str>{item['<str>']}'"]
     N005["if kind == 'pr'"]
-    N006["return f\"{API_ROOT}<str>{repo}<str>{item['<str>']}\""]
+    N006["return f'{API_ROOT}<str>{repo}<str>{item['<str>']}'"]
     N007["if kind == 'issue_comment'"]
     N008["if item.get('comment_id') is None"]
-    N009["raise ValueError(f\"<str>{item.get('<str>')}<str>\")"]
-    N010["return f\"{API_ROOT}<str>{repo}<str>{item['<str>']}\""]
+    N009["raise ValueError(f'<str>{item.get('<str>')}<str>')"]
+    N010["return f'{API_ROOT}<str>{repo}<str>{item['<str>']}'"]
     N011["if kind == 'pr_review_comment'"]
     N012["if item.get('comment_id') is None"]
-    N013["raise ValueError(f\"<str>{item.get('<str>')}<str>\")"]
-    N014["return f\"{API_ROOT}<str>{repo}<str>{item['<str>']}\""]
+    N013["raise ValueError(f'<str>{item.get('<str>')}<str>')"]
+    N014["return f'{API_ROOT}<str>{repo}<str>{item['<str>']}'"]
     N015["raise ValueError(f'<str>{kind!r}')"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -19870,18 +20044,18 @@ flowchart TD
     live = fetch_live_field(url=url, field=field, token=token, opener=opener, sleeper=sleeper)
     verdict = classify_drift(live=live, original=item['<str>'], translated=item['<str>'])
     if verdict == '<str>':
-        msg = f\"<str>{item['<str>']}<str>{item.get('<str>')}<str>{field}<str>\"
+        msg = f'<str>{item['<str>']}<str>{item.get('<str>')}<str>{field}<str>'
         print(msg, file=sys.stderr)
         raise SystemExit(1)
     if verdict == '<str>':
         counts['<str>'] += 1
-        print(f\"<str>{item['<str>']}<str>{item.get('<str>')}<str>{field}<str>\")
+        print(f'<str>{item['<str>']}<str>{item.get('<str>')}<str>{field}<str>')
         continue
     if dry_run:
         print(f'<str>{url}<str>{field}')
     else:
         patch_field(url=url, field=field, new_value=item['<str>'], token=token, opener=opener, sleeper=sleeper)
-        print(f\"<str>{item['<str>']}<str>{item.get('<str>')}<str>{field}<str>\")
+        print(f'<str>{item['<str>']}<str>{item.get('<str>')}<str>{field}<str>')
     counts['<str>'] += 1"]
     N007["return counts"]
     N001 -->|"start"| N002
@@ -19982,7 +20156,7 @@ flowchart TD
         print(f'<str>{url}<str>{field}')
     else:
         patch_field(url=url, field=field, new_value=original, token=token)
-        print(f\"<str>{kind}<str>{item['<str>']}<str>{field}<str>\")
+        print(f'<str>{kind}<str>{item['<str>']}<str>{field}<str>')
     patched += 1"]
     N014["print(...)"]
     N015["return 0"]
@@ -20587,7 +20761,7 @@ flowchart TD
     N002["completed = run_git(...)"]
     N003["if completed.returncode != 0"]
     N004["detail = strip(...)"]
-    N005["raise RuntimeError(f\"<str>{'<str>'.join(args)}<str>{detail}\")"]
+    N005["raise RuntimeError(f'<str>{'<str>'.join(args)}<str>{detail}')"]
     N006["return completed.stdout"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -22145,7 +22319,7 @@ flowchart TD
     N004["target = collect_target_scripts(...)"]
     N005["(violations, stale) = find_violations(...)"]
     N006["for name, defects in violations:
-    print(f\"<str>{name}<str>{name}<str>{'<str>'.join(defects)}<str>\", file=sys.stderr)"]
+    print(f'<str>{name}<str>{name}<str>{'<str>'.join(defects)}<str>', file=sys.stderr)"]
     N007["for name in stale:
     print(f'<str>{name}<str>', file=sys.stderr)"]
     N008["if violations or stale"]
@@ -22737,7 +22911,7 @@ flowchart TD
 flowchart TD
     N001["build_summary(...)"]
     N002["assoc_str = association if association is not None else '<str>'"]
-    N003["return f\"<str>{event_name}<str>{(number if number is not None else '<str>')}<str>{kind}<str>{assoc_str}<str>{trust}<str>{str(has_non_ascii).lower()}<str>{str(has_title_violation).lower()}<str>{str(has_ack).lower()}<str>{action}<str>\""]
+    N003["return f'<str>{event_name}<str>{(number if number is not None else '<str>')}<str>{kind}<str>{assoc_str}<str>{trust}<str>{str(has_non_ascii).lower()}<str>{str(has_title_violation).lower()}<str>{str(has_ack).lower()}<str>{action}<str>'"]
     N001 -->|"start"| N002
     N002 --> N003
 ```
@@ -23301,7 +23475,7 @@ flowchart TD
 flowchart TD
     N001["_cmd_list(...)"]
     N002["for hook in provisioning_hooks(_load_config()):
-    print(f\"{hook.get('<str>', '<str>')}<str>{hook.get('<str>')}\")"]
+    print(f'{hook.get('<str>', '<str>')}<str>{hook.get('<str>')}')"]
     N003["return 0"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -24004,7 +24178,7 @@ flowchart TD
     if not missing:
         continue
     location = '<str>' if runbook is None else f'{runbook.path.as_posix()}<str>'
-    errors.append(f\"<str>{secret}<str>{format_refs(secret_uses)}<str>{location}<str>{'<str>'.join(missing)}\")"]
+    errors.append(f'<str>{secret}<str>{format_refs(secret_uses)}<str>{location}<str>{'<str>'.join(missing)}')"]
     N008["return errors"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -24482,7 +24656,7 @@ flowchart TD
     N010["registry_scripts = parse_contract_registry_scripts(...)"]
     N011["missing_contract = find_missing_cli_contracts(...)"]
     N012["for stem in missing:
-    print(f\"<str>{stem}<str>{stem}<str>{stem.lstrip('<str>')}<str>\", file=sys.stderr)"]
+    print(f'<str>{stem}<str>{stem}<str>{stem.lstrip('<str>')}<str>', file=sys.stderr)"]
     N013["for stem in stale:
     print(f'<str>{stem}<str>', file=sys.stderr)"]
     N014["for stem in undeclared_api:
@@ -25525,7 +25699,7 @@ flowchart TD
     N012["append(...)"]
     N013["if unknown_count > 0"]
     N014["append(...)"]
-    N015["return FamilyRow(family='<str>', detector='<str>', status=STATUS_DRIFT, evidence=evidence, action=f\"{'<str>'.join(parts)}<str>\")"]
+    N015["return FamilyRow(family='<str>', detector='<str>', status=STATUS_DRIFT, evidence=evidence, action=f'{'<str>'.join(parts)}<str>')"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 -->|"true"| N004
@@ -25601,6 +25775,27 @@ flowchart TD
     N003 -->|"false"| N005
     N005 -->|"true"| N006
     N005 -->|"false"| N007
+```
+
+### classify_workflow_permissions(...)
+
+```mermaid
+flowchart TD
+    N001["classify_workflow_permissions(...)"]
+    N002["evidence = '<str>'"]
+    N003["detector = '<str>'"]
+    N004["if rc == 0"]
+    N005["return FamilyRow(family='<str>', detector=detector, status=STATUS_COVERED, evidence=evidence, action='<str>')"]
+    N006["if rc == 1"]
+    N007["return FamilyRow(family='<str>', detector=detector, status=STATUS_DRIFT, evidence=evidence, action='<str>')"]
+    N008["return FamilyRow(family='<str>', detector=detector, status=STATUS_ERROR, evidence=evidence, action=f'<str>{rc}<str>')"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 --> N004
+    N004 -->|"true"| N005
+    N004 -->|"false"| N006
+    N006 -->|"true"| N007
+    N006 -->|"false"| N008
 ```
 
 ### classify_uv_pin_staleness(...)
@@ -25698,7 +25893,7 @@ flowchart TD
 flowchart TD
     N001["render_family_issue_title(...)"]
     N002["spec = FAMILY_ISSUE_SPEC[family]"]
-    N003["return f\"<str>{spec['<str>']}<str>{run_date}<str>\""]
+    N003["return f'<str>{spec['<str>']}<str>{run_date}<str>'"]
     N001 -->|"start"| N002
     N002 --> N003
 ```
@@ -25709,7 +25904,7 @@ flowchart TD
 flowchart TD
     N001["render_family_issue_body(...)"]
     N002["spec = FAMILY_ISSUE_SPEC[family]"]
-    N003["return f\"<str>{DEFAULT_TRACKING_ISSUE}<str>{family}<str>{run_url}<str>{run_date}<str>{spec['<str>']}<str>{spec['<str>']}<str>{spec['<str>']}<str>{DEFAULT_TRACKING_ISSUE}<str>\""]
+    N003["return f'<str>{DEFAULT_TRACKING_ISSUE}<str>{family}<str>{run_url}<str>{run_date}<str>{spec['<str>']}<str>{spec['<str>']}<str>{spec['<str>']}<str>{DEFAULT_TRACKING_ISSUE}<str>'"]
     N001 -->|"start"| N002
     N002 --> N003
 ```
@@ -25789,7 +25984,7 @@ flowchart TD
     N002["ruleset_text = _read_text(...)"]
     N003["labels_text = _read_text(...)"]
     N004["uv_stale_text = _read_text(...)"]
-    N005["return [classify_rulesets(rc=parse_int_flag(args.ruleset_detect_rc, '<str>'), detect_output=ruleset_text), classify_labels(rc=parse_int_flag(args.labels_plan_rc, '<str>'), summary_text=labels_text), classify_apm(rc=parse_int_flag(args.apm_diff_rc, '<str>')), classify_uv_pin_literal(rc=parse_int_flag(args.uv_drift_rc, '<str>')), classify_uv_pin_staleness(rc=parse_int_flag(args.uv_stale_rc, '<str>'), stale_text=uv_stale_text), pr_gate_only_row(family='<str>', detector='<str>', evidence='<str>'), pr_gate_only_row(family='<str>', detector='<str>', evidence='<str>'), pr_gate_only_row(family='<str>', detector='<str>', evidence='<str>'), out_of_scope_row(family='<str>', detector='<str>', evidence='<str>', message='<str>')]"]
+    N005["return [classify_rulesets(rc=parse_int_flag(args.ruleset_detect_rc, '<str>'), detect_output=ruleset_text), classify_labels(rc=parse_int_flag(args.labels_plan_rc, '<str>'), summary_text=labels_text), classify_apm(rc=parse_int_flag(args.apm_diff_rc, '<str>')), classify_uv_pin_literal(rc=parse_int_flag(args.uv_drift_rc, '<str>')), classify_workflow_permissions(rc=parse_int_flag(args.workflow_permissions_drift_rc, '<str>')), classify_uv_pin_staleness(rc=parse_int_flag(args.uv_stale_rc, '<str>'), stale_text=uv_stale_text), pr_gate_only_row(family='<str>', detector='<str>', evidence='<str>'), pr_gate_only_row(family='<str>', detector='<str>', evidence='<str>'), pr_gate_only_row(family='<str>', detector='<str>', evidence='<str>'), out_of_scope_row(family='<str>', detector='<str>', evidence='<str>', message='<str>')]"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 --> N004
@@ -25986,22 +26181,23 @@ flowchart TD
     N016["add_argument(...)"]
     N017["add_argument(...)"]
     N018["add_argument(...)"]
-    N019["set_defaults(...)"]
-    N020["p_post = add_parser(...)"]
-    N021["add_argument(...)"]
+    N019["add_argument(...)"]
+    N020["set_defaults(...)"]
+    N021["p_post = add_parser(...)"]
     N022["add_argument(...)"]
     N023["add_argument(...)"]
     N024["add_argument(...)"]
     N025["add_argument(...)"]
-    N026["set_defaults(...)"]
-    N027["p_file = add_parser(...)"]
-    N028["add_argument(...)"]
+    N026["add_argument(...)"]
+    N027["set_defaults(...)"]
+    N028["p_file = add_parser(...)"]
     N029["add_argument(...)"]
     N030["add_argument(...)"]
     N031["add_argument(...)"]
     N032["add_argument(...)"]
-    N033["set_defaults(...)"]
-    N034["return parser"]
+    N033["add_argument(...)"]
+    N034["set_defaults(...)"]
+    N035["return parser"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 --> N004
@@ -26035,6 +26231,7 @@ flowchart TD
     N031 --> N032
     N032 --> N033
     N033 --> N034
+    N034 --> N035
 ```
 
 ### main(...)
@@ -26221,8 +26418,8 @@ flowchart TD
     N001["render_section(...)"]
     N002["elapsed_txt = elapsed if elapsed else _UNAVAILABLE"]
     N003["if usage is not None"]
-    N004["total = f\"{usage['<str>']:<str>}<str>{usage['<str>']:<str>}<str>{usage['<str>']:<str>}<str>{usage['<str>']:<str>}<str>{usage['<str>']:<str>}<str>\""]
-    N005["cost = f\"<str>{usage['<str>']:<str>}\""]
+    N004["total = f'{usage['<str>']:<str>}<str>{usage['<str>']:<str>}<str>{usage['<str>']:<str>}<str>{usage['<str>']:<str>}<str>{usage['<str>']:<str>}<str>'"]
+    N005["cost = f'<str>{usage['<str>']:<str>}'"]
     N006["models = '<str>'.join(usage['<str>']) if usage['<str>'] else _UNAVAILABLE"]
     N007["total, cost, models = _UNAVAILABLE"]
     N008["return f'<str>{_HEADING}<str>{elapsed_txt}<str>{total}<str>{cost}<str>{models}<str>'"]
@@ -26521,7 +26718,7 @@ flowchart TD
     N003["token_warnings = []"]
     N004["for check in entry.get('<str>', []):
     if not check.get('<str>', True):
-        spec_failures.append(f\"{check.get('<str>', '<str>')}<str>{check.get('<str>', '<str>')}\")"]
+        spec_failures.append(f'{check.get('<str>', '<str>')}<str>{check.get('<str>', '<str>')}')"]
     N005["budget = get(...)"]
     N006["if budget.get('exceeded')"]
     N007["append(...)"]
@@ -27905,7 +28102,7 @@ flowchart TD
     try:
         review_by = date.fromisoformat(values['<str>'])
     except ValueError as exc:
-        raise ValueError(f\"{path}<str>{index}<str>{values['<str>']!r}\") from exc
+        raise ValueError(f'{path}<str>{index}<str>{values['<str>']!r}') from exc
     suppressions.append(Suppression(ecosystem=values['<str>'], name=values['<str>'], vuln_id=values['<str>'], reason=values['<str>'], review_by=review_by))"]
     N009["return suppressions"]
     N001 -->|"start"| N002
@@ -28432,10 +28629,10 @@ flowchart TD
 flowchart TD
     N001["_write_github_output(...)"]
     N002["with path.open('<str>', encoding='<str>') as handle:
-    handle.write(f\"<str>{_bool(result['<str>'])}<str>\")
-    handle.write(f\"<str>{_bool(result['<str>'])}<str>\")
-    handle.write(f\"<str>{'<str>'.join(result['<str>'])}<str>\")
-    handle.write(f\"<str>{'<str>'.join(result['<str>'])}<str>\")"]
+    handle.write(f'<str>{_bool(result['<str>'])}<str>')
+    handle.write(f'<str>{_bool(result['<str>'])}<str>')
+    handle.write(f'<str>{'<str>'.join(result['<str>'])}<str>')
+    handle.write(f'<str>{'<str>'.join(result['<str>'])}<str>')"]
     N003["end"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -28546,7 +28743,7 @@ flowchart TD
     N016["print(...)"]
     N017["return 1"]
     N018["for label in remove_labels:
-    url = f\"{base_url}<str>{urllib.parse.quote(label, safe='<str>')}\"
+    url = f'{base_url}<str>{urllib.parse.quote(label, safe='<str>')}'
     req = urllib.request.Request(url, method='<str>')
     req.add_header('<str>', auth_header)
     req.add_header('<str>', '<str>')
