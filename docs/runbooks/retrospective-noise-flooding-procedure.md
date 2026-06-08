@@ -25,11 +25,15 @@ non-bot, non-retro merge.
 - Replacing the auto-retro repair-history pre-fill. The
   `_build_repair_history_table` function in
   [`scripts/auto_retro.py`](../../scripts/auto_retro.py) already detects
-  five signal classes (CI failures, fix-up commits with the canonical
+  these row classes (CI failures, fix-up commits with the canonical
   `fix(...)` commit on a fix-typed PR split out as a separate
   `Fix commit` row -- see #413, merge-from-main, multi-commit PR, and
-  failed Verification pairs) and writes them into the retro issue
-  body. This procedure layers human judgment on top of those signals;
+  prose Verification-fail rows) and writes them into the retro issue
+  body. As of #1236 the Verification-fail row is a non-actionable
+  policy-artifact anomaly hint (it never opens a retro on its own,
+  mirroring the Revert-commit row); the `verification_pairs_failed`
+  signal it fed was retired the same way #1227 retired `body_cites_refs`.
+  This procedure layers human judgment on top of those signals;
   it does not duplicate them.
 - Re-classifying the three repair-taxonomy categories. The taxonomy
   (missing deterministic gate / unclear agent instruction / external
@@ -105,13 +109,19 @@ As of [#593](https://github.com/tvna/claude-md/issues/593), the
 auto-retro opener also applies this distinction at issue-creation
 time. A merged PR does not open a standalone retrospective when the
 only rendered rows are `[policy-artifact]` rows (`Merge from main`,
-`Revert commit`, `Fix commit`, `Multi-commit PR`), a
-`(no automated repair signals detected)` sentinel, or successful
-Verification evidence. The opener still creates a retrospective for
-inline review comments, failed CI check runs, failed Verification
-pairs such as local dependency/tool mismatch, or repeated explicit
-iteration commits. Policy-artifact rows remain visible when a
-retrospective opens for one of those actionable signals.
+`Revert commit`, `Fix commit`, `Multi-commit PR`, and -- as of #1236 --
+`Verification fail`), a `(no automated repair signals detected)`
+sentinel, or successful Verification evidence. The opener still creates
+a retrospective for inline review comments, failed CI check runs, or
+repeated explicit iteration commits. A prose Verification-fail row no
+longer opens a retro on its own (#1236): the free-form `## Verification`
+text it parsed is untrusted per CLAUDE.md section 2, and the heuristic
+both misread passing prose and could not tell an intended negative-test
+or before-state demo from a real repair. The row stays visible for
+co-fire correlation; a genuine local failure that matters still surfaces
+through the CI / review / iteration signals it travels with.
+Policy-artifact rows remain visible when a retrospective opens for one
+of those actionable signals.
 
 ### 2.1 Severity thresholds (rule of thumb)
 

@@ -29,9 +29,14 @@ A new retrospective issue titled
 `chore(auto-retro): review PR #<N> repair loops`, with body sections
 `## Scope`, `## Facts`, `## Proposed work`, `## Verification`,
 `## Acceptance criteria`, and `## Parent`. The pre-filled repair-history
-table is built by `_build_repair_history_table` from five signal classes
-(CI failures, fix-up commits, merge-from-main, multi-commit PRs, and failed
-Verification pairs).
+table is built by `_build_repair_history_table` from these row classes:
+CI failures, fix-up commits, merge-from-main, multi-commit PRs, and prose
+Verification-fail rows. The last is a non-actionable policy-artifact anomaly
+hint after #1236 (it does not open a retro on its own, mirroring the
+Revert-commit row); `verification_pairs_failed` was retired as a standalone
+signal there for the same reason #1227 retired `body_cites_refs` -- a
+free-form-prose heuristic over untrusted PR-body text dominated the
+false-positive rate.
 
 The source PR receives one back-link comment `Retrospective: #<n>`,
 idempotent on the `<!-- auto-retro:back-link -->` marker.
