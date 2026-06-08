@@ -92,6 +92,11 @@
             "type": "command",
             "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/preflight_non_ascii.py",
             "statusMessage": "Checking GitHub text"
+          },
+          {
+            "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/preflight_github_secrets.py",
+            "statusMessage": "Checking GitHub text for secrets"
           }
         ]
       },
@@ -307,6 +312,11 @@
             "type": "command",
             "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/preflight_non_ascii.py",
             "statusMessage": "Checking GitHub text"
+          },
+          {
+            "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/preflight_github_secrets.py",
+            "statusMessage": "Checking GitHub text for secrets"
           },
           {
             "type": "command",
