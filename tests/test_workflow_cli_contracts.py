@@ -943,15 +943,15 @@ def test_coverage_failure_issue_run_matches_workflow_env(
     monkeypatch.setenv("WORKFLOW", "Post-merge automation")
     monkeypatch.setenv("COVERAGE_RESULT", "failure")
 
-    def fake_open_or_update(
+    def fake_post_failure_comment(
         context: coverage_failure_issue.CoverageFailureContext,
         *,
         runner=coverage_failure_issue.subprocess.run,
     ) -> str:
         calls.append(context)
-        return "created"
+        return "commented"
 
-    monkeypatch.setattr(coverage_failure_issue, "open_or_update_issue", fake_open_or_update)
+    monkeypatch.setattr(coverage_failure_issue, "post_failure_comment", fake_post_failure_comment)
 
     assert coverage_failure_issue.main(["run"]) == 0
     assert calls[0] == coverage_failure_issue.CoverageFailureContext(
