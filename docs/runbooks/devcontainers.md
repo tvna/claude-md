@@ -672,6 +672,92 @@ Do not depend on Docker Desktop for this repository's devcontainer
 workflow. If VS Code reports Docker-oriented wording, treat it as Dev
 Containers compatibility terminology, not a Docker runtime requirement.
 
+## Debug log capture (macOS)
+
+The connectivity and stale-container triage above tells you *what* failed.
+This section is the companion for *capturing the logs* that explain why,
+focused on the macOS + rootless-Podman path where several log sources behave
+differently from a native Linux container (Issue #1460).
+
+### VS Code Dev Containers log (the primary startup log)
+
+When "Reopen in Container" fails before or during `postCreateCommand`, the
+authoritative log is the Dev Containers extension's own output, not the
+terminal. Capture it before rebuilding (a rebuild rolls the log window):
+
+1. Command Palette -> **Dev Containers: Show Container Log** for the active
+   attempt, or **Developer: Show Logs... -> Window** and switch the Output
+   panel to the **Dev Containers** channel.
+2. The same content is persisted on disk under the per-window logs tree:
+
+   ```sh
+   ls -dt "$HOME/Library/Application Support/Code/logs"/*/window*/exthost/ms-vscode-remote.remote-containers
+   ```
+
+   (On a Linux host the base path is `~/.config/Code/logs`.) Copy the newest
+   matching directory; it holds the create/start command output.
+
+### Podman machine (VM) logs when the VS Code log is truncated
+
+A `postCreateCommand` / `postStartCommand` failure is often truncated in the
+VS Code log. On macOS the container runs inside the podman-machine VM, so the
+fuller record lives there. Capture it from the host:
+
+```sh
+/opt/podman/bin/podman machine list
+/opt/podman/bin/podman machine inspect
+/opt/podman/bin/podman machine ssh -- journalctl -n 500 --no-pager
+```
+
+Do not paste tokens or `~/.config/gh` contents into issues; record only the
+failing units and messages (mirrors the redaction discipline above).
+
+### eBPF correlation log is usually unavailable on macOS Podman
+
+The eBPF correlation monitor's `/tmp/egress-correlation.log` is **best-effort
+and typically absent on macOS**. Its `check` seam requires a readable
+`/sys/kernel/btf/vmlinux`, a mounted tracefs, and `CAP_BPF`/`CAP_PERFMON`,
+all host-dependent inside the podman-machine VM, so `start` skips gracefully
+there. Confirm before relying on it:
+
+```sh
+.devcontainer/scripts/_egress-ebpf.sh check   # expect: skip on most macOS hosts
+```
+
+If it reports `skip`, use the egress *audit* log instead of the eBPF log.
+
+### dmesg_restrict caveat for the egress audit log
+
+`dmesg | grep EGRESS-AUDIT` (see the Egress allowlist section) can return
+nothing under rootless Podman even when audit mode is active: the host may set
+`kernel.dmesg_restrict=1`, and the VM kernel ring buffer is shared across
+containers. If the grep is empty, check the restriction and read the buffer
+with privilege rather than assuming audit produced no output:
+
+```sh
+sysctl kernel.dmesg_restrict        # 1 means non-root dmesg is blocked
+sudo dmesg | grep EGRESS-AUDIT
+```
+
+### One-shot collector
+
+`.devcontainer/scripts/collect-devcontainer-debug.sh` gathers the host-side
+sources above (podman machine/info/connection/ps, best-effort VM `journalctl`,
+and the newest VS Code remote-containers log dir) into a single local bundle:
+
+```sh
+.devcontainer/scripts/collect-devcontainer-debug.sh plan     # list sources, write nothing
+.devcontainer/scripts/collect-devcontainer-debug.sh collect  # write the bundle
+```
+
+The bundle is **local-only** and **best-effort redacted** (common token
+formats are masked). Redaction is not a guarantee -- review every file before
+sharing. The collector deliberately never reads `~/.config/gh`, the agent
+session volumes, or a full environment dump, because those are token-bearing.
+The end-to-end `collect` path needs a real macOS host with a running
+podman-machine VM and cannot be exercised in CI; CI verifies only the pure
+`plan` and `redact` seams plus `bash -n` (`tests/test_collect_devcontainer_debug.py`).
+
 ## Nix version management
 
 `flake.nix` is the source of truth for container-visible tools. Shared
@@ -1002,6 +1088,7 @@ bash -n .devcontainer/scripts/install-agent-cli.sh
 bash -n .devcontainer/scripts/prepare-agent-workspace.sh
 bash -n .devcontainer/scripts/check-stale-agent-container.sh
 bash -n .devcontainer/scripts/ensure-agent-image.sh
+bash -n .devcontainer/scripts/collect-devcontainer-debug.sh
 sh -n .devcontainer/images/features/agent-user/install.sh
 nix build .#claude-cli
 nix build .#codex-cli
