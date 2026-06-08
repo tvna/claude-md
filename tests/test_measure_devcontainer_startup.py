@@ -20,9 +20,10 @@ pytestmark = pytest.mark.shard_ci_ops
 class FakeProc:
     """Stand-in for subprocess.CompletedProcess."""
 
-    def __init__(self, returncode: int = 0, stdout: str = "") -> None:
+    def __init__(self, returncode: int = 0, stdout: str = "", stderr: str = "") -> None:
         self.returncode = returncode
         self.stdout = stdout
+        self.stderr = stderr
 
 
 def make_runner(results: list[FakeProc]) -> tuple[Any, list[list[str]]]:
@@ -53,6 +54,22 @@ def test_run_times_and_wraps_result() -> None:
     result = mod._run(["docker", "ps"], runner=runner, clock=make_clock([10.0, 10.75]))
     assert result == mod.RunResult(returncode=3, stdout="hi", seconds=0.75)
     assert calls == [["docker", "ps"]]
+
+
+def test_run_captures_stderr() -> None:
+    runner, _calls = make_runner([FakeProc(returncode=1, stdout="out", stderr="boom")])
+    result = mod._run(["docker", "x"], runner=runner, clock=make_clock([0.0, 1.0]))
+    assert result.stderr == "boom"
+
+
+def test_run_tolerates_runner_without_stderr() -> None:
+    # A fake that models only stdout (no stderr attr) must not crash _run.
+    class StdoutOnly:
+        returncode = 0
+        stdout = "ok"
+
+    result = mod._run(["x"], runner=lambda *_a, **_k: StdoutOnly(), clock=make_clock([0.0, 0.0]))
+    assert result.stderr == ""
 
 
 # --------------------------------------------------------------------------- #
@@ -176,12 +193,21 @@ def test_session_start_argv_and_id() -> None:
     session.start()
     assert session.container_id == "container99"
     assert calls[0] == [
-        "/usr/bin/docker", "run", "-d", "--rm",
-        "-w", "/workspaces/claude-md",
-        "-v", "/host/repo:/workspaces/claude-md",
-        "--user", "claude",
-        "--cap-add", "NET_ADMIN",
-        "img:sha", "sleep", "infinity",
+        "/usr/bin/docker",
+        "run",
+        "-d",
+        "--rm",
+        "-w",
+        "/workspaces/claude-md",
+        "-v",
+        "/host/repo:/workspaces/claude-md",
+        "--user",
+        "claude",
+        "--cap-add",
+        "NET_ADMIN",
+        "img:sha",
+        "sleep",
+        "infinity",
     ]
 
 
@@ -264,9 +290,7 @@ def test_measure_full_report() -> None:
         },
         size=2_000_000,
     )
-    report = measure_report = mod.measure(
-        session, post_create=["uv sync"], post_start=["egress"], do_pull=True
-    )
+    report = measure_report = mod.measure(session, post_create=["uv sync"], post_start=["egress"], do_pull=True)
     assert report["image"] == "img:sha"
     assert report["pull_seconds"] == 2.5
     assert report["pull_returncode"] == 0
@@ -297,6 +321,43 @@ def test_measure_closes_on_exec_error() -> None:
     with pytest.raises(RuntimeError, match="boom"):
         mod.measure(session, post_create=["x"], post_start=[], do_pull=False)
     assert session.events[-1] == "close"
+
+
+def test_measure_records_stderr_tail_only_on_failure_with_content() -> None:
+    session = FakeSession(
+        exec_results={
+            "ok": mod.RunResult(0, "", 1.0, stderr="noise on success"),
+            "boom": mod.RunResult(1, "", 0.5, stderr="line1\nfatal: boom"),
+            "silent": mod.RunResult(2, "", 0.1, stderr="   "),
+        },
+    )
+    report = mod.measure(session, post_create=["ok", "boom", "silent"], post_start=[], do_pull=False)
+    phases = {p["command"]: p for p in report["phases"]}
+    assert "stderr_tail" not in phases["ok"]  # clean exit needs no explanation
+    assert phases["boom"]["stderr_tail"] == "line1\nfatal: boom"
+    assert "stderr_tail" not in phases["silent"]  # failed but empty stderr
+
+
+# --------------------------------------------------------------------------- #
+# _stderr_tail
+# --------------------------------------------------------------------------- #
+
+
+def test_stderr_tail_keeps_last_lines() -> None:
+    text = "\n".join(f"line{i}" for i in range(50))
+    tail = mod._stderr_tail(text)
+    assert tail.splitlines()[0] == "line30"  # last 20 of 0..49
+    assert tail.splitlines()[-1] == "line49"
+
+
+def test_stderr_tail_caps_chars() -> None:
+    assert len(mod._stderr_tail("x" * 5000)) == mod._STDERR_TAIL_CHARS
+
+
+def test_stderr_tail_sanitises_non_ascii() -> None:
+    tail = mod._stderr_tail("cafeé boom")
+    assert tail.isascii()
+    assert "boom" in tail
 
 
 # --------------------------------------------------------------------------- #
@@ -432,6 +493,39 @@ def test_format_summary_flags_failed_pull_and_truncates() -> None:
     assert "pull: 0.500s (FAILED)" in summary
     assert "..." in summary
     assert long_cmd not in summary
+
+
+def test_format_summary_renders_segment_failures() -> None:
+    report = {
+        "image": "img:sha",
+        "image_size_bytes": 10,
+        "total_phase_seconds": 0.5,
+        "phases": [
+            {
+                "phase": "postCreate",
+                "command": "nix develop",
+                "seconds": 0.5,
+                "returncode": 1,
+                "stderr_tail": "fatal: permission denied",
+            },
+            {"phase": "postStart", "command": "egress", "seconds": 0.0, "returncode": 0},
+        ],
+    }
+    summary = mod.format_summary(report)
+    assert "## Segment failures" in summary
+    assert "postCreate (exit 1): `nix develop`" in summary
+    assert "fatal: permission denied" in summary
+    assert summary.isascii()
+
+
+def test_format_summary_no_failures_section_when_all_pass() -> None:
+    report = {
+        "image": "img:sha",
+        "image_size_bytes": 10,
+        "total_phase_seconds": 0.0,
+        "phases": [{"phase": "postCreate", "command": "ok", "seconds": 0.1, "returncode": 0}],
+    }
+    assert "Segment failures" not in mod.format_summary(report)
 
 
 def test_format_summary_without_pull() -> None:

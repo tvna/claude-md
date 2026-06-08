@@ -47,7 +47,9 @@ Contract:
 - Failure policy: fails loud per CLAUDE.md section 4 -- a missing runtime,
   unreadable/malformed config, mutable image tag, or failed pull/start/inspect
   raises and exits non-zero. A per-segment non-zero exit is recorded as data
-  (the postStart egress step is best-effort off the real host), not swallowed.
+  (the postStart egress step is best-effort off the real host), not swallowed;
+  a failed segment also records ``stderr_tail`` (a bounded ASCII tail of its
+  stderr) so the cause is diagnosable rather than lost.
 
 Tested by ``tests/test_measure_devcontainer_startup.py``.
 """
@@ -80,6 +82,9 @@ class RunResult:
     returncode: int
     stdout: str
     seconds: float
+    # stderr is the actionable channel when a segment fails; default empty so
+    # the field is additive and existing positional construction is unaffected.
+    stderr: str = ""
 
 
 def _run(
@@ -96,7 +101,14 @@ def _run(
     start = clock()
     proc = runner(cmd, capture_output=True, text=True, check=False)
     elapsed = clock() - start
-    return RunResult(returncode=proc.returncode, stdout=proc.stdout, seconds=elapsed)
+    # getattr keeps a fake runner that only models stdout working; a real
+    # capture_output run always carries stderr.
+    return RunResult(
+        returncode=proc.returncode,
+        stdout=proc.stdout,
+        seconds=elapsed,
+        stderr=getattr(proc, "stderr", "") or "",
+    )
 
 
 def resolve_runtime(name: str, *, which: Callable[[str], str | None] = shutil.which) -> str:
@@ -275,6 +287,25 @@ class DockerSession:
             self.container_id = None
 
 
+# Bound on the failure diagnostic kept per segment. A non-zero lifecycle
+# segment is the measurement's signal, but its cause lives in stderr -- which
+# the orchestrator was discarding, leaving a failed measurement undiagnosable
+# (CLAUDE.md section 4: a check that fires must say what went wrong). Keep the
+# tail (the actionable error is the last thing written), ASCII-sanitised so it
+# survives the GitHub posting boundary, and length-capped so a runaway log
+# cannot bloat the report. Diagnostic only -- never an env or secret dump.
+_STDERR_TAIL_LINES = 20
+_STDERR_TAIL_CHARS = 2000
+
+
+def _stderr_tail(text: str) -> str:
+    """Return a bounded, ASCII-only tail of ``text`` for a failed segment."""
+    tail = "\n".join(text.splitlines()[-_STDERR_TAIL_LINES:])
+    if len(tail) > _STDERR_TAIL_CHARS:
+        tail = tail[-_STDERR_TAIL_CHARS:]
+    return tail.encode("ascii", "replace").decode("ascii")
+
+
 def measure(
     session: Session,
     *,
@@ -286,9 +317,11 @@ def measure(
 ) -> dict[str, Any]:
     """Run the measurement against ``session`` and return a JSON-able report.
 
-    A non-zero segment exit is recorded (returncode + time-to-failure), not
-    swallowed: in a measurement a failure is data, and the postStart egress
-    step is expected to be only best-effort outside the real host (no eBPF).
+    A non-zero segment exit is recorded (returncode + time-to-failure + a
+    bounded ``stderr_tail``), not swallowed: in a measurement a failure is
+    data, and the postStart egress step is expected to be only best-effort
+    outside the real host (no eBPF). The stderr tail is what makes a failed
+    measurement diagnosable instead of an opaque non-zero exit.
     With ``probe`` the report also carries an image ``composition`` block
     (gathered while the container is still up). The container is always cleaned
     up.
@@ -307,14 +340,18 @@ def measure(
         for phase, segments in (("postCreate", post_create), ("postStart", post_start)):
             for segment in segments:
                 result = session.exec(segment)
-                report["phases"].append(
-                    {
-                        "phase": phase,
-                        "command": segment,
-                        "seconds": round(result.seconds, 3),
-                        "returncode": result.returncode,
-                    }
-                )
+                entry: dict[str, Any] = {
+                    "phase": phase,
+                    "command": segment,
+                    "seconds": round(result.seconds, 3),
+                    "returncode": result.returncode,
+                }
+                # Attach the diagnostic only on a real failure with content:
+                # a clean exit needs no explanation, and an empty stderr has
+                # nothing to show, so the report stays lean on the happy path.
+                if result.returncode != 0 and result.stderr.strip():
+                    entry["stderr_tail"] = _stderr_tail(result.stderr)
+                report["phases"].append(entry)
         if probe:
             report["composition"] = probe_composition(session, top_n=top_n)
     finally:
@@ -338,8 +375,7 @@ def format_summary(report: dict[str, Any]) -> str:
         "# Devcontainer startup measurement",
         "",
         f"- image: `{report['image']}`",
-        f"- image size: {_human_size(report['image_size_bytes'])} "
-        f"({report['image_size_bytes']} bytes)",
+        f"- image size: {_human_size(report['image_size_bytes'])} " f"({report['image_size_bytes']} bytes)",
     ]
     if "pull_seconds" in report:
         flag = "" if report["pull_returncode"] == 0 else " (FAILED)"
@@ -355,14 +391,25 @@ def format_summary(report: dict[str, Any]) -> str:
         if len(command) > 70:
             command = command[:67] + "..."
         lines.append(f"| {entry['phase']} | {entry['seconds']:.3f} | {entry['returncode']} | {command} |")
+    failures = [entry for entry in report["phases"] if entry.get("stderr_tail")]
+    if failures:
+        lines += ["", "## Segment failures", ""]
+        for entry in failures:
+            lines += [
+                f"- {entry['phase']} (exit {entry['returncode']}): `{entry['command']}`",
+                "",
+                "```",
+                entry["stderr_tail"],
+                "```",
+                "",
+            ]
     composition = report.get("composition")
     if composition:
         lines += [
             "",
             "## Image composition",
             "",
-            f"- /nix/store: {_human_size(composition['nix_store_bytes'])} "
-            f"({composition['nix_store_bytes']} bytes)",
+            f"- /nix/store: {_human_size(composition['nix_store_bytes'])} " f"({composition['nix_store_bytes']} bytes)",
             "",
             "| base dir | size |",
             "| --- | ---: |",
