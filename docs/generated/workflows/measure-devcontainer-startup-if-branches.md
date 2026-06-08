@@ -8,6 +8,8 @@ flowchart TD
     T_workflow_dispatch(["on: workflow_dispatch\ninputs: {'agent': {'description': 'Which devc..."])
 
     J_measure["measure"]
+    S_J_measure_0(("Build image from source"))
 
     T_workflow_dispatch --> J_measure
+    J_measure -->|"inputs.build_from_source"| S_J_measure_0
 ```
