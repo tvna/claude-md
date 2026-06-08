@@ -74,16 +74,23 @@ PRIOR_TENTATIVE_THRESHOLD: Final[float] = 0.3
 PRIOR_MIN_SAMPLE_SIZE: Final[int] = 5
 PRIOR_FETCH_LIMIT: Final[int] = 50
 
-# Prior epoch boundary (refs #1227). Retros opened before the #1227
-# signal-semantics fix measured the OLD (buggy) ``verification_pairs_failed``
-# and the now-retired ``body_cites_refs`` definitions, so their ``retro:fp``
-# labels must not drive ``should_skip_by_prior`` after the fix -- otherwise
-# the #1226 cleanup, which labels ~33 pre-fix false positives ``retro:fp``,
-# would poison the prior and suppress genuine post-fix repair retros. Only
-# retros whose issue number is at or above this boundary contribute to the
-# live skip decision (``auto_retro.run`` passes it; the descriptive
-# triage report keeps the full population). The value sits just above the
-# pre-fix retro population (highest pre-fix retro was #1225; #1226 is the
-# tracking issue, #1227 the fix issue), so the prior degrades to the
-# empty-prior safety net (open normally) until post-fix retros accumulate.
-PRIOR_EPOCH_MIN_RETRO_NUMBER: Final[int] = 1228
+# Prior epoch boundary (refs #1227, advanced for #1236). Retros opened
+# before a signal-semantics fix measured the OLD (buggy) signal
+# definitions, so their ``retro:fp`` labels must not drive
+# ``should_skip_by_prior`` after the fix -- otherwise a mass ``retro:fp``
+# cleanup would poison the prior and suppress genuine post-fix repair
+# retros. Only retros whose issue number is at or above this boundary
+# contribute to the live skip decision (``auto_retro.run`` passes it; the
+# descriptive triage report keeps the full population).
+#
+# History:
+# - 1228 (#1227): first epoch, just above the original pre-fix population
+#   (highest pre-fix retro #1225) for the #1226 Phase B cleanup of ~33 FPs.
+# - 1460 (#1236): advanced after ``verification_pairs_failed`` was retired
+#   as a standalone trigger and its prose ``Verification fail`` rows were
+#   demoted to non-actionable policy-artifact anomaly hints. The second
+#   retro flood (#1235..#1459) was the prose-verification FP class the
+#   #1227 fix did not reach; labelling that batch ``retro:fp`` would poison
+#   the surviving ``multi_commit_pr`` / ``fix_typed_title`` priors, so the
+#   boundary moves just above the highest retro in that batch (#1459).
+PRIOR_EPOCH_MIN_RETRO_NUMBER: Final[int] = 1460

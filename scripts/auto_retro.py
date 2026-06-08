@@ -712,12 +712,13 @@ def compute_repair_signals(
     PR #275 and PR #288 merged with zero inline review comments yet
     carried substantial repair history in issues #287 and #273.
 
-    ``body_cites_refs`` was retired as a standalone trigger in #1227: it
-    fired on nearly every PR (CLAUDE.md section 3 mandates a ``Refs #N``
-    line), so it was non-discriminating and dominated label-prior
-    pollution. Repair loops captured in sibling issues are still caught by
-    the remaining signals (review comments, fix-typed titles, fix-up
-    commits, failed verification pairs).
+    ``body_cites_refs`` was retired as a standalone trigger in #1227, and
+    ``verification_pairs_failed`` was retired the same way in #1236: both
+    keyed off non-discriminating or untrusted PR-body prose and dominated
+    label-prior pollution. Repair loops captured in sibling issues are still
+    caught by the remaining signals (review comments, fix-typed titles,
+    fix-up / iteration commits) and by the deterministic GitHub check-run
+    state surfaced in :func:`_repair_history_rows`.
 
     Signals returned:
 
@@ -751,18 +752,28 @@ def compute_repair_signals(
             - _count_revert(commit_subjects)
         )
         multi_commit = pure_commits > 1
-    verification_pairs = extract_verification_pairs(pr.body or "")
     # `post_merge_unchecked` was removed in #418: the Post-merge subsection
     # is documented to be checked by the operator AFTER observing the merge,
     # so it is structurally unchecked at merge time. Re-scanning the subsection
     # is deferred to the workflow tracked in #421.
+    #
+    # `verification_pairs_failed` was retired as a signal in #1236, mirroring
+    # the #1227 `body_cites_refs` retirement. It keyed off `_result_is_passing`
+    # over free-form PR-body `## Verification` prose, which CLAUDE.md section 2
+    # treats as untrusted: the heuristic both under-recognized passing prose
+    # (`no docs/generated drift`, `single commit over main`, `pre-push ... all
+    # pass`) and could not tell an intended negative-test / before-state demo
+    # (`exit 1` by design) from a real repair, making it the dominant FP source
+    # behind the #1235..#1459 retro flood. Genuine repair loops are still
+    # caught deterministically by the surviving signals (inline review
+    # comments, fix-typed titles, multi-commit / iteration commits) and by the
+    # GitHub check-run state read in `_repair_history_rows`. The prose rows are
+    # retained as non-actionable policy-artifact anomaly hints (see
+    # `_repair_history_rows`) for co-fire correlation only.
     return {
         "inline_review_comments": bool(has_inline_comments),
         "fix_typed_title": fix_typed,
         "multi_commit_pr": multi_commit,
-        "verification_pairs_failed": any(
-            not p.passed for p in verification_pairs
-        ),
     }
 
 
@@ -781,7 +792,6 @@ _SIGNAL_NAMES: tuple[str, ...] = (
     "inline_review_comments",
     "fix_typed_title",
     "multi_commit_pr",
-    "verification_pairs_failed",
 )
 
 
@@ -1725,14 +1735,26 @@ def _repair_history_rows(
             )
         )
 
+    # Verification-prose rows are non-actionable anomaly hints, not a
+    # standalone trigger (refs #1236). `_result_is_passing` runs over
+    # free-form `## Verification` prose (untrusted per CLAUDE.md section 2)
+    # and cannot reliably distinguish a real repair from an intended
+    # negative-test / before-state demo or from passing prose it fails to
+    # recognize. The row is kept for co-fire correlation when a deterministic
+    # signal (CI failure, inline review, iteration commit) opens the retro,
+    # but marked policy-artifact so `_has_only_exempt_policy_artifact_rows`
+    # skips a verification-only PR -- mirroring the `Revert commit` row.
     for pair in verification_pairs or []:
         if pair.passed:
             continue
         rows.append(
             RepairHistoryRow(
                 f"Verification fail: {pair.command}",
-                f"observed: {pair.result}",
-                next_action=_REPAIR_NEXT_ACTION_FILL,
+                f"{_POLICY_ARTIFACT_MARKER} observed: {pair.result} -- "
+                "PR-body prose heuristic; confirm via co-firing CI / review / "
+                "iteration signal before classifying",
+                policy_artifact=True,
+                next_action="--",
             )
         )
 
