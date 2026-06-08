@@ -70,6 +70,7 @@ import scan_input_contract_drift
 import scan_maintainability_metrics
 import scan_markdown_links
 import scan_non_ascii
+import scan_nonexhaustive_invariant_drift
 import scan_preflight_drift
 import scan_provisioning_hook_serial
 import scan_quality_standard_drift
@@ -194,6 +195,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("scan_markdown_links.py", "verify"): "test_scan_markdown_links_verify_matches_workflow_args",
     ("scan_maintainability_metrics.py", "verify"): "test_scan_maintainability_metrics_verify_matches_workflow_args",
     ("scan_non_ascii.py", "run"): "test_scan_non_ascii_run_matches_workflow_env",
+    ("scan_nonexhaustive_invariant_drift.py", "verify"): "test_scan_nonexhaustive_invariant_drift_verify_matches_workflow_args",
     ("scan_hook_coverage_drift.py", "verify"): "test_scan_hook_coverage_drift_verify_matches_workflow_args",
     ("scan_input_contract_drift.py", "verify"): "test_scan_input_contract_drift_verify_matches_workflow_args",
     ("scan_preflight_drift.py", "verify"): "test_scan_preflight_drift_verify_matches_workflow_args",
@@ -1252,6 +1254,13 @@ def test_scan_quality_standard_drift_verify_matches_workflow_args() -> None:
     """Mirrors the ``Verify quality-standard enforcement map`` step in
     ``.github/workflows/verify-agents.yml``. Refs #1089."""
     assert scan_quality_standard_drift.main(["verify"]) == 0
+
+
+def test_scan_nonexhaustive_invariant_drift_verify_matches_workflow_args() -> None:
+    """Mirrors the ``Verify section 2/4 safety enumerations stay
+    non-exhaustive`` step in ``.github/workflows/verify-agents.yml``. Refs
+    #1241, #1242, #1243."""
+    assert scan_nonexhaustive_invariant_drift.main(["verify"]) == 0
 
 
 def test_scan_test_presence_drift_verify_matches_workflow_args() -> None:
