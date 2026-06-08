@@ -126,6 +126,16 @@
         ]
       },
       {
+        "matcher": "^mcp__github__issue_write$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/gate_reserved_retro_scope.py",
+            "statusMessage": "Checking reserved auto-retro scope"
+          }
+        ]
+      },
+      {
         "matcher": "^mcp__github__(issue_write|add_issue_comment|create_pull_request|update_pull_request|add_reply_to_pull_request_comment|pull_request_review_write|add_comment_to_pending_review)$",
         "hooks": [
           {
@@ -162,6 +172,16 @@
             "type": "command",
             "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/block_sensitive_reads.py",
             "statusMessage": "Blocking reads of local credential files"
+          }
+        ]
+      },
+      {
+        "matcher": "^Bash$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/gate_irreversible_bash.py",
+            "statusMessage": "Guarding against irreversible bash operations"
           }
         ]
       },
@@ -347,6 +367,11 @@
           },
           {
             "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/session_resource_report.py checkpoint",
+            "statusMessage": "Recording per-PR ccusage checkpoint"
+          },
+          {
+            "type": "command",
             "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/post_pr_create_ci_monitor.py",
             "statusMessage": "Starting PR CI monitor"
           },
@@ -378,7 +403,7 @@
           {
             "type": "command",
             "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/post_merge_retro_append.py",
-            "statusMessage": "Directing agent to append repair analysis to auto-retro"
+            "statusMessage": "Reminding agent not to duplicate the auto-retro or post a redundant comment"
           },
           {
             "type": "command",

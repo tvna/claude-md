@@ -31,16 +31,28 @@ jobs:
       pull-requests: write
     steps:
       - name: Checkout repository
-        # Persist the default GITHUB_TOKEN (contents: write) so the refresh step's
-        # `git push origin <fresh-branch>` in scripts/devcontainer_pin_pr.py can
-        # authenticate. `persist-credentials: false` here left the push with no
-        # credentials, failing with exit 128. This mirrors the working `open` flow
-        # in publish-devcontainer-images.yml (update-pins job). Refs #696, #1137.
+        # Persist the default GITHUB_TOKEN (contents: read) so the refresh step's
+        # `git ls-remote origin <fresh-branch>` in scripts/devcontainer_pin_pr.py
+        # (branch-existence check) can authenticate. The pin commit itself is now
+        # created via the GitHub API (createCommitOnBranch) using the App token,
+        # not `git push`, so it is signed/Verified. `persist-credentials: false`
+        # here would strip the ls-remote credential. Refs #696, #1137, #1437.
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      # Mint a short-lived GitHub App installation token so the superseding pin
+      # PR is authored by the App bot (not a human PAT owner), its push to main
+      # still triggers downstream workflows, and the API-created pin commit is
+      # signed (Verified) under the App bot. Refs #1401, #1437.
+      - name: Mint GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ secrets.DEVCONTAINER_PIN_APP_ID }}
+          private-key: ${{ secrets.DEVCONTAINER_PIN_APP_PRIVATE_KEY }}
 
       - name: Refresh behind pin PR onto latest main
         env:
-          GH_TOKEN: ${{ secrets.DEVCONTAINER_PIN_PR_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
           REPO: ${{ github.repository }}
         run: |
           set -euo pipefail

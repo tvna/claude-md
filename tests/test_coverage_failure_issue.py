@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import subprocess
 
 import coverage_failure_issue
@@ -10,9 +9,8 @@ pytestmark = pytest.mark.shard_ci_ops
 
 
 class FakeRunner:
-    def __init__(self, *, list_stdout: str = "[]") -> None:
+    def __init__(self) -> None:
         self.calls: list[list[str]] = []
-        self.list_stdout = list_stdout
 
     def __call__(
         self,
@@ -28,12 +26,10 @@ class FakeRunner:
         assert text is True
         assert timeout == 30
         assert check is True
-        if cmd[:3] == ["gh", "issue", "list"]:
-            return subprocess.CompletedProcess(cmd, 0, self.list_stdout, "")
         return subprocess.CompletedProcess(cmd, 0, "", "")
 
 
-def test_render_issue_body_links_run_and_names_threshold() -> None:
+def test_render_comment_links_run_and_names_threshold() -> None:
     context = coverage_failure_issue.CoverageFailureContext(
         repo="owner/repo",
         run_url="https://github.com/owner/repo/actions/runs/123/attempts/2",
@@ -43,40 +39,15 @@ def test_render_issue_body_links_run_and_names_threshold() -> None:
         run_attempt="2",
     )
 
-    body = coverage_failure_issue.render_issue_body(context)
+    comment = coverage_failure_issue.render_comment(context)
 
-    assert "<!-- coverage-failure-issue -->" in body
-    assert "Refs #749" in body
-    assert "https://github.com/owner/repo/actions/runs/123/attempts/2" in body
-    assert "pytest --cov-fail-under=92.71" in body
-    assert "Speculation:" in body
+    assert "https://github.com/owner/repo/actions/runs/123/attempts/2" in comment
+    assert "[tool.coverage.report].fail_under in pyproject.toml" in comment
+    assert "Post-merge coverage gate failed." in comment
 
 
-def test_open_or_update_creates_issue_when_no_marker_issue_exists() -> None:
-    runner = FakeRunner(list_stdout="[]")
-    context = coverage_failure_issue.CoverageFailureContext(
-        repo="owner/repo",
-        run_url="https://github.com/owner/repo/actions/runs/123",
-        workflow="Post-merge automation",
-        coverage_result="failure",
-        run_id="123",
-        run_attempt="1",
-    )
-
-    result = coverage_failure_issue.open_or_update_issue(context, runner=runner)
-
-    assert result == "created"
-    assert runner.calls[0][:3] == ["gh", "issue", "list"]
-    assert runner.calls[1][:3] == ["gh", "issue", "create"]
-    assert "--title" in runner.calls[1]
-    assert "ci(coverage): post-merge coverage threshold failed" in runner.calls[1]
-    assert runner.calls[1].count("--label") == 2
-    assert "type:fix" in runner.calls[1]
-    assert "layer:p3-harness" in runner.calls[1]
-
-
-def test_open_or_update_comments_when_marker_issue_exists() -> None:
-    runner = FakeRunner(list_stdout=json.dumps([{"number": 321}]))
+def test_post_failure_comment_targets_quality_tracking_issue() -> None:
+    runner = FakeRunner()
     context = coverage_failure_issue.CoverageFailureContext(
         repo="owner/repo",
         run_url="https://github.com/owner/repo/actions/runs/124",
@@ -86,13 +57,14 @@ def test_open_or_update_comments_when_marker_issue_exists() -> None:
         run_attempt="1",
     )
 
-    result = coverage_failure_issue.open_or_update_issue(context, runner=runner)
+    result = coverage_failure_issue.post_failure_comment(context, runner=runner)
 
     assert result == "commented"
-    assert runner.calls[0][:3] == ["gh", "issue", "list"]
-    assert runner.calls[1][:3] == ["gh", "issue", "comment"]
-    assert "321" in runner.calls[1]
-    assert any("https://github.com/owner/repo/actions/runs/124" in arg for arg in runner.calls[1])
+    assert len(runner.calls) == 1
+    assert runner.calls[0][:3] == ["gh", "issue", "comment"]
+    assert str(coverage_failure_issue.TARGET_ISSUE) in runner.calls[0]
+    assert coverage_failure_issue.TARGET_ISSUE == 197
+    assert any("https://github.com/owner/repo/actions/runs/124" in arg for arg in runner.calls[0])
 
 
 def test_context_from_env_requires_token_repo_and_run_id() -> None:
@@ -110,15 +82,15 @@ def test_main_run_matches_workflow_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("WORKFLOW", "Post-merge automation")
     monkeypatch.setenv("COVERAGE_RESULT", "failure")
 
-    def fake_open_or_update(
+    def fake_post_failure_comment(
         context: coverage_failure_issue.CoverageFailureContext,
         *,
         runner=coverage_failure_issue.subprocess.run,
     ) -> str:
         calls.append(context)
-        return "created"
+        return "commented"
 
-    monkeypatch.setattr(coverage_failure_issue, "open_or_update_issue", fake_open_or_update)
+    monkeypatch.setattr(coverage_failure_issue, "post_failure_comment", fake_post_failure_comment)
 
     assert coverage_failure_issue.main(["run"]) == 0
     assert calls[0].run_url == "https://github.com/owner/repo/actions/runs/123/attempts/2"

@@ -201,10 +201,11 @@ def type_fit_findings(title: str, *, kind: str, body: str = "") -> list[TypeFitF
     if parts is None:
         return []
 
-    text = _normalized_policy_text(title, body)
+    title_text = _normalize_policy_text(title)
+    body_text = _normalize_policy_text(_strip_resource_consumption_section(body))
     findings: list[TypeFitFinding] = []
-    if _has_performance_signal(text):
-        findings.extend(_performance_type_findings(parts, text))
+    if _has_performance_signal(title_text, body_text):
+        findings.extend(_performance_type_findings(parts, f"{title_text} {body_text}"))
     return findings
 
 
@@ -278,18 +279,53 @@ def verify_title(title: str, *, kind: str, body: str = "", author: str = "") -> 
     return 0
 
 
-def _normalized_policy_text(title: str, body: str) -> str:
-    text = f"{title}\n{body}".lower()
-    return re.sub(r"[^a-z0-9#+.-]+", " ", text)
+def _normalize_policy_text(text: str) -> str:
+    return re.sub(r"[^a-z0-9#+.-]+", " ", text.lower())
+
+
+# The required ``## Resource Consumption`` PR section
+# (scripts/session_resource_report.py) always carries fixed ``resource``
+# wording in its heading -- it reports the session cost of producing the PR,
+# never the PR's own work. Left in the type-fit scan it would mis-classify
+# every non-bot PR that merely carries the section as performance work. This
+# is the same relayed/boilerplate-text root cause as the trusted-bot body
+# drop (#1127); strip the section here so only the PR's own prose feeds the
+# heuristic. Refs #1413.
+_RESOURCE_CONSUMPTION_SECTION_RE = re.compile(
+    r"(?ims)^[ \t]*##[ \t]+Resource[ \t]+Consumption\b.*?(?=^[ \t]*##[ \t]|\Z)"
+)
+
+
+def _strip_resource_consumption_section(body: str) -> str:
+    """Return *body* with the boilerplate ``## Resource Consumption`` H2 removed.
+
+    The section runs from its ``## Resource Consumption`` heading to the next
+    H2 heading (or end of body). A PR whose only ``resource`` wording is this
+    generated section must not be forced onto a ``perf`` title; a PR that
+    discusses resource work in its own prose still trips the heuristic.
+    """
+    return _RESOURCE_CONSUMPTION_SECTION_RE.sub("", body)
 
 
 def _words(text: str) -> set[str]:
     return set(re.findall(r"[a-z0-9][a-z0-9+-]*", text))
 
 
-def _has_performance_signal(text: str) -> bool:
-    words = _words(text)
-    return bool(words & _PERFORMANCE_TERMS) or any(phrase in text for phrase in _PERFORMANCE_PHRASES)
+def _has_performance_signal(title_text: str, body_text: str) -> bool:
+    """Return True when the title or body signals performance work.
+
+    The title is header-level metadata where a lone performance word
+    (``memory``, ``cache``, ``latency``, ...) is high-confidence, so it fires
+    on words OR phrases. A lone word in the *body*, by contrast, is too weak --
+    prose like "operator memory" produced false positives on non-performance
+    work (#1424 / #1054), so the body escalates only on a multi-word
+    performance phrase from ``_PERFORMANCE_PHRASES``.
+    """
+    if _words(title_text) & _PERFORMANCE_TERMS:
+        return True
+    if any(phrase in title_text for phrase in _PERFORMANCE_PHRASES):
+        return True
+    return any(phrase in body_text for phrase in _PERFORMANCE_PHRASES)
 
 
 def _performance_type_findings(parts: TitleParts, text: str) -> list[TypeFitFinding]:

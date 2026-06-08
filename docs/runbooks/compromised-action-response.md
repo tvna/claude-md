@@ -19,8 +19,8 @@ radius and recovering.
   applying `threat:intel-needed` / `threat:response-needed`), or an upstream
   notice reports that a pinned action or its runtime download is compromised.
 - A workflow run shows unexpected network egress, image pushes, or token use.
-- A repository secret (for example `DEVCONTAINER_PIN_PR_TOKEN`) is suspected
-  exposed in logs, a fork PR, or a third-party step.
+- A repository secret (for example `DEVCONTAINER_PIN_APP_PRIVATE_KEY`) is
+  suspected exposed in logs, a fork PR, or a third-party step.
 
 Match the input to the action (agent instructions section 2): an advisory or
 triage label is evidence; act on it. A vague rumor is not; verify against the
@@ -71,14 +71,15 @@ If a write-capable job (for example `build` or `publish`) ran a compromised step
 
 If a secret is suspected exposed:
 
-1. **Revoke first, rotate second.** For `DEVCONTAINER_PIN_PR_TOKEN`, revoke the
-   PAT or GitHub App installation token at its source immediately (GitHub
-   **Settings -> Developer settings** for a PAT, or the App's installation for
-   an installation token), then issue a replacement following the issuance path
-   in [`devcontainers.md`](devcontainers.md) ("One-time setup for
-   `DEVCONTAINER_PIN_PR_TOKEN`"): scope to `tvna/claude-md`, minimum permissions
-   (Metadata read, Contents read/write, Pull requests read/write), expiry <= 90
-   days, stored only in the `devcontainer-image-pins` Environment.
+1. **Revoke first, rotate second.** For `DEVCONTAINER_PIN_APP_PRIVATE_KEY`,
+   delete the exposed private key on the GitHub App's settings page immediately
+   (which invalidates any installation token minted from it), then generate a
+   fresh key and follow the issuance path in
+   [`devcontainers.md`](devcontainers.md) ("One-time setup for
+   `DEVCONTAINER_PIN_APP_ID`"): App scoped to `tvna/claude-md`, minimum
+   permissions (Metadata read, Contents read/write, Pull requests read/write),
+   the new key stored only in the `devcontainer-image-pins` Environment. If the
+   App ID itself is not sensitive, only the key needs rotation.
 2. **Treat `GITHUB_TOKEN` as rotated automatically** -- it expires at job end --
    but if a job's `GITHUB_TOKEN` was exposed mid-run, assume any write it had
    (for `build`/`publish`: `packages: write`) was usable until expiry and check
@@ -115,8 +116,9 @@ be automated. Link the advisory primary source and the revert PR.
 ## Related
 
 - [`revert-first-rollback.md`](revert-first-rollback.md) -- rollback mechanics.
-- [`devcontainers.md`](devcontainers.md) -- `DEVCONTAINER_PIN_PR_TOKEN` issuance
-  and the publish/pin workflows.
+- [`devcontainers.md`](devcontainers.md) -- GitHub App pin-PR credential
+  (`DEVCONTAINER_PIN_APP_ID` / `DEVCONTAINER_PIN_APP_PRIVATE_KEY`) issuance and
+  the publish/pin workflows.
 - [`dependabot-automerge.md`](dependabot-automerge.md) -- auto-merge audit policy
   and the threat-intel / severity block conditions.
 - [`workflow-permissions-audit.md`](workflow-permissions-audit.md) -- per-job

@@ -1,23 +1,31 @@
 #!/usr/bin/env python3
-"""PostToolUse hook: redirect post-merge retro from create to append.
+"""PostToolUse hook: dedup guard for the post-merge auto-retro.
 
 When the agent calls mcp__github__merge_pull_request this hook emits
 additionalContext instructing the agent to:
 
-  1. NOT create a new retrospective issue.  CI post-merge.yml already
+  1. NOT open a second retrospective issue.  CI post-merge.yml already
      triggers scripts/auto_retro.py which opens the canonical auto-retro
-     (title prefix ``fix(auto-retro)``).
-  2. Search for the CI auto-retro by that title prefix plus the merged
-     PR number.
-  3. If found: append the agent repair analysis as a comment via
-     mcp__github__add_issue_comment.
-  4. Fallback only: create a new retro if no auto-retro exists after the
-     CI workflow has had time to run (workflow was skipped or failed).
+     (title prefix ``chore(auto-retro)``) with the repair-history table
+     pre-filled from check_runs + commit subjects.
+  2. NOT post a separate repair-analysis comment on that retro.  The retro
+     body is already pre-filled and the triage-report dashboard
+     (docs/generated/scripts/auto-retro-triage-report.md) is the review
+     surface, so an appended comment is redundant notification noise
+     (Phase 1 of #1386).
+  3. Fallback only: create a new retro if no auto-retro exists after the
+     CI workflow has had time to run (workflow was skipped or failed), so
+     the audit ledger is never lost.
+
+This hook used to direct the agent to append its repair analysis as a
+comment via mcp__github__add_issue_comment; that directive was removed in
+Phase 1 of #1386 to cut per-merge comment noise. The dedup guard (do not
+open a duplicate retro) is retained.
 
 Fail-open: malformed input, missing fields, or off-target tools exit 0
 with no output so a hook bug cannot wedge unrelated tool calls.
 
-Refs: issue #916.
+Refs: issue #916, #1386.
 """
 
 from __future__ import annotations
@@ -108,31 +116,28 @@ def decide(event: dict[str, Any]) -> dict[str, Any] | None:
 
     if pr_number is None:
         return _build_context(
-            f"MANDATORY RETRO APPEND: {TARGET_TOOL} fired but the merged PR number "
+            f"AUTO-RETRO DEDUP GUARD: {TARGET_TOOL} fired but the merged PR number "
             f"could not be extracted from tool_input or tool_response. "
-            f"Do NOT create a new retro issue. "
-            f"Search GitHub issues for title prefix '{RETRO_TITLE_PREFIX}' to find "
-            f"the CI-generated auto-retro, then append your repair analysis as a "
-            f"comment via mcp__github__add_issue_comment. "
-            f"Only create a new retro if no auto-retro exists after CI has run."
+            f"Do NOT open a new retrospective issue and do NOT post a separate "
+            f"repair-analysis comment: CI post-merge.yml opens the canonical "
+            f"auto-retro (title prefix '{RETRO_TITLE_PREFIX}') with its body "
+            f"pre-filled, and the triage-report dashboard is the review surface. "
+            f"Only create a retro if none exists after CI has run."
         )
 
     pr_label = f"{owner}/{repo}#{pr_number}" if owner and repo else f"PR #{pr_number}"
-    owner_str = owner or "(see tool_input)"
-    repo_str = repo or "(see tool_input)"
 
     return _build_context(
-        f"MANDATORY RETRO APPEND: PR {pr_label} was just merged. "
-        f"Do NOT create a new retrospective issue. "
+        f"AUTO-RETRO DEDUP GUARD: PR {pr_label} was just merged. "
+        f"Do NOT open a new retrospective issue and do NOT post a separate "
+        f"repair-analysis comment. "
         f"CI post-merge.yml will automatically open a retro titled "
-        f"'{RETRO_TITLE_PREFIX}: review {pr_label} repair loops' (or similar). "
-        f"Procedure:\n"
-        f"1. Search for the auto-retro: find an open issue whose title starts with "
-        f"'{RETRO_TITLE_PREFIX}' and contains 'PR #{pr_number}' "
-        f"(owner={owner_str}, repo={repo_str}).\n"
-        f"2. If found: call mcp__github__add_issue_comment on that issue and append "
-        f"your agent repair analysis (classification table, repair list, gate gaps).\n"
-        f"3. Fallback only: if no auto-retro appears after CI has had time to run "
+        f"'{RETRO_TITLE_PREFIX}: review {pr_label} repair loops' (or similar) with "
+        f"the repair-history table pre-filled from check_runs + commit subjects. "
+        f"The triage-report dashboard "
+        f"(docs/generated/scripts/auto-retro-triage-report.md) is the review "
+        f"surface, so an appended comment is redundant noise.\n"
+        f"Fallback only: if no auto-retro appears after CI has had time to run "
         f"(post-merge.yml was skipped or failed), create a new retro issue — but "
         f"only after confirming no existing retro covers PR #{pr_number}.\n"
         f"Forbidden: opening a second retro issue when an auto-retro already exists "

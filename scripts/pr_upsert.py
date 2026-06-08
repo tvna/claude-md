@@ -32,8 +32,23 @@ from pathlib import Path
 from typing import Any
 
 from _github_api import apply_call as _github_apply_call
+from _github_api import graphql_call as _github_graphql_call
 
 _API_ROOT = "https://api.github.com"
+
+# Commits authored through this mutation are signed by GitHub and shown as
+# Verified, with the authenticated token's identity (the App bot) as author.
+# This is the only way to produce a verified commit for an App-bot author: a
+# GitHub App account cannot hold its own GPG/SSH signing key, so a local
+# ``git commit`` on the runner is always unsigned and rejected by the
+# ``required_signatures`` rule on ``main``. Refs #1437.
+_CREATE_COMMIT_ON_BRANCH_MUTATION = """
+mutation($input: CreateCommitOnBranchInput!) {
+  createCommitOnBranch(input: $input) {
+    commit { oid }
+  }
+}
+"""
 
 
 def _list_open_prs(
@@ -108,6 +123,142 @@ def _compare_behind(
     if not isinstance(behind, int):
         raise RuntimeError(f"Compare response missing behind_by: {body[:200]}")
     return behind
+
+
+def _get_pr(
+    *,
+    repo: str,
+    number: int,
+    token: str,
+    apply_call: Callable[..., tuple[int, str]] = _github_apply_call,
+) -> dict[str, Any]:
+    """Return the full PR object for *number* (includes ``mergeable``/``mergeable_state``)."""
+    url = f"{_API_ROOT}/repos/{repo}/pulls/{number}"
+    code, body = apply_call(method="GET", url=url, payload=None, token=token)
+    if not (200 <= code < 300):
+        raise RuntimeError(f"Get PR #{number} failed: HTTP {code}: {body[:200]}")
+    try:
+        data = json.loads(body)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"Unexpected response from get PR: {body[:200]}") from exc
+    if not isinstance(data, dict):
+        raise RuntimeError(f"Expected object from get PR, got: {body[:200]}")
+    return data
+
+
+def _get_ref_sha(
+    *,
+    repo: str,
+    ref: str,
+    token: str,
+    apply_call: Callable[..., tuple[int, str]] = _github_apply_call,
+) -> str:
+    """Return the commit sha that ``refs/{ref}`` points at (e.g. ``ref='heads/main'``)."""
+    url = f"{_API_ROOT}/repos/{repo}/git/ref/{ref}"
+    code, body = apply_call(method="GET", url=url, payload=None, token=token)
+    if not (200 <= code < 300):
+        raise RuntimeError(f"Get ref {ref} failed: HTTP {code}: {body[:200]}")
+    try:
+        data = json.loads(body)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"Unexpected response from get ref {ref}: {body[:200]}") from exc
+    sha = data.get("object", {}).get("sha") if isinstance(data, dict) else None
+    if not isinstance(sha, str) or not sha:
+        raise RuntimeError(f"Get ref {ref} response missing object.sha: {body[:200]}")
+    return sha
+
+
+def _create_branch_ref(
+    *,
+    repo: str,
+    branch: str,
+    sha: str,
+    token: str,
+    apply_call: Callable[..., tuple[int, str]] = _github_apply_call,
+) -> None:
+    """Create ``refs/heads/{branch}`` pointing at *sha*."""
+    url = f"{_API_ROOT}/repos/{repo}/git/refs"
+    payload = {"ref": f"refs/heads/{branch}", "sha": sha}
+    code, resp = apply_call(method="POST", url=url, payload=payload, token=token)
+    if not (200 <= code < 300):
+        raise RuntimeError(f"Create branch ref {branch} failed: HTTP {code}: {resp[:200]}")
+
+
+def _create_commit_on_branch(
+    *,
+    repo: str,
+    branch: str,
+    expected_head_oid: str,
+    headline: str,
+    body: str,
+    additions: list[dict[str, str]],
+    token: str,
+    graphql_call: Callable[..., tuple[int, dict[str, Any]]] = _github_graphql_call,
+) -> str:
+    """Create a signed commit on *branch* via GraphQL; return the new commit oid.
+
+    *additions* is a list of ``{"path", "contents"}`` where ``contents`` is the
+    base64-encoded file bytes. *expected_head_oid* must equal the current head of
+    *branch* or GitHub rejects the mutation (guarding against a racing write).
+    See ``_CREATE_COMMIT_ON_BRANCH_MUTATION`` for why this path is required for a
+    verified App-bot commit. Refs #1437.
+    """
+    message: dict[str, str] = {"headline": headline}
+    if body:
+        message["body"] = body
+    variables = {
+        "input": {
+            "branch": {"repositoryNameWithOwner": repo, "branchName": branch},
+            "message": message,
+            "expectedHeadOid": expected_head_oid,
+            "fileChanges": {"additions": additions},
+        }
+    }
+    code, response = graphql_call(query=_CREATE_COMMIT_ON_BRANCH_MUTATION, variables=variables, token=token)
+    if not (200 <= code < 300):
+        raise RuntimeError(f"createCommitOnBranch HTTP {code}")
+    if "errors" in response:
+        raise RuntimeError(f"createCommitOnBranch errors: {response['errors']}")
+    try:
+        oid = response["data"]["createCommitOnBranch"]["commit"]["oid"]
+    except (KeyError, TypeError) as exc:
+        raise RuntimeError(f"createCommitOnBranch: unexpected response: {str(response)[:200]}") from exc
+    if not isinstance(oid, str) or not oid:
+        raise RuntimeError(f"createCommitOnBranch: missing commit oid: {str(response)[:200]}")
+    return oid
+
+
+def _merge_pr(
+    *,
+    repo: str,
+    number: int,
+    sha: str,
+    merge_method: str,
+    token: str,
+    apply_call: Callable[..., tuple[int, str]] = _github_apply_call,
+) -> bool:
+    """Merge a PR via the REST merge API, pinning the head *sha*.
+
+    Returns ``True`` when the merge succeeded. Returns ``False`` for the two
+    expected "not mergeable right now" races, which the caller retries on the
+    next keeper trigger instead of failing the run:
+
+    - ``405 Method Not Allowed`` -- base-branch protection is not yet satisfied
+      (a required check still pending, the branch is behind, etc.).
+    - ``409 Conflict`` -- the provided *sha* no longer matches the PR head (a
+      newer commit landed); pinning the sha guarantees we never merge a stale
+      tree.
+
+    Any other non-2xx response is a real error and raises ``RuntimeError``.
+    """
+    url = f"{_API_ROOT}/repos/{repo}/pulls/{number}/merge"
+    payload = {"merge_method": merge_method, "sha": sha}
+    code, resp = apply_call(method="PUT", url=url, payload=payload, token=token)
+    if 200 <= code < 300:
+        return True
+    if code in (405, 409):
+        return False
+    raise RuntimeError(f"Merge PR #{number} failed: HTTP {code}: {resp[:200]}")
 
 
 def _close_pr(

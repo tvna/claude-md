@@ -1,7 +1,7 @@
 {
   "//": "GENERATED FILE -- do not edit. Source: .devcontainer/codex/devcontainer.json. Regenerate: python3 scripts/generate_devcontainer_arch_overlays.py generate. This overlay pins --platform=linux/amd64 for explicit cross-arch selection; see docs/runbooks/devcontainers.md.",
   "name": "claude-md Codex (linux/amd64)",
-  "image": "ghcr.io/tvna/claude-md-devcontainer-codex:26138daaac0bd872bd01a07e9b3d07a5fb3cda62",
+  "image": "ghcr.io/tvna/claude-md-devcontainer-codex:249a93a617d841cde47117bd447d01bbec931986",
   "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
   "initializeCommand": "bash .devcontainer/scripts/check-gh-config-permissions.sh ${HOME}/.config/gh && bash .devcontainer/scripts/ensure-agent-image.sh codex --platform linux/amd64",
   "remoteUser": "codex",
@@ -21,7 +21,7 @@
     "AGENT_CONTAINER": "codex"
   },
   "postCreateCommand": "bash .devcontainer/scripts/prepare-agent-workspace.sh codex && nix develop .#codex --command uv sync --locked --group local && bash .devcontainer/scripts/install-agent-cli.sh codex && bash .devcontainer/scripts/configure-agent-runtime.sh codex",
-  "postStartCommand": "if [ \"${DEVCONTAINER_APPLY_EGRESS_ALLOWLIST:-1}\" = \"1\" ]; then nix develop .#network --command bash .devcontainer/scripts/apply-egress-allowlist.sh .devcontainer/network/codex.allowlist; fi",
+  "postStartCommand": "if [ \"${DEVCONTAINER_APPLY_EGRESS_ALLOWLIST:-1}\" = \"1\" ]; then nix develop .#network --command bash .devcontainer/scripts/apply-egress-allowlist.sh .devcontainer/network/shared.allowlist; fi",
   "customizations": {
     "vscode": {
       "extensions": [

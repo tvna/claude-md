@@ -255,6 +255,14 @@ STEPS: tuple[Step, ...] = (
         argv=("python3", "scripts/scan_quality_standard_drift.py", "verify"),
     ),
     Step(
+        # Refs #1241/#1242/#1243 (and #1239, #178). Fails when a section 2/4
+        # safety enumeration in master.instructions.md drops its
+        # non-exhaustive marker, re-closing an open invariant into a finite
+        # list.
+        name="scan_nonexhaustive_invariant_drift",
+        argv=("python3", "scripts/scan_nonexhaustive_invariant_drift.py", "verify"),
+    ),
+    Step(
         # Refs #1088. Fails when a scripts/*.py lacks its matching test module
         # (M2), a new GitHub-API script is absent from the boundary registry
         # (O6), or a workflow-invoked script has no CLI contract test (M3).

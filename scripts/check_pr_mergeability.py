@@ -11,13 +11,15 @@ is non-null (GitHub computes mergeability asynchronously), then surfaces
 ``mergeable_state`` to the agent:
 
 - ``clean``   -> no action needed.
-- ``dirty``   -> instruct agent to rebase/merge immediately.
+- ``dirty``   -> replacement-branch recovery (conflict; force-push is blocked).
+- ``behind``  -> deterministic refresh via scripts/refresh_pr_branch.py
+  (no conflict; no force-push, no update_pull_request_branch). Refs #1361.
 - ``blocked`` / ``unknown`` -> advisory only.
 
 **SessionStart** (CLI: ``python3 scripts/check_pr_mergeability.py session-start``):
-Scans open PRs authored by the session user for ``mergeable_state: dirty``
-and emits a banner if any are found, so a resumed session catches stale
-branches immediately.
+Scans open PRs authored by the session user for ``mergeable_state`` of
+``dirty`` or ``behind`` and emits a banner if any are found, so a resumed
+session catches stale branches immediately.
 
 ## Failure mode
 
@@ -258,10 +260,18 @@ def decide_post_tool_use(
     if state == "dirty":
         return _build_context(
             f"MERGE CONFLICT DETECTED: {pr_label} has mergeable_state=dirty. "
-            "The branch has conflicts with the base branch. "
-            "Rebase or merge the base branch into your branch immediately before proceeding: "
-            "`git fetch origin && git rebase origin/<base>` (or `git merge origin/<base>`), "
-            "then force-push and re-run checks."
+            "The branch conflicts with the base branch. force-push is blocked by the "
+            "non_fast_forward ruleset and update_pull_request_branch is gated, so use "
+            "the replacement-branch path: docs/runbooks/update-pr-branch-recovery.md."
+        )
+
+    if state == "behind":
+        return _build_context(
+            f"OUT OF DATE: {pr_label} has mergeable_state=behind (no conflict). "
+            "Bring it up to date deterministically -- do NOT force-push or call "
+            "update_pull_request_branch (both are blocked): run "
+            "`python3 scripts/refresh_pr_branch.py --push` from the PR branch. "
+            "See docs/runbooks/refresh-behind-pr.md."
         )
 
     if state == "clean":
@@ -371,7 +381,10 @@ def run_session_start(
         lines = ["MERGE CONFLICT WARNING: the following open PRs have merge conflicts (mergeable_state=dirty):"]
         for url in dirty:
             lines.append(f"  - {url}")
-        lines.append("Rebase or merge the base branch into each branch before continuing work.")
+        lines.append(
+            "force-push is blocked and update_pull_request_branch is gated; resolve each "
+            "via the replacement-branch path: docs/runbooks/update-pr-branch-recovery.md."
+        )
         print("\n".join(lines))
 
     if behind:
@@ -379,9 +392,9 @@ def run_session_start(
         for url in behind:
             lines.append(f"  - {url}")
         lines.append(
-            "Update each branch before pushing new commits: "
-            "`git fetch origin && git rebase origin/<base>` (or `git merge origin/<base>`), "
-            "then force-push."
+            "Update each (no conflict) deterministically -- do NOT force-push: from the PR "
+            "branch run `python3 scripts/refresh_pr_branch.py --push`. "
+            "See docs/runbooks/refresh-behind-pr.md."
         )
         print("\n".join(lines))
 

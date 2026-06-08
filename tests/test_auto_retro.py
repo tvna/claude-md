@@ -2104,7 +2104,6 @@ class TestComputeRepairSignals:
             "inline_review_comments": True,
             "fix_typed_title": False,
             "multi_commit_pr": False,
-            "verification_pairs_failed": False,
         }
 
     def test_body_cites_refs_signal_is_retired(self) -> None:
@@ -2913,7 +2912,6 @@ class TestIssue592Corpus:
         "body_cites_refs": False,
         "fix_typed_title": False,
         "multi_commit_pr": False,
-        "verification_pairs_failed": False,
     }
 
     @staticmethod
@@ -2948,8 +2946,13 @@ class TestIssue592Corpus:
             (553, "G3", {}, ["docs: x"], ["all checks have passed"], "", False),
             (557, "G3", {}, ["ci: x", "Merge branch 'main' into f"], ["`OK: no direct pip install.` exit 0"], "", False),
             (561, "G3", {}, ["ci: x"], ["pytest 1828 passed in 203.91s"], "", False),
-            (567, "G4", {"verification_pairs_failed": True}, ["ci: x"], ["`not run; local uv 0.11.16 does not match repository required-version ==0.11.11`"], "", True),
-            (570, "G4", {"verification_pairs_failed": True}, ["feat: x"], ["`blocked: ModuleNotFoundError: No module named 'hypothesis'`"], "", True),
+            # G4 (#1236): verification-prose failures are now non-actionable
+            # policy-artifact anomaly hints, so a verification-only PR skips.
+            # The genuine local failures these encode would still open a retro
+            # when a CI failure / iteration commit co-fires; prose alone no
+            # longer does.
+            (567, "G4", {}, ["ci: x"], ["`not run; local uv 0.11.16 does not match repository required-version ==0.11.11`"], "", False),
+            (570, "G4", {}, ["feat: x"], ["`blocked: ModuleNotFoundError: No module named 'hypothesis'`"], "", False),
             (543, "G5", {"fix_typed_title": True}, ["fix(harness): remove gate"], ["`378 passed in 200.38s`"], "fix", False),
         ],
     )
@@ -2963,12 +2966,10 @@ class TestIssue592Corpus:
         pr_type: str,
         expected: bool,
     ) -> None:
-        merged_signals = dict(self._BASE_SIGNALS)
-        merged_signals.update(signals)
+        # `signals` is retained for corpus documentation of what fired on
+        # the historical retro; the live disposition is now derived purely
+        # from the rendered rows (verification_pairs_failed retired in #1236).
         pairs = [self._pair(result) for result in results]
-        assert merged_signals["verification_pairs_failed"] is any(
-            not pair.passed for pair in pairs
-        )
         rows = ar._repair_history_rows([], commits, len(commits), pairs, pr_type)
         standalone = bool(rows) and not ar._has_only_exempt_policy_artifact_rows(
             rows
@@ -2999,7 +3000,6 @@ class TestIssue927Corpus:
         "body_cites_refs": False,
         "fix_typed_title": False,
         "multi_commit_pr": False,
-        "verification_pairs_failed": False,
     }
 
     @staticmethod
@@ -3131,12 +3131,10 @@ class TestIssue927Corpus:
         pr_type: str,
         expected: bool,
     ) -> None:
-        merged_signals = dict(self._BASE_SIGNALS)
-        merged_signals.update(signals)
+        # `signals` is retained for corpus documentation of what fired on
+        # the historical retro; the live disposition is now derived purely
+        # from the rendered rows (verification_pairs_failed retired in #1236).
         pairs = [self._pair(result) for result in results]
-        assert merged_signals["verification_pairs_failed"] is any(
-            not pair.passed for pair in pairs
-        )
         rows = ar._repair_history_rows([], commits, len(commits), pairs, pr_type)
         standalone = bool(rows) and not ar._has_only_exempt_policy_artifact_rows(
             rows
@@ -3259,7 +3257,10 @@ class TestRepairHistoryFourColumnSchema:
         )
         assert ar._REPAIR_NEXT_ACTION_FILL in row_line
 
-    def test_verification_fail_row_carries_next_action_sentinel(self) -> None:
+    def test_verification_fail_row_is_exempt_policy_artifact(self) -> None:
+        # Refs #1236: prose Verification rows are non-actionable anomaly
+        # hints, marked policy-artifact with a dash next-action like the
+        # Revert / Multi-commit rows, so a verification-only PR skips.
         pairs = [
             ar.VerificationPair(command="pytest", result="1 failed", passed=False)
         ]
@@ -3271,7 +3272,9 @@ class TestRepairHistoryFourColumnSchema:
             for line in table.splitlines()
             if "Verification fail: pytest" in line
         )
-        assert ar._REPAIR_NEXT_ACTION_FILL in row_line
+        assert ar._POLICY_ARTIFACT_MARKER in row_line
+        cells = [c.strip() for c in row_line.strip()[1:-1].split("|")]
+        assert cells[3] == "--"
 
     def test_artifact_row_next_action_is_dash(self) -> None:
         # Multi-commit PR is a policy-artifact row.
@@ -4716,29 +4719,29 @@ class TestComputePriorFromLabels:
         assert prior["multi_commit_pr"] == (0.5, 2)
 
     def test_epoch_cutoff_excludes_pre_epoch_retros(self) -> None:
-        # Refs #1227: retros below the epoch boundary measured the old
+        # Refs #1227, #1236: retros below the epoch boundary measured the old
         # signal semantics and must not drive the prior. With the cutoff,
         # only the post-epoch retro contributes; the pre-epoch fp retro
         # is dropped, so the signal degrades to the empty-prior net.
         past = [
             ar.PastRetro(
                 number=900,
-                signals=frozenset({"verification_pairs_failed"}),
+                signals=frozenset({"multi_commit_pr"}),
                 labels=frozenset({rl.RETRO_FP}),
             ),
             ar.PastRetro(
                 number=1300,
-                signals=frozenset({"verification_pairs_failed"}),
+                signals=frozenset({"multi_commit_pr"}),
                 labels=frozenset({rl.RETRO_TP}),
             ),
         ]
         # Pure tally (default epoch) sees both -> 1 fp of 2.
         assert ar.compute_prior_from_labels(past)[
-            "verification_pairs_failed"
+            "multi_commit_pr"
         ] == (0.5, 2)
         # With the epoch boundary the pre-epoch fp retro is excluded.
         gated = ar.compute_prior_from_labels(past, epoch_min_number=1228)
-        assert gated["verification_pairs_failed"] == (0.0, 1)
+        assert gated["multi_commit_pr"] == (0.0, 1)
 
 
 class TestShouldSkipByPrior:
@@ -5000,6 +5003,32 @@ class TestFetchPastRetroLabels:
         assert past[1].signals == frozenset(
             {"inline_review_comments", "fix_typed_title"}
         )
+
+    def test_parses_state_and_title_with_defaults(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """state/title populate the #1386 dashboard; absent fields default."""
+        payload = {
+            "items": [
+                {
+                    "number": 100,
+                    "labels": [],
+                    "body": "",
+                    "state": "closed",
+                    "title": "chore(auto-retro): review PR #42 repair loops",
+                },
+                {"number": 101, "labels": [], "body": ""},
+            ]
+        }
+        monkeypatch.setattr(
+            ar, "gh_api", lambda *_a, **_kw: json.dumps(payload)
+        )
+        past = ar.fetch_past_retro_labels("o/r")
+        assert past[0].state == "closed"
+        assert past[0].title == "chore(auto-retro): review PR #42 repair loops"
+        # Missing fields fall back to the pre-#1386 defaults.
+        assert past[1].state == "open"
+        assert past[1].title == ""
 
     def test_limit_truncates_items(
         self, monkeypatch: pytest.MonkeyPatch

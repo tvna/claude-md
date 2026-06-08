@@ -51,6 +51,7 @@ import nixpkgs_cooldown
 import post_issue_comment
 import pr_upsert
 import preflight_uv_version
+import prune_devcontainer_images
 import pytest
 import ruleset_drift
 import rulesets_apply
@@ -69,6 +70,7 @@ import scan_input_contract_drift
 import scan_maintainability_metrics
 import scan_markdown_links
 import scan_non_ascii
+import scan_nonexhaustive_invariant_drift
 import scan_preflight_drift
 import scan_provisioning_hook_serial
 import scan_quality_standard_drift
@@ -161,6 +163,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("coverage_failure_issue.py", "run"): "test_coverage_failure_issue_run_matches_workflow_env",
     ("devcontainer_pin_pr.py", "open"): "test_devcontainer_pin_pr_open_matches_workflow_args",
     ("devcontainer_pin_pr.py", "refresh"): "test_devcontainer_pin_pr_refresh_matches_workflow_args",
+    ("devcontainer_pin_pr.py", "merge"): "test_devcontainer_pin_pr_merge_matches_workflow_args",
     ("flake_pin.py", "asset-url"): "test_flake_pin_workflow_subcommands_match_ci_usage",
     ("flake_pin.py", "bump"): "test_flake_pin_workflow_subcommands_match_ci_usage",
     ("flake_pin_latest.py", "check"): "test_flake_pin_latest_check_matches_workflow_args",
@@ -192,6 +195,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("scan_markdown_links.py", "verify"): "test_scan_markdown_links_verify_matches_workflow_args",
     ("scan_maintainability_metrics.py", "verify"): "test_scan_maintainability_metrics_verify_matches_workflow_args",
     ("scan_non_ascii.py", "run"): "test_scan_non_ascii_run_matches_workflow_env",
+    ("scan_nonexhaustive_invariant_drift.py", "verify"): "test_scan_nonexhaustive_invariant_drift_verify_matches_workflow_args",
     ("scan_hook_coverage_drift.py", "verify"): "test_scan_hook_coverage_drift_verify_matches_workflow_args",
     ("scan_input_contract_drift.py", "verify"): "test_scan_input_contract_drift_verify_matches_workflow_args",
     ("scan_preflight_drift.py", "verify"): "test_scan_preflight_drift_verify_matches_workflow_args",
@@ -231,6 +235,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("github_paginate.py", "fetch"): "test_github_paginate_fetch_matches_workflow_args",
     ("github_paginate.py", "get"): "test_github_paginate_get_matches_workflow_args",
     ("post_issue_comment.py", "create"): "test_post_issue_comment_create_matches_workflow_args",
+    ("prune_devcontainer_images.py", "prune"): "test_prune_devcontainer_images_prune_matches_workflow_args",
     ("pr_upsert.py", "upsert"): "test_pr_upsert_matches_workflow_args",
     ("verify_shard_coverage.py", None): "test_verify_shard_coverage_matches_workflow_args",
     ("verify_test_shard_markers.py", None): "test_verify_test_shard_markers_matches_workflow_args",
@@ -938,15 +943,15 @@ def test_coverage_failure_issue_run_matches_workflow_env(
     monkeypatch.setenv("WORKFLOW", "Post-merge automation")
     monkeypatch.setenv("COVERAGE_RESULT", "failure")
 
-    def fake_open_or_update(
+    def fake_post_failure_comment(
         context: coverage_failure_issue.CoverageFailureContext,
         *,
         runner=coverage_failure_issue.subprocess.run,
     ) -> str:
         calls.append(context)
-        return "created"
+        return "commented"
 
-    monkeypatch.setattr(coverage_failure_issue, "open_or_update_issue", fake_open_or_update)
+    monkeypatch.setattr(coverage_failure_issue, "post_failure_comment", fake_post_failure_comment)
 
     assert coverage_failure_issue.main(["run"]) == 0
     assert calls[0] == coverage_failure_issue.CoverageFailureContext(
@@ -1249,6 +1254,13 @@ def test_scan_quality_standard_drift_verify_matches_workflow_args() -> None:
     """Mirrors the ``Verify quality-standard enforcement map`` step in
     ``.github/workflows/verify-agents.yml``. Refs #1089."""
     assert scan_quality_standard_drift.main(["verify"]) == 0
+
+
+def test_scan_nonexhaustive_invariant_drift_verify_matches_workflow_args() -> None:
+    """Mirrors the ``Verify section 2/4 safety enumerations stay
+    non-exhaustive`` step in ``.github/workflows/verify-agents.yml``. Refs
+    #1241, #1242, #1243."""
+    assert scan_nonexhaustive_invariant_drift.main(["verify"]) == 0
 
 
 def test_scan_test_presence_drift_verify_matches_workflow_args() -> None:
@@ -1696,6 +1708,33 @@ def test_github_paginate_fetch_run_jobs_matches_workflow_args(
     assert (tmp_path / "jobs" / "42.json").exists()
 
 
+def test_prune_devcontainer_images_prune_matches_workflow_args(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """prune subcommand accepts the --owner/--package/--pinned-sha-from/--keep-recent/
+    --min-age-days/--dry-run/--summary-file args used by the ``Prune old devcontainer
+    image versions`` step in monthly-maintenance.yml. Refs #1400."""
+    monkeypatch.setenv("GH_TOKEN", "tok")
+    monkeypatch.setattr(prune_devcontainer_images, "_list_versions", lambda *a, **k: [])
+    monkeypatch.setattr(prune_devcontainer_images, "_delete_version", lambda *a, **k: (204, ""))
+    cfg = tmp_path / "devcontainer.json"
+    cfg.write_text(json.dumps({"image": "ghcr.io/tvna/x:" + "a" * 40}), encoding="utf-8")
+    summary = tmp_path / "summary.md"
+    rc = prune_devcontainer_images.main([
+        "prune",
+        "--owner", "owner",
+        "--package", "claude-md-devcontainer-claude",
+        "--package", "claude-md-devcontainer-codex",
+        "--pinned-sha-from", str(cfg),
+        "--pinned-sha-from", str(cfg),
+        "--keep-recent", "10",
+        "--min-age-days", "90",
+        "--dry-run", "true",
+        "--summary-file", str(summary),
+    ])
+    assert rc == 0
+
+
 def test_validate_json_syntax_verify_matches_workflow_args() -> None:
     """verify subcommand accepts the repeated --file args used by the
     ``Validate ruleset JSON syntax`` steps in apply-rulesets.yml and
@@ -1807,15 +1846,28 @@ def test_devcontainer_pin_pr_uses_environment_secret_token() -> None:
         "contents": "write",
         "pull-requests": "write",
     }
-    assert "DEVCONTAINER_PIN_PR_TOKEN" in raw
+    # The PR is authored by a GitHub App bot: the token is minted at runtime from
+    # the App ID + private key, fully replacing the old PAT. Refs #1401.
+    assert "DEVCONTAINER_PIN_APP_ID" in raw
+    assert "DEVCONTAINER_PIN_APP_PRIVATE_KEY" in raw
+    assert "DEVCONTAINER_PIN_PR_TOKEN" not in raw
+
+    app_token = next(step for step in update_pins["steps"] if step.get("id") == "app-token")
+    assert app_token["uses"].startswith("actions/create-github-app-token@")
+    assert app_token["with"] == {
+        "app-id": "${{ secrets.DEVCONTAINER_PIN_APP_ID }}",
+        "private-key": "${{ secrets.DEVCONTAINER_PIN_APP_PRIVATE_KEY }}",
+    }
 
     open_pr = next(
         step for step in update_pins["steps"] if step.get("name") == "Open pin update PR"
     )
-    # Thin orchestration: GH_TOKEN comes from the environment secret, REPO from
-    # the workflow context (both consumed by scripts/devcontainer_pin_pr.py).
+    # Thin orchestration: GH_TOKEN is the App installation token (so the PR
+    # author is the App bot and the API-created pin commit is signed under that
+    # same bot), REPO from the workflow context. Both consumed by
+    # scripts/devcontainer_pin_pr.py. Refs #1437.
     assert open_pr["env"] == {
-        "GH_TOKEN": "${{ secrets.DEVCONTAINER_PIN_PR_TOKEN }}",
+        "GH_TOKEN": "${{ steps.app-token.outputs.token }}",
         "REPO": "${{ github.repository }}",
     }
     assert "scripts/devcontainer_pin_pr.py open" in open_pr["run"]
@@ -1827,7 +1879,7 @@ def test_devcontainer_pin_pr_open_matches_workflow_args(
 ) -> None:
     """open subcommand accepts the args used by the Open pin update PR step.
 
-    The branch/PR decision flow and auto-merge request are exercised by
+    The branch/PR decision flow is exercised by
     tests/test_devcontainer_pin_pr.py; here we pin the workflow argv shape.
     Refs #696, #911.
     """
@@ -1835,7 +1887,8 @@ def test_devcontainer_pin_pr_open_matches_workflow_args(
     monkeypatch.setenv("REPO", REPO)
     template = tmp_path / "tmpl.md"
     template.write_text("Pinned to __GITHUB_SHA__.\n", encoding="utf-8")
-    # Branch absent -> create branch + upsert; mock git and the GitHub API helpers.
+    # Branch absent -> create branch + upsert; mock the git probes, the signed
+    # commit API path, and the PR upsert. Refs #1437.
     monkeypatch.setattr(
         devcontainer_pin_pr,
         "run_git",
@@ -1843,8 +1896,8 @@ def test_devcontainer_pin_pr_open_matches_workflow_args(
             ["git", *args], 1 if args[0] == "diff" else 2 if args[0] == "ls-remote" else 0
         ),
     )
+    monkeypatch.setattr(devcontainer_pin_pr, "_create_pin_branch", lambda **kw: None)
     monkeypatch.setattr(devcontainer_pin_pr, "_upsert_pr", lambda **kw: ("created", 42))
-    monkeypatch.setattr(devcontainer_pin_pr, "_enable_auto_merge", lambda **kw: None)
     rc = devcontainer_pin_pr.main([
         "open",
         "--github-sha", "abc123",
@@ -1889,28 +1942,134 @@ def test_devcontainer_pin_pr_refresh_matches_workflow_args(
     assert rc == 0
 
 
-def test_devcontainer_pin_refresh_persists_checkout_credentials() -> None:
-    """The refresh job's checkout must persist credentials for the branch push.
+def test_devcontainer_pin_automerge_workflow_contract() -> None:
+    """The pin auto-merge keeper triggers on workflow_run + schedule, prefix-gated, uses an App token.
 
-    Regression guard for #1301: the keeper's ``git push origin <fresh-branch>``
-    in ``scripts/devcontainer_pin_pr.py`` (``_create_pin_branch``) authenticates
-    with the GITHUB_TOKEN that ``actions/checkout`` persists by default. A
-    ``persist-credentials: false`` on that checkout strips the credential, so
-    every refresh of a behind pin PR failed with git exit 128. Assert the
-    checkout step does not disable credential persistence. Refs #1229, #1301, #1303.
+    The repository-level "Allow auto-merge" toggle is intentionally OFF, so the
+    pin PR is completed by this dedicated keeper instead of native auto-merge.
+    The earlier ``check_suite: completed`` trigger never fired -- GitHub
+    suppresses ``check_suite`` events for Actions-created suites to prevent
+    recursion -- so the keeper is driven by ``workflow_run`` on the workflows
+    that own the required status checks, plus a ``schedule`` safety net. Pin the
+    wiring that makes that safe and scoped: those triggers, an ``if`` guard that
+    restricts the job to the pin branch prefix, the GitHub App token (so the
+    merge's push to main still triggers downstream workflows), and the ``merge``
+    subcommand. Refs #1352, #1363, #1401.
+    """
+    workflow = yaml.safe_load((_WORKFLOWS_DIR / "devcontainer-pin-automerge.yml").read_text(encoding="utf-8"))
+    # ``on`` may parse to the truthy bool key True under YAML 1.1; tolerate both.
+    triggers = workflow.get("on", workflow.get(True))
+    # check_suite is suppressed for Actions-created suites, so it must be gone.
+    assert "check_suite" not in triggers
+    # workflow_run fires off the workflows that own the required status checks.
+    assert triggers["workflow_run"]["types"] == ["completed"]
+    assert triggers["workflow_run"]["workflows"] == ["Verify PR", "Verify repository scripts"]
+    # schedule is the safety net that converges a missed workflow_run event.
+    assert "schedule" in triggers
+    assert "workflow_dispatch" in triggers
+
+    job = workflow["jobs"]["merge"]
+    assert job["permissions"] == {"contents": "write", "pull-requests": "write"}
+    # Prefix guard keeps the job from running on every workflow_run completion.
+    assert "devcontainer/image-pins-" in job["if"]
+    assert "github.event.workflow_run.conclusion == 'success'" in job["if"]
+    assert "workflow_dispatch" in job["if"]
+    assert "schedule" in job["if"]
+
+    app_token = next(s for s in job["steps"] if s.get("id") == "app-token")
+    assert app_token["uses"].startswith("actions/create-github-app-token@")
+    assert app_token["with"] == {
+        "app-id": "${{ secrets.DEVCONTAINER_PIN_APP_ID }}",
+        "private-key": "${{ secrets.DEVCONTAINER_PIN_APP_PRIVATE_KEY }}",
+    }
+
+    # The merge step needs only the App token (it merges; it does not author a
+    # commit, so no PIN_BOT_APP_SLUG). Refs #1401.
+    merge_step = next(s for s in job["steps"] if "devcontainer_pin_pr.py merge" in str(s.get("run", "")))
+    assert merge_step["env"] == {
+        "GH_TOKEN": "${{ steps.app-token.outputs.token }}",
+        "REPO": "${{ github.repository }}",
+    }
+
+
+def test_devcontainer_pin_pr_merge_matches_workflow_args(monkeypatch: pytest.MonkeyPatch) -> None:
+    """merge subcommand accepts the args used by devcontainer-pin-automerge.yml.
+
+    The merge decision flow is exercised by tests/test_devcontainer_pin_pr.py;
+    here we pin the workflow argv shape. Refs #1352.
+    """
+    monkeypatch.setenv("GH_TOKEN", "tok")
+    monkeypatch.setenv("REPO", REPO)
+    # No open pin PR -> the command is a no-op; we only assert the argv parses.
+    monkeypatch.setattr(devcontainer_pin_pr, "_list_open_prs_by_prefix", lambda **kw: [])
+    rc = devcontainer_pin_pr.main(["merge"])
+    assert rc == 0
+
+
+def test_devcontainer_pin_refresh_persists_checkout_credentials() -> None:
+    """The refresh job's checkout must persist credentials for the remote probe.
+
+    Regression guard for #1301: ``scripts/devcontainer_pin_pr.py`` still runs
+    ``git ls-remote origin <fresh-branch>`` (the branch-existence check) which
+    authenticates with the GITHUB_TOKEN that ``actions/checkout`` persists by
+    default. The pin commit itself is now created via the GitHub API
+    (createCommitOnBranch), not ``git push``, so it is signed -- but a
+    ``persist-credentials: false`` on this checkout would still strip the
+    ls-remote credential. Assert the checkout step does not disable credential
+    persistence. Refs #1229, #1301, #1303, #1437.
     """
     workflow = yaml.safe_load(
         (_WORKFLOWS_DIR / "devcontainer-pin-refresh.yml").read_text(encoding="utf-8")
     )
     steps = workflow["jobs"]["refresh"]["steps"]
     checkout_steps = [s for s in steps if "actions/checkout" in str(s.get("uses", ""))]
-    assert checkout_steps, "refresh job must check out the repository before pushing"
+    assert checkout_steps, "refresh job must check out the repository before probing the remote"
     for step in checkout_steps:
         persist = step.get("with", {}).get("persist-credentials", True)
         assert persist is not False, (
             "devcontainer-pin-refresh checkout must persist credentials so the refresh "
-            "branch push authenticates (regression #1301); remove `persist-credentials: false`."
+            "ls-remote probe authenticates (regression #1301); remove `persist-credentials: false`."
         )
+
+
+def test_force_with_lease_push_fetches_branch_first() -> None:
+    """Bot-branch ``--force-with-lease`` pushes must fetch the branch first.
+
+    Regression guard for #1412: the auto-retro/regenerate jobs check out
+    ``main`` shallowly, recreate the bot branch from ``main``, then run
+    ``git push --force-with-lease origin "$PR_BRANCH"``. With no
+    ``refs/remotes/origin/$PR_BRANCH`` tracking ref (the shallow checkout
+    never fetched it), the lease cannot be verified and git rejects the
+    overwrite with ``stale info`` whenever the branch already exists. The
+    fix fetches the branch into its tracking ref before the push. Assert
+    every ``--force-with-lease`` push step fetches ``$PR_BRANCH`` earlier in
+    the same step so the repair stays a deterministic gate.
+    """
+    offenders: list[str] = []
+    for path in sorted(_WORKFLOWS_DIR.glob("*.yml")):
+        workflow = yaml.safe_load(path.read_text(encoding="utf-8"))
+        for job_name, job in (workflow.get("jobs") or {}).items():
+            for step in job.get("steps", []):
+                run = str(step.get("run", ""))
+                if 'git push --force-with-lease origin "$PR_BRANCH"' not in run:
+                    continue
+                lines = run.splitlines()
+                push_idx = next(
+                    i
+                    for i, line in enumerate(lines)
+                    if 'git push --force-with-lease origin "$PR_BRANCH"' in line
+                )
+                fetched_before = any(
+                    "git fetch origin" in line and "$PR_BRANCH" in line
+                    for line in lines[:push_idx]
+                )
+                if not fetched_before:
+                    offenders.append(f"{path.name}::{job_name}")
+    assert not offenders, (
+        "force-with-lease push must fetch $PR_BRANCH into its tracking ref first "
+        "or git rejects the overwrite with 'stale info' (#1412); missing fetch in: "
+        + ", ".join(offenders)
+    )
 
 
 def test_analyze_ci_timings_matches_workflow_args(

@@ -39,7 +39,7 @@ def _run(dir_arg: str, *, path: str, env_file: str | None) -> subprocess.Complet
         'printf "PATH=%s\\n" "$PATH"\n'
     )
     return subprocess.run(
-        ["bash", "-c", script],
+        ["/bin/bash", "-c", script],
         env=env,
         check=False,
         capture_output=True,

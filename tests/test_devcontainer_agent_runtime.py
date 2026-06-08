@@ -43,6 +43,8 @@ def test_runtime_script_installs_gh_and_container_scoped_defaults() -> None:
     agent_prompt = (REPO_ROOT / ".devcontainer/config/profile.d/claude-md-agent-prompt.sh").read_text(encoding="utf-8")
 
     assert "install_nix_binary gh-cli gh" in script
+    # The GitHub MCP server binary backs the Docker-less stdio launch path (#1063).
+    assert "install_nix_binary github-mcp-server github-mcp-server" in script
     assert '"Bash(*)"' in claude_settings
     assert '"mcp__github__*"' in claude_settings
     assert "/etc/profile.d/claude-md-agent-prompt.sh" in script
@@ -186,3 +188,25 @@ def test_runbook_documents_gh_bind_mount_security() -> None:
     assert "host-side" in runbook
     assert "gh auth status" in runbook
     assert "read-write" in runbook
+
+
+def test_prebuild_strips_nix_store_links_hardlink_farm() -> None:
+    # The published images are Trivy-scanned in publish-devcontainer-images.yml;
+    # its secret scanner walks /nix/store/.links (the store optimisation hardlink
+    # farm) as a duplicate path to every store file, producing redundant Code
+    # scanning alerts. The agent-user Feature deletes the farm at build time so
+    # the published image carries no .links. Refs #1348.
+    install = (REPO_ROOT / ".devcontainer/images/features/agent-user/install.sh").read_text(encoding="utf-8")
+    assert "rm -rf /nix/store/.links" in install
+
+
+def test_prebuild_runs_agent_user_feature_last() -> None:
+    # The .links removal above is only correct if the agent-user Feature is the
+    # last build-time step: it must run after the nix Feature populates the
+    # store, and `devcontainer build` runs no postCreateCommand afterwards. Guard
+    # that ordering invariant for both prebuild configs. Refs #1348.
+    for agent in AGENTS:
+        config = load_json(REPO_ROOT / ".devcontainer" / "images" / agent / "devcontainer.json")
+        order = config.get("overrideFeatureInstallOrder")
+        assert isinstance(order, list)
+        assert order[-1] == "../features/agent-user"

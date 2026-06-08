@@ -59,10 +59,10 @@ must never wedge the session -- the server-side post-merge retro
 from __future__ import annotations
 
 import argparse
-import contextlib
 import json
 import re
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -75,6 +75,9 @@ _MARKER_DIR = Path("/tmp/claude-pre-merge-retro-survey")  # noqa: S108
 _PULL_URL_RE = re.compile(r"/pull/(\d+)")
 _MIN_SATISFACTION = 2
 _MAX_SATISFACTION = 5
+# Lifecycle phase stamped into every survey marker (refs #1192) so a later
+# reader knows which moment the satisfaction score measures.
+_SURVEY_PHASE = "pre-merge-handoff"
 
 _BLOCK_REASON = (
     "GATE BLOCK: this session opened PR #{pr} and is handing it off for a "
@@ -84,7 +87,10 @@ _BLOCK_REASON = (
     "CONSECUTIVELY, plan-mode style: emit the branched follow-up "
     "AskUserQuestion immediately after the satisfaction answer with no "
     "intervening prose, so the survey reads as one continuous flow.\n"
-    "  1. Ask SATISFACTION first (single-select: 5 very satisfied / 4 "
+    "  1. Ask SATISFACTION first, anchored to an EXPLICIT timepoint: frame "
+    "the question as 'satisfaction with the work as of the pre-merge handoff "
+    "of PR #{pr} (state today's date)' so the score is unambiguous when the "
+    "marker is read back later (single-select: 5 very satisfied / 4 "
     "satisfied / 3 neutral / 2 somewhat dissatisfied).\n"
     "  2. Branch on that answer (emit the next question right away):\n"
     "     - high (4-5): ask whether any problem (rework / fix / surprise) "
@@ -172,8 +178,15 @@ def created_pr_numbers(entries: list[Any]) -> list[int]:
     """Return PR numbers this session created, oldest first, de-duplicated.
 
     A PR is "created" when an assistant ``tool_use`` of
-    ``create_pull_request`` has a matching ``tool_result`` whose body
-    carries a ``/pull/<n>`` URL.
+    ``create_pull_request`` has a matching ``tool_result`` that did NOT
+    error and whose body carries a ``/pull/<n>`` URL.
+
+    A failed ``create_pull_request`` call is marked ``is_error: true`` by
+    the harness regardless of its body, and a common failure -- "A pull
+    request already exists for owner:branch .../pull/<n>" -- carries a
+    ``/pull/<n>`` URL pointing at the *existing* PR. Counting that as a
+    creation would fire the handoff survey for a PR this session never
+    opened (#1374), so error results are skipped.
     """
     create_ids: set[str] = set()
     for entry in entries:
@@ -192,6 +205,8 @@ def created_pr_numbers(entries: list[Any]) -> list[int]:
             if block.get("type") != "tool_result":
                 continue
             if block.get("tool_use_id") not in create_ids:
+                continue
+            if block.get("is_error"):  # failed creation: not a real PR (#1374)
                 continue
             match = _PULL_URL_RE.search(_result_text(block))
             if not match:
@@ -251,9 +266,18 @@ def record(
     (the non-interactive fallback for when ``AskUserQuestion`` cannot be
     confirmed -- issue #1081), they are persisted as JSON in the marker body
     so a real signal is captured instead of an empty file.
+
+    Every marker also records *when* and *at what lifecycle phase* the score
+    was taken (refs #1192): ``recorded_at`` (ISO-8601 UTC) and ``phase``
+    (``pre-merge-handoff``). Without them a later reader cannot tell which
+    moment a satisfaction score measures.
     """
     _MARKER_DIR.mkdir(parents=True, exist_ok=True)
-    payload: dict[str, Any] = {"pr": pr_number}
+    payload: dict[str, Any] = {
+        "pr": pr_number,
+        "phase": _SURVEY_PHASE,
+        "recorded_at": datetime.now(UTC).isoformat(),
+    }
     if satisfaction is not None:
         payload["satisfaction"] = satisfaction
     if problem is not None:
@@ -304,8 +328,23 @@ def run_record(
                 file=sys.stderr,
             )
             return 0
-    with contextlib.suppress(OSError):
+    try:
         record(pr_number, satisfaction=satisfaction, problem=raw_problem)
+    except OSError as exc:
+        # Refs #1140: a swallowed marker-write failure used to exit 0 as if the
+        # survey were recorded, but with no marker the next Stop re-blocks and
+        # the survey double-fires for the same PR. Surface the failure loudly
+        # (CLAUDE.md section 4: never a silent default) and exit non-zero so the
+        # caller knows the handoff is NOT recorded and can fix the marker dir
+        # and retry, instead of looping on a phantom success.
+        print(
+            f"::error::{_SCRIPT_NAME}: failed to write survey marker for "
+            f"PR #{pr_number}: {exc}. The handoff survey is NOT recorded and "
+            "the Stop gate will re-block; fix the marker directory and rerun "
+            "--record.",
+            file=sys.stderr,
+        )
+        return 1
     return 0
 
 

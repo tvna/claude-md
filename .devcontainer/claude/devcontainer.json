@@ -1,6 +1,6 @@
 {
   "name": "claude-md Claude",
-  "image": "ghcr.io/tvna/claude-md-devcontainer-claude:26138daaac0bd872bd01a07e9b3d07a5fb3cda62",
+  "image": "ghcr.io/tvna/claude-md-devcontainer-claude:249a93a617d841cde47117bd447d01bbec931986",
   "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
   "initializeCommand": "bash .devcontainer/scripts/check-gh-config-permissions.sh ${HOME}/.config/gh && bash .devcontainer/scripts/ensure-agent-image.sh claude",
   "remoteUser": "claude",
@@ -18,7 +18,7 @@
     "AGENT_CONTAINER": "claude"
   },
   "postCreateCommand": "bash .devcontainer/scripts/prepare-agent-workspace.sh claude && nix develop .#claude --command uv sync --locked --group local && bash .devcontainer/scripts/install-agent-cli.sh claude && bash .devcontainer/scripts/configure-agent-runtime.sh claude",
-  "postStartCommand": "if [ \"${DEVCONTAINER_APPLY_EGRESS_ALLOWLIST:-1}\" = \"1\" ]; then nix develop .#network --command bash .devcontainer/scripts/apply-egress-allowlist.sh .devcontainer/network/claude.allowlist; fi",
+  "postStartCommand": "if [ \"${DEVCONTAINER_APPLY_EGRESS_ALLOWLIST:-1}\" = \"1\" ]; then nix develop .#network --command bash .devcontainer/scripts/apply-egress-allowlist.sh .devcontainer/network/shared.allowlist; fi",
   "customizations": {
     "vscode": {
       "extensions": [

@@ -32,7 +32,7 @@ flowchart TD
     B -- "recorded" --> Z["Allow stop (gate passes)"]
     B -- "not recorded" --> D["block -> launch AskUserQuestion<br/>(present consecutively, no prose between)"]
 
-    D --> Q1["Q1 SATISFACTION first, single-select<br/>5 very / 4 satisfied / 3 neutral / 2 dissatisfied"]
+    D --> Q1["Q1 SATISFACTION first, anchored to the pre-merge handoff of PR #N (today)<br/>single-select: 5 very / 4 satisfied / 3 neutral / 2 dissatisfied"]
     Q1 --> SW{"branch on satisfaction"}
 
     SW -- "high (4-5)" --> Q2a["Q2a any problem?<br/>rework / fix / surprise"]
@@ -109,6 +109,33 @@ python3 scripts/gate_handoff_retro_survey_askuserquestion.py \
 loudly with no marker written, so the handoff is never marked done on bad data.
 `--problem` is free text. A bare `--record` stays valid because the gate only
 checks marker existence. The answers are persisted as JSON in the marker body.
+
+Every marker also stamps the lifecycle moment the score measures (refs #1192),
+so a satisfaction value is never ambiguous when read back later:
+
+```json
+{
+  "pr": 1234,
+  "phase": "pre-merge-handoff",
+  "recorded_at": "2026-06-08T12:34:56+00:00",
+  "satisfaction": 5,
+  "problem": "none"
+}
+```
+
+If the marker write itself fails (for example an unwritable marker directory),
+`--record` now exits non-zero and prints the failure instead of swallowing it
+(refs #1140): a silent failure would leave no marker and re-fire the survey for
+the same PR on the next Stop.
+
+## Only successfully created PRs count (#1374)
+
+A PR counts as "created" only when the `create_pull_request` tool_result did not
+error. A failed creation is marked `is_error: true` by the harness, and a common
+failure ("A pull request already exists for owner:branch .../pull/<n>") still
+carries a `/pull/<n>` URL pointing at the *existing* PR. The gate skips
+`is_error` results so the handoff survey is not fired for a PR this session never
+opened.
 
 ## Failure modes
 

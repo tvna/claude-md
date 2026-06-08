@@ -163,15 +163,18 @@ unavoidable, place the work under a `docs`, `test`, `perf`, or
 
 ## PR body sections
 
-`.github/PULL_REQUEST_TEMPLATE.md` defines the required PR body shape.
-The required H2 sections, in order, are:
+`.github/PULL_REQUEST_TEMPLATE.md` defines the PR body shape. The H2
+headings form an allowlist enforced by `scripts/body_policy.py`
+(`unexpected_pr_sections`, mirrored client-side by
+`scripts/preflight_pr_template_shape.py`): only the headings listed below
+may appear, and a PR body carrying any other H2 is rejected. The body is
+conclusion-first (BLUF) -- `## Summary` leads, and `## Related Issue` is
+kept last, just before the agent-attribution footer, per GitHub
+convention. The headings, in order, are:
 
-- `## Summary` - one or two sentences that name what the PR changes and
-  why. Mirrors the linked issue's `Scope` and `Why`.
-- `## Related Issue` - a single `Refs #<number>` (or `Closes #<number>`,
-  etc.) line. Per CLAUDE.md section 3, every PR must cite its issue.
-  The keywords `Refs`, `Closes`, `Fixes`, and `Resolves` are accepted
-  (case-insensitive).
+- `## Summary` - the conclusion in one or two sentences: what the PR
+  changes, whether verification passed, and the risk level. Lead with the
+  outcome, not the journey. Required.
 - `## Facts` - observable evidence (diffs, command output, test names,
   log lines) per CLAUDE.md section 2. No speculation.
 - `## Assumptions` - what the author is trusting but has not verified.
@@ -228,6 +231,22 @@ The required H2 sections, in order, are:
   - `### Post-merge (auto-retro signal)` - read by
     `scripts/auto_retro.py`. Unchecked items become repair-history
     rows in the auto-opened retrospective issue.
+- `## Resource Consumption` - the session resource cost of producing the
+  PR: elapsed time from session start (the `CCR_SPAWN_TIMESTAMP_MS`
+  container-spawn epoch) to PR creation, the total tokens, the
+  input / output / cache-create / cache-read breakdown, the USD cost, and
+  the model(s) used. Generated deterministically by
+  `scripts/session_resource_report.py`, which reads the current Claude Code
+  session id and `ccusage session --json --id <id>`; it degrades to an
+  `unavailable (no session data)` body when no session data exists (for
+  example a human-authored PR with no ccusage session, or ccusage absent).
+  Required on every PR; trusted-bot authors (dependabot) are skipped by
+  `scripts/body_policy.py`, so their PRs need not carry it. Refs #1413.
+- `## Related Issue` - a single `Refs #<number>` (or `Closes #<number>`,
+  etc.) line, kept last per GitHub convention so the conclusion stays at
+  the top. Per CLAUDE.md section 3, every PR must cite its issue; this
+  heading is required. The keywords `Refs`, `Closes`, `Fixes`, and
+  `Resolves` are accepted (case-insensitive).
 
 The HTML comment at the top of `PULL_REQUEST_TEMPLATE.md` is rendered
 out of the final PR body and does not need to be preserved.
@@ -236,7 +255,7 @@ out of the final PR body and does not need to be preserved.
 
 | Body section | CLAUDE.md anchor | What it enforces |
 |---|---|---|
-| `Scope` (issue), `Summary` (PR) | section 1 | The goal is named before any work begins. |
+| `Scope` (issue), `Summary` (PR) | section 1 | The goal is named before any work begins; on a PR the `Summary` leads as the conclusion-first (BLUF) block. |
 | `Facts` with `Fact:` / `Speculation:` tags | section 2 | Facts and speculation are visibly separated; reviewers know which lines need pushback. |
 | `Proposed work` (issue), `Changes` (PR) | section 5 | The change touches only what it must; adjacent cleanups are not bundled in. |
 | `Verification` / `Acceptance criteria` (issue), `Verification` (PR) | section 1, section 4 | Completion has an observable check; the blast radius of an unverified merge is bounded. |
@@ -249,16 +268,46 @@ See [`docs/archive/issue-pr-body-examples.md`](../archive/issue-pr-body-examples
 
 ## Body-policy gate
 
-Two layers of the body-shape contract are enforced today.
+Several layers of the body-shape contract are enforced today.
 
 ### Enforced today: H2 section presence (baseline gate)
 
 `.github/workflows/verify-pr.yml` (job: `Validate body section structure`) shells out to
 `scripts/body_policy.py verify` and checks that every required H2 (or
 H3 for Issue Forms) heading from the lists above is present in the
-body. Bodies whose `created_at` predates `BODY_POLICY_CUTOFF`
-(currently `2026-05-26T00:00:00Z`) skip this check so the back-catalog
-stays exempt.
+body. For pull requests the required set (`_PR_REQUIRED`) includes
+`## Summary` (the conclusion-first BLUF block) and `## Related Issue`
+(consistent with the CLAUDE.md section 3 / `issue_link.py` requirement
+that every PR cite its issue). Bodies whose `created_at` predates
+`BODY_POLICY_CUTOFF` (currently `2026-05-26T00:00:00Z`) skip this check
+so the back-catalog stays exempt.
+
+### Enforced today: PR H2 allowlist
+
+For pull requests the baseline gate also rejects any H2 heading outside
+the allowlist `_PR_ALLOWED` (the `_PR_REQUIRED` set plus the conditional
+`## Text delta`). `scripts/body_policy.py:unexpected_pr_sections`
+enumerates the offending headings and `verify_pr_allowed_sections`
+renders the deny message; the same function backs both the server gate
+(`_verify`) and the client hook
+(`scripts/preflight_pr_template_shape.py`), so an unlisted section such
+as `## Notes` is blocked before the MCP call and again in CI. H3
+subsections (the Checklist's `### Bootstrap` / `### After-merge` /
+`### Post-merge`) are part of their parent section and are not
+allowlisted as standalone H2s. The check runs only for in-window bodies
+(the `created_at < cutoff` skip exempts the back-catalog). Refs #1396.
+
+### Enforced today: standard-doc / constant sync gate
+
+`tests/test_body_policy_standard_doc.py` parses the `## <Name>` headings
+listed in the "Issue body sections" and "PR body sections" sections of
+this document and asserts they match the `scripts/body_policy.py`
+constants in either direction: the PR list equals `_PR_ALLOWED`, the
+issue list equals `_ISSUE_COMMON_REQUIRED` plus the optional
+`_ISSUE_OPTIONAL` (`Parent`), and every `_ISSUE_TRACKING_REQUIRED` name
+is documented somewhere in this runbook. A change to either the prose or
+the constants that is not mirrored in the other fails the test, so the
+runbook cannot silently drift from the validator. Refs #1191, #1396.
 
 ### Enforced today: PR shape gate (post-2026-05-26)
 
@@ -309,13 +358,29 @@ would become a duplicate that fails the server gate and forces a manual
 `scripts/preflight_pr_template_shape.py` therefore requires the
 `create_pull_request` body to carry **no** footer and denies one that
 does; the harness then supplies the single footer. The exception is
-deliberately create-only: `update_pull_request` is not auto-appended
-(that is how the single-footer repair works), so it keeps requiring
-exactly one trailing footer. Local Claude CLI and CI leave
-`CLAUDE_CODE_REMOTE` unset and are unaffected -- they keep requiring a
-trailing footer. The server-side `verify_pr_agent_attribution_footer`
+deliberately create-only: `update_pull_request` is not auto-appended, so
+it keeps requiring exactly one trailing footer. Local Claude CLI and CI
+leave `CLAUDE_CODE_REMOTE` unset and are unaffected -- they keep requiring
+a trailing footer. The server-side `verify_pr_agent_attribution_footer`
 gate is unchanged, so a genuine duplicate (two footers) still fails.
 Refs #1025.
+
+That create-only relaxation used to force a manual footer repair on the
+very next call: the create-path PostToolUse fixer
+(`scripts/post_pr_create_body_fix.py`) always asks the agent to resend a
+normalized body via `update_pull_request`, and under the harness that
+normalized body (built from the footerless authored body) lacked the
+footer the update gate requires. The fixer now lifts the
+harness-appended footer out of the stored body and re-appends it to the
+normalized body it hands back, so the mandated update already carries
+exactly one footer -- the create-vs-update asymmetry is bridged
+harness-enforced, not agent-remembered, without relaxing the update gate
+and without relying on PreToolUse `updatedInput` (unreliable under the
+multiple-hook PR matcher; see
+[`docs/runbooks/rtk-hook-verification.md`](../runbooks/rtk-hook-verification.md)).
+A *standalone* `update_pull_request` (one not driven by that fixer) still
+requires the footer, and the `preflight_pr_template_shape.py` deny reason
+names the asymmetry so it is a single self-correcting step. Refs #1427.
 
 ### Enforced today: Refs check
 
@@ -458,6 +523,27 @@ re-evaluated.
 Commit naming convention (titles only - it does not read the body). It is
 not part of the body-policy gate, but contributors who hit a body-policy
 failure often also need to fix their title at the same time.
+
+### Commit message ASCII coverage
+
+Commit messages on `main` are ASCII by construction, not by a dedicated
+commit-message gate. The coverage mirrors the `#N` link table above:
+
+| Surface | ASCII status | Mechanism |
+|---|---|---|
+| Squash commit subject | Transitively covered. | The squash subject is `<PR title> (#<PR-number>)`. `title_policy.is_ascii_title` already denies a non-ASCII PR title in the `Validate title policy` job, so the subject cannot carry non-ASCII. |
+| Squash commit body | Covered with one residual gap. | The squash body is composed from the PR body, which passes the non-ASCII defense (`scripts/preflight_non_ascii.py` client-side preflight + `scripts/scan_non_ascii.py` server-side). That defense permits non-ASCII only behind the explicit `<!-- non-ascii-ack -->` opt-out, so an acked PR body could in principle carry non-ASCII into the squash commit body. |
+
+No separate commit-message ASCII gate is added. The subject is already
+covered; the residual body gap is low-probability (zero non-ASCII subjects
+and zero non-ASCII bodies across the last 300 `main` commits at the time of
+writing, per the [#18](https://github.com/tvna/claude-md/issues/18)
+analysis); and the squash body is editable in the merge UI, so it cannot be
+gated deterministically before merge. If a non-ASCII commit body is ever
+observed on `main`, the durable fix is a post-merge detect-and-alert on
+`main` (mirroring `ruleset-drift.yml`), not a pre-commit hook that the
+merge step can bypass. As with the link table, this reasoning assumes
+squash-merge-only on `main`; if that default is loosened, re-evaluate.
 
 ## Trusted-bot bypass
 

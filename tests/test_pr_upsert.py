@@ -453,3 +453,240 @@ class TestCloseDeleteComment:
         apply_call = _make_apply_call(403, {"message": "no"})
         with pytest.raises(RuntimeError, match="403"):
             pu._comment_pr(repo="owner/repo", number=9, body="x", token="tok", apply_call=apply_call)
+
+
+# ---------------------------------------------------------------------------
+# _get_pr()
+# ---------------------------------------------------------------------------
+
+
+class TestGetPr:
+    def test_returns_pr_object(self) -> None:
+        apply_call = _make_apply_call(200, {"number": 5, "mergeable_state": "clean"})
+        pr = pu._get_pr(repo="owner/repo", number=5, token="tok", apply_call=apply_call)
+        assert pr["mergeable_state"] == "clean"
+
+    def test_includes_pr_number_in_url(self) -> None:
+        captured: list[str] = []
+
+        def apply_call(*, method: str, url: str, payload: object, token: str) -> tuple[int, str]:
+            captured.append(url)
+            return 200, json.dumps({"number": 9})
+
+        pu._get_pr(repo="owner/repo", number=9, token="tok", apply_call=apply_call)
+        assert captured[0].endswith("/pulls/9")
+
+    def test_http_error_raises(self) -> None:
+        apply_call = _make_apply_call(404, {"message": "nope"})
+        with pytest.raises(RuntimeError, match="404"):
+            pu._get_pr(repo="owner/repo", number=5, token="tok", apply_call=apply_call)
+
+    def test_non_object_raises(self) -> None:
+        apply_call = _make_apply_call(200, [1, 2])
+        with pytest.raises(RuntimeError):
+            pu._get_pr(repo="owner/repo", number=5, token="tok", apply_call=apply_call)
+
+
+# ---------------------------------------------------------------------------
+# _merge_pr()
+# ---------------------------------------------------------------------------
+
+
+class TestMergePr:
+    def test_success_returns_true_and_pins_sha(self) -> None:
+        captured: dict[str, Any] = {}
+
+        def apply_call(*, method: str, url: str, payload: object, token: str) -> tuple[int, str]:
+            captured.update(method=method, url=url, payload=payload)
+            return 200, json.dumps({"merged": True})
+
+        ok = pu._merge_pr(
+            repo="owner/repo", number=7, sha="abc", merge_method="squash", token="tok", apply_call=apply_call
+        )
+        assert ok is True
+        assert captured["method"] == "PUT"
+        assert captured["url"].endswith("/pulls/7/merge")
+        assert captured["payload"] == {"merge_method": "squash", "sha": "abc"}
+
+    def test_405_not_mergeable_returns_false(self) -> None:
+        apply_call = _make_apply_call(405, {"message": "not mergeable"})
+        ok = pu._merge_pr(
+            repo="owner/repo", number=7, sha="a", merge_method="squash", token="tok", apply_call=apply_call
+        )
+        assert ok is False
+
+    def test_409_sha_mismatch_returns_false(self) -> None:
+        apply_call = _make_apply_call(409, {"message": "head changed"})
+        ok = pu._merge_pr(
+            repo="owner/repo", number=7, sha="a", merge_method="squash", token="tok", apply_call=apply_call
+        )
+        assert ok is False
+
+    def test_other_error_raises(self) -> None:
+        apply_call = _make_apply_call(500, {"message": "boom"})
+        with pytest.raises(RuntimeError, match="500"):
+            pu._merge_pr(
+                repo="owner/repo", number=7, sha="a", merge_method="squash", token="tok", apply_call=apply_call
+            )
+
+
+# ---------------------------------------------------------------------------
+# _get_ref_sha()
+# ---------------------------------------------------------------------------
+
+
+class TestGetRefSha:
+    def test_returns_object_sha(self) -> None:
+        apply_call = _make_apply_call(200, {"object": {"sha": "deadbeef"}})
+        sha = pu._get_ref_sha(repo="owner/repo", ref="heads/main", token="tok", apply_call=apply_call)
+        assert sha == "deadbeef"
+
+    def test_requests_single_ref_endpoint(self) -> None:
+        captured: list[str] = []
+
+        def apply_call(*, method: str, url: str, payload: object, token: str) -> tuple[int, str]:
+            captured.append(url)
+            return 200, json.dumps({"object": {"sha": "s"}})
+
+        pu._get_ref_sha(repo="o/r", ref="heads/main", token="tok", apply_call=apply_call)
+        assert captured[0].endswith("/repos/o/r/git/ref/heads/main")
+
+    def test_http_error_raises(self) -> None:
+        apply_call = _make_apply_call(404, {"message": "not found"})
+        with pytest.raises(RuntimeError, match="404"):
+            pu._get_ref_sha(repo="owner/repo", ref="heads/main", token="tok", apply_call=apply_call)
+
+    def test_missing_sha_raises(self) -> None:
+        apply_call = _make_apply_call(200, {"object": {}})
+        with pytest.raises(RuntimeError, match="missing object.sha"):
+            pu._get_ref_sha(repo="owner/repo", ref="heads/main", token="tok", apply_call=apply_call)
+
+
+# ---------------------------------------------------------------------------
+# _create_branch_ref()
+# ---------------------------------------------------------------------------
+
+
+class TestCreateBranchRef:
+    def test_posts_fully_qualified_ref(self) -> None:
+        captured: dict[str, Any] = {}
+
+        def apply_call(*, method: str, url: str, payload: Any, token: str) -> tuple[int, str]:
+            captured["method"] = method
+            captured["url"] = url
+            captured["payload"] = payload
+            return 201, "{}"
+
+        pu._create_branch_ref(repo="o/r", branch="feat/x", sha="abc", token="tok", apply_call=apply_call)
+        assert captured["method"] == "POST"
+        assert captured["url"].endswith("/repos/o/r/git/refs")
+        assert captured["payload"] == {"ref": "refs/heads/feat/x", "sha": "abc"}
+
+    def test_http_error_raises(self) -> None:
+        apply_call = _make_apply_call(422, {"message": "Reference already exists"})
+        with pytest.raises(RuntimeError, match="422"):
+            pu._create_branch_ref(repo="o/r", branch="feat/x", sha="abc", token="tok", apply_call=apply_call)
+
+
+# ---------------------------------------------------------------------------
+# _create_commit_on_branch()
+# ---------------------------------------------------------------------------
+
+
+def _make_graphql_call(
+    status: int, response: dict[str, Any]
+) -> Callable[..., tuple[int, dict[str, Any]]]:
+    def graphql_call(*, query: str, variables: dict[str, Any], token: str) -> tuple[int, dict[str, Any]]:
+        return status, response
+
+    return graphql_call
+
+
+class TestCreateCommitOnBranch:
+    def test_returns_commit_oid(self) -> None:
+        graphql_call = _make_graphql_call(200, {"data": {"createCommitOnBranch": {"commit": {"oid": "c0ffee"}}}})
+        oid = pu._create_commit_on_branch(
+            repo="o/r",
+            branch="feat/x",
+            expected_head_oid="base",
+            headline="subj",
+            body="Refs #1",
+            additions=[{"path": "a.txt", "contents": "Zm9v"}],
+            token="tok",
+            graphql_call=graphql_call,
+        )
+        assert oid == "c0ffee"
+
+    def test_builds_expected_input_variables(self) -> None:
+        captured: dict[str, Any] = {}
+
+        def graphql_call(*, query: str, variables: dict[str, Any], token: str) -> tuple[int, dict[str, Any]]:
+            captured.update(variables)
+            return 200, {"data": {"createCommitOnBranch": {"commit": {"oid": "x"}}}}
+
+        pu._create_commit_on_branch(
+            repo="o/r",
+            branch="feat/x",
+            expected_head_oid="base-sha",
+            headline="subj",
+            body="Refs #1",
+            additions=[{"path": "a.txt", "contents": "Zm9v"}],
+            token="tok",
+            graphql_call=graphql_call,
+        )
+        inp = captured["input"]
+        assert inp["branch"] == {"repositoryNameWithOwner": "o/r", "branchName": "feat/x"}
+        assert inp["expectedHeadOid"] == "base-sha"
+        assert inp["message"] == {"headline": "subj", "body": "Refs #1"}
+        assert inp["fileChanges"] == {"additions": [{"path": "a.txt", "contents": "Zm9v"}]}
+
+    def test_omits_empty_message_body(self) -> None:
+        captured: dict[str, Any] = {}
+
+        def graphql_call(*, query: str, variables: dict[str, Any], token: str) -> tuple[int, dict[str, Any]]:
+            captured.update(variables)
+            return 200, {"data": {"createCommitOnBranch": {"commit": {"oid": "x"}}}}
+
+        pu._create_commit_on_branch(
+            repo="o/r",
+            branch="b",
+            expected_head_oid="s",
+            headline="subj",
+            body="",
+            additions=[],
+            token="tok",
+            graphql_call=graphql_call,
+        )
+        assert captured["input"]["message"] == {"headline": "subj"}
+
+    def test_http_error_raises(self) -> None:
+        graphql_call = _make_graphql_call(500, {})
+        with pytest.raises(RuntimeError, match="createCommitOnBranch HTTP 500"):
+            pu._create_commit_on_branch(
+                repo="o/r", branch="b", expected_head_oid="s", headline="h", body="", additions=[],
+                token="tok", graphql_call=graphql_call,
+            )
+
+    def test_graphql_errors_raise(self) -> None:
+        graphql_call = _make_graphql_call(200, {"errors": [{"message": "stale expectedHeadOid"}]})
+        with pytest.raises(RuntimeError, match="createCommitOnBranch errors"):
+            pu._create_commit_on_branch(
+                repo="o/r", branch="b", expected_head_oid="s", headline="h", body="", additions=[],
+                token="tok", graphql_call=graphql_call,
+            )
+
+    def test_empty_oid_raises(self) -> None:
+        graphql_call = _make_graphql_call(200, {"data": {"createCommitOnBranch": {"commit": {"oid": ""}}}})
+        with pytest.raises(RuntimeError, match="missing commit oid"):
+            pu._create_commit_on_branch(
+                repo="o/r", branch="b", expected_head_oid="s", headline="h", body="", additions=[],
+                token="tok", graphql_call=graphql_call,
+            )
+
+    def test_malformed_response_raises(self) -> None:
+        graphql_call = _make_graphql_call(200, {"data": {"createCommitOnBranch": {"commit": {}}}})
+        with pytest.raises(RuntimeError, match="unexpected response"):
+            pu._create_commit_on_branch(
+                repo="o/r", branch="b", expected_head_oid="s", headline="h", body="", additions=[],
+                token="tok", graphql_call=graphql_call,
+            )

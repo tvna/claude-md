@@ -53,6 +53,14 @@
         "hooks": [
           {
             "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && scripts/install-ccusage.sh"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
             "command": "cd \"$(git rev-parse --show-toplevel)\" && scripts/session_uv_local_pin.sh"
           }
         ]
@@ -166,6 +174,15 @@
         ]
       },
       {
+        "matcher": "mcp__github__issue_write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/gate_reserved_retro_scope.py"
+          }
+        ]
+      },
+      {
         "matcher": "mcp__github__update_pull_request_branch",
         "hooks": [
           {
@@ -189,6 +206,15 @@
           {
             "type": "command",
             "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/block_sensitive_reads.py"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/gate_irreversible_bash.py"
           }
         ]
       },
@@ -363,6 +389,15 @@
         "hooks": [
           {
             "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/session_resource_report.py checkpoint"
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__github__create_pull_request",
+        "hooks": [
+          {
+            "type": "command",
             "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/post_pr_create_ci_monitor.py"
           },
           {
@@ -396,6 +431,10 @@
       {
         "matcher": "mcp__codex_apps__github\\._create_pull_request",
         "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/session_resource_report.py checkpoint"
+          },
           {
             "type": "command",
             "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/post_pr_create_ci_monitor.py"

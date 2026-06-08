@@ -39,6 +39,8 @@ An earlier draft of this runbook ([#107](https://github.com/tvna/claude-md/pull/
 
 The carve-out for `.claude/settings.json` pulls the hook surface back under PR review. See `docs/standards/repo-scope.md` § "Security tradeoff for `.claude/settings.json`" for the recorded risk-acceptance.
 
+This git-external boundary is not limited to the setup-script field. Per the official docs (https://code.claude.com/docs/en/claude-code-on-the-web § "Network access"), the **network access policy** — the access level (`None` / `Trusted` / `Custom`) and any custom allowed domains — is likewise part of the environment configuration set in the Cloud environment UI at environment create/edit time, and is not stored in git. The `.claude/settings.json` carve-out only pulls the *SessionStart hook* back under PR review; the network policy remains Web-UI-managed (git-external) by design. So when reasoning about what is and is not under change control, treat network access policy the same as the setup-script field — it lives in the Web UI, not the repo.
+
 ## Codex boundary
 
 Codex consumes this repository's universal instruction surface through `AGENTS.md`. Issue [#604](https://github.com/tvna/claude-md/issues/604) establishes the narrow `.codex/hooks.json` carve-out for repository-owned deterministic hooks, and [#606](https://github.com/tvna/claude-md/issues/606) lands the first implementation slice.
@@ -128,6 +130,7 @@ Upstream-follow: Dependabot (`.github/dependabot.yml`) does not natively bump `[
 
 - **Outbound network policy.** The hook fetches from `github.com/astral-sh/uv/releases`. If the environment's network policy denies that, the hook fails at session start. Confirm policy before first use; see https://code.claude.com/docs/en/claude-code-on-the-web for policy options.
 - **Hook execution mode is synchronous.** The session does not become interactive until `uv sync --locked` completes (typically <10 s on a warm container, longer on a fresh one). This is intentional — it guarantees the first command sees the pinned `uv` and the locked venv. If startup latency becomes a problem, the script can switch to the async pattern (`{"async": true, "asyncTimeout": 300000}`) at the cost of a race window where early commands may see stale `uv`.
+- **The pin read must not go through `uv run`.** `scripts/install-uv.sh` reads `[tool.uv].required-version` with a bare `python3` / inline `tomllib` call (`python3 scripts/uv_pin.py read`, before the pinned binary is installed and on `PATH`); the [Verification](#verification) recipe and `scripts/session_uv_local_pin.sh` follow the same pattern. Do not redirect that read through `uv run python`. It would be circular: the stock container `uv` (`0.8.17`) does not satisfy the pin, and `uv run` aborts on a `required-version` mismatch (the failure mode this hook repairs — see [`docs/runbooks/host-uv-pin.md`](../runbooks/host-uv-pin.md)), so the read would fail at the exact moment it is meant to fix the drift. A bare-`python3` read also avoids `uv run`'s implicit project sync (venv creation, dependency install, index network access) for a step that only needs one TOML value. `uv` may run project code only *after* step 4 puts the pinned binary on `PATH`.
 
 ## References
 
