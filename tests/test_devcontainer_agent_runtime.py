@@ -125,6 +125,34 @@ def test_codex_runtime_installs_bubblewrap_for_sandbox() -> None:
     assert "install_nix_binary bubblewrap bwrap" in script
 
 
+def test_runtime_provisions_ccusage_for_both_agents() -> None:
+    """ccusage must be on PATH for both agents, not Claude only.
+
+    The PR-body Resource Consumption section
+    (scripts/session_resource_report.py) shells out to ``ccusage`` to report
+    per-session token/cost. It previously installed only for the claude agent
+    (``if [[ "$agent" == "claude" ]]``) and the codex devShell omitted it, so
+    Codex sessions had no ccusage and the section could not be generated there.
+    This guards the both-agents provisioning from regressing. Refs #1467.
+    """
+    flake = (REPO_ROOT / "flake.nix").read_text(encoding="utf-8")
+    script = (REPO_ROOT / ".devcontainer/scripts/configure-agent-runtime.sh").read_text(encoding="utf-8")
+
+    # The pinned ccusage derivation exists and the symlink runs at runtime.
+    assert "ccusage-cli = pkgs.stdenvNoCC.mkDerivation" in flake
+    assert "install_nix_binary ccusage-cli ccusage" in script
+
+    # The install must not be gated to the claude agent any more.
+    assert 'if [[ "$agent" == "claude" ]]; then\n  install_nix_binary ccusage-cli ccusage' not in script
+
+    # Both agent devShells expose ccusage-cli so `nix develop` has it too.
+    for shell_name in ("claude", "codex"):
+        block = flake.split(f'{shell_name} = mkAgentShell "{shell_name}"', 1)[1].split("];", 1)[0]
+        assert "agentPackages.ccusage-cli" in block, (
+            f"{shell_name} devShell is missing agentPackages.ccusage-cli"
+        )
+
+
 def test_codex_devcontainer_permits_seccomp_for_bwrap() -> None:
     config = load_json(REPO_ROOT / ".devcontainer" / "codex" / "devcontainer.json")
     run_args = config.get("runArgs", [])
