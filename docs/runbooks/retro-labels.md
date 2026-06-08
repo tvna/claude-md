@@ -11,13 +11,29 @@ The labels live as a single source of truth in
 [`scripts/_retro_labels.py`](../../scripts/_retro_labels.py), alongside
 the four prior thresholds consumed by the signal gate.
 
+## Retro issues are triage signals, not direct work
+
+An auto-opened retro is titled `chore(auto-retro): review PR #N repair loops`
+(Refs #1069). The neutral `chore` prefix is deliberate: a retro is a triage
+signal, not a unit of work to implement directly. Do **not** open an
+implementation PR straight off a retro issue. Decide TP/FP first; when a real
+repair loop is confirmed, open a separate follow-up issue for the fix. The
+retro itself is closed by a retro-close PR (a `type(auto-retro): ...` title,
+for example `docs(auto-retro): ...`) that records the triage outcome.
+
+This is enforced deterministically: `scripts/auto_retro.py verify-no-direct-retro-pr`
+(wired into `.github/workflows/verify-pr.yml`) fails any PR that
+closes or references a retro issue unless that PR is itself a retro-close PR.
+`is_retro_issue_title` recognizes both the `chore(auto-retro)` prefix and the
+legacy `fix(auto-retro)` prefix used by closed historical retros.
+
 ## SoT layout
 
 | File | Purpose |
 |---|---|
 | `scripts/_retro_labels.py` | Label string constants and `ALL_RETRO_LABELS` frozenset |
 | `scripts/scan_retro_followup_drift.py` | Daily scanner that applies `retro:fp-candidate` and `retro:fp` based on follow-up state |
-| `.github/workflows/retro-followup-drift.yml` | Cron + `workflow_dispatch` driver for the scanner |
+| `.github/workflows/daily-maintenance.yml` | Cron + `workflow_dispatch` driver for the scanner |
 | `docs/runbooks/retro-labels.md` *(this file)* | Operator runbook |
 
 ## The four labels
@@ -236,7 +252,7 @@ report can never disagree with the live skip decision.
 Unlike the decision-tree doc, this report depends on live GitHub label
 state, so it is **non-deterministic** and is NOT part of the
 `generate-docs.yml` drift gate. It is refreshed weekly by
-`.github/workflows/auto-retro-triage-report.yml`, which opens a pull
+`.github/workflows/weekly-maintenance.yml`, which opens a pull
 request when the snapshot drifts. The git history of the committed
 snapshot is the time series.
 
@@ -263,7 +279,7 @@ uv run pytest tests/test_scan_retro_followup_drift.py -v
 
 - [`scripts/_retro_labels.py`](../../scripts/_retro_labels.py) -- label SoT.
 - [`scripts/scan_retro_followup_drift.py`](../../scripts/scan_retro_followup_drift.py) -- scanner.
-- [`.github/workflows/retro-followup-drift.yml`](../../.github/workflows/retro-followup-drift.yml) -- cron driver.
+- [`.github/workflows/daily-maintenance.yml`](../../.github/workflows/daily-maintenance.yml) -- cron driver (`scan` job).
 - [`scripts/auto_retro.py`](../../scripts/auto_retro.py) -- the retro generator the labels feed back into.
 - [CLAUDE.md](../../CLAUDE.md) section 3 -- retro framework rationale.
 - [#558](https://github.com/tvna/claude-md/issues/558) -- PR1 issue.

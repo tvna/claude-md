@@ -11,11 +11,28 @@ whether to add:
 
 The older metadata classifier remains as a helper for issue/PR text, but the
 workflow uses ``scan`` so triage is driven by external sources.
+
+Contract:
+- Inputs: the ``scan`` subcommand (locked dependencies under
+  ``--repo-root``, external OSV.dev and CISA KEV feeds, optional NVD/EPSS/
+  GHSA enrichment via ``GH_TOKEN`` / ``GITHUB_TOKEN``, fixture overrides
+  ``--osv-file`` / ``--kev-file``, ``--summary-file``) and the ``classify``
+  subcommand (``--title`` / ``$TITLE``, ``--body`` / ``--body-file``,
+  ``--labels`` / ``$LABELS``); ``REPO`` and ``NUMBER`` for label writes.
+- Outputs: ``threat:*`` labels applied via the GitHub API, a Markdown
+  step summary, an idempotent marker-anchored triage evidence comment on
+  the issue/PR (the ``comment`` subcommand, so the correlation table is
+  co-located with the label per CLAUDE.md section 6), and ``::error::``
+  annotations on stderr; exit 0 on success, exit 1 on missing env or an
+  API failure.
+- Failure policy: fails loud per CLAUDE.md section 4 (gate: a missing
+  token/repo/number or an API error exits non-zero).
 """
 
 from __future__ import annotations
 
 import argparse
+import io
 import json
 import os
 import re
@@ -25,6 +42,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from collections.abc import Callable
+from datetime import date
 from pathlib import Path
 from typing import Any, NamedTuple
 
@@ -56,6 +74,17 @@ ECOSYSTEM_ACTIONS = "GitHub Actions"
 ECOSYSTEM_PYPI = "PyPI"
 WORKFLOW_SUBDIR = ".github/workflows"
 SCRIPTS_SUBDIR = "scripts"
+
+# Checked-in accepted-intel suppression allowlist (#1277). Each entry is a
+# reviewed waiver keyed on (ecosystem, name, vuln_id) with a mandatory
+# reason and an ISO ``review_by`` expiry. An *unexpired* entry stops a
+# non-response finding from flipping ``threat:intel-needed``; an *expired*
+# entry re-surfaces the label (fail-loud per CLAUDE.md s4) instead of
+# silently persisting. Suppressions never apply to known-exploited or
+# malware findings -- those always escalate. Resolved relative to
+# ``--repo-root`` so the scan auto-loads it without a CLI flag, mirroring
+# ``verify_security_control_floor`` reading its committed TOML.
+SUPPRESSIONS_RELPATH = ".github/threat-intel-suppressions.json"
 
 # Pattern for CVE identifiers used to filter EPSS-eligible aliases. EPSS
 # data is keyed on CVE only; GHSA / OSV identifiers are not accepted by
@@ -122,6 +151,21 @@ class Finding(NamedTuple):
     # NVD CVE enrichment (#174). Supplemental only -- empty tuple means
     # "no NVD enrichment available", not "vulnerability not relevant".
     nvd_metadata: tuple[NvdEnrichment, ...] = ()
+
+
+class Suppression(NamedTuple):
+    """A reviewed accepted-intel waiver loaded from the checked-in allowlist (#1277).
+
+    ``review_by`` is the expiry: on or after this date the waiver no longer
+    suppresses, so the finding re-surfaces ``threat:intel-needed``. ``reason``
+    is mandatory so the record explains itself to a later reviewer.
+    """
+
+    ecosystem: str
+    name: str
+    vuln_id: str
+    reason: str
+    review_by: date
 
 
 INTEL_INDICATORS = (
@@ -401,6 +445,18 @@ def _iter_executable_inputs(repo_root: Path) -> list[Path]:
     return sorted(candidates)
 
 
+def _record_outage(outages: list[str] | None, source: str) -> None:
+    """Record a confirmed live-source outage for the triage summary.
+
+    Only the soft-fail sources (FIRST EPSS, NVD) call this: they swallow
+    transport errors and continue, so without this the confidence drop is
+    invisible. OSV / KEV / GHSA / OSSF failures stay loud (exit 1) and need
+    no accumulator. ``None`` means the caller did not opt in.
+    """
+    if outages is not None and source not in outages:
+        outages.append(source)
+
+
 def fetch_external_findings(
     dependencies: list[Dependency],
     *,
@@ -415,6 +471,7 @@ def fetch_external_findings(
     epss_live: bool = False,
     nvd_file: Path | None = None,
     nvd_live: bool = False,
+    outages: list[str] | None = None,
 ) -> list[Finding]:
     """Collect OSV, CISA KEV, GHSA, OSSF malicious-package, FIRST EPSS, and NVD intelligence.
 
@@ -490,10 +547,11 @@ def fetch_external_findings(
             _collect_cve_ids(merged),
             epss_file=epss_file,
             epss_live=epss_live,
+            outages=outages,
         )
         merged = [_attach_epss(finding, epss_scores) for finding in merged]
     if nvd_file is not None or nvd_live:
-        nvd_map = fetch_nvd_metadata(_collect_cve_ids(merged), nvd_file=nvd_file)
+        nvd_map = fetch_nvd_metadata(_collect_cve_ids(merged), nvd_file=nvd_file, outages=outages)
         merged = attach_nvd_to_findings(merged, nvd_map)
     return sorted(merged, key=lambda f: (f.dependency.name, f.vuln_id))
 
@@ -581,6 +639,7 @@ def fetch_epss_scores(
     *,
     epss_file: Path | None = None,
     epss_live: bool = False,
+    outages: list[str] | None = None,
 ) -> dict[str, tuple[float, float]]:
     """Return ``{cve: (score, percentile)}`` from FIRST EPSS for *cves*.
 
@@ -607,6 +666,7 @@ def fetch_epss_scores(
     try:
         data = request_json(f"{EPSS_URL}?{query}")
     except (OSError, ValueError, json.JSONDecodeError):
+        _record_outage(outages, SOURCE_EPSS)
         return {}
     return _parse_epss_payload(data)
 
@@ -943,6 +1003,7 @@ def fetch_nvd_metadata(
     cve_ids: list[str],
     *,
     nvd_file: Path | None = None,
+    outages: list[str] | None = None,
 ) -> dict[str, NvdEnrichment]:
     """Return NVD enrichment keyed by CVE id.
 
@@ -985,6 +1046,7 @@ def fetch_nvd_metadata(
             query = urllib.parse.urlencode({"cveId": cve_id})
             data = request_json(f"{NVD_CVE_URL}?{query}")
         except (OSError, ValueError, json.JSONDecodeError):
+            _record_outage(outages, SOURCE_NVD)
             continue
         vulnerabilities = data.get("vulnerabilities") if isinstance(data, dict) else None
         if not isinstance(vulnerabilities, list) or not vulnerabilities:
@@ -1136,12 +1198,111 @@ def attach_nvd_to_findings(
     return enriched
 
 
-def classify_findings(findings: list[Finding], labels: set[str]) -> dict[str, object]:
-    intel_needed = bool(findings)
-    response_needed = any(
-        finding.known_exploited or finding.advisory_type == GHSA_MALWARE_TYPE
-        for finding in findings
-    )
+def load_suppressions(path: Path) -> list[Suppression]:
+    """Return reviewed accepted-intel waivers parsed from *path* (#1277).
+
+    Fails loud (``ValueError``) on a malformed envelope or entry -- a missing
+    required field or a non-ISO ``review_by`` date is a defect that must stop
+    the run, never be silently dropped (CLAUDE.md s4). Expiry is *not* a load
+    error: an expired entry parses successfully and is re-surfaced downstream
+    by :func:`classify_findings`.
+    """
+    data = load_json(path)
+    raw = data.get("suppressions", [])
+    if not isinstance(raw, list):
+        raise ValueError(f"{path}: 'suppressions' must be an array")
+    suppressions: list[Suppression] = []
+    required = ("ecosystem", "name", "vuln_id", "reason", "review_by")
+    for index, entry in enumerate(raw):
+        if not isinstance(entry, dict):
+            raise ValueError(f"{path}: suppression #{index} must be an object")
+        values: dict[str, str] = {}
+        for field in required:
+            value = entry.get(field)
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError(
+                    f"{path}: suppression #{index} field '{field}' must be a non-empty string"
+                )
+            values[field] = value.strip()
+        try:
+            review_by = date.fromisoformat(values["review_by"])
+        except ValueError as exc:
+            raise ValueError(
+                f"{path}: suppression #{index} 'review_by' must be ISO YYYY-MM-DD: "
+                f"{values['review_by']!r}"
+            ) from exc
+        suppressions.append(
+            Suppression(
+                ecosystem=values["ecosystem"],
+                name=values["name"],
+                vuln_id=values["vuln_id"],
+                reason=values["reason"],
+                review_by=review_by,
+            )
+        )
+    return suppressions
+
+
+def _finding_is_response_class(finding: Finding) -> bool:
+    """Return True when *finding* carries a known-exploitation/malware signal.
+
+    Response-class findings escalate ``threat:response-needed`` and must never
+    be silenced by an accepted-intel suppression (#1277): a waiver only covers
+    advisory intel gaps, not confirmed exploitation.
+    """
+    return finding.known_exploited or finding.advisory_type == GHSA_MALWARE_TYPE
+
+
+def _matching_suppression(
+    finding: Finding, suppressions: tuple[Suppression, ...] | list[Suppression]
+) -> Suppression | None:
+    """Return the first suppression whose key matches *finding*, or None.
+
+    Matched on (ecosystem, name) plus a vuln_id that equals the finding's
+    primary id or any alias, so a waiver written against a CVE still covers a
+    GHSA-primary finding that aliases it.
+    """
+    for supp in suppressions:
+        if supp.ecosystem != finding.dependency.ecosystem:
+            continue
+        if supp.name.lower() != finding.dependency.name.lower():
+            continue
+        if supp.vuln_id in {finding.vuln_id, *finding.aliases}:
+            return supp
+    return None
+
+
+def _suppression_label(supp: Suppression) -> str:
+    """Render a one-line human reference for a re-surfaced expired suppression."""
+    return f"{supp.ecosystem}/{supp.name} {supp.vuln_id} (review-by {supp.review_by.isoformat()})"
+
+
+def classify_findings(
+    findings: list[Finding],
+    labels: set[str],
+    *,
+    suppressions: tuple[Suppression, ...] | list[Suppression] = (),
+    today: date | None = None,
+) -> dict[str, object]:
+    today = today or date.today()
+    active: list[Finding] = []
+    suppressed_count = 0
+    expired_resurfaced: list[str] = []
+    for finding in findings:
+        supp = _matching_suppression(finding, suppressions)
+        if supp is None or _finding_is_response_class(finding):
+            active.append(finding)
+            continue
+        if supp.review_by <= today:
+            # Expired waiver: re-surface the label rather than silently
+            # persist the suppression (#1277, CLAUDE.md s4).
+            expired_resurfaced.append(_suppression_label(supp))
+            active.append(finding)
+            continue
+        suppressed_count += 1
+
+    intel_needed = bool(active)
+    response_needed = any(_finding_is_response_class(finding) for finding in findings)
 
     recommended_labels, remove_labels = classify_label_changes(
         labels,
@@ -1155,6 +1316,9 @@ def classify_findings(findings: list[Finding], labels: set[str]) -> dict[str, ob
         "recommended_labels": recommended_labels,
         "remove_labels": remove_labels,
         "finding_count": len(findings),
+        "active_finding_count": len(active),
+        "suppressed_count": suppressed_count,
+        "expired_suppressions": expired_resurfaced,
         "known_exploited_count": sum(1 for finding in findings if finding.known_exploited),
         "findings": [finding_to_dict(finding) for finding in findings],
     }
@@ -1266,6 +1430,8 @@ def _cmd_scan(args: argparse.Namespace) -> int:
     repo_root = Path(args.repo_root)
     labels = parse_labels(args.labels or os.environ.get("LABELS", ""))
     dependencies = discover_dependencies(repo_root)
+    suppressions = _resolve_suppressions(repo_root, args.suppressions_file)
+    outages: list[str] = []
     findings = fetch_external_findings(
         dependencies,
         osv_file=args.osv_file,
@@ -1279,17 +1445,38 @@ def _cmd_scan(args: argparse.Namespace) -> int:
         epss_live=args.epss_live,
         nvd_file=args.nvd_file,
         nvd_live=args.nvd_live,
+        outages=outages,
     )
-    result = classify_findings(findings, labels)
+    result = classify_findings(findings, labels, suppressions=suppressions)
 
     if args.summary_file:
-        write_summary(Path(args.summary_file), dependencies, findings, result)
+        write_summary(Path(args.summary_file), dependencies, findings, result, outages=outages)
+    if args.comment_file:
+        comment_path = Path(args.comment_file)
+        comment_path.parent.mkdir(parents=True, exist_ok=True)
+        comment_path.write_text(
+            render_summary_markdown(dependencies, findings, result, outages=outages),
+            encoding="utf-8",
+        )
     if args.github_output:
         _write_github_output(Path(args.github_output), result)
 
+    # Surface mode for the scheduled re-triage (#1277): the evidence (summary,
+    # output, comment) is always written first, then the run is failed loud so
+    # a recurring advisory or an expired suppression turns the scheduled run
+    # red. PR triage leaves --fail-on-intel off and keeps its advisory exit 0.
+    exit_code = 1 if args.fail_on_intel and result["intel_needed"] else 0
+    if exit_code:
+        print(
+            "::error::threat-intel triage reports intel_needed=true "
+            "(unsuppressed finding or expired accepted-intel suppression); "
+            "review the step summary and renew or clear the suppression record.",
+            file=sys.stderr,
+        )
+
     if args.format == "json":
         print(json.dumps(result, sort_keys=True))
-        return 0
+        return exit_code
 
     print(f"dependencies={len(dependencies)}")
     print(f"findings={result['finding_count']}")
@@ -1298,7 +1485,46 @@ def _cmd_scan(args: argparse.Namespace) -> int:
     print(f"response_needed={_bool(result['response_needed'])}")
     print(f"recommended_labels={','.join(result['recommended_labels'])}")
     print(f"remove_labels={','.join(result['remove_labels'])}")
-    return 0
+    return exit_code
+
+
+def _resolve_suppressions(
+    repo_root: Path, suppressions_file: Path | None
+) -> list[Suppression]:
+    """Return the accepted-intel suppressions for a scan (#1277).
+
+    An explicit ``--suppressions-file`` is loaded unconditionally so a typo'd
+    path fails loud rather than silently disabling every waiver. Otherwise the
+    conventional ``<repo-root>/.github/threat-intel-suppressions.json`` is
+    auto-loaded when present; its absence simply means "no waivers", which is
+    the fail-safe default (every finding still flips the label).
+    """
+    if suppressions_file is not None:
+        return load_suppressions(suppressions_file)
+    default_path = repo_root / SUPPRESSIONS_RELPATH
+    if default_path.is_file():
+        return load_suppressions(default_path)
+    return []
+
+
+def render_summary_markdown(
+    dependencies: list[Dependency],
+    findings: list[Finding],
+    result: dict[str, object],
+    *,
+    outages: list[str] | None = None,
+) -> str:
+    """Render the triage correlation table as a Markdown string.
+
+    Pure: the same text is appended to ``$GITHUB_STEP_SUMMARY`` by
+    :func:`write_summary` and posted as the idempotent issue/PR evidence
+    comment by the ``comment`` subcommand, so the two surfaces cannot
+    drift. ``outages`` lists soft-fail live sources (FIRST EPSS, NVD) whose
+    absence reduced confidence this run.
+    """
+    handle = io.StringIO()
+    _write_summary_body(handle, dependencies, findings, result, outages)
+    return handle.getvalue()
 
 
 def write_summary(
@@ -1306,46 +1532,75 @@ def write_summary(
     dependencies: list[Dependency],
     findings: list[Finding],
     result: dict[str, object],
+    *,
+    outages: list[str] | None = None,
 ) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(render_summary_markdown(dependencies, findings, result, outages=outages))
+
+
+def _write_summary_body(
+    handle: io.StringIO,
+    dependencies: list[Dependency],
+    findings: list[Finding],
+    result: dict[str, object],
+    outages: list[str] | None,
+) -> None:
     sources_line = _summary_sources_line(findings)
     has_nvd = any(finding.nvd_metadata for finding in findings)
-    with path.open("a", encoding="utf-8") as handle:
-        handle.write("## Threat intelligence triage\n\n")
-        handle.write(f"- Sources: {sources_line}\n")
-        handle.write(f"- Dependencies checked: {len(dependencies)}\n")
-        handle.write(f"- Findings: {result['finding_count']}\n")
-        handle.write(f"- Known exploited findings: {result['known_exploited_count']}\n")
-        handle.write(f"- Recommended labels: `{','.join(result['recommended_labels'])}`\n\n")
-        if not findings:
-            handle.write("No external threat-intelligence findings matched locked dependencies.\n")
-            return
+    handle.write("## Threat intelligence triage\n\n")
+    if outages:
+        handle.write(
+            f"> Live-source outages (reduced confidence): {', '.join(outages)}. "
+            "Absent data from a source is not evidence of safety.\n\n"
+        )
+    handle.write(f"- Sources: {sources_line}\n")
+    handle.write(f"- Dependencies checked: {len(dependencies)}\n")
+    handle.write(f"- Findings: {result['finding_count']}\n")
+    handle.write(f"- Known exploited findings: {result['known_exploited_count']}\n")
+    handle.write(f"- Recommended labels: `{','.join(result['recommended_labels'])}`\n")
+    suppressed_count = int(result.get("suppressed_count", 0) or 0)
+    if suppressed_count:
+        handle.write(f"- Accepted-intel suppressions applied: {suppressed_count}\n")
+    handle.write("\n")
+    expired = result.get("expired_suppressions") or []
+    if isinstance(expired, list) and expired:
+        handle.write(
+            "> Expired accepted-intel suppressions re-surfaced (review overdue): "
+            f"{'; '.join(str(item) for item in expired)}. "
+            "Renew or remove the suppression record in "
+            f"`{SUPPRESSIONS_RELPATH}`.\n\n"
+        )
+    if not findings:
+        handle.write("No external threat-intelligence findings matched locked dependencies.\n")
+        return
+    if has_nvd:
+        handle.write(
+            "| Dependency | Version | Vulnerability | Source | Known exploited | EPSS | NVD CVSS | NVD CWE |\n"
+        )
+        handle.write("|---|---:|---|---|---|---|---|---|\n")
+    else:
+        handle.write("| Dependency | Version | Vulnerability | Source | Known exploited | EPSS |\n")
+        handle.write("|---|---:|---|---|---|---|\n")
+    for finding in findings:
+        row = (
+            f"| `{finding.dependency.name}` | `{finding.dependency.version}` | "
+            f"`{finding.vuln_id}` | {finding.source} | {_bool(finding.known_exploited)} | "
+            f"{_format_epss_cell(finding)} |"
+        )
         if has_nvd:
-            handle.write(
-                "| Dependency | Version | Vulnerability | Source | Known exploited | EPSS | NVD CVSS | NVD CWE |\n"
-            )
-            handle.write("|---|---:|---|---|---|---|---|---|\n")
-        else:
-            handle.write("| Dependency | Version | Vulnerability | Source | Known exploited | EPSS |\n")
-            handle.write("|---|---:|---|---|---|---|\n")
+            row += f" {_nvd_cvss_cell(finding)} | {_nvd_cwe_cell(finding)} |"
+        handle.write(row + "\n")
+    if has_nvd:
+        handle.write("\n### NVD references (supplemental)\n\n")
+        handle.write(
+            "NVD is consulted only for CVEs already surfaced by OSV/GitHub Advisory. "
+            "Missing NVD enrichment does not imply the underlying finding is not relevant.\n\n"
+        )
         for finding in findings:
-            row = (
-                f"| `{finding.dependency.name}` | `{finding.dependency.version}` | "
-                f"`{finding.vuln_id}` | {finding.source} | {_bool(finding.known_exploited)} | "
-                f"{_format_epss_cell(finding)} |"
-            )
-            if has_nvd:
-                row += f" {_nvd_cvss_cell(finding)} | {_nvd_cwe_cell(finding)} |"
-            handle.write(row + "\n")
-        if has_nvd:
-            handle.write("\n### NVD references (supplemental)\n\n")
-            handle.write(
-                "NVD is consulted only for CVEs already surfaced by OSV/GitHub Advisory. "
-                "Missing NVD enrichment does not imply the underlying finding is not relevant.\n\n"
-            )
-            for finding in findings:
-                for enrichment in finding.nvd_metadata:
-                    _write_nvd_detail(handle, finding, enrichment)
+            for enrichment in finding.nvd_metadata:
+                _write_nvd_detail(handle, finding, enrichment)
 
 
 def _nvd_cvss_cell(finding: Finding) -> str:
@@ -1548,25 +1803,40 @@ def _apply_labels(
     return 0
 
 
-def _cmd_apply_labels(args: argparse.Namespace) -> int:
+def _resolve_issue_target() -> tuple[str, str, int] | None:
+    """Return ``(token, repo, number)`` from env, or None after a loud error.
+
+    Shared by ``apply-labels`` and ``comment``: both write to one issue/PR
+    identified by ``REPO`` / ``NUMBER`` and authenticated by ``GH_TOKEN``.
+    Returns None (never raises) so each caller maps it to exit 1 per the
+    fail-loud policy in CLAUDE.md section 4.
+    """
     token = os.environ.get("GH_TOKEN", "")
     repo = os.environ.get("REPO", "")
     number_str = os.environ.get("NUMBER", "")
 
     if not token:
         print("::error::GH_TOKEN is not set", file=sys.stderr)
-        return 1
+        return None
     if not repo:
         print("::error::REPO is not set", file=sys.stderr)
-        return 1
+        return None
     if not number_str:
         print("::error::NUMBER is not set", file=sys.stderr)
-        return 1
+        return None
     try:
         number = int(number_str)
     except ValueError:
         print(f"::error::NUMBER must be an integer: {number_str!r}", file=sys.stderr)
+        return None
+    return token, repo, number
+
+
+def _cmd_apply_labels(args: argparse.Namespace) -> int:
+    target = _resolve_issue_target()
+    if target is None:
         return 1
+    token, repo, number = target
 
     add_labels = [lbl.strip() for lbl in (args.add_labels or "").split(",") if lbl.strip()]
     remove_labels = [lbl.strip() for lbl in (args.remove_labels or "").split(",") if lbl.strip()]
@@ -1576,6 +1846,115 @@ def _cmd_apply_labels(args: argparse.Namespace) -> int:
         repo=repo,
         number=number,
         token=token,
+    )
+
+
+_TRIAGE_COMMENT_MARKER = "<!-- threat-intel-triage v1 -->"
+
+
+def _github_comment_request(
+    url: str,
+    *,
+    method: str,
+    token: str,
+    payload: dict[str, object] | None = None,
+) -> urllib.request.Request:
+    """Build an authenticated GitHub REST request for the comments API."""
+    data = json.dumps(payload, separators=(",", ":")).encode("utf-8") if payload is not None else None
+    req = urllib.request.Request(url, data=data, method=method)  # noqa: S310 -- fixed https://api.github.com endpoint
+    req.add_header("Authorization", f"Bearer {token}")
+    req.add_header("Accept", "application/vnd.github+json")
+    req.add_header("X-GitHub-Api-Version", _GITHUB_API_VERSION)
+    if payload is not None:
+        req.add_header("Content-Type", "application/json")
+    return req
+
+
+def _find_triage_comment_id(
+    *,
+    repo: str,
+    number: int,
+    token: str,
+    marker: str,
+    opener: Callable[[urllib.request.Request], Any] = urllib.request.urlopen,
+) -> int | None:
+    """Return the id of the marker-anchored triage comment, or None.
+
+    Pages once with ``per_page=100``; the bot keeps a single comment per
+    item so the marker can only sit on the first page.
+    """
+    url = f"https://api.github.com/repos/{repo}/issues/{number}/comments?per_page=100"
+    req = _github_comment_request(url, method="GET", token=token)
+    with opener(req) as resp:
+        raw = resp.read().decode("utf-8")
+    comments = json.loads(raw) if raw.strip() else []
+    if not isinstance(comments, list):
+        return None
+    for comment in comments:
+        if not isinstance(comment, dict):
+            continue
+        body = comment.get("body") or ""
+        if isinstance(body, str) and body.startswith(marker):
+            cid = comment.get("id")
+            if isinstance(cid, int):
+                return cid
+    return None
+
+
+def _upsert_comment(
+    *,
+    body: str,
+    repo: str,
+    number: int,
+    token: str,
+    marker: str,
+    create: bool = True,
+    opener: Callable[[urllib.request.Request], Any] = urllib.request.urlopen,
+) -> int:
+    """Idempotently PATCH or POST the marker-anchored triage comment.
+
+    ``create=False`` makes the call update-only: when no marked comment
+    exists it is a no-op (returns 0) so a clean issue never gains a noise
+    comment. Returns 0 on success, 1 on API failure.
+    """
+    existing = _find_triage_comment_id(
+        repo=repo, number=number, token=token, marker=marker, opener=opener
+    )
+    if existing is None and not create:
+        return 0
+    if existing is not None:
+        url = f"https://api.github.com/repos/{repo}/issues/comments/{existing}"
+        req = _github_comment_request(url, method="PATCH", token=token, payload={"body": body})
+    else:
+        url = f"https://api.github.com/repos/{repo}/issues/{number}/comments"
+        req = _github_comment_request(url, method="POST", token=token, payload={"body": body})
+    try:
+        with opener(req) as resp:
+            code = int(resp.status)
+    except urllib.error.HTTPError as exc:
+        code = int(exc.code)
+    if not 200 <= code < 300:
+        print(f"::error::triage-comment HTTP {code}", file=sys.stderr)
+        return 1
+    return 0
+
+
+def _cmd_comment(args: argparse.Namespace) -> int:
+    target = _resolve_issue_target()
+    if target is None:
+        return 1
+    token, repo, number = target
+
+    marker = args.marker or _TRIAGE_COMMENT_MARKER
+    rendered = Path(args.body_file).read_text(encoding="utf-8")
+    body = f"{marker}\n\n{rendered}"
+    return _upsert_comment(
+        body=body,
+        repo=repo,
+        number=number,
+        token=token,
+        marker=marker,
+        create=not args.update_only,
     )
 
 
@@ -1630,6 +2009,14 @@ def main(argv: list[str] | None = None) -> int:
     p_scan.add_argument(
         "--summary-file",
         help="Append a markdown summary to this file.",
+    )
+    p_scan.add_argument(
+        "--comment-file",
+        help=(
+            "Write the rendered triage markdown (overwrite) to this path so "
+            "the `comment` subcommand can post it as the issue/PR evidence "
+            "comment."
+        ),
     )
     p_scan.add_argument(
         "--osv-file",
@@ -1703,6 +2090,25 @@ def main(argv: list[str] | None = None) -> int:
             "supplemental and silently skipped on transport failure."
         ),
     )
+    p_scan.add_argument(
+        "--suppressions-file",
+        type=Path,
+        help=(
+            "Accepted-intel suppression allowlist (#1277). Defaults to "
+            "<repo-root>/.github/threat-intel-suppressions.json when present. "
+            "An explicit path is loaded unconditionally and fails loud if "
+            "missing or malformed."
+        ),
+    )
+    p_scan.add_argument(
+        "--fail-on-intel",
+        action="store_true",
+        help=(
+            "Exit non-zero when intel_needed is true after suppressions. Used "
+            "by the scheduled re-triage so a recurring advisory or an expired "
+            "suppression turns the run red. PR triage leaves this off."
+        ),
+    )
     p_scan.set_defaults(func=_cmd_scan)
 
     p_apply = sub.add_parser(
@@ -1720,6 +2126,31 @@ def main(argv: list[str] | None = None) -> int:
         help="Comma-separated label names to remove.",
     )
     p_apply.set_defaults(func=_cmd_apply_labels)
+
+    p_comment = sub.add_parser(
+        "comment",
+        help="Upsert the threat-intel triage evidence comment on an issue/PR.",
+    )
+    p_comment.add_argument(
+        "--body-file",
+        required=True,
+        help="Path to the rendered triage markdown (from `scan --comment-file`).",
+    )
+    p_comment.add_argument(
+        "--update-only",
+        action="store_true",
+        help=(
+            "Only update an existing marked comment; do not create one when "
+            "absent. Use when no findings fired so a clean item gains no noise "
+            "comment. Reads REPO, NUMBER, GH_TOKEN from env."
+        ),
+    )
+    p_comment.add_argument(
+        "--marker",
+        default=_TRIAGE_COMMENT_MARKER,
+        help="HTML marker anchoring the idempotent comment.",
+    )
+    p_comment.set_defaults(func=_cmd_comment)
 
     args = parser.parse_args(argv)
     try:

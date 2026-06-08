@@ -7,3 +7,17 @@ target:
 dependencies:
   apm:
   - obra/superpowers#f2cbfbefebbfef77321e4c9abc9e949826bea9d7
+  mcp:
+  - name: context7
+    transport: http
+    url: https://mcp.context7.com/mcp
+  # Local GitHub MCP server, added by special exception for CLI use (#1063).
+  # apm.yml is the source of truth; scripts/gen_mcp_json.py renders .mcp.json
+  # from this block at SessionStart (gitignored, never committed -- prohibited
+  # per docs/standards/repo-scope.md, #1067). The server launches via
+  # scripts/mcp_github_launch.sh, which mints a fresh GitHub App installation
+  # token at every start, so no PAT is handed over and no secret hits a file.
+  - name: github
+    transport: stdio
+    command: scripts/mcp_github_launch.sh
+    args: []

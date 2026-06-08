@@ -16,10 +16,15 @@ on:
 
 permissions: {}
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   build:
     name: Build ${{ matrix.agent }} devcontainer image (${{ matrix.arch }})
     runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
     permissions:
       contents: read
       packages: write
@@ -48,7 +53,9 @@ jobs:
       IMAGE_PREFIX: ghcr.io/${{ github.repository_owner }}/claude-md-devcontainer
     steps:
       - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
 
       - name: Log in to GHCR
         env:
@@ -77,10 +84,88 @@ jobs:
             --cache-to "type=registry,ref=${cache_ref},mode=max" \
             --push
 
+  scan:
+    name: Scan ${{ matrix.agent }} devcontainer image (${{ matrix.arch }})
+    needs: build
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    # Isolated from `build` so a compromised scanner cannot reach the GHCR write
+    # token: scan holds read-only registry access plus SARIF upload, nothing more.
+    permissions:
+      packages: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - agent: claude
+            arch: amd64
+            runner: ubuntu-24.04
+          - agent: claude
+            arch: arm64
+            runner: ubuntu-24.04-arm
+          - agent: codex
+            arch: amd64
+            runner: ubuntu-24.04
+          - agent: codex
+            arch: arm64
+            runner: ubuntu-24.04-arm
+    env:
+      IMAGE_PREFIX: ghcr.io/${{ github.repository_owner }}/claude-md-devcontainer
+    steps:
+      - name: Log in to GHCR
+        env:
+          GHCR_TOKEN: ${{ github.token }}
+        run: |
+          printf '%s' "$GHCR_TOKEN" | docker login ghcr.io \
+            --username "${{ github.actor }}" \
+            --password-stdin
+
+      # Trivy scans the per-arch image published by `build` on the matching-arch
+      # runner. Informational-first posture (mirrors the CodeQL workflow):
+      # exit-code 0 means findings never fail the run, and continue-on-error
+      # means a Trivy DB-download or other infra failure never blocks publish.
+      # Results surface in the Security tab via the SARIF upload.
+      - name: Scan published image with Trivy
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        continue-on-error: true
+        with:
+          image-ref: ${{ env.IMAGE_PREFIX }}-${{ matrix.agent }}:${{ github.sha }}-${{ matrix.arch }}
+          scanners: vuln,secret,misconfig
+          # Skip the Nix store optimisation hardlink farm. /nix/store/.links is a
+          # content-addressed mirror in which every store file is hardlinked under
+          # a second path; Trivy's secret scanner walks it and reports findings
+          # (e.g. a HIGH "Asymmetric Private Key") against the .links/<hash> path,
+          # and also emits a 15 MB large-file warning. Skipping the farm loses no
+          # detection coverage: each .links entry is a hardlink to a file that is
+          # still scanned at its real /nix/store/<hash> path. Verified against
+          # Trivy v0.70.0 pkg/fanal/utils/utils.go SkipPath: skip-dirs patterns are
+          # matched on the leading-slash-trimmed path with doublestar, so the
+          # relative pattern below prunes the whole subtree. Refs #1473, #1348.
+          skip-dirs: nix/store/.links
+          format: sarif
+          output: trivy-results.sarif
+          exit-code: '0'
+          # Pin the Trivy binary, not just the action SHA. trivy-action downloads
+          # the scanner at runtime and the `version:` input selects which binary;
+          # leaving it unset (or `latest`) was the exposure vector in the
+          # 2026-03-19 Trivy supply-chain incident (aquasecurity/trivy#10425).
+          # v0.70.0 is the trivy-action v0.36.0 default and post-incident
+          # (>= v0.69.3). Bump in lockstep when the pinned action SHA changes.
+          version: v0.70.0
+
+      - name: Upload Trivy results to the Security tab
+        uses: github/codeql-action/upload-sarif@1a818fd5f97ed0ee9a823421bd5b171add01227f # v4.36.2
+        continue-on-error: true
+        with:
+          sarif_file: trivy-results.sarif
+          category: trivy-${{ matrix.agent }}-${{ matrix.arch }}
+
   publish:
     name: Publish ${{ matrix.agent }} devcontainer manifest
     needs: build
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     permissions:
       packages: write
     strategy:
@@ -112,6 +197,7 @@ jobs:
     needs: publish
     if: github.event_name == 'push'
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     environment:
       name: devcontainer-image-pins
     permissions:
@@ -119,54 +205,41 @@ jobs:
       pull-requests: write
     steps:
       - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
       - name: Update pinned image SHAs
         run: python3 scripts/update_devcontainer_image_pins.py "$GITHUB_SHA"
 
+      # Mint a short-lived GitHub App installation token so the generated pin PR
+      # is authored by the App bot (not a human PAT owner). App-token events,
+      # unlike GITHUB_TOKEN, still trigger the downstream pull_request checks the
+      # auto-merge keeper waits on. The token also authors the pin commit via the
+      # GraphQL createCommitOnBranch API, so GitHub signs it (Verified) under the
+      # App bot, satisfying the required_signatures rule on main. Refs #1401, #1437.
+      - name: Mint GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ secrets.DEVCONTAINER_PIN_APP_ID }}
+          private-key: ${{ secrets.DEVCONTAINER_PIN_APP_PRIVATE_KEY }}
+
       - name: Open pin update PR
         env:
-          GH_TOKEN: ${{ secrets.DEVCONTAINER_PIN_PR_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          REPO: ${{ github.repository }}
         run: |
-          if [ -z "${GH_TOKEN:-}" ]; then
-            echo "::error::DEVCONTAINER_PIN_PR_TOKEN is required in the devcontainer-image-pins environment"
-            exit 1
-          fi
-
-          if git diff --quiet; then
-            echo "devcontainer image pins already match ${GITHUB_SHA}"
-            exit 0
-          fi
-
-          branch="codex/devcontainer-image-pins-${GITHUB_SHA}"
-          enable_auto_merge() {
-            pr_number="$1"
-            python3 scripts/dependabot_automerge.py request-automerge --pr-number "$pr_number" \
-              || echo "::warning::auto-merge request failed for PR #${pr_number}; enable it manually if needed"
-          }
-
-          if git ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
-            existing_pr="$(python3 scripts/pr_upsert.py find --head "$branch")"
-            if [ -n "$existing_pr" ]; then
-              echo "pin update PR already exists: #${existing_pr}"
-              enable_auto_merge "$existing_pr"
-              exit 0
-            fi
-            echo "pin update branch already exists without an open PR; retrying PR creation: $branch"
-          else
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git checkout -b "$branch"
-            git add .devcontainer/claude/devcontainer.json .devcontainer/codex/devcontainer.json docs/runbooks/devcontainers.md
-            git commit -m "fix(devcontainer): pin published agent images" -m "Refs #696"
-            git push origin "$branch"
-          fi
-
-          sed "s/__GITHUB_SHA__/${GITHUB_SHA}/g" \
-            .github/pr-body-templates/devcontainer-image-pins.md > pr-body.md
-          pr_number="$(python3 scripts/pr_upsert.py upsert \
+          set -euo pipefail
+          python3 scripts/devcontainer_pin_pr.py open \
+            --github-sha "$GITHUB_SHA" \
             --base main \
-            --head "$branch" \
             --title "fix(devcontainer): pin published agent images" \
-            --body-file pr-body.md)"
-          enable_auto_merge "$pr_number"
+            --commit-subject "fix(devcontainer): pin published agent images" \
+            --commit-trailer "Refs #696" \
+            --template .github/pr-body-templates/devcontainer-image-pins.md \
+            --file .devcontainer/claude/devcontainer.json \
+            --file .devcontainer/codex/devcontainer.json \
+            --file .devcontainer/claude-amd64/devcontainer.json \
+            --file .devcontainer/claude-arm64/devcontainer.json \
+            --file .devcontainer/codex-amd64/devcontainer.json \
+            --file .devcontainer/codex-arm64/devcontainer.json \
+            --file docs/runbooks/devcontainers.md

@@ -273,16 +273,6 @@ writer = "auto-retro and post-merge retrospective automation"
 reader = "auto-retro sentinel, rescan, and duplicate-retro prevention"
 lifecycle = "Added after retrospective creation is confirmed; retained as durable PR audit state."
 
-[[labels]]
-name = "ops:coverage-failure"
-family = "ops"
-status = "add"
-description = "Post-merge coverage threshold failure has an open operational repair queue."
-color = "d73a4a"
-writer = ".github/workflows/post-merge.yml and scripts/coverage_failure_issue.py"
-reader = "coverage repair queues and post-merge operational triage"
-lifecycle = "Added when the coverage gate opens or updates a repair issue; closed or cleared after repair."
-
 [[retired_labels]]
 name = "layer:meta"
 reason = "Responsibility is unstable and overlaps the typed axes."

@@ -9,13 +9,34 @@ import json
 from pathlib import Path
 
 import pytest
+from gen_agent_hooks import unwrap_command
 
 pytestmark = pytest.mark.shard_preflight
 
 ROOT = Path(__file__).resolve().parents[1]
 DEVIN_HOOKS = ROOT / ".devin" / "hooks.v1.json"
 CODEX_HOOKS = ROOT / ".codex" / "hooks.json"
-CORE_HOOK_EVENTS = {"SessionStart", "PreToolUse", "PostToolUse"}
+CORE_HOOK_EVENTS = {"SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse"}
+
+
+def _unwrap_groups(groups: list[dict[str, object]]) -> list[dict[str, object]]:
+    """Return *groups* with every hook command stripped of the CWD wrapper.
+
+    The configs are generated from ``scripts/agent_hooks_source.json`` with a
+    ``cd "$(git rev-parse --show-toplevel)" && `` prefix injected into each
+    repo-script command (so hooks run regardless of the session CWD). Tests
+    assert against the clean repo-relative commands, so the wrapper is peeled
+    back here before structural comparison.
+    """
+    out: list[dict[str, object]] = []
+    for group in groups:
+        clone = json.loads(json.dumps(group))
+        for handler in clone.get("hooks", []):
+            command = handler.get("command")
+            if isinstance(command, str):
+                handler["command"] = unwrap_command(command)
+        out.append(clone)
+    return out
 
 
 def _load_hooks() -> dict[str, object]:
@@ -45,7 +66,7 @@ def _commands_for_groups(groups: list[dict[str, object]]) -> list[str]:
             assert isinstance(handler, dict)
             command = handler["command"]
             assert isinstance(command, str)
-            commands.append(command)
+            commands.append(unwrap_command(command))
     return commands
 
 
@@ -68,7 +89,7 @@ def _matcher_to_commands(groups: list[dict[str, object]]) -> dict[str, list[str]
             assert isinstance(handler, dict)
             command = handler["command"]
             assert isinstance(command, str)
-            commands.append(command)
+            commands.append(unwrap_command(command))
     return out
 
 
@@ -128,6 +149,21 @@ def test_devin_session_start_matches_required_bootstrap_gates() -> None:
     assert "python3 scripts/check_pr_mergeability.py session-start" in commands
 
 
+def test_devin_user_prompt_submit_registers_context7_gate() -> None:
+    data = _load_hooks()
+    assert _unwrap_groups(_hook_groups(data, "UserPromptSubmit")) == [
+        {
+            "hooks": [
+                {
+                    "type": "command",
+                    "command": "python3 scripts/prompt_context7_gate.py",
+                    "statusMessage": "Checking context7 lookup guidance",
+                }
+            ]
+        }
+    ]
+
+
 def test_devin_pre_tool_use_covers_github_write_gates() -> None:
     data = _load_hooks()
     matcher_to_commands = _matcher_to_commands(_hook_groups(data, "PreToolUse"))
@@ -136,19 +172,12 @@ def test_devin_pre_tool_use_covers_github_write_gates() -> None:
         "update_pull_request|add_reply_to_pull_request_comment|"
         "pull_request_review_write|add_comment_to_pending_review|sub_issue_write)$"
     )
-    connector_write_matcher = (
-        "^mcp__codex_apps__github\\._"
-        "(create_issue|create_pull_request|update_pull_request)$"
-    )
+    connector_write_matcher = "^mcp__codex_apps__github\\._" "(create_issue|create_pull_request|update_pull_request)$"
 
     assert github_write_matcher in matcher_to_commands
     assert connector_write_matcher in matcher_to_commands
-    assert "python3 scripts/preflight_non_ascii.py" in matcher_to_commands[
-        github_write_matcher
-    ]
-    assert "python3 scripts/preflight_title_policy.py" in matcher_to_commands[
-        connector_write_matcher
-    ]
+    assert "python3 scripts/preflight_non_ascii.py" in matcher_to_commands[github_write_matcher]
+    assert "python3 scripts/preflight_title_policy.py" in matcher_to_commands[connector_write_matcher]
 
 
 def test_devin_post_tool_use_starts_pr_monitoring() -> None:
@@ -158,10 +187,11 @@ def test_devin_post_tool_use_starts_pr_monitoring() -> None:
     connector_pr_create = "^mcp__codex_apps__github\\._create_pull_request$"
 
     assert legacy_pr_create in matcher_to_commands
-    assert "python3 scripts/post_pr_create_ci_monitor.py" in matcher_to_commands[
-        legacy_pr_create
-    ]
+    assert "python3 scripts/post_pr_create_ci_monitor.py" in matcher_to_commands[legacy_pr_create]
+    # Merge-readiness loop must surface mergeability for every agent (Refs #1361).
+    assert "python3 scripts/check_pr_mergeability.py" in matcher_to_commands[legacy_pr_create]
     assert connector_pr_create in matcher_to_commands
+    assert "python3 scripts/check_pr_mergeability.py" in matcher_to_commands[connector_pr_create]
 
 
 def test_devin_hooks_match_codex_hooks_exactly() -> None:

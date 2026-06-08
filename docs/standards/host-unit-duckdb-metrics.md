@@ -33,8 +33,9 @@ Two consequences follow and bound everything below:
 | File / path | Target | Purpose |
 |---|---|---|
 | `docs/standards/host-unit-duckdb-metrics.md` *(this file)* | -- | Adopted contract: trade-off, lifecycle, schema, write path, observation, export |
-| [`metrics/duckdb/schema/v1/schema.sql`](../../metrics/duckdb/schema/v1/schema.sql) | host-local `*.duckdb` | Versioned init path: tables, OTLP export view, read-back view, baseline template |
-| [`metrics/duckdb/init.sh`](../../metrics/duckdb/init.sh) | operator shell | Environment-aware init helper: detects devcontainer vs. local path, supports `CLAUDE_MD_METRICS_DB` override |
+| [`metrics/duckdb/schema/v1/schema.sql`](../../metrics/duckdb/schema/v1/schema.sql) | host-local `*.duckdb` | Versioned init path: metrics tables, OTLP gauge export view, read-back view, baseline template |
+| [`metrics/duckdb/schema/v2/schema.sql`](../../metrics/duckdb/schema/v2/schema.sql) | host-local `*.duckdb` | Additive migration: OTLP-logs `session_log` table, `otlp_log_record` export view, read-back view, redacted write template (Refs #824) |
+| [`metrics/duckdb/init.sh`](../../metrics/duckdb/init.sh) | operator shell | Environment-aware init helper: applies v1 then v2 in order, detects devcontainer vs. local path, supports `CLAUDE_MD_METRICS_DB` override |
 | `*.duckdb` (host-local, git-ignored) | each host | The database itself -- local measurement state, never committed (Refs #88) |
 
 ## Storage location and lifecycle
@@ -49,7 +50,7 @@ Two consequences follow and bound everything below:
   | devcontainer (claude) | `/home/claude/.claude/metrics.duckdb` |
   | devcontainer (codex) | `/home/codex/.codex/metrics.duckdb` |
   | local machine / Codespaces / other persistent host | `$HOME/.local/state/claude-md/metrics.duckdb` |
-  | CI runners (GitHub Actions etc.) | — (ephemeral; no write path in v1) |
+  | CI runners / Claude agent / web sessions (ephemeral) | -- (out of measurement scope unless the manual R2 escrow path is used; see *Ephemeral-environment measurement boundary*) |
 
   The devcontainer paths land inside the named Docker volumes
   (`claude-md-claude-session` and `claude-md-codex-session`) that are already
@@ -68,17 +69,179 @@ Two consequences follow and bound everything below:
   CLAUDE_MD_METRICS_DB=/custom/path.duckdb ./metrics/duckdb/init.sh
   ```
 
-  The helper calls `duckdb … < metrics/duckdb/schema/v1/schema.sql`, which is
-  idempotent (`IF NOT EXISTS` on every object), so re-running is safe.
+  The helper applies the schema versions in order (`schema/v1/schema.sql` then
+  `schema/v2/schema.sql`); every object uses `IF NOT EXISTS` / `CREATE OR
+  REPLACE`, so re-running is safe.
 
 - **Retention / rotation.** The database is append-mostly and small (one row per
   measured change). No rotation is required for v1; if a host's file is lost it
   is rebuilt by re-recording from `main`'s history. Because it is host-local
   state, losing it costs reproducible work, not irreplaceable data.
+- **Ephemeral environments record nothing -- by decision, not by accident.**
+  Claude agent / web / CI sessions are explicitly out of measurement scope
+  unless they use the manual R2 escrow handoff path; see
+  *Ephemeral-environment measurement boundary* below for the recorded decisions
+  and the options they resolve (Refs #826, #1212).
 - **duckdb is intentionally NOT a repository dependency.** The only runtime
   Python dependency stays `pyyaml`. The schema is plain SQL executed by the
   DuckDB CLI (or any DuckDB binding) that the operator already has. This keeps
   the strict `uv` dependency surface untouched (see *Out of scope*).
+
+## Ephemeral-environment measurement boundary (decision, Refs #826)
+
+The write path above is operator-local by design: one durable DuckDB file per
+host, written by an operator-local step, with no CI write path in v1. That
+leaves an implicit gap -- measurement produced inside an **ephemeral** Claude
+agent / web / CI environment persists nowhere. This section records the
+deliberate decision that closes the gap as an explicit, documented boundary
+rather than a silent exception to the "collect early, do not abandon early
+collection" premise that motivates this contract (Refs #815).
+
+**Facts that bound the decision (measured on the agent container):**
+
+- No `duckdb` runtime is installed (no CLI, no Python module, none in the `uv`
+  env), and `duckdb` is intentionally not a repository dependency.
+- No `.duckdb` file exists, and the container filesystem is ephemeral: the repo
+  is cloned fresh on start and reclaimed on inactivity / session end.
+- `*.duckdb` is git-ignored (Refs #88), so a database file is never committed.
+
+An agent / web / CI session therefore cannot contribute a measurement row to any
+durable store today: the data would be lost twice over (ephemeral filesystem
+plus git-ignore).
+
+**Options considered:**
+
+- **(A) Accept and document the boundary.** Agent / web / CI sessions are
+  explicitly out of measurement scope; only durable operator hosts record rows.
+  Lowest cost; no new infrastructure; the proportionality signal is openly
+  partial.
+- (B) Per-session export at session end -- emit OTLP-shaped rows to an external
+  sink or OTLP collector before the container is reclaimed. Requires an egress
+  destination and must honour the #88 anonymization and #824 redaction
+  contracts.
+- (C) Commit a redacted, aggregated row to a durable branch or artifact (never
+  the raw `*.duckdb`). Requires a reviewed write path.
+
+**Decision for #826: (A) -- accept and document the boundary.** Ephemeral agent
+/ web / CI sessions are explicitly **out of measurement scope** by default;
+only durable operator hosts record rows. This is consistent with the v1 "no CI
+write path" stance (see the lifecycle table and *Out of scope*): the same
+ephemerality that excludes CI runners excludes agent / web sessions. The signal
+is therefore **openly partial by record** -- changes made in an ephemeral
+session are knowingly absent from the store, not silently dropped -- which
+removes the silent bias an undocumented boundary would introduce toward changes
+made on durable hosts.
+
+**Decision: adopt option (B) as a manual R2 escrow runbook (Refs #1212).** The
+default boundary above remains intact for sessions that do not use the escrow.
+When an ephemeral session deliberately needs to preserve measurement data, R2
+is allowed only as a temporary handoff layer between that session and the
+durable macOS host. The canonical metrics store remains the per-host DuckDB
+database; R2 is never the canonical store and never a shared live database.
+Option (C) remains rejected because committing rows or artifacts would reopen a
+reviewed write-path surface that this contract still avoids.
+
+### Manual R2 escrow handoff (Refs #1212)
+
+Use this path only when an ephemeral agent / web / CI session has produced
+measurement data that would otherwise be lost before the operator can retrieve
+it. It is an operator-run handoff, not an automated recorder and not a new
+repository dependency.
+
+**Artifact shape.** Upload one redacted OTLP-shaped export bundle per session or
+change. The bundle is a directory or archive containing:
+
+- `manifest.json` -- schema version, opaque session id, producing commit SHA,
+  bundle digest, generated-at time, row counts, and artifact file digests.
+- `metrics.parquet` -- rows shaped like `otlp_metric_data_point`.
+- `logs.parquet` -- optional rows shaped like `otlp_log_record` / `session_log`
+  after the #824 redaction contract is applied.
+
+Raw `*.duckdb` and `*.duckdb.wal` files are not valid escrow artifacts. A raw
+database upload may contain local state that is outside the export contract, so
+the handoff starts from the minimal export bundle and keeps DuckDB itself out of
+the repo dependency set.
+
+**R2 object contract.** Store each bundle under an immutable object prefix:
+`escrow/session/<opaque-session-id>/<bundle-digest>/`. The session id is not a
+hostname, repository name, issue title, URL, path, user name, or raw prompt
+fragment. The digest prefix prevents accidental overwrite; a corrected export
+uses a new digest prefix rather than mutating the existing object. Configure an
+R2 lifecycle rule for the escrow prefix with a 24 hours expiration. Lifecycle is
+cleanup defense-in-depth, not correctness: the durable host still uses
+delete-after-import behavior and must explicitly delete the object after
+successful verification and import.
+
+**First-time R2 provisioning (one-time, before any handoff; Refs #1326).** R2
+does not exist until the durable operator provisions it from scratch; an agent
+session never performs these steps. Cloudflare documents the path as:
+
+1. Create or sign in to a Cloudflare account.
+2. Enable R2 by completing the R2 subscription checkout in the dashboard under
+   `Storage & databases > R2`. Cloudflare requires a payment method on the
+   account to enable R2 even when usage stays within the Standard-storage free
+   tier; usage inside the free tier bills at $0.00. Treat any activation charge
+   as a billing fact the operator confirms, not an agent action.
+3. Create the dedicated escrow bucket
+   (`Storage & databases > R2 > Overview > Create bucket`). This bucket holds
+   only the escrow prefixes from *R2 object contract* above and nothing else.
+4. Add the 24 hours lifecycle expiration rule for the `escrow/session/` prefix
+   exactly as *R2 object contract* above defines it.
+5. Create the parent token as *Credential issuance* below defines it. The
+   Account ID shown in the R2 dashboard is the S3 endpoint host
+   (`https://<account-id>.r2.cloudflarestorage.com`); it is not itself a secret
+   but is still passed only through the task-specific secure channel.
+
+Account creation, R2 enablement, payment-method linkage, and the parent token
+are operator actions on the durable host; none of them are ever delegated to an
+ephemeral agent session.
+
+**Credential issuance.** The parent token lives only with the durable operator,
+created in the Cloudflare dashboard or API with the minimum Cloudflare
+permission needed to mint scoped R2 credentials and manage the escrow bucket
+lifecycle; Cloudflare documents lifecycle management as requiring the `Workers
+R2 Storage Write` permission group. The parent token is stored in the
+operator's local credential manager, never in the repository, never in an agent
+prompt, and never in CI logs. For each handoff, the operator mints a temporary
+R2 credential with `object-read-write`, bound to the escrow bucket,
+prefix-scoped to `escrow/session/<opaque-session-id>/`, and limited to 900
+seconds. The temporary credential includes access key id, secret access key, and
+session token; all three are bearer secrets and must be passed only through the
+task-specific secure channel. The operator must rotate the parent token on the
+operator's normal secret-rotation cadence or immediately after suspected
+exposure. Verify the handoff without revealing values by performing a scoped
+`PutObject`/`HeadObject` probe against only the session prefix and confirming a
+different prefix is denied.
+
+**Retrieval and import.** The durable macOS host downloads the bundle before the
+temporary credential expires or mints a separate prefix-scoped read credential
+for retrieval. Before import, the host must verify the manifest digest and row
+counts, confirm every file digest listed by `manifest.json`, and reject any row
+containing raw hostnames, raw repository names, raw paths, URLs, raw prompts,
+raw model output, credentials, request ids, or unredacted logs; the accepted
+bundle invariant is no raw hostnames, no raw repository names, and no raw
+paths. Metrics import
+uses the existing idempotent `INSERT OR REPLACE INTO change_measurement`
+contract after mapping the OTLP-shaped rows back to the host-unit schema. Log
+imports target `session_log` only after the same redaction checks pass. After a
+successful import, the operator must explicitly delete the R2 object or prefix;
+if that deletion fails, the lifecycle rule remains the backup cleanup path and
+the operator records the failed delete as an operational event.
+
+**Sources used for the decision.** Cloudflare R2 documents S3-compatible
+temporary credentials with bucket binding, operation permissions, optional
+object/prefix scope, session tokens, and TTL up to 604800 seconds; R2 object
+lifecycle rules can expire objects by prefix, with deletion typically occurring
+within 24 hours of the expiration value. DuckDB documents R2 through its
+S3-compatible `httpfs` support and an `R2` secret type, while DuckDB temporary
+secrets remain in memory by default and persistent secrets are written to a
+local unencrypted secret directory. Those facts make a short-lived export
+handoff feasible without adding DuckDB or R2 client libraries to this
+repository. Cloudflare's R2 get-started and pricing documentation further
+records that R2 must be enabled through an R2 subscription checkout and that a
+payment method is required on the account before a bucket can be created, even
+for the free tier -- the provisioning facts behind *First-time R2 provisioning*
+above.
 
 ## OTLP-compatible schema
 
@@ -154,6 +317,80 @@ anonymization obligation lives at write time.
   wiring are **out of scope here** -- the point of this contract is that they
   can be added later without changing how any host collects.
 
+## OTLP logs extension (Refs #824)
+
+Schema v2 ([`metrics/duckdb/schema/v2/schema.sql`](../../metrics/duckdb/schema/v2/schema.sql))
+adds an OpenTelemetry-**logs**-shaped surface next to the metrics. Where v1
+records OTLP **gauge data points** (one measurement per change), v2 records
+**redacted operational session events** -- for example a commit-signing
+failure -- as OTLP `LogRecord`s. It is an additive migration: it touches no v1
+object, records a `'2'` row in `schema_meta`, and is idempotent.
+
+The motivation is concrete. A commit-signing failure observed during the #815
+work exposed a host-local filesystem path to a signing key, a signing-server
+request identifier, and a raw error payload. Capturing severity-tagged events
+next to the metrics makes such anomalies noticeable by intuition (CLAUDE.md
+Section 6) without re-collection -- **but only if every host-identifying field
+is removed first.**
+
+### Storage form (`session_log`)
+
+One append-only row per event (operational events are distinct occurrences, not
+idempotent measurements, so there is no de-duplication key). Columns mirror the
+OTLP LogRecord data model:
+
+| Column | OTLP field | Notes |
+|---|---|---|
+| `event_code` | (classified attribute) | **Required** classified, non-identifying code from a controlled vocabulary (e.g. `commit_signing.failure`). This replaces raw text as the descriptor. |
+| `severity_number` | `SeverityNumber` | Integer `1..24` (TRACE=1..FATAL=24), CHECK-bounded |
+| `severity_text` | `SeverityText` | e.g. `ERROR` |
+| `body` | `Body` | **Redacted** summary only, or NULL -- never a raw payload |
+| `scope_name` / `scope_version` | InstrumentationScope | who emitted it |
+| `time_unix_nano` | `TimeUnixNano` | when the event occurred |
+| `observed_time_unix_nano` | `ObservedTimeUnixNano` | when it was recorded |
+| `resource_attributes` | Resource | anonymized `host.id` only (same rule as the metrics table) |
+| `attributes` | LogRecord attributes | redacted, non-identifying keys only |
+
+### Export form (`otlp_log_record`) and observation (`v_session_log`)
+
+`otlp_log_record` renames the stored columns to the OpenTelemetry
+ClickHouse-exporter / DuckDB OTLP-extension **logs** layout (`Timestamp`,
+`ObservedTimestamp`, `SeverityText`, `SeverityNumber`, `ServiceName`, `Body`,
+`ResourceAttributes`, `ScopeName`, `ScopeVersion`, `LogAttributes`), so
+cross-host aggregation stays an export step. `v_session_log` is the human
+read-back view: one row per event over time with timestamps rendered to UTC.
+
+Export (later cross-host aggregation):
+`COPY (SELECT * FROM otlp_log_record) TO 'logs.parquet' (FORMAT parquet);`
+
+### Redaction contract (mandatory, before any row is written)
+
+Storing raw operational logs verbatim would violate
+[#88](https://github.com/tvna/claude-md/issues/88) (no repo names, paths, URLs,
+raw prompts, or raw model output in any exported row) and **CLAUDE.md Section
+4** (debug instrumentation is an attack surface; redact credentials, tokens, and
+PII before logging). Therefore, **before** the `INSERT`, the writer MUST drop or
+hash every one of these field classes:
+
+- **filesystem paths** (e.g. the signing-key path),
+- **key locations** (key files, keyring entries, agent socket paths),
+- **tokens** (signing tokens, credentials, secrets of any kind),
+- **request identifiers** (signing-server request ids, correlation ids),
+- **hostnames** (and any raw host identity -- only an opaque `host.id` survives),
+- **raw error payloads** (the verbatim error string or server response).
+
+What survives is **only** a severity (`severity_number` + `severity_text`) and a
+classified, non-identifying `event_code`. **No raw free text reaches the table.**
+The raw signing-server error -- and every operational log like it -- is stored
+**only** in this redacted form, citing #88 and CLAUDE.md Section 4.
+
+This contract is enforced primarily at the source (redact before insert). As
+defense-in-depth (CLAUDE.md Section 4), the `session_log` table adds a coarse
+CHECK that rejects the most unambiguous un-redacted marker -- a path separator
+in `body` -- so an un-redacted write **fails loudly** rather than being silently
+stored. The CHECK is a backstop, not the contract: it cannot detect a hostname
+or a token, so the writer remains responsible for full redaction.
+
 ## Reproducibility contract (carried from performance-metrics.md)
 
 - **Deterministic signals** (e.g. `scope_compiled_tokens`): the same
@@ -185,16 +422,23 @@ their still-valid requirements are carried into the columns above.
   schema is dependency-free plain SQL. Revisit only if an in-repo automated
   recorder is ever justified.
 - **A CI write path or a CI gate over the store.** Excluded for v1 (ephemeral
-  runners, no host-local DB). A future phase could add a host-scheduled recorder.
+  runners, no host-local DB). The ephemeral agent / web / CI measurement
+  boundary is now an explicit recorded decision -- option (A), accept and
+  document -- not an implicit gap (Refs #826; see *Ephemeral-environment
+  measurement boundary*). The #1212 R2 escrow path adopts option (B) only as a
+  manual temporary handoff; it does not create a CI write path, a shared remote
+  DuckDB database, or an automated recorder. A future phase could still add a
+  host-scheduled recorder, or re-open option (C) as a fresh decision.
 - **The cross-host OTLP collector and its aggregation pipeline.** The export
   view makes this a later, additive step.
 - **The OTLP *logs* signal (operational session logs, e.g. commit-signing
-  failures).** This store is metrics-only (OTLP gauge data points). Capturing
-  redacted operational logs is deferred to
-  [#824](https://github.com/tvna/claude-md/issues/824), which must define the
-  redaction contract -- drop or hash paths, key locations, tokens, request ids,
-  hostnames, and raw payloads -- before any such row is written (Refs #88,
-  CLAUDE.md Section 4).
+  failures).** Landed in schema v2 (Refs
+  [#824](https://github.com/tvna/claude-md/issues/824)); see *OTLP logs
+  extension* above. The redaction contract -- drop or hash paths, key locations,
+  tokens, request ids, hostnames, and raw payloads before any row is written
+  (Refs #88, CLAUDE.md Section 4) -- is defined there. Still deferred: a runtime
+  recorder that emits these events automatically (the write path stays
+  operator-local, and `duckdb` stays out of the repo dependency set).
 - **The structure-sensitive task signal** (Refs #90/#83): a candidate quality
   input once the schema exists; added additively as a new signal column.
 - **`compiled_source_version` population** (Refs #89): the column exists now and
@@ -219,8 +463,9 @@ CLAUDE_MD_METRICS_DB=/custom/path.duckdb ./metrics/duckdb/init.sh
 DB="${CLAUDE_MD_METRICS_DB:-$HOME/.local/state/claude-md/metrics.duckdb}"
 duckdb "$DB" -c "SELECT * FROM v_proportionality;"
 
-# 3. Confirm the OTLP export surface is populated:
+# 3. Confirm the OTLP export surfaces are populated:
 duckdb "$DB" -c "SELECT MetricName, Value FROM otlp_metric_data_point;"
+duckdb "$DB" -c "SELECT SeverityText, Body FROM otlp_log_record;"  # redacted logs (v2)
 ```
 
 What CI *does* verify deterministically: this document's local links and the
@@ -230,6 +475,10 @@ unrelated regression is introduced (`pytest`).
 ## References
 
 - [#815](https://github.com/tvna/claude-md/issues/815) -- this contract (host-unit DuckDB store).
+- [#824](https://github.com/tvna/claude-md/issues/824) -- OTLP logs extension (schema v2: redacted operational session logs).
+- [#826](https://github.com/tvna/claude-md/issues/826) -- ephemeral-environment measurement boundary (decision: option (A), accept and document).
+- [#1212](https://github.com/tvna/claude-md/issues/1212) -- manual Cloudflare R2 escrow handoff for ephemeral measurement export.
+- [#1326](https://github.com/tvna/claude-md/issues/1326) -- from-scratch Cloudflare R2 provisioning for the escrow runbook.
 - [#814](https://github.com/tvna/claude-md/issues/814) -- parent: Section 5 quality-scalability proportionality reframe.
 - [#226](https://github.com/tvna/claude-md/issues/226) -- CLAUDE.md / AGENTS.md evolution tracker.
 - [#89](https://github.com/tvna/claude-md/issues/89) -- instruction-source versioning (OPEN; provides `compiled_source_version`).
@@ -237,3 +486,5 @@ unrelated regression is introduced (`pytest`).
 - [`docs/standards/performance-metrics.md`](performance-metrics.md) -- the superseded storage design.
 - [`docs/standards/repo-scope.md`](repo-scope.md) -- declared repo purpose (2).
 - OpenTelemetry metric data model and the ClickHouse-exporter / DuckDB OTLP-extension column layout -- the external compatibility target the schema mirrors.
+- Cloudflare R2 temporary credentials, object lifecycle, and S3 compatibility documentation -- the external escrow capability.
+- DuckDB S3 API / R2 secret and secrets manager documentation -- the compatibility and secret-storage boundary used for the decision.

@@ -158,3 +158,15 @@ class TestMain:
         assert rc == 0
         assert out == ""
         assert "::error::" in err
+
+    def test_non_dict_json_fails_open(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        # Valid JSON that is not an object (a bare scalar) must fail open
+        # silently: no decision on stdout, no error on stderr, exit 0.
+        rc, out, err = self._run(monkeypatch, capsys, "123")
+        assert rc == 0
+        assert out == ""
+        assert err == ""

@@ -173,14 +173,112 @@ class TestFindViolations:
     def test_no_violations_in_current_workflows(self) -> None:
         violations = swgc.find_violations(WORKFLOW_DIR)
         assert violations == [], (
-            "Unallowlisted gh CLI calls found in current workflows:\n"
+            "Unallowlisted gh CLI calls or direct GitHub-API curls found in current workflows:\n"
             + "\n".join(
-                f"  {v.workflow} / {v.job} / {v.step!r}: {v.fragment!r}"
+                f"  ({v.kind}) {v.workflow} / {v.job} / {v.step!r}: {v.fragment!r}"
                 for v in violations
             )
-            + "\n\nEither migrate the gh call to a tested Python script, or add an"
+            + "\n\nEither migrate the call to a tested Python script, or add an"
             " allowlist entry with rationale in scripts/scan_workflow_gh_calls.py."
         )
+
+
+# ---------------------------------------------------------------------------
+# curl-to-GitHub-API detection (Refs #911)
+# ---------------------------------------------------------------------------
+
+
+class TestCurlGitHubApi:
+    def test_detects_curl_to_api_github_com(self, tmp_path: Path) -> None:
+        _write_wf(
+            tmp_path,
+            "curl.yml",
+            "jobs:\n  j:\n    steps:\n      - name: Post comment\n"
+            '        run: curl -X POST "https://api.github.com/repos/o/r/issues/1/comments"\n',
+        )
+        violations = swgc.find_violations(tmp_path)
+        assert len(violations) == 1
+        assert violations[0].kind == "curl"
+        assert violations[0].step == "Post comment"
+        assert "api.github.com" in violations[0].fragment
+
+    def test_detects_multiline_curl_to_api(self, tmp_path: Path) -> None:
+        _write_wf(
+            tmp_path,
+            "multi.yml",
+            "jobs:\n  j:\n    steps:\n      - name: Post\n        run: |\n"
+            "          curl -sS -X POST \\\n"
+            '            "https://api.github.com/repos/o/r/issues/1/comments"\n',
+        )
+        violations = swgc.find_violations(tmp_path)
+        assert len(violations) == 1
+        assert violations[0].kind == "curl"
+
+    def test_detects_uploads_github_com(self, tmp_path: Path) -> None:
+        _write_wf(
+            tmp_path,
+            "up.yml",
+            "jobs:\n  j:\n    steps:\n      - name: Upload\n"
+            '        run: curl -X POST "https://uploads.github.com/x"\n',
+        )
+        assert swgc.find_violations(tmp_path)[0].kind == "curl"
+
+    def test_uv_release_download_is_not_violation(self, tmp_path: Path) -> None:
+        _write_wf(
+            tmp_path,
+            "uv.yml",
+            "jobs:\n  j:\n    steps:\n      - name: Install uv\n"
+            '        run: curl -LsSf "https://github.com/astral-sh/uv/releases/download/0.1/uv.tar.gz" -o /tmp/uv.tar.gz\n',
+        )
+        assert swgc.find_violations(tmp_path) == []
+
+    def test_api_github_com_without_curl_is_not_violation(self, tmp_path: Path) -> None:
+        # A python script call that happens to mention the host is fine.
+        _write_wf(
+            tmp_path,
+            "py.yml",
+            "jobs:\n  j:\n    steps:\n      - name: Fetch\n"
+            "        run: python3 scripts/github_paginate.py get --path repos/o/r --field x\n",
+        )
+        assert swgc.find_violations(tmp_path) == []
+
+    def test_curl_to_other_host_is_not_violation(self, tmp_path: Path) -> None:
+        _write_wf(
+            tmp_path,
+            "other.yml",
+            "jobs:\n  j:\n    steps:\n      - name: Ping\n"
+            '        run: curl "https://example.com/health"\n',
+        )
+        assert swgc.find_violations(tmp_path) == []
+
+    def test_curl_violation_suppressed_when_allowlisted(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            swgc,
+            "_ALLOWLIST_KEYS",
+            frozenset({("curl.yml", "Post comment")}),
+        )
+        _write_wf(
+            tmp_path,
+            "curl.yml",
+            "jobs:\n  j:\n    steps:\n      - name: Post comment\n"
+            '        run: curl -X POST "https://api.github.com/x"\n',
+        )
+        assert swgc.find_violations(tmp_path) == []
+
+    def test_list_reports_curl_kind(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        _write_wf(
+            tmp_path,
+            "curl.yml",
+            "jobs:\n  j:\n    steps:\n      - name: Post\n"
+            '        run: curl "https://api.github.com/x"\n',
+        )
+        monkeypatch.setattr(swgc, "WORKFLOW_DIR", tmp_path)
+        assert swgc.main(["list"]) == 0
+        assert "(curl)" in capsys.readouterr().out
 
 
 # ---------------------------------------------------------------------------

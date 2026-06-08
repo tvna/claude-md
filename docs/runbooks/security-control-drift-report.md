@@ -16,10 +16,16 @@ read-only entry points (`ruleset_drift.py detect`, `labels_apply.py plan`,
 aggregates the outcomes into a single Markdown table and posts (or updates)
 a rolling comment on the parent tracking issue.
 
-Per-family detectors keep their own gates and own per-family issue-filing
-paths (e.g. the `ruleset-drift` weekly-maintenance job continues to file SoT drift / unknown
-ruleset issues on the existing weekly cron). This aggregator only reports;
-it never opens a new issue and never auto-remediates.
+Per-family detectors keep their own gates. The `rulesets` family files via its
+own `ruleset-drift` weekly-maintenance job (SoT drift / unknown ruleset issues).
+To meet the `detect-and-file` floor (`.github/security-control-floor.toml`), the
+`security-control-drift` job also runs `security_drift_report.py
+file-family-issues` after aggregation, which auto-files **one issue per drifting
+target family** for `labels`, `apm-instructions`, and `uv-pin-literal` (the
+`drift_families` output of the aggregate step gates the step; advisory
+`uv-pin-staleness` is excluded). The aggregator itself never auto-remediates,
+and the rolling-comment path never opens an issue -- only the `file-family-issues`
+step does.
 
 ## Trigger
 
@@ -27,6 +33,7 @@ it never opens a new issue and never auto-remediates.
 |---|---|---|
 | `schedule` | `0 20 * * 0` (UTC) -- Mon 05:00 JST | Always assembles the report and updates the rolling comment on #178 (the dry-run field is forced to `false`). |
 | `workflow_dispatch` | manual | Select `task=security-control-drift`; the `security_control_dry_run` input defaults to `true` (no comment) so an operator can preview the table in the step summary before publishing. |
+| `push` (on `main`; control-family SoT paths) | event-driven (#1390) | A change to `.github/rulesets/**`, `.github/labels.json`, `.apm/instructions/**`, `pyproject.toml`, `CLAUDE.md`, or `AGENTS.md` runs this job immediately (dry-run forced to `false`), so drift is caught near the change instead of up to a week later. Every other weekly job is skipped on push. |
 
 The weekly maintenance workflow intentionally runs these jobs on the same
 JST Monday 05:00 trigger to reduce scheduled workflow sprawl.
@@ -37,7 +44,7 @@ JST Monday 05:00 trigger to reduce scheduled workflow sprawl.
 |---|---|---|
 | `rulesets` | `scripts/ruleset_drift.py detect` | Requires `RULESETS_PAT` (read-only PAT, same secret as the `ruleset-drift` job). Outputs `drift_count` / `unknown_count`. |
 | `labels` | `scripts/labels_apply.py plan` | Uses `GITHUB_TOKEN` (metadata read suffices). Summary file is parsed for `plan-only` / `report-only` rows. |
-| `apm-instructions` | `apm compile` + `git diff --exit-code -- CLAUDE.md AGENTS.md` | Compile is pinned via `APM_CLI_VERSION` env (`0.12.1`) and `uv run --with apm-cli==<pin> --exclude-newer "14 days"` to suppress transient drift, mirroring `portable-pr-policy.yml`. |
+| `apm-instructions` | `apm compile` + `git diff --exit-code -- CLAUDE.md AGENTS.md` | Compile is pinned via `APM_CLI_VERSION` env (`0.12.1`) and `uv run --with apm-cli==<pin> --exclude-newer "14 days"` to suppress transient drift, mirroring `verify-pr.yml`. |
 | `uv-pin-literal` | `scripts/uv_pin.py drift` | Asserts the pin literal lives only in `pyproject.toml`. |
 | `uv-pin-staleness` | `scripts/uv_pin.py stale` | Informational; emits `::warning::` when the pin trails upstream latest. |
 
@@ -45,9 +52,9 @@ JST Monday 05:00 trigger to reduce scheduled workflow sprawl.
 
 | Family | Status reason |
 |---|---|
-| `title-policy` (`verify-title-policy.yml`) | PR-gate only; no scheduled drift surface beyond PR review. |
+| `title-policy` (`verify-pr.yml` `portable-pr-policy` job for PR titles; `verify-github-content.yml` for issue titles) | PR-gate only; no scheduled drift surface beyond PR review. |
 | `non-ascii` (`issue-pr-triage.yml` / `scan`, `preflight_non_ascii.py`) | PR-gate only. |
-| `dependabot-labels` (`verify-dependabot-labels.yml`) | PR-gate only. |
+| `dependabot-labels` (`verify-pr.yml`) | PR-gate only. |
 | `required-checks` (live vs `.github/rulesets/main.json`) | Tracked separately by [#120](https://github.com/tvna/claude-md/issues/120); intentionally out of scope here. |
 
 ## Rolling comment

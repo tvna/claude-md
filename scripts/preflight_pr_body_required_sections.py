@@ -5,9 +5,9 @@ Bound in ``.claude/settings.json`` to
 ``mcp__github__(create_pull_request|update_pull_request)``. Reads the
 PreToolUse event JSON from stdin and, when the drafted PR body would
 fail the baseline H2/H3 heading existence check enforced by
-``scripts/body_policy.py`` (the ``_PR_REQUIRED`` tuple: Facts /
-Assumptions / Risk and blast radius / Rollback / Verification /
-Checklist), emits a ``permissionDecision: "deny"`` JSON on stdout so
+``scripts/body_policy.py`` (the ``_PR_REQUIRED`` tuple: Summary /
+Related Issue / Facts / Assumptions / Risk and blast radius / Rollback /
+Verification / Checklist), emits a ``permissionDecision: "deny"`` JSON on stdout so
 the operator can add the missing sections BEFORE the API call instead
 of round-tripping through ``verify-body-policy.yml``.
 
@@ -53,11 +53,10 @@ since the cutoff exists only to exempt the back-catalog at the server.
 
 from __future__ import annotations
 
-import sys
 from typing import Any
 
 from _github_tool_names import canonical_github_tool
-from _hook_runtime import emit_decision, read_event
+from _hook_runtime import build_deny, run_tool_hook
 from body_policy import (
     extract_headings,
     missing_sections,
@@ -133,13 +132,7 @@ def decide(
     missing = evaluate(body)
     if not missing:
         return None
-    return {
-        "hookSpecificOutput": {
-            "hookEventName": "PreToolUse",
-            "permissionDecision": "deny",
-            "permissionDecisionReason": build_deny_reason(tool_name, missing),
-        }
-    }
+    return build_deny(build_deny_reason(tool_name, missing))
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -151,22 +144,7 @@ def main(argv: list[str] | None = None) -> int:
     ``verify-body-policy.yml`` workflow remains as backstop.
     """
     del argv
-    event = read_event("preflight_pr_body_required_sections")
-    if event is None:
-        return 0
-
-    tool_name = event.get("tool_name")
-    tool_input = event.get("tool_input") or {}
-    if not isinstance(tool_name, str) or not isinstance(tool_input, dict):
-        print(
-            "::error::preflight_pr_body_required_sections: event missing "
-            "tool_name/tool_input",
-            file=sys.stderr,
-        )
-        return 0
-
-    emit_decision(decide(tool_name, tool_input))
-    return 0
+    return run_tool_hook("preflight_pr_body_required_sections", decide)
 
 
 if __name__ == "__main__":

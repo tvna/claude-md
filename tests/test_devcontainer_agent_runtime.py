@@ -43,10 +43,34 @@ def test_runtime_script_installs_gh_and_container_scoped_defaults() -> None:
     agent_prompt = (REPO_ROOT / ".devcontainer/config/profile.d/claude-md-agent-prompt.sh").read_text(encoding="utf-8")
 
     assert "install_nix_binary gh-cli gh" in script
+    # The GitHub MCP server binary backs the Docker-less stdio launch path (#1063).
+    assert "install_nix_binary github-mcp-server github-mcp-server" in script
     assert '"Bash(*)"' in claude_settings
     assert '"mcp__github__*"' in claude_settings
     assert "/etc/profile.d/claude-md-agent-prompt.sh" in script
     assert "agent:repo(branch)" in agent_prompt
+
+
+def test_runtime_provisions_rtk_for_claude_pretooluse_hook() -> None:
+    script = (REPO_ROOT / ".devcontainer/scripts/configure-agent-runtime.sh").read_text(encoding="utf-8")
+    claude_settings = load_json(REPO_ROOT / ".devcontainer/config/claude/settings.json")
+
+    # rtk must be symlinked to /usr/local/bin so the PreToolUse hook resolves it.
+    assert "install_nix_binary rtk-cli rtk" in script
+
+    # The claude config declares the rtk auto-rewrite PreToolUse Bash hook.
+    hooks = claude_settings.get("hooks")
+    assert isinstance(hooks, dict)
+    pre_tool_use = hooks.get("PreToolUse")
+    assert isinstance(pre_tool_use, list)
+    rtk_commands = [
+        inner.get("command")
+        for entry in pre_tool_use
+        if isinstance(entry, dict) and entry.get("matcher") == "Bash"
+        for inner in (entry.get("hooks") or [])
+        if isinstance(inner, dict)
+    ]
+    assert "rtk hook claude" in rtk_commands
 
 
 def test_codex_runtime_config_uses_supported_toml_keys() -> None:
@@ -99,6 +123,34 @@ def test_codex_runtime_installs_bubblewrap_for_sandbox() -> None:
     assert "bubblewrap = pkgs.bubblewrap;" in flake
     assert "agentPackages.bubblewrap" in flake
     assert "install_nix_binary bubblewrap bwrap" in script
+
+
+def test_runtime_provisions_ccusage_for_both_agents() -> None:
+    """ccusage must be on PATH for both agents, not Claude only.
+
+    The PR-body Resource Consumption section
+    (scripts/session_resource_report.py) shells out to ``ccusage`` to report
+    per-session token/cost. It previously installed only for the claude agent
+    (``if [[ "$agent" == "claude" ]]``) and the codex devShell omitted it, so
+    Codex sessions had no ccusage and the section could not be generated there.
+    This guards the both-agents provisioning from regressing. Refs #1467.
+    """
+    flake = (REPO_ROOT / "flake.nix").read_text(encoding="utf-8")
+    script = (REPO_ROOT / ".devcontainer/scripts/configure-agent-runtime.sh").read_text(encoding="utf-8")
+
+    # The pinned ccusage derivation exists and the symlink runs at runtime.
+    assert "ccusage-cli = pkgs.stdenvNoCC.mkDerivation" in flake
+    assert "install_nix_binary ccusage-cli ccusage" in script
+
+    # The install must not be gated to the claude agent any more.
+    assert 'if [[ "$agent" == "claude" ]]; then\n  install_nix_binary ccusage-cli ccusage' not in script
+
+    # Both agent devShells expose ccusage-cli so `nix develop` has it too.
+    for shell_name in ("claude", "codex"):
+        block = flake.split(f'{shell_name} = mkAgentShell "{shell_name}"', 1)[1].split("];", 1)[0]
+        assert "agentPackages.ccusage-cli" in block, (
+            f"{shell_name} devShell is missing agentPackages.ccusage-cli"
+        )
 
 
 def test_codex_devcontainer_permits_seccomp_for_bwrap() -> None:
@@ -164,3 +216,33 @@ def test_runbook_documents_gh_bind_mount_security() -> None:
     assert "host-side" in runbook
     assert "gh auth status" in runbook
     assert "read-write" in runbook
+
+
+def test_trivy_scan_skips_nix_store_links_hardlink_farm() -> None:
+    # The published images are Trivy-scanned in publish-devcontainer-images.yml;
+    # its secret scanner walks /nix/store/.links (the Nix store optimisation
+    # hardlink farm) and reports findings (e.g. a HIGH "Asymmetric Private Key")
+    # against the .links/<hash> path. The scan-side skip prunes that subtree
+    # deterministically; building-time removal proved ineffective in the
+    # published image (the rm did not persist). Refs #1473, #1348.
+    workflow = (REPO_ROOT / ".github/workflows/publish-devcontainer-images.yml").read_text(encoding="utf-8")
+    assert "skip-dirs: nix/store/.links" in workflow
+
+    # Guard against the reverted build-time approach silently coming back: the
+    # farm must not be deleted in the Feature install (it shares inodes with the
+    # real store paths and removing it would surface the secret at its real path).
+    install = (REPO_ROOT / ".devcontainer/images/features/agent-user/install.sh").read_text(encoding="utf-8")
+    assert "rm -rf /nix/store/.links" not in install
+
+
+def test_prebuild_runs_agent_user_feature_last() -> None:
+    # The agent-user Feature finalizes the agent user/group/sudoers to uid 0, so
+    # it must run last in the build: after common-utils and the nix Feature have
+    # populated users and the store, with no postCreateCommand running afterwards
+    # in `devcontainer build`. Guard that ordering invariant for both prebuild
+    # configs. Refs #1348.
+    for agent in AGENTS:
+        config = load_json(REPO_ROOT / ".devcontainer" / "images" / agent / "devcontainer.json")
+        order = config.get("overrideFeatureInstallOrder")
+        assert isinstance(order, list)
+        assert order[-1] == "../features/agent-user"

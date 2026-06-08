@@ -9,14 +9,36 @@ import json
 from pathlib import Path
 
 import pytest
+from gen_agent_hooks import unwrap_command
 
 pytestmark = pytest.mark.shard_preflight
 
 ROOT = Path(__file__).resolve().parents[1]
 CODEX_HOOKS = ROOT / ".codex" / "hooks.json"
+
+
+def _unwrap_groups(groups: list[dict[str, object]]) -> list[dict[str, object]]:
+    """Return *groups* with every hook command stripped of the CWD wrapper.
+
+    The configs are generated from ``scripts/agent_hooks_source.json`` with a
+    ``cd "$(git rev-parse --show-toplevel)" && `` prefix injected into each
+    repo-script command. Tests assert against the clean repo-relative
+    commands, so the wrapper is peeled back here before structural comparison.
+    """
+    out: list[dict[str, object]] = []
+    for group in groups:
+        clone = json.loads(json.dumps(group))
+        for handler in clone.get("hooks", []):
+            command = handler.get("command")
+            if isinstance(command, str):
+                handler["command"] = unwrap_command(command)
+        out.append(clone)
+    return out
+
+
 PERMISSION_REQUEST_PLAN = ROOT / "docs" / "prd" / "codex-permission-request-policy-gate.md"
 DOCS_INDEX = ROOT / "docs" / "INDEX.md"
-CORE_HOOK_EVENTS = {"SessionStart", "PreToolUse", "PostToolUse"}
+CORE_HOOK_EVENTS = {"SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse"}
 
 
 def _load_hooks() -> dict[str, object]:
@@ -109,6 +131,26 @@ def test_codex_superpowers_hooks_are_apm_managed() -> None:
     )
 
 
+def test_codex_user_prompt_submit_registers_context7_gate() -> None:
+    data = _load_hooks()
+    hooks = data["hooks"]
+    assert isinstance(hooks, dict)
+    user_prompt_submit = hooks["UserPromptSubmit"]
+    assert isinstance(user_prompt_submit, list)
+
+    assert _unwrap_groups(user_prompt_submit) == [
+        {
+            "hooks": [
+                {
+                    "type": "command",
+                    "command": "python3 scripts/prompt_context7_gate.py",
+                    "statusMessage": "Checking context7 lookup guidance",
+                }
+            ]
+        }
+    ]
+
+
 def test_codex_pre_tool_use_covers_claude_github_write_hooks() -> None:
     data = _load_hooks()
     hooks = data["hooks"]
@@ -128,10 +170,16 @@ def test_codex_pre_tool_use_covers_claude_github_write_hooks() -> None:
         for handler in handlers:
             command = handler["command"]
             assert isinstance(command, str)
-            commands.append(command)
+            commands.append(unwrap_command(command))
 
-    assert "^mcp__github__(issue_write|add_issue_comment|create_pull_request|update_pull_request|add_reply_to_pull_request_comment|pull_request_review_write|add_comment_to_pending_review|sub_issue_write)$" in matchers
-    assert "^mcp__github__(issue_write|add_issue_comment|create_pull_request|update_pull_request|add_reply_to_pull_request_comment|pull_request_review_write|add_comment_to_pending_review)$" in matchers
+    assert (
+        "^mcp__github__(issue_write|add_issue_comment|create_pull_request|update_pull_request|add_reply_to_pull_request_comment|pull_request_review_write|add_comment_to_pending_review|sub_issue_write)$"
+        in matchers
+    )
+    assert (
+        "^mcp__github__(issue_write|add_issue_comment|create_pull_request|update_pull_request|add_reply_to_pull_request_comment|pull_request_review_write|add_comment_to_pending_review)$"
+        in matchers
+    )
     assert "python3 scripts/preflight_non_ascii.py" in commands
     assert "python3 scripts/preflight_codex_github_footer.py" in commands
     assert "python3 scripts/pr_body_close_keyword_gate.py" in commands
@@ -168,11 +216,9 @@ def test_codex_pre_tool_use_covers_codex_github_connector_tools() -> None:
         for handler in handlers:
             command = handler["command"]
             assert isinstance(command, str)
-            commands.append(command)
+            commands.append(unwrap_command(command))
 
-    title_body_matcher = (
-        "^mcp__codex_apps__github\\._(create_issue|create_pull_request|update_pull_request)$"
-    )
+    title_body_matcher = "^mcp__codex_apps__github\\._(create_issue|create_pull_request|update_pull_request)$"
     pr_matcher = "^mcp__codex_apps__github\\._(create_pull_request|update_pull_request)$"
 
     assert title_body_matcher in matcher_to_commands
@@ -208,7 +254,7 @@ def test_codex_pr_write_hooks_match_claude_base_freshness_gate() -> None:
         isinstance(handlers := group.get("hooks"), list)
         and any(
             isinstance(handler, dict)
-            and handler.get("command") == "python3 scripts/preflight_branch_base.py verify"
+            and unwrap_command(str(handler.get("command", ""))) == "python3 scripts/preflight_branch_base.py verify"
             for handler in handlers
         )
         for group in matching
@@ -234,11 +280,13 @@ def test_codex_post_tool_use_starts_ci_monitor_after_mcp_pr_create() -> None:
         for handler in handlers:
             command = handler["command"]
             assert isinstance(command, str)
-            commands.append(command)
+            commands.append(unwrap_command(command))
 
     assert "^mcp__github__create_pull_request$" in matchers
     assert "python3 scripts/post_pr_create_ci_monitor.py" in commands
     assert "python3 scripts/ci_early_status_probe.py" in commands
+    # Merge-readiness loop must surface mergeability for every agent (Refs #1361).
+    assert "python3 scripts/check_pr_mergeability.py" in commands
 
 
 def test_codex_post_tool_use_starts_ci_monitor_after_codex_connector_pr_create() -> None:
@@ -268,13 +316,15 @@ def test_codex_post_tool_use_starts_ci_monitor_after_codex_connector_pr_create()
         for handler in handlers:
             command = handler["command"]
             assert isinstance(command, str)
-            commands.append(command)
+            commands.append(unwrap_command(command))
 
-    assert connector_matcher in matcher_to_commands, (
-        "PostToolUse has no entry for the Codex connector create_pull_request path"
-    )
+    assert (
+        connector_matcher in matcher_to_commands
+    ), "PostToolUse has no entry for the Codex connector create_pull_request path"
     assert "python3 scripts/post_pr_create_ci_monitor.py" in matcher_to_commands[connector_matcher]
     assert "python3 scripts/ci_early_status_probe.py" in matcher_to_commands[connector_matcher]
+    # Merge-readiness loop must surface mergeability for every agent (Refs #1361).
+    assert "python3 scripts/check_pr_mergeability.py" in matcher_to_commands[connector_matcher]
 
 
 def test_codex_session_start_surfaces_hooks_path_gap() -> None:
@@ -300,7 +350,7 @@ def test_codex_session_start_surfaces_hooks_path_gap() -> None:
             if isinstance(handler, dict):
                 cmd = handler.get("command", "")
                 if isinstance(cmd, str):
-                    commands.append(cmd)
+                    commands.append(unwrap_command(cmd))
 
     assert "python3 scripts/check_hooks_path.py" in commands, (
         "SessionStart does not include check_hooks_path.py; "

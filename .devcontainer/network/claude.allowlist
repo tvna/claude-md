@@ -1,6 +1,0 @@
-# Claude container egress allowlist.
-#
-# Include the shared development destinations, then append Claude-only
-# endpoints when a reviewed workflow requires them.
-@include shared.allowlist
-api.anthropic.com

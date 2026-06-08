@@ -1,0 +1,13 @@
+# CodeQL configuration for the workflow-scripts scan. Refs #1237.
+#
+# Scope is restricted to scripts/. tests/ is intentionally excluded: its
+# fixtures carry deliberately insecure patterns (subprocess, /tmp paths, asserts;
+# see the per-file-ignores in pyproject.toml) that would be false positives here.
+# Python is an interpreted language, so the `paths:` filter is honored by CodeQL.
+#
+# The query suite (security-extended) is selected via the `queries:` input on the
+# init step in .github/workflows/codeql.yml, not duplicated here.
+name: Workflow scripts CodeQL config
+
+paths:
+  - scripts

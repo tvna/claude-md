@@ -179,6 +179,22 @@ def test_decide_denies_force_push_to_other_branch(monkeypatch: pytest.MonkeyPatc
     assert result["hookSpecificOutput"]["permissionDecision"] == "deny"
 
 
+def test_decide_denies_rtk_rewritten_push_to_other_branch(monkeypatch: pytest.MonkeyPatch) -> None:
+    # The rtk auto-rewrite hook prefixes ``git push`` with ``rtk`` (#1199); the
+    # session-branch gate must still detect it and deny the off-branch push.
+    _with_session(_SESSION_BRANCH, monkeypatch)
+    result = subject.decide(_bash_event("rtk git push origin feat/my-feature"))
+    assert result is not None
+    reason = result["hookSpecificOutput"]["permissionDecisionReason"]
+    assert "feat/my-feature" in reason
+    assert result["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+def test_decide_allows_rtk_rewritten_push_to_session_branch(monkeypatch: pytest.MonkeyPatch) -> None:
+    _with_session(_SESSION_BRANCH, monkeypatch)
+    assert subject.decide(_bash_event(f"rtk git push origin {_SESSION_BRANCH}")) is None
+
+
 # ---------------------------------------------------------------------------
 # _extract_push_remote_ref() — parser unit tests
 # ---------------------------------------------------------------------------

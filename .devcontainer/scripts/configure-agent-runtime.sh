@@ -43,6 +43,12 @@ install_nix_binary() {
 install_nix_binary gh-cli gh
 install_nix_binary pinned-uv uv
 install_nix_binary python-runtime python3
+# GitHub MCP server binary for the Docker-less stdio launch path (#1063):
+# scripts/mcp_github_launch.sh execs this when no Docker daemon is present.
+install_nix_binary github-mcp-server github-mcp-server
+# rtk must resolve on PATH when the claude PreToolUse Bash hook (`rtk hook
+# claude` in config/claude/settings.json) fires; symlink it like gh/uv/python3.
+install_nix_binary rtk-cli rtk
 if [[ ! -x "/usr/local/bin/apm" ]]; then
   install_nix_binary apm-cli apm
 else
@@ -51,6 +57,11 @@ fi
 if [[ "$agent" == "codex" ]]; then
   install_nix_binary bubblewrap bwrap
 fi
+# ccusage is provisioned for both agents so per-session token/cost reporting
+# (the PR-body Resource Consumption section, scripts/session_resource_report.py)
+# can run from Claude and Codex, not Claude only. Both agent devShells include
+# ccusage-cli; symlink the pinned binary onto PATH here. Refs #1467.
+install_nix_binary ccusage-cli ccusage
 
 home_dir="$(getent passwd "$agent" | cut -d: -f6)"
 if [[ -z "$home_dir" ]]; then

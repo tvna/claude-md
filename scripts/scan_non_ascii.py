@@ -13,6 +13,19 @@ the bottom, monkeypatched in tests. Surface area mirrors the prior
 inline shell exactly so behaviour is preserved byte-for-byte.
 
 See also: issue #102 (umbrella) and ``docs/prd/non-ascii-defense.md``.
+
+Contract:
+- Inputs: the ``run`` subcommand; the webhook event JSON from
+  ``--event-file`` or ``$GITHUB_EVENT_PATH``; the event name from
+  ``--event-name`` or ``$GITHUB_EVENT_NAME``; the repository from
+  ``--repo`` / ``$REPO`` / ``$GITHUB_REPOSITORY``; ``GH_TOKEN`` for the
+  ``gh_api`` boundary.
+- Outputs: advisory/block actions via the GitHub API (labels, comments),
+  a Markdown step summary to ``$GITHUB_STEP_SUMMARY``, and ``::error::``
+  annotations on stderr; exit 0 on success, exit 1 on missing inputs or
+  an API failure.
+- Failure policy: fails loud per CLAUDE.md section 4 (gate: a missing
+  event payload or API error exits non-zero).
 """
 
 from __future__ import annotations

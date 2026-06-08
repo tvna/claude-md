@@ -107,6 +107,20 @@ class TestEvaluate:
         errors = shape.evaluate(body)
         assert any("multiple agent-attribution footers" in e for e in errors)
 
+    def test_unknown_h2_returns_allowlist_error(self) -> None:
+        # An H2 outside the allowlist is rejected client-side. Refs #1396.
+        body = (
+            _VERIFICATION_OK
+            + "\n## Notes\n\nx\n\n"
+            + _CHECKLIST_OK
+            + "\n"
+            + _FOOTER_OK
+        )
+        errors = shape.evaluate(body)
+        assert any(
+            "outside the allowed set" in e and "## Notes" in e for e in errors
+        )
+
 
 class TestDecide:
     def test_well_formed_body_passes(self) -> None:
@@ -161,6 +175,23 @@ class TestDecide:
         reason = decision["hookSpecificOutput"]["permissionDecisionReason"]
         assert "Verification" in reason
 
+    def test_unknown_h2_emits_deny(self) -> None:
+        # An allowlist violation denies the MCP write client-side. Refs #1396.
+        body = (
+            _VERIFICATION_OK
+            + "\n## Notes\n\nx\n\n"
+            + _CHECKLIST_OK
+            + "\n"
+            + _FOOTER_OK
+        )
+        decision = shape.decide(
+            "mcp__github__create_pull_request", {"body": body}
+        )
+        assert decision is not None
+        reason = decision["hookSpecificOutput"]["permissionDecisionReason"]
+        assert "## Notes" in reason
+        assert "outside the allowed set" in reason
+
 
 # ---------------------------------------------------------------------------
 # Claude web harness footer relaxation (create-only, #1025)
@@ -205,6 +236,33 @@ class TestClaudeWebHarnessFooter:
         assert decision is not None
         reason = decision["hookSpecificOutput"]["permissionDecisionReason"]
         assert "agent-attribution footer" in reason
+
+    def test_update_under_harness_deny_names_asymmetry(self) -> None:
+        # Refs #1427: the update-path footer deny must explain the
+        # create-vs-update asymmetry so the fix is a single step, and stay
+        # ASCII so the server gate can echo it.
+        decision = shape.decide(
+            "mcp__github__update_pull_request",
+            {"body": _NO_FOOTER_BODY},
+            environ=_HARNESS_ENV,
+        )
+        assert decision is not None
+        reason = decision["hookSpecificOutput"]["permissionDecisionReason"]
+        assert "web harness" in reason
+        assert "post_pr_create_body_fix.py" in reason
+        assert reason.isascii()
+
+    def test_create_under_harness_no_footer_omits_asymmetry_note(self) -> None:
+        # The note is update-only; the create path stays silent (it accepts
+        # a footerless body under the harness anyway).
+        decision = shape.decide(
+            "mcp__github__create_pull_request",
+            {"body": _NO_FOOTER_BODY},
+            environ={},
+        )
+        assert decision is not None
+        reason = decision["hookSpecificOutput"]["permissionDecisionReason"]
+        assert "Note (web harness)" not in reason
 
     def test_update_under_harness_accepts_single_footer(self) -> None:
         assert (

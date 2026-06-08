@@ -16,20 +16,21 @@ python3 scripts/preflight_all.py --list
 At time of writing, the steps mirror the script invocations from the
 `pull_request:`-triggered workflows under `.github/workflows/`:
 
-| step                              | source workflow                       | soft-skip?           |
-| --------------------------------- | ------------------------------------- | -------------------- |
-| `scan_apm_portability`            | `portable-pr-policy.yml`              | no                   |
-| `verify_apm_checksums`            | `portable-pr-policy.yml`              | no                   |
-| `uv_pin_drift`                    | `verify-agents.yml`                   | no                   |
-| `scan_workflow_pip`               | `verify-agents.yml`                   | no                   |
-| `scan_workflow_action_pins`       | `verify-agents.yml`                   | no                   |
-| `scan_docs_inventory`             | `verify-agents.yml`                   | no                   |
-| `scan_design_philosophy_drift`    | `verify-design-philosophy.yml`        | no                   |
-| `dependabot_labels`               | `verify-dependabot-labels.yml`        | no                   |
-| `verify_required_check_contexts`  | `verify-ruleset-sync.yml`             | no                   |
-| `verify_ruleset_sync`             | `verify-ruleset-sync.yml`             | yes (`GH_TOKEN_API`) |
-| `ruff` / `mypy` / `pytest`        | `verify-agents.yml`                   | yes (`uv`)           |
-| `prek`                            | `portable-pr-policy.yml`              | yes (`uv`)           |
+| step                              | source workflow (job)                              | soft-skip?           |
+| --------------------------------- | -------------------------------------------------- | -------------------- |
+| `scan_apm_portability`            | `verify-pr.yml` (`portable-pr-policy`)             | no                   |
+| `verify_apm_checksums`            | `verify-pr.yml` (`portable-pr-policy`)             | no                   |
+| `uv_pin_drift`                    | `verify-agents.yml`                                | no                   |
+| `scan_workflow_pip`               | `verify-agents.yml`                                | no                   |
+| `scan_workflow_action_pins`       | `verify-agents.yml`                                | no                   |
+| `scan_docs_inventory`             | `verify-agents.yml`                                | no                   |
+| `scan_doc_workflow_refs`          | `verify-agents.yml`                                | no                   |
+| `scan_design_philosophy_drift`    | `verify-pr.yml` (`verify-design-philosophy`)      | no                   |
+| `dependabot_labels`               | `verify-pr.yml` (`verify-dependabot-labels`)      | no                   |
+| `verify_required_check_contexts`  | `verify-pr.yml` (`verify-ruleset-sync`)           | no                   |
+| `verify_ruleset_sync`             | `verify-pr.yml` (`verify-ruleset-sync`)           | yes (`GH_TOKEN_API`) |
+| `ruff` / `mypy` / `pytest`        | `verify-agents.yml`                                | yes (`uv`)           |
+| `prek`                            | `verify-pr.yml` (`portable-pr-policy`)            | yes (`uv`)           |
 
 Steps marked "soft-skip" emit a `::warning::` annotation and continue
 when their prerequisite is missing locally; the equivalent CI job

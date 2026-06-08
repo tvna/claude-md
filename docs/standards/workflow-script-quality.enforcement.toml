@@ -1,0 +1,62 @@
+# Enforcement map for docs/standards/workflow-script-quality.md must-haves.
+#
+# Refs #1089. Each table key is a must-have id (M1-M10) that appears as a
+# `### M<n>.` heading in the standard. `status` is one of:
+#
+#   enforced  -- a deterministic gate fails CI when the item regresses.
+#   partial   -- a gate covers part of the item (e.g. the declaration but
+#                not the full runtime behaviour); the rest is review.
+#   doc-only  -- no backing gate today; the item relies on reviewer memory.
+#
+# `backing` lists the deterministic artifacts that sustain the item. Each
+# entry is one of:
+#
+#   script:<name>  -- scripts/<name>.py must exist.
+#   test:<name>    -- tests/<name>.py must exist.
+#   tool:<name>    -- <name> must be referenced in pyproject.toml.
+#
+# scripts/scan_quality_standard_drift.py verifies that this file and the
+# standard stay in sync: every must-have heading has exactly one entry,
+# every `enforced`/`partial` entry resolves its backing, and every
+# `doc-only` entry has an empty backing list. Tightening a row from
+# doc-only/partial to enforced is the unit of follow-up work.
+
+[M1]
+status = "doc-only"
+backing = []
+
+[M2]
+status = "enforced"
+backing = ["tool:pytest", "tool:coverage", "script:scan_test_presence_drift"]
+
+[M3]
+status = "enforced"
+backing = ["test:test_workflow_cli_contracts", "script:scan_test_presence_drift"]
+
+[M4]
+status = "partial"
+backing = ["script:scan_input_contract_drift"]
+
+[M5]
+status = "doc-only"
+backing = []
+
+[M6]
+status = "doc-only"
+backing = []
+
+[M7]
+status = "partial"
+backing = ["tool:ruff", "script:scan_secret_runbooks"]
+
+[M8]
+status = "enforced"
+backing = ["tool:ruff", "tool:mypy", "tool:coverage"]
+
+[M9]
+status = "partial"
+backing = ["script:scan_input_contract_drift"]
+
+[M10]
+status = "enforced"
+backing = ["script:scan_workflow_pip"]

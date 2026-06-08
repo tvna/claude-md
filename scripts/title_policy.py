@@ -8,6 +8,16 @@ agent summaries before body context is inspected. Keep it ASCII-only so
 zero-width marks, RTL controls, emoji, Japanese text, and homoglyphs are
 rejected at the boundary.
 
+Contract:
+- Inputs: the ``verify`` subcommand; ``--kind`` (``issue`` or ``pr``);
+  the title from ``--title`` or the ``TITLE`` env var; the naming policy
+  from ``.github/title-policy.toml``; PR/issue body text from ``PR_BODY``
+  / ``ISSUE_BODY`` for the issue-reference check.
+- Outputs: ``::error::`` annotations naming each violation on stdout;
+  exit 0 when the title passes, exit 1 otherwise.
+- Failure policy: fails loud per CLAUDE.md section 4 (gate: a malformed
+  or policy-violating title exits non-zero).
+
 Tracked by #155.
 """
 
@@ -19,6 +29,8 @@ import re
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
+
+from _trusted_bots import _TRUSTED_BOT_LOGINS
 
 _DEFAULT_MAX_FINDINGS = 10
 TITLE_POLICY_CONFIG = Path(__file__).resolve().parents[1] / ".github" / "title-policy.toml"
@@ -82,7 +94,7 @@ _PERFORMANCE_PHRASES = (
     "reduce runtime",
     "speed up",
 )
-_PERF_ADJACENT_ALLOWED_TYPES = frozenset({"build", "ci", "docs", "perf", "test", "tracking"})
+_PERF_ADJACENT_ALLOWED_TYPES = frozenset({"build", "ci", "docs", "perf", "test"})
 _PERF_FIX_TERMS = frozenset({"bug", "defect", "error", "fail", "failure", "regression"})
 _CI_INFRA_TERMS = frozenset({"action", "actions", "ci", "gate", "workflow", "workflows"})
 _BUILD_INFRA_TERMS = frozenset({"build", "container", "image", "images", "package", "publish"})
@@ -150,6 +162,22 @@ def pr_title_strip_issue_refs(title: str) -> str:
     return re.sub(r"\s+", " ", stripped).strip()
 
 
+def pr_title_ref_is_exempt(title: str) -> bool:
+    """Return True when a ``(#NNN)`` token is allowed despite the PR ban.
+
+    A ``revert``-typed conventional title may carry a ``(#NNN)`` token that
+    names the pull request or commit being reverted; that reference
+    identifies the reverted change and is not a redundant duplicate of the
+    body's issue link, so the dedup ban (#167 / #214) does not apply. Per
+    CLAUDE.md section 3, ``git revert`` is the default rollback path and its
+    subject names the original change. The ASCII, naming-convention, and
+    type-fit checks still apply to revert titles, so this lifts only the
+    dedup rule, not the security boundary tracked by #155.
+    """
+    parts = parse_title_parts(title)
+    return parts is not None and parts.type == "revert"
+
+
 def allowed_types_csv() -> str:
     """Return the allowed conventional-commit types as a CSV string.
 
@@ -173,10 +201,11 @@ def type_fit_findings(title: str, *, kind: str, body: str = "") -> list[TypeFitF
     if parts is None:
         return []
 
-    text = _normalized_policy_text(title, body)
+    title_text = _normalize_policy_text(title)
+    body_text = _normalize_policy_text(_strip_resource_consumption_section(body))
     findings: list[TypeFitFinding] = []
-    if _has_performance_signal(text):
-        findings.extend(_performance_type_findings(parts, text))
+    if _has_performance_signal(title_text, body_text):
+        findings.extend(_performance_type_findings(parts, f"{title_text} {body_text}"))
     return findings
 
 
@@ -205,8 +234,18 @@ def describe_non_ascii(title: str, limit: int = _DEFAULT_MAX_FINDINGS) -> list[s
     return findings
 
 
-def verify_title(title: str, *, kind: str, body: str = "") -> int:
-    """Print a GitHub Actions annotation and return a process exit code."""
+def verify_title(title: str, *, kind: str, body: str = "", author: str = "") -> int:
+    """Print a GitHub Actions annotation and return a process exit code.
+
+    When *author* is a trusted bot (``_trusted_bots._TRUSTED_BOT_LOGINS``),
+    the body is dropped from the type-fit heuristic (#1127): a dependabot PR
+    relays upstream release notes whose ``cache`` / ``memory`` wording would
+    otherwise mis-classify a correct ``chore(deps):`` title as performance
+    work. The title-only checks (ASCII, naming convention, issue-ref) still
+    apply to every author including bots, except that ``revert``-typed
+    titles are exempt from the issue-ref ban per
+    :func:`pr_title_ref_is_exempt` (the ref names the reverted change).
+    """
     fail = 0
     if not is_ascii_title(title):
         details = ", ".join(describe_non_ascii(title))
@@ -219,15 +258,17 @@ def verify_title(title: str, *, kind: str, body: str = "") -> int:
         print(f"::error::{kind} title must follow repository naming convention: " f"{naming_convention_hint(kind)}.")
         fail = 1
     else:
-        policy_body = body or _body_from_env()
+        policy_body = "" if _is_trusted_bot_author(author) else (body or _body_from_env())
         for finding in type_fit_findings(title, kind=kind, body=policy_body):
             print(f"::error::{kind} title type does not fit the work: {format_type_fit_finding(finding)}")
             fail = 1
 
-    if kind == "pull_request" and pr_title_has_issue_ref(title):
+    if kind == "pull_request" and pr_title_has_issue_ref(title) and not pr_title_ref_is_exempt(title):
         print(
             "::error::pull_request title must not contain issue references "
-            "like (#NNN). Put `Refs #NNN` in the PR body instead. See #167."
+            "like (#NNN). Put `Refs #NNN` in the PR body instead. See #167. "
+            "A `revert(<scope>): ...` title may keep `(#NNN)` naming the "
+            "reverted change."
         )
         fail = 1
 
@@ -238,25 +279,60 @@ def verify_title(title: str, *, kind: str, body: str = "") -> int:
     return 0
 
 
-def _normalized_policy_text(title: str, body: str) -> str:
-    text = f"{title}\n{body}".lower()
-    return re.sub(r"[^a-z0-9#+.-]+", " ", text)
+def _normalize_policy_text(text: str) -> str:
+    return re.sub(r"[^a-z0-9#+.-]+", " ", text.lower())
+
+
+# The required ``## Resource Consumption`` PR section
+# (scripts/session_resource_report.py) always carries fixed ``resource``
+# wording in its heading -- it reports the session cost of producing the PR,
+# never the PR's own work. Left in the type-fit scan it would mis-classify
+# every non-bot PR that merely carries the section as performance work. This
+# is the same relayed/boilerplate-text root cause as the trusted-bot body
+# drop (#1127); strip the section here so only the PR's own prose feeds the
+# heuristic. Refs #1413.
+_RESOURCE_CONSUMPTION_SECTION_RE = re.compile(
+    r"(?ims)^[ \t]*##[ \t]+Resource[ \t]+Consumption\b.*?(?=^[ \t]*##[ \t]|\Z)"
+)
+
+
+def _strip_resource_consumption_section(body: str) -> str:
+    """Return *body* with the boilerplate ``## Resource Consumption`` H2 removed.
+
+    The section runs from its ``## Resource Consumption`` heading to the next
+    H2 heading (or end of body). A PR whose only ``resource`` wording is this
+    generated section must not be forced onto a ``perf`` title; a PR that
+    discusses resource work in its own prose still trips the heuristic.
+    """
+    return _RESOURCE_CONSUMPTION_SECTION_RE.sub("", body)
 
 
 def _words(text: str) -> set[str]:
     return set(re.findall(r"[a-z0-9][a-z0-9+-]*", text))
 
 
-def _has_performance_signal(text: str) -> bool:
-    words = _words(text)
-    return bool(words & _PERFORMANCE_TERMS) or any(phrase in text for phrase in _PERFORMANCE_PHRASES)
+def _has_performance_signal(title_text: str, body_text: str) -> bool:
+    """Return True when the title or body signals performance work.
+
+    The title is header-level metadata where a lone performance word
+    (``memory``, ``cache``, ``latency``, ...) is high-confidence, so it fires
+    on words OR phrases. A lone word in the *body*, by contrast, is too weak --
+    prose like "operator memory" produced false positives on non-performance
+    work (#1424 / #1054), so the body escalates only on a multi-word
+    performance phrase from ``_PERFORMANCE_PHRASES``.
+    """
+    if _words(title_text) & _PERFORMANCE_TERMS:
+        return True
+    if any(phrase in title_text for phrase in _PERFORMANCE_PHRASES):
+        return True
+    return any(phrase in body_text for phrase in _PERFORMANCE_PHRASES)
 
 
 def _performance_type_findings(parts: TitleParts, text: str) -> list[TypeFitFinding]:
     words = _words(text)
     if parts.type == "perf":
         return []
-    if parts.type in {"docs", "test", "tracking"}:
+    if parts.type in {"docs", "test"}:
         return []
     if parts.type == "ci" and words & _CI_INFRA_TERMS:
         return []
@@ -281,12 +357,21 @@ def _body_from_env() -> str:
     return os.environ.get("PR_BODY") or os.environ.get("ISSUE_BODY") or ""
 
 
+def _author_from_env() -> str:
+    return os.environ.get("PR_AUTHOR") or ""
+
+
+def _is_trusted_bot_author(author: str) -> bool:
+    return bool(author) and author in _TRUSTED_BOT_LOGINS
+
+
 def _cmd_verify(args: argparse.Namespace) -> int:
     title = args.title
     if title is None:
         title = os.environ.get("TITLE", "")
     body = _read_body_arg(args)
-    return verify_title(title, kind=args.kind, body=body or "")
+    author = args.author if args.author is not None else _author_from_env()
+    return verify_title(title, kind=args.kind, body=body or "", author=author)
 
 
 def _read_body_arg(args: argparse.Namespace) -> str | None:
@@ -322,6 +407,13 @@ def main(argv: list[str] | None = None) -> int:
     p_verify.add_argument(
         "--body-file",
         help="Optional file containing the issue or PR body used for type-fit checks.",
+    )
+    p_verify.add_argument(
+        "--author",
+        help=(
+            "Optional PR/issue author login. Defaults to the PR_AUTHOR env var. "
+            "A trusted-bot author drops the body from the type-fit heuristic."
+        ),
     )
     p_verify.set_defaults(func=_cmd_verify)
 

@@ -24,6 +24,10 @@
           claudeCodeVersion = "2.1.154";
           codexCliVersion = "0.135.0";
           apmVersion = "0.12.1";
+          wazaVersion = "0.33.0";
+          rtkVersion = "0.42.1";
+          actionlintVersion = "1.7.7";
+          ccusageVersion = "20.0.6";
           claudeCodeNative = {
             aarch64-linux = {
               package = "claude-code-linux-arm64";
@@ -64,6 +68,67 @@
             x86_64-linux = {
               target = "x86_64-unknown-linux-gnu";
               hash = "sha256-p2eEglQ5GFXJbfJx6cqLf3LdFy0xBGBEeFPSXZB7muA=";
+            };
+          }.${system};
+          wazaNative = {
+            aarch64-linux = {
+              asset = "waza-linux-arm64";
+              hash = "sha256-VSuk9F5fc+PpwMk0KeLFniHxpN6LmJX5j1Te6n8D36g=";
+            };
+            x86_64-linux = {
+              asset = "waza-linux-amd64";
+              hash = "sha256-waMaFdlZ0s1Tb+tBz3sg+UsENKjoaUnT3j0hweP7b/M=";
+            };
+          }.${system};
+          # rtk publishes per-target release tarballs; the asset field carries
+          # the full archive filename because the x86_64 build is musl-static
+          # while the aarch64 build is gnu-dynamic (no shared target suffix to
+          # template). Each tarball unpacks to a single ``rtk`` binary.
+          rtkNative = {
+            aarch64-linux = {
+              asset = "rtk-aarch64-unknown-linux-gnu.tar.gz";
+              hash = "sha256-MvTXh2bi9bQ3Vu/OPGmdxNqL7vUpbesC+ndW8yV+slw=";
+            };
+            x86_64-linux = {
+              asset = "rtk-x86_64-unknown-linux-musl.tar.gz";
+              hash = "sha256-o3yjAKQlEKlkRT8rwuIXdp7whyeAr4AtuKfWmPHaJGU=";
+            };
+          }.${system};
+          # actionlint (rhysd/actionlint) ships per-target release tarballs, each
+          # holding a single ``actionlint`` binary. The asset filenames embed the
+          # version, but they MUST stay STATIC strings (not ``${actionlintVersion}``
+          # interpolations): scripts/flake_pin.py parses this block with a
+          # brace-naive regex, and a ``}`` inside an interpolation would truncate
+          # the match. A version bump must therefore update the filenames here
+          # alongside the version and hashes (see scripts/flake_pin.py).
+          actionlintNative = {
+            aarch64-linux = {
+              asset = "actionlint_1.7.7_linux_arm64.tar.gz";
+              hash = "sha256-QBlC+cJO1x5P5xt2x9Y49m2GM1dcQBbv0pd858KDF9A=";
+            };
+            x86_64-linux = {
+              asset = "actionlint_1.7.7_linux_amd64.tar.gz";
+              hash = "sha256-AjBwoofNjMzXFRX+3IQ/GYW/lsQ2t+/67M5nKQ5+B1c=";
+            };
+          }.${system};
+          # ccusage (ryoppippi/ccusage) ships platform-specific native binaries
+          # via npm scoped packages (@ccusage/ccusage-linux-<arch>), each a
+          # self-contained static-pie ELF holding ``package/bin/ccusage`` (no
+          # Node runtime needed). The main ``ccusage`` npm package declares them
+          # as optionalDependencies; we fetch the per-system binary package
+          # directly, mirroring claude-cli / codex-cli. The ``pkg`` field is the
+          # scoped package basename and drives both the registry URL and the
+          # tarball filename. Pinned by SHA256 for supply-chain hardening (the
+          # npm sha512 integrity was verified against these tarballs first);
+          # SHA256 keeps the pin in scan_flake_pin_drift.py's coverage. Refs #1404.
+          ccusageNative = {
+            aarch64-linux = {
+              pkg = "ccusage-linux-arm64";
+              hash = "sha256-vcXhHYK2+CkKcq/u5WQZhAUs5FNXq36HSgJ8fKWZ2zE=";
+            };
+            x86_64-linux = {
+              pkg = "ccusage-linux-x64";
+              hash = "sha256-Wl94vPpOZ4A74sG3AFDz64grUmUxPTF/PIWze7yO/xw=";
             };
           }.${system};
           pinned-uv = pkgs.stdenvNoCC.mkDerivation {
@@ -150,12 +215,114 @@ EOF
               runHook postInstall
             '';
           };
+          # waza ships a single prebuilt release binary (no archive), so the
+          # source is fetched verbatim and installed without unpacking. Mirrors
+          # the apm-cli ELF handling (no strip / no patchelf): the devcontainer
+          # image is a standard FHS distro, so the dynamic loader resolves
+          # normally. Pinned by SHA256 for supply-chain hardening. Refs #1103.
+          waza-cli = pkgs.stdenvNoCC.mkDerivation {
+            pname = "waza";
+            version = wazaVersion;
+            src = pkgs.fetchurl {
+              url = "https://github.com/microsoft/waza/releases/download/v${wazaVersion}/${wazaNative.asset}";
+              hash = wazaNative.hash;
+            };
+            dontUnpack = true;
+            dontBuild = true;
+            dontStrip = true;
+            dontPatchELF = true;
+            installPhase = ''
+              runHook preInstall
+
+              install -Dm755 $src $out/bin/waza
+
+              runHook postInstall
+            '';
+          };
+          # rtk (rtk-ai/rtk) ships prebuilt release tarballs, each holding a
+          # single ``rtk`` binary. Mirrors the apm-cli ELF handling (no strip /
+          # no patchelf): the aarch64 build is gnu-dynamic and the devcontainer
+          # is a standard FHS distro, so the dynamic loader resolves normally;
+          # the x86_64 build is musl-static. Pinned by SHA256 for supply-chain
+          # hardening. Refs #1193.
+          rtk-cli = pkgs.stdenvNoCC.mkDerivation {
+            pname = "rtk";
+            version = rtkVersion;
+            src = pkgs.fetchurl {
+              url = "https://github.com/rtk-ai/rtk/releases/download/v${rtkVersion}/${rtkNative.asset}";
+              hash = rtkNative.hash;
+            };
+            # The tarball holds a bare ``rtk`` binary with no enclosing
+            # directory, so the default unpackPhase fails to pick a source root
+            # ("unpacker appears to have produced no directories"). Point it at
+            # the unpack dir itself so installPhase finds ./rtk.
+            sourceRoot = ".";
+            dontBuild = true;
+            dontStrip = true;
+            dontPatchELF = true;
+            installPhase = ''
+              runHook preInstall
+
+              install -Dm755 rtk $out/bin/rtk
+
+              runHook postInstall
+            '';
+          };
+          # actionlint (rhysd/actionlint) ships prebuilt release tarballs, each
+          # holding a single bare ``actionlint`` binary (no enclosing dir), so
+          # point sourceRoot at the unpack dir itself -- mirrors rtk-cli. Pinned
+          # by SHA256 for supply-chain hardening. Refs #1263.
+          actionlint-cli = pkgs.stdenvNoCC.mkDerivation {
+            pname = "actionlint";
+            version = actionlintVersion;
+            src = pkgs.fetchurl {
+              url = "https://github.com/rhysd/actionlint/releases/download/v${actionlintVersion}/${actionlintNative.asset}";
+              hash = actionlintNative.hash;
+            };
+            sourceRoot = ".";
+            dontBuild = true;
+            dontStrip = true;
+            dontPatchELF = true;
+            installPhase = ''
+              runHook preInstall
+
+              install -Dm755 actionlint $out/bin/actionlint
+
+              runHook postInstall
+            '';
+          };
+          # ccusage's per-system npm tarball unpacks to the standard npm
+          # ``package/`` source root holding ``bin/ccusage`` (a self-contained
+          # ELF). Mirrors claude-cli minus the bin path: install that binary.
+          ccusage-cli = pkgs.stdenvNoCC.mkDerivation {
+            pname = "ccusage";
+            version = ccusageVersion;
+            src = pkgs.fetchurl {
+              url = "https://registry.npmjs.org/@ccusage/${ccusageNative.pkg}/-/${ccusageNative.pkg}-${ccusageVersion}.tgz";
+              hash = ccusageNative.hash;
+            };
+            dontBuild = true;
+            dontStrip = true;
+            dontPatchELF = true;
+            installPhase = ''
+              runHook preInstall
+
+              install -Dm755 bin/ccusage $out/bin/ccusage
+
+              runHook postInstall
+            '';
+          };
         in
         {
-          inherit claude-cli codex-cli pinned-uv apm-cli;
+          inherit claude-cli codex-cli pinned-uv apm-cli waza-cli rtk-cli actionlint-cli ccusage-cli;
           bubblewrap = pkgs.bubblewrap;
           gh-cli = pkgs.gh;
           python-runtime = pkgs.python311;
+          # GitHub MCP server binary for the local-stdio launch path used by
+          # scripts/mcp_github_launch.sh (#1063). In the devcontainer there is no
+          # Docker daemon, so the wrapper execs this Nix-pinned binary instead of
+          # `docker run`. Pinned transitively through the nixos-25.05 nixpkgs input.
+          github-mcp-server = pkgs.github-mcp-server;
         };
       mkShells = system:
         let
@@ -174,7 +341,11 @@ EOF
             nodejs_22
             python311
             ripgrep
+            shellcheck
             agentPackages.pinned-uv
+            agentPackages.waza-cli
+            agentPackages.rtk-cli
+            agentPackages.actionlint-cli
           ];
           pythonQualityPackages = with pkgs; [
             mypy
@@ -182,7 +353,10 @@ EOF
             ruff
           ];
           networkPackages = with pkgs; [
+            bpftrace
+            dnsmasq
             dnsutils
+            ipset
             iproute2
             iptables
           ];
@@ -198,11 +372,13 @@ EOF
           default = mkAgentShell "shared" [ ];
           claude = mkAgentShell "claude" [
             agentPackages.claude-cli
+            agentPackages.ccusage-cli
             pkgs.nodePackages.npm
           ];
           codex = mkAgentShell "codex" [
             agentPackages.bubblewrap
             agentPackages.codex-cli
+            agentPackages.ccusage-cli
             pkgs.nodePackages.pnpm
           ];
           network = pkgs.mkShell {

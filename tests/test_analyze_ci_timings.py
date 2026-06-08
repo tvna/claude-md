@@ -16,7 +16,7 @@ from pathlib import Path
 import analyze_ci_timings
 import pytest
 
-pytestmark = pytest.mark.shard_ci_ops
+pytestmark = pytest.mark.shard_ci_ops_2
 
 def _make_job(
     *,
@@ -720,3 +720,140 @@ class TestRenderCompareReport:
         assert "_no step samples_" in report
         assert "Pre-cutoff job executions: 0." in report
         assert "Post-cutoff job executions: 0." in report
+
+
+_T = datetime(2026, 5, 20, 12, 0, tzinfo=UTC)
+
+
+def _samples(*durations: float) -> list[tuple[datetime, float]]:
+    """Build (started_at, duration) samples in the aggregate_job_durations shape."""
+    return [(_T, d) for d in durations]
+
+
+class TestBudget:
+    def test_budget_breaches_flags_over(self) -> None:
+        agg = {"slow": _samples(400.0, 420.0), "fast": _samples(10.0)}
+        assert analyze_ci_timings.budget_breaches(agg, 300.0) == [("slow", 410.0)]
+
+    def test_budget_breaches_empty_when_under(self) -> None:
+        assert analyze_ci_timings.budget_breaches({"j": _samples(10.0, 20.0)}, 300.0) == []
+
+    def test_budget_uses_p50_not_max(self) -> None:
+        # A single slow outlier must not trip the soft budget (median is 10).
+        assert analyze_ci_timings.budget_breaches({"j": _samples(10.0, 10.0, 999.0)}, 300.0) == []
+
+    def test_budget_skips_empty_samples(self) -> None:
+        assert analyze_ci_timings.budget_breaches({"j": []}, 1.0) == []
+
+    def test_report_includes_budget_breach(self) -> None:
+        jobs = [
+            _make_job(
+                name="slow",
+                started_at="2026-05-20T12:00:00Z",
+                completed_at="2026-05-20T12:10:00Z",  # 600s
+            )
+        ]
+        report = analyze_ci_timings.render_report(
+            jobs, title="t", budget_seconds=300.0
+        )
+        assert "## Budget" in report
+        assert "BUDGET BREACH" in report
+        assert "slow" in report
+
+    def test_report_budget_ok_when_under(self) -> None:
+        jobs = [_make_job(name="fast")]  # default 60s
+        report = analyze_ci_timings.render_report(
+            jobs, title="t", budget_seconds=300.0
+        )
+        assert "## Budget" in report
+        assert "BUDGET BREACH" not in report
+
+    def test_report_omits_budget_section_when_none(self) -> None:
+        report = analyze_ci_timings.render_report(
+            [_make_job(name="j")], title="t"
+        )
+        assert "## Budget" not in report
+
+    def test_cli_budget_flag(self, tmp_path: Path) -> None:
+        jobs = [
+            _make_job(
+                name="slow",
+                started_at="2026-05-20T12:00:00Z",
+                completed_at="2026-05-20T12:10:00Z",
+            )
+        ]
+        _write_jobs(tmp_path, "run.json", jobs)
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            rc = analyze_ci_timings.main(
+                ["--jobs", str(tmp_path), "--budget-seconds", "300", "--title", "t"]
+            )
+        assert rc == 0
+        assert "BUDGET BREACH" in buf.getvalue()
+
+    def test_budget_breach_payload_shape(self) -> None:
+        agg = {"slow": _samples(400.0, 420.0), "fast": _samples(10.0)}
+        payload = analyze_ci_timings.budget_breach_payload(agg, 300.0)
+        assert payload == {
+            "budget_seconds": 300.0,
+            "breaches": [{"job": "slow", "p50": 410.0}],
+        }
+
+    def test_budget_breach_payload_empty_when_under(self) -> None:
+        payload = analyze_ci_timings.budget_breach_payload(
+            {"j": _samples(10.0, 20.0)}, 300.0
+        )
+        assert payload == {"budget_seconds": 300.0, "breaches": []}
+
+    def test_cli_budget_output_writes_breach_json(self, tmp_path: Path) -> None:
+        jobs = [
+            _make_job(
+                name="slow",
+                started_at="2026-05-20T12:00:00Z",
+                completed_at="2026-05-20T12:10:00Z",  # 600s
+            )
+        ]
+        _write_jobs(tmp_path, "run.json", jobs)
+        out_file = tmp_path / "budget.json"
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            rc = analyze_ci_timings.main(
+                [
+                    "--jobs",
+                    str(tmp_path),
+                    "--budget-seconds",
+                    "300",
+                    "--budget-output",
+                    str(out_file),
+                ]
+            )
+        assert rc == 0
+        payload = json.loads(out_file.read_text(encoding="utf-8"))
+        assert payload["budget_seconds"] == 300.0
+        assert payload["breaches"] == [{"job": "slow", "p50": 600.0}]
+
+    def test_cli_budget_output_empty_when_under(self, tmp_path: Path) -> None:
+        _write_jobs(tmp_path, "run.json", [_make_job(name="fast")])  # 60s
+        out_file = tmp_path / "budget.json"
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            rc = analyze_ci_timings.main(
+                [
+                    "--jobs",
+                    str(tmp_path),
+                    "--budget-seconds",
+                    "300",
+                    "--budget-output",
+                    str(out_file),
+                ]
+            )
+        assert rc == 0
+        assert json.loads(out_file.read_text(encoding="utf-8"))["breaches"] == []
+
+    def test_cli_budget_output_requires_budget_seconds(self, tmp_path: Path) -> None:
+        _write_jobs(tmp_path, "run.json", [_make_job(name="a")])
+        with pytest.raises(SystemExit) as exc:
+            analyze_ci_timings.main(
+                ["--jobs", str(tmp_path), "--budget-output", str(tmp_path / "b.json")]
+            )
+        assert exc.value.code == 2

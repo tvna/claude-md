@@ -100,7 +100,7 @@ class TestFollowsNamingConvention:
         "title",
         [
             "fix(non-ascii): notify title policy violations",
-            "tracking: coordinate non-ascii defense",
+            "chore: coordinate non-ascii defense",
         ],
     )
     def test_issue_titles_pass(self, title: str) -> None:
@@ -154,13 +154,74 @@ class TestTypeFitFindings:
         assert "performance" in findings[0].reason
         assert "perf" in findings[0].expected_types
 
-    def test_body_can_supply_performance_signal(self) -> None:
+    def test_body_phrase_supplies_performance_signal(self) -> None:
+        # The body escalates only on a multi-word performance phrase, not on a
+        # lone word (#1424). "speed up" is in _PERFORMANCE_PHRASES.
         findings = title_policy.type_fit_findings(
             "fix(devcontainer): improve image setup",
             kind="issue",
-            body="Fact: this speeds up devcontainer startup by caching images.",
+            body="Fact: this is a clear speed up of devcontainer image setup.",
         )
         assert len(findings) == 1
+
+    def test_resource_consumption_section_does_not_trip_type_fit(self) -> None:
+        # The required boilerplate ## Resource Consumption section carries the
+        # word "resource" but never describes the PR's own work; a chore PR
+        # that merely carries it must not be forced onto a perf title. Refs #1413.
+        body = (
+            "## Summary\n\n- Bump a pinned dependency.\n\n"
+            "## Resource Consumption\n\n"
+            "- Elapsed (since previous PR or session start): 0:01:00\n"
+            "- Total tokens: 1,000 (input 1 / output 1 / cache-create 1 / cache-read 1)\n"
+            "- Cost (USD): $0.0100\n"
+            "- Model(s): claude-opus-4-8\n"
+        )
+        assert (
+            title_policy.type_fit_findings(
+                "chore(deps): bump pinned dependency",
+                kind="pull_request",
+                body=body,
+            )
+            == []
+        )
+
+    def test_resource_wording_outside_the_section_still_trips(self) -> None:
+        # Perf vocabulary in the PR's own prose still classifies the work,
+        # even when the boilerplate section is also present and stripped.
+        body = (
+            "## Summary\n\n- Speed up the resource cache for faster startup.\n\n"
+            "## Resource Consumption\n\n- Cost (USD): $0.0100\n"
+        )
+        findings = title_policy.type_fit_findings(
+            "chore(x): tidy things", kind="pull_request", body=body
+        )
+        assert len(findings) == 1
+
+    def test_strip_resource_section_stops_at_next_h2(self) -> None:
+        body = (
+            "## Resource Consumption\n\n- resource cost\n\n"
+            "## Related Issue\n\nCloses #1\n"
+        )
+        stripped = title_policy._strip_resource_consumption_section(body)
+        assert "Resource Consumption" not in stripped
+        assert "## Related Issue" in stripped
+
+    @pytest.mark.parametrize(
+        "title",
+        [
+            "chore(harness): tidy operator notes",
+            "feat(harness): add operator notes",
+        ],
+    )
+    def test_lone_body_word_does_not_trip(self, title: str) -> None:
+        # #1424 / #1054: a lone performance word in the body ("memory" here) is
+        # too weak a signal and must not misclassify a non-performance title.
+        findings = title_policy.type_fit_findings(
+            title,
+            kind="issue",
+            body="This improves operator memory of past runs.",
+        )
+        assert findings == []
 
 
 class TestPrTitleHasIssueRef:
@@ -188,6 +249,33 @@ class TestPrTitleHasIssueRef:
     )
     def test_titles_without_issue_ref_pass(self, title: str) -> None:
         assert title_policy.pr_title_has_issue_ref(title) is False
+
+
+class TestPrTitleRefIsExempt:
+    @pytest.mark.parametrize(
+        "title",
+        [
+            "revert: undo prior change (#1122)",
+            "revert(automerge): restore non-ascii label exemption (#1122)",
+            "revert(scope): drop change (#203) (#213)",
+        ],
+    )
+    def test_revert_titles_are_exempt(self, title: str) -> None:
+        assert title_policy.pr_title_ref_is_exempt(title) is True
+
+    @pytest.mark.parametrize(
+        "title",
+        [
+            "fix(x): summary (#42)",
+            "feat: add gate (#7)",
+            # ``revert`` substring outside the type slot must not exempt.
+            "fix(revert): summary (#9)",
+            # Malformed shape parses to no type, so it stays banned.
+            "revert this thing (#9)",
+        ],
+    )
+    def test_non_revert_titles_are_not_exempt(self, title: str) -> None:
+        assert title_policy.pr_title_ref_is_exempt(title) is False
 
 
 class TestDescribeNonAscii:
@@ -276,11 +364,29 @@ class TestVerifyTitle:
             title_policy.verify_title(
                 "fix(devcontainer): improve image setup",
                 kind="issue",
-                body="Fact: this speeds up startup by caching images.",
+                body="Fact: this is a clear speed up of devcontainer image setup.",
             )
             == 1
         )
         assert "title type does not fit" in capsys.readouterr().out
+
+    def test_revert_pr_title_with_ref_exits_zero(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        # A revert title may name the reverted PR/commit; the dedup ban
+        # (#167 / #214) does not apply, but ASCII/naming still would.
+        assert (
+            title_policy.verify_title(
+                "revert(automerge): restore label exemption (#1122)",
+                kind="pull_request",
+            )
+            == 0
+        )
+        out = capsys.readouterr().out
+        assert (
+            "OK: pull_request title is ASCII-only and follows naming convention."
+            in out
+        )
 
     def test_issue_with_issue_ref_in_title_still_passes(
         self, capsys: pytest.CaptureFixture[str]
@@ -294,6 +400,59 @@ class TestVerifyTitle:
         )
         out = capsys.readouterr().out
         assert "OK: issue title is ASCII-only and follows naming convention." in out
+
+
+class TestTrustedBotTypeFitCarveOut:
+    """#1127: a trusted-bot author drops the relayed body from type-fit.
+
+    Dependabot relays upstream release notes whose performance wording must
+    not mis-classify a correct ``chore(deps):`` title as performance work.
+    Title-only checks still apply to bots. The body carries a performance
+    *phrase* ("build cache") so that a non-bot author still trips the gate --
+    that contrast is what proves the carve-out drops the bot body (#1424
+    narrowed body signal to phrases, so a lone word no longer trips either).
+    """
+
+    _DEPENDABOT_TITLE = "chore(deps): bump actions/setup-go from 5.6.0 to 6.4.0"
+    _PERF_BODY = "Update the Go module build cache to use go.mod."
+
+    def test_trusted_bot_body_does_not_trip_type_fit(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        assert (
+            title_policy.verify_title(
+                self._DEPENDABOT_TITLE,
+                kind="pull_request",
+                body=self._PERF_BODY,
+                author="dependabot[bot]",
+            )
+            == 0
+        )
+        assert "title type does not fit" not in capsys.readouterr().out
+
+    def test_non_bot_author_body_still_trips_type_fit(self) -> None:
+        assert (
+            title_policy.verify_title(
+                self._DEPENDABOT_TITLE,
+                kind="pull_request",
+                body=self._PERF_BODY,
+                author="octocat",
+            )
+            == 1
+        )
+
+    def test_trusted_bot_perf_signal_in_title_still_fails(self) -> None:
+        # The carve-out drops only the body; a perf signal in the bot's own
+        # title is still its own authored content and must be checked.
+        assert (
+            title_policy.verify_title(
+                "chore(deps): cache image builds",
+                kind="pull_request",
+                body="",
+                author="dependabot[bot]",
+            )
+            == 1
+        )
 
 
 class TestPropertyInvariants:

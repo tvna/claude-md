@@ -38,7 +38,7 @@ class TestRunCreate:
         assert len(post_calls) == 1
         _, _, payload = post_calls[0]
         assert payload["title"] == (
-            "fix(auto-retro): review PR #42 repair loops"
+            "chore(auto-retro): review PR #42 repair loops"
         )
         assert "feat(harness): step one" in payload["body"]
         assert "fix(harness): step two" in payload["body"]
@@ -145,7 +145,10 @@ class TestRunCreate:
     ) -> None:
         """run() must POST the back-link comment on the source PR after
         create_issue returns. Ordering matters: the back-link references
-        the retro number, so the retro must exist first."""
+        the retro number, so the retro must exist first.
+
+        PR-thread comments are opt-in since #1386, so the flag is set."""
+        monkeypatch.setenv("AUTO_RETRO_PR_COMMENTS", "1")
         seen = orchestrator_recorder(
             monkeypatch,
             created_response={"number": 777, "html_url": "https://x/i/777"},
@@ -175,7 +178,10 @@ class TestRunCreate:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """A re-run on the same merged PR finds an existing back-link
-        marker and PATCHes it instead of creating a duplicate."""
+        marker and PATCHes it instead of creating a duplicate.
+
+        PR-thread comments are opt-in since #1386, so the flag is set."""
+        monkeypatch.setenv("AUTO_RETRO_PR_COMMENTS", "1")
         seen = orchestrator_recorder(
             monkeypatch,
             created_response={"number": 777, "html_url": "https://x/i/777"},
@@ -205,7 +211,10 @@ class TestRunCreate:
         back-link comment lands. Ordering matters: a subscribed session
         consumes the labeled webhook as the terminal-state signal, so the
         back-link comment (the human-visible reverse pointer) must already
-        be in place by the time the label fires."""
+        be in place by the time the label fires.
+
+        PR-thread comments are opt-in since #1386, so the flag is set."""
+        monkeypatch.setenv("AUTO_RETRO_PR_COMMENTS", "1")
         seen = orchestrator_recorder(
             monkeypatch,
             created_response={"number": 777, "html_url": "https://x/i/777"},
@@ -227,3 +236,34 @@ class TestRunCreate:
             "terminal label must be POSTed after the back-link comment"
         )
         assert seen[label_idx][2] == {"labels": [ar._TERMINAL_LABEL]}
+
+    def test_back_link_disabled_by_default_label_still_applied(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Default (no AUTO_RETRO_PR_COMMENTS): the retro issue is created
+        and the terminal label is applied, but no back-link comment is
+        POSTed to the source PR -- the dashboard is the surface now (#1386)."""
+        monkeypatch.delenv("AUTO_RETRO_PR_COMMENTS", raising=False)
+        seen = orchestrator_recorder(
+            monkeypatch,
+            created_response={"number": 777, "html_url": "https://x/i/777"},
+            commits=[
+                {"commit": {"message": "feat(harness): step one"}},
+                {"commit": {"message": "fixup! step one"}},
+            ],
+        )
+        assert ar.run(merged_event(number=42, commits=2), "o/r") == 0
+        # Retro issue still created.
+        assert any(
+            m == "POST" and p == "/repos/o/r/issues" for m, p, _b in seen
+        )
+        # No back-link comment POSTed to the PR thread.
+        assert not any(
+            m == "POST" and p == "/repos/o/r/issues/42/comments"
+            for m, p, _b in seen
+        )
+        # Terminal label (the quiet PR-side pointer) is still applied.
+        assert any(
+            m == "POST" and p == "/repos/o/r/issues/42/labels"
+            for m, p, _b in seen
+        )

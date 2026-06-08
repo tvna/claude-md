@@ -1,0 +1,240 @@
+name: Verify PR
+
+# Consolidated PR-verification gates (issue #1319). This file groups the
+# pull_request validation workflows that previously lived as separate files:
+#   - portable-pr-policy.yml      -> job: portable-pr-policy
+#   - verify-design-philosophy.yml-> job: verify-design-philosophy
+#   - verify-dependabot-labels.yml-> job: verify-dependabot-labels
+#   - verify-ruleset-sync.yml     -> job: verify-ruleset-sync
+#
+# Each job keeps its original `name:` so the required_status_check contexts in
+# .github/rulesets/main.json keep resolving (scripts/verify_required_check_contexts.py
+# matches on job `name:`, not file name). Job-level permissions, concurrency,
+# environment, and env are preserved per job to keep effective security
+# permissions identical to the pre-consolidation state.
+#
+# Trigger note (intentional widening, documented per #1319): the merged
+# on.pull_request.types is the UNION of the source triggers
+# ([opened, edited, synchronize, reopened, ready_for_review]). The two jobs that
+# previously used the default types (verify-design-philosophy, verify-dependabot-labels)
+# now also run on `edited` and `ready_for_review`. This is a superset of their
+# old triggers; it never narrows their coverage and keeps the required gates
+# resolvable on title/body edits.
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened, ready_for_review]
+
+permissions: {}
+
+jobs:
+  portable-pr-policy:
+    name: "Portable PR policy / gate"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+    concurrency:
+      group: portable-pr-policy-${{ github.event.pull_request.number || github.ref }}
+      cancel-in-progress: true
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      KIND: pull_request
+      TITLE: ${{ github.event.pull_request.title }}
+      PR_BODY: ${{ github.event.pull_request.body }}
+      PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+      PR_CREATED_AT: ${{ github.event.pull_request.created_at }}
+      BODY_POLICY_CUTOFF: "2026-05-26T00:00:00Z"
+      BODY_POLICY_SHAPE_CUTOFF: "2026-05-26T00:00:00Z"
+      BASE_REF: origin/${{ github.event.pull_request.base.ref }}
+      APM_CLI_VERSION: "0.12.1"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          # fetch-depth: 0 makes origin/<base> reachable from HEAD so the
+          # README translation check can compare <base>..HEAD.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Validate title policy
+        run: |
+          body_file="$(mktemp)"
+          printf '%s' "$PR_BODY" > "$body_file"
+          python3 scripts/title_policy.py verify --kind "$KIND" --body-file "$body_file" --author "$PR_AUTHOR"
+
+      - name: Validate body section structure
+        run: |
+          body_file="$(mktemp)"
+          printf '%s' "$PR_BODY" > "$body_file"
+          python3 scripts/body_policy.py verify \
+            --kind "$KIND" \
+            --body-file "$body_file"
+
+      - name: Validate retro repair completeness
+        run: |
+          body_file="$(mktemp)"
+          printf '%s' "$PR_BODY" > "$body_file"
+          python3 scripts/auto_retro.py verify-retro-completeness \
+            --repo "$REPO" --pr-title "$TITLE" --pr-body-file "$body_file"
+
+      - name: Block direct PR from retro issue
+        run: |
+          body_file="$(mktemp)"
+          printf '%s' "$PR_BODY" > "$body_file"
+          python3 scripts/auto_retro.py verify-no-direct-retro-pr \
+            --repo "$REPO" --pr-title "$TITLE" --pr-body-file "$body_file"
+
+      - name: Validate PR-issue link
+        run: |
+          body_file="$(mktemp)"
+          printf '%s' "$PR_BODY" > "$body_file"
+          python3 scripts/issue_link.py verify --repo "$REPO" --body-file "$body_file" --author "$PR_AUTHOR"
+
+      - name: Validate linked issue titles
+        run: |
+          body_file="$(mktemp)"
+          printf '%s' "$PR_BODY" > "$body_file"
+          python3 scripts/verify_linked_issue_titles.py verify --repo "$REPO" --body-file "$body_file"
+
+      - name: Validate README translation parity
+        run: |
+          body_file="$(mktemp)"
+          printf '%s' "$PR_BODY" > "$body_file"
+          python3 scripts/verify_readme_translation.py verify \
+            --base-ref "$BASE_REF" \
+            --body-file "$body_file"
+
+      - name: Require Text delta section for instruction changes
+        run: |
+          body_file="$(mktemp)"
+          printf '%s' "$PR_BODY" > "$body_file"
+          python3 scripts/verify_text_delta_section.py verify \
+            --base-ref "$BASE_REF" \
+            --body-file "$body_file" \
+            --created-at "$PR_CREATED_AT" \
+            --cutoff "$BODY_POLICY_CUTOFF"
+
+      - name: Require design-philosophy matrix update for principle changes
+        run: |
+          body_file="$(mktemp)"
+          printf '%s' "$PR_BODY" > "$body_file"
+          python3 scripts/scan_design_philosophy_drift.py verify-coupling \
+            --base-ref "$BASE_REF" \
+            --body-file "$body_file"
+
+      - name: Scan APM artifacts for repo-local references
+        run: |
+          python3 scripts/scan_apm_portability.py verify \
+            --path .apm/instructions/master.instructions.md \
+            --path CLAUDE.md \
+            --path AGENTS.md
+
+      - name: Set up uv and project environment
+        uses: ./.github/actions/setup-uv
+
+      - name: Compile agent instructions
+        run: uv run --with "apm-cli==${APM_CLI_VERSION}" --exclude-newer "14 days" apm compile
+
+      - name: Verify CLAUDE.md / AGENTS.md drift
+        run: |
+          if ! git diff --exit-code -- CLAUDE.md AGENTS.md; then
+            echo "::error::CLAUDE.md / AGENTS.md drift detected vs .apm/instructions/master.instructions.md."
+            echo "Run 'uv run --with \"apm-cli==${APM_CLI_VERSION}\" --exclude-newer \"14 days\" apm compile' locally and commit the result."
+            exit 1
+          fi
+
+      - name: Verify .apm checksum lockfile
+        run: python3 scripts/verify_apm_checksums.py verify
+
+      - name: Verify apm.lock.yaml MCP drift
+        run: python3 scripts/scan_apm_lock_drift.py verify
+
+      - name: Run prek (j178/prek) against all files
+        run: uv tool run prek run --all-files --show-diff-on-failure
+
+  verify-design-philosophy:
+    name: "Verify design philosophy doc / verify"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    concurrency:
+      group: verify-design-philosophy-${{ github.ref }}
+      cancel-in-progress: true
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+
+      - name: Scan design-philosophy doc for drift against APM master
+        run: |
+          python3 scripts/scan_design_philosophy_drift.py verify \
+            --master .apm/instructions/master.instructions.md \
+            --doc docs/prd/agent-rules-design-philosophy.md
+
+  verify-dependabot-labels:
+    name: "Verify dependabot labels / verify"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    concurrency:
+      group: verify-dependabot-labels-${{ github.ref }}
+      cancel-in-progress: true
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+
+      - name: Verify dependabot.yml labels resolve in labels.json
+        run: |
+          python3 scripts/dependabot_labels.py verify \
+            --dependabot .github/dependabot.yml \
+            --labels .github/labels.json
+
+  verify-ruleset-sync:
+    name: "Verify ruleset sync / gate"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: ruleset-verify
+    permissions:
+      contents: read
+    concurrency:
+      group: verify-ruleset-sync-${{ github.ref }}
+      cancel-in-progress: true
+    env:
+      GH_TOKEN_API: ${{ secrets.RULESETS_PAT }}
+      REPO: ${{ github.repository }}
+      BASE_REF: ${{ github.event.pull_request.base.ref }}
+    steps:
+      - name: Guard RULESETS_PAT
+        run: |
+          if [ -z "${GH_TOKEN_API}" ]; then
+            echo "::error::RULESETS_PAT secret is not set. Configure the 'ruleset-verify' environment with the RULESETS_PAT secret. See docs/runbooks/rulesets.md \"Required secret\" and \"PR-time required-checks sync gate\"."
+            exit 1
+          fi
+
+      - name: Checkout repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+
+      - name: Verify required-check contexts match workflow job names
+        run: |
+          python3 scripts/verify_required_check_contexts.py verify \
+            --sot-path .github/rulesets/main.json \
+            --workflows-dir .github/workflows
+
+      - name: Verify ruleset sync
+        run: |
+          python3 scripts/verify_ruleset_sync.py verify \
+            --repo "${REPO}" \
+            --base-ref "${BASE_REF}" \
+            --sot-path .github/rulesets/main.json \
+            --ruleset-name main-protection

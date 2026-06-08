@@ -52,11 +52,10 @@ ALLOWLIST: dict[str, str] = {
         "Triggered by the Claude ``Write`` tool which has no Codex equivalent. "
         "Codex plan artifacts are managed differently and do not require this gate."
     ),
-    "gate_merge_retro_survey_askuserquestion": (
-        "Drives the Claude-only ``AskUserQuestion`` tool (no Codex/Devin "
-        "equivalent) to run a pre-merge retro/satisfaction survey, mirroring "
-        "``gate_decision_handoff_askuserquestion``. Cannot be mirrored in Codex "
-        "hooks because that harness has no structured-question tool."
+    "gen_mcp_json": (
+        "Renders the Claude Code project-scope ``.mcp.json`` from apm.yml. "
+        "Codex resolves MCP servers from its own client config, not this file, "
+        "so there is no Codex counterpart to mirror."
     ),
 }
 

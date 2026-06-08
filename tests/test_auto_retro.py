@@ -21,7 +21,7 @@ import auto_retro as ar
 import body_policy as bp
 import pytest
 
-pytestmark = pytest.mark.shard_ci_ops
+pytestmark = pytest.mark.shard_ci_ops_2
 # ---------------------------------------------------------------------------
 # Alignment: required sections must match body_policy
 # ---------------------------------------------------------------------------
@@ -258,15 +258,17 @@ class TestBuildRetroTitle:
             (9, "Freeform title"),
         ],
     )
-    def test_emits_canonical_fix_auto_retro_title(
+    def test_emits_canonical_chore_auto_retro_title(
         self, number: int, source_title: str
     ) -> None:
-        """The retro title is a fixed fix(auto-retro) token regardless of
-        the source PR's own type(scope)."""
+        """The retro title is a fixed chore(auto-retro) token regardless of
+        the source PR's own type(scope). The neutral chore prefix avoids the
+        fix(...) reading that invited direct PRs off un-triaged retros
+        (Refs #1069)."""
         pr = _make_pr(number=number, title=source_title)
         assert (
             ar.build_retro_title(pr)
-            == f"fix(auto-retro): review PR #{number} repair loops"
+            == f"chore(auto-retro): review PR #{number} repair loops"
         )
 
     @pytest.mark.parametrize(
@@ -604,6 +606,19 @@ class TestRepairHistoryTable:
         assert len(multi_lines) == 1
         assert "[policy-artifact]" in multi_lines[0]
 
+    def test_revert_row_carries_policy_artifact_marker(self) -> None:
+        """Refs #1287: synthetic Revert commit row carries the marker and
+        prompts co-fire correlation."""
+        table = ar._build_repair_history_table(
+            None, ['Revert "feat: x"'], 1
+        )
+        revert_lines = [
+            line for line in table.splitlines() if "| Revert commit |" in line
+        ]
+        assert len(revert_lines) == 1
+        assert "[policy-artifact]" in revert_lines[0]
+        assert "co-firing" in revert_lines[0]
+
     def test_policy_artifact_footnote_for_synthetic_rows_without_merge(
         self,
     ) -> None:
@@ -639,24 +654,24 @@ class TestRepairHistoryTable:
 
     def test_pipe_in_commit_subject_is_escaped(self) -> None:
         """A '|' in a commit subject must be backslash-escaped so the
-        table structure stays a 3-column grid."""
+        table structure stays a 4-column grid."""
         table = ar._build_repair_history_table(
             None, ["fix(x): rename a|b to c"], 1
         )
         # The escaped pipe must appear, AND the rendered row line must
-        # contain exactly 4 unescaped '|' characters (the 3 column
+        # contain exactly 5 unescaped '|' characters (the 4 column
         # delimiters plus opening/closing).
         assert "a\\|b" in table
         row_line = next(
             line for line in table.splitlines() if "Iteration commit" in line
         )
         unescaped_pipes = row_line.replace("\\|", "")
-        assert unescaped_pipes.count("|") == 4
+        assert unescaped_pipes.count("|") == 5
 
     def test_table_uses_canonical_header(self) -> None:
         table = ar._build_repair_history_table(None, [], 1)
         first_line = table.splitlines()[0]
-        assert first_line == "| # | Repair | What the reviewer / gate caught |"
+        assert first_line == "| # | Repair | Cause | Next action |"
 
     def test_row_ordering_is_deterministic(self) -> None:
         """Rows must appear in: CI failures, fix-ups, merge-from-main,
@@ -777,7 +792,7 @@ class TestRepairHistoryTableCheckRunContext:
         table = ar._build_repair_history_table(check_runs, [], 1)
         assert "more failures" not in table
 
-    def test_row_columns_remain_three_when_url_present(self) -> None:
+    def test_row_columns_remain_four_when_url_present(self) -> None:
         """Defence: html_url must be safe inside one markdown-table cell
         (the URL contains no pipes, but _escape_table_cell is still in the
         path; this test guards against a future refactor that bypasses it)."""
@@ -794,10 +809,10 @@ class TestRepairHistoryTableCheckRunContext:
         row_line = next(
             line for line in table.splitlines() if "CI fail: gate" in line
         )
-        # 4 unescaped '|' delimiters keep the row a 3-column grid even
+        # 5 unescaped '|' delimiters keep the row a 4-column grid even
         # when the URL/summary contain literal pipes.
         unescaped = row_line.replace("\\|", "")
-        assert unescaped.count("|") == 4
+        assert unescaped.count("|") == 5
 
 
 class TestBuildRetroBodyMarkers:
@@ -834,7 +849,7 @@ class TestBuildRetroBodyMarkers:
         auto_open = body.index("<!-- auto-filled:repair-history -->")
         auto_close = body.index("<!-- /auto-filled:repair-history -->")
         table_header = body.index(
-            "| # | Repair | What the reviewer / gate caught |"
+            "| # | Repair | Cause | Next action |"
         )
         assert auto_open < table_header < auto_close
 
@@ -945,6 +960,44 @@ class TestFindExistingRetro:
             {"number": 12, "title": "Fix(Auto-Retro): review PR #42 repair loops"}
         ]
         assert ar.find_existing_retro(items, 42) == 12
+
+    def test_matches_new_chore_prefix(self) -> None:
+        """New auto-retros use the chore(auto-retro) prefix (Refs #1069)."""
+        items = [
+            {"number": 13, "title": "chore(auto-retro): review PR #42 repair loops"}
+        ]
+        assert ar.find_existing_retro(items, 42) == 13
+
+
+class TestIsRetroIssueTitle:
+    @pytest.mark.parametrize(
+        "title",
+        [
+            "chore(auto-retro): review PR #42 repair loops",
+            "fix(auto-retro): review PR #42 repair loops",
+            "Chore(Auto-Retro): review PR #42 repair loops",
+            "  chore(auto-retro): leading whitespace",
+        ],
+    )
+    def test_matches_current_and_legacy_prefix(self, title: str) -> None:
+        """Both the new chore prefix and the legacy fix prefix are
+        recognized so dedup and the gate keep covering unrenamed closed
+        retros (Refs #1069)."""
+        assert ar.is_retro_issue_title(title) is True
+
+    @pytest.mark.parametrize(
+        "title",
+        [
+            "retro: review PR #42 repair loops",
+            "retro(fix): review PR #42 repair loops",
+            "feat(auto-retro): not a retro issue shape",
+            "docs(auto-retro): record repair-free merge",
+            "feat: unrelated",
+            "",
+        ],
+    )
+    def test_rejects_non_retro_titles(self, title: str) -> None:
+        assert ar.is_retro_issue_title(title) is False
 
 
 class TestIssueLabels:
@@ -2049,11 +2102,18 @@ class TestComputeRepairSignals:
         out = ar.compute_repair_signals(self._pr(), has_inline_comments=True)
         assert out == {
             "inline_review_comments": True,
-            "body_cites_refs": False,
             "fix_typed_title": False,
             "multi_commit_pr": False,
-            "verification_pairs_failed": False,
         }
+
+    def test_body_cites_refs_signal_is_retired(self) -> None:
+        # Retired as a standalone trigger in #1227: a PR whose only
+        # evidence is a Refs line fires no signal.
+        out = ar.compute_repair_signals(
+            self._pr(body="Refs #287\nRefs #298"), has_inline_comments=False
+        )
+        assert "body_cites_refs" not in out
+        assert not any(out.values())
 
     def test_post_merge_signal_removed(self) -> None:
         """Per #418, `post_merge_unchecked` is no longer returned at merge time."""
@@ -2071,26 +2131,6 @@ class TestComputeRepairSignals:
             self._pr(body=body), has_inline_comments=False
         )
         assert not any(out.values())
-
-    def test_body_refs_signal_fires_for_refs(self) -> None:
-        out = ar.compute_repair_signals(
-            self._pr(body="Refs #287\nRefs #298"), has_inline_comments=False
-        )
-        assert out["body_cites_refs"] is True
-
-    def test_body_refs_signal_fires_for_closes_fixes_resolves(self) -> None:
-        for keyword in ["Closes", "Fixes", "Resolves"]:
-            out = ar.compute_repair_signals(
-                self._pr(body=f"{keyword} #1"), has_inline_comments=False
-            )
-            assert out["body_cites_refs"] is True, keyword
-
-    def test_body_refs_ignores_html_commented_refs(self) -> None:
-        out = ar.compute_repair_signals(
-            self._pr(body="<!-- Refs #999 -->\nplain text"),
-            has_inline_comments=False,
-        )
-        assert out["body_cites_refs"] is False
 
     def test_fix_typed_title_signal_fires(self) -> None:
         out = ar.compute_repair_signals(
@@ -2179,6 +2219,111 @@ class TestComputeRepairSignals:
         )
         assert out["multi_commit_pr"] is True
 
+    def test_multi_commit_signal_excludes_git_standard_revert(self) -> None:
+        # A revert-only multi-commit PR must not fire on its own (#1287).
+        out = ar.compute_repair_signals(
+            self._pr(commits=2),
+            has_inline_comments=False,
+            commit_subjects=[
+                'Revert "feat(x): add x"',
+                "feat(x): add x",
+            ],
+        )
+        assert out["multi_commit_pr"] is False
+
+    def test_multi_commit_signal_excludes_conventional_revert(self) -> None:
+        for revert_subject in [
+            "revert(automerge): restore exemption",
+            "revert: restore exemption",
+            "revert!: restore exemption",
+            "revert(automerge)!: restore exemption",
+        ]:
+            out = ar.compute_repair_signals(
+                self._pr(commits=2),
+                has_inline_comments=False,
+                commit_subjects=[revert_subject, "feat(x): add x"],
+            )
+            assert out["multi_commit_pr"] is False, revert_subject
+
+    def test_multi_commit_signal_fires_when_pure_commits_exceed_one_with_revert(
+        self,
+    ) -> None:
+        out = ar.compute_repair_signals(
+            self._pr(commits=3),
+            has_inline_comments=False,
+            commit_subjects=[
+                'Revert "feat(x): add x"',
+                "feat(x): add a",
+                "feat(x): add b",
+            ],
+        )
+        assert out["multi_commit_pr"] is True
+
+    def test_multi_commit_signal_double_revert_counts_once(self) -> None:
+        out = ar.compute_repair_signals(
+            self._pr(commits=2),
+            has_inline_comments=False,
+            commit_subjects=[
+                'Revert "Revert "feat(x): add x""',
+                "feat(x): add x",
+            ],
+        )
+        assert out["multi_commit_pr"] is False
+
+    def test_multi_commit_signal_revert_in_scope_slot_not_subtracted(
+        self,
+    ) -> None:
+        # `fix(revert): ...` is a real fix commit, not a rollback: revert
+        # appears only in the scope slot, so it must NOT be subtracted.
+        out = ar.compute_repair_signals(
+            self._pr(commits=2),
+            has_inline_comments=False,
+            commit_subjects=[
+                "fix(revert): correct the revert helper",
+                "feat(x): add x",
+            ],
+        )
+        assert out["multi_commit_pr"] is True
+
+
+class TestCountRevert:
+    def test_counts_git_standard_and_conventional(self) -> None:
+        count = ar._count_revert(
+            [
+                'Revert "feat(x): add x"',
+                "feat(x): add x",
+                "revert(automerge): restore exemption",
+                "revert: plain revert",
+                "fix(scripts): tweak",
+            ]
+        )
+        assert count == 3
+
+    def test_returns_zero_when_no_revert_subjects(self) -> None:
+        count = ar._count_revert(["feat(x): a", "fix(y): b", "docs(z): c"])
+        assert count == 0
+
+    def test_double_revert_counts_once(self) -> None:
+        count = ar._count_revert(['Revert "Revert "feat: x""'])
+        assert count == 1
+
+    def test_handles_leading_whitespace(self) -> None:
+        count = ar._count_revert(['   Revert "feat: x"'])
+        assert count == 1
+
+    def test_lowercase_git_standard_does_not_count(self) -> None:
+        # Neither Git-standard (capital `Revert "`) nor Conventional.
+        count = ar._count_revert(['revert "feat: x"'])
+        assert count == 0
+
+    def test_revert_without_colon_does_not_count(self) -> None:
+        count = ar._count_revert(["revert this thing", "reverted earlier work"])
+        assert count == 0
+
+    def test_revert_in_scope_slot_does_not_count(self) -> None:
+        count = ar._count_revert(["fix(revert): correct helper"])
+        assert count == 0
+
 
 class TestCountMergeFromMain:
     def test_counts_both_prefix_variants(self) -> None:
@@ -2217,10 +2362,10 @@ class TestCountMergeFromMain:
 class TestRenderRepairSignals:
     def test_renders_each_signal(self) -> None:
         text = ar.render_repair_signals(
-            {"inline_review_comments": True, "body_cites_refs": False}
+            {"inline_review_comments": True, "multi_commit_pr": False}
         )
         assert "inline_review_comments=true" in text
-        assert "body_cites_refs=false" in text
+        assert "multi_commit_pr=false" in text
 
 
 _NEW_SHAPE_BODY = """## Summary
@@ -2767,7 +2912,6 @@ class TestIssue592Corpus:
         "body_cites_refs": False,
         "fix_typed_title": False,
         "multi_commit_pr": False,
-        "verification_pairs_failed": False,
     }
 
     @staticmethod
@@ -2802,8 +2946,13 @@ class TestIssue592Corpus:
             (553, "G3", {}, ["docs: x"], ["all checks have passed"], "", False),
             (557, "G3", {}, ["ci: x", "Merge branch 'main' into f"], ["`OK: no direct pip install.` exit 0"], "", False),
             (561, "G3", {}, ["ci: x"], ["pytest 1828 passed in 203.91s"], "", False),
-            (567, "G4", {"verification_pairs_failed": True}, ["ci: x"], ["`not run; local uv 0.11.16 does not match repository required-version ==0.11.11`"], "", True),
-            (570, "G4", {"verification_pairs_failed": True}, ["feat: x"], ["`blocked: ModuleNotFoundError: No module named 'hypothesis'`"], "", True),
+            # G4 (#1236): verification-prose failures are now non-actionable
+            # policy-artifact anomaly hints, so a verification-only PR skips.
+            # The genuine local failures these encode would still open a retro
+            # when a CI failure / iteration commit co-fires; prose alone no
+            # longer does.
+            (567, "G4", {}, ["ci: x"], ["`not run; local uv 0.11.16 does not match repository required-version ==0.11.11`"], "", False),
+            (570, "G4", {}, ["feat: x"], ["`blocked: ModuleNotFoundError: No module named 'hypothesis'`"], "", False),
             (543, "G5", {"fix_typed_title": True}, ["fix(harness): remove gate"], ["`378 passed in 200.38s`"], "fix", False),
         ],
     )
@@ -2817,12 +2966,10 @@ class TestIssue592Corpus:
         pr_type: str,
         expected: bool,
     ) -> None:
-        merged_signals = dict(self._BASE_SIGNALS)
-        merged_signals.update(signals)
+        # `signals` is retained for corpus documentation of what fired on
+        # the historical retro; the live disposition is now derived purely
+        # from the rendered rows (verification_pairs_failed retired in #1236).
         pairs = [self._pair(result) for result in results]
-        assert merged_signals["verification_pairs_failed"] is any(
-            not pair.passed for pair in pairs
-        )
         rows = ar._repair_history_rows([], commits, len(commits), pairs, pr_type)
         standalone = bool(rows) and not ar._has_only_exempt_policy_artifact_rows(
             rows
@@ -2853,7 +3000,6 @@ class TestIssue927Corpus:
         "body_cites_refs": False,
         "fix_typed_title": False,
         "multi_commit_pr": False,
-        "verification_pairs_failed": False,
     }
 
     @staticmethod
@@ -2985,17 +3131,57 @@ class TestIssue927Corpus:
         pr_type: str,
         expected: bool,
     ) -> None:
-        merged_signals = dict(self._BASE_SIGNALS)
-        merged_signals.update(signals)
+        # `signals` is retained for corpus documentation of what fired on
+        # the historical retro; the live disposition is now derived purely
+        # from the rendered rows (verification_pairs_failed retired in #1236).
         pairs = [self._pair(result) for result in results]
-        assert merged_signals["verification_pairs_failed"] is any(
-            not pair.passed for pair in pairs
-        )
         rows = ar._repair_history_rows([], commits, len(commits), pairs, pr_type)
         standalone = bool(rows) and not ar._has_only_exempt_policy_artifact_rows(
             rows
         )
         assert standalone is expected, f"issue #{issue} ({group})"
+
+
+class TestIssue1227VerificationSkipCorpus:
+    """#1227 corpus: exit=0 / environment-skip false-positive repair.
+
+    Each result below was scored as a verification FAILURE before the
+    #1227 fix, firing ``verification_pairs_failed`` on a merged PR that
+    did no repair work (the dominant open-retro false positive). After
+    the fix the exit-zero and environment-skip forms classify as passing,
+    while genuine local failures keep failing. Refs #1227, #851, #1071,
+    #1074, #1110, #1216.
+    """
+
+    @pytest.mark.parametrize(
+        "result",
+        [
+            "total preflight exit=0 (skill_quality_gate skipped on missing"
+            " local prereqs: bin:waza, env:GH_TOKEN_API)",
+            "PREFLIGHT_EXIT=0 ... all pass; verify_ruleset_sync skipped",
+            "skip: PR is a retro-close PR (rc=0)",
+            "blocked: GH_TOKEN unset in this environment",
+            "exit code 0",
+            "rc=0",
+            "not applicable",
+        ],
+    )
+    def test_passing_results_no_longer_fire(self, result: str) -> None:
+        assert ar._result_is_passing(result) is True
+
+    @pytest.mark.parametrize(
+        "result",
+        [
+            "blocked: ModuleNotFoundError: No module named 'hypothesis'",
+            "not run; local uv 0.11.16 does not match repository"
+            " required-version ==0.11.11",
+            "failed: 3 tests broken",
+            "exit 1",
+            "0 passed, 3 failed",
+        ],
+    )
+    def test_genuine_failures_still_fail(self, result: str) -> None:
+        assert ar._result_is_passing(result) is False
 
 
 # ---------------------------------------------------------------------------
@@ -3053,6 +3239,468 @@ class TestFindTargetRetroFromRefs:
         assert ar.find_target_retro_from_refs(pr, titles) is None
 
 
+class TestRepairHistoryFourColumnSchema:
+    """Cause + Next action columns and per-row sentinel contract. Refs #1058."""
+
+    def test_header_has_cause_and_next_action(self) -> None:
+        table = ar._build_repair_history_table(None, [], 1)
+        header = table.splitlines()[0]
+        assert header == "| # | Repair | Cause | Next action |"
+
+    def test_non_artifact_row_carries_next_action_sentinel(self) -> None:
+        check_runs = [
+            {"name": "gate", "conclusion": "failure", "completed_at": "t"}
+        ]
+        table = ar._build_repair_history_table(check_runs, [], 1)
+        row_line = next(
+            line for line in table.splitlines() if "CI fail: gate" in line
+        )
+        assert ar._REPAIR_NEXT_ACTION_FILL in row_line
+
+    def test_verification_fail_row_is_exempt_policy_artifact(self) -> None:
+        # Refs #1236: prose Verification rows are non-actionable anomaly
+        # hints, marked policy-artifact with a dash next-action like the
+        # Revert / Multi-commit rows, so a verification-only PR skips.
+        pairs = [
+            ar.VerificationPair(command="pytest", result="1 failed", passed=False)
+        ]
+        table = ar._build_repair_history_table(
+            None, [], 1, verification_pairs=pairs
+        )
+        row_line = next(
+            line
+            for line in table.splitlines()
+            if "Verification fail: pytest" in line
+        )
+        assert ar._POLICY_ARTIFACT_MARKER in row_line
+        cells = [c.strip() for c in row_line.strip()[1:-1].split("|")]
+        assert cells[3] == "--"
+
+    def test_artifact_row_next_action_is_dash(self) -> None:
+        # Multi-commit PR is a policy-artifact row.
+        table = ar._build_repair_history_table(None, [], 3)
+        row_line = next(
+            line for line in table.splitlines() if "Multi-commit PR" in line
+        )
+        cells = [c.strip() for c in row_line.strip()[1:-1].split("|")]
+        assert cells[3] == "--"
+
+    def test_positive_control_row_is_four_columns(self) -> None:
+        table = ar._build_repair_history_table(None, [], 1)
+        row_line = next(
+            line
+            for line in table.splitlines()
+            if "no automated repair signals detected" in line
+        )
+        cells = [c.strip() for c in row_line.strip()[1:-1].split("|")]
+        assert len(cells) == 4
+        assert cells[0] == "--"
+        assert cells[3] == "--"
+
+    def test_render_appended_row_returns_three_cells(self) -> None:
+        pr = _make_pr(number=88, title="fix(x): y", merged_at="2026-06-01T00:00:00Z")
+        repair, cause, next_action = ar.render_appended_row(pr)
+        assert repair == "Follow-up fix PR: #88"
+        assert "merged at 2026-06-01T00:00:00Z" in cause
+        assert next_action == ar._REPAIR_NEXT_ACTION_FILL
+
+
+class TestVerifyRetroRepairCompleteness:
+    """Pure-function gate over the auto-filled repair-history block."""
+
+    def _wrap(self, table_rows: str) -> str:
+        return (
+            "## Proposed work\n\n"
+            "<!-- auto-filled:repair-history -->\n"
+            "| # | Repair | Cause | Next action |\n"
+            "|---|--------|-------|-------------|\n"
+            f"{table_rows}"
+            "<!-- /auto-filled:repair-history -->\n"
+        )
+
+    def test_unfilled_next_action_flagged(self) -> None:
+        body = self._wrap(
+            f"| 1 | CI fail: gate | something broke | "
+            f"{ar._REPAIR_NEXT_ACTION_FILL} |\n"
+        )
+        errors = ar.verify_retro_repair_completeness(body)
+        assert errors
+        assert any("Next action" in e for e in errors)
+        assert all(e.startswith("::error::") for e in errors)
+
+    def test_unfilled_cause_flagged(self) -> None:
+        body = self._wrap(
+            f"| 1 | CI fail: gate | {ar._REPAIR_CAUSE_FILL} | add a gate |\n"
+        )
+        errors = ar.verify_retro_repair_completeness(body)
+        assert errors
+        assert any("Cause" in e for e in errors)
+
+    def test_filled_row_passes(self) -> None:
+        body = self._wrap(
+            "| 1 | CI fail: gate | the lint gate failed | add ruff rule |\n"
+        )
+        assert ar.verify_retro_repair_completeness(body) == []
+
+    def test_artifact_only_passes(self) -> None:
+        body = self._wrap(
+            f"| 1 | Multi-commit PR | {ar._POLICY_ARTIFACT_MARKER} 3 commits "
+            f"| -- |\n"
+        )
+        assert ar.verify_retro_repair_completeness(body) == []
+
+    def test_positive_control_passes(self) -> None:
+        body = self._wrap(
+            "| -- | (no automated repair signals detected) | "
+            "positive-control: no repair taxonomy classification requested "
+            "| -- |\n"
+        )
+        assert ar.verify_retro_repair_completeness(body) == []
+
+    def test_missing_auto_filled_block_passes(self) -> None:
+        body = "## Scope\n\nno auto-filled block here.\n"
+        assert ar.verify_retro_repair_completeness(body) == []
+
+    def test_malformed_row_flagged(self) -> None:
+        body = self._wrap("| 1 | CI fail: gate | only three cells |\n")
+        errors = ar.verify_retro_repair_completeness(body)
+        assert errors
+        assert any("malformed" in e for e in errors)
+
+    def test_escaped_pipe_in_cell_does_not_shift_columns(self) -> None:
+        # _escape_table_cell renders an in-cell pipe (e.g. a verification
+        # command like `grep x | wc -l`) as ``\|``. The verify must split
+        # on UNescaped pipes only; a naive split("|") would over-split the
+        # row, shift the Cause / Next action columns, and silently pass an
+        # unfilled retro. Refs #1058.
+        body = self._wrap(
+            f"| 1 | Verification fail: grep x \\| wc -l "
+            f"| observed: 3 failed | {ar._REPAIR_NEXT_ACTION_FILL} |\n"
+        )
+        errors = ar.verify_retro_repair_completeness(body)
+        assert errors
+        assert any("Next action" in e for e in errors)
+
+    def test_real_build_retro_body_with_signal_fails_until_filled(self) -> None:
+        pr = _make_pr(number=900, title="fix(x): patch", commits=1)
+        check_runs = [
+            {"name": "gate", "conclusion": "failure", "completed_at": "t"}
+        ]
+        body = ar.build_retro_body(pr, ["fix(x): patch"], check_runs=check_runs)
+        # The freshly generated body has unfilled next-action sentinels.
+        assert ar.verify_retro_repair_completeness(body)
+
+    def test_real_positive_control_body_passes(self) -> None:
+        pr = _make_pr(number=901, title="feat(x): add", commits=1)
+        body = ar.build_retro_body(pr, [])
+        assert ar.verify_retro_repair_completeness(body) == []
+
+
+class TestVerifyRetroCompletenessCli:
+    """The verify-retro-completeness subcommand skip/fail/pass paths."""
+
+    _RETRO_TITLE = "fix(auto-retro): review PR #900 repair loops"
+
+    def test_skip_when_not_retro_pr(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        rc = ar.main(
+            [
+                "verify-retro-completeness",
+                "--repo",
+                "o/r",
+                "--pr-title",
+                "feat(x): add",
+                "--pr-body-file",
+                "/dev/null",
+            ]
+        )
+        assert rc == 0
+        assert "skip: not a retro-close PR" in capsys.readouterr().out
+
+    def test_skip_when_no_linked_retro(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Any,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        body_file = tmp_path / "body.md"
+        body_file.write_text("Refs #5\n", encoding="utf-8")
+
+        def fake_api(method, path, body=None, **_kw):
+            return json.dumps({"title": "feat(x): not a retro"})
+
+        monkeypatch.setattr(ar, "gh_api", fake_api)
+        rc = ar.main(
+            [
+                "verify-retro-completeness",
+                "--repo",
+                "o/r",
+                "--pr-title",
+                "fix(auto-retro): close",
+                "--pr-body-file",
+                str(body_file),
+            ]
+        )
+        assert rc == 0
+        assert "skip: no linked retro issue" in capsys.readouterr().out
+
+    def test_fail_when_retro_incomplete(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Any,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        body_file = tmp_path / "body.md"
+        body_file.write_text("Refs #900\n", encoding="utf-8")
+        retro_body = (
+            "<!-- auto-filled:repair-history -->\n"
+            "| # | Repair | Cause | Next action |\n"
+            "|---|--------|-------|-------------|\n"
+            f"| 1 | CI fail: gate | cause | {ar._REPAIR_NEXT_ACTION_FILL} |\n"
+            "<!-- /auto-filled:repair-history -->\n"
+        )
+
+        def fake_api(method, path, body=None, **_kw):
+            if path.endswith("/900"):
+                return json.dumps(
+                    {"title": self._RETRO_TITLE, "body": retro_body}
+                )
+            return json.dumps({"title": self._RETRO_TITLE})
+
+        monkeypatch.setattr(ar, "gh_api", fake_api)
+        rc = ar.main(
+            [
+                "verify-retro-completeness",
+                "--repo",
+                "o/r",
+                "--pr-title",
+                "fix(auto-retro): close",
+                "--pr-body-file",
+                str(body_file),
+            ]
+        )
+        assert rc == 1
+        assert "::error::" in capsys.readouterr().out
+
+    def test_pass_when_retro_complete(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Any,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        body_file = tmp_path / "body.md"
+        body_file.write_text("Refs #900\n", encoding="utf-8")
+        retro_body = (
+            "<!-- auto-filled:repair-history -->\n"
+            "| # | Repair | Cause | Next action |\n"
+            "|---|--------|-------|-------------|\n"
+            "| 1 | CI fail: gate | gate failed | add a ruff rule |\n"
+            "<!-- /auto-filled:repair-history -->\n"
+        )
+
+        def fake_api(method, path, body=None, **_kw):
+            if path.endswith("/900"):
+                return json.dumps(
+                    {"title": self._RETRO_TITLE, "body": retro_body}
+                )
+            return json.dumps({"title": self._RETRO_TITLE})
+
+        monkeypatch.setattr(ar, "gh_api", fake_api)
+        rc = ar.main(
+            [
+                "verify-retro-completeness",
+                "--repo",
+                "o/r",
+                "--pr-title",
+                "fix(auto-retro): close",
+                "--pr-body-file",
+                str(body_file),
+            ]
+        )
+        assert rc == 0
+        assert "OK:" in capsys.readouterr().out
+
+    def test_skip_when_retro_body_unavailable(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Any,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        body_file = tmp_path / "body.md"
+        body_file.write_text("Refs #900\n", encoding="utf-8")
+
+        def fake_api(method, path, body=None, **_kw):
+            # Title resolves as a retro, but the body fetch yields nothing.
+            return json.dumps({"title": self._RETRO_TITLE})
+
+        monkeypatch.setattr(ar, "gh_api", fake_api)
+        rc = ar.main(
+            [
+                "verify-retro-completeness",
+                "--repo",
+                "o/r",
+                "--pr-title",
+                "fix(auto-retro): close",
+                "--pr-body-file",
+                str(body_file),
+            ]
+        )
+        assert rc == 0
+        assert "body unavailable" in capsys.readouterr().out
+
+
+class TestFindLinkedRetroRefs:
+    def test_returns_retro_refs_only(self) -> None:
+        body = "Closes #5\nRefs #900\n"
+        titles = {
+            5: "feat(x): unrelated follow-up",
+            900: "chore(auto-retro): review PR #898 repair loops",
+        }
+        assert ar.find_linked_retro_refs(body, titles) == [900]
+
+    def test_matches_legacy_fix_prefix(self) -> None:
+        body = "Closes #900\n"
+        titles = {900: "fix(auto-retro): review PR #898 repair loops"}
+        assert ar.find_linked_retro_refs(body, titles) == [900]
+
+    def test_skips_unfetched_titles(self) -> None:
+        body = "Closes #900\n"
+        assert ar.find_linked_retro_refs(body, {}) == []
+
+    def test_empty_when_no_retro(self) -> None:
+        body = "Closes #5\n"
+        titles = {5: "feat(x): real work"}
+        assert ar.find_linked_retro_refs(body, titles) == []
+
+
+class TestVerifyNoDirectRetroPrCli:
+    """The verify-no-direct-retro-pr subcommand skip/fail/pass paths (Refs #1069)."""
+
+    _RETRO_TITLE = "chore(auto-retro): review PR #900 repair loops"
+
+    def test_skip_when_pr_is_retro_close(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        rc = ar.main(
+            [
+                "verify-no-direct-retro-pr",
+                "--repo",
+                "o/r",
+                "--pr-title",
+                "docs(auto-retro): record repair-free merge",
+                "--pr-body-file",
+                "/dev/null",
+            ]
+        )
+        assert rc == 0
+        assert "skip: PR is a retro-close PR" in capsys.readouterr().out
+
+    def test_skip_when_no_linked_issue(
+        self, tmp_path: Any, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        body_file = tmp_path / "body.md"
+        body_file.write_text("No issue link here.\n", encoding="utf-8")
+        rc = ar.main(
+            [
+                "verify-no-direct-retro-pr",
+                "--repo",
+                "o/r",
+                "--pr-title",
+                "fix(x): real work",
+                "--pr-body-file",
+                str(body_file),
+            ]
+        )
+        assert rc == 0
+        assert "links no issue" in capsys.readouterr().out
+
+    def test_skip_when_linked_issue_not_retro(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Any,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        body_file = tmp_path / "body.md"
+        body_file.write_text("Closes #5\n", encoding="utf-8")
+
+        def fake_api(method, path, body=None, **_kw):
+            return json.dumps({"title": "feat(x): a normal issue"})
+
+        monkeypatch.setattr(ar, "gh_api", fake_api)
+        rc = ar.main(
+            [
+                "verify-no-direct-retro-pr",
+                "--repo",
+                "o/r",
+                "--pr-title",
+                "fix(x): real work",
+                "--pr-body-file",
+                str(body_file),
+            ]
+        )
+        assert rc == 0
+        assert "skip: no linked retro issue" in capsys.readouterr().out
+
+    def test_fail_when_normal_pr_links_retro(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Any,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        body_file = tmp_path / "body.md"
+        body_file.write_text("Closes #900\n", encoding="utf-8")
+
+        def fake_api(method, path, body=None, **_kw):
+            return json.dumps({"title": self._RETRO_TITLE})
+
+        monkeypatch.setattr(ar, "gh_api", fake_api)
+        rc = ar.main(
+            [
+                "verify-no-direct-retro-pr",
+                "--repo",
+                "o/r",
+                "--pr-title",
+                "fix(x): directly fix the retro",
+                "--pr-body-file",
+                str(body_file),
+            ]
+        )
+        assert rc == 1
+        out = capsys.readouterr().out
+        assert "::error::" in out
+        assert "#900" in out
+
+    def test_fail_when_legacy_fix_retro_linked(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Any,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        body_file = tmp_path / "body.md"
+        body_file.write_text("Refs #900\n", encoding="utf-8")
+
+        def fake_api(method, path, body=None, **_kw):
+            return json.dumps(
+                {"title": "fix(auto-retro): review PR #898 repair loops"}
+            )
+
+        monkeypatch.setattr(ar, "gh_api", fake_api)
+        rc = ar.main(
+            [
+                "verify-no-direct-retro-pr",
+                "--repo",
+                "o/r",
+                "--pr-title",
+                "feat(x): build on the retro",
+                "--pr-body-file",
+                str(body_file),
+            ]
+        )
+        assert rc == 1
+        assert "#900" in capsys.readouterr().out
+
+
 class TestInsertAppendedRow:
     _SAMPLE = (
         "## Proposed work\n"
@@ -3060,9 +3708,9 @@ class TestInsertAppendedRow:
         "<!-- auto-filled:repair-history -->\n"
         "1. Repair history\n"
         "\n"
-        "| # | Repair | What |\n"
-        "|---|--------|------|\n"
-        "| 1 | A | B |\n"
+        "| # | Repair | Cause | Next action |\n"
+        "|---|--------|-------|-------------|\n"
+        "| 1 | A | B | C |\n"
         "<!-- /auto-filled:repair-history -->\n"
         "\n"
         "more text\n"
@@ -3071,7 +3719,7 @@ class TestInsertAppendedRow:
     def test_appends_row_with_next_index(self) -> None:
         new_body, changed = ar._insert_appended_row(
             self._SAMPLE,
-            ("Follow-up fix PR: #50", "`fix(x): y` merged at T"),
+            ("Follow-up fix PR: #50", "`fix(x): y` merged at T", "next"),
             50,
         )
         assert changed is True
@@ -3083,13 +3731,15 @@ class TestInsertAppendedRow:
         )
 
     def test_idempotent_when_pr_already_recorded(self) -> None:
-        body = self._SAMPLE.replace("| 1 | A | B |", "| 1 | Follow-up #50 | x |")
-        _, changed = ar._insert_appended_row(body, ("x", "y"), 50)
+        body = self._SAMPLE.replace(
+            "| 1 | A | B | C |", "| 1 | Follow-up #50 | x | y |"
+        )
+        _, changed = ar._insert_appended_row(body, ("x", "y", "z"), 50)
         assert changed is False
 
     def test_no_change_when_markers_missing(self) -> None:
         body = "## Proposed work\n\nno markers here\n"
-        new_body, changed = ar._insert_appended_row(body, ("x", "y"), 50)
+        new_body, changed = ar._insert_appended_row(body, ("x", "y", "z"), 50)
         assert changed is False
         assert new_body == body
 
@@ -3099,16 +3749,16 @@ class TestInsertAppendedRow:
             "no rows\n"
             "<!-- /auto-filled:repair-history -->\n"
         )
-        new_body, changed = ar._insert_appended_row(body, ("x", "y"), 99)
+        new_body, changed = ar._insert_appended_row(body, ("x", "y", "z"), 99)
         assert changed is True
-        assert "| 1 | x | y |" in new_body
+        assert "| 1 | x | y | z |" in new_body
 
     def test_pr_number_prefix_collision_not_idempotent(self) -> None:
         body = self._SAMPLE.replace(
-            "| 1 | A | B |", "| 1 | Follow-up #500 | x |"
+            "| 1 | A | B | C |", "| 1 | Follow-up #500 | x | y |"
         )
         # PR #50 must NOT match an existing #500 row.
-        _, changed = ar._insert_appended_row(body, ("a", "b"), 50)
+        _, changed = ar._insert_appended_row(body, ("a", "b", "c"), 50)
         assert changed is True
 
 
@@ -3790,12 +4440,16 @@ def test_sentinel_workflow_file_exists_and_runs_sentinel_subcommand() -> None:
     """The schedule workflow that backs sentinel_run must exist and
     invoke the right CLI subcommand. Drift between the script and the
     workflow would silently disable the sentinel.
+
+    The sentinel was consolidated into daily-maintenance.yml (issue #1319);
+    its scan-and-close job preserves the original cron, permissions, and CLI
+    invocation.
     """
     repo_root = Path(__file__).resolve().parent.parent
-    workflow = repo_root / ".github" / "workflows" / "auto-retro-sentinel.yml"
+    workflow = repo_root / ".github" / "workflows" / "daily-maintenance.yml"
     assert workflow.exists(), (
-        "Strategy B sentinel needs .github/workflows/auto-retro-sentinel.yml "
-        "(issue #414)"
+        "Strategy B sentinel needs .github/workflows/daily-maintenance.yml "
+        "(issue #414, consolidated in #1319)"
     )
     text = workflow.read_text(encoding="utf-8")
     assert "python3 scripts/auto_retro.py sentinel" in text
@@ -4064,6 +4718,31 @@ class TestComputePriorFromLabels:
         prior = ar.compute_prior_from_labels(past)
         assert prior["multi_commit_pr"] == (0.5, 2)
 
+    def test_epoch_cutoff_excludes_pre_epoch_retros(self) -> None:
+        # Refs #1227, #1236: retros below the epoch boundary measured the old
+        # signal semantics and must not drive the prior. With the cutoff,
+        # only the post-epoch retro contributes; the pre-epoch fp retro
+        # is dropped, so the signal degrades to the empty-prior net.
+        past = [
+            ar.PastRetro(
+                number=900,
+                signals=frozenset({"multi_commit_pr"}),
+                labels=frozenset({rl.RETRO_FP}),
+            ),
+            ar.PastRetro(
+                number=1300,
+                signals=frozenset({"multi_commit_pr"}),
+                labels=frozenset({rl.RETRO_TP}),
+            ),
+        ]
+        # Pure tally (default epoch) sees both -> 1 fp of 2.
+        assert ar.compute_prior_from_labels(past)[
+            "multi_commit_pr"
+        ] == (0.5, 2)
+        # With the epoch boundary the pre-epoch fp retro is excluded.
+        gated = ar.compute_prior_from_labels(past, epoch_min_number=1228)
+        assert gated["multi_commit_pr"] == (0.0, 1)
+
 
 class TestShouldSkipByPrior:
     """Skip-band verdict over the active signal set."""
@@ -4324,6 +5003,32 @@ class TestFetchPastRetroLabels:
         assert past[1].signals == frozenset(
             {"inline_review_comments", "fix_typed_title"}
         )
+
+    def test_parses_state_and_title_with_defaults(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """state/title populate the #1386 dashboard; absent fields default."""
+        payload = {
+            "items": [
+                {
+                    "number": 100,
+                    "labels": [],
+                    "body": "",
+                    "state": "closed",
+                    "title": "chore(auto-retro): review PR #42 repair loops",
+                },
+                {"number": 101, "labels": [], "body": ""},
+            ]
+        }
+        monkeypatch.setattr(
+            ar, "gh_api", lambda *_a, **_kw: json.dumps(payload)
+        )
+        past = ar.fetch_past_retro_labels("o/r")
+        assert past[0].state == "closed"
+        assert past[0].title == "chore(auto-retro): review PR #42 repair loops"
+        # Missing fields fall back to the pre-#1386 defaults.
+        assert past[1].state == "open"
+        assert past[1].title == ""
 
     def test_limit_truncates_items(
         self, monkeypatch: pytest.MonkeyPatch

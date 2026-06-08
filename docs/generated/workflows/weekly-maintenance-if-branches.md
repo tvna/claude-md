@@ -6,17 +6,18 @@ This file is generated from `.github/workflows/weekly-maintenance.yml` by `pytho
 flowchart TD
 
     T_schedule(["on: schedule"])
+    T_push(["on: push\nbranches: ['main']\npaths: ['.github/rulesets/**', '.github/labe..."])
     T_workflow_dispatch(["on: workflow_dispatch\ninputs: {'task': {'description': 'Weekly task..."])
 
     J_branch_cleanup["branch-cleanup"]
     S_J_branch_cleanup_0(("Guard dispatch ref"))
     J_dependency_freshness["dependency-freshness"]
+    J_dependency_threat_triage["dependency-threat-triage"]
     J_generate_agents["generate-agents"]
     J_measure_timings["measure-timings"]
-    S_J_measure_timings_0(("Post report as comment on dispatch issue"))
+    S_J_measure_timings_0(("Open or update CI budget tracking issue"))
+    S_J_measure_timings_1(("Post report as comment on dispatch issue"))
     J_ruleset_drift["ruleset-drift"]
-    S_J_ruleset_drift_0(("File SoT-vs-live drift issue"))
-    S_J_ruleset_drift_1(("File unknown-ruleset issue"))
     J_security_control_drift["security-control-drift"]
     S_J_security_control_drift_0(("Record ruleset detect exit code"))
     S_J_security_control_drift_1(("Record labels plan exit code"))
@@ -25,17 +26,24 @@ flowchart TD
     S_J_security_control_drift_4(("Record uv stale exit code"))
     S_J_security_control_drift_5(("Aggregate drift report"))
     S_J_security_control_drift_6(("Post or update rolling comment on"))
+    S_J_security_control_drift_7(("File per-family drift issues"))
+    J_flake_pin_refresh["flake-pin-refresh"]
+    S_J_flake_pin_refresh_0(("Recompute per-system hashes and bump flake.nix"))
+    S_J_flake_pin_refresh_1(("Validate the bumped flake"))
+    S_J_flake_pin_refresh_2(("Mint GitHub App token"))
+    S_J_flake_pin_refresh_3(("Open bump PR"))
 
     T_schedule -->|"github.event_name == 'schedule' || inputs.task == 'all' || inputs.task ~"| J_branch_cleanup
     J_branch_cleanup -->|"github.event_name == 'workflow_dispatch' && github.ref != 'refs/heads/m~"| S_J_branch_cleanup_0
     T_schedule -->|"github.event_name == 'schedule' || inputs.task == 'all' || inputs.task ~"| J_dependency_freshness
+    T_schedule -->|"github.event_name == 'schedule' || inputs.task == 'all' || inputs.task ~"| J_dependency_threat_triage
     T_schedule -->|"github.event_name == 'schedule' || inputs.task == 'all' || inputs.task ~"| J_generate_agents
     T_schedule -->|"github.event_name == 'schedule' || inputs.task == 'all' || inputs.task ~"| J_measure_timings
-    J_measure_timings -->|"${{ github.event_name == 'workflow_dispatch' && inputs.measure_issue_nu~"| S_J_measure_timings_0
+    J_measure_timings -->|"${{ inputs.measure_cutoff == '' }}"| S_J_measure_timings_0
+    J_measure_timings -->|"${{ github.event_name == 'workflow_dispatch' && inputs.measure_issue_nu~"| S_J_measure_timings_1
     T_schedule -->|"github.event_name == 'schedule' || inputs.task == 'all' || inputs.task ~"| J_ruleset_drift
-    J_ruleset_drift -->|"steps.diff.outputs.drift_count != '0'"| S_J_ruleset_drift_0
-    J_ruleset_drift -->|"steps.diff.outputs.unknown_count != '0'"| S_J_ruleset_drift_1
-    T_schedule -->|"github.event_name == 'schedule' || inputs.task == 'all' || inputs.task ~"| J_security_control_drift
+    T_schedule -->|"github.event_name == 'schedule' || github.event_name == 'push' || input~"| J_security_control_drift
+    T_push -->|"github.event_name == 'schedule' || github.event_name == 'push' || input~"| J_security_control_drift
     J_security_control_drift -->|"always()"| S_J_security_control_drift_0
     J_security_control_drift -->|"always()"| S_J_security_control_drift_1
     J_security_control_drift -->|"always()"| S_J_security_control_drift_2
@@ -43,4 +51,10 @@ flowchart TD
     J_security_control_drift -->|"always()"| S_J_security_control_drift_4
     J_security_control_drift -->|"always()"| S_J_security_control_drift_5
     J_security_control_drift -->|"always()"| S_J_security_control_drift_6
+    J_security_control_drift -->|"always() && steps.aggregate.outputs.drift_families != ''"| S_J_security_control_drift_7
+    T_schedule -->|"github.event_name == 'schedule' || inputs.task == 'all' || inputs.task ~"| J_flake_pin_refresh
+    J_flake_pin_refresh -->|"steps.decide.outputs.target != ''"| S_J_flake_pin_refresh_0
+    J_flake_pin_refresh -->|"steps.decide.outputs.target != ''"| S_J_flake_pin_refresh_1
+    J_flake_pin_refresh -->|"steps.decide.outputs.target != ''"| S_J_flake_pin_refresh_2
+    J_flake_pin_refresh -->|"steps.decide.outputs.target != ''"| S_J_flake_pin_refresh_3
 ```

@@ -218,7 +218,7 @@ def main(argv: list[str] | None = None) -> int:
     if not isinstance(tool_input, dict):
         tool_input = {}
 
-    emit_decision(decide(tool_name, tool_input))
+    emit_decision(decide(tool_name, tool_input), "issue_closure_fast_path")
     return 0
 
 

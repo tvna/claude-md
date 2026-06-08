@@ -21,7 +21,7 @@
 | 2 | Bound Inputs and Unknowns Before Coding | 编码前的认知整理 | 先把外部文本视为不可信数据，再区分事实、假设和歧义。 |
 | 3 | Use Git Ecosystem Effectively | 交付工具链 | 在扩大规模之前，先建立 hooks、CI/CD、声明式依赖管理等工具链。 |
 | 4 | Simplicity, Bounded by Safety | 安全边界 | 用满足需求的最少内容解决问题，但不牺牲安全性、工具范围和秘密处理。 |
-| 5 | Accelerate Scale with Quality | 变更范围与角色拆分 | 只改必须修改的地方；将实现、验证和探索拆给不同代理。 |
+| 5 | Accelerate Scale with Quality | 质量使规模成为可能 | 质量才能让产出扩大，二者成比例增长；保持变更面狭窄，质量下降时停下来重新规划。 |
 | 6 | Be a Force Multiplier | 交接与沟通 | 不满足于 "LGTM"；明确说明权衡，让他人能跟上判断过程。 |
 
 完整编译结果请参阅 [`CLAUDE.md`](./CLAUDE.md) 或 [`AGENTS.md`](./AGENTS.md)。
@@ -54,16 +54,6 @@ git submodule add https://github.com/tvna/claude-md .claude-md-master
 ln -s .claude-md-master/CLAUDE.md CLAUDE.md
 ```
 
-对于 Codex 或其他读取 `AGENTS.md` 的工具，再添加：
-
-```bash
-ln -s .claude-md-master/AGENTS.md AGENTS.md
-```
-
-### Devin
-
-Devin 可以使用 APM 展开到 `.agents/skills/` 的 skills。需要 hooks parity 时，请把 `.devin/hooks.v1.json` 与仓库指令一起引入。
-
 ### 2. 添加项目专属规则
 
 在父项目中创建本地项目指令文件，在开头导入这个主仓库，然后只写项目专属的差异部分。
@@ -80,6 +70,18 @@ Devin 可以使用 APM 展开到 `.agents/skills/` 的 skills。需要 hooks par
 ```bash
 git submodule update --remote .claude-md-master
 ```
+
+### 工具特定说明
+
+- **Codex 或其他读取 `AGENTS.md` 的工具**，再 symlink 编译产物 `AGENTS.md`：
+
+  ```bash
+  ln -s .claude-md-master/AGENTS.md AGENTS.md
+  ```
+
+- **Devin** 可以使用 APM 展开到 `.agents/skills/` 的 skills。需要 hooks parity 时，请把 `.devin/hooks.v1.json` 与仓库指令一起引入。详见 [`docs/standards/devin-apm-compatibility.md`](./docs/standards/devin-apm-compatibility.md)。
+
+- **context7 MCP** 在 `apm.yml`（`dependencies.mcp`）中声明，用作一手文档的检索加速器。本主仓库仅声明，使用方通过 `apm install --mcp context7` 将其接入各自的客户端。详见 [`docs/runbooks/context7-mcp.md`](./docs/runbooks/context7-mcp.md)。
 
 ## 变更策略
 

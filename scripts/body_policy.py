@@ -2,7 +2,19 @@
 """Verify that issue and PR bodies contain their template's required sections.
 
 The workflow ``.github/workflows/verify-body-policy.yml`` shells out to
-this module. The contract is:
+this module.
+
+Contract:
+- Inputs: the ``verify`` subcommand; ``--kind``; the body from
+  ``--body-file`` or the ``ISSUE_BODY`` / ``PR_BODY`` env var; the author
+  login and ``--created-at`` / ``--cutoff`` skip thresholds.
+- Outputs: ``::error::`` annotations naming each missing section on
+  stdout; exit 0 when every required section is present (or a skip
+  applies), exit 1 otherwise.
+- Failure policy: fails loud per CLAUDE.md section 4 (gate: a body
+  missing a required section exits non-zero).
+
+The detailed contract is:
 
 * Read the body from ``--body-file`` when supplied, otherwise from the
   ``ISSUE_BODY`` or ``PR_BODY`` env var (whichever matches ``--kind``).
@@ -44,13 +56,24 @@ _AMPERSAND_RE = re.compile(r"\s*&\s*")
 _TRACKING_MARKER = "Initial child issues"
 
 _PR_REQUIRED: tuple[str, ...] = (
+    "Summary",
+    "Related Issue",
     "Facts",
     "Assumptions",
     "Risk and blast radius",
     "Rollback",
     "Verification",
     "Checklist",
+    "Resource Consumption",
 )
+# ``Text delta`` appears only when the diff touches universal instruction
+# text (.apm/instructions/**, CLAUDE.md, AGENTS.md), so it is allowlisted,
+# not required. A PR body may carry no H2 outside ``_PR_ALLOWED`` (see
+# :func:`unexpected_pr_sections`). ``Summary`` leads as the conclusion-first
+# (BLUF) block; ``Related Issue`` is required for parity with the CLAUDE.md
+# section 3 / ``issue_link.py`` ``Refs/Closes #N`` rule. Refs #1396.
+_PR_OPTIONAL: tuple[str, ...] = ("Text delta",)
+_PR_ALLOWED: tuple[str, ...] = _PR_REQUIRED + _PR_OPTIONAL
 _ISSUE_COMMON_REQUIRED: tuple[str, ...] = (
     "Scope",
     "Facts",
@@ -64,6 +87,12 @@ _ISSUE_TRACKING_REQUIRED: tuple[str, ...] = (
     "Initial child issues",
     "Completion criteria",
 )
+# Issue sections allowed but not required. ``Parent`` links the umbrella
+# tracking issue and is omitted when the issue is standalone, so it is
+# documented in the standard doc's section list yet cannot be required.
+# It is the single source the standard-doc sync test uses to reconcile the
+# doc's issue list with the required constants. Refs #1191, #1396.
+_ISSUE_OPTIONAL: tuple[str, ...] = ("Parent",)
 
 # Shape gate constants (PR template post-2026-05-26). The hook
 # (scripts/preflight_pr_template_shape.py) imports these so the
@@ -79,6 +108,14 @@ _CHECKLIST_SUBSECTIONS: tuple[str, ...] = (
 _VERIFICATION_COMMAND_RE = re.compile(
     r"^-[ \t]+command:[ \t]*`[^`\n]+`[ \t]*$",
     re.MULTILINE,
+)
+# A command line that is well-formed up to the closing backtick but
+# carries trailing non-whitespace after it (e.g. ``(pre-push hooks)``).
+# Detected only to emit a targeted deny reason -- such a line already
+# fails _VERIFICATION_COMMAND_RE, so this never widens what passes.
+# Recurring author defect: retro #1054 row 2(a), retro #1376 repair 2.
+_VERIFICATION_COMMAND_TRAILING_RE = re.compile(
+    r"^-[ \t]+command:[ \t]*`[^`\n]+`[ \t]*(?P<trailing>\S.*)$",
 )
 _VERIFICATION_RESULT_RE = re.compile(
     r"^[ \t]{2}result:[ \t]*\S.*$",
@@ -167,6 +204,46 @@ def missing_sections(
     ]
 
 
+def unexpected_pr_sections(
+    headings: list[tuple[int, str]],
+) -> list[str]:
+    """Return level-2 PR heading texts that fall outside ``_PR_ALLOWED``.
+
+    Only H2 headings are allowlisted; the Checklist's H3 subsections are
+    part of their parent section and are skipped. Matching reuses
+    :func:`_normalize_heading` (``&``/``and`` equivalent, case significant).
+    Offenders are returned in document order, de-duplicated. Refs #1396.
+    """
+    allowed = {_normalize_heading(name) for name in _PR_ALLOWED}
+    seen: set[str] = set()
+    out: list[str] = []
+    for level, text in headings:
+        if level != 2:
+            continue
+        norm = _normalize_heading(text)
+        if norm in allowed or norm in seen:
+            continue
+        seen.add(norm)
+        out.append(text)
+    return out
+
+
+def verify_pr_allowed_sections(body: str) -> list[str]:
+    """Return ``::error::`` strings for PR H2 headings outside the allowlist.
+
+    Single source of the allowlist deny message so the server gate
+    (:func:`_verify`) and the client hook
+    (``scripts/preflight_pr_template_shape.py``) cannot drift. Returns
+    ``[]`` when every H2 heading is in ``_PR_ALLOWED``. Refs #1396.
+    """
+    allowed_list = ", ".join(_PR_ALLOWED)
+    return [
+        f"::error::pull_request body has an H2 section outside the allowed "
+        f"set: ## {name}. Allowed H2 headings: {allowed_list}."
+        for name in unexpected_pr_sections(extract_headings(body))
+    ]
+
+
 def extract_section_body(body: str, heading: str, level: int = 2) -> str:
     """Return the text between ``<level> heading`` and the next sibling H2.
 
@@ -243,6 +320,26 @@ def verify_pr_verification_pairs(body: str) -> list[str]:
                 continue
             pairs += 1
             i += 2
+            continue
+        trailing_match = _VERIFICATION_COMMAND_TRAILING_RE.fullmatch(line)
+        if trailing_match is not None:
+            trailing = trailing_match.group("trailing")
+            errors.append(
+                "::error::Verification 'command:' line has trailing text "
+                f"{trailing!r} after the closing backtick; the command "
+                "line must be code-only. Move the note onto the "
+                "'  result: ...' line or drop it (post-2026-05-26 PR "
+                "shape)."
+            )
+            # Consume an immediately-following result line so it is not
+            # also flagged as an orphan -- the trailing-text error is the
+            # single actionable signal.
+            if i + 1 < len(lines) and _VERIFICATION_RESULT_RE.fullmatch(
+                lines[i + 1]
+            ):
+                i += 2
+            else:
+                i += 1
             continue
         res_match = _VERIFICATION_RESULT_RE.fullmatch(line)
         if res_match is not None:
@@ -381,6 +478,75 @@ def verify_pr_agent_attribution_footer(
     ]
 
 
+_ANGLE_TOKEN_RE = re.compile(r"<[^<>\n]+>")
+_BLANK_RUN_RE = re.compile(r"\n{3,}")
+
+
+def collapse_duplicate_footer(body: str) -> str:
+    """Return *body* with a trailing run of agent-attribution footers collapsed.
+
+    ``mcp__github__create_pull_request`` auto-appends a session footer even
+    when the authored body already ends with one, producing two footer
+    lines. This keeps the last footer (the harness-appended session footer
+    is authoritative) and drops earlier agent-attribution footer lines, then
+    collapses any blank-line run a removal left behind. A body with zero or
+    one footer is returned unchanged (modulo ``\\r`` stripping). Refs #1361.
+    """
+    text = body.replace("\r", "")
+    lines = text.split("\n")
+    footer_idxs = [
+        i for i, line in enumerate(lines)
+        if _AGENT_ATTRIBUTION_FOOTER_RE.fullmatch(line.strip())
+    ]
+    if len(footer_idxs) <= 1:
+        return text
+    drop = set(footer_idxs[:-1])
+    kept = [line for i, line in enumerate(lines) if i not in drop]
+    return _BLANK_RUN_RE.sub("\n\n", "\n".join(kept))
+
+
+def normalize_pr_body(body: str) -> str:
+    """Return *body* with MCP write-tool corruption deterministically undone.
+
+    ``mcp__github__create_pull_request`` / ``update_pull_request`` store the
+    body with HTML-entity encoding applied (``&`` -> ``&amp;``, ``"`` ->
+    ``&#34;``, ``>`` -> ``&gt;``, ``<`` -> ``&lt;``) and append a duplicate
+    agent-attribution footer. This reverses the encoding via
+    :func:`html.unescape` and collapses the duplicate footer via
+    :func:`collapse_duplicate_footer`, so the normalized text matches the
+    body the agent authored. The function is idempotent on an already-clean
+    body. Refs #1361 (R1), #892.
+
+    Angle-bracket *content* the tool dropped entirely (e.g. the
+    ``<sha>`` token in ``git revert <sha>``) is unrecoverable from the
+    stored body; use :func:`detect_dropped_angle_tokens` against the
+    authored body to detect that separately.
+    """
+    return collapse_duplicate_footer(html.unescape(body))
+
+
+def detect_dropped_angle_tokens(authored: str, stored: str) -> list[str]:
+    """Return ``<...>`` tokens present in *authored* but absent from *stored*.
+
+    The MCP write tools drop angle-bracket-delimited tokens entirely rather
+    than HTML-encoding them, which is unrecoverable by
+    :func:`normalize_pr_body`. Comparing the authored body (still intact in
+    the PostToolUse ``tool_input``) against the stored body surfaces each
+    dropped token so the agent can rephrase (e.g. wrap the token in
+    backticks) instead of silently shipping a body with missing content.
+    The stored side is HTML-unescaped first so a token that survived only as
+    ``&lt;sha&gt;`` is not falsely reported as dropped. Refs #1361 (R1).
+    """
+    stored_norm = html.unescape(stored)
+    seen: set[str] = set()
+    dropped: list[str] = []
+    for token in _ANGLE_TOKEN_RE.findall(authored):
+        if token not in stored_norm and token not in seen:
+            seen.add(token)
+            dropped.append(token)
+    return dropped
+
+
 def build_codex_attribution_footer(model: str) -> str:
     """Return the canonical Codex GitHub provenance footer."""
     normalized = model.strip()
@@ -476,6 +642,17 @@ def _verify(
                 f"## {name} (or ### {name})."
             )
         return 1
+
+    # PR H2 allowlist: a PR body may carry only the headings in
+    # _PR_ALLOWED. This runs only for in-window bodies (the created_at <
+    # cutoff skip above already returned 0 for the back-catalog), so a
+    # historical PR with an unlisted heading is not retro-failed. Refs #1396.
+    if kind == "pull_request":
+        allowlist_errors = verify_pr_allowed_sections(body)
+        if allowlist_errors:
+            for msg in allowlist_errors:
+                print(msg)
+            return 1
 
     # Shape gate: post-2026-05-26 PR template enforces Verification
     # command/result pairs and Checklist subsections. The gate is

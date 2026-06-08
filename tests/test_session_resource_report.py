@@ -1,0 +1,538 @@
+"""Tests for ``scripts/session_resource_report.py``.
+
+The ``scripts/`` directory is on ``sys.path`` via the ``pythonpath`` key
+under ``[tool.pytest.ini_options]`` in ``pyproject.toml``.
+
+The generator is split into pure functions (``compute_elapsed``,
+``parse_usage``, ``render_section``) and an I/O seam (``_run_ccusage``,
+``gather``, ``main``). The pure functions are exercised directly; the seam
+is covered by injecting ``env``/``now_ms`` into :func:`gather` and
+monkeypatching the ccusage subprocess, so no test shells out to ccusage.
+
+Refs #1413.
+"""
+
+from __future__ import annotations
+
+import json
+import re
+import subprocess
+
+import body_policy
+import pytest
+import session_resource_report as srr
+
+pytestmark = pytest.mark.shard_preflight
+
+
+# ---------------------------------------------------------------------------
+# compute_elapsed
+# ---------------------------------------------------------------------------
+
+
+class TestComputeElapsed:
+    def test_minutes_and_seconds(self) -> None:
+        # 402 s after spawn -> 0:06:42.
+        assert srr.compute_elapsed(1000.0, 1000.0 + 402_000) == "0:06:42"
+
+    def test_hours_zero_padding(self) -> None:
+        # 3661 s -> 1:01:01, minutes/seconds zero-padded.
+        assert srr.compute_elapsed(0.0, 3_661_000) == "1:01:01"
+
+    def test_string_epoch_ms_parsed(self) -> None:
+        assert srr.compute_elapsed("1000", 1000.0 + 5_000) == "0:00:05"
+
+    def test_missing_spawn_returns_none(self) -> None:
+        assert srr.compute_elapsed(None, 5_000.0) is None
+
+    def test_non_numeric_returns_none(self) -> None:
+        assert srr.compute_elapsed("not-a-number", 5_000.0) is None
+
+    def test_negative_interval_returns_none(self) -> None:
+        # Spawn timestamp in the future (clock skew) must not render a bogus
+        # duration.
+        assert srr.compute_elapsed(10_000.0, 5_000.0) is None
+
+
+# ---------------------------------------------------------------------------
+# parse_usage
+# ---------------------------------------------------------------------------
+
+
+def _row(period: str, **over: object) -> dict[str, object]:
+    base: dict[str, object] = {
+        "period": period,
+        "inputTokens": 3058,
+        "outputTokens": 55836,
+        "cacheCreationTokens": 184694,
+        "cacheReadTokens": 2315219,
+        "totalTokens": 2558807,
+        "totalCost": 3.723137,
+        "modelsUsed": ["claude-opus-4-8"],
+    }
+    base.update(over)
+    return base
+
+
+def _grouped(*rows: dict[str, object]) -> str:
+    return json.dumps({"session": list(rows), "totals": {}})
+
+
+def _coerce_row(row: dict[str, object]) -> srr.Usage:
+    """Build a :class:`Usage` from a ccusage row dict via the real parser."""
+    period = row["period"]
+    assert isinstance(period, str)
+    usage = srr.parse_usage(_grouped(row), period)
+    assert usage is not None
+    return usage
+
+
+def _extract_total(section: str) -> int:
+    """Return the integer from the ``- Total tokens: N (input ...)`` line."""
+    match = re.search(r"- Total tokens: ([\d,]+)", section)
+    assert match is not None, section
+    return int(match.group(1).replace(",", ""))
+
+
+class TestParseUsage:
+    def test_matches_by_period(self) -> None:
+        raw = _grouped(_row("other"), _row("target"))
+        usage = srr.parse_usage(raw, "target")
+        assert usage == {
+            "input": 3058,
+            "output": 55836,
+            "cache_create": 184694,
+            "cache_read": 2315219,
+            "total": 2558807,
+            "cost": pytest.approx(3.723137),
+            "models": ["claude-opus-4-8"],
+        }
+
+    def test_single_row_fallback_when_no_period_match(self) -> None:
+        # --id filters server-side; a lone row is the requested session even
+        # when the period text differs.
+        raw = _grouped(_row("unexpected-id"))
+        usage = srr.parse_usage(raw, "session-we-asked-for")
+        assert usage is not None
+        assert usage["total"] == 2558807
+
+    def test_no_match_with_multiple_rows_returns_none(self) -> None:
+        raw = _grouped(_row("a"), _row("b"))
+        assert srr.parse_usage(raw, "c") is None
+
+    def test_malformed_json_returns_none(self) -> None:
+        assert srr.parse_usage("{not json", "x") is None
+
+    def test_missing_keys_returns_none(self) -> None:
+        raw = json.dumps({"session": [{"period": "x", "inputTokens": 1}]})
+        assert srr.parse_usage(raw, "x") is None
+
+    def test_non_numeric_token_returns_none(self) -> None:
+        # A string where a token count is expected degrades the whole row.
+        raw = _grouped(_row("x", inputTokens="lots"))
+        assert srr.parse_usage(raw, "x") is None
+
+    def test_boolean_token_returns_none(self) -> None:
+        # A JSON ``true`` must not be read as the integer 1.
+        raw = _grouped(_row("x", totalTokens=True))
+        assert srr.parse_usage(raw, "x") is None
+
+    def test_session_not_a_list_returns_none(self) -> None:
+        assert srr.parse_usage(json.dumps({"session": {}}), "x") is None
+
+    def test_top_level_not_a_dict_returns_none(self) -> None:
+        assert srr.parse_usage(json.dumps([1, 2, 3]), "x") is None
+
+
+# ---------------------------------------------------------------------------
+# render_section
+# ---------------------------------------------------------------------------
+
+
+_USAGE: srr.Usage = {
+    "input": 3064,
+    "output": 57757,
+    "cache_create": 188285,
+    "cache_read": 2671781,
+    "total": 2920887,
+    "cost": 3.9719,
+    "models": ["claude-opus-4-8"],
+}
+
+
+_ELAPSED_LABEL = "Elapsed (since previous PR or session start)"
+
+
+class TestRenderSection:
+    def test_heading_present_and_first(self) -> None:
+        out = srr.render_section("0:09:11", _USAGE)
+        assert out.startswith("## Resource Consumption\n")
+
+    def test_live_values_with_thousands_separators(self) -> None:
+        out = srr.render_section("0:09:11", _USAGE)
+        assert "0:09:11" in out
+        assert "2,920,887" in out
+        assert "input 3,064" in out
+        assert "cache-read 2,671,781" in out
+        assert "$3.9719" in out
+        assert "claude-opus-4-8" in out
+
+    def test_usage_none_renders_unavailable(self) -> None:
+        out = srr.render_section("0:09:11", None)
+        # Elapsed still shown; the token/cost/model lines degrade.
+        assert f"{_ELAPSED_LABEL}: 0:09:11" in out
+        assert out.count(srr._UNAVAILABLE) == 3
+
+    def test_elapsed_none_renders_unavailable(self) -> None:
+        out = srr.render_section(None, _USAGE)
+        assert f"{_ELAPSED_LABEL}: {srr._UNAVAILABLE}" in out
+        assert "2,920,887" in out
+
+    def test_both_none_all_unavailable(self) -> None:
+        out = srr.render_section(None, None)
+        assert out.count(srr._UNAVAILABLE) == 4
+
+    def test_empty_models_list_is_unavailable(self) -> None:
+        usage: srr.Usage = {
+            "input": 1,
+            "output": 1,
+            "cache_create": 1,
+            "cache_read": 1,
+            "total": 4,
+            "cost": 0.1,
+            "models": [],
+        }
+        out = srr.render_section("0:00:01", usage)
+        assert f"Model(s): {srr._UNAVAILABLE}" in out
+
+    def test_output_is_ascii(self) -> None:
+        assert srr.render_section("0:09:11", _USAGE).isascii()
+        assert srr.render_section(None, None).isascii()
+
+
+# ---------------------------------------------------------------------------
+# Contract with body_policy
+# ---------------------------------------------------------------------------
+
+
+class TestBodyPolicyContract:
+    def test_section_is_a_required_pr_heading(self) -> None:
+        assert "Resource Consumption" in body_policy._PR_REQUIRED
+
+    def test_rendered_section_satisfies_heading_extraction(self) -> None:
+        out = srr.render_section("0:09:11", _USAGE)
+        headings = {text for _level, text in body_policy.extract_headings(out)}
+        assert "Resource Consumption" in headings
+
+
+# ---------------------------------------------------------------------------
+# gather (I/O seam, ccusage monkeypatched)
+# ---------------------------------------------------------------------------
+
+
+class TestGather:
+    def test_live_path(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: pytest.TempPathFactory
+    ) -> None:
+        # First PR of the session: no checkpoint, so the cumulative total is
+        # the window and elapsed runs from the spawn timestamp.
+        monkeypatch.setattr(
+            srr, "_run_ccusage", lambda _sid: _grouped(_row("sess-1"))
+        )
+        env = {
+            "CCR_SPAWN_TIMESTAMP_MS": "1000",
+            "CLAUDE_CODE_SESSION_ID": "sess-1",
+            "CCR_CCUSAGE_CHECKPOINT_DIR": str(tmp_path),
+        }
+        out = srr.gather(env=env, now_ms=1000.0 + 90_000)
+        assert f"{_ELAPSED_LABEL}: 0:01:30" in out
+        assert "2,558,807" in out
+        assert "$3.7231" in out
+
+    def test_no_session_id_degrades(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # No session id -> ccusage is never consulted; tokens unavailable but
+        # elapsed still rendered from the spawn timestamp.
+        called = {"n": 0}
+
+        def _fake(_sid: str) -> str | None:
+            called["n"] += 1
+            return None
+
+        monkeypatch.setattr(srr, "_run_ccusage", _fake)
+        env = {"CCR_SPAWN_TIMESTAMP_MS": "1000"}
+        out = srr.gather(env=env, now_ms=1000.0 + 1_000)
+        assert f"{_ELAPSED_LABEL}: 0:00:01" in out
+        assert out.count(srr._UNAVAILABLE) == 3
+
+    def test_ccusage_absent_degrades(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(srr, "_run_ccusage", lambda _sid: None)
+        env = {"CLAUDE_CODE_SESSION_ID": "sess-1"}
+        out = srr.gather(env=env, now_ms=5_000.0)
+        # No spawn ts and no ccusage -> the full unavailable form.
+        assert out.count(srr._UNAVAILABLE) == 4
+
+
+# ---------------------------------------------------------------------------
+# Per-PR checkpoint: write_checkpoint + delta_usage + multi-PR gather (#1435)
+# ---------------------------------------------------------------------------
+
+
+class TestDeltaUsage:
+    def test_no_baseline_returns_cumulative(self) -> None:
+        cumulative = _coerce_row(_row("x"))
+        assert srr.delta_usage(cumulative, None) == cumulative
+
+    def test_subtracts_baseline_per_field(self) -> None:
+        baseline = _coerce_row(_row("x"))
+        cumulative = _coerce_row(
+            _row(
+                "x",
+                inputTokens=4058,
+                outputTokens=56836,
+                cacheCreationTokens=185694,
+                cacheReadTokens=2316219,
+                totalTokens=2562807,
+                totalCost=4.723137,
+            )
+        )
+        delta = srr.delta_usage(cumulative, baseline)
+        assert delta["input"] == 1000
+        assert delta["output"] == 1000
+        assert delta["cache_create"] == 1000
+        assert delta["cache_read"] == 1000
+        assert delta["total"] == 4000
+        assert delta["cost"] == pytest.approx(1.0)
+
+    def test_negative_field_falls_back_to_cumulative(self) -> None:
+        # A stale checkpoint whose totals exceed the current cumulative (e.g. a
+        # different session) must not produce a negative delta.
+        baseline = _coerce_row(_row("x", totalTokens=9_000_000))
+        cumulative = _coerce_row(_row("x"))
+        assert srr.delta_usage(cumulative, baseline) == cumulative
+
+
+class TestCheckpointRoundTrip:
+    def test_save_then_load(self, tmp_path: pytest.TempPathFactory) -> None:
+        env = {"CCR_CCUSAGE_CHECKPOINT_DIR": str(tmp_path)}
+        usage = _coerce_row(_row("sess-1"))
+        srr.save_checkpoint("sess-1", 1234.0, usage, env)
+        loaded = srr.load_checkpoint("sess-1", env)
+        assert loaded is not None
+        assert loaded["ts_ms"] == 1234.0
+        assert loaded["usage"] == usage
+
+    def test_load_missing_returns_none(self, tmp_path: pytest.TempPathFactory) -> None:
+        env = {"CCR_CCUSAGE_CHECKPOINT_DIR": str(tmp_path)}
+        assert srr.load_checkpoint("never-written", env) is None
+
+    def test_no_session_id_no_path(self) -> None:
+        assert srr._checkpoint_path("", {}) is None
+        assert srr.load_checkpoint("", {}) is None
+
+    def test_corrupt_file_returns_none(self, tmp_path: pytest.TempPathFactory) -> None:
+        env = {"CCR_CCUSAGE_CHECKPOINT_DIR": str(tmp_path)}
+        path = srr._checkpoint_path("sess-1", env)
+        assert path is not None
+        path.write_text("{not json", encoding="utf-8")
+        assert srr.load_checkpoint("sess-1", env) is None
+
+    def test_write_checkpoint_records_current_cumulative(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: pytest.TempPathFactory
+    ) -> None:
+        monkeypatch.setattr(
+            srr, "_run_ccusage", lambda _sid: _grouped(_row("sess-1"))
+        )
+        env = {
+            "CLAUDE_CODE_SESSION_ID": "sess-1",
+            "CCR_CCUSAGE_CHECKPOINT_DIR": str(tmp_path),
+        }
+        srr.write_checkpoint(env=env, now_ms=5000.0)
+        loaded = srr.load_checkpoint("sess-1", env)
+        assert loaded is not None
+        assert loaded["ts_ms"] == 5000.0
+        assert loaded["usage"]["total"] == 2558807
+
+    def test_write_checkpoint_no_ccusage_is_noop(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: pytest.TempPathFactory
+    ) -> None:
+        # ccusage unavailable -> any prior checkpoint is left intact, not blanked.
+        env = {
+            "CLAUDE_CODE_SESSION_ID": "sess-1",
+            "CCR_CCUSAGE_CHECKPOINT_DIR": str(tmp_path),
+        }
+        srr.save_checkpoint("sess-1", 1.0, _coerce_row(_row("sess-1")), env)
+        monkeypatch.setattr(srr, "_run_ccusage", lambda _sid: None)
+        srr.write_checkpoint(env=env, now_ms=9999.0)
+        loaded = srr.load_checkpoint("sess-1", env)
+        assert loaded is not None
+        assert loaded["ts_ms"] == 1.0  # unchanged
+
+
+class TestMultiPRWindowing:
+    """The #1435 regression: a second PR in one session must report the delta
+    since the first PR-create, and the two deltas must sum to the session
+    total -- no double-counting of the first PR's tokens."""
+
+    def test_second_pr_reports_delta_not_cumulative(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: pytest.TempPathFactory
+    ) -> None:
+        env = {
+            "CCR_SPAWN_TIMESTAMP_MS": "1000",
+            "CLAUDE_CODE_SESSION_ID": "sess-1",
+            "CCR_CCUSAGE_CHECKPOINT_DIR": str(tmp_path),
+        }
+
+        # --- PR #1: cumulative 1,000,000 total tokens, cost $1.0 ---
+        pr1 = _row(
+            "sess-1",
+            inputTokens=100,
+            outputTokens=200,
+            cacheCreationTokens=300,
+            cacheReadTokens=400,
+            totalTokens=1_000_000,
+            totalCost=1.0,
+        )
+        monkeypatch.setattr(srr, "_run_ccusage", lambda _sid: _grouped(pr1))
+        out1 = srr.gather(env=env, now_ms=1000.0 + 60_000)
+        assert "1,000,000" in out1
+        assert "$1.0000" in out1
+        assert f"{_ELAPSED_LABEL}: 0:01:00" in out1  # from spawn (no checkpoint yet)
+
+        # The PostToolUse create hook advances the checkpoint at PR #1 create.
+        srr.write_checkpoint(env=env, now_ms=1000.0 + 60_000)
+
+        # --- PR #2: cumulative grew to 1,500,000 total, cost $1.6 ---
+        pr2 = _row(
+            "sess-1",
+            inputTokens=150,
+            outputTokens=260,
+            cacheCreationTokens=360,
+            cacheReadTokens=470,
+            totalTokens=1_500_000,
+            totalCost=1.6,
+        )
+        monkeypatch.setattr(srr, "_run_ccusage", lambda _sid: _grouped(pr2))
+        out2 = srr.gather(env=env, now_ms=1000.0 + 60_000 + 120_000)
+
+        # PR #2 must report its own slice, not the cumulative 1,500,000.
+        assert "500,000" in out2
+        assert "1,500,000" not in out2
+        assert "$0.6000" in out2
+        # Elapsed for PR #2 runs from the PR #1 checkpoint, not session spawn.
+        assert f"{_ELAPSED_LABEL}: 0:02:00" in out2
+
+    def test_per_pr_deltas_sum_to_session_total(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: pytest.TempPathFactory
+    ) -> None:
+        env = {
+            "CCR_SPAWN_TIMESTAMP_MS": "0",
+            "CLAUDE_CODE_SESSION_ID": "sess-1",
+            "CCR_CCUSAGE_CHECKPOINT_DIR": str(tmp_path),
+        }
+        cumulatives = [300_000, 700_000, 1_200_000]
+        reported: list[int] = []
+        for i, total in enumerate(cumulatives):
+            row = _row("sess-1", totalTokens=total, totalCost=float(total) / 1e6)
+            monkeypatch.setattr(srr, "_run_ccusage", lambda _sid, r=row: _grouped(r))
+            out = srr.gather(env=env, now_ms=float((i + 1) * 1000))
+            reported.append(_extract_total(out))
+            srr.write_checkpoint(env=env, now_ms=float((i + 1) * 1000))
+        assert sum(reported) == cumulatives[-1]
+        assert reported == [300_000, 400_000, 500_000]
+
+
+# ---------------------------------------------------------------------------
+# _coerce_number
+# ---------------------------------------------------------------------------
+
+
+class TestCoerceNumber:
+    def test_int_and_float_pass_through(self) -> None:
+        assert srr._coerce_number(5) == 5.0
+        assert srr._coerce_number(2.5) == 2.5
+
+    def test_non_number_raises(self) -> None:
+        with pytest.raises(ValueError, match="not a number"):
+            srr._coerce_number("nope")
+
+    def test_bool_raises(self) -> None:
+        with pytest.raises(ValueError, match="not a number"):
+            srr._coerce_number(True)
+
+
+# ---------------------------------------------------------------------------
+# _run_ccusage (subprocess seam)
+# ---------------------------------------------------------------------------
+
+
+class TestRunCcusage:
+    def test_empty_session_id_returns_none(self) -> None:
+        assert srr._run_ccusage("") is None
+
+    def test_ccusage_not_on_path_returns_none(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(srr.shutil, "which", lambda _name: None)
+        assert srr._run_ccusage("sess") is None
+
+    def test_success_returns_stdout(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(srr.shutil, "which", lambda _name: "/fake/ccusage")
+
+        def fake_run(argv: list[str], **_kw: object) -> subprocess.CompletedProcess:
+            assert argv == ["/fake/ccusage", "session", "--json"]
+            return subprocess.CompletedProcess(argv, 0, stdout='{"session": []}', stderr="")
+
+        monkeypatch.setattr(srr.subprocess, "run", fake_run)
+        assert srr._run_ccusage("sess") == '{"session": []}'
+
+    def test_non_zero_exit_returns_none(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(srr.shutil, "which", lambda _name: "/fake/ccusage")
+
+        def fake_run(argv: list[str], **_kw: object) -> subprocess.CompletedProcess:
+            return subprocess.CompletedProcess(argv, 1, stdout="x", stderr="boom")
+
+        monkeypatch.setattr(srr.subprocess, "run", fake_run)
+        assert srr._run_ccusage("sess") is None
+
+    def test_subprocess_error_returns_none(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(srr.shutil, "which", lambda _name: "/fake/ccusage")
+
+        def boom(*_a: object, **_k: object) -> object:
+            raise OSError("cannot exec")
+
+        monkeypatch.setattr(srr.subprocess, "run", boom)
+        assert srr._run_ccusage("sess") is None
+
+
+# ---------------------------------------------------------------------------
+# gather default branches (os.environ / wall clock)
+# ---------------------------------------------------------------------------
+
+
+class TestGatherDefaults:
+    def test_defaults_to_os_environ_and_wall_clock(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # env=None -> os.environ; now_ms=None -> time.time(). ccusage stubbed
+        # so the test never shells out.
+        monkeypatch.setattr(srr, "_run_ccusage", lambda _sid: None)
+        out = srr.gather()
+        assert out.startswith("## Resource Consumption")
+
+
+# ---------------------------------------------------------------------------
+# main
+# ---------------------------------------------------------------------------
+
+
+class TestMain:
+    def test_main_writes_section_and_exits_zero(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        monkeypatch.setattr(srr, "gather", lambda: "## Resource Consumption\n- x\n")
+        assert srr.main([]) == 0
+        assert capsys.readouterr().out == "## Resource Consumption\n- x\n"

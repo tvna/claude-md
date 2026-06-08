@@ -242,7 +242,7 @@ def _hook_mode() -> int:
         )
         return 0
 
-    emit_decision(decide(tool_name, tool_input))
+    emit_decision(decide(tool_name, tool_input), "preflight_main_freshness", auditable=False)
     return 0
 
 

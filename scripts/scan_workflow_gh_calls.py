@@ -1,22 +1,25 @@
 #!/usr/bin/env python3
-"""Scan .github/workflows/*.yml for unallowlisted direct ``gh`` CLI calls.
+"""Scan .github/workflows/*.yml for unallowlisted direct GitHub API calls.
 
 Policy (issue #911): workflow ``run:`` blocks must not invoke the ``gh``
-CLI unless the (workflow, step) pair is documented in :data:`ALLOWLIST_ENTRIES`
-with an explicit migration rationale.
+CLI, nor ``curl`` the GitHub REST API (``api.github.com`` /
+``uploads.github.com``) directly, unless the (workflow, step) pair is
+documented in :data:`ALLOWLIST_ENTRIES` with an explicit migration rationale.
+Both shapes embed GitHub behaviour in YAML where it cannot be unit tested;
+the fix is the same -- move it behind a tested ``scripts/*.py`` helper.
 
 ALLOWLIST_ENTRIES is expected to shrink as each migration PR lands.  When
-the list is empty the gate is fully strict: any new ``gh`` call without a
-matching allowlist entry fails CI.
+the list is empty the gate is fully strict: any new ``gh`` call or direct
+``curl`` to the GitHub API without a matching allowlist entry fails CI.
 
 CLI::
 
     python3 scripts/scan_workflow_gh_calls.py verify  # exit 1 on violations
-    python3 scripts/scan_workflow_gh_calls.py list    # print all gh calls
+    python3 scripts/scan_workflow_gh_calls.py list    # print all matches
 
 Exit codes:
     0  verify passed (no violations) or list completed
-    1  verify found unallowlisted gh calls
+    1  verify found unallowlisted gh / curl calls
     2  usage error
 
 Refs #911.
@@ -43,14 +46,21 @@ _GH_CLI_RE = re.compile(
     re.MULTILINE,
 )
 
+# A ``curl`` invocation anywhere in the run block …
+_CURL_RE = re.compile(r"(?:^|(?<=[\s;|&(`]))curl\b", re.MULTILINE)
+# … combined with a GitHub REST API host is a direct-API violation.  The uv
+# release download (``github.com/astral-sh/...``) is intentionally NOT matched.
+_GITHUB_API_HOST_RE = re.compile(r"\b(?:api|uploads)\.github\.com\b")
+
 _FRAGMENT_LEN = 80
 
 
 class Violation(NamedTuple):
-    workflow: str   # file basename
-    job: str        # job key
-    step: str       # step name, or "" if unnamed
-    fragment: str   # first gh … fragment from the run block
+    workflow: str        # file basename
+    job: str             # job key
+    step: str            # step name, or "" if unnamed
+    fragment: str        # first matching fragment from the run block
+    kind: str = "gh"     # "gh" (gh CLI) or "curl" (direct GitHub API curl)
 
 
 # ---------------------------------------------------------------------------
@@ -112,20 +122,43 @@ def _iter_run_steps(
                 yield wf_path.name, str(job_id), step_name, run_text
 
 
+def _fragment_at(run_text: str, start: int) -> str:
+    """Return a trimmed fragment of the run block starting at ``start``."""
+    return run_text[start : start + _FRAGMENT_LEN].strip()
+
+
+def _iter_matches(workflow_dir: Path) -> Iterator[Violation]:
+    """Yield a Violation for every ``gh`` CLI call and direct GitHub-API ``curl``.
+
+    Allowlist filtering is the caller's responsibility; this yields all matches.
+    """
+    for wf_name, job_id, step_name, run_text in _iter_run_steps(workflow_dir):
+        gh_match = _GH_CLI_RE.search(run_text)
+        if gh_match is not None:
+            yield Violation(
+                workflow=wf_name,
+                job=job_id,
+                step=step_name,
+                fragment=_fragment_at(run_text, gh_match.start()),
+                kind="gh",
+            )
+        if _CURL_RE.search(run_text) is not None:
+            api_match = _GITHUB_API_HOST_RE.search(run_text)
+            if api_match is not None:
+                yield Violation(
+                    workflow=wf_name,
+                    job=job_id,
+                    step=step_name,
+                    fragment=_fragment_at(run_text, api_match.start()),
+                    kind="curl",
+                )
+
+
 def find_violations(
     workflow_dir: Path = WORKFLOW_DIR,
 ) -> list[Violation]:
-    """Return a Violation for every unallowlisted ``gh`` CLI call in workflow run: blocks."""
-    violations: list[Violation] = []
-    for wf_name, job_id, step_name, run_text in _iter_run_steps(workflow_dir):
-        match = _GH_CLI_RE.search(run_text)
-        if match is None:
-            continue
-        if (wf_name, step_name) in _ALLOWLIST_KEYS:
-            continue
-        fragment = run_text[match.start() : match.start() + _FRAGMENT_LEN].strip()
-        violations.append(Violation(workflow=wf_name, job=job_id, step=step_name, fragment=fragment))
-    return violations
+    """Return a Violation for every unallowlisted gh CLI call or direct GitHub-API curl."""
+    return [v for v in _iter_matches(workflow_dir) if (v.workflow, v.step) not in _ALLOWLIST_KEYS]
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -140,13 +173,9 @@ def main(argv: list[str] | None = None) -> int:
     wf_dir = WORKFLOW_DIR
 
     if args.cmd == "list":
-        for wf_name, job_id, step_name, run_text in _iter_run_steps(wf_dir):
-            match = _GH_CLI_RE.search(run_text)
-            if match is None:
-                continue
-            status = "ALLOWED" if (wf_name, step_name) in _ALLOWLIST_KEYS else "VIOLATION"
-            fragment = run_text[match.start() : match.start() + _FRAGMENT_LEN].strip()
-            print(f"[{status}] {wf_name} / {job_id} / {step_name!r}: {fragment!r}")
+        for v in _iter_matches(wf_dir):
+            status = "ALLOWED" if (v.workflow, v.step) in _ALLOWLIST_KEYS else "VIOLATION"
+            print(f"[{status}] ({v.kind}) {v.workflow} / {v.job} / {v.step!r}: {v.fragment!r}")
         return 0
 
     violations = find_violations(wf_dir)
@@ -154,9 +183,10 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     for v in violations:
+        what = "gh CLI call" if v.kind == "gh" else "direct GitHub API curl"
         print(
             f"::error file=.github/workflows/{v.workflow}::"
-            f"Unallowlisted gh CLI call in step {v.step!r} (job: {v.job}): "
+            f"Unallowlisted {what} in step {v.step!r} (job: {v.job}): "
             f"{v.fragment!r}. "
             f"Migrate to a tested Python script or add an allowlist entry with "
             f"rationale in scripts/scan_workflow_gh_calls.py ALLOWLIST_ENTRIES.",

@@ -24,7 +24,7 @@ from _retro_labels import (
     RETRO_TP,
 )
 
-pytestmark = pytest.mark.shard_ci_ops
+pytestmark = pytest.mark.shard_ci_ops_2
 
 # ---------------------------------------------------------------------------
 # Label SoT

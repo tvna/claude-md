@@ -71,6 +71,14 @@ _SECTIONS_OK = (
     "## Rollback\n\n- `git revert <sha>`\n\n"
 )
 
+_RESOURCE_OK = (
+    "## Resource Consumption\n\n"
+    "- Elapsed (since previous PR or session start): 0:06:42\n"
+    "- Total tokens: 230,127\n"
+    "- Cost (USD): $0.6396\n"
+    "- Model(s): claude-opus-4-8\n\n"
+)
+
 _GOOD_BODY = (
     "## Summary\n\nAdd connector PR body preflight.\n\n"
     "## Related Issue\n\nCloses #938\n\n"
@@ -79,6 +87,7 @@ _GOOD_BODY = (
     + "\n"
     + _CHECKLIST_OK
     + "\n"
+    + _RESOURCE_OK
     + _FOOTER_OK
 )
 
@@ -179,7 +188,10 @@ class TestEvaluate:
     # -- harness_appends_footer path (Claude web harness create, #1025) --
 
     def test_harness_mode_no_footer_passes(self) -> None:
-        body = _SECTIONS_OK + _VERIFICATION_OK + "\n" + _CHECKLIST_OK
+        body = (
+            _SECTIONS_OK + _VERIFICATION_OK + "\n" + _CHECKLIST_OK
+            + "\n" + _RESOURCE_OK
+        )
         body = (
             "## Summary\n\nx\n\n## Related Issue\n\nCloses #1025\n\n" + body
         )
@@ -207,6 +219,8 @@ class TestHarnessEnvResolution:
             + _VERIFICATION_OK
             + "\n"
             + _CHECKLIST_OK
+            + "\n"
+            + _RESOURCE_OK
         )
         f = tmp_path / "body.md"
         f.write_text(body, encoding="utf-8")
@@ -241,6 +255,8 @@ class TestHarnessEnvResolution:
             + _VERIFICATION_OK
             + "\n"
             + _CHECKLIST_OK
+            + "\n"
+            + _RESOURCE_OK
         )
         f = tmp_path / "body.md"
         f.write_text(body, encoding="utf-8")

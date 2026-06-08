@@ -1,0 +1,41 @@
+# Skill quality gate (PR): runs waza spec-compliance checks on changed skills.
+#
+# Defense-in-depth companion to the local pre-commit hook `skill-quality-gate`
+# (.pre-commit-config.yaml). Policy is fixed in scripts/skill_quality_gate.py:
+# spec-compliance failure = fail, token budget = warning only, LLM judge not
+# run. See issue #1099.
+name: skill-quality
+
+on:
+  pull_request:
+    paths:
+      - ".agents/skills/**/SKILL.md"
+      - "scripts/skill_quality_gate.py"
+      - "scripts/install_waza.sh"
+      - ".github/workflows/skill-quality.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  skill-quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+
+      - name: Set up uv and project environment
+        uses: ./.github/actions/setup-uv
+
+      - name: Install waza (pinned)
+        run: scripts/install_waza.sh
+
+      - name: Run skill quality gate
+        run: uv run python scripts/skill_quality_gate.py verify

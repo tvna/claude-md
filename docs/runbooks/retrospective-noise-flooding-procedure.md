@@ -25,11 +25,15 @@ non-bot, non-retro merge.
 - Replacing the auto-retro repair-history pre-fill. The
   `_build_repair_history_table` function in
   [`scripts/auto_retro.py`](../../scripts/auto_retro.py) already detects
-  five signal classes (CI failures, fix-up commits with the canonical
+  these row classes (CI failures, fix-up commits with the canonical
   `fix(...)` commit on a fix-typed PR split out as a separate
   `Fix commit` row -- see #413, merge-from-main, multi-commit PR, and
-  failed Verification pairs) and writes them into the retro issue
-  body. This procedure layers human judgment on top of those signals;
+  prose Verification-fail rows) and writes them into the retro issue
+  body. As of #1236 the Verification-fail row is a non-actionable
+  policy-artifact anomaly hint (it never opens a retro on its own,
+  mirroring the Revert-commit row); the `verification_pairs_failed`
+  signal it fed was retired the same way #1227 retired `body_cites_refs`.
+  This procedure layers human judgment on top of those signals;
   it does not duplicate them.
 - Re-classifying the three repair-taxonomy categories. The taxonomy
   (missing deterministic gate / unclear agent instruction / external
@@ -66,7 +70,7 @@ or `git log` query.
 
 | # | Signal | Where to read it | What it means |
 |---|--------|------------------|---------------|
-| S1 | High commit count on a single PR | Auto-retro repair-history table `Multi-commit PR` row; or `git log --oneline <base>..<head> | wc -l` | The PR did not squash to a single intent. Either the author iterated in public (legitimate when each commit is a discrete step) or the branch absorbed unrelated work. Note: the `multi_commit_pr` gate that triggers auto-retro creation subtracts merge-from-main commits from the count, so rebase debt forced by the squash-only, linear-history policy does not fire the gate on its own; the repair-history table still records the merge-from-main rows for review visibility. |
+| S1 | High commit count on a single PR | Auto-retro repair-history table `Multi-commit PR` row; or `git log --oneline <base>..<head> | wc -l` | The PR did not squash to a single intent. Either the author iterated in public (legitimate when each commit is a discrete step) or the branch absorbed unrelated work. Note: the `multi_commit_pr` gate that triggers auto-retro creation subtracts merge-from-main commits AND revert commits (Git-standard `Revert "..."` and Conventional `revert:`/`revert(scope):`) from the count, so neither rebase debt forced by the squash-only, linear-history policy nor a `git revert` (the default rollback path per CLAUDE.md section 3) fires the gate on its own; the repair-history table still records `Merge from main` and `Revert commit` rows for review visibility. A revert is an anomaly hint, not a standalone trigger -- a retro opens only when it co-fires with another signal (review comments, failed CI, failed verification). |
 | S2 | Low-information commit subjects | Auto-retro `Iteration commit` row (the canonical `fix(...)` commit on a fix-typed PR is rendered as `Fix commit` instead and is exempt from this count -- see #413); or scan commit subjects for `wip`, `fix`, `fixup!`, `squash!`, `update`, `more`, `tweak`, generic verbs with no scope | Subjects that do not state intent erase the audit trail. A reviewer cannot reconstruct what each commit changed without diffing it. |
 | S3 | Repeated repair commits | Auto-retro `Iteration commit` row with three or more entries (the canonical `fix(...)` commit on a fix-typed PR is exempt -- see #413); or `git log --grep='^fix' <base>..<head>` count | Repeated `fix(...)` commits on the same PR indicate the deterministic gates caught defects late. The pattern points at a missing earlier gate or an unclear agent instruction. |
 | S4 | Force-update churn | `git reflog show origin/<branch>` from the local checkout if available; or the PR `force-pushed` timeline events visible in the GitHub UI | Force pushes rewrite the audit log. A small number is normal (rebase onto main, fix-up squash before merge). A large number obscures which version a reviewer approved. |
@@ -91,16 +95,33 @@ for review visibility but does not need a `missing deterministic gate`
 / `unclear agent instruction` / `external or human decision` tag.
 Refs issue #400.
 
+`Revert commit` rows also carry the `[policy-artifact]` marker but mean
+something different from `Merge from main`. A merge-from-main row is
+pure structural rebase debt; a revert is an *anomaly hint* -- recorded
+for co-fire correlation, not because the rollback itself is a defect.
+A revert alone does not open a retro (it is subtracted from
+`multi_commit_pr`); the row exists so that when a retrospective opens
+for a co-firing signal, the operator can correlate the rollback with
+the CI / review / verification evidence. Exempt from the section 3
+taxonomy only when it does not co-fire. Refs issue #1287.
+
 As of [#593](https://github.com/tvna/claude-md/issues/593), the
 auto-retro opener also applies this distinction at issue-creation
 time. A merged PR does not open a standalone retrospective when the
-only rendered rows are `[policy-artifact]` rows, a
-`(no automated repair signals detected)` sentinel, or successful
-Verification evidence. The opener still creates a retrospective for
-inline review comments, failed CI check runs, failed Verification
-pairs such as local dependency/tool mismatch, or repeated explicit
-iteration commits. Policy-artifact rows remain visible when a
-retrospective opens for one of those actionable signals.
+only rendered rows are `[policy-artifact]` rows (`Merge from main`,
+`Revert commit`, `Fix commit`, `Multi-commit PR`, and -- as of #1236 --
+`Verification fail`), a `(no automated repair signals detected)`
+sentinel, or successful Verification evidence. The opener still creates
+a retrospective for inline review comments, failed CI check runs, or
+repeated explicit iteration commits. A prose Verification-fail row no
+longer opens a retro on its own (#1236): the free-form `## Verification`
+text it parsed is untrusted per CLAUDE.md section 2, and the heuristic
+both misread passing prose and could not tell an intended negative-test
+or before-state demo from a real repair. The row stays visible for
+co-fire correlation; a genuine local failure that matters still surfaces
+through the CI / review / iteration signals it travels with.
+Policy-artifact rows remain visible when a retrospective opens for one
+of those actionable signals.
 
 ### 2.1 Severity thresholds (rule of thumb)
 
@@ -256,8 +277,8 @@ own sub-issue.
 The Q1 escalation produced [#414](https://github.com/tvna/claude-md/issues/414)
 after the 17-retro batch of 2026-05-24 to 2026-05-26 surfaced a
 noise-dominated stream. The deterministic follow-up is the
-**Strategy B sentinel** wired in
-[`.github/workflows/auto-retro-sentinel.yml`](../../.github/workflows/auto-retro-sentinel.yml)
+**Strategy B sentinel** wired in the `scan-and-close` job of
+[`.github/workflows/daily-maintenance.yml`](../../.github/workflows/daily-maintenance.yml)
 and backed by `sentinel_run` in
 [`scripts/auto_retro.py`](../../scripts/auto_retro.py).
 
