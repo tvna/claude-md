@@ -71,6 +71,22 @@ jobs:
           docker buildx create --name "$builder" --driver docker-container --use
           docker buildx inspect --bootstrap
 
+      # The nix-warm-claude Feature bakes the .#claude devShell closure at build
+      # time, but the workspace is NOT mounted during Feature install, so the
+      # Feature can only see files packaged inside its own directory. Stage the
+      # flake files the Feature realises (flake.nix/flake.lock for the closure,
+      # pyproject.toml for the uv version the flake reads) into the Feature dir
+      # for the claude legs only. These copies are git-ignored so they never
+      # drift from the repo flake; each build re-stages the current files, and
+      # all three are in this workflow's `paths:` trigger so a flake change
+      # rebuilds (and re-realises) the layer. Refs #1491.
+      - name: Stage flake into nix-warm-claude feature
+        if: matrix.agent == 'claude'
+        run: |
+          set -euo pipefail
+          feature_dir=".devcontainer/images/features/nix-warm-claude"
+          cp flake.nix flake.lock pyproject.toml "$feature_dir/"
+
       - name: Build and publish ${{ matrix.agent }} devcontainer image
         run: |
           image="${IMAGE_PREFIX}-${{ matrix.agent }}"
