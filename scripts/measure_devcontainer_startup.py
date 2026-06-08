@@ -40,7 +40,8 @@ Contract:
 - Inputs: ``--config`` (required, path to a devcontainer.json); ``--runtime``
   (default ``docker``), ``--workspace``, ``--user``, ``--host-dir``, ``--cap``
   (repeatable), ``--no-pull``, ``--probe-composition``, ``--top-n`` (default
-  30), ``--output``. No env-var fallbacks.
+  30), ``--warmup`` (repeatable: timed pre-postCreate segments), ``--output``.
+  No env-var fallbacks.
 - Outputs: the JSON report on stdout (and to ``--output`` when given), an ASCII
   markdown summary on stderr (for ``$GITHUB_STEP_SUMMARY``); exit 0 on success.
   With ``--probe-composition`` the report gains a ``composition`` block.
@@ -311,6 +312,7 @@ def measure(
     *,
     post_create: list[str],
     post_start: list[str],
+    warmup: list[str] | None = None,
     do_pull: bool = True,
     probe: bool = False,
     top_n: int = 30,
@@ -325,6 +327,13 @@ def measure(
     With ``probe`` the report also carries an image ``composition`` block
     (gathered while the container is still up). The container is always cleaned
     up.
+
+    ``warmup`` segments run in a ``warmup`` phase before postCreate. Their
+    purpose is attribution: a real container-create conflates the first
+    ``nix develop`` (which realises the devShell closure) with the work that
+    command runs. Timing a bare ``nix develop ... --command true`` as a warmup
+    isolates the closure-realisation cost, so the subsequent postCreate segment
+    measures only its own work against an already-warm closure.
     """
     report: dict[str, Any] = {"image": session.image, "phases": []}
 
@@ -337,7 +346,8 @@ def measure(
 
     session.start()
     try:
-        for phase, segments in (("postCreate", post_create), ("postStart", post_start)):
+        phases = (("warmup", warmup or []), ("postCreate", post_create), ("postStart", post_start))
+        for phase, segments in phases:
             for segment in segments:
                 result = session.exec(segment)
                 entry: dict[str, Any] = {
@@ -445,6 +455,16 @@ def run(
         help="Also probe the image's on-disk byte composition (nix store vs base, top entries).",
     )
     parser.add_argument("--top-n", type=int, default=30, help="How many largest store entries to report.")
+    parser.add_argument(
+        "--warmup",
+        action="append",
+        default=[],
+        help=(
+            "Command to run and time in a 'warmup' phase before postCreate "
+            "(repeatable). Use to isolate first-time nix-develop closure "
+            "realisation from the postCreate work that follows."
+        ),
+    )
     parser.add_argument("--output", type=Path, help="Write the JSON report to this path.")
     args = parser.parse_args(argv)
 
@@ -467,6 +487,7 @@ def run(
         session,
         post_create=post_create,
         post_start=post_start,
+        warmup=list(args.warmup),
         do_pull=not args.no_pull,
         probe=args.probe_composition,
         top_n=args.top_n,

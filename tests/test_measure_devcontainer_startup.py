@@ -323,6 +323,45 @@ def test_measure_closes_on_exec_error() -> None:
     assert session.events[-1] == "close"
 
 
+def test_measure_runs_warmup_before_postcreate() -> None:
+    session = FakeSession(
+        exec_results={
+            "nix develop .#claude --command true": mod.RunResult(0, "", 18.0),
+            "uv sync": mod.RunResult(0, "", 6.0),
+        },
+    )
+    report = mod.measure(
+        session,
+        post_create=["uv sync"],
+        post_start=[],
+        warmup=["nix develop .#claude --command true"],
+        do_pull=False,
+    )
+    assert report["phases"] == [
+        {
+            "phase": "warmup",
+            "command": "nix develop .#claude --command true",
+            "seconds": 18.0,
+            "returncode": 0,
+        },
+        {"phase": "postCreate", "command": "uv sync", "seconds": 6.0, "returncode": 0},
+    ]
+    # Warmup is exec'd before postCreate so the closure is warm for uv sync.
+    assert session.events == [
+        "start",
+        "exec:nix develop .#claude --command true",
+        "exec:uv sync",
+        "close",
+    ]
+    assert report["total_phase_seconds"] == 24.0
+
+
+def test_measure_no_warmup_keeps_phases_unchanged() -> None:
+    session = FakeSession(exec_results={"uv sync": mod.RunResult(0, "", 6.0)})
+    report = mod.measure(session, post_create=["uv sync"], post_start=[], do_pull=False)
+    assert [p["phase"] for p in report["phases"]] == ["postCreate"]
+
+
 def test_measure_records_stderr_tail_only_on_failure_with_content() -> None:
     session = FakeSession(
         exec_results={

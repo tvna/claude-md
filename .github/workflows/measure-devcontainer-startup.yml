@@ -21,6 +21,13 @@ on:
           - claude
           - codex
         default: claude
+      split_nix_develop:
+        description: >-
+          Time a bare 'nix develop --command true' as a warmup phase before
+          postCreate, to split first-time devShell closure realisation from the
+          uv sync that the postCreate nix-develop segment otherwise conflates.
+        type: boolean
+        default: false
 
 permissions: {}
 
@@ -54,6 +61,7 @@ jobs:
       - name: Measure startup phases
         env:
           AGENT: ${{ inputs.agent }}
+          SPLIT_NIX_DEVELOP: ${{ inputs.split_nix_develop }}
         run: |
           set -euo pipefail
           config=".devcontainer/${AGENT}/devcontainer.json"
@@ -73,6 +81,13 @@ jobs:
           sudo rm -rf "$workspace_copy"
           sudo cp -a "$GITHUB_WORKSPACE" "$workspace_copy"
           sudo chown -R 0:0 "$workspace_copy"
+          # Opt-in: time a bare nix-develop as a warmup phase so the postCreate
+          # nix-develop segment measures uv sync against an already-warm closure,
+          # splitting first-time closure realisation from uv sync (#1471).
+          warmup_args=()
+          if [ "${SPLIT_NIX_DEVELOP}" = "true" ]; then
+            warmup_args+=(--warmup "nix develop .#${AGENT} --command true")
+          fi
           # postStart applies the egress allowlist, which needs NET_ADMIN; the
           # eBPF caps are unavailable on the runner, so that segment is
           # best-effort and its (possibly non-zero) exit is recorded as data.
@@ -83,6 +98,7 @@ jobs:
             --host-dir "$workspace_copy" \
             --cap NET_ADMIN \
             --probe-composition \
+            "${warmup_args[@]}" \
             --output "startup-${AGENT}.json" \
             2>> "$GITHUB_STEP_SUMMARY"
 
