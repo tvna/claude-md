@@ -57,6 +57,22 @@ jobs:
         run: |
           set -euo pipefail
           config=".devcontainer/${AGENT}/devcontainer.json"
+          # The published image aliases the agent user to uid 0 (agent-user
+          # feature) because production runs under rootless Podman: there the
+          # bind-mounted workspace maps to uid 0 inside the container, so nix's
+          # libgit2 flake fetch sees the repo as owned by the current user.
+          # Under docker on the runner there is no such mapping -- the checkout
+          # stays owned by the runner uid -- so libgit2 rejects the flake git
+          # input ("repository path ... is not owned by current user") and every
+          # nix-develop segment fails before doing any real work, leaving the
+          # postCreate cost unmeasured (#1471). Stage a root-owned copy of the
+          # repo and mount that, reproducing the production uid-0 ownership so
+          # the segments actually run. The original checkout is left untouched
+          # so the post-job git cleanup (runner uid) still works.
+          workspace_copy="${RUNNER_TEMP}/measure-workspace"
+          sudo rm -rf "$workspace_copy"
+          sudo cp -a "$GITHUB_WORKSPACE" "$workspace_copy"
+          sudo chown -R 0:0 "$workspace_copy"
           # postStart applies the egress allowlist, which needs NET_ADMIN; the
           # eBPF caps are unavailable on the runner, so that segment is
           # best-effort and its (possibly non-zero) exit is recorded as data.
@@ -64,6 +80,7 @@ jobs:
             --config "$config" \
             --runtime docker \
             --user "$AGENT" \
+            --host-dir "$workspace_copy" \
             --cap NET_ADMIN \
             --probe-composition \
             --output "startup-${AGENT}.json" \
