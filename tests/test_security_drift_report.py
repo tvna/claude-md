@@ -171,6 +171,21 @@ class TestClassifyUvPinLiteral:
         assert sdr.classify_uv_pin_literal(rc=2).status == sdr.STATUS_ERROR
 
 
+class TestClassifyWorkflowPermissions:
+    def test_covered_rc_zero(self) -> None:
+        row = sdr.classify_workflow_permissions(rc=0)
+        assert row.status == sdr.STATUS_COVERED
+        assert row.family == "workflow-permissions"
+
+    def test_drift_rc_one(self) -> None:
+        row = sdr.classify_workflow_permissions(rc=1)
+        assert row.status == sdr.STATUS_DRIFT
+        assert "apply-rulesets.yml" in row.action
+
+    def test_error_rc_other(self) -> None:
+        assert sdr.classify_workflow_permissions(rc=2).status == sdr.STATUS_ERROR
+
+
 class TestClassifyUvPinStaleness:
     def test_covered_no_warning(self) -> None:
         row = sdr.classify_uv_pin_staleness(rc=0, stale_text="uv pin matches upstream latest.\n")
@@ -356,6 +371,8 @@ def _aggregate_args(tmp_path: Path, **overrides: Any) -> list[str]:
         "--labels-summary-file", str(labels_summary),
         "--apm-diff-rc", overrides.pop("apm_rc", "0"),
         "--uv-drift-rc", overrides.pop("uv_drift_rc", "0"),
+        "--workflow-permissions-drift-rc",
+        overrides.pop("workflow_permissions_drift_rc", "0"),
         "--uv-stale-rc", overrides.pop("uv_stale_rc", "0"),
         "--uv-stale-output", str(uv_stale),
         "--run-url", overrides.pop("run_url", "https://x/runs/1"),
@@ -615,6 +632,15 @@ class TestAggregateEmitsDriftFamilies:
         assert sdr.main(_aggregate_args(tmp_path)) == 0
         gh_out = (tmp_path / "out.txt").read_text(encoding="utf-8")
         assert "drift_families=\n" in gh_out
+
+    def test_workflow_permissions_listed_when_drift(self, tmp_path: Path) -> None:
+        argv = _aggregate_args(tmp_path, workflow_permissions_drift_rc="1")
+        assert sdr.main(argv) == 0
+        gh_out = (tmp_path / "out.txt").read_text(encoding="utf-8")
+        drift_line = next(
+            line for line in gh_out.splitlines() if line.startswith("drift_families=")
+        )
+        assert "workflow-permissions" in drift_line
 
 
 class TestCmdFileFamilyIssues:

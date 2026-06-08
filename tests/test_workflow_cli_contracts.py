@@ -184,6 +184,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("ruleset_drift.py", "reconcile"): "test_ruleset_drift_detect_and_reconcile_match_workflow_args",
     ("rulesets_apply.py", "$MODE"): "test_rulesets_apply_plan_and_auto_delete_match_workflow_args",
     ("rulesets_apply.py", "auto-delete"): "test_rulesets_apply_plan_and_auto_delete_match_workflow_args",
+    ("rulesets_apply.py", "workflow-permissions"): "test_rulesets_apply_workflow_permissions_matches_workflow_args",
     ("scan_allowlist_parser_parity.py", "verify"): "test_scan_allowlist_parser_parity_verify_matches_workflow_args",
     ("scan_allowlist_rationale.py", "verify"): "test_scan_allowlist_rationale_verify_matches_workflow_args",
     ("scan_apm_portability.py", "verify"): "test_scan_apm_portability_verify_matches_workflow_paths",
@@ -988,6 +989,67 @@ def test_rulesets_apply_plan_and_auto_delete_match_workflow_args(
     ) == 0
 
 
+def test_rulesets_apply_workflow_permissions_matches_workflow_args(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Mirror the argv shape used by apply-rulesets.yml and
+    weekly-maintenance.yml.
+
+    apply-rulesets.yml runs ``workflow-permissions --mode plan|apply`` and the
+    weekly security-control-drift job runs it ``--mode drift`` (read-only). The
+    live GET is stubbed so the contract exercises argv/env wiring (SoT read,
+    diff, exit-code mapping) without network access.
+    """
+    sot = tmp_path / "workflow.json"
+    sot.write_text(
+        json.dumps(
+            {
+                "default_workflow_permissions": "read",
+                "can_approve_pull_request_reviews": True,
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("GH_TOKEN", "token")
+    monkeypatch.setattr(
+        rulesets_apply,
+        "get_workflow_permissions",
+        lambda *_a, **_k: {
+            "default_workflow_permissions": "read",
+            "can_approve_pull_request_reviews": True,
+        },
+    )
+
+    # drift mode, in sync -> exit 0
+    assert rulesets_apply.main(
+        [
+            "workflow-permissions",
+            "--repo",
+            REPO,
+            "--sot-file",
+            str(sot),
+            "--mode",
+            "drift",
+            "--summary-file",
+            str(tmp_path / "wfperm-summary.md"),
+        ]
+    ) == 0
+    # plan mode -> exit 0
+    assert rulesets_apply.main(
+        [
+            "workflow-permissions",
+            "--repo",
+            REPO,
+            "--sot-file",
+            str(sot),
+            "--mode",
+            "plan",
+            "--summary-file",
+            str(tmp_path / "wfperm-summary.md"),
+        ]
+    ) == 0
+
+
 def test_coverage_failure_issue_run_matches_workflow_env(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1465,6 +1527,8 @@ def test_security_drift_report_aggregate_and_post_comment_match_workflow_args(
             "--apm-diff-rc",
             "0",
             "--uv-drift-rc",
+            "0",
+            "--workflow-permissions-drift-rc",
             "0",
             "--uv-stale-rc",
             "0",
