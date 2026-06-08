@@ -180,6 +180,16 @@
         "hooks": [
           {
             "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/gate_irreversible_bash.py",
+            "statusMessage": "Guarding against irreversible bash operations"
+          }
+        ]
+      },
+      {
+        "matcher": "^Bash$",
+        "hooks": [
+          {
+            "type": "command",
             "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/gate_gh_cli.py",
             "statusMessage": "Checking for prohibited gh CLI usage"
           }

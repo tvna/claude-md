@@ -220,6 +220,15 @@
               "hooks": [
                 {
                   "type": "command",
+                  "command": "python3 scripts/gate_irreversible_bash.py"
+                }
+              ]
+            },
+            {
+              "matcher": "Bash",
+              "hooks": [
+                {
+                  "type": "command",
                   "command": "python3 scripts/gate_gh_cli.py"
                 }
               ]
@@ -649,6 +658,16 @@
                   "type": "command",
                   "command": "python3 scripts/block_sensitive_reads.py",
                   "statusMessage": "Blocking reads of local credential files"
+                }
+              ]
+            },
+            {
+              "matcher": "^Bash$",
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "python3 scripts/gate_irreversible_bash.py",
+                  "statusMessage": "Guarding against irreversible bash operations"
                 }
               ]
             },
