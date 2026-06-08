@@ -338,7 +338,17 @@ EOF
             gh
             git
             jq
-            nodejs_22
+            # bun, not nodejs_22 + npm/pnpm: this repo has no package.json and
+            # never invokes node/npm/npx -- the agent CLIs (claude/codex/ccusage)
+            # are self-contained native binaries and the only MCP server is the
+            # native github-mcp-server, so a full Node toolchain (nodejs ~91 MB +
+            # its ~69 MB -dev output + npm/pnpm) was unused weight in the baked
+            # image (#1491). bun is a single ~90 MB binary that still gives the
+            # agents a JS runtime + `bunx` (npx-equivalent) for ad-hoc work, with
+            # no separate -dev output. If a workflow needs strict node/npm
+            # behavior, reintroduce nodejs_22 + the package manager and document
+            # the consumer.
+            bun
             python312
             ripgrep
             shellcheck
@@ -388,13 +398,11 @@ EOF
           claude = mkAgentShell "claude" [
             agentPackages.claude-cli
             agentPackages.ccusage-cli
-            pkgs.nodePackages.npm
           ];
           codex = mkAgentShell "codex" [
             agentPackages.bubblewrap
             agentPackages.codex-cli
             agentPackages.ccusage-cli
-            pkgs.nodePackages.pnpm
           ];
           network = pkgs.mkShell {
             packages = networkPackages;
