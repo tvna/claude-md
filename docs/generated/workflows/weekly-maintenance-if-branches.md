@@ -6,6 +6,7 @@ This file is generated from `.github/workflows/weekly-maintenance.yml` by `pytho
 flowchart TD
 
     T_schedule(["on: schedule"])
+    T_push(["on: push\nbranches: ['main']\npaths: ['.github/rulesets/**', '.github/labe..."])
     T_workflow_dispatch(["on: workflow_dispatch\ninputs: {'task': {'description': 'Weekly task..."])
 
     J_branch_cleanup["branch-cleanup"]
@@ -41,7 +42,8 @@ flowchart TD
     J_measure_timings -->|"${{ inputs.measure_cutoff == '' }}"| S_J_measure_timings_0
     J_measure_timings -->|"${{ github.event_name == 'workflow_dispatch' && inputs.measure_issue_nu~"| S_J_measure_timings_1
     T_schedule -->|"github.event_name == 'schedule' || inputs.task == 'all' || inputs.task ~"| J_ruleset_drift
-    T_schedule -->|"github.event_name == 'schedule' || inputs.task == 'all' || inputs.task ~"| J_security_control_drift
+    T_schedule -->|"github.event_name == 'schedule' || github.event_name == 'push' || input~"| J_security_control_drift
+    T_push -->|"github.event_name == 'schedule' || github.event_name == 'push' || input~"| J_security_control_drift
     J_security_control_drift -->|"always()"| S_J_security_control_drift_0
     J_security_control_drift -->|"always()"| S_J_security_control_drift_1
     J_security_control_drift -->|"always()"| S_J_security_control_drift_2

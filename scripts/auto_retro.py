@@ -67,9 +67,33 @@ from _retro_labels import (
 )
 from _trusted_bots import _TRUSTED_BOT_LOGINS
 from issue_link import extract_refs, strip_html_comments
+from pr_upsert import upsert_single_file_pr
 
 _DECISION_TREE_DOC_PATH = Path("docs/generated/scripts/auto-retro-decision-tree.md")
 _TRIAGE_REPORT_DOC_PATH = Path("docs/generated/scripts/auto-retro-triage-report.md")
+
+# Fixed branch / PR identity for the post-merge triage-report refresh. The
+# branch is reused across runs; the snapshot commit is published via the signed
+# createCommitOnBranch path (pr_upsert.upsert_single_file_pr) so the reuse is a
+# fast-forward append and never a force-push -- the all-branches non_fast_forward
+# ruleset rejected the old `git push --force-with-lease` on every drift run after
+# the first. Refs #1042, #1386, #1466.
+_TRIAGE_REPORT_PR_BRANCH = "chore/refresh-auto-retro-triage-report"
+_TRIAGE_REPORT_PR_TITLE = "chore(auto-retro): refresh triage report (#1042)"
+_TRIAGE_REPORT_COMMIT_TRAILER = "Refs #1042"
+_TRIAGE_REPORT_PR_BODY = (
+    "Refreshes the auto-retro triage report snapshot from the current\n"
+    "retro-issue label state after a merge to `main`.\n"
+    "\n"
+    "This report is non-deterministic (it depends on live GitHub state), so\n"
+    "it is refreshed on merge and opened as a pull request rather than\n"
+    "enforced by the generate-docs.yml drift gate. The snapshot commit is\n"
+    "created server-side via the signed createCommitOnBranch path so the\n"
+    "fixed refresh branch can be reused without a force-push (the\n"
+    "all-branches non_fast_forward ruleset rejects force-pushes).\n"
+    "\n"
+    "Refs #1042. Refs #1386. Refs #1466.\n"
+)
 
 # Refs issue #380: GitHub may not finalize merge_commit_sha by the time
 # pull_request_target.closed fires; retry the PR-detail fetch with
@@ -3889,6 +3913,61 @@ def _cmd_triage_report(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_triage_report_pr(args: argparse.Namespace) -> int:
+    """Publish the regenerated triage-report snapshot as a reuse-safe refresh PR.
+
+    Reads the snapshot the preceding ``triage-report`` step wrote and upserts it
+    onto the fixed refresh branch via :func:`pr_upsert.upsert_single_file_pr`,
+    which appends a signed commit (createCommitOnBranch) instead of force-pushing
+    -- the #1466 fix. When the snapshot already matches *base*, there is no drift
+    and the command is a no-op. Refs #1042, #1386, #1466.
+    """
+    repo = (
+        args.repo or os.environ.get("REPO") or os.environ.get("GITHUB_REPOSITORY")
+    )
+    if not repo:
+        print(
+            "::error::missing --repo / $REPO / $GITHUB_REPOSITORY",
+            file=sys.stderr,
+        )
+        return 1
+    token = os.environ.get("GH_TOKEN", "")
+    if not token:
+        print(
+            "::error::GH_TOKEN environment variable is required",
+            file=sys.stderr,
+        )
+        return 1
+    base = args.base or os.environ.get("GITHUB_REF_NAME") or "main"
+    report_path = Path(args.report_file)
+    try:
+        content = report_path.read_bytes()
+    except OSError as exc:
+        print(
+            f"::error::cannot read triage report {args.report_file}: {exc}",
+            file=sys.stderr,
+        )
+        return 1
+    try:
+        result = upsert_single_file_pr(
+            repo=repo,
+            path=str(_TRIAGE_REPORT_DOC_PATH),
+            content=content,
+            base=base,
+            branch=_TRIAGE_REPORT_PR_BRANCH,
+            title=_TRIAGE_REPORT_PR_TITLE,
+            body=_TRIAGE_REPORT_PR_BODY,
+            commit_subject=_TRIAGE_REPORT_PR_TITLE,
+            commit_body=_TRIAGE_REPORT_COMMIT_TRAILER,
+            token=token,
+        )
+    except RuntimeError as exc:
+        print(f"::error::{exc}", file=sys.stderr)
+        return 1
+    print(f"triage-report refresh: {result}")
+    return 0
+
+
 def _cmd_verify_retro_completeness(args: argparse.Namespace) -> int:
     """Gate a ``fix(auto-retro):`` PR on Repair history Cause/Next action.
 
@@ -4134,6 +4213,26 @@ def main(argv: list[str] | None = None) -> int:
         help=f"Markdown output path (default {_TRIAGE_REPORT_DOC_PATH}).",
     )
     p_triage.set_defaults(func=_cmd_triage_report)
+
+    p_triage_pr = sub.add_parser(
+        "triage-report-pr",
+        help=(
+            "Publish the regenerated triage-report snapshot as a refresh PR "
+            "via a signed createCommitOnBranch append (no force-push). Reads "
+            "the file the triage-report step wrote. Refs #1042, #1466."
+        ),
+    )
+    p_triage_pr.add_argument("--repo", help="Override $REPO (owner/name).")
+    p_triage_pr.add_argument(
+        "--base",
+        help="Base branch to open the PR against (default $GITHUB_REF_NAME or main).",
+    )
+    p_triage_pr.add_argument(
+        "--report-file",
+        default=str(_TRIAGE_REPORT_DOC_PATH),
+        help=f"Path to the regenerated snapshot (default {_TRIAGE_REPORT_DOC_PATH}).",
+    )
+    p_triage_pr.set_defaults(func=_cmd_triage_report_pr)
 
     p_verify = sub.add_parser(
         "verify-retro-completeness",

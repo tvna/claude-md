@@ -378,6 +378,7 @@ EOF
           codex = mkAgentShell "codex" [
             agentPackages.bubblewrap
             agentPackages.codex-cli
+            agentPackages.ccusage-cli
             pkgs.nodePackages.pnpm
           ];
           network = pkgs.mkShell {
