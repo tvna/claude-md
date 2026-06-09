@@ -27531,6 +27531,35 @@ flowchart TD
     N010 -->|"false"| N012
 ```
 
+### redact_model(...)
+
+```mermaid
+flowchart TD
+    N001["redact_model(...)"]
+    N002["lowered = lower(...)"]
+    N003["for tier in _MODEL_TIERS:
+    if tier in lowered:
+        return f'{tier.capitalize()}<str>'"]
+    N004["return _UNKNOWN_MODEL_TIER"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 --> N004
+```
+
+### redact_models(...)
+
+```mermaid
+flowchart TD
+    N001["redact_models(...)"]
+    N002["seen = {}"]
+    N003["for model in models:
+    seen.setdefault(redact_model(model), None)"]
+    N004["return list(seen)"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 --> N004
+```
+
 ### render_section(...)
 
 ```mermaid
@@ -27540,17 +27569,19 @@ flowchart TD
     N003["if usage is not None"]
     N004["total = f'{usage['<str>']:<str>}<str>{usage['<str>']:<str>}<str>{usage['<str>']:<str>}<str>{usage['<str>']:<str>}<str>{usage['<str>']:<str>}<str>'"]
     N005["cost = f'<str>{usage['<str>']:<str>}'"]
-    N006["models = '<str>'.join(usage['<str>']) if usage['<str>'] else _UNAVAILABLE"]
-    N007["total, cost, models = _UNAVAILABLE"]
-    N008["return f'<str>{_HEADING}<str>{elapsed_txt}<str>{total}<str>{cost}<str>{models}<str>'"]
+    N006["tiers = redact_models(...)"]
+    N007["models = '<str>'.join(tiers) if tiers else _UNAVAILABLE"]
+    N008["total, cost, models = _UNAVAILABLE"]
+    N009["return f'<str>{_HEADING}<str>{elapsed_txt}<str>{total}<str>{cost}<str>{models}<str>'"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 -->|"true"| N004
     N004 --> N005
     N005 --> N006
-    N003 -->|"false"| N007
-    N006 --> N008
-    N007 --> N008
+    N006 --> N007
+    N003 -->|"false"| N008
+    N007 --> N009
+    N008 --> N009
 ```
 
 ### _run_ccusage(...)
