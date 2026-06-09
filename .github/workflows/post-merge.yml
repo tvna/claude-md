@@ -256,8 +256,9 @@ jobs:
   # docs/generated/scripts/auto-retro-triage-report.md from the live
   # retro-issue label state and opens a PR when the snapshot drifts. The
   # report is non-deterministic (it depends on GitHub state, not just
-  # source), so it cannot live in the generate-docs.yml drift gate; the git
-  # history of the committed snapshot is the time series. Refs #1042, #1386.
+  # source), so it cannot live in the deterministic generated-docs
+  # regeneration; the git history of the committed snapshot is the time
+  # series. Refs #1042, #1386.
   triage-report:
     if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && (inputs.task == 'triage-report' || inputs.task == 'all'))
     runs-on: ubuntu-latest

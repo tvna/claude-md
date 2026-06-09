@@ -143,7 +143,6 @@ Source: `python3 scripts/workflow_diagram.py diagram-doc`. Tracking issue: #960.
 | [workflows/dependabot-automerge-if-branches.md](generated/workflows/dependabot-automerge-if-branches.md) | `dependabot-automerge.yml` |
 | [workflows/devcontainer-pin-refresh-if-branches.md](generated/workflows/devcontainer-pin-refresh-if-branches.md) | `devcontainer-pin-refresh.yml` |
 | [workflows/generate-agents-if-branches.md](generated/workflows/generate-agents-if-branches.md) | `generate-agents.yml` |
-| [workflows/generate-docs-if-branches.md](generated/workflows/generate-docs-if-branches.md) | `generate-docs.yml` |
 | [workflows/issue-pr-triage-if-branches.md](generated/workflows/issue-pr-triage-if-branches.md) | `issue-pr-triage.yml` |
 | [workflows/measure-devcontainer-startup-if-branches.md](generated/workflows/measure-devcontainer-startup-if-branches.md) | `measure-devcontainer-startup.yml` |
 | [workflows/monthly-maintenance-if-branches.md](generated/workflows/monthly-maintenance-if-branches.md) | `monthly-maintenance.yml` |
