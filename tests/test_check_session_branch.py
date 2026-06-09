@@ -87,9 +87,7 @@ def test_check_writes_session_branch_file(monkeypatch: pytest.MonkeyPatch, tmp_p
     assert branch_file.read_text().splitlines() == [branch]
 
 
-def test_check_appends_without_clobbering_existing(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_check_appends_without_clobbering_existing(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     # A second session in the same container (paired work / post-merge
     # follow-up) must ADD its branch, not overwrite the partner's entry.
     monkeypatch.setenv("CLAUDE_CODE_REMOTE", "true")
@@ -118,6 +116,29 @@ def test_check_append_is_deduped(monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ):
         subject.check()
     assert branch_file.read_text().splitlines() == [branch]
+
+
+def test_check_repairs_seed_missing_trailing_newline(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    # Write-side half of the double defense (Refs #1522 retrospective). The
+    # SessionStart seed written by the remote harness may lack a trailing
+    # newline. append_branch only inserts a separator on the append path;
+    # when the current branch is already a member it dedup-returns WITHOUT
+    # touching the file, so a malformed seed would persist on disk and the
+    # NEXT session's append would concatenate onto it -- the exact corruption
+    # that wedged the gate. The hook must guarantee the seed ends with a
+    # newline independently of append_branch.
+    monkeypatch.setenv("CLAUDE_CODE_REMOTE", "true")
+    branch = "claude/session-xyz"
+    branch_file = tmp_path / "CLAUDE_SESSION_BRANCH"
+    branch_file.write_text(branch)  # seed WITHOUT trailing newline; dup of current branch
+    with (
+        patch("check_session_branch._current_branch", return_value=branch),
+        patch.object(subject, "_SESSION_BRANCH_FILE", branch_file),
+    ):
+        subject.check()
+    text = branch_file.read_text()
+    assert text.endswith("\n")
+    assert text.splitlines() == [branch]
 
 
 def test_check_survives_unwritable_path(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
