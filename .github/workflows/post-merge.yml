@@ -145,6 +145,13 @@ jobs:
         # above; pre-push and pre-merge gates do not regenerate it (#1543).
         run: python3 scripts/script_dependency_graph.py all-doc
 
+      - name: Generate script trigger reverse-map
+        # Writes docs/generated/scripts/trigger-map.md by reverse-mapping the
+        # four launch sources (workflow run: steps, pre-commit, preflight_all
+        # Step argv, agent hooks). Same single-producer ownership as the docs
+        # above; pre-push and pre-merge gates do not regenerate it (#1546).
+        run: python3 scripts/script_trigger_map.py all-doc
+
       - name: Generate workflow if-branch diagrams
         run: python3 scripts/workflow_diagram.py diagram-doc
 
@@ -181,6 +188,7 @@ jobs:
 
           - `docs/generated/scripts/ast/<stem>.md` from each `scripts/*.py` AST (one file per script).
           - `docs/generated/scripts/dependency-graph.md` from `scripts/*.py` sibling-import edges.
+          - `docs/generated/scripts/trigger-map.md` from the four `scripts/*.py` launch sources.
           - `docs/generated/workflows/*-if-branches.md` from `.github/workflows/*.yml` if-branch analysis.
 
           ## Related Issue
@@ -209,6 +217,8 @@ jobs:
           - command: `python3 scripts/script_ast_graph.py all-doc`
             result: `exit 0`
           - command: `python3 scripts/script_dependency_graph.py all-doc`
+            result: `exit 0`
+          - command: `python3 scripts/script_trigger_map.py all-doc`
             result: `exit 0`
           - command: `python3 scripts/workflow_diagram.py diagram-doc`
             result: `exit 0`
