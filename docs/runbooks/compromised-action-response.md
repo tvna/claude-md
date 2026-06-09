@@ -99,11 +99,57 @@ If a secret is suspected exposed:
    deterministically. Fall back to manual inverse edits only when revert is
    infeasible, and state the reason.
 2. **Re-pin to a known-good version** once upstream publishes a clean release.
-   For trivy-action, bump both the action SHA pin and the `version:` input in
-   `.github/workflows/publish-devcontainer-images.yml` in lockstep -- the
-   `version:` input selects the runtime Trivy binary and must point at a
-   post-incident release (>= v0.69.3 for the 2026-03 incident).
+   The Trivy scanner runs as a digest-pinned `docker run
+   ghcr.io/aquasecurity/trivy@sha256:<digest>` in the `scan` job of
+   `.github/workflows/publish-devcontainer-images.yml`; pin to a post-incident
+   release (>= v0.70.0 for the 2026-03 incident) by following the
+   [digest bump/refresh procedure](#trivy-scanner-digest-bumprefresh) below.
 3. **Re-enable the workflow** you disabled in Containment.
+
+### Trivy scanner digest bump/refresh
+
+The scanner runtime is pinned by image digest, not by a resolve-at-runtime
+version/tag: images referenced by digest were unaffected by the 2026-03-19
+incident, whereas a tag remains re-resolvable upstream. The trade-off is that
+dropping the `trivy-action` `uses:` ref also drops its Dependabot auto-bump and
+OSV correlation, so the digest is refreshed by this documented procedure and the
+`# threat-intel-pin:` comment keeps the image on the threat-intel scan set
+(`scripts/threat_intel_triage.py` reads it; OSV findings still surface a known
+Trivy CVE even though Dependabot no longer opens the bump PR).
+
+To bump to a new Trivy release (digest and `threat-intel-pin` version move in
+lockstep):
+
+1. Resolve the multi-arch image digest for the chosen release tag. The image
+   tag is the bare version (`0.70.0`), not the `v`-prefixed GitHub release tag:
+   ```sh
+   TAG=0.70.0
+   TOKEN=$(curl -s \
+     "https://ghcr.io/token?scope=repository:aquasecurity/trivy:pull&service=ghcr.io" \
+     | python3 -c 'import sys, json; print(json.load(sys.stdin)["token"])')
+   curl -sI \
+     -H "Authorization: Bearer $TOKEN" \
+     -H "Accept: application/vnd.oci.image.index.v1+json" \
+     -H "Accept: application/vnd.docker.distribution.manifest.list.v2+json" \
+     "https://ghcr.io/v2/aquasecurity/trivy/manifests/$TAG" \
+     | grep -i docker-content-digest
+   ```
+2. In `.github/workflows/publish-devcontainer-images.yml`, update the
+   `ghcr.io/aquasecurity/trivy@sha256:<digest>` reference and the adjacent
+   `# threat-intel-pin: Go github.com/aquasecurity/trivy <version>` comment to
+   the new digest and version together. A digest bumped without its
+   threat-intel-pin version (or vice versa) is a drift defect -- they are one
+   change.
+3. Verify the workflow still passes the action-pin gate (the digest lives in a
+   `run:` step, so it is out of that gate's `uses:` scope, but the check must
+   stay green):
+   ```sh
+   python3 scripts/scan_workflow_action_pins.py verify
+   ```
+4. Confirm the scan still uploads SARIF: trigger `Publish devcontainer images`
+   via `workflow_dispatch` (or push to `main`) and check that the `scan` job's
+   `Upload Trivy results to the Security tab` step succeeds and results appear
+   under the **Security** tab.
 
 ## Post-incident
 

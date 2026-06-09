@@ -35,6 +35,7 @@ import attack_review_reminder
 import auto_retro
 import backup_archive
 import body_policy
+import bot_pr_automerge
 import branch_cleanup
 import ci_budget_issue
 import coverage_failure_issue
@@ -43,6 +44,7 @@ import dependabot_labels
 import devcontainer_pin_pr
 import flake_pin
 import flake_pin_latest
+import gate_generated_scripts_manual_edit
 import github_paginate
 import issue_link
 import labels_apply
@@ -83,6 +85,8 @@ import scan_workflow_action_pins
 import scan_workflow_gh_calls
 import scan_workflow_injection
 import scan_workflow_pip
+import scan_workflow_unsigned_commit
+import script_ast_graph
 import security_drift_report
 import skill_quality_gate
 import threat_intel_triage
@@ -149,7 +153,8 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("backup_archive.py", "build"): "test_backup_archive_build_matches_workflow_args",
     ("github_paginate.py", "fetch-run-jobs"): "test_github_paginate_fetch_run_jobs_matches_workflow_args",
     ("validate_json_syntax.py", "verify"): "test_validate_json_syntax_verify_matches_workflow_args",
-    ("auto_retro.py", "decision-tree-doc"): "test_auto_retro_decision_tree_doc_matches_workflow_args",
+    ("script_ast_graph.py", "all-doc"): "test_script_ast_graph_all_doc_matches_workflow_args",
+    ("gate_generated_scripts_manual_edit.py", "verify"): "test_gate_generated_scripts_manual_edit_matches_workflow_args",
     ("auto_retro.py", "triage-report"): "test_auto_retro_triage_report_matches_workflow_env",
     ("auto_retro.py", "triage-report-pr"): "test_auto_retro_triage_report_pr_matches_workflow_env",
     ("workflow_diagram.py", "diagram-doc"): "test_workflow_diagram_doc_matches_workflow_args",
@@ -164,7 +169,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("coverage_failure_issue.py", "run"): "test_coverage_failure_issue_run_matches_workflow_env",
     ("devcontainer_pin_pr.py", "open"): "test_devcontainer_pin_pr_open_matches_workflow_args",
     ("devcontainer_pin_pr.py", "refresh"): "test_devcontainer_pin_pr_refresh_matches_workflow_args",
-    ("devcontainer_pin_pr.py", "merge"): "test_devcontainer_pin_pr_merge_matches_workflow_args",
+    ("bot_pr_automerge.py", "merge"): "test_bot_pr_automerge_merge_matches_workflow_args",
     ("flake_pin.py", "asset-url"): "test_flake_pin_workflow_subcommands_match_ci_usage",
     ("flake_pin.py", "bump"): "test_flake_pin_workflow_subcommands_match_ci_usage",
     ("flake_pin_latest.py", "check"): "test_flake_pin_latest_check_matches_workflow_args",
@@ -182,6 +187,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("ruleset_drift.py", "reconcile"): "test_ruleset_drift_detect_and_reconcile_match_workflow_args",
     ("rulesets_apply.py", "$MODE"): "test_rulesets_apply_plan_and_auto_delete_match_workflow_args",
     ("rulesets_apply.py", "auto-delete"): "test_rulesets_apply_plan_and_auto_delete_match_workflow_args",
+    ("rulesets_apply.py", "workflow-permissions"): "test_rulesets_apply_workflow_permissions_matches_workflow_args",
     ("scan_allowlist_parser_parity.py", "verify"): "test_scan_allowlist_parser_parity_verify_matches_workflow_args",
     ("scan_allowlist_rationale.py", "verify"): "test_scan_allowlist_rationale_verify_matches_workflow_args",
     ("scan_apm_portability.py", "verify"): "test_scan_apm_portability_verify_matches_workflow_paths",
@@ -210,6 +216,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("scan_workflow_action_pins.py", "verify"): "test_scan_workflow_action_pins_verify_matches_workflow_args",
     ("scan_workflow_gh_calls.py", "verify"): "test_scan_workflow_gh_calls_verify_matches_workflow_args",
     ("scan_workflow_injection.py", "verify"): "test_scan_workflow_injection_verify_matches_workflow_args",
+    ("scan_workflow_unsigned_commit.py", "verify"): "test_scan_workflow_unsigned_commit_verify_matches_workflow_args",
     ("scan_workflow_pip.py", "verify"): "test_scan_workflow_pip_verify_matches_workflow_args",
     ("security_drift_report.py", "aggregate"): "test_security_drift_report_aggregate_and_post_comment_match_workflow_args",
     ("security_drift_report.py", "post-comment"): "test_security_drift_report_aggregate_and_post_comment_match_workflow_args",
@@ -237,7 +244,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("github_paginate.py", "get"): "test_github_paginate_get_matches_workflow_args",
     ("post_issue_comment.py", "create"): "test_post_issue_comment_create_matches_workflow_args",
     ("prune_devcontainer_images.py", "prune"): "test_prune_devcontainer_images_prune_matches_workflow_args",
-    ("pr_upsert.py", "upsert"): "test_pr_upsert_matches_workflow_args",
+    ("pr_upsert.py", "upsert-files"): "test_pr_upsert_upsert_files_matches_workflow_args",
     ("verify_shard_coverage.py", None): "test_verify_shard_coverage_matches_workflow_args",
     ("verify_test_shard_markers.py", None): "test_verify_test_shard_markers_matches_workflow_args",
 }
@@ -528,18 +535,41 @@ def test_auto_retro_post_merge_rescan_matches_workflow_env(
     assert auto_retro.main(["post-merge-rescan"]) == 0
 
 
-def test_auto_retro_decision_tree_doc_matches_workflow_args(
+def test_script_ast_graph_all_doc_matches_workflow_args(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Mirror the default-output shape used by the generated-doc workflow."""
+    """Mirror the per-script default-output shape used by the post-merge workflow."""
     monkeypatch.chdir(tmp_path)
-    output = Path("docs/generated/scripts/auto-retro-decision-tree.md")
+    scripts = tmp_path / "scripts"
+    scripts.mkdir()
+    (scripts / "alpha.py").write_text("def run():\n    return 0\n", encoding="utf-8")
 
-    assert auto_retro.main(["decision-tree-doc"]) == 0
+    assert script_ast_graph.main(["all-doc"]) == 0
 
+    output = Path("docs/generated/scripts/ast/alpha.md")
     assert output.read_text(encoding="utf-8") == (
-        auto_retro.render_decision_tree_markdown()
+        script_ast_graph.render_script_ast_markdown(
+            scripts / "alpha.py", Path("scripts/alpha.py")
+        )
     )
+
+
+def test_gate_generated_scripts_manual_edit_matches_workflow_args(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The verify subcommand passes with no protected-folder changes."""
+    monkeypatch.setattr(
+        gate_generated_scripts_manual_edit,
+        "changed_generated_scripts",
+        lambda *_a, **_kw: frozenset(),
+    )
+    monkeypatch.setattr(
+        gate_generated_scripts_manual_edit,
+        "resolve_branch",
+        lambda *_a, **_kw: "feature/x",
+    )
+
+    assert gate_generated_scripts_manual_edit.main(["verify", "--base-ref", "origin/main"]) == 0
 
 
 def test_auto_retro_triage_report_matches_workflow_env(
@@ -969,6 +999,67 @@ def test_rulesets_apply_plan_and_auto_delete_match_workflow_args(
     ) == 0
 
 
+def test_rulesets_apply_workflow_permissions_matches_workflow_args(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Mirror the argv shape used by apply-rulesets.yml and
+    weekly-maintenance.yml.
+
+    apply-rulesets.yml runs ``workflow-permissions --mode plan|apply`` and the
+    weekly security-control-drift job runs it ``--mode drift`` (read-only). The
+    live GET is stubbed so the contract exercises argv/env wiring (SoT read,
+    diff, exit-code mapping) without network access.
+    """
+    sot = tmp_path / "workflow.json"
+    sot.write_text(
+        json.dumps(
+            {
+                "default_workflow_permissions": "read",
+                "can_approve_pull_request_reviews": True,
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("GH_TOKEN", "token")
+    monkeypatch.setattr(
+        rulesets_apply,
+        "get_workflow_permissions",
+        lambda *_a, **_k: {
+            "default_workflow_permissions": "read",
+            "can_approve_pull_request_reviews": True,
+        },
+    )
+
+    # drift mode, in sync -> exit 0
+    assert rulesets_apply.main(
+        [
+            "workflow-permissions",
+            "--repo",
+            REPO,
+            "--sot-file",
+            str(sot),
+            "--mode",
+            "drift",
+            "--summary-file",
+            str(tmp_path / "wfperm-summary.md"),
+        ]
+    ) == 0
+    # plan mode -> exit 0
+    assert rulesets_apply.main(
+        [
+            "workflow-permissions",
+            "--repo",
+            REPO,
+            "--sot-file",
+            str(sot),
+            "--mode",
+            "plan",
+            "--summary-file",
+            str(tmp_path / "wfperm-summary.md"),
+        ]
+    ) == 0
+
+
 def test_coverage_failure_issue_run_matches_workflow_env(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1271,6 +1362,12 @@ def test_scan_workflow_injection_verify_matches_workflow_args() -> None:
     assert scan_workflow_injection.main(["verify"]) == 0
 
 
+def test_scan_workflow_unsigned_commit_verify_matches_workflow_args() -> None:
+    """Mirrors the ``Assert no git push (unsigned authoring) in workflow run
+    blocks`` step in ``.github/workflows/verify-agents.yml``. Refs #1437, #1466."""
+    assert scan_workflow_unsigned_commit.main(["verify"]) == 0
+
+
 def test_scan_secrets_verify_matches_workflow_args() -> None:
     """Mirrors the ``Assert no hardcoded secrets in tracked non-Python files``
     step in ``.github/workflows/verify-agents.yml``. Refs #1129."""
@@ -1447,6 +1544,8 @@ def test_security_drift_report_aggregate_and_post_comment_match_workflow_args(
             "0",
             "--uv-drift-rc",
             "0",
+            "--workflow-permissions-drift-rc",
+            "0",
             "--uv-stale-rc",
             "0",
             "--uv-stale-output",
@@ -1606,22 +1705,39 @@ def test_pr_upsert_find_matches_workflow_args(
     assert pr_upsert.main(["find", "--head", "codex/devcontainer-image-pins-abc123"]) == 0
 
 
-def test_pr_upsert_matches_workflow_args(
+def test_pr_upsert_upsert_files_matches_workflow_args(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """upsert subcommand accepts the --head/--base/--title/--body-file args used by generate-agents.yml and post-merge.yml."""
+    """upsert-files accepts the --add (generate-agents.yml) and --from-diff
+    (post-merge.yml) arg shapes used to publish signed App-bot commits."""
     monkeypatch.setenv("GH_TOKEN", "tok")
     monkeypatch.setenv("REPO", "owner/repo")
     body_file = tmp_path / "pr-body.md"
     body_file.write_text("body content", encoding="utf-8")
-    monkeypatch.setattr(pr_upsert, "_upsert_pr", lambda **kw: ("created", 99))
+    monkeypatch.setattr(pr_upsert, "_collect_worktree_changes", lambda **kw: ([("CLAUDE.md", b"x\n")], []))
+    monkeypatch.setattr(pr_upsert, "upsert_files_pr", lambda **kw: "created:99")
 
+    # generate-agents.yml shape: explicit --add files.
     assert pr_upsert.main([
-        "upsert",
+        "upsert-files",
         "--head", "chore/regenerate-agent-instructions",
         "--base", "main",
         "--title", "chore: regenerate agent instructions (#18)",
+        "--commit-body", "Refs #18",
         "--body-file", str(body_file),
+        "--add", "CLAUDE.md",
+        "--add", "AGENTS.md",
+    ]) == 0
+
+    # post-merge.yml decision-tree shape: --from-diff over a directory prefix.
+    assert pr_upsert.main([
+        "upsert-files",
+        "--head", "chore/update-generated-docs",
+        "--base", "main",
+        "--title", "docs(generated): regenerate decision tree and workflow diagrams (#960)",
+        "--commit-body", "Refs #960",
+        "--body-file", str(body_file),
+        "--from-diff", "docs/generated/",
     ]) == 0
 
 
@@ -1980,21 +2096,21 @@ def test_devcontainer_pin_pr_refresh_matches_workflow_args(
     assert rc == 0
 
 
-def test_devcontainer_pin_automerge_workflow_contract() -> None:
-    """The pin auto-merge keeper triggers on workflow_run + schedule, prefix-gated, uses an App token.
+def test_tvna_bot_automerge_workflow_contract() -> None:
+    """The unified tvna-bot keeper triggers on workflow_run + schedule, uses an App token.
 
-    The repository-level "Allow auto-merge" toggle is intentionally OFF, so the
-    pin PR is completed by this dedicated keeper instead of native auto-merge.
-    The earlier ``check_suite: completed`` trigger never fired -- GitHub
-    suppresses ``check_suite`` events for Actions-created suites to prevent
-    recursion -- so the keeper is driven by ``workflow_run`` on the workflows
-    that own the required status checks, plus a ``schedule`` safety net. Pin the
-    wiring that makes that safe and scoped: those triggers, an ``if`` guard that
-    restricts the job to the pin branch prefix, the GitHub App token (so the
-    merge's push to main still triggers downstream workflows), and the ``merge``
-    subcommand. Refs #1352, #1363, #1401.
+    The repository-level "Allow auto-merge" toggle is intentionally OFF, so every
+    PR authored by the App bot (``tvna-bot[bot]``) is completed by this single
+    keeper instead of native auto-merge. The earlier per-flow pin keeper is
+    consolidated here. ``check_suite: completed`` never fires for Actions-created
+    suites (recursion suppression), so the keeper is driven by ``workflow_run``
+    on the workflows that own the required status checks, plus a ``schedule``
+    safety net. The merge subcommand filters by author and clean state, so unlike
+    the old pin keeper the job is not branch-prefix-gated -- it runs on any
+    successful run and no-ops when nothing is eligible. Refs #1539, #1352, #1363,
+    #1401.
     """
-    workflow = yaml.safe_load((_WORKFLOWS_DIR / "devcontainer-pin-automerge.yml").read_text(encoding="utf-8"))
+    workflow = yaml.safe_load((_WORKFLOWS_DIR / "tvna-bot-automerge.yml").read_text(encoding="utf-8"))
     # ``on`` may parse to the truthy bool key True under YAML 1.1; tolerate both.
     triggers = workflow.get("on", workflow.get(True))
     # check_suite is suppressed for Actions-created suites, so it must be gone.
@@ -2008,8 +2124,8 @@ def test_devcontainer_pin_automerge_workflow_contract() -> None:
 
     job = workflow["jobs"]["merge"]
     assert job["permissions"] == {"contents": "write", "pull-requests": "write"}
-    # Prefix guard keeps the job from running on every workflow_run completion.
-    assert "devcontainer/image-pins-" in job["if"]
+    # The job is no longer branch-prefix-gated; it gates on a successful run and
+    # the merge subcommand filters to tvna-bot[bot] authors.
     assert "github.event.workflow_run.conclusion == 'success'" in job["if"]
     assert "workflow_dispatch" in job["if"]
     assert "schedule" in job["if"]
@@ -2021,26 +2137,25 @@ def test_devcontainer_pin_automerge_workflow_contract() -> None:
         "private-key": "${{ secrets.DEVCONTAINER_PIN_APP_PRIVATE_KEY }}",
     }
 
-    # The merge step needs only the App token (it merges; it does not author a
-    # commit, so no PIN_BOT_APP_SLUG). Refs #1401.
-    merge_step = next(s for s in job["steps"] if "devcontainer_pin_pr.py merge" in str(s.get("run", "")))
+    # The merge step needs only the App token (it merges; it does not author a commit).
+    merge_step = next(s for s in job["steps"] if "bot_pr_automerge.py merge" in str(s.get("run", "")))
     assert merge_step["env"] == {
         "GH_TOKEN": "${{ steps.app-token.outputs.token }}",
         "REPO": "${{ github.repository }}",
     }
 
 
-def test_devcontainer_pin_pr_merge_matches_workflow_args(monkeypatch: pytest.MonkeyPatch) -> None:
-    """merge subcommand accepts the args used by devcontainer-pin-automerge.yml.
+def test_bot_pr_automerge_merge_matches_workflow_args(monkeypatch: pytest.MonkeyPatch) -> None:
+    """merge subcommand accepts the args used by tvna-bot-automerge.yml.
 
-    The merge decision flow is exercised by tests/test_devcontainer_pin_pr.py;
-    here we pin the workflow argv shape. Refs #1352.
+    The merge decision flow is exercised by tests/test_bot_pr_automerge.py; here
+    we pin the workflow argv shape. Refs #1539.
     """
     monkeypatch.setenv("GH_TOKEN", "tok")
     monkeypatch.setenv("REPO", REPO)
-    # No open pin PR -> the command is a no-op; we only assert the argv parses.
-    monkeypatch.setattr(devcontainer_pin_pr, "_list_open_prs_by_prefix", lambda **kw: [])
-    rc = devcontainer_pin_pr.main(["merge"])
+    # No open bot PR -> the command is a no-op; we only assert the argv parses.
+    monkeypatch.setattr(bot_pr_automerge, "_list_open_prs_by_author", lambda **kw: [])
+    rc = bot_pr_automerge.main(["merge"])
     assert rc == 0
 
 

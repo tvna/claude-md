@@ -56,6 +56,13 @@ jobs:
         # directly into run: shell bodies; route them through env: instead.
         run: uv run python scripts/scan_workflow_injection.py verify
 
+      - name: Assert no git push (unsigned authoring) in workflow run blocks
+        # Refs #1437/#1466: a `git push` in a workflow run block authors an
+        # unsigned commit as github-actions[bot]. Bot-generated PR commits must
+        # use the signed App-bot createCommitOnBranch path (pr_upsert.py
+        # upsert-files); this gate is the regression guard against git push.
+        run: uv run python scripts/scan_workflow_unsigned_commit.py verify
+
       - name: Assert workflow secrets have concrete runbooks
         run: uv run python scripts/scan_secret_runbooks.py verify
 

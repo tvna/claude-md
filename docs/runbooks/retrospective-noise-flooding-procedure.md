@@ -49,7 +49,7 @@ Before splitting `scripts/auto_retro.py`, render the current
 orchestrator decision tree from the `run()` function's Python AST:
 
 ```bash
-python scripts/auto_retro.py decision-tree
+python scripts/script_ast_graph.py auto-retro-decision-tree
 ```
 
 The command writes Mermaid `flowchart TD` text to stdout. Paste the

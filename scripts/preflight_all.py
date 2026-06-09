@@ -149,6 +149,19 @@ STEPS: tuple[Step, ...] = (
         argv=("python3", "scripts/scan_workflow_injection.py", "verify"),
     ),
     Step(
+        name="scan_workflow_unsigned_commit",
+        argv=("python3", "scripts/scan_workflow_unsigned_commit.py", "verify"),
+    ),
+    Step(
+        # Refs #1519. Offline PR-head mirror of the pull_request_target
+        # threat-intel triage scan: fails when the parser yields a malformed
+        # OSV coordinate (the #1511 class) that the base-checkout triage job
+        # cannot catch on the PR. Stdlib-only and network-free, so it runs
+        # the same here, in pre-commit, and on PR head via prek.
+        name="threat_intel_coords",
+        argv=("python3", "scripts/threat_intel_triage.py", "verify"),
+    ),
+    Step(
         # Refs #1256. Workflow correctness gate: actionlint validates
         # workflow syntax, ${{ }} expressions, and -- with shellcheck on
         # PATH -- the shell in every ``run:`` block. Complements the
@@ -228,8 +241,20 @@ STEPS: tuple[Step, ...] = (
         ),
     ),
     Step(
-        name="auto_retro_decision_tree_doc",
-        argv=("python3", "scripts/auto_retro.py", "decision-tree-doc"),
+        # Compatibility coverage for workflows that still reference
+        # scripts/auto_retro.py in pull_request path filters or verify jobs.
+        # The command writes only to stdout (the decision-tree preview); the
+        # per-script AST docs are owned by the post-merge automation (#1540).
+        name="auto_retro_decision_tree_compat",
+        argv=("python3", "scripts/auto_retro.py", "decision-tree"),
+    ),
+    Step(
+        # Refs #1540. docs/generated/scripts/ is owned by the post-merge
+        # automation; the pre-push gate no longer regenerates the per-script
+        # AST docs. This inverse gate fails when a non-bot branch hand-edits
+        # the folder. Runs after preflight_branch_base fetches origin/<base>.
+        name="gate_generated_scripts_manual_edit",
+        argv=("python3", "scripts/gate_generated_scripts_manual_edit.py", "verify"),
     ),
     Step(
         name="workflow_diagram_doc",
@@ -552,11 +577,11 @@ def _heavy_fingerprint(heavy: Sequence[Step], cwd: Path) -> str | None:
 # run concurrently with the working-tree-reading static gates, so the parallel
 # tier runs them first, sequentially (refs #1245):
 #   * preflight_branch_base -- ``git fetch`` writes .git refs and takes a lock.
-#   * auto_retro_decision_tree_doc / workflow_diagram_doc -- write tracked docs
-#     into the working tree.
+#   * workflow_diagram_doc -- writes tracked docs into the working tree.
+# The per-script AST docs are no longer regenerated here: docs/generated/scripts/
+# is owned by the post-merge automation (#1540).
 _SERIAL_CHEAP: frozenset[str] = frozenset({
     "preflight_branch_base",
-    "auto_retro_decision_tree_doc",
     "workflow_diagram_doc",
 })
 

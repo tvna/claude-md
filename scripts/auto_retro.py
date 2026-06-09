@@ -37,14 +37,11 @@ time; ``tests/test_auto_retro.py`` asserts the two stay aligned.
 from __future__ import annotations
 
 import argparse
-import ast
-import inspect
 import json
 import os
 import re
 import subprocess
 import sys
-import textwrap
 import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
@@ -68,8 +65,17 @@ from _retro_labels import (
 from _trusted_bots import _TRUSTED_BOT_LOGINS
 from issue_link import extract_refs, strip_html_comments
 from pr_upsert import upsert_single_file_pr
+from script_ast_graph import (
+    GraphEdge as DecisionTreeEdge,
+)
+from script_ast_graph import (
+    GraphNode as DecisionTreeNode,
+)
+from script_ast_graph import (
+    build_function_graph,
+    render_mermaid,
+)
 
-_DECISION_TREE_DOC_PATH = Path("docs/generated/scripts/auto-retro-decision-tree.md")
 _TRIAGE_REPORT_DOC_PATH = Path("docs/generated/scripts/auto-retro-triage-report.md")
 
 # Fixed branch / PR identity for the post-merge triage-report refresh. The
@@ -889,23 +895,6 @@ class PastRetro:
     title: str = ""
 
 
-@dataclass(frozen=True)
-class DecisionTreeEdge:
-    """One renderable edge in the auto-retro decision tree."""
-
-    source: str
-    target: str
-    label: str
-
-
-@dataclass(frozen=True)
-class DecisionTreeNode:
-    """One renderable node in the auto-retro decision tree."""
-
-    node_id: str
-    label: str
-
-
 def compute_prior_from_labels(
     past_retros: list[PastRetro],
     signal_names: tuple[str, ...] = _SIGNAL_NAMES,
@@ -1171,7 +1160,7 @@ def render_triage_report_markdown(report: TriageReport) -> str:
         "",
         "This file is generated from live GitHub retro-issue labels by "
         "`python3 scripts/auto_retro.py triage-report`. Do not edit it by "
-        "hand. Unlike the decision-tree doc it is a non-deterministic "
+        "hand. Unlike the per-script AST docs it is a non-deterministic "
         "snapshot of repository state, so it is refreshed on merge by the "
         "`post-merge.yml` workflow (which opens a pull request when the "
         "snapshot drifts) rather than the `generate-docs.yml` drift gate.",
@@ -1276,158 +1265,12 @@ def _render_recent_retros(report: TriageReport) -> list[str]:
     return lines
 
 
-def _mermaid_text(text: str) -> str:
-    return text.replace('"', '\\"')
-
-
-def _ast_text(node: ast.AST) -> str:
-    """Return deterministic source text for one AST node."""
-    return ast.unparse(node).strip()
-
-
-def _called_name(node: ast.AST) -> str | None:
-    if isinstance(node, ast.Call):
-        if isinstance(node.func, ast.Name):
-            return node.func.id
-        if isinstance(node.func, ast.Attribute):
-            return node.func.attr
-    return None
-
-
-def _stmt_label(stmt: ast.stmt) -> str:
-    if isinstance(stmt, ast.Assign):
-        targets = ", ".join(_ast_text(t) for t in stmt.targets)
-        called = _called_name(stmt.value)
-        if called is not None:
-            return f"{targets} = {called}(...)"
-        return f"{targets} = {_ast_text(stmt.value)}"
-    if isinstance(stmt, ast.AnnAssign):
-        target = _ast_text(stmt.target)
-        if stmt.value is None:
-            return target
-        called = _called_name(stmt.value)
-        if called is not None:
-            return f"{target} = {called}(...)"
-        return f"{target} = {_ast_text(stmt.value)}"
-    if isinstance(stmt, ast.Expr):
-        called = _called_name(stmt.value)
-        if called is not None:
-            return f"{called}(...)"
-        return _ast_text(stmt.value)
-    if isinstance(stmt, ast.Return):
-        return f"return {_ast_text(stmt.value)}" if stmt.value else "return"
-    if isinstance(stmt, ast.Raise):
-        return f"raise {_ast_text(stmt.exc)}" if stmt.exc else "raise"
-    if isinstance(stmt, ast.If):
-        return f"if {_ast_text(stmt.test)}"
-    if isinstance(stmt, ast.Try):
-        return "try"
-    return _ast_text(stmt)
-
-
-class _AstDecisionTreeBuilder:
-    def __init__(self) -> None:
-        self._next_id = 0
-        self.nodes: list[DecisionTreeNode] = []
-        self.edges: list[DecisionTreeEdge] = []
-
-    def _new_node(self, label: str) -> str:
-        self._next_id += 1
-        node_id = f"N{self._next_id:03d}"
-        self.nodes.append(DecisionTreeNode(node_id=node_id, label=label))
-        return node_id
-
-    def _connect(
-        self, incoming: list[tuple[str, str]], target: str
-    ) -> None:
-        for source, label in incoming:
-            self.edges.append(DecisionTreeEdge(source, target, label))
-
-    def build_function(
-        self, func: Callable[..., Any]
-    ) -> tuple[tuple[DecisionTreeNode, ...], tuple[DecisionTreeEdge, ...]]:
-        source = textwrap.dedent(inspect.getsource(func))
-        module = ast.parse(source)
-        function = module.body[0]
-        if not isinstance(function, ast.FunctionDef):
-            raise ValueError("decision tree source did not parse to a function")
-        start = self._new_node(f"{function.name}(...)")
-        statements = list(function.body)
-        if (
-            statements
-            and isinstance(statements[0], ast.Expr)
-            and isinstance(statements[0].value, ast.Constant)
-            and isinstance(statements[0].value.value, str)
-        ):
-            statements = statements[1:]
-        exits = self._build_block(statements, [(start, "start")])
-        if exits:
-            done = self._new_node("end")
-            self._connect(exits, done)
-        return tuple(self.nodes), tuple(self.edges)
-
-    def _build_block(
-        self, statements: list[ast.stmt], incoming: list[tuple[str, str]]
-    ) -> list[tuple[str, str]]:
-        exits = incoming
-        for stmt in statements:
-            if not exits:
-                break
-            if isinstance(stmt, ast.If):
-                exits = self._build_if(stmt, exits)
-            elif isinstance(stmt, ast.Try):
-                exits = self._build_try(stmt, exits)
-            else:
-                exits = self._build_plain(stmt, exits)
-        return exits
-
-    def _build_plain(
-        self, stmt: ast.stmt, incoming: list[tuple[str, str]]
-    ) -> list[tuple[str, str]]:
-        node_id = self._new_node(_stmt_label(stmt))
-        self._connect(incoming, node_id)
-        if isinstance(stmt, ast.Return | ast.Raise):
-            return []
-        return [(node_id, "")]
-
-    def _build_if(
-        self, stmt: ast.If, incoming: list[tuple[str, str]]
-    ) -> list[tuple[str, str]]:
-        node_id = self._new_node(_stmt_label(stmt))
-        self._connect(incoming, node_id)
-        body_exits = self._build_block(stmt.body, [(node_id, "true")])
-        if stmt.orelse:
-            orelse_exits = self._build_block(stmt.orelse, [(node_id, "false")])
-        else:
-            orelse_exits = [(node_id, "false")]
-        return body_exits + orelse_exits
-
-    def _build_try(
-        self, stmt: ast.Try, incoming: list[tuple[str, str]]
-    ) -> list[tuple[str, str]]:
-        node_id = self._new_node(_stmt_label(stmt))
-        self._connect(incoming, node_id)
-        exits = self._build_block(stmt.body, [(node_id, "try")])
-        for handler in stmt.handlers:
-            if handler.type is None:
-                label = "except"
-            else:
-                label = f"except {_ast_text(handler.type)}"
-            handler_id = self._new_node(label)
-            self.edges.append(DecisionTreeEdge(node_id, handler_id, "raises"))
-            exits.extend(self._build_block(handler.body, [(handler_id, "")]))
-        if stmt.orelse:
-            exits = self._build_block(stmt.orelse, exits)
-        if stmt.finalbody:
-            exits = self._build_block(stmt.finalbody, exits)
-        return exits
-
-
 def auto_retro_decision_tree() -> tuple[
     tuple[DecisionTreeNode, ...], tuple[DecisionTreeEdge, ...]
 ]:
     """Extract the current ``run`` control-flow tree from Python AST."""
-    return _AstDecisionTreeBuilder().build_function(run)
+    graph = build_function_graph(Path(__file__), "run")
+    return graph.nodes, graph.edges
 
 
 def auto_retro_decision_tree_edges() -> tuple[DecisionTreeEdge, ...]:
@@ -1438,36 +1281,8 @@ def auto_retro_decision_tree_edges() -> tuple[DecisionTreeEdge, ...]:
 
 def render_decision_tree_mermaid() -> str:
     """Render the AST-derived auto-retro decision tree as Mermaid."""
-    nodes, edges = auto_retro_decision_tree()
-    lines = ["flowchart TD"]
-    for node in nodes:
-        lines.append(
-            f'    {node.node_id}["{_mermaid_text(node.label)}"]'
-        )
-    for edge in edges:
-        if edge.label:
-            lines.append(
-                f'    {edge.source} -->|"{_mermaid_text(edge.label)}"| '
-                f"{edge.target}"
-            )
-        else:
-            lines.append(f"    {edge.source} --> {edge.target}")
-    return "\n".join(lines) + "\n"
-
-
-def render_decision_tree_markdown() -> str:
-    """Render the checked-in auto-retro decision tree document."""
-    return (
-        "# Auto-retro decision tree\n"
-        "\n"
-        "This file is generated from `scripts/auto_retro.py::run` by "
-        "`python3 scripts/auto_retro.py decision-tree-doc`. Do not edit it "
-        "by hand; update `run()` and regenerate instead.\n"
-        "\n"
-        "```mermaid\n"
-        f"{render_decision_tree_mermaid()}"
-        "```\n"
-    )
+    graph = build_function_graph(Path(__file__), "run")
+    return render_mermaid(graph)
 
 
 def _max_active_fp(
@@ -3888,13 +3703,6 @@ def _cmd_decision_tree(_args: argparse.Namespace) -> int:
     return 0
 
 
-def _cmd_decision_tree_doc(args: argparse.Namespace) -> int:
-    output = Path(args.output)
-    output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(render_decision_tree_markdown(), encoding="utf-8")
-    return 0
-
-
 def _cmd_triage_report(args: argparse.Namespace) -> int:
     repo = (
         args.repo or os.environ.get("REPO") or os.environ.get("GITHUB_REPOSITORY")
@@ -4175,20 +3983,9 @@ def main(argv: list[str] | None = None) -> int:
 
     p_decision_tree = sub.add_parser(
         "decision-tree",
-        help="Render the auto-retro run decision tree as Mermaid.",
+        help="Render the auto-retro run decision tree as Mermaid (stdout preview).",
     )
     p_decision_tree.set_defaults(func=_cmd_decision_tree)
-
-    p_decision_tree_doc = sub.add_parser(
-        "decision-tree-doc",
-        help="Write the checked-in auto-retro decision tree document.",
-    )
-    p_decision_tree_doc.add_argument(
-        "--output",
-        default=str(_DECISION_TREE_DOC_PATH),
-        help=f"Markdown output path (default {_DECISION_TREE_DOC_PATH}).",
-    )
-    p_decision_tree_doc.set_defaults(func=_cmd_decision_tree_doc)
 
     p_triage = sub.add_parser(
         "triage-report",

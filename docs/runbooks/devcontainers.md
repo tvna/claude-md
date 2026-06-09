@@ -302,13 +302,33 @@ opening VS Code, run:
 
 The prebuild definitions live under `.devcontainer/images/<agent>/`.
 Those files are CI inputs only; local users should open the agent
-entrypoints listed above. The prebuild bakes only the base image plus the
-`common-utils`, `nix`, and `agent-user` Features. `devcontainer build` does
-not run `postCreateCommand`, so the agent CLI symlink and the Nix/uv
-closures are NOT baked into the GHCR image -- `install-agent-cli.sh` and
-`uv sync` run at container start as `postCreateCommand` steps. This is why
-the startup probe (Refs #1322, #1332) measures them as a post-pull startup
-phase rather than image content.
+entrypoints listed above. The prebuild bakes the base image plus the
+`common-utils`, `nix`, and `agent-user` Features, and -- for `claude` only --
+the `nix-warm-claude` Feature. `devcontainer build` does not run
+`postCreateCommand`, so the agent CLI symlink and the `uv sync` venv are NOT
+baked into the GHCR image -- `install-agent-cli.sh` and `uv sync` run at
+container start as `postCreateCommand` steps.
+
+The `.#claude` devShell closure IS baked, by the `nix-warm-claude` Feature
+(`.devcontainer/images/features/nix-warm-claude/`, Refs #1491). Lifecycle
+hooks cannot pre-warm it because `devcontainer build` skips them, so the
+Feature -- which runs as root during the build -- copies the flake into a
+non-git `/opt` dir and runs `nix develop "path:...#claude" --command true`,
+leaving the realised closure in `/nix/store`. The split measurement (#1471)
+showed this first-time closure realisation was ~23.4s of container-create,
+dwarfing the ~2.8s `uv sync`; baking it trades image size (~+250-400 MB
+compressed) for that startup time, a net win because the image is cached and
+reused locally across sessions. The `path:` ref forces Nix's non-git
+evaluator, sidestepping the libgit2 dubious-ownership error the runtime
+git+file fetch hits. The publish workflow stages `flake.nix`, `flake.lock`,
+and `pyproject.toml` into the Feature dir for the claude legs only (the
+workspace is not mounted during Feature install); those copies are
+git-ignored so they cannot drift from the source flake. Codex is out of
+scope and does not bake its closure. The retained `postCreateCommand`
+`nix develop .#claude --command true` is a ~0s no-op against the warm store
+and a fallback if the bake ever fails. The startup probe (Refs #1322, #1332)
+measures the now-baked warmup segment as near-zero with
+`split_nix_develop=true`.
 
 The prebuild base is `ubuntu:24.04` plus the `common-utils` feature (with
 zsh / oh-my-zsh disabled) for `git`, `sudo`, and CA certificates, then the
@@ -323,12 +343,12 @@ actionlint) continue to come from the Nix devShell, not the base.
 ## Prebuilt images
 
 Local devcontainers use immutable commit-SHA image tags. The currently
-pinned images were published from `a90c196c63dd4e6050d095aa5d3de56d5372be2d`:
+pinned images were published from `a06a81a5005c2b3efbecc174cf71534f16df1dbe`:
 
 | Agent | Image |
 |---|---|
-| Claude | `ghcr.io/tvna/claude-md-devcontainer-claude:a90c196c63dd4e6050d095aa5d3de56d5372be2d` |
-| Codex | `ghcr.io/tvna/claude-md-devcontainer-codex:a90c196c63dd4e6050d095aa5d3de56d5372be2d` |
+| Claude | `ghcr.io/tvna/claude-md-devcontainer-claude:a06a81a5005c2b3efbecc174cf71534f16df1dbe` |
+| Codex | `ghcr.io/tvna/claude-md-devcontainer-codex:a06a81a5005c2b3efbecc174cf71534f16df1dbe` |
 
 The `Publish devcontainer images` workflow builds both images with the
 Dev Containers CLI and pushes them to GHCR on `main` changes to
@@ -412,35 +432,39 @@ agents cannot enable native auto-merge on arbitrary PRs, and native
 auto-merge is repo-wide -- it cannot be scoped to a single PR. Completing
 the pin PR is therefore delegated to the dedicated keeper below.
 
-### Merging the pin PR when green (`Auto-merge devcontainer pin PR`)
+### Merging the pin PR when green (`Auto-merge tvna-bot PRs`)
 
-Because repo-wide auto-merge is off by design, the
-`Auto-merge devcontainer pin PR` workflow (`devcontainer-pin-automerge.yml`)
-merges the generated pin PR on its behalf -- scoped strictly to the pin
-branch prefix `devcontainer/image-pins-`. It runs
-`python3 scripts/devcontainer_pin_pr.py merge`: it finds the open pin PR, and
-once GitHub reports `mergeable_state == clean` (all required checks green and
-the branch up to date) it squash-merges the PR via the REST merge API and
-deletes the branch. A PR that is not yet `clean`, or that loses the head-SHA
-race, is left untouched for the next trigger.
+Because repo-wide auto-merge is off by design, the unified
+`Auto-merge tvna-bot PRs` workflow (`tvna-bot-automerge.yml`) merges the
+generated pin PR on its behalf. This single keeper (consolidated from the
+former pin-only `devcontainer-pin-automerge.yml` in #1539) merges *every* open
+PR authored by the App bot (`tvna-bot[bot]`), not just the pin branch prefix.
+It runs `python3 scripts/bot_pr_automerge.py merge`: it lists the open
+`tvna-bot[bot]` PRs and, for each one GitHub reports `mergeable_state == clean`
+(all required checks green and the branch up to date), squash-merges it via the
+REST merge API and deletes the branch. A PR that is not yet `clean`, or that
+loses the head-SHA race, is left untouched for the next trigger. Squash is fixed
+so the keyless signing invariant on `main` (see
+[`commit-signing.md`](../standards/commit-signing.md)) is preserved.
 
 The keeper originally triggered on `check_suite: completed`, but that event
 never fired: GitHub suppresses `check_suite` events for suites created by
-GitHub Actions (recursion prevention), and every pin-PR check is
-Actions-created, so the keeper never ran and clean pin PRs stalled (#1363). It
+GitHub Actions (recursion prevention), and every bot-PR check is
+Actions-created, so the keeper never ran and clean PRs stalled (#1363). It
 is now driven by `workflow_run` on the two workflows that own the required
 status checks (`Verify PR`, `Verify repository scripts`) completing -- gated by
-an `if` on `workflow_run.head_branch` and `conclusion == 'success'` so it only
-runs for a green pin-PR CI -- with a `schedule` cron (every 15 min) as a safety
-net so a missed event still converges, and `workflow_dispatch` for manual
-recovery. Because `workflow_run` and `schedule` only run from the default
-branch, the trigger fix takes effect once merged to `main`.
+an `if` on `conclusion == 'success'` (the merge subcommand itself filters to
+`tvna-bot[bot]` authors and clean PRs, so it is no longer branch-prefix-gated)
+-- with a `schedule` cron (every 15 min) as a safety net so a missed event
+still converges, and `workflow_dispatch` for manual recovery. Because
+`workflow_run` and `schedule` only run from the default branch, the trigger
+takes effect once merged to `main`.
 
 Branch protection (`main-protection`) still gates the merge; the keeper never
 bypasses required checks or rulesets. The merge uses the GitHub App installation
 token (not `GITHUB_TOKEN`) so the resulting push to `main` still triggers the
 downstream push workflows (publish / refresh / post-merge). To merge a stuck
-pin PR on demand, dispatch this workflow manually. Refs #1352, #1363, #1401.
+bot PR on demand, dispatch this workflow manually. Refs #1539, #1352, #1363, #1401.
 
 ### Keeping the pin PR mergeable (`Refresh devcontainer pin PR`)
 
@@ -1090,6 +1114,7 @@ bash -n .devcontainer/scripts/check-stale-agent-container.sh
 bash -n .devcontainer/scripts/ensure-agent-image.sh
 bash -n .devcontainer/scripts/collect-devcontainer-debug.sh
 sh -n .devcontainer/images/features/agent-user/install.sh
+sh -n .devcontainer/images/features/nix-warm-claude/install.sh
 nix build .#claude-cli
 nix build .#codex-cli
 ```

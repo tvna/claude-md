@@ -15,9 +15,13 @@ procedure lives in [`docs/runbooks/rulesets.md`](../runbooks/rulesets.md).
 - Signature verification on `main` is satisfied by **GitHub's web-flow
   signature on the squash-merge commit** -- not by signing feature-branch
   commits.
-- No signing key is placed in any agent / CI runner container. Bot commits
-  (`generate-agents.yml`) and agent commits (`claude/*`) stay unsigned on
-  their feature branches and inherit the GitHub squash signature on merge.
+- No signing key is placed in any agent / CI runner container. Agent commits
+  (`claude/*`) and human feature-branch commits stay unsigned on their feature
+  branches and inherit the GitHub squash signature on merge.
+- **Bot-generated PR workflows are the exception**: they author their commits
+  through the GitHub API (`createCommitOnBranch`) under a GitHub App
+  installation token, which GitHub signs (`Verified`) with the App bot
+  (`tvna-bot`) as author. See [Bot-generated PR commits](#bot-generated-pr-commits-app-bot-signed).
 
 ## Why this is satisfiable (invariant)
 
@@ -47,15 +51,58 @@ merge could admit an unsigned commit onto `main`). A change that does so
 MUST either be rejected or paired with a committer-side signing program
 and a revision of this standard.
 
+## Bot-generated PR commits (App-bot signed)
+
+Workflows that open automated PRs (`generate-agents.yml`,
+`post-merge.yml` decision-tree and triage-report jobs, and the
+devcontainer pin / flake-bump flows) do **not** use a runner `git push`.
+A commit pushed via `git` from a runner is authored by the persisted
+`github-actions[bot]` token and is **not** signed -- `git` cannot mint
+GitHub's web-flow signature, and a GitHub App account cannot hold its own
+signing key. Instead these workflows author the commit through the GitHub
+GraphQL `createCommitOnBranch` mutation (`scripts/pr_upsert.py` ->
+`upsert_files_pr` / `upsert_single_file_pr`) under a short-lived GitHub App
+installation token minted by `actions/create-github-app-token` from the
+`devcontainer-image-pins` Environment secrets
+(`DEVCONTAINER_PIN_APP_ID` / `DEVCONTAINER_PIN_APP_PRIVATE_KEY`).
+
+GitHub signs API-created commits (`Verified`) with the App bot
+(`tvna-bot`) as author, and the mutation appends onto the branch tip
+(`expectedHeadOid`), so the all-branches `non_fast_forward` ruleset is
+honored without a force-push. This gives bot PR branches signed,
+App-authored commits *before* merge, on top of the squash-merge signature
+they still inherit on `main`. Refs
+[#1437](https://github.com/tvna/claude-md/issues/1437),
+[#1466](https://github.com/tvna/claude-md/issues/1466).
+
+These App-bot PRs are auto-merged uniformly by a single keeper,
+`scripts/bot_pr_automerge.py merge` (workflow `tvna-bot-automerge.yml`),
+which squash-merges every open PR whose author login is `tvna-bot[bot]`
+once it reaches `mergeable_state == clean`. The keeper fixes the merge
+method to `squash`, so the keyless signing invariant above is preserved: it
+never admits a non-squash merge that could land an unsigned commit on
+`main`, and it adds no `bypass_actors`. The merge is gated entirely by
+branch protection. Refs
+[#1539](https://github.com/tvna/claude-md/issues/1539).
+
+The deterministic regression guard is
+`scripts/scan_workflow_unsigned_commit.py` (wired into pre-commit and the
+`Verify repository scripts` workflow): it fails when any workflow `run:`
+block contains `git push`, so the unsigned authoring path cannot be
+reintroduced. An audited exception carries an inline `# unsigned-ack`.
+
 ## What is explicitly NOT required
 
 - No GPG/SSH signing key for bot or agent commits. (For optional human
   local signing, SSH signing `gpg.format = ssh` is the lighter choice,
   but it is not required by this standard.)
-- No change to `.github/workflows/generate-agents.yml`. The alternative --
-  migrate the bot to the Contents API for auto-signed commits plus an
-  agent key-management program -- was evaluated and rejected as higher
-  operational cost with no enforcement benefit under squash-only merge.
+- No committer-side key-management program. The App-bot signing above
+  relies only on the existing App installation token; the agent (`claude/*`)
+  and human feature-branch commits remain unsigned and inherit the GitHub
+  squash signature on merge. The earlier rejection of a per-committer
+  signing-key program still stands; what changed (Refs #1437) is that
+  bot-generated PR commits now use the keyless, server-side
+  `createCommitOnBranch` path instead of a runner `git push`.
 
 ## Verify before enforcing
 

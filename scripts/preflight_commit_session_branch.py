@@ -18,19 +18,21 @@ constraint at push time, after the commit is already stacked."
 
 This hook closes that gap by shifting the same constraint left to commit
 time. It intercepts every Bash ``git commit`` command and denies it when
-the currently checked-out branch is not the session branch, so the
-single-branch limit is known *before* commits are stacked rather than at
-push.
+the currently checked-out branch is not in the authorized branch set, so
+the limit is known *before* commits are stacked rather than at push. The
+check is a conjunction (member of the set AND not a protected branch), not
+a single equality, so paired work and post-merge follow-up branches stay
+continuable (Refs #1513).
 
-Fail-open: any hook error, missing session-branch file, detached HEAD, or
+Fail-open: any hook error, an empty authorized set, detached HEAD, or a
 non-remote environment exits without a decision so the commit proceeds and
 the push-time gate (plus CI) acts as backstop.
 
 Architecture mirrors preflight_push_session_branch.py:
 * Pure decide() surface plus a thin main() entry.
-* No subprocess: the current branch is read from .git/HEAD and the session
-  branch from .git/CLAUDE_SESSION_BRANCH, so the decision is unit-testable
-  without touching a live repository.
+* No subprocess: the current branch is read from .git/HEAD and the
+  authorized set from .git/CLAUDE_SESSION_BRANCH, so the decision is
+  unit-testable without touching a live repository.
 """
 
 from __future__ import annotations
@@ -41,6 +43,7 @@ from pathlib import Path
 from typing import Any
 
 from _hook_runtime import build_deny, run_event_hook
+from _session_branches import is_authorized, read_authorized_set
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 _SESSION_BRANCH_FILE = REPO_ROOT / ".git" / "CLAUDE_SESSION_BRANCH"
@@ -55,12 +58,8 @@ _GIT_COMMIT_RE = re.compile(r"\bgit\s+commit(?![\w-])")
 _HEAD_REF_PREFIX = "ref: refs/heads/"
 
 
-def _read_session_branch() -> str | None:
-    try:
-        branch = _SESSION_BRANCH_FILE.read_text().strip()
-        return branch if branch else None
-    except OSError:
-        return None
+def _read_authorized_branches() -> set[str]:
+    return read_authorized_set(_SESSION_BRANCH_FILE)
 
 
 def _current_branch() -> str | None:
@@ -91,28 +90,32 @@ def decide(event: dict[str, Any]) -> dict[str, Any] | None:
     if not _GIT_COMMIT_RE.search(command):
         return None
 
-    session_branch = _read_session_branch()
-    if not session_branch:
-        return None  # fail-open: session branch not recorded yet
+    authorized = _read_authorized_branches()
+    if not authorized:
+        return None  # fail-open: no session branch recorded yet
 
     current_branch = _current_branch()
     if not current_branch:
         return None  # detached HEAD / unknown — fail-open
 
-    if current_branch == session_branch:
+    if is_authorized(current_branch, authorized):
         return None
 
+    authorized_list = ", ".join(sorted(authorized))
+    target_hint = sorted(authorized)[0]
     return build_deny(
         f"Blocked by scripts/preflight_commit_session_branch.py: "
-        f"this remote session can only push to '{session_branch}', but you are "
-        f"about to commit on '{current_branch}'. A commit made here cannot be "
-        f"pushed and would strand the work (the push-time gate would refuse it).\n\n"
+        f"this remote session can only push to an authorized branch "
+        f"({authorized_list}), but you are about to commit on '{current_branch}'. "
+        f"A commit made here cannot be pushed and would strand the work "
+        f"(the push-time gate would refuse it).\n\n"
         f"Do one of the following before committing:\n"
-        f"  - Switch back to the session branch: git switch {session_branch}\n"
+        f"  - Switch back to an authorized branch: git switch {target_hint}\n"
         f"  - Or move the work onto it (e.g. git stash, switch, stash pop).\n\n"
         f"Never stack an unrelated issue's commit on the session branch: open a "
-        f"separate issue and handle it in its own session.\n\n"
-        f"Refs #1181, #785."
+        f"separate issue and handle it in its own session. To authorize a new "
+        f"branch, start a new remote session on it.\n\n"
+        f"Refs #1513, #1181, #785."
     )
 
 

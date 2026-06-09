@@ -10,10 +10,14 @@ flowchart TD
 
     J_generate["generate"]
     S_J_generate_0(("Fail if generated instructions drifted (verify mode)"))
-    S_J_generate_1(("Open pull request if generated instructions changed"))
+    S_J_generate_1(("Exit early when generated instructions are unchanged"))
+    S_J_generate_2(("Mint GitHub App token"))
+    S_J_generate_3(("Open pull request if generated instructions changed"))
 
     T_workflow_dispatch --> J_generate
     T_workflow_call --> J_generate
     J_generate -->|"${{ inputs.mode == 'verify' }}"| S_J_generate_0
     J_generate -->|"${{ inputs.mode != 'verify' }}"| S_J_generate_1
+    J_generate -->|"${{ inputs.mode != 'verify' && steps.drift.outputs.changed == 'true' }}"| S_J_generate_2
+    J_generate -->|"${{ inputs.mode != 'verify' && steps.drift.outputs.changed == 'true' }}"| S_J_generate_3
 ```

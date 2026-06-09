@@ -71,6 +71,22 @@ jobs:
           docker buildx create --name "$builder" --driver docker-container --use
           docker buildx inspect --bootstrap
 
+      # The nix-warm-claude Feature bakes the .#claude devShell closure at build
+      # time, but the workspace is NOT mounted during Feature install, so the
+      # Feature can only see files packaged inside its own directory. Stage the
+      # flake files the Feature realises (flake.nix/flake.lock for the closure,
+      # pyproject.toml for the uv version the flake reads) into the Feature dir
+      # for the claude legs only. These copies are git-ignored so they never
+      # drift from the repo flake; each build re-stages the current files, and
+      # all three are in this workflow's `paths:` trigger so a flake change
+      # rebuilds (and re-realises) the layer. Refs #1491.
+      - name: Stage flake into nix-warm-claude feature
+        if: matrix.agent == 'claude'
+        run: |
+          set -euo pipefail
+          feature_dir=".devcontainer/images/features/nix-warm-claude"
+          cp flake.nix flake.lock pyproject.toml "$feature_dir/"
+
       - name: Build and publish ${{ matrix.agent }} devcontainer image
         run: |
           image="${IMAGE_PREFIX}-${{ matrix.agent }}"
@@ -126,12 +142,30 @@ jobs:
       # exit-code 0 means findings never fail the run, and continue-on-error
       # means a Trivy DB-download or other infra failure never blocks publish.
       # Results surface in the Security tab via the SARIF upload.
+      #
+      # The scanner runtime is pinned by image *digest*, not by the resolve-at-
+      # runtime version/tag that the trivy-action wrapper used: images referenced
+      # by digest were unaffected by the 2026-03-19 Trivy supply-chain incident
+      # (aquasecurity/trivy#10425), whereas a version/tag remains re-resolvable
+      # upstream. Dropping the trivy-action `uses:` ref loses its Dependabot
+      # auto-bump and OSV correlation surface; the `# threat-intel-pin:` line in
+      # the run block below re-attaches the OSV surface
+      # (scripts/threat_intel_triage.py reads it), and the digest bump/refresh
+      # procedure is documented in docs/runbooks/compromised-action-response.md.
+      # Bump the @sha256 digest and the threat-intel-pin version in lockstep.
+      # Refs #1276, #1267, #1264.
       - name: Scan published image with Trivy
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         continue-on-error: true
-        with:
-          image-ref: ${{ env.IMAGE_PREFIX }}-${{ matrix.agent }}:${{ github.sha }}-${{ matrix.arch }}
-          scanners: vuln,secret,misconfig
+        env:
+          # Trivy reads TRIVY_USERNAME / TRIVY_PASSWORD for registry auth when it
+          # pulls the GHCR image to scan (and the trivy-db). Passed by reference
+          # (`-e NAME`) below so the token never lands on the command line.
+          # github.token is the job's read-only GHCR credential.
+          TRIVY_USERNAME: ${{ github.actor }}
+          TRIVY_PASSWORD: ${{ github.token }}
+          IMAGE_REF: ${{ env.IMAGE_PREFIX }}-${{ matrix.agent }}:${{ github.sha }}-${{ matrix.arch }}
+        run: |
+          set -euo pipefail
           # Skip the Nix store optimisation hardlink farm. /nix/store/.links is a
           # content-addressed mirror in which every store file is hardlinked under
           # a second path; Trivy's secret scanner walks it and reports findings
@@ -142,20 +176,24 @@ jobs:
           # Trivy v0.70.0 pkg/fanal/utils/utils.go SkipPath: skip-dirs patterns are
           # matched on the leading-slash-trimmed path with doublestar, so the
           # relative pattern below prunes the whole subtree. Refs #1473, #1348.
-          skip-dirs: nix/store/.links
-          format: sarif
-          output: trivy-results.sarif
-          exit-code: '0'
-          # Pin the Trivy binary, not just the action SHA. trivy-action downloads
-          # the scanner at runtime and the `version:` input selects which binary;
-          # leaving it unset (or `latest`) was the exposure vector in the
-          # 2026-03-19 Trivy supply-chain incident (aquasecurity/trivy#10425).
-          # v0.70.0 is the trivy-action v0.36.0 default and post-incident
-          # (>= v0.69.3). Bump in lockstep when the pinned action SHA changes.
-          version: v0.70.0
+          #
+          # threat-intel-pin: Go github.com/aquasecurity/trivy 0.71.0
+          docker run --rm \
+            -e TRIVY_USERNAME \
+            -e TRIVY_PASSWORD \
+            -v "${{ github.workspace }}:/workspace" \
+            -w /workspace \
+            ghcr.io/aquasecurity/trivy@sha256:016eae51fdcf989332a5404af7e8f625cd5d95d7c0907a221d080a996f556500 \
+            image \
+              --scanners vuln,secret,misconfig \
+              --skip-dirs nix/store/.links \
+              --format sarif \
+              --output trivy-results.sarif \
+              --exit-code 0 \
+              "$IMAGE_REF"
 
       - name: Upload Trivy results to the Security tab
-        uses: github/codeql-action/upload-sarif@1a818fd5f97ed0ee9a823421bd5b171add01227f # v4.36.2
+        uses: github/codeql-action/upload-sarif@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4.36.2
         continue-on-error: true
         with:
           sarif_file: trivy-results.sarif
