@@ -1,0 +1,9 @@
+{
+  "id": "nix-warm-claude",
+  "version": "1.0.0",
+  "name": "Warm claude devShell closure",
+  "description": "Realises the .#claude Nix devShell closure at image-build time so runtime container-create skips first-time closure realisation.",
+  "installsAfter": [
+    "ghcr.io/devcontainers/features/nix"
+  ]
+}

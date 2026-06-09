@@ -317,7 +317,7 @@ EOF
           inherit claude-cli codex-cli pinned-uv apm-cli waza-cli rtk-cli actionlint-cli ccusage-cli;
           bubblewrap = pkgs.bubblewrap;
           gh-cli = pkgs.gh;
-          python-runtime = pkgs.python311;
+          python-runtime = pkgs.python312;
           # GitHub MCP server binary for the local-stdio launch path used by
           # scripts/mcp_github_launch.sh (#1063). In the devcontainer there is no
           # Docker daemon, so the wrapper execs this Nix-pinned binary instead of
@@ -338,8 +338,18 @@ EOF
             gh
             git
             jq
-            nodejs_22
-            python311
+            # bun, not nodejs_22 + npm/pnpm: this repo has no package.json and
+            # never invokes node/npm/npx -- the agent CLIs (claude/codex/ccusage)
+            # are self-contained native binaries and the only MCP server is the
+            # native github-mcp-server, so a full Node toolchain (nodejs ~91 MB +
+            # its ~69 MB -dev output + npm/pnpm) was unused weight in the baked
+            # image (#1491). bun is a single ~90 MB binary that still gives the
+            # agents a JS runtime + `bunx` (npx-equivalent) for ad-hoc work, with
+            # no separate -dev output. If a workflow needs strict node/npm
+            # behavior, reintroduce nodejs_22 + the package manager and document
+            # the consumer.
+            bun
+            python312
             ripgrep
             shellcheck
             agentPackages.pinned-uv
@@ -348,8 +358,15 @@ EOF
             agentPackages.actionlint-cli
           ];
           pythonQualityPackages = with pkgs; [
+            # Bare `mypy` (= pkgs.mypy) is built against the nixpkgs-default
+            # interpreter, which in nixpkgs 25.05 is python312 -- the same
+            # interpreter the project now targets (pyproject requires-python
+            # >=3.12) and that sharedPackages provides. So mypy shares the one
+            # python in the closure; there is no duplicate interpreter to avoid,
+            # and no python312Packages override is needed for mypy. Keeps the
+            # baked claude image (#1491) to a single Python.
             mypy
-            python311Packages.pytest-xdist
+            python312Packages.pytest-xdist
             ruff
           ];
           networkPackages = with pkgs; [
@@ -360,8 +377,16 @@ EOF
             iproute2
             iptables
           ];
+          # mkShellNoCC, not mkShell: mkShell pulls the full stdenv C toolchain
+          # (gcc ~256 MB + binutils ~62 MB) into every agent devShell closure.
+          # This repo's `uv sync` installs only wheels (pyyaml/pytest/ruff/mypy/
+          # hypothesis/pytest-xdist all ship manylinux wheels), and the agents run
+          # no from-source C/native builds, so the compiler is dead weight in the
+          # closure -- and in the baked claude image (#1491). Drop it with the
+          # NoCC stdenv. If a future dependency needs to compile from sdist,
+          # restore mkShell (or add a cc to packages) and document the need.
           mkAgentShell = name: extraPackages:
-            pkgs.mkShell {
+            pkgs.mkShellNoCC {
               packages = sharedPackages ++ pythonQualityPackages ++ extraPackages;
               shellHook = ''
                 export AGENT_CONTAINER="${name}"
@@ -373,13 +398,11 @@ EOF
           claude = mkAgentShell "claude" [
             agentPackages.claude-cli
             agentPackages.ccusage-cli
-            pkgs.nodePackages.npm
           ];
           codex = mkAgentShell "codex" [
             agentPackages.bubblewrap
             agentPackages.codex-cli
             agentPackages.ccusage-cli
-            pkgs.nodePackages.pnpm
           ];
           network = pkgs.mkShell {
             packages = networkPackages;
