@@ -179,7 +179,7 @@ jobs:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           REPO: ${{ github.repository }}
           PR_BRANCH: chore/update-generated-docs
-          PR_TITLE: "docs(generated): regenerate decision tree and workflow diagrams (#960)"
+          PR_TITLE: "docs(generated): regenerate decision tree and workflow diagrams"
         run: |
           cat > /tmp/pr-body.md <<'EOF'
           ## Summary

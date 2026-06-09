@@ -85,7 +85,7 @@ _TRIAGE_REPORT_DOC_PATH = Path("docs/generated/scripts/auto-retro-triage-report.
 # ruleset rejected the old `git push --force-with-lease` on every drift run after
 # the first. Refs #1042, #1386, #1466.
 _TRIAGE_REPORT_PR_BRANCH = "chore/refresh-auto-retro-triage-report"
-_TRIAGE_REPORT_PR_TITLE = "chore(auto-retro): refresh triage report (#1042)"
+_TRIAGE_REPORT_PR_TITLE = "chore(auto-retro): refresh triage report"
 _TRIAGE_REPORT_COMMIT_TRAILER = "Refs #1042"
 _TRIAGE_REPORT_PR_BODY = (
     "Refreshes the auto-retro triage report snapshot from the current\n"

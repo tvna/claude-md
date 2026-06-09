@@ -676,6 +676,48 @@ def test_auto_retro_triage_report_pr_matches_workflow_env(
     assert captured["content"] == b"# snapshot\n"
 
 
+def _step_env_pr_title(workflow: str, step_name: str) -> str:
+    """Return the ``PR_TITLE`` env literal of a named step in *workflow*."""
+    document = yaml.safe_load((_WORKFLOWS_DIR / workflow).read_text(encoding="utf-8"))
+    for job in document["jobs"].values():
+        for step in job.get("steps", []):
+            if step.get("name") == step_name:
+                return str(step["env"]["PR_TITLE"])
+    raise AssertionError(f"step {step_name!r} with PR_TITLE not found in {workflow}")
+
+
+def test_generated_bot_pr_titles_pass_title_policy() -> None:
+    """Every generated bot PR title must clear the Portable PR policy gate.
+
+    Regression guard for #1549: three bot workflows hard-coded a PR title that
+    embedded a `(#NNN)` issue ref, which ``title_policy`` (the required
+    ``Portable PR policy / gate``) rejects (#167), so every PR they reopened was
+    unmergeable -- PR #1485 being the visible instance. The titles are sourced
+    from their authoritative locations (workflow ``PR_TITLE`` env and the
+    ``auto_retro`` constant) so a reintroduced `(#NNN)` fails this gate loudly.
+    """
+    titles = {
+        "auto_retro._TRIAGE_REPORT_PR_TITLE": auto_retro._TRIAGE_REPORT_PR_TITLE,
+        "post-merge.yml decision-tree": _step_env_pr_title(
+            "post-merge.yml", "Open pull request if any generated doc changed"
+        ),
+        "generate-agents.yml": _step_env_pr_title(
+            "generate-agents.yml", "Open pull request if generated instructions changed"
+        ),
+    }
+    for source, title in titles.items():
+        assert not title_policy.pr_title_has_issue_ref(title), (
+            f"{source}: PR title must not embed a (#NNN) issue ref; "
+            "put Refs #NNN in the body instead (#167)."
+        )
+        assert (
+            title_policy.verify_title(
+                title, kind="pull_request", author="tvna-bot[bot]"
+            )
+            == 0
+        ), f"{source}: title does not pass title_policy.verify_title"
+
+
 def test_workflow_diagram_doc_matches_workflow_args(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -1767,7 +1809,7 @@ def test_pr_upsert_upsert_files_matches_workflow_args(
         "upsert-files",
         "--head", "chore/regenerate-agent-instructions",
         "--base", "main",
-        "--title", "chore: regenerate agent instructions (#18)",
+        "--title", "chore: regenerate agent instructions",
         "--commit-body", "Refs #18",
         "--body-file", str(body_file),
         "--add", "CLAUDE.md",
@@ -1779,7 +1821,7 @@ def test_pr_upsert_upsert_files_matches_workflow_args(
         "upsert-files",
         "--head", "chore/update-generated-docs",
         "--base", "main",
-        "--title", "docs(generated): regenerate decision tree and workflow diagrams (#960)",
+        "--title", "docs(generated): regenerate decision tree and workflow diagrams",
         "--commit-body", "Refs #960",
         "--body-file", str(body_file),
         "--from-diff", "docs/generated/",
