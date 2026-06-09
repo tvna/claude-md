@@ -7077,6 +7077,135 @@ flowchart TD
     N002 -->|"false"| N004
 ```
 
+### _resource_section(...)
+
+```mermaid
+flowchart TD
+    N001["_resource_section(...)"]
+    N002["match = search(...)"]
+    N003["if match is None"]
+    N004["return None"]
+    N005["rest = body[match.end():]"]
+    N006["nxt = search(...)"]
+    N007["return rest if nxt is None else rest[:nxt.start()]"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 -->|"true"| N004
+    N003 -->|"false"| N005
+    N005 --> N006
+    N006 --> N007
+```
+
+### parse_pr_cost(...)
+
+```mermaid
+flowchart TD
+    N001["parse_pr_cost(...)"]
+    N002["section = _resource_section(...)"]
+    N003["if section is None"]
+    N004["raise InputError(f'{where}<str>')"]
+    N005["match = search(...)"]
+    N006["if match is None"]
+    N007["if _COST_UNAVAILABLE in section"]
+    N008["raise InputError(f'{where}<str>{_COST_UNAVAILABLE}<str>')"]
+    N009["raise InputError(f'{where}<str>')"]
+    N010["return float(match.group(1))"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 -->|"true"| N004
+    N003 -->|"false"| N005
+    N005 --> N006
+    N006 -->|"true"| N007
+    N007 -->|"true"| N008
+    N007 -->|"false"| N009
+    N006 -->|"false"| N010
+```
+
+### _first_table_cell(...)
+
+```mermaid
+flowchart TD
+    N001["_first_table_cell(...)"]
+    N002["inner = strip(...)"]
+    N003["if not inner"]
+    N004["return None"]
+    N005["return inner.split('<str>', 1)[0].strip()"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 -->|"true"| N004
+    N003 -->|"false"| N005
+```
+
+### parse_retro_repairs(...)
+
+```mermaid
+flowchart TD
+    N001["parse_retro_repairs(...)"]
+    N002["lines = splitlines(...)"]
+    N003["header_idx = next(...)"]
+    N004["if header_idx is None"]
+    N005["raise InputError(f'{where}<str>')"]
+    N006["count = 0"]
+    N007["for line in lines[header_idx + 1:]:
+    stripped = line.strip()
+    if not stripped.startswith('<str>'):
+        break
+    first = _first_table_cell(stripped)
+    if first is None:
+        break
+    if not first.isdigit() or int(first) <= 0:
+        continue
+    if _POLICY_ARTIFACT_MARKER in line and _ITERATION_COMMIT_REPAIR not in line:
+        continue
+    count += 1"]
+    N008["return count"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 --> N004
+    N004 -->|"true"| N005
+    N004 -->|"false"| N006
+    N006 --> N007
+    N007 --> N008
+```
+
+### _resolve_cost(...)
+
+```mermaid
+flowchart TD
+    N001["_resolve_cost(...)"]
+    N002["if 'cost' in pr"]
+    N003["return _as_number(pr.get('<str>'), f'{where}<str>')"]
+    N004["body = get(...)"]
+    N005["if isinstance(body, str)"]
+    N006["return parse_pr_cost(body, f'{where}<str>')"]
+    N007["raise InputError(f'{where}<str>')"]
+    N001 -->|"start"| N002
+    N002 -->|"true"| N003
+    N002 -->|"false"| N004
+    N004 --> N005
+    N005 -->|"true"| N006
+    N005 -->|"false"| N007
+```
+
+### _resolve_repairs(...)
+
+```mermaid
+flowchart TD
+    N001["_resolve_repairs(...)"]
+    N002["if 'repairs' in pr"]
+    N003["return _as_number(pr.get('<str>'), f'{where}<str>')"]
+    N004["body = get(...)"]
+    N005["if isinstance(body, str)"]
+    N006["return float(parse_retro_repairs(body, f'{where}<str>'))"]
+    N007["raise InputError(f'{where}<str>')"]
+    N001 -->|"start"| N002
+    N002 -->|"true"| N003
+    N002 -->|"false"| N004
+    N004 --> N005
+    N005 -->|"true"| N006
+    N005 -->|"false"| N007
+```
+
 ### parse_regimes(...)
 
 ```mermaid
@@ -7102,8 +7231,9 @@ flowchart TD
     for j, pr in enumerate(prs):
         if not isinstance(pr, dict):
             raise InputError(f'<str>{name!r}<str>{j}<str>')
-        total_cost += _as_number(pr.get('<str>'), f'<str>{name!r}<str>{j}<str>')
-        total_repairs += _as_number(pr.get('<str>'), f'<str>{name!r}<str>{j}<str>')
+        where = f'<str>{name!r}<str>{j}<str>'
+        total_cost += _resolve_cost(pr, where)
+        total_repairs += _resolve_repairs(pr, where)
     n = len(prs)
     summaries.append(RegimeSummary(name=name, n=n, cost_per_pr=total_cost / n, repairs_per_pr=total_repairs / n))"]
     N009["return summaries"]
