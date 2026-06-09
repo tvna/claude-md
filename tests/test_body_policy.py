@@ -554,6 +554,39 @@ class TestTrustedBotBypass:
             in capsys.readouterr().out
         )
 
+    def test_tvna_bot_passes_with_empty_body(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        # Regression guard for #1553: the App bot that authors generated bot
+        # PRs (createCommitOnBranch, #1437/#1539) must be exempt from the
+        # human-PR body-shape contract, like dependabot[bot]. When it was
+        # absent from .github/trusted_bots.toml, the regenerated triage-report
+        # PR (#1552) failed the Portable PR policy gate's body step.
+        assert (
+            body_policy._verify(
+                "pull_request", "", author="tvna-bot[bot]"
+            )
+            == 0
+        )
+        assert (
+            "skipped: trusted bot author (tvna-bot[bot])"
+            in capsys.readouterr().out
+        )
+
+    def test_triage_report_body_exempt_for_tvna_bot(self) -> None:
+        # The fixed auto-retro triage-report PR body does not carry the
+        # human-PR sections; it passes only because tvna-bot[bot] is trusted.
+        import auto_retro
+
+        assert (
+            body_policy._verify(
+                "pull_request",
+                auto_retro._TRIAGE_REPORT_PR_BODY,
+                author="tvna-bot[bot]",
+            )
+            == 0
+        )
+
     def test_unknown_bot_not_bypassed(
         self, capsys: pytest.CaptureFixture[str]
     ) -> None:

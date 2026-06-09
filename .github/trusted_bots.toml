@@ -4,7 +4,10 @@
 
 [general]
 # Shared across issue-link, body-policy, and non-ASCII scanner (advisory demotion).
-logins = ["dependabot[bot]"]
+# tvna-bot[bot]: the GitHub App bot that authors generated bot PRs via
+# createCommitOnBranch (#1437, #1539). Its fixed generated bodies are exempt
+# from the human-PR body-shape contract, same carve-out as dependabot[bot]. #1553
+logins = ["dependabot[bot]", "tvna-bot[bot]"]
 
 [non_ascii_skip]
 # Bots fully exempt from non-ASCII scan (action = "none": no label, no comment).
