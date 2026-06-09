@@ -145,6 +145,13 @@ jobs:
         # above; pre-push and pre-merge gates do not regenerate it (#1543).
         run: python3 scripts/script_dependency_graph.py all-doc
 
+      - name: Generate script trigger reverse-map
+        # Writes docs/generated/scripts/trigger-map.md by reverse-mapping the
+        # four launch sources (workflow run: steps, pre-commit, preflight_all
+        # Step argv, agent hooks). Same single-producer ownership as the docs
+        # above; pre-push and pre-merge gates do not regenerate it (#1546).
+        run: python3 scripts/script_trigger_map.py all-doc
+
       - name: Generate workflow if-branch diagrams
         run: python3 scripts/workflow_diagram.py diagram-doc
 
@@ -172,7 +179,7 @@ jobs:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           REPO: ${{ github.repository }}
           PR_BRANCH: chore/update-generated-docs
-          PR_TITLE: "docs(generated): regenerate decision tree and workflow diagrams (#960)"
+          PR_TITLE: "docs(generated): regenerate decision tree and workflow diagrams"
         run: |
           cat > /tmp/pr-body.md <<'EOF'
           ## Summary
@@ -181,6 +188,7 @@ jobs:
 
           - `docs/generated/scripts/ast/<stem>.md` from each `scripts/*.py` AST (one file per script).
           - `docs/generated/scripts/dependency-graph.md` from `scripts/*.py` sibling-import edges.
+          - `docs/generated/scripts/trigger-map.md` from the four `scripts/*.py` launch sources.
           - `docs/generated/workflows/*-if-branches.md` from `.github/workflows/*.yml` if-branch analysis.
 
           ## Related Issue
@@ -209,6 +217,8 @@ jobs:
           - command: `python3 scripts/script_ast_graph.py all-doc`
             result: `exit 0`
           - command: `python3 scripts/script_dependency_graph.py all-doc`
+            result: `exit 0`
+          - command: `python3 scripts/script_trigger_map.py all-doc`
             result: `exit 0`
           - command: `python3 scripts/workflow_diagram.py diagram-doc`
             result: `exit 0`
@@ -256,8 +266,9 @@ jobs:
   # docs/generated/scripts/auto-retro-triage-report.md from the live
   # retro-issue label state and opens a PR when the snapshot drifts. The
   # report is non-deterministic (it depends on GitHub state, not just
-  # source), so it cannot live in the generate-docs.yml drift gate; the git
-  # history of the committed snapshot is the time series. Refs #1042, #1386.
+  # source), so it cannot live in the deterministic generated-docs
+  # regeneration; the git history of the committed snapshot is the time
+  # series. Refs #1042, #1386.
   triage-report:
     if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && (inputs.task == 'triage-report' || inputs.task == 'all'))
     runs-on: ubuntu-latest

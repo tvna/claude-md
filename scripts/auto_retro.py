@@ -85,7 +85,7 @@ _TRIAGE_REPORT_DOC_PATH = Path("docs/generated/scripts/auto-retro-triage-report.
 # ruleset rejected the old `git push --force-with-lease` on every drift run after
 # the first. Refs #1042, #1386, #1466.
 _TRIAGE_REPORT_PR_BRANCH = "chore/refresh-auto-retro-triage-report"
-_TRIAGE_REPORT_PR_TITLE = "chore(auto-retro): refresh triage report (#1042)"
+_TRIAGE_REPORT_PR_TITLE = "chore(auto-retro): refresh triage report"
 _TRIAGE_REPORT_COMMIT_TRAILER = "Refs #1042"
 _TRIAGE_REPORT_PR_BODY = (
     "Refreshes the auto-retro triage report snapshot from the current\n"
@@ -93,7 +93,7 @@ _TRIAGE_REPORT_PR_BODY = (
     "\n"
     "This report is non-deterministic (it depends on live GitHub state), so\n"
     "it is refreshed on merge and opened as a pull request rather than\n"
-    "enforced by the generate-docs.yml drift gate. The snapshot commit is\n"
+    "regenerated as part of the deterministic generated docs. The snapshot commit is\n"
     "created server-side via the signed createCommitOnBranch path so the\n"
     "fixed refresh branch can be reused without a force-push (the\n"
     "all-branches non_fast_forward ruleset rejects force-pushes).\n"
@@ -1153,7 +1153,7 @@ def render_triage_report_markdown(report: TriageReport) -> str:
     the live backlog visible, and the per-signal table flags every signal
     whose prior would skip a future retro. The report depends on live
     GitHub label state, so it is a non-deterministic snapshot and is NOT
-    part of the ``generate-docs.yml`` drift gate. Refs #1042, #1386.
+    part of the deterministic generated docs. Refs #1042, #1386.
     """
     lines: list[str] = [
         "# Auto-retro triage report",
@@ -1163,7 +1163,7 @@ def render_triage_report_markdown(report: TriageReport) -> str:
         "hand. Unlike the per-script AST docs it is a non-deterministic "
         "snapshot of repository state, so it is refreshed on merge by the "
         "`post-merge.yml` workflow (which opens a pull request when the "
-        "snapshot drifts) rather than the `generate-docs.yml` drift gate.",
+        "snapshot drifts) rather than as part of the deterministic generated docs.",
         "",
         f"Retros observed: **{report.total}**",
         "",
