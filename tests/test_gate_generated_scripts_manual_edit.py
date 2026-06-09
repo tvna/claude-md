@@ -45,19 +45,22 @@ def test_resolve_branch_uses_github_head_ref(monkeypatch: pytest.MonkeyPatch) ->
     assert gate.resolve_branch(None) == "chore/update-generated-docs"
 
 
-def test_changed_generated_scripts_filters_prefix() -> None:
+def test_changed_generated_docs_filters_prefixes() -> None:
     stdout = (
         "docs/generated/scripts/ast/auto_retro.md\n"
         "docs/generated/workflows/post-merge-if-branches.md\n"
         "scripts/auto_retro.py\n"
         "docs/generated/scripts/auto-retro-triage-report.md\n"
     )
-    changed = gate.changed_generated_scripts(
+    changed = gate.changed_generated_docs(
         "origin/main", runner=_fake_runner(stdout)
     )
+    # Both docs/generated/scripts/ and docs/generated/workflows/ are protected
+    # (refs #1545); only the non-generated source file is excluded.
     assert changed == frozenset(
         {
             "docs/generated/scripts/ast/auto_retro.md",
+            "docs/generated/workflows/post-merge-if-branches.md",
             "docs/generated/scripts/auto-retro-triage-report.md",
         }
     )
@@ -95,7 +98,7 @@ def test_evaluate_fails_for_nonbot_edit() -> None:
 
 
 def test_verify_cli_passes_clean(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(gate, "changed_generated_scripts", lambda *_a, **_kw: frozenset())
+    monkeypatch.setattr(gate, "changed_generated_docs", lambda *_a, **_kw: frozenset())
     monkeypatch.setattr(gate, "resolve_branch", lambda *_a, **_kw: "feature/x")
     assert gate.main(["verify", "--base-ref", "origin/main"]) == 0
 
@@ -105,7 +108,7 @@ def test_verify_cli_fails_on_manual_edit(
 ) -> None:
     monkeypatch.setattr(
         gate,
-        "changed_generated_scripts",
+        "changed_generated_docs",
         lambda *_a, **_kw: frozenset({"docs/generated/scripts/ast/x.md"}),
     )
     monkeypatch.setattr(gate, "resolve_branch", lambda *_a, **_kw: "feature/x")
@@ -116,7 +119,7 @@ def test_verify_cli_fails_on_manual_edit(
 def test_verify_cli_passes_for_exempt_branch(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         gate,
-        "changed_generated_scripts",
+        "changed_generated_docs",
         lambda *_a, **_kw: frozenset({"docs/generated/scripts/ast/x.md"}),
     )
     monkeypatch.setattr(
@@ -131,6 +134,6 @@ def test_verify_cli_fails_loud_on_git_error(
     def boom(*_a, **_kw):
         raise subprocess.CalledProcessError(1, ["git", "diff"])
 
-    monkeypatch.setattr(gate, "changed_generated_scripts", boom)
+    monkeypatch.setattr(gate, "changed_generated_docs", boom)
     assert gate.main(["verify", "--base-ref", "origin/main"]) == 1
     assert "git invocation failed" in capsys.readouterr().err

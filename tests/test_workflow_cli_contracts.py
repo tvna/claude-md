@@ -605,7 +605,7 @@ def test_gate_generated_scripts_manual_edit_matches_workflow_args(
     """The verify subcommand passes with no protected-folder changes."""
     monkeypatch.setattr(
         gate_generated_scripts_manual_edit,
-        "changed_generated_scripts",
+        "changed_generated_docs",
         lambda *_a, **_kw: frozenset(),
     )
     monkeypatch.setattr(
