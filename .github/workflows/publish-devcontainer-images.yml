@@ -177,13 +177,13 @@ jobs:
           # matched on the leading-slash-trimmed path with doublestar, so the
           # relative pattern below prunes the whole subtree. Refs #1473, #1348.
           #
-          # threat-intel-pin: Go github.com/aquasecurity/trivy 0.70.0
+          # threat-intel-pin: Go github.com/aquasecurity/trivy 0.71.0
           docker run --rm \
             -e TRIVY_USERNAME \
             -e TRIVY_PASSWORD \
             -v "${{ github.workspace }}:/workspace" \
             -w /workspace \
-            ghcr.io/aquasecurity/trivy@sha256:be1190afcb28352bfddc4ddeb71470835d16462af68d310f9f4bca710961a41e \
+            ghcr.io/aquasecurity/trivy@sha256:016eae51fdcf989332a5404af7e8f625cd5d95d7c0907a221d080a996f556500 \
             image \
               --scanners vuln,secret,misconfig \
               --skip-dirs nix/store/.links \
