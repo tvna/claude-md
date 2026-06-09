@@ -28097,13 +28097,19 @@ flowchart TD
     N001["fetch_external_findings(...)"]
     N002["if not dependencies"]
     N003["return []"]
-    N004["osv_batch = load_json(osv_file) if osv_file is not None else query_osv_batch(dependencies)"]
-    N005["kev_catalog = load_json(kev_file) if kev_file is not None else fetch_cisa_kev()"]
-    N006["kev_cves = parse_kev_cves(...)"]
-    N007["vuln_ids_by_dep = parse_osv_batch_results(...)"]
-    N008["vuln_details = fetch_osv_details(...)"]
-    N009["osv_findings = []"]
-    N010["for dep, vuln_ids in vuln_ids_by_dep:
+    N004["if osv_file is not None"]
+    N005["osv_batch = load_json(...)"]
+    N006["malformed = validate_osv_coordinates(...)"]
+    N007["if malformed"]
+    N008["coords = join(...)"]
+    N009["raise ValueError(f'<str>{coords}')"]
+    N010["osv_batch = query_osv_batch(...)"]
+    N011["kev_catalog = load_json(kev_file) if kev_file is not None else fetch_cisa_kev()"]
+    N012["kev_cves = parse_kev_cves(...)"]
+    N013["vuln_ids_by_dep = parse_osv_batch_results(...)"]
+    N014["vuln_details = fetch_osv_details(...)"]
+    N015["osv_findings = []"]
+    N016["for dep, vuln_ids in vuln_ids_by_dep:
     for vuln_id in vuln_ids:
         details = vuln_details.get(vuln_id, {})
         aliases = tuple((str(alias) for alias in details.get('<str>', []) if isinstance(alias, str)))
@@ -28111,47 +28117,91 @@ flowchart TD
         known_exploited = bool(cve_ids & kev_cves)
         advisory_type = GHSA_MALWARE_TYPE if vuln_id.startswith(MAL_ID_PREFIX) else None
         osv_findings.append(Finding(dependency=dep, vuln_id=vuln_id, aliases=aliases, source=SOURCE_OSV, known_exploited=known_exploited, advisory_type=advisory_type))"]
-    N011["ghsa_findings = []"]
-    N012["if ghsa_file is not None or ghsa_live"]
-    N013["ghsa_findings = fetch_ghsa_advisories(...)"]
-    N014["ossf_findings = []"]
-    N015["if malpkg_file is not None or malpkg_live"]
-    N016["ossf_findings = fetch_ossf_malicious_packages(...)"]
-    N017["merged = merge_findings(...)"]
-    N018["if epss_file is not None or epss_live"]
-    N019["epss_scores = fetch_epss_scores(...)"]
-    N020["merged = [_attach_epss(finding, epss_scores) for finding in merged]"]
-    N021["if nvd_file is not None or nvd_live"]
-    N022["nvd_map = fetch_nvd_metadata(...)"]
-    N023["merged = attach_nvd_to_findings(...)"]
-    N024["return sorted(merged, key=lambda f: (f.dependency.name, f.vuln_id))"]
+    N017["ghsa_findings = []"]
+    N018["if ghsa_file is not None or ghsa_live"]
+    N019["ghsa_findings = fetch_ghsa_advisories(...)"]
+    N020["ossf_findings = []"]
+    N021["if malpkg_file is not None or malpkg_live"]
+    N022["ossf_findings = fetch_ossf_malicious_packages(...)"]
+    N023["merged = merge_findings(...)"]
+    N024["if epss_file is not None or epss_live"]
+    N025["epss_scores = fetch_epss_scores(...)"]
+    N026["merged = [_attach_epss(finding, epss_scores) for finding in merged]"]
+    N027["if nvd_file is not None or nvd_live"]
+    N028["nvd_map = fetch_nvd_metadata(...)"]
+    N029["merged = attach_nvd_to_findings(...)"]
+    N030["return sorted(merged, key=lambda f: (f.dependency.name, f.vuln_id))"]
     N001 -->|"start"| N002
     N002 -->|"true"| N003
     N002 -->|"false"| N004
-    N004 --> N005
-    N005 --> N006
+    N004 -->|"true"| N005
+    N004 -->|"false"| N006
     N006 --> N007
-    N007 --> N008
+    N007 -->|"true"| N008
     N008 --> N009
-    N009 --> N010
+    N007 -->|"false"| N010
+    N005 --> N011
     N010 --> N011
     N011 --> N012
-    N012 -->|"true"| N013
+    N012 --> N013
     N013 --> N014
-    N012 -->|"false"| N014
     N014 --> N015
-    N015 -->|"true"| N016
+    N015 --> N016
     N016 --> N017
-    N015 -->|"false"| N017
     N017 --> N018
     N018 -->|"true"| N019
     N019 --> N020
+    N018 -->|"false"| N020
     N020 --> N021
-    N018 -->|"false"| N021
     N021 -->|"true"| N022
     N022 --> N023
+    N021 -->|"false"| N023
     N023 --> N024
-    N021 -->|"false"| N024
+    N024 -->|"true"| N025
+    N025 --> N026
+    N026 --> N027
+    N024 -->|"false"| N027
+    N027 -->|"true"| N028
+    N028 --> N029
+    N029 --> N030
+    N027 -->|"false"| N030
+```
+
+### _ecosystem_base(...)
+
+```mermaid
+flowchart TD
+    N001["_ecosystem_base(...)"]
+    N002["return ecosystem.split('<str>', 1)[0]"]
+    N001 -->|"start"| N002
+```
+
+### _coord_field_malformed(...)
+
+```mermaid
+flowchart TD
+    N001["_coord_field_malformed(...)"]
+    N002["return value == '<str>' or bool(_COORD_FIELD_BAD_CHARS.search(value))"]
+    N001 -->|"start"| N002
+```
+
+### validate_osv_coordinates(...)
+
+```mermaid
+flowchart TD
+    N001["validate_osv_coordinates(...)"]
+    N002["malformed = []"]
+    N003["for dep in dependencies:
+    if _ecosystem_base(dep.ecosystem) not in _KNOWN_OSV_ECOSYSTEMS:
+        malformed.append((dep, f'<str>{dep.ecosystem!r}'))
+    elif _coord_field_malformed(dep.name):
+        malformed.append((dep, f'<str>{dep.name!r}'))
+    elif _coord_field_malformed(dep.version):
+        malformed.append((dep, f'<str>{dep.version!r}'))"]
+    N004["return malformed"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 --> N004
 ```
 
 ### query_osv_batch(...)
@@ -29110,6 +29160,28 @@ flowchart TD
     N017 --> N018
 ```
 
+### _cmd_verify(...)
+
+```mermaid
+flowchart TD
+    N001["_cmd_verify(...)"]
+    N002["repo_root = Path(...)"]
+    N003["dependencies = discover_dependencies(...)"]
+    N004["malformed = validate_osv_coordinates(...)"]
+    N005["if not malformed"]
+    N006["return 0"]
+    N007["for dep, reason in malformed:
+    print(f'<str>{dep.ecosystem}<str>{dep.name}<str>{dep.version}<str>{dep.source}<str>{reason}', file=sys.stderr)"]
+    N008["return 1"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 --> N004
+    N004 --> N005
+    N005 -->|"true"| N006
+    N005 -->|"false"| N007
+    N007 --> N008
+```
+
 ### _cmd_scan(...)
 
 ```mermaid
@@ -29815,12 +29887,15 @@ flowchart TD
     N038["add_argument(...)"]
     N039["add_argument(...)"]
     N040["set_defaults(...)"]
-    N041["args = parse_args(...)"]
-    N042["try"]
-    N043["return args.func(args)"]
-    N044["except (OSError, ValueError, json.JSONDecodeError)"]
-    N045["print(...)"]
-    N046["return 1"]
+    N041["p_verify = add_parser(...)"]
+    N042["add_argument(...)"]
+    N043["set_defaults(...)"]
+    N044["args = parse_args(...)"]
+    N045["try"]
+    N046["return args.func(args)"]
+    N047["except (OSError, ValueError, json.JSONDecodeError)"]
+    N048["print(...)"]
+    N049["return 1"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 --> N004
@@ -29862,10 +29937,13 @@ flowchart TD
     N039 --> N040
     N040 --> N041
     N041 --> N042
-    N042 -->|"try"| N043
-    N042 -->|"raises"| N044
+    N042 --> N043
+    N043 --> N044
     N044 --> N045
-    N045 --> N046
+    N045 -->|"try"| N046
+    N045 -->|"raises"| N047
+    N047 --> N048
+    N048 --> N049
 ```
 
 ## scripts/title_policy.py
