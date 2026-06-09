@@ -35,6 +35,7 @@ import attack_review_reminder
 import auto_retro
 import backup_archive
 import body_policy
+import bot_pr_automerge
 import branch_cleanup
 import ci_budget_issue
 import coverage_failure_issue
@@ -167,7 +168,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("coverage_failure_issue.py", "run"): "test_coverage_failure_issue_run_matches_workflow_env",
     ("devcontainer_pin_pr.py", "open"): "test_devcontainer_pin_pr_open_matches_workflow_args",
     ("devcontainer_pin_pr.py", "refresh"): "test_devcontainer_pin_pr_refresh_matches_workflow_args",
-    ("devcontainer_pin_pr.py", "merge"): "test_devcontainer_pin_pr_merge_matches_workflow_args",
+    ("bot_pr_automerge.py", "merge"): "test_bot_pr_automerge_merge_matches_workflow_args",
     ("flake_pin.py", "asset-url"): "test_flake_pin_workflow_subcommands_match_ci_usage",
     ("flake_pin.py", "bump"): "test_flake_pin_workflow_subcommands_match_ci_usage",
     ("flake_pin_latest.py", "check"): "test_flake_pin_latest_check_matches_workflow_args",
@@ -2088,21 +2089,21 @@ def test_devcontainer_pin_pr_refresh_matches_workflow_args(
     assert rc == 0
 
 
-def test_devcontainer_pin_automerge_workflow_contract() -> None:
-    """The pin auto-merge keeper triggers on workflow_run + schedule, prefix-gated, uses an App token.
+def test_tvna_bot_automerge_workflow_contract() -> None:
+    """The unified tvna-bot keeper triggers on workflow_run + schedule, uses an App token.
 
-    The repository-level "Allow auto-merge" toggle is intentionally OFF, so the
-    pin PR is completed by this dedicated keeper instead of native auto-merge.
-    The earlier ``check_suite: completed`` trigger never fired -- GitHub
-    suppresses ``check_suite`` events for Actions-created suites to prevent
-    recursion -- so the keeper is driven by ``workflow_run`` on the workflows
-    that own the required status checks, plus a ``schedule`` safety net. Pin the
-    wiring that makes that safe and scoped: those triggers, an ``if`` guard that
-    restricts the job to the pin branch prefix, the GitHub App token (so the
-    merge's push to main still triggers downstream workflows), and the ``merge``
-    subcommand. Refs #1352, #1363, #1401.
+    The repository-level "Allow auto-merge" toggle is intentionally OFF, so every
+    PR authored by the App bot (``tvna-bot[bot]``) is completed by this single
+    keeper instead of native auto-merge. The earlier per-flow pin keeper is
+    consolidated here. ``check_suite: completed`` never fires for Actions-created
+    suites (recursion suppression), so the keeper is driven by ``workflow_run``
+    on the workflows that own the required status checks, plus a ``schedule``
+    safety net. The merge subcommand filters by author and clean state, so unlike
+    the old pin keeper the job is not branch-prefix-gated -- it runs on any
+    successful run and no-ops when nothing is eligible. Refs #1539, #1352, #1363,
+    #1401.
     """
-    workflow = yaml.safe_load((_WORKFLOWS_DIR / "devcontainer-pin-automerge.yml").read_text(encoding="utf-8"))
+    workflow = yaml.safe_load((_WORKFLOWS_DIR / "tvna-bot-automerge.yml").read_text(encoding="utf-8"))
     # ``on`` may parse to the truthy bool key True under YAML 1.1; tolerate both.
     triggers = workflow.get("on", workflow.get(True))
     # check_suite is suppressed for Actions-created suites, so it must be gone.
@@ -2116,8 +2117,8 @@ def test_devcontainer_pin_automerge_workflow_contract() -> None:
 
     job = workflow["jobs"]["merge"]
     assert job["permissions"] == {"contents": "write", "pull-requests": "write"}
-    # Prefix guard keeps the job from running on every workflow_run completion.
-    assert "devcontainer/image-pins-" in job["if"]
+    # The job is no longer branch-prefix-gated; it gates on a successful run and
+    # the merge subcommand filters to tvna-bot[bot] authors.
     assert "github.event.workflow_run.conclusion == 'success'" in job["if"]
     assert "workflow_dispatch" in job["if"]
     assert "schedule" in job["if"]
@@ -2129,26 +2130,25 @@ def test_devcontainer_pin_automerge_workflow_contract() -> None:
         "private-key": "${{ secrets.DEVCONTAINER_PIN_APP_PRIVATE_KEY }}",
     }
 
-    # The merge step needs only the App token (it merges; it does not author a
-    # commit, so no PIN_BOT_APP_SLUG). Refs #1401.
-    merge_step = next(s for s in job["steps"] if "devcontainer_pin_pr.py merge" in str(s.get("run", "")))
+    # The merge step needs only the App token (it merges; it does not author a commit).
+    merge_step = next(s for s in job["steps"] if "bot_pr_automerge.py merge" in str(s.get("run", "")))
     assert merge_step["env"] == {
         "GH_TOKEN": "${{ steps.app-token.outputs.token }}",
         "REPO": "${{ github.repository }}",
     }
 
 
-def test_devcontainer_pin_pr_merge_matches_workflow_args(monkeypatch: pytest.MonkeyPatch) -> None:
-    """merge subcommand accepts the args used by devcontainer-pin-automerge.yml.
+def test_bot_pr_automerge_merge_matches_workflow_args(monkeypatch: pytest.MonkeyPatch) -> None:
+    """merge subcommand accepts the args used by tvna-bot-automerge.yml.
 
-    The merge decision flow is exercised by tests/test_devcontainer_pin_pr.py;
-    here we pin the workflow argv shape. Refs #1352.
+    The merge decision flow is exercised by tests/test_bot_pr_automerge.py; here
+    we pin the workflow argv shape. Refs #1539.
     """
     monkeypatch.setenv("GH_TOKEN", "tok")
     monkeypatch.setenv("REPO", REPO)
-    # No open pin PR -> the command is a no-op; we only assert the argv parses.
-    monkeypatch.setattr(devcontainer_pin_pr, "_list_open_prs_by_prefix", lambda **kw: [])
-    rc = devcontainer_pin_pr.main(["merge"])
+    # No open bot PR -> the command is a no-op; we only assert the argv parses.
+    monkeypatch.setattr(bot_pr_automerge, "_list_open_prs_by_author", lambda **kw: [])
+    rc = bot_pr_automerge.main(["merge"])
     assert rc == 0
 
 
