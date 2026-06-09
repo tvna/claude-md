@@ -77,6 +77,14 @@ class TestAppendBranch:
         subject.append_branch(bad, "claude/a")  # must not raise
         assert subject.read_authorized_set(bad) == set()
 
+    def test_seed_without_trailing_newline_stays_separated(self, tmp_path: Path) -> None:
+        # A SessionStart seed may lack a trailing newline. Appending must
+        # still produce two distinct members, not one concatenated entry.
+        f = tmp_path / "lock"
+        f.write_text("claude/a")  # no trailing newline
+        subject.append_branch(f, "claude/b")
+        assert subject.read_authorized_set(f) == {"claude/a", "claude/b"}
+
 
 # ---------------------------------------------------------------------------
 # is_authorized
