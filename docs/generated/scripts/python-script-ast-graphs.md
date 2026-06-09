@@ -95,7 +95,7 @@ flowchart TD
     failed = [r for r in runs if str(r.get('<str>') or '<str>').lower() in _FAIL_CONCLUSIONS]
     print(f'<str>{poll + 1}<str>{completed}<str>{total}<str>{len(failed)}<str>', flush=True)
     for r in failed:
-        print(f'<str>{r.get('<str>')}<str>{r.get('<str>')}<str>', flush=True)
+        print(f\"<str>{r.get('<str>')}<str>{r.get('<str>')}<str>\", flush=True)
     if total > 0 and completed == total:
         if failed:
             print(f'<str>{len(failed)}<str>', flush=True)
@@ -599,14 +599,25 @@ flowchart TD
     N002["branch = strip(...)"]
     N003["if not branch or branch in read_authorized_set(path)"]
     N004["return"]
-    N005["with contextlib.suppress(OSError), path.open('<str>', encoding='<str>') as handle:
-    handle.write(branch + '<str>')"]
-    N006["end"]
+    N005["try"]
+    N006["existing = read_text(...)"]
+    N007["except OSError"]
+    N008["existing = '<str>'"]
+    N009["separator = '<str>' if not existing or existing.endswith('<str>') else '<str>'"]
+    N010["with contextlib.suppress(OSError), path.open('<str>', encoding='<str>') as handle:
+    handle.write(separator + branch + '<str>')"]
+    N011["end"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 -->|"true"| N004
     N003 -->|"false"| N005
-    N005 --> N006
+    N005 -->|"try"| N006
+    N005 -->|"raises"| N007
+    N007 --> N008
+    N006 --> N009
+    N008 --> N009
+    N009 --> N010
+    N010 --> N011
 ```
 
 ### is_authorized(...)
@@ -2328,7 +2339,7 @@ flowchart TD
     N016["proposed_work_tail = '<str>'"]
     N017["verification_block = '<str>'"]
     N018["acceptance_block = '<str>'"]
-    N019["return f'<str>{pr.number}<str>{pr.title}<str>{pr.number}<str>{pr.title}<str>{pr.html_url}<str>{pr.merged_at}<str>{pr.merged_by_login or '<str>'}<str>{pr.user_login or '<str>'}<str>{layer_str}<str>{render_signals_fired_line(signals or {})}<str>{commits_block}<str>{fallback_note}<str>{repair_table}<str>{proposed_work_tail}<str>{verification_block}<str>{acceptance_block}<str>{pr.number}<str>{triage_date}<str>'"]
+    N019["return f\"<str>{pr.number}<str>{pr.title}<str>{pr.number}<str>{pr.title}<str>{pr.html_url}<str>{pr.merged_at}<str>{pr.merged_by_login or '<str>'}<str>{pr.user_login or '<str>'}<str>{layer_str}<str>{render_signals_fired_line(signals or {})}<str>{commits_block}<str>{fallback_note}<str>{repair_table}<str>{proposed_work_tail}<str>{verification_block}<str>{acceptance_block}<str>{pr.number}<str>{triage_date}<str>\""]
     N001 -->|"start"| N002
     N002 --> N003
     N003 --> N004
@@ -6618,7 +6629,7 @@ flowchart TD
     N001["render_breach_table(...)"]
     N002["rows = ['<str>', '<str>']"]
     N003["for entry in breaches:
-    rows.append(f'<str>{entry['<str>']}<str>{float(entry['<str>']):<str>}<str>')"]
+    rows.append(f\"<str>{entry['<str>']}<str>{float(entry['<str>']):<str>}<str>\")"]
     N004["return '<str>'.join(rows)"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -7317,7 +7328,7 @@ flowchart TD
 flowchart TD
     N001["render_comparison(...)"]
     N002["baseline = summaries[0]"]
-    N003["lines = ['<str>', '<str>', f'<str>{'<str>':<str>}<str>{'<str>':<str>}<str>{'<str>':<str>}<str>{'<str>':<str>}<str>{'<str>':<str>}<str>{'<str>':<str>}']"]
+    N003["lines = ['<str>', '<str>', f\"<str>{'<str>':<str>}<str>{'<str>':<str>}<str>{'<str>':<str>}<str>{'<str>':<str>}<str>{'<str>':<str>}<str>{'<str>':<str>}\"]"]
     N004["for s in summaries:
     if s is baseline:
         d_cost = d_rep = '<str>'
@@ -7400,7 +7411,7 @@ flowchart TD
     N001["_require_env(...)"]
     N002["missing = [name for name in names if not env.get(name)]"]
     N003["if missing"]
-    N004["raise RuntimeError(f'<str>{'<str>'.join(missing)}')"]
+    N004["raise RuntimeError(f\"<str>{'<str>'.join(missing)}\")"]
     N005["end"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -7663,7 +7674,7 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["render_markdown(...)"]
-    N002["lines = ['<str>', '<str>', f'<str>{str(result.enabled).lower()}<str>', f'<str>{str(result.eligible).lower()}<str>', f'<str>{str(result.should_enable).lower()}<str>', f'<str>{result.ecosystem or '<str>'}<str>', f'<str>{result.update_type or '<str>'}<str>', '<str>']"]
+    N002["lines = ['<str>', '<str>', f'<str>{str(result.enabled).lower()}<str>', f'<str>{str(result.eligible).lower()}<str>', f'<str>{str(result.should_enable).lower()}<str>', f\"<str>{result.ecosystem or '<str>'}<str>\", f\"<str>{result.update_type or '<str>'}<str>\", '<str>']"]
     N003["if result.reasons"]
     N004["append(...)"]
     N005["extend(...)"]
@@ -7896,7 +7907,7 @@ flowchart TD
     N014["if not 200 <= gql_code < 300"]
     N015["raise RuntimeError(f'<str>{gql_code}')"]
     N016["if 'errors' in response"]
-    N017["raise RuntimeError(f'<str>{response['<str>']}')"]
+    N017["raise RuntimeError(f\"<str>{response['<str>']}\")"]
     N018["end"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -7941,7 +7952,7 @@ flowchart TD
     N018["if not 200 <= gql_code < 300"]
     N019["raise RuntimeError(f'<str>{gql_code}')"]
     N020["if 'errors' in response"]
-    N021["raise RuntimeError(f'<str>{response['<str>']}')"]
+    N021["raise RuntimeError(f\"<str>{response['<str>']}\")"]
     N022["return True"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -9298,7 +9309,7 @@ flowchart TD
     N003["url = f'<str>{repo}<str>'"]
     N004["(code, body) = apply_call(...)"]
     N005["if not 200 <= code < 300"]
-    N006["raise LatestPinError(f'<str>{code or '<str>'}<str>{repo}<str>')"]
+    N006["raise LatestPinError(f\"<str>{code or '<str>'}<str>{repo}<str>\")"]
     N007["try"]
     N008["payload = loads(...)"]
     N009["except json.JSONDecodeError"]
@@ -10384,7 +10395,7 @@ flowchart TD
     N002["parts = []"]
     N003["for axis in missing:
     valid = sorted(axes.get(axis) or frozenset())
-    parts.append(f'<str>{axis}<str>{'<str>'.join(valid)}<str>')"]
+    parts.append(f\"<str>{axis}<str>{'<str>'.join(valid)}<str>\")"]
     N004["needed = join(...)"]
     N005["return f'<str>{_TARGET_TOOL}<str>{needed}<str>'"]
     N001 -->|"start"| N002
@@ -10625,7 +10636,7 @@ flowchart TD
     N004["if tool_name in HOOK_COVERED_TOOLS"]
     N005["return None"]
     N006["short = tool_name[len(_MCP_GITHUB_PREFIX):]"]
-    N007["return {'<str>': '<str>', '<str>': f'<str>{tool_name}<str>{short.replace('<str>', '<str>')}<str>'}"]
+    N007["return {'<str>': '<str>', '<str>': f\"<str>{tool_name}<str>{short.replace('<str>', '<str>')}<str>\"}"]
     N001 -->|"start"| N002
     N002 -->|"true"| N003
     N002 -->|"false"| N004
@@ -10982,18 +10993,18 @@ flowchart TD
     N003["if transport in ('http', 'sse')"]
     N004["url = get(...)"]
     N005["if not isinstance(url, str) or not url"]
-    N006["raise ValueError(f'<str>{server.get('<str>')!r}<str>{transport}<str>')"]
+    N006["raise ValueError(f\"<str>{server.get('<str>')!r}<str>{transport}<str>\")"]
     N007["return {'<str>': transport, '<str>': url}"]
     N008["if transport == 'stdio'"]
     N009["command = get(...)"]
     N010["if not isinstance(command, str) or not command"]
-    N011["raise ValueError(f'<str>{server.get('<str>')!r}<str>')"]
+    N011["raise ValueError(f\"<str>{server.get('<str>')!r}<str>\")"]
     N012["entry = {'<str>': '<str>', '<str>': command}"]
     N013["args = get(...)"]
     N014["if args is not None"]
     N015["entry['<str>'] = args"]
     N016["return entry"]
-    N017["raise ValueError(f'<str>{server.get('<str>')!r}<str>{transport!r}')"]
+    N017["raise ValueError(f\"<str>{server.get('<str>')!r}<str>{transport!r}\")"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 -->|"true"| N004
@@ -11527,7 +11538,7 @@ flowchart TD
     N006["if not args.output and (not args.field)"]
     N007["print(...)"]
     N008["return 1"]
-    N009["url = f'{_API_ROOT}<str>{args.path.lstrip('<str>')}'"]
+    N009["url = f\"{_API_ROOT}<str>{args.path.lstrip('<str>')}\""]
     N010["try"]
     N011["body_str = _get_single(...)"]
     N012["except RuntimeError"]
@@ -11652,7 +11663,7 @@ flowchart TD
     N003["if not token"]
     N004["print(...)"]
     N005["return 1"]
-    N006["url = f'{_API_ROOT}<str>{args.path.lstrip('<str>')}'"]
+    N006["url = f\"{_API_ROOT}<str>{args.path.lstrip('<str>')}\""]
     N007["try"]
     N008["data = _paginate_get(...)"]
     N009["except RuntimeError"]
@@ -11825,13 +11836,13 @@ flowchart TD
     N004["return f'<str>{issue_ref}<str>'"]
     N005["if len(prs) == 1"]
     N006["pr = prs[0]"]
-    N007["url = pr.get('<str>') or f'{owner}<str>{repo}<str>{pr.get('<str>')}'"]
+    N007["url = pr.get('<str>') or f\"{owner}<str>{repo}<str>{pr.get('<str>')}\""]
     N008["title = pr.get('<str>') or '<str>'"]
     N009["closed_at = pr.get('<str>') or '<str>'"]
     N010["return f'<str>{issue_ref}<str>{title}<str>{url}<str>{closed_at}<str>'"]
     N011["lines = [f'<str>{len(prs)}<str>{issue_ref}<str>']"]
     N012["for pr in prs:
-    url = pr.get('<str>') or f'<str>{pr.get('<str>')}'
+    url = pr.get('<str>') or f\"<str>{pr.get('<str>')}\"
     title = pr.get('<str>') or '<str>'
     lines.append(f'<str>{url}<str>{title}')"]
     N013["append(...)"]
@@ -12173,7 +12184,7 @@ flowchart TD
     N008["desc_changed = (live_entry.get('<str>') or '<str>') != description"]
     N009["if not color_changed and (not desc_changed)"]
     N010["return {'<str>': '<str>', '<str>': '<str>', '<str>': '<str>', '<str>': None, '<str>': False, '<str>': False}"]
-    N011["return {'<str>': '<str>', '<str>': '<str>', '<str>': f'<str>{urllib.parse.quote(name, safe='<str>')}', '<str>': {'<str>': color, '<str>': description}, '<str>': color_changed, '<str>': desc_changed}"]
+    N011["return {'<str>': '<str>', '<str>': '<str>', '<str>': f\"<str>{urllib.parse.quote(name, safe='<str>')}\", '<str>': {'<str>': color, '<str>': description}, '<str>': color_changed, '<str>': desc_changed}"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 --> N004
@@ -12279,11 +12290,11 @@ flowchart TD
     if mode == '<str>' or dry_run:
         rows.append(render_action_row(name, f'<str>{action}<str>', color_changed, desc_changed, '<str>'))
         continue
-    code, body = apply_call(method=str(decision['<str>']), url=f'{API_ROOT}<str>{repo}{decision['<str>']}', payload=decision['<str>'], token=token)
+    code, body = apply_call(method=str(decision['<str>']), url=f\"{API_ROOT}<str>{repo}{decision['<str>']}\", payload=decision['<str>'], token=token)
     if not 200 <= code < 300:
         _append_rows(summary_file, rows)
-        _append_error(summary_file, f'<str>{name}<str>{decision['<str>']}<str>{_format_code(code)}<str>', body)
-        print(f'<str>{decision['<str>']}<str>{name}<str>{_format_code(code)}<str>')
+        _append_error(summary_file, f\"<str>{name}<str>{decision['<str>']}<str>{_format_code(code)}<str>\", body)
+        print(f\"<str>{decision['<str>']}<str>{name}<str>{_format_code(code)}<str>\")
         return 1
     rows.append(render_action_row(name, f'{action}<str>', color_changed, desc_changed, f'<str>{code}'))"]
     N009["for live_entry in live:
@@ -12297,7 +12308,7 @@ flowchart TD
     if prune_action == '<str>':
         rows.append(render_action_row(live_name, '<str>', '<str>', '<str>', '<str>'))
         continue
-    code, body = apply_call(method='<str>', url=f'{API_ROOT}<str>{repo}<str>{urllib.parse.quote(live_name, safe='<str>')}', payload=None, token=token)
+    code, body = apply_call(method='<str>', url=f\"{API_ROOT}<str>{repo}<str>{urllib.parse.quote(live_name, safe='<str>')}\", payload=None, token=token)
     if not 200 <= code < 300:
         _append_rows(summary_file, rows)
         _append_error(summary_file, f'<str>{live_name}<str>{_format_code(code)}<str>', body)
@@ -12707,27 +12718,27 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["format_summary(...)"]
-    N002["lines = ['<str>', '<str>', f'<str>{report['<str>']}<str>', f'<str>{_human_size(report['<str>'])}<str>{report['<str>']}<str>']"]
+    N002["lines = ['<str>', '<str>', f\"<str>{report['<str>']}<str>\", f\"<str>{_human_size(report['<str>'])}<str>{report['<str>']}<str>\"]"]
     N003["if 'pull_seconds' in report"]
     N004["flag = '<str>' if report['<str>'] == 0 else '<str>'"]
     N005["append(...)"]
-    N006["lines += [f'<str>{report['<str>']:<str>}<str>', '<str>', '<str>', '<str>']"]
+    N006["lines += [f\"<str>{report['<str>']:<str>}<str>\", '<str>', '<str>', '<str>']"]
     N007["for entry in report['<str>']:
     command = entry['<str>']
     if len(command) > 70:
         command = command[:67] + '<str>'
-    lines.append(f'<str>{entry['<str>']}<str>{entry['<str>']:<str>}<str>{entry['<str>']}<str>{command}<str>')"]
+    lines.append(f\"<str>{entry['<str>']}<str>{entry['<str>']:<str>}<str>{entry['<str>']}<str>{command}<str>\")"]
     N008["failures = [entry for entry in report['<str>'] if entry.get('<str>')]"]
     N009["if failures"]
     N010["lines += ['<str>', '<str>', '<str>']"]
     N011["for entry in failures:
-    lines += [f'<str>{entry['<str>']}<str>{entry['<str>']}<str>{entry['<str>']}<str>', '<str>', '<str>', entry['<str>'], '<str>', '<str>']"]
+    lines += [f\"<str>{entry['<str>']}<str>{entry['<str>']}<str>{entry['<str>']}<str>\", '<str>', '<str>', entry['<str>'], '<str>', '<str>']"]
     N012["composition = get(...)"]
     N013["if composition"]
-    N014["lines += ['<str>', '<str>', '<str>', f'<str>{_human_size(composition['<str>'])}<str>{composition['<str>']}<str>', '<str>', '<str>', '<str>']"]
-    N015["lines += [f'<str>{entry['<str>']}<str>{_human_size(entry['<str>'])}<str>' for entry in composition['<str>']]"]
+    N014["lines += ['<str>', '<str>', '<str>', f\"<str>{_human_size(composition['<str>'])}<str>{composition['<str>']}<str>\", '<str>', '<str>', '<str>']"]
+    N015["lines += [f\"<str>{entry['<str>']}<str>{_human_size(entry['<str>'])}<str>\" for entry in composition['<str>']]"]
     N016["lines += ['<str>', '<str>', '<str>']"]
-    N017["lines += [f'<str>{entry['<str>']}<str>{_human_size(entry['<str>'])}<str>' for entry in composition['<str>']]"]
+    N017["lines += [f\"<str>{entry['<str>']}<str>{_human_size(entry['<str>'])}<str>\" for entry in composition['<str>']]"]
     N018["return '<str>'.join(lines) + '<str>'"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -13094,7 +13105,7 @@ flowchart TD
     N001["request_installation_token(...)"]
     N002["if not api_url.startswith('https://')"]
     N003["raise MintError('<str>')"]
-    N004["url = f'{api_url.rstrip('<str>')}<str>{installation_id}<str>'"]
+    N004["url = f\"{api_url.rstrip('<str>')}<str>{installation_id}<str>\""]
     N005["request = Request(...)"]
     N006["try"]
     N007["with urllib.request.urlopen(request, timeout=30) as response:
@@ -14446,7 +14457,7 @@ flowchart TD
     N022["if dropped"]
     N023["tokens = join(...)"]
     N024["warning = f'<str>{tokens}<str>'"]
-    N025["return _build_context(f'<str>{pr_label}<str>{owner or '<str>'}<str>{repo or '<str>'}<str>{pr_number}<str>{warning}<str>{body_repr}<str>')"]
+    N025["return _build_context(f\"<str>{pr_label}<str>{owner or '<str>'}<str>{repo or '<str>'}<str>{pr_number}<str>{warning}<str>{body_repr}<str>\")"]
     N001 -->|"start"| N002
     N002 -->|"true"| N003
     N002 -->|"false"| N004
@@ -15196,36 +15207,43 @@ flowchart TD
     N002["message = {'<str>': headline}"]
     N003["if body"]
     N004["message['<str>'] = body"]
-    N005["variables = {'<str>': {'<str>': {'<str>': repo, '<str>': branch}, '<str>': message, '<str>': expected_head_oid, '<str>': {'<str>': additions}}}"]
-    N006["(code, response) = graphql_call(...)"]
-    N007["if not 200 <= code < 300"]
-    N008["raise RuntimeError(f'<str>{code}')"]
-    N009["if 'errors' in response"]
-    N010["raise RuntimeError(f'<str>{response['<str>']}')"]
-    N011["try"]
-    N012["oid = response['<str>']['<str>']['<str>']['<str>']"]
-    N013["except (KeyError, TypeError)"]
-    N014["raise RuntimeError(f'<str>{str(response)[:200]}')"]
-    N015["if not isinstance(oid, str) or not oid"]
-    N016["raise RuntimeError(f'<str>{str(response)[:200]}')"]
-    N017["return oid"]
+    N005["file_changes = {'<str>': additions}"]
+    N006["if deletions"]
+    N007["file_changes['<str>'] = deletions"]
+    N008["variables = {'<str>': {'<str>': {'<str>': repo, '<str>': branch}, '<str>': message, '<str>': expected_head_oid, '<str>': file_changes}}"]
+    N009["(code, response) = graphql_call(...)"]
+    N010["if not 200 <= code < 300"]
+    N011["raise RuntimeError(f'<str>{code}')"]
+    N012["if 'errors' in response"]
+    N013["raise RuntimeError(f\"<str>{response['<str>']}\")"]
+    N014["try"]
+    N015["oid = response['<str>']['<str>']['<str>']['<str>']"]
+    N016["except (KeyError, TypeError)"]
+    N017["raise RuntimeError(f'<str>{str(response)[:200]}')"]
+    N018["if not isinstance(oid, str) or not oid"]
+    N019["raise RuntimeError(f'<str>{str(response)[:200]}')"]
+    N020["return oid"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 -->|"true"| N004
     N004 --> N005
     N003 -->|"false"| N005
     N005 --> N006
-    N006 --> N007
-    N007 -->|"true"| N008
-    N007 -->|"false"| N009
-    N009 -->|"true"| N010
-    N009 -->|"false"| N011
-    N011 -->|"try"| N012
-    N011 -->|"raises"| N013
-    N013 --> N014
-    N012 --> N015
-    N015 -->|"true"| N016
-    N015 -->|"false"| N017
+    N006 -->|"true"| N007
+    N007 --> N008
+    N006 -->|"false"| N008
+    N008 --> N009
+    N009 --> N010
+    N010 -->|"true"| N011
+    N010 -->|"false"| N012
+    N012 -->|"true"| N013
+    N012 -->|"false"| N014
+    N014 -->|"try"| N015
+    N014 -->|"raises"| N016
+    N016 --> N017
+    N015 --> N018
+    N018 -->|"true"| N019
+    N018 -->|"false"| N020
 ```
 
 ### _get_branch_head_oid(...)
@@ -15304,47 +15322,75 @@ flowchart TD
     N016 -->|"false"| N018
 ```
 
+### upsert_files_pr(...)
+
+```mermaid
+flowchart TD
+    N001["upsert_files_pr(...)"]
+    N002["if not additions and (not deletions)"]
+    N003["return '<str>'"]
+    N004["if not _ref_drifts(repo=repo, ref=base, additions=additions, deletions=deletions, token=token, apply_call=apply_call)"]
+    N005["return '<str>'"]
+    N006["api_additions = [{'<str>': path, '<str>': base64.b64encode(content).decode('<str>')} for path, content in additions]"]
+    N007["api_deletions = [{'<str>': path} for path in deletions]"]
+    N008["head_oid = _get_branch_head_oid(...)"]
+    N009["if head_oid is None"]
+    N010["base_sha = _get_ref_sha(...)"]
+    N011["_create_branch_ref(...)"]
+    N012["_create_commit_on_branch(...)"]
+    N013["verb = '<str>'"]
+    N014["if not _ref_drifts(repo=repo, ref=branch, additions=additions, deletions=deletions, token=token, apply_call=apply_call)"]
+    N015["verb = '<str>'"]
+    N016["_create_commit_on_branch(...)"]
+    N017["verb = '<str>'"]
+    N018["(_, number) = _upsert_pr(...)"]
+    N019["return f'{verb}<str>{number}'"]
+    N001 -->|"start"| N002
+    N002 -->|"true"| N003
+    N002 -->|"false"| N004
+    N004 -->|"true"| N005
+    N004 -->|"false"| N006
+    N006 --> N007
+    N007 --> N008
+    N008 --> N009
+    N009 -->|"true"| N010
+    N010 --> N011
+    N011 --> N012
+    N012 --> N013
+    N009 -->|"false"| N014
+    N014 -->|"true"| N015
+    N014 -->|"false"| N016
+    N016 --> N017
+    N013 --> N018
+    N015 --> N018
+    N017 --> N018
+    N018 --> N019
+```
+
+### _ref_drifts(...)
+
+```mermaid
+flowchart TD
+    N001["_ref_drifts(...)"]
+    N002["for path, content in additions:
+    if _get_file_bytes(repo=repo, path=path, ref=ref, token=token, apply_call=apply_call) != content:
+        return True"]
+    N003["for path in deletions:
+    if _get_file_bytes(repo=repo, path=path, ref=ref, token=token, apply_call=apply_call) is not None:
+        return True"]
+    N004["return False"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 --> N004
+```
+
 ### upsert_single_file_pr(...)
 
 ```mermaid
 flowchart TD
     N001["upsert_single_file_pr(...)"]
-    N002["base_bytes = _get_file_bytes(...)"]
-    N003["if base_bytes is not None and base_bytes == content"]
-    N004["return '<str>'"]
-    N005["additions = [{'<str>': path, '<str>': base64.b64encode(content).decode('<str>')}]"]
-    N006["head_oid = _get_branch_head_oid(...)"]
-    N007["if head_oid is None"]
-    N008["base_sha = _get_ref_sha(...)"]
-    N009["_create_branch_ref(...)"]
-    N010["_create_commit_on_branch(...)"]
-    N011["verb = '<str>'"]
-    N012["branch_bytes = _get_file_bytes(...)"]
-    N013["if branch_bytes == content"]
-    N014["verb = '<str>'"]
-    N015["_create_commit_on_branch(...)"]
-    N016["verb = '<str>'"]
-    N017["(_, number) = _upsert_pr(...)"]
-    N018["return f'{verb}<str>{number}'"]
+    N002["return upsert_files_pr(repo=repo, additions=[(path, content)], deletions=[], base=base, branch=branch, title=title, body=body, commit_subject=commit_subject, commit_body=commit_body, token=token, apply_call=apply_call, graphql_call=graphql_call)"]
     N001 -->|"start"| N002
-    N002 --> N003
-    N003 -->|"true"| N004
-    N003 -->|"false"| N005
-    N005 --> N006
-    N006 --> N007
-    N007 -->|"true"| N008
-    N008 --> N009
-    N009 --> N010
-    N010 --> N011
-    N007 -->|"false"| N012
-    N012 --> N013
-    N013 -->|"true"| N014
-    N013 -->|"false"| N015
-    N015 --> N016
-    N011 --> N017
-    N014 --> N017
-    N016 --> N017
-    N017 --> N018
 ```
 
 ### _merge_pr(...)
@@ -15569,6 +15615,105 @@ flowchart TD
     N015 -->|"false"| N017
 ```
 
+### _collect_worktree_changes(...)
+
+```mermaid
+flowchart TD
+    N001["_collect_worktree_changes(...)"]
+    N002["additions = {}"]
+    N003["deletions = set(...)"]
+    N004["for path in adds:
+    p = Path(path)
+    if not p.is_file():
+        raise RuntimeError(f'<str>{path}')
+    additions[path] = p.read_bytes()"]
+    N005["for prefix in diff_prefixes:
+    result = run_git(['<str>', '<str>', '<str>', prefix])
+    if result.returncode != 0:
+        raise RuntimeError(f'<str>{prefix!r}<str>{result.stderr.strip()}')
+    for line in result.stdout.splitlines():
+        if not line.strip():
+            continue
+        path = line[3:].split('<str>', 1)[-1].strip()
+        if path in additions:
+            continue
+        candidate = Path(path)
+        if candidate.is_file():
+            additions[path] = candidate.read_bytes()
+            deletions.discard(path)
+        else:
+            deletions.add(path)"]
+    N006["return (list(additions.items()), sorted(deletions))"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 --> N004
+    N004 --> N005
+    N005 --> N006
+```
+
+### _cmd_upsert_files(...)
+
+```mermaid
+flowchart TD
+    N001["_cmd_upsert_files(...)"]
+    N002["token = get(...)"]
+    N003["if not token"]
+    N004["print(...)"]
+    N005["return 1"]
+    N006["repo = get(...)"]
+    N007["if not repo"]
+    N008["print(...)"]
+    N009["return 1"]
+    N010["body_path = Path(...)"]
+    N011["if not body_path.exists()"]
+    N012["print(...)"]
+    N013["return 1"]
+    N014["body = read_text(...)"]
+    N015["try"]
+    N016["(additions, deletions) = _collect_worktree_changes(...)"]
+    N017["except RuntimeError"]
+    N018["print(...)"]
+    N019["return 1"]
+    N020["if not additions and (not deletions)"]
+    N021["print(...)"]
+    N022["return 0"]
+    N023["try"]
+    N024["result = upsert_files_pr(...)"]
+    N025["except RuntimeError"]
+    N026["print(...)"]
+    N027["return 1"]
+    N028["print(...)"]
+    N029["return 0"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 -->|"true"| N004
+    N004 --> N005
+    N003 -->|"false"| N006
+    N006 --> N007
+    N007 -->|"true"| N008
+    N008 --> N009
+    N007 -->|"false"| N010
+    N010 --> N011
+    N011 -->|"true"| N012
+    N012 --> N013
+    N011 -->|"false"| N014
+    N014 --> N015
+    N015 -->|"try"| N016
+    N015 -->|"raises"| N017
+    N017 --> N018
+    N018 --> N019
+    N016 --> N020
+    N020 -->|"true"| N021
+    N021 --> N022
+    N020 -->|"false"| N023
+    N023 -->|"try"| N024
+    N023 -->|"raises"| N025
+    N025 --> N026
+    N026 --> N027
+    N024 --> N028
+    N028 --> N029
+```
+
 ### main(...)
 
 ```mermaid
@@ -15583,12 +15728,23 @@ flowchart TD
     N008["add_argument(...)"]
     N009["find_p = add_parser(...)"]
     N010["add_argument(...)"]
-    N011["args = parse_args(...)"]
-    N012["if args.cmd == 'upsert'"]
-    N013["return _cmd_upsert(args)"]
-    N014["if args.cmd == 'find'"]
-    N015["return _cmd_find(args)"]
-    N016["return 0"]
+    N011["files_p = add_parser(...)"]
+    N012["add_argument(...)"]
+    N013["add_argument(...)"]
+    N014["add_argument(...)"]
+    N015["add_argument(...)"]
+    N016["add_argument(...)"]
+    N017["add_argument(...)"]
+    N018["add_argument(...)"]
+    N019["add_argument(...)"]
+    N020["args = parse_args(...)"]
+    N021["if args.cmd == 'upsert'"]
+    N022["return _cmd_upsert(args)"]
+    N023["if args.cmd == 'find'"]
+    N024["return _cmd_find(args)"]
+    N025["if args.cmd == 'upsert-files'"]
+    N026["return _cmd_upsert_files(args)"]
+    N027["return 0"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 --> N004
@@ -15600,10 +15756,21 @@ flowchart TD
     N009 --> N010
     N010 --> N011
     N011 --> N012
-    N012 -->|"true"| N013
-    N012 -->|"false"| N014
-    N014 -->|"true"| N015
-    N014 -->|"false"| N016
+    N012 --> N013
+    N013 --> N014
+    N014 --> N015
+    N015 --> N016
+    N016 --> N017
+    N017 --> N018
+    N018 --> N019
+    N019 --> N020
+    N020 --> N021
+    N021 -->|"true"| N022
+    N021 -->|"false"| N023
+    N023 -->|"true"| N024
+    N023 -->|"false"| N025
+    N025 -->|"true"| N026
+    N025 -->|"false"| N027
 ```
 
 ## scripts/preflight_all.py
@@ -15795,7 +15962,7 @@ flowchart TD
     N001["emit_summary(...)"]
     N002["width = max(...)"]
     N003["for result in results:
-    line = f'{result.status:<str>}<str>{result.name:<str>{width}<str>}<str>{result.duration_s:<str>}<str>'
+    line = f'{result.status:<str>}<str>{result.name:<str>{width}}<str>{result.duration_s:<str>}<str>'
     if result.detail:
         line = f'{line}<str>{result.detail}'
     print(line, file=stream)"]
@@ -17798,7 +17965,7 @@ flowchart TD
 flowchart TD
     N001["render_report(...)"]
     N002["metrics = decision.metrics"]
-    N003["lines = [f'<str>{decision.kind}', f'<str>{metrics.candidate_count}', f'<str>{metrics.replacement_count}', f'<str>{metrics.closed_superseded_count}', '<str>' + ('<str>'.join((f'<str>{n}' for n in metrics.merged_numbers)) if metrics.merged_numbers else '<str>'), f'<str>{metrics.first_pr_created_at or '<str>'}', f'<str>{(metrics.elapsed_seconds if metrics.elapsed_seconds is not None else '<str>')}']"]
+    N003["lines = [f'<str>{decision.kind}', f'<str>{metrics.candidate_count}', f'<str>{metrics.replacement_count}', f'<str>{metrics.closed_superseded_count}', '<str>' + ('<str>'.join((f'<str>{n}' for n in metrics.merged_numbers)) if metrics.merged_numbers else '<str>'), f\"<str>{metrics.first_pr_created_at or '<str>'}\", f\"<str>{(metrics.elapsed_seconds if metrics.elapsed_seconds is not None else '<str>')}\"]"]
     N004["extend(...)"]
     N005["if decision.kind == 'allow'"]
     N006["insert(...)"]
@@ -18551,7 +18718,7 @@ flowchart TD
     N007["for version in to_delete:
     tags = '<str>'.join(version_tags(version)) or '<str>'
     created = version.get('<str>', '<str>')
-    lines.append(f'<str>{version.get('<str>')}<str>{created}<str>{tags}')"]
+    lines.append(f\"<str>{version.get('<str>')}<str>{created}<str>{tags}\")"]
     N008["append(...)"]
     N009["return lines"]
     N001 -->|"start"| N002
@@ -19094,7 +19261,7 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["render_unknown_row(...)"]
-    N002["return f'<str>{entry['<str>']}<str>{entry['<str>']}<str>{entry['<str>']}<str>{entry['<str>']}<str>'"]
+    N002["return f\"<str>{entry['<str>']}<str>{entry['<str>']}<str>{entry['<str>']}<str>{entry['<str>']}<str>\""]
     N001 -->|"start"| N002
 ```
 
@@ -19257,7 +19424,7 @@ flowchart TD
         ambiguous_row = render_status_row(file=filename, name=name, live_id='<str>', status='<str>')
         summary_chunks.append(ambiguous_row)
         _append(summary_file, '<str>'.join(summary_chunks))
-        raise RuntimeError(f'<str>{name}<str>{decision['<str>']}<str>')
+        raise RuntimeError(f\"<str>{name}<str>{decision['<str>']}<str>\")
     if decision['<str>'] == '<str>':
         row = render_status_row(file=filename, name=name, live_id='<str>', status='<str>')
         summary_chunks.append(row)
@@ -19715,7 +19882,7 @@ flowchart TD
     item, detail_rows = _plan_one_ruleset(file=file, repo=repo, sot_dir=sot_dir, live_rulesets=live_rulesets, token=token, opener=opener, pending_rows=rows, summary_file=summary_file)
     rows.extend(detail_rows)
     if dry_run:
-        rows.append(render_summary_row(file, str(item['<str>']), int(item['<str>']), f'<str>{item['<str>']}<str>', item['<str>']))
+        rows.append(render_summary_row(file, str(item['<str>']), int(item['<str>']), f\"<str>{item['<str>']}<str>\", item['<str>']))
     planned.append(item)"]
     N007["_append_summary(...)"]
     N008["return planned"]
@@ -19743,12 +19910,12 @@ flowchart TD
     action = str(item['<str>'])
     url = f'{API_ROOT}<str>{repo}<str>'
     if action == '<str>':
-        url = f'{url}<str>{item['<str>']}'
+        url = f\"{url}<str>{item['<str>']}\"
     code, body = apply_call(method=action, url=url, payload_path=item['<str>'], token=token, opener=opener, sleeper=sleeper)
     if not 200 <= code < 300:
         display_code = _display_http_code(code)
-        _append_summary(summary_file, ['<str>', f'<str>{item['<str>']}<str>{display_code}<str>', '<str>', body, '<str>'])
-        print(f'<str>{action}<str>{item['<str>']}<str>{display_code}<str>')
+        _append_summary(summary_file, ['<str>', f\"<str>{item['<str>']}<str>{display_code}<str>\", '<str>', body, '<str>'])
+        print(f\"<str>{action}<str>{item['<str>']}<str>{display_code}<str>\")
         raise SystemExit(1)
     response = json.loads(body or '<str>')
     _append_summary(summary_file, [render_summary_row(str(item['<str>']), str(item['<str>']), int(item['<str>']), f'{action}<str>', response.get('<str>'))])"]
@@ -19851,7 +20018,7 @@ flowchart TD
     N006["diff = workflow_permissions_diff(...)"]
     N007["proj_sot = workflow_permissions_projection(...)"]
     N008["proj_live = workflow_permissions_projection(...)"]
-    N009["lines = ['<str>', f'<str>{mode}<str>', f'<str>{sot_path}<str>', f'<str>{('<str>' if diff else '<str>')}<str>']"]
+    N009["lines = ['<str>', f'<str>{mode}<str>', f'<str>{sot_path}<str>', f\"<str>{('<str>' if diff else '<str>')}<str>\"]"]
     N010["for key in WORKFLOW_PERMISSIONS_KEYS:
     lines.append(f'<str>{key}<str>{_json_scalar(proj_live[key])}<str>{_json_scalar(proj_sot[key])}<str>')"]
     N011["if diff"]
@@ -20325,17 +20492,17 @@ flowchart TD
     N001["item_endpoint(...)"]
     N002["kind = item['<str>']"]
     N003["if kind == 'issue'"]
-    N004["return f'{API_ROOT}<str>{repo}<str>{item['<str>']}'"]
+    N004["return f\"{API_ROOT}<str>{repo}<str>{item['<str>']}\""]
     N005["if kind == 'pr'"]
-    N006["return f'{API_ROOT}<str>{repo}<str>{item['<str>']}'"]
+    N006["return f\"{API_ROOT}<str>{repo}<str>{item['<str>']}\""]
     N007["if kind == 'issue_comment'"]
     N008["if item.get('comment_id') is None"]
-    N009["raise ValueError(f'<str>{item.get('<str>')}<str>')"]
-    N010["return f'{API_ROOT}<str>{repo}<str>{item['<str>']}'"]
+    N009["raise ValueError(f\"<str>{item.get('<str>')}<str>\")"]
+    N010["return f\"{API_ROOT}<str>{repo}<str>{item['<str>']}\""]
     N011["if kind == 'pr_review_comment'"]
     N012["if item.get('comment_id') is None"]
-    N013["raise ValueError(f'<str>{item.get('<str>')}<str>')"]
-    N014["return f'{API_ROOT}<str>{repo}<str>{item['<str>']}'"]
+    N013["raise ValueError(f\"<str>{item.get('<str>')}<str>\")"]
+    N014["return f\"{API_ROOT}<str>{repo}<str>{item['<str>']}\""]
     N015["raise ValueError(f'<str>{kind!r}')"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -20491,18 +20658,18 @@ flowchart TD
     live = fetch_live_field(url=url, field=field, token=token, opener=opener, sleeper=sleeper)
     verdict = classify_drift(live=live, original=item['<str>'], translated=item['<str>'])
     if verdict == '<str>':
-        msg = f'<str>{item['<str>']}<str>{item.get('<str>')}<str>{field}<str>'
+        msg = f\"<str>{item['<str>']}<str>{item.get('<str>')}<str>{field}<str>\"
         print(msg, file=sys.stderr)
         raise SystemExit(1)
     if verdict == '<str>':
         counts['<str>'] += 1
-        print(f'<str>{item['<str>']}<str>{item.get('<str>')}<str>{field}<str>')
+        print(f\"<str>{item['<str>']}<str>{item.get('<str>')}<str>{field}<str>\")
         continue
     if dry_run:
         print(f'<str>{url}<str>{field}')
     else:
         patch_field(url=url, field=field, new_value=item['<str>'], token=token, opener=opener, sleeper=sleeper)
-        print(f'<str>{item['<str>']}<str>{item.get('<str>')}<str>{field}<str>')
+        print(f\"<str>{item['<str>']}<str>{item.get('<str>')}<str>{field}<str>\")
     counts['<str>'] += 1"]
     N007["return counts"]
     N001 -->|"start"| N002
@@ -20603,7 +20770,7 @@ flowchart TD
         print(f'<str>{url}<str>{field}')
     else:
         patch_field(url=url, field=field, new_value=original, token=token)
-        print(f'<str>{kind}<str>{item['<str>']}<str>{field}<str>')
+        print(f\"<str>{kind}<str>{item['<str>']}<str>{field}<str>\")
     patched += 1"]
     N014["print(...)"]
     N015["return 0"]
@@ -21208,7 +21375,7 @@ flowchart TD
     N002["completed = run_git(...)"]
     N003["if completed.returncode != 0"]
     N004["detail = strip(...)"]
-    N005["raise RuntimeError(f'<str>{'<str>'.join(args)}<str>{detail}')"]
+    N005["raise RuntimeError(f\"<str>{'<str>'.join(args)}<str>{detail}\")"]
     N006["return completed.stdout"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -22766,7 +22933,7 @@ flowchart TD
     N004["target = collect_target_scripts(...)"]
     N005["(violations, stale) = find_violations(...)"]
     N006["for name, defects in violations:
-    print(f'<str>{name}<str>{name}<str>{'<str>'.join(defects)}<str>', file=sys.stderr)"]
+    print(f\"<str>{name}<str>{name}<str>{'<str>'.join(defects)}<str>\", file=sys.stderr)"]
     N007["for name in stale:
     print(f'<str>{name}<str>', file=sys.stderr)"]
     N008["if violations or stale"]
@@ -23358,7 +23525,7 @@ flowchart TD
 flowchart TD
     N001["build_summary(...)"]
     N002["assoc_str = association if association is not None else '<str>'"]
-    N003["return f'<str>{event_name}<str>{(number if number is not None else '<str>')}<str>{kind}<str>{assoc_str}<str>{trust}<str>{str(has_non_ascii).lower()}<str>{str(has_title_violation).lower()}<str>{str(has_ack).lower()}<str>{action}<str>'"]
+    N003["return f\"<str>{event_name}<str>{(number if number is not None else '<str>')}<str>{kind}<str>{assoc_str}<str>{trust}<str>{str(has_non_ascii).lower()}<str>{str(has_title_violation).lower()}<str>{str(has_ack).lower()}<str>{action}<str>\""]
     N001 -->|"start"| N002
     N002 --> N003
 ```
@@ -23922,7 +24089,7 @@ flowchart TD
 flowchart TD
     N001["_cmd_list(...)"]
     N002["for hook in provisioning_hooks(_load_config()):
-    print(f'{hook.get('<str>', '<str>')}<str>{hook.get('<str>')}')"]
+    print(f\"{hook.get('<str>', '<str>')}<str>{hook.get('<str>')}\")"]
     N003["return 0"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -24625,7 +24792,7 @@ flowchart TD
     if not missing:
         continue
     location = '<str>' if runbook is None else f'{runbook.path.as_posix()}<str>'
-    errors.append(f'<str>{secret}<str>{format_refs(secret_uses)}<str>{location}<str>{'<str>'.join(missing)}')"]
+    errors.append(f\"<str>{secret}<str>{format_refs(secret_uses)}<str>{location}<str>{'<str>'.join(missing)}\")"]
     N008["return errors"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -25103,7 +25270,7 @@ flowchart TD
     N010["registry_scripts = parse_contract_registry_scripts(...)"]
     N011["missing_contract = find_missing_cli_contracts(...)"]
     N012["for stem in missing:
-    print(f'<str>{stem}<str>{stem}<str>{stem.lstrip('<str>')}<str>', file=sys.stderr)"]
+    print(f\"<str>{stem}<str>{stem}<str>{stem.lstrip('<str>')}<str>\", file=sys.stderr)"]
     N013["for stem in stale:
     print(f'<str>{stem}<str>', file=sys.stderr)"]
     N014["for stem in undeclared_api:
@@ -25708,6 +25875,138 @@ flowchart TD
     N007 --> N008
 ```
 
+## scripts/scan_workflow_unsigned_commit.py
+
+### _load_yaml(...)
+
+```mermaid
+flowchart TD
+    N001["_load_yaml(...)"]
+    N002["try"]
+    N003["data = safe_load(...)"]
+    N004["except Exception"]
+    N005["return None"]
+    N006["return data if isinstance(data, dict) else None"]
+    N001 -->|"start"| N002
+    N002 -->|"try"| N003
+    N002 -->|"raises"| N004
+    N004 --> N005
+    N003 --> N006
+```
+
+### _iter_run_steps(...)
+
+```mermaid
+flowchart TD
+    N001["_iter_run_steps(...)"]
+    N002["for wf_path in sorted(workflow_dir.glob('<str>')):
+    data = _load_yaml(wf_path)
+    if data is None:
+        continue
+    jobs = data.get('<str>') or {}
+    if not isinstance(jobs, dict):
+        continue
+    for job_id, job in jobs.items():
+        if not isinstance(job, dict):
+            continue
+        steps = job.get('<str>') or []
+        if not isinstance(steps, list):
+            continue
+        for step in steps:
+            if not isinstance(step, dict):
+                continue
+            run_text = step.get('<str>')
+            if not isinstance(run_text, str):
+                continue
+            step_name = str(step.get('<str>') or '<str>')
+            yield (wf_path.name, str(job_id), step_name, run_text)"]
+    N003["end"]
+    N001 -->|"start"| N002
+    N002 --> N003
+```
+
+### scan_run_text(...)
+
+```mermaid
+flowchart TD
+    N001["scan_run_text(...)"]
+    N002["hits = []"]
+    N003["for lineno, line in enumerate(run_text.splitlines(), start=1):
+    if ACK_MARKER in line:
+        continue
+    match = _GIT_PUSH.search(line)
+    if match is not None:
+        fragment = line[match.start():match.start() + _FRAGMENT_LEN].strip()
+        hits.append((lineno, fragment))"]
+    N004["return hits"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 --> N004
+```
+
+### _iter_matches(...)
+
+```mermaid
+flowchart TD
+    N001["_iter_matches(...)"]
+    N002["for wf_name, job_id, step_name, run_text in _iter_run_steps(workflow_dir):
+    for lineno, fragment in scan_run_text(run_text):
+        yield Violation(workflow=wf_name, job=job_id, step=step_name, line=lineno, fragment=fragment)"]
+    N003["end"]
+    N001 -->|"start"| N002
+    N002 --> N003
+```
+
+### find_violations(...)
+
+```mermaid
+flowchart TD
+    N001["find_violations(...)"]
+    N002["return list(_iter_matches(workflow_dir))"]
+    N001 -->|"start"| N002
+```
+
+### main(...)
+
+```mermaid
+flowchart TD
+    N001["main(...)"]
+    N002["parser = ArgumentParser(...)"]
+    N003["sub = add_subparsers(...)"]
+    N004["add_parser(...)"]
+    N005["add_parser(...)"]
+    N006["args = parse_args(...)"]
+    N007["wf_dir = WORKFLOW_DIR"]
+    N008["if args.cmd == 'list'"]
+    N009["for v in _iter_matches(wf_dir):
+    print(f'{v.workflow}<str>{v.job}<str>{v.step!r}<str>{v.line}<str>{v.fragment!r}')"]
+    N010["return 0"]
+    N011["violations = find_violations(...)"]
+    N012["if not violations"]
+    N013["print(...)"]
+    N014["return 0"]
+    N015["for v in violations:
+    print(f'<str>{v.workflow}<str>{v.step!r}<str>{v.job}<str>{v.fragment!r}<str>{ACK_MARKER}<str>', file=sys.stderr)"]
+    N016["print(...)"]
+    N017["return 1"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 --> N004
+    N004 --> N005
+    N005 --> N006
+    N006 --> N007
+    N007 --> N008
+    N008 -->|"true"| N009
+    N009 --> N010
+    N008 -->|"false"| N011
+    N011 --> N012
+    N012 -->|"true"| N013
+    N013 --> N014
+    N012 -->|"false"| N015
+    N015 --> N016
+    N016 --> N017
+```
+
 ## scripts/script_ast_graph.py
 
 ### iter_script_paths(...)
@@ -26146,7 +26445,7 @@ flowchart TD
     N012["append(...)"]
     N013["if unknown_count > 0"]
     N014["append(...)"]
-    N015["return FamilyRow(family='<str>', detector='<str>', status=STATUS_DRIFT, evidence=evidence, action=f'{'<str>'.join(parts)}<str>')"]
+    N015["return FamilyRow(family='<str>', detector='<str>', status=STATUS_DRIFT, evidence=evidence, action=f\"{'<str>'.join(parts)}<str>\")"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 -->|"true"| N004
@@ -26340,7 +26639,7 @@ flowchart TD
 flowchart TD
     N001["render_family_issue_title(...)"]
     N002["spec = FAMILY_ISSUE_SPEC[family]"]
-    N003["return f'<str>{spec['<str>']}<str>{run_date}<str>'"]
+    N003["return f\"<str>{spec['<str>']}<str>{run_date}<str>\""]
     N001 -->|"start"| N002
     N002 --> N003
 ```
@@ -26351,7 +26650,7 @@ flowchart TD
 flowchart TD
     N001["render_family_issue_body(...)"]
     N002["spec = FAMILY_ISSUE_SPEC[family]"]
-    N003["return f'<str>{DEFAULT_TRACKING_ISSUE}<str>{family}<str>{run_url}<str>{run_date}<str>{spec['<str>']}<str>{spec['<str>']}<str>{spec['<str>']}<str>{DEFAULT_TRACKING_ISSUE}<str>'"]
+    N003["return f\"<str>{DEFAULT_TRACKING_ISSUE}<str>{family}<str>{run_url}<str>{run_date}<str>{spec['<str>']}<str>{spec['<str>']}<str>{spec['<str>']}<str>{DEFAULT_TRACKING_ISSUE}<str>\""]
     N001 -->|"start"| N002
     N002 --> N003
 ```
@@ -26977,7 +27276,7 @@ flowchart TD
     N005["add_argument(...)"]
     N006["add_argument(...)"]
     N007["for key in _DEFAULT_RATES:
-    parser.add_argument(f'<str>{key.replace('<str>', '<str>')}<str>', dest=f'{key}<str>', type=float, default=None, help=f'<str>{key}<str>{_DEFAULT_RATES[key]}<str>')"]
+    parser.add_argument(f\"<str>{key.replace('<str>', '<str>')}<str>\", dest=f'{key}<str>', type=float, default=None, help=f'<str>{key}<str>{_DEFAULT_RATES[key]}<str>')"]
     N008["return parser.parse_args(argv)"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -27181,8 +27480,8 @@ flowchart TD
     N001["render_section(...)"]
     N002["elapsed_txt = elapsed if elapsed else _UNAVAILABLE"]
     N003["if usage is not None"]
-    N004["total = f'{usage['<str>']:<str>}<str>{usage['<str>']:<str>}<str>{usage['<str>']:<str>}<str>{usage['<str>']:<str>}<str>{usage['<str>']:<str>}<str>'"]
-    N005["cost = f'<str>{usage['<str>']:<str>}'"]
+    N004["total = f\"{usage['<str>']:<str>}<str>{usage['<str>']:<str>}<str>{usage['<str>']:<str>}<str>{usage['<str>']:<str>}<str>{usage['<str>']:<str>}<str>\""]
+    N005["cost = f\"<str>{usage['<str>']:<str>}\""]
     N006["models = '<str>'.join(usage['<str>']) if usage['<str>'] else _UNAVAILABLE"]
     N007["total, cost, models = _UNAVAILABLE"]
     N008["return f'<str>{_HEADING}<str>{elapsed_txt}<str>{total}<str>{cost}<str>{models}<str>'"]
@@ -27481,7 +27780,7 @@ flowchart TD
     N003["token_warnings = []"]
     N004["for check in entry.get('<str>', []):
     if not check.get('<str>', True):
-        spec_failures.append(f'{check.get('<str>', '<str>')}<str>{check.get('<str>', '<str>')}')"]
+        spec_failures.append(f\"{check.get('<str>', '<str>')}<str>{check.get('<str>', '<str>')}\")"]
     N005["budget = get(...)"]
     N006["if budget.get('exceeded')"]
     N007["append(...)"]
@@ -28097,13 +28396,19 @@ flowchart TD
     N001["fetch_external_findings(...)"]
     N002["if not dependencies"]
     N003["return []"]
-    N004["osv_batch = load_json(osv_file) if osv_file is not None else query_osv_batch(dependencies)"]
-    N005["kev_catalog = load_json(kev_file) if kev_file is not None else fetch_cisa_kev()"]
-    N006["kev_cves = parse_kev_cves(...)"]
-    N007["vuln_ids_by_dep = parse_osv_batch_results(...)"]
-    N008["vuln_details = fetch_osv_details(...)"]
-    N009["osv_findings = []"]
-    N010["for dep, vuln_ids in vuln_ids_by_dep:
+    N004["if osv_file is not None"]
+    N005["osv_batch = load_json(...)"]
+    N006["malformed = validate_osv_coordinates(...)"]
+    N007["if malformed"]
+    N008["coords = join(...)"]
+    N009["raise ValueError(f'<str>{coords}')"]
+    N010["osv_batch = query_osv_batch(...)"]
+    N011["kev_catalog = load_json(kev_file) if kev_file is not None else fetch_cisa_kev()"]
+    N012["kev_cves = parse_kev_cves(...)"]
+    N013["vuln_ids_by_dep = parse_osv_batch_results(...)"]
+    N014["vuln_details = fetch_osv_details(...)"]
+    N015["osv_findings = []"]
+    N016["for dep, vuln_ids in vuln_ids_by_dep:
     for vuln_id in vuln_ids:
         details = vuln_details.get(vuln_id, {})
         aliases = tuple((str(alias) for alias in details.get('<str>', []) if isinstance(alias, str)))
@@ -28111,47 +28416,91 @@ flowchart TD
         known_exploited = bool(cve_ids & kev_cves)
         advisory_type = GHSA_MALWARE_TYPE if vuln_id.startswith(MAL_ID_PREFIX) else None
         osv_findings.append(Finding(dependency=dep, vuln_id=vuln_id, aliases=aliases, source=SOURCE_OSV, known_exploited=known_exploited, advisory_type=advisory_type))"]
-    N011["ghsa_findings = []"]
-    N012["if ghsa_file is not None or ghsa_live"]
-    N013["ghsa_findings = fetch_ghsa_advisories(...)"]
-    N014["ossf_findings = []"]
-    N015["if malpkg_file is not None or malpkg_live"]
-    N016["ossf_findings = fetch_ossf_malicious_packages(...)"]
-    N017["merged = merge_findings(...)"]
-    N018["if epss_file is not None or epss_live"]
-    N019["epss_scores = fetch_epss_scores(...)"]
-    N020["merged = [_attach_epss(finding, epss_scores) for finding in merged]"]
-    N021["if nvd_file is not None or nvd_live"]
-    N022["nvd_map = fetch_nvd_metadata(...)"]
-    N023["merged = attach_nvd_to_findings(...)"]
-    N024["return sorted(merged, key=lambda f: (f.dependency.name, f.vuln_id))"]
+    N017["ghsa_findings = []"]
+    N018["if ghsa_file is not None or ghsa_live"]
+    N019["ghsa_findings = fetch_ghsa_advisories(...)"]
+    N020["ossf_findings = []"]
+    N021["if malpkg_file is not None or malpkg_live"]
+    N022["ossf_findings = fetch_ossf_malicious_packages(...)"]
+    N023["merged = merge_findings(...)"]
+    N024["if epss_file is not None or epss_live"]
+    N025["epss_scores = fetch_epss_scores(...)"]
+    N026["merged = [_attach_epss(finding, epss_scores) for finding in merged]"]
+    N027["if nvd_file is not None or nvd_live"]
+    N028["nvd_map = fetch_nvd_metadata(...)"]
+    N029["merged = attach_nvd_to_findings(...)"]
+    N030["return sorted(merged, key=lambda f: (f.dependency.name, f.vuln_id))"]
     N001 -->|"start"| N002
     N002 -->|"true"| N003
     N002 -->|"false"| N004
-    N004 --> N005
-    N005 --> N006
+    N004 -->|"true"| N005
+    N004 -->|"false"| N006
     N006 --> N007
-    N007 --> N008
+    N007 -->|"true"| N008
     N008 --> N009
-    N009 --> N010
+    N007 -->|"false"| N010
+    N005 --> N011
     N010 --> N011
     N011 --> N012
-    N012 -->|"true"| N013
+    N012 --> N013
     N013 --> N014
-    N012 -->|"false"| N014
     N014 --> N015
-    N015 -->|"true"| N016
+    N015 --> N016
     N016 --> N017
-    N015 -->|"false"| N017
     N017 --> N018
     N018 -->|"true"| N019
     N019 --> N020
+    N018 -->|"false"| N020
     N020 --> N021
-    N018 -->|"false"| N021
     N021 -->|"true"| N022
     N022 --> N023
+    N021 -->|"false"| N023
     N023 --> N024
-    N021 -->|"false"| N024
+    N024 -->|"true"| N025
+    N025 --> N026
+    N026 --> N027
+    N024 -->|"false"| N027
+    N027 -->|"true"| N028
+    N028 --> N029
+    N029 --> N030
+    N027 -->|"false"| N030
+```
+
+### _ecosystem_base(...)
+
+```mermaid
+flowchart TD
+    N001["_ecosystem_base(...)"]
+    N002["return ecosystem.split('<str>', 1)[0]"]
+    N001 -->|"start"| N002
+```
+
+### _coord_field_malformed(...)
+
+```mermaid
+flowchart TD
+    N001["_coord_field_malformed(...)"]
+    N002["return value == '<str>' or bool(_COORD_FIELD_BAD_CHARS.search(value))"]
+    N001 -->|"start"| N002
+```
+
+### validate_osv_coordinates(...)
+
+```mermaid
+flowchart TD
+    N001["validate_osv_coordinates(...)"]
+    N002["malformed = []"]
+    N003["for dep in dependencies:
+    if _ecosystem_base(dep.ecosystem) not in _KNOWN_OSV_ECOSYSTEMS:
+        malformed.append((dep, f'<str>{dep.ecosystem!r}'))
+    elif _coord_field_malformed(dep.name):
+        malformed.append((dep, f'<str>{dep.name!r}'))
+    elif _coord_field_malformed(dep.version):
+        malformed.append((dep, f'<str>{dep.version!r}'))"]
+    N004["return malformed"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 --> N004
 ```
 
 ### query_osv_batch(...)
@@ -28908,7 +29257,7 @@ flowchart TD
     try:
         review_by = date.fromisoformat(values['<str>'])
     except ValueError as exc:
-        raise ValueError(f'{path}<str>{index}<str>{values['<str>']!r}') from exc
+        raise ValueError(f\"{path}<str>{index}<str>{values['<str>']!r}\") from exc
     suppressions.append(Suppression(ecosystem=values['<str>'], name=values['<str>'], vuln_id=values['<str>'], reason=values['<str>'], review_by=review_by))"]
     N009["return suppressions"]
     N001 -->|"start"| N002
@@ -29108,6 +29457,28 @@ flowchart TD
     N015 --> N016
     N016 --> N017
     N017 --> N018
+```
+
+### _cmd_verify(...)
+
+```mermaid
+flowchart TD
+    N001["_cmd_verify(...)"]
+    N002["repo_root = Path(...)"]
+    N003["dependencies = discover_dependencies(...)"]
+    N004["malformed = validate_osv_coordinates(...)"]
+    N005["if not malformed"]
+    N006["return 0"]
+    N007["for dep, reason in malformed:
+    print(f'<str>{dep.ecosystem}<str>{dep.name}<str>{dep.version}<str>{dep.source}<str>{reason}', file=sys.stderr)"]
+    N008["return 1"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 --> N004
+    N004 --> N005
+    N005 -->|"true"| N006
+    N005 -->|"false"| N007
+    N007 --> N008
 ```
 
 ### _cmd_scan(...)
@@ -29435,10 +29806,10 @@ flowchart TD
 flowchart TD
     N001["_write_github_output(...)"]
     N002["with path.open('<str>', encoding='<str>') as handle:
-    handle.write(f'<str>{_bool(result['<str>'])}<str>')
-    handle.write(f'<str>{_bool(result['<str>'])}<str>')
-    handle.write(f'<str>{'<str>'.join(result['<str>'])}<str>')
-    handle.write(f'<str>{'<str>'.join(result['<str>'])}<str>')"]
+    handle.write(f\"<str>{_bool(result['<str>'])}<str>\")
+    handle.write(f\"<str>{_bool(result['<str>'])}<str>\")
+    handle.write(f\"<str>{'<str>'.join(result['<str>'])}<str>\")
+    handle.write(f\"<str>{'<str>'.join(result['<str>'])}<str>\")"]
     N003["end"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -29549,7 +29920,7 @@ flowchart TD
     N016["print(...)"]
     N017["return 1"]
     N018["for label in remove_labels:
-    url = f'{base_url}<str>{urllib.parse.quote(label, safe='<str>')}'
+    url = f\"{base_url}<str>{urllib.parse.quote(label, safe='<str>')}\"
     req = urllib.request.Request(url, method='<str>')
     req.add_header('<str>', auth_header)
     req.add_header('<str>', '<str>')
@@ -29815,12 +30186,15 @@ flowchart TD
     N038["add_argument(...)"]
     N039["add_argument(...)"]
     N040["set_defaults(...)"]
-    N041["args = parse_args(...)"]
-    N042["try"]
-    N043["return args.func(args)"]
-    N044["except (OSError, ValueError, json.JSONDecodeError)"]
-    N045["print(...)"]
-    N046["return 1"]
+    N041["p_verify = add_parser(...)"]
+    N042["add_argument(...)"]
+    N043["set_defaults(...)"]
+    N044["args = parse_args(...)"]
+    N045["try"]
+    N046["return args.func(args)"]
+    N047["except (OSError, ValueError, json.JSONDecodeError)"]
+    N048["print(...)"]
+    N049["return 1"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 --> N004
@@ -29862,10 +30236,13 @@ flowchart TD
     N039 --> N040
     N040 --> N041
     N041 --> N042
-    N042 -->|"try"| N043
-    N042 -->|"raises"| N044
+    N042 --> N043
+    N043 --> N044
     N044 --> N045
-    N045 --> N046
+    N045 -->|"try"| N046
+    N045 -->|"raises"| N047
+    N047 --> N048
+    N048 --> N049
 ```
 
 ## scripts/title_policy.py

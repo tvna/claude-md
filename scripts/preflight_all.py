@@ -149,6 +149,10 @@ STEPS: tuple[Step, ...] = (
         argv=("python3", "scripts/scan_workflow_injection.py", "verify"),
     ),
     Step(
+        name="scan_workflow_unsigned_commit",
+        argv=("python3", "scripts/scan_workflow_unsigned_commit.py", "verify"),
+    ),
+    Step(
         # Refs #1519. Offline PR-head mirror of the pull_request_target
         # threat-intel triage scan: fails when the parser yields a malformed
         # OSV coordinate (the #1511 class) that the base-checkout triage job
