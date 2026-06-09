@@ -573,7 +573,27 @@ def fetch_external_findings(
     if not dependencies:
         return []
 
-    osv_batch = load_json(osv_file) if osv_file is not None else query_osv_batch(dependencies)
+    if osv_file is not None:
+        osv_batch = load_json(osv_file)
+    else:
+        # Defense in depth (#1519): validate coordinates offline before the
+        # network call so a parser false-match (#1511) fails loud naming the
+        # source file, instead of OSV rejecting the whole batch with HTTP 400
+        # and hiding every finding. The HTTP 400 handler in query_osv_batch
+        # remains the backstop for coordinates that pass this check yet OSV
+        # still refuses.
+        malformed = validate_osv_coordinates(dependencies)
+        if malformed:
+            coords = "; ".join(
+                f"{dep.ecosystem}:{dep.name}@{dep.version} (from {dep.source}) -- {reason}"
+                for dep, reason in malformed
+            )
+            raise ValueError(
+                "Refusing to submit malformed OSV coordinates to querybatch "
+                "(offline pre-check); fix the source so the parser yields a "
+                f"valid ecosystem/name/version. Malformed: {coords}"
+            )
+        osv_batch = query_osv_batch(dependencies)
     kev_catalog = load_json(kev_file) if kev_file is not None else fetch_cisa_kev()
     kev_cves = parse_kev_cves(kev_catalog)
 
@@ -630,6 +650,71 @@ def fetch_external_findings(
         nvd_map = fetch_nvd_metadata(_collect_cve_ids(merged), nvd_file=nvd_file, outages=outages)
         merged = attach_nvd_to_findings(merged, nvd_map)
     return sorted(merged, key=lambda f: (f.dependency.name, f.vuln_id))
+
+
+# Authoritative OSV ecosystem identifiers -- the canonical base name before
+# any colon-suffixed release (e.g. "Debian" from "Debian:11") -- sourced from
+# the OSV schema "Defined Ecosystems" list (ossf/osv-schema docs/schema.md). A
+# discovered coordinate whose ecosystem falls outside this set cannot be a real
+# dependency: the parsers emit a fixed constant (``PyPI`` / ``GitHub Actions``)
+# or an operator-declared OSV ecosystem on a ``# threat-intel-pin:`` line, so a
+# junk value such as ``"`"`` produced by a parser false-match (#1511) is
+# malformed by definition. Treated as a checked-in mirror of the OSV contract,
+# not a live fetch: adding a new ecosystem to a pin is a deliberate one-line
+# review here, and the real-repo validation test (#1519) fails loud if a
+# legitimate ecosystem is ever missing.
+_KNOWN_OSV_ECOSYSTEMS = frozenset({
+    "AlmaLinux", "Alpaquita", "Alpine", "Android", "Azure Linux",
+    "BellSoft Hardened Containers", "Bioconductor", "Bitnami", "Chainguard",
+    "CleanStart", "ConanCenter", "CRAN", "crates.io", "Debian",
+    "Docker Hardened Images", "Echo", "FreeBSD", "GHC", "GitHub Actions",
+    "Go", "Hackage", "Hex", "Julia", "Kubernetes", "Linux", "Mageia",
+    "Maven", "MinimOS", "npm", "NuGet", "opam", "openEuler", "openSUSE",
+    "OSS-Fuzz", "Packagist", "Photon OS", "Pub", "PyPI", "Red Hat",
+    "Rocky Linux", "Root", "RubyGems", "SUSE", "SwiftURL", "TuxCare",
+    "Ubuntu", "VSCode", "Wolfi",
+})
+
+# A well-formed OSV ``name`` / ``version`` carries no whitespace, control, or
+# backtick characters. The #1511 prose false-match yielded exactly such junk
+# (name="line", version="in" alongside an ecosystem of "`").
+_COORD_FIELD_BAD_CHARS = re.compile(r"[\s`\x00-\x1f\x7f]")
+
+
+def _ecosystem_base(ecosystem: str) -> str:
+    """Return the ecosystem name without an OSV ``:<release>`` suffix."""
+    return ecosystem.split(":", 1)[0]
+
+
+def _coord_field_malformed(value: str) -> bool:
+    """Return True when an OSV name/version field is empty or carries junk."""
+    return value == "" or bool(_COORD_FIELD_BAD_CHARS.search(value))
+
+
+def validate_osv_coordinates(
+    dependencies: list[Dependency],
+) -> list[tuple[Dependency, str]]:
+    """Return ``(dependency, reason)`` for each malformed OSV coordinate.
+
+    Offline pre-check that mirrors OSV querybatch's input contract: it catches
+    the #1511 class (a parser false-match yielding e.g. ecosystem='`',
+    name='line', version='in') BEFORE any network call, naming ``dep.source``,
+    instead of relying on OSV to reject the whole batch with HTTP 400 -- which
+    fails the entire scan and hides every finding (CLAUDE.md s4: fail loud, and
+    do so as early and as precisely as possible). An empty list means every
+    coordinate is well-formed. Pure and offline so it is safe to run on PR-head
+    code in a ``pull_request`` gate; see
+    docs/prd/offline-prehead-validation-gates.md.
+    """
+    malformed: list[tuple[Dependency, str]] = []
+    for dep in dependencies:
+        if _ecosystem_base(dep.ecosystem) not in _KNOWN_OSV_ECOSYSTEMS:
+            malformed.append((dep, f"unknown OSV ecosystem {dep.ecosystem!r}"))
+        elif _coord_field_malformed(dep.name):
+            malformed.append((dep, f"malformed package name {dep.name!r}"))
+        elif _coord_field_malformed(dep.version):
+            malformed.append((dep, f"malformed version {dep.version!r}"))
+    return malformed
 
 
 def query_osv_batch(dependencies: list[Dependency]) -> dict[str, object]:
@@ -1522,6 +1607,32 @@ def _cmd_classify(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_verify(args: argparse.Namespace) -> int:
+    """Offline gate: fail when discovered deps carry malformed OSV coordinates.
+
+    Mirrors the pre-network check in :func:`fetch_external_findings` on the
+    *PR head* so a PR that breaks the parser, or adds a workflow line that
+    mis-parses into a junk coordinate (the #1511 class), is caught offline
+    -- no network, no secrets -- rather than only after merge, when the
+    ``pull_request_target`` triage job (which checks out base, not the PR
+    head) finally runs the new code against the new files. Wired through
+    pre-commit / ``prek run --all-files`` and ``preflight_all.py``; see
+    docs/prd/offline-prehead-validation-gates.md.
+    """
+    repo_root = Path(args.repo_root)
+    dependencies = discover_dependencies(repo_root)
+    malformed = validate_osv_coordinates(dependencies)
+    if not malformed:
+        return 0
+    for dep, reason in malformed:
+        print(
+            f"::error::malformed OSV coordinate "
+            f"{dep.ecosystem}:{dep.name}@{dep.version} (from {dep.source}): {reason}",
+            file=sys.stderr,
+        )
+    return 1
+
+
 def _cmd_scan(args: argparse.Namespace) -> int:
     repo_root = Path(args.repo_root)
     labels = parse_labels(args.labels or os.environ.get("LABELS", ""))
@@ -2247,6 +2358,17 @@ def main(argv: list[str] | None = None) -> int:
         help="HTML marker anchoring the idempotent comment.",
     )
     p_comment.set_defaults(func=_cmd_comment)
+
+    p_verify = sub.add_parser(
+        "verify",
+        help="Offline gate: fail on malformed OSV coordinates in discovered deps.",
+    )
+    p_verify.add_argument(
+        "--repo-root",
+        default=".",
+        help="Repository root to discover dependencies under.",
+    )
+    p_verify.set_defaults(func=_cmd_verify)
 
     args = parser.parse_args(argv)
     try:

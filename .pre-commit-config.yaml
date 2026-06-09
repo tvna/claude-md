@@ -29,6 +29,17 @@ repos:
         language: system
         pass_filenames: false
         files: ^\.github/workflows/.*\.ya?ml$
+      - id: threat-intel-coords
+        name: threat-intel OSV coordinate validation (scripts/threat_intel_triage.py verify)
+        # Offline PR-head mirror of the pull_request_target triage scan (#1519):
+        # fails loud here when the parser yields a malformed OSV coordinate
+        # (the #1511 class), which the base-checkout triage job cannot catch on
+        # the PR. Mirrored onto the PR head by `prek run --all-files` in
+        # verify-pr.yml. No network, no secrets. Refs #1511.
+        entry: uv run python scripts/threat_intel_triage.py verify
+        language: system
+        pass_filenames: false
+        files: ^(\.github/workflows/.*\.ya?ml|pyproject\.toml|uv\.lock)$
       - id: actionlint
         name: actionlint (workflow syntax + shellcheck)
         # System binary from flake.nix (sharedPackages). With no file args it
