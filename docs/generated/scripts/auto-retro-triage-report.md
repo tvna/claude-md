@@ -4,14 +4,14 @@ This file is generated from live GitHub retro-issue labels by `python3 scripts/a
 
 Retros observed: **50**
 
-Open untriaged: **4**
+Open untriaged: **5**
 
 ## Anomalies
 
 Signals whose prior FP rate is at or above 0.50 (n >= 5); these signals now suppress new retros via `should_skip_by_prior`:
 
 - `fix_typed_title`: FP rate 0.58 (n=12)
-- `multi_commit_pr`: FP rate 0.53 (n=17)
+- `multi_commit_pr`: FP rate 0.50 (n=18)
 
 ## Triage status
 
@@ -19,10 +19,10 @@ Signals whose prior FP rate is at or above 0.50 (n >= 5); these signals now supp
 pie showData
     title Triage status
     "retro:tp" : 10
-    "retro:fp" : 36
+    "retro:fp" : 35
     "retro:fp-candidate" : 0
     "retro:tentative" : 0
-    "unlabelled" : 4
+    "unlabelled" : 5
 ```
 
 ## Signal occurrence and false-positive rates
@@ -31,17 +31,18 @@ pie showData
 | --- | --: | --: | --: | --: | --: | :-: |
 | `inline_review_comments` | 0 | 0.00 | 0 | 0.00 | 0 |  |
 | `fix_typed_title` | 12 | 0.24 | 7 | 0.58 | 12 | !! |
-| `multi_commit_pr` | 17 | 0.34 | 9 | 0.53 | 17 | !! |
+| `multi_commit_pr` | 18 | 0.36 | 9 | 0.50 | 18 | !! |
 
 ## False-positive rate trend
 
-- All-time: 0.78 (n=46 triaged)
-- Last 20 retros: 0.81 (n=16 triaged) -- rising
+- All-time: 0.78 (n=45 triaged)
+- Last 20 retros: 0.80 (n=15 triaged) -- rising
 
 ## Recent retros
 
 | # | State | Status | Title |
 | --: | :-- | :-- | :-- |
+| 1505 | open | untriaged | chore(auto-retro): review PR #1500 repair loops |
 | 1483 | open | untriaged | chore(auto-retro): review PR #1481 repair loops |
 | 1482 | open | untriaged | chore(auto-retro): review PR #1480 repair loops |
 | 1479 | open | untriaged | chore(auto-retro): review PR #1474 repair loops |
@@ -51,4 +52,3 @@ pie showData
 | 1445 | closed | retro:tp | chore(auto-retro): review PR #1444 repair loops |
 | 1426 | closed | retro:fp | chore(auto-retro): review PR #1425 repair loops |
 | 1423 | closed | retro:fp | chore(auto-retro): review PR #1421 repair loops |
-| 1419 | closed | retro:fp | chore(auto-retro): review PR #1417 repair loops |
