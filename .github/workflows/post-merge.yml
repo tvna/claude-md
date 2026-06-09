@@ -139,6 +139,12 @@ jobs:
         # automation; the PR and pre-push gates no longer regenerate it (#1540).
         run: python3 scripts/script_ast_graph.py all-doc
 
+      - name: Generate script dependency graph
+        # Writes docs/generated/scripts/dependency-graph.md from scripts/*.py
+        # import statements. Same single-producer ownership as the AST docs
+        # above; pre-push and pre-merge gates do not regenerate it (#1543).
+        run: python3 scripts/script_dependency_graph.py all-doc
+
       - name: Generate workflow if-branch diagrams
         run: python3 scripts/workflow_diagram.py diagram-doc
 
@@ -174,6 +180,7 @@ jobs:
           Regenerates `docs/generated/` artifacts from source after a change merged to `main`:
 
           - `docs/generated/scripts/ast/<stem>.md` from each `scripts/*.py` AST (one file per script).
+          - `docs/generated/scripts/dependency-graph.md` from `scripts/*.py` sibling-import edges.
           - `docs/generated/workflows/*-if-branches.md` from `.github/workflows/*.yml` if-branch analysis.
 
           ## Related Issue
@@ -200,6 +207,8 @@ jobs:
           ## Verification
 
           - command: `python3 scripts/script_ast_graph.py all-doc`
+            result: `exit 0`
+          - command: `python3 scripts/script_dependency_graph.py all-doc`
             result: `exit 0`
           - command: `python3 scripts/workflow_diagram.py diagram-doc`
             result: `exit 0`

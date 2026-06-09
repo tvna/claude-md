@@ -87,6 +87,7 @@ import scan_workflow_injection
 import scan_workflow_pip
 import scan_workflow_unsigned_commit
 import script_ast_graph
+import script_dependency_graph
 import security_drift_report
 import skill_quality_gate
 import threat_intel_triage
@@ -154,6 +155,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("github_paginate.py", "fetch-run-jobs"): "test_github_paginate_fetch_run_jobs_matches_workflow_args",
     ("validate_json_syntax.py", "verify"): "test_validate_json_syntax_verify_matches_workflow_args",
     ("script_ast_graph.py", "all-doc"): "test_script_ast_graph_all_doc_matches_workflow_args",
+    ("script_dependency_graph.py", "all-doc"): "test_script_dependency_graph_all_doc_matches_workflow_args",
     ("gate_generated_scripts_manual_edit.py", "verify"): "test_gate_generated_scripts_manual_edit_matches_workflow_args",
     ("auto_retro.py", "triage-report"): "test_auto_retro_triage_report_matches_workflow_env",
     ("auto_retro.py", "triage-report-pr"): "test_auto_retro_triage_report_pr_matches_workflow_env",
@@ -551,6 +553,24 @@ def test_script_ast_graph_all_doc_matches_workflow_args(
         script_ast_graph.render_script_ast_markdown(
             scripts / "alpha.py", Path("scripts/alpha.py")
         )
+    )
+
+
+def test_script_dependency_graph_all_doc_matches_workflow_args(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Mirror the default-output shape used by the post-merge workflow."""
+    monkeypatch.chdir(tmp_path)
+    scripts = tmp_path / "scripts"
+    scripts.mkdir()
+    (scripts / "_git.py").write_text("x = 1\n", encoding="utf-8")
+    (scripts / "alpha.py").write_text("import _git\n", encoding="utf-8")
+
+    assert script_dependency_graph.main(["all-doc"]) == 0
+
+    output = Path("docs/generated/scripts/dependency-graph.md")
+    assert output.read_text(encoding="utf-8") == script_dependency_graph.build_document(
+        tmp_path
     )
 
 
