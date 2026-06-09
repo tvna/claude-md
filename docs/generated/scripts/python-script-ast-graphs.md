@@ -12439,7 +12439,7 @@ flowchart TD
     N002["start = clock(...)"]
     N003["proc = runner(...)"]
     N004["elapsed = clock() - start"]
-    N005["return RunResult(returncode=proc.returncode, stdout=proc.stdout, seconds=elapsed)"]
+    N005["return RunResult(returncode=proc.returncode, stdout=proc.stdout, seconds=elapsed, stderr=getattr(proc, '<str>', '<str>') or '<str>')"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 --> N004
@@ -12490,6 +12490,19 @@ flowchart TD
     N010 -->|"false"| N012
 ```
 
+### reject_mutable_tag(...)
+
+```mermaid
+flowchart TD
+    N001["reject_mutable_tag(...)"]
+    N002["if image.endswith((':main', ':latest'))"]
+    N003["raise ValueError(f'<str>{image}')"]
+    N004["return image"]
+    N001 -->|"start"| N002
+    N002 -->|"true"| N003
+    N002 -->|"false"| N004
+```
+
 ### get_image(...)
 
 ```mermaid
@@ -12498,15 +12511,11 @@ flowchart TD
     N002["image = get(...)"]
     N003["if not isinstance(image, str) or not image"]
     N004["raise ValueError('<str>')"]
-    N005["if image.endswith((':main', ':latest'))"]
-    N006["raise ValueError(f'<str>{image}')"]
-    N007["return image"]
+    N005["return reject_mutable_tag(image)"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 -->|"true"| N004
     N003 -->|"false"| N005
-    N005 -->|"true"| N006
-    N005 -->|"false"| N007
 ```
 
 ### split_segments(...)
@@ -12564,6 +12573,22 @@ flowchart TD
     N005 --> N006
 ```
 
+### _stderr_tail(...)
+
+```mermaid
+flowchart TD
+    N001["_stderr_tail(...)"]
+    N002["tail = join(...)"]
+    N003["if len(tail) > _STDERR_TAIL_CHARS"]
+    N004["tail = tail[-_STDERR_TAIL_CHARS:]"]
+    N005["return tail.encode('<str>', '<str>').decode('<str>')"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 -->|"true"| N004
+    N004 --> N005
+    N003 -->|"false"| N005
+```
+
 ### measure(...)
 
 ```mermaid
@@ -12577,15 +12602,19 @@ flowchart TD
     N007["report['<str>'] = image_size(...)"]
     N008["start(...)"]
     N009["try"]
-    N010["for phase, segments in (('<str>', post_create), ('<str>', post_start)):
+    N010["phases = (('<str>', warmup or []), ('<str>', post_create), ('<str>', post_start))"]
+    N011["for phase, segments in phases:
     for segment in segments:
         result = session.exec(segment)
-        report['<str>'].append({'<str>': phase, '<str>': segment, '<str>': round(result.seconds, 3), '<str>': result.returncode})"]
-    N011["if probe"]
-    N012["report['<str>'] = probe_composition(...)"]
-    N013["close(...)"]
-    N014["report['<str>'] = round(...)"]
-    N015["return report"]
+        entry: dict[str, Any] = {'<str>': phase, '<str>': segment, '<str>': round(result.seconds, 3), '<str>': result.returncode}
+        if result.returncode != 0 and result.stderr.strip():
+            entry['<str>'] = _stderr_tail(result.stderr)
+        report['<str>'].append(entry)"]
+    N012["if probe"]
+    N013["report['<str>'] = probe_composition(...)"]
+    N014["close(...)"]
+    N015["report['<str>'] = round(...)"]
+    N016["return report"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 -->|"true"| N004
@@ -12597,11 +12626,12 @@ flowchart TD
     N008 --> N009
     N009 -->|"try"| N010
     N010 --> N011
-    N011 -->|"true"| N012
-    N012 --> N013
-    N011 -->|"false"| N013
+    N011 --> N012
+    N012 -->|"true"| N013
     N013 --> N014
+    N012 -->|"false"| N014
     N014 --> N015
+    N015 --> N016
 ```
 
 ### _human_size(...)
@@ -12634,13 +12664,18 @@ flowchart TD
     if len(command) > 70:
         command = command[:67] + '<str>'
     lines.append(f'<str>{entry['<str>']}<str>{entry['<str>']:<str>}<str>{entry['<str>']}<str>{command}<str>')"]
-    N008["composition = get(...)"]
-    N009["if composition"]
-    N010["lines += ['<str>', '<str>', '<str>', f'<str>{_human_size(composition['<str>'])}<str>{composition['<str>']}<str>', '<str>', '<str>', '<str>']"]
-    N011["lines += [f'<str>{entry['<str>']}<str>{_human_size(entry['<str>'])}<str>' for entry in composition['<str>']]"]
-    N012["lines += ['<str>', '<str>', '<str>']"]
-    N013["lines += [f'<str>{entry['<str>']}<str>{_human_size(entry['<str>'])}<str>' for entry in composition['<str>']]"]
-    N014["return '<str>'.join(lines) + '<str>'"]
+    N008["failures = [entry for entry in report['<str>'] if entry.get('<str>')]"]
+    N009["if failures"]
+    N010["lines += ['<str>', '<str>', '<str>']"]
+    N011["for entry in failures:
+    lines += [f'<str>{entry['<str>']}<str>{entry['<str>']}<str>{entry['<str>']}<str>', '<str>', '<str>', entry['<str>'], '<str>', '<str>']"]
+    N012["composition = get(...)"]
+    N013["if composition"]
+    N014["lines += ['<str>', '<str>', '<str>', f'<str>{_human_size(composition['<str>'])}<str>{composition['<str>']}<str>', '<str>', '<str>', '<str>']"]
+    N015["lines += [f'<str>{entry['<str>']}<str>{_human_size(entry['<str>'])}<str>' for entry in composition['<str>']]"]
+    N016["lines += ['<str>', '<str>', '<str>']"]
+    N017["lines += [f'<str>{entry['<str>']}<str>{_human_size(entry['<str>'])}<str>' for entry in composition['<str>']]"]
+    N018["return '<str>'.join(lines) + '<str>'"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 -->|"true"| N004
@@ -12653,9 +12688,14 @@ flowchart TD
     N009 -->|"true"| N010
     N010 --> N011
     N011 --> N012
+    N009 -->|"false"| N012
     N012 --> N013
-    N013 --> N014
-    N009 -->|"false"| N014
+    N013 -->|"true"| N014
+    N014 --> N015
+    N015 --> N016
+    N016 --> N017
+    N017 --> N018
+    N013 -->|"false"| N018
 ```
 
 ### run(...)
@@ -12674,20 +12714,22 @@ flowchart TD
     N010["add_argument(...)"]
     N011["add_argument(...)"]
     N012["add_argument(...)"]
-    N013["args = parse_args(...)"]
-    N014["config = load_config(...)"]
-    N015["image = get_image(...)"]
-    N016["post_create = split_segments(...)"]
-    N017["post_start = split_segments(...)"]
-    N018["runtime = resolve_runtime(...)"]
-    N019["session = session_factory(...)"]
-    N020["report = measure(...)"]
-    N021["payload = dumps(...)"]
-    N022["if args.output is not None"]
-    N023["write_text(...)"]
-    N024["print(...)"]
-    N025["print(...)"]
-    N026["return 0"]
+    N013["add_argument(...)"]
+    N014["add_argument(...)"]
+    N015["args = parse_args(...)"]
+    N016["config = load_config(...)"]
+    N017["image = reject_mutable_tag(args.image) if args.image else get_image(config)"]
+    N018["post_create = split_segments(...)"]
+    N019["post_start = split_segments(...)"]
+    N020["runtime = resolve_runtime(...)"]
+    N021["session = session_factory(...)"]
+    N022["report = measure(...)"]
+    N023["payload = dumps(...)"]
+    N024["if args.output is not None"]
+    N025["write_text(...)"]
+    N026["print(...)"]
+    N027["print(...)"]
+    N028["return 0"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 --> N004
@@ -12709,11 +12751,13 @@ flowchart TD
     N019 --> N020
     N020 --> N021
     N021 --> N022
-    N022 -->|"true"| N023
+    N022 --> N023
     N023 --> N024
-    N022 -->|"false"| N024
-    N024 --> N025
+    N024 -->|"true"| N025
     N025 --> N026
+    N024 -->|"false"| N026
+    N026 --> N027
+    N027 --> N028
 ```
 
 ## scripts/measure_prefix_tokens.py
@@ -27733,13 +27777,16 @@ flowchart TD
     by_key.setdefault((dep.ecosystem, dep.name, dep.version), dep)"]
     N006["for dep in parse_transient_uv_run(repo_root):
     by_key.setdefault((dep.ecosystem, dep.name, dep.version), dep)"]
-    N007["return sorted(by_key.values(), key=lambda dep: (dep.ecosystem, dep.name, dep.version))"]
+    N007["for dep in parse_workflow_pinned_images(repo_root):
+    by_key.setdefault((dep.ecosystem, dep.name, dep.version), dep)"]
+    N008["return sorted(by_key.values(), key=lambda dep: (dep.ecosystem, dep.name, dep.version))"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 --> N004
     N004 --> N005
     N005 --> N006
     N006 --> N007
+    N007 --> N008
 ```
 
 ### parse_uv_lock(...)
@@ -27877,6 +27924,34 @@ flowchart TD
     N003 --> N004
     N004 --> N005
     N005 --> N006
+```
+
+### parse_workflow_pinned_images(...)
+
+```mermaid
+flowchart TD
+    N001["parse_workflow_pinned_images(...)"]
+    N002["workflow_dir = repo_root / WORKFLOW_SUBDIR"]
+    N003["if not workflow_dir.is_dir()"]
+    N004["return []"]
+    N005["deps = []"]
+    N006["for path in sorted(workflow_dir.rglob('<str>')):
+    if not path.is_file() or path.suffix not in ('<str>', '<str>'):
+        continue
+    text = path.read_text(encoding='<str>', errors='<str>')
+    source = str(path)
+    for line in text.splitlines():
+        match = _THREAT_INTEL_PIN.search(line)
+        if match is None:
+            continue
+        deps.append(Dependency(name=match.group('<str>'), version=match.group('<str>'), ecosystem=match.group('<str>'), source=source))"]
+    N007["return deps"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 -->|"true"| N004
+    N003 -->|"false"| N005
+    N005 --> N006
+    N006 --> N007
 ```
 
 ### _parse_action_reference(...)

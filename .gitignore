@@ -66,3 +66,13 @@ apm_modules/
 # (docs/standards/repo-scope.md).
 .env
 .env.*
+
+# Flake files staged into the nix-warm-claude Feature at image-build time by
+# .github/workflows/publish-devcontainer-images.yml (claude legs only). They are
+# copies of the repo-root flake the Feature realises into the baked closure;
+# they are generated per build and never committed so they cannot drift from the
+# source flake. See .devcontainer/images/features/nix-warm-claude/install.sh and
+# issue #1491.
+.devcontainer/images/features/nix-warm-claude/flake.nix
+.devcontainer/images/features/nix-warm-claude/flake.lock
+.devcontainer/images/features/nix-warm-claude/pyproject.toml
