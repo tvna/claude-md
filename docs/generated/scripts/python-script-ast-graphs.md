@@ -599,14 +599,25 @@ flowchart TD
     N002["branch = strip(...)"]
     N003["if not branch or branch in read_authorized_set(path)"]
     N004["return"]
-    N005["with contextlib.suppress(OSError), path.open('<str>', encoding='<str>') as handle:
-    handle.write(branch + '<str>')"]
-    N006["end"]
+    N005["try"]
+    N006["existing = read_text(...)"]
+    N007["except OSError"]
+    N008["existing = '<str>'"]
+    N009["separator = '<str>' if not existing or existing.endswith('<str>') else '<str>'"]
+    N010["with contextlib.suppress(OSError), path.open('<str>', encoding='<str>') as handle:
+    handle.write(separator + branch + '<str>')"]
+    N011["end"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 -->|"true"| N004
     N003 -->|"false"| N005
-    N005 --> N006
+    N005 -->|"try"| N006
+    N005 -->|"raises"| N007
+    N007 --> N008
+    N006 --> N009
+    N008 --> N009
+    N009 --> N010
+    N010 --> N011
 ```
 
 ### is_authorized(...)
@@ -15196,36 +15207,43 @@ flowchart TD
     N002["message = {'<str>': headline}"]
     N003["if body"]
     N004["message['<str>'] = body"]
-    N005["variables = {'<str>': {'<str>': {'<str>': repo, '<str>': branch}, '<str>': message, '<str>': expected_head_oid, '<str>': {'<str>': additions}}}"]
-    N006["(code, response) = graphql_call(...)"]
-    N007["if not 200 <= code < 300"]
-    N008["raise RuntimeError(f'<str>{code}')"]
-    N009["if 'errors' in response"]
-    N010["raise RuntimeError(f'<str>{response['<str>']}')"]
-    N011["try"]
-    N012["oid = response['<str>']['<str>']['<str>']['<str>']"]
-    N013["except (KeyError, TypeError)"]
-    N014["raise RuntimeError(f'<str>{str(response)[:200]}')"]
-    N015["if not isinstance(oid, str) or not oid"]
-    N016["raise RuntimeError(f'<str>{str(response)[:200]}')"]
-    N017["return oid"]
+    N005["file_changes = {'<str>': additions}"]
+    N006["if deletions"]
+    N007["file_changes['<str>'] = deletions"]
+    N008["variables = {'<str>': {'<str>': {'<str>': repo, '<str>': branch}, '<str>': message, '<str>': expected_head_oid, '<str>': file_changes}}"]
+    N009["(code, response) = graphql_call(...)"]
+    N010["if not 200 <= code < 300"]
+    N011["raise RuntimeError(f'<str>{code}')"]
+    N012["if 'errors' in response"]
+    N013["raise RuntimeError(f'<str>{response['<str>']}')"]
+    N014["try"]
+    N015["oid = response['<str>']['<str>']['<str>']['<str>']"]
+    N016["except (KeyError, TypeError)"]
+    N017["raise RuntimeError(f'<str>{str(response)[:200]}')"]
+    N018["if not isinstance(oid, str) or not oid"]
+    N019["raise RuntimeError(f'<str>{str(response)[:200]}')"]
+    N020["return oid"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 -->|"true"| N004
     N004 --> N005
     N003 -->|"false"| N005
     N005 --> N006
-    N006 --> N007
-    N007 -->|"true"| N008
-    N007 -->|"false"| N009
-    N009 -->|"true"| N010
-    N009 -->|"false"| N011
-    N011 -->|"try"| N012
-    N011 -->|"raises"| N013
-    N013 --> N014
-    N012 --> N015
-    N015 -->|"true"| N016
-    N015 -->|"false"| N017
+    N006 -->|"true"| N007
+    N007 --> N008
+    N006 -->|"false"| N008
+    N008 --> N009
+    N009 --> N010
+    N010 -->|"true"| N011
+    N010 -->|"false"| N012
+    N012 -->|"true"| N013
+    N012 -->|"false"| N014
+    N014 -->|"try"| N015
+    N014 -->|"raises"| N016
+    N016 --> N017
+    N015 --> N018
+    N018 -->|"true"| N019
+    N018 -->|"false"| N020
 ```
 
 ### _get_branch_head_oid(...)
@@ -15304,47 +15322,75 @@ flowchart TD
     N016 -->|"false"| N018
 ```
 
+### upsert_files_pr(...)
+
+```mermaid
+flowchart TD
+    N001["upsert_files_pr(...)"]
+    N002["if not additions and (not deletions)"]
+    N003["return '<str>'"]
+    N004["if not _ref_drifts(repo=repo, ref=base, additions=additions, deletions=deletions, token=token, apply_call=apply_call)"]
+    N005["return '<str>'"]
+    N006["api_additions = [{'<str>': path, '<str>': base64.b64encode(content).decode('<str>')} for path, content in additions]"]
+    N007["api_deletions = [{'<str>': path} for path in deletions]"]
+    N008["head_oid = _get_branch_head_oid(...)"]
+    N009["if head_oid is None"]
+    N010["base_sha = _get_ref_sha(...)"]
+    N011["_create_branch_ref(...)"]
+    N012["_create_commit_on_branch(...)"]
+    N013["verb = '<str>'"]
+    N014["if not _ref_drifts(repo=repo, ref=branch, additions=additions, deletions=deletions, token=token, apply_call=apply_call)"]
+    N015["verb = '<str>'"]
+    N016["_create_commit_on_branch(...)"]
+    N017["verb = '<str>'"]
+    N018["(_, number) = _upsert_pr(...)"]
+    N019["return f'{verb}<str>{number}'"]
+    N001 -->|"start"| N002
+    N002 -->|"true"| N003
+    N002 -->|"false"| N004
+    N004 -->|"true"| N005
+    N004 -->|"false"| N006
+    N006 --> N007
+    N007 --> N008
+    N008 --> N009
+    N009 -->|"true"| N010
+    N010 --> N011
+    N011 --> N012
+    N012 --> N013
+    N009 -->|"false"| N014
+    N014 -->|"true"| N015
+    N014 -->|"false"| N016
+    N016 --> N017
+    N013 --> N018
+    N015 --> N018
+    N017 --> N018
+    N018 --> N019
+```
+
+### _ref_drifts(...)
+
+```mermaid
+flowchart TD
+    N001["_ref_drifts(...)"]
+    N002["for path, content in additions:
+    if _get_file_bytes(repo=repo, path=path, ref=ref, token=token, apply_call=apply_call) != content:
+        return True"]
+    N003["for path in deletions:
+    if _get_file_bytes(repo=repo, path=path, ref=ref, token=token, apply_call=apply_call) is not None:
+        return True"]
+    N004["return False"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 --> N004
+```
+
 ### upsert_single_file_pr(...)
 
 ```mermaid
 flowchart TD
     N001["upsert_single_file_pr(...)"]
-    N002["base_bytes = _get_file_bytes(...)"]
-    N003["if base_bytes is not None and base_bytes == content"]
-    N004["return '<str>'"]
-    N005["additions = [{'<str>': path, '<str>': base64.b64encode(content).decode('<str>')}]"]
-    N006["head_oid = _get_branch_head_oid(...)"]
-    N007["if head_oid is None"]
-    N008["base_sha = _get_ref_sha(...)"]
-    N009["_create_branch_ref(...)"]
-    N010["_create_commit_on_branch(...)"]
-    N011["verb = '<str>'"]
-    N012["branch_bytes = _get_file_bytes(...)"]
-    N013["if branch_bytes == content"]
-    N014["verb = '<str>'"]
-    N015["_create_commit_on_branch(...)"]
-    N016["verb = '<str>'"]
-    N017["(_, number) = _upsert_pr(...)"]
-    N018["return f'{verb}<str>{number}'"]
+    N002["return upsert_files_pr(repo=repo, additions=[(path, content)], deletions=[], base=base, branch=branch, title=title, body=body, commit_subject=commit_subject, commit_body=commit_body, token=token, apply_call=apply_call, graphql_call=graphql_call)"]
     N001 -->|"start"| N002
-    N002 --> N003
-    N003 -->|"true"| N004
-    N003 -->|"false"| N005
-    N005 --> N006
-    N006 --> N007
-    N007 -->|"true"| N008
-    N008 --> N009
-    N009 --> N010
-    N010 --> N011
-    N007 -->|"false"| N012
-    N012 --> N013
-    N013 -->|"true"| N014
-    N013 -->|"false"| N015
-    N015 --> N016
-    N011 --> N017
-    N014 --> N017
-    N016 --> N017
-    N017 --> N018
 ```
 
 ### _merge_pr(...)
@@ -15569,6 +15615,105 @@ flowchart TD
     N015 -->|"false"| N017
 ```
 
+### _collect_worktree_changes(...)
+
+```mermaid
+flowchart TD
+    N001["_collect_worktree_changes(...)"]
+    N002["additions = {}"]
+    N003["deletions = set(...)"]
+    N004["for path in adds:
+    p = Path(path)
+    if not p.is_file():
+        raise RuntimeError(f'<str>{path}')
+    additions[path] = p.read_bytes()"]
+    N005["for prefix in diff_prefixes:
+    result = run_git(['<str>', '<str>', '<str>', prefix])
+    if result.returncode != 0:
+        raise RuntimeError(f'<str>{prefix!r}<str>{result.stderr.strip()}')
+    for line in result.stdout.splitlines():
+        if not line.strip():
+            continue
+        path = line[3:].split('<str>', 1)[-1].strip()
+        if path in additions:
+            continue
+        candidate = Path(path)
+        if candidate.is_file():
+            additions[path] = candidate.read_bytes()
+            deletions.discard(path)
+        else:
+            deletions.add(path)"]
+    N006["return (list(additions.items()), sorted(deletions))"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 --> N004
+    N004 --> N005
+    N005 --> N006
+```
+
+### _cmd_upsert_files(...)
+
+```mermaid
+flowchart TD
+    N001["_cmd_upsert_files(...)"]
+    N002["token = get(...)"]
+    N003["if not token"]
+    N004["print(...)"]
+    N005["return 1"]
+    N006["repo = get(...)"]
+    N007["if not repo"]
+    N008["print(...)"]
+    N009["return 1"]
+    N010["body_path = Path(...)"]
+    N011["if not body_path.exists()"]
+    N012["print(...)"]
+    N013["return 1"]
+    N014["body = read_text(...)"]
+    N015["try"]
+    N016["(additions, deletions) = _collect_worktree_changes(...)"]
+    N017["except RuntimeError"]
+    N018["print(...)"]
+    N019["return 1"]
+    N020["if not additions and (not deletions)"]
+    N021["print(...)"]
+    N022["return 0"]
+    N023["try"]
+    N024["result = upsert_files_pr(...)"]
+    N025["except RuntimeError"]
+    N026["print(...)"]
+    N027["return 1"]
+    N028["print(...)"]
+    N029["return 0"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 -->|"true"| N004
+    N004 --> N005
+    N003 -->|"false"| N006
+    N006 --> N007
+    N007 -->|"true"| N008
+    N008 --> N009
+    N007 -->|"false"| N010
+    N010 --> N011
+    N011 -->|"true"| N012
+    N012 --> N013
+    N011 -->|"false"| N014
+    N014 --> N015
+    N015 -->|"try"| N016
+    N015 -->|"raises"| N017
+    N017 --> N018
+    N018 --> N019
+    N016 --> N020
+    N020 -->|"true"| N021
+    N021 --> N022
+    N020 -->|"false"| N023
+    N023 -->|"try"| N024
+    N023 -->|"raises"| N025
+    N025 --> N026
+    N026 --> N027
+    N024 --> N028
+    N028 --> N029
+```
+
 ### main(...)
 
 ```mermaid
@@ -15583,12 +15728,23 @@ flowchart TD
     N008["add_argument(...)"]
     N009["find_p = add_parser(...)"]
     N010["add_argument(...)"]
-    N011["args = parse_args(...)"]
-    N012["if args.cmd == 'upsert'"]
-    N013["return _cmd_upsert(args)"]
-    N014["if args.cmd == 'find'"]
-    N015["return _cmd_find(args)"]
-    N016["return 0"]
+    N011["files_p = add_parser(...)"]
+    N012["add_argument(...)"]
+    N013["add_argument(...)"]
+    N014["add_argument(...)"]
+    N015["add_argument(...)"]
+    N016["add_argument(...)"]
+    N017["add_argument(...)"]
+    N018["add_argument(...)"]
+    N019["add_argument(...)"]
+    N020["args = parse_args(...)"]
+    N021["if args.cmd == 'upsert'"]
+    N022["return _cmd_upsert(args)"]
+    N023["if args.cmd == 'find'"]
+    N024["return _cmd_find(args)"]
+    N025["if args.cmd == 'upsert-files'"]
+    N026["return _cmd_upsert_files(args)"]
+    N027["return 0"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 --> N004
@@ -15600,10 +15756,21 @@ flowchart TD
     N009 --> N010
     N010 --> N011
     N011 --> N012
-    N012 -->|"true"| N013
-    N012 -->|"false"| N014
-    N014 -->|"true"| N015
-    N014 -->|"false"| N016
+    N012 --> N013
+    N013 --> N014
+    N014 --> N015
+    N015 --> N016
+    N016 --> N017
+    N017 --> N018
+    N018 --> N019
+    N019 --> N020
+    N020 --> N021
+    N021 -->|"true"| N022
+    N021 -->|"false"| N023
+    N023 -->|"true"| N024
+    N023 -->|"false"| N025
+    N025 -->|"true"| N026
+    N025 -->|"false"| N027
 ```
 
 ## scripts/preflight_all.py
@@ -25706,6 +25873,138 @@ flowchart TD
     N005 --> N006
     N006 --> N007
     N007 --> N008
+```
+
+## scripts/scan_workflow_unsigned_commit.py
+
+### _load_yaml(...)
+
+```mermaid
+flowchart TD
+    N001["_load_yaml(...)"]
+    N002["try"]
+    N003["data = safe_load(...)"]
+    N004["except Exception"]
+    N005["return None"]
+    N006["return data if isinstance(data, dict) else None"]
+    N001 -->|"start"| N002
+    N002 -->|"try"| N003
+    N002 -->|"raises"| N004
+    N004 --> N005
+    N003 --> N006
+```
+
+### _iter_run_steps(...)
+
+```mermaid
+flowchart TD
+    N001["_iter_run_steps(...)"]
+    N002["for wf_path in sorted(workflow_dir.glob('<str>')):
+    data = _load_yaml(wf_path)
+    if data is None:
+        continue
+    jobs = data.get('<str>') or {}
+    if not isinstance(jobs, dict):
+        continue
+    for job_id, job in jobs.items():
+        if not isinstance(job, dict):
+            continue
+        steps = job.get('<str>') or []
+        if not isinstance(steps, list):
+            continue
+        for step in steps:
+            if not isinstance(step, dict):
+                continue
+            run_text = step.get('<str>')
+            if not isinstance(run_text, str):
+                continue
+            step_name = str(step.get('<str>') or '<str>')
+            yield (wf_path.name, str(job_id), step_name, run_text)"]
+    N003["end"]
+    N001 -->|"start"| N002
+    N002 --> N003
+```
+
+### scan_run_text(...)
+
+```mermaid
+flowchart TD
+    N001["scan_run_text(...)"]
+    N002["hits = []"]
+    N003["for lineno, line in enumerate(run_text.splitlines(), start=1):
+    if ACK_MARKER in line:
+        continue
+    match = _GIT_PUSH.search(line)
+    if match is not None:
+        fragment = line[match.start():match.start() + _FRAGMENT_LEN].strip()
+        hits.append((lineno, fragment))"]
+    N004["return hits"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 --> N004
+```
+
+### _iter_matches(...)
+
+```mermaid
+flowchart TD
+    N001["_iter_matches(...)"]
+    N002["for wf_name, job_id, step_name, run_text in _iter_run_steps(workflow_dir):
+    for lineno, fragment in scan_run_text(run_text):
+        yield Violation(workflow=wf_name, job=job_id, step=step_name, line=lineno, fragment=fragment)"]
+    N003["end"]
+    N001 -->|"start"| N002
+    N002 --> N003
+```
+
+### find_violations(...)
+
+```mermaid
+flowchart TD
+    N001["find_violations(...)"]
+    N002["return list(_iter_matches(workflow_dir))"]
+    N001 -->|"start"| N002
+```
+
+### main(...)
+
+```mermaid
+flowchart TD
+    N001["main(...)"]
+    N002["parser = ArgumentParser(...)"]
+    N003["sub = add_subparsers(...)"]
+    N004["add_parser(...)"]
+    N005["add_parser(...)"]
+    N006["args = parse_args(...)"]
+    N007["wf_dir = WORKFLOW_DIR"]
+    N008["if args.cmd == 'list'"]
+    N009["for v in _iter_matches(wf_dir):
+    print(f'{v.workflow}<str>{v.job}<str>{v.step!r}<str>{v.line}<str>{v.fragment!r}')"]
+    N010["return 0"]
+    N011["violations = find_violations(...)"]
+    N012["if not violations"]
+    N013["print(...)"]
+    N014["return 0"]
+    N015["for v in violations:
+    print(f'<str>{v.workflow}<str>{v.step!r}<str>{v.job}<str>{v.fragment!r}<str>{ACK_MARKER}<str>', file=sys.stderr)"]
+    N016["print(...)"]
+    N017["return 1"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 --> N004
+    N004 --> N005
+    N005 --> N006
+    N006 --> N007
+    N007 --> N008
+    N008 -->|"true"| N009
+    N009 --> N010
+    N008 -->|"false"| N011
+    N011 --> N012
+    N012 -->|"true"| N013
+    N013 --> N014
+    N012 -->|"false"| N015
+    N015 --> N016
+    N016 --> N017
 ```
 
 ## scripts/script_ast_graph.py
