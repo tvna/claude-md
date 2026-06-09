@@ -1,21 +1,21 @@
 #!/usr/bin/env python3
-"""Deterministic gate: forbid hand edits to ``docs/generated/scripts/``.
+"""Deterministic gate: forbid hand edits to ``docs/generated/``.
 
-Content under ``docs/generated/scripts/`` is owned by the post-merge
-automation (refs #1540): the ``decision-tree`` job in
-``.github/workflows/post-merge.yml`` regenerates the per-script AST docs after a
-merge to ``main`` and opens the bot branch ``chore/update-generated-docs`` to
-publish them. Neither the pre-push gate nor any pre-merge drift gate regenerates
-or drift-checks that folder, so this gate is the inverse
-control: a non-bot branch whose diff touches ``docs/generated/scripts/**`` is
-rejected, keeping the folder a single-producer surface instead of a
-hand-editable one.
+Content under ``docs/generated/`` (both ``scripts/`` and ``workflows/``) is
+owned by the post-merge automation (refs #1540, #1545): the ``decision-tree``
+job in ``.github/workflows/post-merge.yml`` regenerates the per-script AST docs
+and the workflow if-branch diagrams after a merge to ``main`` and opens the bot
+branch ``chore/update-generated-docs`` to publish them. Neither the pre-push
+gate nor any pre-merge drift gate regenerates or drift-checks that folder, so
+this gate is the inverse control: a non-bot branch whose diff touches
+``docs/generated/scripts/**`` or ``docs/generated/workflows/**`` is rejected,
+keeping the folder a single-producer surface instead of a hand-editable one.
 
 The post-merge bot branch (``chore/update-generated-docs``) is exempt: it is the
 legitimate producer, and its diff is exactly the regenerated content.
 
 Architecture: pure functions on top (:func:`resolve_base`,
-:func:`changed_generated_scripts`, :func:`evaluate`), a single subprocess
+:func:`changed_generated_docs`, :func:`evaluate`), a single subprocess
 boundary at the bottom (:func:`_run`).
 
 Contract:
@@ -25,7 +25,7 @@ Contract:
   ``git`` branch).
 - Outputs: a single ``OK``/``::error::`` line; exit 0 when no protected path is
   touched or the branch is the exempt bot branch, exit 1 when a non-exempt
-  branch edits the protected folder.
+  branch edits a protected folder.
 - Failure policy: fails loud per CLAUDE.md section 4 -- a forbidden edit and a
   failed git invocation both exit non-zero rather than passing silently.
 """
@@ -37,8 +37,8 @@ import os
 import subprocess
 import sys
 
-# Folder owned by the post-merge automation; hand edits are forbidden here.
-PROTECTED_PREFIX = "docs/generated/scripts/"
+# Folders owned by the post-merge automation; hand edits are forbidden here.
+PROTECTED_PREFIXES = ("docs/generated/scripts/", "docs/generated/workflows/")
 
 # The post-merge bot branch that legitimately regenerates the folder. It is the
 # fixed PR_BRANCH used by the post-merge ``decision-tree`` job.
@@ -81,10 +81,10 @@ def resolve_branch(explicit: str | None = None, *, runner=subprocess.run) -> str
     return result.stdout.strip()
 
 
-def changed_generated_scripts(
+def changed_generated_docs(
     base_ref: str, head: str = "HEAD", *, runner=subprocess.run
 ) -> frozenset[str]:
-    """Return paths under :data:`PROTECTED_PREFIX` changed in ``{base}..{head}``.
+    """Return paths under any :data:`PROTECTED_PREFIXES` changed in ``{base}..{head}``.
 
     Uses ``git diff --name-only`` so renames and deletes also surface.
     """
@@ -92,7 +92,7 @@ def changed_generated_scripts(
         ["git", "diff", "--name-only", f"{base_ref}..{head}"], runner=runner
     )
     touched = {line.strip() for line in result.stdout.splitlines() if line.strip()}
-    return frozenset(path for path in touched if path.startswith(PROTECTED_PREFIX))
+    return frozenset(path for path in touched if path.startswith(PROTECTED_PREFIXES))
 
 
 def is_exempt(branch: str) -> bool:
@@ -108,11 +108,12 @@ def evaluate(changed: frozenset[str], branch: str) -> tuple[int, list[str]]:
         return 0, []
     pretty = ", ".join(sorted(changed))
     return 1, [
-        f"::error::{PROTECTED_PREFIX} is owned by the post-merge automation "
-        "(refs #1540) and must not be edited by hand. The following files "
-        f"were changed on branch {branch or '(unknown)'!r}: {pretty}. Revert "
-        "them; the post-merge `decision-tree` job regenerates per-script AST "
-        "docs and opens the `chore/update-generated-docs` PR after merge."
+        "::error::docs/generated/ is owned by the post-merge automation "
+        "(refs #1540, #1545) and must not be edited by hand. The following "
+        f"files were changed on branch {branch or '(unknown)'!r}: {pretty}. "
+        "Revert them; the post-merge `decision-tree` job regenerates the AST "
+        "docs and workflow diagrams and opens the `chore/update-generated-docs` "
+        "PR after merge."
     ]
 
 
@@ -120,7 +121,7 @@ def _cmd_verify(args: argparse.Namespace) -> int:
     base = args.base_ref or resolve_base()
     branch = resolve_branch(args.branch)
     try:
-        changed = changed_generated_scripts(base)
+        changed = changed_generated_docs(base)
     except (
         subprocess.CalledProcessError,
         subprocess.TimeoutExpired,
@@ -141,7 +142,7 @@ def _cmd_verify(args: argparse.Namespace) -> int:
                 f"OK: exempt bot branch {branch!r} regenerated {pretty}."
             )
         else:
-            print(f"OK: no {PROTECTED_PREFIX} files modified.")
+            print("OK: no docs/generated/ files modified.")
         return 0
     for line in errors:
         print(line, file=sys.stderr)
@@ -154,7 +155,7 @@ def main(argv: list[str] | None = None) -> int:
 
     p_verify = sub.add_parser(
         "verify",
-        help="Fail when a non-bot branch edits docs/generated/scripts/.",
+        help="Fail when a non-bot branch edits docs/generated/ (scripts/ or workflows/).",
     )
     p_verify.add_argument(
         "--base-ref",
