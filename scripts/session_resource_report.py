@@ -226,14 +226,51 @@ def delta_usage(cumulative: Usage, baseline: Usage | None) -> Usage:
     )
 
 
+_MODEL_TIERS = ("opus", "sonnet", "haiku")
+_UNKNOWN_MODEL_TIER = "other-class"
+
+
+def redact_model(model: str) -> str:
+    """Map a ccusage model id to a non-identifying capability tier.
+
+    The runtime model-identity policy withholds the configured model
+    identifier from pushed artifacts, so the exact ccusage ``modelsUsed`` id
+    (for example ``claude-opus-4-8``) must never be written verbatim into a PR
+    body. A ``claude-`` id whose name carries ``opus`` / ``sonnet`` / ``haiku``
+    collapses to ``Opus-class`` / ``Sonnet-class`` / ``Haiku-class``; any other
+    id (a non-Claude model or an unrecognized shape) collapses to the harmless
+    ``other-class`` fallback so an unknown id never leaks through. The match is
+    a case-insensitive substring so both the current ``claude-opus-4-8`` shape
+    and an older ``claude-3-5-sonnet-...`` shape resolve to the same tier.
+    """
+    lowered = model.lower()
+    for tier in _MODEL_TIERS:
+        if tier in lowered:
+            return f"{tier.capitalize()}-class"
+    return _UNKNOWN_MODEL_TIER
+
+
+def redact_models(models: list[str]) -> list[str]:
+    """Return the order-preserving, de-duplicated capability tiers for *models*.
+
+    Two model ids in the same family (for example two Opus versions) collapse
+    to a single ``Opus-class`` entry rather than repeating the tier.
+    """
+    seen: dict[str, None] = {}
+    for model in models:
+        seen.setdefault(redact_model(model), None)
+    return list(seen)
+
+
 def render_section(elapsed: str | None, usage: Usage | None) -> str:
     """Return the ``## Resource Consumption`` markdown block.
 
     *elapsed* is the ``H:MM:SS`` string or ``None``; *usage* is the per-PR
     :class:`Usage` delta or ``None``. Any missing input renders as
     ``unavailable (no session data)`` so the section is always presence-valid
-    for ``scripts/body_policy.py``. The output is ASCII so it passes the
-    GitHub-post non-ASCII gate.
+    for ``scripts/body_policy.py``. The ``Model(s)`` line carries the redacted
+    capability tier (:func:`redact_models`), never the verbatim model id. The
+    output is ASCII so it passes the GitHub-post non-ASCII gate.
     """
     elapsed_txt = elapsed if elapsed else _UNAVAILABLE
     if usage is not None:
@@ -243,7 +280,8 @@ def render_section(elapsed: str | None, usage: Usage | None) -> str:
             f"cache-read {usage['cache_read']:,})"
         )
         cost = f"${usage['cost']:.4f}"
-        models = ", ".join(usage["models"]) if usage["models"] else _UNAVAILABLE
+        tiers = redact_models(usage["models"])
+        models = ", ".join(tiers) if tiers else _UNAVAILABLE
     else:
         total = cost = models = _UNAVAILABLE
     return (

@@ -175,7 +175,9 @@ class TestRenderSection:
         assert "input 3,064" in out
         assert "cache-read 2,671,781" in out
         assert "$3.9719" in out
-        assert "claude-opus-4-8" in out
+        # The Model(s) line carries the redacted tier, never the verbatim id.
+        assert "Model(s): Opus-class" in out
+        assert "claude-opus-4-8" not in out
 
     def test_usage_none_renders_unavailable(self) -> None:
         out = srr.render_section("0:09:11", None)
@@ -208,6 +210,50 @@ class TestRenderSection:
     def test_output_is_ascii(self) -> None:
         assert srr.render_section("0:09:11", _USAGE).isascii()
         assert srr.render_section(None, None).isascii()
+
+
+# ---------------------------------------------------------------------------
+# redact_model / redact_models (model-identity redaction)
+# ---------------------------------------------------------------------------
+
+
+class TestRedactModel:
+    def test_opus_id_maps_to_tier(self) -> None:
+        assert srr.redact_model("claude-opus-4-8") == "Opus-class"
+
+    def test_sonnet_id_maps_to_tier(self) -> None:
+        assert srr.redact_model("claude-sonnet-4-6") == "Sonnet-class"
+
+    def test_haiku_id_maps_to_tier(self) -> None:
+        assert srr.redact_model("claude-haiku-4-5-20251001") == "Haiku-class"
+
+    def test_older_shape_with_family_after_version(self) -> None:
+        # A substring match so an older claude-3-5-sonnet-... shape still
+        # resolves to the family tier.
+        assert srr.redact_model("claude-3-5-sonnet-20241022") == "Sonnet-class"
+
+    def test_unknown_id_falls_back(self) -> None:
+        # A non-Claude or unrecognized id never leaks verbatim.
+        assert srr.redact_model("gpt-4o") == srr._UNKNOWN_MODEL_TIER
+        assert srr.redact_model("some-other-model") == srr._UNKNOWN_MODEL_TIER
+
+    def test_no_verbatim_version_in_output(self) -> None:
+        assert "4-8" not in srr.redact_model("claude-opus-4-8")
+
+
+class TestRedactModels:
+    def test_order_preserving_and_deduplicated(self) -> None:
+        tiers = srr.redact_models(
+            ["claude-opus-4-8", "claude-sonnet-4-6", "claude-opus-4-7"]
+        )
+        # Two Opus ids collapse to a single Opus-class entry; order preserved.
+        assert tiers == ["Opus-class", "Sonnet-class"]
+
+    def test_empty_list_returns_empty(self) -> None:
+        assert srr.redact_models([]) == []
+
+    def test_unknown_ids_collapse_to_single_fallback(self) -> None:
+        assert srr.redact_models(["foo", "bar"]) == [srr._UNKNOWN_MODEL_TIER]
 
 
 # ---------------------------------------------------------------------------
@@ -248,6 +294,9 @@ class TestGather:
         assert f"{_ELAPSED_LABEL}: 0:01:30" in out
         assert "2,558,807" in out
         assert "$3.7231" in out
+        # End-to-end the Model(s) line is redacted to the capability tier.
+        assert "Model(s): Opus-class" in out
+        assert "claude-opus-4-8" not in out
 
     def test_no_session_id_degrades(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # No session id -> ccusage is never consulted; tokens unavailable but
