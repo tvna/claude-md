@@ -149,6 +149,19 @@ STEPS: tuple[Step, ...] = (
         argv=("python3", "scripts/scan_workflow_injection.py", "verify"),
     ),
     Step(
+        name="scan_workflow_unsigned_commit",
+        argv=("python3", "scripts/scan_workflow_unsigned_commit.py", "verify"),
+    ),
+    Step(
+        # Refs #1519. Offline PR-head mirror of the pull_request_target
+        # threat-intel triage scan: fails when the parser yields a malformed
+        # OSV coordinate (the #1511 class) that the base-checkout triage job
+        # cannot catch on the PR. Stdlib-only and network-free, so it runs
+        # the same here, in pre-commit, and on PR head via prek.
+        name="threat_intel_coords",
+        argv=("python3", "scripts/threat_intel_triage.py", "verify"),
+    ),
+    Step(
         # Refs #1256. Workflow correctness gate: actionlint validates
         # workflow syntax, ${{ }} expressions, and -- with shellcheck on
         # PATH -- the shell in every ``run:`` block. Complements the
@@ -229,7 +242,19 @@ STEPS: tuple[Step, ...] = (
     ),
     Step(
         name="auto_retro_decision_tree_doc",
-        argv=("python3", "scripts/auto_retro.py", "decision-tree-doc"),
+        argv=("python3", "scripts/script_ast_graph.py", "auto-retro-decision-tree-doc"),
+    ),
+    Step(
+        # Compatibility coverage for workflows that still reference
+        # scripts/auto_retro.py in pull_request path filters or verify jobs.
+        # The command writes only to stdout; generated docs are owned by
+        # script_ast_graph.py.
+        name="auto_retro_decision_tree_compat",
+        argv=("python3", "scripts/auto_retro.py", "decision-tree"),
+    ),
+    Step(
+        name="script_ast_graphs_doc",
+        argv=("python3", "scripts/script_ast_graph.py", "all-doc"),
     ),
     Step(
         name="workflow_diagram_doc",
@@ -552,11 +577,12 @@ def _heavy_fingerprint(heavy: Sequence[Step], cwd: Path) -> str | None:
 # run concurrently with the working-tree-reading static gates, so the parallel
 # tier runs them first, sequentially (refs #1245):
 #   * preflight_branch_base -- ``git fetch`` writes .git refs and takes a lock.
-#   * auto_retro_decision_tree_doc / workflow_diagram_doc -- write tracked docs
-#     into the working tree.
+#   * auto_retro_decision_tree_doc / script_ast_graphs_doc /
+#     workflow_diagram_doc -- write tracked docs into the working tree.
 _SERIAL_CHEAP: frozenset[str] = frozenset({
     "preflight_branch_base",
     "auto_retro_decision_tree_doc",
+    "script_ast_graphs_doc",
     "workflow_diagram_doc",
 })
 

@@ -40,6 +40,10 @@ from pathlib import Path
 
 from _github_api import apply_call as github_apply_call
 
+# Static per-family catalog split out to keep this module within its size
+# budget (#1488); re-imported so sdr.* names stay stable for callers/tests.
+from _security_drift_families import FAMILY_ISSUE_SPEC, ISSUE_LABELS, TARGET_FAMILIES
+
 API_ROOT = "https://api.github.com"
 DEFAULT_TRACKING_ISSUE = 178
 DEFAULT_MARKER = "<!-- security-control-drift-report -->"
@@ -49,51 +53,6 @@ STATUS_DRIFT = "drift"
 STATUS_PENDING = "pending"
 STATUS_ERROR = "error"
 _VALID_STATUSES = frozenset({STATUS_COVERED, STATUS_DRIFT, STATUS_PENDING, STATUS_ERROR})
-
-# Labels applied to every auto-filed per-family drift issue (mirrors
-# scripts/ruleset_drift.py so the meta-fix lane stays uniform).
-ISSUE_LABELS: tuple[str, ...] = ("layer:meta", "type:fix")
-
-# Families this aggregator auto-files an issue for when they drift, raising them
-# to the `detect-and-file` floor (.github/security-control-floor.toml). The
-# `rulesets` family is deliberately excluded -- the dedicated ruleset-drift job
-# already files its own issues, so including it here would double-file. The
-# advisory `uv-pin-staleness` signal is excluded by design (warning-only).
-TARGET_FAMILIES: tuple[str, ...] = ("labels", "apm-instructions", "uv-pin-literal")
-
-# Per-family static issue text. Detector/evidence mirror the classify_* rows;
-# remediation is the actionable next step a responder runs.
-FAMILY_ISSUE_SPEC: dict[str, dict[str, str]] = {
-    "labels": {
-        "scope": "labels-drift",
-        "detector": "scripts/labels_apply.py plan",
-        "evidence": ".github/labels.json",
-        "remediation": (
-            "Review the labels plan in the run log, then dispatch apply-labels.yml "
-            "with dry_run=false after review (docs/runbooks/issue-triage.md)."
-        ),
-    },
-    "apm-instructions": {
-        "scope": "apm-drift",
-        "detector": "apm compile + git diff --exit-code -- CLAUDE.md AGENTS.md",
-        "evidence": ".apm/instructions/master.instructions.md",
-        "remediation": (
-            "Recompile with `uv run --with apm-cli==<pin> --exclude-newer \"14 days\" "
-            "apm compile` and commit the regenerated CLAUDE.md / AGENTS.md."
-        ),
-    },
-    "uv-pin-literal": {
-        "scope": "uv-pin-drift",
-        "detector": "scripts/uv_pin.py drift",
-        "evidence": "pyproject.toml [tool.uv].required-version",
-        "remediation": (
-            "Remove the offending pin literal or update pyproject.toml so the pin "
-            "lives only in [tool.uv].required-version "
-            "(docs/standards/remote-environment.md)."
-        ),
-    },
-}
-
 
 @dataclasses.dataclass(frozen=True)
 class FamilyRow:
@@ -296,6 +255,38 @@ def classify_uv_pin_literal(*, rc: int) -> FamilyRow:
         status=STATUS_ERROR,
         evidence=evidence,
         action=f"detector exit rc={rc}; investigate the uv_pin drift step log",
+    )
+
+
+def classify_workflow_permissions(*, rc: int) -> FamilyRow:
+    evidence = ".github/actions-permissions/workflow.json"
+    detector = "scripts/rulesets_apply.py workflow-permissions --mode drift"
+    if rc == 0:
+        return FamilyRow(
+            family="workflow-permissions",
+            detector=detector,
+            status=STATUS_COVERED,
+            evidence=evidence,
+            action="no action -- live default workflow permissions match SoT",
+        )
+    if rc == 1:
+        return FamilyRow(
+            family="workflow-permissions",
+            detector=detector,
+            status=STATUS_DRIFT,
+            evidence=evidence,
+            action=(
+                "live default workflow permissions diverge from SoT -- dispatch "
+                "apply-rulesets.yml with enable_workflow_permissions=true and "
+                "dry_run=false after review (docs/runbooks/workflow-permissions.md)"
+            ),
+        )
+    return FamilyRow(
+        family="workflow-permissions",
+        detector=detector,
+        status=STATUS_ERROR,
+        evidence=evidence,
+        action=f"detector exit rc={rc}; investigate the workflow-permissions step log",
     )
 
 
@@ -530,6 +521,12 @@ def _assemble_families(args: argparse.Namespace) -> list[FamilyRow]:
         classify_uv_pin_literal(
             rc=parse_int_flag(args.uv_drift_rc, "--uv-drift-rc")
         ),
+        classify_workflow_permissions(
+            rc=parse_int_flag(
+                args.workflow_permissions_drift_rc,
+                "--workflow-permissions-drift-rc",
+            )
+        ),
         classify_uv_pin_staleness(
             rc=parse_int_flag(args.uv_stale_rc, "--uv-stale-rc"),
             stale_text=uv_stale_text,
@@ -738,6 +735,7 @@ def _build_parser(
     p_agg.add_argument("--labels-summary-file", required=True)
     p_agg.add_argument("--apm-diff-rc", required=True)
     p_agg.add_argument("--uv-drift-rc", required=True)
+    p_agg.add_argument("--workflow-permissions-drift-rc", required=True)
     p_agg.add_argument("--uv-stale-rc", required=True)
     p_agg.add_argument("--uv-stale-output", required=True)
     p_agg.add_argument("--run-url", required=True)

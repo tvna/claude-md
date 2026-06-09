@@ -223,6 +223,10 @@ def discover_dependencies(repo_root: Path) -> list[Dependency]:
       -- transient PyPI pins inside ``uv run --with pkg==version``
       invocations. Non-executable docs prose is intentionally excluded
       so README / runbook examples cannot create noisy findings.
+    * ``.github/workflows/**/*.{yml,yaml}`` -- digest-pinned container
+      images declared via ``# threat-intel-pin: <ecosystem> <name>
+      <version>`` comments (#1276). Keeps a ``run:``-step image (which
+      carries no ``uses:`` action ref) on the OSV correlation surface.
     """
     by_key: dict[tuple[str, str, str], Dependency] = {}
     for dep in parse_uv_lock(repo_root / "uv.lock"):
@@ -232,6 +236,8 @@ def discover_dependencies(repo_root: Path) -> list[Dependency]:
     for dep in parse_workflow_actions(repo_root):
         by_key.setdefault((dep.ecosystem, dep.name, dep.version), dep)
     for dep in parse_transient_uv_run(repo_root):
+        by_key.setdefault((dep.ecosystem, dep.name, dep.version), dep)
+    for dep in parse_workflow_pinned_images(repo_root):
         by_key.setdefault((dep.ecosystem, dep.name, dep.version), dep)
     return sorted(by_key.values(), key=lambda dep: (dep.ecosystem, dep.name, dep.version))
 
@@ -383,6 +389,76 @@ def _extract_workflow_actions(path: Path) -> list[Dependency]:
     return deps
 
 
+# Structured threat-intel pin comment for a digest-pinned container image
+# referenced inside a ``run:`` step rather than a ``uses:`` action. The
+# action-pin scanners above never see such an image (it is not a ``uses:``
+# ref), and digest pinning for OCI images is deliberately out of the
+# SHA-pin gate's scope, so without this companion comment the image would
+# carry no OSV correlation surface at all. Format, on its own comment line
+# in a workflow file::
+#
+#     # threat-intel-pin: <ecosystem> <name> <version>
+#
+# e.g. ``# threat-intel-pin: Go github.com/aquasecurity/trivy 0.70.0``.
+# The image runtime is pinned by ``@sha256:<digest>`` for byte-exact
+# supply-chain integrity (#1276); this line re-attaches the OSV surface
+# the ``trivy-action`` ``uses:`` ref used to provide. The operator declares
+# the OSV coordinates explicitly so this module makes no guessed ecosystem
+# mapping (CLAUDE.md s2). Keep the version in lockstep with the digest on
+# every bump (see docs/runbooks/compromised-action-response.md).
+#
+# The leading ``^\s*`` anchors the match to the start of a line (#1511):
+# the parser scans each line with ``.search()``, so without the anchor a
+# *prose* mention of the token inside a backtick-quoted phrase elsewhere on
+# a comment line (e.g. "the ``# threat-intel-pin:`` line in ..." at
+# publish-devcontainer-images.yml) matched mid-line and produced a garbage
+# ``Dependency`` whose coordinates OSV querybatch rejected with HTTP 400.
+# Anchoring forces a line that *is* a pin comment, so only the real pin
+# declared on its own line is ingested.
+_THREAT_INTEL_PIN = re.compile(
+    r"^\s*#\s*threat-intel-pin:\s*"
+    r"(?P<ecosystem>\S+)\s+(?P<name>\S+)\s+(?P<version>\S+)\s*$"
+)
+
+
+def parse_workflow_pinned_images(repo_root: Path) -> list[Dependency]:
+    """Return container-image deps declared via ``# threat-intel-pin:`` comments.
+
+    Walks ``.github/workflows/**/*.{yml,yaml}`` under *repo_root* and turns
+    every ``# threat-intel-pin: <ecosystem> <name> <version>`` comment into a
+    :class:`Dependency` keyed on the operator-declared ecosystem. This is the
+    coverage-preserving counterpart to digest-pinning an image inside a
+    ``run:`` step (#1276): the digest gives byte-exact integrity while the
+    pin comment keeps the image on the OSV correlation surface, since
+    :func:`parse_workflow_actions` only matches ``uses:`` action refs.
+
+    Unlike the action parser, comment lines are *not* skipped here -- the pin
+    intentionally lives in a comment so it never affects workflow execution.
+    """
+    workflow_dir = repo_root / WORKFLOW_SUBDIR
+    if not workflow_dir.is_dir():
+        return []
+    deps: list[Dependency] = []
+    for path in sorted(workflow_dir.rglob("*")):
+        if not path.is_file() or path.suffix not in (".yml", ".yaml"):
+            continue
+        text = path.read_text(encoding="utf-8", errors="ignore")
+        source = str(path)
+        for line in text.splitlines():
+            match = _THREAT_INTEL_PIN.search(line)
+            if match is None:
+                continue
+            deps.append(
+                Dependency(
+                    name=match.group("name"),
+                    version=match.group("version"),
+                    ecosystem=match.group("ecosystem"),
+                    source=source,
+                )
+            )
+    return deps
+
+
 def _parse_action_reference(
     ref: str, tag_comment: str | None
 ) -> tuple[str, str] | None:
@@ -497,7 +573,27 @@ def fetch_external_findings(
     if not dependencies:
         return []
 
-    osv_batch = load_json(osv_file) if osv_file is not None else query_osv_batch(dependencies)
+    if osv_file is not None:
+        osv_batch = load_json(osv_file)
+    else:
+        # Defense in depth (#1519): validate coordinates offline before the
+        # network call so a parser false-match (#1511) fails loud naming the
+        # source file, instead of OSV rejecting the whole batch with HTTP 400
+        # and hiding every finding. The HTTP 400 handler in query_osv_batch
+        # remains the backstop for coordinates that pass this check yet OSV
+        # still refuses.
+        malformed = validate_osv_coordinates(dependencies)
+        if malformed:
+            coords = "; ".join(
+                f"{dep.ecosystem}:{dep.name}@{dep.version} (from {dep.source}) -- {reason}"
+                for dep, reason in malformed
+            )
+            raise ValueError(
+                "Refusing to submit malformed OSV coordinates to querybatch "
+                "(offline pre-check); fix the source so the parser yields a "
+                f"valid ecosystem/name/version. Malformed: {coords}"
+            )
+        osv_batch = query_osv_batch(dependencies)
     kev_catalog = load_json(kev_file) if kev_file is not None else fetch_cisa_kev()
     kev_cves = parse_kev_cves(kev_catalog)
 
@@ -556,6 +652,71 @@ def fetch_external_findings(
     return sorted(merged, key=lambda f: (f.dependency.name, f.vuln_id))
 
 
+# Authoritative OSV ecosystem identifiers -- the canonical base name before
+# any colon-suffixed release (e.g. "Debian" from "Debian:11") -- sourced from
+# the OSV schema "Defined Ecosystems" list (ossf/osv-schema docs/schema.md). A
+# discovered coordinate whose ecosystem falls outside this set cannot be a real
+# dependency: the parsers emit a fixed constant (``PyPI`` / ``GitHub Actions``)
+# or an operator-declared OSV ecosystem on a ``# threat-intel-pin:`` line, so a
+# junk value such as ``"`"`` produced by a parser false-match (#1511) is
+# malformed by definition. Treated as a checked-in mirror of the OSV contract,
+# not a live fetch: adding a new ecosystem to a pin is a deliberate one-line
+# review here, and the real-repo validation test (#1519) fails loud if a
+# legitimate ecosystem is ever missing.
+_KNOWN_OSV_ECOSYSTEMS = frozenset({
+    "AlmaLinux", "Alpaquita", "Alpine", "Android", "Azure Linux",
+    "BellSoft Hardened Containers", "Bioconductor", "Bitnami", "Chainguard",
+    "CleanStart", "ConanCenter", "CRAN", "crates.io", "Debian",
+    "Docker Hardened Images", "Echo", "FreeBSD", "GHC", "GitHub Actions",
+    "Go", "Hackage", "Hex", "Julia", "Kubernetes", "Linux", "Mageia",
+    "Maven", "MinimOS", "npm", "NuGet", "opam", "openEuler", "openSUSE",
+    "OSS-Fuzz", "Packagist", "Photon OS", "Pub", "PyPI", "Red Hat",
+    "Rocky Linux", "Root", "RubyGems", "SUSE", "SwiftURL", "TuxCare",
+    "Ubuntu", "VSCode", "Wolfi",
+})
+
+# A well-formed OSV ``name`` / ``version`` carries no whitespace, control, or
+# backtick characters. The #1511 prose false-match yielded exactly such junk
+# (name="line", version="in" alongside an ecosystem of "`").
+_COORD_FIELD_BAD_CHARS = re.compile(r"[\s`\x00-\x1f\x7f]")
+
+
+def _ecosystem_base(ecosystem: str) -> str:
+    """Return the ecosystem name without an OSV ``:<release>`` suffix."""
+    return ecosystem.split(":", 1)[0]
+
+
+def _coord_field_malformed(value: str) -> bool:
+    """Return True when an OSV name/version field is empty or carries junk."""
+    return value == "" or bool(_COORD_FIELD_BAD_CHARS.search(value))
+
+
+def validate_osv_coordinates(
+    dependencies: list[Dependency],
+) -> list[tuple[Dependency, str]]:
+    """Return ``(dependency, reason)`` for each malformed OSV coordinate.
+
+    Offline pre-check that mirrors OSV querybatch's input contract: it catches
+    the #1511 class (a parser false-match yielding e.g. ecosystem='`',
+    name='line', version='in') BEFORE any network call, naming ``dep.source``,
+    instead of relying on OSV to reject the whole batch with HTTP 400 -- which
+    fails the entire scan and hides every finding (CLAUDE.md s4: fail loud, and
+    do so as early and as precisely as possible). An empty list means every
+    coordinate is well-formed. Pure and offline so it is safe to run on PR-head
+    code in a ``pull_request`` gate; see
+    docs/prd/offline-prehead-validation-gates.md.
+    """
+    malformed: list[tuple[Dependency, str]] = []
+    for dep in dependencies:
+        if _ecosystem_base(dep.ecosystem) not in _KNOWN_OSV_ECOSYSTEMS:
+            malformed.append((dep, f"unknown OSV ecosystem {dep.ecosystem!r}"))
+        elif _coord_field_malformed(dep.name):
+            malformed.append((dep, f"malformed package name {dep.name!r}"))
+        elif _coord_field_malformed(dep.version):
+            malformed.append((dep, f"malformed version {dep.version!r}"))
+    return malformed
+
+
 def query_osv_batch(dependencies: list[Dependency]) -> dict[str, object]:
     queries = [
         {
@@ -564,7 +725,27 @@ def query_osv_batch(dependencies: list[Dependency]) -> dict[str, object]:
         }
         for dep in dependencies
     ]
-    return request_json(OSV_QUERYBATCH_URL, payload={"queries": queries})
+    try:
+        return request_json(OSV_QUERYBATCH_URL, payload={"queries": queries})
+    except urllib.error.HTTPError as exc:
+        if exc.code == 400:
+            # OSV rejects the whole batch when any submitted coordinate is
+            # malformed (e.g. an invalid ecosystem or version produced by a
+            # parser false-match, #1511). Surface the submitted coordinates
+            # so the offending dependency is identifiable, rather than soft-
+            # failing to an empty result -- hiding findings would mask real
+            # vulnerabilities (CLAUDE.md s4: fail loudly). Non-400 errors
+            # (rate limits, 5xx outages) propagate unchanged.
+            coords = ", ".join(
+                f"{dep.ecosystem}:{dep.name}@{dep.version} (from {dep.source})"
+                for dep in dependencies
+            )
+            raise ValueError(
+                "OSV querybatch rejected the request (HTTP 400); a submitted "
+                "dependency likely declares an invalid ecosystem or version. "
+                f"Submitted coordinates: {coords}"
+            ) from exc
+        raise
 
 
 def fetch_cisa_kev() -> dict[str, object]:
@@ -1426,6 +1607,32 @@ def _cmd_classify(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_verify(args: argparse.Namespace) -> int:
+    """Offline gate: fail when discovered deps carry malformed OSV coordinates.
+
+    Mirrors the pre-network check in :func:`fetch_external_findings` on the
+    *PR head* so a PR that breaks the parser, or adds a workflow line that
+    mis-parses into a junk coordinate (the #1511 class), is caught offline
+    -- no network, no secrets -- rather than only after merge, when the
+    ``pull_request_target`` triage job (which checks out base, not the PR
+    head) finally runs the new code against the new files. Wired through
+    pre-commit / ``prek run --all-files`` and ``preflight_all.py``; see
+    docs/prd/offline-prehead-validation-gates.md.
+    """
+    repo_root = Path(args.repo_root)
+    dependencies = discover_dependencies(repo_root)
+    malformed = validate_osv_coordinates(dependencies)
+    if not malformed:
+        return 0
+    for dep, reason in malformed:
+        print(
+            f"::error::malformed OSV coordinate "
+            f"{dep.ecosystem}:{dep.name}@{dep.version} (from {dep.source}): {reason}",
+            file=sys.stderr,
+        )
+    return 1
+
+
 def _cmd_scan(args: argparse.Namespace) -> int:
     repo_root = Path(args.repo_root)
     labels = parse_labels(args.labels or os.environ.get("LABELS", ""))
@@ -2151,6 +2358,17 @@ def main(argv: list[str] | None = None) -> int:
         help="HTML marker anchoring the idempotent comment.",
     )
     p_comment.set_defaults(func=_cmd_comment)
+
+    p_verify = sub.add_parser(
+        "verify",
+        help="Offline gate: fail on malformed OSV coordinates in discovered deps.",
+    )
+    p_verify.add_argument(
+        "--repo-root",
+        default=".",
+        help="Repository root to discover dependencies under.",
+    )
+    p_verify.set_defaults(func=_cmd_verify)
 
     args = parser.parse_args(argv)
     try:
