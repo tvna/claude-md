@@ -108,6 +108,15 @@ jobs:
             --base-ref "$BASE_REF" \
             --body-file "$body_file"
 
+      - name: Forbid hand edits to generated script docs
+        # docs/generated/scripts/ is owned by the post-merge automation (#1540).
+        # This gate fails a non-bot PR whose diff touches that folder. The
+        # post-merge bot branch (chore/update-generated-docs) is exempt; it is
+        # resolved from GITHUB_HEAD_REF, which Actions sets on pull_request.
+        run: |
+          python3 scripts/gate_generated_scripts_manual_edit.py verify \
+            --base-ref "$BASE_REF"
+
       - name: Require Text delta section for instruction changes
         run: |
           body_file="$(mktemp)"

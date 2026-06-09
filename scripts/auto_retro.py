@@ -73,11 +73,9 @@ from script_ast_graph import (
 )
 from script_ast_graph import (
     build_function_graph,
-    render_auto_retro_decision_tree_markdown,
     render_mermaid,
 )
 
-_DECISION_TREE_DOC_PATH = Path("docs/generated/scripts/auto-retro-decision-tree.md")
 _TRIAGE_REPORT_DOC_PATH = Path("docs/generated/scripts/auto-retro-triage-report.md")
 
 # Fixed branch / PR identity for the post-merge triage-report refresh. The
@@ -1162,7 +1160,7 @@ def render_triage_report_markdown(report: TriageReport) -> str:
         "",
         "This file is generated from live GitHub retro-issue labels by "
         "`python3 scripts/auto_retro.py triage-report`. Do not edit it by "
-        "hand. Unlike the decision-tree doc it is a non-deterministic "
+        "hand. Unlike the per-script AST docs it is a non-deterministic "
         "snapshot of repository state, so it is refreshed on merge by the "
         "`post-merge.yml` workflow (which opens a pull request when the "
         "snapshot drifts) rather than the `generate-docs.yml` drift gate.",
@@ -1285,11 +1283,6 @@ def render_decision_tree_mermaid() -> str:
     """Render the AST-derived auto-retro decision tree as Mermaid."""
     graph = build_function_graph(Path(__file__), "run")
     return render_mermaid(graph)
-
-
-def render_decision_tree_markdown() -> str:
-    """Render the checked-in auto-retro decision tree document."""
-    return render_auto_retro_decision_tree_markdown()
 
 
 def _max_active_fp(
@@ -3710,13 +3703,6 @@ def _cmd_decision_tree(_args: argparse.Namespace) -> int:
     return 0
 
 
-def _cmd_decision_tree_doc(args: argparse.Namespace) -> int:
-    output = Path(args.output)
-    output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(render_decision_tree_markdown(), encoding="utf-8")
-    return 0
-
-
 def _cmd_triage_report(args: argparse.Namespace) -> int:
     repo = (
         args.repo or os.environ.get("REPO") or os.environ.get("GITHUB_REPOSITORY")
@@ -3997,20 +3983,9 @@ def main(argv: list[str] | None = None) -> int:
 
     p_decision_tree = sub.add_parser(
         "decision-tree",
-        help="Render the auto-retro run decision tree as Mermaid.",
+        help="Render the auto-retro run decision tree as Mermaid (stdout preview).",
     )
     p_decision_tree.set_defaults(func=_cmd_decision_tree)
-
-    p_decision_tree_doc = sub.add_parser(
-        "decision-tree-doc",
-        help="Write the checked-in auto-retro decision tree document.",
-    )
-    p_decision_tree_doc.add_argument(
-        "--output",
-        default=str(_DECISION_TREE_DOC_PATH),
-        help=f"Markdown output path (default {_DECISION_TREE_DOC_PATH}).",
-    )
-    p_decision_tree_doc.set_defaults(func=_cmd_decision_tree_doc)
 
     p_triage = sub.add_parser(
         "triage-report",

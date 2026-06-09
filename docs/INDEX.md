@@ -112,12 +112,17 @@ than serving as precedent for new PRD files.
 
 ## generated/ -- checked-in generated views
 
-### generated/scripts/ -- script AST decision trees
+### generated/scripts/ -- per-script AST graphs
 
-| File | Subject | Source | Tracking issues |
-|---|---|---|---|
-| [scripts/auto-retro-decision-tree.md](generated/scripts/auto-retro-decision-tree.md) | Mermaid decision tree for the current `auto_retro.run()` control flow. | `python3 scripts/script_ast_graph.py auto-retro-decision-tree-doc` | #598, #605, #960 |
-| [scripts/python-script-ast-graphs.md](generated/scripts/python-script-ast-graphs.md) | Mermaid AST graphs for top-level functions in every `scripts/*.py` file. | `python3 scripts/script_ast_graph.py all-doc` | #598, #605, #960 |
+`generated/scripts/ast/<stem>.md` holds one Mermaid AST control-flow doc per
+`scripts/*.py` file, plus `generated/scripts/auto-retro-triage-report.md`, the
+live retro-issue snapshot. This folder is owned by the post-merge automation
+(the `decision-tree` job in `.github/workflows/post-merge.yml`); it is not
+hand-editable and is exempt from per-file INDEX linking (a non-bot edit fails
+`scripts/gate_generated_scripts_manual_edit.py`). Sources:
+`python3 scripts/script_ast_graph.py all-doc` (per-script AST) and
+`python3 scripts/auto_retro.py triage-report` (triage snapshot).
+Tracking issues: #598, #605, #960, #1540.
 
 ### generated/workflows/ -- workflow if-branch diagrams
 
@@ -133,7 +138,6 @@ Source: `python3 scripts/workflow_diagram.py diagram-doc`. Tracking issue: #960.
 | [workflows/codeql-if-branches.md](generated/workflows/codeql-if-branches.md) | `codeql.yml` |
 | [workflows/daily-maintenance-if-branches.md](generated/workflows/daily-maintenance-if-branches.md) | `daily-maintenance.yml` |
 | [workflows/dependabot-automerge-if-branches.md](generated/workflows/dependabot-automerge-if-branches.md) | `dependabot-automerge.yml` |
-| [workflows/devcontainer-pin-automerge-if-branches.md](generated/workflows/devcontainer-pin-automerge-if-branches.md) | `devcontainer-pin-automerge.yml` |
 | [workflows/devcontainer-pin-refresh-if-branches.md](generated/workflows/devcontainer-pin-refresh-if-branches.md) | `devcontainer-pin-refresh.yml` |
 | [workflows/generate-agents-if-branches.md](generated/workflows/generate-agents-if-branches.md) | `generate-agents.yml` |
 | [workflows/generate-docs-if-branches.md](generated/workflows/generate-docs-if-branches.md) | `generate-docs.yml` |
@@ -143,6 +147,7 @@ Source: `python3 scripts/workflow_diagram.py diagram-doc`. Tracking issue: #960.
 | [workflows/post-merge-if-branches.md](generated/workflows/post-merge-if-branches.md) | `post-merge.yml` |
 | [workflows/publish-devcontainer-images-if-branches.md](generated/workflows/publish-devcontainer-images-if-branches.md) | `publish-devcontainer-images.yml` |
 | [workflows/skill-quality-if-branches.md](generated/workflows/skill-quality-if-branches.md) | `skill-quality.yml` |
+| [workflows/tvna-bot-automerge-if-branches.md](generated/workflows/tvna-bot-automerge-if-branches.md) | `tvna-bot-automerge.yml` |
 | [workflows/verify-actionlint-if-branches.md](generated/workflows/verify-actionlint-if-branches.md) | `verify-actionlint.yml` |
 | [workflows/verify-agents-if-branches.md](generated/workflows/verify-agents-if-branches.md) | `verify-agents.yml` |
 | [workflows/verify-flake-if-branches.md](generated/workflows/verify-flake-if-branches.md) | `verify-flake.yml` |

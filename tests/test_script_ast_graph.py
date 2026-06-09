@@ -59,11 +59,10 @@ def test_render_script_graphs_markdown_includes_only_scripts(tmp_path: Path) -> 
     (scripts / "alpha.py").write_text("def run():\n    return 0\n", encoding="utf-8")
     (tests / "test_alpha.py").write_text("def test_x():\n    pass\n", encoding="utf-8")
 
-    markdown = sag.render_all_script_graphs_markdown(tmp_path)
+    markdown = sag.render_script_ast_markdown(scripts / "alpha.py", Path("scripts/alpha.py"))
 
-    assert markdown.startswith("# Python script AST graphs\n")
-    assert "## scripts/alpha.py" in markdown
-    assert "### run(...)" in markdown
+    assert markdown.startswith("# AST graph: scripts/alpha.py\n")
+    assert "## run(...)" in markdown
     assert "tests/test_alpha.py" not in markdown
 
 
@@ -78,22 +77,32 @@ def test_render_script_graphs_markdown_redacts_string_literals(tmp_path: Path) -
         encoding="utf-8",
     )
 
-    markdown = sag.render_all_script_graphs_markdown(tmp_path)
+    markdown = sag.render_script_ast_markdown(scripts / "alpha.py", Path("scripts/alpha.py"))
 
     assert ".github/workflows/portable-pr-policy.yml" not in markdown
     assert "UV_VERSION" not in markdown
     assert "'<str>'" in markdown
 
 
-def test_auto_retro_compat_markdown_uses_existing_title() -> None:
-    markdown = sag.render_function_markdown(
-        Path("scripts/auto_retro.py"),
-        "run",
-        title="Auto-retro decision tree",
-        command="python3 scripts/script_ast_graph.py auto-retro-decision-tree-doc",
-    )
+def test_write_all_script_docs_writes_per_script_and_prunes(tmp_path: Path) -> None:
+    scripts = tmp_path / "scripts"
+    scripts.mkdir()
+    (scripts / "alpha.py").write_text("def run():\n    return 0\n", encoding="utf-8")
+    (scripts / "beta.py").write_text("def go():\n    return 1\n", encoding="utf-8")
+    ast_dir = tmp_path / "docs/generated/scripts/ast"
+    ast_dir.mkdir(parents=True)
+    # An orphan doc and the retired legacy outputs must be pruned.
+    (ast_dir / "gamma.md").write_text("stale\n", encoding="utf-8")
+    legacy = tmp_path / "docs/generated/scripts/python-script-ast-graphs.md"
+    legacy.write_text("legacy\n", encoding="utf-8")
+    decision = tmp_path / "docs/generated/scripts/auto-retro-decision-tree.md"
+    decision.write_text("legacy\n", encoding="utf-8")
 
-    assert markdown.startswith("# Auto-retro decision tree\n")
-    assert "scripts/auto_retro.py::run" in markdown
-    assert "```mermaid\nflowchart TD\n" in markdown
-    assert "compute_repair_signals" in markdown
+    written = sag.write_all_script_docs(tmp_path)
+
+    assert {p.name for p in written} == {"alpha.md", "beta.md"}
+    assert (ast_dir / "alpha.md").is_file()
+    assert (ast_dir / "beta.md").is_file()
+    assert not (ast_dir / "gamma.md").exists()
+    assert not legacy.exists()
+    assert not decision.exists()
