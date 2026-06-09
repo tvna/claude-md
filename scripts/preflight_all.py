@@ -241,20 +241,20 @@ STEPS: tuple[Step, ...] = (
         ),
     ),
     Step(
-        name="auto_retro_decision_tree_doc",
-        argv=("python3", "scripts/script_ast_graph.py", "auto-retro-decision-tree-doc"),
-    ),
-    Step(
         # Compatibility coverage for workflows that still reference
         # scripts/auto_retro.py in pull_request path filters or verify jobs.
-        # The command writes only to stdout; generated docs are owned by
-        # script_ast_graph.py.
+        # The command writes only to stdout (the decision-tree preview); the
+        # per-script AST docs are owned by the post-merge automation (#1540).
         name="auto_retro_decision_tree_compat",
         argv=("python3", "scripts/auto_retro.py", "decision-tree"),
     ),
     Step(
-        name="script_ast_graphs_doc",
-        argv=("python3", "scripts/script_ast_graph.py", "all-doc"),
+        # Refs #1540. docs/generated/scripts/ is owned by the post-merge
+        # automation; the pre-push gate no longer regenerates the per-script
+        # AST docs. This inverse gate fails when a non-bot branch hand-edits
+        # the folder. Runs after preflight_branch_base fetches origin/<base>.
+        name="gate_generated_scripts_manual_edit",
+        argv=("python3", "scripts/gate_generated_scripts_manual_edit.py", "verify"),
     ),
     Step(
         name="workflow_diagram_doc",
@@ -577,12 +577,11 @@ def _heavy_fingerprint(heavy: Sequence[Step], cwd: Path) -> str | None:
 # run concurrently with the working-tree-reading static gates, so the parallel
 # tier runs them first, sequentially (refs #1245):
 #   * preflight_branch_base -- ``git fetch`` writes .git refs and takes a lock.
-#   * auto_retro_decision_tree_doc / script_ast_graphs_doc /
-#     workflow_diagram_doc -- write tracked docs into the working tree.
+#   * workflow_diagram_doc -- writes tracked docs into the working tree.
+# The per-script AST docs are no longer regenerated here: docs/generated/scripts/
+# is owned by the post-merge automation (#1540).
 _SERIAL_CHEAP: frozenset[str] = frozenset({
     "preflight_branch_base",
-    "auto_retro_decision_tree_doc",
-    "script_ast_graphs_doc",
     "workflow_diagram_doc",
 })
 

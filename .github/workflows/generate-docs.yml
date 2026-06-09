@@ -2,15 +2,14 @@ name: Generate docs
 
 on:
   pull_request:
+    # Scope narrowed to docs/generated/workflows/ only (#1540).
+    # docs/generated/scripts/ is owned by the post-merge automation and is no
+    # longer regenerated or drift-checked on the PR.
     paths:
       - ".github/workflows/generate-docs.yml"
-      - "docs/generated/**"
-      - "scripts/auto_retro.py"
-      - "scripts/script_ast_graph.py"
+      - "docs/generated/workflows/**"
       - "scripts/workflow_diagram.py"
       - ".github/workflows/*.yml"
-      - "tests/test_auto_retro.py"
-      - "tests/test_auto_retro_decision_tree.py"
       - "tests/test_workflow_cli_contracts.py"
       - "tests/test_workflow_diagram.py"
 
@@ -32,19 +31,13 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Generate auto-retro script decision tree
-        run: python3 scripts/script_ast_graph.py auto-retro-decision-tree-doc
-
-      - name: Generate Python script AST graphs
-        run: python3 scripts/script_ast_graph.py all-doc
-
       - name: Generate workflow if-branch diagrams
         run: python3 scripts/workflow_diagram.py diagram-doc
 
-      - name: Fail if any generated doc drifted
+      - name: Fail if any generated workflow doc drifted
         run: |
-          if ! git diff --exit-code -- docs/generated/; then
-            echo "::error::docs/generated/ is out of date."
-            echo "::error::Run the generated-doc commands above, then commit the results."
+          if ! git diff --exit-code -- docs/generated/workflows/; then
+            echo "::error::docs/generated/workflows/ is out of date."
+            echo "::error::Run the generated-doc command above, then commit the results."
             exit 1
           fi
