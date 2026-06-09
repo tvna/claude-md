@@ -263,6 +263,56 @@ class TestDependencyDiscovery:
             ),
         ]
 
+    def test_parse_workflow_pinned_images_reads_threat_intel_pin(
+        self, tmp_path: Path
+    ) -> None:
+        workflow_dir = tmp_path / ".github" / "workflows"
+        workflow_dir.mkdir(parents=True)
+        workflow = workflow_dir / "scan.yml"
+        workflow.write_text(
+            "jobs:\n"
+            "  scan:\n"
+            "    steps:\n"
+            "      - run: |\n"
+            "          # threat-intel-pin: Go github.com/aquasecurity/trivy 0.70.0\n"
+            "          docker run --rm ghcr.io/aquasecurity/trivy@sha256:abc image\n",
+            encoding="utf-8",
+        )
+
+        deps = triage.parse_workflow_pinned_images(tmp_path)
+
+        assert deps == [
+            triage.Dependency(
+                "github.com/aquasecurity/trivy",
+                "0.70.0",
+                "Go",
+                str(workflow),
+            ),
+        ]
+
+    def test_parse_workflow_pinned_images_ignores_unmarked_comments(
+        self, tmp_path: Path
+    ) -> None:
+        workflow_dir = tmp_path / ".github" / "workflows"
+        workflow_dir.mkdir(parents=True)
+        workflow = workflow_dir / "scan.yml"
+        workflow.write_text(
+            "jobs:\n"
+            "  scan:\n"
+            "    steps:\n"
+            "      - run: |\n"
+            "          # just a normal comment, not a pin\n"
+            "          docker run ghcr.io/aquasecurity/trivy@sha256:abc image\n",
+            encoding="utf-8",
+        )
+
+        assert triage.parse_workflow_pinned_images(tmp_path) == []
+
+    def test_parse_workflow_pinned_images_empty_without_workflow_dir(
+        self, tmp_path: Path
+    ) -> None:
+        assert triage.parse_workflow_pinned_images(tmp_path) == []
+
     def test_parse_transient_uv_run_captures_exact_pin(
         self, tmp_path: Path
     ) -> None:
@@ -355,7 +405,10 @@ class TestDependencyDiscovery:
             "    steps:\n"
             "      - uses: actions/checkout@"
             "abcdef0123456789abcdef0123456789abcdef01 # v4.2.0\n"
-            '      - run: uv run --with apm-cli==0.5.0 apm compile\n',
+            '      - run: uv run --with apm-cli==0.5.0 apm compile\n'
+            "      - run: |\n"
+            "          # threat-intel-pin: Go github.com/aquasecurity/trivy 0.70.0\n"
+            "          docker run ghcr.io/aquasecurity/trivy@sha256:abc image\n",
             encoding="utf-8",
         )
 
@@ -369,6 +422,9 @@ class TestDependencyDiscovery:
         ) in deps
         assert triage.Dependency(
             "apm-cli", "0.5.0", triage.ECOSYSTEM_PYPI, str(workflow)
+        ) in deps
+        assert triage.Dependency(
+            "github.com/aquasecurity/trivy", "0.70.0", "Go", str(workflow)
         ) in deps
         assert triage.Dependency(
             "pytest", "8.3.5", triage.ECOSYSTEM_PYPI, str(tmp_path / "uv.lock")

@@ -223,6 +223,10 @@ def discover_dependencies(repo_root: Path) -> list[Dependency]:
       -- transient PyPI pins inside ``uv run --with pkg==version``
       invocations. Non-executable docs prose is intentionally excluded
       so README / runbook examples cannot create noisy findings.
+    * ``.github/workflows/**/*.{yml,yaml}`` -- digest-pinned container
+      images declared via ``# threat-intel-pin: <ecosystem> <name>
+      <version>`` comments (#1276). Keeps a ``run:``-step image (which
+      carries no ``uses:`` action ref) on the OSV correlation surface.
     """
     by_key: dict[tuple[str, str, str], Dependency] = {}
     for dep in parse_uv_lock(repo_root / "uv.lock"):
@@ -232,6 +236,8 @@ def discover_dependencies(repo_root: Path) -> list[Dependency]:
     for dep in parse_workflow_actions(repo_root):
         by_key.setdefault((dep.ecosystem, dep.name, dep.version), dep)
     for dep in parse_transient_uv_run(repo_root):
+        by_key.setdefault((dep.ecosystem, dep.name, dep.version), dep)
+    for dep in parse_workflow_pinned_images(repo_root):
         by_key.setdefault((dep.ecosystem, dep.name, dep.version), dep)
     return sorted(by_key.values(), key=lambda dep: (dep.ecosystem, dep.name, dep.version))
 
@@ -380,6 +386,67 @@ def _extract_workflow_actions(path: Path) -> list[Dependency]:
                 source=source,
             )
         )
+    return deps
+
+
+# Structured threat-intel pin comment for a digest-pinned container image
+# referenced inside a ``run:`` step rather than a ``uses:`` action. The
+# action-pin scanners above never see such an image (it is not a ``uses:``
+# ref), and digest pinning for OCI images is deliberately out of the
+# SHA-pin gate's scope, so without this companion comment the image would
+# carry no OSV correlation surface at all. Format, on its own comment line
+# in a workflow file::
+#
+#     # threat-intel-pin: <ecosystem> <name> <version>
+#
+# e.g. ``# threat-intel-pin: Go github.com/aquasecurity/trivy 0.70.0``.
+# The image runtime is pinned by ``@sha256:<digest>`` for byte-exact
+# supply-chain integrity (#1276); this line re-attaches the OSV surface
+# the ``trivy-action`` ``uses:`` ref used to provide. The operator declares
+# the OSV coordinates explicitly so this module makes no guessed ecosystem
+# mapping (CLAUDE.md s2). Keep the version in lockstep with the digest on
+# every bump (see docs/runbooks/compromised-action-response.md).
+_THREAT_INTEL_PIN = re.compile(
+    r"#\s*threat-intel-pin:\s*"
+    r"(?P<ecosystem>\S+)\s+(?P<name>\S+)\s+(?P<version>\S+)\s*$"
+)
+
+
+def parse_workflow_pinned_images(repo_root: Path) -> list[Dependency]:
+    """Return container-image deps declared via ``# threat-intel-pin:`` comments.
+
+    Walks ``.github/workflows/**/*.{yml,yaml}`` under *repo_root* and turns
+    every ``# threat-intel-pin: <ecosystem> <name> <version>`` comment into a
+    :class:`Dependency` keyed on the operator-declared ecosystem. This is the
+    coverage-preserving counterpart to digest-pinning an image inside a
+    ``run:`` step (#1276): the digest gives byte-exact integrity while the
+    pin comment keeps the image on the OSV correlation surface, since
+    :func:`parse_workflow_actions` only matches ``uses:`` action refs.
+
+    Unlike the action parser, comment lines are *not* skipped here -- the pin
+    intentionally lives in a comment so it never affects workflow execution.
+    """
+    workflow_dir = repo_root / WORKFLOW_SUBDIR
+    if not workflow_dir.is_dir():
+        return []
+    deps: list[Dependency] = []
+    for path in sorted(workflow_dir.rglob("*")):
+        if not path.is_file() or path.suffix not in (".yml", ".yaml"):
+            continue
+        text = path.read_text(encoding="utf-8", errors="ignore")
+        source = str(path)
+        for line in text.splitlines():
+            match = _THREAT_INTEL_PIN.search(line)
+            if match is None:
+                continue
+            deps.append(
+                Dependency(
+                    name=match.group("name"),
+                    version=match.group("version"),
+                    ecosystem=match.group("ecosystem"),
+                    source=source,
+                )
+            )
     return deps
 
 
