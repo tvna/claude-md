@@ -278,7 +278,7 @@ class TestOpenFlow:
         def _fail(**kw: Any) -> bool:
             raise AssertionError("open must not attempt a merge")
 
-        monkeypatch.setattr(dpp, "_merge_pin_pr_if_clean", _fail)
+        monkeypatch.setattr(dpp, "_merge_pr_if_clean", _fail)
         rc = dpp.main(_open_argv(tmp_path))
         assert rc == 0
         assert "keeper merges it" in capsys.readouterr().out
@@ -367,7 +367,7 @@ class TestRefreshFlow:
             merged.append(kw["number"])
             return True
 
-        monkeypatch.setattr(dpp, "_merge_pin_pr_if_clean", _merge)
+        monkeypatch.setattr(dpp, "_merge_pr_if_clean", _merge)
         regen: list[str] = []
 
         def _regen(sha: str) -> int:
@@ -403,7 +403,7 @@ class TestRefreshFlow:
             merged.append(kw["number"])
             return True
 
-        monkeypatch.setattr(dpp, "_merge_pin_pr_if_clean", _merge)
+        monkeypatch.setattr(dpp, "_merge_pr_if_clean", _merge)
         comments: list[tuple[int, str]] = []
         monkeypatch.setattr(dpp, "_comment_pr", lambda **kw: comments.append((kw["number"], kw["body"])))
         closed: list[int] = []
@@ -467,7 +467,7 @@ class TestRefreshFlow:
             merged.append(kw["number"])
             return True
 
-        monkeypatch.setattr(dpp, "_merge_pin_pr_if_clean", _merge)
+        monkeypatch.setattr(dpp, "_merge_pr_if_clean", _merge)
         rc = dpp.main(_refresh_argv(tmp_path))
         assert rc == 0
         assert merged == [1140]
@@ -505,161 +505,3 @@ class TestRefreshFlow:
         err = capsys.readouterr().err
         assert "failed creating refresh branch" in err
         assert "HTTP 403" in err
-
-
-# ---------------------------------------------------------------------------
-# _merge subcommand
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.usefixtures("_env")
-class TestMergeCommand:
-    def test_no_open_pr_is_noop(
-        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-    ) -> None:
-        monkeypatch.setattr(dpp, "_list_open_prs_by_prefix", lambda **kw: [])
-        rc = dpp.main(["merge"])
-        assert rc == 0
-        assert "nothing to merge" in capsys.readouterr().out
-
-    def test_clean_pr_is_merged_with_head_ref(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr(dpp, "_list_open_prs_by_prefix", lambda **kw: [_open_pin_pr(1132)])
-        captured: dict[str, Any] = {}
-
-        def _merge(**kw: Any) -> bool:
-            captured.update(kw)
-            return True
-
-        monkeypatch.setattr(dpp, "_merge_pin_pr_if_clean", _merge)
-        rc = dpp.main(["merge"])
-        assert rc == 0
-        assert captured["number"] == 1132
-        assert captured["head_ref"] == f"devcontainer/image-pins-{_PUBLISHED}"
-
-    def test_picks_newest_pr(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        prs = [_open_pin_pr(1132), _open_pin_pr(1140)]
-        monkeypatch.setattr(dpp, "_list_open_prs_by_prefix", lambda **kw: prs)
-        captured: dict[str, Any] = {}
-
-        def _merge(**kw: Any) -> bool:
-            captured.update(kw)
-            return True
-
-        monkeypatch.setattr(dpp, "_merge_pin_pr_if_clean", _merge)
-        rc = dpp.main(["merge"])
-        assert rc == 0
-        assert captured["number"] == 1140
-
-    def test_list_error_returns_1(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        def _boom(**kw: Any) -> list[dict[str, Any]]:
-            raise RuntimeError("List PRs failed")
-
-        monkeypatch.setattr(dpp, "_list_open_prs_by_prefix", _boom)
-        assert dpp.main(["merge"]) == 1
-
-    def test_merge_api_error_returns_1(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr(dpp, "_list_open_prs_by_prefix", lambda **kw: [_open_pin_pr(1132)])
-
-        def _boom(**kw: Any) -> bool:
-            raise RuntimeError("Merge PR #1132 failed")
-
-        monkeypatch.setattr(dpp, "_merge_pin_pr_if_clean", _boom)
-        assert dpp.main(["merge"]) == 1
-
-    def test_missing_token_returns_1(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.delenv("GH_TOKEN", raising=False)
-        assert dpp.main(["merge"]) == 1
-
-    def test_missing_repo_returns_1(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.delenv("REPO", raising=False)
-        assert dpp.main(["merge"]) == 1
-
-
-# ---------------------------------------------------------------------------
-# _merge_pin_pr_if_clean / _poll_pr_mergeability
-# ---------------------------------------------------------------------------
-
-
-class TestMergePinPrIfClean:
-    @pytest.fixture(autouse=True)
-    def _no_sleep(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr(dpp.time, "sleep", lambda _s: None)
-
-    def test_clean_pr_merges_and_deletes_branch(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr(
-            dpp,
-            "_get_pr",
-            lambda **kw: {"mergeable": True, "mergeable_state": "clean", "head": {"sha": "deadbeef"}},
-        )
-        merged: dict[str, Any] = {}
-
-        def _merge(**kw: Any) -> bool:
-            merged.update(kw)
-            return True
-
-        monkeypatch.setattr(dpp, "_merge_pr", _merge)
-        deleted: list[str] = []
-        monkeypatch.setattr(dpp, "_delete_branch", lambda **kw: deleted.append(kw["branch"]))
-        result = dpp._merge_pin_pr_if_clean(
-            repo="o/r", number=5, head_ref="devcontainer/image-pins-x", token="t"
-        )
-        assert result is True
-        assert merged["sha"] == "deadbeef"
-        assert merged["merge_method"] == "squash"
-        assert deleted == ["devcontainer/image-pins-x"]
-
-    def test_not_clean_is_noop(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr(
-            dpp,
-            "_get_pr",
-            lambda **kw: {"mergeable": False, "mergeable_state": "dirty", "head": {"sha": "x"}},
-        )
-        called: list[Any] = []
-
-        def _merge(**kw: Any) -> bool:
-            called.append(kw)
-            return True
-
-        monkeypatch.setattr(dpp, "_merge_pr", _merge)
-        result = dpp._merge_pin_pr_if_clean(repo="o/r", number=5, head_ref="b", token="t")
-        assert result is False
-        assert called == []  # never attempts the merge API on a non-clean PR
-
-    def test_merge_race_returns_false_and_keeps_branch(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr(
-            dpp,
-            "_get_pr",
-            lambda **kw: {"mergeable": True, "mergeable_state": "clean", "head": {"sha": "s"}},
-        )
-        monkeypatch.setattr(dpp, "_merge_pr", lambda **kw: False)  # 405/409 race
-        deleted: list[str] = []
-        monkeypatch.setattr(dpp, "_delete_branch", lambda **kw: deleted.append(kw["branch"]))
-        result = dpp._merge_pin_pr_if_clean(repo="o/r", number=5, head_ref="b", token="t")
-        assert result is False
-        assert deleted == []  # do not delete a branch we did not merge
-
-    def test_clean_without_head_sha_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr(
-            dpp, "_get_pr", lambda **kw: {"mergeable": True, "mergeable_state": "clean", "head": {}}
-        )
-        with pytest.raises(RuntimeError, match="no head sha"):
-            dpp._merge_pin_pr_if_clean(repo="o/r", number=5, head_ref="b", token="t")
-
-    def test_polls_until_mergeable_computed(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        seq: list[dict[str, Any]] = [
-            {"mergeable": None, "mergeable_state": "unknown", "head": {"sha": "s"}},
-            {"mergeable": True, "mergeable_state": "clean", "head": {"sha": "s"}},
-        ]
-        calls = {"n": 0}
-
-        def _get(**kw: Any) -> dict[str, Any]:
-            item = seq[min(calls["n"], len(seq) - 1)]
-            calls["n"] += 1
-            return item
-
-        monkeypatch.setattr(dpp, "_get_pr", _get)
-        monkeypatch.setattr(dpp, "_merge_pr", lambda **kw: True)
-        monkeypatch.setattr(dpp, "_delete_branch", lambda **kw: None)
-        result = dpp._merge_pin_pr_if_clean(repo="o/r", number=5, head_ref="b", token="t")
-        assert result is True
-        assert calls["n"] == 2  # polled past the still-computing response

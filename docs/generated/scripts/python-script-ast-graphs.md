@@ -450,6 +450,100 @@ flowchart TD
     N008 --> N009
 ```
 
+## scripts/_pr_merge.py
+
+### _list_open_prs_by_author(...)
+
+```mermaid
+flowchart TD
+    N001["_list_open_prs_by_author(...)"]
+    N002["results = []"]
+    N003["for page in range(1, 11):
+    url = f'{_API_ROOT}<str>{repo}<str>{page}'
+    code, body = apply_call(method='<str>', url=url, payload=None, token=token)
+    if not 200 <= code < 300:
+        raise RuntimeError(f'<str>{code}<str>{body[:200]}')
+    try:
+        data = json.loads(body)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f'<str>{body[:200]}') from exc
+    if not isinstance(data, list):
+        raise RuntimeError(f'<str>{body[:200]}')
+    for pr in data:
+        login = pr.get('<str>', {}).get('<str>', '<str>') if isinstance(pr, dict) else '<str>'
+        if login == author_login:
+            results.append(pr)
+    if len(data) < 100:
+        break"]
+    N004["return results"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 --> N004
+```
+
+### _poll_pr_mergeability(...)
+
+```mermaid
+flowchart TD
+    N001["_poll_pr_mergeability(...)"]
+    N002["pr = {}"]
+    N003["for attempt in range(_MERGE_POLL_ATTEMPTS):
+    if attempt:
+        sleeper(_MERGE_POLL_INTERVAL_SECONDS)
+    pr = _get_pr(repo=repo, number=number, token=token, apply_call=apply_call)
+    if pr.get('<str>') is not None:
+        break"]
+    N004["return pr"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 --> N004
+```
+
+### _merge_pr_if_clean(...)
+
+```mermaid
+flowchart TD
+    N001["_merge_pr_if_clean(...)"]
+    N002["pr = _poll_pr_mergeability(...)"]
+    N003["state = lower(...)"]
+    N004["if state != 'clean'"]
+    N005["print(...)"]
+    N006["return False"]
+    N007["head_sha = pr.get('<str>', {}).get('<str>', '<str>') if isinstance(pr.get('<str>'), dict) else '<str>'"]
+    N008["if not head_sha"]
+    N009["raise RuntimeError(f'<str>{number}<str>')"]
+    N010["if not _merge_pr(repo=repo, number=number, sha=head_sha, merge_method='squash', token=token, apply_call=apply_call)"]
+    N011["print(...)"]
+    N012["return False"]
+    N013["print(...)"]
+    N014["if head_ref"]
+    N015["try"]
+    N016["_delete_branch(...)"]
+    N017["except RuntimeError"]
+    N018["print(...)"]
+    N019["return True"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 --> N004
+    N004 -->|"true"| N005
+    N005 --> N006
+    N004 -->|"false"| N007
+    N007 --> N008
+    N008 -->|"true"| N009
+    N008 -->|"false"| N010
+    N010 -->|"true"| N011
+    N011 --> N012
+    N010 -->|"false"| N013
+    N013 --> N014
+    N014 -->|"true"| N015
+    N015 -->|"try"| N016
+    N015 -->|"raises"| N017
+    N017 --> N018
+    N016 --> N019
+    N018 --> N019
+    N014 -->|"false"| N019
+```
+
 ## scripts/_ref_classifier.py
 
 ### strip_html_comments(...)
@@ -5335,6 +5429,74 @@ flowchart TD
     N016 --> N017
 ```
 
+## scripts/bot_pr_automerge.py
+
+### _cmd_merge(...)
+
+```mermaid
+flowchart TD
+    N001["_cmd_merge(...)"]
+    N002["token = get(...)"]
+    N003["if not token"]
+    N004["print(...)"]
+    N005["return 1"]
+    N006["repo = get(...)"]
+    N007["if not repo"]
+    N008["print(...)"]
+    N009["return 1"]
+    N010["author_login = os.environ.get('<str>') or _DEFAULT_BOT_AUTHOR_LOGIN"]
+    N011["prs = _list_open_prs_by_author(...)"]
+    N012["if not prs"]
+    N013["print(...)"]
+    N014["return 0"]
+    N015["merged = 0"]
+    N016["for pr in prs:
+    number = int(pr['<str>'])
+    head_ref = pr.get('<str>', {}).get('<str>', '<str>') if isinstance(pr.get('<str>'), dict) else '<str>'
+    if _merge_pr_if_clean(repo=repo, number=number, head_ref=head_ref, token=token):
+        merged += 1"]
+    N017["print(...)"]
+    N018["return 0"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 -->|"true"| N004
+    N004 --> N005
+    N003 -->|"false"| N006
+    N006 --> N007
+    N007 -->|"true"| N008
+    N008 --> N009
+    N007 -->|"false"| N010
+    N010 --> N011
+    N011 --> N012
+    N012 -->|"true"| N013
+    N013 --> N014
+    N012 -->|"false"| N015
+    N015 --> N016
+    N016 --> N017
+    N017 --> N018
+```
+
+### main(...)
+
+```mermaid
+flowchart TD
+    N001["main(...)"]
+    N002["parser = ArgumentParser(...)"]
+    N003["sub = add_subparsers(...)"]
+    N004["add_parser(...)"]
+    N005["args = parse_args(...)"]
+    N006["if args.cmd == 'merge'"]
+    N007["return _cmd_merge(args)"]
+    N008["return 0"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 --> N004
+    N004 --> N005
+    N005 --> N006
+    N006 -->|"true"| N007
+    N006 -->|"false"| N008
+```
+
 ## scripts/branch_cleanup.py
 
 ### parse_dry_run(...)
@@ -8429,69 +8591,6 @@ flowchart TD
     N005 --> N006
 ```
 
-### _poll_pr_mergeability(...)
-
-```mermaid
-flowchart TD
-    N001["_poll_pr_mergeability(...)"]
-    N002["pr = {}"]
-    N003["for attempt in range(_MERGE_POLL_ATTEMPTS):
-    if attempt:
-        sleeper(_MERGE_POLL_INTERVAL_SECONDS)
-    pr = _get_pr(repo=repo, number=number, token=token)
-    if pr.get('<str>') is not None:
-        break"]
-    N004["return pr"]
-    N001 -->|"start"| N002
-    N002 --> N003
-    N003 --> N004
-```
-
-### _merge_pin_pr_if_clean(...)
-
-```mermaid
-flowchart TD
-    N001["_merge_pin_pr_if_clean(...)"]
-    N002["pr = _poll_pr_mergeability(...)"]
-    N003["state = lower(...)"]
-    N004["if state != 'clean'"]
-    N005["print(...)"]
-    N006["return False"]
-    N007["head_sha = pr.get('<str>', {}).get('<str>', '<str>') if isinstance(pr.get('<str>'), dict) else '<str>'"]
-    N008["if not head_sha"]
-    N009["raise RuntimeError(f'<str>{number}<str>')"]
-    N010["if not _merge_pr(repo=repo, number=number, sha=head_sha, merge_method='squash', token=token)"]
-    N011["print(...)"]
-    N012["return False"]
-    N013["print(...)"]
-    N014["if head_ref"]
-    N015["try"]
-    N016["_delete_branch(...)"]
-    N017["except RuntimeError"]
-    N018["print(...)"]
-    N019["return True"]
-    N001 -->|"start"| N002
-    N002 --> N003
-    N003 --> N004
-    N004 -->|"true"| N005
-    N005 --> N006
-    N004 -->|"false"| N007
-    N007 --> N008
-    N008 -->|"true"| N009
-    N008 -->|"false"| N010
-    N010 -->|"true"| N011
-    N011 --> N012
-    N010 -->|"false"| N013
-    N013 --> N014
-    N014 -->|"true"| N015
-    N015 -->|"try"| N016
-    N015 -->|"raises"| N017
-    N017 --> N018
-    N016 --> N019
-    N018 --> N019
-    N014 -->|"false"| N019
-```
-
 ### _cmd_open(...)
 
 ```mermaid
@@ -8621,7 +8720,7 @@ flowchart TD
     N031["if behind <= 0"]
     N032["print(...)"]
     N033["try"]
-    N034["_merge_pin_pr_if_clean(...)"]
+    N034["_merge_pr_if_clean(...)"]
     N035["except RuntimeError"]
     N036["print(...)"]
     N037["return 1"]
@@ -8631,7 +8730,7 @@ flowchart TD
     N041["if new_branch == head_ref"]
     N042["print(...)"]
     N043["try"]
-    N044["_merge_pin_pr_if_clean(...)"]
+    N044["_merge_pr_if_clean(...)"]
     N045["except RuntimeError"]
     N046["print(...)"]
     N047["return 1"]
@@ -8767,65 +8866,6 @@ flowchart TD
     N080 -->|"false"| N087
 ```
 
-### _cmd_merge(...)
-
-```mermaid
-flowchart TD
-    N001["_cmd_merge(...)"]
-    N002["token = get(...)"]
-    N003["if not token"]
-    N004["print(...)"]
-    N005["return 1"]
-    N006["repo = get(...)"]
-    N007["if not repo"]
-    N008["print(...)"]
-    N009["return 1"]
-    N010["prefix = args.branch_prefix"]
-    N011["try"]
-    N012["open_prs = _list_open_prs_by_prefix(...)"]
-    N013["except RuntimeError"]
-    N014["print(...)"]
-    N015["return 1"]
-    N016["if not open_prs"]
-    N017["print(...)"]
-    N018["return 0"]
-    N019["pr = max(...)"]
-    N020["number = int(...)"]
-    N021["head_ref = pr.get('<str>', {}).get('<str>', '<str>') if isinstance(pr.get('<str>'), dict) else '<str>'"]
-    N022["try"]
-    N023["_merge_pin_pr_if_clean(...)"]
-    N024["except RuntimeError"]
-    N025["print(...)"]
-    N026["return 1"]
-    N027["return 0"]
-    N001 -->|"start"| N002
-    N002 --> N003
-    N003 -->|"true"| N004
-    N004 --> N005
-    N003 -->|"false"| N006
-    N006 --> N007
-    N007 -->|"true"| N008
-    N008 --> N009
-    N007 -->|"false"| N010
-    N010 --> N011
-    N011 -->|"try"| N012
-    N011 -->|"raises"| N013
-    N013 --> N014
-    N014 --> N015
-    N012 --> N016
-    N016 -->|"true"| N017
-    N017 --> N018
-    N016 -->|"false"| N019
-    N019 --> N020
-    N020 --> N021
-    N021 --> N022
-    N022 -->|"try"| N023
-    N022 -->|"raises"| N024
-    N024 --> N025
-    N025 --> N026
-    N023 --> N027
-```
-
 ### main(...)
 
 ```mermaid
@@ -8851,16 +8891,12 @@ flowchart TD
     N019["add_argument(...)"]
     N020["add_argument(...)"]
     N021["add_argument(...)"]
-    N022["merge_p = add_parser(...)"]
-    N023["add_argument(...)"]
-    N024["args = parse_args(...)"]
-    N025["if args.cmd == 'open'"]
-    N026["return _cmd_open(args)"]
-    N027["if args.cmd == 'refresh'"]
-    N028["return _cmd_refresh(args)"]
-    N029["if args.cmd == 'merge'"]
-    N030["return _cmd_merge(args)"]
-    N031["return 0"]
+    N022["args = parse_args(...)"]
+    N023["if args.cmd == 'open'"]
+    N024["return _cmd_open(args)"]
+    N025["if args.cmd == 'refresh'"]
+    N026["return _cmd_refresh(args)"]
+    N027["return 0"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 --> N004
@@ -8883,14 +8919,10 @@ flowchart TD
     N020 --> N021
     N021 --> N022
     N022 --> N023
-    N023 --> N024
-    N024 --> N025
+    N023 -->|"true"| N024
+    N023 -->|"false"| N025
     N025 -->|"true"| N026
     N025 -->|"false"| N027
-    N027 -->|"true"| N028
-    N027 -->|"false"| N029
-    N029 -->|"true"| N030
-    N029 -->|"false"| N031
 ```
 
 ## scripts/flake_pin.py
@@ -27499,6 +27531,35 @@ flowchart TD
     N010 -->|"false"| N012
 ```
 
+### redact_model(...)
+
+```mermaid
+flowchart TD
+    N001["redact_model(...)"]
+    N002["lowered = lower(...)"]
+    N003["for tier in _MODEL_TIERS:
+    if tier in lowered:
+        return f'{tier.capitalize()}<str>'"]
+    N004["return _UNKNOWN_MODEL_TIER"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 --> N004
+```
+
+### redact_models(...)
+
+```mermaid
+flowchart TD
+    N001["redact_models(...)"]
+    N002["seen = {}"]
+    N003["for model in models:
+    seen.setdefault(redact_model(model), None)"]
+    N004["return list(seen)"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 --> N004
+```
+
 ### render_section(...)
 
 ```mermaid
@@ -27508,17 +27569,19 @@ flowchart TD
     N003["if usage is not None"]
     N004["total = f'{usage['<str>']:<str>}<str>{usage['<str>']:<str>}<str>{usage['<str>']:<str>}<str>{usage['<str>']:<str>}<str>{usage['<str>']:<str>}<str>'"]
     N005["cost = f'<str>{usage['<str>']:<str>}'"]
-    N006["models = '<str>'.join(usage['<str>']) if usage['<str>'] else _UNAVAILABLE"]
-    N007["total, cost, models = _UNAVAILABLE"]
-    N008["return f'<str>{_HEADING}<str>{elapsed_txt}<str>{total}<str>{cost}<str>{models}<str>'"]
+    N006["tiers = redact_models(...)"]
+    N007["models = '<str>'.join(tiers) if tiers else _UNAVAILABLE"]
+    N008["total, cost, models = _UNAVAILABLE"]
+    N009["return f'<str>{_HEADING}<str>{elapsed_txt}<str>{total}<str>{cost}<str>{models}<str>'"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 -->|"true"| N004
     N004 --> N005
     N005 --> N006
-    N003 -->|"false"| N007
-    N006 --> N008
-    N007 --> N008
+    N006 --> N007
+    N003 -->|"false"| N008
+    N007 --> N009
+    N008 --> N009
 ```
 
 ### _run_ccusage(...)

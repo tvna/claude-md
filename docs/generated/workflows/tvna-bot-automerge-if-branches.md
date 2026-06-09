@@ -1,6 +1,6 @@
-# Workflow if-branches: Auto-merge devcontainer pin PR
+# Workflow if-branches: Auto-merge tvna-bot PRs
 
-This file is generated from `.github/workflows/devcontainer-pin-automerge.yml` by `python3 scripts/workflow_diagram.py diagram-doc`. Do not edit it by hand; update the workflow YAML and regenerate instead.
+This file is generated from `.github/workflows/tvna-bot-automerge.yml` by `python3 scripts/workflow_diagram.py diagram-doc`. Do not edit it by hand; update the workflow YAML and regenerate instead.
 
 ```mermaid
 flowchart TD

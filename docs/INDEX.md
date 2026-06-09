@@ -138,7 +138,6 @@ Source: `python3 scripts/workflow_diagram.py diagram-doc`. Tracking issue: #960.
 | [workflows/codeql-if-branches.md](generated/workflows/codeql-if-branches.md) | `codeql.yml` |
 | [workflows/daily-maintenance-if-branches.md](generated/workflows/daily-maintenance-if-branches.md) | `daily-maintenance.yml` |
 | [workflows/dependabot-automerge-if-branches.md](generated/workflows/dependabot-automerge-if-branches.md) | `dependabot-automerge.yml` |
-| [workflows/devcontainer-pin-automerge-if-branches.md](generated/workflows/devcontainer-pin-automerge-if-branches.md) | `devcontainer-pin-automerge.yml` |
 | [workflows/devcontainer-pin-refresh-if-branches.md](generated/workflows/devcontainer-pin-refresh-if-branches.md) | `devcontainer-pin-refresh.yml` |
 | [workflows/generate-agents-if-branches.md](generated/workflows/generate-agents-if-branches.md) | `generate-agents.yml` |
 | [workflows/generate-docs-if-branches.md](generated/workflows/generate-docs-if-branches.md) | `generate-docs.yml` |
@@ -148,6 +147,7 @@ Source: `python3 scripts/workflow_diagram.py diagram-doc`. Tracking issue: #960.
 | [workflows/post-merge-if-branches.md](generated/workflows/post-merge-if-branches.md) | `post-merge.yml` |
 | [workflows/publish-devcontainer-images-if-branches.md](generated/workflows/publish-devcontainer-images-if-branches.md) | `publish-devcontainer-images.yml` |
 | [workflows/skill-quality-if-branches.md](generated/workflows/skill-quality-if-branches.md) | `skill-quality.yml` |
+| [workflows/tvna-bot-automerge-if-branches.md](generated/workflows/tvna-bot-automerge-if-branches.md) | `tvna-bot-automerge.yml` |
 | [workflows/verify-actionlint-if-branches.md](generated/workflows/verify-actionlint-if-branches.md) | `verify-actionlint.yml` |
 | [workflows/verify-agents-if-branches.md](generated/workflows/verify-agents-if-branches.md) | `verify-agents.yml` |
 | [workflows/verify-flake-if-branches.md](generated/workflows/verify-flake-if-branches.md) | `verify-flake.yml` |
