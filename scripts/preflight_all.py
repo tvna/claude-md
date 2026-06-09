@@ -149,6 +149,15 @@ STEPS: tuple[Step, ...] = (
         argv=("python3", "scripts/scan_workflow_injection.py", "verify"),
     ),
     Step(
+        # Refs #1519. Offline PR-head mirror of the pull_request_target
+        # threat-intel triage scan: fails when the parser yields a malformed
+        # OSV coordinate (the #1511 class) that the base-checkout triage job
+        # cannot catch on the PR. Stdlib-only and network-free, so it runs
+        # the same here, in pre-commit, and on PR head via prek.
+        name="threat_intel_coords",
+        argv=("python3", "scripts/threat_intel_triage.py", "verify"),
+    ),
+    Step(
         # Refs #1256. Workflow correctness gate: actionlint validates
         # workflow syntax, ${{ }} expressions, and -- with shellcheck on
         # PATH -- the shell in every ``run:`` block. Complements the

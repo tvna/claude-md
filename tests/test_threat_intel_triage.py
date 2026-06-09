@@ -3383,3 +3383,109 @@ class TestScanSuppressionCli:
         assert out["rc"] == 1
         assert out["result"]["intel_needed"] is True
         assert out["result"]["expired_suppressions"]
+
+
+class TestValidateOsvCoordinates:
+    def test_flags_backtick_ecosystem(self) -> None:
+        # The exact #1511 garbage shape: a parser false-match yielding
+        # ecosystem='`', name='line', version='in'. The backtick ecosystem is
+        # outside the OSV "Defined Ecosystems" set, so it is flagged.
+        bad = triage.Dependency("line", "in", "`", "wf.yml")
+        result = triage.validate_osv_coordinates([bad])
+        assert len(result) == 1
+        dep, reason = result[0]
+        assert dep is bad
+        assert "ecosystem" in reason
+
+    def test_flags_unknown_ecosystem(self) -> None:
+        bad = triage.Dependency("foo/bar", "1.0.0", "NotAnEcosystem", "wf.yml")
+        assert triage.validate_osv_coordinates([bad]) == [
+            (bad, "unknown OSV ecosystem 'NotAnEcosystem'")
+        ]
+
+    def test_flags_whitespace_in_name(self) -> None:
+        bad = triage.Dependency("foo bar", "1.0.0", "PyPI", "uv.lock")
+        result = triage.validate_osv_coordinates([bad])
+        assert len(result) == 1
+        assert "name" in result[0][1]
+
+    def test_flags_empty_version(self) -> None:
+        bad = triage.Dependency("foo", "", "PyPI", "uv.lock")
+        result = triage.validate_osv_coordinates([bad])
+        assert len(result) == 1
+        assert "version" in result[0][1]
+
+    def test_passes_wellformed_across_ecosystems(self) -> None:
+        deps = [
+            triage.Dependency("pytest", "8.3.5", "PyPI", "uv.lock"),
+            triage.Dependency("actions/checkout", "v4", "GitHub Actions", "ci.yml"),
+            triage.Dependency(
+                "github.com/aquasecurity/trivy", "0.70.0", "Go", "ci.yml"
+            ),
+        ]
+        assert triage.validate_osv_coordinates(deps) == []
+
+    def test_release_suffixed_ecosystem_base_is_accepted(self) -> None:
+        # OSV distro ecosystems carry a ``:<release>`` suffix (e.g. Debian:11);
+        # validation matches on the base name before the colon.
+        dep = triage.Dependency("openssl", "3.0.0", "Debian:11", "image")
+        assert triage.validate_osv_coordinates([dep]) == []
+
+    def test_against_real_repo_has_no_malformed_coordinates(self) -> None:
+        # Regression guard (#1511 / #1519): run the PR-head parser over the
+        # PR-head repo tree and assert every discovered OSV coordinate is
+        # well-formed -- the offline check the base-checkout pull_request_target
+        # triage job cannot perform on the PR. If a future workflow line
+        # mis-parses, or a legitimate ecosystem is missing from
+        # _KNOWN_OSV_ECOSYSTEMS, this fails here (before merge) naming the
+        # offending source, instead of only after merge via OSV HTTP 400.
+        repo_root = Path(__file__).resolve().parents[1]
+        deps = triage.discover_dependencies(repo_root)
+        assert deps, "expected the real repo to declare at least one dependency"
+        malformed = triage.validate_osv_coordinates(deps)
+        assert malformed == [], (
+            "malformed OSV coordinates discovered in the repo: "
+            + "; ".join(
+                f"{d.ecosystem}:{d.name}@{d.version} (from {d.source}) -- {r}"
+                for d, r in malformed
+            )
+        )
+
+
+class TestScanOfflineCoordinateGuard:
+    def test_fetch_external_findings_raises_before_network(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # The live path (osv_file is None) must validate offline and raise
+        # before any network call, so query_osv_batch is never reached.
+        called = {"osv": False}
+
+        def _boom(deps: list[triage.Dependency]) -> dict[str, object]:
+            called["osv"] = True
+            raise AssertionError("query_osv_batch must not be reached")
+
+        monkeypatch.setattr(triage, "query_osv_batch", _boom)
+        bad = triage.Dependency("line", "in", "`", "wf.yml")
+        with pytest.raises(ValueError, match="malformed OSV coordinates"):
+            triage.fetch_external_findings([bad])
+        assert called["osv"] is False
+
+
+class TestVerifyCommand:
+    def test_clean_repo_exits_zero(self, tmp_path: Path) -> None:
+        assert triage.main(["verify", "--repo-root", str(tmp_path)]) == 0
+
+    def test_malformed_pin_exits_nonzero(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        workflow_dir = tmp_path / ".github" / "workflows"
+        workflow_dir.mkdir(parents=True)
+        (workflow_dir / "pinned.yml").write_text(
+            "      # threat-intel-pin: NotAnEcosystem github.com/foo/bar 1.0.0\n",
+            encoding="utf-8",
+        )
+        rc = triage.main(["verify", "--repo-root", str(tmp_path)])
+        assert rc == 1
+        err = capsys.readouterr().err
+        assert "NotAnEcosystem" in err
+        assert "github.com/foo/bar" in err
