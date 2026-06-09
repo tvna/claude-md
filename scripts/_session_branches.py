@@ -60,8 +60,17 @@ def append_branch(path: Path, branch: str) -> None:
     branch = branch.strip()
     if not branch or branch in read_authorized_set(path):
         return
+    # A SessionStart seed may lack a trailing newline. Appending blindly
+    # would concatenate the new branch onto the last entry, collapsing two
+    # members into one corrupted authorization string. Insert a separator
+    # when the existing content does not already end in a newline.
+    try:
+        existing = path.read_text(encoding="utf-8")
+    except OSError:
+        existing = ""
+    separator = "" if (not existing or existing.endswith("\n")) else "\n"
     with contextlib.suppress(OSError), path.open("a", encoding="utf-8") as handle:
-        handle.write(branch + "\n")
+        handle.write(separator + branch + "\n")
 
 
 def is_authorized(branch: str | None, authorized: set[str]) -> bool:
