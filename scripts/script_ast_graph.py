@@ -4,13 +4,20 @@
 The generator parses source files directly instead of importing them, so it can
 process every ``scripts/*.py`` file without triggering workflow side effects.
 
+``all-doc`` writes one Markdown file per script under
+``docs/generated/scripts/ast/`` and owns that directory: it deletes any orphan
+``*.md`` that no longer maps to a ``scripts/*.py`` file, and removes the two
+legacy monolithic outputs (``python-script-ast-graphs.md`` and
+``auto-retro-decision-tree.md``) on sight. Content under
+``docs/generated/scripts/`` is owned by the post-merge automation; the pre-push
+and pre-merge gates no longer regenerate it (refs #1540).
+
 Contract:
-- Inputs: subcommands ``auto-retro-decision-tree``,
-  ``auto-retro-decision-tree-doc``, and ``all-doc``; optional ``--output`` and
-  ``--root`` paths.
-- Outputs: Mermaid on stdout for preview mode, or checked-in Markdown files
-  under ``docs/generated/scripts/`` for doc modes; exit 0 when generation
-  succeeds.
+- Inputs: subcommands ``auto-retro-decision-tree`` (stdout preview) and
+  ``all-doc`` (per-script docs); optional ``--root`` path.
+- Outputs: Mermaid on stdout for preview mode, or one checked-in Markdown file
+  per script under ``docs/generated/scripts/ast/`` for ``all-doc``; exit 0 when
+  generation succeeds.
 - Failure policy: fails loud per CLAUDE.md section 4 when a source file cannot
   be parsed, a requested function is absent, or an output file cannot be
   written.
@@ -26,8 +33,15 @@ from dataclasses import dataclass
 from pathlib import Path
 
 SCRIPTS_DIR = Path("scripts")
-ALL_SCRIPTS_DOC_PATH = Path("docs/generated/scripts/python-script-ast-graphs.md")
-AUTO_RETRO_DECISION_TREE_DOC_PATH = Path("docs/generated/scripts/auto-retro-decision-tree.md")
+# Per-script AST docs live under this directory, one ``<stem>.md`` per
+# ``scripts/*.py``. ``all-doc`` owns the directory entirely.
+AST_DOC_DIR = Path("docs/generated/scripts/ast")
+# Legacy monolithic outputs retired by #1540. ``all-doc`` deletes them on sight
+# so the post-merge regeneration removes them without a hand-authored edit.
+LEGACY_DOC_PATHS: tuple[Path, ...] = (
+    Path("docs/generated/scripts/python-script-ast-graphs.md"),
+    Path("docs/generated/scripts/auto-retro-decision-tree.md"),
+)
 AUTO_RETRO_SOURCE_PATH = Path(__file__).resolve().parent / "auto_retro.py"
 
 
@@ -267,61 +281,66 @@ def _safe_generated_doc_graph(graph: FunctionGraph) -> FunctionGraph:
     )
 
 
-def render_function_markdown(
-    path: Path,
-    function_name: str,
-    title: str,
-    command: str,
-    source_label: str | None = None,
-) -> str:
-    """Render one function graph as a checked-in Markdown document."""
-    graph = build_function_graph(path, function_name)
-    source = source_label or str(path)
-    return (
-        f"# {title}\n"
-        "\n"
-        f"This file is generated from `{source}::{function_name}` by "
-        f"`{command}`. Do not edit it by hand; update the source script "
-        "and regenerate instead.\n"
-        "\n"
-        "```mermaid\n"
-        f"{render_mermaid(graph)}"
-        "```\n"
-    )
-
-
-def render_all_script_graphs_markdown(root: Path = Path()) -> str:
-    """Render Markdown containing AST graphs for every ``scripts/*.py`` file."""
+def render_script_ast_markdown(path: Path, display_path: Path) -> str:
+    """Render one script's AST graphs as a per-script Markdown document."""
     lines = [
-        "# Python script AST graphs",
+        f"# AST graph: {display_path}",
         "",
-        "This file is generated from `scripts/*.py` by "
+        f"This file is generated from `{display_path}` by "
         "`python3 scripts/script_ast_graph.py all-doc`. Do not edit it by "
-        "hand; update the source scripts and regenerate instead.",
+        "hand: content under `docs/generated/scripts/` is owned by the "
+        "post-merge automation (refs #1540) -- update the source script "
+        "instead.",
         "",
     ]
-    for path in iter_script_paths(root):
-        display_path = path.relative_to(root) if path.is_absolute() else path
-        lines.extend([f"## {display_path}", ""])
-        graphs = build_script_graphs(path, safe_strings=True)
-        if not graphs:
-            lines.extend(["No top-level functions found.", ""])
-            continue
+    graphs = build_script_graphs(path, safe_strings=True)
+    if not graphs:
+        lines.extend(["No top-level functions found.", ""])
+    else:
         for graph in graphs:
             safe_graph = _safe_generated_doc_graph(graph)
-            lines.extend([f"### {graph.name}(...)", "", "```mermaid", render_mermaid(safe_graph).rstrip(), "```", ""])
+            lines.extend([f"## {graph.name}(...)", "", "```mermaid", render_mermaid(safe_graph).rstrip(), "```", ""])
     return "\n".join(lines).rstrip() + "\n"
 
 
-def render_auto_retro_decision_tree_markdown() -> str:
-    """Render the legacy auto-retro decision tree document."""
-    return render_function_markdown(
-        AUTO_RETRO_SOURCE_PATH,
-        "run",
-        "Auto-retro decision tree",
-        "python3 scripts/script_ast_graph.py auto-retro-decision-tree-doc",
-        source_label="scripts/auto_retro.py",
-    )
+def doc_filename_for(path: Path) -> str:
+    """Return the per-script doc filename for a ``scripts/*.py`` path."""
+    return f"{path.stem}.md"
+
+
+def write_all_script_docs(root: Path = Path()) -> tuple[Path, ...]:
+    """Write one AST doc per script under ``ast/`` and prune stale outputs.
+
+    Owns ``docs/generated/scripts/ast/`` end to end: writes ``<stem>.md`` for
+    every ``scripts/*.py``, deletes any orphan ``*.md`` whose source script is
+    gone, and removes the retired legacy monolithic docs. Returns the written
+    doc paths in deterministic order.
+    """
+    out_dir = root / AST_DOC_DIR
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    written: list[Path] = []
+    expected: set[str] = set()
+    for path in iter_script_paths(root):
+        display_path = path.relative_to(root) if path.is_absolute() else path
+        target = out_dir / doc_filename_for(path)
+        target.write_text(render_script_ast_markdown(path, display_path), encoding="utf-8")
+        written.append(target)
+        expected.add(target.name)
+
+    # Prune orphan per-script docs whose source script no longer exists.
+    for existing in sorted(out_dir.glob("*.md")):
+        if existing.name not in expected:
+            existing.unlink()
+
+    # Remove the retired legacy monolithic outputs so the post-merge
+    # regeneration decommissions them without a hand-authored deletion.
+    for legacy in LEGACY_DOC_PATHS:
+        legacy_path = root / legacy
+        if legacy_path.exists():
+            legacy_path.unlink()
+
+    return tuple(written)
 
 
 def _cmd_auto_retro_decision_tree(_args: argparse.Namespace) -> int:
@@ -329,17 +348,8 @@ def _cmd_auto_retro_decision_tree(_args: argparse.Namespace) -> int:
     return 0
 
 
-def _cmd_auto_retro_decision_tree_doc(args: argparse.Namespace) -> int:
-    output = Path(args.output)
-    output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(render_auto_retro_decision_tree_markdown(), encoding="utf-8")
-    return 0
-
-
 def _cmd_all_doc(args: argparse.Namespace) -> int:
-    output = Path(args.output)
-    output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(render_all_script_graphs_markdown(Path(args.root)), encoding="utf-8")
+    write_all_script_docs(Path(args.root))
     return 0
 
 
@@ -349,34 +359,18 @@ def main(argv: list[str] | None = None) -> int:
 
     p_auto = sub.add_parser(
         "auto-retro-decision-tree",
-        help="Render scripts/auto_retro.py::run as Mermaid.",
+        help="Render scripts/auto_retro.py::run as Mermaid (stdout preview).",
     )
     p_auto.set_defaults(func=_cmd_auto_retro_decision_tree)
 
-    p_auto_doc = sub.add_parser(
-        "auto-retro-decision-tree-doc",
-        help="Write the checked-in auto-retro decision tree document.",
-    )
-    p_auto_doc.add_argument(
-        "--output",
-        default=str(AUTO_RETRO_DECISION_TREE_DOC_PATH),
-        help=f"Markdown output path (default {AUTO_RETRO_DECISION_TREE_DOC_PATH}).",
-    )
-    p_auto_doc.set_defaults(func=_cmd_auto_retro_decision_tree_doc)
-
     p_all_doc = sub.add_parser(
         "all-doc",
-        help="Write AST graph documentation for every scripts/*.py file.",
+        help="Write per-script AST docs under docs/generated/scripts/ast/.",
     )
     p_all_doc.add_argument(
         "--root",
         default=".",
         help="Repository root (default current directory).",
-    )
-    p_all_doc.add_argument(
-        "--output",
-        default=str(ALL_SCRIPTS_DOC_PATH),
-        help=f"Markdown output path (default {ALL_SCRIPTS_DOC_PATH}).",
     )
     p_all_doc.set_defaults(func=_cmd_all_doc)
 

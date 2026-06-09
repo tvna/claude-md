@@ -55,9 +55,12 @@ idempotent on the `<!-- auto-retro:back-link -->` marker.
   for the same `PR #<N>` already exists (open or closed), with a
   substring-collision guard so `PR #249` does not match `PR #2490`.
 
-The full branch logic is rendered in the generated
-[`docs/generated/scripts/auto-retro-decision-tree.md`](../generated/scripts/auto-retro-decision-tree.md)
-by [`scripts/script_ast_graph.py`](../../scripts/script_ast_graph.py).
+The full branch logic is rendered per script under
+`docs/generated/scripts/ast/` (`auto_retro.md` for `run()`'s control flow) by
+[`scripts/script_ast_graph.py`](../../scripts/script_ast_graph.py). That folder
+is owned by the post-merge automation (#1540); for an ad-hoc preview run
+`python3 scripts/script_ast_graph.py auto-retro-decision-tree` to print the
+`run()` Mermaid graph to stdout.
 
 ## 4. Verify a run
 

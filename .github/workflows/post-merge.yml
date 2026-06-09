@@ -133,10 +133,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
-      - name: Generate auto-retro script decision tree
-        run: python3 scripts/script_ast_graph.py auto-retro-decision-tree-doc
-
-      - name: Generate Python script AST graphs
+      - name: Generate per-script AST graphs
+        # Writes one doc per script under docs/generated/scripts/ast/ and prunes
+        # orphan/legacy outputs. This folder is owned by the post-merge
+        # automation; the PR and pre-push gates no longer regenerate it (#1540).
         run: python3 scripts/script_ast_graph.py all-doc
 
       - name: Generate workflow if-branch diagrams
@@ -173,8 +173,7 @@ jobs:
 
           Regenerates `docs/generated/` artifacts from source after a change merged to `main`:
 
-          - `docs/generated/scripts/auto-retro-decision-tree.md` from `scripts/auto_retro.py::run` AST.
-          - `docs/generated/scripts/python-script-ast-graphs.md` from all `scripts/*.py` ASTs.
+          - `docs/generated/scripts/ast/<stem>.md` from each `scripts/*.py` AST (one file per script).
           - `docs/generated/workflows/*-if-branches.md` from `.github/workflows/*.yml` if-branch analysis.
 
           ## Related Issue
@@ -200,8 +199,6 @@ jobs:
 
           ## Verification
 
-          - command: `python3 scripts/script_ast_graph.py auto-retro-decision-tree-doc`
-            result: `exit 0`
           - command: `python3 scripts/script_ast_graph.py all-doc`
             result: `exit 0`
           - command: `python3 scripts/workflow_diagram.py diagram-doc`

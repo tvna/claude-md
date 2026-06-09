@@ -112,12 +112,17 @@ than serving as precedent for new PRD files.
 
 ## generated/ -- checked-in generated views
 
-### generated/scripts/ -- script AST decision trees
+### generated/scripts/ -- per-script AST graphs
 
-| File | Subject | Source | Tracking issues |
-|---|---|---|---|
-| [scripts/auto-retro-decision-tree.md](generated/scripts/auto-retro-decision-tree.md) | Mermaid decision tree for the current `auto_retro.run()` control flow. | `python3 scripts/script_ast_graph.py auto-retro-decision-tree-doc` | #598, #605, #960 |
-| [scripts/python-script-ast-graphs.md](generated/scripts/python-script-ast-graphs.md) | Mermaid AST graphs for top-level functions in every `scripts/*.py` file. | `python3 scripts/script_ast_graph.py all-doc` | #598, #605, #960 |
+`generated/scripts/ast/<stem>.md` holds one Mermaid AST control-flow doc per
+`scripts/*.py` file, plus `generated/scripts/auto-retro-triage-report.md`, the
+live retro-issue snapshot. This folder is owned by the post-merge automation
+(the `decision-tree` job in `.github/workflows/post-merge.yml`); it is not
+hand-editable and is exempt from per-file INDEX linking (a non-bot edit fails
+`scripts/gate_generated_scripts_manual_edit.py`). Sources:
+`python3 scripts/script_ast_graph.py all-doc` (per-script AST) and
+`python3 scripts/auto_retro.py triage-report` (triage snapshot).
+Tracking issues: #598, #605, #960, #1540.
 
 ### generated/workflows/ -- workflow if-branch diagrams
 

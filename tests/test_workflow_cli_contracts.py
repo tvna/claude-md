@@ -44,6 +44,7 @@ import dependabot_labels
 import devcontainer_pin_pr
 import flake_pin
 import flake_pin_latest
+import gate_generated_scripts_manual_edit
 import github_paginate
 import issue_link
 import labels_apply
@@ -152,8 +153,8 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("backup_archive.py", "build"): "test_backup_archive_build_matches_workflow_args",
     ("github_paginate.py", "fetch-run-jobs"): "test_github_paginate_fetch_run_jobs_matches_workflow_args",
     ("validate_json_syntax.py", "verify"): "test_validate_json_syntax_verify_matches_workflow_args",
-    ("script_ast_graph.py", "auto-retro-decision-tree-doc"): "test_script_ast_graph_auto_retro_doc_matches_workflow_args",
     ("script_ast_graph.py", "all-doc"): "test_script_ast_graph_all_doc_matches_workflow_args",
+    ("gate_generated_scripts_manual_edit.py", "verify"): "test_gate_generated_scripts_manual_edit_matches_workflow_args",
     ("auto_retro.py", "triage-report"): "test_auto_retro_triage_report_matches_workflow_env",
     ("auto_retro.py", "triage-report-pr"): "test_auto_retro_triage_report_pr_matches_workflow_env",
     ("workflow_diagram.py", "diagram-doc"): "test_workflow_diagram_doc_matches_workflow_args",
@@ -534,35 +535,41 @@ def test_auto_retro_post_merge_rescan_matches_workflow_env(
     assert auto_retro.main(["post-merge-rescan"]) == 0
 
 
-def test_script_ast_graph_auto_retro_doc_matches_workflow_args(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Mirror the default-output shape used by the generated-doc workflow."""
-    monkeypatch.chdir(tmp_path)
-    output = Path("docs/generated/scripts/auto-retro-decision-tree.md")
-
-    assert script_ast_graph.main(["auto-retro-decision-tree-doc"]) == 0
-
-    assert output.read_text(encoding="utf-8") == (
-        script_ast_graph.render_auto_retro_decision_tree_markdown()
-    )
-
-
 def test_script_ast_graph_all_doc_matches_workflow_args(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Mirror the default-output shape used by the generated-doc workflow."""
+    """Mirror the per-script default-output shape used by the post-merge workflow."""
     monkeypatch.chdir(tmp_path)
     scripts = tmp_path / "scripts"
     scripts.mkdir()
     (scripts / "alpha.py").write_text("def run():\n    return 0\n", encoding="utf-8")
-    output = Path("docs/generated/scripts/python-script-ast-graphs.md")
 
     assert script_ast_graph.main(["all-doc"]) == 0
 
+    output = Path("docs/generated/scripts/ast/alpha.md")
     assert output.read_text(encoding="utf-8") == (
-        script_ast_graph.render_all_script_graphs_markdown(tmp_path)
+        script_ast_graph.render_script_ast_markdown(
+            scripts / "alpha.py", Path("scripts/alpha.py")
+        )
     )
+
+
+def test_gate_generated_scripts_manual_edit_matches_workflow_args(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The verify subcommand passes with no protected-folder changes."""
+    monkeypatch.setattr(
+        gate_generated_scripts_manual_edit,
+        "changed_generated_scripts",
+        lambda *_a, **_kw: frozenset(),
+    )
+    monkeypatch.setattr(
+        gate_generated_scripts_manual_edit,
+        "resolve_branch",
+        lambda *_a, **_kw: "feature/x",
+    )
+
+    assert gate_generated_scripts_manual_edit.main(["verify", "--base-ref", "origin/main"]) == 0
 
 
 def test_auto_retro_triage_report_matches_workflow_env(
