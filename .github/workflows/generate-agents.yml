@@ -78,12 +78,14 @@ jobs:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           REPO: ${{ github.repository }}
           PR_BRANCH: chore/regenerate-agent-instructions
-          PR_TITLE: "chore: regenerate agent instructions (#18)"
+          PR_TITLE: "chore: regenerate agent instructions"
         run: |
           cat > /tmp/pr-body.md <<'EOF'
           Regenerates `CLAUDE.md` and `AGENTS.md` from the APM source instructions.
 
           This automated update is opened as a pull request to keep generated instruction changes aligned with the repository change policy.
+
+          Refs #18
           EOF
 
           # Signed, reuse-safe publish: the commit is created server side via
