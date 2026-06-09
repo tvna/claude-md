@@ -28115,9 +28115,21 @@ flowchart TD
 flowchart TD
     N001["query_osv_batch(...)"]
     N002["queries = [{'<str>': dep.version, '<str>': {'<str>': dep.name, '<str>': dep.ecosystem}} for dep in dependencies]"]
-    N003["return request_json(OSV_QUERYBATCH_URL, payload={'<str>': queries})"]
+    N003["try"]
+    N004["return request_json(OSV_QUERYBATCH_URL, payload={'<str>': queries})"]
+    N005["except urllib.error.HTTPError"]
+    N006["if exc.code == 400"]
+    N007["coords = join(...)"]
+    N008["raise ValueError(f'<str>{coords}')"]
+    N009["raise"]
     N001 -->|"start"| N002
     N002 --> N003
+    N003 -->|"try"| N004
+    N003 -->|"raises"| N005
+    N005 --> N006
+    N006 -->|"true"| N007
+    N007 --> N008
+    N006 -->|"false"| N009
 ```
 
 ### fetch_cisa_kev(...)

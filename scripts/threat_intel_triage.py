@@ -406,8 +406,17 @@ def _extract_workflow_actions(path: Path) -> list[Dependency]:
 # the OSV coordinates explicitly so this module makes no guessed ecosystem
 # mapping (CLAUDE.md s2). Keep the version in lockstep with the digest on
 # every bump (see docs/runbooks/compromised-action-response.md).
+#
+# The leading ``^\s*`` anchors the match to the start of a line (#1511):
+# the parser scans each line with ``.search()``, so without the anchor a
+# *prose* mention of the token inside a backtick-quoted phrase elsewhere on
+# a comment line (e.g. "the ``# threat-intel-pin:`` line in ..." at
+# publish-devcontainer-images.yml) matched mid-line and produced a garbage
+# ``Dependency`` whose coordinates OSV querybatch rejected with HTTP 400.
+# Anchoring forces a line that *is* a pin comment, so only the real pin
+# declared on its own line is ingested.
 _THREAT_INTEL_PIN = re.compile(
-    r"#\s*threat-intel-pin:\s*"
+    r"^\s*#\s*threat-intel-pin:\s*"
     r"(?P<ecosystem>\S+)\s+(?P<name>\S+)\s+(?P<version>\S+)\s*$"
 )
 
@@ -631,7 +640,27 @@ def query_osv_batch(dependencies: list[Dependency]) -> dict[str, object]:
         }
         for dep in dependencies
     ]
-    return request_json(OSV_QUERYBATCH_URL, payload={"queries": queries})
+    try:
+        return request_json(OSV_QUERYBATCH_URL, payload={"queries": queries})
+    except urllib.error.HTTPError as exc:
+        if exc.code == 400:
+            # OSV rejects the whole batch when any submitted coordinate is
+            # malformed (e.g. an invalid ecosystem or version produced by a
+            # parser false-match, #1511). Surface the submitted coordinates
+            # so the offending dependency is identifiable, rather than soft-
+            # failing to an empty result -- hiding findings would mask real
+            # vulnerabilities (CLAUDE.md s4: fail loudly). Non-400 errors
+            # (rate limits, 5xx outages) propagate unchanged.
+            coords = ", ".join(
+                f"{dep.ecosystem}:{dep.name}@{dep.version} (from {dep.source})"
+                for dep in dependencies
+            )
+            raise ValueError(
+                "OSV querybatch rejected the request (HTTP 400); a submitted "
+                "dependency likely declares an invalid ecosystem or version. "
+                f"Submitted coordinates: {coords}"
+            ) from exc
+        raise
 
 
 def fetch_cisa_kev() -> dict[str, object]:
