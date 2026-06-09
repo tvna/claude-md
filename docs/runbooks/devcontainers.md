@@ -432,35 +432,39 @@ agents cannot enable native auto-merge on arbitrary PRs, and native
 auto-merge is repo-wide -- it cannot be scoped to a single PR. Completing
 the pin PR is therefore delegated to the dedicated keeper below.
 
-### Merging the pin PR when green (`Auto-merge devcontainer pin PR`)
+### Merging the pin PR when green (`Auto-merge tvna-bot PRs`)
 
-Because repo-wide auto-merge is off by design, the
-`Auto-merge devcontainer pin PR` workflow (`devcontainer-pin-automerge.yml`)
-merges the generated pin PR on its behalf -- scoped strictly to the pin
-branch prefix `devcontainer/image-pins-`. It runs
-`python3 scripts/devcontainer_pin_pr.py merge`: it finds the open pin PR, and
-once GitHub reports `mergeable_state == clean` (all required checks green and
-the branch up to date) it squash-merges the PR via the REST merge API and
-deletes the branch. A PR that is not yet `clean`, or that loses the head-SHA
-race, is left untouched for the next trigger.
+Because repo-wide auto-merge is off by design, the unified
+`Auto-merge tvna-bot PRs` workflow (`tvna-bot-automerge.yml`) merges the
+generated pin PR on its behalf. This single keeper (consolidated from the
+former pin-only `devcontainer-pin-automerge.yml` in #1539) merges *every* open
+PR authored by the App bot (`tvna-bot[bot]`), not just the pin branch prefix.
+It runs `python3 scripts/bot_pr_automerge.py merge`: it lists the open
+`tvna-bot[bot]` PRs and, for each one GitHub reports `mergeable_state == clean`
+(all required checks green and the branch up to date), squash-merges it via the
+REST merge API and deletes the branch. A PR that is not yet `clean`, or that
+loses the head-SHA race, is left untouched for the next trigger. Squash is fixed
+so the keyless signing invariant on `main` (see
+[`commit-signing.md`](../standards/commit-signing.md)) is preserved.
 
 The keeper originally triggered on `check_suite: completed`, but that event
 never fired: GitHub suppresses `check_suite` events for suites created by
-GitHub Actions (recursion prevention), and every pin-PR check is
-Actions-created, so the keeper never ran and clean pin PRs stalled (#1363). It
+GitHub Actions (recursion prevention), and every bot-PR check is
+Actions-created, so the keeper never ran and clean PRs stalled (#1363). It
 is now driven by `workflow_run` on the two workflows that own the required
 status checks (`Verify PR`, `Verify repository scripts`) completing -- gated by
-an `if` on `workflow_run.head_branch` and `conclusion == 'success'` so it only
-runs for a green pin-PR CI -- with a `schedule` cron (every 15 min) as a safety
-net so a missed event still converges, and `workflow_dispatch` for manual
-recovery. Because `workflow_run` and `schedule` only run from the default
-branch, the trigger fix takes effect once merged to `main`.
+an `if` on `conclusion == 'success'` (the merge subcommand itself filters to
+`tvna-bot[bot]` authors and clean PRs, so it is no longer branch-prefix-gated)
+-- with a `schedule` cron (every 15 min) as a safety net so a missed event
+still converges, and `workflow_dispatch` for manual recovery. Because
+`workflow_run` and `schedule` only run from the default branch, the trigger
+takes effect once merged to `main`.
 
 Branch protection (`main-protection`) still gates the merge; the keeper never
 bypasses required checks or rulesets. The merge uses the GitHub App installation
 token (not `GITHUB_TOKEN`) so the resulting push to `main` still triggers the
 downstream push workflows (publish / refresh / post-merge). To merge a stuck
-pin PR on demand, dispatch this workflow manually. Refs #1352, #1363, #1401.
+bot PR on demand, dispatch this workflow manually. Refs #1539, #1352, #1363, #1401.
 
 ### Keeping the pin PR mergeable (`Refresh devcontainer pin PR`)
 

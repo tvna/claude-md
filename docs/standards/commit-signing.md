@@ -75,6 +75,16 @@ they still inherit on `main`. Refs
 [#1437](https://github.com/tvna/claude-md/issues/1437),
 [#1466](https://github.com/tvna/claude-md/issues/1466).
 
+These App-bot PRs are auto-merged uniformly by a single keeper,
+`scripts/bot_pr_automerge.py merge` (workflow `tvna-bot-automerge.yml`),
+which squash-merges every open PR whose author login is `tvna-bot[bot]`
+once it reaches `mergeable_state == clean`. The keeper fixes the merge
+method to `squash`, so the keyless signing invariant above is preserved: it
+never admits a non-squash merge that could land an unsigned commit on
+`main`, and it adds no `bypass_actors`. The merge is gated entirely by
+branch protection. Refs
+[#1539](https://github.com/tvna/claude-md/issues/1539).
+
 The deterministic regression guard is
 `scripts/scan_workflow_unsigned_commit.py` (wired into pre-commit and the
 `Verify repository scripts` workflow): it fails when any workflow `run:`
