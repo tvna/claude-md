@@ -655,6 +655,8 @@ jobs:
 
       - name: Decide target version (cooldown-gated)
         id: decide
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           target="$(python3 scripts/flake_pin_latest.py check --tool '${{ matrix.tool }}')"
