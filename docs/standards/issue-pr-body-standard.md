@@ -235,13 +235,18 @@ convention. The headings, in order, are:
   PR: elapsed time from session start (the `CCR_SPAWN_TIMESTAMP_MS`
   container-spawn epoch) to PR creation, the total tokens, the
   input / output / cache-create / cache-read breakdown, the USD cost, and
-  the model(s) used. Generated deterministically by
-  `scripts/session_resource_report.py`, which reads the current Claude Code
-  session id and `ccusage session --json --id <id>`; it degrades to an
-  `unavailable (no session data)` body when no session data exists (for
-  example a human-authored PR with no ccusage session, or ccusage absent).
-  Required on every PR; trusted-bot authors (dependabot) are skipped by
-  `scripts/body_policy.py`, so their PRs need not carry it. Refs #1413.
+  the model capability tier. The `Model(s)` line is the redacted tier
+  (`Opus-class` / `Sonnet-class` / `Haiku-class`, or `other-class` for any
+  other model), never the exact model id: the generator collapses the ccusage
+  `modelsUsed` id deterministically so the runtime model-identity policy is
+  honored and the verbatim version string never reaches the body. Generated
+  deterministically by `scripts/session_resource_report.py`, which reads the
+  current Claude Code session id and `ccusage session --json --id <id>`; it
+  degrades to an `unavailable (no session data)` body when no session data
+  exists (for example a human-authored PR with no ccusage session, or ccusage
+  absent). Required on every PR; trusted-bot authors (dependabot) are skipped
+  by `scripts/body_policy.py`, so their PRs need not carry it. Refs #1413,
+  #1535.
 - `## Related Issue` - a single `Refs #<number>` (or `Closes #<number>`,
   etc.) line, kept last per GitHub convention so the conclusion stays at
   the top. Per CLAUDE.md section 3, every PR must cite its issue; this

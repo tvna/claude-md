@@ -160,6 +160,12 @@ reads the current Claude Code session id, the per-PR checkpoint advanced by
 the create_pull_request hook, the CCR_SPAWN_TIMESTAMP_MS session-start epoch,
 and `ccusage session --json`) and paste the output over the lines below.
 
+The Model(s) line is the redacted capability tier (Opus-class / Sonnet-class
+/ Haiku-class, or other-class for any other model), never the exact model id:
+the generator collapses the ccusage modelsUsed id deterministically so the
+canonical output carries the tier and the verbatim version string is never
+written into the body. Do not hand-edit it back to a precise id.
+
 When no session data is available -- a human-authored PR with no ccusage
 session, or ccusage absent -- the generator emits the
 `unavailable (no session data)` form shown below; keep that marker rather
