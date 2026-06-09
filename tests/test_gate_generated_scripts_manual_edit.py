@@ -68,8 +68,23 @@ def test_changed_generated_docs_filters_prefixes() -> None:
 
 def test_is_exempt() -> None:
     assert gate.is_exempt("chore/update-generated-docs") is True
+    # Regression guard for #1553: the triage-report job writes
+    # docs/generated/scripts/auto-retro-triage-report.md on this fixed branch
+    # via createCommitOnBranch, so it must be exempt like the decision-tree
+    # branch. Its omission failed PR #1552 on this gate after the title (#1551)
+    # and body-shape (#1554) blockers were cleared.
+    assert gate.is_exempt("chore/refresh-auto-retro-triage-report") is True
     assert gate.is_exempt("feature/x") is False
     assert gate.is_exempt("") is False
+
+
+def test_triage_report_branch_is_exempt_and_aligned() -> None:
+    # The exempt branch literal must match auto_retro's source-of-truth
+    # constant so a rename of the triage-report branch cannot silently drop
+    # the exemption.
+    import auto_retro
+
+    assert auto_retro._TRIAGE_REPORT_PR_BRANCH in gate.EXEMPT_BRANCHES
 
 
 def test_evaluate_passes_when_no_changes() -> None:
