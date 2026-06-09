@@ -83,6 +83,7 @@ import scan_workflow_action_pins
 import scan_workflow_gh_calls
 import scan_workflow_injection
 import scan_workflow_pip
+import scan_workflow_unsigned_commit
 import script_ast_graph
 import security_drift_report
 import skill_quality_gate
@@ -213,6 +214,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("scan_workflow_action_pins.py", "verify"): "test_scan_workflow_action_pins_verify_matches_workflow_args",
     ("scan_workflow_gh_calls.py", "verify"): "test_scan_workflow_gh_calls_verify_matches_workflow_args",
     ("scan_workflow_injection.py", "verify"): "test_scan_workflow_injection_verify_matches_workflow_args",
+    ("scan_workflow_unsigned_commit.py", "verify"): "test_scan_workflow_unsigned_commit_verify_matches_workflow_args",
     ("scan_workflow_pip.py", "verify"): "test_scan_workflow_pip_verify_matches_workflow_args",
     ("security_drift_report.py", "aggregate"): "test_security_drift_report_aggregate_and_post_comment_match_workflow_args",
     ("security_drift_report.py", "post-comment"): "test_security_drift_report_aggregate_and_post_comment_match_workflow_args",
@@ -240,7 +242,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("github_paginate.py", "get"): "test_github_paginate_get_matches_workflow_args",
     ("post_issue_comment.py", "create"): "test_post_issue_comment_create_matches_workflow_args",
     ("prune_devcontainer_images.py", "prune"): "test_prune_devcontainer_images_prune_matches_workflow_args",
-    ("pr_upsert.py", "upsert"): "test_pr_upsert_matches_workflow_args",
+    ("pr_upsert.py", "upsert-files"): "test_pr_upsert_upsert_files_matches_workflow_args",
     ("verify_shard_coverage.py", None): "test_verify_shard_coverage_matches_workflow_args",
     ("verify_test_shard_markers.py", None): "test_verify_test_shard_markers_matches_workflow_args",
 }
@@ -1352,6 +1354,12 @@ def test_scan_workflow_injection_verify_matches_workflow_args() -> None:
     assert scan_workflow_injection.main(["verify"]) == 0
 
 
+def test_scan_workflow_unsigned_commit_verify_matches_workflow_args() -> None:
+    """Mirrors the ``Assert no git push (unsigned authoring) in workflow run
+    blocks`` step in ``.github/workflows/verify-agents.yml``. Refs #1437, #1466."""
+    assert scan_workflow_unsigned_commit.main(["verify"]) == 0
+
+
 def test_scan_secrets_verify_matches_workflow_args() -> None:
     """Mirrors the ``Assert no hardcoded secrets in tracked non-Python files``
     step in ``.github/workflows/verify-agents.yml``. Refs #1129."""
@@ -1689,22 +1697,39 @@ def test_pr_upsert_find_matches_workflow_args(
     assert pr_upsert.main(["find", "--head", "codex/devcontainer-image-pins-abc123"]) == 0
 
 
-def test_pr_upsert_matches_workflow_args(
+def test_pr_upsert_upsert_files_matches_workflow_args(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """upsert subcommand accepts the --head/--base/--title/--body-file args used by generate-agents.yml and post-merge.yml."""
+    """upsert-files accepts the --add (generate-agents.yml) and --from-diff
+    (post-merge.yml) arg shapes used to publish signed App-bot commits."""
     monkeypatch.setenv("GH_TOKEN", "tok")
     monkeypatch.setenv("REPO", "owner/repo")
     body_file = tmp_path / "pr-body.md"
     body_file.write_text("body content", encoding="utf-8")
-    monkeypatch.setattr(pr_upsert, "_upsert_pr", lambda **kw: ("created", 99))
+    monkeypatch.setattr(pr_upsert, "_collect_worktree_changes", lambda **kw: ([("CLAUDE.md", b"x\n")], []))
+    monkeypatch.setattr(pr_upsert, "upsert_files_pr", lambda **kw: "created:99")
 
+    # generate-agents.yml shape: explicit --add files.
     assert pr_upsert.main([
-        "upsert",
+        "upsert-files",
         "--head", "chore/regenerate-agent-instructions",
         "--base", "main",
         "--title", "chore: regenerate agent instructions (#18)",
+        "--commit-body", "Refs #18",
         "--body-file", str(body_file),
+        "--add", "CLAUDE.md",
+        "--add", "AGENTS.md",
+    ]) == 0
+
+    # post-merge.yml decision-tree shape: --from-diff over a directory prefix.
+    assert pr_upsert.main([
+        "upsert-files",
+        "--head", "chore/update-generated-docs",
+        "--base", "main",
+        "--title", "docs(generated): regenerate decision tree and workflow diagrams (#960)",
+        "--commit-body", "Refs #960",
+        "--body-file", str(body_file),
+        "--from-diff", "docs/generated/",
     ]) == 0
 
 
