@@ -226,7 +226,9 @@ def test_trivy_scan_skips_nix_store_links_hardlink_farm() -> None:
     # deterministically; building-time removal proved ineffective in the
     # published image (the rm did not persist). Refs #1473, #1348.
     workflow = (REPO_ROOT / ".github/workflows/publish-devcontainer-images.yml").read_text(encoding="utf-8")
-    assert "skip-dirs: nix/store/.links" in workflow
+    # The scanner now runs as a digest-pinned `docker run` (#1276), so the skip
+    # is the Trivy CLI flag form rather than the trivy-action `skip-dirs:` input.
+    assert "--skip-dirs nix/store/.links" in workflow
 
     # Guard against the reverted build-time approach silently coming back: the
     # farm must not be deleted in the Feature install (it shares inodes with the

@@ -142,12 +142,30 @@ jobs:
       # exit-code 0 means findings never fail the run, and continue-on-error
       # means a Trivy DB-download or other infra failure never blocks publish.
       # Results surface in the Security tab via the SARIF upload.
+      #
+      # The scanner runtime is pinned by image *digest*, not by the resolve-at-
+      # runtime version/tag that the trivy-action wrapper used: images referenced
+      # by digest were unaffected by the 2026-03-19 Trivy supply-chain incident
+      # (aquasecurity/trivy#10425), whereas a version/tag remains re-resolvable
+      # upstream. Dropping the trivy-action `uses:` ref loses its Dependabot
+      # auto-bump and OSV correlation surface; the `# threat-intel-pin:` line in
+      # the run block below re-attaches the OSV surface
+      # (scripts/threat_intel_triage.py reads it), and the digest bump/refresh
+      # procedure is documented in docs/runbooks/compromised-action-response.md.
+      # Bump the @sha256 digest and the threat-intel-pin version in lockstep.
+      # Refs #1276, #1267, #1264.
       - name: Scan published image with Trivy
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         continue-on-error: true
-        with:
-          image-ref: ${{ env.IMAGE_PREFIX }}-${{ matrix.agent }}:${{ github.sha }}-${{ matrix.arch }}
-          scanners: vuln,secret,misconfig
+        env:
+          # Trivy reads TRIVY_USERNAME / TRIVY_PASSWORD for registry auth when it
+          # pulls the GHCR image to scan (and the trivy-db). Passed by reference
+          # (`-e NAME`) below so the token never lands on the command line.
+          # github.token is the job's read-only GHCR credential.
+          TRIVY_USERNAME: ${{ github.actor }}
+          TRIVY_PASSWORD: ${{ github.token }}
+          IMAGE_REF: ${{ env.IMAGE_PREFIX }}-${{ matrix.agent }}:${{ github.sha }}-${{ matrix.arch }}
+        run: |
+          set -euo pipefail
           # Skip the Nix store optimisation hardlink farm. /nix/store/.links is a
           # content-addressed mirror in which every store file is hardlinked under
           # a second path; Trivy's secret scanner walks it and reports findings
@@ -158,17 +176,21 @@ jobs:
           # Trivy v0.70.0 pkg/fanal/utils/utils.go SkipPath: skip-dirs patterns are
           # matched on the leading-slash-trimmed path with doublestar, so the
           # relative pattern below prunes the whole subtree. Refs #1473, #1348.
-          skip-dirs: nix/store/.links
-          format: sarif
-          output: trivy-results.sarif
-          exit-code: '0'
-          # Pin the Trivy binary, not just the action SHA. trivy-action downloads
-          # the scanner at runtime and the `version:` input selects which binary;
-          # leaving it unset (or `latest`) was the exposure vector in the
-          # 2026-03-19 Trivy supply-chain incident (aquasecurity/trivy#10425).
-          # v0.70.0 is the trivy-action v0.36.0 default and post-incident
-          # (>= v0.69.3). Bump in lockstep when the pinned action SHA changes.
-          version: v0.70.0
+          #
+          # threat-intel-pin: Go github.com/aquasecurity/trivy 0.70.0
+          docker run --rm \
+            -e TRIVY_USERNAME \
+            -e TRIVY_PASSWORD \
+            -v "${{ github.workspace }}:/workspace" \
+            -w /workspace \
+            ghcr.io/aquasecurity/trivy@sha256:be1190afcb28352bfddc4ddeb71470835d16462af68d310f9f4bca710961a41e \
+            image \
+              --scanners vuln,secret,misconfig \
+              --skip-dirs nix/store/.links \
+              --format sarif \
+              --output trivy-results.sarif \
+              --exit-code 0 \
+              "$IMAGE_REF"
 
       - name: Upload Trivy results to the Security tab
         uses: github/codeql-action/upload-sarif@1a818fd5f97ed0ee9a823421bd5b171add01227f # v4.36.2

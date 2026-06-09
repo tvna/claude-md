@@ -27647,13 +27647,16 @@ flowchart TD
     by_key.setdefault((dep.ecosystem, dep.name, dep.version), dep)"]
     N006["for dep in parse_transient_uv_run(repo_root):
     by_key.setdefault((dep.ecosystem, dep.name, dep.version), dep)"]
-    N007["return sorted(by_key.values(), key=lambda dep: (dep.ecosystem, dep.name, dep.version))"]
+    N007["for dep in parse_workflow_pinned_images(repo_root):
+    by_key.setdefault((dep.ecosystem, dep.name, dep.version), dep)"]
+    N008["return sorted(by_key.values(), key=lambda dep: (dep.ecosystem, dep.name, dep.version))"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 --> N004
     N004 --> N005
     N005 --> N006
     N006 --> N007
+    N007 --> N008
 ```
 
 ### parse_uv_lock(...)
@@ -27791,6 +27794,34 @@ flowchart TD
     N003 --> N004
     N004 --> N005
     N005 --> N006
+```
+
+### parse_workflow_pinned_images(...)
+
+```mermaid
+flowchart TD
+    N001["parse_workflow_pinned_images(...)"]
+    N002["workflow_dir = repo_root / WORKFLOW_SUBDIR"]
+    N003["if not workflow_dir.is_dir()"]
+    N004["return []"]
+    N005["deps = []"]
+    N006["for path in sorted(workflow_dir.rglob('<str>')):
+    if not path.is_file() or path.suffix not in ('<str>', '<str>'):
+        continue
+    text = path.read_text(encoding='<str>', errors='<str>')
+    source = str(path)
+    for line in text.splitlines():
+        match = _THREAT_INTEL_PIN.search(line)
+        if match is None:
+            continue
+        deps.append(Dependency(name=match.group('<str>'), version=match.group('<str>'), ecosystem=match.group('<str>'), source=source))"]
+    N007["return deps"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 -->|"true"| N004
+    N003 -->|"false"| N005
+    N005 --> N006
+    N006 --> N007
 ```
 
 ### _parse_action_reference(...)
