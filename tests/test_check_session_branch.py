@@ -84,7 +84,40 @@ def test_check_writes_session_branch_file(monkeypatch: pytest.MonkeyPatch, tmp_p
         patch.object(subject, "_SESSION_BRANCH_FILE", branch_file),
     ):
         subject.check()
-    assert branch_file.read_text() == branch
+    assert branch_file.read_text().splitlines() == [branch]
+
+
+def test_check_appends_without_clobbering_existing(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # A second session in the same container (paired work / post-merge
+    # follow-up) must ADD its branch, not overwrite the partner's entry.
+    monkeypatch.setenv("CLAUDE_CODE_REMOTE", "true")
+    branch_file = tmp_path / "CLAUDE_SESSION_BRANCH"
+    branch_file.write_text("claude/partner-a\n")
+    with (
+        patch("check_session_branch._current_branch", return_value="claude/session-b"),
+        patch.object(subject, "_SESSION_BRANCH_FILE", branch_file),
+    ):
+        subject.check()
+    assert set(branch_file.read_text().splitlines()) == {
+        "claude/partner-a",
+        "claude/session-b",
+    }
+
+
+def test_check_append_is_deduped(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    # Re-starting a session on a branch already recorded must not duplicate it.
+    monkeypatch.setenv("CLAUDE_CODE_REMOTE", "true")
+    branch = "claude/session-xyz"
+    branch_file = tmp_path / "CLAUDE_SESSION_BRANCH"
+    branch_file.write_text(f"{branch}\n")
+    with (
+        patch("check_session_branch._current_branch", return_value=branch),
+        patch.object(subject, "_SESSION_BRANCH_FILE", branch_file),
+    ):
+        subject.check()
+    assert branch_file.read_text().splitlines() == [branch]
 
 
 def test_check_survives_unwritable_path(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

@@ -572,6 +572,61 @@ flowchart TD
 
 No top-level functions found.
 
+## scripts/_session_branches.py
+
+### read_authorized_set(...)
+
+```mermaid
+flowchart TD
+    N001["read_authorized_set(...)"]
+    N002["try"]
+    N003["text = read_text(...)"]
+    N004["except OSError"]
+    N005["return set()"]
+    N006["return {line.strip() for line in text.splitlines() if line.strip()}"]
+    N001 -->|"start"| N002
+    N002 -->|"try"| N003
+    N002 -->|"raises"| N004
+    N004 --> N005
+    N003 --> N006
+```
+
+### append_branch(...)
+
+```mermaid
+flowchart TD
+    N001["append_branch(...)"]
+    N002["branch = strip(...)"]
+    N003["if not branch or branch in read_authorized_set(path)"]
+    N004["return"]
+    N005["with contextlib.suppress(OSError):
+    with path.open('<str>', encoding='<str>') as handle:
+        handle.write(branch + '<str>')"]
+    N006["end"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 -->|"true"| N004
+    N003 -->|"false"| N005
+    N005 --> N006
+```
+
+### is_authorized(...)
+
+```mermaid
+flowchart TD
+    N001["is_authorized(...)"]
+    N002["if not branch"]
+    N003["return False"]
+    N004["if branch in PROTECTED"]
+    N005["return False"]
+    N006["return branch in authorized"]
+    N001 -->|"start"| N002
+    N002 -->|"true"| N003
+    N002 -->|"false"| N004
+    N004 -->|"true"| N005
+    N004 -->|"false"| N006
+```
+
 ## scripts/_trusted_bots.py
 
 ### _load(...)
@@ -6469,8 +6524,7 @@ flowchart TD
     N004["branch = _current_branch(...)"]
     N005["if not branch"]
     N006["return None"]
-    N007["with contextlib.suppress(OSError):
-    _SESSION_BRANCH_FILE.write_text(branch)"]
+    N007["append_branch(...)"]
     N008["message = f'<str>{branch}<str>{branch}'"]
     N009["return {'<str>': {'<str>': message}}"]
     N001 -->|"start"| N002
@@ -16286,21 +16340,13 @@ flowchart TD
 
 ## scripts/preflight_commit_session_branch.py
 
-### _read_session_branch(...)
+### _read_authorized_branches(...)
 
 ```mermaid
 flowchart TD
-    N001["_read_session_branch(...)"]
-    N002["try"]
-    N003["branch = strip(...)"]
-    N004["return branch if branch else None"]
-    N005["except OSError"]
-    N006["return None"]
+    N001["_read_authorized_branches(...)"]
+    N002["return read_authorized_set(_SESSION_BRANCH_FILE)"]
     N001 -->|"start"| N002
-    N002 -->|"try"| N003
-    N003 --> N004
-    N002 -->|"raises"| N005
-    N005 --> N006
 ```
 
 ### _current_branch(...)
@@ -16338,15 +16384,17 @@ flowchart TD
     N006["command = str(...)"]
     N007["if not _GIT_COMMIT_RE.search(command)"]
     N008["return None"]
-    N009["session_branch = _read_session_branch(...)"]
-    N010["if not session_branch"]
+    N009["authorized = _read_authorized_branches(...)"]
+    N010["if not authorized"]
     N011["return None"]
     N012["current_branch = _current_branch(...)"]
     N013["if not current_branch"]
     N014["return None"]
-    N015["if current_branch == session_branch"]
+    N015["if is_authorized(current_branch, authorized)"]
     N016["return None"]
-    N017["return build_deny(f'<str>{session_branch}<str>{current_branch}<str>{session_branch}<str>')"]
+    N017["authorized_list = join(...)"]
+    N018["target_hint = sorted(authorized)[0]"]
+    N019["return build_deny(f'<str>{authorized_list}<str>{current_branch}<str>{target_hint}<str>')"]
     N001 -->|"start"| N002
     N002 -->|"true"| N003
     N002 -->|"false"| N004
@@ -16363,6 +16411,8 @@ flowchart TD
     N013 -->|"false"| N015
     N015 -->|"true"| N016
     N015 -->|"false"| N017
+    N017 --> N018
+    N018 --> N019
 ```
 
 ### main(...)
@@ -17490,21 +17540,13 @@ flowchart TD
 
 ## scripts/preflight_push_session_branch.py
 
-### _read_session_branch(...)
+### _read_authorized_branches(...)
 
 ```mermaid
 flowchart TD
-    N001["_read_session_branch(...)"]
-    N002["try"]
-    N003["branch = strip(...)"]
-    N004["return branch if branch else None"]
-    N005["except OSError"]
-    N006["return None"]
+    N001["_read_authorized_branches(...)"]
+    N002["return read_authorized_set(_SESSION_BRANCH_FILE)"]
     N001 -->|"start"| N002
-    N002 -->|"try"| N003
-    N003 --> N004
-    N002 -->|"raises"| N005
-    N005 --> N006
 ```
 
 ### _extract_push_remote_ref(...)
@@ -17580,15 +17622,17 @@ flowchart TD
     N006["command = str(...)"]
     N007["if not _GIT_PUSH_RE.search(command)"]
     N008["return None"]
-    N009["session_branch = _read_session_branch(...)"]
-    N010["if not session_branch"]
+    N009["authorized = _read_authorized_branches(...)"]
+    N010["if not authorized"]
     N011["return None"]
     N012["remote_ref = _extract_push_remote_ref(...)"]
     N013["if not remote_ref"]
     N014["return None"]
-    N015["if remote_ref in (session_branch, 'HEAD')"]
+    N015["if remote_ref == 'HEAD' or is_authorized(remote_ref, authorized)"]
     N016["return None"]
-    N017["return build_deny(f'<str>{session_branch}<str>{remote_ref}<str>{session_branch}<str>')"]
+    N017["authorized_list = join(...)"]
+    N018["target_hint = sorted(authorized)[0]"]
+    N019["return build_deny(f'<str>{authorized_list}<str>{remote_ref}<str>{target_hint}<str>')"]
     N001 -->|"start"| N002
     N002 -->|"true"| N003
     N002 -->|"false"| N004
@@ -17605,6 +17649,8 @@ flowchart TD
     N013 -->|"false"| N015
     N015 -->|"true"| N016
     N015 -->|"false"| N017
+    N017 --> N018
+    N018 --> N019
 ```
 
 ### main(...)
