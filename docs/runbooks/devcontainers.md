@@ -302,13 +302,33 @@ opening VS Code, run:
 
 The prebuild definitions live under `.devcontainer/images/<agent>/`.
 Those files are CI inputs only; local users should open the agent
-entrypoints listed above. The prebuild bakes only the base image plus the
-`common-utils`, `nix`, and `agent-user` Features. `devcontainer build` does
-not run `postCreateCommand`, so the agent CLI symlink and the Nix/uv
-closures are NOT baked into the GHCR image -- `install-agent-cli.sh` and
-`uv sync` run at container start as `postCreateCommand` steps. This is why
-the startup probe (Refs #1322, #1332) measures them as a post-pull startup
-phase rather than image content.
+entrypoints listed above. The prebuild bakes the base image plus the
+`common-utils`, `nix`, and `agent-user` Features, and -- for `claude` only --
+the `nix-warm-claude` Feature. `devcontainer build` does not run
+`postCreateCommand`, so the agent CLI symlink and the `uv sync` venv are NOT
+baked into the GHCR image -- `install-agent-cli.sh` and `uv sync` run at
+container start as `postCreateCommand` steps.
+
+The `.#claude` devShell closure IS baked, by the `nix-warm-claude` Feature
+(`.devcontainer/images/features/nix-warm-claude/`, Refs #1491). Lifecycle
+hooks cannot pre-warm it because `devcontainer build` skips them, so the
+Feature -- which runs as root during the build -- copies the flake into a
+non-git `/opt` dir and runs `nix develop "path:...#claude" --command true`,
+leaving the realised closure in `/nix/store`. The split measurement (#1471)
+showed this first-time closure realisation was ~23.4s of container-create,
+dwarfing the ~2.8s `uv sync`; baking it trades image size (~+250-400 MB
+compressed) for that startup time, a net win because the image is cached and
+reused locally across sessions. The `path:` ref forces Nix's non-git
+evaluator, sidestepping the libgit2 dubious-ownership error the runtime
+git+file fetch hits. The publish workflow stages `flake.nix`, `flake.lock`,
+and `pyproject.toml` into the Feature dir for the claude legs only (the
+workspace is not mounted during Feature install); those copies are
+git-ignored so they cannot drift from the source flake. Codex is out of
+scope and does not bake its closure. The retained `postCreateCommand`
+`nix develop .#claude --command true` is a ~0s no-op against the warm store
+and a fallback if the bake ever fails. The startup probe (Refs #1322, #1332)
+measures the now-baked warmup segment as near-zero with
+`split_nix_develop=true`.
 
 The prebuild base is `ubuntu:24.04` plus the `common-utils` feature (with
 zsh / oh-my-zsh disabled) for `git`, `sudo`, and CA certificates, then the
@@ -323,12 +343,12 @@ actionlint) continue to come from the Nix devShell, not the base.
 ## Prebuilt images
 
 Local devcontainers use immutable commit-SHA image tags. The currently
-pinned images were published from `8a3feb90459aefd6524f2cd45774a6d277302a31`:
+pinned images were published from `a5969fd27a7b4842d17af3d057a8909788dcbb65`:
 
 | Agent | Image |
 |---|---|
-| Claude | `ghcr.io/tvna/claude-md-devcontainer-claude:8a3feb90459aefd6524f2cd45774a6d277302a31` |
-| Codex | `ghcr.io/tvna/claude-md-devcontainer-codex:8a3feb90459aefd6524f2cd45774a6d277302a31` |
+| Claude | `ghcr.io/tvna/claude-md-devcontainer-claude:a5969fd27a7b4842d17af3d057a8909788dcbb65` |
+| Codex | `ghcr.io/tvna/claude-md-devcontainer-codex:a5969fd27a7b4842d17af3d057a8909788dcbb65` |
 
 The `Publish devcontainer images` workflow builds both images with the
 Dev Containers CLI and pushes them to GHCR on `main` changes to
@@ -1090,6 +1110,7 @@ bash -n .devcontainer/scripts/check-stale-agent-container.sh
 bash -n .devcontainer/scripts/ensure-agent-image.sh
 bash -n .devcontainer/scripts/collect-devcontainer-debug.sh
 sh -n .devcontainer/images/features/agent-user/install.sh
+sh -n .devcontainer/images/features/nix-warm-claude/install.sh
 nix build .#claude-cli
 nix build .#codex-cli
 ```

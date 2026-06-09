@@ -9,9 +9,11 @@ HTTP 403 with no branch name.
 
 When the environment is remote:
 * Emits an additionalContext notice naming the session push target.
-* Writes the branch name to <repo-root>/.git/CLAUDE_SESSION_BRANCH so that
+* Appends the branch name to <repo-root>/.git/CLAUDE_SESSION_BRANCH so that
   preflight_push_session_branch.py can validate push refspecs without an
-  extra subprocess call.
+  extra subprocess call. Appending (rather than overwriting) lets a second
+  session in the same container -- paired work or a post-merge follow-up --
+  authorize its branch without clobbering the partner's entry (Refs #1513).
 
 Fails open (exit 0) on any error so a broken git install never wedges a
 session.
@@ -19,7 +21,6 @@ session.
 
 from __future__ import annotations
 
-import contextlib
 import json
 import os
 import subprocess
@@ -28,6 +29,7 @@ from pathlib import Path
 from typing import Any
 
 from _git import run_git
+from _session_branches import append_branch
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 _REMOTE_ENV_VAR = "CLAUDE_CODE_REMOTE"
@@ -52,8 +54,7 @@ def check() -> dict[str, Any] | None:
     if not branch:
         return None
 
-    with contextlib.suppress(OSError):
-        _SESSION_BRANCH_FILE.write_text(branch)
+    append_branch(_SESSION_BRANCH_FILE, branch)
 
     message = (
         f"Session push target: '{branch}'. "

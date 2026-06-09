@@ -149,6 +149,10 @@
                 {
                   "type": "command",
                   "command": "python3 scripts/preflight_non_ascii.py"
+                },
+                {
+                  "type": "command",
+                  "command": "python3 scripts/preflight_github_secrets.py"
                 }
               ]
             },
@@ -327,6 +331,10 @@
                 },
                 {
                   "type": "command",
+                  "command": "python3 scripts/preflight_github_secrets.py"
+                },
+                {
+                  "type": "command",
                   "command": "python3 scripts/preflight_title_policy.py"
                 }
               ]
@@ -476,6 +484,14 @@
                   "command": "python3 scripts/stop_new_session_handoff_prompt.py"
                 }
               ]
+            },
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "python3 scripts/gate_cache_regime_advisor.py"
+                }
+              ]
             }
           ]
         }
@@ -578,6 +594,11 @@
                   "type": "command",
                   "command": "python3 scripts/preflight_non_ascii.py",
                   "statusMessage": "Checking GitHub text"
+                },
+                {
+                  "type": "command",
+                  "command": "python3 scripts/preflight_github_secrets.py",
+                  "statusMessage": "Checking GitHub text for secrets"
                 }
               ]
             },
@@ -793,6 +814,11 @@
                   "type": "command",
                   "command": "python3 scripts/preflight_non_ascii.py",
                   "statusMessage": "Checking GitHub text"
+                },
+                {
+                  "type": "command",
+                  "command": "python3 scripts/preflight_github_secrets.py",
+                  "statusMessage": "Checking GitHub text for secrets"
                 },
                 {
                   "type": "command",

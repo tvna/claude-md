@@ -1,6 +1,6 @@
 # Auto-retro decision tree
 
-This file is generated from `scripts/auto_retro.py::run` by `python3 scripts/auto_retro.py decision-tree-doc`. Do not edit it by hand; update `run()` and regenerate instead.
+This file is generated from `scripts/auto_retro.py::run` by `python3 scripts/script_ast_graph.py auto-retro-decision-tree-doc`. Do not edit it by hand; update the source script and regenerate instead.
 
 ```mermaid
 flowchart TD

@@ -1,7 +1,7 @@
 [project]
 name = "claude-md"
 version = "1.0.0"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 # pyyaml is retained because tests/test_superpowers_apm_install.py and
 # tests/test_workflow_cli_contracts.py import yaml directly at module level.
 # tomllib is stdlib in Python 3.11+; tomli backport no longer needed.
@@ -84,7 +84,7 @@ show_missing = true
 [tool.ruff]
 # Lint gate (#192). Scope is intentional: only the Python we ship and its
 # tests. target-version matches the project's requires-python lower bound.
-target-version = "py311"
+target-version = "py312"
 line-length = 120
 extend-exclude = [
     # Data file (#102 P3 snapshot of past issue/PR bodies), not Python source.
@@ -170,11 +170,12 @@ ignore = [
 known-first-party = ["scripts"]
 
 [tool.mypy]
-# Type gate (#192) first-pass floor. `python_version` is pinned to 3.11
-# to match the stdlib surface actually used by scripts (`datetime.UTC`,
-# `tomllib`), not the project's `requires-python = ">=3.10"` floor.
-# Tightening the requires-python pin is tracked separately.
-python_version = "3.11"
+# Type gate (#192). `python_version` matches the project floor
+# (`requires-python = ">=3.12"`). The stdlib surface scripts rely on
+# (`datetime.UTC`, `tomllib`) is present from 3.11 onward, so 3.12 is a safe
+# floor; the bump also lets the nix devShell standardize on the nixpkgs-default
+# python312 with no duplicate interpreter in the baked image (#1491).
+python_version = "3.12"
 files = ["scripts", "tests"]
 # Intentionally minimal flag set. Issue #192 asks for a high-signal,
 # narrow gate without repo-wide churn. The two flags below catch real

@@ -33,6 +33,7 @@ step does.
 |---|---|---|
 | `schedule` | `0 20 * * 0` (UTC) -- Mon 05:00 JST | Always assembles the report and updates the rolling comment on #178 (the dry-run field is forced to `false`). |
 | `workflow_dispatch` | manual | Select `task=security-control-drift`; the `security_control_dry_run` input defaults to `true` (no comment) so an operator can preview the table in the step summary before publishing. |
+| `push` (on `main`; control-family SoT paths) | event-driven (#1390) | A change to `.github/rulesets/**`, `.github/labels.json`, `.apm/instructions/**`, `pyproject.toml`, `CLAUDE.md`, or `AGENTS.md` runs this job immediately (dry-run forced to `false`), so drift is caught near the change instead of up to a week later. Every other weekly job is skipped on push. |
 
 The weekly maintenance workflow intentionally runs these jobs on the same
 JST Monday 05:00 trigger to reduce scheduled workflow sprawl.

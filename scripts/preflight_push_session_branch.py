@@ -7,12 +7,15 @@ session start.  A push to any other remote ref returns HTTP 403 with no
 diagnostic, giving the agent no signal about which branch is permitted.
 
 This hook intercepts every Bash ``git push`` command, parses the explicit
-remote-side refspec, and denies the push when it targets a branch other
-than the session branch stored in .git/CLAUDE_SESSION_BRANCH by
-check_session_branch.py.
+remote-side refspec, and denies the push when the target is not in the
+authorized branch set recorded in .git/CLAUDE_SESSION_BRANCH by
+check_session_branch.py. The decision is a conjunction (member of the set
+AND not a protected branch), not a single equality, so paired work and
+post-merge follow-up branches stay continuable without re-opening a path
+to a prior session's branch (Refs #1513).
 
-Fail-open: any hook error, missing session-branch file, or push without
-an explicit refspec exits 0 so the push proceeds and CI acts as backstop.
+Fail-open: any hook error, an empty authorized set, or a push without an
+explicit refspec exits 0 so the push proceeds and CI acts as backstop.
 
 Architecture mirrors preflight_push_base.py:
 * Pure decide() surface plus a thin main() entry.
@@ -28,6 +31,7 @@ from pathlib import Path
 from typing import Any
 
 from _hook_runtime import build_deny, run_event_hook
+from _session_branches import is_authorized, read_authorized_set
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 _SESSION_BRANCH_FILE = REPO_ROOT / ".git" / "CLAUDE_SESSION_BRANCH"
@@ -56,12 +60,8 @@ _FLAGS_WITH_VALUE: frozenset[str] = frozenset({
 })
 
 
-def _read_session_branch() -> str | None:
-    try:
-        branch = _SESSION_BRANCH_FILE.read_text().strip()
-        return branch if branch else None
-    except OSError:
-        return None
+def _read_authorized_branches() -> set[str]:
+    return read_authorized_set(_SESSION_BRANCH_FILE)
 
 
 def _extract_push_remote_ref(command: str) -> str | None:
@@ -136,24 +136,29 @@ def decide(event: dict[str, Any]) -> dict[str, Any] | None:
     if not _GIT_PUSH_RE.search(command):
         return None
 
-    session_branch = _read_session_branch()
-    if not session_branch:
-        return None  # fail-open: session branch not recorded yet
+    authorized = _read_authorized_branches()
+    if not authorized:
+        return None  # fail-open: no session branch recorded yet
 
     remote_ref = _extract_push_remote_ref(command)
     if not remote_ref:
         return None  # no explicit refspec — fail-open
 
-    if remote_ref in (session_branch, "HEAD"):
+    if remote_ref == "HEAD" or is_authorized(remote_ref, authorized):
         return None
 
+    authorized_list = ", ".join(sorted(authorized))
+    target_hint = sorted(authorized)[0]
     return build_deny(
         f"Blocked by scripts/preflight_push_session_branch.py: "
-        f"this remote session only permits pushes to '{session_branch}'. "
-        f"The push targets '{remote_ref}'.\n\n"
-        f"Use the refspec syntax to map your local branch to the session branch:\n"
-        f"  git push origin <local-branch>:{session_branch}\n\n"
-        "Refs #785."
+        f"this remote session only permits pushes to an authorized branch "
+        f"({authorized_list}). The push targets '{remote_ref}'.\n\n"
+        f"Map your local branch onto an authorized branch with a refspec:\n"
+        f"  git push origin <local-branch>:{target_hint}\n\n"
+        f"To authorize a different branch, start a new remote session on it "
+        f"(SessionStart records it); a protected branch (e.g. main) is never "
+        f"authorized here.\n\n"
+        "Refs #1513, #785."
     )
 
 

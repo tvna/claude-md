@@ -83,6 +83,8 @@ import scan_workflow_action_pins
 import scan_workflow_gh_calls
 import scan_workflow_injection
 import scan_workflow_pip
+import scan_workflow_unsigned_commit
+import script_ast_graph
 import security_drift_report
 import skill_quality_gate
 import threat_intel_triage
@@ -149,8 +151,10 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("backup_archive.py", "build"): "test_backup_archive_build_matches_workflow_args",
     ("github_paginate.py", "fetch-run-jobs"): "test_github_paginate_fetch_run_jobs_matches_workflow_args",
     ("validate_json_syntax.py", "verify"): "test_validate_json_syntax_verify_matches_workflow_args",
-    ("auto_retro.py", "decision-tree-doc"): "test_auto_retro_decision_tree_doc_matches_workflow_args",
+    ("script_ast_graph.py", "auto-retro-decision-tree-doc"): "test_script_ast_graph_auto_retro_doc_matches_workflow_args",
+    ("script_ast_graph.py", "all-doc"): "test_script_ast_graph_all_doc_matches_workflow_args",
     ("auto_retro.py", "triage-report"): "test_auto_retro_triage_report_matches_workflow_env",
+    ("auto_retro.py", "triage-report-pr"): "test_auto_retro_triage_report_pr_matches_workflow_env",
     ("workflow_diagram.py", "diagram-doc"): "test_workflow_diagram_doc_matches_workflow_args",
     ("auto_retro.py", "run"): "test_auto_retro_run_matches_workflow_env",
     ("auto_retro.py", "post-merge-rescan"): "test_auto_retro_post_merge_rescan_matches_workflow_env",
@@ -181,6 +185,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("ruleset_drift.py", "reconcile"): "test_ruleset_drift_detect_and_reconcile_match_workflow_args",
     ("rulesets_apply.py", "$MODE"): "test_rulesets_apply_plan_and_auto_delete_match_workflow_args",
     ("rulesets_apply.py", "auto-delete"): "test_rulesets_apply_plan_and_auto_delete_match_workflow_args",
+    ("rulesets_apply.py", "workflow-permissions"): "test_rulesets_apply_workflow_permissions_matches_workflow_args",
     ("scan_allowlist_parser_parity.py", "verify"): "test_scan_allowlist_parser_parity_verify_matches_workflow_args",
     ("scan_allowlist_rationale.py", "verify"): "test_scan_allowlist_rationale_verify_matches_workflow_args",
     ("scan_apm_portability.py", "verify"): "test_scan_apm_portability_verify_matches_workflow_paths",
@@ -209,6 +214,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("scan_workflow_action_pins.py", "verify"): "test_scan_workflow_action_pins_verify_matches_workflow_args",
     ("scan_workflow_gh_calls.py", "verify"): "test_scan_workflow_gh_calls_verify_matches_workflow_args",
     ("scan_workflow_injection.py", "verify"): "test_scan_workflow_injection_verify_matches_workflow_args",
+    ("scan_workflow_unsigned_commit.py", "verify"): "test_scan_workflow_unsigned_commit_verify_matches_workflow_args",
     ("scan_workflow_pip.py", "verify"): "test_scan_workflow_pip_verify_matches_workflow_args",
     ("security_drift_report.py", "aggregate"): "test_security_drift_report_aggregate_and_post_comment_match_workflow_args",
     ("security_drift_report.py", "post-comment"): "test_security_drift_report_aggregate_and_post_comment_match_workflow_args",
@@ -236,7 +242,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("github_paginate.py", "get"): "test_github_paginate_get_matches_workflow_args",
     ("post_issue_comment.py", "create"): "test_post_issue_comment_create_matches_workflow_args",
     ("prune_devcontainer_images.py", "prune"): "test_prune_devcontainer_images_prune_matches_workflow_args",
-    ("pr_upsert.py", "upsert"): "test_pr_upsert_matches_workflow_args",
+    ("pr_upsert.py", "upsert-files"): "test_pr_upsert_upsert_files_matches_workflow_args",
     ("verify_shard_coverage.py", None): "test_verify_shard_coverage_matches_workflow_args",
     ("verify_test_shard_markers.py", None): "test_verify_test_shard_markers_matches_workflow_args",
 }
@@ -527,17 +533,34 @@ def test_auto_retro_post_merge_rescan_matches_workflow_env(
     assert auto_retro.main(["post-merge-rescan"]) == 0
 
 
-def test_auto_retro_decision_tree_doc_matches_workflow_args(
+def test_script_ast_graph_auto_retro_doc_matches_workflow_args(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Mirror the default-output shape used by the generated-doc workflow."""
     monkeypatch.chdir(tmp_path)
     output = Path("docs/generated/scripts/auto-retro-decision-tree.md")
 
-    assert auto_retro.main(["decision-tree-doc"]) == 0
+    assert script_ast_graph.main(["auto-retro-decision-tree-doc"]) == 0
 
     assert output.read_text(encoding="utf-8") == (
-        auto_retro.render_decision_tree_markdown()
+        script_ast_graph.render_auto_retro_decision_tree_markdown()
+    )
+
+
+def test_script_ast_graph_all_doc_matches_workflow_args(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Mirror the default-output shape used by the generated-doc workflow."""
+    monkeypatch.chdir(tmp_path)
+    scripts = tmp_path / "scripts"
+    scripts.mkdir()
+    (scripts / "alpha.py").write_text("def run():\n    return 0\n", encoding="utf-8")
+    output = Path("docs/generated/scripts/python-script-ast-graphs.md")
+
+    assert script_ast_graph.main(["all-doc"]) == 0
+
+    assert output.read_text(encoding="utf-8") == (
+        script_ast_graph.render_all_script_graphs_markdown(tmp_path)
     )
 
 
@@ -561,6 +584,43 @@ def test_auto_retro_triage_report_matches_workflow_env(
             auto_retro.compute_triage_report([])
         )
     )
+
+
+def test_auto_retro_triage_report_pr_matches_workflow_env(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Mirror the env shape used by the post-merge triage-report-pr step.
+
+    The workflow shells to ``python3 scripts/auto_retro.py triage-report-pr``
+    with REPO + GH_TOKEN + GITHUB_REF_NAME in the env, reading the snapshot the
+    preceding triage-report step wrote. The PR-upsert boundary is stubbed so the
+    contract exercises the argv/env wiring (report read, base resolution) without
+    network access. Refs #1466.
+    """
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("REPO", REPO)
+    monkeypatch.setenv("GH_TOKEN", "tok")
+    monkeypatch.setenv("GITHUB_REF_NAME", "main")
+
+    report_path = Path("docs/generated/scripts/auto-retro-triage-report.md")
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    report_path.write_text("# snapshot\n", encoding="utf-8")
+
+    captured: dict[str, Any] = {}
+
+    def fake_upsert(**kwargs: Any) -> str:
+        captured.update(kwargs)
+        return "created:99"
+
+    monkeypatch.setattr(auto_retro, "upsert_single_file_pr", fake_upsert)
+
+    assert auto_retro.main(["triage-report-pr"]) == 0
+
+    assert captured["repo"] == REPO
+    assert captured["base"] == "main"
+    assert captured["branch"] == "chore/refresh-auto-retro-triage-report"
+    assert captured["path"] == "docs/generated/scripts/auto-retro-triage-report.md"
+    assert captured["content"] == b"# snapshot\n"
 
 
 def test_workflow_diagram_doc_matches_workflow_args(
@@ -931,6 +991,67 @@ def test_rulesets_apply_plan_and_auto_delete_match_workflow_args(
     ) == 0
 
 
+def test_rulesets_apply_workflow_permissions_matches_workflow_args(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Mirror the argv shape used by apply-rulesets.yml and
+    weekly-maintenance.yml.
+
+    apply-rulesets.yml runs ``workflow-permissions --mode plan|apply`` and the
+    weekly security-control-drift job runs it ``--mode drift`` (read-only). The
+    live GET is stubbed so the contract exercises argv/env wiring (SoT read,
+    diff, exit-code mapping) without network access.
+    """
+    sot = tmp_path / "workflow.json"
+    sot.write_text(
+        json.dumps(
+            {
+                "default_workflow_permissions": "read",
+                "can_approve_pull_request_reviews": True,
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("GH_TOKEN", "token")
+    monkeypatch.setattr(
+        rulesets_apply,
+        "get_workflow_permissions",
+        lambda *_a, **_k: {
+            "default_workflow_permissions": "read",
+            "can_approve_pull_request_reviews": True,
+        },
+    )
+
+    # drift mode, in sync -> exit 0
+    assert rulesets_apply.main(
+        [
+            "workflow-permissions",
+            "--repo",
+            REPO,
+            "--sot-file",
+            str(sot),
+            "--mode",
+            "drift",
+            "--summary-file",
+            str(tmp_path / "wfperm-summary.md"),
+        ]
+    ) == 0
+    # plan mode -> exit 0
+    assert rulesets_apply.main(
+        [
+            "workflow-permissions",
+            "--repo",
+            REPO,
+            "--sot-file",
+            str(sot),
+            "--mode",
+            "plan",
+            "--summary-file",
+            str(tmp_path / "wfperm-summary.md"),
+        ]
+    ) == 0
+
+
 def test_coverage_failure_issue_run_matches_workflow_env(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1233,6 +1354,12 @@ def test_scan_workflow_injection_verify_matches_workflow_args() -> None:
     assert scan_workflow_injection.main(["verify"]) == 0
 
 
+def test_scan_workflow_unsigned_commit_verify_matches_workflow_args() -> None:
+    """Mirrors the ``Assert no git push (unsigned authoring) in workflow run
+    blocks`` step in ``.github/workflows/verify-agents.yml``. Refs #1437, #1466."""
+    assert scan_workflow_unsigned_commit.main(["verify"]) == 0
+
+
 def test_scan_secrets_verify_matches_workflow_args() -> None:
     """Mirrors the ``Assert no hardcoded secrets in tracked non-Python files``
     step in ``.github/workflows/verify-agents.yml``. Refs #1129."""
@@ -1409,6 +1536,8 @@ def test_security_drift_report_aggregate_and_post_comment_match_workflow_args(
             "0",
             "--uv-drift-rc",
             "0",
+            "--workflow-permissions-drift-rc",
+            "0",
             "--uv-stale-rc",
             "0",
             "--uv-stale-output",
@@ -1568,22 +1697,39 @@ def test_pr_upsert_find_matches_workflow_args(
     assert pr_upsert.main(["find", "--head", "codex/devcontainer-image-pins-abc123"]) == 0
 
 
-def test_pr_upsert_matches_workflow_args(
+def test_pr_upsert_upsert_files_matches_workflow_args(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """upsert subcommand accepts the --head/--base/--title/--body-file args used by generate-agents.yml and post-merge.yml."""
+    """upsert-files accepts the --add (generate-agents.yml) and --from-diff
+    (post-merge.yml) arg shapes used to publish signed App-bot commits."""
     monkeypatch.setenv("GH_TOKEN", "tok")
     monkeypatch.setenv("REPO", "owner/repo")
     body_file = tmp_path / "pr-body.md"
     body_file.write_text("body content", encoding="utf-8")
-    monkeypatch.setattr(pr_upsert, "_upsert_pr", lambda **kw: ("created", 99))
+    monkeypatch.setattr(pr_upsert, "_collect_worktree_changes", lambda **kw: ([("CLAUDE.md", b"x\n")], []))
+    monkeypatch.setattr(pr_upsert, "upsert_files_pr", lambda **kw: "created:99")
 
+    # generate-agents.yml shape: explicit --add files.
     assert pr_upsert.main([
-        "upsert",
+        "upsert-files",
         "--head", "chore/regenerate-agent-instructions",
         "--base", "main",
         "--title", "chore: regenerate agent instructions (#18)",
+        "--commit-body", "Refs #18",
         "--body-file", str(body_file),
+        "--add", "CLAUDE.md",
+        "--add", "AGENTS.md",
+    ]) == 0
+
+    # post-merge.yml decision-tree shape: --from-diff over a directory prefix.
+    assert pr_upsert.main([
+        "upsert-files",
+        "--head", "chore/update-generated-docs",
+        "--base", "main",
+        "--title", "docs(generated): regenerate decision tree and workflow diagrams (#960)",
+        "--commit-body", "Refs #960",
+        "--body-file", str(body_file),
+        "--from-diff", "docs/generated/",
     ]) == 0
 
 

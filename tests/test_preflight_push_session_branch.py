@@ -31,9 +31,12 @@ def _bash_event(command: str) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-def _with_session(branch: str, monkeypatch: pytest.MonkeyPatch) -> None:
+def _with_session(
+    branches: str | set[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setenv("CLAUDE_CODE_REMOTE", "true")
-    monkeypatch.setattr(subject, "_read_session_branch", lambda: branch)
+    authorized = {branches} if isinstance(branches, str) else set(branches)
+    monkeypatch.setattr(subject, "_read_authorized_branches", lambda: authorized)
 
 
 # ---------------------------------------------------------------------------
@@ -65,8 +68,9 @@ def test_decide_passthrough_bash_non_push(monkeypatch: pytest.MonkeyPatch) -> No
 
 
 def test_decide_passthrough_no_session_branch(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Empty authorized set (bootstrap / unrecorded session) — fail-open.
     monkeypatch.setenv("CLAUDE_CODE_REMOTE", "true")
-    monkeypatch.setattr(subject, "_read_session_branch", lambda: None)
+    monkeypatch.setattr(subject, "_read_authorized_branches", set)
     assert subject.decide(_bash_event("git push origin other-branch")) is None
 
 
@@ -179,6 +183,42 @@ def test_decide_denies_force_push_to_other_branch(monkeypatch: pytest.MonkeyPatc
     assert result["hookSpecificOutput"]["permissionDecision"] == "deny"
 
 
+# ---------------------------------------------------------------------------
+# decide() — multi-factor authorized set (Refs #1513)
+# ---------------------------------------------------------------------------
+
+
+def test_decide_allows_push_to_any_set_member(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Paired work / post-merge: the set carries more than one branch; a push
+    # to EITHER member is allowed.
+    branch_b = "claude/follow-up-branch"
+    _with_session({_SESSION_BRANCH, branch_b}, monkeypatch)
+    assert subject.decide(_bash_event(f"git push origin {_SESSION_BRANCH}")) is None
+    assert subject.decide(_bash_event(f"git push origin {branch_b}")) is None
+
+
+def test_decide_denies_main_even_when_in_set(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Invariant 1: a protected branch is rejected even if a stale entry names it.
+    _with_session({_SESSION_BRANCH, "main"}, monkeypatch)
+    result = subject.decide(_bash_event("git push origin main"))
+    assert result is not None
+    assert result["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+def test_decide_denies_unauthorized_prior_session_branch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Invariant 2: a prior session's branch never added to the set stays denied.
+    _with_session(_SESSION_BRANCH, monkeypatch)
+    result = subject.decide(
+        _bash_event("git push origin claude/hopeful-turing-pex8i2")
+    )
+    assert result is not None
+    reason = result["hookSpecificOutput"]["permissionDecisionReason"]
+    assert "claude/hopeful-turing-pex8i2" in reason
+    assert result["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
 def test_decide_denies_rtk_rewritten_push_to_other_branch(monkeypatch: pytest.MonkeyPatch) -> None:
     # The rtk auto-rewrite hook prefixes ``git push`` with ``rtk`` (#1199); the
     # session-branch gate must still detect it and deny the off-branch push.
@@ -247,26 +287,20 @@ class TestExtractPushRemoteRef:
 
 
 # ---------------------------------------------------------------------------
-# _read_session_branch()
+# _read_authorized_branches()
 # ---------------------------------------------------------------------------
 
 
-class TestReadSessionBranch:
-    def test_returns_branch_from_file(self, tmp_path: Path) -> None:
+class TestReadAuthorizedBranches:
+    def test_reads_set_from_file(self, tmp_path: Path) -> None:
         f = tmp_path / "CLAUDE_SESSION_BRANCH"
-        f.write_text("claude/test-branch\n")
+        f.write_text("claude/a\nclaude/b\n")
         with patch.object(subject, "_SESSION_BRANCH_FILE", f):
-            assert subject._read_session_branch() == "claude/test-branch"
+            assert subject._read_authorized_branches() == {"claude/a", "claude/b"}
 
-    def test_returns_none_when_file_missing(self, tmp_path: Path) -> None:
+    def test_empty_set_when_file_missing(self, tmp_path: Path) -> None:
         with patch.object(subject, "_SESSION_BRANCH_FILE", tmp_path / "MISSING"):
-            assert subject._read_session_branch() is None
-
-    def test_returns_none_when_file_empty(self, tmp_path: Path) -> None:
-        f = tmp_path / "CLAUDE_SESSION_BRANCH"
-        f.write_text("  \n")
-        with patch.object(subject, "_SESSION_BRANCH_FILE", f):
-            assert subject._read_session_branch() is None
+            assert subject._read_authorized_branches() == set()
 
 
 # ---------------------------------------------------------------------------

@@ -19,6 +19,21 @@ on:
   schedule:
     # 05:00 JST every Monday. GitHub Actions cron is evaluated in UTC.
     - cron: "0 20 * * 0"
+  # Event-driven drift detection (#1390): a change to a control-family source of
+  # truth on main runs the security-control-drift job immediately instead of
+  # waiting up to a week for the cron. Only that job opts in (its `if` includes
+  # `push`); every other job stays schedule/dispatch-only and is skipped on push.
+  # The weekly cron remains the backstop, and the per-family detector scripts are
+  # reused unchanged (no duplicated detector logic).
+  push:
+    branches: [main]
+    paths:
+      - ".github/rulesets/**"
+      - ".github/labels.json"
+      - ".apm/instructions/**"
+      - "pyproject.toml"
+      - "CLAUDE.md"
+      - "AGENTS.md"
   workflow_dispatch:
     inputs:
       task:
@@ -393,7 +408,7 @@ jobs:
           UNKNOWN_DETECTED: ${{ steps.diff.outputs.unknown_count != '0' }}
 
   security-control-drift:
-    if: github.event_name == 'schedule' || inputs.task == 'all' || inputs.task == 'security-control-drift'
+    if: github.event_name == 'schedule' || github.event_name == 'push' || inputs.task == 'all' || inputs.task == 'security-control-drift'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment: ruleset-verify
@@ -514,6 +529,32 @@ jobs:
             echo "rc=1" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Detect workflow-permissions drift (read-only)
+        id: wfperm
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.RULESETS_PAT }}
+        run: |
+          set -euo pipefail
+          python3 scripts/rulesets_apply.py workflow-permissions \
+            --repo "${REPO}" \
+            --sot-file .github/actions-permissions/workflow.json \
+            --mode drift \
+            --summary-file "${GITHUB_STEP_SUMMARY}"
+
+      - name: Record workflow-permissions drift exit code
+        id: wfperm_rc
+        if: always()
+        env:
+          OUTCOME: ${{ steps.wfperm.outcome }}
+        run: |
+          set -euo pipefail
+          if [ "${OUTCOME}" = "success" ]; then
+            echo "rc=0" >> "$GITHUB_OUTPUT"
+          else
+            echo "rc=1" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Warn if uv pin trails upstream (read-only)
         id: uv_stale
         continue-on-error: true
@@ -547,6 +588,7 @@ jobs:
             --labels-summary-file /tmp/labels-summary.md \
             --apm-diff-rc "${{ steps.apm.outputs.rc }}" \
             --uv-drift-rc "${{ steps.uv_drift_rc.outputs.rc }}" \
+            --workflow-permissions-drift-rc "${{ steps.wfperm_rc.outputs.rc }}" \
             --uv-stale-rc "${{ steps.uv_stale_rc.outputs.rc }}" \
             --uv-stale-output /tmp/uv-stale.out \
             --run-url "${RUN_URL}" \
@@ -557,7 +599,7 @@ jobs:
       - name: Post or update rolling comment on #178
         if: always()
         env:
-          DRY_RUN: ${{ github.event_name == 'schedule' && 'false' || inputs.security_control_dry_run }}
+          DRY_RUN: ${{ (github.event_name == 'schedule' || github.event_name == 'push') && 'false' || inputs.security_control_dry_run }}
         run: |
           set -euo pipefail
           python3 scripts/security_drift_report.py post-comment \
@@ -570,7 +612,7 @@ jobs:
         if: always() && steps.aggregate.outputs.drift_families != ''
         env:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          DRY_RUN: ${{ github.event_name == 'schedule' && 'false' || inputs.security_control_dry_run }}
+          DRY_RUN: ${{ (github.event_name == 'schedule' || github.event_name == 'push') && 'false' || inputs.security_control_dry_run }}
         run: |
           set -euo pipefail
           python3 scripts/security_drift_report.py file-family-issues \
