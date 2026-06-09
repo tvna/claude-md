@@ -5,8 +5,8 @@ Content under ``docs/generated/scripts/`` is owned by the post-merge
 automation (refs #1540): the ``decision-tree`` job in
 ``.github/workflows/post-merge.yml`` regenerates the per-script AST docs after a
 merge to ``main`` and opens the bot branch ``chore/update-generated-docs`` to
-publish them. The pre-push gate and the pre-merge ``generate-docs.yml`` gate no
-longer regenerate or drift-check that folder, so this gate is the inverse
+publish them. Neither the pre-push gate nor any pre-merge drift gate regenerates
+or drift-checks that folder, so this gate is the inverse
 control: a non-bot branch whose diff touches ``docs/generated/scripts/**`` is
 rejected, keeping the folder a single-producer surface instead of a
 hand-editable one.

@@ -679,7 +679,7 @@ def test_auto_retro_triage_report_pr_matches_workflow_env(
 def test_workflow_diagram_doc_matches_workflow_args(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Mirror the default-output shape used by the generate-docs workflow."""
+    """Mirror the default-output shape used by the post-merge generate-docs job."""
     import shutil
 
     # Resolve source path before chdir so it stays absolute.

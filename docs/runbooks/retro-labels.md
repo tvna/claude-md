@@ -250,8 +250,8 @@ The numbers come verbatim from `compute_prior_from_labels`, so the
 report can never disagree with the live skip decision.
 
 Unlike the decision-tree doc, this report depends on live GitHub label
-state, so it is **non-deterministic** and is NOT part of the
-`generate-docs.yml` drift gate. It is refreshed weekly by
+state, so it is **non-deterministic** and is NOT part of the deterministic
+generated-docs flow owned by the post-merge automation. It is refreshed weekly by
 `.github/workflows/weekly-maintenance.yml`, which opens a pull
 request when the snapshot drifts. The git history of the committed
 snapshot is the time series.
