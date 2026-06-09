@@ -115,14 +115,17 @@ than serving as precedent for new PRD files.
 ### generated/scripts/ -- per-script AST graphs
 
 `generated/scripts/ast/<stem>.md` holds one Mermaid AST control-flow doc per
-`scripts/*.py` file, plus `generated/scripts/auto-retro-triage-report.md`, the
-live retro-issue snapshot. This folder is owned by the post-merge automation
+`scripts/*.py` file, `generated/scripts/dependency-graph.md` holds the
+sibling-import dependency graph across those scripts, plus
+`generated/scripts/auto-retro-triage-report.md`, the live retro-issue snapshot.
+This folder is owned by the post-merge automation
 (the `decision-tree` job in `.github/workflows/post-merge.yml`); it is not
 hand-editable and is exempt from per-file INDEX linking (a non-bot edit fails
 `scripts/gate_generated_scripts_manual_edit.py`). Sources:
-`python3 scripts/script_ast_graph.py all-doc` (per-script AST) and
+`python3 scripts/script_ast_graph.py all-doc` (per-script AST),
+`python3 scripts/script_dependency_graph.py all-doc` (dependency graph), and
 `python3 scripts/auto_retro.py triage-report` (triage snapshot).
-Tracking issues: #598, #605, #960, #1540.
+Tracking issues: #598, #605, #960, #1540, #1543.
 
 ### generated/workflows/ -- workflow if-branch diagrams
 
