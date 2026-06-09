@@ -6505,6 +6505,30 @@ flowchart TD
 
 ## scripts/check_session_branch.py
 
+### _ensure_seed_trailing_newline(...)
+
+```mermaid
+flowchart TD
+    N001["_ensure_seed_trailing_newline(...)"]
+    N002["try"]
+    N003["existing = read_text(...)"]
+    N004["except OSError"]
+    N005["return"]
+    N006["if not existing or existing.endswith('\n')"]
+    N007["return"]
+    N008["with contextlib.suppress(OSError):
+    path.write_text(existing + '<str>', encoding='<str>')"]
+    N009["end"]
+    N001 -->|"start"| N002
+    N002 -->|"try"| N003
+    N002 -->|"raises"| N004
+    N004 --> N005
+    N003 --> N006
+    N006 -->|"true"| N007
+    N006 -->|"false"| N008
+    N008 --> N009
+```
+
 ### _current_branch(...)
 
 ```mermaid
@@ -6534,9 +6558,10 @@ flowchart TD
     N004["branch = _current_branch(...)"]
     N005["if not branch"]
     N006["return None"]
-    N007["append_branch(...)"]
-    N008["message = f'<str>{branch}<str>{branch}'"]
-    N009["return {'<str>': {'<str>': message}}"]
+    N007["_ensure_seed_trailing_newline(...)"]
+    N008["append_branch(...)"]
+    N009["message = f'<str>{branch}<str>{branch}'"]
+    N010["return {'<str>': {'<str>': message}}"]
     N001 -->|"start"| N002
     N002 -->|"true"| N003
     N002 -->|"false"| N004
@@ -6545,6 +6570,7 @@ flowchart TD
     N005 -->|"false"| N007
     N007 --> N008
     N008 --> N009
+    N009 --> N010
 ```
 
 ### main(...)
@@ -27473,6 +27499,35 @@ flowchart TD
     N010 -->|"false"| N012
 ```
 
+### redact_model(...)
+
+```mermaid
+flowchart TD
+    N001["redact_model(...)"]
+    N002["lowered = lower(...)"]
+    N003["for tier in _MODEL_TIERS:
+    if tier in lowered:
+        return f'{tier.capitalize()}<str>'"]
+    N004["return _UNKNOWN_MODEL_TIER"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 --> N004
+```
+
+### redact_models(...)
+
+```mermaid
+flowchart TD
+    N001["redact_models(...)"]
+    N002["seen = {}"]
+    N003["for model in models:
+    seen.setdefault(redact_model(model), None)"]
+    N004["return list(seen)"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 --> N004
+```
+
 ### render_section(...)
 
 ```mermaid
@@ -27482,17 +27537,19 @@ flowchart TD
     N003["if usage is not None"]
     N004["total = f'{usage['<str>']:<str>}<str>{usage['<str>']:<str>}<str>{usage['<str>']:<str>}<str>{usage['<str>']:<str>}<str>{usage['<str>']:<str>}<str>'"]
     N005["cost = f'<str>{usage['<str>']:<str>}'"]
-    N006["models = '<str>'.join(usage['<str>']) if usage['<str>'] else _UNAVAILABLE"]
-    N007["total, cost, models = _UNAVAILABLE"]
-    N008["return f'<str>{_HEADING}<str>{elapsed_txt}<str>{total}<str>{cost}<str>{models}<str>'"]
+    N006["tiers = redact_models(...)"]
+    N007["models = '<str>'.join(tiers) if tiers else _UNAVAILABLE"]
+    N008["total, cost, models = _UNAVAILABLE"]
+    N009["return f'<str>{_HEADING}<str>{elapsed_txt}<str>{total}<str>{cost}<str>{models}<str>'"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 -->|"true"| N004
     N004 --> N005
     N005 --> N006
-    N003 -->|"false"| N007
-    N006 --> N008
-    N007 --> N008
+    N006 --> N007
+    N003 -->|"false"| N008
+    N007 --> N009
+    N008 --> N009
 ```
 
 ### _run_ccusage(...)
