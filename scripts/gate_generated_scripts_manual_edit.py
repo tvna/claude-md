@@ -11,8 +11,10 @@ this gate is the inverse control: a non-bot branch whose diff touches
 ``docs/generated/scripts/**`` or ``docs/generated/workflows/**`` is rejected,
 keeping the folder a single-producer surface instead of a hand-editable one.
 
-The post-merge bot branch (``chore/update-generated-docs``) is exempt: it is the
-legitimate producer, and its diff is exactly the regenerated content.
+The post-merge bot branches (``chore/update-generated-docs`` for the AST docs
+and diagrams, ``chore/refresh-auto-retro-triage-report`` for the triage-report
+snapshot) are exempt: they are the legitimate producers, and their diffs are
+exactly the regenerated content.
 
 Architecture: pure functions on top (:func:`resolve_base`,
 :func:`changed_generated_docs`, :func:`evaluate`), a single subprocess
@@ -40,9 +42,15 @@ import sys
 # Folders owned by the post-merge automation; hand edits are forbidden here.
 PROTECTED_PREFIXES = ("docs/generated/scripts/", "docs/generated/workflows/")
 
-# The post-merge bot branch that legitimately regenerates the folder. It is the
-# fixed PR_BRANCH used by the post-merge ``decision-tree`` job.
-EXEMPT_BRANCHES = frozenset({"chore/update-generated-docs"})
+# The post-merge bot branches that legitimately regenerate the folder, each a
+# fixed PR_BRANCH used by a post-merge job:
+# - chore/update-generated-docs: the ``decision-tree`` job (AST docs + diagrams).
+# - chore/refresh-auto-retro-triage-report: the ``triage-report`` job, which
+#   writes docs/generated/scripts/auto-retro-triage-report.md via
+#   createCommitOnBranch (auto_retro._TRIAGE_REPORT_PR_BRANCH). Refs #1553.
+EXEMPT_BRANCHES = frozenset(
+    {"chore/update-generated-docs", "chore/refresh-auto-retro-triage-report"}
+)
 
 
 def resolve_base() -> str:
