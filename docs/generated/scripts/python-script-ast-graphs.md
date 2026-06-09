@@ -599,9 +599,8 @@ flowchart TD
     N002["branch = strip(...)"]
     N003["if not branch or branch in read_authorized_set(path)"]
     N004["return"]
-    N005["with contextlib.suppress(OSError):
-    with path.open('<str>', encoding='<str>') as handle:
-        handle.write(branch + '<str>')"]
+    N005["with contextlib.suppress(OSError), path.open('<str>', encoding='<str>') as handle:
+    handle.write(branch + '<str>')"]
     N006["end"]
     N001 -->|"start"| N002
     N002 --> N003
