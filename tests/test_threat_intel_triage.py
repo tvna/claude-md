@@ -313,6 +313,61 @@ class TestDependencyDiscovery:
     ) -> None:
         assert triage.parse_workflow_pinned_images(tmp_path) == []
 
+    def test_parse_workflow_pinned_images_ignores_prose_mention(
+        self, tmp_path: Path
+    ) -> None:
+        # A comment line that merely *mentions* the token inside a
+        # backtick-quoted phrase must not produce a Dependency (#1511): the
+        # mid-line match used to yield a garbage coordinate (ecosystem=`` ` ``)
+        # that OSV querybatch rejected with HTTP 400.
+        workflow_dir = tmp_path / ".github" / "workflows"
+        workflow_dir.mkdir(parents=True)
+        workflow = workflow_dir / "scan.yml"
+        workflow.write_text(
+            "jobs:\n"
+            "  scan:\n"
+            "    steps:\n"
+            "      - run: |\n"
+            # The mention ends the line, so the unanchored ``.search()`` used
+            # to match ecosystem=`` ` ``, name="line", version="in" up to
+            # ``$`` -- the exact false-match from publish-devcontainer-images.
+            "          # the `# threat-intel-pin:` line in\n"
+            "          docker run ghcr.io/aquasecurity/trivy@sha256:abc image\n",
+            encoding="utf-8",
+        )
+
+        assert triage.parse_workflow_pinned_images(tmp_path) == []
+
+    def test_parse_workflow_pinned_images_prose_and_real_pin_coexist(
+        self, tmp_path: Path
+    ) -> None:
+        # A prose mention preceding the real pin must not suppress the real
+        # pin: only the legitimate, line-anchored pin is ingested (#1511).
+        workflow_dir = tmp_path / ".github" / "workflows"
+        workflow_dir.mkdir(parents=True)
+        workflow = workflow_dir / "scan.yml"
+        workflow.write_text(
+            "jobs:\n"
+            "  scan:\n"
+            "    steps:\n"
+            "      - run: |\n"
+            # Prose mention that ends the line (the #1511 false-match), then
+            # the real pin on its own line below it.
+            "          # the `# threat-intel-pin:` line in\n"
+            "          # threat-intel-pin: Go github.com/aquasecurity/trivy 0.70.0\n"
+            "          docker run ghcr.io/aquasecurity/trivy@sha256:abc image\n",
+            encoding="utf-8",
+        )
+
+        assert triage.parse_workflow_pinned_images(tmp_path) == [
+            triage.Dependency(
+                "github.com/aquasecurity/trivy",
+                "0.70.0",
+                "Go",
+                str(workflow),
+            ),
+        ]
+
     def test_parse_transient_uv_run_captures_exact_pin(
         self, tmp_path: Path
     ) -> None:
@@ -1777,6 +1832,44 @@ class TestNetworkBoundaryFunctions:
         dep = triage.Dependency("requests", "2.31.0", "PyPI", "uv.lock")
         result = triage.query_osv_batch([dep])
         assert result == payload
+
+    def test_query_osv_batch_400_raises_with_coordinates(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # urllib is a function-local import in this file (annotation-only at
+        # module scope under ``from __future__ import annotations``); keep it
+        # local so the existing annotation-only imports do not trip ruff F401.
+        import urllib.error
+
+        def raise_400(*_a: object, **_kw: object) -> dict[str, object]:
+            raise urllib.error.HTTPError(
+                triage.OSV_QUERYBATCH_URL, 400, "Bad Request", {}, None  # type: ignore[arg-type]
+            )
+
+        monkeypatch.setattr(triage, "request_json", raise_400)
+        dep = triage.Dependency("trivy", "0.70.0", "`", "scan.yml")
+        with pytest.raises(ValueError, match="HTTP 400") as excinfo:
+            triage.query_osv_batch([dep])
+        # The loud error names the submitted coordinates and their source so
+        # the offending dependency is identifiable (#1511, CLAUDE.md s4).
+        assert "`:trivy@0.70.0 (from scan.yml)" in str(excinfo.value)
+
+    def test_query_osv_batch_non_400_http_error_propagates(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import urllib.error
+
+        def raise_503(*_a: object, **_kw: object) -> dict[str, object]:
+            raise urllib.error.HTTPError(
+                triage.OSV_QUERYBATCH_URL, 503, "Service Unavailable", {}, None  # type: ignore[arg-type]
+            )
+
+        monkeypatch.setattr(triage, "request_json", raise_503)
+        dep = triage.Dependency("requests", "2.31.0", "PyPI", "uv.lock")
+        # A non-400 transport error is a transient outage, not a malformed
+        # query: it must propagate unchanged (no ValueError translation).
+        with pytest.raises(urllib.error.HTTPError):
+            triage.query_osv_batch([dep])
 
     def test_fetch_cisa_kev_returns_request_json_result(
         self, monkeypatch: pytest.MonkeyPatch
