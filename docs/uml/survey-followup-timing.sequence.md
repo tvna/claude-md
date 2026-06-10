@@ -123,6 +123,7 @@ sequenceDiagram
     alt turn signals handoff AND no paste-ready prompt
         Stop-->>Agent: block: emit paste-ready next-session prompt
         Agent->>Human: fenced paste-ready prompt
+        Note over Human,Agent: operator RESPONSE timing -- pasting it into a follow-up<br/>session re-enters at SessionStart (loops back to the top)
     else cue missed or fence present
         Note over Stop: no-op (can miss handoffs)
     end
@@ -170,3 +171,9 @@ job is the Family B backstop, but it only opens a retro (not a satisfaction
 survey), so a double-fired survey (#1594) is an agent/operator-friction defect,
 not a correctness loss -- the fix belongs at the session-marker / hook-family
 layer, not in CI.
+
+`[analysis]` The follow-up prompt is depicted at two moments: its **emission**
+(the Stop block -> agent emits the fenced prompt) and the operator's **response**
+(pasting it into a follow-up session, which re-enters at SessionStart). That
+response edge is what closes the lifecycle loop back to the top of the diagram --
+the cross-session continuation, not just the in-session emission.

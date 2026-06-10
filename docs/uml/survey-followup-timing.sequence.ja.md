@@ -123,6 +123,7 @@ sequenceDiagram
     alt ターンがハンドオフを示し かつ 貼り付け可能プロンプトなし
         Stop-->>Agent: block: 貼り付け可能な次セッションプロンプトを出力
         Agent->>Human: フェンス付き貼り付け可能プロンプト
+        Note over Human,Agent: オペレータの応答タイミング -- 後続セッションへ貼り付けると<br/>SessionStart へ再入 (先頭へループバック)
     else cue を取りこぼし or フェンス既出
         Note over Stop: no-op (ハンドオフを見逃しうる)
     end
@@ -169,3 +170,8 @@ transcript はすべて exit 0）: `gate_handoff_retro_survey_askuserquestion.py
 のバックストップだが、retro を開くだけで満足度サーベイは行わない。よって二重発火した
 サーベイ（#1594）は correctness の損失ではなくエージェント/オペレータの摩擦の欠陥であり、
 修正は CI ではなくセッションマーカー / フック族の層に属する。
+
+`[analysis]` フォローアッププロンプトは 2 つの契機で描かれている: その **出力**
+（Stop の block -> エージェントがフェンス付きプロンプトを出力）と、オペレータの **応答**
+（後続セッションへ貼り付け、SessionStart へ再入）。この応答エッジこそが、図の先頭へ
+ライフサイクルの環を閉じる —— セッション内の出力だけでなく、クロスセッションの継続である。
