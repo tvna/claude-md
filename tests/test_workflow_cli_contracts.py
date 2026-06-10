@@ -2036,6 +2036,12 @@ def test_pr_label_mutation_jobs_have_pull_request_write() -> None:
 def test_title_policy_verify_matches_workflow_kind_env(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    # title_policy.verify_title falls back to PR_BODY / ISSUE_BODY when called
+    # with an empty body; the single-process pre-push preflight exports PR_BODY
+    # for its body gates, so clear both to keep this type-fit check deterministic
+    # regardless of the ambient environment. Refs #1451.
+    monkeypatch.delenv("PR_BODY", raising=False)
+    monkeypatch.delenv("ISSUE_BODY", raising=False)
     monkeypatch.setenv("TITLE", "fix(ci): ascii title")
 
     assert title_policy.main(["verify", "--kind", "pull_request"]) == 0
