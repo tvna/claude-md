@@ -68,9 +68,11 @@ class TestUsesReservedScope:
 
 class TestDecide:
     def test_reserved_scope_create_is_denied(self) -> None:
+        # A reserved-scope title that is NOT the canonical handoff retro shape
+        # (Refs #1581 exception) stays denied.
         decision = gate.decide(
             "mcp__github__issue_write",
-            _create_input("chore(auto-retro): review PR #5 repair loops"),
+            _create_input("fix(auto-retro): close retro #5"),
         )
         assert decision is not None
         out = decision["hookSpecificOutput"]
@@ -78,6 +80,52 @@ class TestDecide:
         reason = out["permissionDecisionReason"]
         assert "auto-retro" in reason
         assert "#1395" in reason
+
+    def test_canonical_handoff_retro_title_is_allowed(self) -> None:
+        # Refs #1581 / D1: the pre-merge handoff survey opens the canonical
+        # retro in-session. The single permitted exception is the EXACT
+        # build_retro_title shape; the gate must NOT deny it.
+        decision = gate.decide(
+            "mcp__github__issue_write",
+            _create_input("chore(auto-retro): review PR #5 repair loops"),
+        )
+        assert decision is None
+
+    def test_canonical_exception_aligns_with_build_retro_title(self) -> None:
+        # The allow-list predicate must never drift from the title producer:
+        # whatever build_retro_title emits must pass the gate.
+        pr = auto_retro.MergedPR(
+            number=4242,
+            title="fix(x): y",
+            merged=True,
+            merged_at="2026-06-10T00:00:00Z",
+            merged_by_login="human",
+            user_login="human",
+            layer_labels=(),
+            html_url="",
+        )
+        canonical = auto_retro.build_retro_title(pr)
+        assert auto_retro.is_canonical_handoff_retro_title(canonical) is True
+        assert (
+            gate.decide("mcp__github__issue_write", _create_input(canonical))
+            is None
+        )
+
+    def test_other_auto_retro_titles_still_denied(self) -> None:
+        # The exception is narrow: every other auto-retro title stays denied,
+        # including the legacy no-colon prefix and a different fix/docs scope.
+        for title in (
+            "docs(auto-retro): document retro outcome",
+            "chore(auto-retro) review PR #5 repair loops",
+            "chore(auto-retro): review PR #5 repair loops extra",
+        ):
+            decision = gate.decide(
+                "mcp__github__issue_write", _create_input(title)
+            )
+            assert decision is not None, title
+            assert (
+                decision["hookSpecificOutput"]["permissionDecision"] == "deny"
+            )
 
     def test_non_reserved_scope_create_passes(self) -> None:
         decision = gate.decide(
@@ -138,13 +186,28 @@ class TestMain:
             {
                 "tool_name": "mcp__github__issue_write",
                 "tool_input": _create_input(
-                    "chore(auto-retro): review PR #5 repair loops"
+                    "fix(auto-retro): close retro #5"
                 ),
             },
             monkeypatch,
         )
         decision = json.loads(stdout)
         assert decision["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+    def test_canonical_handoff_retro_produces_no_output(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Refs #1581: the permitted handoff retro create yields no decision.
+        stdout = self._run(
+            {
+                "tool_name": "mcp__github__issue_write",
+                "tool_input": _create_input(
+                    "chore(auto-retro): review PR #5 repair loops"
+                ),
+            },
+            monkeypatch,
+        )
+        assert stdout == ""
 
     def test_non_reserved_create_produces_no_output(
         self, monkeypatch: pytest.MonkeyPatch
