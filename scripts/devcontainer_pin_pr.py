@@ -76,13 +76,13 @@ from pathlib import Path
 
 import update_devcontainer_image_pins
 from _git import run_git
+from _pr_commit_batch import _create_commit_on_branch
 from _pr_merge import _merge_pr_if_clean
 from pr_upsert import (
     _close_pr,
     _comment_pr,
     _compare_behind,
     _create_branch_ref,
-    _create_commit_on_branch,
     _delete_branch,
     _get_ref_sha,
     _list_open_prs,

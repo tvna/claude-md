@@ -36,21 +36,12 @@ from _git import run_git
 from _github_api import apply_call as _github_apply_call
 from _github_api import graphql_call as _github_graphql_call
 
-_API_ROOT = "https://api.github.com"
+# Signed commit creation (createCommitOnBranch) and the payload batching that
+# keeps a large backlog from overflowing the mutation live in a sibling module
+# to keep this one within the script size budget. Refs #1437, #1578.
+from _pr_commit_batch import _create_commits_in_batches
 
-# Commits authored through this mutation are signed by GitHub and shown as
-# Verified, with the authenticated token's identity (the App bot) as author.
-# This is the only way to produce a verified commit for an App-bot author: a
-# GitHub App account cannot hold its own GPG/SSH signing key, so a local
-# ``git commit`` on the runner is always unsigned and rejected by the
-# ``required_signatures`` rule on ``main``. Refs #1437.
-_CREATE_COMMIT_ON_BRANCH_MUTATION = """
-mutation($input: CreateCommitOnBranchInput!) {
-  createCommitOnBranch(input: $input) {
-    commit { oid }
-  }
-}
-"""
+_API_ROOT = "https://api.github.com"
 
 
 def _list_open_prs(
@@ -186,56 +177,6 @@ def _create_branch_ref(
         raise RuntimeError(f"Create branch ref {branch} failed: HTTP {code}: {resp[:200]}")
 
 
-def _create_commit_on_branch(
-    *,
-    repo: str,
-    branch: str,
-    expected_head_oid: str,
-    headline: str,
-    body: str,
-    additions: list[dict[str, str]],
-    deletions: list[dict[str, str]] | None = None,
-    token: str,
-    graphql_call: Callable[..., tuple[int, dict[str, Any]]] = _github_graphql_call,
-) -> str:
-    """Create a signed commit on *branch* via GraphQL; return the new commit oid.
-
-    *additions* is a list of ``{"path", "contents"}`` where ``contents`` is the
-    base64-encoded file bytes. *deletions* (when given) is a list of ``{"path"}``
-    for files removed in the same commit; an empty/omitted list leaves the
-    ``deletions`` key off the mutation entirely. *expected_head_oid* must equal
-    the current head of *branch* or GitHub rejects the mutation (guarding against
-    a racing write). See ``_CREATE_COMMIT_ON_BRANCH_MUTATION`` for why this path
-    is required for a verified App-bot commit. Refs #1437.
-    """
-    message: dict[str, str] = {"headline": headline}
-    if body:
-        message["body"] = body
-    file_changes: dict[str, list[dict[str, str]]] = {"additions": additions}
-    if deletions:
-        file_changes["deletions"] = deletions
-    variables = {
-        "input": {
-            "branch": {"repositoryNameWithOwner": repo, "branchName": branch},
-            "message": message,
-            "expectedHeadOid": expected_head_oid,
-            "fileChanges": file_changes,
-        }
-    }
-    code, response = graphql_call(query=_CREATE_COMMIT_ON_BRANCH_MUTATION, variables=variables, token=token)
-    if not (200 <= code < 300):
-        raise RuntimeError(f"createCommitOnBranch HTTP {code}")
-    if "errors" in response:
-        raise RuntimeError(f"createCommitOnBranch errors: {response['errors']}")
-    try:
-        oid = response["data"]["createCommitOnBranch"]["commit"]["oid"]
-    except (KeyError, TypeError) as exc:
-        raise RuntimeError(f"createCommitOnBranch: unexpected response: {str(response)[:200]}") from exc
-    if not isinstance(oid, str) or not oid:
-        raise RuntimeError(f"createCommitOnBranch: missing commit oid: {str(response)[:200]}")
-    return oid
-
-
 def _get_branch_head_oid(
     *,
     repo: str,
@@ -318,6 +259,11 @@ def upsert_files_pr(
 ) -> str:
     """Publish a multi-file change to *branch* and upsert a PR into *base*, never force-pushing.
 
+    A large addition set is split across several chained signed commits
+    (:func:`_create_commits_in_batches`) so the createCommitOnBranch payload
+    cannot overflow the GraphQL request; a small payload stays a single commit
+    with the unchanged headline. Refs #1578.
+
     The signed, reuse-safe generalisation of :func:`upsert_single_file_pr`.
     *additions* is a list of ``(path, content_bytes)`` pairs to write; *deletions*
     is a list of paths to remove in the same commit. The commit is created server
@@ -369,10 +315,10 @@ def upsert_files_pr(
     if head_oid is None:
         base_sha = _get_ref_sha(repo=repo, ref=f"heads/{base}", token=token, apply_call=apply_call)
         _create_branch_ref(repo=repo, branch=branch, sha=base_sha, token=token, apply_call=apply_call)
-        _create_commit_on_branch(
+        _create_commits_in_batches(
             repo=repo,
             branch=branch,
-            expected_head_oid=base_sha,
+            start_oid=base_sha,
             headline=commit_subject,
             body=commit_body,
             additions=api_additions,
@@ -386,10 +332,10 @@ def upsert_files_pr(
     ):
         verb = "branch-current"
     else:
-        _create_commit_on_branch(
+        _create_commits_in_batches(
             repo=repo,
             branch=branch,
-            expected_head_oid=head_oid,
+            start_oid=head_oid,
             headline=commit_subject,
             body=commit_body,
             additions=api_additions,
