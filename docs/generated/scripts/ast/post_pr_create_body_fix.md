@@ -164,7 +164,7 @@ flowchart TD
     N024["if dropped"]
     N025["tokens = join(...)"]
     N026["warning = f'<str>{tokens}<str>'"]
-    N027["return _build_context(f'<str>{pr_label}<str>{owner or '<str>'}<str>{repo or '<str>'}<str>{pr_number}<str>{warning}<str>{body_repr}<str>')"]
+    N027["return _build_context(f\"<str>{pr_label}<str>{owner or '<str>'}<str>{repo or '<str>'}<str>{pr_number}<str>{warning}<str>{body_repr}<str>\")"]
     N001 -->|"start"| N002
     N002 -->|"true"| N003
     N002 -->|"false"| N004

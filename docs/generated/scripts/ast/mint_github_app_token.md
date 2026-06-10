@@ -73,7 +73,7 @@ flowchart TD
     N001["request_installation_token(...)"]
     N002["if not api_url.startswith('https://')"]
     N003["raise MintError('<str>')"]
-    N004["url = f'{api_url.rstrip('<str>')}<str>{installation_id}<str>'"]
+    N004["url = f\"{api_url.rstrip('<str>')}<str>{installation_id}<str>\""]
     N005["request = Request(...)"]
     N006["try"]
     N007["with urllib.request.urlopen(request, timeout=30) as response:

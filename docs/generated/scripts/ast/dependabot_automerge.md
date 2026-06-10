@@ -157,7 +157,7 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["render_markdown(...)"]
-    N002["lines = ['<str>', '<str>', f'<str>{str(result.enabled).lower()}<str>', f'<str>{str(result.eligible).lower()}<str>', f'<str>{str(result.should_enable).lower()}<str>', f'<str>{result.ecosystem or '<str>'}<str>', f'<str>{result.update_type or '<str>'}<str>', '<str>']"]
+    N002["lines = ['<str>', '<str>', f'<str>{str(result.enabled).lower()}<str>', f'<str>{str(result.eligible).lower()}<str>', f'<str>{str(result.should_enable).lower()}<str>', f\"<str>{result.ecosystem or '<str>'}<str>\", f\"<str>{result.update_type or '<str>'}<str>\", '<str>']"]
     N003["if result.reasons"]
     N004["append(...)"]
     N005["extend(...)"]
@@ -390,7 +390,7 @@ flowchart TD
     N014["if not 200 <= gql_code < 300"]
     N015["raise RuntimeError(f'<str>{gql_code}')"]
     N016["if 'errors' in response"]
-    N017["raise RuntimeError(f'<str>{response['<str>']}')"]
+    N017["raise RuntimeError(f\"<str>{response['<str>']}\")"]
     N018["end"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -435,7 +435,7 @@ flowchart TD
     N018["if not 200 <= gql_code < 300"]
     N019["raise RuntimeError(f'<str>{gql_code}')"]
     N020["if 'errors' in response"]
-    N021["raise RuntimeError(f'<str>{response['<str>']}')"]
+    N021["raise RuntimeError(f\"<str>{response['<str>']}\")"]
     N022["return True"]
     N001 -->|"start"| N002
     N002 --> N003

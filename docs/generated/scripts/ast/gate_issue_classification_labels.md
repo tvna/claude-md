@@ -52,7 +52,7 @@ flowchart TD
     N002["parts = []"]
     N003["for axis in missing:
     valid = sorted(axes.get(axis) or frozenset())
-    parts.append(f'<str>{axis}<str>{'<str>'.join(valid)}<str>')"]
+    parts.append(f\"<str>{axis}<str>{'<str>'.join(valid)}<str>\")"]
     N004["needed = join(...)"]
     N005["return f'<str>{_TARGET_TOOL}<str>{needed}<str>'"]
     N001 -->|"start"| N002

@@ -53,7 +53,7 @@ flowchart TD
     failed = [r for r in runs if str(r.get('<str>') or '<str>').lower() in _FAIL_CONCLUSIONS]
     print(f'<str>{poll + 1}<str>{completed}<str>{total}<str>{len(failed)}<str>', flush=True)
     for r in failed:
-        print(f'<str>{r.get('<str>')}<str>{r.get('<str>')}<str>', flush=True)
+        print(f\"<str>{r.get('<str>')}<str>{r.get('<str>')}<str>\", flush=True)
     if total > 0 and completed == total:
         if failed:
             print(f'<str>{len(failed)}<str>', flush=True)
