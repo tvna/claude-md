@@ -12,9 +12,7 @@ flowchart TD
     N004["removed = [name for name in type_labels if name != TRACKING_LABEL]"]
     N005["already_tracking = type_labels == [TRACKING_LABEL]"]
     N006["result = []"]
-    N007["for name in [*non_type, TRACKING_LABEL]:
-    if name not in result:
-        result.append(name)"]
+    N007["for name in [*non_type, TRACKING_LABEL]:     if name not in result:         result.append(name)"]
     N008["return {'<str>': already_tracking, '<str>': removed, '<str>': result}"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -56,11 +54,7 @@ flowchart TD
     N005["data = loads(...)"]
     N006["raw = data.get('<str>', []) if isinstance(data, dict) else []"]
     N007["names = []"]
-    N008["for entry in raw:
-    if isinstance(entry, dict) and isinstance(entry.get('<str>'), str):
-        names.append(entry['<str>'])
-    elif isinstance(entry, str):
-        names.append(entry)"]
+    N008["for entry in raw:     if isinstance(entry, dict) and isinstance(entry.get('<str>'), str):         names.append(entry['<str>'])     elif isinstance(entry, str):         names.append(entry)"]
     N009["return names"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -149,8 +143,7 @@ flowchart TD
     N002["if not raw"]
     N003["return []"]
     N004["out = []"]
-    N005["for token in raw.replace('<str>', '<str>').split():
-    out.append(int(token.lstrip('<str>')))"]
+    N005["for token in raw.replace('<str>', '<str>').split():     out.append(int(token.lstrip('<str>')))"]
     N006["return out"]
     N001 -->|"start"| N002
     N002 -->|"true"| N003
@@ -166,12 +159,7 @@ flowchart TD
     N001["main(...)"]
     N002["parser = ArgumentParser(...)"]
     N003["sub = add_subparsers(...)"]
-    N004["for name in ('<str>', '<str>'):
-    p = sub.add_parser(name)
-    p.add_argument('<str>', default=os.environ.get('<str>', '<str>'))
-    p.add_argument('<str>', type=int, required=True)
-    p.add_argument('<str>', default='<str>', help='<str>')
-    p.add_argument('<str>', default=None, help='<str>')"]
+    N004["for name in ('<str>', '<str>'):     p = sub.add_parser(name)     p.add_argument('<str>', default=os.environ.get('<str>', '<str>'))     p.add_argument('<str>', type=int, required=True)     p.add_argument('<str>', default='<str>', help='<str>')     p.add_argument('<str>', default=None, help='<str>')"]
     N005["args = parse_args(...)"]
     N006["if not args.repo"]
     N007["print(...)"]

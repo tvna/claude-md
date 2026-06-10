@@ -53,13 +53,7 @@ flowchart TD
     N018["if not isinstance(raw_labels, list)"]
     N019["return None"]
     N020["out = []"]
-    N021["for entry in raw_labels:
-    if isinstance(entry, dict):
-        name = entry.get('<str>')
-        if isinstance(name, str):
-            out.append(name)
-    elif isinstance(entry, str):
-        out.append(entry)"]
+    N021["for entry in raw_labels:     if isinstance(entry, dict):         name = entry.get('<str>')         if isinstance(name, str):             out.append(name)     elif isinstance(entry, str):         out.append(entry)"]
     N022["return out"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -196,13 +190,8 @@ flowchart TD
     N008["if not isinstance(tool_name, str) or not isinstance(tool_input, dict)"]
     N009["print(...)"]
     N010["return 0"]
-    N011["def _token_getter() -> str | None:
-    return os.environ.get('<str>') or os.environ.get('<str>')"]
-    N012["def _label_getter(owner: str, repo: str, number: int) -> list[str] | None:
-    token = _token_getter()
-    if not token:
-        return None
-    return fetch_labels(owner, repo, number, token=token)"]
+    N011["def _token_getter() -> str | None:     return os.environ.get('<str>') or os.environ.get('<str>')"]
+    N012["def _label_getter(owner: str, repo: str, number: int) -> list[str] | None:     token = _token_getter()     if not token:         return None     return fetch_labels(owner, repo, number, token=token)"]
     N013["emit_decision(...)"]
     N014["return 0"]
     N001 -->|"start"| N002

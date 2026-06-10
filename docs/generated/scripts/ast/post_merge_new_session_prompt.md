@@ -9,13 +9,7 @@ flowchart TD
     N001["_walk(...)"]
     N002["out = []"]
     N003["stack = [value]"]
-    N004["while stack and len(out) < 200:
-    node = stack.pop()
-    out.append(node)
-    if isinstance(node, dict):
-        stack.extend(node.values())
-    elif isinstance(node, list):
-        stack.extend(node)"]
+    N004["while stack and len(out) < 200:     node = stack.pop()     out.append(node)     if isinstance(node, dict):         stack.extend(node.values())     elif isinstance(node, list):         stack.extend(node)"]
     N005["return out"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -38,16 +32,7 @@ flowchart TD
     N009["if isinstance(val, str) and val.isdecimal()"]
     N010["pr_number = val"]
     N011["if pr_number is None"]
-    N012["for node in _walk(tool_response):
-    if isinstance(node, str):
-        m = _PR_URL_RE.search(node)
-        if m:
-            if owner is None:
-                owner = m.group(1)
-            if repo is None:
-                repo = m.group(2)
-            pr_number = m.group(3)
-            break"]
+    N012["for node in _walk(tool_response):     if isinstance(node, str):         m = _PR_URL_RE.search(node)         if m:             if owner is None:                 owner = m.group(1)             if repo is None:                 repo = m.group(2)             pr_number = m.group(3)             break"]
     N013["return (owner, repo, pr_number)"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -81,28 +66,10 @@ flowchart TD
     N008["if not isinstance(groups, list)"]
     N009["return frozenset()"]
     N010["referenced = set(...)"]
-    N011["for group in groups:
-    if not isinstance(group, dict):
-        continue
-    for handler in group.get('<str>', []) or []:
-        if not isinstance(handler, dict):
-            continue
-        command = handler.get('<str>')
-        if isinstance(command, str):
-            referenced.update(_SCRIPT_SH_RE.findall(command))"]
+    N011["for group in groups:     if not isinstance(group, dict):         continue     for handler in group.get('<str>', []) or []:         if not isinstance(handler, dict):             continue         command = handler.get('<str>')         if isinstance(command, str):             referenced.update(_SCRIPT_SH_RE.findall(command))"]
     N012["scripts_dir = settings_path.resolve().parent.parent / '<str>'"]
     N013["found = set(...)"]
-    N014["for rel in referenced:
-    found.add(rel)
-    script_file = settings_path.resolve().parent.parent / rel
-    try:
-        text = script_file.read_text(encoding='<str>')
-    except OSError:
-        continue
-    for line in text.splitlines():
-        m = _SOURCE_RE.match(line)
-        if m and (scripts_dir / m.group(1)).is_file():
-            found.add(f'<str>{m.group(1)}')"]
+    N014["for rel in referenced:     found.add(rel)     script_file = settings_path.resolve().parent.parent / rel     try:         text = script_file.read_text(encoding='<str>')     except OSError:         continue     for line in text.splitlines():         m = _SOURCE_RE.match(line)         if m and (scripts_dir / m.group(1)).is_file():             found.add(f'<str>{m.group(1)}')"]
     N015["return frozenset(found)"]
     N001 -->|"start"| N002
     N002 -->|"try"| N003
@@ -160,26 +127,7 @@ flowchart TD
     N002["if not token"]
     N003["return None"]
     N004["filenames = []"]
-    N005["for page in range(1, _MAX_PAGES + 1):
-    url = f'{_API_BASE}<str>{owner}<str>{repo}<str>{pr_number}<str>{_PER_PAGE}<str>{page}'
-    try:
-        code, body = apply_call(method='<str>', url=url, payload=None, token=token, opener=opener)
-    except Exception as exc:
-        print(f'<str>{exc}', file=sys.stderr)
-        return None
-    if not 200 <= code < 300:
-        return None
-    try:
-        items = json.loads(body)
-    except json.JSONDecodeError:
-        return None
-    if not isinstance(items, list):
-        return None
-    for item in items:
-        if isinstance(item, dict) and isinstance(item.get('<str>'), str):
-            filenames.append(item['<str>'])
-    if len(items) < _PER_PAGE:
-        break"]
+    N005["for page in range(1, _MAX_PAGES + 1):     url = f'{_API_BASE}<str>{owner}<str>{repo}<str>{pr_number}<str>{_PER_PAGE}<str>{page}'     try:         code, body = apply_call(method='<str>', url=url, payload=None, token=token, opener=opener)     except Exception as exc:         print(f'<str>{exc}', file=sys.stderr)         return None     if not 200 <= code < 300:         return None     try:         items = json.loads(body)     except json.JSONDecodeError:         return None     if not isinstance(items, list):         return None     for item in items:         if isinstance(item, dict) and isinstance(item.get('<str>'), str):             filenames.append(item['<str>'])     if len(items) < _PER_PAGE:         break"]
     N006["return filenames"]
     N001 -->|"start"| N002
     N002 -->|"true"| N003
@@ -206,13 +154,7 @@ flowchart TD
     N003["repo_ja = f'{owner}<str>{repo}' if owner and repo else '<str>'"]
     N004["en_lines = []"]
     N005["ja_lines = []"]
-    N006["for key, (en, ja) in _CATEGORY_LABELS.items():
-    files = categories.get(key)
-    if not files:
-        continue
-    joined = '<str>'.join(files)
-    en_lines.append(f'<str>{en}<str>{joined}')
-    ja_lines.append(f'<str>{ja}<str>{joined}')"]
+    N006["for key, (en, ja) in _CATEGORY_LABELS.items():     files = categories.get(key)     if not files:         continue     joined = '<str>'.join(files)     en_lines.append(f'<str>{en}<str>{joined}')     ja_lines.append(f'<str>{ja}<str>{joined}')"]
     N007["paste_prompt = f'<str>{pr_number}<str>{repo_ja}<str>' + '<str>'.join(ja_lines) + f'<str>{pr_number}<str>'"]
     N008["return f'<str>{repo_label}<str>' + '<str>'.join(en_lines) + f'<str>{paste_prompt}<str>'"]
     N001 -->|"start"| N002

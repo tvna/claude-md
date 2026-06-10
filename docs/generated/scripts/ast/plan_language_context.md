@@ -8,16 +8,7 @@ This file is generated from `scripts/plan_language_context.py` by `python3 scrip
 flowchart TD
     N001["parse_codeowners(...)"]
     N002["rules = []"]
-    N003["for raw in text.splitlines():
-    line = raw.strip()
-    if not line or line.startswith('<str>'):
-        continue
-    parts = line.split()
-    if len(parts) < 2:
-        continue
-    pattern, handles = (parts[0], [p for p in parts[1:] if p.startswith('<str>')])
-    if handles:
-        rules.append((pattern, handles))"]
+    N003["for raw in text.splitlines():     line = raw.strip()     if not line or line.startswith('<str>'):         continue     parts = line.split()     if len(parts) < 2:         continue     pattern, handles = (parts[0], [p for p in parts[1:] if p.startswith('<str>')])     if handles:         rules.append((pattern, handles))"]
     N004["return rules"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -31,17 +22,11 @@ flowchart TD
     N001["primary_owner(...)"]
     N002["counts = {}"]
     N003["order = []"]
-    N004["for _pattern, handles in rules:
-    for handle in handles:
-        if handle not in counts:
-            order.append(handle)
-        counts[handle] = counts.get(handle, 0) + 1"]
+    N004["for _pattern, handles in rules:     for handle in handles:         if handle not in counts:             order.append(handle)         counts[handle] = counts.get(handle, 0) + 1"]
     N005["if not counts"]
     N006["return None"]
     N007["max_count = max(...)"]
-    N008["for handle in order:
-    if counts[handle] == max_count:
-        return handle"]
+    N008["for handle in order:     if counts[handle] == max_count:         return handle"]
     N009["return None"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -63,9 +48,7 @@ flowchart TD
     N004["import tomllib"]
     N005["data = loads(...)"]
     N006["out = {}"]
-    N007["for key, value in data.items():
-    if isinstance(key, str) and isinstance(value, str):
-        out[key] = value"]
+    N007["for key, value in data.items():     if isinstance(key, str) and isinstance(value, str):         out[key] = value"]
     N008["return out"]
     N001 -->|"start"| N002
     N002 -->|"true"| N003

@@ -32,7 +32,7 @@ flowchart TD
     N003["url = f'<str>{repo}<str>'"]
     N004["(code, body) = apply_call(...)"]
     N005["if not 200 <= code < 300"]
-    N006["raise LatestPinError(f\"<str>{code or '<str>'}<str>{repo}<str>\")"]
+    N006["raise LatestPinError(f'<str>{code or '<str>'}<str>{repo}<str>')"]
     N007["try"]
     N008["payload = loads(...)"]
     N009["except json.JSONDecodeError"]

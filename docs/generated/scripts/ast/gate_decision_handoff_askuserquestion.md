@@ -59,9 +59,7 @@ flowchart TD
 flowchart TD
     N001["final_assistant_turn(...)"]
     N002["last_user = -1"]
-    N003["for idx, entry in enumerate(entries):
-    if _entry_role(entry) == '<str>':
-        last_user = idx"]
+    N003["for idx, entry in enumerate(entries):     if _entry_role(entry) == '<str>':         last_user = idx"]
     N004["return [entry for entry in entries[last_user + 1:] if _entry_role(entry) == '<str>']"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -73,10 +71,7 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["turn_used_tool(...)"]
-    N002["for entry in turn:
-    for block in _content_blocks(entry):
-        if block.get('<str>') == '<str>' and block.get('<str>') == tool_name:
-            return True"]
+    N002["for entry in turn:     for block in _content_blocks(entry):         if block.get('<str>') == '<str>' and block.get('<str>') == tool_name:             return True"]
     N003["return False"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -88,10 +83,7 @@ flowchart TD
 flowchart TD
     N001["last_text_block(...)"]
     N002["text = '<str>'"]
-    N003["for entry in turn:
-    for block in _content_blocks(entry):
-        if block.get('<str>') == '<str>' and isinstance(block.get('<str>'), str):
-            text = block['<str>']"]
+    N003["for entry in turn:     for block in _content_blocks(entry):         if block.get('<str>') == '<str>' and isinstance(block.get('<str>'), str):             text = block['<str>']"]
     N004["return text"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -178,14 +170,7 @@ flowchart TD
     N007["except OSError"]
     N008["return []"]
     N009["entries = []"]
-    N010["for line in raw.splitlines():
-    line = line.strip()
-    if not line:
-        continue
-    try:
-        entries.append(json.loads(line))
-    except json.JSONDecodeError:
-        continue"]
+    N010["for line in raw.splitlines():     line = line.strip()     if not line:         continue     try:         entries.append(json.loads(line))     except json.JSONDecodeError:         continue"]
     N011["return entries"]
     N001 -->|"start"| N002
     N002 -->|"true"| N003

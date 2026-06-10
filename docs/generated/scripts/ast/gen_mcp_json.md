@@ -11,18 +11,18 @@ flowchart TD
     N003["if transport in ('http', 'sse')"]
     N004["url = get(...)"]
     N005["if not isinstance(url, str) or not url"]
-    N006["raise ValueError(f\"<str>{server.get('<str>')!r}<str>{transport}<str>\")"]
+    N006["raise ValueError(f'<str>{server.get('<str>')!r}<str>{transport}<str>')"]
     N007["return {'<str>': transport, '<str>': url}"]
     N008["if transport == 'stdio'"]
     N009["command = get(...)"]
     N010["if not isinstance(command, str) or not command"]
-    N011["raise ValueError(f\"<str>{server.get('<str>')!r}<str>\")"]
+    N011["raise ValueError(f'<str>{server.get('<str>')!r}<str>')"]
     N012["entry = {'<str>': '<str>', '<str>': command}"]
     N013["args = get(...)"]
     N014["if args is not None"]
     N015["entry['<str>'] = args"]
     N016["return entry"]
-    N017["raise ValueError(f\"<str>{server.get('<str>')!r}<str>{transport!r}\")"]
+    N017["raise ValueError(f'<str>{server.get('<str>')!r}<str>{transport!r}')"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 -->|"true"| N004
@@ -49,13 +49,7 @@ flowchart TD
     N001["render_mcp_config(...)"]
     N002["servers = (apm_data.get('<str>') or {}).get('<str>') or []"]
     N003["mcp_servers = {}"]
-    N004["for server in servers:
-    if not isinstance(server, dict):
-        raise ValueError(f'<str>{type(server).__name__}')
-    name = server.get('<str>')
-    if not isinstance(name, str) or not name:
-        raise ValueError('<str>')
-    mcp_servers[name] = _server_entry(server)"]
+    N004["for server in servers:     if not isinstance(server, dict):         raise ValueError(f'<str>{type(server).__name__}')     name = server.get('<str>')     if not isinstance(name, str) or not name:         raise ValueError('<str>')     mcp_servers[name] = _server_entry(server)"]
     N005["return {'<str>': mcp_servers}"]
     N001 -->|"start"| N002
     N002 --> N003

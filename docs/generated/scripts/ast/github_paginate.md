@@ -9,34 +9,7 @@ flowchart TD
     N001["_paginate_get(...)"]
     N002["results = []"]
     N003["next_url = url"]
-    N004["while next_url:
-    request = urllib.request.Request(next_url, method='<str>')
-    request.add_header('<str>', f'<str>{token}')
-    request.add_header('<str>', '<str>')
-    request.add_header('<str>', _API_VERSION)
-    try:
-        with opener(request) as response:
-            code = int(response.status)
-            body_str = response.read().decode('<str>', errors='<str>')
-            link_header = str(response.headers.get('<str>') or '<str>')
-    except urllib.error.HTTPError as error:
-        code = int(error.code)
-        body_str = error.read().decode('<str>', errors='<str>')
-        link_header = '<str>'
-    if not 200 <= code < 300:
-        raise RuntimeError(f'<str>{code}<str>{body_str[:200]}')
-    try:
-        page_data = json.loads(body_str)
-    except json.JSONDecodeError as exc:
-        raise RuntimeError(f'<str>{body_str[:200]}') from exc
-    if not isinstance(page_data, list):
-        raise RuntimeError(f'<str>{body_str[:200]}')
-    results.extend(page_data)
-    next_url = None
-    if link_header:
-        match = re.search('<str>', link_header)
-        if match:
-            next_url = match.group(1)"]
+    N004["while next_url:     request = urllib.request.Request(next_url, method='<str>')     request.add_header('<str>', f'<str>{token}')     request.add_header('<str>', '<str>')     request.add_header('<str>', _API_VERSION)     try:         with opener(request) as response:             code = int(response.status)             body_str = response.read().decode('<str>', errors='<str>')             link_header = str(response.headers.get('<str>') or '<str>')     except urllib.error.HTTPError as error:         code = int(error.code)         body_str = error.read().decode('<str>', errors='<str>')         link_header = '<str>'     if not 200 <= code < 300:         raise RuntimeError(f'<str>{code}<str>{body_str[:200]}')     try:         page_data = json.loads(body_str)     except json.JSONDecodeError as exc:         raise RuntimeError(f'<str>{body_str[:200]}') from exc     if not isinstance(page_data, list):         raise RuntimeError(f'<str>{body_str[:200]}')     results.extend(page_data)     next_url = None     if link_header:         match = re.search('<str>', link_header)         if match:             next_url = match.group(1)"]
     N005["return results"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -54,9 +27,7 @@ flowchart TD
     N004["add_header(...)"]
     N005["add_header(...)"]
     N006["try"]
-    N007["with opener(request) as response:
-    code = int(response.status)
-    body_str = response.read().decode('<str>', errors='<str>')"]
+    N007["with opener(request) as response:     code = int(response.status)     body_str = response.read().decode('<str>', errors='<str>')"]
     N008["except urllib.error.HTTPError"]
     N009["code = int(...)"]
     N010["body_str = decode(...)"]
@@ -90,7 +61,7 @@ flowchart TD
     N006["if not args.output and (not args.field)"]
     N007["print(...)"]
     N008["return 1"]
-    N009["url = f\"{_API_ROOT}<str>{args.path.lstrip('<str>')}\""]
+    N009["url = f'{_API_ROOT}<str>{args.path.lstrip('<str>')}'"]
     N010["try"]
     N011["body_str = _get_single(...)"]
     N012["except RuntimeError"]
@@ -180,14 +151,7 @@ flowchart TD
     N010["return 1"]
     N011["outdir = Path(...)"]
     N012["mkdir(...)"]
-    N013["for run_id in run_ids:
-    url = f'{_API_ROOT}<str>{args.repo}<str>{run_id}<str>'
-    try:
-        body_str = _get_single(url=url, token=token)
-    except RuntimeError as exc:
-        print(f'<str>{exc}', file=sys.stderr)
-        return 1
-    (outdir / f'{run_id}<str>').write_text(body_str, encoding='<str>')"]
+    N013["for run_id in run_ids:     url = f'{_API_ROOT}<str>{args.repo}<str>{run_id}<str>'     try:         body_str = _get_single(url=url, token=token)     except RuntimeError as exc:         print(f'<str>{exc}', file=sys.stderr)         return 1     (outdir / f'{run_id}<str>').write_text(body_str, encoding='<str>')"]
     N014["print(...)"]
     N015["return 0"]
     N001 -->|"start"| N002
@@ -215,7 +179,7 @@ flowchart TD
     N003["if not token"]
     N004["print(...)"]
     N005["return 1"]
-    N006["url = f\"{_API_ROOT}<str>{args.path.lstrip('<str>')}\""]
+    N006["url = f'{_API_ROOT}<str>{args.path.lstrip('<str>')}'"]
     N007["try"]
     N008["data = _paginate_get(...)"]
     N009["except RuntimeError"]

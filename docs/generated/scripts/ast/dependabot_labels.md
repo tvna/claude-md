@@ -10,20 +10,7 @@ flowchart TD
     N002["labels = []"]
     N003["in_block = False"]
     N004["block_indent = -1"]
-    N005["for raw_line in yaml_text.splitlines():
-    stripped = raw_line.lstrip()
-    if not stripped or stripped.startswith('<str>'):
-        continue
-    indent = len(raw_line) - len(stripped)
-    if in_block:
-        if indent > block_indent and stripped.startswith('<str>'):
-            labels.append(_unquote(stripped[2:].strip()))
-            continue
-        if indent <= block_indent:
-            in_block = False
-    if not in_block and stripped == '<str>':
-        in_block = True
-        block_indent = indent"]
+    N005["for raw_line in yaml_text.splitlines():     stripped = raw_line.lstrip()     if not stripped or stripped.startswith('<str>'):         continue     indent = len(raw_line) - len(stripped)     if in_block:         if indent > block_indent and stripped.startswith('<str>'):             labels.append(_unquote(stripped[2:].strip()))             continue         if indent <= block_indent:             in_block = False     if not in_block and stripped == '<str>':         in_block = True         block_indent = indent"]
     N006["return labels"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -70,7 +57,7 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["_unquote(...)"]
-    N002["if len(value) >= 2 and value[0] == value[-1] and (value[0] in ('\"', \"'\"))"]
+    N002["if len(value) >= 2 and value[0] == value[-1] and (value[0] in (''', '''))"]
     N003["return value[1:-1]"]
     N004["return value"]
     N001 -->|"start"| N002
@@ -116,8 +103,7 @@ flowchart TD
     N015["return 1"]
     N016["drift = find_drift(...)"]
     N017["if drift"]
-    N018["for name in drift:
-    print(f'<str>{dependabot_path}<str>{name}<str>{dependabot_path}<str>{labels_path}<str>')"]
+    N018["for name in drift:     print(f'<str>{dependabot_path}<str>{name}<str>{dependabot_path}<str>{labels_path}<str>')"]
     N019["print(...)"]
     N020["return 1"]
     N021["print(...)"]

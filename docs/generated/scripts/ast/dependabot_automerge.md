@@ -157,7 +157,7 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["render_markdown(...)"]
-    N002["lines = ['<str>', '<str>', f'<str>{str(result.enabled).lower()}<str>', f'<str>{str(result.eligible).lower()}<str>', f'<str>{str(result.should_enable).lower()}<str>', f\"<str>{result.ecosystem or '<str>'}<str>\", f\"<str>{result.update_type or '<str>'}<str>\", '<str>']"]
+    N002["lines = ['<str>', '<str>', f'<str>{str(result.enabled).lower()}<str>', f'<str>{str(result.eligible).lower()}<str>', f'<str>{str(result.should_enable).lower()}<str>', f'<str>{result.ecosystem or '<str>'}<str>', f'<str>{result.update_type or '<str>'}<str>', '<str>']"]
     N003["if result.reasons"]
     N004["append(...)"]
     N005["extend(...)"]
@@ -232,10 +232,7 @@ flowchart TD
 flowchart TD
     N001["_nested_str(...)"]
     N002["current = data"]
-    N003["for key in keys:
-    if not isinstance(current, dict):
-        return '<str>'
-    current = current.get(key)"]
+    N003["for key in keys:     if not isinstance(current, dict):         return '<str>'     current = current.get(key)"]
     N004["return current if isinstance(current, str) else '<str>'"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -251,9 +248,7 @@ flowchart TD
     N003["if not isinstance(labels, list)"]
     N004["return set()"]
     N005["names = set(...)"]
-    N006["for label in labels:
-    if isinstance(label, dict) and isinstance(label.get('<str>'), str):
-        names.add(label['<str>'])"]
+    N006["for label in labels:     if isinstance(label, dict) and isinstance(label.get('<str>'), str):         names.add(label['<str>'])"]
     N007["return names"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -271,9 +266,7 @@ flowchart TD
     N002["rules = get(...)"]
     N003["if not isinstance(rules, list)"]
     N004["return None"]
-    N005["for rule in rules:
-    if isinstance(rule, dict) and rule.get('<str>') == ecosystem:
-        return rule"]
+    N005["for rule in rules:     if isinstance(rule, dict) and rule.get('<str>') == ecosystem:         return rule"]
     N006["return None"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -301,9 +294,7 @@ flowchart TD
 flowchart TD
     N001["_unexpected_paths(...)"]
     N002["unexpected = []"]
-    N003["for path in changed_files:
-    if not any((fnmatch.fnmatch(path, pattern) for pattern in allowed_paths)):
-        unexpected.append(path)"]
+    N003["for path in changed_files:     if not any((fnmatch.fnmatch(path, pattern) for pattern in allowed_paths)):         unexpected.append(path)"]
     N004["return unexpected"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -332,10 +323,7 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["_write_outputs(...)"]
-    N002["with path.open('<str>', encoding='<str>') as handle:
-    handle.write(f'<str>{str(result.eligible).lower()}<str>')
-    handle.write(f'<str>{str(result.enabled).lower()}<str>')
-    handle.write(f'<str>{str(result.should_enable).lower()}<str>')"]
+    N002["with path.open('<str>', encoding='<str>') as handle:     handle.write(f'<str>{str(result.eligible).lower()}<str>')     handle.write(f'<str>{str(result.enabled).lower()}<str>')     handle.write(f'<str>{str(result.should_enable).lower()}<str>')"]
     N003["end"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -390,7 +378,7 @@ flowchart TD
     N014["if not 200 <= gql_code < 300"]
     N015["raise RuntimeError(f'<str>{gql_code}')"]
     N016["if 'errors' in response"]
-    N017["raise RuntimeError(f\"<str>{response['<str>']}\")"]
+    N017["raise RuntimeError(f'<str>{response['<str>']}')"]
     N018["end"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -435,7 +423,7 @@ flowchart TD
     N018["if not 200 <= gql_code < 300"]
     N019["raise RuntimeError(f'<str>{gql_code}')"]
     N020["if 'errors' in response"]
-    N021["raise RuntimeError(f\"<str>{response['<str>']}\")"]
+    N021["raise RuntimeError(f'<str>{response['<str>']}')"]
     N022["return True"]
     N001 -->|"start"| N002
     N002 --> N003

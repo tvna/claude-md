@@ -9,13 +9,7 @@ flowchart TD
     N001["_walk(...)"]
     N002["out = []"]
     N003["stack = [value]"]
-    N004["while stack and len(out) < 200:
-    node = stack.pop()
-    out.append(node)
-    if isinstance(node, dict):
-        stack.extend(node.values())
-    elif isinstance(node, list):
-        stack.extend(node)"]
+    N004["while stack and len(out) < 200:     node = stack.pop()     out.append(node)     if isinstance(node, dict):         stack.extend(node.values())     elif isinstance(node, list):         stack.extend(node)"]
     N005["return out"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -38,16 +32,7 @@ flowchart TD
     N009["if isinstance(val, str) and val.isdecimal()"]
     N010["pr_number = val"]
     N011["if pr_number is None"]
-    N012["for node in _walk(tool_response):
-    if isinstance(node, str):
-        m = _PR_URL_RE.search(node)
-        if m:
-            if owner is None:
-                owner = m.group(1)
-            if repo is None:
-                repo = m.group(2)
-            pr_number = m.group(3)
-            break"]
+    N012["for node in _walk(tool_response):     if isinstance(node, str):         m = _PR_URL_RE.search(node)         if m:             if owner is None:                 owner = m.group(1)             if repo is None:                 repo = m.group(2)             pr_number = m.group(3)             break"]
     N013["return (owner, repo, pr_number)"]
     N001 -->|"start"| N002
     N002 --> N003
