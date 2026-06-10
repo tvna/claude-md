@@ -6,7 +6,7 @@ This file is generated from `scripts/*.py` import statements by `python3 scripts
 
 | Module | Imported by | Importers |
 | --- | --- | --- |
-| `_hook_runtime` | 36 | `block_sensitive_reads`, `check_pr_mergeability`, `ci_early_status_probe`, `gate_cache_regime_advisor`, `gate_decision_handoff_askuserquestion`, `gate_gh_cli`, `gate_handoff_retro_survey_askuserquestion`, `gate_irreversible_bash`, `gate_issue_classification_labels`, `gate_issue_close_comment`, `gate_mcp_github_uncovered`, `gate_merge_safety`, `gate_reserved_retro_scope`, `gate_update_pr_branch`, `issue_closure_fast_path`, `plan_approval_gate`, `plan_language_context`, `post_merge_new_session_prompt`, `post_merge_retro_append`, `post_pr_create_body_fix`, `post_pr_create_ci_monitor`, `pr_body_close_keyword_gate`, `preflight_codex_github_footer`, `preflight_commit_session_branch`, `preflight_github_secrets`, `preflight_main_freshness`, `preflight_non_ascii`, `preflight_pr_body_required_sections`, `preflight_pr_template_shape`, `preflight_push_base`, `preflight_push_nonempty`, `preflight_push_prek`, `preflight_push_session_branch`, `preflight_title_policy`, `prompt_context7_gate`, `stop_new_session_handoff_prompt` |
+| `_hook_runtime` | 37 | `block_sensitive_reads`, `check_pr_mergeability`, `ci_early_status_probe`, `gate_cache_regime_advisor`, `gate_decision_handoff_askuserquestion`, `gate_gh_cli`, `gate_handoff_retro_survey_askuserquestion`, `gate_irreversible_bash`, `gate_issue_classification_labels`, `gate_issue_close_comment`, `gate_mcp_github_uncovered`, `gate_merge_safety`, `gate_reserved_retro_scope`, `gate_update_pr_branch`, `issue_closure_fast_path`, `plan_approval_gate`, `plan_language_context`, `post_merge_new_session_prompt`, `post_merge_retro_append`, `post_pr_create_body_fix`, `post_pr_create_ci_monitor`, `pr_body_close_keyword_gate`, `preflight_codex_github_footer`, `preflight_commit_session_branch`, `preflight_github_secrets`, `preflight_main_freshness`, `preflight_non_ascii`, `preflight_pr_body_required_sections`, `preflight_pr_template_shape`, `preflight_push_base`, `preflight_push_nonempty`, `preflight_push_prek`, `preflight_push_session_branch`, `preflight_session_base_freshness`, `preflight_title_policy`, `prompt_context7_gate`, `stop_new_session_handoff_prompt` |
 | `_github_api` | 21 | `_ci_watch`, `_pr_commit_batch`, `_pr_merge`, `check_pr_mergeability`, `ci_budget_issue`, `ci_early_status_probe`, `dependabot_automerge`, `github_api`, `issue_closure_fast_path`, `labels_apply`, `np_strategy_tracking`, `post_issue_comment`, `post_merge_new_session_prompt`, `pr_body_close_keyword_gate`, `pr_upsert`, `preflight_replacement_pr`, `prune_devcontainer_images`, `ruleset_drift`, `sanitize_history`, `security_drift_report`, `verify_ruleset_sync` |
 | `_git` | 12 | `check_hooks_path`, `check_session_branch`, `devcontainer_pin_pr`, `pr_upsert`, `preflight_branch_base`, `preflight_cache`, `preflight_coverage`, `preflight_main_freshness`, `preflight_push_nonempty`, `refresh_pr_branch`, `scan_area_path_coverage`, `scan_secrets` |
 | `_github_tool_names` | 8 | `gate_handoff_retro_survey_askuserquestion`, `pr_body_close_keyword_gate`, `preflight_codex_github_footer`, `preflight_github_secrets`, `preflight_non_ascii`, `preflight_pr_body_required_sections`, `preflight_pr_template_shape`, `preflight_title_policy` |
@@ -28,7 +28,9 @@ This file is generated from `scripts/*.py` import statements by `python3 scripts
 | `check_pr_mergeability` | 1 | `gate_merge_safety` |
 | `generate_devcontainer_arch_overlays` | 1 | `update_devcontainer_image_pins` |
 | `preflight_all` | 1 | `scan_devcontainer_tool_drift` |
+| `preflight_branch_base` | 1 | `preflight_session_base_freshness` |
 | `preflight_cache` | 1 | `preflight_all` |
+| `preflight_main_freshness` | 1 | `preflight_session_base_freshness` |
 | `scan_markdown_links` | 1 | `measure_tool_overlap` |
 | `scan_preflight_drift` | 1 | `scan_input_contract_drift` |
 | `scan_secrets` | 1 | `measure_tool_overlap` |
@@ -154,6 +156,9 @@ flowchart TD
     preflight_push_session_branch --> _hook_runtime
     preflight_push_session_branch --> _session_branches
     preflight_replacement_pr --> _github_api
+    preflight_session_base_freshness --> _hook_runtime
+    preflight_session_base_freshness --> preflight_branch_base
+    preflight_session_base_freshness --> preflight_main_freshness
     preflight_title_policy --> _github_tool_names
     preflight_title_policy --> _hook_runtime
     preflight_title_policy --> title_policy
