@@ -11,6 +11,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 
+import _pr_commit_batch as pcb
 import pr_upsert as pu
 
 pytestmark = pytest.mark.shard_ci_ops
@@ -606,7 +607,7 @@ def _make_graphql_call(
 class TestCreateCommitOnBranch:
     def test_returns_commit_oid(self) -> None:
         graphql_call = _make_graphql_call(200, {"data": {"createCommitOnBranch": {"commit": {"oid": "c0ffee"}}}})
-        oid = pu._create_commit_on_branch(
+        oid = pcb._create_commit_on_branch(
             repo="o/r",
             branch="feat/x",
             expected_head_oid="base",
@@ -625,7 +626,7 @@ class TestCreateCommitOnBranch:
             captured.update(variables)
             return 200, {"data": {"createCommitOnBranch": {"commit": {"oid": "x"}}}}
 
-        pu._create_commit_on_branch(
+        pcb._create_commit_on_branch(
             repo="o/r",
             branch="feat/x",
             expected_head_oid="base-sha",
@@ -648,7 +649,7 @@ class TestCreateCommitOnBranch:
             captured.update(variables)
             return 200, {"data": {"createCommitOnBranch": {"commit": {"oid": "x"}}}}
 
-        pu._create_commit_on_branch(
+        pcb._create_commit_on_branch(
             repo="o/r",
             branch="b",
             expected_head_oid="s",
@@ -663,7 +664,7 @@ class TestCreateCommitOnBranch:
     def test_http_error_raises(self) -> None:
         graphql_call = _make_graphql_call(500, {})
         with pytest.raises(RuntimeError, match="createCommitOnBranch HTTP 500"):
-            pu._create_commit_on_branch(
+            pcb._create_commit_on_branch(
                 repo="o/r", branch="b", expected_head_oid="s", headline="h", body="", additions=[],
                 token="tok", graphql_call=graphql_call,
             )
@@ -671,7 +672,7 @@ class TestCreateCommitOnBranch:
     def test_graphql_errors_raise(self) -> None:
         graphql_call = _make_graphql_call(200, {"errors": [{"message": "stale expectedHeadOid"}]})
         with pytest.raises(RuntimeError, match="createCommitOnBranch errors"):
-            pu._create_commit_on_branch(
+            pcb._create_commit_on_branch(
                 repo="o/r", branch="b", expected_head_oid="s", headline="h", body="", additions=[],
                 token="tok", graphql_call=graphql_call,
             )
@@ -679,7 +680,7 @@ class TestCreateCommitOnBranch:
     def test_empty_oid_raises(self) -> None:
         graphql_call = _make_graphql_call(200, {"data": {"createCommitOnBranch": {"commit": {"oid": ""}}}})
         with pytest.raises(RuntimeError, match="missing commit oid"):
-            pu._create_commit_on_branch(
+            pcb._create_commit_on_branch(
                 repo="o/r", branch="b", expected_head_oid="s", headline="h", body="", additions=[],
                 token="tok", graphql_call=graphql_call,
             )
@@ -687,7 +688,7 @@ class TestCreateCommitOnBranch:
     def test_malformed_response_raises(self) -> None:
         graphql_call = _make_graphql_call(200, {"data": {"createCommitOnBranch": {"commit": {}}}})
         with pytest.raises(RuntimeError, match="unexpected response"):
-            pu._create_commit_on_branch(
+            pcb._create_commit_on_branch(
                 repo="o/r", branch="b", expected_head_oid="s", headline="h", body="", additions=[],
                 token="tok", graphql_call=graphql_call,
             )
@@ -806,6 +807,35 @@ class _RecordingGraphql:
     def graphql_call(self, *, query: str, variables: dict[str, Any], token: str) -> tuple[int, dict[str, Any]]:
         self.calls.append(variables)
         return 200, {"data": {"createCommitOnBranch": {"commit": {"oid": "newoid"}}}}
+
+
+class TestUpsertFilesPrBatching:
+    def test_large_addition_set_publishes_in_chained_commits(self) -> None:
+        # Integration: a backlog larger than _MAX_BATCH_FILES must publish as
+        # several chained signed commits instead of one overflowing mutation
+        # (#1578). The first addition is absent on base, so the base-drift probe
+        # short-circuits to drift after a single contents call.
+        additions = [(f"docs/generated/scripts/ast/f{i:03d}.md", b"x\n") for i in range(pcb._MAX_BATCH_FILES + 1)]
+        router = _Router([
+            ("GET", "/contents/docs/generated/scripts/ast/f000.md?ref=main", 404, {"message": "Not Found"}),
+            ("GET", "/git/ref/heads/chore/update-generated-docs", 404, {"message": "Not Found"}),
+            ("GET", "/git/ref/heads/main", 200, {"object": {"sha": "basesha"}}),
+            ("POST", "/git/refs", 201, {}),
+            ("GET", "/pulls?", 200, []),
+            ("POST", "/pulls", 201, {"number": 7}),
+        ])
+        gql = _RecordingGraphql()
+        result = pu.upsert_files_pr(
+            repo="o/r", additions=additions, deletions=[], base="main",
+            branch="chore/update-generated-docs", title="t", body="b",
+            commit_subject="s", commit_body="Refs #1", token="tok",
+            apply_call=router.apply_call, graphql_call=gql.graphql_call,
+        )
+        assert result == "created:7"
+        # 41 files at 40/batch -> two chained commits, second anchored to the first.
+        assert len(gql.calls) == 2
+        assert gql.calls[0]["input"]["expectedHeadOid"] == "basesha"
+        assert gql.calls[1]["input"]["expectedHeadOid"] == "newoid"
 
 
 class TestUpsertSingleFilePr:
@@ -945,7 +975,7 @@ class TestCreateCommitOnBranchDeletions:
             captured.update(variables)
             return 200, {"data": {"createCommitOnBranch": {"commit": {"oid": "x"}}}}
 
-        pu._create_commit_on_branch(
+        pcb._create_commit_on_branch(
             repo="o/r", branch="b", expected_head_oid="s", headline="subj", body="",
             additions=[{"path": "a.txt", "contents": "Zm9v"}],
             deletions=[{"path": "old.txt"}],
@@ -963,7 +993,7 @@ class TestCreateCommitOnBranchDeletions:
             captured.update(variables)
             return 200, {"data": {"createCommitOnBranch": {"commit": {"oid": "x"}}}}
 
-        pu._create_commit_on_branch(
+        pcb._create_commit_on_branch(
             repo="o/r", branch="b", expected_head_oid="s", headline="subj", body="",
             additions=[{"path": "a.txt", "contents": "Zm9v"}], deletions=[],
             token="tok", graphql_call=graphql_call,
