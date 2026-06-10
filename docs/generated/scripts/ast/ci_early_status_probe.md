@@ -11,13 +11,11 @@ flowchart TD
     N003["return [value]"]
     N004["if isinstance(value, dict)"]
     N005["out = []"]
-    N006["for item in value.values():
-    out.extend(_walk_strings(item))"]
+    N006["for item in value.values():     out.extend(_walk_strings(item))"]
     N007["return out"]
     N008["if isinstance(value, list)"]
     N009["out = []"]
-    N010["for item in value:
-    out.extend(_walk_strings(item))"]
+    N010["for item in value:     out.extend(_walk_strings(item))"]
     N011["return out"]
     N012["return []"]
     N001 -->|"start"| N002
@@ -45,19 +43,10 @@ flowchart TD
     N006["if not isinstance(repo, str) or not repo.strip()"]
     N007["repo = None"]
     N008["repo = strip(...)"]
-    N009["for key in ('<str>', '<str>', '<str>'):
-    value = tool_input.get(key)
-    if isinstance(value, int):
-        return (repo, str(value))
-    if isinstance(value, str) and value.strip().isdigit():
-        return (repo, value.strip())"]
+    N009["for key in ('<str>', '<str>', '<str>'):     value = tool_input.get(key)     if isinstance(value, int):         return (repo, str(value))     if isinstance(value, str) and value.strip().isdigit():         return (repo, value.strip())"]
     N010["strings = _walk_strings(...)"]
     N011["extend(...)"]
-    N012["for text in strings:
-    match = _PR_URL_RE.search(text)
-    if match:
-        url_repo, number = match.groups()
-        return (repo or url_repo, number)"]
+    N012["for text in strings:     match = _PR_URL_RE.search(text)     if match:         url_repo, number = match.groups()         return (repo or url_repo, number)"]
     N013["return (repo, None)"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -155,19 +144,9 @@ flowchart TD
     N022["wf_map = {}"]
     N023["(wf_code, wf_data) = _rest_get(...)"]
     N024["if isinstance(wf_data, dict) and 200 <= wf_code < 300"]
-    N025["for wf_run in wf_data.get('<str>') or []:
-    if not isinstance(wf_run, dict):
-        continue
-    cs_id = str(wf_run.get('<str>') or wf_run.get('<str>', {}).get('<str>') or '<str>')
-    wf_name = wf_run.get('<str>') or '<str>'
-    if cs_id and wf_name:
-        wf_map[cs_id] = wf_name"]
+    N025["for wf_run in wf_data.get('<str>') or []:     if not isinstance(wf_run, dict):         continue     cs_id = str(wf_run.get('<str>') or wf_run.get('<str>', {}).get('<str>') or '<str>')     wf_name = wf_run.get('<str>') or '<str>'     if cs_id and wf_name:         wf_map[cs_id] = wf_name"]
     N026["rows = []"]
-    N027["for run in check_runs:
-    if not isinstance(run, dict):
-        continue
-    cs_id = str((run.get('<str>') or {}).get('<str>') or '<str>')
-    rows.append({'<str>': run.get('<str>') or '<str>', '<str>': (run.get('<str>') or '<str>').upper(), '<str>': run.get('<str>') or '<str>', '<str>': wf_map.get(cs_id, '<str>')})"]
+    N027["for run in check_runs:     if not isinstance(run, dict):         continue     cs_id = str((run.get('<str>') or {}).get('<str>') or '<str>')     rows.append({'<str>': run.get('<str>') or '<str>', '<str>': (run.get('<str>') or '<str>').upper(), '<str>': run.get('<str>') or '<str>', '<str>': wf_map.get(cs_id, '<str>')})"]
     N028["return rows"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -214,11 +193,7 @@ flowchart TD
 flowchart TD
     N001["failed_checks(...)"]
     N002["failed = []"]
-    N003["for row in rows:
-    conclusion = str(row.get('<str>') or '<str>').lower()
-    state = str(row.get('<str>') or '<str>').lower()
-    if conclusion in _FAIL_CONCLUSIONS or state in _FAIL_CONCLUSIONS:
-        failed.append(row)"]
+    N003["for row in rows:     conclusion = str(row.get('<str>') or '<str>').lower()     state = str(row.get('<str>') or '<str>').lower()     if conclusion in _FAIL_CONCLUSIONS or state in _FAIL_CONCLUSIONS:         failed.append(row)"]
     N004["return failed"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -257,9 +232,7 @@ flowchart TD
     N001["build_additional_context(...)"]
     N002["label = f'{repo}<str>{pr}' if repo else f'<str>{pr}'"]
     N003["lines = [f'<str>{delay_seconds:<str>}<str>{label}<str>', '<str>', '<str>', '<str>']"]
-    N004["for row in failed[:10]:
-    conclusion = row.get('<str>') or row.get('<str>') or '<str>'
-    lines.append(f'<str>{_check_name(row)}<str>{conclusion}')"]
+    N004["for row in failed[:10]:     conclusion = row.get('<str>') or row.get('<str>') or '<str>'     lines.append(f'<str>{_check_name(row)}<str>{conclusion}')"]
     N005["if len(failed) > 10"]
     N006["append(...)"]
     N007["return {'<str>': {'<str>': '<str>', '<str>': '<str>'.join(lines)}}"]

@@ -8,16 +8,7 @@ This file is generated from `scripts/validate_json_syntax.py` by `python3 script
 flowchart TD
     N001["validate_files(...)"]
     N002["errors = []"]
-    N003["for path in paths:
-    try:
-        raw = Path(path).read_text(encoding='<str>')
-    except OSError as exc:
-        errors.append((path, f'<str>{exc}'))
-        continue
-    try:
-        json.loads(raw)
-    except json.JSONDecodeError as exc:
-        errors.append((path, f'<str>{exc}'))"]
+    N003["for path in paths:     try:         raw = Path(path).read_text(encoding='<str>')     except OSError as exc:         errors.append((path, f'<str>{exc}'))         continue     try:         json.loads(raw)     except json.JSONDecodeError as exc:         errors.append((path, f'<str>{exc}'))"]
     N004["return errors"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -30,8 +21,7 @@ flowchart TD
 flowchart TD
     N001["_cmd_verify(...)"]
     N002["errors = validate_files(...)"]
-    N003["for path, reason in errors:
-    print(f'<str>{path}<str>{reason}', file=sys.stderr)"]
+    N003["for path, reason in errors:     print(f'<str>{path}<str>{reason}', file=sys.stderr)"]
     N004["return 1 if errors else 0"]
     N001 -->|"start"| N002
     N002 --> N003

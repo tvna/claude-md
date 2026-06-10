@@ -18,11 +18,7 @@ flowchart TD
     N001["classify_refs(...)"]
     N002["out = []"]
     N003["seen = set(...)"]
-    N004["for m in REF_LINE_KEYWORD_RE.finditer(body):
-    key = (m.group(1).lower(), int(m.group(2)))
-    if key not in seen:
-        seen.add(key)
-        out.append(key)"]
+    N004["for m in REF_LINE_KEYWORD_RE.finditer(body):     key = (m.group(1).lower(), int(m.group(2)))     if key not in seen:         seen.add(key)         out.append(key)"]
     N005["return out"]
     N001 -->|"start"| N002
     N002 --> N003

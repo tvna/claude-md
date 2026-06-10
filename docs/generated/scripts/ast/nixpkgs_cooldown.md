@@ -8,8 +8,7 @@ This file is generated from `scripts/nixpkgs_cooldown.py` by `python3 scripts/sc
 flowchart TD
     N001["read_uv_cooldown_days(...)"]
     N002["try"]
-    N003["with pyproject_path.open('<str>') as fp:
-    data = tomllib.load(fp)"]
+    N003["with pyproject_path.open('<str>') as fp:     data = tomllib.load(fp)"]
     N004["except FileNotFoundError"]
     N005["raise ValueError(f'<str>{pyproject_path}<str>{exc}')"]
     N006["except tomllib.TOMLDecodeError"]
@@ -107,8 +106,7 @@ flowchart TD
     N001["_cmd_verify(...)"]
     N002["repo_root = resolve(...)"]
     N003["errors = verify_cooldown(...)"]
-    N004["for err in errors:
-    print(f'<str>{err}')"]
+    N004["for err in errors:     print(f'<str>{err}')"]
     N005["if errors"]
     N006["print(...)"]
     N007["return 1"]

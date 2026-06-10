@@ -50,16 +50,9 @@ flowchart TD
 flowchart TD
     N001["compute_fingerprint(...)"]
     N002["digest = sha256(...)"]
-    N003["for path in _tracked_input_files(repo_root):
-    rel = path.relative_to(repo_root).as_posix()
-    digest.update(rel.encode('<str>'))
-    digest.update(b'\x00')
-    digest.update(hashlib.sha256(path.read_bytes()).digest())
-    digest.update(b'\x00')"]
+    N003["for path in _tracked_input_files(repo_root):     rel = path.relative_to(repo_root).as_posix()     digest.update(rel.encode('<str>'))     digest.update(b'\x00')     digest.update(hashlib.sha256(path.read_bytes()).digest())     digest.update(b'\x00')"]
     N004["update(...)"]
-    N005["for token in extra:
-    digest.update(token.encode('<str>'))
-    digest.update(b'\x00')"]
+    N005["for token in extra:     digest.update(token.encode('<str>'))     digest.update(b'\x00')"]
     N006["return digest.hexdigest()"]
     N001 -->|"start"| N002
     N002 --> N003

@@ -29,13 +29,7 @@ flowchart TD
     N003["if not apm_dir.is_dir()"]
     N004["raise FileNotFoundError(f'<str>{_display(APM_DIR_REL)}')"]
     N005["files = []"]
-    N006["for path in apm_dir.rglob('<str>'):
-    if not path.is_file():
-        continue
-    rel = path.relative_to(root)
-    if rel == LOCKFILE_REL:
-        continue
-    files.append(rel)"]
+    N006["for path in apm_dir.rglob('<str>'):     if not path.is_file():         continue     rel = path.relative_to(root)     if rel == LOCKFILE_REL:         continue     files.append(rel)"]
     N007["return sorted(files, key=_display)"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -51,9 +45,7 @@ flowchart TD
 flowchart TD
     N001["_sha256(...)"]
     N002["digest = sha256(...)"]
-    N003["with path.open('<str>') as handle:
-    for chunk in iter(lambda: handle.read(1024 * 1024), b''):
-        digest.update(chunk)"]
+    N003["with path.open('<str>') as handle:     for chunk in iter(lambda: handle.read(1024 * 1024), b''):         digest.update(chunk)"]
     N004["return digest.hexdigest()"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -87,24 +79,7 @@ flowchart TD
     N001["parse_lockfile(...)"]
     N002["rows = {}"]
     N003["errors = []"]
-    N004["for lineno, raw_line in enumerate(text.splitlines(), start=1):
-    if not raw_line.strip():
-        continue
-    parts = raw_line.split()
-    if len(parts) != 2:
-        errors.append(f'<str>{lineno}<str>')
-        continue
-    digest, path_text = parts
-    rel = Path(path_text)
-    if len(digest) != HASH_LEN or any((ch not in '<str>' for ch in digest)):
-        errors.append(f'<str>{lineno}<str>')
-    if rel.is_absolute() or '<str>' in rel.parts or rel.parts[:1] != ('<str>',):
-        errors.append(f'<str>{lineno}<str>')
-    if rel == LOCKFILE_REL:
-        errors.append(f'<str>{lineno}<str>')
-    if rel in rows:
-        errors.append(f'<str>{lineno}<str>{_display(rel)}')
-    rows[rel] = digest"]
+    N004["for lineno, raw_line in enumerate(text.splitlines(), start=1):     if not raw_line.strip():         continue     parts = raw_line.split()     if len(parts) != 2:         errors.append(f'<str>{lineno}<str>')         continue     digest, path_text = parts     rel = Path(path_text)     if len(digest) != HASH_LEN or any((ch not in '<str>' for ch in digest)):         errors.append(f'<str>{lineno}<str>')     if rel.is_absolute() or '<str>' in rel.parts or rel.parts[:1] != ('<str>',):         errors.append(f'<str>{lineno}<str>')     if rel == LOCKFILE_REL:         errors.append(f'<str>{lineno}<str>')     if rel in rows:         errors.append(f'<str>{lineno}<str>{_display(rel)}')     rows[rel] = digest"]
     N005["return (rows, errors)"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -139,13 +114,9 @@ flowchart TD
     N006["actual_paths = set(...)"]
     N007["expected_paths = set(...)"]
     N008["problems = []"]
-    N009["for rel in sorted(expected_paths - actual_paths, key=_display):
-    problems.append(f'<str>{_display(rel)}')"]
-    N010["for rel in sorted(actual_paths - expected_paths, key=_display):
-    problems.append(f'<str>{_display(rel)}')"]
-    N011["for rel in sorted(actual_paths & expected_paths, key=_display):
-    if actual[rel] != expected[rel]:
-        problems.append(f'<str>{_display(rel)}')"]
+    N009["for rel in sorted(expected_paths - actual_paths, key=_display):     problems.append(f'<str>{_display(rel)}')"]
+    N010["for rel in sorted(actual_paths - expected_paths, key=_display):     problems.append(f'<str>{_display(rel)}')"]
+    N011["for rel in sorted(actual_paths & expected_paths, key=_display):     if actual[rel] != expected[rel]:         problems.append(f'<str>{_display(rel)}')"]
     N012["return problems"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -186,8 +157,7 @@ flowchart TD
     N005["except FileNotFoundError"]
     N006["problems = [str(exc)]"]
     N007["if problems"]
-    N008["for problem in problems:
-    print(f'<str>{problem}', file=sys.stderr)"]
+    N008["for problem in problems:     print(f'<str>{problem}', file=sys.stderr)"]
     N009["print(...)"]
     N010["return 1"]
     N011["print(...)"]

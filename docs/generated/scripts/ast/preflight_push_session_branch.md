@@ -26,22 +26,7 @@ flowchart TD
     N009["positionals = []"]
     N010["i = 0"]
     N011["end_of_opts = False"]
-    N012["while i < len(tokens):
-    tok = tokens[i]
-    if not end_of_opts and tok == '<str>':
-        end_of_opts = True
-        i += 1
-        continue
-    if not end_of_opts and tok.startswith('<str>'):
-        if '<str>' in tok or tok in _FLAGS_NO_VALUE:
-            i += 1
-        elif tok in _FLAGS_WITH_VALUE:
-            i += 2
-        else:
-            i += 1
-        continue
-    positionals.append(tok)
-    i += 1"]
+    N012["while i < len(tokens):     tok = tokens[i]     if not end_of_opts and tok == '<str>':         end_of_opts = True         i += 1         continue     if not end_of_opts and tok.startswith('<str>'):         if '<str>' in tok or tok in _FLAGS_NO_VALUE:             i += 1         elif tok in _FLAGS_WITH_VALUE:             i += 2         else:             i += 1         continue     positionals.append(tok)     i += 1"]
     N013["if len(positionals) < 2"]
     N014["return None"]
     N015["refspec = positionals[1]"]

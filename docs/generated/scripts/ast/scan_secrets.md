@@ -29,10 +29,7 @@ flowchart TD
 flowchart TD
     N001["iter_tracked_files(...)"]
     N002["result = run_git(...)"]
-    N003["for rel in result.stdout.split('<str>'):
-    if not rel or _is_skipped(rel):
-        continue
-    yield (repo_root / rel)"]
+    N003["for rel in result.stdout.split('<str>'):     if not rel or _is_skipped(rel):         continue     yield (repo_root / rel)"]
     N004["end"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -62,13 +59,7 @@ flowchart TD
     N002["if paths is None"]
     N003["paths = iter_tracked_files(...)"]
     N004["findings = []"]
-    N005["for path in paths:
-    text = _read_text(path)
-    if text is None:
-        continue
-    rel = path.relative_to(repo_root)
-    for lineno, rule_id in scan_text(text):
-        findings.append(Finding(path=rel, line=lineno, rule_id=rule_id))"]
+    N005["for path in paths:     text = _read_text(path)     if text is None:         continue     rel = path.relative_to(repo_root)     for lineno, rule_id in scan_text(text):         findings.append(Finding(path=rel, line=lineno, rule_id=rule_id))"]
     N006["return findings"]
     N001 -->|"start"| N002
     N002 -->|"true"| N003
@@ -90,14 +81,12 @@ flowchart TD
     N006["args = parse_args(...)"]
     N007["findings = find_violations(...)"]
     N008["if args.cmd == 'list'"]
-    N009["for f in findings:
-    print(f'{f.path.as_posix()}<str>{f.line}<str>{f.rule_id}<str>')"]
+    N009["for f in findings:     print(f'{f.path.as_posix()}<str>{f.line}<str>{f.rule_id}<str>')"]
     N010["return 0"]
     N011["if not findings"]
     N012["print(...)"]
     N013["return 0"]
-    N014["for f in findings:
-    print(f'<str>{f.path.as_posix()}<str>{f.line}<str>{f.rule_id}<str>{PRAGMA_ALLOWLIST}<str>', file=sys.stderr)"]
+    N014["for f in findings:     print(f'<str>{f.path.as_posix()}<str>{f.line}<str>{f.rule_id}<str>{PRAGMA_ALLOWLIST}<str>', file=sys.stderr)"]
     N015["print(...)"]
     N016["return 1"]
     N001 -->|"start"| N002

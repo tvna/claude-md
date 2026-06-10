@@ -9,7 +9,7 @@ flowchart TD
     N001["_require_env(...)"]
     N002["missing = [name for name in names if not env.get(name)]"]
     N003["if missing"]
-    N004["raise RuntimeError(f\"<str>{'<str>'.join(missing)}\")"]
+    N004["raise RuntimeError(f'<str>{'<str>'.join(missing)}')"]
     N005["end"]
     N001 -->|"start"| N002
     N002 --> N003

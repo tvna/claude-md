@@ -109,17 +109,7 @@ flowchart TD
     N002["payload = payload_path.read_bytes() if payload_path is not None else None"]
     N003["final_code = 0"]
     N004["final_body = '<str>'"]
-    N005["for attempt in range(1, 4):
-    code, body = _request(url, token=token, method=method, data=payload, opener=opener)
-    final_code, final_body = (code, body)
-    if 200 <= code < 300:
-        return (code, body)
-    display_code = _display_http_code(code)
-    print(f'<str>{attempt}<str>{display_code}<str>{method}<str>{url}')
-    if code != 0 and code < 500:
-        return (code, body)
-    if attempt < 3:
-        sleeper(attempt * 5)"]
+    N005["for attempt in range(1, 4):     code, body = _request(url, token=token, method=method, data=payload, opener=opener)     final_code, final_body = (code, body)     if 200 <= code < 300:         return (code, body)     display_code = _display_http_code(code)     print(f'<str>{attempt}<str>{display_code}<str>{method}<str>{url}')     if code != 0 and code < 500:         return (code, body)     if attempt < 3:         sleeper(attempt * 5)"]
     N006["return (final_code, final_body)"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -176,12 +166,7 @@ flowchart TD
     N003["live_rulesets = fetch_live_rulesets(...)"]
     N004["rows = [_dispatch_header_for(choice, dry_run, enable_auto_delete)]"]
     N005["planned = []"]
-    N006["for file in targets:
-    item, detail_rows = _plan_one_ruleset(file=file, repo=repo, sot_dir=sot_dir, live_rulesets=live_rulesets, token=token, opener=opener, pending_rows=rows, summary_file=summary_file)
-    rows.extend(detail_rows)
-    if dry_run:
-        rows.append(render_summary_row(file, str(item['<str>']), int(item['<str>']), f\"<str>{item['<str>']}<str>\", item['<str>']))
-    planned.append(item)"]
+    N006["for file in targets:     item, detail_rows = _plan_one_ruleset(file=file, repo=repo, sot_dir=sot_dir, live_rulesets=live_rulesets, token=token, opener=opener, pending_rows=rows, summary_file=summary_file)     rows.extend(detail_rows)     if dry_run:         rows.append(render_summary_row(file, str(item['<str>']), int(item['<str>']), f'<str>{item['<str>']}<str>', item['<str>']))     planned.append(item)"]
     N007["_append_summary(...)"]
     N008["return planned"]
     N001 -->|"start"| N002
@@ -201,22 +186,7 @@ flowchart TD
     N002["targets = select_targets(...)"]
     N003["live_rulesets = fetch_live_rulesets(...)"]
     N004["_append_summary(...)"]
-    N005["for file in targets:
-    item, detail_rows = _plan_one_ruleset(file=file, repo=repo, sot_dir=sot_dir, live_rulesets=live_rulesets, token=token, opener=opener, pending_rows=[], summary_file=summary_file)
-    if detail_rows:
-        _append_summary(summary_file, detail_rows)
-    action = str(item['<str>'])
-    url = f'{API_ROOT}<str>{repo}<str>'
-    if action == '<str>':
-        url = f\"{url}<str>{item['<str>']}\"
-    code, body = apply_call(method=action, url=url, payload_path=item['<str>'], token=token, opener=opener, sleeper=sleeper)
-    if not 200 <= code < 300:
-        display_code = _display_http_code(code)
-        _append_summary(summary_file, ['<str>', f\"<str>{item['<str>']}<str>{display_code}<str>\", '<str>', body, '<str>'])
-        print(f\"<str>{action}<str>{item['<str>']}<str>{display_code}<str>\")
-        raise SystemExit(1)
-    response = json.loads(body or '<str>')
-    _append_summary(summary_file, [render_summary_row(str(item['<str>']), str(item['<str>']), int(item['<str>']), f'{action}<str>', response.get('<str>'))])"]
+    N005["for file in targets:     item, detail_rows = _plan_one_ruleset(file=file, repo=repo, sot_dir=sot_dir, live_rulesets=live_rulesets, token=token, opener=opener, pending_rows=[], summary_file=summary_file)     if detail_rows:         _append_summary(summary_file, detail_rows)     action = str(item['<str>'])     url = f'{API_ROOT}<str>{repo}<str>'     if action == '<str>':         url = f'{url}<str>{item['<str>']}'     code, body = apply_call(method=action, url=url, payload_path=item['<str>'], token=token, opener=opener, sleeper=sleeper)     if not 200 <= code < 300:         display_code = _display_http_code(code)         _append_summary(summary_file, ['<str>', f'<str>{item['<str>']}<str>{display_code}<str>', '<str>', body, '<str>'])         print(f'<str>{action}<str>{item['<str>']}<str>{display_code}<str>')         raise SystemExit(1)     response = json.loads(body or '<str>')     _append_summary(summary_file, [render_summary_row(str(item['<str>']), str(item['<str>']), int(item['<str>']), f'{action}<str>', response.get('<str>'))])"]
     N006["end"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -316,9 +286,8 @@ flowchart TD
     N006["diff = workflow_permissions_diff(...)"]
     N007["proj_sot = workflow_permissions_projection(...)"]
     N008["proj_live = workflow_permissions_projection(...)"]
-    N009["lines = ['<str>', f'<str>{mode}<str>', f'<str>{sot_path}<str>', f\"<str>{('<str>' if diff else '<str>')}<str>\"]"]
-    N010["for key in WORKFLOW_PERMISSIONS_KEYS:
-    lines.append(f'<str>{key}<str>{_json_scalar(proj_live[key])}<str>{_json_scalar(proj_sot[key])}<str>')"]
+    N009["lines = ['<str>', f'<str>{mode}<str>', f'<str>{sot_path}<str>', f'<str>{('<str>' if diff else '<str>')}<str>']"]
+    N010["for key in WORKFLOW_PERMISSIONS_KEYS:     lines.append(f'<str>{key}<str>{_json_scalar(proj_live[key])}<str>{_json_scalar(proj_sot[key])}<str>')"]
     N011["if diff"]
     N012["extend(...)"]
     N013["if mode in ('plan', 'drift')"]
@@ -331,8 +300,7 @@ flowchart TD
     N020["set_workflow_permissions(...)"]
     N021["after = workflow_permissions_projection(...)"]
     N022["extend(...)"]
-    N023["for key in WORKFLOW_PERMISSIONS_KEYS:
-    lines.append(f'<str>{key}<str>{_json_scalar(after[key])}<str>')"]
+    N023["for key in WORKFLOW_PERMISSIONS_KEYS:     lines.append(f'<str>{key}<str>{_json_scalar(after[key])}<str>')"]
     N024["_append_summary(...)"]
     N025["return 0"]
     N001 -->|"start"| N002
@@ -462,8 +430,7 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["_read_json_file(...)"]
-    N002["with path.open(encoding='<str>') as fp:
-    body = json.load(fp)"]
+    N002["with path.open(encoding='<str>') as fp:     body = json.load(fp)"]
     N003["if not isinstance(body, dict)"]
     N004["raise ValueError(f'{path}<str>')"]
     N005["return body"]
@@ -479,10 +446,7 @@ flowchart TD
 flowchart TD
     N001["_append_summary(...)"]
     N002["mkdir(...)"]
-    N003["with path.open('<str>', encoding='<str>') as fp:
-    for line in lines:
-        fp.write(line)
-        fp.write('<str>')"]
+    N003["with path.open('<str>', encoding='<str>') as fp:     for line in lines:         fp.write(line)         fp.write('<str>')"]
     N004["end"]
     N001 -->|"start"| N002
     N002 --> N003

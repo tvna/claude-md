@@ -80,7 +80,13 @@ def iter_script_paths(root: Path = Path()) -> tuple[Path, ...]:
 
 
 def _mermaid_text(text: str) -> str:
-    return text.replace('"', '\\"')
+    # Make a node/edge label safe inside a Mermaid quoted string. Mermaid does
+    # not honour ``\"`` backslash escapes, so a double quote (``ast.unparse``
+    # emits them around f-strings) is swapped for a single quote; and a raw
+    # newline (compound statements unparse with their multi-line body) is
+    # collapsed to a space. Mirrors ``workflow_diagram._mermaid_escape`` so the
+    # two generators sanitize labels the same way (refs #1598).
+    return text.replace('"', "'").replace("\n", " ")
 
 
 def _safe_label_node(node: ast.AST) -> ast.AST:

@@ -29,26 +29,7 @@ flowchart TD
     N003["raw_hooks = get(...)"]
     N004["if not isinstance(raw_hooks, dict)"]
     N005["return result"]
-    N006["for event in HOOK_EVENTS:
-    raw_groups = raw_hooks.get(event, [])
-    if not isinstance(raw_groups, list):
-        continue
-    for group in raw_groups:
-        if not isinstance(group, dict):
-            continue
-        if _is_superpowers(group):
-            continue
-        handlers = group.get('<str>', [])
-        if not isinstance(handlers, list):
-            continue
-        for handler in handlers:
-            if not isinstance(handler, dict):
-                continue
-            command = handler.get('<str>', '<str>')
-            if not isinstance(command, str):
-                continue
-            for script in _extract_scripts_from_command(command):
-                result.add(HookEntry(event=event, script=script))"]
+    N006["for event in HOOK_EVENTS:     raw_groups = raw_hooks.get(event, [])     if not isinstance(raw_groups, list):         continue     for group in raw_groups:         if not isinstance(group, dict):             continue         if _is_superpowers(group):             continue         handlers = group.get('<str>', [])         if not isinstance(handlers, list):             continue         for handler in handlers:             if not isinstance(handler, dict):                 continue             command = handler.get('<str>', '<str>')             if not isinstance(command, str):                 continue             for script in _extract_scripts_from_command(command):                 result.add(HookEntry(event=event, script=script))"]
     N007["return result"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -83,9 +64,7 @@ flowchart TD
     N001["find_drift(...)"]
     N002["codex_pairs = {(h.event, h.script) for h in codex_hooks}"]
     N003["missing = []"]
-    N004["for entry in sorted(claude_hooks, key=lambda h: (h.event, h.script)):
-    if (entry.event, entry.script) not in codex_pairs and entry.script not in allowlist:
-        missing.append(entry)"]
+    N004["for entry in sorted(claude_hooks, key=lambda h: (h.event, h.script)):     if (entry.event, entry.script) not in codex_pairs and entry.script not in allowlist:         missing.append(entry)"]
     N005["return missing"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -105,10 +84,8 @@ flowchart TD
     N006["claude_hooks = collect_claude_hooks(...)"]
     N007["codex_hooks = collect_codex_hooks(...)"]
     N008["missing = find_drift(...)"]
-    N009["for entry in missing:
-    print(f'<str>{entry.event}<str>{entry.script}<str>', file=sys.stderr)"]
-    N010["for script, rationale in sorted(ALLOWLIST.items()):
-    print(f'<str>{script}<str>{rationale}', file=sys.stderr)"]
+    N009["for entry in missing:     print(f'<str>{entry.event}<str>{entry.script}<str>', file=sys.stderr)"]
+    N010["for script, rationale in sorted(ALLOWLIST.items()):     print(f'<str>{script}<str>{rationale}', file=sys.stderr)"]
     N011["if missing"]
     N012["return 1"]
     N013["return 0"]

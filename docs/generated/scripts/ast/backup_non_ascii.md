@@ -95,8 +95,7 @@ flowchart TD
 flowchart TD
     N001["gzip_bytes(...)"]
     N002["buf = BytesIO(...)"]
-    N003["with gzip.GzipFile(filename='<str>', mode='<str>', fileobj=buf, mtime=mtime) as gz:
-    gz.write(raw)"]
+    N003["with gzip.GzipFile(filename='<str>', mode='<str>', fileobj=buf, mtime=mtime) as gz:     gz.write(raw)"]
     N004["return buf.getvalue()"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -131,10 +130,7 @@ flowchart TD
     N004["cmd = ['<str>', '<str>', '<str>', path, '<str>', '<str>']"]
     N005["result = runner(...)"]
     N006["out = []"]
-    N007["for line in result.stdout.splitlines():
-    if not line.strip():
-        continue
-    out.append(json.loads(line))"]
+    N007["for line in result.stdout.splitlines():     if not line.strip():         continue     out.append(json.loads(line))"]
     N008["return out"]
     N001 -->|"start"| N002
     N002 -->|"true"| N003

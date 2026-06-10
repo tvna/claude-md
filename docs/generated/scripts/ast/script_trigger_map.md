@@ -26,27 +26,7 @@ flowchart TD
     N003["if not wf_dir.is_dir()"]
     N004["return []"]
     N005["refs = []"]
-    N006["for path in sorted(wf_dir.glob('<str>')):
-    raw = path.read_text(encoding='<str>')
-    try:
-        document: object = yaml.safe_load(raw)
-    except yaml.YAMLError:
-        document = None
-    jobs = document.get('<str>') if isinstance(document, dict) else None
-    if not isinstance(jobs, dict):
-        for match in _SCRIPT_REF.finditer(raw):
-            refs.append(TriggerRef(match.group(1), '<str>', f'{path.name}<str>'))
-        continue
-    for job_name, job in jobs.items():
-        steps = job.get('<str>') if isinstance(job, dict) else None
-        if not isinstance(steps, list):
-            continue
-        for step in steps:
-            run = step.get('<str>') if isinstance(step, dict) else None
-            if not isinstance(run, str):
-                continue
-            for match in _SCRIPT_REF.finditer(run):
-                refs.append(TriggerRef(match.group(1), '<str>', f'{path.name}<str>{job_name}<str>'))"]
+    N006["for path in sorted(wf_dir.glob('<str>')):     raw = path.read_text(encoding='<str>')     try:         document: object = yaml.safe_load(raw)     except yaml.YAMLError:         document = None     jobs = document.get('<str>') if isinstance(document, dict) else None     if not isinstance(jobs, dict):         for match in _SCRIPT_REF.finditer(raw):             refs.append(TriggerRef(match.group(1), '<str>', f'{path.name}<str>'))         continue     for job_name, job in jobs.items():         steps = job.get('<str>') if isinstance(job, dict) else None         if not isinstance(steps, list):             continue         for step in steps:             run = step.get('<str>') if isinstance(step, dict) else None             if not isinstance(run, str):                 continue             for match in _SCRIPT_REF.finditer(run):                 refs.append(TriggerRef(match.group(1), '<str>', f'{path.name}<str>{job_name}<str>'))"]
     N007["return refs"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -69,17 +49,7 @@ flowchart TD
     N007["if not isinstance(repos, list)"]
     N008["return []"]
     N009["refs = []"]
-    N010["for repo in repos:
-    hooks = repo.get('<str>') if isinstance(repo, dict) else None
-    if not isinstance(hooks, list):
-        continue
-    for hook in hooks:
-        entry = hook.get('<str>') if isinstance(hook, dict) else None
-        if not isinstance(entry, str):
-            continue
-        hook_id = str(hook.get('<str>', '<str>'))
-        for match in _SCRIPT_REF.finditer(entry):
-            refs.append(TriggerRef(match.group(1), '<str>', hook_id))"]
+    N010["for repo in repos:     hooks = repo.get('<str>') if isinstance(repo, dict) else None     if not isinstance(hooks, list):         continue     for hook in hooks:         entry = hook.get('<str>') if isinstance(hook, dict) else None         if not isinstance(entry, str):             continue         hook_id = str(hook.get('<str>', '<str>'))         for match in _SCRIPT_REF.finditer(entry):             refs.append(TriggerRef(match.group(1), '<str>', hook_id))"]
     N011["return refs"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -107,11 +77,7 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["_step_name(...)"]
-    N002["for keyword in call.keywords:
-    if keyword.arg == '<str>' and isinstance(keyword.value, ast.Constant):
-        value = keyword.value.value
-        if isinstance(value, str):
-            return value"]
+    N002["for keyword in call.keywords:     if keyword.arg == '<str>' and isinstance(keyword.value, ast.Constant):         value = keyword.value.value         if isinstance(value, str):             return value"]
     N003["return '<str>'"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -127,18 +93,7 @@ flowchart TD
     N004["return []"]
     N005["tree = parse(...)"]
     N006["refs = []"]
-    N007["for node in ast.walk(tree):
-    if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)):
-        continue
-    if node.func.id != '<str>':
-        continue
-    name = _step_name(node)
-    argv = next((kw.value for kw in node.keywords if kw.arg == '<str>'), None)
-    if argv is None:
-        continue
-    for literal in _str_constants(argv):
-        for match in _SCRIPT_REF.finditer(literal):
-            refs.append(TriggerRef(match.group(1), '<str>', name))"]
+    N007["for node in ast.walk(tree):     if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)):         continue     if node.func.id != '<str>':         continue     name = _step_name(node)     argv = next((kw.value for kw in node.keywords if kw.arg == '<str>'), None)     if argv is None:         continue     for literal in _str_constants(argv):         for match in _SCRIPT_REF.finditer(literal):             refs.append(TriggerRef(match.group(1), '<str>', name))"]
     N008["return refs"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -162,25 +117,7 @@ flowchart TD
     N007["if not isinstance(targets, list)"]
     N008["return []"]
     N009["refs = []"]
-    N010["for target in targets:
-    config = target.get('<str>') if isinstance(target, dict) else None
-    hooks = config.get('<str>') if isinstance(config, dict) else None
-    if not isinstance(hooks, dict):
-        continue
-    agent = str(target.get('<str>', '<str>'))
-    for event, entries in hooks.items():
-        if not isinstance(entries, list):
-            continue
-        for entry in entries:
-            inner = entry.get('<str>') if isinstance(entry, dict) else None
-            if not isinstance(inner, list):
-                continue
-            for hook in inner:
-                command = hook.get('<str>') if isinstance(hook, dict) else None
-                if not isinstance(command, str):
-                    continue
-                for match in _SCRIPT_REF.finditer(command):
-                    refs.append(TriggerRef(match.group(1), '<str>', f'{agent}<str>{event}'))"]
+    N010["for target in targets:     config = target.get('<str>') if isinstance(target, dict) else None     hooks = config.get('<str>') if isinstance(config, dict) else None     if not isinstance(hooks, dict):         continue     agent = str(target.get('<str>', '<str>'))     for event, entries in hooks.items():         if not isinstance(entries, list):             continue         for entry in entries:             inner = entry.get('<str>') if isinstance(entry, dict) else None             if not isinstance(inner, list):                 continue             for hook in inner:                 command = hook.get('<str>') if isinstance(hook, dict) else None                 if not isinstance(command, str):                     continue                 for match in _SCRIPT_REF.finditer(command):                     refs.append(TriggerRef(match.group(1), '<str>', f'{agent}<str>{event}'))"]
     N011["return refs"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -234,8 +171,7 @@ flowchart TD
     N004["if not refs"]
     N005["extend(...)"]
     N006["extend(...)"]
-    N007["for ref in refs:
-    lines.append(f'<str>{ref.script}<str>{ref.kind}<str>{ref.location}<str>')"]
+    N007["for ref in refs:     lines.append(f'<str>{ref.script}<str>{ref.kind}<str>{ref.location}<str>')"]
     N008["append(...)"]
     N009["unreferenced = unreferenced_scripts(...)"]
     N010["extend(...)"]

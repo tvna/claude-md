@@ -80,11 +80,7 @@ flowchart TD
     N001["render_table(...)"]
     N002["measured_total = sum(...)"]
     N003["lines = [f'<str>{model}<str>', '<str>', '<str>', '<str>']"]
-    N004["for m in measurements:
-    bytes_txt = f'{m.byte_size:<str>}' if m.byte_size is not None else _UNAVAILABLE
-    tokens_txt = f'{m.tokens:<str>}' if m.tokens is not None else _UNAVAILABLE
-    rel = _display_path(m.path)
-    lines.append(f'<str>{m.label}<str>{rel}<str>{bytes_txt}<str>{tokens_txt}<str>{_share(m.tokens, measured_total)}<str>')"]
+    N004["for m in measurements:     bytes_txt = f'{m.byte_size:<str>}' if m.byte_size is not None else _UNAVAILABLE     tokens_txt = f'{m.tokens:<str>}' if m.tokens is not None else _UNAVAILABLE     rel = _display_path(m.path)     lines.append(f'<str>{m.label}<str>{rel}<str>{bytes_txt}<str>{tokens_txt}<str>{_share(m.tokens, measured_total)}<str>')"]
     N005["total_txt = f'{measured_total:<str>}' if measured_total else _UNAVAILABLE"]
     N006["append(...)"]
     N007["append(...)"]
@@ -151,9 +147,7 @@ flowchart TD
     N006["if not (os.environ.get('ANTHROPIC_API_KEY') or os.environ.get('ANTHROPIC_AUTH_TOKEN'))"]
     N007["raise RuntimeError('<str>')"]
     N008["client = Anthropic(...)"]
-    N009["def counter(text: str) -> int:
-    resp = client.messages.count_tokens(model=model, messages=[{'<str>': '<str>', '<str>': text}])
-    return int(resp.input_tokens)"]
+    N009["def counter(text: str) -> int:     resp = client.messages.count_tokens(model=model, messages=[{'<str>': '<str>', '<str>': text}])     return int(resp.input_tokens)"]
     N010["return counter"]
     N001 -->|"start"| N002
     N002 -->|"try"| N003

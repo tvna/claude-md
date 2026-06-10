@@ -17,18 +17,7 @@ flowchart TD
     N009["if not isinstance(families, dict) or not families"]
     N010["append(...)"]
     N011["return errors"]
-    N012["for name, spec in families.items():
-    if not isinstance(spec, dict):
-        errors.append(f'<str>{name!r}<str>')
-        continue
-    tier = spec.get('<str>')
-    if tier not in TIER_ORDER:
-        errors.append(f'<str>{name!r}<str>{sorted(TIER_ORDER)}<str>{tier!r}')
-        continue
-    if TIER_ORDER[tier] < floor_rank:
-        reason = spec.get('<str>')
-        if not (isinstance(reason, str) and reason.strip()):
-            errors.append(f'<str>{name!r}<str>{tier!r}<str>{floor!r}<str>{floor}<str>')"]
+    N012["for name, spec in families.items():     if not isinstance(spec, dict):         errors.append(f'<str>{name!r}<str>')         continue     tier = spec.get('<str>')     if tier not in TIER_ORDER:         errors.append(f'<str>{name!r}<str>{sorted(TIER_ORDER)}<str>{tier!r}')         continue     if TIER_ORDER[tier] < floor_rank:         reason = spec.get('<str>')         if not (isinstance(reason, str) and reason.strip()):             errors.append(f'<str>{name!r}<str>{tier!r}<str>{floor!r}<str>{floor}<str>')"]
     N013["return errors"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -49,8 +38,7 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["_load_config(...)"]
-    N002["with path.open('<str>') as handle:
-    return tomllib.load(handle)"]
+    N002["with path.open('<str>') as handle:     return tomllib.load(handle)"]
     N003["end"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -70,8 +58,7 @@ flowchart TD
     N008["print(...)"]
     N009["return 1"]
     N010["errors = evaluate(...)"]
-    N011["for message in errors:
-    print(f'<str>{message}', file=sys.stderr)"]
+    N011["for message in errors:     print(f'<str>{message}', file=sys.stderr)"]
     N012["if errors"]
     N013["print(...)"]
     N014["return 1"]

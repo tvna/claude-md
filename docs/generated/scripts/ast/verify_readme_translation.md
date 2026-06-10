@@ -128,8 +128,7 @@ flowchart TD
     N022["print(...)"]
     N023["print(...)"]
     N024["return 0"]
-    N025["for line in errors:
-    print(line, file=sys.stderr)"]
+    N025["for line in errors:     print(line, file=sys.stderr)"]
     N026["return 1"]
     N001 -->|"start"| N002
     N002 --> N003

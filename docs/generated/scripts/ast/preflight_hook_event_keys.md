@@ -43,15 +43,9 @@ flowchart TD
 flowchart TD
     N001["verify(...)"]
     N002["violations = []"]
-    N003["for rel in HOOK_CONFIG_FILES:
-    path = REPO_ROOT / rel
-    if not path.exists():
-        violations.append(f'{rel}<str>')
-        continue
-    violations.extend(check_file(path))"]
+    N003["for rel in HOOK_CONFIG_FILES:     path = REPO_ROOT / rel     if not path.exists():         violations.append(f'{rel}<str>')         continue     violations.extend(check_file(path))"]
     N004["if violations"]
-    N005["for message in violations:
-    print(f'<str>{message}', file=sys.stderr)"]
+    N005["for message in violations:     print(f'<str>{message}', file=sys.stderr)"]
     N006["return 1"]
     N007["print(...)"]
     N008["return 0"]

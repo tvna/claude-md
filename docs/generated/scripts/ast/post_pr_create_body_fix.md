@@ -50,10 +50,7 @@ flowchart TD
 flowchart TD
     N001["extract_trailing_agent_footer(...)"]
     N002["found = None"]
-    N003["for line in html.unescape(body.replace('<str>', '<str>')).splitlines():
-    stripped = line.strip()
-    if _AGENT_ATTRIBUTION_FOOTER_RE.fullmatch(stripped):
-        found = stripped"]
+    N003["for line in html.unescape(body.replace('<str>', '<str>')).splitlines():     stripped = line.strip()     if _AGENT_ATTRIBUTION_FOOTER_RE.fullmatch(stripped):         found = stripped"]
     N004["return found"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -67,13 +64,7 @@ flowchart TD
     N001["_walk(...)"]
     N002["out = []"]
     N003["stack = [value]"]
-    N004["while stack and len(out) < 200:
-    node = stack.pop()
-    out.append(node)
-    if isinstance(node, dict):
-        stack.extend(node.values())
-    elif isinstance(node, list):
-        stack.extend(node)"]
+    N004["while stack and len(out) < 200:     node = stack.pop()     out.append(node)     if isinstance(node, dict):         stack.extend(node.values())     elif isinstance(node, list):         stack.extend(node)"]
     N005["return out"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -86,22 +77,10 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["extract_pr_coords(...)"]
-    N002["for node in _walk(tool_response):
-    if isinstance(node, str):
-        m = _PR_URL_RE.search(node)
-        if m:
-            return (m.group(1), m.group(2), m.group(3))"]
+    N002["for node in _walk(tool_response):     if isinstance(node, str):         m = _PR_URL_RE.search(node)         if m:             return (m.group(1), m.group(2), m.group(3))"]
     N003["owner = tool_input.get('<str>') if isinstance(tool_input, dict) else None"]
     N004["repo = tool_input.get('<str>') if isinstance(tool_input, dict) else None"]
-    N005["for node in _walk(tool_response):
-    if not isinstance(node, dict):
-        continue
-    for key in _NUMBER_KEYS:
-        val = node.get(key)
-        if isinstance(val, int) and val > 0:
-            return (owner, repo, str(val))
-        if isinstance(val, str) and val.isdecimal():
-            return (owner, repo, val)"]
+    N005["for node in _walk(tool_response):     if not isinstance(node, dict):         continue     for key in _NUMBER_KEYS:         val = node.get(key)         if isinstance(val, int) and val > 0:             return (owner, repo, str(val))         if isinstance(val, str) and val.isdecimal():             return (owner, repo, val)"]
     N006["return (None, None, None)"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -115,11 +94,7 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["extract_stored_body(...)"]
-    N002["for node in _walk(tool_response):
-    if isinstance(node, dict):
-        val = node.get('<str>')
-        if isinstance(val, str):
-            return val"]
+    N002["for node in _walk(tool_response):     if isinstance(node, dict):         val = node.get('<str>')         if isinstance(val, str):             return val"]
     N003["return None"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -164,7 +139,7 @@ flowchart TD
     N024["if dropped"]
     N025["tokens = join(...)"]
     N026["warning = f'<str>{tokens}<str>'"]
-    N027["return _build_context(f\"<str>{pr_label}<str>{owner or '<str>'}<str>{repo or '<str>'}<str>{pr_number}<str>{warning}<str>{body_repr}<str>\")"]
+    N027["return _build_context(f'<str>{pr_label}<str>{owner or '<str>'}<str>{repo or '<str>'}<str>{pr_number}<str>{warning}<str>{body_repr}<str>')"]
     N001 -->|"start"| N002
     N002 -->|"true"| N003
     N002 -->|"false"| N004

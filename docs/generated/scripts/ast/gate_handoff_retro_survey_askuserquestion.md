@@ -128,30 +128,9 @@ flowchart TD
 flowchart TD
     N001["created_pr_numbers(...)"]
     N002["create_ids = set(...)"]
-    N003["for entry in entries:
-    for block in _content_blocks(entry):
-        if block.get('<str>') != '<str>':
-            continue
-        if canonical_github_tool(str(block.get('<str>', '<str>'))) != _CREATE_PR_TOOL:
-            continue
-        tool_id = block.get('<str>')
-        if isinstance(tool_id, str) and tool_id:
-            create_ids.add(tool_id)"]
+    N003["for entry in entries:     for block in _content_blocks(entry):         if block.get('<str>') != '<str>':             continue         if canonical_github_tool(str(block.get('<str>', '<str>'))) != _CREATE_PR_TOOL:             continue         tool_id = block.get('<str>')         if isinstance(tool_id, str) and tool_id:             create_ids.add(tool_id)"]
     N004["numbers = []"]
-    N005["for entry in entries:
-    for block in _content_blocks(entry):
-        if block.get('<str>') != '<str>':
-            continue
-        if block.get('<str>') not in create_ids:
-            continue
-        if block.get('<str>'):
-            continue
-        match = _PULL_URL_RE.search(_result_text(block))
-        if not match:
-            continue
-        number = int(match.group(1))
-        if number > 0 and number not in numbers:
-            numbers.append(number)"]
+    N005["for entry in entries:     for block in _content_blocks(entry):         if block.get('<str>') != '<str>':             continue         if block.get('<str>') not in create_ids:             continue         if block.get('<str>'):             continue         match = _PULL_URL_RE.search(_result_text(block))         if not match:             continue         number = int(match.group(1))         if number > 0 and number not in numbers:             numbers.append(number)"]
     N006["return numbers"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -209,14 +188,7 @@ flowchart TD
     N007["except OSError"]
     N008["return []"]
     N009["entries = []"]
-    N010["for raw_line in raw.splitlines():
-    line = raw_line.strip()
-    if not line:
-        continue
-    try:
-        entries.append(json.loads(line))
-    except json.JSONDecodeError:
-        continue"]
+    N010["for raw_line in raw.splitlines():     line = raw_line.strip()     if not line:         continue     try:         entries.append(json.loads(line))     except json.JSONDecodeError:         continue"]
     N011["return entries"]
     N001 -->|"start"| N002
     N002 -->|"true"| N003

@@ -8,11 +8,7 @@ This file is generated from `scripts/verify_shard_coverage.py` by `python3 scrip
 flowchart TD
     N001["parse_collected(...)"]
     N002["nodes = set(...)"]
-    N003["for raw in text.splitlines():
-    line = raw.strip()
-    if not line or '<str>' not in line:
-        continue
-    nodes.add(line)"]
+    N003["for raw in text.splitlines():     line = raw.strip()     if not line or '<str>' not in line:         continue     nodes.add(line)"]
     N004["return nodes"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -60,12 +56,7 @@ flowchart TD
     N001["parse_junit(...)"]
     N002["root = fromstring(...)"]
     N003["nodes = set(...)"]
-    N004["for case in root.iter('<str>'):
-    classname = case.get('<str>') or '<str>'
-    name = case.get('<str>') or '<str>'
-    if not classname and (not name):
-        continue
-    nodes.add(junit_node_id(classname, name))"]
+    N004["for case in root.iter('<str>'):     classname = case.get('<str>') or '<str>'     name = case.get('<str>') or '<str>'     if not classname and (not name):         continue     nodes.add(junit_node_id(classname, name))"]
     N005["return nodes"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -79,9 +70,7 @@ flowchart TD
 flowchart TD
     N001["compare(...)"]
     N002["seen_in = defaultdict(...)"]
-    N003["for shard, nodes in per_shard.items():
-    for node in nodes:
-        seen_in[node].append(shard)"]
+    N003["for shard, nodes in per_shard.items():     for node in nodes:         seen_in[node].append(shard)"]
     N004["union = set(...)"]
     N005["missing = collected - union"]
     N006["duplicated = {n: shards for n, shards in seen_in.items() if len(shards) > 1}"]
@@ -100,13 +89,9 @@ flowchart TD
 flowchart TD
     N001["format_errors(...)"]
     N002["lines = []"]
-    N003["for node in sorted(missing):
-    lines.append(f'<str>{node}<str>')"]
-    N004["for node in sorted(duplicated):
-    shards = '<str>'.join(duplicated[node])
-    lines.append(f'<str>{node}<str>{shards}<str>')"]
-    N005["for node in sorted(extra):
-    lines.append(f'<str>{node}<str>')"]
+    N003["for node in sorted(missing):     lines.append(f'<str>{node}<str>')"]
+    N004["for node in sorted(duplicated):     shards = '<str>'.join(duplicated[node])     lines.append(f'<str>{node}<str>{shards}<str>')"]
+    N005["for node in sorted(extra):     lines.append(f'<str>{node}<str>')"]
     N006["return lines"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -129,23 +114,12 @@ flowchart TD
     N008["print(...)"]
     N009["return 1"]
     N010["per_shard = {}"]
-    N011["for jp in junit_paths:
-    try:
-        xml_text = jp.read_text(encoding='<str>')
-    except OSError as exc:
-        print(f'<str>{jp}<str>{exc}', file=sys.stderr)
-        return 1
-    try:
-        per_shard[jp.stem] = parse_junit(xml_text)
-    except ET.ParseError as exc:
-        print(f'<str>{jp}<str>{exc}', file=sys.stderr)
-        return 1"]
+    N011["for jp in junit_paths:     try:         xml_text = jp.read_text(encoding='<str>')     except OSError as exc:         print(f'<str>{jp}<str>{exc}', file=sys.stderr)         return 1     try:         per_shard[jp.stem] = parse_junit(xml_text)     except ET.ParseError as exc:         print(f'<str>{jp}<str>{exc}', file=sys.stderr)         return 1"]
     N012["(missing, duplicated) = compare(...)"]
     N013["union = set().union(*per_shard.values()) if per_shard else set()"]
     N014["extra = union - collected"]
     N015["errors = format_errors(...)"]
-    N016["for line in errors:
-    print(line, file=sys.stderr)"]
+    N016["for line in errors:     print(line, file=sys.stderr)"]
     N017["if errors"]
     N018["return 1"]
     N019["total = len(...)"]

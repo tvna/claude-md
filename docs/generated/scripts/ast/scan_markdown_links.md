@@ -23,8 +23,7 @@ flowchart TD
 flowchart TD
     N001["iter_markdown_files(...)"]
     N002["files = set(...)"]
-    N003["for pattern in DOC_GLOBS:
-    files.update((path for path in root.glob(pattern) if path.is_file()))"]
+    N003["for pattern in DOC_GLOBS:     files.update((path for path in root.glob(pattern) if path.is_file()))"]
     N004["return sorted(files)"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -57,10 +56,7 @@ flowchart TD
     N001["iter_links(...)"]
     N002["text = read_text(...)"]
     N003["links = []"]
-    N004["for pattern in (INLINE_LINK_RE, REFERENCE_LINK_RE):
-    for match in pattern.finditer(text):
-        line = text.count('<str>', 0, match.start()) + 1
-        links.append(MarkdownLink(source=path, line=line, target=extract_target(match.group(1))))"]
+    N004["for pattern in (INLINE_LINK_RE, REFERENCE_LINK_RE):     for match in pattern.finditer(text):         line = text.count('<str>', 0, match.start()) + 1         links.append(MarkdownLink(source=path, line=line, target=extract_target(match.group(1))))"]
     N005["return links"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -92,10 +88,7 @@ flowchart TD
     N001["slugify_heading(...)"]
     N002["text = lower(...)"]
     N003["chars = []"]
-    N004["for char in unicodedata.normalize('<str>', text):
-    category = unicodedata.category(char)
-    if category[0] in {'<str>', '<str>'} or char in {'<str>', '<str>'}:
-        chars.append(char)"]
+    N004["for char in unicodedata.normalize('<str>', text):     category = unicodedata.category(char)     if category[0] in {'<str>', '<str>'} or char in {'<str>', '<str>'}:         chars.append(char)"]
     N005["slug = strip(...)"]
     N006["slug = sub(...)"]
     N007["return slug"]
@@ -114,16 +107,7 @@ flowchart TD
     N001["collect_anchors(...)"]
     N002["anchors = set(...)"]
     N003["counts = {}"]
-    N004["for line in path.read_text(encoding='<str>').splitlines():
-    match = HEADING_RE.match(line)
-    if not match:
-        continue
-    base = slugify_heading(match.group(2))
-    if not base:
-        continue
-    seen = counts.get(base, 0)
-    counts[base] = seen + 1
-    anchors.add(base if seen == 0 else f'{base}<str>{seen}')"]
+    N004["for line in path.read_text(encoding='<str>').splitlines():     match = HEADING_RE.match(line)     if not match:         continue     base = slugify_heading(match.group(2))     if not base:         continue     seen = counts.get(base, 0)     counts[base] = seen + 1     anchors.add(base if seen == 0 else f'{base}<str>{seen}')"]
     N005["return anchors"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -219,11 +203,7 @@ flowchart TD
 flowchart TD
     N001["verify(...)"]
     N002["errors = []"]
-    N003["for path in iter_markdown_files(root):
-    for link in iter_links(path):
-        error = verify_link(link, root)
-        if error is not None:
-            errors.append(error)"]
+    N003["for path in iter_markdown_files(root):     for link in iter_links(path):         error = verify_link(link, root)         if error is not None:             errors.append(error)"]
     N004["return errors"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -237,8 +217,7 @@ flowchart TD
     N001["cmd_verify(...)"]
     N002["root = resolve(...)"]
     N003["errors = verify(...)"]
-    N004["for error in errors:
-    print(f'<str>{error}', file=sys.stderr)"]
+    N004["for error in errors:     print(f'<str>{error}', file=sys.stderr)"]
     N005["if errors"]
     N006["return 1"]
     N007["print(...)"]

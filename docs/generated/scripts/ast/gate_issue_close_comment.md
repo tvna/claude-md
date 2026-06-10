@@ -140,8 +140,7 @@ flowchart TD
     N005["tool_input = event.get('<str>') or {}"]
     N006["if not isinstance(tool_input, dict)"]
     N007["return 0"]
-    N008["with contextlib.suppress(OSError):
-    record(tool_input)"]
+    N008["with contextlib.suppress(OSError):     record(tool_input)"]
     N009["return 0"]
     N001 -->|"start"| N002
     N002 --> N003

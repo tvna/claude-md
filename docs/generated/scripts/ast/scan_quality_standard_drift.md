@@ -61,34 +61,9 @@ flowchart TD
     N001["find_drift(...)"]
     N002["defects = []"]
     N003["registry_keys = set(...)"]
-    N004["for missing in sorted(must_haves - registry_keys):
-    defects.append(f'{missing}<str>')"]
-    N005["for orphan in sorted(registry_keys - must_haves):
-    defects.append(f'{orphan}<str>')"]
-    N006["for key in sorted(must_haves & registry_keys):
-    entry = registry[key]
-    if not isinstance(entry, dict):
-        defects.append(f'{key}<str>')
-        continue
-    status = entry.get('<str>')
-    backing = entry.get('<str>')
-    if status not in _VALID_STATUS:
-        defects.append(f'{key}<str>{status!r}<str>{sorted(_VALID_STATUS)}<str>')
-        continue
-    if not isinstance(backing, list) or not all((isinstance(item, str) for item in backing)):
-        defects.append(f'{key}<str>')
-        continue
-    if status == '<str>':
-        if backing:
-            defects.append(f'{key}<str>{backing}<str>')
-        continue
-    if not backing:
-        defects.append(f'{key}<str>{status}<str>')
-        continue
-    for ref in backing:
-        problem = resolve_backing(ref, repo_root, pyproject_text)
-        if problem is not None:
-            defects.append(f'{key}<str>{problem}')"]
+    N004["for missing in sorted(must_haves - registry_keys):     defects.append(f'{missing}<str>')"]
+    N005["for orphan in sorted(registry_keys - must_haves):     defects.append(f'{orphan}<str>')"]
+    N006["for key in sorted(must_haves & registry_keys):     entry = registry[key]     if not isinstance(entry, dict):         defects.append(f'{key}<str>')         continue     status = entry.get('<str>')     backing = entry.get('<str>')     if status not in _VALID_STATUS:         defects.append(f'{key}<str>{status!r}<str>{sorted(_VALID_STATUS)}<str>')         continue     if not isinstance(backing, list) or not all((isinstance(item, str) for item in backing)):         defects.append(f'{key}<str>')         continue     if status == '<str>':         if backing:             defects.append(f'{key}<str>{backing}<str>')         continue     if not backing:         defects.append(f'{key}<str>{status}<str>')         continue     for ref in backing:         problem = resolve_backing(ref, repo_root, pyproject_text)         if problem is not None:             defects.append(f'{key}<str>{problem}')"]
     N007["return defects"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -108,11 +83,9 @@ flowchart TD
     N004["repo_root = Path(...)"]
     N005["pyproject_text = read_text(...)"]
     N006["must_haves = parse_must_haves(...)"]
-    N007["with registry_path.open('<str>') as handle:
-    registry = tomllib.load(handle)"]
+    N007["with registry_path.open('<str>') as handle:     registry = tomllib.load(handle)"]
     N008["defects = find_drift(...)"]
-    N009["for defect in defects:
-    print(f'<str>{defect}<str>', file=sys.stderr)"]
+    N009["for defect in defects:     print(f'<str>{defect}<str>', file=sys.stderr)"]
     N010["if defects"]
     N011["return 1"]
     N012["return 0"]

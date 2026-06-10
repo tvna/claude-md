@@ -62,10 +62,7 @@ flowchart TD
     N008["return None"]
     N009["row = None"]
     N010["if session_id"]
-    N011["for candidate in rows:
-    if isinstance(candidate, dict) and candidate.get('<str>') == session_id:
-        row = candidate
-        break"]
+    N011["for candidate in rows:     if isinstance(candidate, dict) and candidate.get('<str>') == session_id:         row = candidate         break"]
     N012["if row is None"]
     N013["if len(rows) == 1 and isinstance(rows[0], dict)"]
     N014["row = rows[0]"]
@@ -162,9 +159,7 @@ flowchart TD
 flowchart TD
     N001["redact_model(...)"]
     N002["lowered = lower(...)"]
-    N003["for tier in _MODEL_TIERS:
-    if tier in lowered:
-        return f'{tier.capitalize()}<str>'"]
+    N003["for tier in _MODEL_TIERS:     if tier in lowered:         return f'{tier.capitalize()}<str>'"]
     N004["return _UNKNOWN_MODEL_TIER"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -177,8 +172,7 @@ flowchart TD
 flowchart TD
     N001["redact_models(...)"]
     N002["seen = {}"]
-    N003["for model in models:
-    seen.setdefault(redact_model(model), None)"]
+    N003["for model in models:     seen.setdefault(redact_model(model), None)"]
     N004["return list(seen)"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -192,8 +186,8 @@ flowchart TD
     N001["render_section(...)"]
     N002["elapsed_txt = elapsed if elapsed else _UNAVAILABLE"]
     N003["if usage is not None"]
-    N004["total = f\"{usage['<str>']:<str>}<str>{usage['<str>']:<str>}<str>{usage['<str>']:<str>}<str>{usage['<str>']:<str>}<str>{usage['<str>']:<str>}<str>\""]
-    N005["cost = f\"<str>{usage['<str>']:<str>}\""]
+    N004["total = f'{usage['<str>']:<str>}<str>{usage['<str>']:<str>}<str>{usage['<str>']:<str>}<str>{usage['<str>']:<str>}<str>{usage['<str>']:<str>}<str>'"]
+    N005["cost = f'<str>{usage['<str>']:<str>}'"]
     N006["tiers = redact_models(...)"]
     N007["models = '<str>'.join(tiers) if tiers else _UNAVAILABLE"]
     N008["total, cost, models = _UNAVAILABLE"]

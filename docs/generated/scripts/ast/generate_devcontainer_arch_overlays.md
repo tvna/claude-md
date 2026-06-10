@@ -91,17 +91,7 @@ flowchart TD
 flowchart TD
     N001["generate(...)"]
     N002["changed = []"]
-    N003["for agent in AGENTS:
-    base = _load_base(repo_root, agent)
-    for arch in ARCHES:
-        path = overlay_path(repo_root, agent, arch)
-        expected = render_overlay_text(base, agent, arch)
-        current = path.read_text(encoding='<str>') if path.is_file() else None
-        if current == expected:
-            continue
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(expected, encoding='<str>')
-        changed.append(str(path.relative_to(repo_root)))"]
+    N003["for agent in AGENTS:     base = _load_base(repo_root, agent)     for arch in ARCHES:         path = overlay_path(repo_root, agent, arch)         expected = render_overlay_text(base, agent, arch)         current = path.read_text(encoding='<str>') if path.is_file() else None         if current == expected:             continue         path.parent.mkdir(parents=True, exist_ok=True)         path.write_text(expected, encoding='<str>')         changed.append(str(path.relative_to(repo_root)))"]
     N004["return changed"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -114,20 +104,7 @@ flowchart TD
 flowchart TD
     N001["verify(...)"]
     N002["errors = []"]
-    N003["for agent in AGENTS:
-    base_file = base_path(repo_root, agent)
-    if not base_file.is_file():
-        errors.append(f'<str>{base_file}<str>{agent}<str>')
-        continue
-    base = json.loads(base_file.read_text(encoding='<str>'))
-    for arch in ARCHES:
-        path = overlay_path(repo_root, agent, arch)
-        expected = render_overlay_text(base, agent, arch)
-        if not path.is_file():
-            errors.append(f'<str>{path}<str>')
-            continue
-        if path.read_text(encoding='<str>') != expected:
-            errors.append(f'<str>{path}<str>{base_file}<str>')"]
+    N003["for agent in AGENTS:     base_file = base_path(repo_root, agent)     if not base_file.is_file():         errors.append(f'<str>{base_file}<str>{agent}<str>')         continue     base = json.loads(base_file.read_text(encoding='<str>'))     for arch in ARCHES:         path = overlay_path(repo_root, agent, arch)         expected = render_overlay_text(base, agent, arch)         if not path.is_file():             errors.append(f'<str>{path}<str>')             continue         if path.read_text(encoding='<str>') != expected:             errors.append(f'<str>{path}<str>{base_file}<str>')"]
     N004["return errors"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -142,8 +119,7 @@ flowchart TD
     N002["repo_root = resolve(...)"]
     N003["changed = generate(...)"]
     N004["if changed"]
-    N005["for path in changed:
-    print(f'<str>{path}')"]
+    N005["for path in changed:     print(f'<str>{path}')"]
     N006["print(...)"]
     N007["return 0"]
     N001 -->|"start"| N002
@@ -162,8 +138,7 @@ flowchart TD
     N001["_cmd_verify(...)"]
     N002["repo_root = resolve(...)"]
     N003["errors = verify(...)"]
-    N004["for err in errors:
-    print(err, file=sys.stderr)"]
+    N004["for err in errors:     print(err, file=sys.stderr)"]
     N005["if errors"]
     N006["print(...)"]
     N007["return 1"]

@@ -41,8 +41,7 @@ flowchart TD
 flowchart TD
     N001["_leading_command(...)"]
     N002["index = 0"]
-    N003["while index < len(tokens) and _ASSIGN_RE.match(tokens[index]):
-    index += 1"]
+    N003["while index < len(tokens) and _ASSIGN_RE.match(tokens[index]):     index += 1"]
     N004["if index >= len(tokens)"]
     N005["return ('<str>', [])"]
     N006["name = PurePosixPath(_normalize(tokens[index])).name"]
@@ -141,10 +140,7 @@ flowchart TD
     N006["return None"]
     N007["if _ACK_MARKER in command"]
     N008["return None"]
-    N009["for segment in _segments(command):
-    label = _classify(segment)
-    if label is not None:
-        return _deny(label)"]
+    N009["for segment in _segments(command):     label = _classify(segment)     if label is not None:         return _deny(label)"]
     N010["return None"]
     N001 -->|"start"| N002
     N002 -->|"true"| N003

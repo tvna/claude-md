@@ -36,21 +36,7 @@ flowchart TD
     N009["if not files"]
     N010["return [f'<str>{ALLOWLIST_GLOB}<str>{network_dir}<str>']"]
     N011["errors = []"]
-    N012["for path in files:
-    try:
-        rel: Path | str = path.relative_to(repo_root)
-    except ValueError:
-        rel = path
-    python_hosts = resolve_hosts(path)
-    try:
-        bash_hosts = bash_resolve_hosts(path, lib)
-    except subprocess.CalledProcessError as exc:
-        errors.append(f'<str>{rel}<str>{rel}<str>{exc.stderr.strip()}')
-        continue
-    if python_hosts != bash_hosts:
-        python_only = '<str>'.join(sorted(python_hosts - bash_hosts)) or '<str>'
-        bash_only = '<str>'.join(sorted(bash_hosts - python_hosts)) or '<str>'
-        errors.append(f'<str>{rel}<str>{rel}<str>{python_only}<str>{bash_only}<str>')"]
+    N012["for path in files:     try:         rel: Path | str = path.relative_to(repo_root)     except ValueError:         rel = path     python_hosts = resolve_hosts(path)     try:         bash_hosts = bash_resolve_hosts(path, lib)     except subprocess.CalledProcessError as exc:         errors.append(f'<str>{rel}<str>{rel}<str>{exc.stderr.strip()}')         continue     if python_hosts != bash_hosts:         python_only = '<str>'.join(sorted(python_hosts - bash_hosts)) or '<str>'         bash_only = '<str>'.join(sorted(bash_hosts - python_hosts)) or '<str>'         errors.append(f'<str>{rel}<str>{rel}<str>{python_only}<str>{bash_only}<str>')"]
     N013["return errors"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -73,8 +59,7 @@ flowchart TD
     N001["_cmd_verify(...)"]
     N002["repo_root = resolve(...)"]
     N003["errors = verify(...)"]
-    N004["for err in errors:
-    print(err, file=sys.stderr)"]
+    N004["for err in errors:     print(err, file=sys.stderr)"]
     N005["if errors"]
     N006["print(...)"]
     N007["return 1"]

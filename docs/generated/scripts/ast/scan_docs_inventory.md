@@ -61,21 +61,7 @@ flowchart TD
     N004["return set()"]
     N005["text = read_text(...)"]
     N006["entries = set(...)"]
-    N007["for pattern in (INLINE_LINK_RE, REFERENCE_LINK_RE):
-    for match in pattern.finditer(text):
-        target = extract_target(match.group(1))
-        parts = urlsplit(target)
-        if parts.scheme in IGNORED_SCHEMES or target.startswith('<str>'):
-            continue
-        raw_path = unquote(parts.path)
-        if not raw_path or raw_path == '<str>':
-            continue
-        if Path(raw_path).is_absolute():
-            resolved = root / raw_path.lstrip('<str>')
-        else:
-            resolved = index.parent / raw_path
-        if resolved.suffix.lower() == '<str>':
-            entries.add(rel(resolved.resolve(), root.resolve()))"]
+    N007["for pattern in (INLINE_LINK_RE, REFERENCE_LINK_RE):     for match in pattern.finditer(text):         target = extract_target(match.group(1))         parts = urlsplit(target)         if parts.scheme in IGNORED_SCHEMES or target.startswith('<str>'):             continue         raw_path = unquote(parts.path)         if not raw_path or raw_path == '<str>':             continue         if Path(raw_path).is_absolute():             resolved = root / raw_path.lstrip('<str>')         else:             resolved = index.parent / raw_path         if resolved.suffix.lower() == '<str>':             entries.add(rel(resolved.resolve(), root.resolve()))"]
     N008["return entries"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -94,16 +80,7 @@ flowchart TD
     N002["root = resolve(...)"]
     N003["errors = []"]
     N004["index_entries = collect_index_entries(...)"]
-    N005["for path in iter_docs_markdown(root):
-    relative = rel(path, root)
-    if any((relative.startswith(prefix) for prefix in EXEMPT_INVENTORY_PREFIXES)):
-        continue
-    if path.parent == root / '<str>' and relative not in ALLOWED_TOP_LEVEL_DOCS:
-        errors.append(f'<str>{relative}<str>')
-    if relative == INDEX_PATH.as_posix():
-        continue
-    if relative not in index_entries:
-        errors.append(f'<str>{INDEX_PATH.as_posix()}<str>{relative}')"]
+    N005["for path in iter_docs_markdown(root):     relative = rel(path, root)     if any((relative.startswith(prefix) for prefix in EXEMPT_INVENTORY_PREFIXES)):         continue     if path.parent == root / '<str>' and relative not in ALLOWED_TOP_LEVEL_DOCS:         errors.append(f'<str>{relative}<str>')     if relative == INDEX_PATH.as_posix():         continue     if relative not in index_entries:         errors.append(f'<str>{INDEX_PATH.as_posix()}<str>{relative}')"]
     N006["return errors"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -123,8 +100,7 @@ flowchart TD
     N005["args = parse_args(...)"]
     N006["if args.command == 'verify'"]
     N007["errors = verify(...)"]
-    N008["for error in errors:
-    print(error, file=sys.stderr)"]
+    N008["for error in errors:     print(error, file=sys.stderr)"]
     N009["return 1 if errors else 0"]
     N010["error(...)"]
     N011["return 2"]

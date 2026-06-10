@@ -46,11 +46,7 @@ flowchart TD
     N004["except (OSError, SyntaxError)"]
     N005["return set()"]
     N006["names = set(...)"]
-    N007["for node in ast.walk(tree):
-    if isinstance(node, ast.Import):
-        names.update((alias.name.split('<str>')[0] for alias in node.names))
-    elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
-        names.add(node.module.split('<str>')[0])"]
+    N007["for node in ast.walk(tree):     if isinstance(node, ast.Import):         names.update((alias.name.split('<str>')[0] for alias in node.names))     elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:         names.add(node.module.split('<str>')[0])"]
     N008["return names"]
     N001 -->|"start"| N002
     N002 -->|"try"| N003
@@ -67,11 +63,7 @@ flowchart TD
 flowchart TD
     N001["detect_github_api_scripts(...)"]
     N002["detected = set(...)"]
-    N003["for path in sorted(scripts_dir.glob('<str>')):
-    if path.name.startswith('<str>'):
-        continue
-    if module_imports(path) & _GITHUB_API_BOUNDARY:
-        detected.add(path.stem)"]
+    N003["for path in sorted(scripts_dir.glob('<str>')):     if path.name.startswith('<str>'):         continue     if module_imports(path) & _GITHUB_API_BOUNDARY:         detected.add(path.stem)"]
     N004["return detected"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -88,24 +80,7 @@ flowchart TD
     N004["except (OSError, SyntaxError)"]
     N005["return set()"]
     N006["stems = set(...)"]
-    N007["for node in ast.walk(tree):
-    if isinstance(node, ast.AnnAssign):
-        targets: list[ast.expr] = [node.target]
-        value = node.value
-    elif isinstance(node, ast.Assign):
-        targets = list(node.targets)
-        value = node.value
-    else:
-        continue
-    if not any((isinstance(t, ast.Name) and t.id == '<str>' for t in targets)):
-        continue
-    if not isinstance(value, ast.Dict):
-        continue
-    for key in value.keys:
-        if isinstance(key, ast.Tuple) and key.elts:
-            first = key.elts[0]
-            if isinstance(first, ast.Constant) and isinstance(first.value, str):
-                stems.add(first.value.removesuffix('<str>'))"]
+    N007["for node in ast.walk(tree):     if isinstance(node, ast.AnnAssign):         targets: list[ast.expr] = [node.target]         value = node.value     elif isinstance(node, ast.Assign):         targets = list(node.targets)         value = node.value     else:         continue     if not any((isinstance(t, ast.Name) and t.id == '<str>' for t in targets)):         continue     if not isinstance(value, ast.Dict):         continue     for key in value.keys:         if isinstance(key, ast.Tuple) and key.elts:             first = key.elts[0]             if isinstance(first, ast.Constant) and isinstance(first.value, str):                 stems.add(first.value.removesuffix('<str>'))"]
     N008["return stems"]
     N001 -->|"start"| N002
     N002 -->|"try"| N003
@@ -124,9 +99,7 @@ flowchart TD
     N002["script_set = set(...)"]
     N003["missing = [stem for stem in scripts if stem not in allowlist and (not has_test_module(stem, tests_dir))]"]
     N004["stale = []"]
-    N005["for stem in sorted(allowlist):
-    if stem not in script_set or has_test_module(stem, tests_dir):
-        stale.append(stem)"]
+    N005["for stem in sorted(allowlist):     if stem not in script_set or has_test_module(stem, tests_dir):         stale.append(stem)"]
     N006["return (missing, stale)"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -164,8 +137,7 @@ flowchart TD
     N001["collect_workflow_scripts(...)"]
     N002["existing = {path.stem for path in scripts_dir.glob('<str>') if not path.name.startswith('<str>')}"]
     N003["referenced = set(...)"]
-    N004["for path in sorted(workflows_dir.glob('<str>')):
-    referenced |= set(_SCRIPT_INVOCATION.findall(path.read_text(encoding='<str>')))"]
+    N004["for path in sorted(workflows_dir.glob('<str>')):     referenced |= set(_SCRIPT_INVOCATION.findall(path.read_text(encoding='<str>')))"]
     N005["return referenced & existing"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -188,16 +160,11 @@ flowchart TD
     N009["workflow_scripts = collect_workflow_scripts(...)"]
     N010["registry_scripts = parse_contract_registry_scripts(...)"]
     N011["missing_contract = find_missing_cli_contracts(...)"]
-    N012["for stem in missing:
-    print(f\"<str>{stem}<str>{stem}<str>{stem.lstrip('<str>')}<str>\", file=sys.stderr)"]
-    N013["for stem in stale:
-    print(f'<str>{stem}<str>', file=sys.stderr)"]
-    N014["for stem in undeclared_api:
-    print(f'<str>{stem}<str>{stem}<str>{stem}<str>', file=sys.stderr)"]
-    N015["for stem in stale_api:
-    print(f'<str>{stem}<str>', file=sys.stderr)"]
-    N016["for stem in missing_contract:
-    print(f'<str>{stem}<str>{stem}<str>{CONTRACT_TEST_MODULE}<str>', file=sys.stderr)"]
+    N012["for stem in missing:     print(f'<str>{stem}<str>{stem}<str>{stem.lstrip('<str>')}<str>', file=sys.stderr)"]
+    N013["for stem in stale:     print(f'<str>{stem}<str>', file=sys.stderr)"]
+    N014["for stem in undeclared_api:     print(f'<str>{stem}<str>{stem}<str>{stem}<str>', file=sys.stderr)"]
+    N015["for stem in stale_api:     print(f'<str>{stem}<str>', file=sys.stderr)"]
+    N016["for stem in missing_contract:     print(f'<str>{stem}<str>{stem}<str>{CONTRACT_TEST_MODULE}<str>', file=sys.stderr)"]
     N017["if missing or stale or undeclared_api or stale_api or missing_contract"]
     N018["return 1"]
     N019["return 0"]

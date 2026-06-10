@@ -100,15 +100,12 @@ flowchart TD
     N004["return f'<str>{issue_ref}<str>'"]
     N005["if len(prs) == 1"]
     N006["pr = prs[0]"]
-    N007["url = pr.get('<str>') or f\"{owner}<str>{repo}<str>{pr.get('<str>')}\""]
+    N007["url = pr.get('<str>') or f'{owner}<str>{repo}<str>{pr.get('<str>')}'"]
     N008["title = pr.get('<str>') or '<str>'"]
     N009["closed_at = pr.get('<str>') or '<str>'"]
     N010["return f'<str>{issue_ref}<str>{title}<str>{url}<str>{closed_at}<str>'"]
     N011["lines = [f'<str>{len(prs)}<str>{issue_ref}<str>']"]
-    N012["for pr in prs:
-    url = pr.get('<str>') or f\"<str>{pr.get('<str>')}\"
-    title = pr.get('<str>') or '<str>'
-    lines.append(f'<str>{url}<str>{title}')"]
+    N012["for pr in prs:     url = pr.get('<str>') or f'<str>{pr.get('<str>')}'     title = pr.get('<str>') or '<str>'     lines.append(f'<str>{url}<str>{title}')"]
     N013["append(...)"]
     N014["return '<str>'.join(lines)"]
     N001 -->|"start"| N002

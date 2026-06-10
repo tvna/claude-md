@@ -84,18 +84,7 @@ flowchart TD
     N004["if header_idx is None"]
     N005["raise InputError(f'{where}<str>')"]
     N006["count = 0"]
-    N007["for line in lines[header_idx + 1:]:
-    stripped = line.strip()
-    if not stripped.startswith('<str>'):
-        break
-    first = _first_table_cell(stripped)
-    if first is None:
-        break
-    if not first.isdigit() or int(first) <= 0:
-        continue
-    if _POLICY_ARTIFACT_MARKER in line and _ITERATION_COMMIT_REPAIR not in line:
-        continue
-    count += 1"]
+    N007["for line in lines[header_idx + 1:]:     stripped = line.strip()     if not stripped.startswith('<str>'):         break     first = _first_table_cell(stripped)     if first is None:         break     if not first.isdigit() or int(first) <= 0:         continue     if _POLICY_ARTIFACT_MARKER in line and _ITERATION_COMMIT_REPAIR not in line:         continue     count += 1"]
     N008["return count"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -155,25 +144,7 @@ flowchart TD
     N005["if not isinstance(regimes, list) or not regimes"]
     N006["raise InputError('<str>')"]
     N007["summaries = []"]
-    N008["for idx, regime in enumerate(regimes):
-    if not isinstance(regime, dict):
-        raise InputError(f'<str>{idx}<str>')
-    name = regime.get('<str>')
-    if not isinstance(name, str) or not name:
-        raise InputError(f'<str>{idx}<str>')
-    prs = regime.get('<str>')
-    if not isinstance(prs, list) or not prs:
-        raise InputError(f'<str>{name!r}<str>')
-    total_cost = 0.0
-    total_repairs = 0.0
-    for j, pr in enumerate(prs):
-        if not isinstance(pr, dict):
-            raise InputError(f'<str>{name!r}<str>{j}<str>')
-        where = f'<str>{name!r}<str>{j}<str>'
-        total_cost += _resolve_cost(pr, where)
-        total_repairs += _resolve_repairs(pr, where)
-    n = len(prs)
-    summaries.append(RegimeSummary(name=name, n=n, cost_per_pr=total_cost / n, repairs_per_pr=total_repairs / n))"]
+    N008["for idx, regime in enumerate(regimes):     if not isinstance(regime, dict):         raise InputError(f'<str>{idx}<str>')     name = regime.get('<str>')     if not isinstance(name, str) or not name:         raise InputError(f'<str>{idx}<str>')     prs = regime.get('<str>')     if not isinstance(prs, list) or not prs:         raise InputError(f'<str>{name!r}<str>')     total_cost = 0.0     total_repairs = 0.0     for j, pr in enumerate(prs):         if not isinstance(pr, dict):             raise InputError(f'<str>{name!r}<str>{j}<str>')         where = f'<str>{name!r}<str>{j}<str>'         total_cost += _resolve_cost(pr, where)         total_repairs += _resolve_repairs(pr, where)     n = len(prs)     summaries.append(RegimeSummary(name=name, n=n, cost_per_pr=total_cost / n, repairs_per_pr=total_repairs / n))"]
     N009["return summaries"]
     N001 -->|"start"| N002
     N002 -->|"true"| N003
@@ -202,14 +173,8 @@ flowchart TD
 flowchart TD
     N001["render_comparison(...)"]
     N002["baseline = summaries[0]"]
-    N003["lines = ['<str>', '<str>', f\"<str>{'<str>':<str>}<str>{'<str>':<str>}<str>{'<str>':<str>}<str>{'<str>':<str>}<str>{'<str>':<str>}<str>{'<str>':<str>}\"]"]
-    N004["for s in summaries:
-    if s is baseline:
-        d_cost = d_rep = '<str>'
-    else:
-        d_cost = _delta(s.cost_per_pr, baseline.cost_per_pr)
-        d_rep = _delta(s.repairs_per_pr, baseline.repairs_per_pr)
-    lines.append(f'<str>{s.name:<str>}<str>{s.n:<str>}<str>{s.cost_per_pr:<str>}<str>{d_cost:<str>}<str>{s.repairs_per_pr:<str>}<str>{d_rep:<str>}')"]
+    N003["lines = ['<str>', '<str>', f'<str>{'<str>':<str>}<str>{'<str>':<str>}<str>{'<str>':<str>}<str>{'<str>':<str>}<str>{'<str>':<str>}<str>{'<str>':<str>}']"]
+    N004["for s in summaries:     if s is baseline:         d_cost = d_rep = '<str>'     else:         d_cost = _delta(s.cost_per_pr, baseline.cost_per_pr)         d_rep = _delta(s.repairs_per_pr, baseline.repairs_per_pr)     lines.append(f'<str>{s.name:<str>}<str>{s.n:<str>}<str>{s.cost_per_pr:<str>}<str>{d_cost:<str>}<str>{s.repairs_per_pr:<str>}<str>{d_rep:<str>}')"]
     N005["return '<str>'.join(lines) + '<str>'"]
     N001 -->|"start"| N002
     N002 --> N003

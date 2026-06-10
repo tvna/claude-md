@@ -24,13 +24,7 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["_iter_files(...)"]
-    N002["for subdir in SCANNED_SUBDIRS:
-    base = repo_root / subdir
-    if not base.is_dir():
-        continue
-    for path in sorted(base.rglob('<str>')):
-        if path.is_file():
-            yield path"]
+    N002["for subdir in SCANNED_SUBDIRS:     base = repo_root / subdir     if not base.is_dir():         continue     for path in sorted(base.rglob('<str>')):         if path.is_file():             yield path"]
     N003["end"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -42,14 +36,7 @@ flowchart TD
 flowchart TD
     N001["find_hits(...)"]
     N002["hits = []"]
-    N003["for path in _iter_files(repo_root):
-    try:
-        text = path.read_text(encoding='<str>')
-    except (OSError, UnicodeDecodeError):
-        continue
-    for lineno, line in enumerate(text.splitlines(), start=1):
-        if scan_line(line):
-            hits.append(f'{path.relative_to(repo_root)}<str>{lineno}')"]
+    N003["for path in _iter_files(repo_root):     try:         text = path.read_text(encoding='<str>')     except (OSError, UnicodeDecodeError):         continue     for lineno, line in enumerate(text.splitlines(), start=1):         if scan_line(line):             hits.append(f'{path.relative_to(repo_root)}<str>{lineno}')"]
     N004["return hits"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -63,9 +50,7 @@ flowchart TD
     N001["_cmd_verify(...)"]
     N002["hits = find_hits(...)"]
     N003["if hits"]
-    N004["for hit in hits:
-    path, lineno = hit.rsplit('<str>', 1)
-    print(f'<str>{path}<str>{lineno}<str>{ACK_MARKER}<str>', file=sys.stderr)"]
+    N004["for hit in hits:     path, lineno = hit.rsplit('<str>', 1)     print(f'<str>{path}<str>{lineno}<str>{ACK_MARKER}<str>', file=sys.stderr)"]
     N005["print(...)"]
     N006["return 1"]
     N007["print(...)"]
@@ -84,8 +69,7 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["_cmd_list(...)"]
-    N002["for hit in find_hits(REPO_ROOT):
-    print(hit)"]
+    N002["for hit in find_hits(REPO_ROOT):     print(hit)"]
     N003["return 0"]
     N001 -->|"start"| N002
     N002 --> N003

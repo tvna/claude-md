@@ -269,8 +269,7 @@ flowchart TD
     N002["path = get(...)"]
     N003["if not path"]
     N004["return"]
-    N005["with Path(path).open('<str>', encoding='<str>') as fp:
-    fp.write(text)"]
+    N005["with Path(path).open('<str>', encoding='<str>') as fp:     fp.write(text)"]
     N006["end"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -316,10 +315,7 @@ flowchart TD
     N001["_retro_existing_labels(...)"]
     N002["labels = retro.get('<str>') or []"]
     N003["out = []"]
-    N004["for entry in labels:
-    name = entry.get('<str>') if isinstance(entry, dict) else None
-    if isinstance(name, str) and name:
-        out.append(name)"]
+    N004["for entry in labels:     name = entry.get('<str>') if isinstance(entry, dict) else None     if isinstance(name, str) and name:         out.append(name)"]
     N005["return out"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -336,31 +332,7 @@ flowchart TD
     N003["retros = search_retro_issues(...)"]
     N004["labels_applied = {RETRO_FP_CANDIDATE: 0, RETRO_FP: 0}"]
     N005["errors = 0"]
-    N006["for retro in retros:
-    retro_number = retro.get('<str>')
-    if not isinstance(retro_number, int):
-        continue
-    existing = _retro_existing_labels(retro)
-    if RETRO_TP in existing or RETRO_FP in existing:
-        continue
-    body = str(retro.get('<str>') or '<str>')
-    refs = parse_followup_refs(body)
-    if not refs:
-        continue
-    per_followup: list[str] = []
-    for n in refs:
-        try:
-            per_followup.append(_resolve_one_followup(repo, n, today_iso, stale_days))
-        except subprocess.CalledProcessError as exc:
-            errors += 1
-            print(f'<str>{n}<str>{retro_number}<str>{exc.returncode}<str>', file=sys.stderr)
-    aggregate = aggregate_drift(per_followup)
-    target = decide_target_label(aggregate, existing)
-    if target is None:
-        continue
-    apply_label(repo, retro_number, target)
-    labels_applied[target] = labels_applied.get(target, 0) + 1
-    print(f'<str>{target!r}<str>{retro_number}<str>{aggregate}<str>')"]
+    N006["for retro in retros:     retro_number = retro.get('<str>')     if not isinstance(retro_number, int):         continue     existing = _retro_existing_labels(retro)     if RETRO_TP in existing or RETRO_FP in existing:         continue     body = str(retro.get('<str>') or '<str>')     refs = parse_followup_refs(body)     if not refs:         continue     per_followup: list[str] = []     for n in refs:         try:             per_followup.append(_resolve_one_followup(repo, n, today_iso, stale_days))         except subprocess.CalledProcessError as exc:             errors += 1             print(f'<str>{n}<str>{retro_number}<str>{exc.returncode}<str>', file=sys.stderr)     aggregate = aggregate_drift(per_followup)     target = decide_target_label(aggregate, existing)     if target is None:         continue     apply_label(repo, retro_number, target)     labels_applied[target] = labels_applied.get(target, 0) + 1     print(f'<str>{target!r}<str>{retro_number}<str>{aggregate}<str>')"]
     N007["_append_summary(...)"]
     N008["return 0"]
     N001 -->|"start"| N002

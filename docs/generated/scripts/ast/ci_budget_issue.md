@@ -35,9 +35,7 @@ flowchart TD
     N008["breaches = get(...)"]
     N009["if not isinstance(breaches, list)"]
     N010["raise ValueError(f'<str>{path}<str>')"]
-    N011["for entry in breaches:
-    if not isinstance(entry, dict) or '<str>' not in entry or '<str>' not in entry:
-        raise ValueError(f'<str>{path}<str>{entry!r}')"]
+    N011["for entry in breaches:     if not isinstance(entry, dict) or '<str>' not in entry or '<str>' not in entry:         raise ValueError(f'<str>{path}<str>{entry!r}')"]
     N012["return (float(budget), breaches)"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -58,8 +56,7 @@ flowchart TD
 flowchart TD
     N001["render_breach_table(...)"]
     N002["rows = ['<str>', '<str>']"]
-    N003["for entry in breaches:
-    rows.append(f\"<str>{entry['<str>']}<str>{float(entry['<str>']):<str>}<str>\")"]
+    N003["for entry in breaches:     rows.append(f'<str>{entry['<str>']}<str>{float(entry['<str>']):<str>}<str>')"]
     N004["return '<str>'.join(rows)"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -95,11 +92,7 @@ flowchart TD
     N005["if not 200 <= code < 300"]
     N006["raise RuntimeError(f'<str>{code}<str>{body[:200]}')"]
     N007["items = json.loads(body).get('<str>') or []"]
-    N008["for item in items:
-    if not isinstance(item, dict):
-        continue
-    if ISSUE_MARKER in (item.get('<str>') or '<str>') and isinstance(item.get('<str>'), int):
-        return item['<str>']"]
+    N008["for item in items:     if not isinstance(item, dict):         continue     if ISSUE_MARKER in (item.get('<str>') or '<str>') and isinstance(item.get('<str>'), int):         return item['<str>']"]
     N009["return None"]
     N001 -->|"start"| N002
     N002 --> N003

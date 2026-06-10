@@ -40,14 +40,7 @@ flowchart TD
 flowchart TD
     N001["parse_detect_output(...)"]
     N002["result = {}"]
-    N003["for line in text.splitlines():
-    line = line.strip()
-    if not line or '<str>' not in line:
-        continue
-    key, _, value = line.partition('<str>')
-    key = key.strip()
-    if key in ('<str>', '<str>', '<str>'):
-        result[key] = value.strip()"]
+    N003["for line in text.splitlines():     line = line.strip()     if not line or '<str>' not in line:         continue     key, _, value = line.partition('<str>')     key = key.strip()     if key in ('<str>', '<str>', '<str>'):         result[key] = value.strip()"]
     N004["return result"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -90,7 +83,7 @@ flowchart TD
     N012["append(...)"]
     N013["if unknown_count > 0"]
     N014["append(...)"]
-    N015["return FamilyRow(family='<str>', detector='<str>', status=STATUS_DRIFT, evidence=evidence, action=f\"{'<str>'.join(parts)}<str>\")"]
+    N015["return FamilyRow(family='<str>', detector='<str>', status=STATUS_DRIFT, evidence=evidence, action=f'{'<str>'.join(parts)}<str>')"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 -->|"true"| N004
@@ -284,7 +277,7 @@ flowchart TD
 flowchart TD
     N001["render_family_issue_title(...)"]
     N002["spec = FAMILY_ISSUE_SPEC[family]"]
-    N003["return f\"<str>{spec['<str>']}<str>{run_date}<str>\""]
+    N003["return f'<str>{spec['<str>']}<str>{run_date}<str>'"]
     N001 -->|"start"| N002
     N002 --> N003
 ```
@@ -295,7 +288,7 @@ flowchart TD
 flowchart TD
     N001["render_family_issue_body(...)"]
     N002["spec = FAMILY_ISSUE_SPEC[family]"]
-    N003["return f\"<str>{DEFAULT_TRACKING_ISSUE}<str>{family}<str>{run_url}<str>{run_date}<str>{spec['<str>']}<str>{spec['<str>']}<str>{spec['<str>']}<str>{DEFAULT_TRACKING_ISSUE}<str>\""]
+    N003["return f'<str>{DEFAULT_TRACKING_ISSUE}<str>{family}<str>{run_url}<str>{run_date}<str>{spec['<str>']}<str>{spec['<str>']}<str>{spec['<str>']}<str>{DEFAULT_TRACKING_ISSUE}<str>'"]
     N001 -->|"start"| N002
     N002 --> N003
 ```
@@ -305,12 +298,7 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["find_existing_comment(...)"]
-    N002["for entry in comments_json:
-    body = entry.get('<str>')
-    if isinstance(body, str) and marker in body:
-        comment_id = entry.get('<str>')
-        if isinstance(comment_id, int):
-            return comment_id"]
+    N002["for entry in comments_json:     body = entry.get('<str>')     if isinstance(body, str) and marker in body:         comment_id = entry.get('<str>')         if isinstance(comment_id, int):             return comment_id"]
     N003["return None"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -359,8 +347,7 @@ flowchart TD
 flowchart TD
     N001["_append_text(...)"]
     N002["mkdir(...)"]
-    N003["with path.open('<str>', encoding='<str>') as handle:
-    handle.write(content)"]
+    N003["with path.open('<str>', encoding='<str>') as handle:     handle.write(content)"]
     N004["end"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -420,21 +407,14 @@ flowchart TD
     N009["print(...)"]
     N010["return 0"]
     N011["if dry_run"]
-    N012["for family in families:
-    print(f'<str>{family!r}<str>{render_family_issue_title(family, run_date)!r}')"]
+    N012["for family in families:     print(f'<str>{family!r}<str>{render_family_issue_title(family, run_date)!r}')"]
     N013["return 0"]
     N014["token = get(...)"]
     N015["if not token"]
     N016["print(...)"]
     N017["return 1"]
     N018["apply = args.apply_call"]
-    N019["for family in families:
-    payload = {'<str>': render_family_issue_title(family, run_date), '<str>': render_family_issue_body(family, run_url=args.run_url, run_date=run_date), '<str>': list(ISSUE_LABELS)}
-    code, response = apply(method='<str>', url=f'{API_ROOT}<str>{args.repo}<str>', payload=payload, token=token)
-    if not 200 <= code < 300:
-        print(f'<str>{family}<str>{code}<str>{response[:200]}', file=sys.stderr)
-        return 1
-    print(f'<str>{family}<str>{args.repo}<str>')"]
+    N019["for family in families:     payload = {'<str>': render_family_issue_title(family, run_date), '<str>': render_family_issue_body(family, run_url=args.run_url, run_date=run_date), '<str>': list(ISSUE_LABELS)}     code, response = apply(method='<str>', url=f'{API_ROOT}<str>{args.repo}<str>', payload=payload, token=token)     if not 200 <= code < 300:         print(f'<str>{family}<str>{code}<str>{response[:200]}', file=sys.stderr)         return 1     print(f'<str>{family}<str>{args.repo}<str>')"]
     N020["return 0"]
     N001 -->|"start"| N002
     N002 --> N003

@@ -12,17 +12,7 @@ flowchart TD
     N004["except ValueError"]
     N005["rel = path"]
     N006["errors = []"]
-    N007["for lineno, raw in enumerate(path.read_text(encoding='<str>').splitlines(), start=1):
-    stripped = raw.strip()
-    if not stripped or stripped.startswith('<str>'):
-        continue
-    content, rationale = split_inline_comment(raw)
-    if content.startswith('<str>'):
-        continue
-    if not content:
-        continue
-    if not rationale:
-        errors.append(f'<str>{rel}<str>{lineno}<str>{content}<str>{rel}<str>{content}<str>')"]
+    N007["for lineno, raw in enumerate(path.read_text(encoding='<str>').splitlines(), start=1):     stripped = raw.strip()     if not stripped or stripped.startswith('<str>'):         continue     content, rationale = split_inline_comment(raw)     if content.startswith('<str>'):         continue     if not content:         continue     if not rationale:         errors.append(f'<str>{rel}<str>{lineno}<str>{content}<str>{rel}<str>{content}<str>')"]
     N008["return errors"]
     N001 -->|"start"| N002
     N002 -->|"try"| N003
@@ -46,8 +36,7 @@ flowchart TD
     N006["if not files"]
     N007["return [f'<str>{ALLOWLIST_GLOB}<str>{network_dir}<str>']"]
     N008["errors = []"]
-    N009["for path in files:
-    errors.extend(check_file(path, repo_root))"]
+    N009["for path in files:     errors.extend(check_file(path, repo_root))"]
     N010["return errors"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -67,8 +56,7 @@ flowchart TD
     N001["_cmd_verify(...)"]
     N002["repo_root = resolve(...)"]
     N003["errors = verify(...)"]
-    N004["for err in errors:
-    print(err, file=sys.stderr)"]
+    N004["for err in errors:     print(err, file=sys.stderr)"]
     N005["if errors"]
     N006["print(...)"]
     N007["return 1"]

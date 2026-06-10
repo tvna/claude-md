@@ -157,7 +157,7 @@ flowchart TD
 flowchart TD
     N001["build_summary(...)"]
     N002["assoc_str = association if association is not None else '<str>'"]
-    N003["return f\"<str>{event_name}<str>{(number if number is not None else '<str>')}<str>{kind}<str>{assoc_str}<str>{trust}<str>{str(has_non_ascii).lower()}<str>{str(has_title_violation).lower()}<str>{str(has_ack).lower()}<str>{action}<str>\""]
+    N003["return f'<str>{event_name}<str>{(number if number is not None else '<str>')}<str>{kind}<str>{assoc_str}<str>{trust}<str>{str(has_non_ascii).lower()}<str>{str(has_title_violation).lower()}<str>{str(has_ack).lower()}<str>{action}<str>'"]
     N001 -->|"start"| N002
     N002 --> N003
 ```
@@ -187,10 +187,7 @@ flowchart TD
     N001["find_existing_comment_id(...)"]
     N002["raw = gh_api(...)"]
     N003["comments = json.loads(raw) if raw.strip() else []"]
-    N004["for comment in comments:
-    body = comment.get('<str>') or '<str>'
-    if body.startswith(marker):
-        return comment.get('<str>')"]
+    N004["for comment in comments:     body = comment.get('<str>') or '<str>'     if body.startswith(marker):         return comment.get('<str>')"]
     N005["return None"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -257,8 +254,7 @@ flowchart TD
     N002["path = get(...)"]
     N003["if not path"]
     N004["return"]
-    N005["with Path(path).open('<str>', encoding='<str>') as fp:
-    fp.write(text)"]
+    N005["with Path(path).open('<str>', encoding='<str>') as fp:     fp.write(text)"]
     N006["end"]
     N001 -->|"start"| N002
     N002 --> N003

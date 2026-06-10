@@ -39,23 +39,7 @@ flowchart TD
 flowchart TD
     N001["_list_open_prs_by_prefix(...)"]
     N002["results = []"]
-    N003["for page in range(1, 11):
-    url = f'{_API_ROOT}<str>{repo}<str>{page}'
-    code, body = apply_call(method='<str>', url=url, payload=None, token=token)
-    if not 200 <= code < 300:
-        raise RuntimeError(f'<str>{code}<str>{body[:200]}')
-    try:
-        data = json.loads(body)
-    except json.JSONDecodeError as exc:
-        raise RuntimeError(f'<str>{body[:200]}') from exc
-    if not isinstance(data, list):
-        raise RuntimeError(f'<str>{body[:200]}')
-    for pr in data:
-        ref = pr.get('<str>', {}).get('<str>', '<str>') if isinstance(pr, dict) else '<str>'
-        if isinstance(ref, str) and ref.startswith(prefix):
-            results.append(pr)
-    if len(data) < 100:
-        break"]
+    N003["for page in range(1, 11):     url = f'{_API_ROOT}<str>{repo}<str>{page}'     code, body = apply_call(method='<str>', url=url, payload=None, token=token)     if not 200 <= code < 300:         raise RuntimeError(f'<str>{code}<str>{body[:200]}')     try:         data = json.loads(body)     except json.JSONDecodeError as exc:         raise RuntimeError(f'<str>{body[:200]}') from exc     if not isinstance(data, list):         raise RuntimeError(f'<str>{body[:200]}')     for pr in data:         ref = pr.get('<str>', {}).get('<str>', '<str>') if isinstance(pr, dict) else '<str>'         if isinstance(ref, str) and ref.startswith(prefix):             results.append(pr)     if len(data) < 100:         break"]
     N004["return results"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -303,12 +287,8 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["_ref_drifts(...)"]
-    N002["for path, content in additions:
-    if _get_file_bytes(repo=repo, path=path, ref=ref, token=token, apply_call=apply_call) != content:
-        return True"]
-    N003["for path in deletions:
-    if _get_file_bytes(repo=repo, path=path, ref=ref, token=token, apply_call=apply_call) is not None:
-        return True"]
+    N002["for path, content in additions:     if _get_file_bytes(repo=repo, path=path, ref=ref, token=token, apply_call=apply_call) != content:         return True"]
+    N003["for path in deletions:     if _get_file_bytes(repo=repo, path=path, ref=ref, token=token, apply_call=apply_call) is not None:         return True"]
     N004["return False"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -553,27 +533,8 @@ flowchart TD
     N001["_collect_worktree_changes(...)"]
     N002["additions = {}"]
     N003["deletions = set(...)"]
-    N004["for path in adds:
-    p = Path(path)
-    if not p.is_file():
-        raise RuntimeError(f'<str>{path}')
-    additions[path] = p.read_bytes()"]
-    N005["for prefix in diff_prefixes:
-    result = run_git(['<str>', '<str>', '<str>', prefix])
-    if result.returncode != 0:
-        raise RuntimeError(f'<str>{prefix!r}<str>{result.stderr.strip()}')
-    for line in result.stdout.splitlines():
-        if not line.strip():
-            continue
-        path = line[3:].split('<str>', 1)[-1].strip()
-        if path in additions:
-            continue
-        candidate = Path(path)
-        if candidate.is_file():
-            additions[path] = candidate.read_bytes()
-            deletions.discard(path)
-        else:
-            deletions.add(path)"]
+    N004["for path in adds:     p = Path(path)     if not p.is_file():         raise RuntimeError(f'<str>{path}')     additions[path] = p.read_bytes()"]
+    N005["for prefix in diff_prefixes:     result = run_git(['<str>', '<str>', '<str>', prefix])     if result.returncode != 0:         raise RuntimeError(f'<str>{prefix!r}<str>{result.stderr.strip()}')     for line in result.stdout.splitlines():         if not line.strip():             continue         path = line[3:].split('<str>', 1)[-1].strip()         if path in additions:             continue         candidate = Path(path)         if candidate.is_file():             additions[path] = candidate.read_bytes()             deletions.discard(path)         else:             deletions.add(path)"]
     N006["return (list(additions.items()), sorted(deletions))"]
     N001 -->|"start"| N002
     N002 --> N003

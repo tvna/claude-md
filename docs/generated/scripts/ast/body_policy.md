@@ -9,12 +9,7 @@ flowchart TD
     N001["extract_headings(...)"]
     N002["cleaned = strip_html_comments(...)"]
     N003["out = []"]
-    N004["for match in _HEADING_RE.finditer(cleaned):
-    level = len(match.group(1))
-    text = _TRAILING_COLON_RE.sub('<str>', match.group(2)).strip()
-    text = html.unescape(text)
-    if text:
-        out.append((level, text))"]
+    N004["for match in _HEADING_RE.finditer(cleaned):     level = len(match.group(1))     text = _TRAILING_COLON_RE.sub('<str>', match.group(2)).strip()     text = html.unescape(text)     if text:         out.append((level, text))"]
     N005["return out"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -73,14 +68,7 @@ flowchart TD
     N002["allowed = {_normalize_heading(name) for name in _PR_ALLOWED}"]
     N003["seen = set(...)"]
     N004["out = []"]
-    N005["for level, text in headings:
-    if level != 2:
-        continue
-    norm = _normalize_heading(text)
-    if norm in allowed or norm in seen:
-        continue
-    seen.add(norm)
-    out.append(text)"]
+    N005["for level, text in headings:     if level != 2:         continue     norm = _normalize_heading(text)     if norm in allowed or norm in seen:         continue     seen.add(norm)     out.append(text)"]
     N006["return out"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -111,20 +99,7 @@ flowchart TD
     N005["start_idx = None"]
     N006["end_idx = len(...)"]
     N007["pattern = compile(...)"]
-    N008["for i, line in enumerate(lines):
-    match = pattern.match(line)
-    if match is None:
-        continue
-    line_level = len(match.group(1))
-    text = _TRAILING_COLON_RE.sub('<str>', match.group(2)).strip()
-    norm = _normalize_heading(text).casefold()
-    if start_idx is None:
-        if line_level == level and norm == target:
-            start_idx = i + 1
-        continue
-    if line_level <= 2:
-        end_idx = i
-        break"]
+    N008["for i, line in enumerate(lines):     match = pattern.match(line)     if match is None:         continue     line_level = len(match.group(1))     text = _TRAILING_COLON_RE.sub('<str>', match.group(2)).strip()     norm = _normalize_heading(text).casefold()     if start_idx is None:         if line_level == level and norm == target:             start_idx = i + 1         continue     if line_level <= 2:         end_idx = i         break"]
     N009["if start_idx is None"]
     N010["return '<str>'"]
     N011["return '<str>'.join(lines[start_idx:end_idx])"]
@@ -152,30 +127,7 @@ flowchart TD
     N006["pairs = 0"]
     N007["errors = []"]
     N008["i = 0"]
-    N009["while i < len(lines):
-    line = lines[i]
-    cmd_match = _VERIFICATION_COMMAND_RE.fullmatch(line)
-    if cmd_match is not None:
-        if i + 1 >= len(lines) or _VERIFICATION_RESULT_RE.fullmatch(lines[i + 1]) is None:
-            errors.append('<str>')
-            i += 1
-            continue
-        pairs += 1
-        i += 2
-        continue
-    trailing_match = _VERIFICATION_COMMAND_TRAILING_RE.fullmatch(line)
-    if trailing_match is not None:
-        trailing = trailing_match.group('<str>')
-        errors.append(f'<str>{trailing!r}<str>')
-        if i + 1 < len(lines) and _VERIFICATION_RESULT_RE.fullmatch(lines[i + 1]):
-            i += 2
-        else:
-            i += 1
-        continue
-    res_match = _VERIFICATION_RESULT_RE.fullmatch(line)
-    if res_match is not None:
-        errors.append('<str>')
-    i += 1"]
+    N009["while i < len(lines):     line = lines[i]     cmd_match = _VERIFICATION_COMMAND_RE.fullmatch(line)     if cmd_match is not None:         if i + 1 >= len(lines) or _VERIFICATION_RESULT_RE.fullmatch(lines[i + 1]) is None:             errors.append('<str>')             i += 1             continue         pairs += 1         i += 2         continue     trailing_match = _VERIFICATION_COMMAND_TRAILING_RE.fullmatch(line)     if trailing_match is not None:         trailing = trailing_match.group('<str>')         errors.append(f'<str>{trailing!r}<str>')         if i + 1 < len(lines) and _VERIFICATION_RESULT_RE.fullmatch(lines[i + 1]):             i += 2         else:             i += 1         continue     res_match = _VERIFICATION_RESULT_RE.fullmatch(line)     if res_match is not None:         errors.append('<str>')     i += 1"]
     N010["if pairs == 0 and (not errors)"]
     N011["append(...)"]
     N012["return errors"]
@@ -204,24 +156,11 @@ flowchart TD
     N005["lines = splitlines(...)"]
     N006["found = {}"]
     N007["pattern = compile(...)"]
-    N008["for i, line in enumerate(lines):
-    match = pattern.match(line)
-    if match is None:
-        continue
-    text = _TRAILING_COLON_RE.sub('<str>', match.group(1)).strip()
-    base = text.split('<str>', 1)[0].strip()
-    found[base.casefold()] = i"]
+    N008["for i, line in enumerate(lines):     match = pattern.match(line)     if match is None:         continue     text = _TRAILING_COLON_RE.sub('<str>', match.group(1)).strip()     base = text.split('<str>', 1)[0].strip()     found[base.casefold()] = i"]
     N009["errors = []"]
-    N010["for name in _CHECKLIST_SUBSECTIONS:
-    if name.casefold() not in found:
-        errors.append(f'<str>{name}<str>')"]
+    N010["for name in _CHECKLIST_SUBSECTIONS:     if name.casefold() not in found:         errors.append(f'<str>{name}<str>')"]
     N011["h3_positions = sorted(...)"]
-    N012["for idx, (name_key, start) in enumerate(h3_positions):
-    end = h3_positions[idx + 1][1] if idx + 1 < len(h3_positions) else len(lines)
-    chunk = '<str>'.join(lines[start + 1:end])
-    if _CHECKLIST_ITEM_RE.search(chunk) is None:
-        canonical = next((n for n in _CHECKLIST_SUBSECTIONS if n.casefold() == name_key), name_key)
-        errors.append(f'<str>{canonical}<str>')"]
+    N012["for idx, (name_key, start) in enumerate(h3_positions):     end = h3_positions[idx + 1][1] if idx + 1 < len(h3_positions) else len(lines)     chunk = '<str>'.join(lines[start + 1:end])     if _CHECKLIST_ITEM_RE.search(chunk) is None:         canonical = next((n for n in _CHECKLIST_SUBSECTIONS if n.casefold() == name_key), name_key)         errors.append(f'<str>{canonical}<str>')"]
     N013["return errors"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -308,10 +247,7 @@ flowchart TD
     N002["stored_norm = unescape(...)"]
     N003["seen = set(...)"]
     N004["dropped = []"]
-    N005["for token in _ANGLE_TOKEN_RE.findall(authored):
-    if token not in stored_norm and token not in seen:
-        seen.add(token)
-        dropped.append(token)"]
+    N005["for token in _ANGLE_TOKEN_RE.findall(authored):     if token not in stored_norm and token not in seen:         seen.add(token)         dropped.append(token)"]
     N006["return dropped"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -439,20 +375,17 @@ flowchart TD
     N009["headings = extract_headings(...)"]
     N010["missing = missing_sections(...)"]
     N011["if missing"]
-    N012["for name in missing:
-    print(f'<str>{kind}<str>{name}<str>{name}<str>')"]
+    N012["for name in missing:     print(f'<str>{kind}<str>{name}<str>{name}<str>')"]
     N013["return 1"]
     N014["if kind == 'pull_request'"]
     N015["allowlist_errors = verify_pr_allowed_sections(...)"]
     N016["if allowlist_errors"]
-    N017["for msg in allowlist_errors:
-    print(msg)"]
+    N017["for msg in allowlist_errors:     print(msg)"]
     N018["return 1"]
     N019["if kind == 'pull_request' and shape_cutoff and (not created_at or is_within_gate_window(created_at, shape_cutoff))"]
     N020["shape_errors = verify_pr_verification_pairs(body) + verify_pr_checklist_subsections(body) + verify_pr_agent_attribution_footer(body)"]
     N021["if shape_errors"]
-    N022["for msg in shape_errors:
-    print(msg)"]
+    N022["for msg in shape_errors:     print(msg)"]
     N023["return 1"]
     N024["print(...)"]
     N025["return 0"]

@@ -21,11 +21,7 @@ flowchart TD
     N013["print(...)"]
     N014["return 0"]
     N015["merged = 0"]
-    N016["for pr in prs:
-    number = int(pr['<str>'])
-    head_ref = pr.get('<str>', {}).get('<str>', '<str>') if isinstance(pr.get('<str>'), dict) else '<str>'
-    if _merge_pr_if_clean(repo=repo, number=number, head_ref=head_ref, token=token):
-        merged += 1"]
+    N016["for pr in prs:     number = int(pr['<str>'])     head_ref = pr.get('<str>', {}).get('<str>', '<str>') if isinstance(pr.get('<str>'), dict) else '<str>'     if _merge_pr_if_clean(repo=repo, number=number, head_ref=head_ref, token=token):         merged += 1"]
     N017["print(...)"]
     N018["return 0"]
     N001 -->|"start"| N002
