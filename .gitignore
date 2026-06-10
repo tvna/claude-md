@@ -36,12 +36,8 @@ apm_modules/
 # below transitively keeps it out of commits.
 # .claude/settings.json is the narrow file-level carve-out from #109,
 # permitted only to host deterministic lifecycle hooks.
-# .claude/commands/ is the narrow directory carve-out from #1572, permitted
-# to host repo-owned, frequently-used workflow slash commands.
 .claude/*
 !.claude/settings.json
-!.claude/commands/
-!.claude/commands/**
 
 # Agent-tool-specific config (prohibited per docs/standards/repo-scope.md, #58)
 .cursor/
