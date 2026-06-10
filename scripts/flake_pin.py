@@ -144,6 +144,46 @@ TOOLS: dict[str, ToolSpec] = {
             "v{version}/{asset}"
         ),
     ),
+    # zizmor (zizmorcore/zizmor): tag is ``v{version}``; asset embeds no
+    # version, so the rtk/waza shape (full filename in ``asset``). Consumed only
+    # by scripts/install-zizmor.sh -- web-only provisioning, not wired into nix.
+    "zizmor": ToolSpec(
+        version_var="zizmorVersion",
+        native_var="zizmorNative",
+        github_repo="zizmorcore/zizmor",
+        asset_field="asset",
+        url_template=(
+            "https://github.com/zizmorcore/zizmor/releases/download/"
+            "v{version}/{asset}"
+        ),
+    ),
+    # lychee (lycheeverse/lychee): the release tag is ``lychee-v{version}`` (NOT
+    # ``v{version}``), so the template carries that prefix. Asset embeds no
+    # version. Consumed only by scripts/install-lychee.sh.
+    "lychee": ToolSpec(
+        version_var="lycheeVersion",
+        native_var="lycheeNative",
+        github_repo="lycheeverse/lychee",
+        asset_field="asset",
+        url_template=(
+            "https://github.com/lycheeverse/lychee/releases/download/"
+            "lychee-v{version}/{asset}"
+        ),
+    ),
+    # betterleaks (betterleaks/betterleaks): tag is ``v{version}``; asset
+    # filenames EMBED the version and are kept STATIC in flake.nix (actionlint
+    # precedent -- see flake.nix betterleaksNative). Consumed only by
+    # scripts/install-betterleaks.sh.
+    "betterleaks": ToolSpec(
+        version_var="betterleaksVersion",
+        native_var="betterleaksNative",
+        github_repo="betterleaks/betterleaks",
+        asset_field="asset",
+        url_template=(
+            "https://github.com/betterleaks/betterleaks/releases/download/"
+            "v{version}/{asset}"
+        ),
+    ),
 }
 
 

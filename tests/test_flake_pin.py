@@ -197,6 +197,81 @@ def test_resolve_actionlint_amd64_matches_known_digest() -> None:
     )
 
 
+# ---- zizmor / lychee / betterleaks (web-only SessionStart installers) -----
+# These back scripts/install-{zizmor,lychee,betterleaks}.sh. flake.nix is the
+# single pin source of truth even though the tools are not wired into the nix
+# devShell. Refs #1610.
+
+
+def test_repo_new_tools() -> None:
+    assert flake_pin.tool_spec("zizmor").github_repo == "zizmorcore/zizmor"
+    assert flake_pin.tool_spec("lychee").github_repo == "lycheeverse/lychee"
+    assert flake_pin.tool_spec("betterleaks").github_repo == "betterleaks/betterleaks"
+
+
+def test_asset_url_zizmor_keeps_full_archive_name() -> None:
+    url = flake_pin.asset_url(_real_flake(), "zizmor", "x86_64-linux", "9.9.9")
+    assert url.startswith(
+        "https://github.com/zizmorcore/zizmor/releases/download/v9.9.9/"
+    )
+    assert url.endswith(".tar.gz")
+
+
+def test_asset_url_lychee_uses_lychee_v_tag_prefix() -> None:
+    """lychee's release tag is ``lychee-v<version>``, not ``v<version>``."""
+    url = flake_pin.asset_url(_real_flake(), "lychee", "x86_64-linux", "9.9.9")
+    assert url.startswith(
+        "https://github.com/lycheeverse/lychee/releases/download/lychee-v9.9.9/"
+    )
+    assert url.endswith(".tar.gz")
+
+
+def test_asset_url_betterleaks_keeps_full_archive_name() -> None:
+    url = flake_pin.asset_url(
+        _real_flake(), "betterleaks", "x86_64-linux", "9.9.9"
+    )
+    assert url.startswith(
+        "https://github.com/betterleaks/betterleaks/releases/download/v9.9.9/"
+    )
+    assert url.endswith(".tar.gz")
+
+
+def test_resolve_zizmor_amd64_matches_known_digest() -> None:
+    _, asset, sha = flake_pin.resolve(_real_flake(), "zizmor", "x86_64-linux")
+    assert asset == "zizmor-x86_64-unknown-linux-gnu.tar.gz"
+    assert sha == (
+        "aa1facd105f0d83fe5c55b1adcd9d7417de5d83aa27471f91dc0b66cf3803577"
+    )
+
+
+def test_resolve_lychee_amd64_matches_known_digest() -> None:
+    _, asset, sha = flake_pin.resolve(_real_flake(), "lychee", "x86_64-linux")
+    assert asset == "lychee-x86_64-unknown-linux-musl.tar.gz"
+    assert sha == (
+        "73657a111819a30c47c08352896796f23d64e4eb2b3ed39b6d32149241566fc5"
+    )
+
+
+def test_resolve_betterleaks_amd64_matches_known_digest() -> None:
+    _, asset, sha = flake_pin.resolve(
+        _real_flake(), "betterleaks", "x86_64-linux"
+    )
+    assert asset == "betterleaks_1.4.1_linux_x64.tar.gz"
+    assert sha == (
+        "2635ff988d9194cd3070155138589081a54a3438d79ca9b83268addd2fd844cc"
+    )
+
+
+def test_resolve_new_tools_aarch64_are_valid_hex() -> None:
+    text = _real_flake()
+    for tool in ("zizmor", "lychee", "betterleaks"):
+        version, asset, sha = flake_pin.resolve(text, tool, "aarch64-linux")
+        assert version.count(".") >= 1
+        assert asset.endswith(".tar.gz")
+        assert len(sha) == 64
+        int(sha, 16)  # valid hex
+
+
 def test_resolve_isolates_tool_from_waza() -> None:
     """rtk and waza share the x86_64-linux key; resolve must not cross them."""
     text = _real_flake()
