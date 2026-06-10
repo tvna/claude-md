@@ -113,6 +113,29 @@ repos:
         pass_filenames: false
         files: ^docs/.*\.md$
 
+      - id: scan-test-presence-drift
+        name: scan test presence drift (scripts/scan_test_presence_drift.py verify)
+        # Refs #1632 (PR #1625 retro, Fact 4): this scanner already runs in
+        # verify-agents.yml and preflight_all.py, but only at CI / push time, so
+        # a new workflow-invoked script without its M3 CLI contract test (the
+        # #1625 first-attempt gap) did not surface until late. Mirroring it here
+        # fails at commit time. One pass covers M2 (test-module presence), O6
+        # (GitHub-API boundary registry), and M3 (workflow-CLI-contract
+        # presence); it runs whenever a script, test, or workflow changes.
+        entry: uv run python scripts/scan_test_presence_drift.py verify
+        language: system
+        pass_filenames: false
+        files: ^(scripts/.*\.py|tests/.*\.py|\.github/workflows/.*\.ya?ml)$
+      - id: scan-docs-inventory
+        name: scan docs inventory (scripts/scan_docs_inventory.py verify)
+        # Refs #1632 (PR #1625 retro, Fact 4): a new standards doc not linked
+        # from docs/INDEX.md was only caught in CI. Mirroring the CI scanner
+        # here fails the missing index row at commit time.
+        entry: uv run python scripts/scan_docs_inventory.py verify
+        language: system
+        pass_filenames: false
+        files: ^docs/.*\.md$
+
       - id: preflight-branch-base
         name: preflight branch base (scripts/preflight_branch_base.py verify)
         entry: uv run python scripts/preflight_branch_base.py verify

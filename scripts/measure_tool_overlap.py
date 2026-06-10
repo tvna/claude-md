@@ -37,9 +37,12 @@ Contract:
            stdout when omitted), ``--commit`` (sha; default from ``git rev-parse``
            or ``"unknown"``), ``--host-id`` (opaque anonymized token; default
            ``$CLAUDE_MD_HOST_ID`` or ``"unknown"``), ``--pair`` (restrict to one
-           pair; default all three).
+           pair; default all three), ``--smoke`` (opt-in: validate each tool's
+           argv instead of measuring; Refs #1632).
   Outputs: JSON record array written to ``--output`` when given; Markdown report
-           to ``--report`` or stdout; exit 0 on success.
+           to ``--report`` or stdout; exit 0 on success. With ``--smoke``,
+           prints one status line per pair and exits 1 iff any tool rejected its
+           argv (empty / unparseable JSON stdout); an absent binary is skipped.
   Failure policy: fails loud per CLAUDE.md Section 4 -- a measurement is never
            faked with an empty result. A configured tool binary that is absent
            raises ``ToolUnavailableError``; a tool that exits unexpectedly or
@@ -488,7 +491,13 @@ def run_betterleaks(repo_root: Path) -> tuple[list[Finding], float]:
 # ---------------------------------------------------------------------------
 @dataclass(frozen=True)
 class PairSpec:
-    """Static description of one new-tool <-> existing-gate comparison."""
+    """Static description of one new-tool <-> existing-gate comparison.
+
+    ``argv_builder`` returns the exact tool argv for a scope root; it powers the
+    opt-in ``--smoke`` validation, which re-runs the argv and asserts the tool
+    accepted it (non-empty, parseable JSON stdout). It defaults to ``None`` so a
+    test fake can omit it; the three wired pairs all set it.
+    """
 
     pair_name: str
     new_tool: str
@@ -496,6 +505,23 @@ class PairSpec:
     scope_label: str
     run_tool: Callable[[Path], tuple[list[Finding], float]]
     collect_gate: Callable[[Path], list[Finding]]
+    argv_builder: Callable[[Path], list[str]] | None = None
+
+
+def _zizmor_smoke_argv(_repo_root: Path) -> list[str]:
+    return zizmor_argv()
+
+
+def _lychee_smoke_argv(repo_root: Path) -> list[str]:
+    md_files = [
+        scan_markdown_links.rel(p, repo_root)
+        for p in scan_markdown_links.iter_markdown_files(repo_root)
+    ]
+    return lychee_argv(md_files)
+
+
+def _betterleaks_smoke_argv(_repo_root: Path) -> list[str]:
+    return betterleaks_argv()
 
 
 PAIRS: tuple[PairSpec, ...] = (
@@ -506,6 +532,7 @@ PAIRS: tuple[PairSpec, ...] = (
         scope_label=".github/workflows",
         run_tool=run_zizmor,
         collect_gate=collect_workflow_static_gate,
+        argv_builder=_zizmor_smoke_argv,
     ),
     PairSpec(
         pair_name="markdown-links",
@@ -514,6 +541,7 @@ PAIRS: tuple[PairSpec, ...] = (
         scope_label="DOC_GLOBS markdown (offline)",
         run_tool=run_lychee,
         collect_gate=collect_markdown_links_gate,
+        argv_builder=_lychee_smoke_argv,
     ),
     PairSpec(
         pair_name="secrets",
@@ -522,6 +550,7 @@ PAIRS: tuple[PairSpec, ...] = (
         scope_label="working tree, gitignore-respected (betterleaks dir .)",
         run_tool=run_betterleaks,
         collect_gate=collect_secrets_gate,
+        argv_builder=_betterleaks_smoke_argv,
     ),
 )
 
@@ -563,6 +592,93 @@ def measure_pair(
     return record, new_findings, gate_findings
 
 
+# ---------------------------------------------------------------------------
+# Opt-in smoke validation (Refs #1632, Fact 1). The measurement collector
+# parses leniently -- an empty stdout yields zero findings -- so a tool that
+# REJECTS its argv (e.g. betterleaks's `--no-git` on the `dir` subcommand, which
+# printed help to stderr and emitted no JSON) was recorded as a false
+# zero-finding result. This smoke step re-runs each tool's argv and asserts the
+# tool ACCEPTED it: stdout is non-empty AND parseable JSON. It is opt-in
+# (``--smoke``) and binary-aware (an absent binary is "skipped", not "fail"), so
+# it runs in the web session / the measurement workflow where the binaries
+# exist, and is a no-op on the coverage runner where they are absent.
+# ---------------------------------------------------------------------------
+@dataclass(frozen=True)
+class SmokeResult:
+    """Outcome of smoke-checking one pair's tool argv."""
+
+    pair_name: str
+    tool: str
+    status: str  # "ok" | "fail" | "skipped"
+    detail: str
+
+
+def smoke_pair(
+    spec: PairSpec,
+    repo_root: Path,
+    *,
+    run: Callable[[Sequence[str], Path], tuple[str, float]] | None = None,
+) -> SmokeResult:
+    """Run *spec*'s tool argv and assert it produced parseable JSON.
+
+    Returns a ``SmokeResult``: ``skipped`` when the binary is absent (opt-in:
+    the coverage runner has no binaries) or the pair declares no argv builder;
+    ``fail`` -- loud -- when the tool produced no stdout (argv rejected) or
+    unparseable JSON; ``ok`` otherwise. ``run`` is injected so the check is
+    unit-tested without the external binaries; it resolves to :func:`_run` at
+    call time (not def time) so a test can monkeypatch the module attribute.
+    """
+    if run is None:
+        run = _run
+    if spec.argv_builder is None:
+        return SmokeResult(spec.pair_name, spec.new_tool, "skipped", "no argv builder")
+    argv = spec.argv_builder(repo_root)
+    try:
+        stdout, _ms = run(argv, repo_root)
+    except ToolUnavailableError as exc:
+        return SmokeResult(spec.pair_name, spec.new_tool, "skipped", str(exc))
+    if not stdout.strip():
+        return SmokeResult(
+            spec.pair_name,
+            spec.new_tool,
+            "fail",
+            f"{spec.new_tool} produced no stdout for argv {argv!r} -- the tool "
+            f"likely rejected a flag (help goes to stderr); a zero-finding "
+            f"result here would be a false measurement",
+        )
+    try:
+        json.loads(stdout)
+    except json.JSONDecodeError as exc:
+        return SmokeResult(
+            spec.pair_name,
+            spec.new_tool,
+            "fail",
+            f"{spec.new_tool} stdout for argv {argv!r} is not parseable JSON: {exc}",
+        )
+    return SmokeResult(
+        spec.pair_name,
+        spec.new_tool,
+        "ok",
+        f"{spec.new_tool} accepted its argv and emitted parseable JSON",
+    )
+
+
+def cmd_smoke(specs: Sequence[PairSpec], repo_root: Path) -> int:
+    """Smoke-check each pair; print a line per pair; exit 1 iff any failed."""
+    failed = False
+    for spec in specs:
+        result = smoke_pair(spec, repo_root)
+        if result.status == "fail":
+            failed = True
+            print(
+                f"::error::smoke {result.pair_name} ({result.tool}): {result.detail}",
+                file=sys.stderr,
+            )
+        else:
+            print(f"smoke {result.pair_name} ({result.tool}): {result.status} -- {result.detail}")
+    return 1 if failed else 0
+
+
 def _resolve_commit(repo_root: Path, explicit: str | None) -> str:
     if explicit:
         return explicit
@@ -598,6 +714,16 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--host-id", help="Opaque anonymized host.id token.")
     parser.add_argument("--pair", help="Measure only this pair (default: all).")
     parser.add_argument(
+        "--smoke",
+        action="store_true",
+        help=(
+            "Opt-in: instead of measuring, assert each configured tool accepts "
+            "its argv and emits parseable JSON (a bad flag fails loud rather "
+            "than recording a false zero-finding result). Absent binaries are "
+            "skipped, so this is a no-op when the tools are not installed."
+        ),
+    )
+    parser.add_argument(
         "--notes", default="", help="Free-text note stamped on every record."
     )
     parser.add_argument(
@@ -613,9 +739,13 @@ def main(argv: list[str] | None = None) -> int:
 
     args = build_parser().parse_args(argv)
     repo_root = Path(args.scope_root).resolve()
+    specs = _select_pairs(args.pair)
+
+    if args.smoke:
+        return cmd_smoke(specs, repo_root)
+
     commit_sha = _resolve_commit(repo_root, args.commit)
     host_id = args.host_id or os.environ.get("CLAUDE_MD_HOST_ID", "unknown")
-    specs = _select_pairs(args.pair)
 
     records: list[dict[str, object]] = []
     details: list[str] = []
