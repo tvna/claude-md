@@ -189,7 +189,7 @@ flowchart TD
     N010["registry_scripts = parse_contract_registry_scripts(...)"]
     N011["missing_contract = find_missing_cli_contracts(...)"]
     N012["for stem in missing:
-    print(f'<str>{stem}<str>{stem}<str>{stem.lstrip('<str>')}<str>', file=sys.stderr)"]
+    print(f\"<str>{stem}<str>{stem}<str>{stem.lstrip('<str>')}<str>\", file=sys.stderr)"]
     N013["for stem in stale:
     print(f'<str>{stem}<str>', file=sys.stderr)"]
     N014["for stem in undeclared_api:

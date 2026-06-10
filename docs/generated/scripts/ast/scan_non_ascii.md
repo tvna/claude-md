@@ -157,7 +157,7 @@ flowchart TD
 flowchart TD
     N001["build_summary(...)"]
     N002["assoc_str = association if association is not None else '<str>'"]
-    N003["return f'<str>{event_name}<str>{(number if number is not None else '<str>')}<str>{kind}<str>{assoc_str}<str>{trust}<str>{str(has_non_ascii).lower()}<str>{str(has_title_violation).lower()}<str>{str(has_ack).lower()}<str>{action}<str>'"]
+    N003["return f\"<str>{event_name}<str>{(number if number is not None else '<str>')}<str>{kind}<str>{assoc_str}<str>{trust}<str>{str(has_non_ascii).lower()}<str>{str(has_title_violation).lower()}<str>{str(has_ack).lower()}<str>{action}<str>\""]
     N001 -->|"start"| N002
     N002 --> N003
 ```

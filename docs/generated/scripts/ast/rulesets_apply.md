@@ -180,7 +180,7 @@ flowchart TD
     item, detail_rows = _plan_one_ruleset(file=file, repo=repo, sot_dir=sot_dir, live_rulesets=live_rulesets, token=token, opener=opener, pending_rows=rows, summary_file=summary_file)
     rows.extend(detail_rows)
     if dry_run:
-        rows.append(render_summary_row(file, str(item['<str>']), int(item['<str>']), f'<str>{item['<str>']}<str>', item['<str>']))
+        rows.append(render_summary_row(file, str(item['<str>']), int(item['<str>']), f\"<str>{item['<str>']}<str>\", item['<str>']))
     planned.append(item)"]
     N007["_append_summary(...)"]
     N008["return planned"]
@@ -208,12 +208,12 @@ flowchart TD
     action = str(item['<str>'])
     url = f'{API_ROOT}<str>{repo}<str>'
     if action == '<str>':
-        url = f'{url}<str>{item['<str>']}'
+        url = f\"{url}<str>{item['<str>']}\"
     code, body = apply_call(method=action, url=url, payload_path=item['<str>'], token=token, opener=opener, sleeper=sleeper)
     if not 200 <= code < 300:
         display_code = _display_http_code(code)
-        _append_summary(summary_file, ['<str>', f'<str>{item['<str>']}<str>{display_code}<str>', '<str>', body, '<str>'])
-        print(f'<str>{action}<str>{item['<str>']}<str>{display_code}<str>')
+        _append_summary(summary_file, ['<str>', f\"<str>{item['<str>']}<str>{display_code}<str>\", '<str>', body, '<str>'])
+        print(f\"<str>{action}<str>{item['<str>']}<str>{display_code}<str>\")
         raise SystemExit(1)
     response = json.loads(body or '<str>')
     _append_summary(summary_file, [render_summary_row(str(item['<str>']), str(item['<str>']), int(item['<str>']), f'{action}<str>', response.get('<str>'))])"]
@@ -316,7 +316,7 @@ flowchart TD
     N006["diff = workflow_permissions_diff(...)"]
     N007["proj_sot = workflow_permissions_projection(...)"]
     N008["proj_live = workflow_permissions_projection(...)"]
-    N009["lines = ['<str>', f'<str>{mode}<str>', f'<str>{sot_path}<str>', f'<str>{('<str>' if diff else '<str>')}<str>']"]
+    N009["lines = ['<str>', f'<str>{mode}<str>', f'<str>{sot_path}<str>', f\"<str>{('<str>' if diff else '<str>')}<str>\"]"]
     N010["for key in WORKFLOW_PERMISSIONS_KEYS:
     lines.append(f'<str>{key}<str>{_json_scalar(proj_live[key])}<str>{_json_scalar(proj_sot[key])}<str>')"]
     N011["if diff"]

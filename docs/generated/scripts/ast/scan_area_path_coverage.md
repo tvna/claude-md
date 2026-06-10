@@ -10,7 +10,7 @@ flowchart TD
     N002["completed = run_git(...)"]
     N003["if completed.returncode != 0"]
     N004["detail = strip(...)"]
-    N005["raise RuntimeError(f'<str>{'<str>'.join(args)}<str>{detail}')"]
+    N005["raise RuntimeError(f\"<str>{'<str>'.join(args)}<str>{detail}\")"]
     N006["return completed.stdout"]
     N001 -->|"start"| N002
     N002 --> N003
