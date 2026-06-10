@@ -7,6 +7,7 @@ flowchart TD
 
     T_pull_request_target(["on: pull_request_target\ntypes: ['closed']"])
     T_push(["on: push\nbranches: ['main']"])
+    T_schedule(["on: schedule"])
     T_workflow_dispatch(["on: workflow_dispatch\ninputs: {'task': {'description': 'Post-merge ..."])
 
     J_open_retro["open-retro"]
@@ -19,6 +20,7 @@ flowchart TD
     S_J_decision_tree_0(("Mint GitHub App token"))
     S_J_decision_tree_1(("Open pull request if any generated doc changed"))
     J_triage_report["triage-report"]
+    J_verify_docs_drift["verify-docs-drift"]
 
     T_pull_request_target -->|"github.event_name == 'pull_request_target' && github.event.pull_request~"| J_open_retro
     T_push -->|"github.event_name == 'push' || (github.event_name == 'workflow_dispatch~"| J_coverage
@@ -33,4 +35,6 @@ flowchart TD
     J_decision_tree -->|"${{ steps.drift.outputs.changed == 'true' }}"| S_J_decision_tree_1
     T_push -->|"github.event_name == 'push' || (github.event_name == 'workflow_dispatch~"| J_triage_report
     T_workflow_dispatch -->|"github.event_name == 'push' || (github.event_name == 'workflow_dispatch~"| J_triage_report
+    T_push -->|"github.event_name == 'push' || github.event_name == 'schedule'"| J_verify_docs_drift
+    T_schedule -->|"github.event_name == 'push' || github.event_name == 'schedule'"| J_verify_docs_drift
 ```
