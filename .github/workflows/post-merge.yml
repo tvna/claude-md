@@ -309,12 +309,14 @@ jobs:
           private-key: ${{ secrets.DEVCONTAINER_PIN_APP_PRIVATE_KEY }}
 
       # Publish the regenerated snapshot as a refresh PR. The snapshot commit is
-      # appended onto the fixed branch via the signed createCommitOnBranch path
-      # (scripts/pr_upsert.upsert_single_file_pr), not `git push`, so reusing the
-      # branch is a fast-forward append rather than a force-push. The all-branches
-      # non_fast_forward ruleset rejects force-pushes (#1466). The command no-ops
-      # when the snapshot already matches main. Authored by the App bot via the
-      # minted token.
+      # authored via the signed createCommitOnBranch path
+      # (scripts/pr_upsert.upsert_single_file_pr, recreate=True), not `git push`.
+      # On each drift the fixed branch is deleted and re-created off main with one
+      # signed commit, so it never accumulates an unsigned ancestor that would
+      # permanently violate required_signatures (#1560); a delete+create is not a
+      # force-push, so the all-branches non_fast_forward ruleset is still honored
+      # (#1466). The command no-ops when the snapshot already matches main.
+      # Authored by the App bot via the minted token.
       - name: Upsert refresh PR if the snapshot drifted
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
