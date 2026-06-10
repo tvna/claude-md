@@ -76,3 +76,10 @@ apm_modules/
 .devcontainer/images/features/nix-warm-claude/flake.nix
 .devcontainer/images/features/nix-warm-claude/flake.lock
 .devcontainer/images/features/nix-warm-claude/pyproject.toml
+
+# bun-managed node_modules for the Mermaid syntax validation gate
+# (scripts/scan_mermaid_syntax.py, issue #1597). The toolchain is pinned by
+# package.json + bun.lock and materialised by `bun install --frozen-lockfile`
+# (SessionStart scripts/install-bun.sh on the web, the verify-mermaid.yml nix
+# job in CI), so the resolved tree is never committed.
+/node_modules/

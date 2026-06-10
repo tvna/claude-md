@@ -201,6 +201,15 @@ STEPS: tuple[Step, ...] = (
         argv=("python3", "scripts/scan_doc_workflow_refs.py", "verify"),
     ),
     Step(
+        # Refs #1597. Parses every docs/ ```mermaid block via bun (the #1595
+        # regression class). soft + required_bin so a no-bun laptop warn-skips,
+        # mirroring the pre-commit soft-skip; verify-mermaid.yml is the hard gate.
+        name="scan_mermaid_syntax",
+        argv=("python3", "scripts/scan_mermaid_syntax.py", "verify"),
+        required_bin=("bun",),
+        soft=True,
+    ),
+    Step(
         name="scan_maintainability_metrics",
         argv=("python3", "scripts/scan_maintainability_metrics.py", "verify"),
     ),

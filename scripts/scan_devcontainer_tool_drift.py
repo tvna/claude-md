@@ -49,6 +49,9 @@ TOOL_FLAKE_MARKERS: dict[str, str] = {
     "waza": "waza-cli",
     "actionlint": "actionlint",
     "shellcheck": "shellcheck",
+    # Refs #1597. The Mermaid syntax gate (scan_mermaid_syntax) runs the
+    # official parser through bun; flake.nix sharedPackages provisions it.
+    "bun": "bun",
 }
 
 # Tools a gate may require but that are intentionally NOT provisioned by the

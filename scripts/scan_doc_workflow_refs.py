@@ -69,8 +69,12 @@ WORKFLOWS_DIR = REPO_ROOT / ".github" / "workflows"
 
 # Markdown trees excluded from the scan. ``docs/archive/`` is a point-in-time
 # historical record; rewriting it to the current workflow set would falsify the
-# history it exists to preserve.
-EXCLUDED_DIRS: tuple[str, ...] = ("docs/archive/",)
+# history it exists to preserve. ``node_modules/`` is the gitignored bun
+# dependency tree for the Mermaid gate (#1597): it is never committed and its
+# vendored READMEs reference unrelated upstream workflow files, so scanning it
+# would raise false positives when it is materialised locally or by the
+# SessionStart bun installer.
+EXCLUDED_DIRS: tuple[str, ...] = ("docs/archive/", "node_modules/")
 
 # Lines carrying this marker bypass the scan. Mirrors scan_flake_pin_drift.py.
 ACK_MARKER = "workflow-ref-ack"

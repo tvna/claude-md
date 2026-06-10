@@ -99,6 +99,20 @@ repos:
         # and parallel copies otherwise race + redundantly download it (#1150).
         require_serial: true
 
+      - id: scan-mermaid-syntax
+        name: scan mermaid syntax (scripts/scan_mermaid_syntax.py verify)
+        # Parses every ```mermaid block under docs/ with the official Mermaid
+        # parser via bun (scripts/mermaid_parse.mjs) so a render error like the
+        # #1595 ';'-in-a-message regression is caught before merge. Soft-skips
+        # when bun or the pinned node_modules tree (mermaid + jsdom) is absent --
+        # a bare contributor laptop or the uv-only prek job has neither -- which
+        # mirrors the actionlint soft-skip. The unconditional hard gate is the
+        # nix-based verify-mermaid.yml, so enforcement is not lost. Refs #1597.
+        entry: bash -c 'command -v bun >/dev/null 2>&1 && [ -d node_modules/mermaid ] || { echo "bun or node_modules/mermaid absent; skipping mermaid syntax gate (enforced by verify-mermaid.yml); run bun install --frozen-lockfile to enable it" >&2; exit 0; }; exec uv run python scripts/scan_mermaid_syntax.py verify'
+        language: system
+        pass_filenames: false
+        files: ^docs/.*\.md$
+
       - id: preflight-branch-base
         name: preflight branch base (scripts/preflight_branch_base.py verify)
         entry: uv run python scripts/preflight_branch_base.py verify

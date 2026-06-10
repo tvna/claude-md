@@ -71,6 +71,7 @@ import scan_hook_coverage_drift
 import scan_input_contract_drift
 import scan_maintainability_metrics
 import scan_markdown_links
+import scan_mermaid_syntax
 import scan_non_ascii
 import scan_nonexhaustive_invariant_drift
 import scan_preflight_drift
@@ -204,6 +205,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("scan_docs_inventory.py", "verify"): "test_scan_docs_inventory_verify_matches_workflow_args",
     ("scan_flake_pin_drift.py", "verify"): "test_scan_flake_pin_drift_verify_matches_workflow_args",
     ("scan_markdown_links.py", "verify"): "test_scan_markdown_links_verify_matches_workflow_args",
+    ("scan_mermaid_syntax.py", "verify"): "test_scan_mermaid_syntax_verify_matches_workflow_args",
     ("scan_maintainability_metrics.py", "verify"): "test_scan_maintainability_metrics_verify_matches_workflow_args",
     ("scan_non_ascii.py", "run"): "test_scan_non_ascii_run_matches_workflow_env",
     ("scan_nonexhaustive_invariant_drift.py", "verify"): "test_scan_nonexhaustive_invariant_drift_verify_matches_workflow_args",
@@ -1498,6 +1500,21 @@ def test_scan_test_presence_drift_verify_matches_workflow_args() -> None:
 def test_scan_markdown_links_verify_matches_workflow_args() -> None:
     """Mirrors the ``Assert local Markdown links resolve`` step."""
     assert scan_markdown_links.main(["verify"]) == 0
+
+
+def test_scan_mermaid_syntax_verify_matches_workflow_args() -> None:
+    """Mirrors verify-mermaid.yml's ``python3 scripts/scan_mermaid_syntax.py verify``.
+
+    The ``verify`` argv shape is exercised in both environments: with bun and
+    the pinned node_modules the gate parses the current docs (exit 0, since
+    docs/generated/scripts/ast/ is exempt); without them it reaches the
+    bun-missing branch (exit 1). Either way ``verify`` is a real, parseable
+    subcommand -- the contract this test guards.
+    """
+    has_deps = bool(scan_mermaid_syntax.resolve_bun()) and (
+        scan_mermaid_syntax.REPO_ROOT / "node_modules" / "mermaid"
+    ).is_dir()
+    assert scan_mermaid_syntax.main(["verify"]) == (0 if has_deps else 1)
 
 
 def test_scan_compile_from_source_verify_matches_workflow_args() -> None:

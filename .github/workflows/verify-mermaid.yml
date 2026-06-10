@@ -1,0 +1,53 @@
+# Validate Mermaid diagrams under docs/ at PR time.
+#
+# scripts/scan_mermaid_syntax.py extracts every ```mermaid fenced block from
+# docs/**/*.md and parses it with the official Mermaid parser (via bun running
+# scripts/mermaid_parse.mjs) so a render error -- like the #1595 ';'-in-a-message
+# sequence-diagram regression that flowed into both the en and ja docs -- is
+# caught before merge instead of by author review. This is the hard gate; the
+# pre-commit `scan-mermaid-syntax` hook runs the same check locally but
+# soft-skips when bun/node_modules are absent, so enforcement lives here.
+#
+# bun and python3 both come from the flake dev shell (sharedPackages +
+# python312), matching the devcontainer toolchain; the pinned mermaid + jsdom
+# tree is materialised with `bun install --frozen-lockfile` (package.json +
+# bun.lock). Refs #1597.
+name: Verify Mermaid (docs)
+
+on:
+  pull_request:
+    paths:
+      - "docs/**/*.md"
+      - "scripts/scan_mermaid_syntax.py"
+      - "scripts/mermaid_parse.mjs"
+      - "package.json"
+      - "bun.lock"
+      - "flake.nix"
+      - "flake.lock"
+      - ".github/workflows/verify-mermaid.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@ef8a148080ab6020fd15196c2084a2eea5ff2d25 # v22
+
+      - name: Parse all Mermaid blocks under docs/ via the dev shell
+        # `nix develop` realises the default shell, putting bun and python3 on
+        # PATH. `bun install --frozen-lockfile` materialises the pinned mermaid
+        # + jsdom tree, then the gate parses every in-scope block.
+        run: nix develop --command bash -c 'bun install --frozen-lockfile && python3 scripts/scan_mermaid_syntax.py verify'
