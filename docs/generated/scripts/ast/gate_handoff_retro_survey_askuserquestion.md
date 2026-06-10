@@ -215,8 +215,12 @@ flowchart TD
     N005["payload['<str>'] = satisfaction"]
     N006["if problem is not None"]
     N007["payload['<str>'] = problem"]
-    N008["write_text(...)"]
-    N009["return True"]
+    N008["if needs_retro"]
+    N009["payload['<str>'] = True"]
+    N010["if retro_issue is not None"]
+    N011["payload['<str>'] = retro_issue"]
+    N012["write_text(...)"]
+    N013["return True"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 --> N004
@@ -226,7 +230,13 @@ flowchart TD
     N006 -->|"true"| N007
     N007 --> N008
     N006 -->|"false"| N008
-    N008 --> N009
+    N008 -->|"true"| N009
+    N009 --> N010
+    N008 -->|"false"| N010
+    N010 -->|"true"| N011
+    N011 --> N012
+    N010 -->|"false"| N012
+    N012 --> N013
 ```
 
 ## run_gate(...)
@@ -277,12 +287,21 @@ flowchart TD
     N009["if satisfaction is None"]
     N010["print(...)"]
     N011["return 0"]
-    N012["try"]
-    N013["record(...)"]
-    N014["except OSError"]
-    N015["print(...)"]
-    N016["return 1"]
-    N017["return 0"]
+    N012["retro_issue = None"]
+    N013["if raw_retro_issue is not None"]
+    N014["retro_issue = _coerce_pr_number(...)"]
+    N015["if retro_issue is None"]
+    N016["print(...)"]
+    N017["return 1"]
+    N018["if raw_needs_retro and retro_issue is None"]
+    N019["print(...)"]
+    N020["return 1"]
+    N021["try"]
+    N022["record(...)"]
+    N023["except OSError"]
+    N024["print(...)"]
+    N025["return 1"]
+    N026["return 0"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 -->|"true"| N004
@@ -295,11 +314,21 @@ flowchart TD
     N010 --> N011
     N009 -->|"false"| N012
     N007 -->|"false"| N012
-    N012 -->|"try"| N013
-    N012 -->|"raises"| N014
+    N012 --> N013
+    N013 -->|"true"| N014
     N014 --> N015
-    N015 --> N016
-    N013 --> N017
+    N015 -->|"true"| N016
+    N016 --> N017
+    N015 -->|"false"| N018
+    N013 -->|"false"| N018
+    N018 -->|"true"| N019
+    N019 --> N020
+    N018 -->|"false"| N021
+    N021 -->|"try"| N022
+    N021 -->|"raises"| N023
+    N023 --> N024
+    N024 --> N025
+    N022 --> N026
 ```
 
 ## main(...)
@@ -311,16 +340,20 @@ flowchart TD
     N003["add_argument(...)"]
     N004["add_argument(...)"]
     N005["add_argument(...)"]
-    N006["args = parse_args(...)"]
-    N007["if args.record is not None"]
-    N008["return run_record(args.record, args.satisfaction, args.problem)"]
-    N009["return run_gate()"]
+    N006["add_argument(...)"]
+    N007["add_argument(...)"]
+    N008["args = parse_args(...)"]
+    N009["if args.record is not None"]
+    N010["return run_record(args.record, args.satisfaction, args.problem, args.needs_retro, args.retro_issue)"]
+    N011["return run_gate()"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 --> N004
     N004 --> N005
     N005 --> N006
     N006 --> N007
-    N007 -->|"true"| N008
-    N007 -->|"false"| N009
+    N007 --> N008
+    N008 --> N009
+    N009 -->|"true"| N010
+    N009 -->|"false"| N011
 ```
