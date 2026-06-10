@@ -40,6 +40,35 @@ stays byte-for-byte identical to `.codex/hooks.json`
 (see [devin-apm-compatibility.md](devin-apm-compatibility.md)) without
 duplicating the config.
 
+## Per-agent installer scope
+
+Every SessionStart provisioning installer is classified **shared** (intended for
+claude + codex + devin). The decision and a one-line rationale for each installer
+live in the `installer_scope_audit` sibling key of
+[`scripts/agent_hooks_source.json`](../../scripts/agent_hooks_source.json)
+(Refs [#1606](https://github.com/tvna/claude-md/issues/1606)). The generator
+reads only `targets`, so that key documents intent without changing any
+generated config or the `--check` drift gate.
+
+Rationale: every web installer reproduces a devcontainer capability that the nix
+path skips, and codex/devin web sessions equally lack that nix path, so all
+installers are provisioned for uniform cross-agent parity. Each entry still
+records `functionally_required` -- whether a pre-commit / local gate invokes the
+binary directly (`true` for `uv`, `bun`, `actionlint`; `false` for the
+explicit-use binaries `rtk`, `apm`, `waza`, `ccusage`, `zizmor`, `lychee`,
+`betterleaks`) -- to show which installers are already operationally needed
+versus provisioned for uniformity. `ccusage` is an accepted no-op under
+codex/devin, where its Claude-scoped telemetry has no data source.
+
+The `wired` field records the **current** wiring. Installers not yet wired into
+codex+devin carry a `wiring_followup`: the actual wiring **and** the remote-gate
+widening it needs (each not-yet-shared script gates on `CLAUDE_CODE_REMOTE` only,
+so config wiring alone is a no-op under codex's `CODEX_CODE_REMOTE` signal -- the
+script must also widen its gate and persist PATH for codex, mirroring
+`install-uv.sh`) are deferred to
+[#1608](https://github.com/tvna/claude-md/issues/1608). This issue (#1606) is
+audit-only.
+
 ## The CWD-independence wrapper
 
 For every command that references a repo-local `scripts/` file, the generator
