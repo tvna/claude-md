@@ -16,6 +16,24 @@ from hypothesis import strategies as st
 pytestmark = pytest.mark.shard_policy
 
 
+@pytest.fixture(autouse=True)
+def _clear_body_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Isolate every test from an ambient ``PR_BODY`` / ``ISSUE_BODY``.
+
+    ``verify_title`` falls back to ``title_policy._body_from_env`` (which
+    reads ``PR_BODY`` then ``ISSUE_BODY``) whenever it is called with an
+    empty body and a non-trusted-bot author. The single-process pre-push
+    preflight (``scripts/preflight_all.py``) exports ``PR_BODY`` for the body
+    gates and then runs pytest in the same process, so without this fixture
+    that ambient body would suppress (or spuriously raise) the type-fit
+    finding and make these tests non-deterministic. In CI the body gates and
+    the pytest matrix run in separate jobs, so the conflict is local-only;
+    clearing the vars here keeps the tests deterministic in both. Refs #1451.
+    """
+    monkeypatch.delenv("PR_BODY", raising=False)
+    monkeypatch.delenv("ISSUE_BODY", raising=False)
+
+
 class TestTitlePolicyConfig:
     def test_config_lives_under_github(self) -> None:
         assert title_policy.TITLE_POLICY_CONFIG.parts[-2:] == (
