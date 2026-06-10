@@ -79,41 +79,101 @@ def apply_call(
     return last_code, last_body
 
 
+# GitHub's GraphQL endpoint, like the REST one, returns transient HTTP 5xx and
+# network failures; it ALSO returns a generic "Something went wrong while
+# executing your query ... Please include <id> when reporting this issue" entry
+# in the response ``errors`` array -- its internal-error / timeout signature --
+# usually with HTTP 200. A manual decision-tree run reproduced this on
+# createCommitOnBranch even for a single small batch (Refs #1580), and the same
+# generic error also appears when a mutation races a just-recreated branch ref.
+# apply_call already retries the 5xx/network class; graphql_call must mirror that
+# and additionally catch this GraphQL-only signature so one transient blip does
+# not fail the whole generated-docs publish. A retried createCommitOnBranch is
+# safe because expectedHeadOid rejects a stale oid rather than duplicating a
+# commit that actually landed.
+_GRAPHQL_TRANSIENT_ERROR_MARKER = "something went wrong while executing your query"
+
+
+def _graphql_is_transient(code: int, body: dict[str, Any]) -> bool:
+    """Return True when a GraphQL response should be retried.
+
+    Transient: a network failure (``code == 0``), an HTTP 5xx, or a body whose
+    ``errors`` array carries GitHub's generic "Something went wrong while
+    executing your query" entry (its internal-error/timeout signature, usually
+    delivered with HTTP 200). A permanent client error -- a validation failure or
+    a malformed query -- is not transient and is returned to the caller as-is so
+    it fails loud rather than retrying pointlessly.
+    """
+    if code == 0 or code >= 500:
+        return True
+    errors = body.get("errors")
+    if isinstance(errors, list):
+        for err in errors:
+            message = err.get("message", "") if isinstance(err, dict) else ""
+            if isinstance(message, str) and _GRAPHQL_TRANSIENT_ERROR_MARKER in message.lower():
+                return True
+    return False
+
+
 def graphql_call(
     *,
     query: str,
     variables: dict[str, Any],
     token: str,
     opener: Callable[[urllib.request.Request], Any] = _default_opener,
+    sleeper: Callable[[float], None] | None = None,
 ) -> tuple[int, dict[str, Any]]:
-    """Execute a GitHub GraphQL query/mutation. Returns (http_status, response_dict)."""
+    """Execute a GitHub GraphQL query/mutation. Returns (http_status, response_dict).
+
+    Transient responses (HTTP 5xx, network failure, or GitHub's generic
+    "Something went wrong" error signature) are retried up to 3 attempts with
+    backoff, mirroring :func:`apply_call`. A network-level failure that never
+    clears still degrades to ``(0, {})`` rather than raising (CWE-703).
+    """
+    # Resolve the sleeper at call time (not as a captured default) so tests can
+    # neutralise the real retry backoff by injecting a no-op sleeper (#985).
+    sleeper = sleeper if sleeper is not None else time.sleep
     payload = json.dumps({"query": query, "variables": variables}, separators=(",", ":"))
-    request = urllib.request.Request(
-        "https://api.github.com/graphql",
-        data=payload.encode("utf-8"),
-        method="POST",
-    )
-    request.add_header("Authorization", f"Bearer {token}")
-    request.add_header("Accept", "application/vnd.github+json")
-    request.add_header("X-GitHub-Api-Version", API_VERSION)
-    request.add_header("Content-Type", "application/json")
-    try:
-        with opener(request) as response:
-            code = int(response.status)
-            body_str = response.read().decode("utf-8", errors="replace")
-    except urllib.error.HTTPError as error:
-        code = int(error.code)
-        body_str = error.read().decode("utf-8", errors="replace")
-    except urllib.error.URLError:
-        # Network-level failure (DNS, connection reset, timeout). Mirror
-        # apply_call's curl-level 000 so a transient outage degrades to an
-        # empty result instead of an unhandled traceback (CWE-703).
-        return 0, {}
-    try:
-        body = json.loads(body_str) if body_str else {}
-    except json.JSONDecodeError:
-        body = {}
-    return code, body if isinstance(body, dict) else {}
+    last_code = 0
+    last_body: dict[str, Any] = {}
+
+    for attempt in range(1, 4):
+        request = urllib.request.Request(
+            "https://api.github.com/graphql",
+            data=payload.encode("utf-8"),
+            method="POST",
+        )
+        request.add_header("Authorization", f"Bearer {token}")
+        request.add_header("Accept", "application/vnd.github+json")
+        request.add_header("X-GitHub-Api-Version", API_VERSION)
+        request.add_header("Content-Type", "application/json")
+        try:
+            with opener(request) as response:
+                code = int(response.status)
+                body_str = response.read().decode("utf-8", errors="replace")
+        except urllib.error.HTTPError as error:
+            code = int(error.code)
+            body_str = error.read().decode("utf-8", errors="replace")
+        except urllib.error.URLError:
+            # Network-level failure (DNS, connection reset, timeout). Mirror
+            # apply_call's curl-level 000 so a transient outage degrades to an
+            # empty result instead of an unhandled traceback (CWE-703).
+            code = 0
+            body_str = ""
+        try:
+            parsed = json.loads(body_str) if body_str else {}
+        except json.JSONDecodeError:
+            parsed = {}
+        last_code = code
+        last_body = parsed if isinstance(parsed, dict) else {}
+
+        if not _graphql_is_transient(last_code, last_body):
+            break
+        print(f"Attempt {attempt}: transient GraphQL response HTTP {_format_code(last_code)} for POST /graphql")
+        if attempt < 3:
+            sleeper(attempt * 5)
+
+    return last_code, last_body
 
 
 def _format_code(code: int) -> str:
