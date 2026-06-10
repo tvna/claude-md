@@ -203,6 +203,21 @@ class TestEvaluate:
         assert "SATISFACTION first" in decision["reason"]
         assert "--record 99" in decision["reason"]
 
+    def test_satisfaction_anchor_requires_date_time_timezone(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        # Refs #1565: the satisfaction anchor must demand date + time + timezone,
+        # not the date alone. A date-only anchor is ambiguous on read-back (a
+        # session can span hours and cross the day boundary), so this guards the
+        # wording from silently regressing to "today's date" only.
+        monkeypatch.setattr(gate, "_MARKER_DIR", tmp_path / "empty")
+        decision = gate.evaluate({}, _pr_transcript("t1", 7))
+        assert decision is not None
+        reason = decision["reason"]
+        assert "date, time, and timezone" in reason
+        assert "timezone" in reason
+        assert "YYYY-MM-DD HH:MM TZ" in reason
+
     def test_recorded_pr_is_noop(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         monkeypatch.setattr(gate, "_MARKER_DIR", tmp_path)
         (tmp_path / "42").touch()
