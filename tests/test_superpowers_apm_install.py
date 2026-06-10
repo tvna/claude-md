@@ -32,17 +32,6 @@ SUPERPOWERS_SKILLS = {
     "writing-skills",
 }
 
-# Local first-party skills authored directly in-repo (not deployed from a
-# pinned APM dependency), permitted by the .agents/skills/ carve-out widened in
-# #1572. They are cross-client SKILL.md prompts read by Claude, Codex, and
-# Devin alike. Anything under .agents/skills/ outside SUPERPOWERS_SKILLS or this
-# set is unexpected drift.
-LOCAL_FIRST_PARTY_SKILLS = {
-    "issue-pr",
-    "issue-recheck",
-    "ci-rootcause",
-}
-
 
 def _load_yaml(path: Path) -> dict[str, object]:
     data = yaml.safe_load(path.read_text(encoding="utf-8"))
@@ -78,15 +67,12 @@ def test_superpowers_agent_skills_are_deployed() -> None:
         path.parent.name
         for path in skills_root.glob("*/SKILL.md")
     }
-    # Superpowers skills must all be present (deploy/drift check); local
-    # first-party skills (#1572) are also permitted. Anything outside both sets
-    # is unexpected drift and fails the equality.
-    assert deployed == SUPERPOWERS_SKILLS | LOCAL_FIRST_PARTY_SKILLS
+    assert deployed == SUPERPOWERS_SKILLS
 
 
-def test_agent_skills_are_devin_compatible_agent_skills() -> None:
+def test_superpowers_skills_are_devin_compatible_agent_skills() -> None:
     skills_root = ROOT / ".agents" / "skills"
-    for skill in SUPERPOWERS_SKILLS | LOCAL_FIRST_PARTY_SKILLS:
+    for skill in SUPERPOWERS_SKILLS:
         skill_file = skills_root / skill / "SKILL.md"
         assert skill_file.exists()
         text = skill_file.read_text(encoding="utf-8")
