@@ -13,7 +13,9 @@ Covers:
   ignores unmatched results, skips ``is_error`` results (failed creation,
   #1374), and de-duplicates oldest-first.
 - ``evaluate``: blocks an unrecorded created PR; no-op with a marker,
-  with ``stop_hook_active``, off-target event, or no created PR.
+  with ``stop_hook_active``, off-target event, or no created PR. Surveys
+  ONCE per session -- a session opening N PRs fires the gate once, not N
+  times, and recording any one PR covers the whole session (#1594).
 - ``load_transcript``: missing / unreadable / bad-line tolerance.
 - ``record`` / ``run_record``: marker write and invalid-PR fail-open.
 - ``run_gate``: malformed stdin, no transcript, and block-on-stdout.
@@ -61,6 +63,16 @@ def _pr_transcript(tool_id: str = "t1", number: int = 42) -> list[Any]:
         _msg("assistant", _create_pr_use(tool_id)),
         _msg("user", _result(tool_id, f"Created https://github.com/o/r/pull/{number}")),
     ]
+
+
+def _multi_pr_transcript(*numbers: int) -> list[Any]:
+    """A transcript that opens several PRs in one session, oldest first."""
+    entries: list[Any] = []
+    for idx, number in enumerate(numbers):
+        tool_id = f"t{idx}"
+        entries.append(_msg("assistant", _create_pr_use(tool_id)))
+        entries.append(_msg("user", _result(tool_id, f"opened /pull/{number}")))
+    return entries
 
 
 # ---------------------------------------------------------------------------
@@ -234,6 +246,37 @@ class TestEvaluate:
     def test_no_created_pr_is_noop(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         monkeypatch.setattr(gate, "_MARKER_DIR", tmp_path / "empty")
         assert gate.evaluate({}, [_msg("assistant", {"type": "text", "text": "done"})]) is None
+
+    def test_multi_pr_session_blocks_once_then_passes(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        # Refs #1594: a session opening N PRs must fire the survey gate once
+        # (not N times). The single block enumerates every PR and targets the
+        # oldest for --record; once any one PR is recorded, the gate passes for
+        # the whole session rather than re-firing per sibling PR.
+        monkeypatch.setattr(gate, "_MARKER_DIR", tmp_path)
+        transcript = _multi_pr_transcript(1582, 1584, 1589)
+
+        decision = gate.evaluate({}, transcript)
+        assert decision is not None
+        reason = decision["reason"]
+        # The single survey is framed as covering every PR opened this session.
+        assert "#1582" in reason and "#1584" in reason and "#1589" in reason
+        # The oldest PR is the stable --record / retro target.
+        assert "--record 1582" in reason
+
+        # Recording any one of the session's PRs covers the whole session.
+        (tmp_path / "1582").touch()
+        assert gate.evaluate({}, transcript) is None
+
+    def test_any_session_marker_covers_later_pr(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        # A marker on an earlier PR means the session was already surveyed, so a
+        # later PR opened in the same session does not re-trigger the gate.
+        monkeypatch.setattr(gate, "_MARKER_DIR", tmp_path)
+        (tmp_path / "1582").touch()
+        assert gate.evaluate({}, _multi_pr_transcript(1582, 1599)) is None
 
 
 # ---------------------------------------------------------------------------
