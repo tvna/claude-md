@@ -23,6 +23,14 @@ pytestmark = pytest.mark.shard_ci_ops
 REPO_ROOT = Path(__file__).resolve().parents[1]
 INSTALL_BUN = REPO_ROOT / "scripts" / "install-bun.sh"
 CLAUDE_SETTINGS = REPO_ROOT / ".claude" / "settings.json"
+# All three agent configs must provision bun at SessionStart so the Mermaid
+# gate runs locally regardless of which agent opened the session (.devin
+# mirrors .codex via the generator). Refs #1597.
+AGENT_CONFIGS = (
+    REPO_ROOT / ".claude" / "settings.json",
+    REPO_ROOT / ".codex" / "hooks.json",
+    REPO_ROOT / ".devin" / "hooks.v1.json",
+)
 
 
 def _pinned_bun_version() -> str:
@@ -123,8 +131,9 @@ def test_remote_true_reuses_pinned_bun_without_download(tmp_path: Path) -> None:
     assert not (tmp_path / ".local" / "bin" / "bun").exists()
 
 
-def test_session_start_registers_install_bun() -> None:
-    data = json.loads(CLAUDE_SETTINGS.read_text(encoding="utf-8"))
+@pytest.mark.parametrize("config_path", AGENT_CONFIGS, ids=lambda p: p.parent.name)
+def test_session_start_registers_install_bun(config_path: Path) -> None:
+    data = json.loads(config_path.read_text(encoding="utf-8"))
     session_start = data["hooks"]["SessionStart"]
     commands: list[str] = []
     for group in session_start:
