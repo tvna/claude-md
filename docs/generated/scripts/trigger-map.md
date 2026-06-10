@@ -81,6 +81,7 @@ Detection is string-match based:
 | `labels_apply.py` | workflow | `apply-labels.yml (apply)` |
 | `labels_apply.py` | workflow | `weekly-maintenance.yml (security-control-drift)` |
 | `measure_devcontainer_startup.py` | workflow | `measure-devcontainer-startup.yml (measure)` |
+| `measure_tool_overlap.py` | workflow | `measure-tool-overlap.yml (measure)` |
 | `nixpkgs_cooldown.py` | preflight | `nixpkgs_cooldown` |
 | `nixpkgs_cooldown.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
 | `plan_approval_gate.py` | agent-hook | `claude:PostToolUse` |
