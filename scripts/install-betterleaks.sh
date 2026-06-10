@@ -19,10 +19,12 @@
 
 set -euo pipefail
 
-# Only run in the Claude Code on the Web remote environment. Local dev and the
-# nix devcontainer do not provision betterleaks at all (web-only by design), so
-# the hook is a silent no-op there (no stdout/stderr, exit 0).
-if [ "${CLAUDE_CODE_REMOTE:-}" != "true" ]; then
+# Only run in a recognised remote agent environment -- Claude Code on the Web
+# (CLAUDE_CODE_REMOTE=true) or Codex cloud (CODEX_CODE_REMOTE=true, set by the
+# operator; mirrors install-uv.sh). Local dev and the nix devcontainer do not
+# provision betterleaks at all (remote-agent-only by design), so the hook is a
+# silent no-op there (no stdout/stderr, exit 0).
+if [ "${CLAUDE_CODE_REMOTE:-}" != "true" ] && [ "${CODEX_CODE_REMOTE:-}" != "true" ]; then
   exit 0
 fi
 

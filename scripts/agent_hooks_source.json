@@ -1,6 +1,6 @@
 {
   "_comment": "Single source of truth for the per-agent hook configs. Generated files: .claude/settings.json, .codex/hooks.json, .devin/hooks.v1.json. Edit the command strings here in clean repo-relative form, then run python3 scripts/gen_agent_hooks.py to regenerate. The generator injects a working-directory-independence wrapper (cd to git toplevel) into every repo-script command so hooks run regardless of the session's CWD. Do NOT edit the generated files directly; .pre-commit-config.yaml enforces this with gen_agent_hooks.py --check. See docs/standards/agent-hooks-generation.md.",
-  "_installer_scope_audit_comment": "Audit of every SessionStart provisioning installer's per-agent scope (Refs #1606). The generator (gen_agent_hooks.py) reads only 'targets'; this sibling key is ignored at render time, so it documents intent without altering any generated config and does not affect --check. Operator decision (#1606): every web installer reproduces a devcontainer capability that the nix path skips, and codex/devin web sessions equally lack that nix path, so ALL installers are classified 'shared' for uniform cross-agent parity -- including ccusage, whose Claude-scoped telemetry has no data source under codex/devin and is therefore an accepted no-op there. The analytical signal 'does a pre-commit/local gate invoke the binary directly' (true for uv, bun, actionlint; false for the explicit-use binaries rtk/apm/waza/ccusage/zizmor/lychee/betterleaks) is retained per entry to show which installers are already functionally required versus provisioned for uniformity. The 'wired' field records the CURRENT wiring; installers not yet wired into codex+devin carry a 'wiring_followup'. Audit-only is this issue's deliverable: the actual wiring AND the remote-gate widening it needs (each not-yet-shared script gates on CLAUDE_CODE_REMOTE only, so config wiring alone is a no-op under codex's CODEX_CODE_REMOTE signal; the script must also widen its gate and persist PATH for codex, mirroring install-uv.sh) are deferred to #1608. See docs/standards/agent-hooks-generation.md.",
+  "_installer_scope_audit_comment": "Audit of every SessionStart provisioning installer's per-agent scope (Refs #1606; wired in #1608). The generator (gen_agent_hooks.py) reads only 'targets'; this sibling key is ignored at render time, so it documents intent without altering any generated config and does not affect --check. Operator decision (#1606): every web installer reproduces a devcontainer capability that the nix path skips, and codex/devin web sessions equally lack that nix path, so ALL installers are classified 'shared' for uniform cross-agent parity -- including ccusage, whose Claude-scoped telemetry has no data source under codex/devin and is therefore an accepted no-op there. The analytical signal 'does a pre-commit/local gate invoke the binary directly' (true for uv, bun, actionlint; false for the explicit-use binaries rtk/apm/waza/ccusage/zizmor/lychee/betterleaks) is retained per entry to show which installers are already functionally required versus provisioned for uniformity. The 'wired' field records the CURRENT wiring -- now all three agents for every installer. #1608 performed the wiring AND the remote-gate widening it needs: each script previously gated on CLAUDE_CODE_REMOTE only, so config wiring alone was a no-op under codex's CODEX_CODE_REMOTE signal; every installer now gates on both signals (mirroring install-uv.sh) and persists PATH via scripts/_session_path.sh. See docs/standards/agent-hooks-generation.md.",
   "installer_scope_audit": {
     "scripts/install-uv.sh": {
       "scope": "shared",
@@ -18,64 +18,55 @@
       "scope": "shared",
       "wired": ["claude", "codex", "devin"],
       "functionally_required": true,
-      "rationale": "Backs the agent-agnostic Mermaid pre-commit gate (scan-mermaid-syntax soft-skips when bun/node_modules absent); any agent editing docs trips it. Wired into codex+devin in #1603.",
-      "wiring_followup": "Wired but NOT yet operative under codex/devin: the script gates on CLAUDE_CODE_REMOTE only, so it is currently a no-op under codex's CODEX_CODE_REMOTE signal. Widening the gate (and codex PATH persistence), mirroring install-uv.sh, is deferred to #1608."
+      "rationale": "Backs the agent-agnostic Mermaid pre-commit gate (scan-mermaid-syntax soft-skips when bun/node_modules absent); any agent editing docs trips it. Wired into codex+devin in #1603; remote gate widened to CODEX_CODE_REMOTE in #1608 so it is operative there."
     },
     "scripts/install-actionlint.sh": {
       "scope": "shared",
-      "wired": ["claude"],
+      "wired": ["claude", "codex", "devin"],
       "functionally_required": true,
-      "rationale": "Backs the agent-agnostic workflow-lint pre-commit gate (id: actionlint soft-skips when the binary is absent); structurally identical to install-bun.sh (soft-skip pre-commit + nix CI hard gate).",
-      "wiring_followup": "Currently claude-only -- an unreviewed parity gap from #1603. Wire into codex+devin and widen the remote gate (CODEX_CODE_REMOTE + codex PATH persistence): deferred to #1608."
+      "rationale": "Backs the agent-agnostic workflow-lint pre-commit gate (id: actionlint soft-skips when the binary is absent); structurally identical to install-bun.sh (soft-skip pre-commit + nix CI hard gate). Wired into codex+devin and gate widened to CODEX_CODE_REMOTE in #1608."
     },
     "scripts/install-rtk.sh": {
       "scope": "shared",
-      "wired": ["claude"],
+      "wired": ["claude", "codex", "devin"],
       "functionally_required": false,
-      "rationale": "Explicit `rtk <cmd>` affordance (no pre-commit gate invokes it; its `rtk hook claude` hook is Claude-named and unshipped). Classified shared for uniform cross-agent provisioning of devcontainer-parity tools.",
-      "wiring_followup": "Wire into codex+devin and widen the remote gate (CODEX_CODE_REMOTE + codex PATH persistence): deferred to #1608."
+      "rationale": "Explicit `rtk <cmd>` affordance (no pre-commit gate invokes it; its `rtk hook claude` hook is Claude-named and unshipped). Shared for uniform cross-agent provisioning of devcontainer-parity tools; wired into codex+devin and gate widened to CODEX_CODE_REMOTE in #1608."
     },
     "scripts/install-apm.sh": {
       "scope": "shared",
-      "wired": ["claude"],
+      "wired": ["claude", "codex", "devin"],
       "functionally_required": false,
-      "rationale": "Explicit `apm <cmd>` affordance (no in-session gate depends on it; compilation runs via CI / local `apm compile`). Classified shared for uniform cross-agent provisioning of devcontainer-parity tools.",
-      "wiring_followup": "Wire into codex+devin and widen the remote gate (CODEX_CODE_REMOTE + codex PATH persistence): deferred to #1608."
+      "rationale": "Explicit `apm <cmd>` affordance (no in-session gate depends on it; compilation runs via CI / local `apm compile`). Shared for uniform cross-agent provisioning of devcontainer-parity tools; wired into codex+devin and gate widened to CODEX_CODE_REMOTE in #1608."
     },
     "scripts/install-waza.sh": {
       "scope": "shared",
-      "wired": ["claude"],
+      "wired": ["claude", "codex", "devin"],
       "functionally_required": false,
-      "rationale": "Explicit `waza <cmd>` affordance (the skill-quality pre-commit gate uses the separate scripts/install_waza.sh, not this SessionStart installer). Classified shared for uniform cross-agent provisioning of devcontainer-parity tools.",
-      "wiring_followup": "Wire into codex+devin and widen the remote gate (CODEX_CODE_REMOTE + codex PATH persistence): deferred to #1608."
+      "rationale": "Explicit `waza <cmd>` affordance (the skill-quality pre-commit gate uses the separate scripts/install_waza.sh, not this SessionStart installer). Shared for uniform cross-agent provisioning of devcontainer-parity tools; wired into codex+devin and gate widened to CODEX_CODE_REMOTE in #1608."
     },
     "scripts/install-ccusage.sh": {
       "scope": "shared",
-      "wired": ["claude"],
+      "wired": ["claude", "codex", "devin"],
       "functionally_required": false,
-      "rationale": "ccusage reads Claude Code's local usage-telemetry JSONL; the metric it feeds (session_resource_report/cache-regime) is Claude-scoped. Classified shared per operator decision (#1606) for uniform provisioning; it is an ACCEPTED no-op under codex/devin where no telemetry data source exists.",
-      "wiring_followup": "Wire into codex+devin and widen the remote gate (CODEX_CODE_REMOTE + codex PATH persistence): deferred to #1608."
+      "rationale": "ccusage reads Claude Code's local usage-telemetry JSONL; the metric it feeds (session_resource_report/cache-regime) is Claude-scoped. Shared per operator decision (#1606) for uniform provisioning; it is an ACCEPTED no-op under codex/devin where no telemetry data source exists. Wired into codex+devin and gate widened to CODEX_CODE_REMOTE in #1608."
     },
     "scripts/install-zizmor.sh": {
       "scope": "shared",
-      "wired": ["claude"],
+      "wired": ["claude", "codex", "devin"],
       "functionally_required": false,
-      "rationale": "Explicit-use binary for an effectiveness-measurement phase; the deterministic gate is the pure-python scan_workflow_injection.py (needs no binary). Classified shared for uniform cross-agent provisioning of devcontainer-parity tools.",
-      "wiring_followup": "Wire into codex+devin and widen the remote gate (CODEX_CODE_REMOTE + codex PATH persistence): deferred to #1608."
+      "rationale": "Explicit-use binary for an effectiveness-measurement phase; the deterministic gate is the pure-python scan_workflow_injection.py (needs no binary). Shared for uniform cross-agent provisioning of devcontainer-parity tools; wired into codex+devin and gate widened to CODEX_CODE_REMOTE in #1608."
     },
     "scripts/install-lychee.sh": {
       "scope": "shared",
-      "wired": ["claude"],
+      "wired": ["claude", "codex", "devin"],
       "functionally_required": false,
-      "rationale": "Explicit-use binary for an effectiveness-measurement phase; the deterministic gate is the pure-python scan_markdown_links.py (needs no binary). Classified shared for uniform cross-agent provisioning of devcontainer-parity tools.",
-      "wiring_followup": "Wire into codex+devin and widen the remote gate (CODEX_CODE_REMOTE + codex PATH persistence): deferred to #1608."
+      "rationale": "Explicit-use binary for an effectiveness-measurement phase; the deterministic gate is the pure-python scan_markdown_links.py (needs no binary). Shared for uniform cross-agent provisioning of devcontainer-parity tools; wired into codex+devin and gate widened to CODEX_CODE_REMOTE in #1608."
     },
     "scripts/install-betterleaks.sh": {
       "scope": "shared",
-      "wired": ["claude"],
+      "wired": ["claude", "codex", "devin"],
       "functionally_required": false,
-      "rationale": "Explicit-use binary for an effectiveness-measurement phase; the deterministic gate is the pure-python scan_secrets.py (needs no binary). Classified shared for uniform cross-agent provisioning of devcontainer-parity tools.",
-      "wiring_followup": "Wire into codex+devin and widen the remote gate (CODEX_CODE_REMOTE + codex PATH persistence): deferred to #1608."
+      "rationale": "Explicit-use binary for an effectiveness-measurement phase; the deterministic gate is the pure-python scan_secrets.py (needs no binary). Shared for uniform cross-agent provisioning of devcontainer-parity tools; wired into codex+devin and gate widened to CODEX_CODE_REMOTE in #1608."
     }
   },
   "targets": [
@@ -656,6 +647,86 @@
                   "type": "command",
                   "command": "scripts/install-bun.sh",
                   "statusMessage": "Provisioning bun for the Mermaid gate"
+                }
+              ]
+            },
+            {
+              "matcher": "startup|resume|clear|compact",
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "scripts/install-rtk.sh",
+                  "statusMessage": "Provisioning rtk binary"
+                }
+              ]
+            },
+            {
+              "matcher": "startup|resume|clear|compact",
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "scripts/install-apm.sh",
+                  "statusMessage": "Provisioning apm binary"
+                }
+              ]
+            },
+            {
+              "matcher": "startup|resume|clear|compact",
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "scripts/install-actionlint.sh",
+                  "statusMessage": "Provisioning actionlint for the workflow-lint gate"
+                }
+              ]
+            },
+            {
+              "matcher": "startup|resume|clear|compact",
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "scripts/install-waza.sh",
+                  "statusMessage": "Provisioning waza binary"
+                }
+              ]
+            },
+            {
+              "matcher": "startup|resume|clear|compact",
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "scripts/install-ccusage.sh",
+                  "statusMessage": "Provisioning ccusage binary"
+                }
+              ]
+            },
+            {
+              "matcher": "startup|resume|clear|compact",
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "scripts/install-zizmor.sh",
+                  "statusMessage": "Provisioning zizmor binary"
+                }
+              ]
+            },
+            {
+              "matcher": "startup|resume|clear|compact",
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "scripts/install-lychee.sh",
+                  "statusMessage": "Provisioning lychee binary"
+                }
+              ]
+            },
+            {
+              "matcher": "startup|resume|clear|compact",
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "scripts/install-betterleaks.sh",
+                  "statusMessage": "Provisioning betterleaks binary"
                 }
               ]
             },
