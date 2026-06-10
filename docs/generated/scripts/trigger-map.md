@@ -129,6 +129,10 @@ Detection is string-match based:
 | `preflight_push_nonempty.py` | agent-hook | `codex:PreToolUse` |
 | `preflight_push_session_branch.py` | agent-hook | `claude:PreToolUse` |
 | `preflight_push_session_branch.py` | agent-hook | `codex:PreToolUse` |
+| `preflight_session_base_freshness.py` | agent-hook | `claude:PreToolUse` |
+| `preflight_session_base_freshness.py` | agent-hook | `claude:SessionStart` |
+| `preflight_session_base_freshness.py` | agent-hook | `codex:PreToolUse` |
+| `preflight_session_base_freshness.py` | agent-hook | `codex:SessionStart` |
 | `preflight_title_policy.py` | agent-hook | `claude:PreToolUse` |
 | `preflight_title_policy.py` | agent-hook | `codex:PreToolUse` |
 | `preflight_uv_version.py` | preflight | `preflight_uv_version` |
@@ -158,6 +162,7 @@ Detection is string-match based:
 | `scan_devcontainer_tool_drift.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
 | `scan_doc_workflow_refs.py` | preflight | `scan_doc_workflow_refs` |
 | `scan_doc_workflow_refs.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
+| `scan_docs_inventory.py` | pre-commit | `scan-docs-inventory` |
 | `scan_docs_inventory.py` | preflight | `scan_docs_inventory` |
 | `scan_docs_inventory.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
 | `scan_flake_pin_drift.py` | preflight | `scan_flake_pin_drift` |
@@ -190,6 +195,7 @@ Detection is string-match based:
 | `scan_secrets.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
 | `scan_session_path_drift.py` | preflight | `scan_session_path_drift` |
 | `scan_session_path_drift.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
+| `scan_test_presence_drift.py` | pre-commit | `scan-test-presence-drift` |
 | `scan_test_presence_drift.py` | preflight | `scan_test_presence_drift` |
 | `scan_test_presence_drift.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
 | `scan_workflow_action_pins.py` | preflight | `scan_workflow_action_pins` |
