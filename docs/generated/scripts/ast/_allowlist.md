@@ -24,15 +24,7 @@ flowchart TD
     N001["resolve_hosts(...)"]
     N002["hosts = set(...)"]
     N003["base = path.parent"]
-    N004["for raw in path.read_text(encoding='<str>').splitlines():
-    content, _rationale = split_inline_comment(raw)
-    if not content:
-        continue
-    if content.startswith(INCLUDE_PREFIX):
-        target = content[len(INCLUDE_PREFIX):].strip()
-        hosts |= resolve_hosts(base / target)
-        continue
-    hosts.add(content)"]
+    N004["for raw in path.read_text(encoding='<str>').splitlines():     content, _rationale = split_inline_comment(raw)     if not content:         continue     if content.startswith(INCLUDE_PREFIX):         target = content[len(INCLUDE_PREFIX):].strip()         hosts |= resolve_hosts(base / target)         continue     hosts.add(content)"]
     N005["return hosts"]
     N001 -->|"start"| N002
     N002 --> N003

@@ -107,11 +107,7 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["_expand_paths(...)"]
-    N002["for p in paths:
-    if p.is_dir():
-        yield from sorted(p.glob('<str>'))
-    else:
-        yield p"]
+    N002["for p in paths:     if p.is_dir():         yield from sorted(p.glob('<str>'))     else:         yield p"]
     N003["end"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -123,17 +119,7 @@ flowchart TD
 flowchart TD
     N001["load_jobs(...)"]
     N002["out = []"]
-    N003["for path in _expand_paths(paths):
-    text = path.read_text(encoding='<str>')
-    data = json.loads(text)
-    if not isinstance(data, dict):
-        continue
-    jobs = data.get('<str>')
-    if not isinstance(jobs, list):
-        continue
-    for j in jobs:
-        if isinstance(j, dict):
-            out.append(j)"]
+    N003["for path in _expand_paths(paths):     text = path.read_text(encoding='<str>')     data = json.loads(text)     if not isinstance(data, dict):         continue     jobs = data.get('<str>')     if not isinstance(jobs, list):         continue     for j in jobs:         if isinstance(j, dict):             out.append(j)"]
     N004["return out"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -146,22 +132,7 @@ flowchart TD
 flowchart TD
     N001["filter_jobs(...)"]
     N002["out = []"]
-    N003["for j in jobs:
-    if workflow_name is not None and j.get('<str>') != workflow_name:
-        continue
-    if job_name is not None and j.get('<str>') != job_name:
-        continue
-    if since is not None:
-        start = j.get('<str>')
-        if not isinstance(start, str):
-            continue
-        try:
-            started = _parse_iso(start)
-        except ValueError:
-            continue
-        if started < since:
-            continue
-    out.append(j)"]
+    N003["for j in jobs:     if workflow_name is not None and j.get('<str>') != workflow_name:         continue     if job_name is not None and j.get('<str>') != job_name:         continue     if since is not None:         start = j.get('<str>')         if not isinstance(start, str):             continue         try:             started = _parse_iso(start)         except ValueError:             continue         if started < since:             continue     out.append(j)"]
     N004["return out"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -174,24 +145,8 @@ flowchart TD
 flowchart TD
     N001["aggregate_job_durations(...)"]
     N002["bucket = {}"]
-    N003["for j in jobs:
-    name = j.get('<str>')
-    start_raw = j.get('<str>')
-    end_raw = j.get('<str>')
-    if not isinstance(name, str) or not isinstance(start_raw, str):
-        continue
-    if not isinstance(end_raw, str):
-        continue
-    dur = _duration_seconds(start_raw, end_raw)
-    if dur is None:
-        continue
-    try:
-        started = _parse_iso(start_raw)
-    except ValueError:
-        continue
-    bucket.setdefault(name, []).append((started, dur))"]
-    N004["for v in bucket.values():
-    v.sort(key=lambda t: t[0])"]
+    N003["for j in jobs:     name = j.get('<str>')     start_raw = j.get('<str>')     end_raw = j.get('<str>')     if not isinstance(name, str) or not isinstance(start_raw, str):         continue     if not isinstance(end_raw, str):         continue     dur = _duration_seconds(start_raw, end_raw)     if dur is None:         continue     try:         started = _parse_iso(start_raw)     except ValueError:         continue     bucket.setdefault(name, []).append((started, dur))"]
+    N004["for v in bucket.values():     v.sort(key=lambda t: t[0])"]
     N005["return bucket"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -205,33 +160,8 @@ flowchart TD
 flowchart TD
     N001["aggregate_step_durations(...)"]
     N002["bucket = {}"]
-    N003["for j in jobs:
-    job_name = j.get('<str>')
-    if not isinstance(job_name, str):
-        continue
-    steps = j.get('<str>')
-    if not isinstance(steps, list):
-        continue
-    for s in steps:
-        if not isinstance(s, dict):
-            continue
-        step_name = s.get('<str>')
-        start_raw = s.get('<str>')
-        end_raw = s.get('<str>')
-        if not isinstance(step_name, str) or not isinstance(start_raw, str):
-            continue
-        if not isinstance(end_raw, str):
-            continue
-        dur = _duration_seconds(start_raw, end_raw)
-        if dur is None:
-            continue
-        try:
-            started = _parse_iso(start_raw)
-        except ValueError:
-            continue
-        bucket.setdefault((job_name, step_name), []).append((started, dur))"]
-    N004["for v in bucket.values():
-    v.sort(key=lambda t: t[0])"]
+    N003["for j in jobs:     job_name = j.get('<str>')     if not isinstance(job_name, str):         continue     steps = j.get('<str>')     if not isinstance(steps, list):         continue     for s in steps:         if not isinstance(s, dict):             continue         step_name = s.get('<str>')         start_raw = s.get('<str>')         end_raw = s.get('<str>')         if not isinstance(step_name, str) or not isinstance(start_raw, str):             continue         if not isinstance(end_raw, str):             continue         dur = _duration_seconds(start_raw, end_raw)         if dur is None:             continue         try:             started = _parse_iso(start_raw)         except ValueError:             continue         bucket.setdefault((job_name, step_name), []).append((started, dur))"]
+    N004["for v in bucket.values():     v.sort(key=lambda t: t[0])"]
     N005["return bucket"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -246,12 +176,7 @@ flowchart TD
     N001["partition_aggregates_by_cutoff(...)"]
     N002["pre = {}"]
     N003["post = {}"]
-    N004["for key, samples in aggregates.items():
-    for ts, val in samples:
-        if ts < cutoff:
-            pre.setdefault(key, []).append(val)
-        else:
-            post.setdefault(key, []).append(val)"]
+    N004["for key, samples in aggregates.items():     for ts, val in samples:         if ts < cutoff:             pre.setdefault(key, []).append(val)         else:             post.setdefault(key, []).append(val)"]
     N005["return (pre, post)"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -309,9 +234,7 @@ flowchart TD
     N002["rows = []"]
     N003["append(...)"]
     N004["append(...)"]
-    N005["for name in sorted(aggregates):
-    samples = [v for _, v in aggregates[name]]
-    rows.append(f'<str>{name}<str>{len(samples)}<str>{_fmt_seconds(_percentile(samples, 50))}<str>{_fmt_seconds(_percentile(samples, 95))}<str>{_fmt_seconds(max(samples))}<str>{_trend_arrow(samples)}<str>')"]
+    N005["for name in sorted(aggregates):     samples = [v for _, v in aggregates[name]]     rows.append(f'<str>{name}<str>{len(samples)}<str>{_fmt_seconds(_percentile(samples, 50))}<str>{_fmt_seconds(_percentile(samples, 95))}<str>{_fmt_seconds(max(samples))}<str>{_trend_arrow(samples)}<str>')"]
     N006["return '<str>'.join(rows)"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -328,10 +251,7 @@ flowchart TD
     N002["rows = []"]
     N003["append(...)"]
     N004["append(...)"]
-    N005["for key in sorted(aggregates):
-    job_name, step_name = key
-    samples = [v for _, v in aggregates[key]]
-    rows.append(f'<str>{job_name}<str>{step_name}<str>{len(samples)}<str>{_fmt_seconds(_percentile(samples, 50))}<str>{_fmt_seconds(_percentile(samples, 95))}<str>{_fmt_seconds(max(samples))}<str>{_trend_arrow(samples)}<str>')"]
+    N005["for key in sorted(aggregates):     job_name, step_name = key     samples = [v for _, v in aggregates[key]]     rows.append(f'<str>{job_name}<str>{step_name}<str>{len(samples)}<str>{_fmt_seconds(_percentile(samples, 50))}<str>{_fmt_seconds(_percentile(samples, 95))}<str>{_fmt_seconds(max(samples))}<str>{_trend_arrow(samples)}<str>')"]
     N006["return '<str>'.join(rows)"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -348,10 +268,7 @@ flowchart TD
     N002["rows = []"]
     N003["append(...)"]
     N004["append(...)"]
-    N005["for name in sorted(set(pre) | set(post)):
-    pre_samples = pre.get(name, [])
-    post_samples = post.get(name, [])
-    rows.append(f'<str>{name}<str>{len(pre_samples)}<str>{_fmt_seconds(_percentile(pre_samples, 50))}<str>{len(post_samples)}<str>{_fmt_seconds(_percentile(post_samples, 50))}<str>{_delta_p50_marker(pre_samples, post_samples)}<str>')"]
+    N005["for name in sorted(set(pre) | set(post)):     pre_samples = pre.get(name, [])     post_samples = post.get(name, [])     rows.append(f'<str>{name}<str>{len(pre_samples)}<str>{_fmt_seconds(_percentile(pre_samples, 50))}<str>{len(post_samples)}<str>{_fmt_seconds(_percentile(post_samples, 50))}<str>{_delta_p50_marker(pre_samples, post_samples)}<str>')"]
     N006["return '<str>'.join(rows)"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -368,11 +285,7 @@ flowchart TD
     N002["rows = []"]
     N003["append(...)"]
     N004["append(...)"]
-    N005["for key in sorted(set(pre) | set(post)):
-    job_name, step_name = key
-    pre_samples = pre.get(key, [])
-    post_samples = post.get(key, [])
-    rows.append(f'<str>{job_name}<str>{step_name}<str>{len(pre_samples)}<str>{_fmt_seconds(_percentile(pre_samples, 50))}<str>{len(post_samples)}<str>{_fmt_seconds(_percentile(post_samples, 50))}<str>{_delta_p50_marker(pre_samples, post_samples)}<str>')"]
+    N005["for key in sorted(set(pre) | set(post)):     job_name, step_name = key     pre_samples = pre.get(key, [])     post_samples = post.get(key, [])     rows.append(f'<str>{job_name}<str>{step_name}<str>{len(pre_samples)}<str>{_fmt_seconds(_percentile(pre_samples, 50))}<str>{len(post_samples)}<str>{_fmt_seconds(_percentile(post_samples, 50))}<str>{_delta_p50_marker(pre_samples, post_samples)}<str>')"]
     N006["return '<str>'.join(rows)"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -387,13 +300,7 @@ flowchart TD
 flowchart TD
     N001["budget_breaches(...)"]
     N002["out = []"]
-    N003["for name, samples in job_agg.items():
-    durations = [v for _, v in samples]
-    if not durations:
-        continue
-    p50 = _percentile(durations, 50)
-    if p50 > budget_seconds:
-        out.append((name, p50))"]
+    N003["for name, samples in job_agg.items():     durations = [v for _, v in samples]     if not durations:         continue     p50 = _percentile(durations, 50)     if p50 > budget_seconds:         out.append((name, p50))"]
     N004["return sorted(out, key=lambda item: item[1], reverse=True)"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -427,8 +334,7 @@ flowchart TD
     N010["append(...)"]
     N011["append(...)"]
     N012["append(...)"]
-    N013["for name, p50 in breaches:
-    parts.append(f'<str>{name}<str>{_fmt_seconds(p50)}<str>{_fmt_seconds(budget_seconds)}<str>')"]
+    N013["for name, p50 in breaches:     parts.append(f'<str>{name}<str>{_fmt_seconds(p50)}<str>{_fmt_seconds(budget_seconds)}<str>')"]
     N014["return '<str>'.join(parts)"]
     N001 -->|"start"| N002
     N002 --> N003

@@ -32,15 +32,7 @@ flowchart TD
     N001["scan_line(...)"]
     N002["if PRAGMA_ALLOWLIST in line"]
     N003["return None"]
-    N004["for rule in _RULES:
-    match = rule.pattern.search(line)
-    if match is None:
-        continue
-    if rule.value_group is not None:
-        value = match.group(rule.value_group)
-        if not _looks_like_secret_value(value):
-            continue
-    return rule.rule_id"]
+    N004["for rule in _RULES:     match = rule.pattern.search(line)     if match is None:         continue     if rule.value_group is not None:         value = match.group(rule.value_group)         if not _looks_like_secret_value(value):             continue     return rule.rule_id"]
     N005["return None"]
     N001 -->|"start"| N002
     N002 -->|"true"| N003
@@ -54,10 +46,7 @@ flowchart TD
 flowchart TD
     N001["scan_text(...)"]
     N002["hits = []"]
-    N003["for lineno, line in enumerate(text.splitlines(), start=1):
-    rule_id = scan_line(line)
-    if rule_id is not None:
-        hits.append((lineno, rule_id))"]
+    N003["for lineno, line in enumerate(text.splitlines(), start=1):     rule_id = scan_line(line)     if rule_id is not None:         hits.append((lineno, rule_id))"]
     N004["return hits"]
     N001 -->|"start"| N002
     N002 --> N003

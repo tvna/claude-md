@@ -23,9 +23,7 @@ flowchart TD
     N006["return False"]
     N007["pure = PurePosixPath(...)"]
     N008["name = pure.name"]
-    N009["for glob in _SENSITIVE_BASENAME_GLOBS:
-    if fnmatch.fnmatch(name, glob):
-        return True"]
+    N009["for glob in _SENSITIVE_BASENAME_GLOBS:     if fnmatch.fnmatch(name, glob):         return True"]
     N010["segments = set(...)"]
     N011["if segments & _SENSITIVE_DIR_SEGMENTS"]
     N012["return True"]
@@ -70,9 +68,7 @@ flowchart TD
     N005["has_reader = any(...)"]
     N006["if not has_reader"]
     N007["return None"]
-    N008["for tok in tokens:
-    if is_sensitive_path(tok):
-        return _normalize(tok)"]
+    N008["for tok in tokens:     if is_sensitive_path(tok):         return _normalize(tok)"]
     N009["return None"]
     N001 -->|"start"| N002
     N002 --> N003

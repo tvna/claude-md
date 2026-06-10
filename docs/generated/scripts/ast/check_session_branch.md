@@ -13,8 +13,7 @@ flowchart TD
     N005["return"]
     N006["if not existing or existing.endswith('\n')"]
     N007["return"]
-    N008["with contextlib.suppress(OSError):
-    path.write_text(existing + '<str>', encoding='<str>')"]
+    N008["with contextlib.suppress(OSError):     path.write_text(existing + '<str>', encoding='<str>')"]
     N009["end"]
     N001 -->|"start"| N002
     N002 -->|"try"| N003

@@ -32,8 +32,7 @@ flowchart TD
     N007["except OSError"]
     N008["existing = '<str>'"]
     N009["separator = '<str>' if not existing or existing.endswith('<str>') else '<str>'"]
-    N010["with contextlib.suppress(OSError), path.open('<str>', encoding='<str>') as handle:
-    handle.write(separator + branch + '<str>')"]
+    N010["with contextlib.suppress(OSError), path.open('<str>', encoding='<str>') as handle:     handle.write(separator + branch + '<str>')"]
     N011["end"]
     N001 -->|"start"| N002
     N002 --> N003
