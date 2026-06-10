@@ -10,10 +10,7 @@ flowchart TD
     N002["found = which(...)"]
     N003["if found"]
     N004["return found"]
-    N005["for hint in _GO_BIN_HINTS:
-    candidate = hint / '<str>'
-    if candidate.is_file():
-        return str(candidate)"]
+    N005["for hint in _GO_BIN_HINTS:     candidate = hint / '<str>'     if candidate.is_file():         return str(candidate)"]
     N006["return None"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -86,9 +83,7 @@ flowchart TD
     N001["evaluate_skill(...)"]
     N002["spec_failures = []"]
     N003["token_warnings = []"]
-    N004["for check in entry.get('<str>', []):
-    if not check.get('<str>', True):
-        spec_failures.append(f\"{check.get('<str>', '<str>')}<str>{check.get('<str>', '<str>')}\")"]
+    N004["for check in entry.get('<str>', []):     if not check.get('<str>', True):         spec_failures.append(f'{check.get('<str>', '<str>')}<str>{check.get('<str>', '<str>')}')"]
     N005["budget = get(...)"]
     N006["if budget.get('exceeded')"]
     N007["append(...)"]
@@ -115,33 +110,13 @@ flowchart TD
     N006["return 1"]
     N007["if args.skills"]
     N008["targets = []"]
-    N009["for raw in args.skills:
-    target = _normalize_target(repo_root, raw)
-    if target is None:
-        print(f'<str>{raw}<str>', file=sys.stderr)
-        continue
-    targets.append(target)"]
+    N009["for raw in args.skills:     target = _normalize_target(repo_root, raw)     if target is None:         print(f'<str>{raw}<str>', file=sys.stderr)         continue     targets.append(target)"]
     N010["targets = discover_skills(...)"]
     N011["if not targets"]
     N012["print(...)"]
     N013["return 0"]
     N014["total_failures = 0"]
-    N015["for skill_dir in targets:
-    result = run_waza_check(waza, skill_dir)
-    for entry in result.get('<str>', []):
-        rel = Path(entry.get('<str>', str(skill_dir)))
-        with contextlib.suppress(ValueError):
-            rel = rel.relative_to(repo_root)
-        spec_failures, token_warnings = evaluate_skill(entry)
-        for msg in token_warnings:
-            print(f'<str>{rel}<str>{msg}<str>', file=sys.stderr)
-        for msg in spec_failures:
-            print(f'<str>{rel}<str>{msg}', file=sys.stderr)
-        if spec_failures:
-            total_failures += len(spec_failures)
-            print(f'<str>{rel}<str>{len(spec_failures)}<str>', file=sys.stderr)
-        else:
-            print(f'<str>{rel}')"]
+    N015["for skill_dir in targets:     result = run_waza_check(waza, skill_dir)     for entry in result.get('<str>', []):         rel = Path(entry.get('<str>', str(skill_dir)))         with contextlib.suppress(ValueError):             rel = rel.relative_to(repo_root)         spec_failures, token_warnings = evaluate_skill(entry)         for msg in token_warnings:             print(f'<str>{rel}<str>{msg}<str>', file=sys.stderr)         for msg in spec_failures:             print(f'<str>{rel}<str>{msg}', file=sys.stderr)         if spec_failures:             total_failures += len(spec_failures)             print(f'<str>{rel}<str>{len(spec_failures)}<str>', file=sys.stderr)         else:             print(f'<str>{rel}')"]
     N016["if total_failures"]
     N017["print(...)"]
     N018["return 1"]

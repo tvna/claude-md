@@ -9,14 +9,7 @@ flowchart TD
     N001["find_violations(...)"]
     N002["lines = splitlines(...)"]
     N003["problems = []"]
-    N004["for label, anchor in REGISTERED_BULLETS.items():
-    matches = [(i, ln) for i, ln in enumerate(lines, start=1) if anchor in ln]
-    if not matches:
-        problems.append(f'<str>{label}<str>{anchor!r}<str>')
-        continue
-    for lineno, line in matches:
-        if MARKER not in line:
-            problems.append(f'<str>{path}<str>{lineno}<str>{MARKER!r}<str>{label}<str>')"]
+    N004["for label, anchor in REGISTERED_BULLETS.items():     matches = [(i, ln) for i, ln in enumerate(lines, start=1) if anchor in ln]     if not matches:         problems.append(f'<str>{label}<str>{anchor!r}<str>')         continue     for lineno, line in matches:         if MARKER not in line:             problems.append(f'<str>{path}<str>{lineno}<str>{MARKER!r}<str>{label}<str>')"]
     N005["return problems"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -35,8 +28,7 @@ flowchart TD
     N005["return 2"]
     N006["problems = find_violations(...)"]
     N007["if problems"]
-    N008["for problem in problems:
-    print(problem, file=sys.stderr)"]
+    N008["for problem in problems:     print(problem, file=sys.stderr)"]
     N009["return 1"]
     N010["print(...)"]
     N011["return 0"]

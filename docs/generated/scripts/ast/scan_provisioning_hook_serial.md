@@ -8,11 +8,7 @@ This file is generated from `scripts/scan_provisioning_hook_serial.py` by `pytho
 flowchart TD
     N001["provisioning_hooks(...)"]
     N002["hooks = []"]
-    N003["for repo in config.get('<str>', []) or []:
-    for hook in repo.get('<str>', []) or []:
-        entry = str(hook.get('<str>', '<str>'))
-        if _PROVISIONING_RE.search(entry):
-            hooks.append(hook)"]
+    N003["for repo in config.get('<str>', []) or []:     for hook in repo.get('<str>', []) or []:         entry = str(hook.get('<str>', '<str>'))         if _PROVISIONING_RE.search(entry):             hooks.append(hook)"]
     N004["return hooks"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -25,10 +21,7 @@ flowchart TD
 flowchart TD
     N001["find_gaps(...)"]
     N002["errors = []"]
-    N003["for hook in provisioning_hooks(config):
-    if hook.get('<str>') is not True:
-        hook_id = hook.get('<str>', '<str>')
-        errors.append(f'<str>{hook_id}<str>')"]
+    N003["for hook in provisioning_hooks(config):     if hook.get('<str>') is not True:         hook_id = hook.get('<str>', '<str>')         errors.append(f'<str>{hook_id}<str>')"]
     N004["return errors"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -65,8 +58,7 @@ flowchart TD
     N001["_cmd_verify(...)"]
     N002["errors = find_gaps(...)"]
     N003["if errors"]
-    N004["for err in errors:
-    print(err, file=sys.stderr)"]
+    N004["for err in errors:     print(err, file=sys.stderr)"]
     N005["print(...)"]
     N006["return 1"]
     N007["print(...)"]
@@ -85,8 +77,7 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["_cmd_list(...)"]
-    N002["for hook in provisioning_hooks(_load_config()):
-    print(f\"{hook.get('<str>', '<str>')}<str>{hook.get('<str>')}\")"]
+    N002["for hook in provisioning_hooks(_load_config()):     print(f'{hook.get('<str>', '<str>')}<str>{hook.get('<str>')}')"]
     N003["return 0"]
     N001 -->|"start"| N002
     N002 --> N003

@@ -8,10 +8,7 @@ This file is generated from `scripts/scan_session_path_drift.py` by `python3 scr
 flowchart TD
     N001["_iter_writes(...)"]
     N002["writes = []"]
-    N003["for path in sorted(scripts_dir.glob('<str>')):
-    for lineno, line in enumerate(path.read_text(encoding='<str>').splitlines(), 1):
-        if _ENV_FILE_WRITE.search(line):
-            writes.append(EnvFileWrite(script=path.name, lineno=lineno, line=line.strip()))"]
+    N003["for path in sorted(scripts_dir.glob('<str>')):     for lineno, line in enumerate(path.read_text(encoding='<str>').splitlines(), 1):         if _ENV_FILE_WRITE.search(line):             writes.append(EnvFileWrite(script=path.name, lineno=lineno, line=line.strip()))"]
     N004["return writes"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -43,9 +40,7 @@ flowchart TD
     N001["_cmd_verify(...)"]
     N002["scripts_dir = Path(...)"]
     N003["errors = 0"]
-    N004["for write in stray_writes(scripts_dir):
-    errors += 1
-    print(f'<str>{write.script}<str>{write.lineno}<str>{write.script}<str>{write.lineno}<str>{write.line!r}<str>{HELPER_NAME}<str>', file=sys.stderr)"]
+    N004["for write in stray_writes(scripts_dir):     errors += 1     print(f'<str>{write.script}<str>{write.lineno}<str>{write.script}<str>{write.lineno}<str>{write.line!r}<str>{HELPER_NAME}<str>', file=sys.stderr)"]
     N005["if not helper_writes_env_file(scripts_dir)"]
     N006["errors += 1"]
     N007["print(...)"]
@@ -73,8 +68,7 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["_cmd_list(...)"]
-    N002["for write in _iter_writes(Path(args.scripts_dir)):
-    print(f'<str>{write.script}<str>{write.lineno}<str>{write.line}')"]
+    N002["for write in _iter_writes(Path(args.scripts_dir)):     print(f'<str>{write.script}<str>{write.lineno}<str>{write.line}')"]
     N003["return 0"]
     N001 -->|"start"| N002
     N002 --> N003

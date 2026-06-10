@@ -59,9 +59,7 @@ flowchart TD
 flowchart TD
     N001["final_assistant_turn(...)"]
     N002["last_user = -1"]
-    N003["for idx, entry in enumerate(entries):
-    if _entry_role(entry) == '<str>':
-        last_user = idx"]
+    N003["for idx, entry in enumerate(entries):     if _entry_role(entry) == '<str>':         last_user = idx"]
     N004["return [entry for entry in entries[last_user + 1:] if _entry_role(entry) == '<str>']"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -74,10 +72,7 @@ flowchart TD
 flowchart TD
     N001["turn_text(...)"]
     N002["parts = []"]
-    N003["for entry in turn:
-    for block in _content_blocks(entry):
-        if block.get('<str>') == '<str>' and isinstance(block.get('<str>'), str):
-            parts.append(block['<str>'])"]
+    N003["for entry in turn:     for block in _content_blocks(entry):         if block.get('<str>') == '<str>' and isinstance(block.get('<str>'), str):             parts.append(block['<str>'])"]
     N004["return '<str>'.join(parts)"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -152,14 +147,7 @@ flowchart TD
     N007["except OSError"]
     N008["return []"]
     N009["entries = []"]
-    N010["for line in raw.splitlines():
-    line = line.strip()
-    if not line:
-        continue
-    try:
-        entries.append(json.loads(line))
-    except json.JSONDecodeError:
-        continue"]
+    N010["for line in raw.splitlines():     line = line.strip()     if not line:         continue     try:         entries.append(json.loads(line))     except json.JSONDecodeError:         continue"]
     N011["return entries"]
     N001 -->|"start"| N002
     N002 -->|"true"| N003

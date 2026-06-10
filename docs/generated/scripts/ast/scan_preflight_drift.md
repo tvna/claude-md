@@ -9,26 +9,7 @@ flowchart TD
     N001["workflow_targets_pull_request(...)"]
     N002["in_on_block = False"]
     N003["on_block_indent = -1"]
-    N004["for raw_line in yaml_text.splitlines():
-    stripped = raw_line.lstrip()
-    indent = len(raw_line) - len(stripped)
-    if not stripped or stripped.startswith('<str>'):
-        continue
-    if not in_on_block:
-        if stripped.startswith('<str>'):
-            tail = stripped[3:].strip()
-            if tail.startswith('<str>') and '<str>' in tail and ('<str>' not in tail.replace('<str>', '<str>')):
-                tokens = re.findall('<str>', tail)
-                if '<str>' in tokens:
-                    return True
-            in_on_block = True
-            on_block_indent = indent
-        continue
-    if indent <= on_block_indent:
-        return False
-    head = stripped.split('<str>', 1)[0]
-    if head == '<str>':
-        return True"]
+    N004["for raw_line in yaml_text.splitlines():     stripped = raw_line.lstrip()     indent = len(raw_line) - len(stripped)     if not stripped or stripped.startswith('<str>'):         continue     if not in_on_block:         if stripped.startswith('<str>'):             tail = stripped[3:].strip()             if tail.startswith('<str>') and '<str>' in tail and ('<str>' not in tail.replace('<str>', '<str>')):                 tokens = re.findall('<str>', tail)                 if '<str>' in tokens:                     return True             in_on_block = True             on_block_indent = indent         continue     if indent <= on_block_indent:         return False     head = stripped.split('<str>', 1)[0]     if head == '<str>':         return True"]
     N005["return False"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -51,12 +32,7 @@ flowchart TD
 flowchart TD
     N001["collect_workflow_refs(...)"]
     N002["refs = []"]
-    N003["for path in sorted(workflows_dir.glob('<str>')):
-    text = path.read_text(encoding='<str>')
-    if not workflow_targets_pull_request(text):
-        continue
-    for script in sorted(extract_script_refs(text)):
-        refs.append(WorkflowReference(workflow=path.name, script=script))"]
+    N003["for path in sorted(workflows_dir.glob('<str>')):     text = path.read_text(encoding='<str>')     if not workflow_targets_pull_request(text):         continue     for script in sorted(extract_script_refs(text)):         refs.append(WorkflowReference(workflow=path.name, script=script))"]
     N004["return refs"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -71,11 +47,7 @@ flowchart TD
     N002["completed = run(...)"]
     N003["manifest = loads(...)"]
     N004["declared = set(...)"]
-    N005["for entry in manifest:
-    for token in entry.get('<str>', []):
-        match = _SCRIPT_REF.search(token)
-        if match:
-            declared.add(match.group(1))"]
+    N005["for entry in manifest:     for token in entry.get('<str>', []):         match = _SCRIPT_REF.search(token)         if match:             declared.add(match.group(1))"]
     N006["return declared"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -109,10 +81,8 @@ flowchart TD
     N004["workflow_refs = collect_workflow_refs(...)"]
     N005["declared = load_preflight_manifest(...)"]
     N006["(missing, extra) = diff(...)"]
-    N007["for ref in missing:
-    print(f'<str>{ref.workflow}<str>{ref.script}<str>{ref.workflow}<str>', file=sys.stderr)"]
-    N008["for name in sorted(extra):
-    print(f'<str>{name}<str>{name}<str>', file=sys.stderr)"]
+    N007["for ref in missing:     print(f'<str>{ref.workflow}<str>{ref.script}<str>{ref.workflow}<str>', file=sys.stderr)"]
+    N008["for name in sorted(extra):     print(f'<str>{name}<str>{name}<str>', file=sys.stderr)"]
     N009["if missing"]
     N010["return 1"]
     N011["return 0"]

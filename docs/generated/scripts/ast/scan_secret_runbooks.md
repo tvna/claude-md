@@ -23,13 +23,7 @@ flowchart TD
 flowchart TD
     N001["collect_secret_uses(...)"]
     N002["uses = []"]
-    N003["for path in sorted((*workflows_dir.glob('<str>'), *workflows_dir.glob('<str>'))):
-    for lineno, line in enumerate(path.read_text(encoding='<str>').splitlines(), start=1):
-        for match in SECRET_REF_RE.finditer(line):
-            name = match.group(1)
-            if name in IGNORED_SECRETS:
-                continue
-            uses.append(SecretUse(name=name, path=rel(path, root), line=lineno))"]
+    N003["for path in sorted((*workflows_dir.glob('<str>'), *workflows_dir.glob('<str>'))):     for lineno, line in enumerate(path.read_text(encoding='<str>').splitlines(), start=1):         for match in SECRET_REF_RE.finditer(line):             name = match.group(1)             if name in IGNORED_SECRETS:                 continue             uses.append(SecretUse(name=name, path=rel(path, root), line=lineno))"]
     N004["return uses"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -89,14 +83,8 @@ flowchart TD
     N003["runbooks = collect_runbooks(...)"]
     N004["errors = []"]
     N005["by_secret = {}"]
-    N006["for use in uses:
-    by_secret.setdefault(use.name, []).append(use)"]
-    N007["for secret, secret_uses in sorted(by_secret.items()):
-    runbook, missing = best_documented_runbook(secret, runbooks)
-    if not missing:
-        continue
-    location = '<str>' if runbook is None else f'{runbook.path.as_posix()}<str>'
-    errors.append(f\"<str>{secret}<str>{format_refs(secret_uses)}<str>{location}<str>{'<str>'.join(missing)}\")"]
+    N006["for use in uses:     by_secret.setdefault(use.name, []).append(use)"]
+    N007["for secret, secret_uses in sorted(by_secret.items()):     runbook, missing = best_documented_runbook(secret, runbooks)     if not missing:         continue     location = '<str>' if runbook is None else f'{runbook.path.as_posix()}<str>'     errors.append(f'<str>{secret}<str>{format_refs(secret_uses)}<str>{location}<str>{'<str>'.join(missing)}')"]
     N008["return errors"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -114,8 +102,7 @@ flowchart TD
     N001["cmd_verify(...)"]
     N002["root = Path(...)"]
     N003["errors = verify(...)"]
-    N004["for error in errors:
-    print(f'<str>{error}', file=sys.stderr)"]
+    N004["for error in errors:     print(f'<str>{error}', file=sys.stderr)"]
     N005["if errors"]
     N006["return 1"]
     N007["print(...)"]
