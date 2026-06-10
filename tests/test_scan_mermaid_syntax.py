@@ -87,20 +87,22 @@ def test_extract_blocks_emits_unclosed_block() -> None:
 # --- file discovery + exemption -------------------------------------------
 
 
-def test_is_exempt_matches_only_ast_prefix() -> None:
-    assert scan_mermaid_syntax.is_exempt("docs/generated/scripts/ast/x.md")
+def test_is_exempt_excludes_no_path() -> None:
+    # The gate is permanent: the ast prefix is no longer exempt (#1598).
+    assert not scan_mermaid_syntax.is_exempt("docs/generated/scripts/ast/x.md")
     assert not scan_mermaid_syntax.is_exempt("docs/uml/x.md")
 
 
-def test_iter_docs_markdown_skips_exempt_and_non_md(tmp_path: Path) -> None:
+def test_iter_docs_markdown_includes_ast_and_skips_non_md(tmp_path: Path) -> None:
     (tmp_path / "docs" / "uml").mkdir(parents=True)
     (tmp_path / "docs" / "generated" / "scripts" / "ast").mkdir(parents=True)
     (tmp_path / "docs" / "uml" / "a.md").write_text(_md(GOOD_FLOWCHART), encoding="utf-8")
     (tmp_path / "docs" / "uml" / "note.txt").write_text("not markdown", encoding="utf-8")
-    (tmp_path / "docs" / "generated" / "scripts" / "ast" / "g.md").write_text(_md(BAD_SEQUENCE), encoding="utf-8")
+    (tmp_path / "docs" / "generated" / "scripts" / "ast" / "g.md").write_text(_md(GOOD_FLOWCHART), encoding="utf-8")
 
     found = {scan_mermaid_syntax.rel(p, tmp_path) for p in scan_mermaid_syntax.iter_docs_markdown(tmp_path)}
-    assert found == {"docs/uml/a.md"}
+    # The ast directory is now in scope; only the non-Markdown note is skipped.
+    assert found == {"docs/uml/a.md", "docs/generated/scripts/ast/g.md"}
 
 
 def test_iter_docs_markdown_no_docs_dir(tmp_path: Path) -> None:
@@ -276,14 +278,18 @@ def test_live_gate_flags_semicolon_regression(tmp_path: Path) -> None:
 
 
 @_INTEGRATION
-def test_live_gate_ignores_exempt_ast_dir(tmp_path: Path) -> None:
+def test_live_gate_flags_broken_ast_block(tmp_path: Path) -> None:
+    # The ast directory is no longer exempt (#1598): a broken generated block
+    # must be flagged. The #1598 bug class is a backslash-quote (\") inside a
+    # node label, which the Mermaid parser rejects.
     ast = tmp_path / "docs" / "generated" / "scripts" / "ast"
     ast.mkdir(parents=True)
-    # A genuinely broken block (raw newline in a node label) under the exemption.
-    (ast / "x.md").write_text("```mermaid\nflowchart TD\n  N1[\"a\nb\"]\n```\n", encoding="utf-8")
+    (ast / "x.md").write_text('```mermaid\nflowchart TD\n  N1["a\\"b"]\n```\n', encoding="utf-8")
 
     assert _BUN is not None  # guaranteed by @_INTEGRATION
-    assert scan_mermaid_syntax.verify(tmp_path, _BUN) == []
+    errors = scan_mermaid_syntax.verify(tmp_path, _BUN)
+    assert len(errors) == 1
+    assert "docs/generated/scripts/ast/x.md" in errors[0]
 
 
 @_INTEGRATION
