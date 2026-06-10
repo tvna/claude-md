@@ -7,8 +7,20 @@ natural pre-merge moment is the *handoff*: it has opened a PR and is
 ending its turn, advancing the PR to "ready for human merge". This gate
 is the deterministic half of the retro contract: when the session's
 transcript shows it created a pull request and no survey marker has been
-recorded for that PR, it blocks the stop and hands the agent the exact
-branching survey to run through the ``AskUserQuestion`` tool.
+recorded for the session yet, it blocks the stop and hands the agent the
+exact branching survey to run through the ``AskUserQuestion`` tool.
+
+Once per session, not once per PR
+---------------------------------
+The survey is a session-handoff quality signal, so it fires once per
+*session*, aggregating every PR opened in the session -- not once per PR.
+``created_pr_numbers`` reads the current session's transcript only (a new
+session uses a fresh transcript), so it already returns just this session's
+PRs; ``evaluate`` blocks only when NONE of them carries a marker yet.
+Recording any one PR's survey covers the whole session, so a session that
+opens N PRs in a burst fires the gate once, not N times (#1594) -- repeated
+per-PR surveys added friction without proportional signal (CLAUDE.md
+section 5).
 
 Why a Stop hook and not a merge-tool gate
 -----------------------------------------
@@ -91,21 +103,23 @@ _MAX_SATISFACTION = 5
 _SURVEY_PHASE = "pre-merge-handoff"
 
 _BLOCK_REASON = (
-    "GATE BLOCK: this session opened PR #{pr} and is handing it off for a "
-    "human GitHub-UI merge, but no pre-merge retro survey is recorded. "
-    "Before ending your turn, run the AskUserQuestion tool with a "
-    "satisfaction-first, scenario-branched flow. Present the questions "
-    "CONSECUTIVELY, plan-mode style: emit the branched follow-up "
-    "AskUserQuestion immediately after the satisfaction answer with no "
-    "intervening prose, so the survey reads as one continuous flow.\n"
+    "GATE BLOCK: this session opened {pr_list} and is handing the work off "
+    "for a human GitHub-UI merge, but no pre-merge retro survey is recorded "
+    "for this session yet. Run the survey ONCE for the whole session handoff "
+    "-- it covers every PR opened this session ({pr_list}), not one survey "
+    "per PR (#1594). Use the AskUserQuestion tool with a satisfaction-first, "
+    "scenario-branched flow. Present the questions CONSECUTIVELY, plan-mode "
+    "style: emit the branched follow-up AskUserQuestion immediately after the "
+    "satisfaction answer with no intervening prose, so the survey reads as "
+    "one continuous flow.\n"
     "  1. Ask SATISFACTION first, anchored to an EXPLICIT timepoint: frame "
     "the question as 'satisfaction with the work as of the pre-merge handoff "
-    "of PR #{pr} (state today's date, time, and timezone as "
-    "YYYY-MM-DD HH:MM TZ -- e.g. JST and UTC together)' so the score's "
-    "reference moment is unambiguous when the marker is read back later -- a "
-    "date alone is ambiguous because a session can span hours and cross the "
-    "day boundary (single-select: 5 very satisfied / 4 satisfied / 3 neutral "
-    "/ 2 somewhat dissatisfied).\n"
+    "of this session (covering {pr_list}), stating today's date, time, and "
+    "timezone as YYYY-MM-DD HH:MM TZ -- e.g. JST and UTC together)' so the "
+    "score's reference moment is unambiguous when the marker is read back "
+    "later -- a date alone is ambiguous because a session can span hours and "
+    "cross the day boundary (single-select: 5 very satisfied / 4 satisfied / "
+    "3 neutral / 2 somewhat dissatisfied).\n"
     "  2. Branch on that answer (emit the next question right away):\n"
     "     - high (4-5): ask whether any problem (rework / fix / surprise) "
     "occurred, and DERIVE retro necessity from it -- repair-free means "
@@ -118,23 +132,35 @@ _BLOCK_REASON = (
     "-- this path, not CI, owns it, because process repairs (e.g. a "
     "wrong-branch re-placement, a discarded-drift cleanup) leave no PR-diff / "
     "CI / review trace for the post-merge detector to see. First search for "
-    "an existing retro issue for PR #{pr} (title "
-    "'chore(auto-retro): review PR #{pr} repair loops'):\n"
+    "an existing retro issue for PR #{primary} (title "
+    "'chore(auto-retro): review PR #{primary} repair loops'):\n"
     "     - if one EXISTS: add a comment capturing the local-specific repair "
     "detail (the pain points / process repairs from the survey).\n"
     "     - if NONE exists: create it via mcp__github__issue_write with that "
     "EXACT title and an issue body carrying the H2 sections '## Scope', "
     "'## Facts', '## Proposed work', '## Verification', '## Acceptance "
     "criteria' (seed Facts with the survey pain points).\n"
-    "  4. Record the handoff. For a repair-free / minor outcome run "
-    "'python3 scripts/gate_handoff_retro_survey_askuserquestion.py "
-    "--record {pr}'. For a retro outcome run it with "
-    "'--record {pr} --needs-retro --retro-issue <N>' where <N> is the issue "
-    "you created or commented on -- the recorder refuses the marker (the Stop "
-    "gate re-blocks) until that number is supplied. Then end your turn. Do "
-    "NOT call merge_pull_request -- the human merges PR #{pr} through the "
-    "GitHub UI."
+    "  4. Record the handoff ONCE for the session. For a repair-free / minor "
+    "outcome run 'python3 scripts/gate_handoff_retro_survey_askuserquestion.py "
+    "--record {primary}'. For a retro outcome run it with "
+    "'--record {primary} --needs-retro --retro-issue <N>' where <N> is the "
+    "issue you created or commented on -- the recorder refuses the marker "
+    "(the Stop gate re-blocks) until that number is supplied. Recording any "
+    "one of this session's PRs satisfies the gate for all of them. Then end "
+    "your turn. Do NOT call merge_pull_request -- the human merges {pr_list} "
+    "through the GitHub UI."
 )
+
+
+def _build_block_reason(created: list[int]) -> str:
+    """Render the block reason for the session's created PRs.
+
+    *created* is oldest-first (``created_pr_numbers``). The whole list is
+    enumerated so the single survey is understood to cover the session's batch
+    of PRs, and the oldest PR is the stable ``--record`` / retro-title target.
+    """
+    pr_list = ", ".join(f"#{number}" for number in created)
+    return _BLOCK_REASON.format(pr_list=pr_list, primary=created[0])
 
 
 def _marker_path(pr_number: int) -> Path:
@@ -248,19 +274,36 @@ def created_pr_numbers(entries: list[Any]) -> list[int]:
     return numbers
 
 
+def session_surveyed(created: list[int]) -> bool:
+    """Return True when any PR created this session already carries a marker.
+
+    The marker dir is the gate's per-session memory: ``created_pr_numbers``
+    only ever returns PRs opened in the current session (a fresh session uses a
+    fresh transcript), so a single existing marker means the session's handoff
+    survey is already done. The gate must then NOT re-fire for the sibling PRs
+    opened in the same multi-PR burst -- that double/triple-firing is #1594.
+    """
+    return any(_marker_path(pr_number).exists() for pr_number in created)
+
+
 def evaluate(event: dict[str, Any], entries: list[Any]) -> dict[str, Any] | None:
-    """Return a Stop block decision, or None to let the stop proceed."""
+    """Return a Stop block decision, or None to let the stop proceed.
+
+    Survey ONCE per session: block only when the session opened PRs and none of
+    them carries a survey marker yet. Recording any one PR's survey then covers
+    the whole session, so a session that opens N PRs fires the gate once, not N
+    times (#1594).
+    """
     if event.get("hook_event_name") not in (None, "Stop"):
         return None
     if event.get("stop_hook_active"):
         return None
-    for pr_number in created_pr_numbers(entries):
-        if not _marker_path(pr_number).exists():
-            return {
-                "decision": "block",
-                "reason": _BLOCK_REASON.format(pr=pr_number),
-            }
-    return None
+    created = created_pr_numbers(entries)
+    if not created:
+        return None
+    if session_surveyed(created):
+        return None
+    return {"decision": "block", "reason": _build_block_reason(created)}
 
 
 def load_transcript(path_value: object) -> list[Any]:

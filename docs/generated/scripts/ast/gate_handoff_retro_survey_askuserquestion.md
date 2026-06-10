@@ -2,6 +2,17 @@
 
 This file is generated from `scripts/gate_handoff_retro_survey_askuserquestion.py` by `python3 scripts/script_ast_graph.py all-doc`. Do not edit it by hand: content under `docs/generated/scripts/` is owned by the post-merge automation (refs #1540) -- update the source script instead.
 
+## _build_block_reason(...)
+
+```mermaid
+flowchart TD
+    N001["_build_block_reason(...)"]
+    N002["pr_list = join(...)"]
+    N003["return _BLOCK_REASON.format(pr_list=pr_list, primary=created[0])"]
+    N001 -->|"start"| N002
+    N002 --> N003
+```
+
 ## _marker_path(...)
 
 ```mermaid
@@ -149,6 +160,15 @@ flowchart TD
     N005 --> N006
 ```
 
+## session_surveyed(...)
+
+```mermaid
+flowchart TD
+    N001["session_surveyed(...)"]
+    N002["return any((_marker_path(pr_number).exists() for pr_number in created))"]
+    N001 -->|"start"| N002
+```
+
 ## evaluate(...)
 
 ```mermaid
@@ -158,16 +178,22 @@ flowchart TD
     N003["return None"]
     N004["if event.get('stop_hook_active')"]
     N005["return None"]
-    N006["for pr_number in created_pr_numbers(entries):
-    if not _marker_path(pr_number).exists():
-        return {'<str>': '<str>', '<str>': _BLOCK_REASON.format(pr=pr_number)}"]
-    N007["return None"]
+    N006["created = created_pr_numbers(...)"]
+    N007["if not created"]
+    N008["return None"]
+    N009["if session_surveyed(created)"]
+    N010["return None"]
+    N011["return {'<str>': '<str>', '<str>': _build_block_reason(created)}"]
     N001 -->|"start"| N002
     N002 -->|"true"| N003
     N002 -->|"false"| N004
     N004 -->|"true"| N005
     N004 -->|"false"| N006
     N006 --> N007
+    N007 -->|"true"| N008
+    N007 -->|"false"| N009
+    N009 -->|"true"| N010
+    N009 -->|"false"| N011
 ```
 
 ## load_transcript(...)
