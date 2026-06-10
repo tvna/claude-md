@@ -7,8 +7,7 @@ This file is generated from `scripts/title_policy.py` by `python3 scripts/script
 ```mermaid
 flowchart TD
     N001["_load_title_policy_config(...)"]
-    N002["with path.open('<str>') as fp:
-    data = tomllib.load(fp)"]
+    N002["with path.open('<str>') as fp:     data = tomllib.load(fp)"]
     N003["policy = get(...)"]
     N004["if not isinstance(policy, dict)"]
     N005["raise ValueError(f'<str>{path}')"]
@@ -180,12 +179,7 @@ flowchart TD
 flowchart TD
     N001["describe_non_ascii(...)"]
     N002["findings = []"]
-    N003["for index, char in enumerate(title):
-    if char.isascii():
-        continue
-    findings.append(f'<str>{index}<str>{ord(char):<str>}')
-    if len(findings) >= limit:
-        break"]
+    N003["for index, char in enumerate(title):     if char.isascii():         continue     findings.append(f'<str>{index}<str>{ord(char):<str>}')     if len(findings) >= limit:         break"]
     N004["return findings"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -208,9 +202,7 @@ flowchart TD
     N010["print(...)"]
     N011["fail = 1"]
     N012["policy_body = '<str>' if _is_trusted_bot_author(author) else body or _body_from_env()"]
-    N013["for finding in type_fit_findings(title, kind=kind, body=policy_body):
-    print(f'<str>{kind}<str>{format_type_fit_finding(finding)}')
-    fail = 1"]
+    N013["for finding in type_fit_findings(title, kind=kind, body=policy_body):     print(f'<str>{kind}<str>{format_type_fit_finding(finding)}')     fail = 1"]
     N014["if kind == 'pull_request' and pr_title_has_issue_ref(title) and (not pr_title_ref_is_exempt(title))"]
     N015["print(...)"]
     N016["fail = 1"]

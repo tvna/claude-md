@@ -71,10 +71,7 @@ flowchart TD
     N004["changed = False"]
     N005["(text, did_change) = replace_once(...)"]
     N006["changed = changed or did_change"]
-    N007["for agent in AGENTS:
-    pattern = re.compile(DOC_IMAGE_RE_TEMPLATE.format(agent=agent))
-    text, did_change = replace_once(text, pattern, f'<str>{sha}', label=f'{agent}<str>')
-    changed = changed or did_change"]
+    N007["for agent in AGENTS:     pattern = re.compile(DOC_IMAGE_RE_TEMPLATE.format(agent=agent))     text, did_change = replace_once(text, pattern, f'<str>{sha}', label=f'{agent}<str>')     changed = changed or did_change"]
     N008["if changed"]
     N009["write_text(...)"]
     N010["return changed"]
@@ -97,8 +94,7 @@ flowchart TD
     N001["update_pins(...)"]
     N002["validated_sha = validate_sha(...)"]
     N003["changed = False"]
-    N004["for agent in AGENTS:
-    changed = update_agent_config(repo_root, agent, validated_sha) or changed"]
+    N004["for agent in AGENTS:     changed = update_agent_config(repo_root, agent, validated_sha) or changed"]
     N005["changed = update_runbook(repo_root, validated_sha) or changed"]
     N006["overlay_changes = generate(...)"]
     N007["changed = bool(overlay_changes) or changed"]

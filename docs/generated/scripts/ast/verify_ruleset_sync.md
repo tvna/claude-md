@@ -7,12 +7,7 @@ This file is generated from `scripts/verify_ruleset_sync.py` by `python3 scripts
 ```mermaid
 flowchart TD
     N001["extract_required_contexts(...)"]
-    N002["for rule in ruleset.get('<str>', []) or []:
-    if rule.get('<str>') != '<str>':
-        continue
-    params = rule.get('<str>') or {}
-    checks = params.get('<str>') or []
-    return {check['<str>'] for check in checks if isinstance(check, dict) and '<str>' in check}"]
+    N002["for rule in ruleset.get('<str>', []) or []:     if rule.get('<str>') != '<str>':         continue     params = rule.get('<str>') or {}     checks = params.get('<str>') or []     return {check['<str>'] for check in checks if isinstance(check, dict) and '<str>' in check}"]
     N003["return set()"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -84,8 +79,7 @@ flowchart TD
 flowchart TD
     N001["fetch_live_ruleset_by_name(...)"]
     N002["list_req = _api_request(...)"]
-    N003["with opener(list_req) as response:
-    listing = json.loads(response.read().decode('<str>'))"]
+    N003["with opener(list_req) as response:     listing = json.loads(response.read().decode('<str>'))"]
     N004["matches = [r for r in listing if r.get('<str>') == name]"]
     N005["if len(matches) > 1"]
     N006["raise RuntimeError(f'<str>{name!r}<str>{len(matches)}<str>')"]
@@ -93,8 +87,7 @@ flowchart TD
     N008["raise RuntimeError(f'<str>{name!r}<str>')"]
     N009["ruleset_id = matches[0]['<str>']"]
     N010["detail_req = _api_request(...)"]
-    N011["with opener(detail_req) as response:
-    return json.loads(response.read().decode('<str>'))"]
+    N011["with opener(detail_req) as response:     return json.loads(response.read().decode('<str>'))"]
     N012["end"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -116,8 +109,7 @@ flowchart TD
     N001["fetch_base_ref_sot(...)"]
     N002["url = f'{API_ROOT}<str>{repo}<str>{sot_path}<str>{base_ref}'"]
     N003["request = _api_request(...)"]
-    N004["with opener(request) as response:
-    payload = json.loads(response.read().decode('<str>'))"]
+    N004["with opener(request) as response:     payload = json.loads(response.read().decode('<str>'))"]
     N005["return decode_base64_content(payload)"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -149,8 +141,7 @@ flowchart TD
     N018["if not missing"]
     N019["print(...)"]
     N020["return 0"]
-    N021["for line in format_error_lines(missing, docs_url):
-    print(line, file=err_stream)"]
+    N021["for line in format_error_lines(missing, docs_url):     print(line, file=err_stream)"]
     N022["return 1"]
     N001 -->|"start"| N002
     N002 --> N003
