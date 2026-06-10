@@ -67,6 +67,14 @@
               "hooks": [
                 {
                   "type": "command",
+                  "command": "scripts/install-bun.sh"
+                }
+              ]
+            },
+            {
+              "hooks": [
+                {
+                  "type": "command",
                   "command": "scripts/session_uv_local_pin.sh"
                 }
               ]
@@ -519,6 +527,16 @@
                   "type": "command",
                   "command": "scripts/install-uv.sh",
                   "statusMessage": "Checking uv pin"
+                }
+              ]
+            },
+            {
+              "matcher": "startup|resume|clear|compact",
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "scripts/install-bun.sh",
+                  "statusMessage": "Provisioning bun for the Mermaid gate"
                 }
               ]
             },
