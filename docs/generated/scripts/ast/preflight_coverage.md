@@ -56,15 +56,7 @@ flowchart TD
     N004["if not isinstance(files, dict)"]
     N005["return {}"]
     N006["result = {}"]
-    N007["for file_path, info in files.items():
-    if not isinstance(info, dict):
-        continue
-    summary = info.get('<str>', {})
-    if not isinstance(summary, dict):
-        continue
-    pct = summary.get('<str>')
-    if isinstance(pct, int | float):
-        result[str(file_path)] = float(pct)"]
+    N007["for file_path, info in files.items():     if not isinstance(info, dict):         continue     summary = info.get('<str>', {})     if not isinstance(summary, dict):         continue     pct = summary.get('<str>')     if isinstance(pct, int | float):         result[str(file_path)] = float(pct)"]
     N008["return result"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -81,13 +73,7 @@ flowchart TD
 flowchart TD
     N001["check_per_file(...)"]
     N002["failures = []"]
-    N003["for target in targets:
-    if target not in coverage:
-        failures.append((target, '<str>'))
-        continue
-    pct = coverage[target]
-    if pct < floor:
-        failures.append((target, f'{pct:<str>}<str>{floor:<str>}<str>'))"]
+    N003["for target in targets:     if target not in coverage:         failures.append((target, '<str>'))         continue     pct = coverage[target]     if pct < floor:         failures.append((target, f'{pct:<str>}<str>{floor:<str>}<str>'))"]
     N004["return failures"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -127,12 +113,8 @@ flowchart TD
     N027["return 1"]
     N028["failures = check_per_file(...)"]
     N029["failure_paths = {f[0] for f in failures}"]
-    N030["for target in targets:
-    if target not in failure_paths:
-        pct = coverage.get(target, 0.0)
-        print(f'<str>{target}<str>{pct:<str>}<str>{args.floor:<str>}<str>')"]
-    N031["for path, reason in failures:
-    print(f'<str>{path}<str>{reason}', file=sys.stderr)"]
+    N030["for target in targets:     if target not in failure_paths:         pct = coverage.get(target, 0.0)         print(f'<str>{target}<str>{pct:<str>}<str>{args.floor:<str>}<str>')"]
+    N031["for path, reason in failures:     print(f'<str>{path}<str>{reason}', file=sys.stderr)"]
     N032["if failures"]
     N033["print(...)"]
     N034["return 1"]

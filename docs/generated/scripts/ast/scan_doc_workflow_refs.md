@@ -16,13 +16,7 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["iter_markdown(...)"]
-    N002["for path in sorted(repo_root.rglob('<str>')):
-    if '<str>' in path.parts:
-        continue
-    rel = path.relative_to(repo_root).as_posix()
-    if _is_excluded(rel):
-        continue
-    yield path"]
+    N002["for path in sorted(repo_root.rglob('<str>')):     if '<str>' in path.parts:         continue     rel = path.relative_to(repo_root).as_posix()     if _is_excluded(rel):         continue     yield path"]
     N003["end"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -34,17 +28,7 @@ flowchart TD
 flowchart TD
     N001["find_refs(...)"]
     N002["refs = []"]
-    N003["for path in iter_markdown(repo_root):
-    rel = path.relative_to(repo_root).as_posix()
-    try:
-        text = path.read_text(encoding='<str>')
-    except (OSError, UnicodeDecodeError):
-        continue
-    for lineno, line in enumerate(text.splitlines(), start=1):
-        if ACK_MARKER in line:
-            continue
-        for match in _WORKFLOW_REF_RE.finditer(line):
-            refs.append(WorkflowRef(doc=rel, line=lineno, name=match.group(1)))"]
+    N003["for path in iter_markdown(repo_root):     rel = path.relative_to(repo_root).as_posix()     try:         text = path.read_text(encoding='<str>')     except (OSError, UnicodeDecodeError):         continue     for lineno, line in enumerate(text.splitlines(), start=1):         if ACK_MARKER in line:             continue         for match in _WORKFLOW_REF_RE.finditer(line):             refs.append(WorkflowRef(doc=rel, line=lineno, name=match.group(1)))"]
     N004["return refs"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -69,8 +53,7 @@ flowchart TD
     N001["_cmd_verify(...)"]
     N002["refs = find_refs(...)"]
     N003["stale = stale_refs(...)"]
-    N004["for ref in stale:
-    print(f'<str>{ref.doc}<str>{ref.line}<str>{ref.name}<str>', file=sys.stderr)"]
+    N004["for ref in stale:     print(f'<str>{ref.doc}<str>{ref.line}<str>{ref.name}<str>', file=sys.stderr)"]
     N005["if stale"]
     N006["print(...)"]
     N007["return 1"]
@@ -91,8 +74,7 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["_cmd_list(...)"]
-    N002["for ref in find_refs(REPO_ROOT):
-    print(f'{ref.doc}<str>{ref.line}<str>{ref.name}')"]
+    N002["for ref in find_refs(REPO_ROOT):     print(f'{ref.doc}<str>{ref.line}<str>{ref.name}')"]
     N003["return 0"]
     N001 -->|"start"| N002
     N002 --> N003

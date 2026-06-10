@@ -51,9 +51,7 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["_iter_python_files(...)"]
-    N002["for path in sorted(scripts_dir.rglob('<str>')):
-    if path.is_file():
-        yield path"]
+    N002["for path in sorted(scripts_dir.rglob('<str>')):     if path.is_file():         yield path"]
     N003["end"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -68,10 +66,8 @@ flowchart TD
     N003["metrics = find_module_sizes(...)"]
     N004["violations = [metric for metric in metrics if metric.is_violation]"]
     N005["deferred = [metric for metric in metrics if metric.is_over_budget and metric.deferred_reason is not None]"]
-    N006["for metric in violations:
-    print(f'<str>{metric.path}<str>{metric.path}<str>{metric.line_count}<str>{metric.max_lines}<str>', file=sys.stderr)"]
-    N007["for metric in deferred:
-    print(f'<str>{metric.path}<str>{metric.path}<str>{metric.line_count}<str>{metric.max_lines}<str>{metric.deferred_reason}<str>')"]
+    N006["for metric in violations:     print(f'<str>{metric.path}<str>{metric.path}<str>{metric.line_count}<str>{metric.max_lines}<str>', file=sys.stderr)"]
+    N007["for metric in deferred:     print(f'<str>{metric.path}<str>{metric.path}<str>{metric.line_count}<str>{metric.max_lines}<str>{metric.deferred_reason}<str>')"]
     N008["if violations"]
     N009["print(...)"]
     N010["return 1"]

@@ -10,10 +10,7 @@ flowchart TD
     N002["if ACK_MARKER in line"]
     N003["return []"]
     N004["hits = [token for token in FORBIDDEN_TOKENS if token in line]"]
-    N005["for pattern in FORBIDDEN_PHRASE_PATTERNS:
-    match = pattern.search(line)
-    if match is not None:
-        hits.append(f'{PHRASE_HIT_PREFIX}{match.group(0)}')"]
+    N005["for pattern in FORBIDDEN_PHRASE_PATTERNS:     match = pattern.search(line)     if match is not None:         hits.append(f'{PHRASE_HIT_PREFIX}{match.group(0)}')"]
     N006["extend(...)"]
     N007["return hits"]
     N001 -->|"start"| N002
@@ -30,9 +27,7 @@ flowchart TD
 flowchart TD
     N001["scan_text(...)"]
     N002["hits = []"]
-    N003["for lineno, line in enumerate(text.splitlines(), start=1):
-    for token in scan_line(line):
-        hits.append((lineno, token))"]
+    N003["for lineno, line in enumerate(text.splitlines(), start=1):     for token in scan_line(line):         hits.append((lineno, token))"]
     N004["return hits"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -54,25 +49,7 @@ flowchart TD
 flowchart TD
     N001["_verify(...)"]
     N002["total = 0"]
-    N003["for path in paths:
-    if not path.exists():
-        print(f'<str>{path}', file=sys.stderr)
-        total += 1
-        continue
-    for lineno, hit in scan_file(path):
-        if hit.startswith(PHRASE_HIT_PREFIX):
-            snippet = hit[len(PHRASE_HIT_PREFIX):]
-            kind = '<str>'
-            payload = repr(snippet)
-        elif hit.startswith(HARNESS_HIT_PREFIX):
-            snippet = hit[len(HARNESS_HIT_PREFIX):]
-            kind = '<str>'
-            payload = repr(snippet)
-        else:
-            kind = '<str>'
-            payload = repr(hit)
-        print(f'<str>{path}<str>{lineno}<str>{kind}<str>{payload}<str>{ACK_MARKER}<str>', file=sys.stderr)
-        total += 1"]
+    N003["for path in paths:     if not path.exists():         print(f'<str>{path}', file=sys.stderr)         total += 1         continue     for lineno, hit in scan_file(path):         if hit.startswith(PHRASE_HIT_PREFIX):             snippet = hit[len(PHRASE_HIT_PREFIX):]             kind = '<str>'             payload = repr(snippet)         elif hit.startswith(HARNESS_HIT_PREFIX):             snippet = hit[len(HARNESS_HIT_PREFIX):]             kind = '<str>'             payload = repr(snippet)         else:             kind = '<str>'             payload = repr(hit)         print(f'<str>{path}<str>{lineno}<str>{kind}<str>{payload}<str>{ACK_MARKER}<str>', file=sys.stderr)         total += 1"]
     N004["if total"]
     N005["print(...)"]
     N006["return 1"]

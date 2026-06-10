@@ -10,7 +10,7 @@ flowchart TD
     N002["completed = run_git(...)"]
     N003["if completed.returncode != 0"]
     N004["detail = strip(...)"]
-    N005["raise RuntimeError(f\"<str>{'<str>'.join(args)}<str>{detail}\")"]
+    N005["raise RuntimeError(f'<str>{'<str>'.join(args)}<str>{detail}')"]
     N006["return completed.stdout"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -24,8 +24,7 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["load_policy(...)"]
-    N002["with path.open('<str>') as handle:
-    return tomllib.load(handle)"]
+    N002["with path.open('<str>') as handle:     return tomllib.load(handle)"]
     N003["end"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -66,10 +65,7 @@ flowchart TD
 flowchart TD
     N001["glob_top_levels(...)"]
     N002["tops = set(...)"]
-    N003["for entry in area_path_entries(policy):
-    for raw in entry.get('<str>', []):
-        if isinstance(raw, str) and raw:
-            tops.add(PurePosixPath(raw).parts[0])"]
+    N003["for entry in area_path_entries(policy):     for raw in entry.get('<str>', []):         if isinstance(raw, str) and raw:             tops.add(PurePosixPath(raw).parts[0])"]
     N004["return tops"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -104,18 +100,9 @@ flowchart TD
     N002["errors = []"]
     N003["declared = declared_area_labels(...)"]
     N004["mapped = mapped_areas(...)"]
-    N005["for entry in area_path_entries(policy):
-    area = entry.get('<str>')
-    if not isinstance(area, str) or not area:
-        errors.append(_err('<str>'))
-        continue
-    paths = entry.get('<str>')
-    if not isinstance(paths, list) or not paths:
-        errors.append(_err(f'<str>{area}<str>'))"]
-    N006["for area in sorted(mapped - declared):
-    errors.append(_err(f'<str>{area}<str>'))"]
-    N007["for area in sorted(declared - mapped):
-    errors.append(_err(f'<str>{area}<str>'))"]
+    N005["for entry in area_path_entries(policy):     area = entry.get('<str>')     if not isinstance(area, str) or not area:         errors.append(_err('<str>'))         continue     paths = entry.get('<str>')     if not isinstance(paths, list) or not paths:         errors.append(_err(f'<str>{area}<str>'))"]
+    N006["for area in sorted(mapped - declared):     errors.append(_err(f'<str>{area}<str>'))"]
+    N007["for area in sorted(declared - mapped):     errors.append(_err(f'<str>{area}<str>'))"]
     N008["return errors"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -133,9 +120,7 @@ flowchart TD
     N001["verify_directory_coverage(...)"]
     N002["covered = glob_top_levels(...)"]
     N003["errors = []"]
-    N004["for directory in sorted(tracked_top_level_dirs(root, runner)):
-    if directory not in covered:
-        errors.append(_err(f'<str>{directory}<str>'))"]
+    N004["for directory in sorted(tracked_top_level_dirs(root, runner)):     if directory not in covered:         errors.append(_err(f'<str>{directory}<str>'))"]
     N005["return errors"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -173,8 +158,7 @@ flowchart TD
     N005["args = parse_args(...)"]
     N006["if args.command == 'verify'"]
     N007["errors = verify(...)"]
-    N008["for error in errors:
-    print(error, file=sys.stderr)"]
+    N008["for error in errors:     print(error, file=sys.stderr)"]
     N009["return 1 if errors else 0"]
     N010["error(...)"]
     N011["return 2"]

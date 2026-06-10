@@ -8,12 +8,8 @@ This file is generated from `scripts/preflight_all.py` by `python3 scripts/scrip
 flowchart TD
     N001["missing_prereqs(...)"]
     N002["missing = []"]
-    N003["for key in step.required_env:
-    if not environ.get(key):
-        missing.append(f'<str>{key}')"]
-    N004["for binary in step.required_bin:
-    if shutil.which(binary) is None:
-        missing.append(f'<str>{binary}')"]
+    N003["for key in step.required_env:     if not environ.get(key):         missing.append(f'<str>{key}')"]
+    N004["for binary in step.required_bin:     if shutil.which(binary) is None:         missing.append(f'<str>{binary}')"]
     N005["return missing"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -100,17 +96,12 @@ flowchart TD
     N002["serial = [s for s in cheap if s.name in _SERIAL_CHEAP]"]
     N003["parallel = [s for s in cheap if s.name not in _SERIAL_CHEAP]"]
     N004["results = {}"]
-    N005["for step in serial:
-    results[step.name] = run_step(step, cwd, environ)"]
+    N005["for step in serial:     results[step.name] = run_step(step, cwd, environ)"]
     N006["if parallel"]
     N007["workers = _cheap_workers(...)"]
     N008["if workers == 1"]
-    N009["for step in parallel:
-    results[step.name] = run_step(step, cwd, environ)"]
-    N010["with ThreadPoolExecutor(max_workers=workers) as pool:
-    futures = {pool.submit(run_step, step, cwd, environ): step.name for step in parallel}
-    for future in as_completed(futures):
-        results[futures[future]] = future.result()"]
+    N009["for step in parallel:     results[step.name] = run_step(step, cwd, environ)"]
+    N010["with ThreadPoolExecutor(max_workers=workers) as pool:     futures = {pool.submit(run_step, step, cwd, environ): step.name for step in parallel}     for future in as_completed(futures):         results[futures[future]] = future.result()"]
     N011["return [results[step.name] for step in cheap]"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -148,13 +139,7 @@ flowchart TD
     N016["fresh = not disabled and fingerprint is not None and preflight_cache.is_fresh(cache, fingerprint)"]
     N017["heavy_results = []"]
     N018["ran_any = False"]
-    N019["for step in heavy:
-    if fresh:
-        ts = cache.get('<str>', '<str>') if cache else '<str>'
-        heavy_results.append(StepResult(name=step.name, status='<str>', detail=f'<str>{ts}'))
-    else:
-        heavy_results.append(run_step(step, cwd, environ))
-        ran_any = True"]
+    N019["for step in heavy:     if fresh:         ts = cache.get('<str>', '<str>') if cache else '<str>'         heavy_results.append(StepResult(name=step.name, status='<str>', detail=f'<str>{ts}'))     else:         heavy_results.append(run_step(step, cwd, environ))         ran_any = True"]
     N020["if ran_any and fingerprint is not None and all((r.status == 'pass' for r in heavy_results))"]
     N021["record(...)"]
     N022["return cheap_results + heavy_results"]
@@ -188,11 +173,7 @@ flowchart TD
 flowchart TD
     N001["emit_summary(...)"]
     N002["width = max(...)"]
-    N003["for result in results:
-    line = f'{result.status:<str>}<str>{result.name:<str>{width}}<str>{result.duration_s:<str>}<str>'
-    if result.detail:
-        line = f'{line}<str>{result.detail}'
-    print(line, file=stream)"]
+    N003["for result in results:     line = f'{result.status:<str>}<str>{result.name:<str>{width}}<str>{result.duration_s:<str>}<str>'     if result.detail:         line = f'{line}<str>{result.detail}'     print(line, file=stream)"]
     N004["total = sum(...)"]
     N005["print(...)"]
     N006["end"]
@@ -208,11 +189,7 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["emit_annotations(...)"]
-    N002["for result in results:
-    if result.status == '<str>':
-        print(f'<str>{result.name}<str>{result.detail}<str>', file=stream)
-    elif result.status == '<str>':
-        print(f'<str>{result.name}<str>{result.detail}<str>', file=stream)"]
+    N002["for result in results:     if result.status == '<str>':         print(f'<str>{result.name}<str>{result.detail}<str>', file=stream)     elif result.status == '<str>':         print(f'<str>{result.name}<str>{result.detail}<str>', file=stream)"]
     N003["end"]
     N001 -->|"start"| N002
     N002 --> N003

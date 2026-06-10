@@ -21,8 +21,7 @@ flowchart TD
     N002["errors = []"]
     N003["required = required_sections(...)"]
     N004["headings = extract_headings(...)"]
-    N005["for name in missing_sections(required, headings):
-    errors.append(f'<str>{name}<str>')"]
+    N005["for name in missing_sections(required, headings):     errors.append(f'<str>{name}<str>')"]
     N006["extend(...)"]
     N007["extend(...)"]
     N008["extend(...)"]
@@ -74,8 +73,7 @@ flowchart TD
     N007["args = parse_args(...)"]
     N008["body = read_text(...)"]
     N009["errors = evaluate(...)"]
-    N010["for msg in errors:
-    print(msg)"]
+    N010["for msg in errors:     print(msg)"]
     N011["if not errors"]
     N012["print(...)"]
     N013["return 0"]

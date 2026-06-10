@@ -9,8 +9,7 @@ flowchart TD
     N001["required_bins(...)"]
     N002["import preflight_all"]
     N003["bins = set(...)"]
-    N004["for step in preflight_all.STEPS:
-    bins.update(step.required_bin)"]
+    N004["for step in preflight_all.STEPS:     bins.update(step.required_bin)"]
     N005["return bins"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -28,15 +27,7 @@ flowchart TD
     N004["return [f'<str>{flake_path}<str>']"]
     N005["flake_text = read_text(...)"]
     N006["errors = []"]
-    N007["for tool in sorted(required_bins()):
-    if tool in ALLOWLIST:
-        continue
-    marker = TOOL_FLAKE_MARKERS.get(tool)
-    if marker is None:
-        errors.append(f'<str>{tool}<str>{tool}<str>')
-        continue
-    if marker not in flake_text:
-        errors.append(f'<str>{tool}<str>{marker}<str>{marker}<str>')"]
+    N007["for tool in sorted(required_bins()):     if tool in ALLOWLIST:         continue     marker = TOOL_FLAKE_MARKERS.get(tool)     if marker is None:         errors.append(f'<str>{tool}<str>{tool}<str>')         continue     if marker not in flake_text:         errors.append(f'<str>{tool}<str>{marker}<str>{marker}<str>')"]
     N008["return errors"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -54,8 +45,7 @@ flowchart TD
     N001["_cmd_verify(...)"]
     N002["repo_root = resolve(...)"]
     N003["errors = verify(...)"]
-    N004["for err in errors:
-    print(err, file=sys.stderr)"]
+    N004["for err in errors:     print(err, file=sys.stderr)"]
     N005["if errors"]
     N006["print(...)"]
     N007["return 1"]

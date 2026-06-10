@@ -147,10 +147,7 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["extract_hash_marker(...)"]
-    N002["for line in body.splitlines():
-    stripped = line.strip()
-    if stripped.startswith(HASH_MARKER_PREFIX) and stripped.endswith(HASH_MARKER_SUFFIX):
-        return stripped[len(HASH_MARKER_PREFIX):-len(HASH_MARKER_SUFFIX)].strip()"]
+    N002["for line in body.splitlines():     stripped = line.strip()     if stripped.startswith(HASH_MARKER_PREFIX) and stripped.endswith(HASH_MARKER_SUFFIX):         return stripped[len(HASH_MARKER_PREFIX):-len(HASH_MARKER_SUFFIX)].strip()"]
     N003["return None"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -245,7 +242,7 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["render_unknown_row(...)"]
-    N002["return f\"<str>{entry['<str>']}<str>{entry['<str>']}<str>{entry['<str>']}<str>{entry['<str>']}<str>\""]
+    N002["return f'<str>{entry['<str>']}<str>{entry['<str>']}<str>{entry['<str>']}<str>{entry['<str>']}<str>'"]
     N001 -->|"start"| N002
 ```
 
@@ -276,8 +273,7 @@ flowchart TD
     N003["add_header(...)"]
     N004["add_header(...)"]
     N005["add_header(...)"]
-    N006["with opener(request) as response:
-    return json.loads(response.read().decode('<str>'))"]
+    N006["with opener(request) as response:     return json.loads(response.read().decode('<str>'))"]
     N007["end"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -296,8 +292,7 @@ flowchart TD
     N003["add_header(...)"]
     N004["add_header(...)"]
     N005["add_header(...)"]
-    N006["with opener(request) as response:
-    return json.loads(response.read().decode('<str>'))"]
+    N006["with opener(request) as response:     return json.loads(response.read().decode('<str>'))"]
     N007["end"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -322,8 +317,7 @@ flowchart TD
 flowchart TD
     N001["file_issue(...)"]
     N002["cmd = ['<str>', '<str>', '<str>', '<str>', repo, '<str>', title, '<str>', str(body_file)]"]
-    N003["for label in labels:
-    cmd.extend(['<str>', label])"]
+    N003["for label in labels:     cmd.extend(['<str>', label])"]
     N004["_run_gh(...)"]
     N005["end"]
     N001 -->|"start"| N002
@@ -338,9 +332,7 @@ flowchart TD
 flowchart TD
     N001["find_rolling_issue(...)"]
     N002["result = _run_gh(...)"]
-    N003["for issue in json.loads(result.stdout or '<str>'):
-    if issue.get('<str>') == title:
-        return {'<str>': int(issue['<str>']), '<str>': issue['<str>']}"]
+    N003["for issue in json.loads(result.stdout or '<str>'):     if issue.get('<str>') == title:         return {'<str>': int(issue['<str>']), '<str>': issue['<str>']}"]
     N004["return None"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -390,46 +382,13 @@ flowchart TD
     N004["live = list_fn(...)"]
     N005["sot_entries = []"]
     N006["sot_names = set(...)"]
-    N007["for filename in sot_files:
-    path = sot_dir / filename
-    with path.open(encoding='<str>') as handle:
-        entry = json.load(handle)
-    sot_entries.append((filename, entry))
-    sot_names.add(entry['<str>'])"]
+    N007["for filename in sot_files:     path = sot_dir / filename     with path.open(encoding='<str>') as handle:         entry = json.load(handle)     sot_entries.append((filename, entry))     sot_names.add(entry['<str>'])"]
     N008["summary_chunks = [render_summary_header(run_date=run_date, run_url=run_url)]"]
     N009["sot_body_chunks = [render_sot_issue_header(run_date=run_date, run_url=run_url, repo=repo)]"]
     N010["diff_blocks = []"]
     N011["sot_rows = []"]
     N012["drift_count = 0"]
-    N013["for filename, sot_entry in sot_entries:
-    name = sot_entry['<str>']
-    decision = classify(sot_entry, live)
-    if decision['<str>'] == '<str>':
-        ambiguous_row = render_status_row(file=filename, name=name, live_id='<str>', status='<str>')
-        summary_chunks.append(ambiguous_row)
-        _append(summary_file, '<str>'.join(summary_chunks))
-        raise RuntimeError(f\"<str>{name}<str>{decision['<str>']}<str>\")
-    if decision['<str>'] == '<str>':
-        row = render_status_row(file=filename, name=name, live_id='<str>', status='<str>')
-        summary_chunks.append(row)
-        sot_body_chunks.append(row)
-        sot_rows.append(row)
-        drift_count += 1
-        continue
-    live_id = int(decision['<str>'])
-    live_entry = one_fn(repo, live_id, token)
-    diff_text = diff_canonical(sot=sot_entry, live=live_entry, sot_path=f'<str>{filename}', live_path=f'<str>{filename}')
-    if not diff_text:
-        summary_chunks.append(render_status_row(file=filename, name=name, live_id=live_id, status='<str>'))
-        continue
-    row = render_status_row(file=filename, name=name, live_id=live_id, status='<str>')
-    summary_chunks.append(row)
-    sot_body_chunks.append(row)
-    sot_rows.append(row)
-    drift_count += 1
-    block = render_diff_block(name=name, live_id=live_id, diff_text=diff_text)
-    summary_chunks.append(block)
-    diff_blocks.append(block)"]
+    N013["for filename, sot_entry in sot_entries:     name = sot_entry['<str>']     decision = classify(sot_entry, live)     if decision['<str>'] == '<str>':         ambiguous_row = render_status_row(file=filename, name=name, live_id='<str>', status='<str>')         summary_chunks.append(ambiguous_row)         _append(summary_file, '<str>'.join(summary_chunks))         raise RuntimeError(f'<str>{name}<str>{decision['<str>']}<str>')     if decision['<str>'] == '<str>':         row = render_status_row(file=filename, name=name, live_id='<str>', status='<str>')         summary_chunks.append(row)         sot_body_chunks.append(row)         sot_rows.append(row)         drift_count += 1         continue     live_id = int(decision['<str>'])     live_entry = one_fn(repo, live_id, token)     diff_text = diff_canonical(sot=sot_entry, live=live_entry, sot_path=f'<str>{filename}', live_path=f'<str>{filename}')     if not diff_text:         summary_chunks.append(render_status_row(file=filename, name=name, live_id=live_id, status='<str>'))         continue     row = render_status_row(file=filename, name=name, live_id=live_id, status='<str>')     summary_chunks.append(row)     sot_body_chunks.append(row)     sot_rows.append(row)     drift_count += 1     block = render_diff_block(name=name, live_id=live_id, diff_text=diff_text)     summary_chunks.append(block)     diff_blocks.append(block)"]
     N014["if drift_count > 0"]
     N015["append(...)"]
     N016["extend(...)"]
@@ -664,8 +623,7 @@ flowchart TD
 flowchart TD
     N001["_write(...)"]
     N002["mkdir(...)"]
-    N003["with path.open('<str>', encoding='<str>') as handle:
-    handle.write(content)"]
+    N003["with path.open('<str>', encoding='<str>') as handle:     handle.write(content)"]
     N004["end"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -678,8 +636,7 @@ flowchart TD
 flowchart TD
     N001["_append(...)"]
     N002["mkdir(...)"]
-    N003["with path.open('<str>', encoding='<str>') as handle:
-    handle.write(content)"]
+    N003["with path.open('<str>', encoding='<str>') as handle:     handle.write(content)"]
     N004["end"]
     N001 -->|"start"| N002
     N002 --> N003

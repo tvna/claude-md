@@ -68,8 +68,7 @@ flowchart TD
     N001["collect_target_scripts(...)"]
     N002["existing = {path.stem for path in scripts_dir.glob('<str>') if not path.name.startswith('<str>')}"]
     N003["referenced = set(...)"]
-    N004["for path in sorted(workflows_dir.glob('<str>')):
-    referenced |= extract_script_refs(path.read_text(encoding='<str>'))"]
+    N004["for path in sorted(workflows_dir.glob('<str>')):     referenced |= extract_script_refs(path.read_text(encoding='<str>'))"]
     N005["return referenced & existing"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -83,19 +82,9 @@ flowchart TD
 flowchart TD
     N001["find_violations(...)"]
     N002["violations = []"]
-    N003["for name in sorted(target_scripts):
-    if name in baseline:
-        continue
-    defects = check_contract(read_module_docstring(scripts_dir / f'{name}<str>'))
-    if defects:
-        violations.append((name, defects))"]
+    N003["for name in sorted(target_scripts):     if name in baseline:         continue     defects = check_contract(read_module_docstring(scripts_dir / f'{name}<str>'))     if defects:         violations.append((name, defects))"]
     N004["stale = []"]
-    N005["for name in sorted(baseline):
-    if name not in target_scripts:
-        stale.append(name)
-        continue
-    if not check_contract(read_module_docstring(scripts_dir / f'{name}<str>')):
-        stale.append(name)"]
+    N005["for name in sorted(baseline):     if name not in target_scripts:         stale.append(name)         continue     if not check_contract(read_module_docstring(scripts_dir / f'{name}<str>')):         stale.append(name)"]
     N006["return (violations, stale)"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -113,10 +102,8 @@ flowchart TD
     N003["scripts_dir = Path(...)"]
     N004["target = collect_target_scripts(...)"]
     N005["(violations, stale) = find_violations(...)"]
-    N006["for name, defects in violations:
-    print(f\"<str>{name}<str>{name}<str>{'<str>'.join(defects)}<str>\", file=sys.stderr)"]
-    N007["for name in stale:
-    print(f'<str>{name}<str>', file=sys.stderr)"]
+    N006["for name, defects in violations:     print(f'<str>{name}<str>{name}<str>{'<str>'.join(defects)}<str>', file=sys.stderr)"]
+    N007["for name in stale:     print(f'<str>{name}<str>', file=sys.stderr)"]
     N008["if violations or stale"]
     N009["return 1"]
     N010["return 0"]
