@@ -20,23 +20,47 @@ flowchart TD
     N001 -->|"start"| N002
 ```
 
+## _iter_commands(...)
+
+```mermaid
+flowchart TD
+    N001["_iter_commands(...)"]
+    N002["raw_hooks = get(...)"]
+    N003["if not isinstance(raw_hooks, dict)"]
+    N004["return"]
+    N005["for event in HOOK_EVENTS:     raw_groups = raw_hooks.get(event, [])     if not isinstance(raw_groups, list):         continue     for group in raw_groups:         if not isinstance(group, dict):             continue         if _is_superpowers(group):             continue         handlers = group.get('<str>', [])         if not isinstance(handlers, list):             continue         for handler in handlers:             if not isinstance(handler, dict):                 continue             command = handler.get('<str>', '<str>')             if not isinstance(command, str):                 continue             yield (event, command)"]
+    N006["end"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 -->|"true"| N004
+    N003 -->|"false"| N005
+    N005 --> N006
+```
+
 ## _collect_hooks(...)
 
 ```mermaid
 flowchart TD
     N001["_collect_hooks(...)"]
     N002["result = set(...)"]
-    N003["raw_hooks = get(...)"]
-    N004["if not isinstance(raw_hooks, dict)"]
-    N005["return result"]
-    N006["for event in HOOK_EVENTS:     raw_groups = raw_hooks.get(event, [])     if not isinstance(raw_groups, list):         continue     for group in raw_groups:         if not isinstance(group, dict):             continue         if _is_superpowers(group):             continue         handlers = group.get('<str>', [])         if not isinstance(handlers, list):             continue         for handler in handlers:             if not isinstance(handler, dict):                 continue             command = handler.get('<str>', '<str>')             if not isinstance(command, str):                 continue             for script in _extract_scripts_from_command(command):                 result.add(HookEntry(event=event, script=script))"]
-    N007["return result"]
+    N003["for event, command in _iter_commands(data):     for script in _extract_scripts_from_command(command):         result.add(HookEntry(event=event, script=script))"]
+    N004["return result"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 --> N004
-    N004 -->|"true"| N005
-    N004 -->|"false"| N006
-    N006 --> N007
+```
+
+## collect_installers(...)
+
+```mermaid
+flowchart TD
+    N001["collect_installers(...)"]
+    N002["result = set(...)"]
+    N003["for _event, command in _iter_commands(data):     result.update(_INSTALLER_REF.findall(command))"]
+    N004["return result"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 --> N004
 ```
 
 ## collect_claude_hooks(...)
@@ -72,6 +96,19 @@ flowchart TD
     N004 --> N005
 ```
 
+## find_installer_drift(...)
+
+```mermaid
+flowchart TD
+    N001["find_installer_drift(...)"]
+    N002["drift = []"]
+    N003["for name in sorted(claude_installers ^ codex_installers):     if name in exemptions:         continue     if name in claude_installers:         drift.append((name, '<str>', '<str>'))     else:         drift.append((name, '<str>', '<str>'))"]
+    N004["return drift"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 --> N004
+```
+
 ## cmd_verify(...)
 
 ```mermaid
@@ -84,11 +121,16 @@ flowchart TD
     N006["claude_hooks = collect_claude_hooks(...)"]
     N007["codex_hooks = collect_codex_hooks(...)"]
     N008["missing = find_drift(...)"]
-    N009["for entry in missing:     print(f'<str>{entry.event}<str>{entry.script}<str>', file=sys.stderr)"]
-    N010["for script, rationale in sorted(ALLOWLIST.items()):     print(f'<str>{script}<str>{rationale}', file=sys.stderr)"]
-    N011["if missing"]
-    N012["return 1"]
-    N013["return 0"]
+    N009["claude_installers = collect_installers(...)"]
+    N010["codex_installers = collect_installers(...)"]
+    N011["installer_drift = find_installer_drift(...)"]
+    N012["for entry in missing:     print(f'<str>{entry.event}<str>{entry.script}<str>', file=sys.stderr)"]
+    N013["for name, present, absent in installer_drift:     print(f'<str>{name}<str>{present}<str>{absent}<str>', file=sys.stderr)"]
+    N014["for script, rationale in sorted(ALLOWLIST.items()):     print(f'<str>{script}<str>{rationale}', file=sys.stderr)"]
+    N015["for name, rationale in sorted(INSTALLER_PARITY_EXEMPTIONS.items()):     print(f'<str>{name}<str>{rationale}', file=sys.stderr)"]
+    N016["if missing or installer_drift"]
+    N017["return 1"]
+    N018["return 0"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 --> N004
@@ -99,8 +141,13 @@ flowchart TD
     N008 --> N009
     N009 --> N010
     N010 --> N011
-    N011 -->|"true"| N012
-    N011 -->|"false"| N013
+    N011 --> N012
+    N012 --> N013
+    N013 --> N014
+    N014 --> N015
+    N015 --> N016
+    N016 -->|"true"| N017
+    N016 -->|"false"| N018
 ```
 
 ## main(...)
