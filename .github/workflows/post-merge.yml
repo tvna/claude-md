@@ -133,27 +133,36 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
+      # Pin the generators to the project interpreter so this single-producer
+      # committer cannot drift from the Python that wrote the docs already on
+      # main. ast.unparse emits f-strings with 3.11-vs-3.12 quote-style
+      # differences, so a bare `python3` (whatever ubuntu-latest defaults to)
+      # could whole-file-churn docs/generated/. uv provisions the pinned
+      # version; `uv run python` below uses it. Refs #1533.
+      - name: Set up uv and project environment
+        uses: ./.github/actions/setup-uv
+
       - name: Generate per-script AST graphs
         # Writes one doc per script under docs/generated/scripts/ast/ and prunes
         # orphan/legacy outputs. This folder is owned by the post-merge
         # automation; the PR and pre-push gates no longer regenerate it (#1540).
-        run: python3 scripts/script_ast_graph.py all-doc
+        run: uv run python scripts/script_ast_graph.py all-doc
 
       - name: Generate script dependency graph
         # Writes docs/generated/scripts/dependency-graph.md from scripts/*.py
         # import statements. Same single-producer ownership as the AST docs
         # above; pre-push and pre-merge gates do not regenerate it (#1543).
-        run: python3 scripts/script_dependency_graph.py all-doc
+        run: uv run python scripts/script_dependency_graph.py all-doc
 
       - name: Generate script trigger reverse-map
         # Writes docs/generated/scripts/trigger-map.md by reverse-mapping the
         # four launch sources (workflow run: steps, pre-commit, preflight_all
         # Step argv, agent hooks). Same single-producer ownership as the docs
         # above; pre-push and pre-merge gates do not regenerate it (#1546).
-        run: python3 scripts/script_trigger_map.py all-doc
+        run: uv run python scripts/script_trigger_map.py all-doc
 
       - name: Generate workflow if-branch diagrams
-        run: python3 scripts/workflow_diagram.py diagram-doc
+        run: uv run python scripts/workflow_diagram.py diagram-doc
 
       - name: Detect generated-doc drift
         id: drift
@@ -214,13 +223,13 @@ jobs:
 
           ## Verification
 
-          - command: `python3 scripts/script_ast_graph.py all-doc`
+          - command: `uv run python scripts/script_ast_graph.py all-doc`
             result: `exit 0`
-          - command: `python3 scripts/script_dependency_graph.py all-doc`
+          - command: `uv run python scripts/script_dependency_graph.py all-doc`
             result: `exit 0`
-          - command: `python3 scripts/script_trigger_map.py all-doc`
+          - command: `uv run python scripts/script_trigger_map.py all-doc`
             result: `exit 0`
-          - command: `python3 scripts/workflow_diagram.py diagram-doc`
+          - command: `uv run python scripts/workflow_diagram.py diagram-doc`
             result: `exit 0`
 
           ## Checklist
