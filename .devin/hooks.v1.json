@@ -161,6 +161,16 @@
         ]
       },
       {
+        "matcher": "^mcp__github__merge_pull_request$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/gate_merge_safety.py",
+            "statusMessage": "Checking PR is safe to merge (mergeable_state=clean)"
+          }
+        ]
+      },
+      {
         "matcher": "^mcp__github__create_branch$",
         "hooks": [
           {

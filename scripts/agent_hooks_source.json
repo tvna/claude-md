@@ -202,6 +202,15 @@
               ]
             },
             {
+              "matcher": "mcp__github__merge_pull_request",
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "python3 scripts/gate_merge_safety.py"
+                }
+              ]
+            },
+            {
               "matcher": "mcp__github__create_branch",
               "hooks": [
                 {
@@ -659,6 +668,16 @@
                   "type": "command",
                   "command": "python3 scripts/gate_update_pr_branch.py",
                   "statusMessage": "Blocking update_pull_request_branch -- use new-branch recovery path"
+                }
+              ]
+            },
+            {
+              "matcher": "^mcp__github__merge_pull_request$",
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "python3 scripts/gate_merge_safety.py",
+                  "statusMessage": "Checking PR is safe to merge (mergeable_state=clean)"
                 }
               ]
             },
