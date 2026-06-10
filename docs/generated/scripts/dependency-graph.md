@@ -29,7 +29,11 @@ This file is generated from `scripts/*.py` import statements by `python3 scripts
 | `generate_devcontainer_arch_overlays` | 1 | `update_devcontainer_image_pins` |
 | `preflight_all` | 1 | `scan_devcontainer_tool_drift` |
 | `preflight_cache` | 1 | `preflight_all` |
+| `scan_markdown_links` | 1 | `measure_tool_overlap` |
 | `scan_preflight_drift` | 1 | `scan_input_contract_drift` |
+| `scan_secrets` | 1 | `measure_tool_overlap` |
+| `scan_workflow_action_pins` | 1 | `measure_tool_overlap` |
+| `scan_workflow_injection` | 1 | `measure_tool_overlap` |
 | `script_ast_graph` | 1 | `auto_retro` |
 | `session_cost_structure` | 1 | `gate_cache_regime_advisor` |
 | `update_devcontainer_image_pins` | 1 | `devcontainer_pin_pr` |
@@ -37,9 +41,9 @@ This file is generated from `scripts/*.py` import statements by `python3 scripts
 
 ## Isolated scripts
 
-58 script(s) import no sibling module and are imported by none:
+55 script(s) import no sibling module and are imported by none:
 
-`analyze_ci_timings`, `attack_review_reminder`, `backup_archive`, `backup_non_ascii`, `branch_cleanup`, `ccusage_pin`, `compare_cache_regimes`, `coverage_failure_issue`, `dependabot_labels`, `flake_pin`, `flake_pin_latest`, `gate_generated_scripts_manual_edit`, `gen_agent_hooks`, `gen_mcp_json`, `github_paginate`, `measure_devcontainer_startup`, `measure_prefix_tokens`, `mint_github_app_token`, `nixpkgs_cooldown`, `preflight_hook_event_keys`, `rulesets_apply`, `scan_apm_lock_drift`, `scan_apm_portability`, `scan_compile_from_source`, `scan_design_philosophy_drift`, `scan_doc_workflow_refs`, `scan_docs_inventory`, `scan_flake_pin_drift`, `scan_hook_coverage_drift`, `scan_maintainability_metrics`, `scan_markdown_links`, `scan_mermaid_syntax`, `scan_nonexhaustive_invariant_drift`, `scan_provisioning_hook_serial`, `scan_quality_standard_drift`, `scan_secret_runbooks`, `scan_session_path_drift`, `scan_test_presence_drift`, `scan_workflow_action_pins`, `scan_workflow_gh_calls`, `scan_workflow_injection`, `scan_workflow_pip`, `scan_workflow_unsigned_commit`, `script_dependency_graph`, `script_trigger_map`, `session_resource_report`, `skill_quality_gate`, `threat_intel_triage`, `uv_download_checksum`, `validate_json_syntax`, `verify_apm_checksums`, `verify_readme_translation`, `verify_required_check_contexts`, `verify_security_control_floor`, `verify_shard_coverage`, `verify_test_shard_markers`, `waza_pin`, `workflow_diagram`
+`analyze_ci_timings`, `attack_review_reminder`, `backup_archive`, `backup_non_ascii`, `branch_cleanup`, `ccusage_pin`, `compare_cache_regimes`, `coverage_failure_issue`, `dependabot_labels`, `flake_pin`, `flake_pin_latest`, `gate_generated_scripts_manual_edit`, `gen_agent_hooks`, `gen_mcp_json`, `github_paginate`, `measure_devcontainer_startup`, `measure_prefix_tokens`, `mint_github_app_token`, `nixpkgs_cooldown`, `preflight_hook_event_keys`, `rulesets_apply`, `scan_apm_lock_drift`, `scan_apm_portability`, `scan_compile_from_source`, `scan_design_philosophy_drift`, `scan_doc_workflow_refs`, `scan_docs_inventory`, `scan_flake_pin_drift`, `scan_hook_coverage_drift`, `scan_maintainability_metrics`, `scan_mermaid_syntax`, `scan_nonexhaustive_invariant_drift`, `scan_provisioning_hook_serial`, `scan_quality_standard_drift`, `scan_secret_runbooks`, `scan_session_path_drift`, `scan_test_presence_drift`, `scan_workflow_gh_calls`, `scan_workflow_pip`, `scan_workflow_unsigned_commit`, `script_dependency_graph`, `script_trigger_map`, `session_resource_report`, `skill_quality_gate`, `threat_intel_triage`, `uv_download_checksum`, `validate_json_syntax`, `verify_apm_checksums`, `verify_readme_translation`, `verify_required_check_contexts`, `verify_security_control_floor`, `verify_shard_coverage`, `verify_test_shard_markers`, `waza_pin`, `workflow_diagram`
 
 ## Dependency graph
 
@@ -94,6 +98,10 @@ flowchart TD
     issue_link --> _ref_classifier
     issue_link --> _trusted_bots
     labels_apply --> _github_api
+    measure_tool_overlap --> scan_markdown_links
+    measure_tool_overlap --> scan_secrets
+    measure_tool_overlap --> scan_workflow_action_pins
+    measure_tool_overlap --> scan_workflow_injection
     np_strategy_tracking --> _github_api
     np_strategy_tracking --> _ref_classifier
     plan_approval_gate --> _hook_runtime
