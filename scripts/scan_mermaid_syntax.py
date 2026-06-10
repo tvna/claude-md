@@ -14,18 +14,16 @@ boundary at the bottom that shells out to ``bun scripts/mermaid_parse.mjs``.
 The parser is the REAL Mermaid parser on purpose -- a bracket-balance heuristic
 is explicitly not a substitute for proving a block renders (measure-first).
 
-Scope: ``docs/generated/scripts/ast/`` is a documented temporary exemption.
-``scripts/script_ast_graph.py`` emits raw newlines inside node labels, so its
-49 generated blocks fail to parse on current main; fixing that generator is
-tracked separately (issue #1598) and the exemption is removed there.
+Scope: every ` ```mermaid ` block under ``docs/`` is gated, including the
+generator-owned blocks under ``docs/generated/scripts/ast/``. The ``is_exempt``
+mechanism remains as an extension point but no path is exempt today.
 
 Contract:
     Inputs: the ``verify`` subcommand, plus optional ``--root`` (repository
         root to scan, default the repo containing this script) and ``--bun``
         (path to the bun executable, default a PATH lookup). The scanned
-        surface is every ` ```mermaid ` fenced block under ``<root>/docs/**/*.md``
-        except the ``docs/generated/scripts/ast/`` exemption. The parse oracle
-        is ``bun scripts/mermaid_parse.mjs`` (official Mermaid parser); no
+        surface is every ` ```mermaid ` fenced block under ``<root>/docs/**/*.md``.
+        The parse oracle is ``bun scripts/mermaid_parse.mjs`` (official Mermaid parser); no
         stdin, no env input, no network.
     Outputs: prints ``::error file=...,line=...::`` annotations on stderr per
         block the parser rejected plus a one-line summary, exit 0 when every
@@ -48,10 +46,10 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 MERMAID_PARSER = REPO_ROOT / "scripts" / "mermaid_parse.mjs"
 
-# Directories whose Mermaid is owned by automation and known to be invalid on
-# current main. See module docstring and issue #1598; remove when the generator
-# is fixed and the blocks parse.
-EXEMPT_PREFIXES: tuple[str, ...] = ("docs/generated/scripts/ast/",)
+# Repository-relative path prefixes excluded from the gate. Empty by design --
+# every Mermaid block under docs/ is gated. This stays as an extension point so
+# a future quarantine can be added declaratively without reworking is_exempt.
+EXEMPT_PREFIXES: tuple[str, ...] = ()
 
 _FENCE_INFO = "mermaid"
 
