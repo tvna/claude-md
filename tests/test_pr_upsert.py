@@ -1136,7 +1136,34 @@ class TestCmdUpsertFiles:
         assert rc == 0
         assert captured["commit_subject"] == "t"  # defaults to --title
         assert captured["commit_body"] == "Refs #1"
+        assert captured["recreate"] is False  # absent flag defaults to append mode
         assert "created:42" in capsys.readouterr().err
+
+    def test_recreate_flag_threads_through(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # --recreate (the post-merge decision-tree shape, #1574) must reach
+        # upsert_files_pr so the fixed branch is recreated off base rather than
+        # appended onto its stale tip.
+        monkeypatch.setenv("GH_TOKEN", "tok")
+        monkeypatch.setenv("REPO", "owner/repo")
+        body_file = tmp_path / "body.md"
+        body_file.write_text("PR body", encoding="utf-8")
+        monkeypatch.setattr(pu, "_collect_worktree_changes", lambda **kw: ([("CLAUDE.md", b"x\n")], []))
+        captured: dict[str, Any] = {}
+
+        def fake_upsert(**kw: Any) -> str:
+            captured.update(kw)
+            return "created:7"
+
+        monkeypatch.setattr(pu, "upsert_files_pr", fake_upsert)
+        rc = pu.main([
+            "upsert-files", "--head", "chore/update-generated-docs", "--base", "main",
+            "--title", "t", "--body-file", str(body_file),
+            "--from-diff", "docs/generated/", "--recreate",
+        ])
+        assert rc == 0
+        assert captured["recreate"] is True
 
     def test_no_changes_skips(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]

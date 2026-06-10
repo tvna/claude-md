@@ -1820,7 +1820,9 @@ def test_pr_upsert_upsert_files_matches_workflow_args(
         "--add", "AGENTS.md",
     ]) == 0
 
-    # post-merge.yml decision-tree shape: --from-diff over a directory prefix.
+    # post-merge.yml decision-tree shape: --from-diff over a directory prefix,
+    # with --recreate so the fixed branch is rebuilt off base rather than
+    # appended onto its stale tip (#1574).
     assert pr_upsert.main([
         "upsert-files",
         "--head", "chore/update-generated-docs",
@@ -1829,6 +1831,7 @@ def test_pr_upsert_upsert_files_matches_workflow_args(
         "--commit-body", "Refs #960",
         "--body-file", str(body_file),
         "--from-diff", "docs/generated/",
+        "--recreate",
     ]) == 0
 
 
