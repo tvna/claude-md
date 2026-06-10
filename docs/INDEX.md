@@ -50,6 +50,7 @@ than serving as precedent for new PRD files.
 | File | Territory | Tracking issues | Companion |
 |---|---|---|---|
 | [survey-followup-timing.sequence.md](uml/survey-followup-timing.sequence.md) | Sequence diagram of the agent/CI/human handoff collaboration around the pre-merge retro survey and new-session follow-up prompt, with a grounded gap analysis (survey re-fires once per PR; follow-up timing is a cue-word heuristic). Selected over an activity-diagram candidate as the better lens for this timing/ordering defect. | #1594, #1581 | `scripts/gate_handoff_retro_survey_askuserquestion.py`; `scripts/stop_new_session_handoff_prompt.py`; `.github/workflows/post-merge.yml` |
+| [survey-followup-timing.sequence.ja.md](uml/survey-followup-timing.sequence.ja.md) | Japanese translation of `survey-followup-timing.sequence.md` (owner-language reading copy of the sequence diagram and gap analysis). | #1594, #1581 | `docs/uml/survey-followup-timing.sequence.md` |
 
 ## standards/ -- adopted rules, schemas, and contracts
 

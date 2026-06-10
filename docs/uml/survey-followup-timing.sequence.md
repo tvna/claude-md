@@ -1,5 +1,7 @@
 # Survey / follow-up handoff timing
 
+English | [日本語](./survey-followup-timing.sequence.ja.md)
+
 > Status: candidate UML artifact (read-only design record) for review. Triggering
 > issue is #1594 (pre-merge survey double/triple-fires across a multi-PR session);
 > the in-session-vs-CI retro ownership split it interacts with is #1581.
