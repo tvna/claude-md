@@ -51,6 +51,41 @@ def test_build_function_graph_from_source_handles_if_and_try() -> None:
     assert "-->|\"raises\"|" in mermaid
 
 
+def test_mermaid_text_escapes_quotes_and_newlines() -> None:
+    # Mermaid rejects a ``\"`` backslash escape and a raw newline inside a quoted
+    # label. The generator swaps a double quote for a single quote and collapses
+    # newlines to a space, mirroring ``workflow_diagram._mermaid_escape`` so the
+    # rendered label parses (issue #1598).
+    assert sag._mermaid_text('say "hi"') == "say 'hi'"
+    assert sag._mermaid_text("for x in y:\n    f(x)") == "for x in y:     f(x)"
+    assert '"' not in sag._mermaid_text('a"b"c')
+    assert "\n" not in sag._mermaid_text("a\nb\nc")
+
+
+def test_render_mermaid_labels_stay_on_one_line_without_escaped_quotes() -> None:
+    # A ``for`` statement that is not decomposed unparses with its multi-line
+    # body and a double-quoted f-string -- exactly the shape that broke Mermaid
+    # parsing before issue #1598. After sanitizing, no label may leak a raw
+    # newline or carry a backslash-escaped quote.
+    source = textwrap.dedent(
+        """
+        def run(rows):
+            for row in rows:
+                key = f"{row['name']}"
+            return key
+        """
+    )
+
+    mermaid = sag.render_mermaid(sag.build_function_graph_from_source(source, "run"))
+
+    assert '\\"' not in mermaid
+    for line in mermaid.splitlines():
+        # A leaked newline would split a node label across lines, leaving an
+        # opening ``["`` without its closing ``"]`` on the same physical line.
+        if '["' in line:
+            assert line.rstrip().endswith('"]')
+
+
 def test_render_script_graphs_markdown_includes_only_scripts(tmp_path: Path) -> None:
     scripts = tmp_path / "scripts"
     tests = tmp_path / "tests"
