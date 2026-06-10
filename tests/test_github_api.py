@@ -289,15 +289,111 @@ def test_graphql_call_invalid_json_yields_empty_dict() -> None:
 
 
 def test_graphql_call_url_error_yields_zero_and_empty_dict() -> None:
-    # A network-level failure must degrade to (0, {}) rather than raising an
-    # unhandled URLError traceback (CWE-703 regression guard).
+    # A persistent network-level failure must degrade to (0, {}) rather than
+    # raising an unhandled URLError traceback (CWE-703 regression guard). It is
+    # transient, so it is retried up to 3 attempts before giving up.
+    sleeps: list[float] = []
+
     def opener(request: urllib.request.Request) -> Response:
         raise urllib.error.URLError("socket down")
 
-    code, body = graphql_call(query="q", variables={}, token="t", opener=opener)
+    code, body = graphql_call(query="q", variables={}, token="t", opener=opener, sleeper=sleeps.append)
 
     assert code == 0
     assert body == {}
+    assert sleeps == [5, 10]
+
+
+def test_graphql_call_retries_5xx_then_succeeds() -> None:
+    responses = [http_error(503, ""), http_error(502, ""), Response(200, '{"data":{"ok":true}}')]
+    sleeps: list[float] = []
+
+    def opener(request: urllib.request.Request) -> Response:
+        response = responses.pop(0)
+        if isinstance(response, urllib.error.HTTPError):
+            raise response
+        return response
+
+    code, body = graphql_call(query="q", variables={}, token="t", opener=opener, sleeper=sleeps.append)
+
+    assert code == 200
+    assert body == {"data": {"ok": True}}
+    assert sleeps == [5, 10]
+
+
+def test_graphql_call_retries_generic_something_went_wrong_then_succeeds() -> None:
+    # GitHub returns its generic internal-error signature as an `errors` array,
+    # usually with HTTP 200. createCommitOnBranch hit this even for a single
+    # small batch (#1580); it must be retried, not failed on the first try.
+    transient = '{"errors":[{"message":"Something went wrong while executing your query. Please include 682E:... when reporting this issue."}]}'
+    responses = [Response(200, transient), Response(200, '{"data":{"createCommitOnBranch":{"commit":{"oid":"abc"}}}}')]
+    sleeps: list[float] = []
+
+    def opener(request: urllib.request.Request) -> Response:
+        return responses.pop(0)
+
+    code, body = graphql_call(query="m", variables={}, token="t", opener=opener, sleeper=sleeps.append)
+
+    assert code == 200
+    assert body == {"data": {"createCommitOnBranch": {"commit": {"oid": "abc"}}}}
+    assert sleeps == [5]
+
+
+def test_graphql_call_retries_generic_error_then_returns_last_error() -> None:
+    # If the generic error never clears, the last (errored) body is returned so
+    # the caller (e.g. _create_commit_on_branch) fails loud on the `errors` key.
+    transient = '{"errors":[{"message":"Something went wrong while executing your query."}]}'
+    sleeps: list[float] = []
+
+    def opener(request: urllib.request.Request) -> Response:
+        return Response(200, transient)
+
+    code, body = graphql_call(query="m", variables={}, token="t", opener=opener, sleeper=sleeps.append)
+
+    assert code == 200
+    assert "errors" in body
+    assert sleeps == [5, 10]
+
+
+def test_graphql_call_does_not_retry_permanent_validation_error() -> None:
+    # A permanent client error (validation / bad query) is not transient: it is
+    # returned on the first attempt so the caller fails loud immediately.
+    calls = 0
+    sleeps: list[float] = []
+
+    def opener(request: urllib.request.Request) -> Response:
+        nonlocal calls
+        calls += 1
+        return Response(200, '{"errors":[{"message":"Field \'bogus\' doesn\'t exist on type \'Mutation\'"}]}')
+
+    code, body = graphql_call(query="m", variables={}, token="t", opener=opener, sleeper=sleeps.append)
+
+    assert code == 200
+    assert "errors" in body
+    assert calls == 1
+    assert sleeps == []
+
+
+def test_graphql_call_does_not_leak_bearer_token(capsys: pytest.CaptureFixture[str]) -> None:
+    # Exercise the retry print branch and guard the format string against a
+    # future refactor that adds the token to the printed line.
+    items: list[Response | BaseException] = [
+        http_error(500, ""),
+        urllib.error.URLError("net"),
+        Response(200, '{"data":{}}'),
+    ]
+
+    def opener(request: urllib.request.Request) -> Response:
+        item = items.pop(0)
+        if isinstance(item, BaseException):
+            raise item
+        return item
+
+    graphql_call(query="q", variables={}, token="sentinel-DEADBEEF", opener=opener, sleeper=lambda _s: None)
+
+    captured = capsys.readouterr()
+    assert "sentinel-DEADBEEF" not in captured.out
+    assert "sentinel-DEADBEEF" not in captured.err
 
 
 # ---------------------------------------------------------------------------
