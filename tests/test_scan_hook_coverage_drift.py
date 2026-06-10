@@ -159,6 +159,84 @@ def test_find_drift_codex_extra_hooks_are_ignored() -> None:
 
 
 # ---------------------------------------------------------------------------
+# collect_installers
+# ---------------------------------------------------------------------------
+
+
+def test_collect_installers_extracts_installer_names() -> None:
+    settings = _make_claude_settings(
+        {
+            "SessionStart": [
+                _claude_group("scripts/install-uv.sh"),
+                _claude_group("scripts/install-bun.sh"),
+            ],
+            "PreToolUse": [],
+            "PostToolUse": [],
+        }
+    )
+    assert shcd.collect_installers(settings) == {"install-uv", "install-bun"}
+
+
+def test_collect_installers_ignores_non_installer_shell_scripts() -> None:
+    settings = _make_claude_settings(
+        {
+            "SessionStart": [_claude_group("scripts/session_uv_local_pin.sh")],
+            "PreToolUse": [],
+            "PostToolUse": [],
+        }
+    )
+    assert shcd.collect_installers(settings) == set()
+
+
+# ---------------------------------------------------------------------------
+# find_installer_drift
+# ---------------------------------------------------------------------------
+
+
+def test_find_installer_drift_empty_when_fully_shared() -> None:
+    claude = {"install-uv", "install-bun"}
+    codex = {"install-uv", "install-bun"}
+    assert shcd.find_installer_drift(claude, codex, {}) == []
+
+
+def test_find_installer_drift_detects_claude_only_installer() -> None:
+    """Reproduces the bun-style claude-only miss: present in claude, absent in codex."""
+    claude = {"install-uv", "install-bun"}
+    codex = {"install-uv"}
+    drift = shcd.find_installer_drift(claude, codex, {})
+    assert drift == [("install-bun", "claude", "codex")]
+
+
+def test_find_installer_drift_detects_codex_only_installer() -> None:
+    """Parity is symmetric: a codex-only installer is a gap for claude too."""
+    claude = {"install-uv"}
+    codex = {"install-uv", "install-extra"}
+    drift = shcd.find_installer_drift(claude, codex, {})
+    assert drift == [("install-extra", "codex", "claude")]
+
+
+def test_find_installer_drift_exemption_suppresses_gap() -> None:
+    claude = {"install-uv", "install-rtk"}
+    codex = {"install-uv"}
+    exemptions = {"install-rtk": "Claude-only Web provisioner; pending audit."}
+    assert shcd.find_installer_drift(claude, codex, exemptions) == []
+
+
+def test_real_exemptions_cover_current_claude_only_installers() -> None:
+    """The shipped exemptions must keep the real configs parity-clean."""
+    claude = shcd.collect_installers(
+        json.loads((REPO_ROOT / ".claude" / "settings.json").read_text(encoding="utf-8"))
+    )
+    codex = shcd.collect_installers(
+        json.loads((REPO_ROOT / ".codex" / "hooks.json").read_text(encoding="utf-8"))
+    )
+    assert shcd.find_installer_drift(claude, codex, shcd.INSTALLER_PARITY_EXEMPTIONS) == []
+    # install-bun is deliberately NOT exempted, so a regression to claude-only
+    # would be caught.
+    assert "install-bun" not in shcd.INSTALLER_PARITY_EXEMPTIONS
+
+
+# ---------------------------------------------------------------------------
 # cmd_verify via fixtures
 # ---------------------------------------------------------------------------
 
@@ -239,6 +317,67 @@ def test_cmd_verify_passes_with_allowlisted_gap(tmp_path: Path) -> None:
         codex_path,
         _make_codex_hooks({"SessionStart": [], "PreToolUse": [], "PostToolUse": []}),
     )
+
+    rc = shcd.main(["verify", "--claude", str(claude_path), "--codex", str(codex_path)])
+    assert rc == 0
+
+
+def test_cmd_verify_fails_on_claude_only_installer(tmp_path: Path) -> None:
+    """Regression for #1607: install-bun wired into claude only must fail.
+
+    Reproduces the original miss where install-bun.sh was provisioned for the
+    claude agent only while codex/devin lacked the Mermaid-gate runtime, and
+    scan_hook_coverage_drift still passed because shell installers were never
+    compared.
+    """
+    claude_path = tmp_path / "settings.json"
+    codex_path = tmp_path / "hooks.json"
+    _write_json(
+        claude_path,
+        _make_claude_settings(
+            {
+                "SessionStart": [
+                    _claude_group("scripts/install-uv.sh"),
+                    _claude_group("scripts/install-bun.sh"),
+                ],
+                "PreToolUse": [],
+                "PostToolUse": [],
+            }
+        ),
+    )
+    _write_json(
+        codex_path,
+        _make_codex_hooks(
+            {
+                "SessionStart": [_codex_group("scripts/install-uv.sh")],
+                "PreToolUse": [],
+                "PostToolUse": [],
+            }
+        ),
+    )
+
+    rc = shcd.main(["verify", "--claude", str(claude_path), "--codex", str(codex_path)])
+    assert rc == 1
+
+
+def test_cmd_verify_passes_when_installer_shared_across_agents(tmp_path: Path) -> None:
+    """The same installer wired into both agents passes the parity check."""
+    claude_path = tmp_path / "settings.json"
+    codex_path = tmp_path / "hooks.json"
+    for path in (claude_path, codex_path):
+        _write_json(
+            path,
+            _make_claude_settings(
+                {
+                    "SessionStart": [
+                        _claude_group("scripts/install-uv.sh"),
+                        _claude_group("scripts/install-bun.sh"),
+                    ],
+                    "PreToolUse": [],
+                    "PostToolUse": [],
+                }
+            ),
+        )
 
     rc = shcd.main(["verify", "--claude", str(claude_path), "--codex", str(codex_path)])
     assert rc == 0
