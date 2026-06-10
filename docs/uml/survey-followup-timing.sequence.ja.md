@@ -87,7 +87,7 @@ sequenceDiagram
     Note over Agent: SP Plan: brainstorming + writing-plans スキル (CLAUDE.md s1)
     Agent->>Agent: セッションブランチ上でプラン
     Note over Agent: SP Dispatch: dispatching-parallel-agents / subagent-driven-development<br/>(本件: 2 並行の図候補 -> receiving-code-review で 1 案選定)
-    Agent->>Agent: 実装; ハンドオフ前に verification-before-completion
+    Agent->>Agent: 実装し、ハンドオフ前に verification-before-completion を実行
 
     Note over Agent,GH: Family A は各 mcp__github__* 呼び出しをその操作スコープでゲート
     Agent->>MGate: create_pull_request (マルチPR: #1582 / #1584 / #1589)

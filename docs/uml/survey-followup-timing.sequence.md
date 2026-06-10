@@ -87,7 +87,7 @@ sequenceDiagram
     Note over Agent: SP plan phase: brainstorming + writing-plans skills (CLAUDE.md s1)
     Agent->>Agent: plan on the session branch
     Note over Agent: SP dispatch: dispatching-parallel-agents / subagent-driven-development<br/>(here: two parallel diagram candidates, then receiving-code-review to pick one)
-    Agent->>Agent: implement; verification-before-completion before handoff
+    Agent->>Agent: implement, then verification-before-completion before handoff
 
     Note over Agent,GH: Family A gates each mcp__github__* call, scoped to that op
     Agent->>MGate: create_pull_request (multi-PR: #1582 / #1584 / #1589)
