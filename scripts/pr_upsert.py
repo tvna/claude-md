@@ -727,6 +727,7 @@ def _cmd_upsert_files(args: argparse.Namespace) -> int:
             commit_subject=args.commit_subject or args.title,
             commit_body=args.commit_body,
             token=token,
+            recreate=args.recreate,
         )
     except RuntimeError as exc:
         print(f"Error: {exc}", file=sys.stderr)
@@ -769,6 +770,17 @@ def main(argv: list[str] | None = None) -> int:
         default=[],
         dest="from_diff",
         help="Path prefix; its git-status changes (add/modify/delete) are committed (repeatable)",
+    )
+    files_p.add_argument(
+        "--recreate",
+        action="store_true",
+        help=(
+            "On drift, delete the fixed head branch and recreate it off --base "
+            "with a single signed commit instead of appending onto its tip. Use "
+            "for a fixed bot branch that can fall far behind base (the "
+            "createCommitOnBranch append then fails); mirrors the triage-report "
+            "refresh path (Refs #1560)."
+        ),
     )
 
     args = parser.parse_args(argv)
