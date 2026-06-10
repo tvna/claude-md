@@ -17,37 +17,50 @@ against the stored body and warns about each dropped <...> token so the
 agent can rephrase (e.g. wrap it in backticks) rather than ship missing
 content.
 
-Footer carry-forward (Refs #1427): under the remote web harness
+Footer carry-forward (Refs #1427, #1441): under the remote web harness
 (``CLAUDE_CODE_REMOTE=true``) the create call auto-appends one session
 footer to the *stored* body, but the agent's authored body carries none
 (``preflight_pr_template_shape`` relaxes the footer on the create path
 only). The mandated fix-up ``update_pull_request`` is NOT auto-appended and
 its footer gate still requires one, so resending the footerless normalized
-body would be denied. This hook therefore lifts the harness-appended footer
-out of the stored body and re-appends it to the normalized body it hands
-back, collapsing the create-vs-update asymmetry without relaxing any gate
-and without relying on PreToolUse ``updatedInput`` (unreliable under the
-multiple-hook PR matcher; see docs/runbooks/rtk-hook-verification.md). It
-appends only when the normalized body lacks a trailing footer, so no
-duplicate is produced.
+body would be denied.
+
+The original carry-forward (#1427) lifted the footer out of the *stored*
+body in ``tool_response``. That is inert under the web harness: the
+``create_pull_request`` MCP response was observed to be ``{id, url}`` only,
+with no ``body`` field (#1439), so there is nothing to lift. This hook
+therefore reconstructs the canonical session footer from the harness session
+id (``CLAUDE_CODE_REMOTE_SESSION_ID``; the harness footer URL is
+``https://claude.ai/code/session_<token>`` where ``<token>`` is that env var
+with its ``cse_`` prefix stripped) instead of depending on ``tool_response``.
+The stored-body footer remains a secondary source for when one is actually
+present there (e.g. a response shape that does echo the body). Outside the
+web harness (local CLI, ``CLAUDE_CODE_REMOTE`` unset) no footer is
+fabricated; the local path keeps requiring a manually authored footer. The
+footer is appended only when the normalized body lacks a trailing footer, so
+no duplicate is produced, and without relying on PreToolUse ``updatedInput``
+(unreliable under the multiple-hook PR matcher; see
+docs/runbooks/rtk-hook-verification.md).
 
 Fail-open: malformed input, missing fields, or off-target tools exit 0 with
 no output so a hook bug cannot wedge unrelated tool calls.
 
-Refs: issue #892, #1361 (R1), #1427.
+Refs: issue #892, #1361 (R1), #1427, #1441.
 """
 
 from __future__ import annotations
 
 import html
+import os
 import re
+from collections.abc import Mapping
 from typing import Any
 
 from _hook_runtime import emit_decision, read_event
 
 # Import the footer regex from body_policy (rather than recompiling it here)
-# so the carry-forward detection cannot drift from the gate that enforces the
-# footer. Refs #1427.
+# so the carry-forward detection and the reconstructed footer (#1441) cannot
+# drift from the gate that enforces the footer. Refs #1427, #1441.
 from body_policy import (
     _AGENT_ATTRIBUTION_FOOTER_RE,
     detect_dropped_angle_tokens,
@@ -55,6 +68,49 @@ from body_policy import (
 )
 
 TARGET_TOOL = "mcp__github__create_pull_request"
+
+# Refs #1441. The remote web harness signals itself with CLAUDE_CODE_REMOTE=true
+# (the same env var preflight_push_session_branch.py and
+# preflight_pr_template_shape.py key off) and exposes its session id as
+# CLAUDE_CODE_REMOTE_SESSION_ID=cse_<token>. The footer URL the harness appends
+# is https://claude.ai/code/session_<token>, i.e. the prefix below plus the
+# token with its cse_ prefix stripped (observed in env, not the unrelated
+# CLAUDE_CODE_SESSION_ID UUID that issue #1441 named).
+_REMOTE_ENV_VAR = "CLAUDE_CODE_REMOTE"
+_REMOTE_SESSION_ID_VAR = "CLAUDE_CODE_REMOTE_SESSION_ID"
+_CSE_PREFIX = "cse_"
+_SESSION_URL_PREFIX = "https://claude.ai/code/session_"
+_AGENT_NAME = "Claude Code"
+
+
+def build_harness_session_footer(env: Mapping[str, str]) -> str | None:
+    """Return the agent footer the web harness auto-appends, or None.
+
+    Reconstructs the footer deterministically from the harness session id so
+    the mandated ``update_pull_request`` body carries it even when the create
+    MCP response omits the stored body (the ``{id, url}``-only shape observed
+    on #1439). Returns None when not under the remote web harness
+    (``CLAUDE_CODE_REMOTE`` not truthy) -- so the local CLI never has a footer
+    fabricated for it -- and None when the session id is absent or empty -- so
+    a malformed ``.../session_`` URL is never produced.
+
+    The constructed line is asserted against ``_AGENT_ATTRIBUTION_FOOTER_RE``
+    (the very regex ``body_policy.verify_pr_agent_attribution_footer`` uses) so
+    the reconstruction cannot drift from the gate that enforces the footer;
+    any mismatch returns None rather than emitting a footer the gate rejects.
+    """
+    if env.get(_REMOTE_ENV_VAR, "").strip().lower() != "true":
+        return None
+    raw = env.get(_REMOTE_SESSION_ID_VAR, "").strip()
+    if not raw:
+        return None
+    token = raw[len(_CSE_PREFIX):] if raw.startswith(_CSE_PREFIX) else raw
+    if not token:
+        return None
+    footer = f"_Generated by [{_AGENT_NAME}]({_SESSION_URL_PREFIX}{token})_"
+    if not _AGENT_ATTRIBUTION_FOOTER_RE.fullmatch(footer):
+        return None
+    return footer
 
 
 def has_trailing_agent_footer(body: str) -> bool:
@@ -180,12 +236,18 @@ def decide(event: dict[str, Any]) -> dict[str, Any] | None:
     normalized = normalize_pr_body(body)
 
     stored = extract_stored_body(tool_response)
-    # Refs #1427: carry the harness-appended session footer forward from the
-    # stored body so the mandated update_pull_request (whose footer gate is
-    # not relaxed) is not denied for a missing footer. Append only when the
-    # normalized body lacks one, so no duplicate is produced.
-    if stored is not None and not has_trailing_agent_footer(normalized):
-        carried_footer = extract_trailing_agent_footer(stored)
+    # Refs #1427, #1441: ensure the mandated update_pull_request (whose footer
+    # gate is NOT relaxed) is not denied for a missing footer. Append only when
+    # the normalized body lacks one, so no duplicate is produced. Reconstruct
+    # the harness session footer from the session id (the create MCP response
+    # omits the body under the web harness, #1439, so lifting it from the
+    # stored body is inert); fall back to the stored-body footer when one is
+    # actually present there, and to nothing outside the harness so the local
+    # CLI is never given a fabricated footer.
+    if not has_trailing_agent_footer(normalized):
+        carried_footer = build_harness_session_footer(os.environ)
+        if carried_footer is None and stored is not None:
+            carried_footer = extract_trailing_agent_footer(stored)
         if carried_footer is not None:
             normalized = f"{normalized.rstrip()}\n\n{carried_footer}"
 
