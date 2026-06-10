@@ -5,8 +5,8 @@ it. Lanes are the buckets that `ls docs/` already shows:
 `proposals/` (pre-decision evaluations with open questions), `prd/`
 (design-stage rationale and decision records), `standards/`
 (adopted rules, schemas, and contracts), `runbooks/` (operator
-procedures), `generated/` (checked-in generated views), `archive/`
-(frozen historical evidence).
+procedures), `uml/` (UML diagram artifacts), `generated/` (checked-in
+generated views), `archive/` (frozen historical evidence).
 
 If you only want one entry per lane, read the first row of each table
 below -- that is the highest-traffic document in the lane. Otherwise
@@ -37,7 +37,6 @@ for `archive/` is documented separately in
 | [offline-prehead-validation-gates.md](prd/offline-prehead-validation-gates.md) | Design pattern for offline PR-head mirror gates that catch breakage a base-checkout `pull_request_target` check cannot see on the PR; five-part checklist and a gate registry. | #1519, #1511 | `scripts/threat_intel_triage.py` (`verify`); `.pre-commit-config.yaml`; `.github/workflows/verify-pr.yml` |
 | [security-control-inventory.md](prd/security-control-inventory.md) | MITRE ATT&CK coverage SoT for repository security surfaces. Re-read whenever a workflow, script, ruleset, or runbook lands. | #179, #178 | `scripts/security_drift_report.py`; `.github/workflows/weekly-maintenance.yml` |
 | [zero-trust-gap-analysis.md](prd/zero-trust-gap-analysis.md) | Durable Zero Trust (eBook) gap analysis mapping repo controls to seven capability domains and three maturity tiers; the session-memory-independent record of unmet gaps and their tracking issues. | #178, #1387 | `docs/prd/security-control-inventory.md`; `.github/workflows/weekly-maintenance.yml` |
-| [survey-followup-timing-sequence-gap-analysis.md](prd/survey-followup-timing-sequence-gap-analysis.md) | Sequence-diagram visualization of the agent/CI/human handoff collaboration around the pre-merge retro survey and new-session follow-up prompt, plus a five-gap analysis (survey fires per-PR not per-handoff; follow-up timing is heuristic). | #1594, #1581 | `scripts/gate_handoff_retro_survey_askuserquestion.py`; `scripts/stop_new_session_handoff_prompt.py`; `.github/workflows/post-merge.yml` |
 | [privileged-operation-runbooks.md](prd/privileged-operation-runbooks.md) | Six-control contract (authorizing issue, dry-run, live apply, rollback, audit, secret-leak evidence) for every privileged operation. | #182, #178 | `.github/workflows/apply-rulesets.yml`; `.github/workflows/apply-labels.yml`; `.github/workflows/weekly-maintenance.yml` |
 | [non-ascii-defense.md](prd/non-ascii-defense.md) | Three-layer ASCII discipline at the GitHub-post boundary. | #102 | `scripts/scan_non_ascii.py`; `scripts/preflight_non_ascii.py`; `scripts/sanitize_history.py`; `.github/workflows/issue-pr-triage.yml` |
 | [freshness-precondition-gate.md](prd/freshness-precondition-gate.md) | Concrete companion to the universal time-boxed-gate refresh rule: the create_branch freshness preflight, the interim per-operation refresh, and the future auto-refresh skill. | #894, #654, #859 | `scripts/preflight_main_freshness.py`; `.claude/settings.json`; `.apm/instructions/master.instructions.md` (section 3) |
@@ -45,6 +44,12 @@ for `archive/` is documented separately in
 The last three `prd/` entries are adopted contracts with legacy
 placement. They should move to `standards/` in a scoped follow-up rather
 than serving as precedent for new PRD files.
+
+## uml/ -- UML diagram artifacts
+
+| File | Territory | Tracking issues | Companion |
+|---|---|---|---|
+| [survey-followup-timing.sequence.md](uml/survey-followup-timing.sequence.md) | Sequence diagram of the agent/CI/human handoff collaboration around the pre-merge retro survey and new-session follow-up prompt, with a grounded gap analysis (survey re-fires once per PR; follow-up timing is a cue-word heuristic). Selected over an activity-diagram candidate as the better lens for this timing/ordering defect. | #1594, #1581 | `scripts/gate_handoff_retro_survey_askuserquestion.py`; `scripts/stop_new_session_handoff_prompt.py`; `.github/workflows/post-merge.yml` |
 
 ## standards/ -- adopted rules, schemas, and contracts
 
