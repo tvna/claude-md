@@ -141,33 +141,17 @@ Tracking issues: #598, #605, #960, #1540, #1543, #1546.
 
 ### generated/workflows/ -- workflow if-branch diagrams
 
-One file per `.github/workflows/*.yml`. Each diagram shows job-level `if:` conditions,
-`needs:` dependency edges, and step-level `if:` branches.
-Source: `python3 scripts/workflow_diagram.py diagram-doc`. Tracking issue: #960.
-
-| File | Workflow |
-|---|---|
-| [workflows/apply-labels-if-branches.md](generated/workflows/apply-labels-if-branches.md) | `apply-labels.yml` |
-| [workflows/apply-rulesets-if-branches.md](generated/workflows/apply-rulesets-if-branches.md) | `apply-rulesets.yml` |
-| [workflows/backup-non-ascii-originals-if-branches.md](generated/workflows/backup-non-ascii-originals-if-branches.md) | `backup-non-ascii-originals.yml` |
-| [workflows/codeql-if-branches.md](generated/workflows/codeql-if-branches.md) | `codeql.yml` |
-| [workflows/daily-maintenance-if-branches.md](generated/workflows/daily-maintenance-if-branches.md) | `daily-maintenance.yml` |
-| [workflows/dependabot-automerge-if-branches.md](generated/workflows/dependabot-automerge-if-branches.md) | `dependabot-automerge.yml` |
-| [workflows/devcontainer-pin-refresh-if-branches.md](generated/workflows/devcontainer-pin-refresh-if-branches.md) | `devcontainer-pin-refresh.yml` |
-| [workflows/generate-agents-if-branches.md](generated/workflows/generate-agents-if-branches.md) | `generate-agents.yml` |
-| [workflows/issue-pr-triage-if-branches.md](generated/workflows/issue-pr-triage-if-branches.md) | `issue-pr-triage.yml` |
-| [workflows/measure-devcontainer-startup-if-branches.md](generated/workflows/measure-devcontainer-startup-if-branches.md) | `measure-devcontainer-startup.yml` |
-| [workflows/monthly-maintenance-if-branches.md](generated/workflows/monthly-maintenance-if-branches.md) | `monthly-maintenance.yml` |
-| [workflows/post-merge-if-branches.md](generated/workflows/post-merge-if-branches.md) | `post-merge.yml` |
-| [workflows/publish-devcontainer-images-if-branches.md](generated/workflows/publish-devcontainer-images-if-branches.md) | `publish-devcontainer-images.yml` |
-| [workflows/skill-quality-if-branches.md](generated/workflows/skill-quality-if-branches.md) | `skill-quality.yml` |
-| [workflows/tvna-bot-automerge-if-branches.md](generated/workflows/tvna-bot-automerge-if-branches.md) | `tvna-bot-automerge.yml` |
-| [workflows/verify-actionlint-if-branches.md](generated/workflows/verify-actionlint-if-branches.md) | `verify-actionlint.yml` |
-| [workflows/verify-agents-if-branches.md](generated/workflows/verify-agents-if-branches.md) | `verify-agents.yml` |
-| [workflows/verify-flake-if-branches.md](generated/workflows/verify-flake-if-branches.md) | `verify-flake.yml` |
-| [workflows/verify-github-content-if-branches.md](generated/workflows/verify-github-content-if-branches.md) | `verify-github-content.yml` |
-| [workflows/verify-pr-if-branches.md](generated/workflows/verify-pr-if-branches.md) | `verify-pr.yml` |
-| [workflows/weekly-maintenance-if-branches.md](generated/workflows/weekly-maintenance-if-branches.md) | `weekly-maintenance.yml` |
+`generated/workflows/<name>-if-branches.md` holds one Mermaid if-branch diagram
+per `.github/workflows/<name>.yml`. Each diagram shows job-level `if:`
+conditions, `needs:` dependency edges, and step-level `if:` branches.
+This folder is owned by the post-merge automation
+(the `decision-tree` job in `.github/workflows/post-merge.yml`); it is not
+hand-editable and is exempt from per-file INDEX linking (a non-bot edit fails
+`scripts/gate_generated_scripts_manual_edit.py`). Listing each file here would
+drift as workflows are added or removed, so the directory is described once and
+skipped by `scripts/scan_docs_inventory.py`.
+Source: `python3 scripts/workflow_diagram.py diagram-doc`.
+Tracking issues: #960, #1613.
 
 ## archive/ -- frozen historical evidence
 
