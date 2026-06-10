@@ -32,7 +32,7 @@ flowchart TD
     B -- "recorded" --> Z["Allow stop (gate passes)"]
     B -- "not recorded" --> D["block -> launch AskUserQuestion<br/>(present consecutively, no prose between)"]
 
-    D --> Q1["Q1 SATISFACTION first, anchored to the pre-merge handoff of PR #N (today)<br/>single-select: 5 very / 4 satisfied / 3 neutral / 2 dissatisfied"]
+    D --> Q1["Q1 SATISFACTION first, anchored to the pre-merge handoff of PR #N<br/>state date + time + timezone (YYYY-MM-DD HH:MM TZ, e.g. JST and UTC)<br/>single-select: 5 very / 4 satisfied / 3 neutral / 2 dissatisfied"]
     Q1 --> SW{"branch on satisfaction"}
 
     SW -- "high (4-5)" --> Q2a["Q2a any problem?<br/>rework / fix / surprise"]
@@ -65,7 +65,11 @@ flowchart TD
 1. Open the PR as usual (`mcp__github__create_pull_request`) and let the turn end.
 2. The Stop gate blocks with a reason that spells out the satisfaction-first,
    scenario-branched flow for each unrecorded PR. Run `AskUserQuestion` accordingly:
-   - Ask satisfaction first (single-select).
+   - Ask satisfaction first (single-select), anchored to an explicit date +
+     time + timezone (`YYYY-MM-DD HH:MM TZ`, e.g. JST and UTC together) so the
+     score's reference moment is unambiguous when the marker is read back later
+     -- a date alone is ambiguous because a session can span hours and cross the
+     day boundary (refs #1565).
    - Emit the branched follow-up immediately after the answer, with no prose in
      between, so the survey reads as one continuous flow (plan-mode style).
    - High satisfaction (4-5): ask whether any problem occurred and derive retro
