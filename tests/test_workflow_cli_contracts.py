@@ -648,7 +648,8 @@ def test_auto_retro_triage_report_pr_matches_workflow_env(
     with REPO + GH_TOKEN + GITHUB_REF_NAME in the env, reading the snapshot the
     preceding triage-report step wrote. The PR-upsert boundary is stubbed so the
     contract exercises the argv/env wiring (report read, base resolution) without
-    network access. Refs #1466.
+    network access. Also pins ``recreate=True`` so the refresh branch is rebuilt
+    from main each run and cannot retain an unsigned ancestor. Refs #1466, #1560.
     """
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("REPO", REPO)
@@ -674,6 +675,9 @@ def test_auto_retro_triage_report_pr_matches_workflow_env(
     assert captured["branch"] == "chore/refresh-auto-retro-triage-report"
     assert captured["path"] == "docs/generated/scripts/auto-retro-triage-report.md"
     assert captured["content"] == b"# snapshot\n"
+    # #1560: the refresh branch is recreated from main each run (delete+create),
+    # so it never accumulates an unsigned ancestor that required_signatures rejects.
+    assert captured["recreate"] is True
 
 
 def _step_env_pr_title(workflow: str, step_name: str) -> str:

@@ -79,11 +79,14 @@ from script_ast_graph import (
 _TRIAGE_REPORT_DOC_PATH = Path("docs/generated/scripts/auto-retro-triage-report.md")
 
 # Fixed branch / PR identity for the post-merge triage-report refresh. The
-# branch is reused across runs; the snapshot commit is published via the signed
-# createCommitOnBranch path (pr_upsert.upsert_single_file_pr) so the reuse is a
-# fast-forward append and never a force-push -- the all-branches non_fast_forward
-# ruleset rejected the old `git push --force-with-lease` on every drift run after
-# the first. Refs #1042, #1386, #1466.
+# branch name is reused across runs, but the snapshot commit is published with
+# recreate=True (pr_upsert.upsert_single_file_pr): on each drift the branch is
+# deleted and re-created off main with one signed createCommitOnBranch commit, so
+# it never accumulates ancestry. The earlier reuse-and-append design (#1466) left
+# a legacy unsigned ancestor on the branch that permanently violated the main
+# required_signatures rule while non_fast_forward blocked rewriting it (#1560). A
+# delete+create is not a force-push, so non_fast_forward is still honored.
+# Refs #1042, #1386, #1466, #1560.
 _TRIAGE_REPORT_PR_BRANCH = "chore/refresh-auto-retro-triage-report"
 _TRIAGE_REPORT_PR_TITLE = "chore(auto-retro): refresh triage report"
 _TRIAGE_REPORT_COMMIT_TRAILER = "Refs #1042"
@@ -94,11 +97,12 @@ _TRIAGE_REPORT_PR_BODY = (
     "This report is non-deterministic (it depends on live GitHub state), so\n"
     "it is refreshed on merge and opened as a pull request rather than\n"
     "regenerated as part of the deterministic generated docs. The snapshot commit is\n"
-    "created server-side via the signed createCommitOnBranch path so the\n"
-    "fixed refresh branch can be reused without a force-push (the\n"
-    "all-branches non_fast_forward ruleset rejects force-pushes).\n"
+    "created server-side via the signed createCommitOnBranch path. The fixed\n"
+    "refresh branch is re-created from main on each run (delete then create, not a\n"
+    "force-push) so it never accumulates an unsigned ancestor that would block the\n"
+    "required_signatures rule.\n"
     "\n"
-    "Refs #1042. Refs #1386. Refs #1466.\n"
+    "Refs #1042. Refs #1386. Refs #1466. Refs #1560.\n"
 )
 
 # Refs issue #380: GitHub may not finalize merge_commit_sha by the time
@@ -3726,9 +3730,15 @@ def _cmd_triage_report_pr(args: argparse.Namespace) -> int:
 
     Reads the snapshot the preceding ``triage-report`` step wrote and upserts it
     onto the fixed refresh branch via :func:`pr_upsert.upsert_single_file_pr`,
-    which appends a signed commit (createCommitOnBranch) instead of force-pushing
-    -- the #1466 fix. When the snapshot already matches *base*, there is no drift
-    and the command is a no-op. Refs #1042, #1386, #1466.
+    which creates a signed commit (createCommitOnBranch) instead of force-pushing
+    -- the #1466 fix. The upsert is called with ``recreate=True``: on each drift
+    the fixed branch is deleted and re-created off *base* with a single signed
+    commit, so it never accumulates ancestry. Reusing-and-appending instead left a
+    legacy unsigned ancestor on the branch that permanently violated the main
+    ``required_signatures`` rule and ``non_fast_forward`` blocked rewriting it
+    (#1560). A delete+create is not a force-push, so ``non_fast_forward`` is still
+    honored. When the snapshot already matches *base*, there is no drift and the
+    command is a no-op. Refs #1042, #1386, #1466, #1560.
     """
     repo = (
         args.repo or os.environ.get("REPO") or os.environ.get("GITHUB_REPOSITORY")
@@ -3768,6 +3778,7 @@ def _cmd_triage_report_pr(args: argparse.Namespace) -> int:
             commit_subject=_TRIAGE_REPORT_PR_TITLE,
             commit_body=_TRIAGE_REPORT_COMMIT_TRAILER,
             token=token,
+            recreate=True,
         )
     except RuntimeError as exc:
         print(f"::error::{exc}", file=sys.stderr)

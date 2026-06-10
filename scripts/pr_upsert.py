@@ -312,6 +312,7 @@ def upsert_files_pr(
     commit_subject: str,
     commit_body: str,
     token: str,
+    recreate: bool = False,
     apply_call: Callable[..., tuple[int, str]] = _github_apply_call,
     graphql_call: Callable[..., tuple[int, dict[str, Any]]] = _github_graphql_call,
 ) -> str:
@@ -334,9 +335,19 @@ def upsert_files_pr(
       (``expectedHeadOid`` = the branch head). If the tip already carries the same
       additions/deletions, no commit is made; the open PR (if any) is reconciled.
 
+    When *recreate* is true and there is drift, the existing *branch* ref is
+    deleted first (``_delete_branch``) so the run always lands on the branch-absent
+    path: a fresh branch off *base* carrying a single signed commit. A delete is
+    not a force-push, so the all-branches ``non_fast_forward`` ruleset is still
+    honored; unlike the append path it leaves no accumulated ancestry on the reused
+    branch, which is what lets an unsigned legacy ancestor permanently violate the
+    main ``required_signatures`` rule (Refs #1560). Default false preserves the
+    append semantics for every other caller.
+
     Returns ``"up-to-date"``, or ``"<verb>:<pr_number>"`` where *verb* is
-    ``created`` (new branch), ``committed`` (appended onto an existing branch), or
-    ``branch-current`` (branch tip already matched, PR reconciled only).
+    ``created`` (new branch -- always the verb under *recreate*), ``committed``
+    (appended onto an existing branch), or ``branch-current`` (branch tip already
+    matched, PR reconciled only).
     """
     if not additions and not deletions:
         return "up-to-date"
@@ -348,6 +359,12 @@ def upsert_files_pr(
 
     api_additions = [{"path": path, "contents": base64.b64encode(content).decode("ascii")} for path, content in additions]
     api_deletions = [{"path": path} for path in deletions]
+    if recreate:
+        # Drop the reused branch's accumulated ancestry so the commit lands on a
+        # fresh branch off base (single signed commit, no legacy unsigned
+        # ancestor). Delete is not a force-push -> non_fast_forward is honored.
+        # Refs #1560.
+        _delete_branch(repo=repo, branch=branch, token=token, apply_call=apply_call)
     head_oid = _get_branch_head_oid(repo=repo, branch=branch, token=token, apply_call=apply_call)
     if head_oid is None:
         base_sha = _get_ref_sha(repo=repo, ref=f"heads/{base}", token=token, apply_call=apply_call)
@@ -425,14 +442,15 @@ def upsert_single_file_pr(
     commit_subject: str,
     commit_body: str,
     token: str,
+    recreate: bool = False,
     apply_call: Callable[..., tuple[int, str]] = _github_apply_call,
     graphql_call: Callable[..., tuple[int, dict[str, Any]]] = _github_graphql_call,
 ) -> str:
     """Publish *content* to *path* on *branch* and upsert a PR into *base*, never force-pushing.
 
     Thin single-file wrapper over :func:`upsert_files_pr`; see that function for the
-    reuse-safe (no force-push) semantics and the ``"<verb>:<pr_number>"`` return
-    contract. Refs #1437, #1466.
+    reuse-safe (no force-push) semantics, the *recreate* delete+create option, and
+    the ``"<verb>:<pr_number>"`` return contract. Refs #1437, #1466, #1560.
     """
     return upsert_files_pr(
         repo=repo,
@@ -445,6 +463,7 @@ def upsert_single_file_pr(
         commit_subject=commit_subject,
         commit_body=commit_body,
         token=token,
+        recreate=recreate,
         apply_call=apply_call,
         graphql_call=graphql_call,
     )

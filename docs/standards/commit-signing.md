@@ -75,6 +75,18 @@ they still inherit on `main`. Refs
 [#1437](https://github.com/tvna/claude-md/issues/1437),
 [#1466](https://github.com/tvna/claude-md/issues/1466).
 
+The triage-report refresh flow (`auto_retro.py triage-report-pr`) instead
+calls the upsert with `recreate=True`: on each drift its fixed branch is
+deleted and re-created off `main` with a single signed commit, never
+accumulating ancestry. The append variant left a legacy unsigned ancestor
+(an old `github-actions[bot]` `git push` commit) permanently on the reused
+branch, which `required_signatures` rejected while `non_fast_forward`
+blocked rewriting it -- the branch could only be cleared by deletion. A
+delete+create is not a force-push, so `non_fast_forward` still holds. The
+decision-tree generated-docs branch keeps the append path (its history
+carries no unsigned ancestor). Refs
+[#1560](https://github.com/tvna/claude-md/issues/1560).
+
 These App-bot PRs are auto-merged uniformly by a single keeper,
 `scripts/bot_pr_automerge.py merge` (workflow `tvna-bot-automerge.yml`),
 which squash-merges every open PR whose author login is `tvna-bot[bot]`
