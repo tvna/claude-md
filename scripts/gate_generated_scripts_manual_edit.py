@@ -49,15 +49,7 @@ PROTECTED_PREFIXES = ("docs/generated/scripts/", "docs/generated/workflows/")
 #   writes docs/generated/scripts/auto-retro-triage-report.md via
 #   createCommitOnBranch (auto_retro._TRIAGE_REPORT_PR_BRANCH). Refs #1553.
 EXEMPT_BRANCHES = frozenset(
-    {
-        "chore/update-generated-docs",
-        "chore/refresh-auto-retro-triage-report",
-        # TEMP (Refs #1583): operator-authorized, time-boxed exemption for the
-        # session branch that manually converges docs/generated/ while the
-        # decision-tree bot publish is broken. MUST be reverted once main is
-        # converged -- it weakens the single-producer guard while present.
-        "claude/pr-1579-post-merge-validation-tj569b",
-    }
+    {"chore/update-generated-docs", "chore/refresh-auto-retro-triage-report"}
 )
 
 
