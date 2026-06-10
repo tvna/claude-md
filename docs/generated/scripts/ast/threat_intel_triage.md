@@ -1171,7 +1171,7 @@ flowchart TD
     try:
         review_by = date.fromisoformat(values['<str>'])
     except ValueError as exc:
-        raise ValueError(f'{path}<str>{index}<str>{values['<str>']!r}') from exc
+        raise ValueError(f\"{path}<str>{index}<str>{values['<str>']!r}\") from exc
     suppressions.append(Suppression(ecosystem=values['<str>'], name=values['<str>'], vuln_id=values['<str>'], reason=values['<str>'], review_by=review_by))"]
     N009["return suppressions"]
     N001 -->|"start"| N002
@@ -1720,10 +1720,10 @@ flowchart TD
 flowchart TD
     N001["_write_github_output(...)"]
     N002["with path.open('<str>', encoding='<str>') as handle:
-    handle.write(f'<str>{_bool(result['<str>'])}<str>')
-    handle.write(f'<str>{_bool(result['<str>'])}<str>')
-    handle.write(f'<str>{'<str>'.join(result['<str>'])}<str>')
-    handle.write(f'<str>{'<str>'.join(result['<str>'])}<str>')"]
+    handle.write(f\"<str>{_bool(result['<str>'])}<str>\")
+    handle.write(f\"<str>{_bool(result['<str>'])}<str>\")
+    handle.write(f\"<str>{'<str>'.join(result['<str>'])}<str>\")
+    handle.write(f\"<str>{'<str>'.join(result['<str>'])}<str>\")"]
     N003["end"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -1834,7 +1834,7 @@ flowchart TD
     N016["print(...)"]
     N017["return 1"]
     N018["for label in remove_labels:
-    url = f'{base_url}<str>{urllib.parse.quote(label, safe='<str>')}'
+    url = f\"{base_url}<str>{urllib.parse.quote(label, safe='<str>')}\"
     req = urllib.request.Request(url, method='<str>')
     req.add_header('<str>', auth_header)
     req.add_header('<str>', '<str>')

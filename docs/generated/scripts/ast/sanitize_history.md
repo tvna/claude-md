@@ -66,17 +66,17 @@ flowchart TD
     N001["item_endpoint(...)"]
     N002["kind = item['<str>']"]
     N003["if kind == 'issue'"]
-    N004["return f'{API_ROOT}<str>{repo}<str>{item['<str>']}'"]
+    N004["return f\"{API_ROOT}<str>{repo}<str>{item['<str>']}\""]
     N005["if kind == 'pr'"]
-    N006["return f'{API_ROOT}<str>{repo}<str>{item['<str>']}'"]
+    N006["return f\"{API_ROOT}<str>{repo}<str>{item['<str>']}\""]
     N007["if kind == 'issue_comment'"]
     N008["if item.get('comment_id') is None"]
-    N009["raise ValueError(f'<str>{item.get('<str>')}<str>')"]
-    N010["return f'{API_ROOT}<str>{repo}<str>{item['<str>']}'"]
+    N009["raise ValueError(f\"<str>{item.get('<str>')}<str>\")"]
+    N010["return f\"{API_ROOT}<str>{repo}<str>{item['<str>']}\""]
     N011["if kind == 'pr_review_comment'"]
     N012["if item.get('comment_id') is None"]
-    N013["raise ValueError(f'<str>{item.get('<str>')}<str>')"]
-    N014["return f'{API_ROOT}<str>{repo}<str>{item['<str>']}'"]
+    N013["raise ValueError(f\"<str>{item.get('<str>')}<str>\")"]
+    N014["return f\"{API_ROOT}<str>{repo}<str>{item['<str>']}\""]
     N015["raise ValueError(f'<str>{kind!r}')"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -232,18 +232,18 @@ flowchart TD
     live = fetch_live_field(url=url, field=field, token=token, opener=opener, sleeper=sleeper)
     verdict = classify_drift(live=live, original=item['<str>'], translated=item['<str>'])
     if verdict == '<str>':
-        msg = f'<str>{item['<str>']}<str>{item.get('<str>')}<str>{field}<str>'
+        msg = f\"<str>{item['<str>']}<str>{item.get('<str>')}<str>{field}<str>\"
         print(msg, file=sys.stderr)
         raise SystemExit(1)
     if verdict == '<str>':
         counts['<str>'] += 1
-        print(f'<str>{item['<str>']}<str>{item.get('<str>')}<str>{field}<str>')
+        print(f\"<str>{item['<str>']}<str>{item.get('<str>')}<str>{field}<str>\")
         continue
     if dry_run:
         print(f'<str>{url}<str>{field}')
     else:
         patch_field(url=url, field=field, new_value=item['<str>'], token=token, opener=opener, sleeper=sleeper)
-        print(f'<str>{item['<str>']}<str>{item.get('<str>')}<str>{field}<str>')
+        print(f\"<str>{item['<str>']}<str>{item.get('<str>')}<str>{field}<str>\")
     counts['<str>'] += 1"]
     N007["return counts"]
     N001 -->|"start"| N002
@@ -344,7 +344,7 @@ flowchart TD
         print(f'<str>{url}<str>{field}')
     else:
         patch_field(url=url, field=field, new_value=original, token=token)
-        print(f'<str>{kind}<str>{item['<str>']}<str>{field}<str>')
+        print(f\"<str>{kind}<str>{item['<str>']}<str>{field}<str>\")
     patched += 1"]
     N014["print(...)"]
     N015["return 0"]

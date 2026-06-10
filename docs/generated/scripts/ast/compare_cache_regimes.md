@@ -202,7 +202,7 @@ flowchart TD
 flowchart TD
     N001["render_comparison(...)"]
     N002["baseline = summaries[0]"]
-    N003["lines = ['<str>', '<str>', f'<str>{'<str>':<str>}<str>{'<str>':<str>}<str>{'<str>':<str>}<str>{'<str>':<str>}<str>{'<str>':<str>}<str>{'<str>':<str>}']"]
+    N003["lines = ['<str>', '<str>', f\"<str>{'<str>':<str>}<str>{'<str>':<str>}<str>{'<str>':<str>}<str>{'<str>':<str>}<str>{'<str>':<str>}<str>{'<str>':<str>}\"]"]
     N004["for s in summaries:
     if s is baseline:
         d_cost = d_rep = '<str>'

@@ -43,7 +43,7 @@ flowchart TD
     N008["desc_changed = (live_entry.get('<str>') or '<str>') != description"]
     N009["if not color_changed and (not desc_changed)"]
     N010["return {'<str>': '<str>', '<str>': '<str>', '<str>': '<str>', '<str>': None, '<str>': False, '<str>': False}"]
-    N011["return {'<str>': '<str>', '<str>': '<str>', '<str>': f'<str>{urllib.parse.quote(name, safe='<str>')}', '<str>': {'<str>': color, '<str>': description}, '<str>': color_changed, '<str>': desc_changed}"]
+    N011["return {'<str>': '<str>', '<str>': '<str>', '<str>': f\"<str>{urllib.parse.quote(name, safe='<str>')}\", '<str>': {'<str>': color, '<str>': description}, '<str>': color_changed, '<str>': desc_changed}"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 --> N004
@@ -149,11 +149,11 @@ flowchart TD
     if mode == '<str>' or dry_run:
         rows.append(render_action_row(name, f'<str>{action}<str>', color_changed, desc_changed, '<str>'))
         continue
-    code, body = apply_call(method=str(decision['<str>']), url=f'{API_ROOT}<str>{repo}{decision['<str>']}', payload=decision['<str>'], token=token)
+    code, body = apply_call(method=str(decision['<str>']), url=f\"{API_ROOT}<str>{repo}{decision['<str>']}\", payload=decision['<str>'], token=token)
     if not 200 <= code < 300:
         _append_rows(summary_file, rows)
-        _append_error(summary_file, f'<str>{name}<str>{decision['<str>']}<str>{_format_code(code)}<str>', body)
-        print(f'<str>{decision['<str>']}<str>{name}<str>{_format_code(code)}<str>')
+        _append_error(summary_file, f\"<str>{name}<str>{decision['<str>']}<str>{_format_code(code)}<str>\", body)
+        print(f\"<str>{decision['<str>']}<str>{name}<str>{_format_code(code)}<str>\")
         return 1
     rows.append(render_action_row(name, f'{action}<str>', color_changed, desc_changed, f'<str>{code}'))"]
     N009["for live_entry in live:
@@ -167,7 +167,7 @@ flowchart TD
     if prune_action == '<str>':
         rows.append(render_action_row(live_name, '<str>', '<str>', '<str>', '<str>'))
         continue
-    code, body = apply_call(method='<str>', url=f'{API_ROOT}<str>{repo}<str>{urllib.parse.quote(live_name, safe='<str>')}', payload=None, token=token)
+    code, body = apply_call(method='<str>', url=f\"{API_ROOT}<str>{repo}<str>{urllib.parse.quote(live_name, safe='<str>')}\", payload=None, token=token)
     if not 200 <= code < 300:
         _append_rows(summary_file, rows)
         _append_error(summary_file, f'<str>{live_name}<str>{_format_code(code)}<str>', body)

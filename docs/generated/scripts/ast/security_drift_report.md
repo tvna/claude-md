@@ -90,7 +90,7 @@ flowchart TD
     N012["append(...)"]
     N013["if unknown_count > 0"]
     N014["append(...)"]
-    N015["return FamilyRow(family='<str>', detector='<str>', status=STATUS_DRIFT, evidence=evidence, action=f'{'<str>'.join(parts)}<str>')"]
+    N015["return FamilyRow(family='<str>', detector='<str>', status=STATUS_DRIFT, evidence=evidence, action=f\"{'<str>'.join(parts)}<str>\")"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 -->|"true"| N004
@@ -284,7 +284,7 @@ flowchart TD
 flowchart TD
     N001["render_family_issue_title(...)"]
     N002["spec = FAMILY_ISSUE_SPEC[family]"]
-    N003["return f'<str>{spec['<str>']}<str>{run_date}<str>'"]
+    N003["return f\"<str>{spec['<str>']}<str>{run_date}<str>\""]
     N001 -->|"start"| N002
     N002 --> N003
 ```
@@ -295,7 +295,7 @@ flowchart TD
 flowchart TD
     N001["render_family_issue_body(...)"]
     N002["spec = FAMILY_ISSUE_SPEC[family]"]
-    N003["return f'<str>{DEFAULT_TRACKING_ISSUE}<str>{family}<str>{run_url}<str>{run_date}<str>{spec['<str>']}<str>{spec['<str>']}<str>{spec['<str>']}<str>{DEFAULT_TRACKING_ISSUE}<str>'"]
+    N003["return f\"<str>{DEFAULT_TRACKING_ISSUE}<str>{family}<str>{run_url}<str>{run_date}<str>{spec['<str>']}<str>{spec['<str>']}<str>{spec['<str>']}<str>{DEFAULT_TRACKING_ISSUE}<str>\""]
     N001 -->|"start"| N002
     N002 --> N003
 ```

@@ -11,18 +11,18 @@ flowchart TD
     N003["if transport in ('http', 'sse')"]
     N004["url = get(...)"]
     N005["if not isinstance(url, str) or not url"]
-    N006["raise ValueError(f'<str>{server.get('<str>')!r}<str>{transport}<str>')"]
+    N006["raise ValueError(f\"<str>{server.get('<str>')!r}<str>{transport}<str>\")"]
     N007["return {'<str>': transport, '<str>': url}"]
     N008["if transport == 'stdio'"]
     N009["command = get(...)"]
     N010["if not isinstance(command, str) or not command"]
-    N011["raise ValueError(f'<str>{server.get('<str>')!r}<str>')"]
+    N011["raise ValueError(f\"<str>{server.get('<str>')!r}<str>\")"]
     N012["entry = {'<str>': '<str>', '<str>': command}"]
     N013["args = get(...)"]
     N014["if args is not None"]
     N015["entry['<str>'] = args"]
     N016["return entry"]
-    N017["raise ValueError(f'<str>{server.get('<str>')!r}<str>{transport!r}')"]
+    N017["raise ValueError(f\"<str>{server.get('<str>')!r}<str>{transport!r}\")"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 -->|"true"| N004

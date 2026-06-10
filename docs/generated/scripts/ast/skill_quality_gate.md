@@ -88,7 +88,7 @@ flowchart TD
     N003["token_warnings = []"]
     N004["for check in entry.get('<str>', []):
     if not check.get('<str>', True):
-        spec_failures.append(f'{check.get('<str>', '<str>')}<str>{check.get('<str>', '<str>')}')"]
+        spec_failures.append(f\"{check.get('<str>', '<str>')}<str>{check.get('<str>', '<str>')}\")"]
     N005["budget = get(...)"]
     N006["if budget.get('exceeded')"]
     N007["append(...)"]
