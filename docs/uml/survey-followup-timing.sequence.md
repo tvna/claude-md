@@ -40,6 +40,32 @@ gates `create_pull_request` once per call (`post_pr_create_ci_monitor` /
 could key its dedup off the create-call identity. As a Family B Stop hook it
 instead transcript-scrapes PR numbers and replays -- the structural root of #1594.
 
+## superpowers involvement points
+
+`[fact]` Both families are repo-owned scripts under `scripts/`, behind a
+code-owner merge gate. A third provenance also engages the lifecycle:
+**superpowers**, an external APM plugin pinned in `apm.yml` /
+`apm.lock.yaml` (`obra/superpowers@f2cbfbe`, `package_type: marketplace_plugin`).
+Its trust is governance-gated by the lockfile pin, not by per-run review
+(CLAUDE.md section 2). It engages at these points, mechanically a Family B
+SessionStart hook plus skills the agent loads at decision points:
+
+| Lifecycle point | superpowers engagement | Source |
+|---|---|---|
+| SessionStart (boot) | `run-hook.cmd session-start` loads the skill catalog | `.claude/settings.json` SessionStart (`_apm_source: superpowers`); `using-superpowers` |
+| Plan phase (post-prompt) | `brainstorming`, `writing-plans` drive plan mode | `apm.lock.yaml` deployed skills; CLAUDE.md section 1 |
+| Dispatch | `dispatching-parallel-agents`, `subagent-driven-development` | CLAUDE.md section 3; used here for the two parallel diagram candidates |
+| Review / pre-handoff | `receiving-code-review`, `requesting-code-review`, `verification-before-completion` | CLAUDE.md section 6 |
+| Branch finish | `finishing-a-development-branch`, `systematic-debugging` (evidence-first) | `apm.lock.yaml` deployed skills |
+
+`[analysis]` superpowers' only deterministic hook is the SessionStart loader; the
+rest are *skills* the agent elects to invoke, so they are advisory, not gates.
+For the survey/follow-up timing problem this matters: the parallel-dispatch and
+review skills shaped HOW this artifact was built, but they add no enforcement to
+WHEN the survey fires -- that stays entirely with the repo-owned Family B Stop
+hook. superpowers is a build-time force-multiplier here, not part of the #1594
+control surface.
+
 ## Sequence diagram (centerpiece)
 
 ```mermaid
@@ -52,10 +78,14 @@ sequenceDiagram
     participant CI
 
     Note over Agent,Stop: SessionStart (Family B, boot phase): install-* toolchain,<br/>gen_mcp_json, plan_language_context (owner-language policy),<br/>check_session_branch, check_pr_mergeability
+    Note over Agent,Stop: SP SessionStart hook (superpowers, _apm_source):<br/>run-hook.cmd loads the skill catalog (using-superpowers)
     Note over Human,Agent: TIMELINE START -- operator submits the prompt
     Human->>Agent: submit prompt (the task)
     Note over Agent,Stop: UserPromptSubmit (Family B): prompt_context7_gate<br/>injects the primary-source-docs advisory
-    Agent->>Agent: plan and implement on the session branch
+    Note over Agent: SP plan phase: brainstorming + writing-plans skills (CLAUDE.md s1)
+    Agent->>Agent: plan on the session branch
+    Note over Agent: SP dispatch: dispatching-parallel-agents / subagent-driven-development<br/>(here: two parallel diagram candidates, then receiving-code-review to pick one)
+    Agent->>Agent: implement; verification-before-completion before handoff
 
     Note over Agent,GH: Family A gates each mcp__github__* call, scoped to that op
     Agent->>MGate: create_pull_request (multi-PR: #1582 / #1584 / #1589)
