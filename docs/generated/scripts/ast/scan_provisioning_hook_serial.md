@@ -86,7 +86,7 @@ flowchart TD
 flowchart TD
     N001["_cmd_list(...)"]
     N002["for hook in provisioning_hooks(_load_config()):
-    print(f'{hook.get('<str>', '<str>')}<str>{hook.get('<str>')}')"]
+    print(f\"{hook.get('<str>', '<str>')}<str>{hook.get('<str>')}\")"]
     N003["return 0"]
     N001 -->|"start"| N002
     N002 --> N003

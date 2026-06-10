@@ -225,27 +225,27 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["format_summary(...)"]
-    N002["lines = ['<str>', '<str>', f'<str>{report['<str>']}<str>', f'<str>{_human_size(report['<str>'])}<str>{report['<str>']}<str>']"]
+    N002["lines = ['<str>', '<str>', f\"<str>{report['<str>']}<str>\", f\"<str>{_human_size(report['<str>'])}<str>{report['<str>']}<str>\"]"]
     N003["if 'pull_seconds' in report"]
     N004["flag = '<str>' if report['<str>'] == 0 else '<str>'"]
     N005["append(...)"]
-    N006["lines += [f'<str>{report['<str>']:<str>}<str>', '<str>', '<str>', '<str>']"]
+    N006["lines += [f\"<str>{report['<str>']:<str>}<str>\", '<str>', '<str>', '<str>']"]
     N007["for entry in report['<str>']:
     command = entry['<str>']
     if len(command) > 70:
         command = command[:67] + '<str>'
-    lines.append(f'<str>{entry['<str>']}<str>{entry['<str>']:<str>}<str>{entry['<str>']}<str>{command}<str>')"]
+    lines.append(f\"<str>{entry['<str>']}<str>{entry['<str>']:<str>}<str>{entry['<str>']}<str>{command}<str>\")"]
     N008["failures = [entry for entry in report['<str>'] if entry.get('<str>')]"]
     N009["if failures"]
     N010["lines += ['<str>', '<str>', '<str>']"]
     N011["for entry in failures:
-    lines += [f'<str>{entry['<str>']}<str>{entry['<str>']}<str>{entry['<str>']}<str>', '<str>', '<str>', entry['<str>'], '<str>', '<str>']"]
+    lines += [f\"<str>{entry['<str>']}<str>{entry['<str>']}<str>{entry['<str>']}<str>\", '<str>', '<str>', entry['<str>'], '<str>', '<str>']"]
     N012["composition = get(...)"]
     N013["if composition"]
-    N014["lines += ['<str>', '<str>', '<str>', f'<str>{_human_size(composition['<str>'])}<str>{composition['<str>']}<str>', '<str>', '<str>', '<str>']"]
-    N015["lines += [f'<str>{entry['<str>']}<str>{_human_size(entry['<str>'])}<str>' for entry in composition['<str>']]"]
+    N014["lines += ['<str>', '<str>', '<str>', f\"<str>{_human_size(composition['<str>'])}<str>{composition['<str>']}<str>\", '<str>', '<str>', '<str>']"]
+    N015["lines += [f\"<str>{entry['<str>']}<str>{_human_size(entry['<str>'])}<str>\" for entry in composition['<str>']]"]
     N016["lines += ['<str>', '<str>', '<str>']"]
-    N017["lines += [f'<str>{entry['<str>']}<str>{_human_size(entry['<str>'])}<str>' for entry in composition['<str>']]"]
+    N017["lines += [f\"<str>{entry['<str>']}<str>{_human_size(entry['<str>'])}<str>\" for entry in composition['<str>']]"]
     N018["return '<str>'.join(lines) + '<str>'"]
     N001 -->|"start"| N002
     N002 --> N003

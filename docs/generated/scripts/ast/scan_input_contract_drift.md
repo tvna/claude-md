@@ -114,7 +114,7 @@ flowchart TD
     N004["target = collect_target_scripts(...)"]
     N005["(violations, stale) = find_violations(...)"]
     N006["for name, defects in violations:
-    print(f'<str>{name}<str>{name}<str>{'<str>'.join(defects)}<str>', file=sys.stderr)"]
+    print(f\"<str>{name}<str>{name}<str>{'<str>'.join(defects)}<str>\", file=sys.stderr)"]
     N007["for name in stale:
     print(f'<str>{name}<str>', file=sys.stderr)"]
     N008["if violations or stale"]

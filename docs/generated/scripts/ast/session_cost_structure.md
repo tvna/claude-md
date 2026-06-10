@@ -275,7 +275,7 @@ flowchart TD
     N005["add_argument(...)"]
     N006["add_argument(...)"]
     N007["for key in _DEFAULT_RATES:
-    parser.add_argument(f'<str>{key.replace('<str>', '<str>')}<str>', dest=f'{key}<str>', type=float, default=None, help=f'<str>{key}<str>{_DEFAULT_RATES[key]}<str>')"]
+    parser.add_argument(f\"<str>{key.replace('<str>', '<str>')}<str>\", dest=f'{key}<str>', type=float, default=None, help=f'<str>{key}<str>{_DEFAULT_RATES[key]}<str>')"]
     N008["return parser.parse_args(argv)"]
     N001 -->|"start"| N002
     N002 --> N003

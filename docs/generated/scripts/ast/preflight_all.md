@@ -189,7 +189,7 @@ flowchart TD
     N001["emit_summary(...)"]
     N002["width = max(...)"]
     N003["for result in results:
-    line = f'{result.status:<str>}<str>{result.name:<str>{width}<str>}<str>{result.duration_s:<str>}<str>'
+    line = f'{result.status:<str>}<str>{result.name:<str>{width}}<str>{result.duration_s:<str>}<str>'
     if result.detail:
         line = f'{line}<str>{result.detail}'
     print(line, file=stream)"]

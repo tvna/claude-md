@@ -59,7 +59,7 @@ flowchart TD
     N001["render_breach_table(...)"]
     N002["rows = ['<str>', '<str>']"]
     N003["for entry in breaches:
-    rows.append(f'<str>{entry['<str>']}<str>{float(entry['<str>']):<str>}<str>')"]
+    rows.append(f\"<str>{entry['<str>']}<str>{float(entry['<str>']):<str>}<str>\")"]
     N004["return '<str>'.join(rows)"]
     N001 -->|"start"| N002
     N002 --> N003

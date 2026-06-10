@@ -245,7 +245,7 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["render_unknown_row(...)"]
-    N002["return f'<str>{entry['<str>']}<str>{entry['<str>']}<str>{entry['<str>']}<str>{entry['<str>']}<str>'"]
+    N002["return f\"<str>{entry['<str>']}<str>{entry['<str>']}<str>{entry['<str>']}<str>{entry['<str>']}<str>\""]
     N001 -->|"start"| N002
 ```
 
@@ -408,7 +408,7 @@ flowchart TD
         ambiguous_row = render_status_row(file=filename, name=name, live_id='<str>', status='<str>')
         summary_chunks.append(ambiguous_row)
         _append(summary_file, '<str>'.join(summary_chunks))
-        raise RuntimeError(f'<str>{name}<str>{decision['<str>']}<str>')
+        raise RuntimeError(f\"<str>{name}<str>{decision['<str>']}<str>\")
     if decision['<str>'] == '<str>':
         row = render_status_row(file=filename, name=name, live_id='<str>', status='<str>')
         summary_chunks.append(row)

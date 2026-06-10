@@ -18,7 +18,7 @@ flowchart TD
     N010["if not 200 <= code < 300"]
     N011["raise RuntimeError(f'<str>{code}')"]
     N012["if 'errors' in response"]
-    N013["raise RuntimeError(f'<str>{response['<str>']}')"]
+    N013["raise RuntimeError(f\"<str>{response['<str>']}\")"]
     N014["try"]
     N015["oid = response['<str>']['<str>']['<str>']['<str>']"]
     N016["except (KeyError, TypeError)"]

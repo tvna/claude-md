@@ -82,7 +82,7 @@ flowchart TD
     N004["if is_exempt(branch)"]
     N005["return (0, [])"]
     N006["pretty = join(...)"]
-    N007["return (1, [f'<str>{branch or '<str>'!r}<str>{pretty}<str>'])"]
+    N007["return (1, [f\"<str>{branch or '<str>'!r}<str>{pretty}<str>\"])"]
     N001 -->|"start"| N002
     N002 -->|"true"| N003
     N002 -->|"false"| N004

@@ -193,7 +193,7 @@ flowchart TD
     N007["for version in to_delete:
     tags = '<str>'.join(version_tags(version)) or '<str>'
     created = version.get('<str>', '<str>')
-    lines.append(f'<str>{version.get('<str>')}<str>{created}<str>{tags}')"]
+    lines.append(f\"<str>{version.get('<str>')}<str>{created}<str>{tags}\")"]
     N008["append(...)"]
     N009["return lines"]
     N001 -->|"start"| N002

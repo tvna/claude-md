@@ -96,7 +96,7 @@ flowchart TD
     if not missing:
         continue
     location = '<str>' if runbook is None else f'{runbook.path.as_posix()}<str>'
-    errors.append(f'<str>{secret}<str>{format_refs(secret_uses)}<str>{location}<str>{'<str>'.join(missing)}')"]
+    errors.append(f\"<str>{secret}<str>{format_refs(secret_uses)}<str>{location}<str>{'<str>'.join(missing)}\")"]
     N008["return errors"]
     N001 -->|"start"| N002
     N002 --> N003
