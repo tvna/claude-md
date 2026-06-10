@@ -5,8 +5,8 @@ it. Lanes are the buckets that `ls docs/` already shows:
 `proposals/` (pre-decision evaluations with open questions), `prd/`
 (design-stage rationale and decision records), `standards/`
 (adopted rules, schemas, and contracts), `runbooks/` (operator
-procedures), `generated/` (checked-in generated views), `archive/`
-(frozen historical evidence).
+procedures), `uml/` (UML diagram artifacts), `generated/` (checked-in
+generated views), `archive/` (frozen historical evidence).
 
 If you only want one entry per lane, read the first row of each table
 below -- that is the highest-traffic document in the lane. Otherwise
@@ -44,6 +44,13 @@ for `archive/` is documented separately in
 The last three `prd/` entries are adopted contracts with legacy
 placement. They should move to `standards/` in a scoped follow-up rather
 than serving as precedent for new PRD files.
+
+## uml/ -- UML diagram artifacts
+
+| File | Territory | Tracking issues | Companion |
+|---|---|---|---|
+| [survey-followup-timing.sequence.md](uml/survey-followup-timing.sequence.md) | Sequence diagram of the agent/CI/human handoff collaboration around the pre-merge retro survey and new-session follow-up prompt, with a grounded gap analysis (survey re-fires once per PR; follow-up timing is a cue-word heuristic). Selected over an activity-diagram candidate as the better lens for this timing/ordering defect. | #1594, #1581 | `scripts/gate_handoff_retro_survey_askuserquestion.py`; `scripts/stop_new_session_handoff_prompt.py`; `.github/workflows/post-merge.yml` |
+| [survey-followup-timing.sequence.ja.md](uml/survey-followup-timing.sequence.ja.md) | Japanese translation of `survey-followup-timing.sequence.md` (owner-language reading copy of the sequence diagram and gap analysis). | #1594, #1581 | `docs/uml/survey-followup-timing.sequence.md` |
 
 ## standards/ -- adopted rules, schemas, and contracts
 
