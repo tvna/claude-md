@@ -318,6 +318,58 @@ class TestRecord:
         assert not (marker_dir / "12").exists()
         assert "--satisfaction" in capsys.readouterr().err
 
+    def test_record_persists_retro_fields(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        # Refs #1581: a problem-found handoff records the retro it opened.
+        monkeypatch.setattr(gate, "_MARKER_DIR", tmp_path)
+        assert (
+            gate.record(8, satisfaction=3, problem="wrong branch", needs_retro=True, retro_issue=77)
+            is True
+        )
+        payload = json.loads((tmp_path / "8").read_text())
+        assert payload["needs_retro"] is True
+        assert payload["retro_issue"] == 77
+
+    def test_record_omits_retro_fields_when_absent(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        # A repair-free / minor handoff records no retro fields.
+        monkeypatch.setattr(gate, "_MARKER_DIR", tmp_path)
+        assert gate.record(8, satisfaction=5) is True
+        payload = json.loads((tmp_path / "8").read_text())
+        assert "needs_retro" not in payload
+        assert "retro_issue" not in payload
+
+    def test_run_record_needs_retro_with_issue_writes_marker(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.setattr(gate, "_MARKER_DIR", tmp_path)
+        assert gate.run_record("12", "3", "rework", True, "77") == 0
+        payload = json.loads((tmp_path / "12").read_text())
+        assert payload["needs_retro"] is True
+        assert payload["retro_issue"] == 77
+
+    def test_run_record_needs_retro_without_issue_is_loud_and_blocks(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        # Refs #1581 / D1: --needs-retro without --retro-issue must NOT write a
+        # marker (so the Stop gate re-blocks) and must surface loudly + exit 1.
+        marker_dir = tmp_path / "survey"
+        monkeypatch.setattr(gate, "_MARKER_DIR", marker_dir)
+        assert gate.run_record("12", None, None, True, None) == 1
+        assert not (marker_dir / "12").exists()
+        assert "--needs-retro requires --retro-issue" in capsys.readouterr().err
+
+    def test_run_record_invalid_retro_issue_is_loud_and_blocks(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        marker_dir = tmp_path / "survey"
+        monkeypatch.setattr(gate, "_MARKER_DIR", marker_dir)
+        assert gate.run_record("12", None, None, True, "nope") == 1
+        assert not (marker_dir / "12").exists()
+        assert "--retro-issue must be a positive issue number" in capsys.readouterr().err
+
     def test_run_record_marker_write_failure_is_loud(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
@@ -410,4 +462,18 @@ class TestMain:
 
         monkeypatch.setattr(gate, "run_record", _record)
         assert gate.main(["--record", "12", "--satisfaction", "5", "--problem", "none"]) == 0
-        assert seen == [("12", "5", "none")]
+        # needs_retro defaults False / retro_issue None when the flags are absent.
+        assert seen == [("12", "5", "none", False, None)]
+
+    def test_retro_flags_forwarded_to_recorder(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        seen: list[tuple[object, ...]] = []
+
+        def _record(*args: object) -> int:
+            seen.append(args)
+            return 0
+
+        monkeypatch.setattr(gate, "run_record", _record)
+        assert (
+            gate.main(["--record", "12", "--needs-retro", "--retro-issue", "77"]) == 0
+        )
+        assert seen == [("12", None, None, True, "77")]
