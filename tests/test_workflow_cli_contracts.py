@@ -49,6 +49,7 @@ import github_paginate
 import issue_link
 import labels_apply
 import measure_devcontainer_startup
+import measure_tool_overlap
 import nixpkgs_cooldown
 import post_issue_comment
 import pr_upsert
@@ -151,6 +152,7 @@ class WorkflowInvocation(NamedTuple):
 CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("analyze_ci_timings.py", None): "test_analyze_ci_timings_matches_workflow_args",
     ("measure_devcontainer_startup.py", None): "test_measure_devcontainer_startup_matches_workflow_args",
+    ("measure_tool_overlap.py", None): "test_measure_tool_overlap_matches_workflow_args",
     ("ci_budget_issue.py", "run"): "test_ci_budget_issue_run_matches_workflow_args",
     ("attack_review_reminder.py", "assemble"): "test_attack_review_reminder_assemble_matches_workflow_args",
     ("backup_archive.py", "build"): "test_backup_archive_build_matches_workflow_args",
@@ -2391,6 +2393,53 @@ def test_analyze_ci_timings_matches_workflow_args(
     assert rc == 0
     out = capsys.readouterr().out
     assert "verify-agents.yml timings (weekly)" in out
+
+
+def test_measure_tool_overlap_matches_workflow_args(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Mirror the argv shape used by measure-tool-overlap.yml.
+
+    The workflow shells to ``uv run python scripts/measure_tool_overlap.py
+    --scope-root . --commit <sha> --host-id <token> --notes "..." --output
+    records.json --report report.md``. Exercise that flag-only shape (no
+    subcommand) with the three pairs stubbed by a fake PairSpec, so the
+    contract is pinned without the web-session-only binaries. Refs #1618.
+    """
+    fake = measure_tool_overlap.PairSpec(
+        pair_name="fake",
+        new_tool="nt",
+        existing_gate="eg",
+        scope_label="s",
+        run_tool=lambda root: ([measure_tool_overlap.Finding("r", "f", 1)], 1.0),
+        collect_gate=lambda root: [],
+    )
+    monkeypatch.setattr(measure_tool_overlap, "PAIRS", (fake,))
+    out_path = tmp_path / "records.json"
+    report_path = tmp_path / "report.md"
+    rc = measure_tool_overlap.main(
+        [
+            "--scope-root",
+            str(tmp_path),
+            "--commit",
+            "deadbeef",
+            "--host-id",
+            "ci-ephemeral",
+            "--notes",
+            "scheduled measurement (123)",
+            "--output",
+            str(out_path),
+            "--report",
+            str(report_path),
+        ]
+    )
+    assert rc == 0
+    records = json.loads(out_path.read_text(encoding="utf-8"))
+    assert len(records) == 1
+    assert tuple(records[0].keys()) == measure_tool_overlap.RECORD_COLUMNS
+    assert records[0]["commit_sha"] == "deadbeef"
+    assert records[0]["resource_attributes"]["host.id"] == "ci-ephemeral"
+    assert "Tool overlap measurement" in report_path.read_text(encoding="utf-8")
 
 
 def test_measure_devcontainer_startup_matches_workflow_args(
