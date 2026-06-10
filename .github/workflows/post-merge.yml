@@ -5,6 +5,11 @@ on:
     types: [closed]
   push:
     branches: [main]
+  # Daily drift sweep for the verify-docs-drift job below. Every other job in
+  # this workflow gates on push / workflow_dispatch in its `if:`, so a schedule
+  # event runs only the drift gate; the write-capable jobs all skip. Refs #1574.
+  schedule:
+    - cron: "23 6 * * *"
   workflow_dispatch:
     inputs:
       task:
@@ -257,17 +262,23 @@ jobs:
 
           # Signed, reuse-safe publish: the changed docs/generated/ files are
           # committed server side via createCommitOnBranch (App-bot author,
-          # Verified) and appended onto the fixed branch -- no force-push, so the
-          # all-branches non_fast_forward ruleset is honored. --from-diff derives
-          # the added/modified/deleted set from `git status` of the working tree.
-          # Refs #1437, #1466.
+          # Verified). --from-diff derives the added/modified/deleted set from
+          # `git status` of the working tree. --recreate deletes and recreates
+          # the fixed branch off base with a single signed commit instead of
+          # appending onto its tip: the branch can fall far behind main between
+          # successful publishes, and a 152-file createCommitOnBranch appended
+          # onto that stale tip fails ("Something went wrong"). A delete+create
+          # is not a force-push, so the all-branches non_fast_forward ruleset is
+          # still honored. Mirrors the triage-report refresh path.
+          # Refs #1437, #1466, #1560, #1574.
           python3 scripts/pr_upsert.py upsert-files \
             --head "$PR_BRANCH" \
             --base "$GITHUB_REF_NAME" \
             --title "$PR_TITLE" \
             --commit-body "Refs #960" \
             --body-file /tmp/pr-body.md \
-            --from-diff docs/generated/
+            --from-diff docs/generated/ \
+            --recreate
 
   # Moved here from weekly-maintenance.yml (#1386) so the triage-report
   # dashboard -- now the primary human inspection surface for auto-retro --
@@ -332,3 +343,47 @@ jobs:
           REPO: ${{ github.repository }}
           GITHUB_REF_NAME: ${{ github.ref_name }}
         run: python3 scripts/auto_retro.py triage-report-pr
+
+  # Durable drift gate (#1574, the optional item 2 of #1533): regenerate the
+  # deterministic docs/generated/ tree with the project-pinned interpreter and
+  # fail loudly when main has drifted from it. The decision-tree job above is the
+  # single producer and only opens a PR (it never fails on drift); this read-only
+  # gate is the missing detection layer, so a stale docs/generated/ surfaces on
+  # the next push or the daily schedule instead of waiting for an unrelated PR.
+  # It mints no token and writes nothing (contents: read), so it shares no
+  # Environment with the write-capable jobs above. The generators are pinned to
+  # `uv run python` for the same reason the committer is (#1533): a bare python3
+  # could f-string-churn the AST docs across Python versions and produce a false
+  # drift signal here.
+  verify-docs-drift:
+    if: github.event_name == 'push' || github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Set up uv and project environment
+        uses: ./.github/actions/setup-uv
+
+      - name: Regenerate the deterministic generated docs
+        run: |
+          uv run python scripts/script_ast_graph.py all-doc
+          uv run python scripts/script_dependency_graph.py all-doc
+          uv run python scripts/script_trigger_map.py all-doc
+          uv run python scripts/workflow_diagram.py diagram-doc
+
+      - name: Fail when docs/generated/ drifted from the regeneration
+        run: |
+          # `git add -A` stages new, modified, and deleted paths so the
+          # --cached diff catches untracked additions (e.g. a new ast/<stem>.md)
+          # that a plain `git diff` would miss. No commit is made.
+          git add -A docs/generated/
+          if ! git diff --cached --quiet -- docs/generated/; then
+            echo "::error::docs/generated/ is stale: regenerating with the pinned interpreter produced changes. The post-merge decision-tree job should have opened chore/update-generated-docs; check that it merged. Drift:"
+            git diff --cached --stat -- docs/generated/ >&2
+            exit 1
+          fi
+          echo "OK: docs/generated/ matches the pinned-interpreter regeneration."
