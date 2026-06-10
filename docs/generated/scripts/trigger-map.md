@@ -169,6 +169,9 @@ Detection is string-match based:
 | `scan_maintainability_metrics.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
 | `scan_markdown_links.py` | preflight | `scan_markdown_links` |
 | `scan_markdown_links.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
+| `scan_mermaid_syntax.py` | pre-commit | `scan-mermaid-syntax` |
+| `scan_mermaid_syntax.py` | preflight | `scan_mermaid_syntax` |
+| `scan_mermaid_syntax.py` | workflow | `verify-mermaid.yml (gate)` |
 | `scan_non_ascii.py` | workflow | `issue-pr-triage.yml (scan)` |
 | `scan_nonexhaustive_invariant_drift.py` | preflight | `scan_nonexhaustive_invariant_drift` |
 | `scan_nonexhaustive_invariant_drift.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
