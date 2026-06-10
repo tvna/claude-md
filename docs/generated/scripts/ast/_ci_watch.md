@@ -40,26 +40,7 @@ flowchart TD
     N009["print(...)"]
     N010["return 1"]
     N011["print(...)"]
-    N012["for poll in range(_MAX_POLLS):
-    if poll > 0:
-        time.sleep(_POLL_INTERVAL)
-    code, data = _rest_get(f'<str>{owner}<str>{repo}<str>{sha}<str>', token=token)
-    if not isinstance(data, dict) or not 200 <= code < 300:
-        print(f'<str>{poll + 1}<str>{code}', flush=True)
-        continue
-    runs = data.get('<str>') or []
-    total = len(runs)
-    completed = sum((1 for r in runs if r.get('<str>') == '<str>'))
-    failed = [r for r in runs if str(r.get('<str>') or '<str>').lower() in _FAIL_CONCLUSIONS]
-    print(f'<str>{poll + 1}<str>{completed}<str>{total}<str>{len(failed)}<str>', flush=True)
-    for r in failed:
-        print(f\"<str>{r.get('<str>')}<str>{r.get('<str>')}<str>\", flush=True)
-    if total > 0 and completed == total:
-        if failed:
-            print(f'<str>{len(failed)}<str>', flush=True)
-        else:
-            print('<str>', flush=True)
-        return 0"]
+    N012["for poll in range(_MAX_POLLS):     if poll > 0:         time.sleep(_POLL_INTERVAL)     code, data = _rest_get(f'<str>{owner}<str>{repo}<str>{sha}<str>', token=token)     if not isinstance(data, dict) or not 200 <= code < 300:         print(f'<str>{poll + 1}<str>{code}', flush=True)         continue     runs = data.get('<str>') or []     total = len(runs)     completed = sum((1 for r in runs if r.get('<str>') == '<str>'))     failed = [r for r in runs if str(r.get('<str>') or '<str>').lower() in _FAIL_CONCLUSIONS]     print(f'<str>{poll + 1}<str>{completed}<str>{total}<str>{len(failed)}<str>', flush=True)     for r in failed:         print(f'<str>{r.get('<str>')}<str>{r.get('<str>')}<str>', flush=True)     if total > 0 and completed == total:         if failed:             print(f'<str>{len(failed)}<str>', flush=True)         else:             print('<str>', flush=True)         return 0"]
     N013["print(...)"]
     N014["return 0"]
     N001 -->|"start"| N002

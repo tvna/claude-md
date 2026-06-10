@@ -48,21 +48,9 @@ flowchart TD
 flowchart TD
     N001["aggregate_usages(...)"]
     N002["by_id = {}"]
-    N003["for entry in entries:
-    found = _message_usage(entry)
-    if found is not None:
-        by_id[found[0]] = found[1]"]
+    N003["for entry in entries:     found = _message_usage(entry)     if found is not None:         by_id[found[0]] = found[1]"]
     N004["input_t, output_t, read_t, write_5m, write_1h = 0"]
-    N005["for usage in by_id.values():
-    input_t += _coerce_int(usage.get('<str>'))
-    output_t += _coerce_int(usage.get('<str>'))
-    read_t += _coerce_int(usage.get('<str>'))
-    creation = usage.get('<str>')
-    if isinstance(creation, dict):
-        write_5m += _coerce_int(creation.get('<str>'))
-        write_1h += _coerce_int(creation.get('<str>'))
-    else:
-        write_5m += _coerce_int(usage.get('<str>'))"]
+    N005["for usage in by_id.values():     input_t += _coerce_int(usage.get('<str>'))     output_t += _coerce_int(usage.get('<str>'))     read_t += _coerce_int(usage.get('<str>'))     creation = usage.get('<str>')     if isinstance(creation, dict):         write_5m += _coerce_int(creation.get('<str>'))         write_1h += _coerce_int(creation.get('<str>'))     else:         write_5m += _coerce_int(usage.get('<str>'))"]
     N006["return Tokens(input=input_t, output=output_t, cache_read=read_t, cache_write_5m=write_5m, cache_write_1h=write_1h)"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -100,14 +88,7 @@ flowchart TD
     N004["except OSError"]
     N005["return []"]
     N006["entries = []"]
-    N007["for line in raw.splitlines():
-    line = line.strip()
-    if not line:
-        continue
-    try:
-        entries.append(json.loads(line))
-    except json.JSONDecodeError:
-        continue"]
+    N007["for line in raw.splitlines():     line = line.strip()     if not line:         continue     try:         entries.append(json.loads(line))     except json.JSONDecodeError:         continue"]
     N008["return entries"]
     N001 -->|"start"| N002
     N002 -->|"try"| N003
@@ -173,11 +154,7 @@ flowchart TD
     N017["rows = data.get('<str>') if isinstance(data, dict) else None"]
     N018["if not isinstance(rows, list)"]
     N019["return None"]
-    N020["for row in rows:
-    if isinstance(row, dict) and row.get('<str>') == session_id:
-        cost = row.get('<str>')
-        if isinstance(cost, int | float) and (not isinstance(cost, bool)):
-            return float(cost)"]
+    N020["for row in rows:     if isinstance(row, dict) and row.get('<str>') == session_id:         cost = row.get('<str>')         if isinstance(cost, int | float) and (not isinstance(cost, bool)):             return float(cost)"]
     N021["return None"]
     N001 -->|"start"| N002
     N002 -->|"true"| N003
@@ -221,11 +198,7 @@ flowchart TD
     N001["render_report(...)"]
     N002["lines = ['<str>', '<str>']"]
     N003["total = costs.total"]
-    N004["for key, label in _CATEGORY_LABELS:
-    tok = getattr(tokens, key)
-    cost = getattr(costs, key)
-    share = cost / total * 100.0 if total > 0 else 0.0
-    lines.append(f'<str>{label:<str>}<str>{tok:<str>}<str>{cost:<str>}<str>{share:<str>}<str>')"]
+    N004["for key, label in _CATEGORY_LABELS:     tok = getattr(tokens, key)     cost = getattr(costs, key)     share = cost / total * 100.0 if total > 0 else 0.0     lines.append(f'<str>{label:<str>}<str>{tok:<str>}<str>{cost:<str>}<str>{share:<str>}<str>')"]
     N005["append(...)"]
     N006["append(...)"]
     N007["if ccusage_total is not None"]
@@ -254,10 +227,7 @@ flowchart TD
 flowchart TD
     N001["_build_rates(...)"]
     N002["rates = dict(...)"]
-    N003["for key in rates:
-    override = getattr(args, f'{key}<str>', None)
-    if override is not None:
-        rates[key] = override"]
+    N003["for key in rates:     override = getattr(args, f'{key}<str>', None)     if override is not None:         rates[key] = override"]
     N004["return rates"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -274,8 +244,7 @@ flowchart TD
     N004["add_argument(...)"]
     N005["add_argument(...)"]
     N006["add_argument(...)"]
-    N007["for key in _DEFAULT_RATES:
-    parser.add_argument(f\"<str>{key.replace('<str>', '<str>')}<str>\", dest=f'{key}<str>', type=float, default=None, help=f'<str>{key}<str>{_DEFAULT_RATES[key]}<str>')"]
+    N007["for key in _DEFAULT_RATES:     parser.add_argument(f'<str>{key.replace('<str>', '<str>')}<str>', dest=f'{key}<str>', type=float, default=None, help=f'<str>{key}<str>{_DEFAULT_RATES[key]}<str>')"]
     N008["return parser.parse_args(argv)"]
     N001 -->|"start"| N002
     N002 --> N003

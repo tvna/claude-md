@@ -179,8 +179,7 @@ flowchart TD
     N021["print(...)"]
     N022["print(...)"]
     N023["return 0"]
-    N024["for line in errors:
-    print(line)"]
+    N024["for line in errors:     print(line)"]
     N025["return 1"]
     N001 -->|"start"| N002
     N002 --> N003

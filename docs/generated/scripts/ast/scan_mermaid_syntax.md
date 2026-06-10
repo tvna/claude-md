@@ -35,12 +35,7 @@ flowchart TD
     N003["if not docs.exists()"]
     N004["return []"]
     N005["files = []"]
-    N006["for path in sorted(docs.rglob('<str>')):
-    if not path.is_file():
-        continue
-    if is_exempt(rel(path, root)):
-        continue
-    files.append(path)"]
+    N006["for path in sorted(docs.rglob('<str>')):     if not path.is_file():         continue     if is_exempt(rel(path, root)):         continue     files.append(path)"]
     N007["return files"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -55,9 +50,7 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["_fence_marker(...)"]
-    N002["for marker in ('<str>', '<str>'):
-    if stripped.startswith(marker):
-        return marker"]
+    N002["for marker in ('<str>', '<str>'):     if stripped.startswith(marker):         return marker"]
     N003["return None"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -72,28 +65,7 @@ flowchart TD
     N003["blocks = []"]
     N004["index = 0"]
     N005["total = len(...)"]
-    N006["while index < total:
-    line = lines[index]
-    stripped = line.strip()
-    marker = _fence_marker(stripped)
-    if marker is None or stripped[len(marker):].strip() != _FENCE_INFO:
-        index += 1
-        continue
-    fence_line = index + 1
-    indent = len(line) - len(line.lstrip())
-    body: list[str] = []
-    index += 1
-    while index < total:
-        current = lines[index]
-        if current.strip() == marker:
-            index += 1
-            break
-        if indent and current[:indent].strip() == '<str>':
-            body.append(current[indent:])
-        else:
-            body.append(current)
-        index += 1
-    blocks.append(MermaidBlock(source=source, line=fence_line, text='<str>'.join(body)))"]
+    N006["while index < total:     line = lines[index]     stripped = line.strip()     marker = _fence_marker(stripped)     if marker is None or stripped[len(marker):].strip() != _FENCE_INFO:         index += 1         continue     fence_line = index + 1     indent = len(line) - len(line.lstrip())     body: list[str] = []     index += 1     while index < total:         current = lines[index]         if current.strip() == marker:             index += 1             break         if indent and current[:indent].strip() == '<str>':             body.append(current[indent:])         else:             body.append(current)         index += 1     blocks.append(MermaidBlock(source=source, line=fence_line, text='<str>'.join(body)))"]
     N007["return blocks"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -109,8 +81,7 @@ flowchart TD
 flowchart TD
     N001["collect_blocks(...)"]
     N002["blocks = []"]
-    N003["for path in iter_docs_markdown(root):
-    blocks.extend(extract_blocks(path, path.read_text(encoding='<str>')))"]
+    N003["for path in iter_docs_markdown(root):     blocks.extend(extract_blocks(path, path.read_text(encoding='<str>')))"]
     N004["return blocks"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -158,13 +129,7 @@ flowchart TD
     N001["diagnostics(...)"]
     N002["by_id = {f'{block.source}<str>{block.line}': block for block in blocks}"]
     N003["errors = []"]
-    N004["for result in results:
-    if result.get('<str>'):
-        continue
-    block = by_id.get(result.get('<str>', '<str>'))
-    if block is None:
-        continue
-    errors.append(format_error(block, result.get('<str>') or '<str>', root))"]
+    N004["for result in results:     if result.get('<str>'):         continue     block = by_id.get(result.get('<str>', '<str>'))     if block is None:         continue     errors.append(format_error(block, result.get('<str>') or '<str>', root))"]
     N005["return errors"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -213,8 +178,7 @@ flowchart TD
     N009["except RuntimeError"]
     N010["print(...)"]
     N011["return 1"]
-    N012["for error in errors:
-    print(error, file=sys.stderr)"]
+    N012["for error in errors:     print(error, file=sys.stderr)"]
     N013["if errors"]
     N014["print(...)"]
     N015["return 1"]

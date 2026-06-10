@@ -9,30 +9,7 @@ flowchart TD
     N001["extract_shard_markers(...)"]
     N002["tree = parse(...)"]
     N003["found = []"]
-    N004["for node in tree.body:
-    if not isinstance(node, ast.Assign):
-        continue
-    targets = [t for t in node.targets if isinstance(t, ast.Name) and t.id == '<str>']
-    if not targets:
-        continue
-    value = node.value
-    candidates: list[ast.expr] = []
-    if isinstance(value, ast.List | ast.Tuple):
-        candidates = list(value.elts)
-    else:
-        candidates = [value]
-    for expr in candidates:
-        if not isinstance(expr, ast.Attribute):
-            continue
-        if not isinstance(expr.value, ast.Attribute):
-            continue
-        if expr.value.attr != '<str>':
-            continue
-        inner = expr.value.value
-        if not isinstance(inner, ast.Name) or inner.id != '<str>':
-            continue
-        if expr.attr.startswith('<str>'):
-            found.append(expr.attr)"]
+    N004["for node in tree.body:     if not isinstance(node, ast.Assign):         continue     targets = [t for t in node.targets if isinstance(t, ast.Name) and t.id == '<str>']     if not targets:         continue     value = node.value     candidates: list[ast.expr] = []     if isinstance(value, ast.List | ast.Tuple):         candidates = list(value.elts)     else:         candidates = [value]     for expr in candidates:         if not isinstance(expr, ast.Attribute):             continue         if not isinstance(expr.value, ast.Attribute):             continue         if expr.value.attr != '<str>':             continue         inner = expr.value.value         if not isinstance(inner, ast.Name) or inner.id != '<str>':             continue         if expr.attr.startswith('<str>'):             found.append(expr.attr)"]
     N005["return found"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -104,10 +81,8 @@ flowchart TD
     N004["print(...)"]
     N005["return 1"]
     N006["all_errors = []"]
-    N007["for path in files:
-    all_errors.extend(verify_file(path))"]
-    N008["for line in all_errors:
-    print(line, file=sys.stderr)"]
+    N007["for path in files:     all_errors.extend(verify_file(path))"]
+    N008["for line in all_errors:     print(line, file=sys.stderr)"]
     N009["if all_errors"]
     N010["return 1"]
     N011["print(...)"]

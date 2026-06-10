@@ -9,19 +9,7 @@ flowchart TD
     N001["validate_sot(...)"]
     N002["if not isinstance(sot, list)"]
     N003["raise ValueError('<str>')"]
-    N004["for entry in sot:
-    name = entry.get('<str>') if isinstance(entry, dict) else None
-    display_name = name if isinstance(name, str) and name else '<str>'
-    if not isinstance(name, str) or not name:
-        raise ValueError('<str>')
-    color = entry.get('<str>')
-    if not isinstance(color, str) or not HEX_COLOR_RE.fullmatch(color):
-        raise ValueError(f'<str>{display_name}<str>')
-    description = entry.get('<str>')
-    if not isinstance(description, str):
-        raise ValueError(f'<str>{display_name}<str>')
-    if len(description) > 100:
-        raise ValueError(f'<str>{display_name}<str>')"]
+    N004["for entry in sot:     name = entry.get('<str>') if isinstance(entry, dict) else None     display_name = name if isinstance(name, str) and name else '<str>'     if not isinstance(name, str) or not name:         raise ValueError('<str>')     color = entry.get('<str>')     if not isinstance(color, str) or not HEX_COLOR_RE.fullmatch(color):         raise ValueError(f'<str>{display_name}<str>')     description = entry.get('<str>')     if not isinstance(description, str):         raise ValueError(f'<str>{display_name}<str>')     if len(description) > 100:         raise ValueError(f'<str>{display_name}<str>')"]
     N005["end"]
     N001 -->|"start"| N002
     N002 -->|"true"| N003
@@ -43,7 +31,7 @@ flowchart TD
     N008["desc_changed = (live_entry.get('<str>') or '<str>') != description"]
     N009["if not color_changed and (not desc_changed)"]
     N010["return {'<str>': '<str>', '<str>': '<str>', '<str>': '<str>', '<str>': None, '<str>': False, '<str>': False}"]
-    N011["return {'<str>': '<str>', '<str>': '<str>', '<str>': f\"<str>{urllib.parse.quote(name, safe='<str>')}\", '<str>': {'<str>': color, '<str>': description}, '<str>': color_changed, '<str>': desc_changed}"]
+    N011["return {'<str>': '<str>', '<str>': '<str>', '<str>': f'<str>{urllib.parse.quote(name, safe='<str>')}', '<str>': {'<str>': color, '<str>': description}, '<str>': color_changed, '<str>': desc_changed}"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 --> N004
@@ -97,8 +85,7 @@ flowchart TD
     N003["add_header(...)"]
     N004["add_header(...)"]
     N005["add_header(...)"]
-    N006["with opener(request) as response:
-    labels = json.loads(response.read().decode('<str>'))"]
+    N006["with opener(request) as response:     labels = json.loads(response.read().decode('<str>'))"]
     N007["if len(labels) >= 100"]
     N008["raise RuntimeError(f'<str>{len(labels)}<str>')"]
     N009["return labels"]
@@ -117,8 +104,7 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["load_sot(...)"]
-    N002["with path.open(encoding='<str>') as handle:
-    sot = json.load(handle)"]
+    N002["with path.open(encoding='<str>') as handle:     sot = json.load(handle)"]
     N003["validate_sot(...)"]
     N004["return sot"]
     N001 -->|"start"| N002
@@ -137,43 +123,8 @@ flowchart TD
     N005["sot_names = {str(entry['<str>']) for entry in sot}"]
     N006["rows = []"]
     N007["_write_summary_header(...)"]
-    N008["for entry in sot:
-    name = str(entry['<str>'])
-    decision = decide_label_action(sot_entry=entry, live_entry=live_by_name.get(name))
-    action = str(decision['<str>'])
-    if action == '<str>':
-        rows.append(render_action_row(name, '<str>', '<str>', '<str>', '<str>'))
-        continue
-    color_changed = _changed_cell(decision['<str>'], is_post=action == '<str>')
-    desc_changed = _changed_cell(decision['<str>'], is_post=action == '<str>')
-    if mode == '<str>' or dry_run:
-        rows.append(render_action_row(name, f'<str>{action}<str>', color_changed, desc_changed, '<str>'))
-        continue
-    code, body = apply_call(method=str(decision['<str>']), url=f\"{API_ROOT}<str>{repo}{decision['<str>']}\", payload=decision['<str>'], token=token)
-    if not 200 <= code < 300:
-        _append_rows(summary_file, rows)
-        _append_error(summary_file, f\"<str>{name}<str>{decision['<str>']}<str>{_format_code(code)}<str>\", body)
-        print(f\"<str>{decision['<str>']}<str>{name}<str>{_format_code(code)}<str>\")
-        return 1
-    rows.append(render_action_row(name, f'{action}<str>', color_changed, desc_changed, f'<str>{code}'))"]
-    N009["for live_entry in live:
-    live_name = str(live_entry.get('<str>'))
-    prune_action = decide_prune_action(live_name=live_name, in_sot=live_name in sot_names, prune=prune, dry_run=mode == '<str>' or dry_run)
-    if prune_action == '<str>':
-        continue
-    if prune_action == '<str>':
-        rows.append(render_action_row(live_name, '<str>', '<str>', '<str>', '<str>'))
-        continue
-    if prune_action == '<str>':
-        rows.append(render_action_row(live_name, '<str>', '<str>', '<str>', '<str>'))
-        continue
-    code, body = apply_call(method='<str>', url=f\"{API_ROOT}<str>{repo}<str>{urllib.parse.quote(live_name, safe='<str>')}\", payload=None, token=token)
-    if not 200 <= code < 300:
-        _append_rows(summary_file, rows)
-        _append_error(summary_file, f'<str>{live_name}<str>{_format_code(code)}<str>', body)
-        print(f'<str>{live_name}<str>{_format_code(code)}<str>')
-        return 1
-    rows.append(render_action_row(live_name, '<str>', '<str>', '<str>', f'<str>{code}'))"]
+    N008["for entry in sot:     name = str(entry['<str>'])     decision = decide_label_action(sot_entry=entry, live_entry=live_by_name.get(name))     action = str(decision['<str>'])     if action == '<str>':         rows.append(render_action_row(name, '<str>', '<str>', '<str>', '<str>'))         continue     color_changed = _changed_cell(decision['<str>'], is_post=action == '<str>')     desc_changed = _changed_cell(decision['<str>'], is_post=action == '<str>')     if mode == '<str>' or dry_run:         rows.append(render_action_row(name, f'<str>{action}<str>', color_changed, desc_changed, '<str>'))         continue     code, body = apply_call(method=str(decision['<str>']), url=f'{API_ROOT}<str>{repo}{decision['<str>']}', payload=decision['<str>'], token=token)     if not 200 <= code < 300:         _append_rows(summary_file, rows)         _append_error(summary_file, f'<str>{name}<str>{decision['<str>']}<str>{_format_code(code)}<str>', body)         print(f'<str>{decision['<str>']}<str>{name}<str>{_format_code(code)}<str>')         return 1     rows.append(render_action_row(name, f'{action}<str>', color_changed, desc_changed, f'<str>{code}'))"]
+    N009["for live_entry in live:     live_name = str(live_entry.get('<str>'))     prune_action = decide_prune_action(live_name=live_name, in_sot=live_name in sot_names, prune=prune, dry_run=mode == '<str>' or dry_run)     if prune_action == '<str>':         continue     if prune_action == '<str>':         rows.append(render_action_row(live_name, '<str>', '<str>', '<str>', '<str>'))         continue     if prune_action == '<str>':         rows.append(render_action_row(live_name, '<str>', '<str>', '<str>', '<str>'))         continue     code, body = apply_call(method='<str>', url=f'{API_ROOT}<str>{repo}<str>{urllib.parse.quote(live_name, safe='<str>')}', payload=None, token=token)     if not 200 <= code < 300:         _append_rows(summary_file, rows)         _append_error(summary_file, f'<str>{live_name}<str>{_format_code(code)}<str>', body)         print(f'<str>{live_name}<str>{_format_code(code)}<str>')         return 1     rows.append(render_action_row(live_name, '<str>', '<str>', '<str>', f'<str>{code}'))"]
     N010["_append_rows(...)"]
     N011["return 0"]
     N001 -->|"start"| N002
@@ -256,14 +207,7 @@ flowchart TD
 flowchart TD
     N001["_write_summary_header(...)"]
     N002["mkdir(...)"]
-    N003["with summary_file.open('<str>', encoding='<str>') as handle:
-    handle.write('<str>')
-    handle.write(f'<str>{str(dry_run).lower()}<str>')
-    handle.write(f'<str>{str(prune).lower()}<str>')
-    handle.write(f'<str>{sot_count}<str>')
-    handle.write(f'<str>{live_count}<str>')
-    handle.write('<str>')
-    handle.write('<str>')"]
+    N003["with summary_file.open('<str>', encoding='<str>') as handle:     handle.write('<str>')     handle.write(f'<str>{str(dry_run).lower()}<str>')     handle.write(f'<str>{str(prune).lower()}<str>')     handle.write(f'<str>{sot_count}<str>')     handle.write(f'<str>{live_count}<str>')     handle.write('<str>')     handle.write('<str>')"]
     N004["end"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -275,9 +219,7 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["_append_rows(...)"]
-    N002["with summary_file.open('<str>', encoding='<str>') as handle:
-    for row in rows:
-        handle.write(f'{row}<str>')"]
+    N002["with summary_file.open('<str>', encoding='<str>') as handle:     for row in rows:         handle.write(f'{row}<str>')"]
     N003["end"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -288,13 +230,7 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["_append_error(...)"]
-    N002["with summary_file.open('<str>', encoding='<str>') as handle:
-    handle.write(f'<str>{title}<str>')
-    handle.write('<str>')
-    handle.write(body)
-    if body and (not body.endswith('<str>')):
-        handle.write('<str>')
-    handle.write('<str>')"]
+    N002["with summary_file.open('<str>', encoding='<str>') as handle:     handle.write(f'<str>{title}<str>')     handle.write('<str>')     handle.write(body)     if body and (not body.endswith('<str>')):         handle.write('<str>')     handle.write('<str>')"]
     N003["end"]
     N001 -->|"start"| N002
     N002 --> N003

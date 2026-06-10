@@ -21,10 +21,7 @@ flowchart TD
     N004["except FileNotFoundError"]
     N005["return None"]
     N006["data = {}"]
-    N007["for line in text.splitlines():
-    if '<str>' in line:
-        k, _, v = line.partition('<str>')
-        data[k.strip()] = v.strip()"]
+    N007["for line in text.splitlines():     if '<str>' in line:         k, _, v = line.partition('<str>')         data[k.strip()] = v.strip()"]
     N008["sha = get(...)"]
     N009["fetched_at_str = get(...)"]
     N010["if not sha or not fetched_at_str"]

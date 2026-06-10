@@ -26,10 +26,7 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["_first_string(...)"]
-    N002["for key in keys:
-    value = mapping.get(key)
-    if isinstance(value, str) and value.strip():
-        return value.strip()"]
+    N002["for key in keys:     value = mapping.get(key)     if isinstance(value, str) and value.strip():         return value.strip()"]
     N003["return None"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -49,10 +46,7 @@ flowchart TD
     N008["if model is not None"]
     N009["return model"]
     N010["env = os.environ if environ is None else environ"]
-    N011["for name in _MODEL_ENV_NAMES:
-    value = env.get(name)
-    if value and value.strip():
-        return value.strip()"]
+    N011["for name in _MODEL_ENV_NAMES:     value = env.get(name)     if value and value.strip():         return value.strip()"]
     N012["return None"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -129,12 +123,7 @@ flowchart TD
 flowchart TD
     N001["main(...)"]
     N002["del argv"]
-    N003["def _decide(event: dict[str, Any]) -> dict[str, Any] | None:
-    split = split_tool_event(event, '<str>')
-    if split is None:
-        return None
-    tool_name, tool_input = split
-    return decide(tool_name, tool_input, event=event)"]
+    N003["def _decide(event: dict[str, Any]) -> dict[str, Any] | None:     split = split_tool_event(event, '<str>')     if split is None:         return None     tool_name, tool_input = split     return decide(tool_name, tool_input, event=event)"]
     N004["return run_event_hook('<str>', _decide)"]
     N001 -->|"start"| N002
     N002 --> N003

@@ -9,20 +9,7 @@ flowchart TD
     N001["build_payload(...)"]
     N002["payload = {'<str>': timestamp, '<str>': repo}"]
     N003["counts = []"]
-    N004["for key, fname in sources:
-    path = indir / fname
-    try:
-        raw = path.read_text(encoding='<str>')
-    except OSError as exc:
-        raise ValueError(f'<str>{path}<str>{exc}<str>') from exc
-    try:
-        data = json.loads(raw)
-    except json.JSONDecodeError as exc:
-        raise ValueError(f'<str>{path}<str>{exc}') from exc
-    if not isinstance(data, list):
-        raise ValueError(f'<str>{path}<str>{type(data).__name__}')
-    payload[key] = data
-    counts.append((key, len(data)))"]
+    N004["for key, fname in sources:     path = indir / fname     try:         raw = path.read_text(encoding='<str>')     except OSError as exc:         raise ValueError(f'<str>{path}<str>{exc}<str>') from exc     try:         data = json.loads(raw)     except json.JSONDecodeError as exc:         raise ValueError(f'<str>{path}<str>{exc}') from exc     if not isinstance(data, list):         raise ValueError(f'<str>{path}<str>{type(data).__name__}')     payload[key] = data     counts.append((key, len(data)))"]
     N005["return (payload, counts)"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -35,8 +22,7 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["write_gzip(...)"]
-    N002["with gzip.open(archive, '<str>', encoding='<str>') as fh:
-    json.dump(payload, fh, ensure_ascii=True, indent=None)"]
+    N002["with gzip.open(archive, '<str>', encoding='<str>') as fh:     json.dump(payload, fh, ensure_ascii=True, indent=None)"]
     N003["end"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -52,8 +38,7 @@ flowchart TD
     N004["except ValueError"]
     N005["print(...)"]
     N006["return 1"]
-    N007["for key, count in counts:
-    print(f'{key}<str>{count}<str>', flush=True)"]
+    N007["for key, count in counts:     print(f'{key}<str>{count}<str>', flush=True)"]
     N008["archive = Path(...)"]
     N009["write_gzip(...)"]
     N010["print(...)"]

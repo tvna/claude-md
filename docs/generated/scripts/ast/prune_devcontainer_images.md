@@ -27,15 +27,7 @@ flowchart TD
 flowchart TD
     N001["parse_pinned_shas(...)"]
     N002["shas = set(...)"]
-    N003["for raw in paths:
-    path = Path(raw)
-    data = json.loads(path.read_text(encoding='<str>'))
-    image = data.get('<str>')
-    if not isinstance(image, str) or '<str>' not in image:
-        raise ValueError(f'{path}<str>')
-    tag = image.rsplit('<str>', 1)[1]
-    if _SHA_RE.fullmatch(tag):
-        shas.add(tag)"]
+    N003["for raw in paths:     path = Path(raw)     data = json.loads(path.read_text(encoding='<str>'))     image = data.get('<str>')     if not isinstance(image, str) or '<str>' not in image:         raise ValueError(f'{path}<str>')     tag = image.rsplit('<str>', 1)[1]     if _SHA_RE.fullmatch(tag):         shas.add(tag)"]
     N004["return shas"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -52,10 +44,7 @@ flowchart TD
     N004["if tag.startswith('buildcache-')"]
     N005["return True"]
     N006["base = tag"]
-    N007["for suffix in _ARCH_SUFFIXES:
-    if base.endswith(suffix):
-        base = base[:-len(suffix)]
-        break"]
+    N007["for suffix in _ARCH_SUFFIXES:     if base.endswith(suffix):         base = base[:-len(suffix)]         break"]
     N008["return base in pinned_shas"]
     N001 -->|"start"| N002
     N002 -->|"true"| N003
@@ -97,9 +86,7 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["_deletion_order_key(...)"]
-    N002["for tag in version_tags(version):
-    if not any((tag.endswith(suffix) for suffix in _ARCH_SUFFIXES)):
-        return 0"]
+    N002["for tag in version_tags(version):     if not any((tag.endswith(suffix) for suffix in _ARCH_SUFFIXES)):         return 0"]
     N003["return 1"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -136,20 +123,7 @@ flowchart TD
 flowchart TD
     N001["_list_versions(...)"]
     N002["results = []"]
-    N003["for page in range(1, _MAX_PAGES + 1):
-    url = f'{API_ROOT}<str>{owner}<str>{package}<str>{_PER_PAGE}<str>{page}<str>'
-    code, body = _call(method='<str>', url=url, token=token, opener=opener)
-    if not 200 <= code < 300:
-        raise RuntimeError(f'<str>{package}<str>{code}<str>{body[:200]}')
-    try:
-        chunk = json.loads(body) if body else []
-    except json.JSONDecodeError as exc:
-        raise RuntimeError(f'<str>{package}<str>{body[:200]}') from exc
-    if not isinstance(chunk, list):
-        raise RuntimeError(f'<str>{package}<str>{body[:200]}')
-    results.extend(chunk)
-    if len(chunk) < _PER_PAGE:
-        break"]
+    N003["for page in range(1, _MAX_PAGES + 1):     url = f'{API_ROOT}<str>{owner}<str>{package}<str>{_PER_PAGE}<str>{page}<str>'     code, body = _call(method='<str>', url=url, token=token, opener=opener)     if not 200 <= code < 300:         raise RuntimeError(f'<str>{package}<str>{code}<str>{body[:200]}')     try:         chunk = json.loads(body) if body else []     except json.JSONDecodeError as exc:         raise RuntimeError(f'<str>{package}<str>{body[:200]}') from exc     if not isinstance(chunk, list):         raise RuntimeError(f'<str>{package}<str>{body[:200]}')     results.extend(chunk)     if len(chunk) < _PER_PAGE:         break"]
     N004["return results"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -190,10 +164,7 @@ flowchart TD
     N004["append(...)"]
     N005["append(...)"]
     N006["return lines"]
-    N007["for version in to_delete:
-    tags = '<str>'.join(version_tags(version)) or '<str>'
-    created = version.get('<str>', '<str>')
-    lines.append(f\"<str>{version.get('<str>')}<str>{created}<str>{tags}\")"]
+    N007["for version in to_delete:     tags = '<str>'.join(version_tags(version)) or '<str>'     created = version.get('<str>', '<str>')     lines.append(f'<str>{version.get('<str>')}<str>{created}<str>{tags}')"]
     N008["append(...)"]
     N009["return lines"]
     N001 -->|"start"| N002
@@ -226,37 +197,13 @@ flowchart TD
     N014["report = [f'<str>{mode}<str>', '<str>']"]
     N015["deleted = 0"]
     N016["failures = []"]
-    N017["for package in args.package:
-    try:
-        versions = _list_versions(args.owner, package, token)
-    except RuntimeError as exc:
-        print(f'<str>{exc}', file=sys.stderr)
-        return 1
-    to_delete = select_versions_to_delete(versions, pinned_shas, args.keep_recent, args.min_age_days, now)
-    report.extend(_format_plan(package, to_delete))
-    print(f'{package}<str>{len(versions)}<str>{len(to_delete)}<str>{mode}<str>')
-    if dry_run:
-        continue
-    for version in to_delete:
-        raw_id = version.get('<str>')
-        if raw_id is None:
-            failures.append(f'{package}<str>')
-            continue
-        version_id = int(raw_id)
-        code, body = _delete_version(args.owner, package, version_id, token)
-        if 200 <= code < 300:
-            deleted += 1
-            print(f'<str>{package}<str>{version_id}')
-        else:
-            failures.append(f'{package}<str>{version_id}<str>{code}<str>{body[:120]}')"]
+    N017["for package in args.package:     try:         versions = _list_versions(args.owner, package, token)     except RuntimeError as exc:         print(f'<str>{exc}', file=sys.stderr)         return 1     to_delete = select_versions_to_delete(versions, pinned_shas, args.keep_recent, args.min_age_days, now)     report.extend(_format_plan(package, to_delete))     print(f'{package}<str>{len(versions)}<str>{len(to_delete)}<str>{mode}<str>')     if dry_run:         continue     for version in to_delete:         raw_id = version.get('<str>')         if raw_id is None:             failures.append(f'{package}<str>')             continue         version_id = int(raw_id)         code, body = _delete_version(args.owner, package, version_id, token)         if 200 <= code < 300:             deleted += 1             print(f'<str>{package}<str>{version_id}')         else:             failures.append(f'{package}<str>{version_id}<str>{code}<str>{body[:120]}')"]
     N018["if not dry_run"]
     N019["append(...)"]
     N020["append(...)"]
     N021["if args.summary_file"]
-    N022["with Path(args.summary_file).open('<str>', encoding='<str>') as handle:
-    handle.write('<str>'.join(report) + '<str>')"]
-    N023["for failure in failures:
-    print(f'<str>{failure}', file=sys.stderr)"]
+    N022["with Path(args.summary_file).open('<str>', encoding='<str>') as handle:     handle.write('<str>'.join(report) + '<str>')"]
+    N023["for failure in failures:     print(f'<str>{failure}', file=sys.stderr)"]
     N024["return 1 if failures else 0"]
     N001 -->|"start"| N002
     N002 --> N003

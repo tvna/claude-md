@@ -11,16 +11,7 @@ flowchart TD
     N003["captured = []"]
     N004["capturing = False"]
     N005["closed = False"]
-    N006["for line in lines:
-    if not capturing:
-        if begin_marker in line:
-            capturing = True
-            captured.append(line)
-        continue
-    captured.append(line)
-    if end_marker in line:
-        closed = True
-        break"]
+    N006["for line in lines:     if not capturing:         if begin_marker in line:             capturing = True             captured.append(line)         continue     captured.append(line)     if end_marker in line:         closed = True         break"]
     N007["if not capturing"]
     N008["raise ValueError(f'<str>{begin_marker!r}')"]
     N009["if not closed"]
@@ -64,8 +55,7 @@ flowchart TD
 flowchart TD
     N001["_append_summary(...)"]
     N002["block = join(...)"]
-    N003["with Path(summary_file).open('<str>', encoding='<str>') as fh:
-    fh.write(block)"]
+    N003["with Path(summary_file).open('<str>', encoding='<str>') as fh:     fh.write(block)"]
     N004["end"]
     N001 -->|"start"| N002
     N002 --> N003

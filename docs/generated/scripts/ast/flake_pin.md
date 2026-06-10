@@ -24,8 +24,7 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["_quoted_setter(...)"]
-    N002["def _set(match: re.Match[str]) -> str:
-    return f'{match.group(1)}{value}{match.group(2)}'"]
+    N002["def _set(match: re.Match[str]) -> str:     return f'{match.group(1)}{value}{match.group(2)}'"]
     N003["return _set"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -194,12 +193,7 @@ flowchart TD
 flowchart TD
     N001["_replace_hash_in_entry(...)"]
     N002["entry_re = compile(...)"]
-    N003["def repl(match: re.Match[str]) -> str:
-    head, entry_body, tail = (match.group(1), match.group(2), match.group(3))
-    new_body, n = re.subn('<str>', _quoted_setter(new_sri), entry_body)
-    if n != 1:
-        raise FlakePinError(f'<str>{system}<str>{n}')
-    return head + new_body + tail"]
+    N003["def repl(match: re.Match[str]) -> str:     head, entry_body, tail = (match.group(1), match.group(2), match.group(3))     new_body, n = re.subn('<str>', _quoted_setter(new_sri), entry_body)     if n != 1:         raise FlakePinError(f'<str>{system}<str>{n}')     return head + new_body + tail"]
     N004["(new_block, count) = subn(...)"]
     N005["if count != 1"]
     N006["raise FlakePinError(f'<str>{system}<str>{count}')"]
@@ -218,9 +212,7 @@ flowchart TD
 flowchart TD
     N001["bump(...)"]
     N002["spec = tool_spec(...)"]
-    N003["for system, sri in hashes.items():
-    if not _SRI_RE.fullmatch(sri):
-        raise FlakePinError(f'<str>{system}<str>{sri!r}')"]
+    N003["for system, sri in hashes.items():     if not _SRI_RE.fullmatch(sri):         raise FlakePinError(f'<str>{system}<str>{sri!r}')"]
     N004["(new_text, vcount) = subn(...)"]
     N005["if vcount != 1"]
     N006["raise FlakePinError(f'<str>{spec.version_var}<str>{vcount}')"]
@@ -230,8 +222,7 @@ flowchart TD
     N010["if set(hashes) != present"]
     N011["raise FlakePinError(f'<str>{sorted(hashes)}<str>{sorted(present)}<str>{spec.native_var}')"]
     N012["new_body = body"]
-    N013["for system, sri in hashes.items():
-    new_body = _replace_hash_in_entry(new_body, system, sri)"]
+    N013["for system, sri in hashes.items():     new_body = _replace_hash_in_entry(new_body, system, sri)"]
     N014["return new_text[:block_match.start(1)] + new_body + new_text[block_match.end(1):]"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -254,14 +245,7 @@ flowchart TD
 flowchart TD
     N001["_parse_hash_args(...)"]
     N002["result = {}"]
-    N003["for pair in pairs:
-    if '<str>' not in pair:
-        raise FlakePinError(f'<str>{pair!r}')
-    system, sri = pair.split('<str>', 1)
-    system = system.strip()
-    if system in result:
-        raise FlakePinError(f'<str>{system}<str>')
-    result[system] = sri.strip()"]
+    N003["for pair in pairs:     if '<str>' not in pair:         raise FlakePinError(f'<str>{pair!r}')     system, sri = pair.split('<str>', 1)     system = system.strip()     if system in result:         raise FlakePinError(f'<str>{system}<str>')     result[system] = sri.strip()"]
     N004["if not result"]
     N005["raise FlakePinError('<str>')"]
     N006["return result"]

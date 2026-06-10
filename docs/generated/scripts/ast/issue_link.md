@@ -124,12 +124,7 @@ flowchart TD
     N009["print(...)"]
     N010["return 1"]
     N011["fail = 0"]
-    N012["for n in refs:
-    if issue_exists(repo, n):
-        print(f'<str>{n}<str>{repo}<str>')
-    else:
-        print(f'<str>{n}<str>{repo}<str>')
-        fail = 1"]
+    N012["for n in refs:     if issue_exists(repo, n):         print(f'<str>{n}<str>{repo}<str>')     else:         print(f'<str>{n}<str>{repo}<str>')         fail = 1"]
     N013["if fail"]
     N014["return 1"]
     N015["classified = classify_refs(...)"]
@@ -139,11 +134,7 @@ flowchart TD
     N019["print(...)"]
     N020["return 0"]
     N021["refs_only = sorted(...)"]
-    N022["for n in refs_only:
-    labels = get_issue_labels(repo, n)
-    if labels is None or _TRACKING_LABEL not in labels:
-        print(_format_no_closing_keyword_msg(refs_only))
-        return 1"]
+    N022["for n in refs_only:     labels = get_issue_labels(repo, n)     if labels is None or _TRACKING_LABEL not in labels:         print(_format_no_closing_keyword_msg(refs_only))         return 1"]
     N023["print(...)"]
     N024["return 0"]
     N001 -->|"start"| N002

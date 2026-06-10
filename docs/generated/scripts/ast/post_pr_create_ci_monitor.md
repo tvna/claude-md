@@ -9,13 +9,7 @@ flowchart TD
     N001["_walk(...)"]
     N002["out = []"]
     N003["stack = [value]"]
-    N004["while stack and len(out) < 200:
-    current = stack.pop()
-    out.append(current)
-    if isinstance(current, dict):
-        stack.extend(current.values())
-    elif isinstance(current, list):
-        stack.extend(current)"]
+    N004["while stack and len(out) < 200:     current = stack.pop()     out.append(current)     if isinstance(current, dict):         stack.extend(current.values())     elif isinstance(current, list):         stack.extend(current)"]
     N005["return out"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -28,17 +22,7 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["extract_pr_url(...)"]
-    N002["for item in _walk(value):
-    if isinstance(item, dict):
-        for key, maybe_url in item.items():
-            if key in URL_KEYS and isinstance(maybe_url, str):
-                match = GITHUB_PR_URL_RE.search(maybe_url)
-                if match is not None:
-                    return match.group(0)
-    elif isinstance(item, str):
-        match = GITHUB_PR_URL_RE.search(item)
-        if match is not None:
-            return match.group(0)"]
+    N002["for item in _walk(value):     if isinstance(item, dict):         for key, maybe_url in item.items():             if key in URL_KEYS and isinstance(maybe_url, str):                 match = GITHUB_PR_URL_RE.search(maybe_url)                 if match is not None:                     return match.group(0)     elif isinstance(item, str):         match = GITHUB_PR_URL_RE.search(item)         if match is not None:             return match.group(0)"]
     N003["return None"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -49,16 +33,7 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["extract_pr_number(...)"]
-    N002["for item in _walk(value):
-    if not isinstance(item, dict):
-        continue
-    for key, maybe_number in item.items():
-        if key not in NUMBER_KEYS:
-            continue
-        if isinstance(maybe_number, int) and maybe_number > 0:
-            return str(maybe_number)
-        if isinstance(maybe_number, str) and maybe_number.isdecimal():
-            return maybe_number"]
+    N002["for item in _walk(value):     if not isinstance(item, dict):         continue     for key, maybe_number in item.items():         if key not in NUMBER_KEYS:             continue         if isinstance(maybe_number, int) and maybe_number > 0:             return str(maybe_number)         if isinstance(maybe_number, str) and maybe_number.isdecimal():             return maybe_number"]
     N003["return None"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -69,18 +44,7 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["extract_repo(...)"]
-    N002["for item in _walk(value):
-    if not isinstance(item, dict):
-        continue
-    owner = item.get('<str>')
-    name = item.get('<str>') or item.get('<str>') or item.get('<str>')
-    if isinstance(owner, str) and isinstance(name, str):
-        candidate = f'{owner}<str>{name}'
-        if _is_owner_repo(candidate):
-            return candidate
-    for key, maybe_repo in item.items():
-        if key in REPO_KEYS and isinstance(maybe_repo, str) and _is_owner_repo(maybe_repo):
-            return maybe_repo"]
+    N002["for item in _walk(value):     if not isinstance(item, dict):         continue     owner = item.get('<str>')     name = item.get('<str>') or item.get('<str>') or item.get('<str>')     if isinstance(owner, str) and isinstance(name, str):         candidate = f'{owner}<str>{name}'         if _is_owner_repo(candidate):             return candidate     for key, maybe_repo in item.items():         if key in REPO_KEYS and isinstance(maybe_repo, str) and _is_owner_repo(maybe_repo):             return maybe_repo"]
     N003["return None"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -139,8 +103,7 @@ flowchart TD
     N002["pr_label = re.sub('<str>', '<str>', argv[3]).strip('<str>') or '<str>'"]
     N003["log_path = Path(tempfile.gettempdir()) / f'<str>{pr_label}<str>'"]
     N004["try"]
-    N005["with log_path.open('<str>') as log:
-    subprocess.Popen(argv, cwd=cwd or None, stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT, close_fds=True, start_new_session=True)"]
+    N005["with log_path.open('<str>') as log:     subprocess.Popen(argv, cwd=cwd or None, stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT, close_fds=True, start_new_session=True)"]
     N006["except Exception"]
     N007["raise"]
     N008["return log_path"]

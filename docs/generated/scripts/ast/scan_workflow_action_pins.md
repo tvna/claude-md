@@ -75,10 +75,7 @@ flowchart TD
 flowchart TD
     N001["scan_text(...)"]
     N002["out = []"]
-    N003["for lineno, line in enumerate(text.splitlines(), start=1):
-    reason = scan_line(line)
-    if reason is not None:
-        out.append((lineno, reason))"]
+    N003["for lineno, line in enumerate(text.splitlines(), start=1):     reason = scan_line(line)     if reason is not None:         out.append((lineno, reason))"]
     N004["return out"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -103,10 +100,7 @@ flowchart TD
     N003["if not workflow_dir.exists()"]
     N004["return []"]
     N005["violations = []"]
-    N006["for path in _iter_workflow_files(workflow_dir):
-    rel = path.relative_to(repo_root)
-    for lineno, reason in scan_file(path):
-        violations.append((rel, lineno, reason))"]
+    N006["for path in _iter_workflow_files(workflow_dir):     rel = path.relative_to(repo_root)     for lineno, reason in scan_file(path):         violations.append((rel, lineno, reason))"]
     N007["return violations"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -121,9 +115,7 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["_iter_workflow_files(...)"]
-    N002["for path in sorted(workflow_dir.rglob('<str>')):
-    if path.is_file() and path.suffix in ('<str>', '<str>'):
-        yield path"]
+    N002["for path in sorted(workflow_dir.rglob('<str>')):     if path.is_file() and path.suffix in ('<str>', '<str>'):         yield path"]
     N003["end"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -136,8 +128,7 @@ flowchart TD
     N001["_cmd_verify(...)"]
     N002["repo_root = resolve(...)"]
     N003["violations = find_violations(...)"]
-    N004["for rel, lineno, reason in violations:
-    print(f'<str>{rel}<str>{lineno}<str>{reason}<str>{ACK_MARKER}<str>', file=sys.stderr)"]
+    N004["for rel, lineno, reason in violations:     print(f'<str>{rel}<str>{lineno}<str>{reason}<str>{ACK_MARKER}<str>', file=sys.stderr)"]
     N005["if violations"]
     N006["print(...)"]
     N007["return 1"]

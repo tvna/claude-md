@@ -32,12 +32,7 @@ flowchart TD
 flowchart TD
     N001["_imported_top_levels(...)"]
     N002["names = set(...)"]
-    N003["for node in ast.walk(module):
-    if isinstance(node, ast.Import):
-        for alias in node.names:
-            names.add(alias.name.split('<str>')[0])
-    elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
-        names.add(node.module.split('<str>')[0])"]
+    N003["for node in ast.walk(module):     if isinstance(node, ast.Import):         for alias in node.names:             names.add(alias.name.split('<str>')[0])     elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:         names.add(node.module.split('<str>')[0])"]
     N004["return frozenset(names)"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -63,10 +58,7 @@ flowchart TD
     N002["paths = iter_script_paths(...)"]
     N003["stems = script_stems(...)"]
     N004["edges = set(...)"]
-    N005["for path in paths:
-    source = path.read_text(encoding='<str>')
-    for imported in extract_sibling_imports(source, stems, path.stem):
-        edges.add(DependencyEdge(importer=path.stem, imported=imported))"]
+    N005["for path in paths:     source = path.read_text(encoding='<str>')     for imported in extract_sibling_imports(source, stems, path.stem):         edges.add(DependencyEdge(importer=path.stem, imported=imported))"]
     N006["return tuple(sorted(edges))"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -81,8 +73,7 @@ flowchart TD
 flowchart TD
     N001["_fan_in(...)"]
     N002["table = {}"]
-    N003["for edge in edges:
-    table.setdefault(edge.imported, set()).add(edge.importer)"]
+    N003["for edge in edges:     table.setdefault(edge.imported, set()).add(edge.importer)"]
     N004["return {imported: sorted(importers) for imported, importers in table.items()}"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -109,10 +100,7 @@ flowchart TD
     N005["if not fan_in"]
     N006["extend(...)"]
     N007["extend(...)"]
-    N008["for imported in sorted(fan_in, key=lambda name: (-len(fan_in[name]), name)):
-    importers = fan_in[imported]
-    importer_cells = '<str>'.join((f'<str>{name}<str>' for name in importers))
-    lines.append(f'<str>{imported}<str>{len(importers)}<str>{importer_cells}<str>')"]
+    N008["for imported in sorted(fan_in, key=lambda name: (-len(fan_in[name]), name)):     importers = fan_in[imported]     importer_cells = '<str>'.join((f'<str>{name}<str>' for name in importers))     lines.append(f'<str>{imported}<str>{len(importers)}<str>{importer_cells}<str>')"]
     N009["append(...)"]
     N010["participating = _participating(...)"]
     N011["isolated = sorted(...)"]
@@ -127,8 +115,7 @@ flowchart TD
     N020["if not edges"]
     N021["extend(...)"]
     N022["mermaid = ['<str>']"]
-    N023["for edge in edges:
-    mermaid.append(f'<str>{edge.importer}<str>{edge.imported}')"]
+    N023["for edge in edges:     mermaid.append(f'<str>{edge.importer}<str>{edge.imported}')"]
     N024["extend(...)"]
     N025["return '<str>'.join(lines).rstrip() + '<str>'"]
     N001 -->|"start"| N002

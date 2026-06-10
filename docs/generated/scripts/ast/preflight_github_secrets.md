@@ -10,12 +10,9 @@ flowchart TD
     N002["if isinstance(value, str)"]
     N003["(yield (path or '<str>', value))"]
     N004["if isinstance(value, dict)"]
-    N005["for key, child in value.items():
-    child_path = f'{path}<str>{key}' if path else str(key)
-    yield from iter_string_fields(child, child_path)"]
+    N005["for key, child in value.items():     child_path = f'{path}<str>{key}' if path else str(key)     yield from iter_string_fields(child, child_path)"]
     N006["if isinstance(value, list)"]
-    N007["for index, child in enumerate(value):
-    yield from iter_string_fields(child, f'{path}<str>{index}<str>')"]
+    N007["for index, child in enumerate(value):     yield from iter_string_fields(child, f'{path}<str>{index}<str>')"]
     N008["end"]
     N001 -->|"start"| N002
     N002 -->|"true"| N003
@@ -34,10 +31,7 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["first_finding(...)"]
-    N002["for field_path, text in iter_string_fields(tool_input):
-    hits = scan_text(text)
-    if hits:
-        return (field_path, hits[0][1])"]
+    N002["for field_path, text in iter_string_fields(tool_input):     hits = scan_text(text)     if hits:         return (field_path, hits[0][1])"]
     N003["return None"]
     N001 -->|"start"| N002
     N002 --> N003

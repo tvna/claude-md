@@ -127,17 +127,7 @@ flowchart TD
     N005["h2_pattern = compile(...)"]
     N006["start = None"]
     N007["end = len(...)"]
-    N008["for i, line in enumerate(lines):
-    match = h2_pattern.match(line)
-    if match is None:
-        continue
-    text = match.group(1).rstrip('<str>').strip()
-    if start is None:
-        if text.casefold() == target:
-            start = i + 1
-        continue
-    end = i
-    break"]
+    N008["for i, line in enumerate(lines):     match = h2_pattern.match(line)     if match is None:         continue     text = match.group(1).rstrip('<str>').strip()     if start is None:         if text.casefold() == target:             start = i + 1         continue     end = i     break"]
     N009["if start is None"]
     N010["return '<str>'"]
     N011["return '<str>'.join(lines[start:end])"]
@@ -254,17 +244,7 @@ flowchart TD
     N005["lines = splitlines(...)"]
     N006["pairs = []"]
     N007["i = 0"]
-    N008["while i < len(lines):
-    cmd_match = _VERIFICATION_COMMAND_RE.fullmatch(lines[i])
-    if cmd_match is not None and i + 1 < len(lines):
-        res_match = _VERIFICATION_RESULT_RE.fullmatch(lines[i + 1])
-        if res_match is not None:
-            cmd_text = lines[i].split('<str>', 1)[1].strip()
-            res_text = lines[i + 1].split('<str>', 1)[1].strip()
-            pairs.append(VerificationPair(command=cmd_text, result=res_text, passed=_result_is_passing(res_text)))
-            i += 2
-            continue
-    i += 1"]
+    N008["while i < len(lines):     cmd_match = _VERIFICATION_COMMAND_RE.fullmatch(lines[i])     if cmd_match is not None and i + 1 < len(lines):         res_match = _VERIFICATION_RESULT_RE.fullmatch(lines[i + 1])         if res_match is not None:             cmd_text = lines[i].split('<str>', 1)[1].strip()             res_text = lines[i + 1].split('<str>', 1)[1].strip()             pairs.append(VerificationPair(command=cmd_text, result=res_text, passed=_result_is_passing(res_text)))             i += 2             continue     i += 1"]
     N009["return pairs"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -289,27 +269,11 @@ flowchart TD
     N007["item_pattern = compile(...)"]
     N008["start = None"]
     N009["end = len(...)"]
-    N010["for i, line in enumerate(lines):
-    match = h3_pattern.match(line)
-    if match is None:
-        continue
-    text = match.group(1).rstrip('<str>').strip()
-    base = text.split('<str>', 1)[0].strip().casefold()
-    if start is None:
-        if base == '<str>':
-            start = i + 1
-        continue
-    end = i
-    break"]
+    N010["for i, line in enumerate(lines):     match = h3_pattern.match(line)     if match is None:         continue     text = match.group(1).rstrip('<str>').strip()     base = text.split('<str>', 1)[0].strip().casefold()     if start is None:         if base == '<str>':             start = i + 1         continue     end = i     break"]
     N011["if start is None"]
     N012["return []"]
     N013["items = []"]
-    N014["for line in lines[start:end]:
-    m = item_pattern.match(line)
-    if m is None:
-        continue
-    checked = m.group(1).lower() == '<str>'
-    items.append((m.group(2).strip(), checked))"]
+    N014["for line in lines[start:end]:     m = item_pattern.match(line)     if m is None:         continue     checked = m.group(1).lower() == '<str>'     items.append((m.group(2).strip(), checked))"]
     N015["return items"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -405,13 +369,7 @@ flowchart TD
     N001["compute_prior_from_labels(...)"]
     N002["eligible = past_retros if epoch_min_number <= 0 else [r for r in past_retros if r.number >= epoch_min_number]"]
     N003["prior = {}"]
-    N004["for name in signal_names:
-    denom = sum((1 for r in eligible if name in r.signals))
-    if denom == 0:
-        prior[name] = (0.0, 0)
-        continue
-    numer = sum((1 for r in eligible if name in r.signals and RETRO_FP in r.labels))
-    prior[name] = (numer / denom, denom)"]
+    N004["for name in signal_names:     denom = sum((1 for r in eligible if name in r.signals))     if denom == 0:         prior[name] = (0.0, 0)         continue     numer = sum((1 for r in eligible if name in r.signals and RETRO_FP in r.labels))     prior[name] = (numer / denom, denom)"]
     N005["return prior"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -424,9 +382,7 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["_retro_status(...)"]
-    N002["for label in _TRIAGE_LABELS:
-    if label in labels:
-        return label"]
+    N002["for label in _TRIAGE_LABELS:     if label in labels:         return label"]
     N003["return '<str>'"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -459,11 +415,7 @@ flowchart TD
     N004["label_counts[_UNLABELLED_KEY] = sum(...)"]
     N005["prior = compute_prior_from_labels(...)"]
     N006["signal_stats = []"]
-    N007["for name in signal_names:
-    fp_rate, sample = prior[name]
-    fp_count = round(fp_rate * sample)
-    fire_rate = sample / total if total else 0.0
-    signal_stats.append(SignalStat(name=name, fire_count=sample, fire_rate=fire_rate, fp_count=fp_count, fp_rate=fp_rate, sample_size=sample))"]
+    N007["for name in signal_names:     fp_rate, sample = prior[name]     fp_count = round(fp_rate * sample)     fire_rate = sample / total if total else 0.0     signal_stats.append(SignalStat(name=name, fire_count=sample, fire_rate=fire_rate, fp_count=fp_count, fp_rate=fp_rate, sample_size=sample))"]
     N008["open_untriaged = sum(...)"]
     N009["by_recency = sorted(...)"]
     N010["recent = tuple(...)"]
@@ -493,8 +445,7 @@ flowchart TD
     N003["if report.anomalies"]
     N004["append(...)"]
     N005["append(...)"]
-    N006["for stat in report.anomalies:
-    lines.append(f'<str>{stat.name}<str>{stat.fp_rate:<str>}<str>{stat.sample_size}<str>')"]
+    N006["for stat in report.anomalies:     lines.append(f'<str>{stat.name}<str>{stat.fp_rate:<str>}<str>{stat.sample_size}<str>')"]
     N007["append(...)"]
     N008["extend(...)"]
     N009["if report.total == 0"]
@@ -502,13 +453,10 @@ flowchart TD
     N011["append(...)"]
     N012["append(...)"]
     N013["append(...)"]
-    N014["for label in (*_TRIAGE_LABELS, _UNLABELLED_KEY):
-    lines.append(f'<str>{label}<str>{report.label_counts[label]}')"]
+    N014["for label in (*_TRIAGE_LABELS, _UNLABELLED_KEY):     lines.append(f'<str>{label}<str>{report.label_counts[label]}')"]
     N015["append(...)"]
     N016["extend(...)"]
-    N017["for stat in report.signal_stats:
-    marker = '<str>' if stat.is_anomaly else '<str>'
-    lines.append(f'<str>{stat.name}<str>{stat.fire_count}<str>{stat.fire_rate:<str>}<str>{stat.fp_count}<str>{stat.fp_rate:<str>}<str>{stat.sample_size}<str>{marker}<str>')"]
+    N017["for stat in report.signal_stats:     marker = '<str>' if stat.is_anomaly else '<str>'     lines.append(f'<str>{stat.name}<str>{stat.fire_count}<str>{stat.fire_rate:<str>}<str>{stat.fp_count}<str>{stat.fp_rate:<str>}<str>{stat.sample_size}<str>{marker}<str>')"]
     N018["extend(...)"]
     N019["extend(...)"]
     N020["return '<str>'.join(lines) + '<str>'"]
@@ -586,9 +534,7 @@ flowchart TD
     N005["return lines"]
     N006["append(...)"]
     N007["append(...)"]
-    N008["for r in report.recent:
-    title = r.title or '<str>'
-    lines.append(f'<str>{r.number}<str>{r.state}<str>{r.status}<str>{title}<str>')"]
+    N008["for r in report.recent:     title = r.title or '<str>'     lines.append(f'<str>{r.number}<str>{r.state}<str>{r.status}<str>{title}<str>')"]
     N009["return lines"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -639,14 +585,7 @@ flowchart TD
 flowchart TD
     N001["_max_active_fp(...)"]
     N002["best = (0.0, None, 0)"]
-    N003["for name, fired in signals.items():
-    if not fired:
-        continue
-    rate, sample = prior.get(name, (0.0, 0))
-    if sample < min_sample_size:
-        continue
-    if rate >= best[0]:
-        best = (rate, name, sample)"]
+    N003["for name, fired in signals.items():     if not fired:         continue     rate, sample = prior.get(name, (0.0, 0))     if sample < min_sample_size:         continue     if rate >= best[0]:         best = (rate, name, sample)"]
     N004["return best"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -718,58 +657,19 @@ flowchart TD
     N002["rows = []"]
     N003["rendered_failed = 0"]
     N004["total_failed = 0"]
-    N005["for entry in check_runs or []:
-    conclusion = str(entry.get('<str>') or '<str>')
-    if conclusion not in _CHECK_RUN_FAIL_CONCLUSIONS:
-        continue
-    total_failed += 1
-    if rendered_failed >= _CHECK_RUN_DISPLAY_CAP:
-        continue
-    rendered_failed += 1
-    name = str(entry.get('<str>') or '<str>')
-    completed = str(entry.get('<str>') or '<str>')
-    html_url = str(entry.get('<str>') or '<str>').strip()
-    summary_raw = entry.get('<str>')
-    summary = str(summary_raw).strip() if summary_raw else '<str>'
-    parts = [f'<str>{conclusion}<str>{completed}']
-    if html_url:
-        parts.append(f'<str>{html_url}')
-    if summary:
-        parts.append(f'<str>{summary}')
-    detail = '<str>'.join(parts) or _REPAIR_CAUSE_FILL
-    rows.append(RepairHistoryRow(f'<str>{name}', detail, next_action=_REPAIR_NEXT_ACTION_FILL))"]
+    N005["for entry in check_runs or []:     conclusion = str(entry.get('<str>') or '<str>')     if conclusion not in _CHECK_RUN_FAIL_CONCLUSIONS:         continue     total_failed += 1     if rendered_failed >= _CHECK_RUN_DISPLAY_CAP:         continue     rendered_failed += 1     name = str(entry.get('<str>') or '<str>')     completed = str(entry.get('<str>') or '<str>')     html_url = str(entry.get('<str>') or '<str>').strip()     summary_raw = entry.get('<str>')     summary = str(summary_raw).strip() if summary_raw else '<str>'     parts = [f'<str>{conclusion}<str>{completed}']     if html_url:         parts.append(f'<str>{html_url}')     if summary:         parts.append(f'<str>{summary}')     detail = '<str>'.join(parts) or _REPAIR_CAUSE_FILL     rows.append(RepairHistoryRow(f'<str>{name}', detail, next_action=_REPAIR_NEXT_ACTION_FILL))"]
     N006["overflow = total_failed - _CHECK_RUN_DISPLAY_CAP"]
     N007["if overflow > 0"]
     N008["append(...)"]
     N009["canonical_fix_index = None"]
     N010["if pr_type == 'fix'"]
-    N011["for i, subject in enumerate(commit_subjects):
-    stripped_i = subject.strip()
-    if any((stripped_i.startswith(prefix) for prefix in _MERGE_FROM_MAIN_PREFIXES)):
-        continue
-    if stripped_i.startswith('<str>'):
-        canonical_fix_index = i
-    break"]
-    N012["for i, subject in enumerate(commit_subjects):
-    stripped = subject.strip()
-    if i == canonical_fix_index:
-        rows.append(RepairHistoryRow('<str>', f'{_POLICY_ARTIFACT_MARKER}<str>{subject}<str>', policy_artifact=True, next_action='<str>'))
-        continue
-    if stripped.startswith('<str>') or stripped.startswith('<str>') or stripped.startswith('<str>'):
-        rows.append(RepairHistoryRow('<str>', f'{_POLICY_ARTIFACT_MARKER}<str>{subject}<str>', policy_artifact=True, next_action='<str>'))"]
-    N013["for subject in commit_subjects:
-    stripped = subject.strip()
-    if any((stripped.startswith(prefix) for prefix in _MERGE_FROM_MAIN_PREFIXES)):
-        rows.append(RepairHistoryRow('<str>', f'{_POLICY_ARTIFACT_MARKER}<str>{subject}<str>', policy_artifact=True, next_action='<str>'))"]
-    N014["for subject in commit_subjects:
-    if _is_revert_subject(subject):
-        rows.append(RepairHistoryRow('<str>', f'{_POLICY_ARTIFACT_MARKER}<str>{subject}<str>', policy_artifact=True, next_action='<str>'))"]
+    N011["for i, subject in enumerate(commit_subjects):     stripped_i = subject.strip()     if any((stripped_i.startswith(prefix) for prefix in _MERGE_FROM_MAIN_PREFIXES)):         continue     if stripped_i.startswith('<str>'):         canonical_fix_index = i     break"]
+    N012["for i, subject in enumerate(commit_subjects):     stripped = subject.strip()     if i == canonical_fix_index:         rows.append(RepairHistoryRow('<str>', f'{_POLICY_ARTIFACT_MARKER}<str>{subject}<str>', policy_artifact=True, next_action='<str>'))         continue     if stripped.startswith('<str>') or stripped.startswith('<str>') or stripped.startswith('<str>'):         rows.append(RepairHistoryRow('<str>', f'{_POLICY_ARTIFACT_MARKER}<str>{subject}<str>', policy_artifact=True, next_action='<str>'))"]
+    N013["for subject in commit_subjects:     stripped = subject.strip()     if any((stripped.startswith(prefix) for prefix in _MERGE_FROM_MAIN_PREFIXES)):         rows.append(RepairHistoryRow('<str>', f'{_POLICY_ARTIFACT_MARKER}<str>{subject}<str>', policy_artifact=True, next_action='<str>'))"]
+    N014["for subject in commit_subjects:     if _is_revert_subject(subject):         rows.append(RepairHistoryRow('<str>', f'{_POLICY_ARTIFACT_MARKER}<str>{subject}<str>', policy_artifact=True, next_action='<str>'))"]
     N015["if pr_commit_count > 1"]
     N016["append(...)"]
-    N017["for pair in verification_pairs or []:
-    if pair.passed:
-        continue
-    rows.append(RepairHistoryRow(f'<str>{pair.command}', f'{_POLICY_ARTIFACT_MARKER}<str>{pair.result}<str>', policy_artifact=True, next_action='<str>'))"]
+    N017["for pair in verification_pairs or []:     if pair.passed:         continue     rows.append(RepairHistoryRow(f'<str>{pair.command}', f'{_POLICY_ARTIFACT_MARKER}<str>{pair.result}<str>', policy_artifact=True, next_action='<str>'))"]
     N018["return rows"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -850,7 +750,7 @@ flowchart TD
     N016["proposed_work_tail = '<str>'"]
     N017["verification_block = '<str>'"]
     N018["acceptance_block = '<str>'"]
-    N019["return f\"<str>{pr.number}<str>{pr.title}<str>{pr.number}<str>{pr.title}<str>{pr.html_url}<str>{pr.merged_at}<str>{pr.merged_by_login or '<str>'}<str>{pr.user_login or '<str>'}<str>{layer_str}<str>{render_signals_fired_line(signals or {})}<str>{commits_block}<str>{fallback_note}<str>{repair_table}<str>{proposed_work_tail}<str>{verification_block}<str>{acceptance_block}<str>{pr.number}<str>{triage_date}<str>\""]
+    N019["return f'<str>{pr.number}<str>{pr.title}<str>{pr.number}<str>{pr.title}<str>{pr.html_url}<str>{pr.merged_at}<str>{pr.merged_by_login or '<str>'}<str>{pr.user_login or '<str>'}<str>{layer_str}<str>{render_signals_fired_line(signals or {})}<str>{commits_block}<str>{fallback_note}<str>{repair_table}<str>{proposed_work_tail}<str>{verification_block}<str>{acceptance_block}<str>{pr.number}<str>{triage_date}<str>'"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 --> N004
@@ -884,29 +784,7 @@ flowchart TD
     N005["return []"]
     N006["block = body[open_idx:close_idx]"]
     N007["errors = []"]
-    N008["for line in block.splitlines():
-    stripped = line.strip()
-    if not (stripped.startswith('<str>') and stripped.endswith('<str>')):
-        continue
-    if '<str>' in stripped:
-        continue
-    if set(stripped) <= set('<str>'):
-        continue
-    if _POLICY_ARTIFACT_MARKER in stripped:
-        continue
-    if '<str>' in stripped:
-        continue
-    cells = [cell.strip().replace('<str>', '<str>') for cell in re.split('<str>', stripped[1:-1])]
-    repair_name = cells[1] if len(cells) > 1 else '<str>'
-    if len(cells) < 4:
-        errors.append(f'<str>{repair_name}<str>{len(cells)}<str>')
-        continue
-    cause = cells[2]
-    next_action = cells[3]
-    if not cause or '<str>' in cause:
-        errors.append(f'<str>{repair_name}<str>')
-    if not next_action or '<str>' in next_action:
-        errors.append(f'<str>{repair_name}<str>')"]
+    N008["for line in block.splitlines():     stripped = line.strip()     if not (stripped.startswith('<str>') and stripped.endswith('<str>')):         continue     if '<str>' in stripped:         continue     if set(stripped) <= set('<str>'):         continue     if _POLICY_ARTIFACT_MARKER in stripped:         continue     if '<str>' in stripped:         continue     cells = [cell.strip().replace('<str>', '<str>') for cell in re.split('<str>', stripped[1:-1])]     repair_name = cells[1] if len(cells) > 1 else '<str>'     if len(cells) < 4:         errors.append(f'<str>{repair_name}<str>{len(cells)}<str>')         continue     cause = cells[2]     next_action = cells[3]     if not cause or '<str>' in cause:         errors.append(f'<str>{repair_name}<str>')     if not next_action or '<str>' in next_action:         errors.append(f'<str>{repair_name}<str>')"]
     N009["return errors"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -927,12 +805,7 @@ flowchart TD
     N003["return None"]
     N004["body_without_comments = strip_html_comments(...)"]
     N005["refs = extract_refs(...)"]
-    N006["for number in refs:
-    title = referenced_titles.get(number)
-    if title is None:
-        continue
-    if is_retro_issue_title(title):
-        return number"]
+    N006["for number in refs:     title = referenced_titles.get(number)     if title is None:         continue     if is_retro_issue_title(title):         return number"]
     N007["return None"]
     N001 -->|"start"| N002
     N002 -->|"true"| N003
@@ -1001,12 +874,7 @@ flowchart TD
 flowchart TD
     N001["find_existing_retro(...)"]
     N002["needle = compile(...)"]
-    N003["for item in search_items:
-    title = item.get('<str>') or '<str>'
-    if not is_retro_issue_title(title):
-        continue
-    if needle.search(title):
-        return item.get('<str>')"]
+    N003["for item in search_items:     title = item.get('<str>') or '<str>'     if not is_retro_issue_title(title):         continue     if needle.search(title):         return item.get('<str>')"]
     N004["return None"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -1026,11 +894,7 @@ flowchart TD
     N007["return False"]
     N008["if any((state.lower() == 'x' for state in checkboxes))"]
     N009["return False"]
-    N010["for comment in comments or []:
-    user = comment.get('<str>') or {}
-    login = user.get('<str>') or '<str>'
-    if login and login not in _SENTINEL_IGNORED_COMMENT_LOGINS:
-        return False"]
+    N010["for comment in comments or []:     user = comment.get('<str>') or {}     login = user.get('<str>') or '<str>'     if login and login not in _SENTINEL_IGNORED_COMMENT_LOGINS:         return False"]
     N011["return True"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -1081,9 +945,7 @@ flowchart TD
 flowchart TD
     N001["issue_labels(...)"]
     N002["labels = ['<str>', '<str>']"]
-    N003["for lbl in layer_labels:
-    if lbl and lbl not in labels:
-        labels.append(lbl)"]
+    N003["for lbl in layer_labels:     if lbl and lbl not in labels:         labels.append(lbl)"]
     N004["if tentative and RETRO_TENTATIVE not in labels"]
     N005["append(...)"]
     N006["return labels"]
@@ -1121,9 +983,7 @@ flowchart TD
     N002["raw = gh_api(...)"]
     N003["commits = json.loads(raw) if raw.strip() else []"]
     N004["subjects = []"]
-    N005["for entry in commits:
-    message = (entry.get('<str>') or {}).get('<str>') or '<str>'
-    subjects.append(message.split('<str>', 1)[0].strip())"]
+    N005["for entry in commits:     message = (entry.get('<str>') or {}).get('<str>') or '<str>'     subjects.append(message.split('<str>', 1)[0].strip())"]
     N006["return subjects"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -1139,14 +999,7 @@ flowchart TD
     N001["fetch_check_runs(...)"]
     N002["sleeper = sleeper if sleeper is not None else time.sleep"]
     N003["sha = None"]
-    N004["for attempt in range(1, _MERGE_SHA_RETRY_ATTEMPTS + 1):
-    raw = gh_api('<str>', f'<str>{repo}<str>{pr_number}')
-    pr_detail = json.loads(raw) if raw.strip() else {}
-    sha = pr_detail.get('<str>')
-    if sha:
-        break
-    if attempt < _MERGE_SHA_RETRY_ATTEMPTS:
-        sleeper(_MERGE_SHA_RETRY_BACKOFF[attempt - 1])"]
+    N004["for attempt in range(1, _MERGE_SHA_RETRY_ATTEMPTS + 1):     raw = gh_api('<str>', f'<str>{repo}<str>{pr_number}')     pr_detail = json.loads(raw) if raw.strip() else {}     sha = pr_detail.get('<str>')     if sha:         break     if attempt < _MERGE_SHA_RETRY_ATTEMPTS:         sleeper(_MERGE_SHA_RETRY_BACKOFF[attempt - 1])"]
     N005["if not sha"]
     N006["print(...)"]
     N007["return []"]
@@ -1154,19 +1007,7 @@ flowchart TD
     N009["payload = json.loads(raw) if raw.strip() else {}"]
     N010["all_runs = list(...)"]
     N011["failed_runs = [run for run in all_runs if str(run.get('<str>') or '<str>') in _CHECK_RUN_FAIL_CONCLUSIONS]"]
-    N012["for index, run in enumerate(failed_runs):
-    run['<str>'] = None
-    if index >= _CHECK_RUN_DISPLAY_CAP:
-        continue
-    run_id = run.get('<str>')
-    if not isinstance(run_id, int):
-        continue
-    try:
-        annotations = fetch_check_run_annotations(repo, run_id, limit=_ANNOTATION_FETCH_LIMIT)
-    except subprocess.CalledProcessError as exc:
-        print(f'<str>{run_id}<str>{exc.returncode}<str>', file=sys.stderr)
-        continue
-    run['<str>'] = _summarize_annotations(annotations)"]
+    N012["for index, run in enumerate(failed_runs):     run['<str>'] = None     if index >= _CHECK_RUN_DISPLAY_CAP:         continue     run_id = run.get('<str>')     if not isinstance(run_id, int):         continue     try:         annotations = fetch_check_run_annotations(repo, run_id, limit=_ANNOTATION_FETCH_LIMIT)     except subprocess.CalledProcessError as exc:         print(f'<str>{run_id}<str>{exc.returncode}<str>', file=sys.stderr)         continue     run['<str>'] = _summarize_annotations(annotations)"]
     N013["return failed_runs"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -1208,24 +1049,7 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["_summarize_annotations(...)"]
-    N002["for entry in annotations:
-    level = str(entry.get('<str>') or '<str>')
-    if level != '<str>':
-        continue
-    title = str(entry.get('<str>') or '<str>').strip()
-    message = str(entry.get('<str>') or '<str>').strip()
-    first_line = message.split('<str>', 1)[0].strip() if message else '<str>'
-    if title and first_line:
-        summary = f'{title}<str>{first_line}'
-    elif title:
-        summary = title
-    elif first_line:
-        summary = first_line
-    else:
-        return None
-    if len(summary) > _ANNOTATION_SUMMARY_MAX:
-        summary = summary[:_ANNOTATION_SUMMARY_MAX - 3] + '<str>'
-    return summary"]
+    N002["for entry in annotations:     level = str(entry.get('<str>') or '<str>')     if level != '<str>':         continue     title = str(entry.get('<str>') or '<str>').strip()     message = str(entry.get('<str>') or '<str>').strip()     first_line = message.split('<str>', 1)[0].strip() if message else '<str>'     if title and first_line:         summary = f'{title}<str>{first_line}'     elif title:         summary = title     elif first_line:         summary = first_line     else:         return None     if len(summary) > _ANNOTATION_SUMMARY_MAX:         summary = summary[:_ANNOTATION_SUMMARY_MAX - 3] + '<str>'     return summary"]
     N003["return None"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -1267,28 +1091,7 @@ flowchart TD
     N013["return []"]
     N014["items = list(data.get('<str>') or [])[:limit]"]
     N015["out = []"]
-    N016["for item in items:
-    if not isinstance(item, dict):
-        continue
-    number = item.get('<str>')
-    if not isinstance(number, int):
-        continue
-    labels_raw = item.get('<str>') or []
-    names: set[str] = set()
-    for lbl in labels_raw:
-        if isinstance(lbl, dict):
-            name = lbl.get('<str>')
-            if isinstance(name, str) and name:
-                names.add(name)
-    body = item.get('<str>')
-    if not isinstance(body, str) or not body:
-        body = '<str>'
-    signals = parse_signals_from_retro_body(body)
-    state = item.get('<str>')
-    state = state if isinstance(state, str) and state else '<str>'
-    title = item.get('<str>')
-    title = title if isinstance(title, str) else '<str>'
-    out.append(PastRetro(number=number, signals=signals, labels=frozenset(names), state=state, title=title))"]
+    N016["for item in items:     if not isinstance(item, dict):         continue     number = item.get('<str>')     if not isinstance(number, int):         continue     labels_raw = item.get('<str>') or []     names: set[str] = set()     for lbl in labels_raw:         if isinstance(lbl, dict):             name = lbl.get('<str>')             if isinstance(name, str) and name:                 names.add(name)     body = item.get('<str>')     if not isinstance(body, str) or not body:         body = '<str>'     signals = parse_signals_from_retro_body(body)     state = item.get('<str>')     state = state if isinstance(state, str) and state else '<str>'     title = item.get('<str>')     title = title if isinstance(title, str) else '<str>'     out.append(PastRetro(number=number, signals=signals, labels=frozenset(names), state=state, title=title))"]
     N017["return out"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -1327,18 +1130,7 @@ flowchart TD
 flowchart TD
     N001["fetch_issue_titles(...)"]
     N002["out = {}"]
-    N003["for number in numbers:
-    try:
-        raw = gh_api('<str>', f'<str>{repo}<str>{number}')
-    except subprocess.CalledProcessError:
-        continue
-    try:
-        data = json.loads(raw) if raw.strip() else {}
-    except json.JSONDecodeError:
-        continue
-    title = data.get('<str>')
-    if isinstance(title, str):
-        out[number] = title"]
+    N003["for number in numbers:     try:         raw = gh_api('<str>', f'<str>{repo}<str>{number}')     except subprocess.CalledProcessError:         continue     try:         data = json.loads(raw) if raw.strip() else {}     except json.JSONDecodeError:         continue     title = data.get('<str>')     if isinstance(title, str):         out[number] = title"]
     N004["return out"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -1426,10 +1218,7 @@ flowchart TD
     N001["find_existing_back_link_id(...)"]
     N002["raw = gh_api(...)"]
     N003["comments = json.loads(raw) if raw.strip() else []"]
-    N004["for comment in comments:
-    body = comment.get('<str>') or '<str>'
-    if body.startswith(marker):
-        return comment.get('<str>')"]
+    N004["for comment in comments:     body = comment.get('<str>') or '<str>'     if body.startswith(marker):         return comment.get('<str>')"]
     N005["return None"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -1532,10 +1321,7 @@ flowchart TD
     N005["data = json.loads(raw) if raw.strip() else {}"]
     N006["items = list(...)"]
     N007["out = []"]
-    N008["for item in items:
-    title = item.get('<str>') or '<str>'
-    if is_retro_issue_title(title):
-        out.append(item)"]
+    N008["for item in items:     title = item.get('<str>') or '<str>'     if is_retro_issue_title(title):         out.append(item)"]
     N009["return out"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -1573,10 +1359,7 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["has_sentinel_marker(...)"]
-    N002["for comment in comments or []:
-    body = comment.get('<str>') or '<str>'
-    if _SENTINEL_CLOSE_MARKER in body:
-        return True"]
+    N002["for comment in comments or []:     body = comment.get('<str>') or '<str>'     if _SENTINEL_CLOSE_MARKER in body:         return True"]
     N003["return False"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -1614,8 +1397,7 @@ flowchart TD
     N002["path = get(...)"]
     N003["if not path"]
     N004["return"]
-    N005["with Path(path).open('<str>', encoding='<str>') as fp:
-    fp.write(text)"]
+    N005["with Path(path).open('<str>', encoding='<str>') as fp:     fp.write(text)"]
     N006["end"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -1915,42 +1697,7 @@ flowchart TD
     N006["return 0"]
     N007["closed = []"]
     N008["skipped = []"]
-    N009["for item in items:
-    raw_number = item.get('<str>')
-    if not isinstance(raw_number, int):
-        continue
-    number = raw_number
-    created_at = str(item.get('<str>') or '<str>')
-    if not is_retro_age_exceeded(created_at, now_iso, days):
-        skipped.append((number, '<str>'))
-        continue
-    try:
-        comments = fetch_issue_comments(repo, number)
-    except subprocess.CalledProcessError as exc:
-        print(f'<str>{number}<str>{exc.returncode}<str>', file=sys.stderr)
-        skipped.append((number, '<str>'))
-        continue
-    if has_sentinel_marker(comments):
-        skipped.append((number, '<str>'))
-        continue
-    body = item.get('<str>') or '<str>'
-    if not is_retro_untouched(body, comments):
-        skipped.append((number, '<str>'))
-        continue
-    try:
-        post_sentinel_comment(repo, number, days)
-    except subprocess.CalledProcessError as exc:
-        print(f'<str>{number}<str>{exc.returncode}<str>', file=sys.stderr)
-        skipped.append((number, '<str>'))
-        continue
-    try:
-        close_issue_as_not_planned(repo, number)
-    except subprocess.CalledProcessError as exc:
-        print(f'<str>{number}<str>{exc.returncode}<str>', file=sys.stderr)
-        skipped.append((number, '<str>'))
-        continue
-    closed.append(number)
-    print(f'<str>{number}<str>')"]
+    N009["for item in items:     raw_number = item.get('<str>')     if not isinstance(raw_number, int):         continue     number = raw_number     created_at = str(item.get('<str>') or '<str>')     if not is_retro_age_exceeded(created_at, now_iso, days):         skipped.append((number, '<str>'))         continue     try:         comments = fetch_issue_comments(repo, number)     except subprocess.CalledProcessError as exc:         print(f'<str>{number}<str>{exc.returncode}<str>', file=sys.stderr)         skipped.append((number, '<str>'))         continue     if has_sentinel_marker(comments):         skipped.append((number, '<str>'))         continue     body = item.get('<str>') or '<str>'     if not is_retro_untouched(body, comments):         skipped.append((number, '<str>'))         continue     try:         post_sentinel_comment(repo, number, days)     except subprocess.CalledProcessError as exc:         print(f'<str>{number}<str>{exc.returncode}<str>', file=sys.stderr)         skipped.append((number, '<str>'))         continue     try:         close_issue_as_not_planned(repo, number)     except subprocess.CalledProcessError as exc:         print(f'<str>{number}<str>{exc.returncode}<str>', file=sys.stderr)         skipped.append((number, '<str>'))         continue     closed.append(number)     print(f'<str>{number}<str>')"]
     N010["_append_summary(...)"]
     N011["return 0"]
     N001 -->|"start"| N002
@@ -2087,33 +1834,7 @@ flowchart TD
     N003["if not items"]
     N004["return []"]
     N005["results = []"]
-    N006["for text, checked in items:
-    if checked:
-        continue
-    lower = text.lower()
-    if '<str>' in lower:
-        body_no_comments = strip_html_comments(pr_body or '<str>')
-        refs = extract_refs(body_no_comments)
-        if not refs:
-            results.append(PostMergeGateResult(gate='<str>', satisfied=True, detail='<str>'))
-            continue
-        all_closed = True
-        for ref in refs:
-            state = fetch_issue_state(repo, ref)
-            if state != '<str>':
-                all_closed = False
-                break
-        results.append(PostMergeGateResult(gate='<str>', satisfied=all_closed, detail=f'<str>{refs}<str>' if all_closed else f'<str>{ref}<str>{state}'))
-    elif '<str>' in lower:
-        existing_items = search_retro_issues(repo, pr_number)
-        existing = find_existing_retro(existing_items, pr_number)
-        results.append(PostMergeGateResult(gate='<str>', satisfied=existing is not None, detail=f'<str>{existing}<str>' if existing is not None else f'<str>{pr_number}'))
-    elif '<str>' in lower and '<str>' in lower:
-        fix_prs = search_fix_prs_since(repo, merged_at, now_iso)
-        has_followup = len(fix_prs) > 0
-        results.append(PostMergeGateResult(gate='<str>', satisfied=not has_followup, detail='<str>' if not has_followup else '<str>' + '<str>'.join(('<str>' + str(p.get('<str>', '<str>')) for p in fix_prs))))
-    else:
-        results.append(PostMergeGateResult(gate='<str>', satisfied=True, detail=f'<str>{text!r}'))"]
+    N006["for text, checked in items:     if checked:         continue     lower = text.lower()     if '<str>' in lower:         body_no_comments = strip_html_comments(pr_body or '<str>')         refs = extract_refs(body_no_comments)         if not refs:             results.append(PostMergeGateResult(gate='<str>', satisfied=True, detail='<str>'))             continue         all_closed = True         for ref in refs:             state = fetch_issue_state(repo, ref)             if state != '<str>':                 all_closed = False                 break         results.append(PostMergeGateResult(gate='<str>', satisfied=all_closed, detail=f'<str>{refs}<str>' if all_closed else f'<str>{ref}<str>{state}'))     elif '<str>' in lower:         existing_items = search_retro_issues(repo, pr_number)         existing = find_existing_retro(existing_items, pr_number)         results.append(PostMergeGateResult(gate='<str>', satisfied=existing is not None, detail=f'<str>{existing}<str>' if existing is not None else f'<str>{pr_number}'))     elif '<str>' in lower and '<str>' in lower:         fix_prs = search_fix_prs_since(repo, merged_at, now_iso)         has_followup = len(fix_prs) > 0         results.append(PostMergeGateResult(gate='<str>', satisfied=not has_followup, detail='<str>' if not has_followup else '<str>' + '<str>'.join(('<str>' + str(p.get('<str>', '<str>')) for p in fix_prs))))     else:         results.append(PostMergeGateResult(gate='<str>', satisfied=True, detail=f'<str>{text!r}'))"]
     N007["return results"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -2149,81 +1870,7 @@ flowchart TD
     N007["return 0"]
     N008["appended = []"]
     N009["skipped = []"]
-    N010["for item in items:
-    raw_number = item.get('<str>')
-    if not isinstance(raw_number, int):
-        continue
-    pr_number = raw_number
-    title = str(item.get('<str>') or '<str>')
-    if is_retro_pr(title):
-        skipped.append((pr_number, '<str>'))
-        continue
-    skip, reason = should_skip(MergedPR(number=pr_number, title=title, merged=True, merged_at='<str>', merged_by_login=(item.get('<str>') or {}).get('<str>'), user_login=(item.get('<str>') or {}).get('<str>'), layer_labels=(), html_url='<str>'))
-    if skip:
-        skipped.append((pr_number, reason))
-        continue
-    pr_detail = fetch_pr_detail(repo, pr_number)
-    if not pr_detail:
-        skipped.append((pr_number, '<str>'))
-        continue
-    merged_at = str(pr_detail.get('<str>') or '<str>')
-    if not merged_at:
-        skipped.append((pr_number, '<str>'))
-        continue
-    age_hours = _hours_between(merged_at, now_iso)
-    if age_hours < _RESCAN_MIN_AGE_HOURS:
-        skipped.append((pr_number, f'<str>{age_hours:<str>}<str>{_RESCAN_MIN_AGE_HOURS}<str>'))
-        continue
-    pr_body = str(pr_detail.get('<str>') or '<str>')
-    post_merge_items = extract_post_merge_checklist(pr_body)
-    if not post_merge_items:
-        skipped.append((pr_number, '<str>'))
-        continue
-    all_checked = all((checked for _, checked in post_merge_items))
-    if all_checked:
-        skipped.append((pr_number, '<str>'))
-        continue
-    existing_items = search_retro_issues(repo, pr_number)
-    retro_number = find_existing_retro(existing_items, pr_number)
-    if retro_number is None:
-        skipped.append((pr_number, '<str>'))
-        continue
-    retro_body = fetch_issue_body(repo, retro_number)
-    if not retro_body:
-        skipped.append((pr_number, f'<str>{retro_number}<str>'))
-        continue
-    if _RESCAN_MARKER in retro_body:
-        skipped.append((pr_number, f'<str>{retro_number}<str>'))
-        continue
-    gate_results = verify_post_merge_gates(repo, pr_number, pr_body, merged_at, now_iso)
-    unsatisfied = [g for g in gate_results if not g.satisfied]
-    if not unsatisfied:
-        skipped.append((pr_number, '<str>'))
-        continue
-    open_idx = retro_body.find(_AUTO_FILLED_OPEN)
-    close_idx = retro_body.find(_AUTO_FILLED_CLOSE)
-    if open_idx == -1 or close_idx == -1 or close_idx < open_idx:
-        skipped.append((pr_number, f'<str>{retro_number}<str>'))
-        continue
-    block = retro_body[open_idx:close_idx]
-    next_idx = _next_table_index(block)
-    new_rows = '<str>'
-    for i, gate in enumerate(unsatisfied):
-        row_idx = next_idx + i
-        repair = _escape_table_cell(f'<str>{gate.gate}')
-        detail = _escape_table_cell(gate.detail)
-        new_rows += f'<str>{row_idx}<str>{repair}<str>{detail}<str>'
-    new_body = retro_body[:close_idx] + new_rows + retro_body[close_idx:]
-    rescan_comment = f'<str>{_RESCAN_MARKER}<str>{len(unsatisfied)}<str>{pr_number}<str>'
-    new_body += rescan_comment
-    try:
-        patch_issue_body(repo, retro_number, new_body)
-    except subprocess.CalledProcessError as exc:
-        print(f'<str>{retro_number}<str>{exc.returncode}<str>', file=sys.stderr)
-        skipped.append((pr_number, f'<str>{retro_number}<str>'))
-        continue
-    appended.append((pr_number, retro_number))
-    print(f'<str>{len(unsatisfied)}<str>{pr_number}<str>{retro_number}')"]
+    N010["for item in items:     raw_number = item.get('<str>')     if not isinstance(raw_number, int):         continue     pr_number = raw_number     title = str(item.get('<str>') or '<str>')     if is_retro_pr(title):         skipped.append((pr_number, '<str>'))         continue     skip, reason = should_skip(MergedPR(number=pr_number, title=title, merged=True, merged_at='<str>', merged_by_login=(item.get('<str>') or {}).get('<str>'), user_login=(item.get('<str>') or {}).get('<str>'), layer_labels=(), html_url='<str>'))     if skip:         skipped.append((pr_number, reason))         continue     pr_detail = fetch_pr_detail(repo, pr_number)     if not pr_detail:         skipped.append((pr_number, '<str>'))         continue     merged_at = str(pr_detail.get('<str>') or '<str>')     if not merged_at:         skipped.append((pr_number, '<str>'))         continue     age_hours = _hours_between(merged_at, now_iso)     if age_hours < _RESCAN_MIN_AGE_HOURS:         skipped.append((pr_number, f'<str>{age_hours:<str>}<str>{_RESCAN_MIN_AGE_HOURS}<str>'))         continue     pr_body = str(pr_detail.get('<str>') or '<str>')     post_merge_items = extract_post_merge_checklist(pr_body)     if not post_merge_items:         skipped.append((pr_number, '<str>'))         continue     all_checked = all((checked for _, checked in post_merge_items))     if all_checked:         skipped.append((pr_number, '<str>'))         continue     existing_items = search_retro_issues(repo, pr_number)     retro_number = find_existing_retro(existing_items, pr_number)     if retro_number is None:         skipped.append((pr_number, '<str>'))         continue     retro_body = fetch_issue_body(repo, retro_number)     if not retro_body:         skipped.append((pr_number, f'<str>{retro_number}<str>'))         continue     if _RESCAN_MARKER in retro_body:         skipped.append((pr_number, f'<str>{retro_number}<str>'))         continue     gate_results = verify_post_merge_gates(repo, pr_number, pr_body, merged_at, now_iso)     unsatisfied = [g for g in gate_results if not g.satisfied]     if not unsatisfied:         skipped.append((pr_number, '<str>'))         continue     open_idx = retro_body.find(_AUTO_FILLED_OPEN)     close_idx = retro_body.find(_AUTO_FILLED_CLOSE)     if open_idx == -1 or close_idx == -1 or close_idx < open_idx:         skipped.append((pr_number, f'<str>{retro_number}<str>'))         continue     block = retro_body[open_idx:close_idx]     next_idx = _next_table_index(block)     new_rows = '<str>'     for i, gate in enumerate(unsatisfied):         row_idx = next_idx + i         repair = _escape_table_cell(f'<str>{gate.gate}')         detail = _escape_table_cell(gate.detail)         new_rows += f'<str>{row_idx}<str>{repair}<str>{detail}<str>'     new_body = retro_body[:close_idx] + new_rows + retro_body[close_idx:]     rescan_comment = f'<str>{_RESCAN_MARKER}<str>{len(unsatisfied)}<str>{pr_number}<str>'     new_body += rescan_comment     try:         patch_issue_body(repo, retro_number, new_body)     except subprocess.CalledProcessError as exc:         print(f'<str>{retro_number}<str>{exc.returncode}<str>', file=sys.stderr)         skipped.append((pr_number, f'<str>{retro_number}<str>'))         continue     appended.append((pr_number, retro_number))     print(f'<str>{len(unsatisfied)}<str>{pr_number}<str>{retro_number}')"]
     N011["_append_summary(...)"]
     N012["return 0"]
     N001 -->|"start"| N002
@@ -2466,11 +2113,7 @@ flowchart TD
     N017["refs = extract_refs(...)"]
     N018["titles = fetch_issue_titles(...)"]
     N019["target = None"]
-    N020["for number in refs:
-    title = titles.get(number)
-    if title is not None and is_retro_issue_title(title):
-        target = number
-        break"]
+    N020["for number in refs:     title = titles.get(number)     if title is not None and is_retro_issue_title(title):         target = number         break"]
     N021["if target is None"]
     N022["print(...)"]
     N023["return 0"]
@@ -2480,8 +2123,7 @@ flowchart TD
     N027["return 0"]
     N028["errors = verify_retro_repair_completeness(...)"]
     N029["if errors"]
-    N030["for error in errors:
-    print(error)"]
+    N030["for error in errors:     print(error)"]
     N031["return 1"]
     N032["print(...)"]
     N033["return 0"]
@@ -2526,10 +2168,7 @@ flowchart TD
 flowchart TD
     N001["find_linked_retro_refs(...)"]
     N002["out = []"]
-    N003["for number in extract_refs(strip_html_comments(pr_body)):
-    title = titles.get(number)
-    if title is not None and is_retro_issue_title(title):
-        out.append(number)"]
+    N003["for number in extract_refs(strip_html_comments(pr_body)):     title = titles.get(number)     if title is not None and is_retro_issue_title(title):         out.append(number)"]
     N004["return out"]
     N001 -->|"start"| N002
     N002 --> N003

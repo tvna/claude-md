@@ -46,9 +46,7 @@ flowchart TD
     N001["file_sha256_hex(...)"]
     N002["digest = sha256(...)"]
     N003["try"]
-    N004["with file_path.open('<str>') as handle:
-    for chunk in iter(lambda: handle.read(1024 * 1024), b''):
-        digest.update(chunk)"]
+    N004["with file_path.open('<str>') as handle:     for chunk in iter(lambda: handle.read(1024 * 1024), b''):         digest.update(chunk)"]
     N005["except OSError"]
     N006["raise ValueError(f'<str>{file_path}<str>{exc}')"]
     N007["return digest.hexdigest()"]

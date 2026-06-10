@@ -8,8 +8,7 @@ This file is generated from `scripts/uv_pin.py` by `python3 scripts/script_ast_g
 flowchart TD
     N001["read_pin(...)"]
     N002["try"]
-    N003["with pyproject_path.open('<str>') as fp:
-    data = tomllib.load(fp)"]
+    N003["with pyproject_path.open('<str>') as fp:     data = tomllib.load(fp)"]
     N004["except FileNotFoundError"]
     N005["raise ValueError(f'<str>{pyproject_path}<str>{exc}')"]
     N006["except tomllib.TOMLDecodeError"]
@@ -42,31 +41,13 @@ flowchart TD
 flowchart TD
     N001["find_drift(...)"]
     N002["errors = []"]
-    N003["for path in _iter_files(repo_root, DRIFT_SUBDIRS):
-    rel = path.relative_to(repo_root)
-    if rel.as_posix() in DRIFT_EXCLUDE_RELPATHS:
-        continue
-    for line_num, line in _read_lines(path):
-        if pin in line:
-            errors.append(f'{rel}<str>{line_num}<str>{pin!r}<str>')"]
+    N003["for path in _iter_files(repo_root, DRIFT_SUBDIRS):     rel = path.relative_to(repo_root)     if rel.as_posix() in DRIFT_EXCLUDE_RELPATHS:         continue     for line_num, line in _read_lines(path):         if pin in line:             errors.append(f'{rel}<str>{line_num}<str>{pin!r}<str>')"]
     N004["workflow_dir = repo_root / WORKFLOW_SUBDIR"]
     N005["if workflow_dir.exists()"]
-    N006["for path in workflow_dir.rglob('<str>'):
-    if not path.is_file() or path.suffix not in ('<str>', '<str>'):
-        continue
-    for line_num, line in _read_lines(path):
-        if _UV_PIN_SYMBOL_ASSIGN.match(line) and (not _GHA_EXPR.search(line)):
-            rel = path.relative_to(repo_root)
-            errors.append(f'{rel}<str>{line_num}<str>')"]
+    N006["for path in workflow_dir.rglob('<str>'):     if not path.is_file() or path.suffix not in ('<str>', '<str>'):         continue     for line_num, line in _read_lines(path):         if _UV_PIN_SYMBOL_ASSIGN.match(line) and (not _GHA_EXPR.search(line)):             rel = path.relative_to(repo_root)             errors.append(f'{rel}<str>{line_num}<str>')"]
     N007["docs_dir = repo_root / DOCS_SUBDIR"]
     N008["if docs_dir.exists()"]
-    N009["for path in docs_dir.rglob('<str>'):
-    if not path.is_file():
-        continue
-    for line_num, line in _read_lines(path):
-        if _UV_PIN_SYMBOL_SYMBOL.search(line):
-            rel = path.relative_to(repo_root)
-            errors.append(f'{rel}<str>{line_num}<str>')"]
+    N009["for path in docs_dir.rglob('<str>'):     if not path.is_file():         continue     for line_num, line in _read_lines(path):         if _UV_PIN_SYMBOL_SYMBOL.search(line):             rel = path.relative_to(repo_root)             errors.append(f'{rel}<str>{line_num}<str>')"]
     N010["return errors"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -105,13 +86,7 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["_iter_files(...)"]
-    N002["for sub in subdirs:
-    base = root / sub
-    if not base.exists():
-        continue
-    for path in base.rglob('<str>'):
-        if path.is_file():
-            yield path"]
+    N002["for sub in subdirs:     base = root / sub     if not base.exists():         continue     for path in base.rglob('<str>'):         if path.is_file():             yield path"]
     N003["end"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -156,8 +131,7 @@ flowchart TD
     N003["pin = read_pin(...)"]
     N004["print(...)"]
     N005["errors = find_drift(...)"]
-    N006["for err in errors:
-    print(f'<str>{err}')"]
+    N006["for err in errors:     print(f'<str>{err}')"]
     N007["if errors"]
     N008["print(...)"]
     N009["return 1"]

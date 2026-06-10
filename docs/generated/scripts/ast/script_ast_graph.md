@@ -22,7 +22,7 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["_mermaid_text(...)"]
-    N002["return text.replace('<str>', '<str>')"]
+    N002["return text.replace('<str>', '<str>').replace('<str>', '<str>')"]
     N001 -->|"start"| N002
 ```
 
@@ -31,12 +31,7 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["_safe_label_node(...)"]
-    N002["class SafeLabelTransformer(ast.NodeTransformer):
-
-    def visit_Constant(self, node: ast.Constant) -> ast.AST:
-        if isinstance(node.value, str):
-            return ast.copy_location(ast.Constant(value='<str>'), node)
-        return node"]
+    N002["class SafeLabelTransformer(ast.NodeTransformer):      def visit_Constant(self, node: ast.Constant) -> ast.AST:         if isinstance(node.value, str):             return ast.copy_location(ast.Constant(value='<str>'), node)         return node"]
     N003["return SafeLabelTransformer().visit(copy.deepcopy(node))"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -163,9 +158,7 @@ flowchart TD
 flowchart TD
     N001["build_function_graph_from_source(...)"]
     N002["module = _module_from_source(...)"]
-    N003["for function in _top_level_functions(module):
-    if function.name == function_name:
-        return AstGraphBuilder().build_function(function)"]
+    N003["for function in _top_level_functions(module):     if function.name == function_name:         return AstGraphBuilder().build_function(function)"]
     N004["raise ValueError(f'<str>{function_name}')"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -198,13 +191,8 @@ flowchart TD
 flowchart TD
     N001["render_mermaid(...)"]
     N002["lines = ['<str>']"]
-    N003["for node in graph.nodes:
-    lines.append(f'<str>{node.node_id}<str>{_mermaid_text(node.label)}<str>')"]
-    N004["for edge in graph.edges:
-    if edge.label:
-        lines.append(f'<str>{edge.source}<str>{_mermaid_text(edge.label)}<str>{edge.target}')
-    else:
-        lines.append(f'<str>{edge.source}<str>{edge.target}')"]
+    N003["for node in graph.nodes:     lines.append(f'<str>{node.node_id}<str>{_mermaid_text(node.label)}<str>')"]
+    N004["for edge in graph.edges:     if edge.label:         lines.append(f'<str>{edge.source}<str>{_mermaid_text(edge.label)}<str>{edge.target}')     else:         lines.append(f'<str>{edge.source}<str>{edge.target}')"]
     N005["return '<str>'.join(lines) + '<str>'"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -239,9 +227,7 @@ flowchart TD
     N003["graphs = build_script_graphs(...)"]
     N004["if not graphs"]
     N005["extend(...)"]
-    N006["for graph in graphs:
-    safe_graph = _safe_generated_doc_graph(graph)
-    lines.extend([f'<str>{graph.name}<str>', '<str>', '<str>', render_mermaid(safe_graph).rstrip(), '<str>', '<str>'])"]
+    N006["for graph in graphs:     safe_graph = _safe_generated_doc_graph(graph)     lines.extend([f'<str>{graph.name}<str>', '<str>', '<str>', render_mermaid(safe_graph).rstrip(), '<str>', '<str>'])"]
     N007["return '<str>'.join(lines).rstrip() + '<str>'"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -270,19 +256,9 @@ flowchart TD
     N003["mkdir(...)"]
     N004["written = []"]
     N005["expected = set(...)"]
-    N006["for path in iter_script_paths(root):
-    display_path = path.relative_to(root) if path.is_absolute() else path
-    target = out_dir / doc_filename_for(path)
-    target.write_text(render_script_ast_markdown(path, display_path), encoding='<str>')
-    written.append(target)
-    expected.add(target.name)"]
-    N007["for existing in sorted(out_dir.glob('<str>')):
-    if existing.name not in expected:
-        existing.unlink()"]
-    N008["for legacy in LEGACY_DOC_PATHS:
-    legacy_path = root / legacy
-    if legacy_path.exists():
-        legacy_path.unlink()"]
+    N006["for path in iter_script_paths(root):     display_path = path.relative_to(root) if path.is_absolute() else path     target = out_dir / doc_filename_for(path)     target.write_text(render_script_ast_markdown(path, display_path), encoding='<str>')     written.append(target)     expected.add(target.name)"]
+    N007["for existing in sorted(out_dir.glob('<str>')):     if existing.name not in expected:         existing.unlink()"]
+    N008["for legacy in LEGACY_DOC_PATHS:     legacy_path = root / legacy     if legacy_path.exists():         legacy_path.unlink()"]
     N009["return tuple(written)"]
     N001 -->|"start"| N002
     N002 --> N003

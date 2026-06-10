@@ -88,14 +88,7 @@ flowchart TD
     N001["list_branches(...)"]
     N002["result = _run(...)"]
     N003["branches = []"]
-    N004["for line in result.stdout.splitlines():
-    if not line.strip():
-        continue
-    try:
-        name, sha = line.split('<str>', 1)
-    except ValueError as exc:
-        raise ValueError(f'<str>{line!r}') from exc
-    branches.append((name, sha))"]
+    N004["for line in result.stdout.splitlines():     if not line.strip():         continue     try:         name, sha = line.split('<str>', 1)     except ValueError as exc:         raise ValueError(f'<str>{line!r}') from exc     branches.append((name, sha))"]
     N005["return branches"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -132,9 +125,7 @@ flowchart TD
     N001["find_rolling_issue(...)"]
     N002["result = _run(...)"]
     N003["issues = loads(...)"]
-    N004["for issue in issues:
-    if issue.get('<str>') == title:
-        return _normalize_issue(issue)"]
+    N004["for issue in issues:     if issue.get('<str>') == title:         return _normalize_issue(issue)"]
     N005["return None"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -159,8 +150,7 @@ flowchart TD
 flowchart TD
     N001["create_issue(...)"]
     N002["cmd = ['<str>', '<str>', '<str>', '<str>', repo, '<str>', title, '<str>', str(body_file)]"]
-    N003["for label in ROLLING_ISSUE_LABELS:
-    cmd.extend(['<str>', label])"]
+    N003["for label in ROLLING_ISSUE_LABELS:     cmd.extend(['<str>', label])"]
     N004["_run(...)"]
     N005["end"]
     N001 -->|"start"| N002
@@ -206,18 +196,7 @@ flowchart TD
     N003["min_age_days = parse_min_age_days(...)"]
     N004["branches = list_branches(...)"]
     N005["rows = []"]
-    N006["for branch, sha in branches:
-    if branch == default_branch:
-        continue
-    last_commit = get_last_commit_date(repo, sha, runner=runner)
-    age_seconds = int((now_utc - last_commit).total_seconds())
-    if age_seconds <= min_age_days * SECONDS_PER_DAY:
-        continue
-    has_open_pr = count_open_prs_for_head(repo, branch, runner=runner) > 0
-    if not is_candidate(branch=branch, default_branch=default_branch, last_commit_utc=last_commit, now_utc=now_utc, min_age_days=min_age_days, has_open_pr=has_open_pr):
-        continue
-    age_days = age_seconds // SECONDS_PER_DAY
-    rows.append(format_summary_row(branch, last_commit, age_days, sha))"]
+    N006["for branch, sha in branches:     if branch == default_branch:         continue     last_commit = get_last_commit_date(repo, sha, runner=runner)     age_seconds = int((now_utc - last_commit).total_seconds())     if age_seconds <= min_age_days * SECONDS_PER_DAY:         continue     has_open_pr = count_open_prs_for_head(repo, branch, runner=runner) > 0     if not is_candidate(branch=branch, default_branch=default_branch, last_commit_utc=last_commit, now_utc=now_utc, min_age_days=min_age_days, has_open_pr=has_open_pr):         continue     age_days = age_seconds // SECONDS_PER_DAY     rows.append(format_summary_row(branch, last_commit, age_days, sha))"]
     N007["summary_lines = _survey_header(...)"]
     N008["comment_lines = _comment_header(...)"]
     N009["if rows"]
@@ -265,8 +244,7 @@ flowchart TD
     N004["print(...)"]
     N005["print(...)"]
     N006["if args.github_output"]
-    N007["with Path(args.github_output).open('<str>', encoding='<str>') as fp:
-    fp.write(f'<str>{candidate_count}<str>')"]
+    N007["with Path(args.github_output).open('<str>', encoding='<str>') as fp:     fp.write(f'<str>{candidate_count}<str>')"]
     N008["out = Path(...)"]
     N009["if comment is None"]
     N010["unlink(...)"]

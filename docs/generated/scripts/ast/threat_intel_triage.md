@@ -10,8 +10,7 @@ flowchart TD
     N002["if isinstance(raw, str)"]
     N003["chunks = split(...)"]
     N004["chunks = []"]
-    N005["for item in raw:
-    chunks.extend(re.split('<str>', item))"]
+    N005["for item in raw:     chunks.extend(re.split('<str>', item))"]
     N006["return {chunk.strip() for chunk in chunks if chunk.strip()}"]
     N001 -->|"start"| N002
     N002 -->|"true"| N003
@@ -27,16 +26,11 @@ flowchart TD
 flowchart TD
     N001["discover_dependencies(...)"]
     N002["by_key = {}"]
-    N003["for dep in parse_uv_lock(repo_root / '<str>'):
-    by_key[dep.ecosystem, dep.name, dep.version] = dep"]
-    N004["for dep in parse_pyproject_pinned_dependencies(repo_root / '<str>'):
-    by_key.setdefault((dep.ecosystem, dep.name, dep.version), dep)"]
-    N005["for dep in parse_workflow_actions(repo_root):
-    by_key.setdefault((dep.ecosystem, dep.name, dep.version), dep)"]
-    N006["for dep in parse_transient_uv_run(repo_root):
-    by_key.setdefault((dep.ecosystem, dep.name, dep.version), dep)"]
-    N007["for dep in parse_workflow_pinned_images(repo_root):
-    by_key.setdefault((dep.ecosystem, dep.name, dep.version), dep)"]
+    N003["for dep in parse_uv_lock(repo_root / '<str>'):     by_key[dep.ecosystem, dep.name, dep.version] = dep"]
+    N004["for dep in parse_pyproject_pinned_dependencies(repo_root / '<str>'):     by_key.setdefault((dep.ecosystem, dep.name, dep.version), dep)"]
+    N005["for dep in parse_workflow_actions(repo_root):     by_key.setdefault((dep.ecosystem, dep.name, dep.version), dep)"]
+    N006["for dep in parse_transient_uv_run(repo_root):     by_key.setdefault((dep.ecosystem, dep.name, dep.version), dep)"]
+    N007["for dep in parse_workflow_pinned_images(repo_root):     by_key.setdefault((dep.ecosystem, dep.name, dep.version), dep)"]
     N008["return sorted(by_key.values(), key=lambda dep: (dep.ecosystem, dep.name, dep.version))"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -59,13 +53,7 @@ flowchart TD
     N006["deps = []"]
     N007["if not isinstance(packages, list)"]
     N008["return deps"]
-    N009["for package in packages:
-    if not isinstance(package, dict):
-        continue
-    name = package.get('<str>')
-    version = package.get('<str>')
-    if isinstance(name, str) and isinstance(version, str):
-        deps.append(Dependency(name=name, version=version, ecosystem='<str>', source=str(path)))"]
+    N009["for package in packages:     if not isinstance(package, dict):         continue     name = package.get('<str>')     version = package.get('<str>')     if isinstance(name, str) and isinstance(version, str):         deps.append(Dependency(name=name, version=version, ecosystem='<str>', source=str(path)))"]
     N010["return deps"]
     N001 -->|"start"| N002
     N002 -->|"true"| N003
@@ -92,14 +80,9 @@ flowchart TD
     N008["extend(...)"]
     N009["dependency_groups = get(...)"]
     N010["if isinstance(dependency_groups, dict)"]
-    N011["for value in dependency_groups.values():
-    raw_deps.extend(_string_list(value))"]
+    N011["for value in dependency_groups.values():     raw_deps.extend(_string_list(value))"]
     N012["deps = []"]
-    N013["for dep in raw_deps:
-    parsed = parse_exact_python_requirement(dep)
-    if parsed is not None:
-        name, version = parsed
-        deps.append(Dependency(name=name, version=version, ecosystem='<str>', source=str(path)))"]
+    N013["for dep in raw_deps:     parsed = parse_exact_python_requirement(dep)     if parsed is not None:         name, version = parsed         deps.append(Dependency(name=name, version=version, ecosystem='<str>', source=str(path)))"]
     N014["return deps"]
     N001 -->|"start"| N002
     N002 -->|"true"| N003
@@ -142,10 +125,7 @@ flowchart TD
     N003["if not workflow_dir.is_dir()"]
     N004["return []"]
     N005["deps = []"]
-    N006["for path in sorted(workflow_dir.rglob('<str>')):
-    if not path.is_file() or path.suffix not in ('<str>', '<str>'):
-        continue
-    deps.extend(_extract_workflow_actions(path))"]
+    N006["for path in sorted(workflow_dir.rglob('<str>')):     if not path.is_file() or path.suffix not in ('<str>', '<str>'):         continue     deps.extend(_extract_workflow_actions(path))"]
     N007["return deps"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -163,19 +143,7 @@ flowchart TD
     N002["text = read_text(...)"]
     N003["source = str(...)"]
     N004["deps = []"]
-    N005["for line in text.splitlines():
-    if _COMMENT_LINE.match(line):
-        continue
-    match = _USES_LINE.match(line)
-    if match is None:
-        continue
-    ref = match.group('<str>')
-    tag_comment = match.group('<str>')
-    parsed = _parse_action_reference(ref, tag_comment)
-    if parsed is None:
-        continue
-    name, version = parsed
-    deps.append(Dependency(name=name, version=version, ecosystem=ECOSYSTEM_ACTIONS, source=source))"]
+    N005["for line in text.splitlines():     if _COMMENT_LINE.match(line):         continue     match = _USES_LINE.match(line)     if match is None:         continue     ref = match.group('<str>')     tag_comment = match.group('<str>')     parsed = _parse_action_reference(ref, tag_comment)     if parsed is None:         continue     name, version = parsed     deps.append(Dependency(name=name, version=version, ecosystem=ECOSYSTEM_ACTIONS, source=source))"]
     N006["return deps"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -193,16 +161,7 @@ flowchart TD
     N003["if not workflow_dir.is_dir()"]
     N004["return []"]
     N005["deps = []"]
-    N006["for path in sorted(workflow_dir.rglob('<str>')):
-    if not path.is_file() or path.suffix not in ('<str>', '<str>'):
-        continue
-    text = path.read_text(encoding='<str>', errors='<str>')
-    source = str(path)
-    for line in text.splitlines():
-        match = _THREAT_INTEL_PIN.search(line)
-        if match is None:
-            continue
-        deps.append(Dependency(name=match.group('<str>'), version=match.group('<str>'), ecosystem=match.group('<str>'), source=source))"]
+    N006["for path in sorted(workflow_dir.rglob('<str>')):     if not path.is_file() or path.suffix not in ('<str>', '<str>'):         continue     text = path.read_text(encoding='<str>', errors='<str>')     source = str(path)     for line in text.splitlines():         match = _THREAT_INTEL_PIN.search(line)         if match is None:             continue         deps.append(Dependency(name=match.group('<str>'), version=match.group('<str>'), ecosystem=match.group('<str>'), source=source))"]
     N007["return deps"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -249,11 +208,7 @@ flowchart TD
 flowchart TD
     N001["parse_transient_uv_run(...)"]
     N002["deps = []"]
-    N003["for path in _iter_executable_inputs(repo_root):
-    text = path.read_text(encoding='<str>', errors='<str>')
-    source = str(path)
-    for match in _UV_WITH_EXACT_PIN.finditer(text):
-        deps.append(Dependency(name=match.group('<str>'), version=match.group('<str>'), ecosystem=ECOSYSTEM_PYPI, source=source))"]
+    N003["for path in _iter_executable_inputs(repo_root):     text = path.read_text(encoding='<str>', errors='<str>')     source = str(path)     for match in _UV_WITH_EXACT_PIN.finditer(text):         deps.append(Dependency(name=match.group('<str>'), version=match.group('<str>'), ecosystem=ECOSYSTEM_PYPI, source=source))"]
     N004["return deps"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -268,14 +223,10 @@ flowchart TD
     N002["candidates = []"]
     N003["workflow_dir = repo_root / WORKFLOW_SUBDIR"]
     N004["if workflow_dir.is_dir()"]
-    N005["for path in workflow_dir.rglob('<str>'):
-    if path.is_file() and path.suffix in ('<str>', '<str>'):
-        candidates.append(path)"]
+    N005["for path in workflow_dir.rglob('<str>'):     if path.is_file() and path.suffix in ('<str>', '<str>'):         candidates.append(path)"]
     N006["scripts_dir = repo_root / SCRIPTS_SUBDIR"]
     N007["if scripts_dir.is_dir()"]
-    N008["for path in scripts_dir.rglob('<str>'):
-    if path.is_file() and path.suffix in ('<str>', '<str>'):
-        candidates.append(path)"]
+    N008["for path in scripts_dir.rglob('<str>'):     if path.is_file() and path.suffix in ('<str>', '<str>'):         candidates.append(path)"]
     N009["return sorted(candidates)"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -322,14 +273,7 @@ flowchart TD
     N013["vuln_ids_by_dep = parse_osv_batch_results(...)"]
     N014["vuln_details = fetch_osv_details(...)"]
     N015["osv_findings = []"]
-    N016["for dep, vuln_ids in vuln_ids_by_dep:
-    for vuln_id in vuln_ids:
-        details = vuln_details.get(vuln_id, {})
-        aliases = tuple((str(alias) for alias in details.get('<str>', []) if isinstance(alias, str)))
-        cve_ids = {vuln_id, *aliases}
-        known_exploited = bool(cve_ids & kev_cves)
-        advisory_type = GHSA_MALWARE_TYPE if vuln_id.startswith(MAL_ID_PREFIX) else None
-        osv_findings.append(Finding(dependency=dep, vuln_id=vuln_id, aliases=aliases, source=SOURCE_OSV, known_exploited=known_exploited, advisory_type=advisory_type))"]
+    N016["for dep, vuln_ids in vuln_ids_by_dep:     for vuln_id in vuln_ids:         details = vuln_details.get(vuln_id, {})         aliases = tuple((str(alias) for alias in details.get('<str>', []) if isinstance(alias, str)))         cve_ids = {vuln_id, *aliases}         known_exploited = bool(cve_ids & kev_cves)         advisory_type = GHSA_MALWARE_TYPE if vuln_id.startswith(MAL_ID_PREFIX) else None         osv_findings.append(Finding(dependency=dep, vuln_id=vuln_id, aliases=aliases, source=SOURCE_OSV, known_exploited=known_exploited, advisory_type=advisory_type))"]
     N017["ghsa_findings = []"]
     N018["if ghsa_file is not None or ghsa_live"]
     N019["ghsa_findings = fetch_ghsa_advisories(...)"]
@@ -404,13 +348,7 @@ flowchart TD
 flowchart TD
     N001["validate_osv_coordinates(...)"]
     N002["malformed = []"]
-    N003["for dep in dependencies:
-    if _ecosystem_base(dep.ecosystem) not in _KNOWN_OSV_ECOSYSTEMS:
-        malformed.append((dep, f'<str>{dep.ecosystem!r}'))
-    elif _coord_field_malformed(dep.name):
-        malformed.append((dep, f'<str>{dep.name!r}'))
-    elif _coord_field_malformed(dep.version):
-        malformed.append((dep, f'<str>{dep.version!r}'))"]
+    N003["for dep in dependencies:     if _ecosystem_base(dep.ecosystem) not in _KNOWN_OSV_ECOSYSTEMS:         malformed.append((dep, f'<str>{dep.ecosystem!r}'))     elif _coord_field_malformed(dep.name):         malformed.append((dep, f'<str>{dep.name!r}'))     elif _coord_field_malformed(dep.version):         malformed.append((dep, f'<str>{dep.version!r}'))"]
     N004["return malformed"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -462,10 +400,7 @@ flowchart TD
     N007["return {}"]
     N008["vuln_ids = sorted(...)"]
     N009["details = {}"]
-    N010["for vuln_id in vuln_ids:
-    data = request_json(OSV_VULN_URL.format(id=urllib.parse.quote(vuln_id, safe='<str>')))
-    if isinstance(data, dict):
-        details[vuln_id] = data"]
+    N010["for vuln_id in vuln_ids:     data = request_json(OSV_VULN_URL.format(id=urllib.parse.quote(vuln_id, safe='<str>')))     if isinstance(data, dict):         details[vuln_id] = data"]
     N011["return details"]
     N001 -->|"start"| N002
     N002 -->|"true"| N003
@@ -488,16 +423,7 @@ flowchart TD
     N003["if not isinstance(results, list)"]
     N004["raise ValueError('<str>')"]
     N005["parsed = []"]
-    N006["for dep, result in zip(dependencies, results, strict=False):
-    if not isinstance(result, dict):
-        parsed.append((dep, []))
-        continue
-    vulns = result.get('<str>', [])
-    if not isinstance(vulns, list):
-        parsed.append((dep, []))
-        continue
-    ids = sorted({str(vuln['<str>']) for vuln in vulns if isinstance(vuln, dict) and isinstance(vuln.get('<str>'), str)})
-    parsed.append((dep, ids))"]
+    N006["for dep, result in zip(dependencies, results, strict=False):     if not isinstance(result, dict):         parsed.append((dep, []))         continue     vulns = result.get('<str>', [])     if not isinstance(vulns, list):         parsed.append((dep, []))         continue     ids = sorted({str(vuln['<str>']) for vuln in vulns if isinstance(vuln, dict) and isinstance(vuln.get('<str>'), str)})     parsed.append((dep, ids))"]
     N007["return parsed"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -516,12 +442,7 @@ flowchart TD
     N003["if not isinstance(vulnerabilities, list)"]
     N004["raise ValueError('<str>')"]
     N005["cves = set(...)"]
-    N006["for vulnerability in vulnerabilities:
-    if not isinstance(vulnerability, dict):
-        continue
-    cve_id = vulnerability.get('<str>')
-    if isinstance(cve_id, str):
-        cves.add(cve_id)"]
+    N006["for vulnerability in vulnerabilities:     if not isinstance(vulnerability, dict):         continue     cve_id = vulnerability.get('<str>')     if isinstance(cve_id, str):         cves.add(cve_id)"]
     N007["return cves"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -581,14 +502,7 @@ flowchart TD
     N003["if not isinstance(rows, list)"]
     N004["return {}"]
     N005["scores = {}"]
-    N006["for row in rows:
-    if not isinstance(row, dict):
-        continue
-    cve = row.get('<str>')
-    score = _coerce_epss_float(row.get('<str>'))
-    percentile = _coerce_epss_float(row.get('<str>'))
-    if isinstance(cve, str) and score is not None and (percentile is not None):
-        scores[cve.upper()] = (score, percentile)"]
+    N006["for row in rows:     if not isinstance(row, dict):         continue     cve = row.get('<str>')     score = _coerce_epss_float(row.get('<str>'))     percentile = _coerce_epss_float(row.get('<str>'))     if isinstance(cve, str) and score is not None and (percentile is not None):         scores[cve.upper()] = (score, percentile)"]
     N007["return scores"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -627,10 +541,7 @@ flowchart TD
 flowchart TD
     N001["_collect_cve_ids(...)"]
     N002["seen = set(...)"]
-    N003["for finding in findings:
-    for candidate in (finding.vuln_id, *finding.aliases):
-        if isinstance(candidate, str) and _CVE_PATTERN.match(candidate):
-            seen.add(candidate.upper())"]
+    N003["for finding in findings:     for candidate in (finding.vuln_id, *finding.aliases):         if isinstance(candidate, str) and _CVE_PATTERN.match(candidate):             seen.add(candidate.upper())"]
     N004["return sorted(seen)"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -644,13 +555,7 @@ flowchart TD
     N001["_attach_epss(...)"]
     N002["if not scores"]
     N003["return finding"]
-    N004["for candidate in (finding.vuln_id, *finding.aliases):
-    if not isinstance(candidate, str):
-        continue
-    match = scores.get(candidate.upper())
-    if match is not None:
-        score, percentile = match
-        return finding._replace(epss_score=score, epss_percentile=percentile)"]
+    N004["for candidate in (finding.vuln_id, *finding.aliases):     if not isinstance(candidate, str):         continue     match = scores.get(candidate.upper())     if match is not None:         score, percentile = match         return finding._replace(epss_score=score, epss_percentile=percentile)"]
     N005["return finding"]
     N001 -->|"start"| N002
     N002 -->|"true"| N003
@@ -669,27 +574,9 @@ flowchart TD
     N005["advisories = []"]
     N006["if ghsa_file is not None"]
     N007["advisories = load_ghsa_advisories(...)"]
-    N008["for dep in dependencies:
-    ghsa_eco = _GHSA_ECOSYSTEM_MAP.get(dep.ecosystem)
-    if ghsa_eco is None:
-        continue
-    query = urllib.parse.urlencode({'<str>': f'{dep.name}<str>{dep.version}', '<str>': ghsa_eco, '<str>': '<str>'})
-    data = request_json_any(f'{GHSA_ADVISORIES_URL}<str>{query}', token=token)
-    if isinstance(data, list):
-        advisories.extend((item for item in data if isinstance(item, dict)))"]
+    N008["for dep in dependencies:     ghsa_eco = _GHSA_ECOSYSTEM_MAP.get(dep.ecosystem)     if ghsa_eco is None:         continue     query = urllib.parse.urlencode({'<str>': f'{dep.name}<str>{dep.version}', '<str>': ghsa_eco, '<str>': '<str>'})     data = request_json_any(f'{GHSA_ADVISORIES_URL}<str>{query}', token=token)     if isinstance(data, list):         advisories.extend((item for item in data if isinstance(item, dict)))"]
     N009["findings = []"]
-    N010["for advisory in advisories:
-    vuln_id = _ghsa_primary_id(advisory)
-    if not vuln_id:
-        continue
-    aliases = _ghsa_aliases(advisory, vuln_id)
-    advisory_type = _ghsa_type(advisory)
-    identifiers = {vuln_id, *aliases}
-    known_exploited = bool(identifiers & kev)
-    for dep in dependencies:
-        if not _ghsa_affects_dependency(advisory, dep):
-            continue
-        findings.append(Finding(dependency=dep, vuln_id=vuln_id, aliases=aliases, source=SOURCE_GHSA, known_exploited=known_exploited, advisory_type=advisory_type))"]
+    N010["for advisory in advisories:     vuln_id = _ghsa_primary_id(advisory)     if not vuln_id:         continue     aliases = _ghsa_aliases(advisory, vuln_id)     advisory_type = _ghsa_type(advisory)     identifiers = {vuln_id, *aliases}     known_exploited = bool(identifiers & kev)     for dep in dependencies:         if not _ghsa_affects_dependency(advisory, dep):             continue         findings.append(Finding(dependency=dep, vuln_id=vuln_id, aliases=aliases, source=SOURCE_GHSA, known_exploited=known_exploited, advisory_type=advisory_type))"]
     N011["return findings"]
     N001 -->|"start"| N002
     N002 -->|"true"| N003
@@ -743,12 +630,7 @@ flowchart TD
     N005["append(...)"]
     N006["identifiers = get(...)"]
     N007["if isinstance(identifiers, list)"]
-    N008["for item in identifiers:
-    if not isinstance(item, dict):
-        continue
-    value = item.get('<str>')
-    if isinstance(value, str) and value and (value != primary) and (value not in aliases):
-        aliases.append(value)"]
+    N008["for item in identifiers:     if not isinstance(item, dict):         continue     value = item.get('<str>')     if isinstance(value, str) and value and (value != primary) and (value not in aliases):         aliases.append(value)"]
     N009["return tuple(aliases)"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -784,17 +666,7 @@ flowchart TD
     N005["vulnerabilities = get(...)"]
     N006["if not isinstance(vulnerabilities, list)"]
     N007["return False"]
-    N008["for vuln in vulnerabilities:
-    if not isinstance(vuln, dict):
-        continue
-    package = vuln.get('<str>')
-    if not isinstance(package, dict):
-        continue
-    if package.get('<str>') != ghsa_eco:
-        continue
-    name = package.get('<str>')
-    if isinstance(name, str) and name.lower() == dep.name.lower():
-        return True"]
+    N008["for vuln in vulnerabilities:     if not isinstance(vuln, dict):         continue     package = vuln.get('<str>')     if not isinstance(package, dict):         continue     if package.get('<str>') != ghsa_eco:         continue     name = package.get('<str>')     if isinstance(name, str) and name.lower() == dep.name.lower():         return True"]
     N009["return False"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -820,19 +692,9 @@ flowchart TD
     N008["if malpkg_file is not None"]
     N009["records = load_ossf_malicious_records(...)"]
     N010["records = []"]
-    N011["for dep in dependencies:
-    records.extend(query_osv_malicious_for_dependency(dep))"]
+    N011["for dep in dependencies:     records.extend(query_osv_malicious_for_dependency(dep))"]
     N012["findings = []"]
-    N013["for record in records:
-    vuln_id = record.get('<str>')
-    if not isinstance(vuln_id, str) or not vuln_id.startswith(MAL_ID_PREFIX):
-        continue
-    raw_aliases = record.get('<str>', [])
-    aliases = tuple((str(alias) for alias in (raw_aliases if isinstance(raw_aliases, list) else []) if isinstance(alias, str)))
-    identifiers = {vuln_id, *aliases}
-    known_exploited = bool(identifiers & kev)
-    for dep in _ossf_affected_dependencies(record, dependencies):
-        findings.append(Finding(dependency=dep, vuln_id=vuln_id, aliases=aliases, source=SOURCE_OSSF_MAL, known_exploited=known_exploited, advisory_type=GHSA_MALWARE_TYPE))"]
+    N013["for record in records:     vuln_id = record.get('<str>')     if not isinstance(vuln_id, str) or not vuln_id.startswith(MAL_ID_PREFIX):         continue     raw_aliases = record.get('<str>', [])     aliases = tuple((str(alias) for alias in (raw_aliases if isinstance(raw_aliases, list) else []) if isinstance(alias, str)))     identifiers = {vuln_id, *aliases}     known_exploited = bool(identifiers & kev)     for dep in _ossf_affected_dependencies(record, dependencies):         findings.append(Finding(dependency=dep, vuln_id=vuln_id, aliases=aliases, source=SOURCE_OSSF_MAL, known_exploited=known_exploited, advisory_type=GHSA_MALWARE_TYPE))"]
     N014["return findings"]
     N001 -->|"start"| N002
     N002 -->|"true"| N003
@@ -895,19 +757,7 @@ flowchart TD
     N003["if not isinstance(affected, list)"]
     N004["return []"]
     N005["matched = []"]
-    N006["for entry in affected:
-    if not isinstance(entry, dict):
-        continue
-    package = entry.get('<str>')
-    if not isinstance(package, dict):
-        continue
-    eco = package.get('<str>')
-    name = package.get('<str>')
-    if not isinstance(eco, str) or not isinstance(name, str):
-        continue
-    for dep in dependencies:
-        if dep.ecosystem == eco and dep.name.lower() == name.lower() and (dep not in matched):
-            matched.append(dep)"]
+    N006["for entry in affected:     if not isinstance(entry, dict):         continue     package = entry.get('<str>')     if not isinstance(package, dict):         continue     eco = package.get('<str>')     name = package.get('<str>')     if not isinstance(eco, str) or not isinstance(name, str):         continue     for dep in dependencies:         if dep.ecosystem == eco and dep.name.lower() == name.lower() and (dep not in matched):             matched.append(dep)"]
     N007["return matched"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -923,23 +773,7 @@ flowchart TD
 flowchart TD
     N001["merge_findings(...)"]
     N002["by_key = {}"]
-    N003["for finding in findings:
-    dep = finding.dependency
-    key = (dep.ecosystem, dep.name, dep.version, finding.vuln_id)
-    existing = by_key.get(key)
-    if existing is None:
-        by_key[key] = finding
-        continue
-    sources = [s.strip() for s in existing.source.split('<str>') if s.strip()]
-    for chunk in finding.source.split('<str>'):
-        src = chunk.strip()
-        if src and src not in sources:
-            sources.append(src)
-    merged_aliases = list(existing.aliases)
-    for alias in finding.aliases:
-        if alias not in merged_aliases:
-            merged_aliases.append(alias)
-    by_key[key] = Finding(dependency=existing.dependency, vuln_id=existing.vuln_id, aliases=tuple(merged_aliases), source='<str>'.join(sources), known_exploited=existing.known_exploited or finding.known_exploited, advisory_type=existing.advisory_type or finding.advisory_type, epss_score=existing.epss_score if existing.epss_score is not None else finding.epss_score, epss_percentile=existing.epss_percentile if existing.epss_percentile is not None else finding.epss_percentile)"]
+    N003["for finding in findings:     dep = finding.dependency     key = (dep.ecosystem, dep.name, dep.version, finding.vuln_id)     existing = by_key.get(key)     if existing is None:         by_key[key] = finding         continue     sources = [s.strip() for s in existing.source.split('<str>') if s.strip()]     for chunk in finding.source.split('<str>'):         src = chunk.strip()         if src and src not in sources:             sources.append(src)     merged_aliases = list(existing.aliases)     for alias in finding.aliases:         if alias not in merged_aliases:             merged_aliases.append(alias)     by_key[key] = Finding(dependency=existing.dependency, vuln_id=existing.vuln_id, aliases=tuple(merged_aliases), source='<str>'.join(sources), known_exploited=existing.known_exploited or finding.known_exploited, advisory_type=existing.advisory_type or finding.advisory_type, epss_score=existing.epss_score if existing.epss_score is not None else finding.epss_score, epss_percentile=existing.epss_percentile if existing.epss_percentile is not None else finding.epss_percentile)"]
     N004["return list(by_key.values())"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -963,33 +797,9 @@ flowchart TD
     N011["if not isinstance(raw_map, dict)"]
     N012["return {}"]
     N013["upper_raw = {key.upper(): value for key, value in raw_map.items() if isinstance(key, str)}"]
-    N014["for cve_id in cve_ids:
-    cve_payload = upper_raw.get(cve_id)
-    if not isinstance(cve_payload, dict):
-        continue
-    parsed = parse_nvd_cve(cve_payload, cve_id)
-    if parsed is not None:
-        enrichment[cve_id] = parsed"]
+    N014["for cve_id in cve_ids:     cve_payload = upper_raw.get(cve_id)     if not isinstance(cve_payload, dict):         continue     parsed = parse_nvd_cve(cve_payload, cve_id)     if parsed is not None:         enrichment[cve_id] = parsed"]
     N015["return enrichment"]
-    N016["for cve_id in cve_ids:
-    try:
-        query = urllib.parse.urlencode({'<str>': cve_id})
-        data = request_json(f'{NVD_CVE_URL}<str>{query}')
-    except (OSError, ValueError, json.JSONDecodeError):
-        _record_outage(outages, SOURCE_NVD)
-        continue
-    vulnerabilities = data.get('<str>') if isinstance(data, dict) else None
-    if not isinstance(vulnerabilities, list) or not vulnerabilities:
-        continue
-    first = vulnerabilities[0]
-    if not isinstance(first, dict):
-        continue
-    cve_payload = first.get('<str>')
-    if not isinstance(cve_payload, dict):
-        continue
-    parsed = parse_nvd_cve(cve_payload, cve_id)
-    if parsed is not None:
-        enrichment[cve_id] = parsed"]
+    N016["for cve_id in cve_ids:     try:         query = urllib.parse.urlencode({'<str>': cve_id})         data = request_json(f'{NVD_CVE_URL}<str>{query}')     except (OSError, ValueError, json.JSONDecodeError):         _record_outage(outages, SOURCE_NVD)         continue     vulnerabilities = data.get('<str>') if isinstance(data, dict) else None     if not isinstance(vulnerabilities, list) or not vulnerabilities:         continue     first = vulnerabilities[0]     if not isinstance(first, dict):         continue     cve_payload = first.get('<str>')     if not isinstance(cve_payload, dict):         continue     parsed = parse_nvd_cve(cve_payload, cve_id)     if parsed is not None:         enrichment[cve_id] = parsed"]
     N017["return enrichment"]
     N001 -->|"start"| N002
     N002 -->|"true"| N003
@@ -1036,26 +846,7 @@ flowchart TD
     N002["metrics = payload.get('<str>') if isinstance(payload, dict) else None"]
     N003["if not isinstance(metrics, dict)"]
     N004["return (None, None, None)"]
-    N005["for key, label in (('<str>', '<str>'), ('<str>', '<str>'), ('<str>', '<str>')):
-    entries = metrics.get(key)
-    if not isinstance(entries, list) or not entries:
-        continue
-    first = entries[0]
-    if not isinstance(first, dict):
-        continue
-    cvss_data = first.get('<str>')
-    if not isinstance(cvss_data, dict):
-        continue
-    severity_raw = cvss_data.get('<str>')
-    if not isinstance(severity_raw, str):
-        severity_raw = first.get('<str>') if isinstance(first.get('<str>'), str) else None
-    score_raw = cvss_data.get('<str>')
-    score: float | None = None
-    if isinstance(score_raw, int | float):
-        score = float(score_raw)
-    if severity_raw is None and score is None:
-        continue
-    return (severity_raw, score, label)"]
+    N005["for key, label in (('<str>', '<str>'), ('<str>', '<str>'), ('<str>', '<str>')):     entries = metrics.get(key)     if not isinstance(entries, list) or not entries:         continue     first = entries[0]     if not isinstance(first, dict):         continue     cvss_data = first.get('<str>')     if not isinstance(cvss_data, dict):         continue     severity_raw = cvss_data.get('<str>')     if not isinstance(severity_raw, str):         severity_raw = first.get('<str>') if isinstance(first.get('<str>'), str) else None     score_raw = cvss_data.get('<str>')     score: float | None = None     if isinstance(score_raw, int | float):         score = float(score_raw)     if severity_raw is None and score is None:         continue     return (severity_raw, score, label)"]
     N006["return (None, None, None)"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -1073,18 +864,7 @@ flowchart TD
     N003["if not isinstance(weaknesses, list)"]
     N004["return ()"]
     N005["cwes = []"]
-    N006["for weakness in weaknesses:
-    if not isinstance(weakness, dict):
-        continue
-    descriptions = weakness.get('<str>')
-    if not isinstance(descriptions, list):
-        continue
-    for desc in descriptions:
-        if not isinstance(desc, dict):
-            continue
-        value = desc.get('<str>')
-        if isinstance(value, str) and value.startswith('<str>') and (value not in cwes):
-            cwes.append(value)"]
+    N006["for weakness in weaknesses:     if not isinstance(weakness, dict):         continue     descriptions = weakness.get('<str>')     if not isinstance(descriptions, list):         continue     for desc in descriptions:         if not isinstance(desc, dict):             continue         value = desc.get('<str>')         if isinstance(value, str) and value.startswith('<str>') and (value not in cwes):             cwes.append(value)"]
     N007["return tuple(cwes)"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -1103,14 +883,7 @@ flowchart TD
     N003["if not isinstance(references, list)"]
     N004["return ()"]
     N005["urls = []"]
-    N006["for ref in references:
-    if not isinstance(ref, dict):
-        continue
-    url = ref.get('<str>')
-    if isinstance(url, str) and url not in urls:
-        urls.append(url)
-    if len(urls) >= _NVD_MAX_REFERENCES:
-        break"]
+    N006["for ref in references:     if not isinstance(ref, dict):         continue     url = ref.get('<str>')     if isinstance(url, str) and url not in urls:         urls.append(url)     if len(urls) >= _NVD_MAX_REFERENCES:         break"]
     N007["return tuple(urls)"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -1128,18 +901,7 @@ flowchart TD
     N002["if not nvd_map"]
     N003["return findings"]
     N004["enriched = []"]
-    N005["for finding in findings:
-    matches: list[NvdEnrichment] = []
-    for candidate in (finding.vuln_id, *finding.aliases):
-        if not isinstance(candidate, str) or not _CVE_PATTERN.match(candidate):
-            continue
-        hit = nvd_map.get(candidate.upper())
-        if hit is not None and hit not in matches:
-            matches.append(hit)
-    if matches:
-        enriched.append(finding._replace(nvd_metadata=tuple(matches)))
-    else:
-        enriched.append(finding)"]
+    N005["for finding in findings:     matches: list[NvdEnrichment] = []     for candidate in (finding.vuln_id, *finding.aliases):         if not isinstance(candidate, str) or not _CVE_PATTERN.match(candidate):             continue         hit = nvd_map.get(candidate.upper())         if hit is not None and hit not in matches:             matches.append(hit)     if matches:         enriched.append(finding._replace(nvd_metadata=tuple(matches)))     else:         enriched.append(finding)"]
     N006["return enriched"]
     N001 -->|"start"| N002
     N002 -->|"true"| N003
@@ -1159,20 +921,7 @@ flowchart TD
     N005["raise ValueError(f'{path}<str>')"]
     N006["suppressions = []"]
     N007["required = ('<str>', '<str>', '<str>', '<str>', '<str>')"]
-    N008["for index, entry in enumerate(raw):
-    if not isinstance(entry, dict):
-        raise ValueError(f'{path}<str>{index}<str>')
-    values: dict[str, str] = {}
-    for field in required:
-        value = entry.get(field)
-        if not isinstance(value, str) or not value.strip():
-            raise ValueError(f'{path}<str>{index}<str>{field}<str>')
-        values[field] = value.strip()
-    try:
-        review_by = date.fromisoformat(values['<str>'])
-    except ValueError as exc:
-        raise ValueError(f\"{path}<str>{index}<str>{values['<str>']!r}\") from exc
-    suppressions.append(Suppression(ecosystem=values['<str>'], name=values['<str>'], vuln_id=values['<str>'], reason=values['<str>'], review_by=review_by))"]
+    N008["for index, entry in enumerate(raw):     if not isinstance(entry, dict):         raise ValueError(f'{path}<str>{index}<str>')     values: dict[str, str] = {}     for field in required:         value = entry.get(field)         if not isinstance(value, str) or not value.strip():             raise ValueError(f'{path}<str>{index}<str>{field}<str>')         values[field] = value.strip()     try:         review_by = date.fromisoformat(values['<str>'])     except ValueError as exc:         raise ValueError(f'{path}<str>{index}<str>{values['<str>']!r}') from exc     suppressions.append(Suppression(ecosystem=values['<str>'], name=values['<str>'], vuln_id=values['<str>'], reason=values['<str>'], review_by=review_by))"]
     N009["return suppressions"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -1198,13 +947,7 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["_matching_suppression(...)"]
-    N002["for supp in suppressions:
-    if supp.ecosystem != finding.dependency.ecosystem:
-        continue
-    if supp.name.lower() != finding.dependency.name.lower():
-        continue
-    if supp.vuln_id in {finding.vuln_id, *finding.aliases}:
-        return supp"]
+    N002["for supp in suppressions:     if supp.ecosystem != finding.dependency.ecosystem:         continue     if supp.name.lower() != finding.dependency.name.lower():         continue     if supp.vuln_id in {finding.vuln_id, *finding.aliases}:         return supp"]
     N003["return None"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -1228,16 +971,7 @@ flowchart TD
     N003["active = []"]
     N004["suppressed_count = 0"]
     N005["expired_resurfaced = []"]
-    N006["for finding in findings:
-    supp = _matching_suppression(finding, suppressions)
-    if supp is None or _finding_is_response_class(finding):
-        active.append(finding)
-        continue
-    if supp.review_by <= today:
-        expired_resurfaced.append(_suppression_label(supp))
-        active.append(finding)
-        continue
-    suppressed_count += 1"]
+    N006["for finding in findings:     supp = _matching_suppression(finding, suppressions)     if supp is None or _finding_is_response_class(finding):         active.append(finding)         continue     if supp.review_by <= today:         expired_resurfaced.append(_suppression_label(supp))         active.append(finding)         continue     suppressed_count += 1"]
     N007["intel_needed = bool(...)"]
     N008["response_needed = any(...)"]
     N009["(recommended_labels, remove_labels) = classify_label_changes(...)"]
@@ -1383,8 +1117,7 @@ flowchart TD
     N004["malformed = validate_osv_coordinates(...)"]
     N005["if not malformed"]
     N006["return 0"]
-    N007["for dep, reason in malformed:
-    print(f'<str>{dep.ecosystem}<str>{dep.name}<str>{dep.version}<str>{dep.source}<str>{reason}', file=sys.stderr)"]
+    N007["for dep, reason in malformed:     print(f'<str>{dep.ecosystem}<str>{dep.name}<str>{dep.version}<str>{dep.source}<str>{reason}', file=sys.stderr)"]
     N008["return 1"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -1502,8 +1235,7 @@ flowchart TD
 flowchart TD
     N001["write_summary(...)"]
     N002["mkdir(...)"]
-    N003["with path.open('<str>', encoding='<str>') as handle:
-    handle.write(render_summary_markdown(dependencies, findings, result, outages=outages))"]
+    N003["with path.open('<str>', encoding='<str>') as handle:     handle.write(render_summary_markdown(dependencies, findings, result, outages=outages))"]
     N004["end"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -1540,17 +1272,11 @@ flowchart TD
     N024["write(...)"]
     N025["write(...)"]
     N026["write(...)"]
-    N027["for finding in findings:
-    row = f'<str>{finding.dependency.name}<str>{finding.dependency.version}<str>{finding.vuln_id}<str>{finding.source}<str>{_bool(finding.known_exploited)}<str>{_format_epss_cell(finding)}<str>'
-    if has_nvd:
-        row += f'<str>{_nvd_cvss_cell(finding)}<str>{_nvd_cwe_cell(finding)}<str>'
-    handle.write(row + '<str>')"]
+    N027["for finding in findings:     row = f'<str>{finding.dependency.name}<str>{finding.dependency.version}<str>{finding.vuln_id}<str>{finding.source}<str>{_bool(finding.known_exploited)}<str>{_format_epss_cell(finding)}<str>'     if has_nvd:         row += f'<str>{_nvd_cvss_cell(finding)}<str>{_nvd_cwe_cell(finding)}<str>'     handle.write(row + '<str>')"]
     N028["if has_nvd"]
     N029["write(...)"]
     N030["write(...)"]
-    N031["for finding in findings:
-    for enrichment in finding.nvd_metadata:
-        _write_nvd_detail(handle, finding, enrichment)"]
+    N031["for finding in findings:     for enrichment in finding.nvd_metadata:         _write_nvd_detail(handle, finding, enrichment)"]
     N032["end"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -1598,11 +1324,7 @@ flowchart TD
     N002["if not finding.nvd_metadata"]
     N003["return '<str>'"]
     N004["parts = []"]
-    N005["for item in finding.nvd_metadata:
-    severity = item.cvss_severity or '<str>'
-    score = f'{item.cvss_score:<str>}' if item.cvss_score is not None else '<str>'
-    version = item.cvss_version or '<str>'
-    parts.append(f'<str>{version}<str>{severity}<str>{score}')"]
+    N005["for item in finding.nvd_metadata:     severity = item.cvss_severity or '<str>'     score = f'{item.cvss_score:<str>}' if item.cvss_score is not None else '<str>'     version = item.cvss_version or '<str>'     parts.append(f'<str>{version}<str>{severity}<str>{score}')"]
     N006["return '<str>'.join(parts)"]
     N001 -->|"start"| N002
     N002 -->|"true"| N003
@@ -1619,10 +1341,7 @@ flowchart TD
     N002["if not finding.nvd_metadata"]
     N003["return '<str>'"]
     N004["seen = []"]
-    N005["for item in finding.nvd_metadata:
-    for cwe in item.cwe_ids:
-        if cwe not in seen:
-            seen.append(cwe)"]
+    N005["for item in finding.nvd_metadata:     for cwe in item.cwe_ids:         if cwe not in seen:             seen.append(cwe)"]
     N006["return '<str>'.join(seen)"]
     N001 -->|"start"| N002
     N002 -->|"true"| N003
@@ -1646,8 +1365,7 @@ flowchart TD
     N009["write(...)"]
     N010["if enrichment.references"]
     N011["write(...)"]
-    N012["for url in enrichment.references:
-    handle.write(f'<str>{url}<str>')"]
+    N012["for url in enrichment.references:     handle.write(f'<str>{url}<str>')"]
     N013["end"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -1685,11 +1403,7 @@ flowchart TD
 flowchart TD
     N001["_summary_sources_line(...)"]
     N002["seen = []"]
-    N003["for finding in findings:
-    for chunk in finding.source.split('<str>'):
-        src = chunk.strip()
-        if src and src not in seen:
-            seen.append(src)"]
+    N003["for finding in findings:     for chunk in finding.source.split('<str>'):         src = chunk.strip()         if src and src not in seen:             seen.append(src)"]
     N004["preferred = [SOURCE_OSV, SOURCE_GHSA, SOURCE_OSSF_MAL]"]
     N005["ordered = [src for src in preferred if src in seen]"]
     N006["extend(...)"]
@@ -1719,11 +1433,7 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["_write_github_output(...)"]
-    N002["with path.open('<str>', encoding='<str>') as handle:
-    handle.write(f\"<str>{_bool(result['<str>'])}<str>\")
-    handle.write(f\"<str>{_bool(result['<str>'])}<str>\")
-    handle.write(f\"<str>{'<str>'.join(result['<str>'])}<str>\")
-    handle.write(f\"<str>{'<str>'.join(result['<str>'])}<str>\")"]
+    N002["with path.open('<str>', encoding='<str>') as handle:     handle.write(f'<str>{_bool(result['<str>'])}<str>')     handle.write(f'<str>{_bool(result['<str>'])}<str>')     handle.write(f'<str>{'<str>'.join(result['<str>'])}<str>')     handle.write(f'<str>{'<str>'.join(result['<str>'])}<str>')"]
     N003["end"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -1794,8 +1504,7 @@ flowchart TD
     N007["if token"]
     N008["headers['<str>'] = f'<str>{token}'"]
     N009["request = Request(...)"]
-    N010["with urllib.request.urlopen(request, timeout=30) as response:
-    return json.loads(response.read().decode('<str>'))"]
+    N010["with urllib.request.urlopen(request, timeout=30) as response:     return json.loads(response.read().decode('<str>'))"]
     N011["end"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -1826,29 +1535,13 @@ flowchart TD
     N009["add_header(...)"]
     N010["add_header(...)"]
     N011["try"]
-    N012["with opener(req) as resp:
-    code = int(resp.status)"]
+    N012["with opener(req) as resp:     code = int(resp.status)"]
     N013["except urllib.error.HTTPError"]
     N014["code = int(...)"]
     N015["if not 200 <= code < 300"]
     N016["print(...)"]
     N017["return 1"]
-    N018["for label in remove_labels:
-    url = f\"{base_url}<str>{urllib.parse.quote(label, safe='<str>')}\"
-    req = urllib.request.Request(url, method='<str>')
-    req.add_header('<str>', auth_header)
-    req.add_header('<str>', '<str>')
-    req.add_header('<str>', _GITHUB_API_VERSION)
-    try:
-        with opener(req) as resp:
-            code = int(resp.status)
-    except urllib.error.HTTPError as exc:
-        code = int(exc.code)
-    if code == 404:
-        continue
-    if not 200 <= code < 300:
-        print(f'<str>{label!r}<str>{code}', file=sys.stderr)
-        return 1"]
+    N018["for label in remove_labels:     url = f'{base_url}<str>{urllib.parse.quote(label, safe='<str>')}'     req = urllib.request.Request(url, method='<str>')     req.add_header('<str>', auth_header)     req.add_header('<str>', '<str>')     req.add_header('<str>', _GITHUB_API_VERSION)     try:         with opener(req) as resp:             code = int(resp.status)     except urllib.error.HTTPError as exc:         code = int(exc.code)     if code == 404:         continue     if not 200 <= code < 300:         print(f'<str>{label!r}<str>{code}', file=sys.stderr)         return 1"]
     N019["return 0"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -1967,19 +1660,11 @@ flowchart TD
     N001["_find_triage_comment_id(...)"]
     N002["url = f'<str>{repo}<str>{number}<str>'"]
     N003["req = _github_comment_request(...)"]
-    N004["with opener(req) as resp:
-    raw = resp.read().decode('<str>')"]
+    N004["with opener(req) as resp:     raw = resp.read().decode('<str>')"]
     N005["comments = json.loads(raw) if raw.strip() else []"]
     N006["if not isinstance(comments, list)"]
     N007["return None"]
-    N008["for comment in comments:
-    if not isinstance(comment, dict):
-        continue
-    body = comment.get('<str>') or '<str>'
-    if isinstance(body, str) and body.startswith(marker):
-        cid = comment.get('<str>')
-        if isinstance(cid, int):
-            return cid"]
+    N008["for comment in comments:     if not isinstance(comment, dict):         continue     body = comment.get('<str>') or '<str>'     if isinstance(body, str) and body.startswith(marker):         cid = comment.get('<str>')         if isinstance(cid, int):             return cid"]
     N009["return None"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -2005,8 +1690,7 @@ flowchart TD
     N008["url = f'<str>{repo}<str>{number}<str>'"]
     N009["req = _github_comment_request(...)"]
     N010["try"]
-    N011["with opener(req) as resp:
-    code = int(resp.status)"]
+    N011["with opener(req) as resp:     code = int(resp.status)"]
     N012["except urllib.error.HTTPError"]
     N013["code = int(...)"]
     N014["if not 200 <= code < 300"]

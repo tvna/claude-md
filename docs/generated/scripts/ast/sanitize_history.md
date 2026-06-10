@@ -42,17 +42,7 @@ flowchart TD
 flowchart TD
     N001["index_backup(...)"]
     N002["out = {}"]
-    N003["for item in backup.get('<str>') or []:
-    kind = item.get('<str>')
-    id_ = item.get('<str>')
-    comment_id = item.get('<str>')
-    if id_ is None or kind is None:
-        continue
-    body = item.get('<str>') or '<str>'
-    out[kind, id_, comment_id, '<str>'] = body
-    title = item.get('<str>') or '<str>'
-    if title:
-        out[kind, id_, comment_id, '<str>'] = title"]
+    N003["for item in backup.get('<str>') or []:     kind = item.get('<str>')     id_ = item.get('<str>')     comment_id = item.get('<str>')     if id_ is None or kind is None:         continue     body = item.get('<str>') or '<str>'     out[kind, id_, comment_id, '<str>'] = body     title = item.get('<str>') or '<str>'     if title:         out[kind, id_, comment_id, '<str>'] = title"]
     N004["return out"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -66,17 +56,17 @@ flowchart TD
     N001["item_endpoint(...)"]
     N002["kind = item['<str>']"]
     N003["if kind == 'issue'"]
-    N004["return f\"{API_ROOT}<str>{repo}<str>{item['<str>']}\""]
+    N004["return f'{API_ROOT}<str>{repo}<str>{item['<str>']}'"]
     N005["if kind == 'pr'"]
-    N006["return f\"{API_ROOT}<str>{repo}<str>{item['<str>']}\""]
+    N006["return f'{API_ROOT}<str>{repo}<str>{item['<str>']}'"]
     N007["if kind == 'issue_comment'"]
     N008["if item.get('comment_id') is None"]
-    N009["raise ValueError(f\"<str>{item.get('<str>')}<str>\")"]
-    N010["return f\"{API_ROOT}<str>{repo}<str>{item['<str>']}\""]
+    N009["raise ValueError(f'<str>{item.get('<str>')}<str>')"]
+    N010["return f'{API_ROOT}<str>{repo}<str>{item['<str>']}'"]
     N011["if kind == 'pr_review_comment'"]
     N012["if item.get('comment_id') is None"]
-    N013["raise ValueError(f\"<str>{item.get('<str>')}<str>\")"]
-    N014["return f\"{API_ROOT}<str>{repo}<str>{item['<str>']}\""]
+    N013["raise ValueError(f'<str>{item.get('<str>')}<str>')"]
+    N014["return f'{API_ROOT}<str>{repo}<str>{item['<str>']}'"]
     N015["raise ValueError(f'<str>{kind!r}')"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -140,11 +130,7 @@ flowchart TD
     N002["if not raw"]
     N003["return set()"]
     N004["out = set(...)"]
-    N005["for chunk in raw.split('<str>'):
-    chunk = chunk.strip()
-    if not chunk:
-        continue
-    out.add(int(chunk))"]
+    N005["for chunk in raw.split('<str>'):     chunk = chunk.strip()     if not chunk:         continue     out.add(int(chunk))"]
     N006["return out"]
     N001 -->|"start"| N002
     N002 -->|"true"| N003
@@ -218,33 +204,8 @@ flowchart TD
     N002["counts = {'<str>': 0, '<str>': 0, '<str>': 0, '<str>': 0}"]
     N003["items = translations.get('<str>') or []"]
     N004["actionable = []"]
-    N005["for item in items:
-    if is_excluded(item, excluded_prs):
-        counts['<str>'] += 1
-        continue
-    actionable.append(item)"]
-    N006["for index, item in enumerate(actionable):
-    if batch_size and index and (index % batch_size == 0):
-        print(f'<str>{index}<str>{len(actionable)}<str>')
-    counts['<str>'] += 1
-    url = item_endpoint(repo, item)
-    field = item['<str>']
-    live = fetch_live_field(url=url, field=field, token=token, opener=opener, sleeper=sleeper)
-    verdict = classify_drift(live=live, original=item['<str>'], translated=item['<str>'])
-    if verdict == '<str>':
-        msg = f\"<str>{item['<str>']}<str>{item.get('<str>')}<str>{field}<str>\"
-        print(msg, file=sys.stderr)
-        raise SystemExit(1)
-    if verdict == '<str>':
-        counts['<str>'] += 1
-        print(f\"<str>{item['<str>']}<str>{item.get('<str>')}<str>{field}<str>\")
-        continue
-    if dry_run:
-        print(f'<str>{url}<str>{field}')
-    else:
-        patch_field(url=url, field=field, new_value=item['<str>'], token=token, opener=opener, sleeper=sleeper)
-        print(f\"<str>{item['<str>']}<str>{item.get('<str>')}<str>{field}<str>\")
-    counts['<str>'] += 1"]
+    N005["for item in items:     if is_excluded(item, excluded_prs):         counts['<str>'] += 1         continue     actionable.append(item)"]
+    N006["for index, item in enumerate(actionable):     if batch_size and index and (index % batch_size == 0):         print(f'<str>{index}<str>{len(actionable)}<str>')     counts['<str>'] += 1     url = item_endpoint(repo, item)     field = item['<str>']     live = fetch_live_field(url=url, field=field, token=token, opener=opener, sleeper=sleeper)     verdict = classify_drift(live=live, original=item['<str>'], translated=item['<str>'])     if verdict == '<str>':         msg = f'<str>{item['<str>']}<str>{item.get('<str>')}<str>{field}<str>'         print(msg, file=sys.stderr)         raise SystemExit(1)     if verdict == '<str>':         counts['<str>'] += 1         print(f'<str>{item['<str>']}<str>{item.get('<str>')}<str>{field}<str>')         continue     if dry_run:         print(f'<str>{url}<str>{field}')     else:         patch_field(url=url, field=field, new_value=item['<str>'], token=token, opener=opener, sleeper=sleeper)         print(f'<str>{item['<str>']}<str>{item.get('<str>')}<str>{field}<str>')     counts['<str>'] += 1"]
     N007["return counts"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -260,8 +221,7 @@ flowchart TD
 flowchart TD
     N001["run_plan(...)"]
     N002["plan = []"]
-    N003["for item in iter_actionable(translations, excluded_prs):
-    plan.append({'<str>': item['<str>'], '<str>': item.get('<str>'), '<str>': item['<str>'], '<str>': sha256_hex(item['<str>']), '<str>': sha256_hex(item['<str>'])})"]
+    N003["for item in iter_actionable(translations, excluded_prs):     plan.append({'<str>': item['<str>'], '<str>': item.get('<str>'), '<str>': item['<str>'], '<str>': sha256_hex(item['<str>']), '<str>': sha256_hex(item['<str>'])})"]
     N004["return plan"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -334,18 +294,7 @@ flowchart TD
     N010["backup = load_backup(...)"]
     N011["index = index_backup(...)"]
     N012["patched = 0"]
-    N013["for (kind, id_, comment_id, field), original in index.items():
-    item = {'<str>': kind, '<str>': id_, '<str>': comment_id, '<str>': _number_for_restore(backup, kind, id_)}
-    try:
-        url = item_endpoint(repo, item)
-    except ValueError:
-        continue
-    if args.dry_run:
-        print(f'<str>{url}<str>{field}')
-    else:
-        patch_field(url=url, field=field, new_value=original, token=token)
-        print(f\"<str>{kind}<str>{item['<str>']}<str>{field}<str>\")
-    patched += 1"]
+    N013["for (kind, id_, comment_id, field), original in index.items():     item = {'<str>': kind, '<str>': id_, '<str>': comment_id, '<str>': _number_for_restore(backup, kind, id_)}     try:         url = item_endpoint(repo, item)     except ValueError:         continue     if args.dry_run:         print(f'<str>{url}<str>{field}')     else:         patch_field(url=url, field=field, new_value=original, token=token)         print(f'<str>{kind}<str>{item['<str>']}<str>{field}<str>')     patched += 1"]
     N014["print(...)"]
     N015["return 0"]
     N001 -->|"start"| N002
@@ -369,9 +318,7 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["_number_for_restore(...)"]
-    N002["for item in backup.get('<str>') or []:
-    if item.get('<str>') == kind and item.get('<str>') == id_:
-        return item.get('<str>')"]
+    N002["for item in backup.get('<str>') or []:     if item.get('<str>') == kind and item.get('<str>') == id_:         return item.get('<str>')"]
     N003["return None"]
     N001 -->|"start"| N002
     N002 --> N003

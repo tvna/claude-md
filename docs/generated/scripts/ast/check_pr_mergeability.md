@@ -125,13 +125,7 @@ flowchart TD
     N001["_walk(...)"]
     N002["out = []"]
     N003["stack = [value]"]
-    N004["while stack and len(out) < 200:
-    node = stack.pop()
-    out.append(node)
-    if isinstance(node, dict):
-        stack.extend(node.values())
-    elif isinstance(node, list):
-        stack.extend(node)"]
+    N004["while stack and len(out) < 200:     node = stack.pop()     out.append(node)     if isinstance(node, dict):         stack.extend(node.values())     elif isinstance(node, list):         stack.extend(node)"]
     N005["return out"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -146,22 +140,10 @@ flowchart TD
     N001["_extract_pr_info(...)"]
     N002["tool_input = event.get('<str>') or {}"]
     N003["tool_response = get(...)"]
-    N004["for node in _walk(tool_response) + _walk(tool_input):
-    if isinstance(node, str):
-        m = _PR_URL_RE.search(node)
-        if m:
-            return (m.group(1), m.group(2), m.group(3))"]
+    N004["for node in _walk(tool_response) + _walk(tool_input):     if isinstance(node, str):         m = _PR_URL_RE.search(node)         if m:             return (m.group(1), m.group(2), m.group(3))"]
     N005["owner = tool_input.get('<str>') if isinstance(tool_input, dict) else None"]
     N006["repo = tool_input.get('<str>') if isinstance(tool_input, dict) else None"]
-    N007["for node in _walk(tool_response):
-    if not isinstance(node, dict):
-        continue
-    for key in ('<str>', '<str>', '<str>', '<str>'):
-        val = node.get(key)
-        if isinstance(val, int) and val > 0:
-            return (owner, repo, str(val))
-        if isinstance(val, str) and val.isdecimal():
-            return (owner, repo, val)"]
+    N007["for node in _walk(tool_response):     if not isinstance(node, dict):         continue     for key in ('<str>', '<str>', '<str>', '<str>'):         val = node.get(key)         if isinstance(val, int) and val > 0:             return (owner, repo, str(val))         if isinstance(val, str) and val.isdecimal():             return (owner, repo, val)"]
     N008["return (None, None, None)"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -180,14 +162,7 @@ flowchart TD
     N002["actual_token = token or _get_token()"]
     N003["path = f'<str>{owner}<str>{repo}<str>{pr_number}'"]
     N004["data = None"]
-    N005["for attempt in range(_MAX_POLLS):
-    if attempt > 0:
-        sleeper(_POLL_INTERVAL_SECONDS)
-    data = _rest_get(path, token=actual_token, opener=opener)
-    if data is None:
-        return None
-    if data.get('<str>') is not None:
-        return data"]
+    N005["for attempt in range(_MAX_POLLS):     if attempt > 0:         sleeper(_POLL_INTERVAL_SECONDS)     data = _rest_get(path, token=actual_token, opener=opener)     if data is None:         return None     if data.get('<str>') is not None:         return data"]
     N006["return data"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -277,19 +252,7 @@ flowchart TD
     N015["if prs is None"]
     N016["return []"]
     N017["result = []"]
-    N018["for pr in prs:
-    if not isinstance(pr, dict):
-        continue
-    pr_user = pr.get('<str>') or {}
-    if not isinstance(pr_user, dict) or pr_user.get('<str>') != login:
-        continue
-    number = pr.get('<str>')
-    url = pr.get('<str>') or '<str>'
-    head = pr.get('<str>') or {}
-    head_repo = head.get('<str>') or {}
-    owner_login = (head_repo.get('<str>') or {}).get('<str>') or '<str>'
-    repo_name = head_repo.get('<str>') or '<str>'
-    result.append({'<str>': number, '<str>': url, '<str>': {'<str>': owner_login}, '<str>': {'<str>': repo_name}})"]
+    N018["for pr in prs:     if not isinstance(pr, dict):         continue     pr_user = pr.get('<str>') or {}     if not isinstance(pr_user, dict) or pr_user.get('<str>') != login:         continue     number = pr.get('<str>')     url = pr.get('<str>') or '<str>'     head = pr.get('<str>') or {}     head_repo = head.get('<str>') or {}     owner_login = (head_repo.get('<str>') or {}).get('<str>') or '<str>'     repo_name = head_repo.get('<str>') or '<str>'     result.append({'<str>': number, '<str>': url, '<str>': {'<str>': owner_login}, '<str>': {'<str>': repo_name}})"]
     N019["return result"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -321,35 +284,15 @@ flowchart TD
     N004["return"]
     N005["dirty = []"]
     N006["behind = []"]
-    N007["for pr in prs:
-    number = str(pr.get('<str>') or '<str>')
-    if not number:
-        continue
-    owner_obj = pr.get('<str>') or {}
-    owner = owner_obj.get('<str>') if isinstance(owner_obj, dict) else None
-    repo_obj = pr.get('<str>') or {}
-    repo = repo_obj.get('<str>') if isinstance(repo_obj, dict) else None
-    if not owner or not repo:
-        continue
-    pr_data = _poll_mergeability(owner, repo, number, opener=opener, token=token, sleeper=sleeper)
-    if pr_data is None:
-        continue
-    state = str(pr_data.get('<str>') or '<str>').lower()
-    url = pr.get('<str>') or f'{owner}<str>{repo}<str>{number}'
-    if state == '<str>':
-        dirty.append(url)
-    elif state == '<str>':
-        behind.append(url)"]
+    N007["for pr in prs:     number = str(pr.get('<str>') or '<str>')     if not number:         continue     owner_obj = pr.get('<str>') or {}     owner = owner_obj.get('<str>') if isinstance(owner_obj, dict) else None     repo_obj = pr.get('<str>') or {}     repo = repo_obj.get('<str>') if isinstance(repo_obj, dict) else None     if not owner or not repo:         continue     pr_data = _poll_mergeability(owner, repo, number, opener=opener, token=token, sleeper=sleeper)     if pr_data is None:         continue     state = str(pr_data.get('<str>') or '<str>').lower()     url = pr.get('<str>') or f'{owner}<str>{repo}<str>{number}'     if state == '<str>':         dirty.append(url)     elif state == '<str>':         behind.append(url)"]
     N008["if dirty"]
     N009["lines = ['<str>']"]
-    N010["for url in dirty:
-    lines.append(f'<str>{url}')"]
+    N010["for url in dirty:     lines.append(f'<str>{url}')"]
     N011["append(...)"]
     N012["print(...)"]
     N013["if behind"]
     N014["lines = ['<str>']"]
-    N015["for url in behind:
-    lines.append(f'<str>{url}')"]
+    N015["for url in behind:     lines.append(f'<str>{url}')"]
     N016["append(...)"]
     N017["print(...)"]
     N018["end"]

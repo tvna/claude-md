@@ -30,13 +30,7 @@ flowchart TD
     N002["lines = splitlines(...)"]
     N003["start = None"]
     N004["end = None"]
-    N005["for index, line in enumerate(lines):
-    if DOC_SECTION_3_HEADING_RE.match(line):
-        start = index
-        continue
-    if start is not None and DOC_NEXT_SECTION_RE.match(line):
-        end = index
-        break"]
+    N005["for index, line in enumerate(lines):     if DOC_SECTION_3_HEADING_RE.match(line):         start = index         continue     if start is not None and DOC_NEXT_SECTION_RE.match(line):         end = index         break"]
     N006["if start is None"]
     N007["return ([], 0)"]
     N008["if end is None"]
@@ -70,17 +64,7 @@ flowchart TD
     N001["parse_master_subtitles(...)"]
     N002["result = {}"]
     N003["pending = None"]
-    N004["for line in text.splitlines():
-    section_match = MASTER_SECTION_RE.match(line)
-    if section_match:
-        pending = int(section_match.group(1))
-        continue
-    if pending is None:
-        continue
-    subtitle_match = MASTER_SUBTITLE_RE.match(line)
-    if subtitle_match:
-        result[pending] = subtitle_match.group(1)
-        pending = None"]
+    N004["for line in text.splitlines():     section_match = MASTER_SECTION_RE.match(line)     if section_match:         pending = int(section_match.group(1))         continue     if pending is None:         continue     subtitle_match = MASTER_SUBTITLE_RE.match(line)     if subtitle_match:         result[pending] = subtitle_match.group(1)         pending = None"]
     N005["return result"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -105,13 +89,7 @@ flowchart TD
     N002["lines = splitlines(...)"]
     N003["start = None"]
     N004["end = None"]
-    N005["for i, line in enumerate(lines):
-    if DOC_GLOSSARY_HEADING_RE.match(line):
-        start = i + 1
-        continue
-    if start is not None and DOC_HEADING_RE.match(line):
-        end = i
-        break"]
+    N005["for i, line in enumerate(lines):     if DOC_GLOSSARY_HEADING_RE.match(line):         start = i + 1         continue     if start is not None and DOC_HEADING_RE.match(line):         end = i         break"]
     N006["if start is None"]
     N007["return set()"]
     N008["if end is None"]
@@ -135,13 +113,7 @@ flowchart TD
 flowchart TD
     N001["parse_doc_wording_counts(...)"]
     N002["hits = []"]
-    N003["for lineno, line in enumerate(text.splitlines(), start=1):
-    for match in DOC_WORDING_RE.finditer(line):
-        token = match.group(1).lower()
-        count = WORD_TO_INT.get(token, _safe_int(token))
-        if count is None:
-            continue
-        hits.append((lineno, match.group(0), count))"]
+    N003["for lineno, line in enumerate(text.splitlines(), start=1):     for match in DOC_WORDING_RE.finditer(line):         token = match.group(1).lower()         count = WORD_TO_INT.get(token, _safe_int(token))         if count is None:             continue         hits.append((lineno, match.group(0), count))"]
     N004["return hits"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -202,20 +174,10 @@ flowchart TD
     N033["print(...)"]
     N034["failures += 1"]
     N035["expected_count = max(...)"]
-    N036["for lineno, phrase, count in parse_doc_wording_counts(doc_text):
-    if count != expected_count:
-        print(f'<str>{doc_path}<str>{lineno}<str>{phrase}<str>{count}<str>{expected_count}<str>', file=sys.stderr)
-        failures += 1"]
+    N036["for lineno, phrase, count in parse_doc_wording_counts(doc_text):     if count != expected_count:         print(f'<str>{doc_path}<str>{lineno}<str>{phrase}<str>{count}<str>{expected_count}<str>', file=sys.stderr)         failures += 1"]
     N037["master_subtitles = parse_master_subtitles(...)"]
     N038["doc_row_labels = parse_doc_row_labels(...)"]
-    N039["for n in sorted(master_sections & matrix_rows):
-    sub_text = master_subtitles.get(n)
-    label_text = doc_row_labels.get(n)
-    if sub_text is None or label_text is None:
-        continue
-    if normalize_label(sub_text) != normalize_label(label_text):
-        print(f'<str>{doc_path}<str>{section_offset}<str>{n}<str>{label_text}<str>{n}<str>{sub_text}<str>', file=sys.stderr)
-        failures += 1"]
+    N039["for n in sorted(master_sections & matrix_rows):     sub_text = master_subtitles.get(n)     label_text = doc_row_labels.get(n)     if sub_text is None or label_text is None:         continue     if normalize_label(sub_text) != normalize_label(label_text):         print(f'<str>{doc_path}<str>{section_offset}<str>{n}<str>{label_text}<str>{n}<str>{sub_text}<str>', file=sys.stderr)         failures += 1"]
     N040["glossary_entries = parse_glossary_entries(...)"]
     N041["missing_glossary = sorted(...)"]
     N042["if missing_glossary"]
@@ -387,8 +349,7 @@ flowchart TD
     N016["print(...)"]
     N017["print(...)"]
     N018["return 0"]
-    N019["for line in errors:
-    print(line)"]
+    N019["for line in errors:     print(line)"]
     N020["return 1"]
     N001 -->|"start"| N002
     N002 --> N003

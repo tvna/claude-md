@@ -8,23 +8,7 @@ This file is generated from `scripts/_pr_merge.py` by `python3 scripts/script_as
 flowchart TD
     N001["_list_open_prs_by_author(...)"]
     N002["results = []"]
-    N003["for page in range(1, 11):
-    url = f'{_API_ROOT}<str>{repo}<str>{page}'
-    code, body = apply_call(method='<str>', url=url, payload=None, token=token)
-    if not 200 <= code < 300:
-        raise RuntimeError(f'<str>{code}<str>{body[:200]}')
-    try:
-        data = json.loads(body)
-    except json.JSONDecodeError as exc:
-        raise RuntimeError(f'<str>{body[:200]}') from exc
-    if not isinstance(data, list):
-        raise RuntimeError(f'<str>{body[:200]}')
-    for pr in data:
-        login = pr.get('<str>', {}).get('<str>', '<str>') if isinstance(pr, dict) else '<str>'
-        if login == author_login:
-            results.append(pr)
-    if len(data) < 100:
-        break"]
+    N003["for page in range(1, 11):     url = f'{_API_ROOT}<str>{repo}<str>{page}'     code, body = apply_call(method='<str>', url=url, payload=None, token=token)     if not 200 <= code < 300:         raise RuntimeError(f'<str>{code}<str>{body[:200]}')     try:         data = json.loads(body)     except json.JSONDecodeError as exc:         raise RuntimeError(f'<str>{body[:200]}') from exc     if not isinstance(data, list):         raise RuntimeError(f'<str>{body[:200]}')     for pr in data:         login = pr.get('<str>', {}).get('<str>', '<str>') if isinstance(pr, dict) else '<str>'         if login == author_login:             results.append(pr)     if len(data) < 100:         break"]
     N004["return results"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -37,12 +21,7 @@ flowchart TD
 flowchart TD
     N001["_poll_pr_mergeability(...)"]
     N002["pr = {}"]
-    N003["for attempt in range(_MERGE_POLL_ATTEMPTS):
-    if attempt:
-        sleeper(_MERGE_POLL_INTERVAL_SECONDS)
-    pr = _get_pr(repo=repo, number=number, token=token, apply_call=apply_call)
-    if pr.get('<str>') is not None:
-        break"]
+    N003["for attempt in range(_MERGE_POLL_ATTEMPTS):     if attempt:         sleeper(_MERGE_POLL_INTERVAL_SECONDS)     pr = _get_pr(repo=repo, number=number, token=token, apply_call=apply_call)     if pr.get('<str>') is not None:         break"]
     N004["return pr"]
     N001 -->|"start"| N002
     N002 --> N003

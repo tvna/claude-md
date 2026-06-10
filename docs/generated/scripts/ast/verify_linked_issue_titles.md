@@ -56,9 +56,7 @@ flowchart TD
     N008["if not title_policy.follows_naming_convention(title, kind='issue')"]
     N009["hint = naming_convention_hint(...)"]
     N010["append(...)"]
-    N011["for finding in title_policy.type_fit_findings(title, kind='<str>'):
-    formatted = title_policy.format_type_fit_finding(finding)
-    errors.append(f'<str>{number}<str>{formatted}{suffix}')"]
+    N011["for finding in title_policy.type_fit_findings(title, kind='<str>'):     formatted = title_policy.format_type_fit_finding(finding)     errors.append(f'<str>{number}<str>{formatted}{suffix}')"]
     N012["return errors"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -86,19 +84,7 @@ flowchart TD
     N005["print(...)"]
     N006["return 0"]
     N007["fail = 0"]
-    N008["for n in refs:
-    issue_title = get_issue_title(repo, n, runner=runner)
-    if issue_title is None:
-        print(f'<str>{n}<str>{repo}<str>')
-        fail = 1
-        continue
-    errors = _validate_issue_title(issue_title, n)
-    if errors:
-        for line in errors:
-            print(line)
-        fail = 1
-    else:
-        print(f'<str>{n}<str>')"]
+    N008["for n in refs:     issue_title = get_issue_title(repo, n, runner=runner)     if issue_title is None:         print(f'<str>{n}<str>{repo}<str>')         fail = 1         continue     errors = _validate_issue_title(issue_title, n)     if errors:         for line in errors:             print(line)         fail = 1     else:         print(f'<str>{n}<str>')"]
     N009["return fail"]
     N001 -->|"start"| N002
     N002 --> N003

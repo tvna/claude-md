@@ -135,7 +135,7 @@ flowchart TD
 flowchart TD
     N001["render_report(...)"]
     N002["metrics = decision.metrics"]
-    N003["lines = [f'<str>{decision.kind}', f'<str>{metrics.candidate_count}', f'<str>{metrics.replacement_count}', f'<str>{metrics.closed_superseded_count}', '<str>' + ('<str>'.join((f'<str>{n}' for n in metrics.merged_numbers)) if metrics.merged_numbers else '<str>'), f\"<str>{metrics.first_pr_created_at or '<str>'}\", f\"<str>{(metrics.elapsed_seconds if metrics.elapsed_seconds is not None else '<str>')}\"]"]
+    N003["lines = [f'<str>{decision.kind}', f'<str>{metrics.candidate_count}', f'<str>{metrics.replacement_count}', f'<str>{metrics.closed_superseded_count}', '<str>' + ('<str>'.join((f'<str>{n}' for n in metrics.merged_numbers)) if metrics.merged_numbers else '<str>'), f'<str>{metrics.first_pr_created_at or '<str>'}', f'<str>{(metrics.elapsed_seconds if metrics.elapsed_seconds is not None else '<str>')}']"]
     N004["extend(...)"]
     N005["if decision.kind == 'allow'"]
     N006["insert(...)"]

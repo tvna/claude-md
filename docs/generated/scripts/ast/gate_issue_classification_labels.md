@@ -12,8 +12,7 @@ flowchart TD
     N004["raise ValueError('<str>')"]
     N005["names = [entry['<str>'] for entry in raw if isinstance(entry, dict) and isinstance(entry.get('<str>'), str)]"]
     N006["axes = {}"]
-    N007["for axis, prefix in _AXIS_PREFIXES:
-    axes[axis] = frozenset((name for name in names if name.startswith(prefix)))"]
+    N007["for axis, prefix in _AXIS_PREFIXES:     axes[axis] = frozenset((name for name in names if name.startswith(prefix)))"]
     N008["return axes"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -31,12 +30,7 @@ flowchart TD
     N001["missing_axes(...)"]
     N002["present = {label for label in labels if isinstance(label, str)}"]
     N003["missing = []"]
-    N004["for axis, _prefix in _AXIS_PREFIXES:
-    valid = axes.get(axis) or frozenset()
-    if not valid:
-        continue
-    if not present & valid:
-        missing.append(axis)"]
+    N004["for axis, _prefix in _AXIS_PREFIXES:     valid = axes.get(axis) or frozenset()     if not valid:         continue     if not present & valid:         missing.append(axis)"]
     N005["return missing"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -50,9 +44,7 @@ flowchart TD
 flowchart TD
     N001["build_reason(...)"]
     N002["parts = []"]
-    N003["for axis in missing:
-    valid = sorted(axes.get(axis) or frozenset())
-    parts.append(f\"<str>{axis}<str>{'<str>'.join(valid)}<str>\")"]
+    N003["for axis in missing:     valid = sorted(axes.get(axis) or frozenset())     parts.append(f'<str>{axis}<str>{'<str>'.join(valid)}<str>')"]
     N004["needed = join(...)"]
     N005["return f'<str>{_TARGET_TOOL}<str>{needed}<str>'"]
     N001 -->|"start"| N002
