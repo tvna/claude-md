@@ -75,6 +75,30 @@
               "hooks": [
                 {
                   "type": "command",
+                  "command": "scripts/install-zizmor.sh"
+                }
+              ]
+            },
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "scripts/install-lychee.sh"
+                }
+              ]
+            },
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "scripts/install-betterleaks.sh"
+                }
+              ]
+            },
+            {
+              "hooks": [
+                {
+                  "type": "command",
                   "command": "scripts/session_uv_local_pin.sh"
                 }
               ]

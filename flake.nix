@@ -28,6 +28,20 @@
           rtkVersion = "0.42.1";
           actionlintVersion = "1.7.7";
           ccusageVersion = "20.0.6";
+          # zizmor / lychee / betterleaks are provisioned ONLY by the
+          # SessionStart installers (scripts/install-{zizmor,lychee,betterleaks}.sh)
+          # in Claude Code on the Web sessions; they are deliberately NOT wired
+          # into the nix devShell / sharedPackages. flake.nix stays the single
+          # pin source of truth (scripts/flake_pin.py reads these via the same
+          # contract as rtk/waza), but the let-bindings below are intentionally
+          # unused by any derivation -- they exist so the pin lives in exactly
+          # one place and scan_flake_pin_drift.py can guard the checksum. They
+          # run alongside the existing scan_workflow_*/scan_markdown_links/
+          # scan_secrets gates during the effectiveness-measurement phase; no
+          # existing gate is removed. Refs #1610.
+          zizmorVersion = "1.25.2";
+          lycheeVersion = "0.24.2";
+          betterleaksVersion = "1.4.1";
           claudeCodeNative = {
             aarch64-linux = {
               package = "claude-code-linux-arm64";
@@ -129,6 +143,54 @@
             x86_64-linux = {
               pkg = "ccusage-linux-x64";
               hash = "sha256-Wl94vPpOZ4A74sG3AFDz64grUmUxPTF/PIWze7yO/xw=";
+            };
+          }.${system};
+          # zizmor (zizmorcore/zizmor) ships per-target release tarballs, each
+          # unpacking to a single bare ``zizmor`` binary. Only a gnu linux build
+          # is published per arch, so the asset carries no shared target suffix
+          # to template -- the full filename is stored verbatim (rtk shape). The
+          # filename embeds no version, so a bump only rewrites version + hashes.
+          zizmorNative = {
+            aarch64-linux = {
+              asset = "zizmor-aarch64-unknown-linux-gnu.tar.gz";
+              hash = "sha256-S0uUkREsKgmzGBAcDTNJtzrxxPUy4JfdbQFk8qvadg0=";
+            };
+            x86_64-linux = {
+              asset = "zizmor-x86_64-unknown-linux-gnu.tar.gz";
+              hash = "sha256-qh+s0QXw2D/lxVsa3NnXQX3l2DqidHH5HcC2bPOANXc=";
+            };
+          }.${system};
+          # lychee (lycheeverse/lychee) publishes musl-static per-target tarballs
+          # that unpack to ``lychee-<target>/lychee`` (a nested dir, unlike rtk's
+          # bare layout -- the installer locates the binary with ``find``). The
+          # release tag is ``lychee-v<version>`` (not ``v<version>``); the
+          # flake_pin.py url_template encodes that prefix. Asset embeds no
+          # version.
+          lycheeNative = {
+            aarch64-linux = {
+              asset = "lychee-aarch64-unknown-linux-musl.tar.gz";
+              hash = "sha256-XQsOOuqyQPQZIMYzpur5dZm+bu3aA0s26Fjt59ul5TU=";
+            };
+            x86_64-linux = {
+              asset = "lychee-x86_64-unknown-linux-musl.tar.gz";
+              hash = "sha256-c2V6ERgZowxHwINSiWeW8j1k5OsrPtObbTIUkkFWb8U=";
+            };
+          }.${system};
+          # betterleaks (betterleaks/betterleaks) ships per-arch Go-static
+          # tarballs holding a bare ``betterleaks`` binary (plus LICENSE/README).
+          # The asset filenames EMBED the version, so -- like actionlintNative --
+          # they MUST stay STATIC strings (no ``${betterleaksVersion}``): the
+          # flake_pin.py _native_block regex is brace-naive and a ``}`` inside an
+          # interpolation would truncate the match. A version bump must rewrite
+          # the embedded filenames here alongside the version and hashes.
+          betterleaksNative = {
+            aarch64-linux = {
+              asset = "betterleaks_1.4.1_linux_arm64.tar.gz";
+              hash = "sha256-I+0FziF8IdOecjxtlwqf0Lnptobq4a6/nXePt6d6zJI=";
+            };
+            x86_64-linux = {
+              asset = "betterleaks_1.4.1_linux_x64.tar.gz";
+              hash = "sha256-JjX/mI2RlM0wcBVROFiQgaVKNDjXnKm4Mmit3S/YRMw=";
             };
           }.${system};
           pinned-uv = pkgs.stdenvNoCC.mkDerivation {
