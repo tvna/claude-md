@@ -78,6 +78,7 @@ than serving as precedent for new PRD files.
 | [performance-metrics.md](standards/performance-metrics.md) | Phase 2 design-only measurement schema for the performance impact of master-source edits. No harness lands with this document. | #58, #61 | (none; Phase 3 harness tracked in #62) |
 | [sast-tooling.md](standards/sast-tooling.md) | Adopted CodeQL dataflow (taint) scan over `scripts/` (advanced setup, security-extended, informational-first) and the recorded rejection of Pyre (mypy overlap) and Pysa (pyre engine plus bespoke taint models). | #1237 | `.github/workflows/codeql.yml`; `.github/codeql/codeql-config.yml`; `pyproject.toml` (ruff `S`, mypy) |
 | [host-unit-duckdb-metrics.md](standards/host-unit-duckdb-metrics.md) | OTel-compatible per-host DuckDB store for the quality-vs-scope proportionality signal. Supersedes the orphan-branch JSON approach; collect early in DuckDB, export to OTLP later. | #815, #814, #226 | `metrics/duckdb/schema/v1/schema.sql`; `docs/standards/performance-metrics.md` |
+| [tool-overlap-measurement.md](standards/tool-overlap-measurement.md) | Effectiveness-measurement contract for running each new tool (zizmor / lychee / betterleaks) alongside its overlapping gate on the same scope: what is recorded, the redaction rule, the measurement window, and the keep / replace / drop decision rule. | #1618, #1610 | `scripts/measure_tool_overlap.py`; `metrics/duckdb/schema/v3/schema.sql`; `.github/workflows/measure-tool-overlap.yml`; `tests/test_measure_tool_overlap.py` |
 
 ## runbooks/ -- operator procedures
 
