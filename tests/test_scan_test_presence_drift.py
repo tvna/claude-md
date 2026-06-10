@@ -13,8 +13,22 @@ from pathlib import Path
 
 import pytest
 import scan_test_presence_drift as gate
+import yaml
 
 pytestmark = pytest.mark.shard_default
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+
+
+def _local_hook_entries() -> dict[str, str]:
+    """Return {hook id: entry} for the repo-local pre-commit hooks."""
+    config = yaml.safe_load((REPO_ROOT / ".pre-commit-config.yaml").read_text(encoding="utf-8"))
+    entries: dict[str, str] = {}
+    for repo in config["repos"]:
+        if repo.get("repo") == "local":
+            for hook in repo["hooks"]:
+                entries[hook["id"]] = hook["entry"]
+    return entries
 
 
 # --- M2 test-module presence -------------------------------------------------
@@ -264,3 +278,45 @@ class TestRepositoryTreeIsClean:
     def test_github_api_registry_matches_detection(self) -> None:
         detected = gate.detect_github_api_scripts(gate.SCRIPTS_DIR)
         assert detected == set(gate.GITHUB_API_SCRIPTS)
+
+
+class TestPreCommitWiring:
+    """Refs #1632 (PR #1625 retro, Fact 4): the scanner must fire at commit time.
+
+    Wiring it into ``.pre-commit-config.yaml`` is the durable gate that closes
+    the Fact 4 gap (a new workflow-invoked script without its M3 contract test
+    previously surfaced only in CI). The scanner already runs in
+    verify-agents.yml and preflight_all.py; this asserts the commit-time mirror.
+    """
+
+    def test_hook_is_registered(self) -> None:
+        entries = _local_hook_entries()
+        assert "scan-test-presence-drift" in entries
+        assert "scripts/scan_test_presence_drift.py verify" in entries["scan-test-presence-drift"]
+
+    def test_throwaway_workflow_script_without_contract_is_flagged(
+        self, tmp_path: Path
+    ) -> None:
+        # Reproduce Fact 4 in miniature: a new public script invoked by a
+        # workflow, with a test module (M2 ok) but no CONTRACT_REGISTRY entry,
+        # must be reported as missing its M3 contract test -- the exact class the
+        # #1625 first attempt missed.
+        scripts = tmp_path / "scripts"
+        tests = tmp_path / "tests"
+        workflows = tmp_path / "workflows"
+        for d in (scripts, tests, workflows):
+            d.mkdir()
+        (scripts / "throwaway_tool.py").write_text("print('hi')\n", encoding="utf-8")
+        (tests / "test_throwaway_tool.py").write_text("", encoding="utf-8")
+        (tests / "test_workflow_cli_contracts.py").write_text(
+            "CONTRACT_REGISTRY = {}\n", encoding="utf-8"
+        )
+        (workflows / "throwaway.yml").write_text(
+            "jobs:\n  x:\n    steps:\n"
+            "      - run: uv run python scripts/throwaway_tool.py verify\n",
+            encoding="utf-8",
+        )
+        workflow_scripts = gate.collect_workflow_scripts(workflows, scripts)
+        registry = gate.parse_contract_registry_scripts(tests / "test_workflow_cli_contracts.py")
+        missing = gate.find_missing_cli_contracts(workflow_scripts, registry)
+        assert "throwaway_tool" in missing

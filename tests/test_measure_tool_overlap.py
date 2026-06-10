@@ -409,3 +409,90 @@ class TestOrchestration:
         rc = mto.main(["--scope-root", str(REPO_ROOT), "--commit", "x", "--host-id", "h"])
         assert rc == 0
         assert "Tool overlap measurement" in capsys.readouterr().out
+
+
+class TestSmoke:
+    """Opt-in argv smoke validation (Refs #1632, Fact 1).
+
+    The collector parses leniently, so a tool that REJECTS its argv (empty
+    stdout, help on stderr) was recorded as a false zero-finding result. These
+    tests prove the smoke step turns that masquerade into a loud failure, while
+    an absent binary is a benign skip.
+    """
+
+    def _spec(self) -> mto.PairSpec:
+        return mto.PairSpec(
+            pair_name="secrets",
+            new_tool="betterleaks",
+            existing_gate="eg",
+            scope_label="s",
+            run_tool=lambda root: ([], 1.0),
+            collect_gate=lambda root: [],
+            argv_builder=lambda root: ["betterleaks", "dir", "."],
+        )
+
+    def test_empty_stdout_is_a_loud_fail(self) -> None:
+        # The exact Fact 1 shape: a rejected flag prints help to stderr and
+        # leaves stdout empty -- which must NOT pass as a clean (zero) scan.
+        result = mto.smoke_pair(self._spec(), REPO_ROOT, run=lambda argv, cwd: ("", 10.0))
+        assert result.status == "fail"
+        assert "no stdout" in result.detail
+
+    def test_unparseable_stdout_is_a_fail(self) -> None:
+        result = mto.smoke_pair(self._spec(), REPO_ROOT, run=lambda argv, cwd: ("not json", 1.0))
+        assert result.status == "fail"
+        assert "parseable JSON" in result.detail
+
+    def test_valid_json_is_ok(self) -> None:
+        # betterleaks emits the literal `null` for a clean scan -- valid JSON,
+        # non-empty stdout, so the argv was accepted.
+        result = mto.smoke_pair(self._spec(), REPO_ROOT, run=lambda argv, cwd: ("null\n", 1.0))
+        assert result.status == "ok"
+
+    def test_absent_binary_is_skipped(self) -> None:
+        def _absent(argv: object, cwd: object) -> tuple[str, float]:
+            raise mto.ToolUnavailableError("required tool 'betterleaks' is not on PATH")
+
+        result = mto.smoke_pair(self._spec(), REPO_ROOT, run=_absent)
+        assert result.status == "skipped"
+
+    def test_no_argv_builder_is_skipped(self) -> None:
+        spec = mto.PairSpec(
+            pair_name="p", new_tool="t", existing_gate="g", scope_label="s",
+            run_tool=lambda root: ([], 1.0), collect_gate=lambda root: [],
+        )
+        assert mto.smoke_pair(spec, REPO_ROOT).status == "skipped"
+
+    def test_cmd_smoke_exit_codes(self, capsys: pytest.CaptureFixture[str]) -> None:
+        ok = mto.PairSpec(
+            pair_name="ok", new_tool="t", existing_gate="g", scope_label="s",
+            run_tool=lambda root: ([], 1.0), collect_gate=lambda root: [],
+            argv_builder=lambda root: ["x"],
+        )
+        # Inject a passing then a failing run via _run monkeypatch is awkward for
+        # two pairs; instead exercise cmd_smoke through smoke_pair's real path
+        # with a binary that is absent (skip) -> exit 0.
+        assert mto.cmd_smoke([ok], REPO_ROOT) == 0
+        out = capsys.readouterr().out
+        assert "smoke ok" in out
+
+    def test_main_smoke_flag_skips_absent_binaries(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        # With --smoke and no binaries, every pair is skipped -> exit 0 (no-op
+        # on the coverage runner). Force ToolUnavailableError for determinism.
+        def _absent(argv: object, cwd: object) -> tuple[str, float]:
+            raise mto.ToolUnavailableError("absent")
+
+        monkeypatch.setattr(mto, "_run", _absent)
+        rc = mto.main(["--scope-root", str(REPO_ROOT), "--smoke"])
+        assert rc == 0
+        assert "skipped" in capsys.readouterr().out
+
+    def test_main_smoke_flag_fails_loud_on_bad_argv(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(mto, "_run", lambda argv, cwd: ("", 10.0))
+        monkeypatch.setattr(mto, "PAIRS", (self._spec(),))
+        rc = mto.main(["--scope-root", str(REPO_ROOT), "--smoke"])
+        assert rc == 1

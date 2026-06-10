@@ -133,6 +133,14 @@
         "hooks": [
           {
             "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/preflight_session_base_freshness.py session-start"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
             "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/check_pr_mergeability.py session-start"
           }
         ]
@@ -296,6 +304,15 @@
           {
             "type": "command",
             "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/preflight_commit_session_branch.py"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/preflight_session_base_freshness.py"
           }
         ]
       },

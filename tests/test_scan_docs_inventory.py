@@ -6,8 +6,29 @@ from pathlib import Path
 
 import pytest
 import scan_docs_inventory
+import yaml
 
 pytestmark = pytest.mark.shard_ci_ops
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+
+
+def test_pre_commit_hook_is_registered() -> None:
+    """Refs #1632 (PR #1625 retro, Fact 4): docs inventory must gate at commit.
+
+    Mirroring the CI scanner into ``.pre-commit-config.yaml`` is the durable
+    gate that fails a new standards doc missing its docs/INDEX.md row at commit
+    time, not only in CI.
+    """
+    config = yaml.safe_load((REPO_ROOT / ".pre-commit-config.yaml").read_text(encoding="utf-8"))
+    entries = {
+        hook["id"]: hook["entry"]
+        for repo in config["repos"]
+        if repo.get("repo") == "local"
+        for hook in repo["hooks"]
+    }
+    assert "scan-docs-inventory" in entries
+    assert "scripts/scan_docs_inventory.py verify" in entries["scan-docs-inventory"]
 
 
 def _write_index(root: Path, body: str) -> None:

@@ -217,6 +217,14 @@
               "hooks": [
                 {
                   "type": "command",
+                  "command": "python3 scripts/preflight_session_base_freshness.py session-start"
+                }
+              ]
+            },
+            {
+              "hooks": [
+                {
+                  "type": "command",
                   "command": "python3 scripts/check_pr_mergeability.py session-start"
                 }
               ]
@@ -380,6 +388,15 @@
                 {
                   "type": "command",
                   "command": "python3 scripts/preflight_commit_session_branch.py"
+                }
+              ]
+            },
+            {
+              "matcher": "Bash",
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "python3 scripts/preflight_session_base_freshness.py"
                 }
               ]
             },
@@ -687,6 +704,16 @@
               "hooks": [
                 {
                   "type": "command",
+                  "command": "python3 scripts/preflight_session_base_freshness.py session-start",
+                  "statusMessage": "Checking branch base freshness"
+                }
+              ]
+            },
+            {
+              "matcher": "startup|resume|clear|compact",
+              "hooks": [
+                {
+                  "type": "command",
                   "command": "python3 scripts/check_pr_mergeability.py session-start",
                   "statusMessage": "Checking open PR mergeability"
                 }
@@ -868,6 +895,16 @@
                   "type": "command",
                   "command": "python3 scripts/preflight_commit_session_branch.py",
                   "statusMessage": "Checking session branch before commit"
+                }
+              ]
+            },
+            {
+              "matcher": "^Bash$",
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "python3 scripts/preflight_session_base_freshness.py",
+                  "statusMessage": "Checking branch base before commit"
                 }
               ]
             },

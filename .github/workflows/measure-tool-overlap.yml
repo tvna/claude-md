@@ -57,6 +57,14 @@ jobs:
           scripts/install-betterleaks.sh
           echo "${HOME}/.local/bin" >> "$GITHUB_PATH"
 
+      - name: Smoke-check tool argv (Refs #1632, Fact 1)
+        # Before measuring, assert each tool ACCEPTS its argv and emits
+        # parseable JSON. A rejected flag (betterleaks's `--no-git` on `dir`
+        # printed help to stderr and emitted no JSON) otherwise masquerades as a
+        # zero-finding result; this step fails the build loud instead. The
+        # binaries are installed in the prior step, so none are skipped here.
+        run: uv run python scripts/measure_tool_overlap.py --smoke
+
       - name: Run overlap measurement
         env:
           # Ephemeral CI carries no persistent host identity; use a constant,
