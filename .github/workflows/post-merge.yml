@@ -207,7 +207,7 @@ jobs:
 
           ## Related Issue
 
-          Closes #960
+          Closes #__ISSUE_ANCHOR:generated-docs__
 
           ## Facts
 
@@ -271,11 +271,17 @@ jobs:
           # is not a force-push, so the all-branches non_fast_forward ruleset is
           # still honored. Mirrors the triage-report refresh path.
           # Refs #1437, #1466, #1560, #1574.
+          #
+          # Refs #1640: the tracking issue for this PR series lives in
+          # .github/tracking-issues.toml; render expands the __ISSUE_ANCHOR__
+          # token in the body, and the commit trailer resolves the same anchor.
+          python3 scripts/issue_anchors.py render --file /tmp/pr-body.md
+          TRACKING_ISSUE="$(python3 scripts/issue_anchors.py get generated-docs)"
           python3 scripts/pr_upsert.py upsert-files \
             --head "$PR_BRANCH" \
             --base "$GITHUB_REF_NAME" \
             --title "$PR_TITLE" \
-            --commit-body "Refs #960" \
+            --commit-body "Refs #${TRACKING_ISSUE}" \
             --body-file /tmp/pr-body.md \
             --from-diff docs/generated/ \
             --recreate

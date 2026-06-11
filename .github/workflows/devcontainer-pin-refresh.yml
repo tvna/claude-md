@@ -56,12 +56,15 @@ jobs:
           REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
+          # Refs #1640: the trailer's tracking issue lives in
+          # .github/tracking-issues.toml, not in this file.
+          TRACKING_ISSUE="$(python3 scripts/issue_anchors.py get devcontainer-pins)"
           python3 scripts/devcontainer_pin_pr.py refresh \
             --base main \
             --target-sha "$GITHUB_SHA" \
             --title "fix(devcontainer): pin published agent images" \
             --commit-subject "fix(devcontainer): pin published agent images" \
-            --commit-trailer "Refs #696" \
+            --commit-trailer "Refs #${TRACKING_ISSUE}" \
             --template .github/pr-body-templates/devcontainer-image-pins.md \
             --file .devcontainer/claude/devcontainer.json \
             --file .devcontainer/codex/devcontainer.json \

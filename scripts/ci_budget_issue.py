@@ -50,6 +50,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
+import issue_anchors
 from _github_api import apply_call as github_apply_call
 
 API_ROOT = "https://api.github.com"
@@ -60,7 +61,9 @@ API_ROOT = "https://api.github.com"
 ISSUE_MARKER = "<!-- ci-budget-breach-issue -->"
 ISSUE_TITLE = "ci(timings): verify-agents job over soft wall-time budget"
 ISSUE_LABELS = ("type:tracking", "layer:p3-harness")
-PARENT_ISSUE = 1156
+# Resolved from the declarative anchor table so a renumbering stays a
+# one-file diff (#1640).
+PARENT_ISSUE = issue_anchors.resolve("ci-budget-parent")
 
 ApplyCall = Callable[..., tuple[int, str]]
 

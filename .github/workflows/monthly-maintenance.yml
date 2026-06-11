@@ -27,7 +27,7 @@ on:
   workflow_dispatch:
     inputs:
       dry_run:
-        description: 'Preview only (assemble template, do not post comment on #178).'
+        description: 'Preview only (assemble template, do not post comment on the security tracking issue).'
         type: boolean
         required: true
         default: true
@@ -45,10 +45,11 @@ concurrency:
   group: attack-coverage-review-reminder
   cancel-in-progress: false
 
+# The reminder's target issue is resolved at runtime from
+# .github/tracking-issues.toml (security-tracking anchor). Refs #1640.
 env:
   REPO: ${{ github.repository }}
   RUNBOOK: docs/runbooks/attack-coverage-review-cadence.md
-  TRACKING_ISSUE: "178"
 
 jobs:
   remind:
@@ -83,6 +84,7 @@ jobs:
           COMMENT_PATH: ${{ steps.assemble.outputs.comment_path }}
         run: |
           set -euo pipefail
+          TRACKING_ISSUE="$(python3 scripts/issue_anchors.py get security-tracking)"
           if [ "${DRY_RUN}" = "true" ]; then
             echo "[dry-run] Would post review reminder comment on ${REPO}#${TRACKING_ISSUE}."
             exit 0
