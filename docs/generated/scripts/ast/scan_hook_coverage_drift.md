@@ -96,17 +96,60 @@ flowchart TD
     N004 --> N005
 ```
 
-## find_installer_drift(...)
+## validate_exemption(...)
 
 ```mermaid
 flowchart TD
-    N001["find_installer_drift(...)"]
-    N002["drift = []"]
-    N003["for name in sorted(claude_installers ^ codex_installers):     if name in exemptions:         continue     if name in claude_installers:         drift.append((name, '<str>', '<str>'))     else:         drift.append((name, '<str>', '<str>'))"]
-    N004["return drift"]
+    N001["validate_exemption(...)"]
+    N002["if not isinstance(spec, dict)"]
+    N003["return f'<str>{name!r}<str>'"]
+    N004["agents = get(...)"]
+    N005["if not isinstance(agents, list) or not agents or len(set(agents)) != len(agents) or (not set(agents) <= set(AGENTS))"]
+    N006["return f'<str>{name!r}<str>{list(AGENTS)}'"]
+    N007["if set(agents) == set(AGENTS)"]
+    N008["return f'<str>{name!r}<str>'"]
+    N009["rationale = get(...)"]
+    N010["if not isinstance(rationale, str) or not rationale.strip()"]
+    N011["return f'<str>{name!r}<str>'"]
+    N012["issue = get(...)"]
+    N013["if not isinstance(issue, int) or isinstance(issue, bool)"]
+    N014["return f'<str>{name!r}<str>'"]
+    N015["return '<str>'"]
+    N001 -->|"start"| N002
+    N002 -->|"true"| N003
+    N002 -->|"false"| N004
+    N004 --> N005
+    N005 -->|"true"| N006
+    N005 -->|"false"| N007
+    N007 -->|"true"| N008
+    N007 -->|"false"| N009
+    N009 --> N010
+    N010 -->|"true"| N011
+    N010 -->|"false"| N012
+    N012 --> N013
+    N013 -->|"true"| N014
+    N013 -->|"false"| N015
+```
+
+## find_installer_parity_violations(...)
+
+```mermaid
+flowchart TD
+    N001["find_installer_parity_violations(...)"]
+    N002["all_agents = set(...)"]
+    N003["universe = set(...)"]
+    N004["for names in installers_by_agent.values():     universe |= names"]
+    N005["violations = []"]
+    N006["for name in sorted(exemptions):     err = validate_exemption(name, exemptions[name])     if err:         violations.append(err)     elif name not in universe:         violations.append(f'<str>{name!r}<str>')"]
+    N007["for name in sorted(universe):     actual = {agent for agent in AGENTS if name in installers_by_agent.get(agent, set())}     spec = exemptions.get(name)     if spec is not None and (not validate_exemption(name, spec)):         declared_agents = spec['<str>']         declared = set(declared_agents) if isinstance(declared_agents, list) else set()         if actual != declared:             violations.append(f'<str>{name!r}<str>{sorted(declared)}<str>{sorted(actual)}<str>')         continue     if spec is not None:         continue     if actual != all_agents:         missing = sorted(all_agents - actual)         violations.append(f'<str>{name!r}<str>{sorted(actual)}<str>{missing}<str>')"]
+    N008["return violations"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 --> N004
+    N004 --> N005
+    N005 --> N006
+    N006 --> N007
+    N007 --> N008
 ```
 
 ## cmd_verify(...)
@@ -114,23 +157,21 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["cmd_verify(...)"]
-    N002["claude_path = Path(...)"]
-    N003["codex_path = Path(...)"]
-    N004["claude_settings = loads(...)"]
-    N005["codex_data = loads(...)"]
-    N006["claude_hooks = collect_claude_hooks(...)"]
-    N007["codex_hooks = collect_codex_hooks(...)"]
-    N008["missing = find_drift(...)"]
-    N009["claude_installers = collect_installers(...)"]
-    N010["codex_installers = collect_installers(...)"]
-    N011["installer_drift = find_installer_drift(...)"]
-    N012["for entry in missing:     print(f'<str>{entry.event}<str>{entry.script}<str>', file=sys.stderr)"]
-    N013["for name, present, absent in installer_drift:     print(f'<str>{name}<str>{present}<str>{absent}<str>', file=sys.stderr)"]
-    N014["for script, rationale in sorted(ALLOWLIST.items()):     print(f'<str>{script}<str>{rationale}', file=sys.stderr)"]
-    N015["for name, rationale in sorted(INSTALLER_PARITY_EXEMPTIONS.items()):     print(f'<str>{name}<str>{rationale}', file=sys.stderr)"]
-    N016["if missing or installer_drift"]
-    N017["return 1"]
-    N018["return 0"]
+    N002["claude_settings = loads(...)"]
+    N003["codex_data = loads(...)"]
+    N004["devin_data = loads(...)"]
+    N005["claude_hooks = collect_claude_hooks(...)"]
+    N006["codex_hooks = collect_codex_hooks(...)"]
+    N007["missing = find_drift(...)"]
+    N008["installers_by_agent = {'<str>': collect_installers(claude_settings), '<str>': collect_installers(codex_data), '<str>': collect_installers(devin_data)}"]
+    N009["parity_violations = find_installer_parity_violations(...)"]
+    N010["for entry in missing:     print(f'<str>{entry.event}<str>{entry.script}<str>', file=sys.stderr)"]
+    N011["for message in parity_violations:     print(f'<str>{message}<str>', file=sys.stderr)"]
+    N012["for script, rationale in sorted(ALLOWLIST.items()):     print(f'<str>{script}<str>{rationale}', file=sys.stderr)"]
+    N013["for name, spec in sorted(INSTALLER_PARITY_EXEMPTIONS.items()):     exempt_agents = spec.get('<str>')     exempt_rationale = spec.get('<str>')     print(f'<str>{name}<str>{exempt_agents}<str>{exempt_rationale}', file=sys.stderr)"]
+    N014["if missing or parity_violations"]
+    N015["return 1"]
+    N016["return 0"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 --> N004
@@ -144,10 +185,8 @@ flowchart TD
     N011 --> N012
     N012 --> N013
     N013 --> N014
-    N014 --> N015
-    N015 --> N016
-    N016 -->|"true"| N017
-    N016 -->|"false"| N018
+    N014 -->|"true"| N015
+    N014 -->|"false"| N016
 ```
 
 ## main(...)
@@ -160,9 +199,10 @@ flowchart TD
     N004["verify = add_parser(...)"]
     N005["add_argument(...)"]
     N006["add_argument(...)"]
-    N007["set_defaults(...)"]
-    N008["args = parse_args(...)"]
-    N009["return args.func(args)"]
+    N007["add_argument(...)"]
+    N008["set_defaults(...)"]
+    N009["args = parse_args(...)"]
+    N010["return args.func(args)"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 --> N004
@@ -171,4 +211,5 @@ flowchart TD
     N006 --> N007
     N007 --> N008
     N008 --> N009
+    N009 --> N010
 ```
