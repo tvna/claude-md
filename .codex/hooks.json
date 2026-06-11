@@ -26,6 +26,86 @@
         "hooks": [
           {
             "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && scripts/install-rtk.sh",
+            "statusMessage": "Provisioning rtk binary"
+          }
+        ]
+      },
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && scripts/install-apm.sh",
+            "statusMessage": "Provisioning apm binary"
+          }
+        ]
+      },
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && scripts/install-actionlint.sh",
+            "statusMessage": "Provisioning actionlint for the workflow-lint gate"
+          }
+        ]
+      },
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && scripts/install-waza.sh",
+            "statusMessage": "Provisioning waza binary"
+          }
+        ]
+      },
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && scripts/install-ccusage.sh",
+            "statusMessage": "Provisioning ccusage binary"
+          }
+        ]
+      },
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && scripts/install-zizmor.sh",
+            "statusMessage": "Provisioning zizmor binary"
+          }
+        ]
+      },
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && scripts/install-lychee.sh",
+            "statusMessage": "Provisioning lychee binary"
+          }
+        ]
+      },
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && scripts/install-betterleaks.sh",
+            "statusMessage": "Provisioning betterleaks binary"
+          }
+        ]
+      },
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
             "command": "cd \"$(git rev-parse --show-toplevel)\" && scripts/session_uv_local_pin.sh",
             "statusMessage": "Aligning local uv with repo pin"
           }

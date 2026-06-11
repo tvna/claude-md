@@ -79,21 +79,13 @@ ALLOWLIST: dict[str, str] = {
 # installer absent here -- such as ``install-bun.sh`` -- MUST be wired into
 # every agent or the gate fails loudly.
 #
-# The eight entries below are all Claude-only provisioners for the Claude Code
-# on the Web remote environment (``CLAUDE_CODE_REMOTE=true``). Whether codex /
-# devin sessions should also provision these tools is the open cross-agent
-# audit tracked in #1604; listing them here keeps each gap visible and
-# auditable rather than excluded from comparison.
-INSTALLER_PARITY_EXEMPTIONS: dict[str, str] = {
-    "install-rtk": "Claude-only Web provisioner for the rtk binary; cross-agent scope pending #1604 audit.",
-    "install-apm": "Claude-only Web provisioner for the apm binary; cross-agent scope pending #1604 audit.",
-    "install-actionlint": "Claude-only Web provisioner for the actionlint binary; cross-agent scope pending #1604 audit.",
-    "install-waza": "Claude-only Web provisioner for the waza binary; cross-agent scope pending #1604 audit.",
-    "install-ccusage": "Claude-only Web provisioner for the ccusage binary; cross-agent scope pending #1604 audit.",
-    "install-zizmor": "Claude-only Web provisioner for the zizmor binary; cross-agent scope pending #1604 audit.",
-    "install-lychee": "Claude-only Web provisioner for the lychee binary; cross-agent scope pending #1604 audit.",
-    "install-betterleaks": "Claude-only Web provisioner for the betterleaks binary; cross-agent scope pending #1604 audit.",
-}
+# Empty since #1608: the eight formerly Claude-only provisioners (rtk, apm,
+# actionlint, waza, ccusage, zizmor, lychee, betterleaks) resolved the #1606
+# cross-agent audit as "shared" and are now wired into claude, codex, and devin
+# (their remote gates widened to CODEX_CODE_REMOTE), so no installer needs an
+# exemption. Add an entry here only for a future installer that is deliberately
+# scoped to a strict subset of agents, with a documented per-agent rationale.
+INSTALLER_PARITY_EXEMPTIONS: dict[str, str] = {}
 
 # Hook event keys recognised in both config files.
 HOOK_EVENTS = ("SessionStart", "PreToolUse", "PostToolUse")
