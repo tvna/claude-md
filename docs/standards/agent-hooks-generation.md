@@ -60,14 +60,29 @@ explicit-use binaries `rtk`, `apm`, `waza`, `ccusage`, `zizmor`, `lychee`,
 versus provisioned for uniformity. `ccusage` is an accepted no-op under
 codex/devin, where its Claude-scoped telemetry has no data source.
 
-The `wired` field records the **current** wiring. Installers not yet wired into
-codex+devin carry a `wiring_followup`: the actual wiring **and** the remote-gate
-widening it needs (each not-yet-shared script gates on `CLAUDE_CODE_REMOTE` only,
-so config wiring alone is a no-op under codex's `CODEX_CODE_REMOTE` signal -- the
-script must also widen its gate and persist PATH for codex, mirroring
-`install-uv.sh`) are deferred to
-[#1608](https://github.com/tvna/claude-md/issues/1608). This issue (#1606) is
-audit-only.
+The `wired` field records the current wiring. As of
+[#1608](https://github.com/tvna/claude-md/issues/1608) every installer is wired
+into all three agents and each script's remote gate accepts both
+`CLAUDE_CODE_REMOTE` and `CODEX_CODE_REMOTE` (mirroring `install-uv.sh`), so the
+provisioning is actually operative under codex/devin rather than a no-op.
+
+### Parity gate
+
+Cross-agent installer parity is enforced by a durable deterministic gate --
+`scripts/scan_hook_coverage_drift.py verify`, which runs in
+[`preflight_all.py`](../../scripts/preflight_all.py) and the `verify-agents.yml`
+CI workflow (Refs
+[#1607](https://github.com/tvna/claude-md/issues/1607),
+[#1609](https://github.com/tvna/claude-md/issues/1609)). It reads
+`.claude/settings.json`, `.codex/hooks.json`, and `.devin/hooks.v1.json`
+directly (devin is not assumed to mirror codex) and fails when an installer is
+wired into a strict subset of agents. The only escape hatch is a per-agent
+**contract** in `INSTALLER_PARITY_EXEMPTIONS`: an entry must declare the exact
+`agents` subset, a `rationale`, and a tracking `issue`, and the gate verifies
+that declaration matches the actual wiring -- a stale, dangling, or
+all-agents-covering exemption fails loudly, so a genuinely-missing agent can no
+longer hide behind it. This turns the `install-bun` claude-only miss that
+reached the operator's eye into a gate.
 
 ## The CWD-independence wrapper
 
