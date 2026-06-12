@@ -149,12 +149,20 @@ intelligence state, not repository ownership or issue purpose.
 |---|---|---|
 | `severity:security` | Human or security workflow | Bias toward investigation |
 | `severity:non-ascii-content` | Non-ASCII content scan | Content-boundary signal |
-| `threat:intel-needed` | `issue-pr-triage.yml` / `scripts/threat_intel_triage.py` | Collect threat intelligence before ordinary routing |
-| `threat:response-needed` | `issue-pr-triage.yml` / `scripts/threat_intel_triage.py` | Block autonomous PRs until response planning occurs |
+| `threat:intel-needed` | Manual (owner) since #1645 | Collect threat intelligence before ordinary routing |
+| `threat:response-needed` | Manual (owner) since #1645 | Investigate + response planning before an autonomous PR |
 
-Threat labels may be removed only when the finding is proven stale, false
-positive, or remediated in the linked evidence trail. Source outages do not
-prove safety.
+Since [#1645](https://github.com/tvna/claude-md/issues/1645) the `threat:*`
+labels are **no longer auto-applied per issue/PR**. Threat-intelligence findings
+are repository-global, so `scripts/threat_intel_triage.py` aggregates them into a
+single idempotent comment on the #178 security umbrella (posted weekly by the
+`dependency-threat-triage` job in `.github/workflows/weekly-maintenance.yml`)
+instead of stamping a label onto whichever item triggered a run. The label
+definitions remain for manual owner annotation; an existing label may be removed
+only when the finding is proven stale, false positive, or remediated in the
+linked evidence trail. Source outages do not prove safety. See
+[`docs/runbooks/issue-triage.md`](../runbooks/issue-triage.md#threat-0-to-2) for
+the aggregation mechanism.
 
 ## Area Labels
 

@@ -235,7 +235,6 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("security_drift_report.py", "post-comment"): "test_security_drift_report_aggregate_and_post_comment_match_workflow_args",
     ("security_drift_report.py", "file-family-issues"): "test_security_drift_report_file_family_issues_matches_workflow_args",
     ("skill_quality_gate.py", "verify"): "test_skill_quality_gate_verify_matches_workflow_args",
-    ("threat_intel_triage.py", "apply-labels"): "test_threat_intel_apply_labels_matches_workflow_args",
     ("threat_intel_triage.py", "scan"): "test_threat_intel_scan_matches_workflow_args",
     ("threat_intel_triage.py", "comment"): "test_threat_intel_comment_matches_workflow_args",
     ("title_policy.py", "verify"): "test_title_policy_verify_matches_workflow_kind_env",
@@ -1749,65 +1748,61 @@ def test_threat_intel_scan_matches_workflow_args(
             "--repo-root",
             ".",
             "--labels",
-            "type:fix",
+            "",
             "--ghsa-live",
             "--malpkg-live",
             "--epss-live",
-            "--github-output",
-            str(tmp_path / "output"),
             "--summary-file",
             str(tmp_path / "summary.md"),
+            "--github-output",
+            str(tmp_path / "output"),
             "--comment-file",
-            str(tmp_path / "triage-comment.md"),
+            str(tmp_path / "threat-aggregate.md"),
+            "--fail-on-intel",
         ]
     ) == 0
     # scan must render the same markdown to the comment file that the
     # comment subcommand later posts (the two surfaces share render_summary_markdown).
-    assert (tmp_path / "triage-comment.md").exists()
-
-
-def test_threat_intel_apply_labels_matches_workflow_args(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """apply-labels subcommand accepts the --add-labels/--remove-labels args used by the workflow."""
-    monkeypatch.setenv("GH_TOKEN", "tok")
-    monkeypatch.setenv("REPO", "owner/repo")
-    monkeypatch.setenv("NUMBER", "42")
-    monkeypatch.setattr(threat_intel_triage, "_apply_labels", lambda **kw: 0)
-
-    assert threat_intel_triage.main(["apply-labels", "--add-labels", "threat:intel-needed"]) == 0
-    assert threat_intel_triage.main(["apply-labels", "--remove-labels", "threat:response-needed"]) == 0
-    assert threat_intel_triage.main(["apply-labels"]) == 0
+    assert (tmp_path / "threat-aggregate.md").exists()
 
 
 def test_threat_intel_comment_matches_workflow_args(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """comment subcommand accepts the argv shapes used by issue-pr-triage.yml.
+    """comment subcommand accepts the argv shapes used by weekly-maintenance.yml.
 
-    The ``Publish triage evidence comment`` step invokes both branches:
-    ``comment --body-file <f>`` when findings fired (create allowed) and
-    ``comment --body-file <f> --update-only`` when none did. The
-    _upsert_comment boundary is stubbed so the contract exercises argv/env
-    wiring without network access.
+    The ``Aggregate findings onto the security tracking issue`` step invokes
+    both branches against the #178 umbrella, with the issue number resolved at
+    runtime via ``issue_anchors.py`` and passed as ``--issue`` (never
+    hardcoded): ``comment --body-file <f> --issue <n> --marker <m>`` when
+    findings fired (create allowed) and the same plus ``--update-only`` when
+    none did. The _upsert_comment boundary is stubbed so the contract
+    exercises argv/env wiring without network access.
     """
     monkeypatch.setenv("GH_TOKEN", "tok")
     monkeypatch.setenv("REPO", "owner/repo")
-    monkeypatch.setenv("NUMBER", "42")
-    body_file = tmp_path / "triage-comment.md"
+    # No NUMBER env: the workflow passes the tracking issue via --issue.
+    body_file = tmp_path / "threat-aggregate.md"
     body_file.write_text("## Threat intelligence triage\n", encoding="utf-8")
+    marker = "<!-- threat-intel-aggregate v1 -->"
 
-    seen: list[bool] = []
+    seen: list[dict[str, object]] = []
 
     def fake_upsert(**kw: object) -> int:
-        seen.append(bool(kw["create"]))
+        seen.append(kw)
         return 0
 
     monkeypatch.setattr(threat_intel_triage, "_upsert_comment", fake_upsert)
 
-    assert threat_intel_triage.main(["comment", "--body-file", str(body_file)]) == 0
-    assert threat_intel_triage.main(["comment", "--body-file", str(body_file), "--update-only"]) == 0
-    assert seen == [True, False]
+    assert threat_intel_triage.main(
+        ["comment", "--body-file", str(body_file), "--issue", "178", "--marker", marker]
+    ) == 0
+    assert threat_intel_triage.main(
+        ["comment", "--body-file", str(body_file), "--issue", "178", "--marker", marker, "--update-only"]
+    ) == 0
+    assert [kw["create"] for kw in seen] == [True, False]
+    assert all(kw["number"] == 178 for kw in seen)
+    assert all(kw["marker"] == marker for kw in seen)
 
 
 def test_pr_upsert_find_matches_workflow_args(
@@ -2049,48 +2044,6 @@ def test_validate_json_syntax_verify_matches_workflow_args() -> None:
         "--file", ".github/rulesets/main.json",
         "--file", ".github/rulesets/all-branches.json",
     ]) == 0
-
-
-def test_pr_label_mutation_jobs_have_pull_request_write() -> None:
-    offenders: list[str] = []
-    for workflow in sorted(_WORKFLOWS_DIR.glob("*.yml")):
-        raw = workflow.read_text(encoding="utf-8")
-        try:
-            document = yaml.safe_load(raw)
-        except yaml.YAMLError:
-            continue
-        if not isinstance(document, dict) or "pull_request_target" not in raw:
-            continue
-        jobs = document.get("jobs")
-        if not isinstance(jobs, dict):
-            continue
-        for job_name, job in jobs.items():
-            if not isinstance(job, dict):
-                continue
-            steps = job.get("steps")
-            if not isinstance(steps, list):
-                continue
-            mutates_pr_labels = False
-            for step in steps:
-                if not isinstance(step, dict):
-                    continue
-                run_text = step.get("run")
-                if not isinstance(run_text, str):
-                    continue
-                if "threat_intel_triage.py" in run_text and "apply-labels" in run_text:
-                    mutates_pr_labels = True
-            if not mutates_pr_labels:
-                continue
-            permissions = job.get("permissions")
-            if not isinstance(permissions, dict):
-                offenders.append(f"{workflow}:{job_name} missing permissions block")
-                continue
-            if permissions.get("pull-requests") != "write":
-                offenders.append(
-                    f"{workflow}:{job_name} must declare pull-requests: write"
-                )
-
-    assert offenders == []
 
 
 def test_title_policy_verify_matches_workflow_kind_env(

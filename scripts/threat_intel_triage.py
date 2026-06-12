@@ -2,31 +2,35 @@
 """Collect threat intelligence and classify repository response needs.
 
 The primary rule collects external intelligence from OSV.dev and CISA KEV,
-correlates it with this repository's locked dependencies, and decides
-whether to add:
+correlates it with this repository's locked dependencies, and classifies
+the repository-global response need:
 
-* ``threat:intel-needed`` -- collect threat intelligence before routing.
-* ``threat:response-needed`` -- security response is required; do not
-  create an autonomous fix without investigation.
+* ``intel_needed`` -- external intelligence matched a locked dependency.
+* ``response_needed`` -- confirmed exploitation (CISA KEV) or malware
+  evidence; do not create an autonomous fix without investigation.
 
-The older metadata classifier remains as a helper for issue/PR text, but the
-workflow uses ``scan`` so triage is driven by external sources.
+Findings are repository-global (``discover_dependencies`` walks the tree,
+not a single issue/PR), so they are recorded as one aggregated, idempotent
+comment on the security tracking issue rather than stamped onto whatever
+item triggered a run -- the per-item ``threat:*`` labelling was retired in
+#1645 (consolidate into the #178 umbrella). The metadata classifier
+(``classify``) remains as a helper for issue/PR text.
 
 Contract:
 - Inputs: the ``scan`` subcommand (locked dependencies under
   ``--repo-root``, external OSV.dev and CISA KEV feeds, optional NVD/EPSS/
   GHSA enrichment via ``GH_TOKEN`` / ``GITHUB_TOKEN``, fixture overrides
-  ``--osv-file`` / ``--kev-file``, ``--summary-file``) and the ``classify``
-  subcommand (``--title`` / ``$TITLE``, ``--body`` / ``--body-file``,
-  ``--labels`` / ``$LABELS``); ``REPO`` and ``NUMBER`` for label writes.
-- Outputs: ``threat:*`` labels applied via the GitHub API, a Markdown
-  step summary, an idempotent marker-anchored triage evidence comment on
-  the issue/PR (the ``comment`` subcommand, so the correlation table is
-  co-located with the label per CLAUDE.md section 6), and ``::error::``
-  annotations on stderr; exit 0 on success, exit 1 on missing env or an
-  API failure.
+  ``--osv-file`` / ``--kev-file``, ``--summary-file`` / ``--comment-file``)
+  and the ``classify`` subcommand (``--title`` / ``$TITLE``, ``--body`` /
+  ``--body-file``, ``--labels`` / ``$LABELS``); ``REPO`` plus ``--issue``
+  (or ``$NUMBER``) and ``GH_TOKEN`` for the aggregated ``comment`` write.
+- Outputs: a Markdown step summary, GitHub Actions outputs, and -- via the
+  ``comment`` subcommand -- an idempotent marker-anchored aggregated
+  comment on the security tracking issue (the correlation table co-located
+  with the umbrella per CLAUDE.md section 6); ``::error::`` annotations on
+  stderr; exit 0 on success, exit 1 on missing env or an API failure.
 - Failure policy: fails loud per CLAUDE.md section 4 (gate: a missing
-  token/repo/number or an API error exits non-zero).
+  token/repo/issue number or an API error exits non-zero).
 """
 
 from __future__ import annotations
@@ -1956,71 +1960,20 @@ def request_json_any(
 _GITHUB_API_VERSION = "2022-11-28"
 
 
-def _apply_labels(
-    *,
-    add_labels: list[str],
-    remove_labels: list[str],
-    repo: str,
-    number: int,
-    token: str,
-    opener: Callable[[urllib.request.Request], Any] = urllib.request.urlopen,
-) -> int:
-    """Add and remove labels on a GitHub issue/PR via the REST API.
+def _resolve_issue_target(
+    explicit_number: int | None = None,
+) -> tuple[str, str, int] | None:
+    """Return ``(token, repo, number)`` for the aggregated comment write.
 
-    Returns 0 on success, 1 on API failure (not counting 404 on removes).
-    """
-    base_url = f"https://api.github.com/repos/{repo}/issues/{number}/labels"
-    auth_header = f"Bearer {token}"
-
-    if add_labels:
-        data = json.dumps({"labels": add_labels}, separators=(",", ":")).encode("utf-8")
-        req = urllib.request.Request(  # noqa: S310 -- fixed https://api.github.com endpoint
-            base_url, data=data, method="POST"
-        )
-        req.add_header("Authorization", auth_header)
-        req.add_header("Accept", "application/vnd.github+json")
-        req.add_header("X-GitHub-Api-Version", _GITHUB_API_VERSION)
-        req.add_header("Content-Type", "application/json")
-        try:
-            with opener(req) as resp:
-                code = int(resp.status)
-        except urllib.error.HTTPError as exc:
-            code = int(exc.code)
-        if not 200 <= code < 300:
-            print(f"::error::add-labels HTTP {code}", file=sys.stderr)
-            return 1
-
-    for label in remove_labels:
-        url = f"{base_url}/{urllib.parse.quote(label, safe='')}"
-        req = urllib.request.Request(url, method="DELETE")  # noqa: S310 -- fixed https://api.github.com endpoint
-        req.add_header("Authorization", auth_header)
-        req.add_header("Accept", "application/vnd.github+json")
-        req.add_header("X-GitHub-Api-Version", _GITHUB_API_VERSION)
-        try:
-            with opener(req) as resp:
-                code = int(resp.status)
-        except urllib.error.HTTPError as exc:
-            code = int(exc.code)
-        if code == 404:
-            continue  # label was already absent — not an error
-        if not 200 <= code < 300:
-            print(f"::error::remove-label {label!r} HTTP {code}", file=sys.stderr)
-            return 1
-
-    return 0
-
-
-def _resolve_issue_target() -> tuple[str, str, int] | None:
-    """Return ``(token, repo, number)`` from env, or None after a loud error.
-
-    Shared by ``apply-labels`` and ``comment``: both write to one issue/PR
-    identified by ``REPO`` / ``NUMBER`` and authenticated by ``GH_TOKEN``.
-    Returns None (never raises) so each caller maps it to exit 1 per the
-    fail-loud policy in CLAUDE.md section 4.
+    ``token`` and ``repo`` come from ``GH_TOKEN`` / ``REPO``. The issue
+    number is *explicit_number* when given -- the workflow resolves the
+    security tracking issue via ``scripts/issue_anchors.py`` and passes it
+    as ``--issue`` so the number is never hardcoded -- and otherwise falls
+    back to ``$NUMBER``. Returns None (never raises) so the caller maps it
+    to exit 1 per the fail-loud policy in CLAUDE.md section 4.
     """
     token = os.environ.get("GH_TOKEN", "")
     repo = os.environ.get("REPO", "")
-    number_str = os.environ.get("NUMBER", "")
 
     if not token:
         print("::error::GH_TOKEN is not set", file=sys.stderr)
@@ -2028,8 +1981,11 @@ def _resolve_issue_target() -> tuple[str, str, int] | None:
     if not repo:
         print("::error::REPO is not set", file=sys.stderr)
         return None
+    if explicit_number is not None:
+        return token, repo, explicit_number
+    number_str = os.environ.get("NUMBER", "")
     if not number_str:
-        print("::error::NUMBER is not set", file=sys.stderr)
+        print("::error::either --issue or NUMBER must be set", file=sys.stderr)
         return None
     try:
         number = int(number_str)
@@ -2039,24 +1995,7 @@ def _resolve_issue_target() -> tuple[str, str, int] | None:
     return token, repo, number
 
 
-def _cmd_apply_labels(args: argparse.Namespace) -> int:
-    target = _resolve_issue_target()
-    if target is None:
-        return 1
-    token, repo, number = target
-
-    add_labels = [lbl.strip() for lbl in (args.add_labels or "").split(",") if lbl.strip()]
-    remove_labels = [lbl.strip() for lbl in (args.remove_labels or "").split(",") if lbl.strip()]
-    return _apply_labels(
-        add_labels=add_labels,
-        remove_labels=remove_labels,
-        repo=repo,
-        number=number,
-        token=token,
-    )
-
-
-_TRIAGE_COMMENT_MARKER = "<!-- threat-intel-triage v1 -->"
+_TRIAGE_COMMENT_MARKER = "<!-- threat-intel-aggregate v1 -->"
 
 
 def _github_comment_request(
@@ -2147,7 +2086,7 @@ def _upsert_comment(
 
 
 def _cmd_comment(args: argparse.Namespace) -> int:
-    target = _resolve_issue_target()
+    target = _resolve_issue_target(args.issue)
     if target is None:
         return 1
     token, repo, number = target
@@ -2318,25 +2257,9 @@ def main(argv: list[str] | None = None) -> int:
     )
     p_scan.set_defaults(func=_cmd_scan)
 
-    p_apply = sub.add_parser(
-        "apply-labels",
-        help="Add/remove labels on a GitHub issue or PR via the REST API.",
-    )
-    p_apply.add_argument(
-        "--add-labels",
-        default="",
-        help="Comma-separated label names to add. Reads REPO, NUMBER, GH_TOKEN from env.",
-    )
-    p_apply.add_argument(
-        "--remove-labels",
-        default="",
-        help="Comma-separated label names to remove.",
-    )
-    p_apply.set_defaults(func=_cmd_apply_labels)
-
     p_comment = sub.add_parser(
         "comment",
-        help="Upsert the threat-intel triage evidence comment on an issue/PR.",
+        help="Upsert the aggregated threat-intel comment on the security tracking issue.",
     )
     p_comment.add_argument(
         "--body-file",
@@ -2344,12 +2267,24 @@ def main(argv: list[str] | None = None) -> int:
         help="Path to the rendered triage markdown (from `scan --comment-file`).",
     )
     p_comment.add_argument(
+        "--issue",
+        type=int,
+        default=None,
+        help=(
+            "Target issue number for the aggregated comment. The workflow "
+            "resolves the security tracking issue via "
+            "`scripts/issue_anchors.py get security-tracking` and passes it "
+            "here so the number is never hardcoded. Falls back to $NUMBER. "
+            "Reads REPO and GH_TOKEN from env."
+        ),
+    )
+    p_comment.add_argument(
         "--update-only",
         action="store_true",
         help=(
             "Only update an existing marked comment; do not create one when "
-            "absent. Use when no findings fired so a clean item gains no noise "
-            "comment. Reads REPO, NUMBER, GH_TOKEN from env."
+            "absent. Use when no findings fired so the tracking issue gains "
+            "no empty comment."
         ),
     )
     p_comment.add_argument(
