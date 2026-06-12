@@ -26,7 +26,7 @@ flowchart TD
     S_J_security_control_drift_4(("Record workflow-permissions drift exit code"))
     S_J_security_control_drift_5(("Record uv stale exit code"))
     S_J_security_control_drift_6(("Aggregate drift report"))
-    S_J_security_control_drift_7(("Post or update rolling comment on"))
+    S_J_security_control_drift_7(("Post or update rolling comment on the security tracking issue"))
     S_J_security_control_drift_8(("File per-family drift issues"))
     J_flake_pin_refresh["flake-pin-refresh"]
     S_J_flake_pin_refresh_0(("Recompute per-system hashes and bump flake.nix"))
