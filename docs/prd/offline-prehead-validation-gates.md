@@ -19,12 +19,19 @@ pre-commit config, and CI, not in this prose.
 
 ## The problem class
 
-Several of this repository's privileged checks run under
-`pull_request_target` so they can hold write scopes and secrets while
-triaging an untrusted PR. The canonical example is the `triage` job in
-`.github/workflows/issue-pr-triage.yml`. Its `actions/checkout` step
-specifies no `ref:`, so it checks out the **base** branch (main) -- both the
-*code* that runs and the *files* it scans.
+Several of this repository's privileged or scheduled checks scan repository
+files or code with a **base-branch** checkout, so they never see a PR's own
+changes. The original motivating example was the per-event `triage` job in
+`.github/workflows/issue-pr-triage.yml`, a `pull_request_target` job whose
+`actions/checkout` step specified no `ref:` and therefore checked out the
+**base** branch (main) -- both the *code* that ran and the *files* it scanned.
+That per-event job was retired in
+[#1645](https://github.com/tvna/claude-md/issues/1645); the OSV querybatch
+submission it performed now runs in the scheduled `dependency-threat-triage`
+job in `.github/workflows/weekly-maintenance.yml`, which fires on `schedule` /
+`workflow_dispatch` and so does not run on PRs at all. Either way the PR head
+is never scanned by the privileged path -- which is exactly the blind spot
+this gate closes, and is now the *only* PR-time check of OSV coordinates.
 
 The consequence is a structural blind spot. On a PR, such a job exercises
 neither the PR's modified code nor the PR's modified inputs:
@@ -115,7 +122,7 @@ and consistently designed.
 
 | Gate | Mirrors | Validator | CLI | Refs |
 | --- | --- | --- | --- | --- |
-| threat-intel OSV coordinates | `triage` job in `issue-pr-triage.yml` (OSV querybatch submission) | `validate_osv_coordinates` in `scripts/threat_intel_triage.py` | `threat_intel_triage.py verify` | #1519, #1511 |
+| threat-intel OSV coordinates | `dependency-threat-triage` job in `weekly-maintenance.yml` (OSV querybatch submission; was the per-event `triage` job in `issue-pr-triage.yml` until #1645) | `validate_osv_coordinates` in `scripts/threat_intel_triage.py` | `threat_intel_triage.py verify` | #1519, #1511, #1645 |
 
 ## Open questions / future work
 
