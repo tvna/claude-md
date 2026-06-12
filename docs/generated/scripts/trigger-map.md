@@ -75,6 +75,13 @@ Detection is string-match based:
 | `github_paginate.py` | workflow | `backup-non-ascii-originals.yml (backup)` |
 | `github_paginate.py` | workflow | `weekly-maintenance.yml (branch-cleanup)` |
 | `github_paginate.py` | workflow | `weekly-maintenance.yml (measure-timings)` |
+| `issue_anchors.py` | workflow | `devcontainer-pin-refresh.yml (refresh)` |
+| `issue_anchors.py` | workflow | `generate-agents.yml (generate)` |
+| `issue_anchors.py` | workflow | `monthly-maintenance.yml (remind)` |
+| `issue_anchors.py` | workflow | `post-merge.yml (decision-tree)` |
+| `issue_anchors.py` | workflow | `publish-devcontainer-images.yml (update-pins)` |
+| `issue_anchors.py` | workflow | `weekly-maintenance.yml (flake-pin-refresh)` |
+| `issue_anchors.py` | workflow | `weekly-maintenance.yml (security-control-drift)` |
 | `issue_closure_fast_path.py` | agent-hook | `claude:PreToolUse` |
 | `issue_closure_fast_path.py` | agent-hook | `codex:PreToolUse` |
 | `issue_link.py` | workflow | `verify-pr.yml (portable-pr-policy)` |
@@ -171,6 +178,8 @@ Detection is string-match based:
 | `scan_hook_coverage_drift.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
 | `scan_input_contract_drift.py` | preflight | `scan_input_contract_drift` |
 | `scan_input_contract_drift.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
+| `scan_issue_anchor_drift.py` | preflight | `scan_issue_anchor_drift` |
+| `scan_issue_anchor_drift.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
 | `scan_maintainability_metrics.py` | preflight | `scan_maintainability_metrics` |
 | `scan_maintainability_metrics.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
 | `scan_markdown_links.py` | preflight | `scan_markdown_links` |

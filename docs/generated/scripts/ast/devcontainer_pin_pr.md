@@ -27,7 +27,7 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["render_pr_body(...)"]
-    N002["return template_text.replace('<str>', github_sha)"]
+    N002["return issue_anchors.substitute(template_text.replace('<str>', github_sha))"]
     N001 -->|"start"| N002
 ```
 
