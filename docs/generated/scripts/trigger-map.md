@@ -80,6 +80,7 @@ Detection is string-match based:
 | `issue_anchors.py` | workflow | `monthly-maintenance.yml (remind)` |
 | `issue_anchors.py` | workflow | `post-merge.yml (decision-tree)` |
 | `issue_anchors.py` | workflow | `publish-devcontainer-images.yml (update-pins)` |
+| `issue_anchors.py` | workflow | `weekly-maintenance.yml (dependency-threat-triage)` |
 | `issue_anchors.py` | workflow | `weekly-maintenance.yml (flake-pin-refresh)` |
 | `issue_anchors.py` | workflow | `weekly-maintenance.yml (security-control-drift)` |
 | `issue_closure_fast_path.py` | agent-hook | `claude:PreToolUse` |
@@ -238,7 +239,6 @@ Detection is string-match based:
 | `stop_new_session_handoff_prompt.py` | agent-hook | `claude:Stop` |
 | `threat_intel_triage.py` | pre-commit | `threat-intel-coords` |
 | `threat_intel_triage.py` | preflight | `threat_intel_coords` |
-| `threat_intel_triage.py` | workflow | `issue-pr-triage.yml (triage)` |
 | `threat_intel_triage.py` | workflow | `weekly-maintenance.yml (dependency-threat-triage)` |
 | `title_policy.py` | workflow | `verify-github-content.yml (gate)` |
 | `title_policy.py` | workflow | `verify-pr.yml (portable-pr-policy)` |

@@ -1520,51 +1520,6 @@ flowchart TD
     N010 --> N011
 ```
 
-## _apply_labels(...)
-
-```mermaid
-flowchart TD
-    N001["_apply_labels(...)"]
-    N002["base_url = f'<str>{repo}<str>{number}<str>'"]
-    N003["auth_header = f'<str>{token}'"]
-    N004["if add_labels"]
-    N005["data = encode(...)"]
-    N006["req = Request(...)"]
-    N007["add_header(...)"]
-    N008["add_header(...)"]
-    N009["add_header(...)"]
-    N010["add_header(...)"]
-    N011["try"]
-    N012["with opener(req) as resp:     code = int(resp.status)"]
-    N013["except urllib.error.HTTPError"]
-    N014["code = int(...)"]
-    N015["if not 200 <= code < 300"]
-    N016["print(...)"]
-    N017["return 1"]
-    N018["for label in remove_labels:     url = f'{base_url}<str>{urllib.parse.quote(label, safe='<str>')}'     req = urllib.request.Request(url, method='<str>')     req.add_header('<str>', auth_header)     req.add_header('<str>', '<str>')     req.add_header('<str>', _GITHUB_API_VERSION)     try:         with opener(req) as resp:             code = int(resp.status)     except urllib.error.HTTPError as exc:         code = int(exc.code)     if code == 404:         continue     if not 200 <= code < 300:         print(f'<str>{label!r}<str>{code}', file=sys.stderr)         return 1"]
-    N019["return 0"]
-    N001 -->|"start"| N002
-    N002 --> N003
-    N003 --> N004
-    N004 -->|"true"| N005
-    N005 --> N006
-    N006 --> N007
-    N007 --> N008
-    N008 --> N009
-    N009 --> N010
-    N010 --> N011
-    N011 -->|"try"| N012
-    N011 -->|"raises"| N013
-    N013 --> N014
-    N012 --> N015
-    N014 --> N015
-    N015 -->|"true"| N016
-    N016 --> N017
-    N015 -->|"false"| N018
-    N004 -->|"false"| N018
-    N018 --> N019
-```
-
 ## _resolve_issue_target(...)
 
 ```mermaid
@@ -1572,61 +1527,44 @@ flowchart TD
     N001["_resolve_issue_target(...)"]
     N002["token = get(...)"]
     N003["repo = get(...)"]
-    N004["number_str = get(...)"]
-    N005["if not token"]
-    N006["print(...)"]
-    N007["return None"]
-    N008["if not repo"]
-    N009["print(...)"]
-    N010["return None"]
-    N011["if not number_str"]
-    N012["print(...)"]
-    N013["return None"]
-    N014["try"]
-    N015["number = int(...)"]
-    N016["except ValueError"]
-    N017["print(...)"]
-    N018["return None"]
-    N019["return (token, repo, number)"]
+    N004["if not token"]
+    N005["print(...)"]
+    N006["return None"]
+    N007["if not repo"]
+    N008["print(...)"]
+    N009["return None"]
+    N010["if explicit_number is not None"]
+    N011["return (token, repo, explicit_number)"]
+    N012["number_str = get(...)"]
+    N013["if not number_str"]
+    N014["print(...)"]
+    N015["return None"]
+    N016["try"]
+    N017["number = int(...)"]
+    N018["except ValueError"]
+    N019["print(...)"]
+    N020["return None"]
+    N021["return (token, repo, number)"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 --> N004
-    N004 --> N005
-    N005 -->|"true"| N006
-    N006 --> N007
-    N005 -->|"false"| N008
-    N008 -->|"true"| N009
-    N009 --> N010
-    N008 -->|"false"| N011
-    N011 -->|"true"| N012
-    N012 --> N013
-    N011 -->|"false"| N014
-    N014 -->|"try"| N015
-    N014 -->|"raises"| N016
-    N016 --> N017
-    N017 --> N018
-    N015 --> N019
-```
-
-## _cmd_apply_labels(...)
-
-```mermaid
-flowchart TD
-    N001["_cmd_apply_labels(...)"]
-    N002["target = _resolve_issue_target(...)"]
-    N003["if target is None"]
-    N004["return 1"]
-    N005["(token, repo, number) = target"]
-    N006["add_labels = [lbl.strip() for lbl in (args.add_labels or '<str>').split('<str>') if lbl.strip()]"]
-    N007["remove_labels = [lbl.strip() for lbl in (args.remove_labels or '<str>').split('<str>') if lbl.strip()]"]
-    N008["return _apply_labels(add_labels=add_labels, remove_labels=remove_labels, repo=repo, number=number, token=token)"]
-    N001 -->|"start"| N002
-    N002 --> N003
-    N003 -->|"true"| N004
-    N003 -->|"false"| N005
+    N004 -->|"true"| N005
     N005 --> N006
-    N006 --> N007
-    N007 --> N008
+    N004 -->|"false"| N007
+    N007 -->|"true"| N008
+    N008 --> N009
+    N007 -->|"false"| N010
+    N010 -->|"true"| N011
+    N010 -->|"false"| N012
+    N012 --> N013
+    N013 -->|"true"| N014
+    N014 --> N015
+    N013 -->|"false"| N016
+    N016 -->|"try"| N017
+    N016 -->|"raises"| N018
+    N018 --> N019
+    N019 --> N020
+    N017 --> N021
 ```
 
 ## _github_comment_request(...)
@@ -1775,24 +1713,21 @@ flowchart TD
     N029["add_argument(...)"]
     N030["add_argument(...)"]
     N031["set_defaults(...)"]
-    N032["p_apply = add_parser(...)"]
+    N032["p_comment = add_parser(...)"]
     N033["add_argument(...)"]
     N034["add_argument(...)"]
-    N035["set_defaults(...)"]
-    N036["p_comment = add_parser(...)"]
-    N037["add_argument(...)"]
-    N038["add_argument(...)"]
+    N035["add_argument(...)"]
+    N036["add_argument(...)"]
+    N037["set_defaults(...)"]
+    N038["p_verify = add_parser(...)"]
     N039["add_argument(...)"]
     N040["set_defaults(...)"]
-    N041["p_verify = add_parser(...)"]
-    N042["add_argument(...)"]
-    N043["set_defaults(...)"]
-    N044["args = parse_args(...)"]
-    N045["try"]
-    N046["return args.func(args)"]
-    N047["except (OSError, ValueError, json.JSONDecodeError)"]
-    N048["print(...)"]
-    N049["return 1"]
+    N041["args = parse_args(...)"]
+    N042["try"]
+    N043["return args.func(args)"]
+    N044["except (OSError, ValueError, json.JSONDecodeError)"]
+    N045["print(...)"]
+    N046["return 1"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 --> N004
@@ -1834,11 +1769,8 @@ flowchart TD
     N039 --> N040
     N040 --> N041
     N041 --> N042
-    N042 --> N043
-    N043 --> N044
+    N042 -->|"try"| N043
+    N042 -->|"raises"| N044
     N044 --> N045
-    N045 -->|"try"| N046
-    N045 -->|"raises"| N047
-    N047 --> N048
-    N048 --> N049
+    N045 --> N046
 ```
