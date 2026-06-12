@@ -1,0 +1,101 @@
+# OpenSSF Scorecard supply-chain posture analysis.
+#
+# Scorecard scores the WHOLE repository (Branch-Protection, Token-Permissions,
+# Pinned-Dependencies, Dangerous-Workflow, etc.) and uploads the result as SARIF
+# to GitHub Code Scanning, the same dashboard CodeQL (codeql.yml) feeds. It
+# complements CodeQL: CodeQL is source->sink taint analysis of scripts/, while
+# Scorecard measures the project's security configuration and supply-chain
+# hygiene. Refs #1646.
+#
+# Posture: informational first. Like codeql.yml, this is intentionally NOT a
+# required check. It graduates to required only after the baseline is clean, so
+# adding it cannot block merges on day one.
+#
+# Triggers (operator-confirmed "standard config + PR augmentation"):
+#   push: main / schedule -> authoritative score. publish_results=true mints the
+#         OIDC token, publishes to the public dataset + badge, and uploads SARIF.
+#   pull_request          -> early feedback on the security-relevant surface.
+#         The pull_request trigger is documented as experimental by
+#         ossf/scorecard-action, so it is scoped narrowly and publish_results is
+#         forced false (a PR score is transient and must never be published).
+#
+# Actions are SHA-pinned to match the repo's existing pins (checkout v6.0.3,
+# codeql-action/upload-sarif v4.36.2, upload-artifact v7.0.1); ossf/scorecard-action
+# is pinned to v2.4.3. Dependabot's github-actions ecosystem keeps them current.
+name: Scorecard
+
+on:
+  push:
+    # Only the default branch is supported by Scorecard; an unfiltered push keeps
+    # the published score authoritative for the latest main state. The weekly
+    # schedule is the freshness backstop.
+    branches: [main]
+  pull_request:
+    branches: [main]
+    # Scorecard always evaluates the whole repo; these paths only gate WHEN the
+    # PR run fires, limiting it to changes that can move a Scorecard check.
+    paths:
+      - ".github/**"
+      - "scripts/**"
+      - "flake.nix"
+      - "flake.lock"
+      - "pyproject.toml"
+      - "uv.lock"
+      - "package.json"
+      - "bun.lock"
+      - ".pre-commit-config.yaml"
+  schedule:
+    # Weekly baseline so drift is caught even when main is untouched, mirroring
+    # the codeql.yml schedule. Offset from CodeQL's cron to spread CI load.
+    - cron: "41 5 * * 1"
+
+# Least privilege at the top level; the analysis job escalates only what it needs.
+permissions: read-all
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analysis:
+    name: Scorecard analysis
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      # Required to upload SARIF to the Code Scanning dashboard.
+      security-events: write
+      # Required for the GitHub OIDC token when publish_results is true
+      # (push / schedule only). Harmless on PR runs, where no token is minted.
+      id-token: write
+      contents: read
+      actions: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+
+      - name: Run Scorecard analysis
+        uses: ossf/scorecard-action@4eaacf0543bb3f2c246792bd56e8cdeffafb205a # v2.4.3
+        with:
+          results_file: results.sarif
+          results_format: sarif
+          # Publish only on push/schedule. A pull_request score is transient and
+          # forks cannot mint the OIDC token, so publishing is forced off there.
+          publish_results: ${{ github.event_name != 'pull_request' }}
+
+      - name: Upload SARIF artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: scorecard-sarif
+          path: results.sarif
+          retention-days: 5
+
+      - name: Upload SARIF to code scanning
+        # Skip on fork PRs: their GITHUB_TOKEN is read-only, so security-events:
+        # write is not granted and the upload would fail. Same-repo PRs (the
+        # default path here) and push/schedule runs upload normally.
+        if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
+        uses: github/codeql-action/upload-sarif@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4.36.2
+        with:
+          sarif_file: results.sarif
