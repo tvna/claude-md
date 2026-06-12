@@ -1,0 +1,70 @@
+# Tracking-issue anchors: the single declarative source for every GitHub
+# issue number that CI writes to (rolling comments, `Closes #` lines,
+# commit trailers, PR-body `Refs #` lines).
+#
+# Workflows and scripts MUST resolve these at runtime through
+# scripts/issue_anchors.py (CLI `get <key>` / `render --file PATH`, library
+# `resolve()` / `substitute()`) instead of hardcoding the number, so an
+# umbrella-issue renumbering is a one-file diff here. The deterministic gate
+# scripts/scan_issue_anchor_drift.py (verify-agents lint-scripts-static and
+# scripts/preflight_all.py) fails when a functional hardcoded issue number
+# reappears or a consumer path below goes stale.
+#
+# `writes` documents what kind of write lands on the issue; `consumers`
+# lists the files that resolve the anchor (existence-checked by the gate).
+# Provenance comments (`# Refs #NNN`) elsewhere are history, not behaviour,
+# and intentionally stay literal. Refs #1640.
+schema_version = 1
+
+[[anchors]]
+key = "security-tracking"
+issue = 178
+writes = "rolling-comment"
+consumers = [
+  ".github/workflows/weekly-maintenance.yml",
+  ".github/workflows/monthly-maintenance.yml",
+  "scripts/security_drift_report.py",
+]
+
+[[anchors]]
+key = "coverage-failure"
+issue = 197
+writes = "comment"
+consumers = ["scripts/coverage_failure_issue.py"]
+
+[[anchors]]
+key = "ci-budget-parent"
+issue = 1156
+writes = "issue-body-ref"
+consumers = ["scripts/ci_budget_issue.py"]
+
+[[anchors]]
+key = "generated-docs"
+issue = 960
+writes = "pr-closes-line"
+consumers = [".github/workflows/post-merge.yml"]
+
+[[anchors]]
+key = "agents-regen"
+issue = 18
+writes = "commit-trailer"
+consumers = [".github/workflows/generate-agents.yml"]
+
+[[anchors]]
+key = "devcontainer-pins"
+issue = 696
+writes = "commit-trailer"
+consumers = [
+  ".github/workflows/devcontainer-pin-refresh.yml",
+  ".github/workflows/publish-devcontainer-images.yml",
+  ".github/pr-body-templates/devcontainer-image-pins.md",
+]
+
+[[anchors]]
+key = "flake-pin"
+issue = 1171
+writes = "commit-trailer"
+consumers = [
+  ".github/workflows/weekly-maintenance.yml",
+  ".github/pr-body-templates/flake-pin.md",
+]

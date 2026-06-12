@@ -122,6 +122,13 @@ jobs:
         # contract test (M3, #189). Sustains #189/#194 as a continuous gate.
         run: uv run python scripts/scan_test_presence_drift.py verify
 
+      - name: Verify tracking-issue anchors stay declarative
+        # Refs #1640: fails when a workflow, PR-body template, or script
+        # constant hardcodes a tracking-issue number instead of resolving it
+        # through .github/tracking-issues.toml via the issue_anchors resolver,
+        # so an umbrella-issue renumbering stays a one-file diff.
+        run: uv run python scripts/scan_issue_anchor_drift.py verify
+
       - name: Verify Claude/Codex hook coverage parity
         # Refs #615: fails when a Claude hook script is absent from Codex
         # coverage and is not in the explicit allowlist.

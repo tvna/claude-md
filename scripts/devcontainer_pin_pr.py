@@ -74,6 +74,7 @@ import re
 import sys
 from pathlib import Path
 
+import issue_anchors
 import update_devcontainer_image_pins
 from _git import run_git
 from _pr_commit_batch import _create_commit_on_branch
@@ -113,8 +114,9 @@ def _regenerate_pins(published_sha: str) -> int:
 
 
 def render_pr_body(template_text: str, github_sha: str) -> str:
-    """Substitute the ``__GITHUB_SHA__`` placeholder (replaces the workflow ``sed``)."""
-    return template_text.replace("__GITHUB_SHA__", github_sha)
+    """Substitute the ``__GITHUB_SHA__`` placeholder (replaces the workflow ``sed``)
+    and ``__ISSUE_ANCHOR:<key>__`` tokens (.github/tracking-issues.toml, #1640)."""
+    return issue_anchors.substitute(template_text.replace("__GITHUB_SHA__", github_sha))
 
 
 def _has_pin_changes() -> bool:

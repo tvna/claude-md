@@ -596,15 +596,18 @@ jobs:
             --report-file /tmp/security-drift-report.md \
             --github-output "${GITHUB_OUTPUT}"
 
-      - name: Post or update rolling comment on #178
+      - name: Post or update rolling comment on the security tracking issue
         if: always()
         env:
           DRY_RUN: ${{ (github.event_name == 'schedule' || github.event_name == 'push') && 'false' || inputs.security_control_dry_run }}
         run: |
           set -euo pipefail
+          # Refs #1640: the rolling-comment target lives in
+          # .github/tracking-issues.toml, not in this file.
+          TRACKING_ISSUE="$(python3 scripts/issue_anchors.py get security-tracking)"
           python3 scripts/security_drift_report.py post-comment \
             --repo "${REPO}" \
-            --issue 178 \
+            --issue "${TRACKING_ISSUE}" \
             --report-file /tmp/security-drift-report.md \
             --dry-run "${DRY_RUN}"
 
@@ -706,12 +709,15 @@ jobs:
           set -euo pipefail
           tool='${{ matrix.tool }}'
           target='${{ steps.decide.outputs.target }}'
+          # Refs #1640: the trailer's tracking issue lives in
+          # .github/tracking-issues.toml, not in this file.
+          TRACKING_ISSUE="$(python3 scripts/issue_anchors.py get flake-pin)"
           python3 scripts/devcontainer_pin_pr.py open \
             --github-sha "${tool}-${target}" \
             --branch-prefix "flake-pin-" \
             --base main \
             --title "chore(flake): bump ${tool} pin to ${target}" \
             --commit-subject "chore(flake): bump ${tool} pin to ${target}" \
-            --commit-trailer "Refs #1171" \
+            --commit-trailer "Refs #${TRACKING_ISSUE}" \
             --template .github/pr-body-templates/flake-pin.md \
             --file flake.nix

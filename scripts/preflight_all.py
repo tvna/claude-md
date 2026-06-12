@@ -102,14 +102,8 @@ STEPS: tuple[Step, ...] = (
             "AGENTS.md",
         ),
     ),
-    Step(
-        name="verify_apm_checksums",
-        argv=("python3", "scripts/verify_apm_checksums.py", "verify"),
-    ),
-    Step(
-        name="scan_apm_lock_drift",
-        argv=("python3", "scripts/scan_apm_lock_drift.py", "verify"),
-    ),
+    Step(name="verify_apm_checksums", argv=("python3", "scripts/verify_apm_checksums.py", "verify")),
+    Step(name="scan_apm_lock_drift", argv=("python3", "scripts/scan_apm_lock_drift.py", "verify")),
     Step(
         name="uv_pin_drift",
         argv=("python3", "scripts/uv_pin.py", "drift"),
@@ -303,6 +297,8 @@ STEPS: tuple[Step, ...] = (
         name="scan_test_presence_drift",
         argv=("python3", "scripts/scan_test_presence_drift.py", "verify"),
     ),
+    # Refs #1640. Fails on tracking-issue numbers hardcoded outside .github/tracking-issues.toml.
+    Step(name="scan_issue_anchor_drift", argv=("python3", "scripts/scan_issue_anchor_drift.py", "verify")),
     Step(
         # Refs #615. Fails when a Claude hook script is absent from Codex
         # coverage and is not in the explicit allowlist in the script.

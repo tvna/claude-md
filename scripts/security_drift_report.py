@@ -38,6 +38,7 @@ import sys
 from collections.abc import Callable
 from pathlib import Path
 
+import issue_anchors
 from _github_api import apply_call as github_apply_call
 
 # Static per-family catalog split out to keep this module within its size
@@ -45,7 +46,8 @@ from _github_api import apply_call as github_apply_call
 from _security_drift_families import FAMILY_ISSUE_SPEC, ISSUE_LABELS, TARGET_FAMILIES
 
 API_ROOT = "https://api.github.com"
-DEFAULT_TRACKING_ISSUE = 178
+# Anchor table (#1640): a renumbering is a one-file diff to the TOML.
+DEFAULT_TRACKING_ISSUE = issue_anchors.resolve("security-tracking")
 DEFAULT_MARKER = "<!-- security-control-drift-report -->"
 
 STATUS_COVERED = "covered"

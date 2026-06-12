@@ -46,6 +46,7 @@ import flake_pin
 import flake_pin_latest
 import gate_generated_scripts_manual_edit
 import github_paginate
+import issue_anchors
 import issue_link
 import labels_apply
 import measure_devcontainer_startup
@@ -70,6 +71,7 @@ import scan_docs_inventory
 import scan_flake_pin_drift
 import scan_hook_coverage_drift
 import scan_input_contract_drift
+import scan_issue_anchor_drift
 import scan_maintainability_metrics
 import scan_markdown_links
 import scan_mermaid_syntax
@@ -185,6 +187,8 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("dependabot_automerge.py", "request-automerge"): "test_dependabot_request_automerge_matches_workflow_args",
     ("dependabot_automerge.py", "disable-automerge"): "test_dependabot_disable_automerge_matches_workflow_args",
     ("dependabot_labels.py", "verify"): "test_dependabot_labels_verify_matches_workflow_paths",
+    ("issue_anchors.py", "get"): "test_issue_anchors_get_matches_workflow_args",
+    ("issue_anchors.py", "render"): "test_issue_anchors_render_matches_workflow_args",
     ("issue_link.py", "verify"): "test_issue_link_verify_matches_workflow_body_file_and_author",
     ("labels_apply.py", "$COMMAND"): "test_labels_apply_validate_and_plan_match_workflow_args",
     ("labels_apply.py", "plan"): "test_labels_apply_validate_and_plan_match_workflow_args",
@@ -213,6 +217,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("scan_nonexhaustive_invariant_drift.py", "verify"): "test_scan_nonexhaustive_invariant_drift_verify_matches_workflow_args",
     ("scan_hook_coverage_drift.py", "verify"): "test_scan_hook_coverage_drift_verify_matches_workflow_args",
     ("scan_input_contract_drift.py", "verify"): "test_scan_input_contract_drift_verify_matches_workflow_args",
+    ("scan_issue_anchor_drift.py", "verify"): "test_scan_issue_anchor_drift_verify_matches_workflow_args",
     ("scan_preflight_drift.py", "verify"): "test_scan_preflight_drift_verify_matches_workflow_args",
     ("scan_provisioning_hook_serial.py", "verify"): "test_scan_provisioning_hook_serial_verify_matches_workflow_args",
     ("scan_quality_standard_drift.py", "verify"): "test_scan_quality_standard_drift_verify_matches_workflow_args",
@@ -1854,6 +1859,39 @@ def test_pr_upsert_upsert_files_matches_workflow_args(
     ]) == 0
 
 
+def test_issue_anchors_get_matches_workflow_args(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """get <key> prints the bare issue number consumed via command
+    substitution in weekly-maintenance.yml, monthly-maintenance.yml,
+    post-merge.yml, generate-agents.yml, devcontainer-pin-refresh.yml, and
+    publish-devcontainer-images.yml. Refs #1640."""
+    for key, expected in (
+        ("security-tracking", "178"),
+        ("flake-pin", "1171"),
+        ("generated-docs", "960"),
+        ("agents-regen", "18"),
+        ("devcontainer-pins", "696"),
+    ):
+        assert issue_anchors.main(["get", key]) == 0
+        assert capsys.readouterr().out.strip() == expected
+
+
+def test_issue_anchors_render_matches_workflow_args(tmp_path: Path) -> None:
+    """render --file rewrites the heredoc-built PR bodies in place
+    (post-merge.yml, generate-agents.yml). Refs #1640."""
+    body = tmp_path / "pr-body.md"
+    body.write_text("Closes #__ISSUE_ANCHOR:generated-docs__\n", encoding="utf-8")
+    assert issue_anchors.main(["render", "--file", str(body)]) == 0
+    assert body.read_text(encoding="utf-8") == "Closes #960\n"
+
+
+def test_scan_issue_anchor_drift_verify_matches_workflow_args() -> None:
+    """Mirrors the ``Verify tracking-issue anchors stay declarative`` step in
+    verify-agents.yml. Refs #1640."""
+    assert scan_issue_anchor_drift.main(["verify"]) == 0
+
+
 def test_github_paginate_fetch_matches_workflow_args(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -2144,7 +2182,10 @@ def test_devcontainer_pin_pr_uses_environment_secret_token() -> None:
         "REPO": "${{ github.repository }}",
     }
     assert "scripts/devcontainer_pin_pr.py open" in open_pr["run"]
-    assert "Refs #696" in open_pr["run"]
+    # Refs #1640: the trailer's issue number is resolved from the anchor
+    # table at runtime, never hardcoded in the workflow.
+    assert "scripts/issue_anchors.py get devcontainer-pins" in open_pr["run"]
+    assert 'Refs #${TRACKING_ISSUE}' in open_pr["run"]
 
 
 def test_devcontainer_pin_pr_open_matches_workflow_args(

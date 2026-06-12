@@ -84,6 +84,23 @@ class TestRenderPrBody:
     def test_no_placeholder_is_passthrough(self) -> None:
         assert dpp.render_pr_body("no marker", "x") == "no marker"
 
+    def test_substitutes_issue_anchor_tokens(self) -> None:
+        """Refs #1640: the templates carry __ISSUE_ANCHOR:<key>__ tokens that
+        resolve through .github/tracking-issues.toml at render time."""
+        out = dpp.render_pr_body(
+            "sha __GITHUB_SHA__\nRefs #__ISSUE_ANCHOR:devcontainer-pins__\n", "deadbeef"
+        )
+        assert out == "sha deadbeef\nRefs #696\n"
+
+    def test_live_templates_render_without_residual_tokens(self) -> None:
+        """Both checked-in templates resolve every token against the live
+        anchor table; an unknown key would raise instead of leaking a token."""
+        for name in ("devcontainer-image-pins.md", "flake-pin.md"):
+            template = Path(".github/pr-body-templates") / name
+            body = dpp.render_pr_body(template.read_text(encoding="utf-8"), "deadbeef")
+            assert "__ISSUE_ANCHOR:" not in body
+            assert "Refs #" in body
+
 
 # ---------------------------------------------------------------------------
 # _create_pin_branch
@@ -505,3 +522,115 @@ class TestRefreshFlow:
         err = capsys.readouterr().err
         assert "failed creating refresh branch" in err
         assert "HTTP 403" in err
+
+    def test_missing_gh_token_returns_1(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        monkeypatch.delenv("GH_TOKEN", raising=False)
+        assert dpp.main(_refresh_argv(tmp_path)) == 1
+        assert "GH_TOKEN" in capsys.readouterr().err
+
+    def test_missing_repo_returns_1(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        monkeypatch.setenv("GH_TOKEN", "tok")
+        monkeypatch.delenv("REPO", raising=False)
+        assert dpp.main(_refresh_argv(tmp_path)) == 1
+        assert "REPO" in capsys.readouterr().err
+
+    def test_list_open_prs_failure_returns_1(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        def _boom(**kw: Any) -> list[dict[str, Any]]:
+            raise RuntimeError("List PRs failed: HTTP 500")
+
+        monkeypatch.setattr(dpp, "_list_open_prs_by_prefix", _boom)
+        assert dpp.main(_refresh_argv(tmp_path)) == 1
+        assert "HTTP 500" in capsys.readouterr().err
+
+    def test_compare_behind_failure_returns_1(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        monkeypatch.setattr(dpp, "_list_open_prs_by_prefix", lambda **kw: [_open_pin_pr(1132)])
+
+        def _boom(**kw: Any) -> int:
+            raise RuntimeError("Compare failed: HTTP 502")
+
+        monkeypatch.setattr(dpp, "_compare_behind", _boom)
+        assert dpp.main(_refresh_argv(tmp_path)) == 1
+        assert "HTTP 502" in capsys.readouterr().err
+
+    def test_up_to_date_merge_failure_returns_1(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        monkeypatch.setattr(dpp, "_list_open_prs_by_prefix", lambda **kw: [_open_pin_pr(1132)])
+        monkeypatch.setattr(dpp, "_compare_behind", lambda **kw: 0)
+
+        def _boom(**kw: Any) -> bool:
+            raise RuntimeError("Merge failed: HTTP 405")
+
+        monkeypatch.setattr(dpp, "_merge_pr_if_clean", _boom)
+        assert dpp.main(_refresh_argv(tmp_path)) == 1
+        assert "HTTP 405" in capsys.readouterr().err
+
+    def test_redundant_pr_close_failure_is_warning_only(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """Best-effort cleanup: failing to close the redundant PR warns, exits 0."""
+        monkeypatch.setattr(dpp, "run_git", _FakeGit({"diff": 0}))  # no pin changes
+        monkeypatch.setattr(dpp, "_list_open_prs_by_prefix", lambda **kw: [_open_pin_pr(1132)])
+        monkeypatch.setattr(dpp, "_compare_behind", lambda **kw: 3)
+        monkeypatch.setattr(dpp, "_regenerate_pins", lambda sha: 0)
+
+        def _boom(**kw: Any) -> None:
+            raise RuntimeError("Comment failed: HTTP 403")
+
+        monkeypatch.setattr(dpp, "_comment_pr", _boom)
+        rc = dpp.main(_refresh_argv(tmp_path))
+        assert rc == 0
+        assert "failed to close redundant PR" in capsys.readouterr().err
+
+    def test_template_read_failure_returns_1(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        monkeypatch.setattr(dpp, "run_git", _FakeGit({"diff": 1, "ls-remote": 0}))
+        monkeypatch.setattr(dpp, "_list_open_prs_by_prefix", lambda **kw: [_open_pin_pr(1132)])
+        monkeypatch.setattr(dpp, "_compare_behind", lambda **kw: 3)
+        monkeypatch.setattr(dpp, "_regenerate_pins", lambda sha: 0)
+        argv = _refresh_argv(tmp_path)
+        argv[argv.index("--template") + 1] = str(tmp_path / "absent.md")
+        assert dpp.main(argv) == 1
+        assert "cannot read template" in capsys.readouterr().err
+
+    def test_upsert_failure_returns_1(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        monkeypatch.setattr(dpp, "run_git", _FakeGit({"diff": 1, "ls-remote": 0}))
+        monkeypatch.setattr(dpp, "_list_open_prs_by_prefix", lambda **kw: [_open_pin_pr(1132)])
+        monkeypatch.setattr(dpp, "_compare_behind", lambda **kw: 3)
+        monkeypatch.setattr(dpp, "_regenerate_pins", lambda sha: 0)
+
+        def _boom(**kw: Any) -> tuple[str, int]:
+            raise RuntimeError("Upsert failed: HTTP 422")
+
+        monkeypatch.setattr(dpp, "_upsert_pr", _boom)
+        assert dpp.main(_refresh_argv(tmp_path)) == 1
+        assert "HTTP 422" in capsys.readouterr().err
+
+    def test_supersede_cleanup_failure_is_warning_only(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """The replacement PR exists; failing to close the stale one warns, exits 0."""
+        monkeypatch.setattr(dpp, "run_git", _FakeGit({"diff": 1, "ls-remote": 0}))
+        monkeypatch.setattr(dpp, "_list_open_prs_by_prefix", lambda **kw: [_open_pin_pr(1132)])
+        monkeypatch.setattr(dpp, "_compare_behind", lambda **kw: 3)
+        monkeypatch.setattr(dpp, "_regenerate_pins", lambda sha: 0)
+        monkeypatch.setattr(dpp, "_upsert_pr", lambda **kw: ("created", 1140))
+
+        def _boom(**kw: Any) -> None:
+            raise RuntimeError("Comment failed: HTTP 403")
+
+        monkeypatch.setattr(dpp, "_comment_pr", _boom)
+        rc = dpp.main(_refresh_argv(tmp_path))
+        assert rc == 0
+        assert "failed to fully supersede PR" in capsys.readouterr().err

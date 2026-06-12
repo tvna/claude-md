@@ -85,8 +85,14 @@ jobs:
 
           This automated update is opened as a pull request to keep generated instruction changes aligned with the repository change policy.
 
-          Refs #18
+          Refs #__ISSUE_ANCHOR:agents-regen__
           EOF
+
+          # Refs #1640: the tracking issue for this PR series lives in
+          # .github/tracking-issues.toml; render expands the __ISSUE_ANCHOR__
+          # token in the body, and the commit trailer resolves the same anchor.
+          python3 scripts/issue_anchors.py render --file /tmp/pr-body.md
+          TRACKING_ISSUE="$(python3 scripts/issue_anchors.py get agents-regen)"
 
           # Signed, reuse-safe publish: the commit is created server side via
           # createCommitOnBranch (App-bot author, Verified) and appended onto the
@@ -96,7 +102,7 @@ jobs:
             --head "$PR_BRANCH" \
             --base "$GITHUB_REF_NAME" \
             --title "$PR_TITLE" \
-            --commit-body "Refs #18" \
+            --commit-body "Refs #${TRACKING_ISSUE}" \
             --body-file /tmp/pr-body.md \
             --add CLAUDE.md \
             --add AGENTS.md

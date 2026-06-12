@@ -11,11 +11,14 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
+import issue_anchors
+
 # Coverage failures are reported as comments on the continuous code-quality
-# tracking issue (#197) rather than a dedicated, marker-searched issue. The
+# tracking issue rather than a dedicated, marker-searched issue. The
 # previous open-marker search matched unrelated issues by tokenized title text,
-# so the destination is now pinned explicitly.
-TARGET_ISSUE = 197
+# so the destination is pinned explicitly -- resolved from the declarative
+# anchor table so a renumbering stays a one-file diff (#1640).
+TARGET_ISSUE = issue_anchors.resolve("coverage-failure")
 COVERAGE_GATE = "pytest --cov (threshold: [tool.coverage.report].fail_under in pyproject.toml)"
 
 Runner = Callable[..., subprocess.CompletedProcess[str]]
