@@ -55,7 +55,7 @@ A workflow that does only `checkout` plus a pure local script (no API call, no `
 | `weekly-maintenance.yml` / `ruleset-drift` | `schedule` (weekly) + `workflow_dispatch` | `RULESETS_PAT` via `env.GH_TOKEN_API` (read-only use), `GITHUB_TOKEN` via `env.GH_TOKEN` (for issue filing) | `contents: read`, `issues: write` | `contents: read`, `issues: write` | `none`. Residual: `RULESETS_PAT` (admin scope) is consumed by a scheduled workflow without an Environment boundary — the apply workflows put the same PAT behind the `ruleset-apply` Environment, this one does not. The script only reads (`/repos/.../rulesets`), but PAT exposure scope is unchanged. | #56, #181 (Environment-scope this read PAT) |
 | `issue-pr-triage.yml` / `scan` | `issues`, `pull_request_target`, `issue_comment`, `pull_request_review_comment` | `GITHUB_TOKEN` via `env.GH_TOKEN` | `contents: read`, `issues: write`, `pull-requests: write` | `contents: read`, `issues: write`, `pull-requests: write` | `none`. Residual: `pull_request_target` write token from fork PRs; gated by `actor != github-actions[bot]` and by trusted-bot allowlist in `_trusted_bots.py`. Documented in `docs/prd/non-ascii-defense.md`. | — |
 | `weekly-maintenance.yml` / `security-control-drift` | `schedule` (weekly) + `workflow_dispatch` (task-gated input `security_control_dry_run` default true) | `RULESETS_PAT` via `env.GH_TOKEN_API` (read-only), `GITHUB_TOKEN` via `env.GH_TOKEN` (for posting rolling comment on #178) | `contents: read`, `issues: write` | `contents: read`, `issues: write` | `none`. Residual: same `RULESETS_PAT` exposure pattern as `ruleset-drift` (scheduled, not Environment-scoped). `curl` to astral-sh/uv supply chain (pinned per #112). | #56, #181 (PAT scoping), #180 (already closed by this workflow itself) |
-| `issue-pr-triage.yml` / `triage` | `issues` (opened/edited/labeled/unlabeled/reopened), `pull_request_target` (opened/edited/synchronize/labeled/unlabeled/reopened/ready_for_review) | `GITHUB_TOKEN` via `env.GH_TOKEN` | `contents: read`, `issues: write`, `pull-requests: write` | `contents: read`, `issues: write`, `pull-requests: write` | `none`. Residual: `pull_request_target` is limited to same-repository pull requests because the job guard rejects fork PRs before checkout or label mutation. | #170 (sustained ops), #700 (PR label mutation permission) |
+| `weekly-maintenance.yml` / `dependency-threat-triage` | `schedule` (weekly) + `workflow_dispatch` (task-gated input `task=dependency-threat-triage`) | `GITHUB_TOKEN` via `env.GH_TOKEN` | `contents: read`, `issues: write` | `contents: read`, `issues: write` | `none`. Residual: posts one idempotent aggregated finding comment to the #178 umbrella (marker `<!-- threat-intel-aggregate v1 -->`); replaced the retired per-event `issue-pr-triage.yml` / `triage` job in #1645, so the prior `pull_request_target` fork-token exposure no longer applies. | #170 (sustained ops) |
 | `verify-agents.yml` | `pull_request` | `GITHUB_TOKEN` via `env.GH_TOKEN` (in `lint-scripts` stale check only) | `contents: read` | `contents: read` | `none`. Agent instruction compile and prek moved to the `portable-pr-policy` job in `verify-pr.yml`; this workflow now covers repository-specific script checks only. | — |
 | `verify-pr.yml` / `portable-pr-policy` | `pull_request` | `GITHUB_TOKEN` via `env.GH_TOKEN` (issue-link step only) | `contents: read`, `issues: read`, `pull-requests: read` | `(job: portable-pr-policy)` `contents: read`, `issues: read`, `pull-requests: read` (top-level `permissions: {}`) | `none`. Residual: `curl` to astral-sh/uv supply chain (pinned per #112); PR body is read from the event payload, and issue-link resolves referenced issues with the repository token. Consolidated in #1319; job `name:` preserved so the `Portable PR policy / gate` required context still resolves. | — |
 | `verify-pr.yml` / `verify-design-philosophy` | `pull_request` | none | `contents: read` | `(job: verify-design-philosophy)` `contents: read` (top-level `permissions: {}`) | `none`. Consolidated in #1319. | — |
@@ -80,12 +80,11 @@ The remaining least-privilege question is whether `generate-agents.yml` should b
 
 ## Note on `pull_request_target` exposure
 
-Five workflows use `pull_request_target` and therefore carry write-capable tokens even for fork PRs:
+Three `pull_request_target` surfaces carry write-capable tokens even for fork PRs:
 
 - `post-merge.yml` -- gated by `merged == true` (fork PRs cannot self-merge into base without maintainer review).
 - `dependabot-automerge.yml` — gated by `user.login == dependabot[bot]`.
-- `issue-pr-triage.yml` / `scan` -- gated by `actor != github-actions[bot]` plus trusted-bot allowlist; intentional in this design (#102, `docs/prd/non-ascii-defense.md`).
-- `issue-pr-triage.yml` / `triage` -- same-repository PR guard rejects fork PRs before checkout or label mutation. Tracked under #170.
+- `issue-pr-triage.yml` / `scan` -- gated by `actor != github-actions[bot]` plus trusted-bot allowlist; intentional in this design (#102, `docs/prd/non-ascii-defense.md`). (The per-event `triage` job that also ran here was retired in #1645; threat-intel triage now runs in the scheduled `weekly-maintenance.yml` / `dependency-threat-triage` job, which is not `pull_request_target`.)
 
 These workflows all check out the SoT (base branch) rather than the PR head, which is the standard `pull_request_target` mitigation. The audit confirms that pattern holds in every case above; no `pull_request_target` workflow checks out the PR head with the write-capable token attached.
 
@@ -97,12 +96,12 @@ Follow-up issues this audit references (every "Follow-up" cell maps to one of th
 |---|---|---|
 | #31 | Branch cleanup phased rollout (Goal D is the deletion path) | `weekly-maintenance.yml` / `branch-cleanup` |
 | #56 | Ruleset PAT handling and privileged-dispatch hardening | `apply-rulesets.yml`, `weekly-maintenance.yml` |
-| #170 | Sustained external threat-intelligence triage operations | `issue-pr-triage.yml` / `triage` |
+| #170 | Sustained external threat-intelligence triage operations | `weekly-maintenance.yml` / `dependency-threat-triage` |
 | #181 | Workflow permissions and PAT audit (least privilege matrix) | self-referenced; matrix rows that surface a `mismatch` other than `none`: `generate-agents.yml`, `weekly-maintenance.yml` |
 | #182 | Privileged-operation runbook checklist (dry-run / authorization / rollback / audit) | `apply-labels.yml`, `apply-rulesets.yml`, `weekly-maintenance.yml` / `branch-cleanup` (delete path) |
 | #183 | Downstream instruction review checklist | `generate-agents.yml` |
 
-Surfaces explicitly marked `none` (no follow-up): `post-merge.yml`, `dependabot-automerge.yml`, `issue-pr-triage.yml` / `scan`, `issue-pr-triage.yml` / `triage`, `verify-pr.yml` / `portable-pr-policy`, `verify-pr.yml` / `verify-design-philosophy`, `verify-pr.yml` / `verify-dependabot-labels`, `verify-github-content.yml`. The `verify-pr.yml` / `verify-ruleset-sync` job carries a `none` workflow-token mismatch but a residual `RULESETS_PAT` surface tracked under #56 / #181.
+Surfaces explicitly marked `none` (no follow-up): `post-merge.yml`, `dependabot-automerge.yml`, `issue-pr-triage.yml` / `scan`, `weekly-maintenance.yml` / `dependency-threat-triage`, `verify-pr.yml` / `portable-pr-policy`, `verify-pr.yml` / `verify-design-philosophy`, `verify-pr.yml` / `verify-dependabot-labels`, `verify-github-content.yml`. The `verify-pr.yml` / `verify-ruleset-sync` job carries a `none` workflow-token mismatch but a residual `RULESETS_PAT` surface tracked under #56 / #181.
 
 ## Note on companion inventory
 

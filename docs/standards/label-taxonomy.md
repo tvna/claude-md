@@ -51,7 +51,6 @@ Every final label belongs to exactly one declared family.
 | `type:*` | Exactly one for normal issues | Issue purpose or structural kind |
 | `state:*` | Zero or one | Lifecycle and actionability |
 | `severity:*` | Zero or one | Human safety or content sensitivity |
-| `threat:*` | Zero to two | Threat-intelligence overlay |
 | `area:*` | One or more for active implementation | File and directory ownership or conflict domain |
 | `ops:*` | As required by deterministic workflows | Workflow, bot, or maintenance state |
 
@@ -140,29 +139,28 @@ removal, and the backfill of existing retros are migration work owned by #972
 (see Migration Boundary); this section records the design decision only.
 Refs #1060, #1050.
 
-## Severity And Threat Labels
-
-`threat:*` is retained as an overlay axis because it records security
-intelligence state, not repository ownership or issue purpose.
+## Severity Labels
 
 | Label | Writer | Routing effect |
 |---|---|---|
 | `severity:security` | Human or security workflow | Bias toward investigation |
 | `severity:non-ascii-content` | Non-ASCII content scan | Content-boundary signal |
-| `threat:intel-needed` | Manual (owner) since #1645 | Collect threat intelligence before ordinary routing |
-| `threat:response-needed` | Manual (owner) since #1645 | Investigate + response planning before an autonomous PR |
 
-Since [#1645](https://github.com/tvna/claude-md/issues/1645) the `threat:*`
-labels are **no longer auto-applied per issue/PR**. Threat-intelligence findings
+The `threat:*` overlay axis (`threat:intel-needed`, `threat:response-needed`)
+was **retired** in [#1647](https://github.com/tvna/claude-md/issues/1647),
+following the [#1645](https://github.com/tvna/claude-md/issues/1645) consolidation
+that stopped auto-applying the labels per issue/PR. Threat-intelligence findings
 are repository-global, so `scripts/threat_intel_triage.py` aggregates them into a
 single idempotent comment on the #178 security umbrella (posted weekly by the
 `dependency-threat-triage` job in `.github/workflows/weekly-maintenance.yml`)
-instead of stamping a label onto whichever item triggered a run. The label
-definitions remain for manual owner annotation; an existing label may be removed
-only when the finding is proven stale, false positive, or remediated in the
-linked evidence trail. Source outages do not prove safety. See
-[`docs/runbooks/issue-triage.md`](../runbooks/issue-triage.md#threat-0-to-2) for
-the aggregation mechanism.
+instead of stamping a label onto whichever item triggered a run. The
+`intel-needed` / `response-needed` *classifications* survive only as descriptors
+in that aggregated comment, not as live labels. The label definitions were
+removed from `.github/labels.json` and `.github/label-policy.toml`, and the
+live per-item assignments are swept by the owner-driven prune dispatch. Source
+outages do not prove safety. See
+[`docs/runbooks/issue-triage.md`](../runbooks/issue-triage.md#threat-retired)
+for the aggregation mechanism and the cleanup procedure.
 
 ## Area Labels
 

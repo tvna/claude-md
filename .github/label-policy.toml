@@ -31,11 +31,6 @@ purpose = "Human safety or content sensitivity flag."
 cardinality = "zero_or_one"
 
 [[families]]
-name = "threat"
-purpose = "Threat-intelligence overlay state."
-cardinality = "zero_to_two"
-
-[[families]]
 name = "area"
 purpose = "File and directory ownership or conflict domain."
 cardinality = "one_or_more_for_active_implementation"
@@ -152,20 +147,6 @@ family = "severity"
 status = "keep"
 description = "Non-ASCII content boundary signal for issue, PR, or comment text."
 color = "ff7619"
-
-[[labels]]
-name = "threat:intel-needed"
-family = "threat"
-status = "keep"
-description = "Threat intelligence collection is required before ordinary routing."
-color = "b4a7d6"
-
-[[labels]]
-name = "threat:response-needed"
-family = "threat"
-status = "keep"
-description = "Security response planning is required before autonomous PR work."
-color = "cc0000"
 
 [[labels]]
 name = "area:agent-instructions"
@@ -300,6 +281,14 @@ reason = "Noisy duplicate of type:fix."
 [[retired_labels]]
 name = "governance"
 reason = "Recreates retired layer:meta ambiguity."
+
+[[retired_labels]]
+name = "threat:intel-needed"
+reason = "Per-item threat:* labelling retired in 1645; findings aggregate weekly onto the 178 security umbrella, not per item. Definition removed in 1647."
+
+[[retired_labels]]
+name = "threat:response-needed"
+reason = "Per-item threat:* labelling retired in 1645; findings aggregate weekly onto the 178 security umbrella, not per item. Definition removed in 1647."
 
 [[area_paths]]
 area = "area:agent-instructions"

@@ -1,6 +1,6 @@
 # Issue Triage — Label Taxonomy & Routing Runbook
 
-This document is the operator-facing runbook for the labels that triage every issue in this repository. The core axes, severity flag, and automated threat flags are all readable from the GraphQL `labels.nodes[]` header, letting an API/MCP client route an issue without fetching its body.
+This document is the operator-facing runbook for the labels that triage every issue in this repository. The core axes and the severity flag are all readable from the GraphQL `labels.nodes[]` header, letting an API/MCP client route an issue without fetching its body. (The `threat:*` overlay axis was retired in #1647; see `threat:*` below.)
 
 The adopted post-#970 label design lives in
 [`docs/standards/label-taxonomy.md`](../standards/label-taxonomy.md) and the
@@ -30,7 +30,7 @@ Every issue receives:
 - **Exactly 1 `type:*` label** — purpose of the change
 - **0 or 1 `state:*` label** — lifecycle position; absent means active
 - **0 or 1 `severity:*` label** — sensitivity flag (security or content)
-- **0 to 2 `threat:*` labels** — threat-intelligence routing flags (no longer auto-applied; see `threat:*` below)
+- ~~**0 to 2 `threat:*` labels**~~ — **retired** in #1647; the per-item labels are removed and threat-intelligence findings aggregate onto the #178 umbrella (see `threat:*` below)
 
 ### `layer:*` (multi-valued, ≥1)
 
@@ -82,14 +82,16 @@ mark the umbrella with the label.
 | `severity:security` | Security-sensitive. Overrides agent routing toward `investigate` regardless of `type:*`. |
 | `severity:non-ascii-content` | Non-ASCII in title/body/comment; advisory for trusted authors, blocks external contributors. |
 
-### `threat:*` (0 to 2)
+### `threat:*` (retired)
 
-**These labels are no longer auto-applied to individual issues/PRs (retired in [#1645](https://github.com/tvna/claude-md/issues/1645)).** Threat-intelligence findings are repository-global — they come from the locked-dependency corpus, not from any one issue/PR — so stamping them onto whatever item happened to trigger a run produced pure noise (a single known-exploited, no-fix advisory flipped `threat:response-needed` on every new item). Findings are now **aggregated** into one idempotent comment on the #178 security umbrella; see [Aggregated findings on the security umbrella](#aggregated-findings-on-the-security-umbrella) below. The label definitions remain in `.github/labels.json` and may still be set manually by the owner; cleanup of the labels and evidence comments already applied to existing items is tracked as a follow-up to #1645.
+**The `threat:*` labels were retired.** Auto-application was removed in [#1645](https://github.com/tvna/claude-md/issues/1645), and the label definitions were removed from `.github/labels.json` and `.github/label-policy.toml` in [#1647](https://github.com/tvna/claude-md/issues/1647). Threat-intelligence findings are repository-global — they come from the locked-dependency corpus, not from any one issue/PR — so stamping them onto whatever item happened to trigger a run produced pure noise (a single known-exploited, no-fix advisory flipped `threat:response-needed` on every new item). Findings are now **aggregated** into one idempotent comment on the #178 security umbrella; see [Aggregated findings on the security umbrella](#aggregated-findings-on-the-security-umbrella) below. The `intel-needed` / `response-needed` *classifications* survive only as finding descriptors in that aggregated comment, not as live labels:
 
-| Label | Meaning (when set manually) |
+| Finding class | Meaning (on the #178 umbrella) |
 |---|---|
-| `threat:intel-needed` | Collect threat intelligence before routing or implementation. |
-| `threat:response-needed` | Security response is required; do not open an autonomous PR before investigation. |
+| `intel-needed` | A repository-relevant external finding was surfaced; collect threat intelligence. |
+| `response-needed` | A KEV-correlated, OSSF `MAL-`, or GHSA `malware` finding fired; security response is required (no autonomous remediation). |
+
+The live per-item label assignments left by the retired regime are swept by the owner-driven prune dispatch; see *Stale-label handling* below.
 
 The deterministic rule lives in `scripts/threat_intel_triage.py`. The `scan` subcommand extracts every repository-local dependency surface and consults five external sources plus one supplemental enrichment layer.
 
@@ -147,13 +149,14 @@ are satisfied and fixtures cover the new branch.
 Precedence is ordered by evidence strength:
 
 1. **Confirmed exploitation or malware** takes priority. CISA KEV correlation,
-   GHSA `malware` advisories, and OSSF `MAL-` findings can add
-   `threat:response-needed`.
+   GHSA `malware` advisories, and OSSF `MAL-` findings classify the run
+   `response_needed`.
 2. **Prediction enriches but does not escalate.** FIRST EPSS scores help humans
-   prioritize CVE-aliased findings, but do not add `threat:response-needed`.
+   prioritize CVE-aliased findings, but do not escalate the run to
+   `response_needed`.
 3. **Vulnerability metadata informs context.** OSV.dev, GHSA vulnerability
    advisories, and NVD metadata establish or enrich the finding set, but absent
-   exploitation or malware evidence they route to `threat:intel-needed` only.
+   exploitation or malware evidence they classify the run `intel_needed` only.
 
 Missing source data is never evidence of safety. Empty, rate-limited, failed, or
 unsupported responses mean "no usable data from this source in this run"; they do
@@ -206,46 +209,57 @@ so the owner runs it and records the result on #1076.
 
 **Each cycle checks four things:**
 
-1. **True positives.** Open findings that received `threat:intel-needed` or
-   `threat:response-needed` and were acted on. Confirm each acted-on finding had
+1. **True positives.** Findings classified `intel-needed` or `response-needed`
+   on the #178 umbrella and acted on. Confirm each acted-on finding had
    a real repository-relevant cause: a locked dependency, a workflow `uses:`
    pin, or a transient `uv run --with` pin actually present in the tree.
-2. **False positives.** Findings that received a threat label but were
-   dismissed. Record the *systemic* cause (over-broad query, stale fixture,
+2. **False positives.** Findings classified on the umbrella but dismissed.
+   Record the *systemic* cause (over-broad query, stale fixture,
    ecosystem mismatch) rather than only the individual dismissal, so the rule or
    its fixtures can be narrowed.
-3. **Stale labels.** Issues or PRs carrying `threat:intel-needed` or
-   `threat:response-needed` with no follow-up activity beyond **one full
-   quarter** (the review window). See *Stale-label handling* below.
+3. **Leftover labels.** The retired per-item `threat:*` assignments still
+   present on existing issues/PRs. These are no longer re-evaluated by
+   automation; see *Stale-label handling* below for the one-time owner-driven
+   cleanup.
 4. **Source coverage.** Confirm OSV.dev, CISA KEV, GitHub Advisory Database,
    OSSF malicious-packages, FIRST EPSS, and NVD are reachable and return the
    expected data shapes; note any upstream schema or terms change. Per *Missing
    source data is never evidence of safety* above, an unreachable source is
    recorded as reduced confidence for that cycle, never as an all-clear.
 
-**Stale-label handling (manual procedure, owner @tvna).** Stale-label detection
-is **not** automated; it is a deliberate manual sweep performed each cycle by
-the repository owner (`@tvna`, the CODEOWNERS primary owner):
+**Stale-label handling (owner-driven cleanup, owner @tvna).** The `threat:*`
+labels were **retired**: [#1645](https://github.com/tvna/claude-md/issues/1645)
+stopped auto-applying them, and [#1647](https://github.com/tvna/claude-md/issues/1647)
+removed the definitions from `.github/labels.json` and `.github/label-policy.toml`.
+Every live `threat:*` assignment is therefore a leftover from the retired
+per-item regime, and the bulk cleanup is a single owner-driven, dry-run-first
+operation rather than a recurring per-item manual sweep:
 
-1. List open issues and PRs carrying a `threat:*` label (for example
-   `gh issue list --label threat:intel-needed` and
-   `gh issue list --label threat:response-needed`, plus the PR equivalents).
-2. For each, decide whether the underlying finding still fires. Since
-   [#1645](https://github.com/tvna/claude-md/issues/1645) no workflow applies
-   or removes `threat:*` labels automatically, so **every** live `threat:*`
-   label is now a leftover from the retired per-item regime (or a manual
-   owner annotation) and none are re-evaluated by automation — treat them as
-   stale unless a human is deliberately tracking the item. The bulk removal of
-   these leftovers is tracked as a follow-up to #1645.
-3. Remove a confirmed-stale label manually. `threat:response-needed` is removed
-   only when the finding stops firing or a human-reviewed remediation lands —
-   per *Response handoff* below, a missed window never clears it on its own.
-4. Record the sweep — items reviewed, labels removed, and any systemic cause —
-   in that cycle's comment on #1076.
+1. **Dry-run first.** List the open (and recently closed) issues and PRs still
+   carrying a `threat:*` label so the deletion scope is visible before any
+   mutation (`gh issue list --label threat:intel-needed`,
+   `gh issue list --label threat:response-needed`, plus the `gh pr list`
+   equivalents, or the GraphQL / MCP search equivalents).
+2. **Remove the assignments via the prune dispatch.** Because the definitions
+   are gone from `.github/labels.json`, dispatching `apply-labels.yml` with
+   `dry_run=true, prune=true` first (confirm only `threat:intel-needed` and
+   `threat:response-needed` appear under `plan-only (DELETE)`), then
+   `dry_run=false, prune=true`, deletes both labels from every issue and PR in
+   one operation. This is destructive on existing assignments per *Apply* and
+   *Rollback* above; re-adding a definition does not restore assignments.
+3. **Delete the per-item evidence comments.** The old per-item evidence comments
+   anchored by the retired marker `<!-- threat-intel-triage v1 -->` are not
+   touched by the label prune; delete them per item (owner-driven, confirm
+   first). The current aggregated comment uses a different marker
+   (`<!-- threat-intel-aggregate v1 -->`) on the #178 umbrella and is left in
+   place.
+4. **Record the sweep** — items reviewed, labels removed, evidence comments
+   deleted, and any systemic cause — in a dated comment on
+   [#1076](https://github.com/tvna/claude-md/issues/1076).
 
-Automating stale-label detection as a scheduled workflow step (mirroring
-`monthly-maintenance.yml`) is deferred future work tracked on #1076;
-until it lands, this manual sweep is the enforcement surface.
+A manual per-label `gh issue edit --remove-label` sweep remains the fallback if
+the prune dispatch is unavailable, but the prune is the single-operation path
+now that the definitions are retired.
 
 ### Why EPSS is advisory-only (no auto-escalation threshold)
 
@@ -279,15 +293,13 @@ Agents read `(type, state, severity, threat)` from the header alone and apply th
 |---|---|---|
 | `state:rfc` OR `state:parked` | no-action | no |
 | `type:tracking` | no-action on umbrella; act on sub-issues only | no |
-| `threat:response-needed` (manual only) | investigate + response planning (no autonomous PR) | yes |
-| `threat:intel-needed` (manual only) | collect threat intelligence, then re-route | yes |
 | `severity:security` (regardless of other labels) | investigate (no autonomous PR) | yes |
 | `type:fix` AND NOT `severity:security` | auto-fix candidate (mechanical PR allowed) | yes |
 | `type:docs` | auto-fix candidate | yes |
 | `type:feat` OR `type:refactor` | investigate — plan first, implementation awaits approval | yes |
 | No `type:*` yet | triage-needed: read title only, set `type:*`, re-route | title only |
 
-Rows are evaluated top-to-bottom; the first match wins. This table is the routing decision — the labels do not encode the decision themselves. Since [#1645](https://github.com/tvna/claude-md/issues/1645) the `threat:*` rows fire only on a label a human set deliberately; threat-intelligence findings are no longer auto-labelled per item and instead live on the #178 umbrella, so an agent acts on a finding by reading that umbrella comment, not by waiting for a per-item `threat:*` label.
+Rows are evaluated top-to-bottom; the first match wins. This table is the routing decision — the labels do not encode the decision themselves. The `threat:*` rows were removed when the labels were retired ([#1645](https://github.com/tvna/claude-md/issues/1645), [#1647](https://github.com/tvna/claude-md/issues/1647)); threat-intelligence findings live on the #178 umbrella, so an agent acts on a finding by reading that umbrella comment, not by waiting for a per-item label.
 
 ## Apply
 
@@ -378,10 +390,11 @@ gh api -X GET /repos/tvna/claude-md/issues --paginate -f state=all \
         | select((.labels | map(.name) | any(startswith("layer:")) | not) or
                  (.labels | map(.name) | map(select(startswith("type:"))) | length != 1) or
                  (.labels | map(.name) | map(select(startswith("state:"))) | length > 1) or
-                 (.labels | map(.name) | map(select(. == "severity:security")) | length > 1) or
-                 (.labels | map(.name) | map(select(startswith("threat:"))) | length > 2))
+                 (.labels | map(.name) | map(select(. == "severity:security")) | length > 1))
         | .number'
-# Must print nothing once Phase 3 is complete.
+# Must print nothing once Phase 3 is complete. (The retired threat:* axis is no
+# longer checked here; any leftover threat:* assignment is cleaned by the
+# owner-driven prune dispatch -- see Stale-label handling.)
 ```
 
 ## Rollback
@@ -398,7 +411,7 @@ Deleting a label is **destructive on existing issues** — GitHub removes the la
 
 ## Drift detection
 
-A scheduled workflow that diffs the live labels returned by `gh api` against `.github/labels.json` **and** verifies issue coverage (every open issue has ≥1 `layer:*`, exactly 1 `type:*`, ≤1 `state:*`, ≤1 `severity:*`, ≤2 `threat:*`) is planned as Phase 5 of [#84](https://github.com/tvna/claude-md/issues/84) (parked). Until it lands, drift is detected only by manual review during retrospectives.
+A scheduled workflow that diffs the live labels returned by `gh api` against `.github/labels.json` **and** verifies issue coverage (every open issue has ≥1 `layer:*`, exactly 1 `type:*`, ≤1 `state:*`, ≤1 `severity:*`) is planned as Phase 5 of [#84](https://github.com/tvna/claude-md/issues/84) (parked). Until it lands, drift is detected only by manual review during retrospectives.
 
 ## Migration from the `agent:*` design (#34)
 

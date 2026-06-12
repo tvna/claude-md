@@ -94,29 +94,18 @@ the body edit, label repair, and behind-refresh paths above are ruled out,
 and record the required root-cause note so the replacement-PR guard
 (`scripts/preflight_replacement_pr.py`) classifies the churn correctly.
 
-## Triage label routing failure (manual repair)
+## Threat-label routing (retired)
 
-The original session behind #675 hit `Resource not accessible by
-integration` when the triage workflow tried to add `threat:intel-needed`.
-That was a token-scope gap in the pre-consolidation triage workflow. The
-current `issue-pr-triage.yml` `triage` job declares `issues: write` and
-`pull-requests: write` (the scope the label endpoint
-`POST /repos/<repo>/issues/<n>/labels` needs), so the failure no longer
-reproduces -- recorded as a `none` mismatch in
-[`workflow-permissions-audit.md`](workflow-permissions-audit.md).
-
-If a label-routing run still fails (for example a transient API error), add
-the label by hand with the same approved wrapper the workflow uses, rather
-than a command-line GitHub client:
-
-```sh
-REPO=tvna/claude-md NUMBER=<issue-or-pr-number> GH_TOKEN=<token> \
-  python3 scripts/threat_intel_triage.py apply-labels \
-    --add-labels threat:intel-needed
-```
-
-The token needs `issues: write` on the repository; the script reads it from
-`GH_TOKEN` and never echoes the value.
+Per-item `threat:*` label routing was retired in
+[#1645](https://github.com/tvna/claude-md/issues/1645): the per-event `triage`
+job in `issue-pr-triage.yml` and the `apply-labels` subcommand of
+`scripts/threat_intel_triage.py` no longer exist, so there is no per-item
+label-routing failure to recover from. Threat-intelligence findings are
+repository-global and now aggregate weekly onto the #178 security umbrella via
+the `dependency-threat-triage` job in `weekly-maintenance.yml` (see
+[`issue-triage.md` Aggregated findings on the security umbrella](issue-triage.md#aggregated-findings-on-the-security-umbrella)).
+Cleanup of the `threat:*` labels already applied to existing items is tracked
+in [#1647](https://github.com/tvna/claude-md/issues/1647).
 
 ## Verify
 
