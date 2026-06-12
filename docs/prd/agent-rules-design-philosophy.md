@@ -169,7 +169,9 @@ removed.
   check (a script, a workflow, a hook, or a ruleset) that replaces
   reviewer memory. Defined operationally in section 2.2. Required by
   master section 3 ("push deterministic work into hooks, pre-commit,
-  and CI/CD ... build the harness first if it's missing").
+  and CI/CD"), under the section's lead rule ("if the gate is missing,
+  build it before the operation it guards -- never substitute agent
+  memory for an absent gate").
 - **untrusted data**: External text such as issue bodies, PR
   descriptions, review comments, CI logs, webhook payloads,
   generated reports, pasted stack traces, and external docs,
