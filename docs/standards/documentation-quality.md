@@ -57,6 +57,27 @@ prevents history-shaped files from accumulating at `docs/` root, while
 leaving each lane's README responsible for explaining where a document
 belongs.
 
+## D3. Docs Inventory Navigation Budget
+
+`scripts/scan_docs_inventory.py verify` also enforces a byte budget on
+`docs/INDEX.md` (`MAX_INDEX_BYTES`, 40 KiB). INDEX is read on demand
+whenever an agent navigates `docs/` -- it is not part of the per-request
+prefix -- so its byte weight is a per-navigation read cost. The budget
+blocks runaway growth rather than discovering it after the fact, and
+forces the split decision at a documented threshold instead of leaving it
+to agent memory.
+
+Bytes, not lines, are the signal: a few verbose `Territory`/`Companion`
+rows cost more to read than many terse ones, so the byte count is the
+faithful proxy for navigation cost.
+
+The remediation when the budget trips is a per-lane split, **not** a
+budget bump: keep a small top-level INDEX (lane descriptions plus the
+first row per lane) and move each lane's full table into its lane README.
+That split also requires teaching the inventory gate to follow links
+transitively (INDEX -> lane README -> leaf docs), because today
+`collect_index_entries` reads links from `docs/INDEX.md` directly only.
+
 ## Deferred Checks
 
 These checks were evaluated for issue #202 but are not blocking yet:
