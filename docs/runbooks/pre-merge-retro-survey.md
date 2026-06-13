@@ -83,6 +83,13 @@ flowchart TD
 4. End the turn. The human merges the PR through the GitHub UI; do NOT call
    `merge_pull_request`. A later stop in the same session passes for that PR.
 
+When the survey opens a retro in-session (R3 / R4 above), the
+`mcp__github__issue_write` create carries the reserved `auto-retro` scope, which
+`scripts/gate_reserved_retro_scope.py` denies by default. The one narrow
+allow-exception that lets this path through (and what it covers and excludes) is
+the design record in
+[`docs/standards/reserved-retro-scope-exception.md`](../standards/reserved-retro-scope-exception.md).
+
 ## Non-interactive fallback (AskUserQuestion confirm failure, #1081)
 
 The survey relies on the Claude-only `AskUserQuestion` tool to collect the

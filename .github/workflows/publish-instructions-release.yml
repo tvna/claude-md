@@ -1,0 +1,99 @@
+name: Publish instructions release
+
+# Publishes the compiled CLAUDE.md / AGENTS.md plus a SHA256SUMS manifest as
+# downloadable assets on a tagged release, so downstream consumers can pin a
+# version and verify the sha256 before landing the instructions as a committed
+# real file. Triggered by an `instructions-v*` tag (a deliberate, privileged
+# maintainer act) or a manual dispatch. See
+# docs/runbooks/consumer-instruction-sync.md and
+# docs/proposals/instruction-distribution-mechanism.md. Refs #1678.
+on:
+  push:
+    tags:
+      - "instructions-v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release tag to publish (e.g. instructions-vX.Y.Z). Must already exist as a tag."
+        type: string
+        required: true
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  APM_CLI_VERSION: "0.12.1"
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write  # create the release and upload assets via github.token
+    steps:
+      - name: Resolve release tag
+        id: tag
+        env:
+          # Route the trigger inputs through env (never interpolate directly
+          # into the run body). A dispatch supplies the tag explicitly; a tag
+          # push uses the ref name. Refs #1129.
+          DISPATCH_VERSION: ${{ inputs.version }}
+          REF_NAME: ${{ github.ref_name }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            tag="$DISPATCH_VERSION"
+          else
+            tag="$REF_NAME"
+          fi
+          case "$tag" in
+            instructions-v*) ;;
+            *)
+              echo "::error::tag '$tag' must start with 'instructions-v'"
+              exit 1
+              ;;
+          esac
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          ref: ${{ steps.tag.outputs.tag }}
+          persist-credentials: false
+
+      - name: Set up uv and project environment
+        uses: ./.github/actions/setup-uv
+
+      - name: Verify compiled instructions match the APM source at this tag
+        # The release ships the committed CLAUDE.md / AGENTS.md. Re-compile and
+        # fail if they drift, so a tag can never publish stale artifacts.
+        run: |
+          set -euo pipefail
+          uv run --with "apm-cli==${APM_CLI_VERSION}" apm compile
+          if ! git diff --exit-code -- CLAUDE.md AGENTS.md; then
+            echo "::error::CLAUDE.md or AGENTS.md is out of date at this tag. Re-run 'apm compile' and retag."
+            exit 1
+          fi
+
+      - name: Build SHA256SUMS manifest
+        run: |
+          set -euo pipefail
+          sha256sum CLAUDE.md AGENTS.md > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Publish release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          set -euo pipefail
+          python3 scripts/publish_instruction_release.py publish \
+            --tag "$TAG" \
+            --asset CLAUDE.md \
+            --asset AGENTS.md \
+            --asset SHA256SUMS

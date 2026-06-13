@@ -10,7 +10,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 
-from _github_api import apply_call, graphql_call
+from _github_api import apply_call, graphql_call, upload_release_asset
 
 pytestmark = pytest.mark.shard_ci_ops
 
@@ -439,3 +439,81 @@ def test_apply_call_uses_default_opener_with_timeout(monkeypatch: pytest.MonkeyP
     assert code == 200
     assert body == "ok"
     assert captured["timeout"] == _github_api._HTTP_TIMEOUT_SECONDS
+
+
+def test_upload_release_asset_posts_binary_to_uploads_host() -> None:
+    requests: list[urllib.request.Request] = []
+
+    def opener(request: urllib.request.Request) -> Response:
+        requests.append(request)
+        return Response(201, '{"id":7}')
+
+    code, body = upload_release_asset(
+        repo="o/r",
+        release_id=42,
+        name="CLAUDE.md",
+        content=b"master\n",
+        content_type="text/markdown",
+        token="token",
+        opener=opener,
+        sleeper=lambda _s: None,
+    )
+
+    assert code == 201
+    assert body == '{"id":7}'
+    req = requests[0]
+    assert req.method == "POST"
+    assert req.full_url == "https://uploads.github.com/repos/o/r/releases/42/assets?name=CLAUDE.md"
+    assert req.data == b"master\n"
+    assert req.headers["Content-type"] == "text/markdown"
+    assert req.headers["Authorization"] == "Bearer token"
+
+
+def test_upload_release_asset_retries_5xx_then_succeeds() -> None:
+    responses: list[object] = [http_error(503, "one"), Response(201, "ok")]
+    sleeps: list[float] = []
+
+    def opener(request: urllib.request.Request) -> Response:
+        response = responses.pop(0)
+        if isinstance(response, urllib.error.HTTPError):
+            raise response
+        assert isinstance(response, Response)
+        return response
+
+    code, body = upload_release_asset(
+        repo="o/r",
+        release_id=1,
+        name="SHA256SUMS",
+        content=b"x",
+        content_type="application/octet-stream",
+        token="token",
+        opener=opener,
+        sleeper=sleeps.append,
+    )
+
+    assert code == 201
+    assert body == "ok"
+    assert sleeps == [5]
+
+
+def test_upload_release_asset_returns_4xx_without_retry() -> None:
+    calls: list[int] = []
+
+    def opener(request: urllib.request.Request) -> Response:
+        calls.append(1)
+        raise http_error(422, "already exists")
+
+    code, body = upload_release_asset(
+        repo="o/r",
+        release_id=1,
+        name="CLAUDE.md",
+        content=b"x",
+        content_type="text/markdown",
+        token="token",
+        opener=opener,
+        sleeper=lambda _s: None,
+    )
+
+    assert code == 422
+    assert "already exists" in body
+    assert len(calls) == 1

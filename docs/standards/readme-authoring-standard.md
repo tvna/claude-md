@@ -55,8 +55,8 @@ This is the core rule and the reason this standard exists.
 
 - **Numbered `###` headings (`### 1.`, `### 2.`, ...) are for ordered
   steps only** - a sequence the reader performs in order. Inside
-  `## Using This From Another Project` the steps are: pull in the
-  submodule, add project-specific rules, pull in updates.
+  `## Using This From Another Project` the steps are: add the sync
+  workflow, add project-specific rules, pull in updates.
 - **Tool-specific notes do not belong between numbered steps.** A note that
   applies only to one downstream tool (Codex, Devin, and future targets) is
   not a step in the sequence; inserting it as `### <Tool>` between `### 1.`
