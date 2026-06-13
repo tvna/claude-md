@@ -32,7 +32,7 @@ class TestParseLabels:
 
 
 class TestClassify:
-    def test_no_security_signal_returns_no_labels(self) -> None:
+    def test_no_security_signal_returns_no_classification(self) -> None:
         result = triage.classify(
             "feat: add threat intelligence triage rule",
             "Deterministic routing only.",
@@ -40,8 +40,6 @@ class TestClassify:
         )
         assert result["intel_needed"] is False
         assert result["response_needed"] is False
-        assert result["recommended_labels"] == []
-        assert result["remove_labels"] == []
 
     def test_security_label_forces_collection_and_response(self) -> None:
         result = triage.classify(
@@ -51,11 +49,6 @@ class TestClassify:
         )
         assert result["intel_needed"] is True
         assert result["response_needed"] is True
-        assert result["recommended_labels"] == [
-            triage.INTEL_LABEL,
-            triage.RESPONSE_LABEL,
-        ]
-        assert result["remove_labels"] == []
 
     def test_cve_requires_collection_only(self) -> None:
         result = triage.classify(
@@ -65,8 +58,6 @@ class TestClassify:
         )
         assert result["intel_needed"] is True
         assert result["response_needed"] is False
-        assert result["recommended_labels"] == [triage.INTEL_LABEL]
-        assert result["remove_labels"] == []
         assert result["matched_intel_indicators"] == ["cve"]
 
     def test_active_exploitation_requires_response(self) -> None:
@@ -77,9 +68,6 @@ class TestClassify:
         )
         assert result["intel_needed"] is True
         assert result["response_needed"] is True
-        assert triage.INTEL_LABEL in result["recommended_labels"]
-        assert triage.RESPONSE_LABEL in result["recommended_labels"]
-        assert result["remove_labels"] == []
         assert "active-exploitation" in result["matched_response_indicators"]
         assert "exploit-available" in result["matched_response_indicators"]
         assert "ghsa" in result["matched_intel_indicators"]
@@ -94,28 +82,6 @@ class TestClassify:
         assert result["response_needed"] is True
         assert "credential-action" in result["matched_response_indicators"]
         assert "secret-leak" in result["matched_response_indicators"]
-
-    def test_stale_automation_labels_are_removed(self) -> None:
-        result = triage.classify(
-            "docs: update runbook",
-            "No concrete security advisory.",
-            {triage.INTEL_LABEL, triage.RESPONSE_LABEL},
-        )
-        assert result["intel_needed"] is True
-        assert result["response_needed"] is False
-        assert result["recommended_labels"] == []
-        assert result["remove_labels"] == [triage.RESPONSE_LABEL]
-
-    def test_existing_needed_label_is_not_recommended_again(self) -> None:
-        result = triage.classify(
-            "fix: evaluate CVE-2026-12345",
-            "Need to determine whether this repo is affected.",
-            {triage.INTEL_LABEL},
-        )
-        assert result["intel_needed"] is True
-        assert result["response_needed"] is False
-        assert result["recommended_labels"] == []
-        assert result["remove_labels"] == []
 
 
 class TestDependencyDiscovery:
@@ -515,7 +481,6 @@ class TestExternalFindings:
 
         assert result["intel_needed"] is True
         assert result["response_needed"] is False
-        assert result["recommended_labels"] == [triage.INTEL_LABEL]
         assert result["finding_count"] == 1
 
     def test_cisa_kev_alias_requires_response(self, tmp_path: Path) -> None:
@@ -540,41 +505,11 @@ class TestExternalFindings:
             osv_file=osv,
             kev_file=kev,
         )
-        result = triage.classify_findings(findings, {triage.INTEL_LABEL})
+        result = triage.classify_findings(findings, set())
 
         assert findings[0].known_exploited is True
         assert result["intel_needed"] is True
         assert result["response_needed"] is True
-        assert result["recommended_labels"] == [triage.RESPONSE_LABEL]
-        assert result["remove_labels"] == []
-
-    def test_existing_finding_label_is_not_recommended_again(
-        self, tmp_path: Path
-    ) -> None:
-        osv = tmp_path / "osv.json"
-        kev = tmp_path / "kev.json"
-        osv.write_text(
-            json.dumps(
-                {
-                    "results": [{"vulns": [{"id": "GHSA-abcd-1234-wxyz"}]}],
-                    "details": {"GHSA-abcd-1234-wxyz": {"aliases": ["CVE-2026-1111"]}},
-                }
-            ),
-            encoding="utf-8",
-        )
-        kev.write_text(json.dumps({"vulnerabilities": []}), encoding="utf-8")
-
-        findings = triage.fetch_external_findings(
-            [triage.Dependency("demo", "1.0.0", "PyPI", "uv.lock")],
-            osv_file=osv,
-            kev_file=kev,
-        )
-        result = triage.classify_findings(findings, {triage.INTEL_LABEL})
-
-        assert result["intel_needed"] is True
-        assert result["response_needed"] is False
-        assert result["recommended_labels"] == []
-        assert result["remove_labels"] == []
 
     def test_ghsa_finding_matches_locked_dependency(self, tmp_path: Path) -> None:
         osv = tmp_path / "osv.json"
@@ -623,7 +558,6 @@ class TestExternalFindings:
         assert "CVE-2026-3333" in findings[0].aliases
         assert result["intel_needed"] is True
         assert result["response_needed"] is False
-        assert result["recommended_labels"] == [triage.INTEL_LABEL]
 
     def test_ghsa_malware_advisory_escalates_response(self, tmp_path: Path) -> None:
         osv = tmp_path / "osv.json"
@@ -669,10 +603,6 @@ class TestExternalFindings:
         assert findings[0].known_exploited is False
         assert result["intel_needed"] is True
         assert result["response_needed"] is True
-        assert result["recommended_labels"] == [
-            triage.INTEL_LABEL,
-            triage.RESPONSE_LABEL,
-        ]
 
     def test_ossf_malicious_package_match_escalates_response(self, tmp_path: Path) -> None:
         osv = tmp_path / "osv.json"
@@ -718,10 +648,6 @@ class TestExternalFindings:
         assert "GHSA-mali-cious-pkg0" in findings[0].aliases
         assert result["intel_needed"] is True
         assert result["response_needed"] is True
-        assert result["recommended_labels"] == [
-            triage.INTEL_LABEL,
-            triage.RESPONSE_LABEL,
-        ]
 
     def test_ossf_non_matching_entry_does_not_label(self, tmp_path: Path) -> None:
         osv = tmp_path / "osv.json"
@@ -759,8 +685,6 @@ class TestExternalFindings:
         assert findings == []
         assert result["intel_needed"] is False
         assert result["response_needed"] is False
-        assert result["recommended_labels"] == []
-        assert result["remove_labels"] == []
 
     def test_ossf_drops_records_without_mal_prefix(self, tmp_path: Path) -> None:
         osv = tmp_path / "osv.json"
@@ -970,7 +894,6 @@ class TestEpssEnrichment:
         # Advisory-only: high EPSS without KEV/malware does not escalate.
         assert result["intel_needed"] is True
         assert result["response_needed"] is False
-        assert result["recommended_labels"] == [triage.INTEL_LABEL]
         # finding_to_dict surfaces EPSS for downstream consumers.
         assert result["findings"][0]["epss_score"] == 0.4213
         assert result["findings"][0]["epss_percentile"] == 0.9521
@@ -1003,7 +926,6 @@ class TestEpssEnrichment:
         assert findings[0].epss_score == 0.975
         assert findings[0].known_exploited is False
         assert result["response_needed"] is False
-        assert result["recommended_labels"] == [triage.INTEL_LABEL]
 
     def test_epss_supplements_kev_correlated_finding(self, tmp_path: Path) -> None:
         osv = tmp_path / "osv.json"
@@ -1037,10 +959,6 @@ class TestEpssEnrichment:
         assert findings[0].epss_score == 0.88
         # KEV remains the authoritative response signal; EPSS rides along.
         assert result["response_needed"] is True
-        assert result["recommended_labels"] == [
-            triage.INTEL_LABEL,
-            triage.RESPONSE_LABEL,
-        ]
 
     def test_epss_missing_cve_leaves_finding_unchanged(self, tmp_path: Path) -> None:
         osv = tmp_path / "osv.json"
@@ -1390,8 +1308,6 @@ class TestCli:
         assert out.read_text(encoding="utf-8").splitlines() == [
             "intel_needed=true",
             "response_needed=true",
-            "recommended_labels=threat:intel-needed,threat:response-needed",
-            "remove_labels=",
         ]
 
     def test_scan_uses_external_fixtures(self, tmp_path: Path, capsys) -> None:
@@ -1442,8 +1358,6 @@ class TestCli:
         assert out.read_text(encoding="utf-8").splitlines() == [
             "intel_needed=true",
             "response_needed=true",
-            "recommended_labels=threat:intel-needed,threat:response-needed",
-            "remove_labels=",
         ]
         assert "Sources: OSV.dev, CISA KEV" in summary.read_text(encoding="utf-8")
 
@@ -1502,18 +1416,13 @@ class TestCli:
 
         assert rc == 0
         assert result["response_needed"] is True
-        assert result["recommended_labels"] == [
-            triage.INTEL_LABEL,
-            triage.RESPONSE_LABEL,
-        ]
         summary_text = summary.read_text(encoding="utf-8")
         assert triage.SOURCE_OSSF_MAL in summary_text
         assert "CISA KEV" in summary_text
+        assert "- Classification: response-needed" in summary_text
         assert out.read_text(encoding="utf-8").splitlines() == [
             "intel_needed=true",
             "response_needed=true",
-            "recommended_labels=threat:intel-needed,threat:response-needed",
-            "remove_labels=",
         ]
 
     def test_scan_includes_ghsa_source_in_summary(self, tmp_path: Path, capsys) -> None:
@@ -2590,8 +2499,11 @@ class TestRenderSummaryMarkdown:
         md = triage.render_summary_markdown([finding.dependency], [finding], result)
         assert "## Threat intelligence triage" in md
         assert "| `requests` | `2.31.0` | `CVE-2024-0001` |" in md
-        assert "threat:intel-needed" in md
-        assert "threat:response-needed" in md  # known_exploited escalates
+        # known_exploited escalates the run to response-needed; the comment
+        # reports the classification, not the retired threat:* labels (#1651).
+        assert "- Classification: response-needed" in md
+        assert "threat:intel-needed" not in md
+        assert "threat:response-needed" not in md
 
     def test_no_findings_states_the_clear_result(self) -> None:
         dep = triage.Dependency("requests", "2.31.0", "PyPI", "uv.lock")
@@ -3039,7 +2951,6 @@ class TestClassifyFindingsSuppression:
         assert result["intel_needed"] is False
         assert result["suppressed_count"] == 1
         assert result["active_finding_count"] == 0
-        assert result["recommended_labels"] == []
         # The finding still appears in the evidence table.
         assert result["finding_count"] == 1
 
@@ -3050,7 +2961,7 @@ class TestClassifyFindingsSuppression:
         )
         assert result["intel_needed"] is False
 
-    def test_expired_suppression_resurfaces_label(self) -> None:
+    def test_expired_suppression_resurfaces_intel(self) -> None:
         finding = _intel_finding()
         today = date(2026, 6, 6)
         # review_by == today counts as expired (fail-safe).
@@ -3061,7 +2972,6 @@ class TestClassifyFindingsSuppression:
         assert result["suppressed_count"] == 0
         assert result["expired_suppressions"]
         assert "CVE-2026-2222" in result["expired_suppressions"][0]
-        assert triage.INTEL_LABEL in result["recommended_labels"]
 
     def test_response_class_finding_is_never_suppressed(self) -> None:
         finding = _intel_finding(known_exploited=True)

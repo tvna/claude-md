@@ -50,10 +50,7 @@ from datetime import date
 from pathlib import Path
 from typing import Any, NamedTuple
 
-INTEL_LABEL = "threat:intel-needed"
-RESPONSE_LABEL = "threat:response-needed"
 SECURITY_LABEL = "severity:security"
-THREAT_LABELS = {INTEL_LABEL, RESPONSE_LABEL}
 OSV_QUERYBATCH_URL = "https://api.osv.dev/v1/querybatch"
 OSV_QUERY_URL = "https://api.osv.dev/v1/query"
 OSV_VULN_URL = "https://api.osv.dev/v1/vulns/{id}"
@@ -82,8 +79,8 @@ SCRIPTS_SUBDIR = "scripts"
 # Checked-in accepted-intel suppression allowlist (#1277). Each entry is a
 # reviewed waiver keyed on (ecosystem, name, vuln_id) with a mandatory
 # reason and an ISO ``review_by`` expiry. An *unexpired* entry stops a
-# non-response finding from flipping ``threat:intel-needed``; an *expired*
-# entry re-surfaces the label (fail-loud per CLAUDE.md s4) instead of
+# non-response finding from flipping ``intel_needed`` true; an *expired*
+# entry re-surfaces it (fail-loud per CLAUDE.md s4) instead of
 # silently persisting. Suppressions never apply to known-exploited or
 # malware findings -- those always escalate. Resolved relative to
 # ``--repo-root`` so the scan auto-loads it without a CLI flag, mirroring
@@ -161,7 +158,7 @@ class Suppression(NamedTuple):
     """A reviewed accepted-intel waiver loaded from the checked-in allowlist (#1277).
 
     ``review_by`` is the expiry: on or after this date the waiver no longer
-    suppresses, so the finding re-surfaces ``threat:intel-needed``. ``reason``
+    suppresses, so the finding re-surfaces ``intel_needed`` true. ``reason``
     is mandatory so the record explains itself to a later reviewer.
     """
 
@@ -1489,17 +1486,9 @@ def classify_findings(
     intel_needed = bool(active)
     response_needed = any(_finding_is_response_class(finding) for finding in findings)
 
-    recommended_labels, remove_labels = classify_label_changes(
-        labels,
-        intel_needed=intel_needed,
-        response_needed=response_needed,
-    )
-
     return {
         "intel_needed": intel_needed,
         "response_needed": response_needed,
-        "recommended_labels": recommended_labels,
-        "remove_labels": remove_labels,
         "finding_count": len(findings),
         "active_finding_count": len(active),
         "suppressed_count": suppressed_count,
@@ -1555,37 +1544,13 @@ def classify(title: str, body: str, labels: set[str]) -> dict[str, object]:
     intel_needed = security_labeled or bool(intel_matches) or bool(response_matches)
     response_needed = security_labeled or bool(response_matches)
 
-    recommended_labels, remove_labels = classify_label_changes(
-        labels,
-        intel_needed=intel_needed,
-        response_needed=response_needed,
-    )
-
     return {
         "intel_needed": intel_needed,
         "response_needed": response_needed,
-        "recommended_labels": recommended_labels,
-        "remove_labels": remove_labels,
         "matched_intel_indicators": intel_matches,
         "matched_response_indicators": response_matches,
         "security_labeled": security_labeled,
     }
-
-
-def classify_label_changes(
-    labels: set[str], *, intel_needed: bool, response_needed: bool
-) -> tuple[list[str], list[str]]:
-    wanted_labels: list[str] = []
-    if intel_needed:
-        wanted_labels.append(INTEL_LABEL)
-    if response_needed:
-        wanted_labels.append(RESPONSE_LABEL)
-    existing_threat_labels = labels & THREAT_LABELS
-    recommended_labels = [
-        label for label in wanted_labels if label not in existing_threat_labels
-    ]
-    remove_labels = sorted(existing_threat_labels - set(wanted_labels))
-    return recommended_labels, remove_labels
 
 
 def _cmd_classify(args: argparse.Namespace) -> int:
@@ -1604,8 +1569,6 @@ def _cmd_classify(args: argparse.Namespace) -> int:
 
     print(f"intel_needed={_bool(result['intel_needed'])}")
     print(f"response_needed={_bool(result['response_needed'])}")
-    print(f"recommended_labels={','.join(result['recommended_labels'])}")
-    print(f"remove_labels={','.join(result['remove_labels'])}")
     print(f"matched_intel_indicators={','.join(result['matched_intel_indicators'])}")
     print(f"matched_response_indicators={','.join(result['matched_response_indicators'])}")
     return 0
@@ -1694,8 +1657,6 @@ def _cmd_scan(args: argparse.Namespace) -> int:
     print(f"known_exploited={result['known_exploited_count']}")
     print(f"intel_needed={_bool(result['intel_needed'])}")
     print(f"response_needed={_bool(result['response_needed'])}")
-    print(f"recommended_labels={','.join(result['recommended_labels'])}")
-    print(f"remove_labels={','.join(result['remove_labels'])}")
     return exit_code
 
 
@@ -1770,7 +1731,7 @@ def _write_summary_body(
     handle.write(f"- Dependencies checked: {len(dependencies)}\n")
     handle.write(f"- Findings: {result['finding_count']}\n")
     handle.write(f"- Known exploited findings: {result['known_exploited_count']}\n")
-    handle.write(f"- Recommended labels: `{','.join(result['recommended_labels'])}`\n")
+    handle.write(f"- Classification: {_classification_descriptor(result)}\n")
     suppressed_count = int(result.get("suppressed_count", 0) or 0)
     if suppressed_count:
         handle.write(f"- Accepted-intel suppressions applied: {suppressed_count}\n")
@@ -1892,12 +1853,25 @@ def _write_github_output(path: Path, result: dict[str, object]) -> None:
     with path.open("a", encoding="utf-8") as handle:
         handle.write(f"intel_needed={_bool(result['intel_needed'])}\n")
         handle.write(f"response_needed={_bool(result['response_needed'])}\n")
-        handle.write(f"recommended_labels={','.join(result['recommended_labels'])}\n")
-        handle.write(f"remove_labels={','.join(result['remove_labels'])}\n")
 
 
 def _bool(value: object) -> str:
     return "true" if bool(value) else "false"
+
+
+def _classification_descriptor(result: dict[str, object]) -> str:
+    """Return the run's threat classification without naming retired labels.
+
+    Mirrors the ``intel_needed`` / ``response_needed`` run classification. The
+    per-item ``threat:*`` label code path was removed in #1651 (labels retired
+    in #1647), so the aggregated #178 comment reports the classification state
+    rather than a label recommendation and no longer names retired labels.
+    """
+    if result["response_needed"]:
+        return "response-needed"
+    if result["intel_needed"]:
+        return "intel-needed"
+    return "none"
 
 
 def _string_list(value: object) -> list[str]:

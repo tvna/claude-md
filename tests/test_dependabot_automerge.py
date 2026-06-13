@@ -133,12 +133,15 @@ def test_both_threat_labels_block_sorted() -> None:
     assert "threat-intel label present: threat:intel-needed, threat:response-needed" in result.reasons
 
 
-def test_threat_labels_match_triage_source_of_truth() -> None:
-    # The literals in dependabot_automerge mirror threat_intel_triage's labels;
-    # this asserts they cannot drift apart (the triage script applies them).
-    import threat_intel_triage as tit
-
-    assert set(da._THREAT_BLOCKING_LABELS) == {tit.RESPONSE_LABEL, tit.INTEL_LABEL}
+def test_threat_blocking_labels_are_inert_defense_in_depth() -> None:
+    # The threat:* labels were retired in #1647 (definitions removed) and the
+    # per-item label code path in threat_intel_triage was removed in #1651, so
+    # nothing applies these labels anymore. The guard is kept as inert
+    # defense-in-depth (CLAUDE.md s4): if a threat:* label is ever re-created
+    # and applied by hand, auto-merge must still block. The literals are now
+    # self-contained -- there is no producer constant left to mirror, so this
+    # pins the expected set directly.
+    assert set(da._THREAT_BLOCKING_LABELS) == {"threat:response-needed", "threat:intel-needed"}
 
 
 def test_unexpected_path_blocks() -> None:
