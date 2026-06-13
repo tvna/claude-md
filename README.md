@@ -46,38 +46,36 @@ python3 scripts/verify_apm_checksums.py verify
 
 ## Using This From Another Project
 
-### 1. Pull it in as a submodule
+Import the compiled `CLAUDE.md` / `AGENTS.md` as **committed real files** -- not a
+submodule and not a symlink. A submodule is stored only as a commit pointer, so a
+fresh `git clone` (such as a Claude Code on the web session) leaves it empty and a
+symlinked `CLAUDE.md` becomes a broken link that silently loads nothing. The
+method below instead lands the instructions as files that are part of the clone.
 
-```bash
-# From the parent project's root
-git submodule add https://github.com/tvna/claude-md .claude-md-master
-ln -s .claude-md-master/CLAUDE.md CLAUDE.md
-```
+### 1. Add the sync workflow
+
+Copy the sync workflow from [`docs/runbooks/consumer-instruction-sync.md`](./docs/runbooks/consumer-instruction-sync.md) into your project. It fetches the compiled instructions from a pinned tagged release, verifies each file against the published `SHA256SUMS`, and opens a PR that writes them as committed real files. Merge that PR behind your code-owner gate; do not auto-merge.
 
 ### 2. Add project-specific rules
 
-Create a local project instructions file in the parent project and import the master at the top, then list only the project-specific delta below.
+If your project adds its own delta, sync the master into a vendored path and import it from your own `CLAUDE.md`, then list only the project-specific delta below.
 
 ```markdown
-@.claude-md-master/CLAUDE.md
+@.agents/claude-md-master/CLAUDE.md
 
 ## Project-specific rules
 - (only the delta for this project)
 ```
 
+The sync overwrites only the vendored file, so your own `CLAUDE.md` is never clobbered.
+
 ### 3. Pulling in updates
 
-```bash
-git submodule update --remote .claude-md-master
-```
+Bump the pinned release tag in the sync workflow in a reviewed PR. The scheduled run then opens the update PR; merge it behind your code-owner gate.
 
 ### Tool-specific notes
 
-- **Codex and other `AGENTS.md` readers** also symlink the compiled `AGENTS.md`:
-
-  ```bash
-  ln -s .claude-md-master/AGENTS.md AGENTS.md
-  ```
+- **Codex and other `AGENTS.md` readers**: the same sync lands `AGENTS.md` as a committed real file alongside `CLAUDE.md`; no separate step is needed.
 
 - **Devin** can use the APM-deployed skills from `.agents/skills/`. For hook
   parity, vendor `.devin/hooks.v1.json` alongside the repository instructions.

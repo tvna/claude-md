@@ -3,11 +3,18 @@ from __future__ import annotations
 import json
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from collections.abc import Callable
 from typing import Any
 
 API_VERSION = "2022-11-28"
+
+# GitHub serves release-asset uploads from a separate host (binary body,
+# not JSON), so the asset uploader below targets this fixed endpoint while
+# every other call stays on https://api.github.com. Keeping both on this
+# module preserves the single-HTTP-boundary invariant (must-have M7).
+_UPLOADS_ROOT = "https://uploads.github.com"
 
 # Bound every GitHub API call so a stalled connection cannot hang the
 # workflow job until the runner-level timeout fires (CWE-400 / CWE-770).
@@ -71,6 +78,63 @@ def apply_call(
         if 200 <= last_code < 300:
             break
         print(f"Attempt {attempt}: HTTP {_format_code(last_code)} for {method} {url}")
+        if last_code != 0 and last_code < 500:
+            break
+        if attempt < 3:
+            sleeper(attempt * 5)
+
+    return last_code, last_body
+
+
+def upload_release_asset(
+    *,
+    repo: str,
+    release_id: int,
+    name: str,
+    content: bytes,
+    content_type: str,
+    token: str,
+    opener: Callable[[urllib.request.Request], Any] = _default_opener,
+    sleeper: Callable[[float], None] | None = None,
+) -> tuple[int, str]:
+    """Upload a binary asset to a GitHub release. Returns (http_status, body).
+
+    POSTs raw bytes to the uploads.github.com asset endpoint for *release_id*.
+    Transient responses (network failure or HTTP 5xx) are retried up to 3
+    attempts with backoff, mirroring :func:`apply_call`. A 4xx is returned to
+    the caller as-is so it fails loud rather than retrying pointlessly.
+    """
+    # Resolve the sleeper at call time so tests can neutralise the backoff (#985).
+    sleeper = sleeper if sleeper is not None else time.sleep
+    url = f"{_UPLOADS_ROOT}/repos/{repo}/releases/{release_id}/assets?name={urllib.parse.quote(name)}"
+    last_code = 0
+    last_body = ""
+
+    for attempt in range(1, 4):
+        # S310 justification: the URL is built from the fixed
+        # https://uploads.github.com endpoint plus repo/path segments from
+        # trusted env vars; opener is injectable for tests but defaults to the
+        # bounded urlopen on the fixed host.
+        request = urllib.request.Request(url, data=content, method="POST")  # noqa: S310 — fixed https://uploads.github.com endpoint
+        request.add_header("Authorization", f"Bearer {token}")
+        request.add_header("Accept", "application/vnd.github+json")
+        request.add_header("X-GitHub-Api-Version", API_VERSION)
+        request.add_header("Content-Type", content_type)
+
+        try:
+            with opener(request) as response:
+                last_code = int(response.status)
+                last_body = response.read().decode("utf-8", errors="replace")
+        except urllib.error.HTTPError as error:
+            last_code = int(error.code)
+            last_body = error.read().decode("utf-8", errors="replace")
+        except urllib.error.URLError as error:
+            last_code = 0
+            last_body = str(error.reason)
+
+        if 200 <= last_code < 300:
+            break
+        print(f"Attempt {attempt}: HTTP {_format_code(last_code)} for POST {url}")
         if last_code != 0 and last_code < 500:
             break
         if attempt < 3:

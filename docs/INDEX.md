@@ -25,6 +25,7 @@ for `archive/` is documented separately in
 | File | Territory | Tracking issues | Companion |
 |---|---|---|---|
 | [README.md](proposals/README.md) | Placement rules for pre-decision evaluations whose requirements are not yet decidable, and their graduation path into `prd/` / `standards/` / `runbooks/`. | #1001 | `docs/INDEX.md`; `docs/prd/README.md` |
+| [instruction-distribution-mechanism.md](proposals/instruction-distribution-mechanism.md) | Decision (A+C: shipped sync template plus tagged release artifacts pinned by tag+sha256) for how downstream projects import the compiled instructions as committed real files; retraction of the submodule+symlink method; deferred reusable-workflow option B and its re-open condition. | #1678 | `.github/workflows/publish-instructions-release.yml`; `scripts/publish_instruction_release.py`; `docs/runbooks/consumer-instruction-sync.md` |
 
 ## prd/ -- design-stage rationale and decision records
 
@@ -87,6 +88,7 @@ than serving as precedent for new PRD files.
 | File | Territory | Tracking issues | Companion |
 |---|---|---|---|
 | [README.md](runbooks/README.md) | Placement rules for operator procedures. | #202 | `docs/INDEX.md`; `docs/standards/documentation-quality.md` |
+| [consumer-instruction-sync.md](runbooks/consumer-instruction-sync.md) | Downstream consumer procedure for importing the compiled `CLAUDE.md` / `AGENTS.md` as committed real files via a copyable sync workflow that fetches a tag-pinned release asset, verifies sha256, and opens a PR (no auto-merge). | #1678 | `.github/workflows/publish-instructions-release.yml`; `scripts/publish_instruction_release.py`; `docs/proposals/instruction-distribution-mechanism.md` |
 | [rulesets.md](runbooks/rulesets.md) | Apply / verify / rollback runbook for `.github/rulesets/*.json` SoT. | #18 | `.github/workflows/apply-rulesets.yml`; `.github/workflows/verify-pr.yml` (`verify-ruleset-sync` job); `.github/workflows/weekly-maintenance.yml`; `scripts/rulesets_apply.py`; `scripts/ruleset_drift.py`; `scripts/verify_ruleset_sync.py` |
 | [issue-triage.md](runbooks/issue-triage.md) | Label taxonomy and routing runbook readable from `labels.nodes[]` headers without fetching issue bodies. | #84, #34 | `.github/labels.json`; `.github/workflows/apply-labels.yml`; `scripts/labels_apply.py` |
 | [branch-cleanup.md](runbooks/branch-cleanup.md) | Weekly survey of abandoned branches; currently dry-run only. | #31, #18 Phase 4-B | `.github/workflows/weekly-maintenance.yml`; `scripts/branch_cleanup.py` |

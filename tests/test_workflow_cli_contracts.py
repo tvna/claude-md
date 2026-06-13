@@ -56,6 +56,7 @@ import post_issue_comment
 import pr_upsert
 import preflight_uv_version
 import prune_devcontainer_images
+import publish_instruction_release
 import pytest
 import ruleset_drift
 import rulesets_apply
@@ -258,6 +259,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("github_paginate.py", "get"): "test_github_paginate_get_matches_workflow_args",
     ("post_issue_comment.py", "create"): "test_post_issue_comment_create_matches_workflow_args",
     ("prune_devcontainer_images.py", "prune"): "test_prune_devcontainer_images_prune_matches_workflow_args",
+    ("publish_instruction_release.py", "publish"): "test_publish_instruction_release_publish_matches_workflow_args",
     ("pr_upsert.py", "upsert-files"): "test_pr_upsert_upsert_files_matches_workflow_args",
     ("verify_shard_coverage.py", None): "test_verify_shard_coverage_matches_workflow_args",
     ("verify_test_shard_markers.py", None): "test_verify_test_shard_markers_matches_workflow_args",
@@ -1994,6 +1996,35 @@ def test_post_issue_comment_create_matches_workflow_args(
     body_file = tmp_path / "comment.md"
     body_file.write_text("assembled comment", encoding="utf-8")
     rc = post_issue_comment.main(["create", "--issue-number", "178", "--body-file", str(body_file)])
+    assert rc == 0
+
+
+def test_publish_instruction_release_publish_matches_workflow_args(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """publish accepts the --tag/--asset argv used by publish-instructions-release.yml.
+
+    The release job calls ``publish_instruction_release.py publish --tag "$TAG"
+    --asset CLAUDE.md --asset AGENTS.md --asset SHA256SUMS``. Monkeypatch the
+    publish boundary so the contract test pins the argv shape without an API
+    call or on-disk asset files. Refs #1678.
+    """
+    monkeypatch.setenv("GH_TOKEN", "tok")
+    monkeypatch.setenv("REPO", "owner/repo")
+    monkeypatch.setattr(publish_instruction_release, "publish", lambda **kw: "https://x/rel")
+    rc = publish_instruction_release.main(
+        [
+            "publish",
+            "--tag",
+            "instructions-v1.0.0",
+            "--asset",
+            "CLAUDE.md",
+            "--asset",
+            "AGENTS.md",
+            "--asset",
+            "SHA256SUMS",
+        ]
+    )
     assert rc == 0
 
 

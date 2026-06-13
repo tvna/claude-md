@@ -132,6 +132,7 @@ GITHUB_API_SCRIPTS: frozenset[str] = frozenset(
         "pr_upsert",
         "preflight_replacement_pr",
         "prune_devcontainer_images",
+        "publish_instruction_release",
         "ruleset_drift",
         "sanitize_history",
         "security_drift_report",
