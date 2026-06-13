@@ -974,8 +974,7 @@ flowchart TD
     N006["for finding in findings:     supp = _matching_suppression(finding, suppressions)     if supp is None or _finding_is_response_class(finding):         active.append(finding)         continue     if supp.review_by <= today:         expired_resurfaced.append(_suppression_label(supp))         active.append(finding)         continue     suppressed_count += 1"]
     N007["intel_needed = bool(...)"]
     N008["response_needed = any(...)"]
-    N009["(recommended_labels, remove_labels) = classify_label_changes(...)"]
-    N010["return {'<str>': intel_needed, '<str>': response_needed, '<str>': recommended_labels, '<str>': remove_labels, '<str>': len(findings), '<str>': len(active), '<str>': suppressed_count, '<str>': expired_resurfaced, '<str>': sum((1 for finding in findings if finding.known_exploited)), '<str>': [finding_to_dict(finding) for finding in findings]}"]
+    N009["return {'<str>': intel_needed, '<str>': response_needed, '<str>': len(findings), '<str>': len(active), '<str>': suppressed_count, '<str>': expired_resurfaced, '<str>': sum((1 for finding in findings if finding.known_exploited)), '<str>': [finding_to_dict(finding) for finding in findings]}"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 --> N004
@@ -984,7 +983,6 @@ flowchart TD
     N006 --> N007
     N007 --> N008
     N008 --> N009
-    N009 --> N010
 ```
 
 ## finding_to_dict(...)
@@ -1025,8 +1023,7 @@ flowchart TD
     N005["security_labeled = SECURITY_LABEL in labels"]
     N006["intel_needed = security_labeled or bool(intel_matches) or bool(response_matches)"]
     N007["response_needed = security_labeled or bool(response_matches)"]
-    N008["(recommended_labels, remove_labels) = classify_label_changes(...)"]
-    N009["return {'<str>': intel_needed, '<str>': response_needed, '<str>': recommended_labels, '<str>': remove_labels, '<str>': intel_matches, '<str>': response_matches, '<str>': security_labeled}"]
+    N008["return {'<str>': intel_needed, '<str>': response_needed, '<str>': intel_matches, '<str>': response_matches, '<str>': security_labeled}"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 --> N004
@@ -1034,34 +1031,6 @@ flowchart TD
     N005 --> N006
     N006 --> N007
     N007 --> N008
-    N008 --> N009
-```
-
-## classify_label_changes(...)
-
-```mermaid
-flowchart TD
-    N001["classify_label_changes(...)"]
-    N002["wanted_labels = []"]
-    N003["if intel_needed"]
-    N004["append(...)"]
-    N005["if response_needed"]
-    N006["append(...)"]
-    N007["existing_threat_labels = labels & THREAT_LABELS"]
-    N008["recommended_labels = [label for label in wanted_labels if label not in existing_threat_labels]"]
-    N009["remove_labels = sorted(...)"]
-    N010["return (recommended_labels, remove_labels)"]
-    N001 -->|"start"| N002
-    N002 --> N003
-    N003 -->|"true"| N004
-    N004 --> N005
-    N003 -->|"false"| N005
-    N005 -->|"true"| N006
-    N006 --> N007
-    N005 -->|"false"| N007
-    N007 --> N008
-    N008 --> N009
-    N009 --> N010
 ```
 
 ## _cmd_classify(...)
@@ -1083,9 +1052,7 @@ flowchart TD
     N013["print(...)"]
     N014["print(...)"]
     N015["print(...)"]
-    N016["print(...)"]
-    N017["print(...)"]
-    N018["return 0"]
+    N016["return 0"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 -->|"true"| N004
@@ -1103,8 +1070,6 @@ flowchart TD
     N013 --> N014
     N014 --> N015
     N015 --> N016
-    N016 --> N017
-    N017 --> N018
 ```
 
 ## _cmd_verify(...)
@@ -1159,9 +1124,7 @@ flowchart TD
     N025["print(...)"]
     N026["print(...)"]
     N027["print(...)"]
-    N028["print(...)"]
-    N029["print(...)"]
-    N030["return exit_code"]
+    N028["return exit_code"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 --> N004
@@ -1193,8 +1156,6 @@ flowchart TD
     N025 --> N026
     N026 --> N027
     N027 --> N028
-    N028 --> N029
-    N029 --> N030
 ```
 
 ## _resolve_suppressions(...)
@@ -1433,7 +1394,7 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["_write_github_output(...)"]
-    N002["with path.open('<str>', encoding='<str>') as handle:     handle.write(f'<str>{_bool(result['<str>'])}<str>')     handle.write(f'<str>{_bool(result['<str>'])}<str>')     handle.write(f'<str>{'<str>'.join(result['<str>'])}<str>')     handle.write(f'<str>{'<str>'.join(result['<str>'])}<str>')"]
+    N002["with path.open('<str>', encoding='<str>') as handle:     handle.write(f'<str>{_bool(result['<str>'])}<str>')     handle.write(f'<str>{_bool(result['<str>'])}<str>')"]
     N003["end"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -1446,6 +1407,23 @@ flowchart TD
     N001["_bool(...)"]
     N002["return '<str>' if bool(value) else '<str>'"]
     N001 -->|"start"| N002
+```
+
+## _classification_descriptor(...)
+
+```mermaid
+flowchart TD
+    N001["_classification_descriptor(...)"]
+    N002["if result['response_needed']"]
+    N003["return '<str>'"]
+    N004["if result['intel_needed']"]
+    N005["return '<str>'"]
+    N006["return '<str>'"]
+    N001 -->|"start"| N002
+    N002 -->|"true"| N003
+    N002 -->|"false"| N004
+    N004 -->|"true"| N005
+    N004 -->|"false"| N006
 ```
 
 ## _string_list(...)
