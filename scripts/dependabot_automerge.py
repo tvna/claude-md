@@ -50,13 +50,15 @@ _API_ROOT = "https://api.github.com"
 # labels remain manual-review blockers.
 _ADVISORY_NON_BLOCKING_LABEL = "severity:non-ascii-content"
 
-# Threat-intel labels applied by scripts/threat_intel_triage.py (#1264). They
-# block auto-merge unconditionally: a malicious-package or response-needed
-# finding must reach a human even for an otherwise-eligible Dependabot bump, and
-# may be added *after* auto-merge was enabled (the disable-automerge path below
-# handles that race). Kept as literals to avoid importing the large triage
-# module at runtime; equality with threat_intel_triage.{RESPONSE,INTEL}_LABEL is
-# asserted in tests/test_dependabot_automerge.py so the strings cannot drift.
+# Threat-intel labels formerly applied by scripts/threat_intel_triage.py (#1264).
+# The label definitions were retired in #1647 and the per-item label code path in
+# the triage script was removed in #1651, so nothing applies these labels anymore.
+# This guard is kept as inert defense-in-depth (CLAUDE.md s4: do not collapse a
+# safety layer without reason): if a threat:* label is ever re-created and applied
+# by hand, an otherwise-eligible Dependabot bump must still block and reach a human
+# (the disable-automerge path below closes the after-enable race). The strings are
+# self-contained literals -- there is no producer constant left to mirror;
+# tests/test_dependabot_automerge.py pins the expected set.
 _THREAT_BLOCKING_LABELS = ("threat:response-needed", "threat:intel-needed")
 
 _ENABLE_AUTO_MERGE_MUTATION = """
