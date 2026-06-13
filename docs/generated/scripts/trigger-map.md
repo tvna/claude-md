@@ -105,6 +105,8 @@ Detection is string-match based:
 | `pr_body_close_keyword_gate.py` | agent-hook | `codex:PreToolUse` |
 | `pr_upsert.py` | workflow | `generate-agents.yml (generate)` |
 | `pr_upsert.py` | workflow | `post-merge.yml (decision-tree)` |
+| `preflight_angle_token_drop.py` | agent-hook | `claude:PreToolUse` |
+| `preflight_angle_token_drop.py` | agent-hook | `codex:PreToolUse` |
 | `preflight_branch_base.py` | agent-hook | `claude:PreToolUse` |
 | `preflight_branch_base.py` | agent-hook | `codex:PreToolUse` |
 | `preflight_branch_base.py` | pre-commit | `preflight-branch-base` |
