@@ -28,6 +28,25 @@ flowchart TD
     N005 --> N006
 ```
 
+## upload_release_asset(...)
+
+```mermaid
+flowchart TD
+    N001["upload_release_asset(...)"]
+    N002["sleeper = sleeper if sleeper is not None else time.sleep"]
+    N003["url = f'{_UPLOADS_ROOT}<str>{repo}<str>{release_id}<str>{urllib.parse.quote(name)}'"]
+    N004["last_code = 0"]
+    N005["last_body = '<str>'"]
+    N006["for attempt in range(1, 4):     request = urllib.request.Request(url, data=content, method='<str>')     request.add_header('<str>', f'<str>{token}')     request.add_header('<str>', '<str>')     request.add_header('<str>', API_VERSION)     request.add_header('<str>', content_type)     try:         with opener(request) as response:             last_code = int(response.status)             last_body = response.read().decode('<str>', errors='<str>')     except urllib.error.HTTPError as error:         last_code = int(error.code)         last_body = error.read().decode('<str>', errors='<str>')     except urllib.error.URLError as error:         last_code = 0         last_body = str(error.reason)     if 200 <= last_code < 300:         break     print(f'<str>{attempt}<str>{_format_code(last_code)}<str>{url}')     if last_code != 0 and last_code < 500:         break     if attempt < 3:         sleeper(attempt * 5)"]
+    N007["return (last_code, last_body)"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 --> N004
+    N004 --> N005
+    N005 --> N006
+    N006 --> N007
+```
+
 ## _graphql_is_transient(...)
 
 ```mermaid
