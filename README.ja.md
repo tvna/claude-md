@@ -46,38 +46,32 @@ python3 scripts/verify_apm_checksums.py verify
 
 ## 別プロジェクトから使う
 
-### 1. サブモジュールとして取り込む
+コンパイル済みの `CLAUDE.md` / `AGENTS.md` は **コミット済みの実ファイル** として取り込みます（submodule でも symlink でもありません）。submodule はコミットポインタとしてしか保存されないため、fresh な `git clone`（Claude Code on the web のセッションなど）では空になり、symlink した `CLAUDE.md` は壊れたリンクとなって何もサイレントに読み込まれません。以下の方式は、クローンの一部となる実ファイルとして指示を配置します。
 
-```bash
-# 親プロジェクトのルートで実行
-git submodule add https://github.com/tvna/claude-md .claude-md-master
-ln -s .claude-md-master/CLAUDE.md CLAUDE.md
-```
+### 1. 同期ワークフローを追加する
+
+[`docs/runbooks/consumer-instruction-sync.md`](./docs/runbooks/consumer-instruction-sync.md) の同期ワークフローを自分のプロジェクトにコピーします。固定したタグ付きリリースからコンパイル済み指示を取得し、公開された `SHA256SUMS` で各ファイルを検証し、コミット済み実ファイルとして書き込む PR を開きます。その PR は code-owner ゲートを通してマージし、自動マージはしないでください。
 
 ### 2. プロジェクト固有ルールを追加する
 
-親プロジェクト側でローカルなプロジェクト指示ファイルを作成し、先頭でこのマスターを読み込んでから、プロジェクト固有の差分だけを書きます。
+プロジェクト固有の差分がある場合は、マスターを vendored パスへ同期し、自分の `CLAUDE.md` から import して、その下にプロジェクト固有の差分だけを書きます。
 
 ```markdown
-@.claude-md-master/CLAUDE.md
+@.agents/claude-md-master/CLAUDE.md
 
 ## Project-specific rules
 - (only the delta for this project)
 ```
 
+同期は vendored ファイルだけを上書きするので、自分の `CLAUDE.md` が壊されることはありません。
+
 ### 3. 更新を取り込む
 
-```bash
-git submodule update --remote .claude-md-master
-```
+レビュー済みの PR で同期ワークフローの固定リリースタグを更新します。スケジュール実行が更新 PR を開くので、code-owner ゲートを通してマージします。
 
 ### ツール別の補足
 
-- **Codex など `AGENTS.md` を読むツール** 向けには、コンパイル済みの `AGENTS.md` も symlink します。
-
-  ```bash
-  ln -s .claude-md-master/AGENTS.md AGENTS.md
-  ```
+- **Codex など `AGENTS.md` を読むツール** 向けにも、同じ同期で `AGENTS.md` が `CLAUDE.md` と並ぶコミット済み実ファイルとして配置されます。別の手順は不要です。
 
 - **Devin** は APM が展開した `.agents/skills/` の skills を利用できます。hooks の parity が必要な場合は、リポジトリ指示と一緒に `.devin/hooks.v1.json` を取り込んでください。詳細は [`docs/standards/devin-apm-compatibility.md`](./docs/standards/devin-apm-compatibility.md) を参照してください。
 
