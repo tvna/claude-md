@@ -182,3 +182,45 @@ def test_main_block_exits_via_runpy(monkeypatch: pytest.MonkeyPatch) -> None:
     with pytest.raises(SystemExit) as exc_info:
         runpy.run_module("scan_docs_inventory", run_name="__main__")
     assert exc_info.value.code == 0
+
+
+# ---------------------------------------------------------------------------
+# INDEX byte budget (Refs #1665)
+# ---------------------------------------------------------------------------
+
+
+def test_index_within_budget_passes(tmp_path: Path) -> None:
+    _write_index(tmp_path, "# docs/ index\n")
+    assert scan_docs_inventory.verify_index_budget(tmp_path) == []
+
+
+def test_index_over_budget_reports_error(tmp_path: Path) -> None:
+    oversize = "# docs/ index\n" + ("x" * (scan_docs_inventory.MAX_INDEX_BYTES + 1))
+    _write_index(tmp_path, oversize)
+
+    errors = scan_docs_inventory.verify_index_budget(tmp_path)
+
+    assert len(errors) == 1
+    assert "over the" in errors[0]
+    assert "navigation budget" in errors[0]
+    assert str(scan_docs_inventory.MAX_INDEX_BYTES) in errors[0]
+
+
+def test_missing_index_has_no_budget_error(tmp_path: Path) -> None:
+    (tmp_path / "docs").mkdir()
+    assert scan_docs_inventory.verify_index_budget(tmp_path) == []
+
+
+def test_verify_surfaces_budget_error(tmp_path: Path) -> None:
+    oversize = "# docs/ index\n" + ("y" * (scan_docs_inventory.MAX_INDEX_BYTES + 1))
+    _write_index(tmp_path, oversize)
+
+    errors = scan_docs_inventory.verify(tmp_path)
+
+    assert any("navigation budget" in error for error in errors)
+
+
+def test_real_index_is_within_budget() -> None:
+    """The committed docs/INDEX.md must stay under the navigation budget."""
+    index = REPO_ROOT / "docs" / "INDEX.md"
+    assert index.stat().st_size <= scan_docs_inventory.MAX_INDEX_BYTES

@@ -5,6 +5,10 @@ Refs #918. ``docs/INDEX.md`` is the operator-facing map for the docs
 tree, so every Markdown document under ``docs/`` must either appear
 there or be the index itself. Top-level docs are reserved for navigation
 and documented compatibility pointers.
+
+Refs #1665. Because INDEX is read on demand during navigation, this gate
+also enforces a byte budget on it (``MAX_INDEX_BYTES``) so its growth is
+blocked rather than discovered.
 """
 
 from __future__ import annotations
@@ -39,6 +43,17 @@ EXEMPT_INVENTORY_PREFIXES = (
 INLINE_LINK_RE = re.compile(r"!?\[[^\]\n]*\]\(([^)\n]+)\)")
 REFERENCE_LINK_RE = re.compile(r"^\s{0,3}\[[^\]\n]+\]:\s+(\S+)", re.MULTILINE)
 IGNORED_SCHEMES = frozenset({"http", "https", "mailto", "tel", "data"})
+
+# Refs #1665. docs/INDEX.md is read on demand whenever an agent navigates
+# docs/ (it is not part of the per-request prefix), so its byte weight is a
+# per-navigation read cost. This budget caps that cost so runaway growth is
+# blocked rather than discovered, and the decision to split INDEX into
+# per-lane sub-indexes is forced at a documented threshold rather than left
+# to agent memory. The ceiling (40 KiB) sits above the current size (~31.5
+# KiB at adoption) with headroom for near-term lane additions; the
+# remediation when it trips is the per-lane split documented in
+# docs/standards/documentation-quality.md (D3), not a budget bump.
+MAX_INDEX_BYTES = 40 * 1024
 
 
 def rel(path: Path, root: Path) -> str:
@@ -93,10 +108,34 @@ def collect_index_entries(root: Path) -> set[str]:
     return entries
 
 
+def verify_index_budget(root: Path) -> list[str]:
+    """Return a budget diagnostic when ``docs/INDEX.md`` exceeds the ceiling.
+
+    The byte count, not the line count, is the navigation read cost: a few
+    verbose table rows cost more than many terse ones, so bytes are the
+    faithful signal here. Over budget, the fix is to split INDEX into
+    per-lane sub-indexes (see ``docs/standards/documentation-quality.md``
+    D3), which also requires teaching this gate to follow links
+    transitively; a budget bump is not the remediation.
+    """
+    index = root / INDEX_PATH
+    if not index.exists():
+        return []
+    size = index.stat().st_size
+    if size <= MAX_INDEX_BYTES:
+        return []
+    return [
+        f"::error file={INDEX_PATH.as_posix()}::docs/INDEX.md is {size} bytes, "
+        f"over the {MAX_INDEX_BYTES}-byte navigation budget; split it into "
+        "per-lane sub-indexes (docs/standards/documentation-quality.md D3) "
+        "rather than raising the budget"
+    ]
+
+
 def verify(root: Path = REPO_ROOT) -> list[str]:
     """Return docs inventory diagnostics."""
     root = root.resolve()
-    errors: list[str] = []
+    errors: list[str] = verify_index_budget(root)
     index_entries = collect_index_entries(root)
 
     for path in iter_docs_markdown(root):
