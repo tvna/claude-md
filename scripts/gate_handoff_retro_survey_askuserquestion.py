@@ -31,6 +31,14 @@ never calls it, so the survey never appeared (observed on PR #1062).
 The handoff -- the agent's ``Stop`` -- is the only in-session moment
 that matches a human UI merge. Issue #1073 moves the trigger here.
 
+This Stop trigger is a settled design decision, not an open question. Retro
+#1593 (R1) re-raised whether a bootstrap-recovery or explicit ``SessionEnd``
+trigger would be better, but the repository owner re-confirmed ``Stop`` is
+correct: under the human-UI-merge UX the agent never calls
+``mcp__github__merge_pull_request``, so the ``Stop`` handoff remains the only
+in-session moment that matches a human merge. The trigger stays here -- do not
+re-derive this conflict (refs #1672 / #1593).
+
 Why a Claude-only gate
 ----------------------
 ``AskUserQuestion`` is a Claude Code harness tool with no Codex / Devin
