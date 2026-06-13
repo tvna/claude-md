@@ -141,6 +141,8 @@ Detection is string-match based:
 | `preflight_session_base_freshness.py` | agent-hook | `claude:SessionStart` |
 | `preflight_session_base_freshness.py` | agent-hook | `codex:PreToolUse` |
 | `preflight_session_base_freshness.py` | agent-hook | `codex:SessionStart` |
+| `preflight_session_branch_authz.py` | agent-hook | `claude:PreToolUse` |
+| `preflight_session_branch_authz.py` | agent-hook | `codex:PreToolUse` |
 | `preflight_title_policy.py` | agent-hook | `claude:PreToolUse` |
 | `preflight_title_policy.py` | agent-hook | `codex:PreToolUse` |
 | `preflight_uv_version.py` | preflight | `preflight_uv_version` |
