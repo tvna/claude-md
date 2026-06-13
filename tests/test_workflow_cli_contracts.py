@@ -103,6 +103,7 @@ import uv_pin
 import validate_json_syntax
 import verify_apm_checksums
 import verify_dependabot_author
+import verify_instruction_text_growth
 import verify_linked_issue_titles
 import verify_readme_translation
 import verify_required_check_contexts
@@ -249,6 +250,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("verify_linked_issue_titles.py", "verify"): "test_verify_linked_issue_titles_verify_matches_workflow_args",
     ("verify_readme_translation.py", "verify"): "test_verify_readme_translation_matches_workflow_args",
     ("verify_text_delta_section.py", "verify"): "test_verify_text_delta_section_matches_workflow_args",
+    ("verify_instruction_text_growth.py", "verify"): "test_verify_instruction_text_growth_matches_workflow_args",
     ("verify_required_check_contexts.py", "verify"): "test_verify_required_check_contexts_matches_workflow_args",
     ("verify_ruleset_sync.py", "verify"): "test_verify_ruleset_sync_matches_workflow_args",
     ("verify_security_control_floor.py", None): "test_verify_security_control_floor_matches_workflow_args",
@@ -1329,6 +1331,53 @@ def test_verify_text_delta_section_matches_workflow_args(
         encoding="utf-8",
     )
     assert verify_text_delta_section.main(
+        [
+            "verify",
+            "--base-ref",
+            "origin/main",
+            "--body-file",
+            str(body_file),
+            "--created-at",
+            "2026-06-03T00:00:00Z",
+            "--cutoff",
+            "2026-05-26T00:00:00Z",
+        ]
+    ) == 0
+
+
+def test_verify_instruction_text_growth_matches_workflow_args(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Mirror the env+argv shape used by verify-pr.yml.
+
+    The workflow shells to
+    ``python3 scripts/verify_instruction_text_growth.py verify
+    --base-ref "$BASE_REF" --body-file "$body_file"
+    --created-at "$PR_CREATED_AT" --cutoff "$BODY_POLICY_CUTOFF"``.
+    Stub the diff lookup so the test stays hermetic across CI checkout
+    depths (the lint-scripts-pytest job checks out shallow, so a real
+    ``git diff origin/main..HEAD`` would fail with exit 128). A growth
+    diff plus a ``text-growth-ack:`` body must pass.
+    """
+    growth_diff = (
+        "--- a/.apm/instructions/master.instructions.md\n"
+        "+++ b/.apm/instructions/master.instructions.md\n"
+        "@@ -10 +10 @@\n"
+        "-old text\n"
+        "+old text expanded more\n"
+    )
+    monkeypatch.setattr(
+        verify_instruction_text_growth,
+        "instruction_diff",
+        lambda base, head="HEAD", **kwargs: growth_diff,
+    )
+
+    body_file = tmp_path / "body.md"
+    body_file.write_text(
+        "## Summary\n\ntext-growth-ack: warranted clarification\n",
+        encoding="utf-8",
+    )
+    assert verify_instruction_text_growth.main(
         [
             "verify",
             "--base-ref",
