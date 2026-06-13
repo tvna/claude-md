@@ -152,6 +152,7 @@ Detection is string-match based:
 | `rulesets_apply.py` | workflow | `weekly-maintenance.yml (security-control-drift)` |
 | `scan_allowlist_parser_parity.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
 | `scan_allowlist_rationale.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
+| `scan_apm_ascii.py` | workflow | `verify-pr.yml (portable-pr-policy)` |
 | `scan_apm_lock_drift.py` | workflow | `verify-pr.yml (portable-pr-policy)` |
 | `scan_apm_portability.py` | workflow | `verify-pr.yml (portable-pr-policy)` |
 | `scan_compile_from_source.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
