@@ -372,6 +372,14 @@ STEPS: tuple[Step, ...] = (
         argv=("python3", "scripts/verify_security_control_floor.py"),
     ),
     Step(
+        # Refs #1387. Fails when the security-control inventory drifts from the
+        # tree (an unlisted privileged surface or a dangling scripts/ reference),
+        # mirroring the verify-agents.yml lint-scripts-static gate so currency is
+        # checked pre-push too.
+        name="verify_control_inventory_currency",
+        argv=("python3", "scripts/verify_control_inventory_currency.py", "verify"),
+    ),
+    Step(
         # Refs #745. Fetches the live base branch and fails before push when
         # HEAD does not contain it, matching GitHub's out-of-date branch gate.
         name="preflight_branch_base",

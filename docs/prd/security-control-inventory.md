@@ -56,8 +56,8 @@ files via its own `ruleset-drift` job; `labels`, `apm-instructions`, and
 
 | Surface | ATT&CK | Existing defense | Evidence | Status | Gap |
 |---|---|---|---|---|---|
-| `apply-labels.yml` | PrivEsc, Impact | Manual `workflow_dispatch` only; `main` ref guard; `labels-apply` Environment scopes `LABELS_PAT`; mandatory `dry_run` input default, `prune` opt-in. | `docs/runbooks/issue-triage.md`, `scripts/labels_apply.py`, `tests/test_labels_apply.py` | partially covered | #181 (perms audit), #182 (privileged-op runbook) |
-| `apply-rulesets.yml` | PrivEsc, IA, Impact | Manual dispatch on `main` only; `ruleset-apply` Environment scopes `RULESETS_PAT`; per-file JSON validation; ruleset selector + `dry_run` + opt-in `enable_auto_delete`. | `docs/runbooks/rulesets.md`, `scripts/rulesets_apply.py`, `tests/test_rulesets_apply.py` | partially covered | #56 (PAT handling), #181, #182 |
+| `apply-labels.yml` | PrivEsc, Impact | Manual `workflow_dispatch` only; `main` ref guard; `labels-apply` Environment scopes `LABELS_PAT`; mandatory `dry_run` input default, `prune` opt-in. | `docs/runbooks/issue-triage.md`, `scripts/labels_apply.py`, `tests/test_labels_apply.py` | covered | — |
+| `apply-rulesets.yml` | PrivEsc, IA, Impact | Manual dispatch on `main` only; `ruleset-apply` Environment scopes `RULESETS_PAT`; per-file JSON validation; ruleset selector + `dry_run` + opt-in `enable_auto_delete`. | `docs/runbooks/rulesets.md`, `scripts/rulesets_apply.py`, `tests/test_rulesets_apply.py` | partially covered | #56 (PAT handling) |
 | `weekly-maintenance.yml` / `branch-cleanup` | Impact | Weekly scheduled survey with `contents: read`; survey-only mode (no deletion); rolling summary issue serves as audit log. | `docs/runbooks/branch-cleanup.md`, `scripts/branch_cleanup.py`, `tests/test_branch_cleanup.py` | covered | — |
 | `dependabot-automerge.yml` | RD, Persist | `pull_request_target` gated by audit script reading `dependabot-automerge.json` allowlist; severity/threat labels block auto-merge. | `docs/runbooks/dependabot-automerge.md`, `scripts/dependabot_automerge.py`, `tests/test_dependabot_automerge.py`, #185 | covered | — |
 | `generate-agents.yml` | Persist, LM | Dispatch + reusable compile; weekly schedule is called by `weekly-maintenance.yml`; drift check via `git diff --exit-code` on `CLAUDE.md` / `AGENTS.md`; opens PR rather than push direct. | `.apm/instructions/master.instructions.md`, `verify-pr.yml`, #112 | partially covered | #183 (downstream review checklist) |
@@ -69,6 +69,11 @@ files via its own `ruleset-drift` job; `labels`, `apm-instructions`, and
 | `verify-pr.yml` / `portable-pr-policy` | IA, DE, RD, Persist, LM | PR gate: title / body / issue-link checks, README translation parity, APM portability scan, `apm compile` drift, checksum verification, and `prek` in one portable required context (the `Portable PR policy / gate` job, consolidated into `verify-pr.yml` in #1319). | `.apm/instructions/master.instructions.md`, `CLAUDE.md`, `AGENTS.md`, `scripts/scan_apm_portability.py`, `scripts/title_policy.py`, `scripts/body_policy.py`, `scripts/issue_link.py` | partially covered | #183 (downstream review checklist) |
 | `verify-pr.yml` / `verify-dependabot-labels` | RD | Static cross-check that `dependabot.yml` labels resolve in `labels.json` (the `Verify dependabot labels / verify` job, consolidated into `verify-pr.yml` in #1319). | `scripts/dependabot_labels.py`, `tests/test_dependabot_labels.py` | covered | — |
 | `verify-github-content.yml` | IA, DE, RD | Issue-only gate: title ASCII / format and body section structure for issue events. PR content checks live in `verify-pr.yml`. | `scripts/title_policy.py`, `scripts/body_policy.py`, `docs/standards/issue-pr-body-standard.md`, `docs/prd/non-ascii-defense.md` | covered | — |
+| `devcontainer-pin-refresh.yml` | RD, Persist, PrivEsc | `push` / `workflow_dispatch`; top-level `permissions: {}`; the PR-authoring job runs in a GitHub Environment with a scoped GitHub App token (`DEVCONTAINER_PIN_APP_ID` / `DEVCONTAINER_PIN_APP_PRIVATE_KEY`) granting only `contents: write` + `pull-requests: write`; opens a signed-commit PR via the App-bot path rather than pushing direct. | `scripts/devcontainer_pin_pr.py`, `tests/test_devcontainer_pin_pr.py`, `scripts/mint_github_app_token.py`, `docs/runbooks/devcontainers.md`, `docs/standards/github-mcp-app-auth.md`, #696 | covered | — |
+| `publish-devcontainer-images.yml` | RD, Persist, Impact | `push` / `workflow_dispatch`; default `permissions: {}`; build/push jobs scope `packages: write`; the pin-bump PR job runs in a GitHub Environment with a scoped App token (`contents: write` / `pull-requests: write`); publishes images to GHCR and opens a signed-commit pin-bump PR. | `scripts/update_devcontainer_image_pins.py`, `tests/test_update_devcontainer_image_pins.py`, `scripts/mint_github_app_token.py`, `docs/runbooks/devcontainers.md`, #696 | covered | — |
+| `post-merge.yml` | Persist, Impact, PrivEsc | `push` on `main` + `schedule` + `workflow_dispatch`; per-job least-privilege blocks (`permissions: {}` default); the generated-docs job mints a scoped GitHub App token in a GitHub Environment for the signed PR-authoring path only (`contents: write` / `pull-requests: write`); other jobs stay `contents: read`. | `scripts/mint_github_app_token.py`, `tests/test_mint_github_app_token.py`, `docs/standards/github-mcp-app-auth.md`, #960 | covered | — |
+| `monthly-maintenance.yml` | Impact, Disc | Monthly `schedule` + `workflow_dispatch`; top-level `contents: read` + `issues: write`; the GHCR-cleanup job runs in a GitHub Environment with a scoped `GHCR_CLEANUP_TOKEN` (the default `GITHUB_TOKEN` cannot `packages: delete`); deletes only untagged / aged registry image versions. | `scripts/prune_devcontainer_images.py`, `tests/test_prune_devcontainer_images.py`, `docs/runbooks/devcontainers.md` | covered | — |
+| `tvna-bot-automerge.yml` | PrivEsc, Impact | `workflow_run` + `schedule` + `workflow_dispatch`; default `permissions: {}`; the merge job runs in a GitHub Environment with a scoped App token (`contents: write` / `pull-requests: write`); auto-merges only PRs authored by the trusted `tvna-bot` App after required checks pass. | `scripts/bot_pr_automerge.py`, `tests/test_bot_pr_automerge.py`, `docs/runbooks/dependabot-automerge.md` | covered | — |
 
 Notes:
 
@@ -134,12 +139,12 @@ rejects a deliberately unsafe sample.
 | `gate_mcp_github_uncovered.py` | DE, Exec | Catch-all PreToolUse hook for `mcp__github__*` tools without dedicated hooks; denies uncovered tools and redirects to `scripts/github_api.py` (reads) or instructs adding a hook (writes). | `tests/test_gate_mcp_github_uncovered.py`, `.claude/settings.json`, #870, #887 | covered | — |
 | `_trusted_bots.py` | RD, Coll | Static allowlist of trusted bot logins; consumed by `scan_non_ascii.py` and PR-body checks. | `docs/standards/issue-pr-body-standard.md`, `docs/prd/non-ascii-defense.md` | covered | — |
 | `body_policy.py` | DE, RD | Validates issue/PR body section structure with cutoff date; pure function, no network. | `tests/test_body_policy.py`, `verify-pr.yml`, `verify-github-content.yml`, #206 | covered | — |
-| `branch_cleanup.py` | Impact, Persist | Survey-only; creates/edits rolling issue; `dry_run` default; bounded age threshold; tested age boundaries. | `tests/test_branch_cleanup.py`, `weekly-maintenance.yml`, `docs/runbooks/branch-cleanup.md` | partially covered | #182 (privileged-op runbook for future deletion path) |
+| `branch_cleanup.py` | Impact, Persist | Survey-only; creates/edits rolling issue; `dry_run` default; bounded age threshold; tested age boundaries. | `tests/test_branch_cleanup.py`, `weekly-maintenance.yml`, `docs/runbooks/branch-cleanup.md` | covered | — |
 | `dependabot_automerge.py` | RD, Persist | Audit-only; no mutation; reads policy from `dependabot-automerge.json`; tested against representative fixtures. | `tests/test_dependabot_automerge.py`, `docs/runbooks/dependabot-automerge.md` | covered | — |
 | `dependabot_labels.py` | RD, DE | Static label-resolution check; no network; no mutation. | `tests/test_dependabot_labels.py`, `verify-pr.yml` | covered | — |
 | `install-uv.sh` | Exec, C2, Persist | Idempotent SessionStart hook; no-op outside `CLAUDE_CODE_REMOTE`; reads pin from `pyproject.toml`; fetches astral-sh/uv release only. | `docs/standards/remote-environment.md`, `.claude/settings.json` (carve-out), #106, #109, #112 | partially covered | no paired automated test for the shell script (manual verification documented); see `docs/standards/remote-environment.md` *Verification* section. Tracked under #112 follow-up notes. |
 | `issue_link.py` | IA, DE | PR gate; validates issue references via same-repo `gh api`; applies advisory labels. | `tests/test_issue_link.py`, `verify-pr.yml`, `docs/standards/issue-pr-body-standard.md` | covered | — |
-| `labels_apply.py` | PrivEsc, Impact, Exfil | Plan / dry-run / apply tri-state; PAT scoped to `labels-apply` Environment; prune is opt-in and DELETE-aware; outputs human-readable diff. | `tests/test_labels_apply.py`, `apply-labels.yml`, `docs/runbooks/issue-triage.md` | partially covered | #181, #182 |
+| `labels_apply.py` | PrivEsc, Impact, Exfil | Plan / dry-run / apply tri-state; PAT scoped to `labels-apply` Environment; prune is opt-in and DELETE-aware; outputs human-readable diff. | `tests/test_labels_apply.py`, `apply-labels.yml`, `docs/runbooks/issue-triage.md` | covered | — |
 | `np_strategy_tracking.py` | PrivEsc, Impact | Plan (default dry-run) / apply tri-state; swaps an issue's `type:*` label to `type:tracking` for an N-PR delivery strategy so sibling PRs can use `Refs` without the body marker the GitHub MCP layer strips; pure decision function (`plan_label_swap`); `apply` records rationale as an issue comment; never echoes the token. | `tests/test_np_strategy_tracking.py`, `docs/standards/issue-pr-body-standard.md`, #1035, #1005 | covered | — |
 | `plan_language_context.py` | Coll, LM | SessionStart hook; reads `.github/owners.yaml` and emits language policy; no mutation, no network. | `tests/test_plan_language_context.py`, `docs/standards/repo-scope.md`, #211 | covered | — |
 | `pr_body_close_keyword_gate.py` | IA, DE | PreToolUse hook; client-side mirror of the issue-link step inside `verify-pr.yml` (Refs-only / tracking-label / partial-work-marker gate; the opt-out marker is the legacy `<!-- partial -->` comment or the MCP-safe plain-text `partial-pr` line, #1035); blocks `mcp__github__(create_pull_request\|update_pull_request)` with a `permissionDecision: "deny"` JSON; fail-closed when `GH_TOKEN` is unset so the local outcome cannot be looser than the server gate. | `tests/test_pr_body_close_keyword_gate.py`, `docs/standards/issue-pr-body-standard.md`, #219, #222, #1035 | covered | — |
@@ -147,7 +152,7 @@ rejects a deliberately unsafe sample.
 | `preflight_github_secrets.py` | Cred, Exfil, DE | PreToolUse hook that scans every string field of `mcp__github__*` write inputs (issue / PR / comment / review bodies) for high-confidence secrets via the shared `_secret_patterns.py` detector and denies before the value crosses into GitHub; the matched value is never echoed (redacted diagnostic names only the field and rule id); fail-open on parse errors (the event envelope is harness-generated, not attacker-controllable, per #1389). Wired into all three agent configs via `agent_hooks_source.json`. | `tests/test_preflight_github_secrets.py`, `scripts/_secret_patterns.py`, `scripts/scan_secrets.py`, `.claude/settings.json`, #1388 | covered | — |
 | `_secret_patterns.py` | Cred, Exfil | Shared high-confidence secret-pattern detector (`scan_line` / `scan_text`); pure functions, no I/O; consumed by `scan_secrets.py` (committed-file gate) and `preflight_github_secrets.py` (write-side gate) so the two cannot drift. Never returns the matched value. | `tests/test_scan_secrets.py`, `tests/test_preflight_github_secrets.py`, #1129, #1388 | covered | — |
 | `ruleset_drift.py` | Persist, IA | Compares live rulesets to SoT JSON; files an issue when drift is detected; reads `GH_TOKEN_API`. | `tests/test_ruleset_drift.py`, `weekly-maintenance.yml`, `docs/runbooks/rulesets.md` | covered | — |
-| `rulesets_apply.py` | PrivEsc, IA, Impact | Plan / dry-run / apply tri-state; PAT scoped to `ruleset-apply` Environment; opt-in `enable_auto_delete`; outputs ruleset-by-ruleset diff. | `tests/test_rulesets_apply.py`, `apply-rulesets.yml`, `docs/runbooks/rulesets.md` | partially covered | #56, #181, #182 |
+| `rulesets_apply.py` | PrivEsc, IA, Impact | Plan / dry-run / apply tri-state; PAT scoped to `ruleset-apply` Environment; opt-in `enable_auto_delete`; outputs ruleset-by-ruleset diff. | `tests/test_rulesets_apply.py`, `apply-rulesets.yml`, `docs/runbooks/rulesets.md` | partially covered | #56 |
 | `scan_non_ascii.py` | DE, Coll, Persist, Cred | Write-side scanner; closes / requests-changes / labels; trusted-bot allowlist; respects body section boundaries. | `tests/test_scan_non_ascii.py`, `issue-pr-triage.yml`, `docs/prd/non-ascii-defense.md`, #102 | covered | — |
 | `security_drift_report.py` | Persist, Impact | Aggregator: parses captured exit codes / outputs of the per-family detectors and emits a single Markdown report; posts / updates a rolling comment on parent #178 via `_github_api.apply_call`. The `file-family-issues` subcommand auto-files one issue per drifting target family (`labels`, `apm-instructions`, `uv-pin-literal`) via the same `apply_call` boundary, meeting the `detect-and-file` floor; never mutates per-family state. | `tests/test_security_drift_report.py`, `weekly-maintenance.yml`, `.github/security-control-floor.toml`, `docs/runbooks/security-control-drift-report.md`, #180 | covered | — |
 | `verify_security_control_floor.py` | Persist, Impact | Deterministic gate (`lint-scripts-static`): reads `.github/security-control-floor.toml` and fails CI when a scheduled control family sits below the `detect-and-file` floor without an explicit `exempt_reason`; pure `evaluate`, no network. | `tests/test_verify_security_control_floor.py`, `.github/security-control-floor.toml`, `verify-agents.yml`, #178 | covered | — |
@@ -162,13 +167,13 @@ rejects a deliberately unsafe sample.
 | `docs/runbooks/branch-cleanup.md` | Impact, Disc | Documents weekly survey workflow, dispatch inputs, age threshold, dry-run default, rollback path (re-create branch from issue note). | `weekly-maintenance.yml`, `scripts/branch_cleanup.py`, #31 | covered | — |
 | `docs/runbooks/dependabot-automerge.md` | RD, Persist | Documents allowlist policy and labels that veto auto-merge; references audit script. | `dependabot-automerge.yml`, `scripts/dependabot_automerge.py`, #185 | covered | — |
 | `docs/standards/issue-pr-body-standard.md` | DE, RD, IA | Documents body section requirements; trusted-bot carve-out; advisory hook integration. | `verify-pr.yml`, `verify-github-content.yml`, `scripts/body_policy.py`, `scripts/pr_body_close_keyword_gate.py`, #206 | covered | — |
-| `docs/runbooks/issue-triage.md` | Coll, Recon, Persist, PrivEsc | Documents label taxonomy, `LABELS_PAT` Environment scope, apply workflow, prune semantics, manual verification. | `apply-labels.yml`, `.github/labels.json`, #84 | partially covered | #181, #182 |
+| `docs/runbooks/issue-triage.md` | Coll, Recon, Persist, PrivEsc | Documents label taxonomy, `LABELS_PAT` Environment scope, apply workflow, prune semantics, manual verification. | `apply-labels.yml`, `.github/labels.json`, #84 | covered | — |
 | `docs/runbooks/agent-provenance.md` | RD, Exec, LM, C2 | Documents minimum provenance metadata, permission review, update cadence, and rollback expectations before adopting or updating skills, subagents, MCP servers, or comparable agent extensions. | #63, #312, `docs/agent-provenance.md` | covered | — |
 | `docs/prd/non-ascii-defense.md` | DE, LM, Cred, Coll | Documents three-layer non-ASCII defense (past sanitization, write-side workflow + PreToolUse, read-side PostToolUse); rollback steps. | `issue-pr-triage.yml`, `scripts/scan_non_ascii.py`, `scripts/preflight_non_ascii.py`, #102, #146 | covered | — |
 | `docs/standards/performance-metrics.md` | RD | Design-only doc; no operational control today; no privileged data. | #61, #58 | not applicable | — |
 | `docs/standards/remote-environment.md` | Exec, C2, Persist | Documents SessionStart hook, uv pin propagation, verification commands, rollback procedure, outbound-network expectations. | `scripts/install-uv.sh`, `.claude/settings.json`, `scripts/uv_pin.py`, #106, #109, #112 | covered | — |
 | `docs/standards/repo-scope.md` | LM, Exec | Documents the `.claude/settings.json` carve-out and the prohibition on per-agent tool config (`.codex/`, etc.). | `docs/standards/remote-environment.md`, #109 | covered | — |
-| `docs/runbooks/rulesets.md` | PrivEsc, IA, Impact, Disc | Documents `RULESETS_PAT` scope, ruleset apply / verify / rollback orchestration, dispatch authorization, audit-log expectations. | `apply-rulesets.yml`, `weekly-maintenance.yml`, `scripts/rulesets_apply.py`, #18, #27, #56 | partially covered | #56, #182 |
+| `docs/runbooks/rulesets.md` | PrivEsc, IA, Impact, Disc | Documents `RULESETS_PAT` scope, ruleset apply / verify / rollback orchestration, dispatch authorization, audit-log expectations. | `apply-rulesets.yml`, `weekly-maintenance.yml`, `scripts/rulesets_apply.py`, #18, #27, #56 | partially covered | #56 |
 | `docs/runbooks/security-control-drift-report.md` | Persist, Impact | Documents the scheduled aggregator (#180): trigger, families covered, families pending, rolling-comment marker, dry-run preview, per-row investigation steps, rollback. | `weekly-maintenance.yml`, `scripts/security_drift_report.py`, #178, #180 | covered | — |
 
 ## Cross-reference: ATT&CK tactic → surface coverage
@@ -177,20 +182,20 @@ This table answers, for each row of #178's coverage table: which surfaces in thi
 
 | ATT&CK | Contributing surfaces | Aggregate status | Gap |
 |---|---|---|---|
-| Recon | `docs/runbooks/issue-triage.md`, `docs/runbooks/rulesets.md`, `docs/standards/remote-environment.md`, `threat_intel_triage.py` | partially covered | #170, #181 (no scheduled secret scan beyond GitHub default) |
+| Recon | `docs/runbooks/issue-triage.md`, `docs/runbooks/rulesets.md`, `docs/standards/remote-environment.md`, `threat_intel_triage.py` | partially covered | #170 |
 | RD | `verify-pr.yml`, `verify-github-content.yml`, `issue-pr-triage.yml`, `verify_dependabot_author.py`, `.github/dependabot.yml`, `uv.lock`, `pyproject.toml`, `docs/runbooks/agent-provenance.md` | covered | — |
 | IA | `main.json`, `all-branches.json`, `verify_dependabot_author.py`, `verify-pr.yml`, `verify-github-content.yml`, `weekly-maintenance.yml` | partially covered | #120 |
-| Exec | `verify-agents.yml`, `verify-pr.yml`, `install-uv.sh`, `pyproject.toml`, `uv.lock`, `.claude/settings.json` carve-out, `docs/runbooks/agent-provenance.md` | partially covered | #181 (workflow `permissions:` audit) |
+| Exec | `verify-agents.yml`, `verify-pr.yml`, `install-uv.sh`, `pyproject.toml`, `uv.lock`, `.claude/settings.json` carve-out, `docs/runbooks/agent-provenance.md` | covered | — |
 | Persist | `verify-pr.yml`, `weekly-maintenance.yml`, `apply-labels.yml`, `apply-rulesets.yml`, `verify-github-content.yml` | covered | — |
-| PrivEsc | `apply-labels.yml`, `apply-rulesets.yml`, `weekly-maintenance.yml`, `docs/runbooks/issue-triage.md`, `docs/runbooks/rulesets.md` | partially covered | #56, #181 |
+| PrivEsc | `apply-labels.yml`, `apply-rulesets.yml`, `weekly-maintenance.yml`, `docs/runbooks/issue-triage.md`, `docs/runbooks/rulesets.md` | partially covered | #56 |
 | DE | `verify-pr.yml`, `verify-github-content.yml`, `issue-pr-triage.yml`, `preflight_non_ascii.py` | covered | — |
-| Cred | `issue-pr-triage.yml`, `preflight_non_ascii.py`, `docs/runbooks/rulesets.md`, `docs/runbooks/issue-triage.md` (Environment-scoped PATs) | partially covered | #181 (log redaction audit) |
+| Cred | `issue-pr-triage.yml`, `preflight_non_ascii.py`, `docs/runbooks/rulesets.md`, `docs/runbooks/issue-triage.md` (Environment-scoped PATs) | covered | — |
 | Disc | `docs/runbooks/rulesets.md`, `docs/runbooks/issue-triage.md`, `docs/runbooks/branch-cleanup.md`, `docs/standards/remote-environment.md` | covered | — |
 | LM | `.apm/instructions/master.instructions.md`, `CLAUDE.md`, `AGENTS.md`, `verify-pr.yml`, `generate-agents.yml`, `docs/runbooks/agent-provenance.md` | partially covered | #183 |
 | Coll | `issue-pr-triage.yml`, `_trusted_bots.py`, `docs/prd/non-ascii-defense.md` | partially covered | #63, #102 |
 | C2 | `install-uv.sh`, `threat_intel_triage.py`, `generate-agents.yml`, `uv.lock`, `pyproject.toml`, `docs/runbooks/agent-provenance.md` | covered | — |
-| Exfil | `apply-labels.yml`, `apply-rulesets.yml`, `weekly-maintenance.yml`, `docs/runbooks/rulesets.md`, `docs/runbooks/branch-cleanup.md` | partially covered | #181, #182 |
-| Impact | `apply-labels.yml`, `apply-rulesets.yml`, `weekly-maintenance.yml`, `main.json`, `all-branches.json` | partially covered | #182 |
+| Exfil | `apply-labels.yml`, `apply-rulesets.yml`, `weekly-maintenance.yml`, `docs/runbooks/rulesets.md`, `docs/runbooks/branch-cleanup.md` | covered | — |
+| Impact | `apply-labels.yml`, `apply-rulesets.yml`, `weekly-maintenance.yml`, `main.json`, `all-branches.json` | covered | — |
 
 ## Gap summary
 
@@ -204,13 +209,11 @@ Follow-up issues this inventory references:
 | #120 | Required-checks vs live ruleset synchronization |
 | #170 | Sustained external threat-intelligence triage operations |
 | #180 | Scheduled drift reporting across control families (closed by `weekly-maintenance.yml`) |
-| #181 | Workflow permissions and PAT audit (least privilege matrix) |
-| #182 | Privileged-operation runbook checklist (dry-run / authorization / rollback / audit) |
 | #183 | Downstream instruction review checklist |
-| #184 | ATT&CK review cadence on #178 |
-| #312 | Agent extension provenance runbook for skills, subagents, MCP servers, and comparable extensions |
 
 No new follow-up issues are opened by this inventory: every gap identified above maps to one of the issues in the table. If a future review surfaces a gap that does not fit any of these, append it to this file and open a new issue then.
+
+Resolved gaps (closed-completed; their controls landed and are recorded in the rows above, no longer open gaps): #181 (workflow permissions / PAT audit -> `docs/runbooks/workflow-permissions-audit.md`), #182 (privileged-operation runbook checklist -> the `issue-triage.md` / `rulesets.md` / `branch-cleanup.md` runbooks), #184 (ATT&CK review cadence -> `docs/runbooks/attack-coverage-review-cadence.md`), #312 (agent extension provenance -> `docs/agent-provenance.md`).
 
 Surfaces explicitly marked `not applicable`:
 
@@ -230,11 +233,25 @@ Expected behavior:
 - A match in a file already represented in this inventory under its primary section is acceptable and does not require a new entry.
 - A match in a file NOT represented here is a defect in this inventory and should be added by a PR that closes #179 follow-up.
 
-Reviewers should also confirm:
+The `rg` command above stays a useful exploratory aid, but currency is no
+longer reviewer-memory dependent: it is enforced by the deterministic gate
+`scripts/verify_control_inventory_currency.py` in the `lint-scripts-static` job
+of `verify-agents.yml` (refs #1387). The gate fails CI when
 
-- `ls .github/workflows/` matches the 15 rows in section 1.
-- `ls .github/rulesets/` matches the 2 rows in section 2.
-- `ls scripts/` matches the 22 rows in section 6 (`__pycache__` is excluded; not security-relevant).
-- `ls docs/` matches the 11 rows in section 7.
+- a surface that crosses a secret / privilege boundary (a workflow using a
+  non-`GITHUB_TOKEN` secret or declaring an `environment:`, or a script
+  importing `_secret_patterns`) is not declared in
+  `.github/security-surface-inventory.toml` -- so a NEW privileged surface
+  cannot land without either an inventory row or a justified exemption;
+- a manifest entry marked `status = "inventory"` has no row here, or a
+  `status = "exempt"` entry carries no reason;
+- this document cites a `scripts/*.py` or `.github/workflows/*.yml` path that no
+  longer exists (a dangling reference).
+
+The gate is tree-only and runs with no network, so it cannot read GitHub issue
+state; reconciling a *closed* tracking issue that lingers in a Gap column stays
+a periodic resync plus the weekly drift job's domain. Because the row counts in
+sections 1-7 grow as controls land, this document no longer asserts a fixed row
+count per section -- the gate, not a hardcoded number, is the currency check.
 
 Closes #179.
