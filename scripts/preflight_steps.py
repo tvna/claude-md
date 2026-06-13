@@ -66,6 +66,20 @@ STEPS: tuple[Step, ...] = (
             "AGENTS.md",
         ),
     ),
+    Step(
+        name="scan_apm_ascii",
+        argv=(
+            "python3",
+            "scripts/scan_apm_ascii.py",
+            "verify",
+            "--path",
+            ".apm/instructions/master.instructions.md",
+            "--path",
+            "CLAUDE.md",
+            "--path",
+            "AGENTS.md",
+        ),
+    ),
     Step(name="verify_apm_checksums", argv=("python3", "scripts/verify_apm_checksums.py", "verify")),
     Step(name="scan_apm_lock_drift", argv=("python3", "scripts/scan_apm_lock_drift.py", "verify")),
     Step(
