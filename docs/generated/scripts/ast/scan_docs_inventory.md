@@ -72,13 +72,34 @@ flowchart TD
     N007 --> N008
 ```
 
+## verify_index_budget(...)
+
+```mermaid
+flowchart TD
+    N001["verify_index_budget(...)"]
+    N002["index = root / INDEX_PATH"]
+    N003["if not index.exists()"]
+    N004["return []"]
+    N005["size = index.stat().st_size"]
+    N006["if size <= MAX_INDEX_BYTES"]
+    N007["return []"]
+    N008["return [f'<str>{INDEX_PATH.as_posix()}<str>{size}<str>{MAX_INDEX_BYTES}<str>']"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 -->|"true"| N004
+    N003 -->|"false"| N005
+    N005 --> N006
+    N006 -->|"true"| N007
+    N006 -->|"false"| N008
+```
+
 ## verify(...)
 
 ```mermaid
 flowchart TD
     N001["verify(...)"]
     N002["root = resolve(...)"]
-    N003["errors = []"]
+    N003["errors = verify_index_budget(...)"]
     N004["index_entries = collect_index_entries(...)"]
     N005["for path in iter_docs_markdown(root):     relative = rel(path, root)     if any((relative.startswith(prefix) for prefix in EXEMPT_INVENTORY_PREFIXES)):         continue     if path.parent == root / '<str>' and relative not in ALLOWED_TOP_LEVEL_DOCS:         errors.append(f'<str>{relative}<str>')     if relative == INDEX_PATH.as_posix():         continue     if relative not in index_entries:         errors.append(f'<str>{INDEX_PATH.as_posix()}<str>{relative}')"]
     N006["return errors"]
