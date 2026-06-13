@@ -62,6 +62,7 @@ import ruleset_drift
 import rulesets_apply
 import scan_allowlist_parser_parity
 import scan_allowlist_rationale
+import scan_apm_ascii
 import scan_apm_lock_drift
 import scan_apm_portability
 import scan_compile_from_source
@@ -203,6 +204,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("rulesets_apply.py", "workflow-permissions"): "test_rulesets_apply_workflow_permissions_matches_workflow_args",
     ("scan_allowlist_parser_parity.py", "verify"): "test_scan_allowlist_parser_parity_verify_matches_workflow_args",
     ("scan_allowlist_rationale.py", "verify"): "test_scan_allowlist_rationale_verify_matches_workflow_args",
+    ("scan_apm_ascii.py", "verify"): "test_scan_apm_ascii_verify_matches_workflow_paths",
     ("scan_apm_portability.py", "verify"): "test_scan_apm_portability_verify_matches_workflow_paths",
     ("scan_design_philosophy_drift.py", "verify"): "test_scan_design_philosophy_drift_verify_matches_workflow_paths",
     ("scan_design_philosophy_drift.py", "verify-coupling"): "test_scan_design_philosophy_drift_verify_coupling_matches_workflow_args",
@@ -1194,6 +1196,15 @@ def test_coverage_failure_issue_run_matches_workflow_env(
         run_id="123",
         run_attempt="2",
     )
+
+
+def test_scan_apm_ascii_verify_matches_workflow_paths(tmp_path: Path) -> None:
+    path = tmp_path / "ascii.md"
+    path.write_text("ascii prose -- clean\n", encoding="utf-8")
+
+    assert scan_apm_ascii.main(
+        ["verify", "--path", str(path), "--path", str(path), "--path", str(path)]
+    ) == 0
 
 
 def test_scan_apm_portability_verify_matches_workflow_paths(tmp_path: Path) -> None:
