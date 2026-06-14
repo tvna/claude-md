@@ -438,6 +438,15 @@
               "hooks": [
                 {
                   "type": "command",
+                  "command": "python3 scripts/gate_instruction_body_advisory.py"
+                }
+              ]
+            },
+            {
+              "matcher": "Bash",
+              "hooks": [
+                {
+                  "type": "command",
                   "command": "python3 scripts/preflight_push_nonempty.py"
                 }
               ]
@@ -1052,6 +1061,16 @@
                   "type": "command",
                   "command": "python3 scripts/preflight_session_base_freshness.py",
                   "statusMessage": "Checking branch base before commit"
+                }
+              ]
+            },
+            {
+              "matcher": "^Bash$",
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "python3 scripts/gate_instruction_body_advisory.py",
+                  "statusMessage": "Reminding about instruction-text PR body sections"
                 }
               ]
             },

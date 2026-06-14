@@ -92,12 +92,22 @@ def resolve_branch(explicit: str | None = None, *, runner=subprocess.run) -> str
 def changed_generated_docs(
     base_ref: str, head: str = "HEAD", *, runner=subprocess.run
 ) -> frozenset[str]:
-    """Return paths under any :data:`PROTECTED_PREFIXES` changed in ``{base}..{head}``.
+    """Return paths under any :data:`PROTECTED_PREFIXES` the branch changed.
+
+    Uses the three-dot ``{base_ref}...{head}`` (merge-base) diff so the gate
+    reports only what the branch introduced relative to the common ancestor,
+    not whatever the base accumulated after the branch was cut. The two-dot
+    ``{base_ref}..{head}`` form compares the two tips directly, so once ``main``
+    advances while the PR is open -- e.g. a post-merge ``docs/generated``
+    regeneration lands on ``main`` -- two-dot surfaces that base-only churn as
+    if this branch had touched the folder, the false positive recorded in retro
+    #1703 (repair 4). Three-dot is anchored at the merge-base, so base-only
+    commits never appear; a genuine hand-edit on the branch still does.
 
     Uses ``git diff --name-only`` so renames and deletes also surface.
     """
     result = _run(
-        ["git", "diff", "--name-only", f"{base_ref}..{head}"], runner=runner
+        ["git", "diff", "--name-only", f"{base_ref}...{head}"], runner=runner
     )
     touched = {line.strip() for line in result.stdout.splitlines() if line.strip()}
     return frozenset(path for path in touched if path.startswith(PROTECTED_PREFIXES))
