@@ -15,4 +15,15 @@ logins = ["dependabot[bot]", "tvna-bot[bot]"]
 # security concern.
 # codecov: #480, #504, #620 -- GitHub has delivered as both "codecov" and "codecov[bot]"
 # devin: Cognition AI Devin integration (devin-ai-integration[bot] canonical form)
-logins = ["codecov", "codecov[bot]", "devin-ai-integration[bot]", "devin[bot]"]
+# chatgpt-codex-connector: #1731 -- OpenAI Codex review bot; posts generated review
+#   comments with emoji. GitHub delivers App logins in two forms (webhook/REST appends
+#   the "[bot]" suffix, GraphQL returns the bare slug), so both are listed, mirroring
+#   the codecov dual-form carve-out.
+logins = [
+    "codecov",
+    "codecov[bot]",
+    "devin-ai-integration[bot]",
+    "devin[bot]",
+    "chatgpt-codex-connector",
+    "chatgpt-codex-connector[bot]",
+]
