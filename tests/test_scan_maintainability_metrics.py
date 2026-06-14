@@ -71,6 +71,76 @@ class TestModuleSizePilot:
         assert metrics[0].deferred_reason == "baseline debt"
         assert violations == []
 
+    def test_module_in_warn_band_warns_but_passes(self, tmp_path: Path) -> None:
+        path = _make_script(
+            tmp_path,
+            "scripts/warn.py",
+            scan_maintainability_metrics.WARN_MODULE_LINES,
+        )
+
+        metric = scan_maintainability_metrics.measure_module(path, tmp_path)
+
+        assert metric.is_in_warn_band
+        assert not metric.is_violation
+
+    def test_module_just_below_warn_band_is_not_flagged(
+        self, tmp_path: Path
+    ) -> None:
+        path = _make_script(
+            tmp_path,
+            "scripts/small.py",
+            scan_maintainability_metrics.WARN_MODULE_LINES - 1,
+        )
+
+        metric = scan_maintainability_metrics.measure_module(path, tmp_path)
+
+        assert not metric.is_in_warn_band
+
+    def test_module_at_hard_limit_is_in_warn_band_but_passes(
+        self, tmp_path: Path
+    ) -> None:
+        path = _make_script(
+            tmp_path,
+            "scripts/edge.py",
+            scan_maintainability_metrics.MAX_MODULE_LINES,
+        )
+
+        metric = scan_maintainability_metrics.measure_module(path, tmp_path)
+
+        assert metric.is_in_warn_band
+        assert not metric.is_violation
+
+    def test_violation_is_not_counted_as_warn_band(self, tmp_path: Path) -> None:
+        path = _make_script(
+            tmp_path,
+            "scripts/large.py",
+            scan_maintainability_metrics.MAX_MODULE_LINES + 1,
+        )
+
+        metric = scan_maintainability_metrics.measure_module(path, tmp_path)
+
+        assert metric.is_violation
+        assert not metric.is_in_warn_band
+
+    def test_deferred_module_is_not_counted_as_warn_band(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        rel = Path("scripts/legacy.py")
+        _make_script(
+            tmp_path,
+            rel.as_posix(),
+            scan_maintainability_metrics.WARN_MODULE_LINES,
+        )
+        monkeypatch.setattr(
+            scan_maintainability_metrics,
+            "DEFERRED_OVERSIZE_MODULES",
+            {rel: "baseline debt"},
+        )
+
+        metric = scan_maintainability_metrics.find_module_sizes(tmp_path)[0]
+
+        assert not metric.is_in_warn_band
+
 
 class TestMain:
     def test_clean_tree_exits_zero(self, tmp_path: Path) -> None:
@@ -95,6 +165,20 @@ class TestMain:
                 ["verify", "--repo-root", str(tmp_path)]
             )
             == 1
+        )
+
+    def test_warn_band_module_exits_zero(self, tmp_path: Path) -> None:
+        _make_script(
+            tmp_path,
+            "scripts/warn.py",
+            scan_maintainability_metrics.WARN_MODULE_LINES,
+        )
+
+        assert (
+            scan_maintainability_metrics.main(
+                ["verify", "--repo-root", str(tmp_path)]
+            )
+            == 0
         )
 
 
@@ -122,3 +206,7 @@ class TestMaintainabilityMetricStandard:
     def test_ci_fail_or_report_policy_is_documented(self, standard_text: str) -> None:
         assert "Fails CI" in standard_text
         assert "Reports only" in standard_text
+
+    def test_warning_band_is_documented(self, standard_text: str) -> None:
+        assert "Warning Band" in standard_text
+        assert "WARN_RATIO" in standard_text

@@ -17,7 +17,7 @@ flowchart TD
 flowchart TD
     N001["measure_module(...)"]
     N002["rel = relative_to(...)"]
-    N003["return ModuleSize(path=rel, line_count=count_lines(path), max_lines=MAX_MODULE_LINES, deferred_reason=DEFERRED_OVERSIZE_MODULES.get(rel))"]
+    N003["return ModuleSize(path=rel, line_count=count_lines(path), max_lines=MAX_MODULE_LINES, warn_lines=WARN_MODULE_LINES, deferred_reason=DEFERRED_OVERSIZE_MODULES.get(rel))"]
     N001 -->|"start"| N002
     N002 --> N003
 ```
@@ -65,14 +65,16 @@ flowchart TD
     N002["repo_root = resolve(...)"]
     N003["metrics = find_module_sizes(...)"]
     N004["violations = [metric for metric in metrics if metric.is_violation]"]
-    N005["deferred = [metric for metric in metrics if metric.is_over_budget and metric.deferred_reason is not None]"]
-    N006["for metric in violations:     print(f'<str>{metric.path}<str>{metric.path}<str>{metric.line_count}<str>{metric.max_lines}<str>', file=sys.stderr)"]
-    N007["for metric in deferred:     print(f'<str>{metric.path}<str>{metric.path}<str>{metric.line_count}<str>{metric.max_lines}<str>{metric.deferred_reason}<str>')"]
-    N008["if violations"]
-    N009["print(...)"]
-    N010["return 1"]
+    N005["warned = [metric for metric in metrics if metric.is_in_warn_band]"]
+    N006["deferred = [metric for metric in metrics if metric.is_over_budget and metric.deferred_reason is not None]"]
+    N007["for metric in violations:     print(f'<str>{metric.path}<str>{metric.path}<str>{metric.line_count}<str>{metric.max_lines}<str>', file=sys.stderr)"]
+    N008["for metric in warned:     print(f'<str>{metric.path}<str>{metric.path}<str>{metric.line_count}<str>{metric.warn_lines}<str>{metric.max_lines}<str>{int(WARN_RATIO * 100)}<str>')"]
+    N009["for metric in deferred:     print(f'<str>{metric.path}<str>{metric.path}<str>{metric.line_count}<str>{metric.max_lines}<str>{metric.deferred_reason}<str>')"]
+    N010["if violations"]
     N011["print(...)"]
-    N012["return 0"]
+    N012["return 1"]
+    N013["print(...)"]
+    N014["return 0"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 --> N004
@@ -80,10 +82,12 @@ flowchart TD
     N005 --> N006
     N006 --> N007
     N007 --> N008
-    N008 -->|"true"| N009
+    N008 --> N009
     N009 --> N010
-    N008 -->|"false"| N011
+    N010 -->|"true"| N011
     N011 --> N012
+    N010 -->|"false"| N013
+    N013 --> N014
 ```
 
 ## main(...)
