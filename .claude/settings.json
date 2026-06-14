@@ -5,6 +5,12 @@
       "Edit(/tmp/claude-plans/**)",
       "Write(/tmp/claude-plans/**)",
       "MultiEdit(/tmp/claude-plans/**)"
+    ],
+    "deny": [
+      "Bash(git -c commit.gpgsign=false:*)",
+      "Bash(git -c commit.gpgsign=0:*)",
+      "Bash(git -c commit.gpgsign=no:*)",
+      "Bash(git -c commit.gpgsign=off:*)"
     ]
   },
   "hooks": {
@@ -294,6 +300,15 @@
         "hooks": [
           {
             "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/gate_unsigned_commit_bash.py"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
             "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/preflight_push_base.py"
           }
         ]
@@ -340,6 +355,15 @@
           {
             "type": "command",
             "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/preflight_session_base_freshness.py"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/gate_instruction_body_advisory.py"
           }
         ]
       },

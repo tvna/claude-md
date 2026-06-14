@@ -50,6 +50,8 @@ Detection is string-match based:
 | `gate_gh_cli.py` | agent-hook | `claude:PreToolUse` |
 | `gate_gh_cli.py` | agent-hook | `codex:PreToolUse` |
 | `gate_handoff_retro_survey_askuserquestion.py` | agent-hook | `claude:Stop` |
+| `gate_instruction_body_advisory.py` | agent-hook | `claude:PreToolUse` |
+| `gate_instruction_body_advisory.py` | agent-hook | `codex:PreToolUse` |
 | `gate_irreversible_bash.py` | agent-hook | `claude:PreToolUse` |
 | `gate_irreversible_bash.py` | agent-hook | `codex:PreToolUse` |
 | `gate_issue_classification_labels.py` | agent-hook | `claude:PreToolUse` |
@@ -64,6 +66,8 @@ Detection is string-match based:
 | `gate_merge_safety.py` | agent-hook | `codex:PreToolUse` |
 | `gate_reserved_retro_scope.py` | agent-hook | `claude:PreToolUse` |
 | `gate_reserved_retro_scope.py` | agent-hook | `codex:PreToolUse` |
+| `gate_unsigned_commit_bash.py` | agent-hook | `claude:PreToolUse` |
+| `gate_unsigned_commit_bash.py` | agent-hook | `codex:PreToolUse` |
 | `gate_update_pr_branch.py` | agent-hook | `claude:PreToolUse` |
 | `gate_update_pr_branch.py` | agent-hook | `codex:PreToolUse` |
 | `gen_agent_hooks.py` | pre-commit | `gen-agent-hooks` |

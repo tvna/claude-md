@@ -79,13 +79,78 @@ flowchart TD
     N003 --> N004
 ```
 
+## _strip_survey_vocab(...)
+
+```mermaid
+flowchart TD
+    N001["_strip_survey_vocab(...)"]
+    N002["for phrase in SURVEY_NEUTRALIZE:     lowered = lowered.replace(phrase.lower(), '<str>')"]
+    N003["return lowered"]
+    N001 -->|"start"| N002
+    N002 --> N003
+```
+
+## _find_all(...)
+
+```mermaid
+flowchart TD
+    N001["_find_all(...)"]
+    N002["out = []"]
+    N003["start = 0"]
+    N004["while (i := text.find(needle, start)) != -1:     out.append(i)     start = i + 1"]
+    N005["return out"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 --> N004
+    N004 --> N005
+```
+
+## _co_occurs_near(...)
+
+```mermaid
+flowchart TD
+    N001["_co_occurs_near(...)"]
+    N002["anchor_idx = [i for a in anchors for i in _find_all(text, a)]"]
+    N003["if not anchor_idx"]
+    N004["return False"]
+    N005["partner_idx = [j for p in partners for j in _find_all(text, p)]"]
+    N006["return any((abs(a - p) <= window for a in anchor_idx for p in partner_idx))"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 -->|"true"| N004
+    N003 -->|"false"| N005
+    N005 --> N006
+```
+
 ## signals_handoff(...)
 
 ```mermaid
 flowchart TD
     N001["signals_handoff(...)"]
+    N002["lowered = _strip_survey_vocab(...)"]
+    N003["return _co_occurs_near(lowered, HANDOFF_CUES, HANDOFF_DIRECTIVES, PROXIMITY_WINDOW)"]
+    N001 -->|"start"| N002
+    N002 --> N003
+```
+
+## signals_terminal_wait(...)
+
+```mermaid
+flowchart TD
+    N001["signals_terminal_wait(...)"]
     N002["lowered = lower(...)"]
-    N003["return any((cue in lowered for cue in HANDOFF_CUES))"]
+    N003["return any((cue in lowered for cue in TERMINAL_WAIT_CUES))"]
+    N001 -->|"start"| N002
+    N002 --> N003
+```
+
+## signals_terminal_done(...)
+
+```mermaid
+flowchart TD
+    N001["signals_terminal_done(...)"]
+    N002["lowered = lower(...)"]
+    N003["return any((cue in lowered for cue in TERMINAL_DONE_CUES))"]
     N001 -->|"start"| N002
     N002 --> N003
 ```
@@ -114,11 +179,15 @@ flowchart TD
     N007["if not turn"]
     N008["return None"]
     N009["text = turn_text(...)"]
-    N010["if not signals_handoff(text)"]
+    N010["if signals_terminal_wait(text)"]
     N011["return None"]
-    N012["if already_provided(text)"]
+    N012["if signals_terminal_done(text)"]
     N013["return None"]
-    N014["return {'<str>': '<str>', '<str>': _BLOCK_REASON}"]
+    N014["if not signals_handoff(text)"]
+    N015["return None"]
+    N016["if already_provided(text)"]
+    N017["return None"]
+    N018["return {'<str>': '<str>', '<str>': _BLOCK_REASON}"]
     N001 -->|"start"| N002
     N002 -->|"true"| N003
     N002 -->|"false"| N004
@@ -132,6 +201,10 @@ flowchart TD
     N010 -->|"false"| N012
     N012 -->|"true"| N013
     N012 -->|"false"| N014
+    N014 -->|"true"| N015
+    N014 -->|"false"| N016
+    N016 -->|"true"| N017
+    N016 -->|"false"| N018
 ```
 
 ## load_transcript(...)

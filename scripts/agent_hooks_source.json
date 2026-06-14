@@ -80,6 +80,12 @@
             "Edit(/tmp/claude-plans/**)",
             "Write(/tmp/claude-plans/**)",
             "MultiEdit(/tmp/claude-plans/**)"
+          ],
+          "deny": [
+            "Bash(git -c commit.gpgsign=false:*)",
+            "Bash(git -c commit.gpgsign=0:*)",
+            "Bash(git -c commit.gpgsign=no:*)",
+            "Bash(git -c commit.gpgsign=off:*)"
           ]
         },
         "hooks": {
@@ -369,6 +375,15 @@
               "hooks": [
                 {
                   "type": "command",
+                  "command": "python3 scripts/gate_unsigned_commit_bash.py"
+                }
+              ]
+            },
+            {
+              "matcher": "Bash",
+              "hooks": [
+                {
+                  "type": "command",
                   "command": "python3 scripts/preflight_push_base.py"
                 }
               ]
@@ -415,6 +430,15 @@
                 {
                   "type": "command",
                   "command": "python3 scripts/preflight_session_base_freshness.py"
+                }
+              ]
+            },
+            {
+              "matcher": "Bash",
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "python3 scripts/gate_instruction_body_advisory.py"
                 }
               ]
             },
@@ -985,6 +1009,16 @@
               "hooks": [
                 {
                   "type": "command",
+                  "command": "python3 scripts/gate_unsigned_commit_bash.py",
+                  "statusMessage": "Checking for commit-signing bypass"
+                }
+              ]
+            },
+            {
+              "matcher": "^Bash$",
+              "hooks": [
+                {
+                  "type": "command",
                   "command": "python3 scripts/preflight_push_base.py",
                   "statusMessage": "Checking branch base before push"
                 }
@@ -1027,6 +1061,16 @@
                   "type": "command",
                   "command": "python3 scripts/preflight_session_base_freshness.py",
                   "statusMessage": "Checking branch base before commit"
+                }
+              ]
+            },
+            {
+              "matcher": "^Bash$",
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "python3 scripts/gate_instruction_body_advisory.py",
+                  "statusMessage": "Reminding about instruction-text PR body sections"
                 }
               ]
             },
