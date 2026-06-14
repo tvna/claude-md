@@ -230,6 +230,26 @@ After every `dry_run=false` dispatch ([#56](https://github.com/tvna/claude-md/is
    - `environment.deployment_approval` — must show the approving admin matches the expected reviewer for the `ruleset-apply` environment.
 3. Capture the matching log lines in the closing PR body alongside the returned ruleset id.
 
+## Protected-path review split decision
+
+**Decision (2026-06-14, [#1382](https://github.com/tvna/claude-md/issues/1382), re-homed from [#313](https://github.com/tvna/claude-md/issues/313) under the Zero Trust umbrella [#178](https://github.com/tvna/claude-md/issues/178)): parked.**
+
+[#63](https://github.com/tvna/claude-md/issues/63) catalogs a transparency-paradox gap where public rules can satisfy formal gates while still changing security-sensitive paths. The proposed control raised review requirements for a security-relevant path set so those paths cannot land on a single actor's approval alone.
+
+**Security-relevant path set (explicit).** The candidate set evaluated for a hard review split is:
+
+- `.github/workflows/**`
+- `.github/rulesets/**`
+- `.apm/**`
+
+The path set currently enforced via code-owner review (`require_code_owner_review: true` in `main.json`) is the narrower [`.github/CODEOWNERS`](../../.github/CODEOWNERS) set: `.github/workflows/apply-rulesets.yml`, `.github/rulesets/**`, `.github/CODEOWNERS`, and `docs/runbooks/rulesets.md`. The broader `.github/workflows/**` and `.apm/**` surfaces are **not** covered by CODEOWNERS today.
+
+**Solo-dev bottleneck assessment.** This repository has a single human contributor (`@tvna`). A hard review split that demands an independent approver on the path set above would deadlock routine maintenance: `@tvna` cannot independently review `@tvna`'s own change, so every touch of a protected path would block indefinitely with no second reviewer to clear it. The marginal assurance over the controls already in place does not justify a self-deadlocking gate.
+
+**Decision: park, with rationale.** No separate conditional ruleset is added for the security-relevant path set; `main.json` stays a single `main-protection` ruleset. `bypass_actors` stays `[]` across all rulesets (the "keep admin bypass?" question is answered: removed -- see the apply section and the emergency disable / re-enable procedure). The existing deterministic controls (no bypass actor, dry-run-first apply, live-vs-SoT drift detection, PR-time required-check sync, signed squash-only `main`) carry the risk in the interim.
+
+**Unpark condition.** Promote this from parked to implemented when **either** a practical independent-reviewer path exists (a second trusted human or a bot reviewer that can satisfy `require_code_owner_review` without rubber-stamping) **or** an equivalent lower-friction deterministic gate is chosen (for example, a path-scoped CI check that fails a PR touching the security-relevant set unless an out-of-band authorization marker is present), neither of which deadlocks solo maintenance. Revisit if additional human contributors are added.
+
 ## Rollback
 
 ```sh
