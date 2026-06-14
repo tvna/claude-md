@@ -265,6 +265,16 @@ class TestClassifyAction:
         """Devin is in _NON_ASCII_SKIP_LOGINS: fully exempt, no label/comment."""
         assert san.classify_action(True, False, "NONE", login) == "none"
 
+    @pytest.mark.parametrize(
+        "login", ["chatgpt-codex-connector", "chatgpt-codex-connector[bot]"]
+    )
+    def test_codex_connector_non_ascii_is_none_skip(self, login: str) -> None:
+        """Codex review bot is in _NON_ASCII_SKIP_LOGINS (#1731): fully exempt.
+
+        Both login forms are covered because GitHub delivers App logins as the
+        bare slug (GraphQL) and with the '[bot]' suffix (webhook/REST)."""
+        assert san.classify_action(True, False, "NONE", login) == "none"
+
     def test_trusted_bot_ascii_only_is_none(self) -> None:
         """No non-ASCII -> none regardless of login (cheap-exit guard)."""
         assert (
@@ -302,6 +312,12 @@ def test_non_ascii_skip_logins_contains_codecov_and_devin() -> None:
     assert "codecov" in san._NON_ASCII_SKIP_LOGINS
     assert "codecov[bot]" in san._NON_ASCII_SKIP_LOGINS
     assert any("devin" in login for login in san._NON_ASCII_SKIP_LOGINS)
+
+
+def test_non_ascii_skip_logins_contains_codex_connector() -> None:
+    """Regression guard for #1731: both codex-connector forms must be present."""
+    assert "chatgpt-codex-connector" in san._NON_ASCII_SKIP_LOGINS
+    assert "chatgpt-codex-connector[bot]" in san._NON_ASCII_SKIP_LOGINS
 
 
 def test_non_ascii_skip_logins_disjoint_from_trusted_bot_logins() -> None:
@@ -851,6 +867,26 @@ class TestRun:
             },
         }
         assert san.run(event, "issue_comment", "o/r") == 0
+        assert seen == []
+
+    @pytest.mark.parametrize(
+        "login", ["chatgpt-codex-connector", "chatgpt-codex-connector[bot]"]
+    )
+    def test_codex_connector_review_comment_is_fully_skipped(
+        self, monkeypatch: pytest.MonkeyPatch, login: str
+    ) -> None:
+        """#1731: the Codex review bot's emoji-bearing comment is fully exempt
+        (action=none): no label, no advisory comment."""
+        seen = _capture_gh_api(monkeypatch)
+        event = {
+            "pull_request": {"number": 1727},
+            "comment": {
+                "body": "Useful? React with \U0001f44d / \U0001f44e.",
+                "author_association": "NONE",
+                "user": {"login": login},
+            },
+        }
+        assert san.run(event, "pull_request_review_comment", "o/r") == 0
         assert seen == []
 
     def test_unknown_bot_pr_still_blocks(
