@@ -616,6 +616,10 @@ no repo-specific implementation:
   executable contract, not a prose promise: a check that goes red on
   the recorded repair and green once the fix lands, born as a new
   `scripts/` gate or test (the primary lane the 6.4 table routes to).
+  When the gate protects an invariant a refactor establishes (a single
+  source of truth or "only here" rule), master section 3 obliges
+  shipping it in that same change, so the contract is born at build
+  time rather than rediscovered as a post-merge retro finding.
 - **Selection** - a new gate enters advisory (`continue-on-error`) and
   is promoted to a required status check (`.github/rulesets/`) only
   after it earns a low false-positive rate across successive merges,
