@@ -95,6 +95,9 @@ jobs:
       - name: Assert script maintainability metrics
         run: uv run python scripts/scan_maintainability_metrics.py verify
 
+      - name: Assert script size distribution snapshot is current
+        run: uv run python scripts/scan_module_size_distribution.py verify
+
       - name: Verify preflight set matches CI script invocations
         # Refs #493: fails when a pull_request: workflow gains a
         # `python3 scripts/<name>.py` call without a matching step in

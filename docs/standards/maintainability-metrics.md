@@ -58,6 +58,35 @@ hard budget changes. Like the hard limit, changing the ratio requires
 updating this document, the scanner constant, and the tests in the same
 PR.
 
+### Distribution Snapshot
+
+The hard limit and the warning band are per-run signals: they describe a
+single CI run, not the trend. A ceiling clustering effect (Goodhart's
+law) is only visible *over time*, so `scripts/scan_module_size_distribution.py`
+persists the distribution as a committed snapshot,
+`docs/standards/module-size-distribution.toml`, and the git history of
+that one file is the time series.
+
+The snapshot is an aggregate histogram plus warn-band and over-budget
+membership (module names, not per-module line counts), so an edit that
+does not cross a histogram bucket or band boundary leaves it unchanged
+(low churn), while a module entering the warn band, crossing the budget,
+or shifting a bucket appears as a reviewable diff.
+
+The snapshot is generated, never hand-written:
+
+- `scan_module_size_distribution.py write` regenerates the file.
+- `scan_module_size_distribution.py verify` (the `lint-scripts-static`
+  gate) fails when the committed file is stale, so the distribution
+  cannot drift silently.
+
+When a change shifts the distribution, regenerate and commit the snapshot
+in the same PR:
+
+```bash
+uv run python scripts/scan_module_size_distribution.py write
+```
+
 Initial baseline:
 
 | File | Status | Rationale |
