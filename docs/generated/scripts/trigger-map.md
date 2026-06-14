@@ -217,6 +217,7 @@ Detection is string-match based:
 | `validate_json_syntax.py` | workflow | `apply-rulesets.yml (apply)` |
 | `validate_json_syntax.py` | workflow | `weekly-maintenance.yml (ruleset-drift)` |
 | `verify_apm_checksums.py` | workflow | `verify-pr.yml (portable-pr-policy)` |
+| `verify_control_inventory_currency.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
 | `verify_dependabot_author.py` | workflow | `issue-pr-triage.yml (dependabot-author)` |
 | `verify_instruction_text_growth.py` | workflow | `verify-pr.yml (portable-pr-policy)` |
 | `verify_linked_issue_titles.py` | workflow | `verify-pr.yml (portable-pr-policy)` |
