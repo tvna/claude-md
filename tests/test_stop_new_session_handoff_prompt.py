@@ -71,6 +71,24 @@ class TestSignalsHandoff:
             "引き継ぎサーベイは記録済み。残りは別セッションで対応してください。"
         )
 
+    def test_topic_mention_without_directive_does_not_match(self) -> None:
+        # #1711: an RCA that NAMES a handoff as a topic word but directs no
+        # continuation must not count -- the cue has no nearby directive.
+        assert not hook.signals_handoff(
+            "新規セッションのハンドオフプロンプトの誤検知を調査した。"
+        )
+
+    def test_english_topic_mention_without_directive_does_not_match(self) -> None:
+        assert not hook.signals_handoff(
+            "The new-session handoff prompt hook false-fired on this PR."
+        )
+
+    def test_cue_far_from_directive_does_not_match(self) -> None:
+        # #1711: a cue and a directive separated by more than the proximity
+        # window are not one handoff statement.
+        text = "新規セッションのハンドオフ機能について説明する。" + "x" * 100 + "別件を続けてください。"
+        assert not hook.signals_handoff(text)
+
 
 class TestSignalsTerminalWait:
     def test_japanese_pre_merge_wait_matches(self) -> None:
@@ -84,6 +102,26 @@ class TestSignalsTerminalWait:
 
     def test_plain_handoff_is_not_terminal_wait(self) -> None:
         assert not hook.signals_terminal_wait("残りは別セッションで続けてください。")
+
+
+class TestSignalsTerminalDone:
+    def test_japanese_completion_matches(self) -> None:
+        assert hook.signals_terminal_done("PR #1706 は対応完了。追加対応なし。")
+
+    def test_japanese_merged_matches(self) -> None:
+        assert hook.signals_terminal_done("本PRはマージ済み、作業は完了です。")
+
+    def test_english_all_done_matches(self) -> None:
+        assert hook.signals_terminal_done("All done; nothing to hand off.")
+
+    def test_genuine_parked_work_is_not_terminal_done(self) -> None:
+        # A parked-work handoff is NOT a completion report: it must stay eligible
+        # to block, so it must not look terminal-done.
+        assert not hook.signals_terminal_done("残りは後続セッションで続けてください。")
+
+    def test_unrelated_subtask_completion_is_not_terminal_done(self) -> None:
+        # Bare "完了" of a subtask is not whole-task done, so it must not match.
+        assert not hook.signals_terminal_done("ビルドは完了。残りは別セッションで続けて。")
 
 
 class TestAlreadyProvided:
@@ -201,6 +239,32 @@ class TestEvaluate:
             _text("作業はブランチに退避しました。残りは後続セッションで続けてください。")
         )
         assert hook.evaluate({}, entries) == {"decision": "block", "reason": hook._BLOCK_REASON}
+
+    def test_post_merge_completion_report_is_noop(self) -> None:
+        # #1711: the residual false positive -- a post-merge RCA that NAMES a
+        # handoff as a topic word while the work is merged / done, with no
+        # paste-ready prompt. Both the terminal-done suppressor and the missing
+        # directive keep it from blocking.
+        turn = (
+            "## RCA\n"
+            "stop_new_session_handoff_prompt が PR #1706 マージ後に誤発火した。\n"
+            "新規セッションのハンドオフプロンプトという話題語が残るのが原因。\n"
+            "PR #1706 はマージ済み、対応完了。追加対応なし。\n"
+        )
+        assert hook.evaluate({}, self._entries(_text(turn))) is None
+
+    def test_topic_mention_without_directive_is_noop(self) -> None:
+        # #1711: a handoff named only as a topic, no directive, no done framing.
+        entries = self._entries(_text("新規セッションのハンドオフプロンプトの誤検知を調査中。"))
+        assert hook.evaluate({}, entries) is None
+
+    def test_terminal_done_suppresses_even_with_directive(self) -> None:
+        # #1711: terminal-done is checked before the cue, so a contradictory
+        # "continue in a new session" wrapped in a completion report no-ops.
+        entries = self._entries(
+            _text("残りは新規セッションで続けてください。なお本PRは対応完了・マージ済み。")
+        )
+        assert hook.evaluate({}, entries) is None
 
 
 # ---------------------------------------------------------------------------
