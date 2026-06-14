@@ -12,8 +12,8 @@ This file is generated from `scripts/*.py` import statements by `python3 scripts
 | `_github_tool_names` | 9 | `gate_handoff_retro_survey_askuserquestion`, `pr_body_close_keyword_gate`, `preflight_angle_token_drop`, `preflight_codex_github_footer`, `preflight_github_secrets`, `preflight_non_ascii`, `preflight_pr_body_required_sections`, `preflight_pr_template_shape`, `preflight_title_policy` |
 | `body_policy` | 9 | `post_pr_create_body_fix`, `pr_body_builder`, `preflight_angle_token_drop`, `preflight_codex_github_footer`, `preflight_pr_body`, `preflight_pr_body_required_sections`, `preflight_pr_template_shape`, `verify_instruction_text_growth`, `verify_text_delta_section` |
 | `_trusted_bots` | 7 | `auto_retro`, `body_policy`, `dependabot_automerge`, `issue_link`, `scan_non_ascii`, `title_policy`, `verify_dependabot_author` |
+| `issue_anchors` | 6 | `_security_drift_issues`, `ci_budget_issue`, `coverage_failure_issue`, `devcontainer_pin_pr`, `scan_issue_anchor_drift`, `security_drift_report` |
 | `_ref_classifier` | 5 | `issue_link`, `np_strategy_tracking`, `pr_body_close_keyword_gate`, `preflight_pr_body`, `verify_linked_issue_titles` |
-| `issue_anchors` | 5 | `ci_budget_issue`, `coverage_failure_issue`, `devcontainer_pin_pr`, `scan_issue_anchor_drift`, `security_drift_report` |
 | `_session_branches` | 4 | `check_session_branch`, `preflight_commit_session_branch`, `preflight_push_session_branch`, `preflight_session_branch_authz` |
 | `issue_link` | 4 | `auto_retro`, `body_policy`, `preflight_angle_token_drop`, `scan_retro_followup_drift` |
 | `pr_upsert` | 3 | `_pr_merge`, `auto_retro`, `devcontainer_pin_pr` |
@@ -22,9 +22,10 @@ This file is generated from `scripts/*.py` import statements by `python3 scripts
 | `_pr_merge` | 2 | `bot_pr_automerge`, `devcontainer_pin_pr` |
 | `_retro_labels` | 2 | `auto_retro`, `scan_retro_followup_drift` |
 | `_secret_patterns` | 2 | `preflight_github_secrets`, `scan_secrets` |
+| `_security_drift_families` | 2 | `_security_drift_issues`, `security_drift_report` |
 | `scan_non_ascii` | 2 | `preflight_non_ascii`, `preflight_pr_body` |
 | `title_policy` | 2 | `preflight_title_policy`, `verify_linked_issue_titles` |
-| `_security_drift_families` | 1 | `security_drift_report` |
+| `_security_drift_issues` | 1 | `security_drift_report` |
 | `auto_retro` | 1 | `gate_reserved_retro_scope` |
 | `check_pr_mergeability` | 1 | `gate_merge_safety` |
 | `generate_devcontainer_arch_overlays` | 1 | `update_devcontainer_image_pins` |
@@ -58,6 +59,8 @@ flowchart TD
     _pr_commit_batch --> _github_api
     _pr_merge --> _github_api
     _pr_merge --> pr_upsert
+    _security_drift_issues --> _security_drift_families
+    _security_drift_issues --> issue_anchors
     auto_retro --> _retro_labels
     auto_retro --> _trusted_bots
     auto_retro --> issue_link
@@ -198,6 +201,7 @@ flowchart TD
     scan_secrets --> _secret_patterns
     security_drift_report --> _github_api
     security_drift_report --> _security_drift_families
+    security_drift_report --> _security_drift_issues
     security_drift_report --> issue_anchors
     stop_new_session_handoff_prompt --> _hook_runtime
     title_policy --> _trusted_bots
