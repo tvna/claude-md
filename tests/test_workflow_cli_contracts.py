@@ -59,6 +59,7 @@ import preflight_uv_version
 import prune_devcontainer_images
 import publish_instruction_release
 import pytest
+import python_pin
 import ruleset_drift
 import rulesets_apply
 import scan_allowlist_parser_parity
@@ -250,6 +251,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("uv_pin.py", "drift"): "test_uv_pin_workflow_subcommands_match_ci_usage",
     ("uv_pin.py", "read"): "test_uv_pin_workflow_subcommands_match_ci_usage",
     ("uv_pin.py", "stale"): "test_uv_pin_workflow_subcommands_match_ci_usage",
+    ("python_pin.py", "verify"): "test_python_pin_verify_matches_workflow_args",
     ("verify_apm_checksums.py", "verify"): "test_verify_apm_checksums_matches_workflow_args",
     ("verify_dependabot_author.py", "verify"): "test_verify_dependabot_author_verify_matches_workflow_args",
     ("verify_linked_issue_titles.py", "verify"): "test_verify_linked_issue_titles_verify_matches_workflow_args",
@@ -2717,6 +2719,24 @@ def test_uv_pin_workflow_subcommands_match_ci_usage(
     assert uv_pin.main(["read", str(tmp_path / "pyproject.toml")]) == 0
     assert uv_pin.main(["drift", "--repo-root", str(tmp_path)]) == 0
     assert uv_pin.main(["stale", "--repo-root", str(tmp_path)]) == 0
+
+
+def test_python_pin_verify_matches_workflow_args(tmp_path: Path) -> None:
+    """Mirror the workflow step in ``.github/workflows/verify-agents.yml`` and
+    ``weekly-maintenance.yml`` that runs
+    ``uv run python scripts/python_pin.py verify`` -- no extra flags, cwd is the
+    repo root. Refs #1680.
+    """
+    (tmp_path / "pyproject.toml").write_text(
+        '[project]\nrequires-python = ">=3.12"\n'
+        '\n[tool.ruff]\ntarget-version = "py312"\n'
+        '\n[tool.mypy]\npython_version = "3.12"\n',
+        encoding="utf-8",
+    )
+    (tmp_path / ".python-version").write_text("3.12.13\n", encoding="utf-8")
+    (tmp_path / "flake.nix").write_text("python312\n", encoding="utf-8")
+
+    assert python_pin.main(["verify", "--repo-root", str(tmp_path)]) == 0
 
 
 def test_preflight_uv_version_verify_matches_workflow_args(
