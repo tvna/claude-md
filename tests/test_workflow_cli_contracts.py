@@ -1771,10 +1771,10 @@ def test_security_drift_report_file_family_issues_matches_workflow_args() -> Non
     """Mirror the argv shape of the File-per-family-drift-issues step.
 
     weekly-maintenance.yml shells to ``file-family-issues --repo R --run-url U
-    --run-date D --families <csv> --dry-run <bool>`` where ``<csv>`` is the
-    ``drift_families`` output of the aggregate step. Exercise the dry-run path
-    (no token, no network) across every target family so the contract pins the
-    accepted flag set and the family allowlist.
+    --run-date D --families <csv> --resolved-families <csv> --dry-run <bool>``
+    where the two CSVs are the ``drift_families`` / ``covered_families`` outputs
+    of the aggregate step. Exercise the dry-run path (no token, no network) across
+    every target family so the contract pins the accepted flag set and allowlist.
     """
     assert security_drift_report.main(
         [
@@ -1786,7 +1786,9 @@ def test_security_drift_report_file_family_issues_matches_workflow_args() -> Non
             "--run-date",
             "2026-06-03",
             "--families",
-            "labels,apm-instructions,uv-pin-literal",
+            "labels,apm-instructions",
+            "--resolved-families",
+            "uv-pin-literal,workflow-permissions",
             "--dry-run",
             "true",
         ]

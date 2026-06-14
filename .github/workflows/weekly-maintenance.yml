@@ -669,8 +669,13 @@ jobs:
             --report-file /tmp/security-drift-report.md \
             --dry-run "${DRY_RUN}"
 
-      - name: File per-family drift issues
-        if: always() && steps.aggregate.outputs.drift_families != ''
+      # Reconcile ONE rolling issue per target family: create on new drift, keep a
+      # single issue (closing legacy dated duplicates), and auto-close when a
+      # family stops drifting. Runs unconditionally (no drift_families gate) so a
+      # resolved family can close its open issue, mirroring the ruleset-drift
+      # reconcile steps. Refs #1726.
+      - name: Reconcile per-family drift issues
+        if: always() && steps.aggregate.outcome == 'success'
         env:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           DRY_RUN: ${{ (github.event_name == 'schedule' || github.event_name == 'push') && 'false' || inputs.security_control_dry_run }}
@@ -681,6 +686,7 @@ jobs:
             --run-url "${RUN_URL}" \
             --run-date "${{ steps.aggregate.outputs.report_date }}" \
             --families "${{ steps.aggregate.outputs.drift_families }}" \
+            --resolved-families "${{ steps.aggregate.outputs.covered_families }}" \
             --dry-run "${DRY_RUN}"
 
   # Merged from flake-pin-refresh.yml (#1319). flake.nix is the single source of
