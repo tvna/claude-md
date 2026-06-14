@@ -194,6 +194,16 @@ jobs:
         # on reviewer memory alone.
         run: uv run python scripts/verify_security_control_floor.py
 
+      - name: Verify security-control inventory is current with the tree
+        # Refs #1387: the inventory (docs/prd/security-control-inventory.md)
+        # must stay current. A surface that crosses a secret/privilege boundary
+        # (a workflow using a non-GITHUB_TOKEN secret or declaring an
+        # environment, or a script importing _secret_patterns) must be declared
+        # in .github/security-surface-inventory.toml, and the document must not
+        # cite a scripts/ path that no longer exists, so a new privileged
+        # surface cannot land on reviewer memory alone.
+        run: uv run python scripts/verify_control_inventory_currency.py verify
+
       - name: Warn if uv pin trails upstream
         env:
           GH_TOKEN: ${{ github.token }}

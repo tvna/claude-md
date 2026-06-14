@@ -104,6 +104,7 @@ import uv_download_checksum
 import uv_pin
 import validate_json_syntax
 import verify_apm_checksums
+import verify_control_inventory_currency
 import verify_dependabot_author
 import verify_instruction_text_growth
 import verify_linked_issue_titles
@@ -257,6 +258,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("verify_required_check_contexts.py", "verify"): "test_verify_required_check_contexts_matches_workflow_args",
     ("verify_ruleset_sync.py", "verify"): "test_verify_ruleset_sync_matches_workflow_args",
     ("verify_security_control_floor.py", None): "test_verify_security_control_floor_matches_workflow_args",
+    ("verify_control_inventory_currency.py", "verify"): "test_verify_control_inventory_currency_matches_workflow_args",
     ("github_paginate.py", "fetch"): "test_github_paginate_fetch_matches_workflow_args",
     ("github_paginate.py", "get"): "test_github_paginate_get_matches_workflow_args",
     ("post_issue_comment.py", "create"): "test_post_issue_comment_create_matches_workflow_args",
@@ -1786,6 +1788,18 @@ def test_verify_security_control_floor_matches_workflow_args() -> None:
     must exit 0 on it. Refs #178.
     """
     assert verify_security_control_floor.main([]) == 0
+
+
+def test_verify_control_inventory_currency_matches_workflow_args() -> None:
+    """Mirror the argv shape used by verify-agents.yml lint-scripts-static.
+
+    The workflow shells to ``uv run python
+    scripts/verify_control_inventory_currency.py verify`` with no further
+    arguments, so the gate reads the committed inventory plus
+    ``.github/security-surface-inventory.toml`` and must exit 0 on them.
+    Refs #1387.
+    """
+    assert verify_control_inventory_currency.main(["verify"]) == 0
 
 
 def test_threat_intel_scan_matches_workflow_args(
