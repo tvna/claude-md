@@ -17,6 +17,7 @@ from __future__ import annotations
 import json
 import re
 import subprocess
+from pathlib import Path
 
 import body_policy
 import pytest
@@ -768,7 +769,7 @@ class TestRunCcusageCodex:
 
 
 class TestCodexRolloutSessionId:
-    def test_returns_uuid_from_most_recent_file(self, tmp_path: pytest.TempPathFactory) -> None:
+    def test_returns_uuid_from_most_recent_file(self, tmp_path: Path) -> None:
         sessions_dir = tmp_path / "sessions" / "2026" / "06" / "14"
         sessions_dir.mkdir(parents=True)
         rollout = sessions_dir / "rollout-1749945000000-550e8400-e29b-41d4-a716-446655440000.jsonl"
@@ -776,18 +777,16 @@ class TestCodexRolloutSessionId:
         result = srr._codex_rollout_session_id(_base=tmp_path / "sessions")
         assert result == "550e8400-e29b-41d4-a716-446655440000"
 
-    def test_no_files_returns_empty_string(self, tmp_path: pytest.TempPathFactory) -> None:
+    def test_no_files_returns_empty_string(self, tmp_path: Path) -> None:
         (tmp_path / "sessions").mkdir()
         result = srr._codex_rollout_session_id(_base=tmp_path / "sessions")
         assert result == ""
 
-    def test_missing_base_dir_returns_empty_string(self, tmp_path: pytest.TempPathFactory) -> None:
+    def test_missing_base_dir_returns_empty_string(self, tmp_path: Path) -> None:
         result = srr._codex_rollout_session_id(_base=tmp_path / "no-such-dir" / "sessions")
         assert result == ""
 
-    def test_concurrent_sessions_returns_empty_string(
-        self, tmp_path: pytest.TempPathFactory
-    ) -> None:
+    def test_concurrent_sessions_returns_empty_string(self, tmp_path: Path) -> None:
         sessions_dir = tmp_path / "sessions" / "2026" / "06" / "14"
         sessions_dir.mkdir(parents=True)
         r1 = sessions_dir / "rollout-1749945000000-aaaaaaaa-0000-0000-0000-000000000001.jsonl"
@@ -804,9 +803,7 @@ class TestCodexRolloutSessionId:
         result = srr._codex_rollout_session_id(_base=tmp_path / "sessions")
         assert result == ""
 
-    def test_malformed_filename_no_uuid_returns_empty(
-        self, tmp_path: pytest.TempPathFactory
-    ) -> None:
+    def test_malformed_filename_no_uuid_returns_empty(self, tmp_path: Path) -> None:
         sessions_dir = tmp_path / "sessions"
         sessions_dir.mkdir(parents=True)
         bad = sessions_dir / "rollout-notauuid.jsonl"
@@ -814,7 +811,7 @@ class TestCodexRolloutSessionId:
         result = srr._codex_rollout_session_id(_base=tmp_path / "sessions")
         assert result == ""
 
-    def test_only_most_recent_file_chosen(self, tmp_path: pytest.TempPathFactory) -> None:
+    def test_only_most_recent_file_chosen(self, tmp_path: Path) -> None:
         sessions_dir = tmp_path / "sessions"
         sessions_dir.mkdir(parents=True)
         old = sessions_dir / "rollout-100-aaaaaaaa-0000-0000-0000-000000000001.jsonl"
@@ -832,12 +829,12 @@ class TestCodexRolloutSessionId:
 
 class TestRenderSectionReasoning:
     def test_reasoning_shown_when_nonzero(self) -> None:
-        usage: srr.Usage = {**_USAGE, "reasoning": 5000}  # type: ignore[misc]
+        usage: srr.Usage = {**_USAGE, "reasoning": 5000}
         out = srr.render_section("0:01:00", usage)
         assert "reasoning 5,000" in out
 
     def test_reasoning_hidden_when_zero(self) -> None:
-        usage: srr.Usage = {**_USAGE, "reasoning": 0}  # type: ignore[misc]
+        usage: srr.Usage = {**_USAGE, "reasoning": 0}
         out = srr.render_section("0:01:00", usage)
         assert "reasoning" not in out
 
@@ -852,7 +849,7 @@ class TestRenderSectionReasoning:
 
 class TestGatherCodex:
     def test_codex_live_path(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: pytest.TempPathFactory
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
         monkeypatch.setattr(srr, "_run_ccusage_codex", lambda: _codex_json())
         monkeypatch.setattr(srr, "_codex_rollout_session_id", lambda: "test-uuid-1")
@@ -865,7 +862,7 @@ class TestGatherCodex:
         assert f"Model(s): {srr._UNAVAILABLE}" in out
 
     def test_codex_reasoning_tokens_surfaced(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: pytest.TempPathFactory
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
         monkeypatch.setattr(srr, "_run_ccusage_codex", lambda: _codex_json(reasoning=9999))
         monkeypatch.setattr(srr, "_codex_rollout_session_id", lambda: "test-uuid-r")
@@ -874,7 +871,7 @@ class TestGatherCodex:
         assert "reasoning 9,999" in out
 
     def test_codex_no_rollout_file_degrades_elapsed_and_checkpoint(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: pytest.TempPathFactory
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
         monkeypatch.setattr(srr, "_run_ccusage_codex", lambda: _codex_json())
         monkeypatch.setattr(srr, "_codex_rollout_session_id", lambda: "")
@@ -894,7 +891,7 @@ class TestGatherCodex:
         assert out.count(srr._UNAVAILABLE) == 4
 
     def test_codex_second_pr_elapsed_from_checkpoint(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: pytest.TempPathFactory
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
         monkeypatch.setattr(srr, "_run_ccusage_codex", lambda: _codex_json())
         monkeypatch.setattr(srr, "_codex_rollout_session_id", lambda: "test-uuid-2")
@@ -909,7 +906,7 @@ class TestGatherCodex:
         assert f"{_ELAPSED_LABEL}: 0:01:30" in out2
 
     def test_codex_second_pr_delta_tokens(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: pytest.TempPathFactory
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
         env = {"AGENT_CONTAINER": "codex", "CCR_CCUSAGE_CHECKPOINT_DIR": str(tmp_path)}
         monkeypatch.setattr(srr, "_codex_rollout_session_id", lambda: "test-uuid-3")
@@ -926,7 +923,7 @@ class TestGatherCodex:
         assert "1,500" not in out2
 
     def test_claude_code_path_unaffected_by_codex_env(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: pytest.TempPathFactory
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
         # Ensure the Claude Code path is byte-identical: AGENT_CONTAINER absent.
         monkeypatch.setattr(
