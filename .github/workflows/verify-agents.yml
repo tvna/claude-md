@@ -212,6 +212,15 @@ jobs:
         # surface cannot land on reviewer memory alone.
         run: uv run python scripts/verify_control_inventory_currency.py verify
 
+      - name: Verify OWASP Agentic Top 10 (ASI01-ASI10) mapping is complete
+        # Refs #1378: the inventory (docs/prd/security-control-inventory.md)
+        # carries a peer-axis mapping onto the OWASP Top 10 for Agentic
+        # Applications 2026. Every one of ASI01..ASI10 must keep a status row
+        # with a rationale, so an agent-class risk cannot silently lose its
+        # mapping on reviewer memory alone. The same tree-only check re-runs in
+        # the weekly security-control-drift job as a redundant visibility signal.
+        run: uv run python scripts/owasp_asi_mapping.py verify
+
       - name: Warn if uv pin trails upstream
         env:
           GH_TOKEN: ${{ github.token }}

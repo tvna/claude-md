@@ -10,6 +10,31 @@ stay stable for callers and tests. Refs #180, parent #178.
 """
 from __future__ import annotations
 
+import dataclasses
+
+STATUS_COVERED = "covered"
+STATUS_DRIFT = "drift"
+STATUS_PENDING = "pending"
+STATUS_ERROR = "error"
+_VALID_STATUSES = frozenset({STATUS_COVERED, STATUS_DRIFT, STATUS_PENDING, STATUS_ERROR})
+
+
+@dataclasses.dataclass(frozen=True)
+class FamilyRow:
+    family: str
+    detector: str
+    status: str
+    evidence: str
+    action: str
+
+    def __post_init__(self) -> None:
+        if self.status not in _VALID_STATUSES:
+            raise ValueError(
+                f"FamilyRow.status must be one of {sorted(_VALID_STATUSES)}; "
+                f"got {self.status!r}"
+            )
+
+
 # Labels applied to every auto-filed per-family drift issue (mirrors
 # scripts/ruleset_drift.py so the meta-fix lane stays uniform).
 ISSUE_LABELS: tuple[str, ...] = ("layer:meta", "type:fix")
