@@ -32,6 +32,14 @@ jobs:
       - name: Assert uv pin lives only in pyproject.toml
         run: uv run python scripts/uv_pin.py drift
 
+      - name: Assert python pin is exact and consistent
+        # Refs #1680. `.python-version` pins the exact patch `uv run python`
+        # resolves to, so ast.unparse doc generation is byte-identical across
+        # the post-merge committer, verify-docs-drift, and local pre-push.
+        # This gate keeps that pin from silently drifting from requires-python,
+        # ruff, mypy, and flake.nix.
+        run: uv run python scripts/python_pin.py verify
+
       - name: Assert running uv matches the pin
         # Refs #1207. PR #1206 closed the *static* drift gap but left a runtime
         # gap: the host uv that runs Stop hooks could still drift ahead of the
