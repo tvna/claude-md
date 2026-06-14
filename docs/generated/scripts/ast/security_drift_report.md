@@ -182,6 +182,27 @@ flowchart TD
     N006 -->|"false"| N008
 ```
 
+## classify_owasp_asi(...)
+
+```mermaid
+flowchart TD
+    N001["classify_owasp_asi(...)"]
+    N002["if rc == 0"]
+    N003["(status, action) = (STATUS_COVERED, '<str>')"]
+    N004["if rc == 1"]
+    N005["(status, action) = (STATUS_DRIFT, '<str>')"]
+    N006["(status, action) = (STATUS_ERROR, f'<str>{rc}<str>')"]
+    N007["return FamilyRow(family='<str>', detector='<str>', status=status, evidence='<str>', action=action)"]
+    N001 -->|"start"| N002
+    N002 -->|"true"| N003
+    N002 -->|"false"| N004
+    N004 -->|"true"| N005
+    N004 -->|"false"| N006
+    N003 --> N007
+    N005 --> N007
+    N006 --> N007
+```
+
 ## classify_uv_pin_staleness(...)
 
 ```mermaid
@@ -251,8 +272,9 @@ flowchart TD
     N004["families_with_drift = sum(...)"]
     N005["families_with_error = sum(...)"]
     N006["summary = f'<str>{run_date}<str>{run_url}<str>{families_with_drift}<str>{families_with_error}<str>' + _render_table(families)"]
-    N007["report_body = f'{marker}<str>{run_date}<str>{run_url}<str>{families_with_drift}<str>{families_with_error}<str>' + _render_table(families) + '<str>'"]
-    N008["return (summary, report_body, families_with_drift)"]
+    N007["note = '<str>'"]
+    N008["report_body = f'{marker}<str>{summary}<str>{note}'"]
+    N009["return (summary, report_body, families_with_drift)"]
     N001 -->|"start"| N002
     N002 -->|"true"| N003
     N002 -->|"false"| N004
@@ -260,6 +282,7 @@ flowchart TD
     N005 --> N006
     N006 --> N007
     N007 --> N008
+    N008 --> N009
 ```
 
 ## target_families_with_drift(...)
@@ -362,7 +385,7 @@ flowchart TD
     N002["ruleset_text = _read_text(...)"]
     N003["labels_text = _read_text(...)"]
     N004["uv_stale_text = _read_text(...)"]
-    N005["return [classify_rulesets(rc=parse_int_flag(args.ruleset_detect_rc, '<str>'), detect_output=ruleset_text), classify_labels(rc=parse_int_flag(args.labels_plan_rc, '<str>'), summary_text=labels_text), classify_apm(rc=parse_int_flag(args.apm_diff_rc, '<str>')), classify_uv_pin_literal(rc=parse_int_flag(args.uv_drift_rc, '<str>')), classify_workflow_permissions(rc=parse_int_flag(args.workflow_permissions_drift_rc, '<str>')), classify_uv_pin_staleness(rc=parse_int_flag(args.uv_stale_rc, '<str>'), stale_text=uv_stale_text), pr_gate_only_row(family='<str>', detector='<str>', evidence='<str>'), pr_gate_only_row(family='<str>', detector='<str>', evidence='<str>'), pr_gate_only_row(family='<str>', detector='<str>', evidence='<str>'), out_of_scope_row(family='<str>', detector='<str>', evidence='<str>', message='<str>')]"]
+    N005["return [classify_rulesets(rc=parse_int_flag(args.ruleset_detect_rc, '<str>'), detect_output=ruleset_text), classify_labels(rc=parse_int_flag(args.labels_plan_rc, '<str>'), summary_text=labels_text), classify_apm(rc=parse_int_flag(args.apm_diff_rc, '<str>')), classify_uv_pin_literal(rc=parse_int_flag(args.uv_drift_rc, '<str>')), classify_workflow_permissions(rc=parse_int_flag(args.workflow_permissions_drift_rc, '<str>')), classify_uv_pin_staleness(rc=parse_int_flag(args.uv_stale_rc, '<str>'), stale_text=uv_stale_text), classify_owasp_asi(rc=parse_int_flag(args.owasp_asi_verify_rc, '<str>')), pr_gate_only_row(family='<str>', detector='<str>', evidence='<str>'), pr_gate_only_row(family='<str>', detector='<str>', evidence='<str>'), pr_gate_only_row(family='<str>', detector='<str>', evidence='<str>'), out_of_scope_row(family='<str>', detector='<str>', evidence='<str>', message='<str>')]"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 --> N004
@@ -553,22 +576,23 @@ flowchart TD
     N017["add_argument(...)"]
     N018["add_argument(...)"]
     N019["add_argument(...)"]
-    N020["set_defaults(...)"]
-    N021["p_post = add_parser(...)"]
-    N022["add_argument(...)"]
+    N020["add_argument(...)"]
+    N021["set_defaults(...)"]
+    N022["p_post = add_parser(...)"]
     N023["add_argument(...)"]
     N024["add_argument(...)"]
     N025["add_argument(...)"]
     N026["add_argument(...)"]
-    N027["set_defaults(...)"]
-    N028["p_file = add_parser(...)"]
-    N029["add_argument(...)"]
+    N027["add_argument(...)"]
+    N028["set_defaults(...)"]
+    N029["p_file = add_parser(...)"]
     N030["add_argument(...)"]
     N031["add_argument(...)"]
     N032["add_argument(...)"]
     N033["add_argument(...)"]
-    N034["set_defaults(...)"]
-    N035["return parser"]
+    N034["add_argument(...)"]
+    N035["set_defaults(...)"]
+    N036["return parser"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 --> N004
@@ -603,6 +627,7 @@ flowchart TD
     N032 --> N033
     N033 --> N034
     N034 --> N035
+    N035 --> N036
 ```
 
 ## main(...)
