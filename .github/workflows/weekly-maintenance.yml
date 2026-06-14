@@ -175,6 +175,9 @@ jobs:
       - name: Assert uv pin lives only in pyproject.toml
         run: uv run python scripts/uv_pin.py drift
 
+      - name: Assert python pin is exact and consistent
+        run: uv run python scripts/python_pin.py verify
+
       - name: Assert workflows install Python deps via uv only
         run: uv run python scripts/scan_workflow_pip.py verify
 

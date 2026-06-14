@@ -16,6 +16,8 @@ The Claude Code on the Web remote environment ships with a stale `uv` (`0.8.17`)
 | `.claude/settings.json` | Remote session | Registers `scripts/install-uv.sh` as the `SessionStart` hook. Permitted under the [#109](https://github.com/tvna/claude-md/issues/109) carve-out in `docs/standards/repo-scope.md`. |
 | `.codex/hooks.json` | Codex session | Registers the same SessionStart hook shape for Codex. The uv installer remains Claude-remote-gated until Codex documents a stable remote-only signal; the language-context hook consumes Codex's `cwd` event field. Tracked by [#604](https://github.com/tvna/claude-md/issues/604) / [#606](https://github.com/tvna/claude-md/issues/606) / [#616](https://github.com/tvna/claude-md/issues/616). |
 | `.github/workflows/verify-agents.yml` (`lint-uv-pin` job) | CI | Drift gate — runs `pytest tests/test_uv_pin.py` then `scripts/uv_pin.py drift`. Fails any PR that re-introduces a uv version literal outside `pyproject.toml`. See [#112](https://github.com/tvna/claude-md/issues/112). |
+| `.python-version` | All | **Single source of truth for the pinned Python interpreter.** Exact `X.Y.Z` patch so `uv run python` resolves the same interpreter everywhere. See the [Python interpreter pin](#python-interpreter-pin) section and [#1680](https://github.com/tvna/claude-md/issues/1680). |
+| `scripts/python_pin.py` | All | Pin reader / consistency checker for `.python-version`. Verifies the pin is exact and its minor matches `requires-python`, ruff, mypy, and `flake.nix`. Mirrored as a `preflight_all` step and run by `verify-agents` / `weekly-maintenance`. Tested by `tests/test_python_pin.py`. |
 | `.github/dependabot.yml` | CI | Bumps GitHub Actions SHAs and `uv.lock` entries weekly. The uv binary pin itself is bumped manually (see *Update procedure* below). |
 | `docs/standards/remote-environment.md` *(this file)* | — | Runbook: how the hook works, how the SoT propagates, verification, update procedure. |
 
@@ -125,6 +127,16 @@ The uv version lives in **one place only**: `[tool.uv].required-version` in `pyp
 4. Record the bump in the retrospective issue for that PR (CLAUDE.md §3).
 
 Upstream-follow: Dependabot (`.github/dependabot.yml`) does not natively bump `[tool.uv].required-version`. The `lint-uv-pin` job emits a `::warning::` annotation on every PR when the pin trails the latest upstream uv release — that warning is the operator's cue to open a one-line bump PR. (If staleness reminders prove inadequate, switching to Renovate is config-only; tracked as a potential follow-up under #58.)
+
+## Python interpreter pin
+
+`uv run python` is the interpreter that writes the deterministic `docs/generated/` tree (the AST graphs, dependency graph, and trigger map). `requires-python = ">=3.12"` in `pyproject.toml` is a *range*, so without a patch pin `uv run python` binds to whatever 3.12.x the host already has. `ast.unparse` renders nested f-string format specs differently across 3.12 patch releases, so the same generator on two patches produces a one-line diff in `docs/generated/scripts/ast/preflight_all.md` — phantom drift between the post-merge committer ([#1571](https://github.com/tvna/claude-md/issues/1571)), the `verify-docs-drift` gate ([#1574](https://github.com/tvna/claude-md/issues/1574)), and a local pre-push. Follow-up to [#1533](https://github.com/tvna/claude-md/issues/1533); decision record [#1680](https://github.com/tvna/claude-md/issues/1680).
+
+`.python-version` closes that gap. It pins one exact patch (`X.Y.Z`); uv reads it when resolving `uv run python` and downloads that exact interpreter, so every environment converges on the same one.
+
+`scripts/python_pin.py verify` keeps the pin from silently drifting. `requires-python` is the source of truth for the Python *minor*; the gate fails when `.python-version` is not an exact patch, or when its minor diverges from `requires-python`, `[tool.ruff].target-version`, `[tool.mypy].python_version`, or any `python3XY` token in `flake.nix`. It runs in `verify-agents` and `weekly-maintenance`, and is mirrored locally as the `python_pin` `preflight_all` step.
+
+**Bump procedure.** Edit `.python-version` to the new `X.Y.Z` patch (and, if the minor changes, `requires-python`, the ruff/mypy version keys, and the `flake.nix` `python3XY` attributes in the same change). Open a PR; `verify-agents` runs `python_pin verify`, and the `push`-triggered `verify-docs-drift` job confirms a no-op regeneration of `docs/generated/` stays clean under the new interpreter. Record the bump in the PR retrospective (CLAUDE.md §3).
 
 ## Risks
 
