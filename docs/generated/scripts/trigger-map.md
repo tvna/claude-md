@@ -178,6 +178,7 @@ Detection is string-match based:
 | `scan_markdown_links.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
 | `scan_mermaid_syntax.py` | pre-commit | `scan-mermaid-syntax` |
 | `scan_mermaid_syntax.py` | workflow | `verify-mermaid.yml (gate)` |
+| `scan_module_size_distribution.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
 | `scan_non_ascii.py` | workflow | `issue-pr-triage.yml (scan)` |
 | `scan_nonexhaustive_invariant_drift.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
 | `scan_preflight_drift.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
