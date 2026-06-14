@@ -87,6 +87,8 @@ Detection is string-match based:
 | `measure_devcontainer_startup.py` | workflow | `measure-devcontainer-startup.yml (measure)` |
 | `measure_tool_overlap.py` | workflow | `measure-tool-overlap.yml (measure)` |
 | `nixpkgs_cooldown.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
+| `owasp_asi_mapping.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
+| `owasp_asi_mapping.py` | workflow | `weekly-maintenance.yml (security-control-drift)` |
 | `plan_approval_gate.py` | agent-hook | `claude:PostToolUse` |
 | `plan_language_context.py` | agent-hook | `claude:SessionStart` |
 | `plan_language_context.py` | agent-hook | `codex:SessionStart` |
