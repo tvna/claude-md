@@ -634,6 +634,29 @@ class TestBlockExternal:
             san.block_external("o/r", 1, "weird")
 
 
+class TestNoSelfClearingReview:
+    """Rule (#1736): the non-ASCII triage MUST NOT auto-dismiss or auto-approve
+    the ``REQUEST_CHANGES`` review it posts. Self-clearing a defensive block can
+    be coerced into self-unblocking and collapses the review layer (defense-in-
+    depth, CLAUDE.md section 4). The block is one-directional; lifting a stale or
+    false-positive review is a deliberate maintainer action in the GitHub UI, and
+    false positives are prevented at the source by the trusted-bot exemption
+    (#1732). See docs/prd/non-ascii-defense.md "Self-clearing prohibition"."""
+
+    def test_module_has_no_review_dismissal_or_approve(self) -> None:
+        source = Path(san.__file__).read_text(encoding="utf-8")
+        assert "/dismissals" not in source, (
+            "scan_non_ascii.py must not call the review-dismissal endpoint "
+            "(/reviews/{id}/dismissals): self-clearing the triage's own block is "
+            "prohibited. See docs/prd/non-ascii-defense.md (#1736)."
+        )
+        assert "APPROVE" not in source, (
+            "scan_non_ascii.py must not submit an APPROVE review: self-clearing "
+            "the triage's own block is prohibited. See "
+            "docs/prd/non-ascii-defense.md (#1736)."
+        )
+
+
 # ---------------------------------------------------------------------------
 # run (orchestrator)
 # ---------------------------------------------------------------------------
