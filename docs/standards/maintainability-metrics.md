@@ -32,10 +32,31 @@ Policy:
 
 - Fails CI for any non-deferred Python module under `scripts/` above
   800 physical lines.
+- Emits a non-failing `::warning` for any passing module in the warning
+  band -- at or above `WARN_MODULE_LINES` (80% of the budget, 640 lines)
+  but still within the 800-line limit.
 - Reports only for explicitly listed baseline debt, with a reason in
   `DEFERRED_OVERSIZE_MODULES`.
 - Uses physical lines rather than parsed statements so large docstrings,
   examples, and dispatch tables still count against review burden.
+
+### Warning Band
+
+The hard limit alone is a binary gate: a module is invisible until it
+crosses 800 lines, and a hard ceiling tends to be treated as a target
+(Goodhart's law). The current distribution shows the effect -- several
+modules cluster within a handful of lines of the limit, two landing
+exactly on it. The warning band at 80% (640 lines) makes "approaching
+the limit" observable in review before a module reaches the ceiling or
+is trimmed (for example by stripping docstrings) to stay under a
+physical-line budget. It never fails CI and never changes exit codes;
+it only surfaces a `::warning` annotation so the trend is visible early.
+
+The band ratio lives in `WARN_RATIO` and is derived as
+`int(MAX_MODULE_LINES * WARN_RATIO)`, so it stays proportional if the
+hard budget changes. Like the hard limit, changing the ratio requires
+updating this document, the scanner constant, and the tests in the same
+PR.
 
 Initial baseline:
 
