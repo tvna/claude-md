@@ -5,6 +5,12 @@
       "Edit(/tmp/claude-plans/**)",
       "Write(/tmp/claude-plans/**)",
       "MultiEdit(/tmp/claude-plans/**)"
+    ],
+    "deny": [
+      "Bash(git -c commit.gpgsign=false:*)",
+      "Bash(git -c commit.gpgsign=0:*)",
+      "Bash(git -c commit.gpgsign=no:*)",
+      "Bash(git -c commit.gpgsign=off:*)"
     ]
   },
   "hooks": {
