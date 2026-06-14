@@ -28,11 +28,17 @@ run, mirroring the `ruleset-drift` reconcile pattern:
 - drifting + no open rolling issue -> create one (stable, date-free title);
 - drifting + open rolling issue(s) -> keep the oldest, close any extras as
   superseded (this consolidates the legacy dated duplicates filed before #1726);
-- resolved + open rolling issue(s) -> **auto-close** them;
-- resolved + none -> stay silent.
+- explicitly covered (clean) + open rolling issue(s) -> **auto-close** them;
+- explicitly covered + none -> stay silent;
+- detector error / unknown -> leave any open rolling issue untouched.
 
-The step therefore runs unconditionally (no `drift_families != ''` gate) so a
-family that stops drifting can have its issue auto-closed without an operator.
+The step is driven by two aggregate outputs: `drift_families` (the families in
+drift) and `covered_families` (families with an EXPLICIT clean status). Only a
+covered family is auto-closed; a family whose detector errored appears in neither
+list, so a transient failure cannot auto-close and thereby hide an active drift
+issue (a #1730 review finding). The step runs unconditionally (no
+`drift_families != ''` gate) so a family that becomes clean can have its issue
+auto-closed without an operator.
 The aggregator itself never auto-remediates the underlying control (labels are
 still applied only via the manual `apply-labels.yml` dispatch); only the
 `file-family-issues` step manages the per-family issue lifecycle, and the

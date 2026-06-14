@@ -220,18 +220,21 @@ def reconcile_family_issues(
     run_url: str,
     run_date: str,
     drifting: list[str],
+    resolved: list[str],
     dry_run: bool,
 ) -> int:
     """Maintain ONE rolling issue per target family (create / dedupe / close).
 
-    Every target family is reconciled each run, regardless of which are in
-    ``drifting``:
+    Each target family is reconciled by its observed status:
 
-    - drifting + no open rolling issue   -> create one;
-    - drifting + open rolling issue(s)   -> keep the oldest, close any extras
-                                            (consolidates legacy dated duplicates);
-    - resolved + open rolling issue(s)   -> auto-close them;
-    - resolved + none                    -> stay silent.
+    - ``drifting`` + no open rolling issue   -> create one;
+    - ``drifting`` + open rolling issue(s)   -> keep the oldest, close any extras
+                                                (consolidates legacy duplicates);
+    - ``resolved`` (EXPLICIT covered) + open  -> auto-close them;
+    - ``resolved`` + none                     -> stay silent;
+    - neither (detector error / unknown)      -> leave untouched, so a transient
+                                                failure cannot auto-close and hide
+                                                an active drift issue (#1730 review).
 
     Honours ``dry_run`` (no API calls). Returns a process exit code.
     """
@@ -243,8 +246,13 @@ def reconcile_family_issues(
                     f"{render_family_issue_title(family)!r} (create if absent, "
                     "dedupe extras)"
                 )
+            elif family in resolved:
+                print(f"[dry-run] {family}: covered -> close any open rolling issue")
             else:
-                print(f"[dry-run] {family}: resolved -> close any open rolling issue")
+                print(
+                    f"[dry-run] {family}: error/unknown -> leave any open rolling "
+                    "issue untouched"
+                )
         return 0
 
     token = os.environ.get("GH_TOKEN", "")
@@ -267,8 +275,9 @@ def reconcile_family_issues(
                 apply, repo, family, matches, token,
                 run_url=run_url, run_date=run_date,
             )
-        else:
+        elif family in resolved:
             failed |= not _close_all(apply, repo, family, matches, token)
+        # else: detector error / unknown -- leave any open issue untouched.
     return 1 if failed else 0
 
 

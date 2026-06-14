@@ -78,13 +78,20 @@ def _fake_apply(
     return fake, calls
 
 
-def _reconcile(fake: Any, drifting: list[str], *, dry_run: bool = False) -> int:
+def _reconcile(
+    fake: Any,
+    drifting: list[str],
+    *,
+    resolved: list[str] | None = None,
+    dry_run: bool = False,
+) -> int:
     return sdi.reconcile_family_issues(
         apply=fake,
         repo="owner/repo",
         run_url="https://x/runs/1",
         run_date="2026-06-03",
         drifting=drifting,
+        resolved=resolved or [],
         dry_run=dry_run,
     )
 
@@ -151,11 +158,23 @@ class TestReconcile:
     ) -> None:
         fake, calls = _fake_apply([_labels_issue(1432, dated="2026-06-07")])
         monkeypatch.setenv("GH_TOKEN", "tkn")
-        assert _reconcile(fake, []) == 0  # nothing drifting -> resolved everywhere
+        # labels is EXPLICITLY covered -> close its open issue.
+        assert _reconcile(fake, [], resolved=["labels"]) == 0
         patched = [c for c in calls if c["method"] == "PATCH"]
         assert len(patched) == 1
         assert patched[0]["url"].endswith("/repos/owner/repo/issues/1432")
         assert patched[0]["payload"]["state"] == "closed"
+
+    def test_error_family_left_untouched(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # A detector error puts labels in NEITHER list. Its open rolling issue
+        # must NOT be auto-closed, or a transient failure would hide active drift
+        # (#1730 review). Only the list GET happens.
+        fake, calls = _fake_apply([_labels_issue(1432, dated="2026-06-07")])
+        monkeypatch.setenv("GH_TOKEN", "tkn")
+        assert _reconcile(fake, [], resolved=[]) == 0
+        assert [c["method"] for c in calls] == ["GET"]
 
     def test_missing_token_exits_one(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("GH_TOKEN", raising=False)

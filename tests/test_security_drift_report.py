@@ -646,6 +646,26 @@ class TestAggregateEmitsDriftFamilies:
         assert sdr.main(_aggregate_args(tmp_path)) == 0
         gh_out = (tmp_path / "out.txt").read_text(encoding="utf-8")
         assert "drift_families=\n" in gh_out
+        # All detectors clean -> every target family is EXPLICITLY covered.
+        assert (
+            "covered_families=labels,apm-instructions,uv-pin-literal,workflow-permissions"
+            in gh_out
+        )
+
+    def test_errored_family_is_neither_drift_nor_covered(self, tmp_path: Path) -> None:
+        # A non-0/1 labels rc -> STATUS_ERROR: omitted from BOTH lists so the
+        # reconcile step leaves its rolling issue untouched (#1730 review).
+        argv = _aggregate_args(tmp_path, labels_rc="2")
+        assert sdr.main(argv) == 0
+        gh_out = (tmp_path / "out.txt").read_text(encoding="utf-8")
+        drift_line = next(
+            line for line in gh_out.splitlines() if line.startswith("drift_families=")
+        )
+        covered_line = next(
+            line for line in gh_out.splitlines() if line.startswith("covered_families=")
+        )
+        assert "labels" not in drift_line
+        assert "labels" not in covered_line
 
     def test_workflow_permissions_listed_when_drift(self, tmp_path: Path) -> None:
         argv = _aggregate_args(tmp_path, workflow_permissions_drift_rc="1")

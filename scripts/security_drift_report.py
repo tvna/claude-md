@@ -439,6 +439,21 @@ def target_families_with_drift(families: list[FamilyRow]) -> list[str]:
     ]
 
 
+def target_families_covered(families: list[FamilyRow]) -> list[str]:
+    """Return the target families with an EXPLICIT clean (`covered`) status.
+
+    A detector that errored is :data:`STATUS_ERROR`, not covered, so it is
+    omitted here. The reconcile step closes a rolling issue only for families
+    in this list -- never on a bare absence from the drift list -- so a transient
+    detector failure cannot auto-close (and thereby hide) an active drift issue.
+    """
+    return [
+        row.family
+        for row in families
+        if row.family in TARGET_FAMILIES and row.status == STATUS_COVERED
+    ]
+
+
 # render_family_issue_title / is_family_issue_title / render_family_issue_body now
 # live in _security_drift_issues (#1726) and are re-imported above.
 
@@ -547,6 +562,7 @@ def _cmd_aggregate(args: argparse.Namespace) -> int:
     )
 
     drift_families = target_families_with_drift(families)
+    covered_families = target_families_covered(families)
 
     _append_text(Path(args.summary_file), summary)
     _write_text(Path(args.report_file), report_body)
@@ -554,7 +570,8 @@ def _cmd_aggregate(args: argparse.Namespace) -> int:
         Path(args.github_output),
         f"families_with_drift={families_with_drift}\n"
         f"report_date={run_date}\n"
-        f"drift_families={','.join(drift_families)}\n",
+        f"drift_families={','.join(drift_families)}\n"
+        f"covered_families={','.join(covered_families)}\n",
     )
     return 0
 
@@ -565,18 +582,22 @@ def _cmd_file_family_issues(args: argparse.Namespace) -> int:
     Despite the historical subcommand name, this no longer floods a fresh issue
     per run (#1726): it delegates to
     :func:`_security_drift_issues.reconcile_family_issues`. ``--families`` is the
-    comma-separated ``drift_families`` output of ``aggregate`` -- the families
-    currently in drift. Each name must be in :data:`TARGET_FAMILIES`; an unexpected
-    name fails loud. Honours ``--dry-run`` (no API calls).
+    comma-separated ``drift_families`` output of ``aggregate`` (families in drift),
+    and ``--resolved-families`` is the ``covered_families`` output (families with an
+    EXPLICIT clean status). Only a `covered` family is auto-closed; a family in
+    neither list -- e.g. its detector errored -- is left untouched so a transient
+    failure cannot hide an active drift issue. Each name must be in
+    :data:`TARGET_FAMILIES`; an unexpected name fails loud. Honours ``--dry-run``.
     """
     dry_run = parse_dry_run(args.dry_run)
     run_date = args.run_date or _utc_today()
     drifting = [name.strip() for name in args.families.split(",") if name.strip()]
+    resolved = [name.strip() for name in args.resolved_families.split(",") if name.strip()]
 
-    unknown = [name for name in drifting if name not in TARGET_FAMILIES]
+    unknown = [name for name in (*drifting, *resolved) if name not in TARGET_FAMILIES]
     if unknown:
         raise ValueError(
-            f"--families contains non-target families {unknown}; "
+            f"--families/--resolved-families contains non-target families {unknown}; "
             f"allowed: {sorted(TARGET_FAMILIES)}"
         )
 
@@ -586,6 +607,7 @@ def _cmd_file_family_issues(args: argparse.Namespace) -> int:
         run_url=args.run_url,
         run_date=run_date,
         drifting=drifting,
+        resolved=resolved,
         dry_run=dry_run,
     )
 
@@ -719,7 +741,7 @@ def _build_parser(
 
     p_file = sub.add_parser(
         "file-family-issues",
-        help="File one issue per drifting target family (labels/apm/uv-pin-literal).",
+        help="Reconcile one rolling issue per target family (create / dedupe / close).",
     )
     p_file.add_argument("--repo", required=True)
     p_file.add_argument("--run-url", required=True)
@@ -728,6 +750,16 @@ def _build_parser(
         "--families",
         required=True,
         help="Comma-separated drift_families output from the aggregate subcommand.",
+    )
+    p_file.add_argument(
+        "--resolved-families",
+        default="",
+        help=(
+            "Comma-separated covered_families output from the aggregate subcommand "
+            "(families with an EXPLICIT clean status). Only these are auto-closed; "
+            "a family in neither list (e.g. a detector error) is left untouched. "
+            "Defaults to empty so a missing value never auto-closes."
+        ),
     )
     p_file.add_argument("--dry-run", default="true")
     p_file.set_defaults(func=_cmd_file_family_issues, apply_call=apply_call)

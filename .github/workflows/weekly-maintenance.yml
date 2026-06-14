@@ -686,6 +686,7 @@ jobs:
             --run-url "${RUN_URL}" \
             --run-date "${{ steps.aggregate.outputs.report_date }}" \
             --families "${{ steps.aggregate.outputs.drift_families }}" \
+            --resolved-families "${{ steps.aggregate.outputs.covered_families }}" \
             --dry-run "${DRY_RUN}"
 
   # Merged from flake-pin-refresh.yml (#1319). flake.nix is the single source of
