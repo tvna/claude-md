@@ -33,6 +33,7 @@ This file is generated from `scripts/*.py` import statements by `python3 scripts
 | `preflight_cache` | 1 | `preflight_all` |
 | `preflight_main_freshness` | 1 | `preflight_session_base_freshness` |
 | `preflight_steps` | 1 | `preflight_all` |
+| `scan_maintainability_metrics` | 1 | `scan_module_size_distribution` |
 | `scan_markdown_links` | 1 | `measure_tool_overlap` |
 | `scan_preflight_drift` | 1 | `scan_input_contract_drift` |
 | `scan_secrets` | 1 | `measure_tool_overlap` |
@@ -45,9 +46,9 @@ This file is generated from `scripts/*.py` import statements by `python3 scripts
 
 ## Isolated scripts
 
-58 script(s) import no sibling module and are imported by none:
+57 script(s) import no sibling module and are imported by none:
 
-`analyze_ci_timings`, `attack_review_reminder`, `backup_archive`, `backup_non_ascii`, `branch_cleanup`, `ccusage_pin`, `compare_cache_regimes`, `dependabot_labels`, `flake_pin`, `flake_pin_latest`, `gate_generated_scripts_manual_edit`, `gen_agent_hooks`, `gen_mcp_json`, `github_paginate`, `measure_devcontainer_startup`, `measure_prefix_tokens`, `mint_github_app_token`, `nixpkgs_cooldown`, `owasp_asi_mapping`, `preflight_hook_event_keys`, `python_pin`, `rulesets_apply`, `scan_apm_ascii`, `scan_apm_lock_drift`, `scan_apm_portability`, `scan_compile_from_source`, `scan_design_philosophy_drift`, `scan_doc_workflow_refs`, `scan_docs_inventory`, `scan_flake_pin_drift`, `scan_hook_coverage_drift`, `scan_maintainability_metrics`, `scan_mermaid_syntax`, `scan_nonexhaustive_invariant_drift`, `scan_provisioning_hook_serial`, `scan_quality_standard_drift`, `scan_secret_runbooks`, `scan_session_path_drift`, `scan_test_presence_drift`, `scan_workflow_gh_calls`, `scan_workflow_pip`, `scan_workflow_unsigned_commit`, `script_dependency_graph`, `script_trigger_map`, `session_resource_report`, `skill_quality_gate`, `threat_intel_triage`, `uv_download_checksum`, `validate_json_syntax`, `verify_apm_checksums`, `verify_control_inventory_currency`, `verify_readme_translation`, `verify_required_check_contexts`, `verify_security_control_floor`, `verify_shard_coverage`, `verify_test_shard_markers`, `waza_pin`, `workflow_diagram`
+`analyze_ci_timings`, `attack_review_reminder`, `backup_archive`, `backup_non_ascii`, `branch_cleanup`, `ccusage_pin`, `compare_cache_regimes`, `dependabot_labels`, `flake_pin`, `flake_pin_latest`, `gate_generated_scripts_manual_edit`, `gen_agent_hooks`, `gen_mcp_json`, `github_paginate`, `measure_devcontainer_startup`, `measure_prefix_tokens`, `mint_github_app_token`, `nixpkgs_cooldown`, `owasp_asi_mapping`, `preflight_hook_event_keys`, `python_pin`, `rulesets_apply`, `scan_apm_ascii`, `scan_apm_lock_drift`, `scan_apm_portability`, `scan_compile_from_source`, `scan_design_philosophy_drift`, `scan_doc_workflow_refs`, `scan_docs_inventory`, `scan_flake_pin_drift`, `scan_hook_coverage_drift`, `scan_mermaid_syntax`, `scan_nonexhaustive_invariant_drift`, `scan_provisioning_hook_serial`, `scan_quality_standard_drift`, `scan_secret_runbooks`, `scan_session_path_drift`, `scan_test_presence_drift`, `scan_workflow_gh_calls`, `scan_workflow_pip`, `scan_workflow_unsigned_commit`, `script_dependency_graph`, `script_trigger_map`, `session_resource_report`, `skill_quality_gate`, `threat_intel_triage`, `uv_download_checksum`, `validate_json_syntax`, `verify_apm_checksums`, `verify_control_inventory_currency`, `verify_readme_translation`, `verify_required_check_contexts`, `verify_security_control_floor`, `verify_shard_coverage`, `verify_test_shard_markers`, `waza_pin`, `workflow_diagram`
 
 ## Dependency graph
 
@@ -189,6 +190,7 @@ flowchart TD
     scan_devcontainer_tool_drift --> preflight_all
     scan_input_contract_drift --> scan_preflight_drift
     scan_issue_anchor_drift --> issue_anchors
+    scan_module_size_distribution --> scan_maintainability_metrics
     scan_non_ascii --> _trusted_bots
     scan_retro_followup_drift --> _retro_labels
     scan_retro_followup_drift --> issue_link
