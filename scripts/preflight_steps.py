@@ -380,6 +380,14 @@ STEPS: tuple[Step, ...] = (
         argv=("python3", "scripts/verify_control_inventory_currency.py", "verify"),
     ),
     Step(
+        # Refs #1378. Fails when the OWASP Agentic Top 10 (ASI01-ASI10) mapping in
+        # the security-control inventory loses a status row, mirroring the
+        # verify-agents.yml lint-scripts-static gate so the mapping is checked
+        # pre-push too.
+        name="owasp_asi_mapping",
+        argv=("python3", "scripts/owasp_asi_mapping.py", "verify"),
+    ),
+    Step(
         # Refs #745. Fetches the live base branch and fails before push when
         # HEAD does not contain it, matching GitHub's out-of-date branch gate.
         name="preflight_branch_base",

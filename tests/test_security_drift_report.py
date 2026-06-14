@@ -186,6 +186,21 @@ class TestClassifyWorkflowPermissions:
         assert sdr.classify_workflow_permissions(rc=2).status == sdr.STATUS_ERROR
 
 
+class TestClassifyOwaspAsi:
+    def test_covered_rc_zero(self) -> None:
+        row = sdr.classify_owasp_asi(rc=0)
+        assert row.status == sdr.STATUS_COVERED
+        assert row.family == "owasp-asi-mapping"
+
+    def test_drift_rc_one(self) -> None:
+        row = sdr.classify_owasp_asi(rc=1)
+        assert row.status == sdr.STATUS_DRIFT
+        assert "security-control-inventory.md" in row.action
+
+    def test_error_rc_other(self) -> None:
+        assert sdr.classify_owasp_asi(rc=2).status == sdr.STATUS_ERROR
+
+
 class TestClassifyUvPinStaleness:
     def test_covered_no_warning(self) -> None:
         row = sdr.classify_uv_pin_staleness(rc=0, stale_text="uv pin matches upstream latest.\n")
@@ -375,6 +390,7 @@ def _aggregate_args(tmp_path: Path, **overrides: Any) -> list[str]:
         overrides.pop("workflow_permissions_drift_rc", "0"),
         "--uv-stale-rc", overrides.pop("uv_stale_rc", "0"),
         "--uv-stale-output", str(uv_stale),
+        "--owasp-asi-verify-rc", overrides.pop("owasp_asi_verify_rc", "0"),
         "--run-url", overrides.pop("run_url", "https://x/runs/1"),
         "--run-date", overrides.pop("run_date", "2026-05-23"),
         "--summary-file", str(tmp_path / "summary.md"),

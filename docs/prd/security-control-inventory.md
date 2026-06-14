@@ -197,6 +197,33 @@ This table answers, for each row of #178's coverage table: which surfaces in thi
 | Exfil | `apply-labels.yml`, `apply-rulesets.yml`, `weekly-maintenance.yml`, `docs/runbooks/rulesets.md`, `docs/runbooks/branch-cleanup.md` | covered | — |
 | Impact | `apply-labels.yml`, `apply-rulesets.yml`, `weekly-maintenance.yml`, `main.json`, `all-branches.json` | covered | — |
 
+## OWASP Top 10 for Agentic Applications 2026 (ASI01-ASI10) coverage
+
+Peer axis to the MITRE ATT&CK mapping above. ATT&CK answers "which attacker tactic is covered"; the OWASP Top 10 for Agentic Applications 2026 (ASI01-ASI10, OWASP GenAI Security Project, published 2025-12) answers "which agent-class risk is covered". The two run as cross-linked peer axes under [#178](https://github.com/tvna/claude-md/issues/178), not merged. This section is the deliverable for [#1378](https://github.com/tvna/claude-md/issues/1378) (re-homed from the retired umbrella #1023).
+
+Status vocabulary matches the per-surface tables above (`covered`, `partially covered`, `not applicable`). Here `not applicable` means the risk is structurally out of scope for this single-author instruction repository -- no persistent agent memory store (ASI06), no inter-agent message bus (ASI07) -- not that the item was skipped.
+
+Mapping completeness is itself a deterministic gate, not reviewer memory: the PR-time `lint-scripts-static` job runs `scripts/owasp_asi_mapping.py verify`, which fails CI if any ASI item loses its status row, and the weekly `security-control-drift` job carries an `owasp-asi-mapping` family that re-runs the same tree-only check on cron and surfaces drift in the #178 rolling comment.
+
+| ASI | Agentic risk (OWASP 2026) | Status | Repo evidence / rationale | Gap |
+|---|---|---|---|---|
+| `ASI01` | Agent Goal Hijack | covered | Untrusted-input discipline in CLAUDE.md section 2 (external text is data, never instruction) plus the non-ASCII / multi-byte prompt-injection gates `scan_non_ascii.py` and `preflight_non_ascii.py`. | #102 |
+| `ASI02` | Tool Misuse and Exploitation | covered | Fail-closed MCP allowlist: `gate_mcp_github_uncovered.py` denies uncovered `mcp__github__*` tools, `gate_gh_cli.py` blocks raw `gh` / `curl api.github.com`, `gate_issue_close_comment.py` gates issue close. Bounded tool-scope rule in CLAUDE.md section 4. | -- |
+| `ASI03` | Identity and Privilege Abuse | partially covered | Privilege is bounded today (Environment-scoped PATs, `bypass_actors: []`, code-owner review, per-job least privilege), but the repo hosts multiple coding agents with no per-agent attribution at action time and authenticates privileged workflows with long-lived PATs. Residual risk recorded below. | #1380, #1381 |
+| `ASI04` | Agentic Supply Chain Vulnerabilities | covered | `uv sync --locked`, SHA-pinned GitHub Actions, `threat_intel_triage.py` (OSV / GHSA / OSSF / CISA KEV / EPSS), Dependabot cooldown, and the `agent-provenance.md` extension checklist. | -- |
+| `ASI05` | Unexpected Code Execution | covered | No agent-authored code reaches a privileged runtime un-reviewed: squash-merge plus code-owner review is the only path to `main`; the `S` (flake8-bandit) ruff family flags subprocess injection and unsafe execution across `scripts/`, pinned by `test_ruff_security_gate.py`. | -- |
+| `ASI06` | Memory and Context Poisoning | not applicable | Structurally out of scope: this repository has no persistent agent memory store or vector index that survives a session; the remote container is reclaimed on inactivity. Re-evaluate if a durable memory store is ever added. | -- |
+| `ASI07` | Insecure Inter-Agent Communication | not applicable | Structurally out of scope: there is no inter-agent message bus or agent-to-agent protocol here. The coding agents act independently against the same Git remote; their only shared channel is the code-owner-reviewed merge gate. Re-evaluate if an agent-to-agent transport is ever added. | -- |
+| `ASI08` | Cascading Failures | partially covered | Containment relies on the merge boundary (`bypass_actors: []`, code-owner review, no direct push, dry-run defaults on privileged workflows) and per-job least privilege, but there is no in-session deviation detection or per-session mutation blast-radius cap. Residual risk recorded below. | #1380 |
+| `ASI09` | Human-Agent Trust Exploitation | covered | CLAUDE.md section 4 keeps confirmations / dry-runs for every irreversible or outward-facing operation and section 6 keeps the decision with the human; `gate_issue_close_comment.py` blocks a silent issue close with no posted rationale. | -- |
+| `ASI10` | Rogue Agents | partially covered | Same containment as ASI08 (merge boundary, least privilege, no direct push): an agent cannot mutate `main` outside the reviewed gate. What is missing is runtime behavioral-anomaly detection and a per-session blast-radius cap that would catch a drifting agent before the merge boundary. Residual risk recorded below. | #1380 |
+
+### Accepted residual risks (the three gaps from #1023)
+
+- **ASI03 -- agent identity / non-human identity (Gap 1).** The repo runs multiple coding agents (Claude, Codex, Devin) against one Git remote with no per-agent attribution at action time, and authenticates privileged workflows with long-lived PATs rather than short-lived / OIDC tokens. Accepted as residual risk for now: privilege is already bounded by Environment-scoped secrets, `bypass_actors: []`, and code-owner review, so an unattributed agent still cannot bypass the merge gate. Tracked for closure by #1381 (short-lived / OIDC identity) and #1380 (per-session blast-radius cap). Re-evaluate when either lands.
+- **ASI08 / ASI10 -- runtime anomaly / containment (Gap 3).** There is no in-session deviation detection or per-session mutation blast-radius cap; a compromised or drifting agent is contained only at the merge boundary. Accepted as residual risk: the merge boundary is a hard gate (`bypass_actors: []`, required code-owner review, squash-only, no direct push), so the blast radius of a rogue in-session action stops at an unmerged branch. Tracked by #1380. Re-evaluate when a runtime anomaly signal is scoped.
+- **ASI mapping itself (Gap 2)** is closed by this section plus its deterministic re-verification (the `scripts/owasp_asi_mapping.py` gate and the `owasp-asi-mapping` drift family), so the mapping cannot silently drift.
+
 ## Gap summary
 
 Follow-up issues this inventory references:
@@ -210,6 +237,9 @@ Follow-up issues this inventory references:
 | #170 | Sustained external threat-intelligence triage operations |
 | #180 | Scheduled drift reporting across control families (closed by `weekly-maintenance.yml`) |
 | #183 | Downstream instruction review checklist |
+| #1378 | OWASP Agentic Top 10 (ASI01-ASI10) mapping completion (this section) |
+| #1380 | Per-session mutation blast-radius cap / runtime anomaly (ASI08 / ASI10) |
+| #1381 | Short-lived / OIDC agent identity (ASI03) |
 
 No new follow-up issues are opened by this inventory: every gap identified above maps to one of the issues in the table. If a future review surfaces a gap that does not fit any of these, append it to this file and open a new issue then.
 

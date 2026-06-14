@@ -92,6 +92,15 @@ reproducible and comparable across quarters:
    Confirm any change touching `.apm/instructions/master.instructions.md`
    or compiled `CLAUDE.md` / `AGENTS.md` was reviewed against the
    checklist before merge.
+8. **OWASP Agentic Top 10 (ASI01-ASI10) mapping.** Re-read the
+   `OWASP Top 10 for Agentic Applications 2026` section of
+   `docs/prd/security-control-inventory.md` -- the peer axis to the
+   ATT&CK table. Confirm every ASI item still carries a status and that
+   the ASI03 / ASI08 / ASI10 residual-risk notes are still accurate.
+   Completeness is gated deterministically by
+   `scripts/owasp_asi_mapping.py verify` (PR time and weekly), so this
+   review checks the *judgement* (are the statuses still correct?), not
+   the presence of the rows.
 
 If an evidence source is missing or unreadable, the review records
 that fact under `Stale sub-issues or blocked work` rather than
@@ -121,6 +130,7 @@ YYYY-MM-DD (UTC). Replace with the date the review is performed.
 - [ ] `git log --since="3 months ago"` on security-relevant surfaces reviewed.
 - [ ] `docs/runbooks/workflow-permissions-audit.md` matrix reviewed.
 - [ ] `docs/runbooks/downstream-instruction-review-checklist.md` reviewed.
+- [ ] OWASP ASI01-ASI10 mapping in `security-control-inventory.md` re-walked (peer axis).
 
 ### ATT&CK tactic rows that changed status
 
@@ -224,7 +234,9 @@ python3 -c "import yaml; yaml.safe_load(open('.github/workflows/monthly-maintena
 - [#184](https://github.com/tvna/claude-md/issues/184) -- the sub-issue
   this runbook closes.
 - [`docs/prd/security-control-inventory.md`](../prd/security-control-inventory.md) --
-  per-surface inventory that backs the ATT&CK table.
+  per-surface inventory that backs the ATT&CK table and carries the
+  peer-axis OWASP Agentic Top 10 (ASI01-ASI10) mapping (#1378), gated by
+  `scripts/owasp_asi_mapping.py`.
 - [`docs/runbooks/security-control-drift-report.md`](security-control-drift-report.md) --
   weekly drift channel that the quarterly review reads alongside.
 - [`docs/runbooks/workflow-permissions-audit.md`](workflow-permissions-audit.md) --
