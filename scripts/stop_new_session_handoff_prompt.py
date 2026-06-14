@@ -26,15 +26,21 @@ call):
 
 * ``stop_hook_active`` true -> no-op. The harness sets this when the stop is
   already a continuation triggered by a prior block, so re-blocking would loop.
+* The turn must NOT be a human/CI terminal wait (#1704). When the only
+  remaining work is awaiting a GitHub-UI merge, a code-owner review, or CI,
+  there is no agent work to hand to a follow-up session, so the paste-ready
+  prompt is noise -- such a turn no-ops even if it mentions a handoff.
 * The final assistant turn must signal a handoff to a new / follow-up session
-  (a cue word, ja or en) ...
+  (a cue word, ja or en), AFTER the mandatory pre-merge retro-survey vocabulary
+  is stripped (#1704) -- the survey gate names its own event a "session
+  handoff", so merely reporting that REQUIRED survey must not count as a cue ...
 * ... AND must NOT already carry a paste-ready prompt (a fenced code block or
   an explicit paste marker) -- otherwise the goal is already met.
 
 Fails open per CLAUDE.md section 4: any missing field, unreadable transcript, or
 parse error exits 0 with no output. A hook bug must never wedge the session.
 
-Refs issue #1334. Refs #1291.
+Refs issue #1704. Refs #1334. Refs #1291.
 """
 
 from __future__ import annotations
@@ -78,6 +84,46 @@ PROVIDED_MARKERS: tuple[str, ...] = (
     "貼り付け",
     "そのまま貼",
     "貼って",
+)
+
+# The mandatory pre-merge retro-survey gate
+# (gate_handoff_retro_survey_askuserquestion.py) names its own event a "session
+# handoff" / "引き継ぎサーベイ". Reporting compliance with that REQUIRED survey
+# must not, by itself, trip the new-session cue (#1704): the survey compound is
+# surgically removed before cue matching, so only a handoff cue OUTSIDE the
+# survey vocabulary can fire. Listed lowercase (en) / verbatim (ja); matching is
+# done on the lowercased turn text.
+SURVEY_NEUTRALIZE: tuple[str, ...] = (
+    "引き継ぎサーベイ",
+    "ハンドオフサーベイ",
+    "handoff survey",
+    "session handoff survey",
+    "session-handoff survey",
+)
+
+# A turn whose only remaining work is a human/CI terminal action -- awaiting a
+# GitHub-UI merge, a code-owner review, or CI -- has NO agent work to hand to a
+# follow-up session, so a paste-ready new-session prompt is noise (#1704).
+# Presence of any cue suppresses the nag. Kept narrow and specific to the "work
+# is done, waiting on a human or CI" framing so a genuine parked-work handoff is
+# unaffected. Matched against the lowercased turn text (ja cues are unaffected
+# by lowercasing; en cues are listed lowercase).
+TERMINAL_WAIT_CUES: tuple[str, ...] = (
+    "マージ直前",
+    "ui 上でのマージ",
+    "ui でのマージ",
+    "ui でマージ",
+    "マージをお任せ",
+    "マージはお任せ",
+    "マージはあなた",
+    "オーナー承認待ち",
+    "レビュー承認待ち",
+    "just before merge",
+    "awaiting merge",
+    "await merge",
+    "owner will merge",
+    "owner to merge",
+    "merge via the github ui",
 )
 
 _BLOCK_REASON = (
@@ -137,10 +183,27 @@ def turn_text(turn: list[Any]) -> str:
     return "\n".join(parts)
 
 
+def _strip_survey_vocab(lowered: str) -> str:
+    """Remove retro-survey compounds so reporting the survey is not a cue."""
+    for phrase in SURVEY_NEUTRALIZE:
+        lowered = lowered.replace(phrase.lower(), " ")
+    return lowered
+
+
 def signals_handoff(text: str) -> bool:
-    """True when *text* announces a handoff to a new / follow-up session."""
-    lowered = text.lower()
+    """True when *text* announces a handoff to a new / follow-up session.
+
+    The mandatory pre-merge retro-survey vocabulary is stripped first (#1704)
+    so merely reporting that survey does not, by itself, count as a handoff cue.
+    """
+    lowered = _strip_survey_vocab(text.lower())
     return any(cue in lowered for cue in HANDOFF_CUES)
+
+
+def signals_terminal_wait(text: str) -> bool:
+    """True when *text*'s remaining work is a human/CI terminal wait (#1704)."""
+    lowered = text.lower()
+    return any(cue in lowered for cue in TERMINAL_WAIT_CUES)
 
 
 def already_provided(text: str) -> bool:
@@ -159,6 +222,11 @@ def evaluate(event: dict[str, Any], entries: list[Any]) -> dict[str, Any] | None
     if not turn:
         return None
     text = turn_text(turn)
+    # A pre-merge / human-CI terminal wait has no agent work to hand off (#1704):
+    # the correct operator-facing status is "no agent work remaining", so the
+    # paste-ready new-session prompt would be noise. Suppress before the cue check.
+    if signals_terminal_wait(text):
+        return None
     if not signals_handoff(text):
         return None
     if already_provided(text):
