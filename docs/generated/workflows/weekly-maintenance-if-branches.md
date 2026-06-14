@@ -29,7 +29,7 @@ flowchart TD
     S_J_security_control_drift_6(("Record OWASP ASI verify exit code"))
     S_J_security_control_drift_7(("Aggregate drift report"))
     S_J_security_control_drift_8(("Post or update rolling comment on the security tracking issue"))
-    S_J_security_control_drift_9(("File per-family drift issues"))
+    S_J_security_control_drift_9(("Reconcile per-family drift issues"))
     J_flake_pin_refresh["flake-pin-refresh"]
     S_J_flake_pin_refresh_0(("Recompute per-system hashes and bump flake.nix"))
     S_J_flake_pin_refresh_1(("Validate the bumped flake"))
@@ -57,7 +57,7 @@ flowchart TD
     J_security_control_drift -->|"always()"| S_J_security_control_drift_6
     J_security_control_drift -->|"always()"| S_J_security_control_drift_7
     J_security_control_drift -->|"always()"| S_J_security_control_drift_8
-    J_security_control_drift -->|"always() && steps.aggregate.outputs.drift_families != ''"| S_J_security_control_drift_9
+    J_security_control_drift -->|"always() && steps.aggregate.outcome == 'success'"| S_J_security_control_drift_9
     T_schedule -->|"github.event_name == 'schedule' || inputs.task == 'all' || inputs.task ~"| J_flake_pin_refresh
     J_flake_pin_refresh -->|"steps.decide.outputs.target != ''"| S_J_flake_pin_refresh_0
     J_flake_pin_refresh -->|"steps.decide.outputs.target != ''"| S_J_flake_pin_refresh_1

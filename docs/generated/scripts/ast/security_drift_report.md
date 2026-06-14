@@ -294,26 +294,13 @@ flowchart TD
     N001 -->|"start"| N002
 ```
 
-## render_family_issue_title(...)
+## target_families_covered(...)
 
 ```mermaid
 flowchart TD
-    N001["render_family_issue_title(...)"]
-    N002["spec = FAMILY_ISSUE_SPEC[family]"]
-    N003["return f'<str>{spec['<str>']}<str>{run_date}<str>'"]
+    N001["target_families_covered(...)"]
+    N002["return [row.family for row in families if row.family in TARGET_FAMILIES and row.status == STATUS_COVERED]"]
     N001 -->|"start"| N002
-    N002 --> N003
-```
-
-## render_family_issue_body(...)
-
-```mermaid
-flowchart TD
-    N001["render_family_issue_body(...)"]
-    N002["spec = FAMILY_ISSUE_SPEC[family]"]
-    N003["return f'<str>{DEFAULT_TRACKING_ISSUE}<str>{family}<str>{run_url}<str>{run_date}<str>{spec['<str>']}<str>{spec['<str>']}<str>{spec['<str>']}<str>{DEFAULT_TRACKING_ISSUE}<str>'"]
-    N001 -->|"start"| N002
-    N002 --> N003
 ```
 
 ## find_existing_comment(...)
@@ -401,10 +388,11 @@ flowchart TD
     N003["families = _assemble_families(...)"]
     N004["(summary, report_body, families_with_drift) = build_report(...)"]
     N005["drift_families = target_families_with_drift(...)"]
-    N006["_append_text(...)"]
-    N007["_write_text(...)"]
-    N008["_append_text(...)"]
-    N009["return 0"]
+    N006["covered_families = target_families_covered(...)"]
+    N007["_append_text(...)"]
+    N008["_write_text(...)"]
+    N009["_append_text(...)"]
+    N010["return 0"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 --> N004
@@ -413,6 +401,7 @@ flowchart TD
     N006 --> N007
     N007 --> N008
     N008 --> N009
+    N009 --> N010
 ```
 
 ## _cmd_file_family_issues(...)
@@ -422,42 +411,20 @@ flowchart TD
     N001["_cmd_file_family_issues(...)"]
     N002["dry_run = parse_dry_run(...)"]
     N003["run_date = args.run_date or _utc_today()"]
-    N004["families = [name.strip() for name in args.families.split('<str>') if name.strip()]"]
-    N005["unknown = [name for name in families if name not in TARGET_FAMILIES]"]
-    N006["if unknown"]
-    N007["raise ValueError(f'<str>{unknown}<str>{sorted(TARGET_FAMILIES)}')"]
-    N008["if not families"]
-    N009["print(...)"]
-    N010["return 0"]
-    N011["if dry_run"]
-    N012["for family in families:     print(f'<str>{family!r}<str>{render_family_issue_title(family, run_date)!r}')"]
-    N013["return 0"]
-    N014["token = get(...)"]
-    N015["if not token"]
-    N016["print(...)"]
-    N017["return 1"]
-    N018["apply = args.apply_call"]
-    N019["for family in families:     payload = {'<str>': render_family_issue_title(family, run_date), '<str>': render_family_issue_body(family, run_url=args.run_url, run_date=run_date), '<str>': list(ISSUE_LABELS)}     code, response = apply(method='<str>', url=f'{API_ROOT}<str>{args.repo}<str>', payload=payload, token=token)     if not 200 <= code < 300:         print(f'<str>{family}<str>{code}<str>{response[:200]}', file=sys.stderr)         return 1     print(f'<str>{family}<str>{args.repo}<str>')"]
-    N020["return 0"]
+    N004["drifting = [name.strip() for name in args.families.split('<str>') if name.strip()]"]
+    N005["resolved = [name.strip() for name in args.resolved_families.split('<str>') if name.strip()]"]
+    N006["unknown = [name for name in (*drifting, *resolved) if name not in TARGET_FAMILIES]"]
+    N007["if unknown"]
+    N008["raise ValueError(f'<str>{unknown}<str>{sorted(TARGET_FAMILIES)}')"]
+    N009["return reconcile_family_issues(apply=args.apply_call, repo=args.repo, run_url=args.run_url, run_date=run_date, drifting=drifting, resolved=resolved, dry_run=dry_run)"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 --> N004
     N004 --> N005
     N005 --> N006
-    N006 -->|"true"| N007
-    N006 -->|"false"| N008
-    N008 -->|"true"| N009
-    N009 --> N010
-    N008 -->|"false"| N011
-    N011 -->|"true"| N012
-    N012 --> N013
-    N011 -->|"false"| N014
-    N014 --> N015
-    N015 -->|"true"| N016
-    N016 --> N017
-    N015 -->|"false"| N018
-    N018 --> N019
-    N019 --> N020
+    N006 --> N007
+    N007 -->|"true"| N008
+    N007 -->|"false"| N009
 ```
 
 ## _cmd_post_comment(...)
@@ -591,8 +558,9 @@ flowchart TD
     N032["add_argument(...)"]
     N033["add_argument(...)"]
     N034["add_argument(...)"]
-    N035["set_defaults(...)"]
-    N036["return parser"]
+    N035["add_argument(...)"]
+    N036["set_defaults(...)"]
+    N037["return parser"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 --> N004
@@ -628,6 +596,7 @@ flowchart TD
     N033 --> N034
     N034 --> N035
     N035 --> N036
+    N036 --> N037
 ```
 
 ## main(...)
