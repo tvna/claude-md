@@ -79,6 +79,7 @@ import scan_issue_anchor_drift
 import scan_maintainability_metrics
 import scan_markdown_links
 import scan_mermaid_syntax
+import scan_module_size_distribution
 import scan_non_ascii
 import scan_nonexhaustive_invariant_drift
 import scan_preflight_drift
@@ -220,6 +221,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("scan_markdown_links.py", "verify"): "test_scan_markdown_links_verify_matches_workflow_args",
     ("scan_mermaid_syntax.py", "verify"): "test_scan_mermaid_syntax_verify_matches_workflow_args",
     ("scan_maintainability_metrics.py", "verify"): "test_scan_maintainability_metrics_verify_matches_workflow_args",
+    ("scan_module_size_distribution.py", "verify"): "test_scan_module_size_distribution_verify_matches_workflow_args",
     ("scan_non_ascii.py", "run"): "test_scan_non_ascii_run_matches_workflow_env",
     ("scan_nonexhaustive_invariant_drift.py", "verify"): "test_scan_nonexhaustive_invariant_drift_verify_matches_workflow_args",
     ("scan_hook_coverage_drift.py", "verify"): "test_scan_hook_coverage_drift_verify_matches_workflow_args",
@@ -1642,6 +1644,12 @@ def test_scan_maintainability_metrics_verify_matches_workflow_args() -> None:
     """Mirrors the ``Assert script maintainability metrics`` step in
     ``.github/workflows/verify-agents.yml``."""
     assert scan_maintainability_metrics.main(["verify", "--repo-root", "."]) == 0
+
+
+def test_scan_module_size_distribution_verify_matches_workflow_args() -> None:
+    """Mirrors the ``Assert script size distribution snapshot is current``
+    step in ``.github/workflows/verify-agents.yml``."""
+    assert scan_module_size_distribution.main(["verify", "--repo-root", "."]) == 0
 
 
 def test_scan_workflow_pip_verify_matches_workflow_args() -> None:
