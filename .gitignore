@@ -67,15 +67,15 @@ apm_modules/
 .env
 .env.*
 
-# Flake files staged into the nix-warm-claude Feature at image-build time by
-# .github/workflows/publish-devcontainer-images.yml (claude legs only). They are
+# Flake files staged into the nix-warm-agent Feature at image-build time by
+# .github/workflows/publish-devcontainer-images.yml. They are
 # copies of the repo-root flake the Feature realises into the baked closure;
 # they are generated per build and never committed so they cannot drift from the
-# source flake. See .devcontainer/images/features/nix-warm-claude/install.sh and
-# issue #1491.
-.devcontainer/images/features/nix-warm-claude/flake.nix
-.devcontainer/images/features/nix-warm-claude/flake.lock
-.devcontainer/images/features/nix-warm-claude/pyproject.toml
+# source flake. See .devcontainer/images/features/nix-warm-agent/install.sh and
+# issues #1491 and #1743.
+.devcontainer/images/features/nix-warm-agent/flake.nix
+.devcontainer/images/features/nix-warm-agent/flake.lock
+.devcontainer/images/features/nix-warm-agent/pyproject.toml
 
 # bun-managed node_modules for the Mermaid syntax validation gate
 # (scripts/scan_mermaid_syntax.py, issue #1597). The toolchain is pinned by

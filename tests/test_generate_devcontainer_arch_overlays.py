@@ -121,3 +121,12 @@ def test_committed_overlays_match_their_bases() -> None:
     # The real repository's overlays must stay in sync with their base configs;
     # this mirrors the preflight drift gate so a stale commit fails locally too.
     assert overlays.verify(Path()) == []
+
+
+def test_codex_poststart_applies_egress_allowlist_without_nix_shell() -> None:
+    config = json.loads(overlays.base_path(Path(), "codex").read_text(encoding="utf-8"))
+
+    post_start = config["postStartCommand"]
+
+    assert "nix develop .#network" not in post_start
+    assert "bash .devcontainer/scripts/apply-egress-allowlist.sh" in post_start

@@ -1,0 +1,20 @@
+{
+  "id": "nix-warm-agent",
+  "version": "1.0.0",
+  "name": "Warm agent devShell closure",
+  "description": "Realises the selected agent Nix devShell closure at image-build time so runtime container-create skips first-time closure realisation.",
+  "options": {
+    "agentShell": {
+      "type": "string",
+      "enum": [
+        "claude",
+        "codex"
+      ],
+      "default": "claude",
+      "description": "Nix devShell attribute to realise."
+    }
+  },
+  "installsAfter": [
+    "ghcr.io/devcontainers/features/nix"
+  ]
+}

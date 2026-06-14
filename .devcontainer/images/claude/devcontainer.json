@@ -15,13 +15,15 @@
     "../features/agent-user": {
       "agentUser": "claude"
     },
-    "../features/nix-warm-claude": {}
+    "../features/nix-warm-agent": {
+      "agentShell": "claude"
+    }
   },
   "overrideFeatureInstallOrder": [
     "ghcr.io/devcontainers/features/common-utils",
     "ghcr.io/devcontainers/features/nix",
     "../features/agent-user",
-    "../features/nix-warm-claude"
+    "../features/nix-warm-agent"
   ],
   "remoteEnv": {
     "AGENT_CONTAINER": "claude"

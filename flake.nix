@@ -461,11 +461,11 @@ EOF
             agentPackages.claude-cli
             agentPackages.ccusage-cli
           ];
-          codex = mkAgentShell "codex" [
+          codex = mkAgentShell "codex" ([
             agentPackages.bubblewrap
             agentPackages.codex-cli
             agentPackages.ccusage-cli
-          ];
+          ] ++ networkPackages);
           network = pkgs.mkShell {
             packages = networkPackages;
           };

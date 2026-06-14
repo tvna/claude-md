@@ -31,7 +31,7 @@ on:
       build_from_source:
         description: >-
           Build the image locally from .devcontainer/images/<agent> (running
-          the build-time Features, incl. nix-warm-claude) and measure that
+          the build-time Features, incl. nix-warm-agent) and measure that
           instead of pulling the published pin. Use to verify a closure-bake
           change on a branch before it is published to GHCR (#1491).
         type: boolean
@@ -67,11 +67,11 @@ jobs:
             --password-stdin
 
       # Build the image locally from the prebuild definition so a branch's
-      # build-time Features (here nix-warm-claude, which bakes the .#claude
+      # build-time Features (here nix-warm-agent, which bakes the agent
       # devShell closure) can be measured before they are published to GHCR. The
       # workspace is NOT mounted during Feature install, so stage the flake files
-      # the nix-warm-claude Feature realises into the Feature dir, exactly as the
-      # publish workflow does for the claude legs. Native platform only (no
+      # the nix-warm-agent Feature realises into the Feature dir, exactly as the
+      # publish workflow does for the agent legs. Native platform only (no
       # --platform / --push): we measure on the matching-arch runner. Refs #1491.
       - name: Build image from source
         if: inputs.build_from_source
@@ -81,10 +81,8 @@ jobs:
           MEASURE_IMAGE: claude-md-measure:local
         run: |
           set -euo pipefail
-          if [ "${AGENT}" = "claude" ]; then
-            cp flake.nix flake.lock pyproject.toml \
-              .devcontainer/images/features/nix-warm-claude/
-          fi
+          cp flake.nix flake.lock pyproject.toml \
+            .devcontainer/images/features/nix-warm-agent/
           npx --yes "@devcontainers/cli@${DEVCONTAINERS_CLI_VERSION}" build \
             --workspace-folder . \
             --config ".devcontainer/images/${AGENT}/devcontainer.json" \

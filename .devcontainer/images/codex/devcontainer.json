@@ -14,12 +14,16 @@
     },
     "../features/agent-user": {
       "agentUser": "codex"
+    },
+    "../features/nix-warm-agent": {
+      "agentShell": "codex"
     }
   },
   "overrideFeatureInstallOrder": [
     "ghcr.io/devcontainers/features/common-utils",
     "ghcr.io/devcontainers/features/nix",
-    "../features/agent-user"
+    "../features/agent-user",
+    "../features/nix-warm-agent"
   ],
   "remoteEnv": {
     "AGENT_CONTAINER": "codex"

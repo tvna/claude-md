@@ -240,15 +240,15 @@ def test_trivy_scan_skips_nix_store_links_hardlink_farm() -> None:
 def test_prebuild_runs_agent_user_feature_after_base_features() -> None:
     # The agent-user Feature finalizes the agent user/group/sudoers to uid 0, so
     # it must run after common-utils and the nix Feature have populated users and
-    # the store. For codex it is the last Feature. For claude the nix-warm-claude
-    # Feature follows it to realise the .#claude devShell closure (#1491): that
-    # only writes /nix/store as root and never touches the agent user, /home, or
-    # sudoers, so running it after agent-user leaves the user finalization intact
-    # while still landing after the nix store is set up. Guard the ordering
-    # invariant for both prebuild configs. Refs #1348, #1491.
+    # the store. The nix-warm-agent Feature follows it to realise each agent's
+    # devShell closure (#1491, #1743): that only writes /nix/store as root and
+    # never touches the agent user, /home, or sudoers, so running it after
+    # agent-user leaves the user finalization intact while still landing after
+    # the nix store is set up. Guard the ordering invariant for both prebuild
+    # configs. Refs #1348, #1491, #1743.
     expected_last = {
-        "claude": "../features/nix-warm-claude",
-        "codex": "../features/agent-user",
+        "claude": "../features/nix-warm-agent",
+        "codex": "../features/nix-warm-agent",
     }
     for agent in AGENTS:
         config = load_json(REPO_ROOT / ".devcontainer" / "images" / agent / "devcontainer.json")
@@ -260,22 +260,21 @@ def test_prebuild_runs_agent_user_feature_after_base_features() -> None:
         assert order.index("../features/agent-user") > order.index("ghcr.io/devcontainers/features/common-utils")
 
 
-def test_claude_prebuild_bakes_devshell_closure() -> None:
-    # The nix-warm-claude Feature realises the .#claude devShell closure into the
-    # image at build time so runtime container-create skips the ~23s first-time
-    # closure realisation (#1491, measured in #1471). Guard the wiring: the
-    # Feature is referenced by the claude config, runs last (after the nix store
-    # exists), and the publish workflow stages the flake files it realises into
-    # the Feature dir for the claude legs only. Codex is out of scope and must
-    # not gain the Feature.
-    claude = load_json(REPO_ROOT / ".devcontainer" / "images" / "claude" / "devcontainer.json")
-    features = claude.get("features")
-    assert isinstance(features, dict)
-    assert "../features/nix-warm-claude" in features
+def test_prebuild_bakes_agent_devshell_closure() -> None:
+    # The nix-warm-agent Feature realises each agent devShell closure into the
+    # image at build time so runtime container-create skips first-time closure
+    # realisation (#1491, #1743). Guard the wiring: the Feature is referenced by
+    # both prebuild configs, runs last (after the nix store exists), and the
+    # publish workflow stages the flake files it realises into the Feature dir.
+    for agent in AGENTS:
+        config = load_json(REPO_ROOT / ".devcontainer" / "images" / agent / "devcontainer.json")
+        features = config.get("features")
+        assert isinstance(features, dict)
+        assert features.get("../features/nix-warm-agent") == {"agentShell": agent}
 
-    feature_dir = REPO_ROOT / ".devcontainer/images/features/nix-warm-claude"
+    feature_dir = REPO_ROOT / ".devcontainer/images/features/nix-warm-agent"
     meta = load_json(feature_dir / "devcontainer-feature.json")
-    assert meta["id"] == "nix-warm-claude"
+    assert meta["id"] == "nix-warm-agent"
     installs_after = meta.get("installsAfter")
     assert isinstance(installs_after, list)
     assert "ghcr.io/devcontainers/features/nix" in installs_after
@@ -283,13 +282,8 @@ def test_claude_prebuild_bakes_devshell_closure() -> None:
     install = (feature_dir / "install.sh").read_text(encoding="utf-8")
     # Uses the path: flake ref to force the non-git evaluator (avoids the libgit2
     # dubious-ownership error the runtime git+file fetch hits, #1471).
-    assert 'path:${work}#claude' in install
+    assert 'path:${work}#${agent_shell}' in install
 
     workflow = (REPO_ROOT / ".github/workflows/publish-devcontainer-images.yml").read_text(encoding="utf-8")
-    assert "Stage flake into nix-warm-claude feature" in workflow
-    assert "if: matrix.agent == 'claude'" in workflow
-
-    codex = load_json(REPO_ROOT / ".devcontainer" / "images" / "codex" / "devcontainer.json")
-    codex_features = codex.get("features")
-    assert isinstance(codex_features, dict)
-    assert "../features/nix-warm-claude" not in codex_features
+    assert "Stage flake into nix-warm-agent feature" in workflow
+    assert "if: matrix.agent == 'claude'" not in workflow
