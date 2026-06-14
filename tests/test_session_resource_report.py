@@ -106,6 +106,7 @@ class TestParseUsage:
             "total": 2558807,
             "cost": pytest.approx(3.723137),
             "models": ["claude-opus-4-8"],
+            "reasoning": 0,
         }
 
     def test_single_row_fallback_when_no_period_match(self) -> None:
@@ -157,6 +158,7 @@ _USAGE: srr.Usage = {
     "total": 2920887,
     "cost": 3.9719,
     "models": ["claude-opus-4-8"],
+    "reasoning": 0,
 }
 
 
@@ -203,6 +205,7 @@ class TestRenderSection:
             "total": 4,
             "cost": 0.1,
             "models": [],
+            "reasoning": 0,
         }
         out = srr.render_section("0:00:01", usage)
         assert f"Model(s): {srr._UNAVAILABLE}" in out
@@ -585,3 +588,356 @@ class TestMain:
         monkeypatch.setattr(srr, "gather", lambda: "## Resource Consumption\n- x\n")
         assert srr.main([]) == 0
         assert capsys.readouterr().out == "## Resource Consumption\n- x\n"
+
+
+# ---------------------------------------------------------------------------
+# Codex support (#1467)
+# ---------------------------------------------------------------------------
+
+
+def _codex_json(
+    *,
+    inp: int = 1000,
+    output: int = 500,
+    cache_read: int = 200,
+    total: int = 1700,
+    cost: float = 0.025,
+    reasoning: int = 0,
+) -> str:
+    """Return a ``ccusage codex session --json`` payload (confirmed schema, #1467)."""
+    return json.dumps(
+        {
+            "sessions": [],
+            "totals": {
+                "inputTokens": inp,
+                "outputTokens": output,
+                "cachedInputTokens": cache_read,
+                "totalTokens": total,
+                "costUSD": cost,
+                "reasoningOutputTokens": reasoning,
+            },
+        }
+    )
+
+
+class TestIsCodex:
+    def test_agent_container_codex_returns_true(self) -> None:
+        assert srr._is_codex({"AGENT_CONTAINER": "codex"}) is True
+
+    def test_absent_env_returns_false(self) -> None:
+        assert srr._is_codex({}) is False
+
+    def test_other_value_returns_false(self) -> None:
+        assert srr._is_codex({"AGENT_CONTAINER": "claude"}) is False
+
+    def test_claude_code_env_returns_false(self) -> None:
+        assert srr._is_codex({"CLAUDE_CODE_SESSION_ID": "abc"}) is False
+
+
+class TestParseUsageCodex:
+    def test_parses_confirmed_totals_schema(self) -> None:
+        usage = srr.parse_usage_codex(_codex_json())
+        assert usage == {
+            "input": 1000,
+            "output": 500,
+            "cache_create": 0,
+            "cache_read": 200,
+            "total": 1700,
+            "cost": pytest.approx(0.025),
+            "models": [],
+            "reasoning": 0,
+        }
+
+    def test_cache_create_is_always_zero(self) -> None:
+        usage = srr.parse_usage_codex(_codex_json())
+        assert usage is not None
+        assert usage["cache_create"] == 0
+
+    def test_models_is_always_empty(self) -> None:
+        usage = srr.parse_usage_codex(_codex_json())
+        assert usage is not None
+        assert usage["models"] == []
+
+    def test_reasoning_tokens_surfaced(self) -> None:
+        usage = srr.parse_usage_codex(_codex_json(reasoning=12345))
+        assert usage is not None
+        assert usage["reasoning"] == 12345
+
+    def test_all_zeros_returns_valid_usage(self) -> None:
+        raw = json.dumps(
+            {
+                "sessions": [],
+                "totals": {
+                    "inputTokens": 0,
+                    "outputTokens": 0,
+                    "cachedInputTokens": 0,
+                    "totalTokens": 0,
+                    "costUSD": 0,
+                    "reasoningOutputTokens": 0,
+                },
+            }
+        )
+        usage = srr.parse_usage_codex(raw)
+        assert usage is not None
+        assert usage["total"] == 0
+
+    def test_malformed_json_returns_none(self) -> None:
+        assert srr.parse_usage_codex("{not json") is None
+
+    def test_missing_totals_key_returns_none(self) -> None:
+        assert srr.parse_usage_codex(json.dumps({"sessions": []})) is None
+
+    def test_missing_token_field_returns_none(self) -> None:
+        raw = json.dumps({"sessions": [], "totals": {"inputTokens": 1}})
+        assert srr.parse_usage_codex(raw) is None
+
+    def test_non_numeric_field_returns_none(self) -> None:
+        raw = json.dumps(
+            {
+                "sessions": [],
+                "totals": {
+                    "inputTokens": "lots",
+                    "outputTokens": 0,
+                    "cachedInputTokens": 0,
+                    "totalTokens": 0,
+                    "costUSD": 0,
+                    "reasoningOutputTokens": 0,
+                },
+            }
+        )
+        assert srr.parse_usage_codex(raw) is None
+
+    def test_boolean_field_returns_none(self) -> None:
+        raw = json.dumps(
+            {
+                "sessions": [],
+                "totals": {
+                    "inputTokens": True,
+                    "outputTokens": 0,
+                    "cachedInputTokens": 0,
+                    "totalTokens": 0,
+                    "costUSD": 0,
+                    "reasoningOutputTokens": 0,
+                },
+            }
+        )
+        assert srr.parse_usage_codex(raw) is None
+
+    def test_top_level_not_a_dict_returns_none(self) -> None:
+        assert srr.parse_usage_codex(json.dumps([1, 2, 3])) is None
+
+
+class TestRunCcusageCodex:
+    def test_ccusage_not_on_path_returns_none(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(srr.shutil, "which", lambda _name: None)
+        assert srr._run_ccusage_codex() is None
+
+    def test_success_returns_stdout(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(srr.shutil, "which", lambda _name: "/fake/ccusage")
+
+        def fake_run(argv: list[str], **_kw: object) -> subprocess.CompletedProcess:
+            assert argv == ["/fake/ccusage", "codex", "session", "--json"]
+            return subprocess.CompletedProcess(argv, 0, stdout=_codex_json(), stderr="")
+
+        monkeypatch.setattr(srr.subprocess, "run", fake_run)
+        assert srr._run_ccusage_codex() == _codex_json()
+
+    def test_non_zero_exit_returns_none(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(srr.shutil, "which", lambda _name: "/fake/ccusage")
+
+        def fake_run(argv: list[str], **_kw: object) -> subprocess.CompletedProcess:
+            return subprocess.CompletedProcess(argv, 1, stdout="x", stderr="boom")
+
+        monkeypatch.setattr(srr.subprocess, "run", fake_run)
+        assert srr._run_ccusage_codex() is None
+
+    def test_subprocess_error_returns_none(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(srr.shutil, "which", lambda _name: "/fake/ccusage")
+
+        def boom(*_a: object, **_k: object) -> object:
+            raise OSError("cannot exec")
+
+        monkeypatch.setattr(srr.subprocess, "run", boom)
+        assert srr._run_ccusage_codex() is None
+
+
+class TestCodexRolloutSessionId:
+    def test_returns_uuid_from_most_recent_file(self, tmp_path: pytest.TempPathFactory) -> None:
+        sessions_dir = tmp_path / "sessions" / "2026" / "06" / "14"
+        sessions_dir.mkdir(parents=True)
+        rollout = sessions_dir / "rollout-1749945000000-550e8400-e29b-41d4-a716-446655440000.jsonl"
+        rollout.write_text("", encoding="utf-8")
+        result = srr._codex_rollout_session_id(_base=tmp_path / "sessions")
+        assert result == "550e8400-e29b-41d4-a716-446655440000"
+
+    def test_no_files_returns_empty_string(self, tmp_path: pytest.TempPathFactory) -> None:
+        (tmp_path / "sessions").mkdir()
+        result = srr._codex_rollout_session_id(_base=tmp_path / "sessions")
+        assert result == ""
+
+    def test_missing_base_dir_returns_empty_string(self, tmp_path: pytest.TempPathFactory) -> None:
+        result = srr._codex_rollout_session_id(_base=tmp_path / "no-such-dir" / "sessions")
+        assert result == ""
+
+    def test_concurrent_sessions_returns_empty_string(
+        self, tmp_path: pytest.TempPathFactory
+    ) -> None:
+        sessions_dir = tmp_path / "sessions" / "2026" / "06" / "14"
+        sessions_dir.mkdir(parents=True)
+        r1 = sessions_dir / "rollout-1749945000000-aaaaaaaa-0000-0000-0000-000000000001.jsonl"
+        r2 = sessions_dir / "rollout-1749945000001-aaaaaaaa-0000-0000-0000-000000000002.jsonl"
+        r1.write_text("", encoding="utf-8")
+        r2.write_text("", encoding="utf-8")
+        # Give both the same mtime so they appear concurrent.
+        import os as _os
+        import time as _time
+
+        now = _time.time()
+        _os.utime(r1, (now, now))
+        _os.utime(r2, (now, now))
+        result = srr._codex_rollout_session_id(_base=tmp_path / "sessions")
+        assert result == ""
+
+    def test_malformed_filename_no_uuid_returns_empty(
+        self, tmp_path: pytest.TempPathFactory
+    ) -> None:
+        sessions_dir = tmp_path / "sessions"
+        sessions_dir.mkdir(parents=True)
+        bad = sessions_dir / "rollout-notauuid.jsonl"
+        bad.write_text("", encoding="utf-8")
+        result = srr._codex_rollout_session_id(_base=tmp_path / "sessions")
+        assert result == ""
+
+    def test_only_most_recent_file_chosen(self, tmp_path: pytest.TempPathFactory) -> None:
+        sessions_dir = tmp_path / "sessions"
+        sessions_dir.mkdir(parents=True)
+        old = sessions_dir / "rollout-100-aaaaaaaa-0000-0000-0000-000000000001.jsonl"
+        new = sessions_dir / "rollout-200-bbbbbbbb-0000-0000-0000-000000000002.jsonl"
+        old.write_text("", encoding="utf-8")
+        new.write_text("", encoding="utf-8")
+        import os as _os
+        import time as _time
+
+        _os.utime(old, (1.0, 1.0))
+        _os.utime(new, (_time.time() + 10, _time.time() + 10))
+        result = srr._codex_rollout_session_id(_base=tmp_path / "sessions")
+        assert result == "bbbbbbbb-0000-0000-0000-000000000002"
+
+
+class TestRenderSectionReasoning:
+    def test_reasoning_shown_when_nonzero(self) -> None:
+        usage: srr.Usage = {**_USAGE, "reasoning": 5000}  # type: ignore[misc]
+        out = srr.render_section("0:01:00", usage)
+        assert "reasoning 5,000" in out
+
+    def test_reasoning_hidden_when_zero(self) -> None:
+        usage: srr.Usage = {**_USAGE, "reasoning": 0}  # type: ignore[misc]
+        out = srr.render_section("0:01:00", usage)
+        assert "reasoning" not in out
+
+    def test_reasoning_hidden_produces_same_format_as_before(self) -> None:
+        # Claude Code path (reasoning=0) must produce byte-identical output to
+        # the pre-Codex format; the breakdown must NOT contain "reasoning".
+        out = srr.render_section("0:09:11", _USAGE)
+        assert "reasoning" not in out
+        assert "input 3,064" in out
+        assert "output 57,757" in out
+
+
+class TestGatherCodex:
+    def test_codex_live_path(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: pytest.TempPathFactory
+    ) -> None:
+        monkeypatch.setattr(srr, "_run_ccusage_codex", lambda: _codex_json())
+        monkeypatch.setattr(srr, "_codex_rollout_session_id", lambda: "test-uuid-1")
+        env = {"AGENT_CONTAINER": "codex", "CCR_CCUSAGE_CHECKPOINT_DIR": str(tmp_path)}
+        out = srr.gather(env=env, now_ms=5000.0)
+        # No checkpoint yet -> elapsed unavailable; tokens/cost from totals.
+        assert f"{_ELAPSED_LABEL}: {srr._UNAVAILABLE}" in out
+        assert "1,700" in out
+        assert "$0.0250" in out
+        assert f"Model(s): {srr._UNAVAILABLE}" in out
+
+    def test_codex_reasoning_tokens_surfaced(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: pytest.TempPathFactory
+    ) -> None:
+        monkeypatch.setattr(srr, "_run_ccusage_codex", lambda: _codex_json(reasoning=9999))
+        monkeypatch.setattr(srr, "_codex_rollout_session_id", lambda: "test-uuid-r")
+        env = {"AGENT_CONTAINER": "codex", "CCR_CCUSAGE_CHECKPOINT_DIR": str(tmp_path)}
+        out = srr.gather(env=env, now_ms=5000.0)
+        assert "reasoning 9,999" in out
+
+    def test_codex_no_rollout_file_degrades_elapsed_and_checkpoint(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: pytest.TempPathFactory
+    ) -> None:
+        monkeypatch.setattr(srr, "_run_ccusage_codex", lambda: _codex_json())
+        monkeypatch.setattr(srr, "_codex_rollout_session_id", lambda: "")
+        env = {"AGENT_CONTAINER": "codex", "CCR_CCUSAGE_CHECKPOINT_DIR": str(tmp_path)}
+        out = srr.gather(env=env, now_ms=5000.0)
+        # Tokens still available from totals even without a rollout UUID.
+        assert "1,700" in out
+        assert f"{_ELAPSED_LABEL}: {srr._UNAVAILABLE}" in out
+
+    def test_codex_no_ccusage_degrades_tokens(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(srr, "_run_ccusage_codex", lambda: None)
+        monkeypatch.setattr(srr, "_codex_rollout_session_id", lambda: "test-uuid-1")
+        env = {"AGENT_CONTAINER": "codex"}
+        out = srr.gather(env=env, now_ms=5000.0)
+        assert out.count(srr._UNAVAILABLE) == 4
+
+    def test_codex_second_pr_elapsed_from_checkpoint(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: pytest.TempPathFactory
+    ) -> None:
+        monkeypatch.setattr(srr, "_run_ccusage_codex", lambda: _codex_json())
+        monkeypatch.setattr(srr, "_codex_rollout_session_id", lambda: "test-uuid-2")
+        env = {"AGENT_CONTAINER": "codex", "CCR_CCUSAGE_CHECKPOINT_DIR": str(tmp_path)}
+
+        # PR #1: gather then write checkpoint.
+        srr.gather(env=env, now_ms=0.0)
+        srr.write_checkpoint(env=env, now_ms=0.0)
+
+        # PR #2: elapsed runs from the checkpoint (0 ms -> 90 s = 0:01:30).
+        out2 = srr.gather(env=env, now_ms=90_000.0)
+        assert f"{_ELAPSED_LABEL}: 0:01:30" in out2
+
+    def test_codex_second_pr_delta_tokens(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: pytest.TempPathFactory
+    ) -> None:
+        env = {"AGENT_CONTAINER": "codex", "CCR_CCUSAGE_CHECKPOINT_DIR": str(tmp_path)}
+        monkeypatch.setattr(srr, "_codex_rollout_session_id", lambda: "test-uuid-3")
+
+        # PR #1 cumulative: 1000 total.
+        monkeypatch.setattr(srr, "_run_ccusage_codex", lambda: _codex_json(total=1000, inp=600, output=400, cache_read=0, cost=0.01))
+        srr.gather(env=env, now_ms=0.0)
+        srr.write_checkpoint(env=env, now_ms=0.0)
+
+        # PR #2 cumulative: 1500 total -> delta 500.
+        monkeypatch.setattr(srr, "_run_ccusage_codex", lambda: _codex_json(total=1500, inp=900, output=600, cache_read=0, cost=0.015))
+        out2 = srr.gather(env=env, now_ms=1000.0)
+        assert "500" in out2
+        assert "1,500" not in out2
+
+    def test_claude_code_path_unaffected_by_codex_env(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: pytest.TempPathFactory
+    ) -> None:
+        # Ensure the Claude Code path is byte-identical: AGENT_CONTAINER absent.
+        monkeypatch.setattr(
+            srr, "_run_ccusage", lambda _sid: _grouped(_row("sess-cc"))
+        )
+        env = {
+            "CCR_SPAWN_TIMESTAMP_MS": "1000",
+            "CLAUDE_CODE_SESSION_ID": "sess-cc",
+            "CCR_CCUSAGE_CHECKPOINT_DIR": str(tmp_path),
+        }
+        out = srr.gather(env=env, now_ms=1000.0 + 60_000)
+        assert f"{_ELAPSED_LABEL}: 0:01:00" in out
+        assert "2,558,807" in out
+        assert "Model(s): Opus-class" in out
