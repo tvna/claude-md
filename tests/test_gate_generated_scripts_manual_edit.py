@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import subprocess
+from pathlib import Path
 from types import SimpleNamespace
 
 import gate_generated_scripts_manual_edit as gate
@@ -14,6 +15,27 @@ pytestmark = pytest.mark.shard_preflight
 def _fake_runner(stdout: str):
     def runner(_cmd, **_kwargs):
         return SimpleNamespace(stdout=stdout, stderr="", returncode=0)
+
+    return runner
+
+
+def _git(repo: Path, *args: str) -> str:
+    return subprocess.run(
+        ["git", *args],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+
+
+def _cwd_runner(repo: Path):
+    """A real ``subprocess.run`` runner pinned to *repo* for live-git tests."""
+
+    def runner(cmd, **_kwargs):
+        return subprocess.run(
+            cmd, cwd=repo, capture_output=True, text=True, check=True
+        )
 
     return runner
 
@@ -152,3 +174,76 @@ def test_verify_cli_fails_loud_on_git_error(
     monkeypatch.setattr(gate, "changed_generated_docs", boom)
     assert gate.main(["verify", "--base-ref", "origin/main"]) == 1
     assert "git invocation failed" in capsys.readouterr().err
+
+
+def _seed_advancing_main_repo(repo: Path) -> None:
+    """Build the retro #1703 repair-4 scenario in a real git repo.
+
+    base commit (gen file present) -> branch `feature` makes a NON-generated
+    change -> `main` then advances with a commit that rewrites the generated
+    file. The branch never touched docs/generated/, but main did after the
+    branch was cut.
+    """
+    _git(repo, "init", "-q", "-b", "main")
+    _git(repo, "config", "user.email", "t@example.com")
+    _git(repo, "config", "user.name", "t")
+    # The dev environment enforces commit signing globally; a throwaway repo
+    # has no signing key, so disable it locally to keep the fixture hermetic.
+    _git(repo, "config", "commit.gpgsign", "false")
+    gen = repo / "docs" / "generated" / "scripts" / "x.md"
+    gen.parent.mkdir(parents=True)
+    gen.write_text("v1\n", encoding="utf-8")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "base")
+
+    _git(repo, "switch", "-q", "-c", "feature")
+    (repo / "scripts").mkdir()
+    (repo / "scripts" / "src.py").write_text("x = 1\n", encoding="utf-8")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "branch: edit source only")
+
+    _git(repo, "switch", "-q", "main")
+    gen.write_text("v2 regenerated post-merge\n", encoding="utf-8")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "main: post-merge regen of docs/generated")
+
+
+def test_advancing_main_does_not_falsely_flag_branch(tmp_path: Path) -> None:
+    # Regression for retro #1703 repair 4: with main advanced past the branch,
+    # the two-dot diff (main..feature) reports the base-only generated churn as
+    # a branch edit (the false positive). The three-dot diff (main...feature),
+    # anchored at the merge-base, reports nothing because the branch never
+    # touched docs/generated/. This asserts the three-dot behavior, so it goes
+    # red against the old two-dot code and green after the fix.
+    _seed_advancing_main_repo(tmp_path)
+    runner = _cwd_runner(tmp_path)
+
+    changed = gate.changed_generated_docs("main", head="feature", runner=runner)
+    assert changed == frozenset()
+
+    # Two-dot would have flagged it: prove the scenario is real, not a no-op.
+    two_dot = subprocess.run(
+        ["git", "diff", "--name-only", "main..feature"],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    assert "docs/generated/scripts/x.md" in two_dot
+
+
+def test_real_branch_edit_still_flagged_under_three_dot(tmp_path: Path) -> None:
+    # The three-dot fix must not blind the gate: a genuine hand-edit to a
+    # protected file on the branch still surfaces.
+    _seed_advancing_main_repo(tmp_path)
+    _git(tmp_path, "switch", "-q", "feature")
+    (tmp_path / "docs" / "generated" / "scripts" / "x.md").write_text(
+        "hand edited on branch\n", encoding="utf-8"
+    )
+    _git(tmp_path, "add", "-A")
+    _git(tmp_path, "commit", "-q", "-m", "branch: hand-edit generated file")
+
+    changed = gate.changed_generated_docs(
+        "main", head="feature", runner=_cwd_runner(tmp_path)
+    )
+    assert "docs/generated/scripts/x.md" in changed
