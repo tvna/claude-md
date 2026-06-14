@@ -42,6 +42,35 @@ source-of-truth JSON does not self-fail any PR. Source-of-truth ahead of
 live is the normal phased-rollout lag window; the live apply is the
 operator's staged step (see the runbook).
 
+## Web / remote agent sessions (Claude Code on the web)
+
+Claude Code web (remote) sessions push feature-branch commits through the
+managed git proxy. These commits are treated exactly like any other
+`claude/*` feature-branch commit: they stay **unsigned on the branch** and
+inherit GitHub's web-flow signature when the PR is squash-merged. A PR built
+solely from web-session commits is therefore mergeable once it is green and
+up to date with `main` -- the squash commit GitHub creates is `Verified` and
+satisfies `required_signatures`.
+
+Client-side signing inside the session is both unnecessary and ineffective,
+so it is **not** part of this standard:
+
+- A session may have an SSH signing key configured, but its committer identity
+  (`noreply@anthropic.com`) is not a GitHub account that has registered that
+  key as a *signing* key. GitHub marks such a commit `Unverified`, and an
+  `Unverified` signature does **not** satisfy `required_signatures` -- only the
+  squash-merge web-flow signature does. Provisioning a key into the session
+  would not change this without also re-homing the committer identity onto a
+  GitHub account that owns the registered signing key, which the keyless
+  invariant below deliberately avoids.
+- A pre-merge `mergeable_state` of `behind` or `blocked` on such a PR is a
+  base-staleness, review-thread-resolution, or code-owner-review condition --
+  not a signature block. Resolve it by rebasing onto `main`
+  (`git fetch origin main && git rebase origin/main`) and squash-merging; do
+  not attempt to re-sign the branch commits. Refs
+  [#1496](https://github.com/tvna/claude-md/issues/1496),
+  [#1494](https://github.com/tvna/claude-md/issues/1494).
+
 ## Normative invariant (reviewers MUST enforce)
 
 `main.json` MUST remain squash-only for this standard to hold. **Adding
