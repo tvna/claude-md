@@ -87,6 +87,14 @@ STEPS: tuple[Step, ...] = (
         argv=("python3", "scripts/uv_pin.py", "drift"),
     ),
     Step(
+        # Refs #1680. Static gate: fails when ``.python-version`` is not an
+        # exact patch or its minor drifts from requires-python / ruff / mypy /
+        # flake.nix. Mirrors the uv pin drift gate above; reads only the working
+        # tree, so it runs hard locally and in CI alike.
+        name="python_pin",
+        argv=("python3", "scripts/python_pin.py", "verify"),
+    ),
+    Step(
         # Refs #1207. Runtime gate: fails when ``uv --version`` does not match
         # ``[tool.uv].required-version``. Complements the static drift gate
         # above -- that one catches literal-value drift across the source
@@ -378,6 +386,14 @@ STEPS: tuple[Step, ...] = (
         # checked pre-push too.
         name="verify_control_inventory_currency",
         argv=("python3", "scripts/verify_control_inventory_currency.py", "verify"),
+    ),
+    Step(
+        # Refs #1378. Fails when the OWASP Agentic Top 10 (ASI01-ASI10) mapping in
+        # the security-control inventory loses a status row, mirroring the
+        # verify-agents.yml lint-scripts-static gate so the mapping is checked
+        # pre-push too.
+        name="owasp_asi_mapping",
+        argv=("python3", "scripts/owasp_asi_mapping.py", "verify"),
     ),
     Step(
         # Refs #745. Fetches the live base branch and fails before push when

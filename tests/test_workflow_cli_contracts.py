@@ -52,12 +52,14 @@ import labels_apply
 import measure_devcontainer_startup
 import measure_tool_overlap
 import nixpkgs_cooldown
+import owasp_asi_mapping
 import post_issue_comment
 import pr_upsert
 import preflight_uv_version
 import prune_devcontainer_images
 import publish_instruction_release
 import pytest
+import python_pin
 import ruleset_drift
 import rulesets_apply
 import scan_allowlist_parser_parity
@@ -249,6 +251,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("uv_pin.py", "drift"): "test_uv_pin_workflow_subcommands_match_ci_usage",
     ("uv_pin.py", "read"): "test_uv_pin_workflow_subcommands_match_ci_usage",
     ("uv_pin.py", "stale"): "test_uv_pin_workflow_subcommands_match_ci_usage",
+    ("python_pin.py", "verify"): "test_python_pin_verify_matches_workflow_args",
     ("verify_apm_checksums.py", "verify"): "test_verify_apm_checksums_matches_workflow_args",
     ("verify_dependabot_author.py", "verify"): "test_verify_dependabot_author_verify_matches_workflow_args",
     ("verify_linked_issue_titles.py", "verify"): "test_verify_linked_issue_titles_verify_matches_workflow_args",
@@ -259,6 +262,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("verify_ruleset_sync.py", "verify"): "test_verify_ruleset_sync_matches_workflow_args",
     ("verify_security_control_floor.py", None): "test_verify_security_control_floor_matches_workflow_args",
     ("verify_control_inventory_currency.py", "verify"): "test_verify_control_inventory_currency_matches_workflow_args",
+    ("owasp_asi_mapping.py", "verify"): "test_owasp_asi_mapping_verify_matches_workflow_args",
     ("github_paginate.py", "fetch"): "test_github_paginate_fetch_matches_workflow_args",
     ("github_paginate.py", "get"): "test_github_paginate_get_matches_workflow_args",
     ("post_issue_comment.py", "create"): "test_post_issue_comment_create_matches_workflow_args",
@@ -1728,6 +1732,8 @@ def test_security_drift_report_aggregate_and_post_comment_match_workflow_args(
             "0",
             "--uv-stale-output",
             str(uv_stale),
+            "--owasp-asi-verify-rc",
+            "0",
             "--run-url",
             "https://example.test/run",
             "--summary-file",
@@ -1800,6 +1806,17 @@ def test_verify_control_inventory_currency_matches_workflow_args() -> None:
     Refs #1387.
     """
     assert verify_control_inventory_currency.main(["verify"]) == 0
+
+
+def test_owasp_asi_mapping_verify_matches_workflow_args() -> None:
+    """Mirror the argv shape used by both workflow callers.
+
+    verify-agents.yml (lint-scripts-static, PR gate) and weekly-maintenance.yml
+    (security-control-drift job) both shell to ``scripts/owasp_asi_mapping.py
+    verify`` with no further arguments, so the gate reads the committed
+    ``docs/prd/security-control-inventory.md`` and must exit 0 on it. Refs #1378.
+    """
+    assert owasp_asi_mapping.main(["verify"]) == 0
 
 
 def test_threat_intel_scan_matches_workflow_args(
@@ -2702,6 +2719,24 @@ def test_uv_pin_workflow_subcommands_match_ci_usage(
     assert uv_pin.main(["read", str(tmp_path / "pyproject.toml")]) == 0
     assert uv_pin.main(["drift", "--repo-root", str(tmp_path)]) == 0
     assert uv_pin.main(["stale", "--repo-root", str(tmp_path)]) == 0
+
+
+def test_python_pin_verify_matches_workflow_args(tmp_path: Path) -> None:
+    """Mirror the workflow step in ``.github/workflows/verify-agents.yml`` and
+    ``weekly-maintenance.yml`` that runs
+    ``uv run python scripts/python_pin.py verify`` -- no extra flags, cwd is the
+    repo root. Refs #1680.
+    """
+    (tmp_path / "pyproject.toml").write_text(
+        '[project]\nrequires-python = ">=3.12"\n'
+        '\n[tool.ruff]\ntarget-version = "py312"\n'
+        '\n[tool.mypy]\npython_version = "3.12"\n',
+        encoding="utf-8",
+    )
+    (tmp_path / ".python-version").write_text("3.12.13\n", encoding="utf-8")
+    (tmp_path / "flake.nix").write_text("python312\n", encoding="utf-8")
+
+    assert python_pin.main(["verify", "--repo-root", str(tmp_path)]) == 0
 
 
 def test_preflight_uv_version_verify_matches_workflow_args(

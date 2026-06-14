@@ -146,6 +146,8 @@ Detection is string-match based:
 | `prompt_context7_gate.py` | agent-hook | `codex:UserPromptSubmit` |
 | `prune_devcontainer_images.py` | workflow | `monthly-maintenance.yml (prune-devcontainer-images)` |
 | `publish_instruction_release.py` | workflow | `publish-instructions-release.yml (publish)` |
+| `python_pin.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
+| `python_pin.py` | workflow | `weekly-maintenance.yml (dependency-freshness)` |
 | `ruleset_drift.py` | workflow | `weekly-maintenance.yml (ruleset-drift)` |
 | `ruleset_drift.py` | workflow | `weekly-maintenance.yml (security-control-drift)` |
 | `rulesets_apply.py` | workflow | `apply-rulesets.yml (apply)` |

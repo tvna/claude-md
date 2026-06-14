@@ -32,6 +32,14 @@ jobs:
       - name: Assert uv pin lives only in pyproject.toml
         run: uv run python scripts/uv_pin.py drift
 
+      - name: Assert python pin is exact and consistent
+        # Refs #1680. `.python-version` pins the exact patch `uv run python`
+        # resolves to, so ast.unparse doc generation is byte-identical across
+        # the post-merge committer, verify-docs-drift, and local pre-push.
+        # This gate keeps that pin from silently drifting from requires-python,
+        # ruff, mypy, and flake.nix.
+        run: uv run python scripts/python_pin.py verify
+
       - name: Assert running uv matches the pin
         # Refs #1207. PR #1206 closed the *static* drift gap but left a runtime
         # gap: the host uv that runs Stop hooks could still drift ahead of the
@@ -203,6 +211,15 @@ jobs:
         # cite a scripts/ path that no longer exists, so a new privileged
         # surface cannot land on reviewer memory alone.
         run: uv run python scripts/verify_control_inventory_currency.py verify
+
+      - name: Verify OWASP Agentic Top 10 (ASI01-ASI10) mapping is complete
+        # Refs #1378: the inventory (docs/prd/security-control-inventory.md)
+        # carries a peer-axis mapping onto the OWASP Top 10 for Agentic
+        # Applications 2026. Every one of ASI01..ASI10 must keep a status row
+        # with a rationale, so an agent-class risk cannot silently lose its
+        # mapping on reviewer memory alone. The same tree-only check re-runs in
+        # the weekly security-control-drift job as a redundant visibility signal.
+        run: uv run python scripts/owasp_asi_mapping.py verify
 
       - name: Warn if uv pin trails upstream
         env:
