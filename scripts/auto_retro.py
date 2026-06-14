@@ -39,7 +39,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import re
 import subprocess
 import sys
 import time
@@ -50,19 +49,99 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
+# Pure layers extracted into sibling helper modules (Refs #1725, a
+# precondition for #1702). auto_retro.py retains the GitHub IO fetchers and
+# the run / sentinel / post-merge-rescan orchestration; the parser, triage,
+# and renderer layers below are pure and are re-exported here so existing
+# ``import auto_retro as ar; ar.<X>`` callers and tests keep resolving every
+# moved name (public and underscore-prefixed) on this module. The names are
+# also consumed directly by the retained IO code, which calls them as
+# module-level symbols.
+from _auto_retro_parse import (
+    _APPENDED_CLOSE,
+    _APPENDED_OPEN,
+    _AUTO_FILLED_CLOSE,
+    _AUTO_FILLED_OPEN,
+    _MERGE_FROM_MAIN_PREFIXES,
+    _POLICY_ARTIFACT_MARKER,
+    _REPAIR_CAUSE_FILL,
+    _REPAIR_NEXT_ACTION_FILL,
+    _REQUIRED_SECTIONS,
+    _RESULT_ENV_SKIP_RE,
+    _REVERT_CONVENTIONAL_RE,
+    _REVERT_PREFIXES,
+    _SENTINEL_IGNORED_COMMENT_LOGINS,
+    _SIGNAL_NAMES,
+    _VERIFICATION_COMMAND_RE,
+    _VERIFICATION_RESULT_RE,
+    MergedPR,
+    RepairHistoryRow,
+    VerificationPair,
+    _count_merge_from_main,
+    _count_revert,
+    _is_revert_subject,
+    _result_is_passing,
+    _slice_section,
+    compute_repair_signals,
+    extract_post_merge_checklist,
+    extract_type_scope,
+    extract_verification_pairs,
+    is_retro_issue_title,
+    is_retro_pr,
+    parse_event,
+    parse_signals_from_retro_body,
+    render_repair_signals,
+    render_signals_fired_line,
+    should_skip,
+)
+from _auto_retro_render import (
+    _ACCEPTANCE_CHECKBOX_RE,
+    _ANNOTATION_FETCH_LIMIT,
+    _ANNOTATION_SUMMARY_MAX,
+    _CANONICAL_RETRO_TITLE_RE,
+    _CHECK_RUN_DISPLAY_CAP,
+    _CHECK_RUN_FAIL_CONCLUSIONS,
+    _build_repair_history_table,
+    _escape_table_cell,
+    _has_only_exempt_policy_artifact_rows,
+    _insert_appended_row,
+    _next_table_index,
+    _repair_history_rows,
+    build_retro_body,
+    build_retro_title,
+    find_existing_retro,
+    find_target_retro_from_refs,
+    is_canonical_handoff_retro_title,
+    is_retro_age_exceeded,
+    is_retro_untouched,
+    issue_labels,
+    render_appended_row,
+    verify_retro_repair_completeness,
+)
+from _auto_retro_triage import (
+    _FP_TREND_WINDOW,
+    _RECENT_RETRO_COUNT,
+    _TRIAGE_LABELS,
+    _UNLABELLED_KEY,
+    PastRetro,
+    RecentRetro,
+    SignalStat,
+    TriageReport,
+    _max_active_fp,
+    _render_fp_trend,
+    _render_recent_retros,
+    _retro_fp_rate,
+    _retro_status,
+    compute_prior_from_labels,
+    compute_triage_report,
+    is_tentative_by_prior,
+    render_triage_report_markdown,
+    should_skip_by_prior,
+)
 from _retro_labels import (
-    ALL_RETRO_LABELS,
     PRIOR_EPOCH_MIN_RETRO_NUMBER,
     PRIOR_FETCH_LIMIT,
-    PRIOR_MIN_SAMPLE_SIZE,
-    PRIOR_SKIP_THRESHOLD,
-    PRIOR_TENTATIVE_THRESHOLD,
-    RETRO_FP,
-    RETRO_FP_CANDIDATE,
-    RETRO_TENTATIVE,
-    RETRO_TP,
 )
-from _trusted_bots import _TRUSTED_BOT_LOGINS
 from issue_link import extract_refs, strip_html_comments
 from pr_upsert import upsert_single_file_pr
 from script_ast_graph import (
@@ -75,6 +154,90 @@ from script_ast_graph import (
     build_function_graph,
     render_mermaid,
 )
+
+# Re-export every moved pure symbol (public and underscore-prefixed) so
+# ``auto_retro.<name>`` keeps resolving for callers and tests. Ruff's F401
+# unused-import check is satisfied by listing the re-exports in ``__all__``.
+__all__ = [
+    "_ACCEPTANCE_CHECKBOX_RE",
+    "_ANNOTATION_FETCH_LIMIT",
+    "_ANNOTATION_SUMMARY_MAX",
+    "_APPENDED_CLOSE",
+    "_APPENDED_OPEN",
+    "_AUTO_FILLED_CLOSE",
+    "_AUTO_FILLED_OPEN",
+    "_CANONICAL_RETRO_TITLE_RE",
+    "_CHECK_RUN_DISPLAY_CAP",
+    "_CHECK_RUN_FAIL_CONCLUSIONS",
+    "_FP_TREND_WINDOW",
+    "_MERGE_FROM_MAIN_PREFIXES",
+    "_POLICY_ARTIFACT_MARKER",
+    "_RECENT_RETRO_COUNT",
+    "_REPAIR_CAUSE_FILL",
+    "_REPAIR_NEXT_ACTION_FILL",
+    "_REQUIRED_SECTIONS",
+    "_RESULT_ENV_SKIP_RE",
+    "_REVERT_CONVENTIONAL_RE",
+    "_REVERT_PREFIXES",
+    "_SENTINEL_IGNORED_COMMENT_LOGINS",
+    "_SIGNAL_NAMES",
+    "_TRIAGE_LABELS",
+    "_UNLABELLED_KEY",
+    "_VERIFICATION_COMMAND_RE",
+    "_VERIFICATION_RESULT_RE",
+    "MergedPR",
+    # triage layer (_auto_retro_triage)
+    "PastRetro",
+    "RecentRetro",
+    "RepairHistoryRow",
+    "SignalStat",
+    "TriageReport",
+    # parser layer (_auto_retro_parse)
+    "VerificationPair",
+    "_build_repair_history_table",
+    "_count_merge_from_main",
+    "_count_revert",
+    "_escape_table_cell",
+    "_has_only_exempt_policy_artifact_rows",
+    "_insert_appended_row",
+    "_is_revert_subject",
+    "_max_active_fp",
+    "_next_table_index",
+    "_render_fp_trend",
+    "_render_recent_retros",
+    "_repair_history_rows",
+    "_result_is_passing",
+    "_retro_fp_rate",
+    "_retro_status",
+    "_slice_section",
+    "build_retro_body",
+    # renderer layer (_auto_retro_render)
+    "build_retro_title",
+    "compute_prior_from_labels",
+    "compute_repair_signals",
+    "compute_triage_report",
+    "extract_post_merge_checklist",
+    "extract_type_scope",
+    "extract_verification_pairs",
+    "find_existing_retro",
+    "find_target_retro_from_refs",
+    "is_canonical_handoff_retro_title",
+    "is_retro_age_exceeded",
+    "is_retro_issue_title",
+    "is_retro_pr",
+    "is_retro_untouched",
+    "is_tentative_by_prior",
+    "issue_labels",
+    "parse_event",
+    "parse_signals_from_retro_body",
+    "render_appended_row",
+    "render_repair_signals",
+    "render_signals_fired_line",
+    "render_triage_report_markdown",
+    "should_skip",
+    "should_skip_by_prior",
+    "verify_retro_repair_completeness",
+]
 
 _TRIAGE_REPORT_DOC_PATH = Path("docs/generated/scripts/auto-retro-triage-report.md")
 
@@ -112,1163 +275,6 @@ _TRIAGE_REPORT_PR_BODY = (
 _MERGE_SHA_RETRY_ATTEMPTS: int = 4
 _MERGE_SHA_RETRY_BACKOFF: tuple[float, ...] = (2.0, 4.0, 8.0)
 
-# Section names mirror body_policy._ISSUE_COMMON_REQUIRED so the
-# auto-opened retro issue passes verify-body-policy. Drift between the
-# two is caught by tests/test_auto_retro.py::test_required_sections_align.
-_REQUIRED_SECTIONS: tuple[str, ...] = (
-    "Scope",
-    "Facts",
-    "Proposed work",
-    "Verification",
-    "Acceptance criteria",
-)
-
-# Conservative match: lowercase Conventional Commit token with optional
-# parenthetic scope. A non-matching source PR title yields an empty token;
-# the retro body records the parse failure in its Facts section.
-_TYPE_SCOPE_RE = re.compile(r"^([a-z][a-z0-9-]*(?:\([a-z0-9-]+\))?)\s*:")
-
-# Patterns for reading the post-2026-05-26 PR shape. Kept literally
-# aligned with scripts/body_policy.py to make the hook + server gate +
-# retro reader share one truth. tests/test_auto_retro.py contains an
-# alignment test (test_verification_regex_align_with_body_policy) that
-# fails on drift.
-_VERIFICATION_COMMAND_RE = re.compile(
-    r"^-[ \t]+command:[ \t]*`[^`\n]+`[ \t]*$",
-    re.MULTILINE,
-)
-_VERIFICATION_RESULT_RE = re.compile(
-    r"^[ \t]{2}result:[ \t]*\S.*$",
-    re.MULTILINE,
-)
-
-_RESULT_PASSING_PREFIXES: tuple[str, ...] = (
-    "exit 0",
-    "ok",
-    "ok:",
-    "pass",
-    "passed",
-    "success",
-    # Common tool-natural-language pass shapes. Refs #417.
-    "all hooks",
-    "all checks",
-    "all tests",
-    # Successful verification evidence captured in the #592 corpus.
-    # These are proof that the operator ran a check and observed the
-    # expected passing state, not repair rows. Refs #593.
-    "compilation completed successfully",
-    "required test coverage",
-    "parses",
-    "shows",
-    "matches",
-    # nix hash prefix: `sha256-<base64>` is the standard nix SRI hash
-    # format output by `nix eval ... .src.outputHash` and by python
-    # base64/binascii hash helpers. Refs #927.
-    "sha256-",
-)
-
-# Successful verification is often recorded as an observation sentence
-# rather than a tool-status token. Keep this list concrete: every phrase
-# below comes from the #592 G3 retro corpus and describes proof that the
-# verification did what the operator expected, not a generic failure.
-_RESULT_PASSING_OBSERVATION_PHRASES: tuple[str, ...] = (
-    "ascii-clean",
-    "completed successfully",
-    "diff is confined",
-    "exit 0",
-    "exits 0",
-    "gate trips as designed",
-    "insertions",
-    "insertions(+)",
-    "no hits",
-    "no matches",
-    "one commit on the branch",
-    "only the intentional",
-    "parsed without exception",
-    "parses;",
-    " passed in ",
-    "required test coverage",
-    "ruff / mypy / prek pass",
-    "shows chapter",
-    "total coverage",
-    # Phrases from the #927 corpus: observations confirmed as successful
-    # verification proof in open retros #742, #810, #829. Refs #927.
-    "compiled successfully",
-    "all gates pass",
-    "guard block present",
-    "tarball contains",
-)
-
-# Pure numeric result (e.g., a count from `grep -c` or `wc -l`). The
-# operator chose count-style verification, so the value is a measured
-# quantity rather than a status code; treat as passing. Refs #417.
-_RESULT_PASSING_NUMERIC_RE = re.compile(r"^-?\d+(?:\.\d+)?$")
-
-# "all <token> hooks|checks|tests" pattern. Tools like pre-commit, prek,
-# and `gh pr checks` interpolate a count or qualifier between "all" and
-# the unit noun ("all six hooks Passed", "all 3 checks have passed").
-# The literal prefixes in _RESULT_PASSING_PREFIXES only catch the bare
-# "all hooks" / "all checks" / "all tests" forms, so this regex covers
-# the natural-language variants without widening the allowlist into
-# free-form prose. Refs #411.
-_RESULT_PASSING_ALL_UNIT_RE = re.compile(
-    r"^all\s+\S+\s+(?:hooks|checks|tests)\b",
-    re.IGNORECASE,
-)
-
-# pytest-style count summary: `246 passed in 198.59s`, `1476 passed,
-# coverage 94.24%`, `22 passed in 0.09s`. Anchored to start so trailing
-# prose (timing, coverage) is tolerated but a leading failure count is
-# not silently swallowed. Refs #453.
-_RESULT_PASSING_COUNT_RE = re.compile(r"^\d+\s+passed\b", re.IGNORECASE)
-
-# Trailing `ok` word marker: `yaml syntax ok`, `config ok.`. Word
-# boundary keeps `not ok` and `lookup` out of the match. Refs #453.
-_RESULT_PASSING_TRAILING_OK_RE = re.compile(r"\bok\b\.?\s*$", re.IGNORECASE)
-
-# ASCII cleanliness checks usually print key/value facts rather than a
-# status word. Treat the exact zero-count observation as success. Refs #596.
-_RESULT_PASSING_NON_ASCII_ZERO_RE = re.compile(
-    r"\bnon_ascii\s*=\s*0\b",
-    re.IGNORECASE,
-)
-
-# nix eval quoted-string output (e.g. `"1.2.3"`, `"sha256-abc=="`).
-# A successful `nix eval` on a string-typed attribute always wraps the
-# value in double-quotes; evaluation errors use the un-quoted `error: ...`
-# prefix instead. Refs #927.
-_RESULT_PASSING_NIX_QUOTED_RE = re.compile(r'^"[^"\n]+"$')
-
-# grep -n match output: `18:aka.ms`. A non-empty `linenum:content` result
-# means the operator's pattern was found in the file -- i.e. the file
-# contains the expected entry. Refs #927.
-_RESULT_PASSING_GREP_N_RE = re.compile(r"^\d+:\S")
-
-# sha256sum / shasum standard output: 64 hex chars + whitespace + filename
-# (e.g. `a0b896...  apm-linux-x86_64.tar.gz`). Only sha256 (64 chars)
-# is covered; sha1 / md5 are matched by _RESULT_PASSING_HEX_HASH_RE.
-# Refs #927.
-_RESULT_PASSING_SHASUM_RE = re.compile(r"^[0-9a-f]{64}\s+\S", re.IGNORECASE)
-
-# Pure hex hash string of 8+ chars (e.g. `15e7b5dfd8e654725ff0`).
-# Operators using hash-based verification record a bare hex digest as the
-# measured result; any 8+ char hex string is treated as a quantity, not a
-# status. Refs #927.
-_RESULT_PASSING_HEX_HASH_RE = re.compile(r"^[0-9a-f]{8,}$", re.IGNORECASE)
-
-# Package name-version string (e.g. `bubblewrap-0.11.0`, `uv-1.2.3`).
-# Output of `nix eval .#packages.<system>.NAME.name` or similar when the
-# derivation exists and is evaluable. Refs #927.
-_RESULT_PASSING_PKG_VERSION_RE = re.compile(
-    r"^[a-z][a-z0-9_-]*-\d+\.\d+", re.IGNORECASE
-)
-
-# nix-prefixed tool or shell name (e.g. `nix-shell`, `nix-develop`).
-# Output of `nix eval .#devShells.<system>.NAME.name --raw`. Refs #927.
-_RESULT_PASSING_NIX_TOOL_RE = re.compile(r"^nix-[a-z][a-z0-9-]*$", re.IGNORECASE)
-
-# Explicit failure-count marker that must NOT be treated as passing even
-# if the rest of the string smells like a pass (`0 passed, 3 failed`).
-# Refs #453.
-_RESULT_FAILING_COUNT_RE = re.compile(r"\b\d+\s+failed\b", re.IGNORECASE)
-
-# Zero exit / return code anywhere in the result is a pass even when the
-# surrounding text uses a non-standard prefix that the prefix allowlist
-# misses (`total preflight exit=0`, `PREFLIGHT_EXIT=0`, `skip: ... (rc=0)`).
-# Only an explicit zero matches: `exit=1` and a bare version like `0.11`
-# do not (the `0` must not be followed by a digit or a dot). Refs #1227.
-_RESULT_PASSING_EXIT_ZERO_RE = re.compile(
-    r"\b(?:exit(?:[ _-]?code)?|rc|preflight_exit)\b[ \t]*[=:]?[ \t]*0(?![.\d])",
-    re.IGNORECASE,
-)
-
-# Environment-prerequisite-unavailable markers. A verification that could
-# not run because a CI-only token or tool was absent locally is a skip, not
-# a repair signal: `blocked: GH_TOKEN unset`, `skip: PR is a retro-close PR`,
-# `skipped on missing local prereqs`, `not applicable`. A genuine local
-# failure (`blocked: ModuleNotFoundError`, `required uv ==X, local uv is Y`,
-# `not run; ... does not match`) carries none of these markers and stays a
-# failure. Refs #1227, #851.
-_RESULT_ENV_SKIP_RE = re.compile(
-    r"^[ \t]*skip(?:ped)?\b"
-    r"|\bunset\b"
-    r"|\bmissing (?:env|local prereq)"
-    r"|\bnot applicable\b"
-    r"|\bn/a\b",
-    re.IGNORECASE,
-)
-
-# Append-to-existing-retro markers used by append_repair_history_row.
-_AUTO_FILLED_OPEN = "<!-- auto-filled:repair-history -->"
-_AUTO_FILLED_CLOSE = "<!-- /auto-filled:repair-history -->"
-_APPENDED_OPEN = "<!-- appended-follow-up-fixes -->"
-_APPENDED_CLOSE = "<!-- /appended-follow-up-fixes -->"
-
-# Visible sentinels marking an unfilled Repair history Cause / Next action
-# cell. They let verify_retro_repair_completeness mechanically detect rows
-# the operator has not yet completed. Static strings keep build_retro_body
-# byte-identical on event re-run.
-_REPAIR_CAUSE_FILL = "(fill: cause -- how this repair arose)"
-_REPAIR_NEXT_ACTION_FILL = (
-    "(fill: next action -- gate or issue to prevent recurrence)"
-)
-
-
-@dataclass(frozen=True)
-class VerificationPair:
-    command: str
-    result: str
-    passed: bool
-
-
-@dataclass(frozen=True)
-class MergedPR:
-    number: int
-    title: str
-    merged: bool
-    merged_at: str
-    merged_by_login: str | None
-    user_login: str | None
-    layer_labels: tuple[str, ...]
-    html_url: str
-    body: str = ""
-    commits: int = 0
-
-
-# ---------------------------------------------------------------------------
-# Pure functions
-# ---------------------------------------------------------------------------
-
-
-def parse_event(event: dict[str, Any]) -> MergedPR:
-    """Extract the fields the retro flow needs from a pull_request event.
-
-    Raises :class:`ValueError` when the event payload has no
-    ``pull_request`` object or no ``number``. ``merged == false`` is NOT
-    raised here; callers (run, _cmd_run) decide what to do with an
-    unmerged event so the workflow stays composable.
-    """
-    pr = event.get("pull_request") or {}
-    number = pr.get("number")
-    if number is None:
-        raise ValueError("event payload has no pull_request.number")
-
-    merged_by = pr.get("merged_by") or {}
-    user = pr.get("user") or {}
-    labels = pr.get("labels") or []
-    layer_labels = tuple(
-        (lbl.get("name") or "")
-        for lbl in labels
-        if (lbl.get("name") or "").startswith("layer:")
-    )
-    return MergedPR(
-        number=int(number),
-        title=str(pr.get("title") or ""),
-        merged=bool(pr.get("merged")),
-        merged_at=str(pr.get("merged_at") or ""),
-        merged_by_login=merged_by.get("login"),
-        user_login=user.get("login"),
-        layer_labels=layer_labels,
-        html_url=str(pr.get("html_url") or ""),
-        body=str(pr.get("body") or ""),
-        commits=int(pr.get("commits") or 0),
-    )
-
-
-def extract_type_scope(pr_title: str) -> str:
-    """Extract the ``type(scope)`` token from a Conventional Commit title.
-
-    Returns ``""`` when the title does not match; callers handle the empty
-    token explicitly.
-    """
-    match = _TYPE_SCOPE_RE.match(pr_title)
-    if match is None:
-        return ""
-    return match.group(1)
-
-
-def is_retro_pr(pr_title: str) -> bool:
-    """True if the PR is itself a retrospective (skip to avoid recursion).
-
-    Matches when the title's ``type(scope)`` token literally contains
-    ``(auto-retro)`` -- covering both auto-opened retros and retro-closing
-    PRs like ``fix(auto-retro): ...`` / ``docs(auto-retro): ...`` that the
-    title policy forces to use an allowed Conventional Commit type with an
-    ``auto-retro`` scope.
-    """
-    stripped = pr_title.lstrip().lower()
-    token = extract_type_scope(stripped) or ""
-    return "(auto-retro)" in token
-
-
-def is_retro_issue_title(title: str) -> bool:
-    """True if *title* is an auto-opened retrospective issue title.
-
-    Single source of truth for retro-issue title detection. Matches the
-    canonical ``chore(auto-retro): review PR #<N> repair loops`` prefix and
-    the legacy ``fix(auto-retro)`` prefix (case-insensitive after lstrip).
-    Both shapes are recognized so dedup, the sentinel, the label-derived
-    prior, and the no-direct-PR gate keep covering closed historical retros
-    that were not renamed during the prefix migration (Refs #1069). Older
-    ``retro(`` / ``retro:`` titles were fully migrated and are not matched.
-    """
-    stripped = title.lstrip().lower()
-    return stripped.startswith("chore(auto-retro)") or stripped.startswith(
-        "fix(auto-retro)"
-    )
-
-
-def should_skip(
-    pr: MergedPR, trusted_bots: frozenset[str] = _TRUSTED_BOT_LOGINS
-) -> tuple[bool, str]:
-    """Return ``(skip, reason)``. Empty *reason* when not skipping."""
-    if pr.merged_by_login is not None and pr.merged_by_login in trusted_bots:
-        return True, f"merged by trusted bot ({pr.merged_by_login})"
-    if pr.user_login is not None and pr.user_login in trusted_bots:
-        return True, f"authored by trusted bot ({pr.user_login})"
-    if is_retro_pr(pr.title):
-        return True, "PR is itself a retrospective (avoid recursion)"
-    return False, ""
-
-
-# Commit-subject prefixes recorded as "rebase debt before merge" in the
-# Repair history table. The squash-only, linear-history merge policy in
-# .github/rulesets/main.json forces branches behind main to rebase or
-# merge main in before merge, so these commits are a structural side
-# effect of the policy rather than evidence of a repair loop.
-_MERGE_FROM_MAIN_PREFIXES: tuple[str, ...] = (
-    "Merge branch 'main'",
-    "Merge remote-tracking branch 'origin/main'",
-    "Merge branch 'master'",
-    "Merge remote-tracking branch 'origin/master'",
-)
-
-# Leading marker on the right-hand cell of merge-from-main rows. Lets
-# operators skip the row when filling the section 3 classification
-# column: the row is a structural artifact of the squash + linear-history
-# + strict-status-checks ruleset, not a repair loop. Issue #400.
-_POLICY_ARTIFACT_MARKER = "[policy-artifact]"
-
-
-@dataclass(frozen=True)
-class RepairHistoryRow:
-    """One generated Repair history row before markdown rendering."""
-
-    repair: str
-    detail: str
-    policy_artifact: bool = False
-    next_action: str = ""
-
-
-def _count_merge_from_main(subjects: list[str]) -> int:
-    """Return the number of *subjects* that are merge-from-main commits.
-
-    Shared by :func:`compute_repair_signals` (to exempt rebase debt from
-    the ``multi_commit_pr`` gate) and :func:`_build_repair_history_table`
-    (to render the "Merge from main" rows). Matches the prefixes in
-    :data:`_MERGE_FROM_MAIN_PREFIXES`.
-    """
-    return sum(
-        1
-        for subject in subjects
-        if any(
-            subject.strip().startswith(prefix)
-            for prefix in _MERGE_FROM_MAIN_PREFIXES
-        )
-    )
-
-
-# Commit-subject markers for `git revert` commits. Kept parallel to
-# _MERGE_FROM_MAIN_PREFIXES rather than merged into one matcher: the
-# Git-standard revert subject is NOT Conventional (`Revert "<subject>"`),
-# while the Conventional forms (`revert(scope): ...`) carry a type slot, so a
-# single literal-prefix list cannot cover both without muddying each. Per
-# CLAUDE.md section 3 `git revert` is the default rollback path, so a revert
-# commit is an expected artifact, not a repair loop on its own -- but unlike
-# merge-from-main (pure structural rebase debt) it is an anomaly *hint*: it
-# subtracts from the multi_commit_pr count yet is still recorded for co-fire
-# correlation (refs #1287).
-_REVERT_PREFIXES: tuple[str, ...] = ('Revert "',)
-
-# Conventional revert subjects: `revert: ...`, `revert(scope): ...`, and the
-# breaking `revert!: ` / `revert(scope)!: `. The `: ` separator is required so
-# `revert this thing` (no colon) and `fix(revert): ...` (revert only in the
-# scope slot, a real fix commit) do NOT match -- consistent with
-# title_policy.pr_title_ref_is_exempt, which only treats the *type* slot as a
-# revert. Matched case-sensitively: Git emits capital `Revert "`, Conventional
-# types are lowercase per .github/title-policy.toml `scope_pattern`
-# (kept in sync here as a self-contained literal to avoid importing
-# title_policy's regex internals).
-_REVERT_CONVENTIONAL_RE = re.compile(r"^revert(?:\([a-z0-9][a-z0-9-]*\))?!?: ")
-
-
-def _is_revert_subject(subject: str) -> bool:
-    """Return True if *subject* is a Git-standard or Conventional revert.
-
-    A double revert (``Revert "Revert "feat: x""``) is still one commit and
-    matches once; nesting depth is not counted. Lowercase ``revert "...``
-    (neither Git-standard nor Conventional) does not match, to avoid false
-    positives on prose.
-    """
-    stripped = subject.strip()
-    return any(
-        stripped.startswith(prefix) for prefix in _REVERT_PREFIXES
-    ) or bool(_REVERT_CONVENTIONAL_RE.match(stripped))
-
-
-def _count_revert(subjects: list[str]) -> int:
-    """Return the number of *subjects* that are revert commits.
-
-    Shared by :func:`compute_repair_signals` (to subtract reverts from the
-    ``multi_commit_pr`` count so a revert alone does not fire the gate) and
-    :func:`_repair_history_rows` (to render the ``Revert commit`` rows).
-    Mirrors :func:`_count_merge_from_main`; see :func:`_is_revert_subject`
-    for the per-subject predicate.
-    """
-    return sum(1 for subject in subjects if _is_revert_subject(subject))
-
-
-def _slice_section(body: str, heading: str) -> str:
-    """Return the slice of ``body`` under ``## heading`` up to the next H2.
-
-    HTML comments are stripped first so a commented heading does not
-    pretend to terminate the range. Case-insensitive match on the
-    heading text. Returns ``""`` when the heading is absent.
-    """
-    cleaned = strip_html_comments((body or "").replace("\r", ""))
-    lines = cleaned.splitlines()
-    target = heading.strip().casefold()
-    h2_pattern = re.compile(r"^##[ \t]+(.+?)[ \t]*$")
-    start: int | None = None
-    end = len(lines)
-    for i, line in enumerate(lines):
-        match = h2_pattern.match(line)
-        if match is None:
-            # H3+ inside an active section is part of the slice.
-            continue
-        text = match.group(1).rstrip(":").strip()
-        if start is None:
-            if text.casefold() == target:
-                start = i + 1
-            continue
-        end = i
-        break
-    if start is None:
-        return ""
-    return "\n".join(lines[start:end])
-
-
-def _result_is_passing(result: str) -> bool:
-    """Return True if a Verification result line text looks like a pass.
-
-    Strips surrounding backticks and leading whitespace, then:
-
-    * a purely numeric result (matched by :data:`_RESULT_PASSING_NUMERIC_RE`)
-      is treated as a measured quantity from a count-style verification
-      and accepted as passing;
-    * a result matching :data:`_RESULT_PASSING_ALL_UNIT_RE` (``all <N>
-      hooks/checks/tests ...``) is accepted as passing, covering natural
-      tool output where a count or qualifier is interpolated between
-      ``all`` and the unit noun (refs #411);
-    * pytest-style ``N passed ...`` counts (matched by
-      :data:`_RESULT_PASSING_COUNT_RE`) are accepted as passing;
-    * a string ending in the word ``ok`` (matched by
-      :data:`_RESULT_PASSING_TRAILING_OK_RE`) is accepted as passing;
-    * otherwise the lowercased text is matched against the prefix
-      allowlist in :data:`_RESULT_PASSING_PREFIXES` (``exit 0``, ``OK:``,
-      ``pass``, ``passed``, ``success``, ``ok``, plus common tool
-      summaries such as ``all hooks ...``).
-
-    An explicit ``N failed`` token anywhere in the text (matched by
-    :data:`_RESULT_FAILING_COUNT_RE`) forces a failure verdict even if
-    another marker would have accepted it.
-
-    Additional patterns from the #927 corpus (retros #742, #788, #802,
-    #807, #810, #829, #900) are matched by dedicated regexes for nix eval
-    quoted-string output, grep -n line results, sha256sum output, pure hex
-    hashes, package name-version strings, and nix-prefixed tool names.
-
-    A zero exit / return code anywhere in the text (matched by
-    :data:`_RESULT_PASSING_EXIT_ZERO_RE`: ``exit=0``, ``rc=0``,
-    ``PREFLIGHT_EXIT=0``) is a pass even behind a non-standard prefix, and an
-    environment-prerequisite-unavailable result (matched by
-    :data:`_RESULT_ENV_SKIP_RE`: ``skip:``/``skipped``, ``... unset``,
-    ``missing env``/``missing local prereq``, ``not applicable``/``n/a``) is a
-    skip rather than a repair signal. A genuine local failure such as
-    ``blocked: ModuleNotFoundError`` carries none of these markers and stays a
-    failure. Refs #1227, #851.
-
-    Anything else (including ``exit 1``, ``failed``, free-form prose) is
-    treated as a failure signal. Refs #411, #417, #453, #927.
-    """
-    raw_text = result.strip()
-    text = raw_text
-    if text.startswith("`") and text.endswith("`") and len(text) >= 2:
-        text = text[1:-1].strip()
-    # Strip a trailing operator-commentary parenthetical so it does not
-    # mask a pass marker on the primary value (e.g.
-    # `\`yaml syntax ok\` (parsed without exception)` --> `\`yaml syntax ok\``,
-    # `1476 passed, coverage 94.24% (gate 92.71%)` --> `1476 passed, ...`).
-    # Re-strip backticks if newly applicable. Refs #453.
-    stripped = re.sub(r"\s*\([^()]*\)\s*$", "", text).strip()
-    if stripped != text:
-        text = stripped
-        if text.startswith("`") and text.endswith("`") and len(text) >= 2:
-            text = text[1:-1].strip()
-    if _RESULT_FAILING_COUNT_RE.search(text):
-        return False
-    if _RESULT_PASSING_NUMERIC_RE.match(text):
-        return True
-    if _RESULT_PASSING_ALL_UNIT_RE.match(text):
-        return True
-    if _RESULT_PASSING_COUNT_RE.match(text):
-        return True
-    if _RESULT_PASSING_TRAILING_OK_RE.search(text):
-        return True
-    if _RESULT_PASSING_NON_ASCII_ZERO_RE.search(raw_text):
-        return True
-    if _RESULT_PASSING_NIX_QUOTED_RE.match(text):
-        return True
-    if _RESULT_PASSING_GREP_N_RE.match(text):
-        return True
-    if _RESULT_PASSING_SHASUM_RE.match(text):
-        return True
-    if _RESULT_PASSING_HEX_HASH_RE.match(text):
-        return True
-    if _RESULT_PASSING_PKG_VERSION_RE.match(text):
-        return True
-    if _RESULT_PASSING_NIX_TOOL_RE.match(text):
-        return True
-    if _RESULT_PASSING_EXIT_ZERO_RE.search(text):
-        return True
-    if _RESULT_ENV_SKIP_RE.search(text):
-        return True
-    lower = text.lower()
-    raw_lower = raw_text.lower()
-    return any(lower.startswith(prefix) for prefix in _RESULT_PASSING_PREFIXES) or any(
-        phrase in raw_lower for phrase in _RESULT_PASSING_OBSERVATION_PHRASES
-    )
-
-
-def extract_verification_pairs(body: str) -> list[VerificationPair]:
-    """Parse ``## Verification`` from a PR body into command/result pairs.
-
-    Returns an empty list when the section is absent or empty. Pairing
-    is order-dependent (command line followed immediately by a result
-    line on the next physical line) so a stray ``command:`` or
-    ``result:`` does not produce a half pair.
-    """
-    section = _slice_section(body, "Verification")
-    if not section.strip():
-        return []
-    lines = section.splitlines()
-    pairs: list[VerificationPair] = []
-    i = 0
-    while i < len(lines):
-        cmd_match = _VERIFICATION_COMMAND_RE.fullmatch(lines[i])
-        if cmd_match is not None and i + 1 < len(lines):
-            res_match = _VERIFICATION_RESULT_RE.fullmatch(lines[i + 1])
-            if res_match is not None:
-                cmd_text = lines[i].split("command:", 1)[1].strip()
-                res_text = lines[i + 1].split("result:", 1)[1].strip()
-                pairs.append(
-                    VerificationPair(
-                        command=cmd_text,
-                        result=res_text,
-                        passed=_result_is_passing(res_text),
-                    )
-                )
-                i += 2
-                continue
-        i += 1
-    return pairs
-
-
-def extract_post_merge_checklist(body: str) -> list[tuple[str, bool]]:
-    """Parse ``## Checklist > ### Post-merge`` into ``[(item, checked)]``.
-
-    Returns ``[]`` when the Checklist section or its Post-merge H3 is
-    absent. ``After-merge`` and ``Bootstrap`` siblings are not included.
-    The subsection match is case-insensitive and tolerates a trailing
-    parenthetic clarifier (``### Post-merge (auto-retro signal)``).
-
-    Not called at merge time after #418: the Post-merge subsection is
-    structurally unchecked when auto-retro opens the issue. Retained
-    here for the deferred re-scan workflow tracked in #421, which will
-    revisit the merged PR body after the observation window closes.
-    """
-    section = _slice_section(body, "Checklist")
-    if not section.strip():
-        return []
-    lines = section.splitlines()
-    h3_pattern = re.compile(r"^###[ \t]+(.+?)[ \t]*$")
-    item_pattern = re.compile(r"^[ \t]*-[ \t]+\[([ xX])\][ \t]+(.+?)\s*$")
-    start: int | None = None
-    end = len(lines)
-    for i, line in enumerate(lines):
-        match = h3_pattern.match(line)
-        if match is None:
-            continue
-        text = match.group(1).rstrip(":").strip()
-        base = text.split("(", 1)[0].strip().casefold()
-        if start is None:
-            if base == "post-merge":
-                start = i + 1
-            continue
-        end = i
-        break
-    if start is None:
-        return []
-    items: list[tuple[str, bool]] = []
-    for line in lines[start:end]:
-        m = item_pattern.match(line)
-        if m is None:
-            continue
-        checked = m.group(1).lower() == "x"
-        items.append((m.group(2).strip(), checked))
-    return items
-
-
-def compute_repair_signals(
-    pr: MergedPR,
-    has_inline_comments: bool,
-    commit_subjects: list[str] | None = None,
-) -> dict[str, bool]:
-    """Return a dict of `signal_name -> fired` describing observable repair
-    evidence on the merged PR. Used by :func:`run` to decide whether to open
-    a retrospective issue.
-
-    Each signal is independently weak; their logical OR is the gate. The
-    historical signal (`has_inline_comments`) is retained verbatim; the
-    remaining heuristics catch repair loops captured outside the PR's
-    review thread -- in sibling issues, in fix-typed titles, or in
-    fix-up commits squashed at merge. See issue #298 for the reproducer:
-    PR #275 and PR #288 merged with zero inline review comments yet
-    carried substantial repair history in issues #287 and #273.
-
-    ``body_cites_refs`` was retired as a standalone trigger in #1227, and
-    ``verification_pairs_failed`` was retired the same way in #1236: both
-    keyed off non-discriminating or untrusted PR-body prose and dominated
-    label-prior pollution. Repair loops captured in sibling issues are still
-    caught by the remaining signals (review comments, fix-typed titles,
-    fix-up / iteration commits) and by the deterministic GitHub check-run
-    state surfaced in :func:`_repair_history_rows`.
-
-    Signals returned:
-
-    - ``inline_review_comments``: at least one comment on the PR's
-      review thread (the legacy gate).
-    - ``fix_typed_title``: PR title starts with ``fix(`` (Conventional
-      Commit `fix` type).
-    - ``multi_commit_pr``: source branch had more than one commit before
-      the merge. When *commit_subjects* is supplied, merge-from-main
-      commits (see :data:`_MERGE_FROM_MAIN_PREFIXES`) and revert commits
-      (see :func:`_count_revert`) are subtracted from the count. Rebase
-      debt created by the squash-only, linear-history merge policy does
-      not fire the gate on its own, and a revert -- the default rollback
-      path per CLAUDE.md section 3 -- is an anomaly *hint* that must not
-      open a retro alone: it only matters when it co-fires with another
-      signal (review comments, failed CI, failed verification). The revert
-      is still surfaced as a ``Revert commit`` row in the repair-history
-      table for that correlation (refs #1287). When *commit_subjects* is
-      ``None`` (the legacy two-arg call shape, retained for tests that do
-      not exercise the gate ordering in :func:`run`) the gate falls back
-      to ``pr.commits > 1`` -- subjects are required to subtract either
-      artifact class, so the fallback fires more readily by design.
-    """
-    fix_typed = pr.title.lstrip().lower().startswith("fix(")
-    if commit_subjects is None:
-        multi_commit = pr.commits > 1
-    else:
-        pure_commits = (
-            pr.commits
-            - _count_merge_from_main(commit_subjects)
-            - _count_revert(commit_subjects)
-        )
-        multi_commit = pure_commits > 1
-    # `post_merge_unchecked` was removed in #418: the Post-merge subsection
-    # is documented to be checked by the operator AFTER observing the merge,
-    # so it is structurally unchecked at merge time. Re-scanning the subsection
-    # is deferred to the workflow tracked in #421.
-    #
-    # `verification_pairs_failed` was retired as a signal in #1236, mirroring
-    # the #1227 `body_cites_refs` retirement. It keyed off `_result_is_passing`
-    # over free-form PR-body `## Verification` prose, which CLAUDE.md section 2
-    # treats as untrusted: the heuristic both under-recognized passing prose
-    # (`no docs/generated drift`, `single commit over main`, `pre-push ... all
-    # pass`) and could not tell an intended negative-test / before-state demo
-    # (`exit 1` by design) from a real repair, making it the dominant FP source
-    # behind the #1235..#1459 retro flood. Genuine repair loops are still
-    # caught deterministically by the surviving signals (inline review
-    # comments, fix-typed titles, multi-commit / iteration commits) and by the
-    # GitHub check-run state read in `_repair_history_rows`. The prose rows are
-    # retained as non-actionable policy-artifact anomaly hints (see
-    # `_repair_history_rows`) for co-fire correlation only.
-    return {
-        "inline_review_comments": bool(has_inline_comments),
-        "fix_typed_title": fix_typed,
-        "multi_commit_pr": multi_commit,
-    }
-
-
-def render_repair_signals(signals: dict[str, bool]) -> str:
-    """Render a one-line summary of the signal aggregate for log/summary use."""
-    return ", ".join(f"{name}={str(fired).lower()}" for name, fired in signals.items())
-
-
-# Single source of truth for the signal universe. Mirrors the keys
-# returned by :func:`compute_repair_signals` and is consumed by the
-# label-derived prior helpers below. Kept as a tuple (not a frozenset)
-# so the rendered "Signals fired:" line has a stable ordering across
-# runs -- required for byte-identical retro bodies on re-run of the
-# same merge event. Refs #582.
-_SIGNAL_NAMES: tuple[str, ...] = (
-    "inline_review_comments",
-    "fix_typed_title",
-    "multi_commit_pr",
-)
-
-
-def render_signals_fired_line(signals: dict[str, bool]) -> str:
-    """Render the ``- Signals fired: ...`` Facts-section line.
-
-    Lists every signal whose ``fired`` flag is True in declaration
-    order, comma-separated. Returns ``- Signals fired: (none)`` when
-    no signal fires -- empty payload is still parseable by
-    :func:`parse_signals_from_retro_body`.
-
-    The shape is fixed because :func:`parse_signals_from_retro_body`
-    parses it as a deterministic feature when reconstructing past
-    retros for the prior calculator. Refs #582.
-    """
-    fired = [name for name in _SIGNAL_NAMES if signals.get(name, False)]
-    if not fired:
-        return "- Signals fired: (none)"
-    return "- Signals fired: " + ", ".join(fired)
-
-
-_SIGNALS_FIRED_LINE_RE = re.compile(
-    r"^\s*-\s+Signals fired:\s*(.*?)\s*$", re.MULTILINE
-)
-
-
-def parse_signals_from_retro_body(body: str) -> frozenset[str]:
-    """Extract the signal-name set from a retro body's Facts section.
-
-    Returns an empty frozenset when the body has no ``Signals fired:``
-    line (legacy retros from before #582 landed) or when the line
-    contains the sentinel ``(none)``. Tolerates extra whitespace and
-    case variation in the signal names but rejects names not in
-    :data:`_SIGNAL_NAMES` so a typo on the producing side does not
-    silently poison the prior. Refs #582.
-    """
-    cleaned = strip_html_comments(body or "")
-    match = _SIGNALS_FIRED_LINE_RE.search(cleaned)
-    if match is None:
-        return frozenset()
-    payload = match.group(1).strip()
-    if not payload or payload.lower() == "(none)":
-        return frozenset()
-    known = set(_SIGNAL_NAMES)
-    names = {part.strip() for part in payload.split(",") if part.strip()}
-    return frozenset(names & known)
-
-
-@dataclass(frozen=True)
-class PastRetro:
-    """A past retro issue's signal set and label set, captured for the prior.
-
-    ``signals`` is the frozenset of signal names parsed from the retro
-    body's ``- Signals fired:`` line (empty for pre-#582 retros).
-    ``labels`` is the frozenset of label strings currently applied to
-    the retro -- the prior only cares whether ``retro:fp`` is among
-    them, but the full set is preserved so future retrofits can layer
-    on other labels without changing the dataclass shape.
-
-    ``state`` (``"open"``/``"closed"``) and ``title`` default to the
-    pre-#1386 values so the prior/drift/sentinel construction sites and
-    every existing test keep working unchanged; the triage-report
-    dashboard (recent-retros list, open-untriaged count) reads them when
-    populated by :func:`fetch_past_retro_labels`.
-    """
-
-    number: int
-    signals: frozenset[str]
-    labels: frozenset[str]
-    state: str = "open"
-    title: str = ""
-
-
-def compute_prior_from_labels(
-    past_retros: list[PastRetro],
-    signal_names: tuple[str, ...] = _SIGNAL_NAMES,
-    epoch_min_number: int = 0,
-) -> dict[str, tuple[float, int]]:
-    """For each signal name, return ``(fp_rate, sample_size)``.
-
-    ``fp_rate`` is
-
-        |{r in eligible : signal in r.signals and RETRO_FP in r.labels}|
-        / max(1, |{r in eligible : signal in r.signals}|)
-
-    and ``sample_size`` is the denominator (un-floored). Empty input
-    yields ``(0.0, 0)`` for every signal -- the consumer
-    (:func:`should_skip_by_prior`) gates on ``sample_size >=
-    PRIOR_MIN_SAMPLE_SIZE`` so the empty-prior case degrades to
-    "open normally" rather than to a silent skip. Refs #582.
-
-    *epoch_min_number* drops retros whose issue ``number`` is below the
-    boundary from the population before any counting -- the live skip
-    decision in :func:`run` passes
-    :data:`PRIOR_EPOCH_MIN_RETRO_NUMBER` so retros opened under the old
-    (pre-#1227) signal semantics do not poison the prior. The default
-    ``0`` keeps the function a pure tally over the supplied population
-    (used by the descriptive triage report and by the unit tests).
-    Refs #1227.
-    """
-    eligible = (
-        past_retros
-        if epoch_min_number <= 0
-        else [r for r in past_retros if r.number >= epoch_min_number]
-    )
-    prior: dict[str, tuple[float, int]] = {}
-    for name in signal_names:
-        denom = sum(1 for r in eligible if name in r.signals)
-        if denom == 0:
-            prior[name] = (0.0, 0)
-            continue
-        numer = sum(
-            1 for r in eligible if name in r.signals and RETRO_FP in r.labels
-        )
-        prior[name] = (numer / denom, denom)
-    return prior
-
-
-# Triage labels in the fixed display order used by the triage report.
-# Mirrors the universe in :data:`ALL_RETRO_LABELS` but is ordered so the
-# rendered pie/table is byte-stable across runs. Refs #1042.
-_TRIAGE_LABELS: tuple[str, ...] = (
-    RETRO_TP,
-    RETRO_FP,
-    RETRO_FP_CANDIDATE,
-    RETRO_TENTATIVE,
-)
-_UNLABELLED_KEY: str = "unlabelled"
-
-# How many most-recent retros (by issue number) the dashboard lists, and
-# the trailing window over which it recomputes the FP rate for the trend
-# line. Numbers are the recency proxy: a higher issue number is newer.
-# Refs #1386.
-_RECENT_RETRO_COUNT: int = 10
-_FP_TREND_WINDOW: int = 20
-
-
-def _retro_status(labels: frozenset[str]) -> str:
-    """Return the single display status for a retro from its label set.
-
-    Triage labels are checked in :data:`_TRIAGE_LABELS` priority order so
-    a multi-labelled retro renders one stable status; a retro carrying no
-    triage label is ``"untriaged"``.
-    """
-    for label in _TRIAGE_LABELS:
-        if label in labels:
-            return label
-    return "untriaged"
-
-
-def _retro_fp_rate(retros: list[PastRetro]) -> tuple[float, int]:
-    """Return ``(fp_rate, triaged_count)`` over *retros*.
-
-    A retro is *triaged* iff it carries ``retro:tp`` or ``retro:fp``; the
-    rate is ``|retro:fp| / |triaged|``. An empty triaged population yields
-    ``(0.0, 0)`` so callers can render "n/a" without a zero-division guard
-    at each site.
-    """
-    triaged = [r for r in retros if (RETRO_FP in r.labels or RETRO_TP in r.labels)]
-    if not triaged:
-        return 0.0, 0
-    fp = sum(1 for r in triaged if RETRO_FP in r.labels)
-    return fp / len(triaged), len(triaged)
-
-
-@dataclass(frozen=True)
-class SignalStat:
-    """Per-signal occurrence and false-positive statistics for the report.
-
-    ``fire_count`` is the number of past retros whose ``Signals fired:``
-    line carries this signal; ``fire_rate`` is that count over the total
-    retro population. ``fp_count`` / ``fp_rate`` reuse the exact prior
-    definition from :func:`compute_prior_from_labels` (a retro counts as
-    a false positive iff it carries ``retro:fp``). ``sample_size`` equals
-    ``fire_count`` and is surfaced so a reader can judge whether
-    ``fp_rate`` clears :data:`PRIOR_MIN_SAMPLE_SIZE` before trusting it.
-    """
-
-    name: str
-    fire_count: int
-    fire_rate: float
-    fp_count: int
-    fp_rate: float
-    sample_size: int
-
-    @property
-    def is_anomaly(self) -> bool:
-        """True when the prior would skip a future retro on this signal.
-
-        Mirrors the gate in :func:`should_skip_by_prior`: the FP rate is
-        at or above :data:`PRIOR_SKIP_THRESHOLD` AND the sample is large
-        enough (:data:`PRIOR_MIN_SAMPLE_SIZE`) to trust the estimate.
-        This is the anomaly a human should catch by inspection.
-        """
-        return (
-            self.sample_size >= PRIOR_MIN_SAMPLE_SIZE
-            and self.fp_rate >= PRIOR_SKIP_THRESHOLD
-        )
-
-
-@dataclass(frozen=True)
-class RecentRetro:
-    """One row of the dashboard's recent-retros list.
-
-    ``status`` is the :func:`_retro_status` display label; ``state`` is the
-    GitHub issue state (``"open"``/``"closed"``).
-    """
-
-    number: int
-    title: str
-    status: str
-    state: str
-
-
-@dataclass(frozen=True)
-class TriageReport:
-    """Cross-retro aggregate: triage-status counts plus per-signal stats.
-
-    ``total`` is the size of the observed retro population. ``label_counts``
-    maps each triage label (and the :data:`_UNLABELLED_KEY` bucket) to the
-    number of retros carrying it -- a single retro may carry more than one
-    triage label, so the label counts are independent tallies and need not
-    sum to ``total``. ``signal_stats`` is ordered by :data:`_SIGNAL_NAMES`.
-
-    The remaining fields back the #1386 dashboard sections and default to
-    empty/zero so older construction sites and tests stay valid:
-    ``open_untriaged`` counts open retros carrying no triage label;
-    ``recent`` is the most-recent slice (newest first) for the recent-retros
-    table; ``fp_rate_all``/``fp_triaged`` are the all-time retro-level FP
-    rate and its triaged denominator; ``fp_rate_recent``/``fp_recent_triaged``
-    are the same over the trailing :data:`_FP_TREND_WINDOW` for the trend.
-    """
-
-    total: int
-    label_counts: dict[str, int]
-    signal_stats: tuple[SignalStat, ...]
-    open_untriaged: int = 0
-    recent: tuple[RecentRetro, ...] = ()
-    fp_rate_all: float = 0.0
-    fp_triaged: int = 0
-    fp_rate_recent: float = 0.0
-    fp_recent_triaged: int = 0
-
-    @property
-    def anomalies(self) -> tuple[SignalStat, ...]:
-        """Signals whose prior would skip a future retro -- the headline set."""
-        return tuple(s for s in self.signal_stats if s.is_anomaly)
-
-
-def compute_triage_report(
-    past_retros: list[PastRetro],
-    signal_names: tuple[str, ...] = _SIGNAL_NAMES,
-) -> TriageReport:
-    """Aggregate *past_retros* into a :class:`TriageReport`.
-
-    Pure and GitHub-independent: the caller supplies the population
-    (typically from :func:`fetch_past_retro_labels`). Triage-label tallies
-    count each label independently (a retro may carry several); the
-    ``unlabelled`` bucket counts retros with none of
-    :data:`ALL_RETRO_LABELS`. Per-signal FP statistics are taken verbatim
-    from :func:`compute_prior_from_labels` so the report and the live skip
-    decision can never disagree on the numbers. Refs #1042.
-    """
-    total = len(past_retros)
-    label_counts: dict[str, int] = {
-        label: sum(1 for r in past_retros if label in r.labels)
-        for label in _TRIAGE_LABELS
-    }
-    label_counts[_UNLABELLED_KEY] = sum(
-        1 for r in past_retros if not (r.labels & ALL_RETRO_LABELS)
-    )
-    prior = compute_prior_from_labels(past_retros, signal_names)
-    signal_stats: list[SignalStat] = []
-    for name in signal_names:
-        fp_rate, sample = prior[name]
-        # numer is an exact integer (fp_rate == numer / sample), so
-        # round() recovers it without float drift for any realistic
-        # population size.
-        fp_count = round(fp_rate * sample)
-        fire_rate = sample / total if total else 0.0
-        signal_stats.append(
-            SignalStat(
-                name=name,
-                fire_count=sample,
-                fire_rate=fire_rate,
-                fp_count=fp_count,
-                fp_rate=fp_rate,
-                sample_size=sample,
-            )
-        )
-    open_untriaged = sum(
-        1
-        for r in past_retros
-        if r.state == "open" and not (r.labels & ALL_RETRO_LABELS)
-    )
-    by_recency = sorted(past_retros, key=lambda r: r.number, reverse=True)
-    recent = tuple(
-        RecentRetro(
-            number=r.number,
-            title=r.title,
-            status=_retro_status(r.labels),
-            state=r.state,
-        )
-        for r in by_recency[:_RECENT_RETRO_COUNT]
-    )
-    fp_rate_all, fp_triaged = _retro_fp_rate(past_retros)
-    fp_rate_recent, fp_recent_triaged = _retro_fp_rate(
-        by_recency[:_FP_TREND_WINDOW]
-    )
-    return TriageReport(
-        total=total,
-        label_counts=label_counts,
-        signal_stats=tuple(signal_stats),
-        open_untriaged=open_untriaged,
-        recent=recent,
-        fp_rate_all=fp_rate_all,
-        fp_triaged=fp_triaged,
-        fp_rate_recent=fp_rate_recent,
-        fp_recent_triaged=fp_recent_triaged,
-    )
-
-
-def render_triage_report_markdown(report: TriageReport) -> str:
-    """Render a :class:`TriageReport` as the checked-in Markdown document.
-
-    The shape lets a human detect an anomaly by inspection (CLAUDE.md
-    section 6): the Anomalies block sits at the top, a Mermaid pie shows
-    the triage-status mix, the FP-rate trend and recent-retros list make
-    the live backlog visible, and the per-signal table flags every signal
-    whose prior would skip a future retro. The report depends on live
-    GitHub label state, so it is a non-deterministic snapshot and is NOT
-    part of the deterministic generated docs. Refs #1042, #1386.
-    """
-    lines: list[str] = [
-        "# Auto-retro triage report",
-        "",
-        "This file is generated from live GitHub retro-issue labels by "
-        "`python3 scripts/auto_retro.py triage-report`. Do not edit it by "
-        "hand. Unlike the per-script AST docs it is a non-deterministic "
-        "snapshot of repository state, so it is refreshed on merge by the "
-        "`post-merge.yml` workflow (which opens a pull request when the "
-        "snapshot drifts) rather than as part of the deterministic generated docs.",
-        "",
-        f"Retros observed: **{report.total}**",
-        "",
-        f"Open untriaged: **{report.open_untriaged}**",
-        "",
-        "## Anomalies",
-        "",
-    ]
-    if report.anomalies:
-        lines.append(
-            f"Signals whose prior FP rate is at or above "
-            f"{PRIOR_SKIP_THRESHOLD:.2f} (n >= {PRIOR_MIN_SAMPLE_SIZE}); "
-            f"these signals now suppress new retros via "
-            f"`should_skip_by_prior`:"
-        )
-        lines.append("")
-        for stat in report.anomalies:
-            lines.append(
-                f"- `{stat.name}`: FP rate {stat.fp_rate:.2f} "
-                f"(n={stat.sample_size})"
-            )
-    else:
-        lines.append(
-            "None: no fired signal clears both the FP-rate and "
-            "sample-size thresholds."
-        )
-    lines.extend(["", "## Triage status", ""])
-    if report.total == 0:
-        lines.append("No retros observed yet.")
-    else:
-        lines.append("```mermaid")
-        lines.append("pie showData")
-        lines.append('    title Triage status')
-        for label in (*_TRIAGE_LABELS, _UNLABELLED_KEY):
-            lines.append(f'    "{label}" : {report.label_counts[label]}')
-        lines.append("```")
-    lines.extend(
-        [
-            "",
-            "## Signal occurrence and false-positive rates",
-            "",
-            "| Signal | Fired | Fire rate | FP | FP rate | n | Anomaly |",
-            "| --- | --: | --: | --: | --: | --: | :-: |",
-        ]
-    )
-    for stat in report.signal_stats:
-        marker = "!!" if stat.is_anomaly else ""
-        lines.append(
-            f"| `{stat.name}` | {stat.fire_count} | "
-            f"{stat.fire_rate:.2f} | {stat.fp_count} | "
-            f"{stat.fp_rate:.2f} | {stat.sample_size} | {marker} |"
-        )
-    lines.extend(_render_fp_trend(report))
-    lines.extend(_render_recent_retros(report))
-    return "\n".join(lines) + "\n"
-
-
-def _render_fp_trend(report: TriageReport) -> list[str]:
-    """Render the retro-level FP-rate trend section.
-
-    Compares the all-time FP rate against the trailing
-    :data:`_FP_TREND_WINDOW`-retro window so a human can see at a glance
-    whether triaged retros are trending more or less false-positive.
-    """
-    lines = ["", "## False-positive rate trend", ""]
-    if report.fp_triaged == 0:
-        lines.append("No triaged retros yet (no `retro:tp`/`retro:fp` labels).")
-        return lines
-    delta = report.fp_rate_recent - report.fp_rate_all
-    if report.fp_recent_triaged == 0:
-        direction = "n/a"
-    elif abs(delta) < 0.005:
-        direction = "flat"
-    elif delta > 0:
-        direction = "rising"
-    else:
-        direction = "falling"
-    lines.append(
-        f"- All-time: {report.fp_rate_all:.2f} (n={report.fp_triaged} triaged)"
-    )
-    lines.append(
-        f"- Last {_FP_TREND_WINDOW} retros: {report.fp_rate_recent:.2f} "
-        f"(n={report.fp_recent_triaged} triaged) -- {direction}"
-    )
-    return lines
-
-
-def _render_recent_retros(report: TriageReport) -> list[str]:
-    """Render the most-recent-retros table (newest first)."""
-    lines = ["", "## Recent retros", ""]
-    if not report.recent:
-        lines.append("No retros observed yet.")
-        return lines
-    lines.append("| # | State | Status | Title |")
-    lines.append("| --: | :-- | :-- | :-- |")
-    for r in report.recent:
-        title = r.title or "(no title)"
-        lines.append(f"| {r.number} | {r.state} | {r.status} | {title} |")
-    return lines
-
-
 def auto_retro_decision_tree() -> tuple[
     tuple[DecisionTreeNode, ...], tuple[DecisionTreeEdge, ...]
 ]:
@@ -1287,830 +293,6 @@ def render_decision_tree_mermaid() -> str:
     """Render the AST-derived auto-retro decision tree as Mermaid."""
     graph = build_function_graph(Path(__file__), "run")
     return render_mermaid(graph)
-
-
-def _max_active_fp(
-    signals: dict[str, bool],
-    prior: dict[str, tuple[float, int]],
-    min_sample_size: int,
-) -> tuple[float, str | None, int]:
-    """Return ``(max_fp_rate, signal_name, sample_size)`` over active signals.
-
-    Only signals that fired on the current PR AND have a sample_size of
-    at least ``min_sample_size`` are considered. When no qualifying
-    signal exists, returns ``(0.0, None, 0)``. Shared helper used by
-    both :func:`should_skip_by_prior` and :func:`is_tentative_by_prior`
-    to keep the "max wins" rule centralised.
-    """
-    best: tuple[float, str | None, int] = (0.0, None, 0)
-    for name, fired in signals.items():
-        if not fired:
-            continue
-        rate, sample = prior.get(name, (0.0, 0))
-        if sample < min_sample_size:
-            continue
-        if rate >= best[0]:
-            best = (rate, name, sample)
-    return best
-
-
-def should_skip_by_prior(
-    signals: dict[str, bool],
-    prior: dict[str, tuple[float, int]],
-    skip_threshold: float = PRIOR_SKIP_THRESHOLD,
-    min_sample_size: int = PRIOR_MIN_SAMPLE_SIZE,
-) -> tuple[bool, str]:
-    """Return ``(skip, reason)`` based on the label-derived prior.
-
-    Skips when the MAX fp_rate over signals that fired on the current
-    PR (and meet the sample-size floor) is greater than or equal to
-    ``skip_threshold``. The "worst signal wins" rule matches
-    :func:`scripts.scan_retro_followup_drift.aggregate_drift`. When
-    no signal qualifies, returns ``(False, "")`` -- the empty-prior
-    safety net.
-    """
-    rate, name, sample = _max_active_fp(signals, prior, min_sample_size)
-    if name is not None and rate >= skip_threshold:
-        return True, (
-            f"prior FP rate {rate:.2f} for signal {name!r} "
-            f"(n={sample}) >= {skip_threshold}"
-        )
-    return False, ""
-
-
-def is_tentative_by_prior(
-    signals: dict[str, bool],
-    prior: dict[str, tuple[float, int]],
-    tentative_threshold: float = PRIOR_TENTATIVE_THRESHOLD,
-    skip_threshold: float = PRIOR_SKIP_THRESHOLD,
-    min_sample_size: int = PRIOR_MIN_SAMPLE_SIZE,
-) -> bool:
-    """True when the prior places the retro in the tentative band.
-
-    The tentative band is ``[tentative_threshold, skip_threshold)``:
-    the prior is high enough that the retro might be a false positive
-    but not high enough to skip outright. The caller (``run``) records
-    this verdict by adding ``retro:tentative`` to the issue labels so
-    operators see the uncertainty at triage time.
-
-    Sample-size gating matches :func:`should_skip_by_prior` so the
-    same population is considered for both decisions.
-    """
-    rate, name, _sample = _max_active_fp(signals, prior, min_sample_size)
-    if name is None:
-        return False
-    return tentative_threshold <= rate < skip_threshold
-
-
-def build_retro_title(pr: MergedPR) -> str:
-    """``chore(auto-retro): review PR #<N> repair loops``.
-
-    The title is a fixed ``chore(auto-retro)`` Conventional Commit token:
-    ``chore`` is an allowed type in ``.github/title-policy.toml`` and
-    ``auto-retro`` is the canonical scope, so the auto-opened retro title
-    is policy-conformant. ``chore`` is deliberately neutral: a retro issue
-    is a triage signal, not a directly actionable fix, so the prefix must
-    not read as ``fix`` and invite a direct implementation PR off an
-    un-triaged retro (Refs #1069). The source PR's own ``type(scope)`` is
-    not encoded in the title; it remains recorded in the issue body's Facts
-    section.
-    """
-    return f"chore(auto-retro): review PR #{pr.number} repair loops"
-
-
-# Exact canonical retro-title shape produced by :func:`build_retro_title`.
-# Anchored and fully literal so the match is the *single* title an agent is
-# permitted to mint under the otherwise-reserved ``auto-retro`` scope (the
-# pre-merge handoff survey opens this retro in-session when a problem is
-# found -- Refs #1581 / D1). Kept deliberately narrow: only the colon form
-# ``chore(auto-retro): review PR #<N> repair loops`` matches, so every other
-# ``auto-retro``-scoped title stays denied by gate_reserved_retro_scope, and
-# CI dedup (:func:`find_existing_retro`) still recognises the in-session retro
-# to suppress the post-merge duplicate. The alignment with build_retro_title
-# is asserted by tests so the predicate can never drift from the producer.
-_CANONICAL_RETRO_TITLE_RE = re.compile(
-    r"^chore\(auto-retro\): review PR #\d+ repair loops$"
-)
-
-
-def is_canonical_handoff_retro_title(title: str) -> bool:
-    """True iff *title* is exactly the canonical auto-retro retro title.
-
-    The match is exact (anchored, literal) against the shape
-    :func:`build_retro_title` emits, so it is the one permitted exception to
-    the reserved-``auto-retro``-scope deny in
-    :mod:`gate_reserved_retro_scope`. Surrounding whitespace is tolerated;
-    the legacy no-colon prefix and any other ``auto-retro`` title do NOT
-    match. Refs #1581.
-    """
-    return bool(_CANONICAL_RETRO_TITLE_RE.fullmatch(title.strip()))
-
-
-# check_run conclusion values that count as a repair signal. Excludes
-# success / neutral / skipped (no repair to record).
-_CHECK_RUN_FAIL_CONCLUSIONS: frozenset[str] = frozenset(
-    {"failure", "timed_out", "cancelled", "action_required"}
-)
-
-# Bound the rendered Repair history table: emit at most this many failed
-# check_run rows, then a single overflow row summarising the remainder.
-# Keeps the retro issue body well under GitHub's 65,536-char limit even
-# with a CI explosion. Refs issue #381.
-_CHECK_RUN_DISPLAY_CAP: int = 20
-
-# Per-row cap on the truncated annotation summary string, so a verbose
-# annotation message cannot inflate the retro body unbounded. Refs #381.
-_ANNOTATION_SUMMARY_MAX: int = 200
-
-# Annotations fetched per failed check_run. Small ceiling so the
-# auto-retro orchestrator stays well within GitHub REST rate limits even
-# on a CI fanout; we only need to land on the first ``failure``-level
-# entry. Refs #381.
-_ANNOTATION_FETCH_LIMIT: int = 5
-
-
-def _escape_table_cell(text: str) -> str:
-    """Escape a string for safe placement inside one markdown-table cell.
-
-    Replaces ``|`` with ``\\|`` (so a commit subject containing a pipe
-    does not split the row) and collapses any embedded newline or
-    carriage return to a single space (so a multi-line value does not
-    break out of the cell).
-    """
-    return text.replace("|", "\\|").replace("\r", " ").replace("\n", " ")
-
-
-def _repair_history_rows(
-    check_runs: list[dict[str, Any]] | None,
-    commit_subjects: list[str],
-    pr_commit_count: int,
-    verification_pairs: list[VerificationPair] | None = None,
-    pr_type: str = "",
-) -> list[RepairHistoryRow]:
-    """Return generated Repair history rows before markdown rendering.
-
-    Walks deterministic signal classes in fixed order: CI failures,
-    fix-up commits (canonical fix exempted on fix-typed PRs as a
-    distinct ``Fix commit`` row -- see #413), merge-from-main commits,
-    multi-commit summary, and failed Verification pairs. Emits a
-    sentinel row only when all classes produced zero rows. The
-    Post-merge checklist class was removed in #418 because its items
-    are unchecked at merge time by design; deferred re-scan is tracked
-    in #421.
-
-    When ``pr_type == "fix"``, the first non-merge-from-main commit
-    subject that itself starts with ``fix(`` is rendered as a
-    ``Fix commit`` row instead of ``Iteration commit``: it is the
-    canonical fix the PR was opened to land, not evidence of an earlier
-    silent failure. ``fixup!`` and ``squash!`` subjects remain
-    unconditional iteration markers regardless of PR type because they
-    are explicit iteration prefixes by convention.
-
-    Cells are run through :func:`_escape_table_cell` so commit subjects
-    containing ``|`` cannot break the table. The shape mirrors the
-    canonical hand-rewrites of #305, #307, #317, #333, #334, #336 on
-    2026-05-25. Refs issue #343.
-    """
-    rows: list[RepairHistoryRow] = []
-
-    rendered_failed = 0
-    total_failed = 0
-    for entry in check_runs or []:
-        conclusion = str(entry.get("conclusion") or "")
-        if conclusion not in _CHECK_RUN_FAIL_CONCLUSIONS:
-            continue
-        total_failed += 1
-        if rendered_failed >= _CHECK_RUN_DISPLAY_CAP:
-            continue
-        rendered_failed += 1
-        name = str(entry.get("name") or "(unnamed)")
-        completed = str(entry.get("completed_at") or "(no completed_at)")
-        html_url = str(entry.get("html_url") or "").strip()
-        summary_raw = entry.get("_annotation_summary")
-        summary = str(summary_raw).strip() if summary_raw else ""
-        parts = [f"conclusion={conclusion} at {completed}"]
-        if html_url:
-            parts.append(f"logs: {html_url}")
-        if summary:
-            parts.append(f"annotation: {summary}")
-        detail = "; ".join(parts) or _REPAIR_CAUSE_FILL
-        rows.append(
-            RepairHistoryRow(
-                f"CI fail: {name}",
-                detail,
-                next_action=_REPAIR_NEXT_ACTION_FILL,
-            )
-        )
-
-    overflow = total_failed - _CHECK_RUN_DISPLAY_CAP
-    if overflow > 0:
-        rows.append(
-            RepairHistoryRow(
-                f"CI fail: + {overflow} more failures",
-                "see PR check-run list (truncated)",
-                next_action=_REPAIR_NEXT_ACTION_FILL,
-            )
-        )
-
-    # Issue #413: on a fix-typed PR the first non-merge-from-main commit
-    # that itself starts with `fix(` is the canonical fix the PR landed,
-    # not an iteration on an earlier silent failure. Compute its index
-    # once so the row-emit loop below can split it out as a `Fix commit`
-    # row. Reuses _MERGE_FROM_MAIN_PREFIXES so the "non-merge" definition
-    # stays consistent with _count_merge_from_main and the policy-artifact
-    # rows below.
-    canonical_fix_index: int | None = None
-    if pr_type == "fix":
-        for i, subject in enumerate(commit_subjects):
-            stripped_i = subject.strip()
-            if any(
-                stripped_i.startswith(prefix)
-                for prefix in _MERGE_FROM_MAIN_PREFIXES
-            ):
-                continue
-            if stripped_i.startswith("fix("):
-                canonical_fix_index = i
-            break
-
-    for i, subject in enumerate(commit_subjects):
-        stripped = subject.strip()
-        if i == canonical_fix_index:
-            rows.append(
-                RepairHistoryRow(
-                    "Fix commit",
-                    f"{_POLICY_ARTIFACT_MARKER} `{subject}` -- "
-                    "canonical fix commit on fix-typed PR",
-                    policy_artifact=True,
-                    next_action="--",
-                )
-            )
-            continue
-        if (
-            stripped.startswith("fix(")
-            or stripped.startswith("fixup!")
-            or stripped.startswith("squash!")
-        ):
-            rows.append(
-                RepairHistoryRow(
-                    "Iteration commit",
-                    f"{_POLICY_ARTIFACT_MARKER} `{subject}` -- "
-                    "signals an earlier silent failure",
-                    policy_artifact=True,
-                    next_action="--",
-                )
-            )
-
-    for subject in commit_subjects:
-        stripped = subject.strip()
-        if any(
-            stripped.startswith(prefix) for prefix in _MERGE_FROM_MAIN_PREFIXES
-        ):
-            rows.append(
-                RepairHistoryRow(
-                    "Merge from main",
-                    f"{_POLICY_ARTIFACT_MARKER} `{subject}` -- "
-                    "rebase debt before merge",
-                    policy_artifact=True,
-                    next_action="--",
-                )
-            )
-
-    # Revert commits are an anomaly *hint*, not a standalone trigger (refs
-    # #1287). compute_repair_signals subtracts them from multi_commit_pr, so a
-    # revert-only PR does not fire the gate; this row keeps the revert visible
-    # for co-fire correlation. Marked policy-artifact (and not "Iteration
-    # commit") so _has_only_exempt_policy_artifact_rows skips a revert-only PR
-    # while any genuine co-firing signal still opens the retro. Revert subjects
-    # never start with fix(/fixup!/squash!, so the loops above leave them
-    # untouched.
-    for subject in commit_subjects:
-        if _is_revert_subject(subject):
-            rows.append(
-                RepairHistoryRow(
-                    "Revert commit",
-                    f"{_POLICY_ARTIFACT_MARKER} `{subject}` -- rollback; "
-                    "confirm via co-firing CI / review / verification signal",
-                    policy_artifact=True,
-                    next_action="--",
-                )
-            )
-
-    if pr_commit_count > 1:
-        rows.append(
-            RepairHistoryRow(
-                "Multi-commit PR",
-                f"{_POLICY_ARTIFACT_MARKER} {pr_commit_count} "
-                "commits squash-merged",
-                policy_artifact=True,
-                next_action="--",
-            )
-        )
-
-    # Verification-prose rows are non-actionable anomaly hints, not a
-    # standalone trigger (refs #1236). `_result_is_passing` runs over
-    # free-form `## Verification` prose (untrusted per CLAUDE.md section 2)
-    # and cannot reliably distinguish a real repair from an intended
-    # negative-test / before-state demo or from passing prose it fails to
-    # recognize. The row is kept for co-fire correlation when a deterministic
-    # signal (CI failure, inline review, iteration commit) opens the retro,
-    # but marked policy-artifact so `_has_only_exempt_policy_artifact_rows`
-    # skips a verification-only PR -- mirroring the `Revert commit` row.
-    for pair in verification_pairs or []:
-        if pair.passed:
-            continue
-        rows.append(
-            RepairHistoryRow(
-                f"Verification fail: {pair.command}",
-                f"{_POLICY_ARTIFACT_MARKER} observed: {pair.result} -- "
-                "PR-body prose heuristic; confirm via co-firing CI / review / "
-                "iteration signal before classifying",
-                policy_artifact=True,
-                next_action="--",
-            )
-        )
-
-    # Post-merge subsection rows were removed in #418: the items are
-    # checked AFTER the merge by design, so they are always unchecked at
-    # the moment auto-retro runs. Deferred re-scan tracked in #421.
-    return rows
-
-
-def _has_only_exempt_policy_artifact_rows(rows: list[RepairHistoryRow]) -> bool:
-    """True when rows contain only low-noise policy artifacts.
-
-    Iteration commits keep their marker for operator taxonomy purposes,
-    but they still represent a repeated repair commit and remain
-    actionable for retro creation. Refs #594.
-    """
-    return bool(rows) and all(
-        row.policy_artifact and row.repair != "Iteration commit" for row in rows
-    )
-
-
-def _build_repair_history_table(
-    check_runs: list[dict[str, Any]] | None,
-    commit_subjects: list[str],
-    pr_commit_count: int,
-    verification_pairs: list[VerificationPair] | None = None,
-    pr_type: str = "",
-) -> str:
-    """Render the Repair history markdown table (header + rows, no surrounds)."""
-    rows = _repair_history_rows(
-        check_runs,
-        commit_subjects,
-        pr_commit_count,
-        verification_pairs,
-        pr_type,
-    )
-
-    header = (
-        "| # | Repair | Cause | Next action |\n"
-        "|---|--------|-------|-------------|\n"
-    )
-    if not rows:
-        return (
-            header
-            + "| -- | (no automated repair signals detected) "
-            "| positive-control: no repair taxonomy classification requested "
-            "| -- |\n"
-        )
-    body_rows = "".join(
-        f"| {idx} | {_escape_table_cell(row.repair)} "
-        f"| {_escape_table_cell(row.detail)} "
-        f"| {_escape_table_cell(row.next_action)} |\n"
-        for idx, row in enumerate(rows, start=1)
-    )
-    footnote = ""
-    if any(row.policy_artifact for row in rows):
-        footnote = (
-            "\n"
-            f"_{_POLICY_ARTIFACT_MARKER} rows are forced by the squash + "
-            "linear-history + strict-status-checks policy in "
-            "`.github/rulesets/main.json`. They are exempt from the "
-            "CLAUDE.md section 3 classification taxonomy and may be "
-            "skipped when filling the classification column._\n"
-        )
-    return header + body_rows + footnote
-
-
-def build_retro_body(
-    pr: MergedPR,
-    commit_subjects: list[str],
-    check_runs: list[dict[str, Any]] | None = None,
-    verification_pairs: list[VerificationPair] | None = None,
-    signals: dict[str, bool] | None = None,
-) -> str:
-    """Return the markdown body. Contains every section in :data:`_REQUIRED_SECTIONS`.
-
-    ``check_runs`` defaults to ``None`` so legacy two-arg callers keep
-    working; in that case the Repair history table falls back to
-    commit-subject signals only (and emits the sentinel row when those
-    are also empty).
-
-    ``signals`` is the :func:`compute_repair_signals` output for the
-    source PR; when provided, a ``- Signals fired:`` line is added to
-    the Facts section so future :func:`compute_prior_from_labels`
-    invocations can reconstruct the signal set deterministically
-    without re-fetching the source PR. When omitted (legacy callers),
-    the line is rendered as ``- Signals fired: (none)`` -- contributing
-    zero observations to the prior, which is the safe degradation. Refs #582.
-    """
-    type_scope = extract_type_scope(pr.title)
-    # Bare type (scope stripped) drives the canonical-fix exemption in
-    # _build_repair_history_table.
-    pr_type = type_scope.split("(", 1)[0] if type_scope else ""
-    fallback_note = ""
-    if not type_scope:
-        fallback_note = (
-            "\n- Note: source PR title did not parse as a Conventional "
-            "Commit-style `type(scope): subject`; the source type is "
-            "recorded as empty for repair-history classification.\n"
-        )
-    layer_str = (
-        ", ".join(pr.layer_labels) if pr.layer_labels else "(none on source PR)"
-    )
-    commits_block = (
-        "\n".join(f"  - {subj}" for subj in commit_subjects)
-        if commit_subjects
-        else "  - (no commit subjects fetched)"
-    )
-    repair_table = _build_repair_history_table(
-        check_runs,
-        commit_subjects,
-        pr.commits,
-        verification_pairs,
-        pr_type=pr_type,
-    )
-    # Idempotent date stamp: derive from pr.merged_at (already an ISO
-    # 8601 string from the event payload) rather than datetime.now() so
-    # the body is byte-identical on re-run of the same event.
-    triage_date = pr.merged_at[:10] if pr.merged_at else "YYYY-MM-DD"
-    positive_control = "(no automated repair signals detected)" in repair_table
-    proposed_work_tail = (
-        "\n"
-        "<!-- operator-fill:remaining-steps -->\n"
-        "2. Classification -- (operator) tag each repair above as one of: "
-        "`missing deterministic gate` / `unclear agent instruction` / "
-        "`external or human decision that cannot be automated`.\n"
-        "3. Earliest prevention point -- (operator) per repair, name the "
-        "deterministic gate that should have caught it (workflow, hook, "
-        "ruleset, label, preflight).\n"
-        "4. No-repair reproduction path -- (operator) numbered steps the next "
-        "similar PR should follow to land in one shot.\n"
-        "5. Follow-up issues -- (operator) list deferred gates as "
-        "`- [ ] type(scope): TITLE -- RATIONALE` or write `(none)`.\n"
-        "<!-- /operator-fill:remaining-steps -->\n"
-    )
-    verification_block = (
-        "- Every repair in the table has a classification from the "
-        "section 3 taxonomy.\n"
-        "- Every non-artifact repair row has a non-empty Cause and Next "
-        "action cell (no '(fill: ...)' sentinel remains).\n"
-        "- Every repair has a named earliest prevention point.\n"
-        "- The no-repair reproduction path matches what would happen if "
-        "the deterministic gates from this retrospective were in place.\n"
-        "- The `## Follow-up issues` section (if any) is machine-parseable "
-        "per the bullet convention above.\n"
-    )
-    acceptance_block = (
-        "- [ ] Repair history table complete.\n"
-        "- [ ] Every non-artifact repair row has Cause and Next action "
-        "filled.\n"
-        "- [ ] Each repair classified with the section 3 taxonomy.\n"
-        "- [ ] Each repair has an earliest prevention point.\n"
-        "- [ ] No-repair reproduction path stated.\n"
-        "- [ ] `## Follow-up issues` filed (or explicitly stated `(none)`).\n"
-    )
-    if positive_control:
-        proposed_work_tail = (
-            "\n"
-            "2. Positive-control outcome -- no automated repair signals were "
-            "detected, so no repair taxonomy classification is requested.\n"
-        )
-        verification_block = (
-            "- The repair history table is explicitly labelled as a "
-            "positive-control no-signal outcome.\n"
-            "- No operator repair taxonomy classification is requested.\n"
-        )
-        acceptance_block = (
-            "- [ ] Positive-control no-signal outcome recorded.\n"
-            "- [ ] No repair taxonomy classification requested.\n"
-        )
-    return (
-        "## Scope\n"
-        "\n"
-        f"Retrospective for merged PR #{pr.number} (`{pr.title}`). "
-        "Review repair-free merge reproducibility per CLAUDE.md section 3: "
-        "list every repair required between PR open and merge; identify the "
-        "earliest deterministic gate that should have prevented each repair; "
-        "and state how the next run will reproduce the no-repair path.\n"
-        "\n"
-        "## Facts\n"
-        "\n"
-        f"- Source PR: #{pr.number} -- {pr.title}\n"
-        f"- Source PR URL: {pr.html_url}\n"
-        f"- Merged at (UTC): {pr.merged_at}\n"
-        f"- Merged by: {pr.merged_by_login or '(unknown)'}\n"
-        f"- Source PR author: {pr.user_login or '(unknown)'}\n"
-        f"- Layer labels inherited from source PR: {layer_str}\n"
-        f"{render_signals_fired_line(signals or {})}\n"
-        "- Commit subjects in PR (repair-history candidates):\n"
-        f"{commits_block}\n"
-        f"{fallback_note}"
-        "\n"
-        "## Proposed work\n"
-        "\n"
-        "<!-- auto-filled:repair-history -->\n"
-        "1. Repair history -- the table below is pre-filled from "
-        "check_runs + commit subjects. Fill the Next action cell of every "
-        "non-artifact row; edit Cause only to correct or add missed "
-        "repairs.\n"
-        "\n"
-        f"{repair_table}"
-        "<!-- /auto-filled:repair-history -->\n"
-        f"{proposed_work_tail}"
-        "\n"
-        "## Verification\n"
-        "\n"
-        f"{verification_block}"
-        "\n"
-        "## Acceptance criteria\n"
-        "\n"
-        f"{acceptance_block}"
-        "\n"
-        "## Parent\n"
-        "\n"
-        "Refs CLAUDE.md section 3 (\"After each merge, auto-open a "
-        f"retrospective issue\"). Source PR: #{pr.number}.\n"
-        "\n"
-        "_Opened automatically by `.github/workflows/post-merge.yml`. "
-        f"Proposed work pre-filled by retro triage {triage_date} "
-        "(auto-filled rows: check_runs + commit subjects; operator-filled "
-        "rows: classification, prevention point, no-repair path, "
-        "follow-ups)._\n"
-    )
-
-
-def verify_retro_repair_completeness(body: str) -> list[str]:
-    """Return ``::error::`` strings for unfilled Repair history rows.
-
-    Scans the ``<!-- auto-filled:repair-history -->`` block of a retro
-    issue body and flags every non-artifact data row whose Cause cell
-    (column 3) or Next action cell (column 4) is empty or still carries
-    a ``(fill: ...)`` sentinel. Pure function consumed by the
-    ``verify-retro-completeness`` CLI gate.
-
-    Fail-safe by construction:
-
-    - When the auto-filled block is absent the body is not a generated
-      retro, so ``[]`` is returned (nothing to enforce).
-    - Header and separator rows are skipped.
-    - Rows carrying the ``[policy-artifact]`` marker are exempt (forced
-      by repository merge policy, not actionable repairs), as is the
-      positive-control no-signal sentinel row.
-
-    A row with fewer than four cells is malformed and itself reported as
-    an ``::error::``. Returns ``[]`` when the table is well-formed.
-    """
-    open_idx = body.find(_AUTO_FILLED_OPEN)
-    close_idx = body.find(_AUTO_FILLED_CLOSE)
-    if open_idx == -1 or close_idx == -1 or close_idx < open_idx:
-        return []
-    block = body[open_idx:close_idx]
-    errors: list[str] = []
-    for line in block.splitlines():
-        stripped = line.strip()
-        if not (stripped.startswith("|") and stripped.endswith("|")):
-            continue
-        # Header row.
-        if "# | Repair" in stripped:
-            continue
-        # Separator row: only dashes / pipes / spaces / colons.
-        if set(stripped) <= set("|-: "):
-            continue
-        # Exemptions: policy-artifact rows and the positive-control row.
-        if _POLICY_ARTIFACT_MARKER in stripped:
-            continue
-        if "(no automated repair signals detected)" in stripped:
-            continue
-        # Split into cells: drop the leading/trailing pipe, then split on
-        # UNescaped pipes only. _escape_table_cell renders an in-cell pipe
-        # (e.g. a verification command like `grep x | wc -l`) as ``\|``;
-        # a naive split("|") would over-split that row and shift the Cause
-        # / Next action columns, silently passing an unfilled retro. The
-        # negative lookbehind keeps escaped pipes inside their cell, and we
-        # unescape them back for the emptiness / sentinel checks.
-        cells = [
-            cell.strip().replace("\\|", "|")
-            for cell in re.split(r"(?<!\\)\|", stripped[1:-1])
-        ]
-        repair_name = cells[1] if len(cells) > 1 else "(unknown)"
-        if len(cells) < 4:
-            errors.append(
-                f"::error::repair row '{repair_name}' is malformed: "
-                f"expected 4 cells (# | Repair | Cause | Next action), "
-                f"got {len(cells)}."
-            )
-            continue
-        cause = cells[2]
-        next_action = cells[3]
-        if not cause or "(fill:" in cause:
-            errors.append(
-                f"::error::repair row '{repair_name}' has an empty or "
-                f"unfilled Cause cell (a '(fill: ...)' sentinel remains)."
-            )
-        if not next_action or "(fill:" in next_action:
-            errors.append(
-                f"::error::repair row '{repair_name}' has an empty or "
-                f"unfilled Next action cell (a '(fill: ...)' sentinel "
-                f"remains)."
-            )
-    return errors
-
-
-def find_target_retro_from_refs(
-    pr: MergedPR,
-    referenced_titles: dict[int, str],
-) -> int | None:
-    """Return the retro issue number a fix-typed PR is amending, or ``None``.
-
-    Used by :func:`run` to decide whether a freshly merged ``fix(...)``
-    PR should append to an existing retro issue rather than open a new
-    one. The match requires both:
-
-    - the PR title starts with ``fix(`` (Conventional Commit ``fix``
-      type), AND
-    - the PR body has at least one line-anchored ``Refs|Closes|Fixes|
-      Resolves #N`` whose target issue title is a retro issue title (see
-      :func:`is_retro_issue_title`).
-
-    The first match wins so the body order determines priority. Pure
-    function: callers supply ``referenced_titles`` via :func:`fetch_issue_titles`.
-    """
-    if not pr.title.lstrip().lower().startswith("fix("):
-        return None
-    body_without_comments = strip_html_comments(pr.body or "")
-    refs = extract_refs(body_without_comments)
-    for number in refs:
-        title = referenced_titles.get(number)
-        if title is None:
-            continue
-        if is_retro_issue_title(title):
-            return number
-    return None
-
-
-def render_appended_row(pr: MergedPR) -> tuple[str, str, str]:
-    """Render the (repair, cause, next_action) cells for a follow-up fix row."""
-    return (
-        _escape_table_cell(f"Follow-up fix PR: #{pr.number}"),
-        _escape_table_cell(f"`{pr.title}` merged at {pr.merged_at}"),
-        _escape_table_cell(_REPAIR_NEXT_ACTION_FILL),
-    )
-
-
-def _next_table_index(table_text: str) -> int:
-    """Return the next available row index for the auto-filled table.
-
-    Scans existing ``| N | ... |`` rows and returns ``max(N) + 1``,
-    falling back to 1 when no numbered rows exist.
-    """
-    pattern = re.compile(r"^\|\s*(\d+)\s*\|", re.MULTILINE)
-    indexes = [int(m.group(1)) for m in pattern.finditer(table_text)]
-    return max(indexes) + 1 if indexes else 1
-
-
-def _insert_appended_row(
-    body: str, row: tuple[str, str, str], pr_number: int
-) -> tuple[str, bool]:
-    """Append a row to the retro body's auto-filled block.
-
-    Returns ``(new_body, changed)``. ``changed`` is False when:
-    - the auto-filled markers are missing (caller should fail-soft), or
-    - a row mentioning ``#<pr_number>`` is already present (idempotent).
-
-    The row is inserted as a new line just before the
-    ``<!-- /auto-filled:repair-history -->`` close marker.
-    """
-    open_idx = body.find(_AUTO_FILLED_OPEN)
-    close_idx = body.find(_AUTO_FILLED_CLOSE)
-    if open_idx == -1 or close_idx == -1 or close_idx < open_idx:
-        return body, False
-    block = body[open_idx:close_idx]
-    needle = re.compile(rf"#{pr_number}(?!\d)")
-    if needle.search(block):
-        return body, False
-    next_idx = _next_table_index(block)
-    new_line = f"| {next_idx} | {row[0]} | {row[1]} | {row[2]} |\n"
-    new_body = body[:close_idx] + new_line + body[close_idx:]
-    return new_body, True
-
-
-def find_existing_retro(
-    search_items: list[dict[str, Any]], pr_number: int
-) -> int | None:
-    """Return the matching retro issue number from search results, or None.
-
-    Match heuristic: title is a retro issue title (see
-    :func:`is_retro_issue_title`) AND contains ``PR #<N>`` not followed by
-    another digit. The trailing ``(?!\\d)`` lookahead prevents PR-number
-    prefix collisions (e.g. a lookup for #249 must not match a retro for
-    #2490). The prefix guard avoids matching an unrelated issue that
-    happens to mention the same PR number.
-    """
-    needle = re.compile(rf"PR #{pr_number}(?!\d)")
-    for item in search_items:
-        title = item.get("title") or ""
-        if not is_retro_issue_title(title):
-            continue
-        if needle.search(title):
-            return item.get("number")
-    return None
-
-
-_ACCEPTANCE_CHECKBOX_RE = re.compile(
-    r"^[ \t]*-[ \t]+\[([ xX])\][ \t]+", re.MULTILINE
-)
-
-
-def is_retro_untouched(body: str, comments: list[dict[str, Any]]) -> bool:
-    """Return True when the retro body and comments show no operator engagement.
-
-    Sentinel signal for issue #414. "Untouched" means BOTH:
-
-    * every acceptance-criteria checkbox in the body is still ``[ ]``
-      (no operator marked any progress); AND
-    * the issue has no comments from logins outside
-      :data:`_SENTINEL_IGNORED_COMMENT_LOGINS` (no operator wrote a
-      triage note instead of editing the body).
-
-    The acceptance-criteria slice is read via :func:`_slice_section`
-    rather than scanning the whole body so that operator-fill rows
-    elsewhere (e.g. the Classification table under the auto-fill
-    block) do not falsely satisfy the checkbox check.
-
-    Returns False whenever the section is missing (defensive: treat
-    unparseable bodies as touched so the sentinel never auto-closes
-    something it cannot read).
-    """
-    section = _slice_section(body or "", "Acceptance criteria")
-    if not section.strip():
-        return False
-    checkboxes = _ACCEPTANCE_CHECKBOX_RE.findall(section)
-    if not checkboxes:
-        return False
-    if any(state.lower() == "x" for state in checkboxes):
-        return False
-    for comment in comments or []:
-        user = comment.get("user") or {}
-        login = user.get("login") or ""
-        if login and login not in _SENTINEL_IGNORED_COMMENT_LOGINS:
-            return False
-    return True
-
-
-def is_retro_age_exceeded(
-    created_at: str, now_iso: str, days: int
-) -> bool:
-    """Return True when ``now_iso - created_at`` exceeds ``days``.
-
-    Both arguments are ISO 8601 strings (``YYYY-MM-DDTHH:MM:SSZ``).
-    Returns False on any parse failure so the sentinel never closes a
-    retro whose timestamps it cannot read (fail-safe per CLAUDE.md
-    section 4).
-    """
-    try:
-        created = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
-        now = datetime.fromisoformat(now_iso.replace("Z", "+00:00"))
-    except (ValueError, AttributeError):
-        return False
-    if created.tzinfo is None:
-        created = created.replace(tzinfo=UTC)
-    if now.tzinfo is None:
-        now = now.replace(tzinfo=UTC)
-    delta = now - created
-    return delta.days > days
-
-
-def issue_labels(
-    layer_labels: tuple[str, ...], *, tentative: bool = False
-) -> list[str]:
-    """Return the label list for the retro issue.
-
-    Always ``type:docs`` + ``layer:meta``; appends any additional
-    ``layer:*`` labels inherited from the source PR. Deduplicates while
-    preserving order. When ``tentative`` is True, appends
-    ``retro:tentative`` so operators see at triage time that the
-    label-derived prior placed the retro in the uncertain band
-    (refs #582).
-    """
-    labels = ["type:docs", "layer:meta"]
-    for lbl in layer_labels:
-        if lbl and lbl not in labels:
-            labels.append(lbl)
-    if tentative and RETRO_TENTATIVE not in labels:
-        labels.append(RETRO_TENTATIVE)
-    return labels
 
 
 # ---------------------------------------------------------------------------
@@ -2554,13 +736,10 @@ _SENTINEL_CLOSE_MARKER = "<!-- auto-retro-sentinel:closed -->"
 # in issue #414.
 _DEFAULT_SENTINEL_DAYS: int = 14
 
-# Logins whose comments do NOT count as operator engagement for the
-# sentinel "untouched" check. Extends _TRUSTED_BOT_LOGINS with the
-# repository's own Actions identity, which is the author of the retro
-# issue itself; a self-comment from it would not signal triage.
-_SENTINEL_IGNORED_COMMENT_LOGINS: frozenset[str] = (
-    _TRUSTED_BOT_LOGINS | frozenset({"github-actions[bot]"})
-)
+# ``_SENTINEL_IGNORED_COMMENT_LOGINS`` is defined in ``_auto_retro_parse``
+# (consumed by both the moved ``is_retro_untouched`` predicate and the
+# sentinel orchestration retained below) and re-exported at the top of this
+# module.
 
 # Per-page cap for the sentinel's retro search. Each cron tick processes
 # at most this many open retros; overflow rolls into the next tick. A

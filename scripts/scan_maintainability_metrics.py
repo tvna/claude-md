@@ -41,8 +41,10 @@ WARN_MODULE_LINES = int(MAX_MODULE_LINES * WARN_RATIO)
 # spreading while the oversized module is split in a later scoped PR.
 DEFERRED_OVERSIZE_MODULES: dict[Path, str] = {
     Path("scripts/auto_retro.py"): (
-        "legacy retrospective aggregator; split into parser, GitHub IO, "
-        "and renderer modules in a follow-up PR before tightening the budget"
+        "pure parser/triage/renderer layers extracted into _auto_retro_parse.py, "
+        "_auto_retro_triage.py, and _auto_retro_render.py (refs #1725); the "
+        "GitHub IO fetchers and the run/sentinel/post-merge-rescan orchestration "
+        "remain here, so the module stays over budget and deferred"
     ),
     Path("scripts/threat_intel_triage.py"): (
         "legacy multi-source intelligence gate; split OSV, KEV, NVD, EPSS, "
