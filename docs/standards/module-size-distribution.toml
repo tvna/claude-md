@@ -8,15 +8,15 @@ max_module_lines = 800
 warn_module_lines = 640
 
 [summary]
-total_modules = 170
+total_modules = 171
 in_warn_band = 7
-exactly_at_limit = 2
+exactly_at_limit = 1
 over_budget = 2
 
 # Module counts by inclusive physical-line range.
 [histogram]
 "1-160" = 55
-"161-320" = 78
+"161-320" = 79
 "321-480" = 19
 "481-640" = 9
 "641-800" = 7

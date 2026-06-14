@@ -44,14 +44,23 @@ from _github_api import apply_call as github_apply_call
 # module within its size budget (#1488); re-imported so sdr.* names stay stable
 # for callers/tests.
 from _security_drift_families import (
-    FAMILY_ISSUE_SPEC,
-    ISSUE_LABELS,
+    FAMILY_ISSUE_SPEC,  # noqa: F401  re-exported for callers/tests
+    ISSUE_LABELS,  # noqa: F401  re-exported for callers/tests
     STATUS_COVERED,
     STATUS_DRIFT,
     STATUS_ERROR,
     STATUS_PENDING,
     TARGET_FAMILIES,
     FamilyRow,
+)
+
+# Rolling per-family drift-issue reconcile IO split out to keep this module within
+# its size budget (#1726); re-imported so sdr.* names stay stable for callers/tests.
+from _security_drift_issues import (  # noqa: F401  re-exported for callers/tests
+    is_family_issue_title,
+    reconcile_family_issues,
+    render_family_issue_body,
+    render_family_issue_title,
 )
 
 API_ROOT = "https://api.github.com"
@@ -430,34 +439,8 @@ def target_families_with_drift(families: list[FamilyRow]) -> list[str]:
     ]
 
 
-def render_family_issue_title(family: str, run_date: str) -> str:
-    spec = FAMILY_ISSUE_SPEC[family]
-    return f"fix({spec['scope']}): scheduled drift detected ({run_date})"
-
-
-def render_family_issue_body(family: str, *, run_url: str, run_date: str) -> str:
-    spec = FAMILY_ISSUE_SPEC[family]
-    return (
-        f"Parent: #{DEFAULT_TRACKING_ISSUE}\n"
-        "\n"
-        f"Scheduled drift detected for the `{family}` security control family by "
-        "the weekly `security-control-drift` job in "
-        "`.github/workflows/weekly-maintenance.yml`.\n"
-        "\n"
-        f"- Run: {run_url}\n"
-        f"- Detected at: {run_date}\n"
-        f"- Detector: `{spec['detector']}`\n"
-        f"- Evidence: `{spec['evidence']}`\n"
-        "\n"
-        "## Remediation\n"
-        "\n"
-        f"{spec['remediation']}\n"
-        "\n"
-        "Auto-filed to meet the `detect-and-file` floor "
-        "(`.github/security-control-floor.toml`, "
-        "`docs/prd/security-control-inventory.md`). The cross-family status is "
-        f"tracked in the rolling comment on #{DEFAULT_TRACKING_ISSUE}.\n"
-    )
+# render_family_issue_title / is_family_issue_title / render_family_issue_body now
+# live in _security_drift_issues (#1726) and are re-imported above.
 
 
 # ---------------------------------------------------------------------------
@@ -577,64 +560,34 @@ def _cmd_aggregate(args: argparse.Namespace) -> int:
 
 
 def _cmd_file_family_issues(args: argparse.Namespace) -> int:
-    """File one issue per drifting target family (idempotent per weekly run).
+    """Reconcile ONE rolling issue per target family (create / dedupe / close).
 
-    ``--families`` is the comma-separated list emitted as the
-    ``drift_families`` output of the ``aggregate`` subcommand. Each name must
-    be in :data:`TARGET_FAMILIES`; an unexpected name fails loud rather than
-    silently filing a mislabelled issue. Honours ``--dry-run``.
+    Despite the historical subcommand name, this no longer floods a fresh issue
+    per run (#1726): it delegates to
+    :func:`_security_drift_issues.reconcile_family_issues`. ``--families`` is the
+    comma-separated ``drift_families`` output of ``aggregate`` -- the families
+    currently in drift. Each name must be in :data:`TARGET_FAMILIES`; an unexpected
+    name fails loud. Honours ``--dry-run`` (no API calls).
     """
     dry_run = parse_dry_run(args.dry_run)
     run_date = args.run_date or _utc_today()
-    families = [name.strip() for name in args.families.split(",") if name.strip()]
+    drifting = [name.strip() for name in args.families.split(",") if name.strip()]
 
-    unknown = [name for name in families if name not in TARGET_FAMILIES]
+    unknown = [name for name in drifting if name not in TARGET_FAMILIES]
     if unknown:
         raise ValueError(
             f"--families contains non-target families {unknown}; "
             f"allowed: {sorted(TARGET_FAMILIES)}"
         )
-    if not families:
-        print("No drifting families passed; nothing to file.")
-        return 0
 
-    if dry_run:
-        for family in families:
-            print(
-                f"[dry-run] Would file issue for {family!r}: "
-                f"{render_family_issue_title(family, run_date)!r}"
-            )
-        return 0
-
-    token = os.environ.get("GH_TOKEN", "")
-    if not token:
-        print("::error::GH_TOKEN is not set.", file=sys.stderr)
-        return 1
-
-    apply = args.apply_call  # injected via tests; main() wires github_apply_call.
-    for family in families:
-        payload = {
-            "title": render_family_issue_title(family, run_date),
-            "body": render_family_issue_body(
-                family, run_url=args.run_url, run_date=run_date
-            ),
-            "labels": list(ISSUE_LABELS),
-        }
-        code, response = apply(
-            method="POST",
-            url=f"{API_ROOT}/repos/{args.repo}/issues",
-            payload=payload,
-            token=token,
-        )
-        if not 200 <= code < 300:
-            print(
-                f"::error::POST issue for {family} failed (HTTP {code}); "
-                f"body: {response[:200]}",
-                file=sys.stderr,
-            )
-            return 1
-        print(f"Filed drift issue for {family} on {args.repo}.")
-    return 0
+    return reconcile_family_issues(
+        apply=args.apply_call,  # injected via tests; main() wires github_apply_call.
+        repo=args.repo,
+        run_url=args.run_url,
+        run_date=run_date,
+        drifting=drifting,
+        dry_run=dry_run,
+    )
 
 
 def _cmd_post_comment(args: argparse.Namespace) -> int:

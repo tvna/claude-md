@@ -613,19 +613,17 @@ class TestTargetFamiliesWithDrift:
 
 
 class TestRenderFamilyIssue:
-    def test_title_uses_family_scope(self) -> None:
-        assert sdr.render_family_issue_title("labels", "2026-06-03") == (
-            "fix(labels-drift): scheduled drift detected (2026-06-03)"
+    # Renderer / reconcile behaviour lives in tests/test_security_drift_issues.py
+    # (the helpers moved to _security_drift_issues.py, #1726); the re-exported
+    # names stay reachable through ``sdr.*`` for callers.
+    def test_render_helpers_are_re_exported(self) -> None:
+        assert sdr.render_family_issue_title("labels") == (
+            "fix(labels-drift): scheduled drift detected"
         )
-
-    def test_body_is_ascii_and_has_parent_and_remediation(self) -> None:
-        body = sdr.render_family_issue_body(
-            "uv-pin-literal", run_url="https://x/runs/1", run_date="2026-06-03"
+        assert sdr.is_family_issue_title(
+            "fix(labels-drift): scheduled drift detected (2026-06-12)",
+            sdr.render_family_issue_title("labels"),
         )
-        body.encode("ascii")  # raises if any non-ASCII leaked in
-        assert "Parent: #178" in body
-        assert "## Remediation" in body
-        assert "pyproject.toml" in body
 
     def test_every_target_family_has_a_spec(self) -> None:
         for family in sdr.TARGET_FAMILIES:
@@ -660,7 +658,10 @@ class TestAggregateEmitsDriftFamilies:
 
 
 class TestCmdFileFamilyIssues:
-    def test_dry_run_does_not_call_api(self) -> None:
+    """Thin CLI wrapper concerns; reconcile behaviour lives in
+    tests/test_security_drift_issues.py (the orchestration moved there, #1726)."""
+
+    def test_dry_run_delegates_without_api(self) -> None:
         def fake_apply(**_kwargs: Any) -> tuple[int, str]:
             raise AssertionError("should not be called")
 
@@ -677,33 +678,6 @@ class TestCmdFileFamilyIssues:
         )
         assert rc == 0
 
-    def test_apply_posts_one_issue_per_family(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        calls: list[dict[str, Any]] = []
-
-        def fake_apply(**kwargs: Any) -> tuple[int, str]:
-            calls.append(kwargs)
-            return 201, "{}"
-
-        monkeypatch.setenv("GH_TOKEN", "tkn")
-        rc = sdr.main(
-            [
-                "file-family-issues",
-                "--repo", "owner/repo",
-                "--run-url", "https://x/runs/1",
-                "--run-date", "2026-06-03",
-                "--families", "labels,apm-instructions",
-                "--dry-run", "false",
-            ],
-            apply_call=fake_apply,
-        )
-        assert rc == 0
-        assert len(calls) == 2
-        assert all(c["method"] == "POST" for c in calls)
-        assert all(c["url"].endswith("/repos/owner/repo/issues") for c in calls)
-        assert calls[0]["payload"]["labels"] == list(sdr.ISSUE_LABELS)
-
     def test_unknown_family_fails_loud(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("GH_TOKEN", "tkn")
         rc = sdr.main(
@@ -718,21 +692,15 @@ class TestCmdFileFamilyIssues:
         )
         assert rc == 1
 
-    def test_missing_token_exits_one(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.delenv("GH_TOKEN", raising=False)
-        rc = sdr.main(
-            [
-                "file-family-issues",
-                "--repo", "owner/repo",
-                "--run-url", "https://x/runs/1",
-                "--families", "labels",
-                "--dry-run", "false",
-            ],
-            apply_call=lambda **_k: (201, "{}"),
-        )
-        assert rc == 1
+    def test_reconcile_delegation_creates_for_drift(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        calls: list[dict[str, Any]] = []
 
-    def test_post_failure_exits_one(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        def fake_apply(**kwargs: Any) -> tuple[int, str]:
+            calls.append(kwargs)
+            return (200, "[]") if kwargs["method"] == "GET" else (201, "{}")
+
         monkeypatch.setenv("GH_TOKEN", "tkn")
         rc = sdr.main(
             [
@@ -742,6 +710,11 @@ class TestCmdFileFamilyIssues:
                 "--families", "labels",
                 "--dry-run", "false",
             ],
-            apply_call=lambda **_k: (422, "bad"),
+            apply_call=fake_apply,
         )
-        assert rc == 1
+        assert rc == 0
+        creates = [c for c in calls if c["method"] == "POST"]
+        assert len(creates) == 1
+        assert creates[0]["payload"]["title"] == (
+            "fix(labels-drift): scheduled drift detected"
+        )

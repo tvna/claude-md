@@ -20,12 +20,23 @@ Per-family detectors keep their own gates. The `rulesets` family files via its
 own `ruleset-drift` weekly-maintenance job (SoT drift / unknown ruleset issues).
 To meet the `detect-and-file` floor (`.github/security-control-floor.toml`), the
 `security-control-drift` job also runs `security_drift_report.py
-file-family-issues` after aggregation, which auto-files **one issue per drifting
-target family** for `labels`, `apm-instructions`, and `uv-pin-literal` (the
-`drift_families` output of the aggregate step gates the step; advisory
-`uv-pin-staleness` is excluded). The aggregator itself never auto-remediates,
-and the rolling-comment path never opens an issue -- only the `file-family-issues`
-step does.
+file-family-issues` after aggregation. As of #1726 this **reconciles a single
+rolling issue per target family** (`labels`, `apm-instructions`,
+`uv-pin-literal`, `workflow-permissions`) instead of filing a fresh issue each
+run, mirroring the `ruleset-drift` reconcile pattern:
+
+- drifting + no open rolling issue -> create one (stable, date-free title);
+- drifting + open rolling issue(s) -> keep the oldest, close any extras as
+  superseded (this consolidates the legacy dated duplicates filed before #1726);
+- resolved + open rolling issue(s) -> **auto-close** them;
+- resolved + none -> stay silent.
+
+The step therefore runs unconditionally (no `drift_families != ''` gate) so a
+family that stops drifting can have its issue auto-closed without an operator.
+The aggregator itself never auto-remediates the underlying control (labels are
+still applied only via the manual `apply-labels.yml` dispatch); only the
+`file-family-issues` step manages the per-family issue lifecycle, and the
+rolling-comment path never opens an issue.
 
 ## Trigger
 
