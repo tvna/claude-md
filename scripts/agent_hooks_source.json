@@ -80,6 +80,12 @@
             "Edit(/tmp/claude-plans/**)",
             "Write(/tmp/claude-plans/**)",
             "MultiEdit(/tmp/claude-plans/**)"
+          ],
+          "deny": [
+            "Bash(git -c commit.gpgsign=false:*)",
+            "Bash(git -c commit.gpgsign=0:*)",
+            "Bash(git -c commit.gpgsign=no:*)",
+            "Bash(git -c commit.gpgsign=off:*)"
           ]
         },
         "hooks": {
@@ -361,6 +367,15 @@
                 {
                   "type": "command",
                   "command": "python3 scripts/gate_gh_cli.py"
+                }
+              ]
+            },
+            {
+              "matcher": "Bash",
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "python3 scripts/gate_unsigned_commit_bash.py"
                 }
               ]
             },
@@ -986,6 +1001,16 @@
                   "type": "command",
                   "command": "python3 scripts/gate_gh_cli.py",
                   "statusMessage": "Checking for prohibited gh CLI usage"
+                }
+              ]
+            },
+            {
+              "matcher": "^Bash$",
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "python3 scripts/gate_unsigned_commit_bash.py",
+                  "statusMessage": "Checking for commit-signing bypass"
                 }
               ]
             },

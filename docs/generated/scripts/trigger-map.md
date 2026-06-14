@@ -64,6 +64,8 @@ Detection is string-match based:
 | `gate_merge_safety.py` | agent-hook | `codex:PreToolUse` |
 | `gate_reserved_retro_scope.py` | agent-hook | `claude:PreToolUse` |
 | `gate_reserved_retro_scope.py` | agent-hook | `codex:PreToolUse` |
+| `gate_unsigned_commit_bash.py` | agent-hook | `claude:PreToolUse` |
+| `gate_unsigned_commit_bash.py` | agent-hook | `codex:PreToolUse` |
 | `gate_update_pr_branch.py` | agent-hook | `claude:PreToolUse` |
 | `gate_update_pr_branch.py` | agent-hook | `codex:PreToolUse` |
 | `gen_agent_hooks.py` | pre-commit | `gen-agent-hooks` |
