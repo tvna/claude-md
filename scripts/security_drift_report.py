@@ -31,7 +31,6 @@ Tested by `tests/test_security_drift_report.py`. Refs #180, parent #178.
 from __future__ import annotations
 
 import argparse
-import dataclasses
 import datetime as _dt
 import os
 import sys
@@ -41,36 +40,24 @@ from pathlib import Path
 import issue_anchors
 from _github_api import apply_call as github_apply_call
 
-# Static per-family catalog split out to keep this module within its size
-# budget (#1488); re-imported so sdr.* names stay stable for callers/tests.
-from _security_drift_families import FAMILY_ISSUE_SPEC, ISSUE_LABELS, TARGET_FAMILIES
+# Static per-family catalog and the shared FamilyRow shape split out to keep this
+# module within its size budget (#1488); re-imported so sdr.* names stay stable
+# for callers/tests.
+from _security_drift_families import (
+    FAMILY_ISSUE_SPEC,
+    ISSUE_LABELS,
+    STATUS_COVERED,
+    STATUS_DRIFT,
+    STATUS_ERROR,
+    STATUS_PENDING,
+    TARGET_FAMILIES,
+    FamilyRow,
+)
 
 API_ROOT = "https://api.github.com"
 # Anchor table (#1640): a renumbering is a one-file diff to the TOML.
 DEFAULT_TRACKING_ISSUE = issue_anchors.resolve("security-tracking")
 DEFAULT_MARKER = "<!-- security-control-drift-report -->"
-
-STATUS_COVERED = "covered"
-STATUS_DRIFT = "drift"
-STATUS_PENDING = "pending"
-STATUS_ERROR = "error"
-_VALID_STATUSES = frozenset({STATUS_COVERED, STATUS_DRIFT, STATUS_PENDING, STATUS_ERROR})
-
-@dataclasses.dataclass(frozen=True)
-class FamilyRow:
-    family: str
-    detector: str
-    status: str
-    evidence: str
-    action: str
-
-    def __post_init__(self) -> None:
-        if self.status not in _VALID_STATUSES:
-            raise ValueError(
-                f"FamilyRow.status must be one of {sorted(_VALID_STATUSES)}; "
-                f"got {self.status!r}"
-            )
-
 
 # ---------------------------------------------------------------------------
 # Input parsers (pure)
@@ -292,6 +279,25 @@ def classify_workflow_permissions(*, rc: int) -> FamilyRow:
     )
 
 
+def classify_owasp_asi(*, rc: int) -> FamilyRow:
+    if rc == 0:
+        status, action = STATUS_COVERED, "no action -- every ASI01-ASI10 item carries a status row"
+    elif rc == 1:
+        status, action = STATUS_DRIFT, (
+            "an ASI item lost its status row -- restore the ASI01-ASI10 mapping in "
+            "docs/prd/security-control-inventory.md (PR-time lint-scripts-static normally blocks this)"
+        )
+    else:
+        status, action = STATUS_ERROR, f"detector exit rc={rc}; investigate the owasp-asi-mapping step log"
+    return FamilyRow(
+        family="owasp-asi-mapping",
+        detector="scripts/owasp_asi_mapping.py verify",
+        status=status,
+        evidence="docs/prd/security-control-inventory.md (ASI01-ASI10 section)",
+        action=action,
+    )
+
+
 def classify_uv_pin_staleness(*, rc: int, stale_text: str) -> FamilyRow:
     evidence = "pyproject.toml [tool.uv].required-version vs astral-sh/uv latest release"
     if rc != 0:
@@ -396,21 +402,13 @@ def build_report(
         + _render_table(families)
     )
 
-    report_body = (
-        f"{marker}\n"
-        "\n"
-        f"## Security control drift report -- {run_date}\n"
-        "\n"
-        f"- Run: {run_url}\n"
-        f"- Families with drift: {families_with_drift}\n"
-        f"- Families with detector error: {families_with_error}\n"
-        "\n"
-        + _render_table(families)
-        + "\n"
+    # Body = marker + `summary` + note; built from `summary` so the two cannot diverge.
+    note = (
         "Detector workflows file their own per-family issues when drift is "
         "actionable (see `weekly-maintenance.yml`); this rolling comment is a "
         "single-glance status across all families for the parent #178 tracking issue.\n"
     )
+    report_body = f"{marker}\n\n{summary}\n{note}"
 
     return summary, report_body, families_with_drift
 
@@ -533,6 +531,7 @@ def _assemble_families(args: argparse.Namespace) -> list[FamilyRow]:
             rc=parse_int_flag(args.uv_stale_rc, "--uv-stale-rc"),
             stale_text=uv_stale_text,
         ),
+        classify_owasp_asi(rc=parse_int_flag(args.owasp_asi_verify_rc, "--owasp-asi-verify-rc")),
         pr_gate_only_row(
             family="title-policy",
             detector=".github/workflows/portable-pr-policy.yml",
@@ -740,6 +739,7 @@ def _build_parser(
     p_agg.add_argument("--workflow-permissions-drift-rc", required=True)
     p_agg.add_argument("--uv-stale-rc", required=True)
     p_agg.add_argument("--uv-stale-output", required=True)
+    p_agg.add_argument("--owasp-asi-verify-rc", required=True)
     p_agg.add_argument("--run-url", required=True)
     p_agg.add_argument("--run-date", default="")
     p_agg.add_argument(

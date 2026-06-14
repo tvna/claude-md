@@ -49,3 +49,7 @@ tier = "detect-and-file"
 [families.uv-pin-staleness]
 tier = "detect-only"
 exempt_reason = "Advisory-only upstream-staleness signal: warning-only, never gated. Bumping the pin is a human judgement call, so weekly auto-issues would be noise. Surfaced in the #178 rolling comment instead."
+
+[families.owasp-asi-mapping]
+tier = "pr-gate-only"
+exempt_reason = "Mapping completeness is enforced at PR time by scripts/owasp_asi_mapping.py verify in the lint-scripts-static job of verify-agents.yml, so an incomplete ASI01-ASI10 mapping cannot land on main. The weekly security-control-drift row re-runs the same tree-only check purely as a redundant visibility signal; a drift here is unreachable on main, so auto-filing a per-family issue would be noise. Refs #1378 / #178."
