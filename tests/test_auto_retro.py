@@ -5084,3 +5084,59 @@ class TestFetchPastRetroLabels:
         past = ar.fetch_past_retro_labels("o/r")
         assert past[0].signals == frozenset()
         assert rl.RETRO_FP in past[0].labels
+
+
+class TestCompatibilityReexports:
+    """The pure-layer split (#1725) must preserve auto_retro's public
+    attribute surface. Callers and downstream repos use the documented
+    ``import auto_retro as ar; ar.<name>`` shape, so a future re-split that
+    drops a re-export would raise AttributeError for them. This locks the
+    set of names that were auto_retro attributes before the split. Refs the
+    PR #1727 review (re-export omission).
+    """
+
+    # Names that resolved on auto_retro before the split (label constants
+    # originally imported from _retro_labels, the trusted-bot set, and the
+    # parser result-classification constants moved to _auto_retro_parse).
+    _COMPAT_NAMES: ClassVar[tuple[str, ...]] = (
+        "ALL_RETRO_LABELS",
+        "RETRO_FP",
+        "RETRO_FP_CANDIDATE",
+        "RETRO_TENTATIVE",
+        "RETRO_TP",
+        "PRIOR_MIN_SAMPLE_SIZE",
+        "PRIOR_SKIP_THRESHOLD",
+        "PRIOR_TENTATIVE_THRESHOLD",
+        "_TRUSTED_BOT_LOGINS",
+        "_TYPE_SCOPE_RE",
+        "_SIGNALS_FIRED_LINE_RE",
+        "_RESULT_PASSING_PREFIXES",
+        "_RESULT_PASSING_OBSERVATION_PHRASES",
+        "_RESULT_PASSING_NUMERIC_RE",
+        "_RESULT_PASSING_ALL_UNIT_RE",
+        "_RESULT_PASSING_COUNT_RE",
+        "_RESULT_PASSING_TRAILING_OK_RE",
+        "_RESULT_PASSING_NON_ASCII_ZERO_RE",
+        "_RESULT_PASSING_NIX_QUOTED_RE",
+        "_RESULT_PASSING_GREP_N_RE",
+        "_RESULT_PASSING_SHASUM_RE",
+        "_RESULT_PASSING_HEX_HASH_RE",
+        "_RESULT_PASSING_PKG_VERSION_RE",
+        "_RESULT_PASSING_NIX_TOOL_RE",
+        "_RESULT_PASSING_EXIT_ZERO_RE",
+        "_RESULT_FAILING_COUNT_RE",
+    )
+
+    @pytest.mark.parametrize("name", _COMPAT_NAMES)
+    def test_compat_name_resolves_on_auto_retro(self, name: str) -> None:
+        assert hasattr(ar, name), (
+            f"auto_retro.{name} was dropped from the re-export facade; "
+            "downstream 'import auto_retro as ar; ar.<name>' callers break"
+        )
+        assert name in ar.__all__, f"{name} re-exported but missing from __all__"
+
+    def test_reexported_label_constant_is_canonical(self) -> None:
+        # The re-export must be the same object as its _retro_labels source,
+        # not a divergent copy.
+        assert ar.RETRO_FP is rl.RETRO_FP
+        assert ar.ALL_RETRO_LABELS is rl.ALL_RETRO_LABELS
