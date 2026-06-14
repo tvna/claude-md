@@ -79,13 +79,35 @@ flowchart TD
     N003 --> N004
 ```
 
+## _strip_survey_vocab(...)
+
+```mermaid
+flowchart TD
+    N001["_strip_survey_vocab(...)"]
+    N002["for phrase in SURVEY_NEUTRALIZE:     lowered = lowered.replace(phrase.lower(), '<str>')"]
+    N003["return lowered"]
+    N001 -->|"start"| N002
+    N002 --> N003
+```
+
 ## signals_handoff(...)
 
 ```mermaid
 flowchart TD
     N001["signals_handoff(...)"]
-    N002["lowered = lower(...)"]
+    N002["lowered = _strip_survey_vocab(...)"]
     N003["return any((cue in lowered for cue in HANDOFF_CUES))"]
+    N001 -->|"start"| N002
+    N002 --> N003
+```
+
+## signals_terminal_wait(...)
+
+```mermaid
+flowchart TD
+    N001["signals_terminal_wait(...)"]
+    N002["lowered = lower(...)"]
+    N003["return any((cue in lowered for cue in TERMINAL_WAIT_CUES))"]
     N001 -->|"start"| N002
     N002 --> N003
 ```
@@ -114,11 +136,13 @@ flowchart TD
     N007["if not turn"]
     N008["return None"]
     N009["text = turn_text(...)"]
-    N010["if not signals_handoff(text)"]
+    N010["if signals_terminal_wait(text)"]
     N011["return None"]
-    N012["if already_provided(text)"]
+    N012["if not signals_handoff(text)"]
     N013["return None"]
-    N014["return {'<str>': '<str>', '<str>': _BLOCK_REASON}"]
+    N014["if already_provided(text)"]
+    N015["return None"]
+    N016["return {'<str>': '<str>', '<str>': _BLOCK_REASON}"]
     N001 -->|"start"| N002
     N002 -->|"true"| N003
     N002 -->|"false"| N004
@@ -132,6 +156,8 @@ flowchart TD
     N010 -->|"false"| N012
     N012 -->|"true"| N013
     N012 -->|"false"| N014
+    N014 -->|"true"| N015
+    N014 -->|"false"| N016
 ```
 
 ## load_transcript(...)
