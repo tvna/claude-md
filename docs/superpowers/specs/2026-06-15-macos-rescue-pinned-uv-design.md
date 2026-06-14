@@ -6,13 +6,13 @@
 
 ## 背景
 
-このリポジトリには、Claude/Codex の web 版と devcontainer が使えない、または devcontainer が破損した場合のレスキュー環境として、サンドボックスなしの macOS ホスト環境がある。macOS ホストでは Homebrew などで管理された `uv` がリポジトリの `[tool.uv].required-version` から先行して、`uv run` や `uv sync` が失敗することがある。
+このリポジトリには、Claude/Codex の web 版と devcontainer が使えない、または devcontainer が破損した場合のレスキュー環境として、サンドボックスなしの macOS ホスト環境がある。この macOS 環境には、VS Code workspace、Claude Desktop、Codex Desktop の3つの入口がある。macOS ホストでは Homebrew などで管理された `uv` がリポジトリの `[tool.uv].required-version` から先行して、`uv run` や `uv sync` が失敗することがある。
 
 既存実装では、`pyproject.toml` の `[tool.uv].required-version` を単一ソースとして、`scripts/setup_pinned_uv.sh` が pinned `uv` / `uvx` を `~/.uv-pins/claude-md` に配置する。`scripts/session_uv_local_pin.sh` は Claude/Codex の `SessionStart` に配線され、ローカルホストの `uv` が欠落または drift している場合に pinned prefix をセッション PATH へ追加する。`claude-md.code-workspace` も統合ターミナルの PATH 先頭に同じ prefix を置く。
 
 ## ゴール
 
-既存の `~/.uv-pins/claude-md` 方式を macOS レスキュー環境の恒久運用として確定し、`apm compile` などの実行導線が pinned `uv` に依存することを文書とテストで固定する。
+既存の `~/.uv-pins/claude-md` 方式を macOS レスキュー環境の恒久運用として確定し、VS Code workspace、Claude Desktop、Codex Desktop の各入口で `apm compile` などの実行導線が pinned `uv` に依存することを文書とテストで固定する。
 
 ## 非ゴール
 
@@ -27,12 +27,15 @@
 
 macOS レスキュー環境では、リポジトリ内の `uv` 実行は host `uv` ではなく `~/.uv-pins/claude-md/uv` を優先する。prefix は version-agnostic のまま維持し、pin が更新された場合は `scripts/setup_pinned_uv.sh` が同じ prefix を self-heal する。
 
+入口ごとの責務は分ける。VS Code workspace は `claude-md.code-workspace` の integrated terminal PATH と `folderOpen` task で pinned prefix を優先する。Claude Desktop と Codex Desktop は agent hook config の `SessionStart` から `scripts/session_uv_local_pin.sh` を実行し、ホスト `uv` が欠落または drift している場合に pinned prefix をセッション PATH へ永続化する。
+
 `apm compile` の正式な導線は `uv run --with "apm-cli==0.12.1" apm compile` とし、この `uv` は workspace 統合ターミナルまたは SessionStart hook によって pinned prefix から解決されるものとする。これにより APM の実行時依存解決も ambient host `uv` ではなく repo pin に従う。
 
 ### 変更対象
 
 - `docs/runbooks/host-uv-pin.md`
   - macOS no-sandbox rescue environment の正式運用であることを明記する。
+  - 入口を VS Code workspace、Claude Desktop、Codex Desktop の3つに分けて説明する。
   - `~/.uv-pins/claude-md` を durable prefix として定義する。
   - `apm compile` が pinned `uv` 経由で実行される前提と確認手順を追加する。
 
@@ -44,7 +47,7 @@ macOS レスキュー環境では、リポジトリ内の `uv` 実行は host `u
   - workspace 設定を読むテストを追加または拡張し、`terminal.integrated.env.osx.PATH` が `~/.uv-pins/claude-md` を先頭に置くことを検証する。
   - `bootstrap pinned uv` が folderOpen task として `scripts/setup_pinned_uv.sh` を呼ぶことを検証する。
   - `apm: compile` task が `uv run --with "apm-cli==0.12.1" apm compile` を使うことを検証する。
-  - Claude/Codex の `SessionStart` に `scripts/session_uv_local_pin.sh` が配線されていることを既存テストで固定または強化する。
+  - Claude Desktop と Codex Desktop の `SessionStart` に `scripts/session_uv_local_pin.sh` が配線されていることを既存テストで固定または強化する。
 
 ## エラー処理
 
@@ -66,4 +69,3 @@ macOS レスキュー環境では、リポジトリ内の `uv` 実行は host `u
 ## 想定されるトレードオフ
 
 この設計は macOS レスキュー環境の全体像を完全にはモデル化しない。その代わり、今回の主問題である pinned `uv` と APM 実行導線に絞り、既存のフック、workspace task、runbook、テストを最小変更で恒久運用へ引き上げる。
-
