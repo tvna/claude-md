@@ -96,6 +96,33 @@ def test_codex_hooks_use_pascalcase_event_keys() -> None:
         assert key[0].isupper(), f"hook event key must be PascalCase: {key!r}"
 
 
+def test_codex_session_start_registers_local_uv_pin_alignment() -> None:
+    """Codex Desktop must align host uv before uv-backed hooks run.
+
+    Refs #1745. The macOS rescue path depends on ``session_uv_local_pin.sh``
+    being wired in SessionStart so a drifted package-managed host uv does not
+    break later ``uv run`` commands in the session.
+    """
+    data = _load_hooks()
+    hooks = data["hooks"]
+    assert isinstance(hooks, dict)
+    session_start = hooks["SessionStart"]
+    assert isinstance(session_start, list)
+
+    commands: list[str] = []
+    for group in session_start:
+        assert isinstance(group, dict)
+        handlers = group["hooks"]
+        assert isinstance(handlers, list)
+        for handler in handlers:
+            assert isinstance(handler, dict)
+            command = handler.get("command")
+            if isinstance(command, str):
+                commands.append(unwrap_command(command))
+
+    assert "scripts/session_uv_local_pin.sh" in commands
+
+
 def test_all_codex_hook_commands_point_to_repo_files() -> None:
     data = _load_hooks()
     commands = [entry["command"] for entry in _command_entries(data)]

@@ -122,6 +122,27 @@ def test_claude_hooks_use_pascalcase_event_keys() -> None:
         assert key[0].isupper(), f"hook event key must be PascalCase: {key!r}"
 
 
+def test_claude_session_start_registers_local_uv_pin_alignment() -> None:
+    """Claude Desktop must align host uv before uv-backed hooks run.
+
+    Refs #1745. The macOS rescue path depends on ``session_uv_local_pin.sh``
+    being wired in SessionStart so a drifted package-managed host uv does not
+    break later ``uv run`` commands in the session.
+    """
+    data = _load_settings()
+    commands: list[str] = []
+    for group in _hook_groups(data, "SessionStart"):
+        hooks = group["hooks"]
+        assert isinstance(hooks, list)
+        for hook in hooks:
+            assert isinstance(hook, dict)
+            command = hook.get("command")
+            if isinstance(command, str):
+                commands.append(unwrap_command(command))
+
+    assert "scripts/session_uv_local_pin.sh" in commands
+
+
 def test_claude_post_tool_use_starts_ci_monitor_after_mcp_pr_create() -> None:
     data = _load_settings()
     post_tool_use = _hook_groups(data, "PostToolUse")
