@@ -17,6 +17,12 @@ name: Validate document dependency graph
 on:
   pull_request:
     branches: [main]
+    # Include `edited` so the gate reruns when the PR description is changed
+    # (e.g. a doc-graph-waiver line is added or removed). Without `edited`,
+    # GitHub's default pull_request types (opened/synchronize/reopened) do not
+    # cover body-only changes, leaving the waiver result stale until a commit
+    # is pushed. Refs #1754.
+    types: [opened, synchronize, reopened, edited]
 
 permissions: {}
 
