@@ -36,6 +36,7 @@ import fnmatch
 import sys
 import tomllib
 from pathlib import Path
+from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 POLICY_PATH = Path(".github/label-policy.toml")
@@ -50,14 +51,14 @@ _SCRIPT = "scan_harness_doc_coverage"
 COVERAGE_ALLOWLIST: dict[str, str] = {}
 
 
-def load_entries(policy_path: Path) -> list[dict]:
+def load_entries(policy_path: Path) -> list[dict[str, Any]]:
     """Return all [[area_paths]] entries from *policy_path*."""
     with policy_path.open("rb") as fh:
         data = tomllib.load(fh)
     return [e for e in data.get("area_paths", []) if isinstance(e, dict)]
 
 
-def is_specifically_covered(rel_path: str, entries: list[dict]) -> bool:
+def is_specifically_covered(rel_path: str, entries: list[dict[str, Any]]) -> bool:
     """Return True if *rel_path* matches at least one non-broad area_paths entry."""
     for entry in entries:
         if entry.get("broad"):

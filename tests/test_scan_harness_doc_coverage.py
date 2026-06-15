@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import tomllib
 from pathlib import Path
 from typing import Any
 
@@ -57,7 +56,7 @@ def test_is_specifically_covered_broad_entry_ignored() -> None:
 
 
 def test_is_specifically_covered_non_broad_wins_over_broad() -> None:
-    entries = [
+    entries: list[dict[str, Any]] = [
         {"area": "area:scripts-tests", "paths": ["scripts/**"], "broad": True},
         {"area": "area:preflight", "paths": ["scripts/gate_*.py"]},
     ]
