@@ -136,6 +136,16 @@ repos:
         pass_filenames: false
         files: ^docs/.*\.md$
 
+      - id: uv-mypy
+        name: mypy type gate (uv run mypy scripts tests)
+        # Mirrors the mypy step in verify-agents.yml so TypedDict key errors,
+        # unused type: ignore suppressions, and missing imports surface at
+        # commit time rather than CI. Refs #1756 (PR #1746 retro repair #2-4,#7).
+        entry: uv run mypy scripts tests
+        language: system
+        pass_filenames: false
+        files: ^(scripts/.*\.py|tests/.*\.py)$
+
       - id: preflight-branch-base
         name: preflight branch base (scripts/preflight_branch_base.py verify)
         entry: uv run python scripts/preflight_branch_base.py verify
