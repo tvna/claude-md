@@ -250,10 +250,17 @@ STEPS: tuple[Step, ...] = (
         argv=("python3", "scripts/gate_generated_scripts_manual_edit.py", "verify"),
     ),
     Step(
-        name="workflow_diagram_doc",
-        argv=("python3", "scripts/workflow_diagram.py", "diagram-doc"),
-    ),
-    Step(
+        # Refs #1771. docs/generated/workflows/ is owned by the post-merge
+        # automation, same single-producer model as docs/generated/scripts/
+        # (#1540/#1543/#1546). The pre-push gate no longer regenerates the
+        # workflow if-branch diagrams: the post-merge decision-tree job
+        # generates them, verify-docs-drift drift-checks them, and
+        # gate_generated_scripts_manual_edit forbids hand edits. Generating
+        # here left a perpetually-untracked diagram for any workflow whose
+        # generated doc had not yet landed on main, tripping the untracked-file
+        # stop hook (the #1764 item-2 false-fire). The
+        # test_no_step_generates_docs_generated gate keeps a generator from
+        # re-entering this lane.
         name="scan_preflight_drift",
         argv=("python3", "scripts/scan_preflight_drift.py", "verify"),
     ),
