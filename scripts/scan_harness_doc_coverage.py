@@ -75,8 +75,8 @@ def collect_scripts(scripts_dir: Path) -> list[Path]:
 
 
 def collect_workflows(workflows_dir: Path) -> list[Path]:
-    """Return sorted .yml workflow files under *workflows_dir*."""
-    return sorted(workflows_dir.glob("*.yml"))
+    """Return sorted .yml/.yaml workflow files under *workflows_dir*."""
+    return sorted(workflows_dir.glob("*.yml")) + sorted(workflows_dir.glob("*.yaml"))
 
 
 def _err(rel_path: str, message: str) -> str:
