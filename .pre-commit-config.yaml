@@ -141,10 +141,12 @@ repos:
         # Mirrors the mypy step in verify-agents.yml so TypedDict key errors,
         # unused type: ignore suppressions, and missing imports surface at
         # commit time rather than CI. Refs #1756 (PR #1746 retro repair #2-4,#7).
+        # pyproject.toml and uv.lock are included so mypy config changes or
+        # stub upgrades/removals also trigger the gate (Codex review P2).
         entry: uv run mypy scripts tests
         language: system
         pass_filenames: false
-        files: ^(scripts/.*\.py|tests/.*\.py)$
+        files: ^(scripts/.*\.py|tests/.*\.py|pyproject\.toml|uv\.lock)$
 
       - id: preflight-branch-base
         name: preflight branch base (scripts/preflight_branch_base.py verify)
