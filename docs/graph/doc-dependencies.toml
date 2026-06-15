@@ -1,0 +1,245 @@
+# Document dependency graph for governance enforcement.
+#
+# Nodes are documents, scripts, and compiled artifacts. Edges are typed,
+# directed relationships. When a PR changes a node, the gate
+# `scripts/gate_doc_graph_pr.py` queries this graph and requires that all
+# blocking-severity dependent nodes are also changed in the same PR (or
+# carry an explicit `doc-graph-waiver: NODE_ID -- reason` line in the PR
+# body).
+#
+# Edge types:
+#   governs      -- upstream principles define/constrain downstream; blocking.
+#   compiled_to  -- upstream compiles deterministically into downstream; blocking.
+#   derives_from -- downstream design was derived from upstream; blocking.
+#   enforced_by  -- downstream script enforces upstream rule; advisory.
+#   implements   -- downstream is the concrete implementation of upstream; advisory.
+#   references   -- upstream cites downstream; advisory.
+#
+# Severity: blocking = co-change required; advisory = informational note only.
+#
+# Maintained by: docs/prd/doc-dependency-graph.md
+# CODEOWNERS-protected: .github/CODEOWNERS (docs/graph/ @tvna)
+# Refs #1754.
+
+[meta]
+schema_version = 1
+description = "Typed document dependency graph for PR governance enforcement."
+
+# ---------------------------------------------------------------------------
+# Nodes
+# ---------------------------------------------------------------------------
+
+[[nodes]]
+id = "master_instructions"
+path = ".apm/instructions/master.instructions.md"
+type = "universal_text"
+description = "Source of truth for the six universal agent principles."
+
+[[nodes]]
+id = "claude_md"
+path = "CLAUDE.md"
+type = "compiled_artifact"
+description = "APM-compiled universal instructions for Claude."
+
+[[nodes]]
+id = "agents_md"
+path = "AGENTS.md"
+type = "compiled_artifact"
+description = "APM-compiled universal instructions for Codex."
+
+[[nodes]]
+id = "design_philosophy_prd"
+path = "docs/prd/agent-rules-design-philosophy.md"
+type = "prd"
+description = "Four-lane responsibility matrix and decision tree for CLAUDE.md evolution."
+
+[[nodes]]
+id = "non_ascii_prd"
+path = "docs/prd/non-ascii-defense.md"
+type = "prd"
+description = "Three-layer ASCII discipline rationale for GitHub post boundary."
+
+[[nodes]]
+id = "security_control_inventory"
+path = "docs/prd/security-control-inventory.md"
+type = "prd"
+description = "MITRE ATT&CK coverage SoT for repository security surfaces."
+
+[[nodes]]
+id = "issue_pr_body_standard"
+path = "docs/standards/issue-pr-body-standard.md"
+type = "standard"
+description = "Required H2 sections and Facts/Assumptions discipline for issue and PR bodies."
+
+[[nodes]]
+id = "workflow_script_quality"
+path = "docs/standards/workflow-script-quality.md"
+type = "standard"
+description = "Quality gates M1 through M9 for Python scripts invoked from workflows."
+
+[[nodes]]
+id = "doc_dependency_prd"
+path = "docs/prd/doc-dependency-graph.md"
+type = "prd"
+description = "Design rationale for the document dependency graph governance gate."
+
+[[nodes]]
+id = "scan_design_philosophy_drift"
+path = "scripts/scan_design_philosophy_drift.py"
+type = "harness_script"
+description = "Enforces label parity and glossary presence between master and philosophy PRD."
+
+[[nodes]]
+id = "preflight_non_ascii"
+path = "scripts/preflight_non_ascii.py"
+type = "harness_script"
+description = "Client-side PreToolUse gate: blocks non-ASCII in MCP GitHub write calls."
+
+[[nodes]]
+id = "scan_non_ascii"
+path = "scripts/scan_non_ascii.py"
+type = "harness_script"
+description = "Server-side scanner: labels issues/PRs/comments with non-ASCII content."
+
+[[nodes]]
+id = "body_policy"
+path = "scripts/body_policy.py"
+type = "harness_script"
+description = "Enforces required H2 sections and Facts/Assumptions in PR/issue bodies."
+
+[[nodes]]
+id = "gate_doc_graph_pr"
+path = "scripts/gate_doc_graph_pr.py"
+type = "harness_script"
+description = "CI gate: validates document dependency co-changes using this graph."
+
+[[nodes]]
+id = "doc_graph_lib"
+path = "scripts/doc_graph.py"
+type = "harness_script"
+description = "Core library for loading, querying, and visualising the doc dependency graph."
+
+[[nodes]]
+id = "validate_doc_graph_workflow"
+path = ".github/workflows/validate-doc-graph.yml"
+type = "harness_workflow"
+description = "Advisory CI workflow that runs gate_doc_graph_pr on every pull_request."
+
+# ---------------------------------------------------------------------------
+# Edges
+# ---------------------------------------------------------------------------
+
+# master.instructions.md compiles to CLAUDE.md and AGENTS.md (already gated
+# by verify-pr.yml / apm compile; included here for graph completeness).
+[[edges]]
+from = "master_instructions"
+to = "claude_md"
+type = "compiled_to"
+severity = "blocking"
+note = "Already enforced by verify-pr.yml apm-drift gate; included for completeness."
+
+[[edges]]
+from = "master_instructions"
+to = "agents_md"
+type = "compiled_to"
+severity = "blocking"
+note = "Already enforced by verify-pr.yml apm-drift gate; included for completeness."
+
+# master.instructions.md governs every document that records, implements, or
+# explains the six principles. A change to the principles must trigger a
+# review of each governed document.
+[[edges]]
+from = "master_instructions"
+to = "design_philosophy_prd"
+type = "governs"
+severity = "blocking"
+note = "Principle edits must be reviewed against the responsibility matrix (sec 3)."
+
+[[edges]]
+from = "master_instructions"
+to = "non_ascii_prd"
+type = "governs"
+severity = "blocking"
+note = "P3 bullet on ASCII discipline is rationale-grounded in non_ascii_prd."
+
+[[edges]]
+from = "master_instructions"
+to = "security_control_inventory"
+type = "governs"
+severity = "blocking"
+note = "P3/P4 safety principles define the security control surface."
+
+[[edges]]
+from = "master_instructions"
+to = "issue_pr_body_standard"
+type = "governs"
+severity = "blocking"
+note = "P2 Facts/Assumptions discipline is adopted in issue_pr_body_standard."
+
+[[edges]]
+from = "master_instructions"
+to = "workflow_script_quality"
+type = "governs"
+severity = "blocking"
+note = "P4 safety boundary sets the must-have quality gates M1-M9."
+
+[[edges]]
+from = "master_instructions"
+to = "doc_dependency_prd"
+type = "governs"
+severity = "blocking"
+note = "P3 deterministic-gate requirement motivates this graph system."
+
+# Advisory edges: policy documents informing their enforcing scripts.
+# When the policy changes, the enforcing script should be reviewed, but
+# the enforcing script changing does not require the policy to change.
+[[edges]]
+from = "design_philosophy_prd"
+to = "scan_design_philosophy_drift"
+type = "enforced_by"
+severity = "advisory"
+note = "scan_design_philosophy_drift enforces the matrix-subtitle invariant."
+
+[[edges]]
+from = "non_ascii_prd"
+to = "preflight_non_ascii"
+type = "enforced_by"
+severity = "advisory"
+note = "preflight_non_ascii is Layer 3 of the non-ASCII defense."
+
+[[edges]]
+from = "non_ascii_prd"
+to = "scan_non_ascii"
+type = "enforced_by"
+severity = "advisory"
+note = "scan_non_ascii is Layer 2 (server-side) of the non-ASCII defense."
+
+[[edges]]
+from = "issue_pr_body_standard"
+to = "body_policy"
+type = "enforced_by"
+severity = "advisory"
+note = "body_policy enforces the required H2 sections defined in the standard."
+
+# doc_dependency_prd governs the gate implementation and workflow.
+[[edges]]
+from = "doc_dependency_prd"
+to = "gate_doc_graph_pr"
+type = "enforced_by"
+severity = "advisory"
+note = "gate_doc_graph_pr is the deterministic enforcement of the graph policy."
+
+[[edges]]
+from = "doc_dependency_prd"
+to = "validate_doc_graph_workflow"
+type = "enforced_by"
+severity = "advisory"
+note = "validate_doc_graph_workflow wires gate_doc_graph_pr into CI."
+
+# gate_doc_graph_pr implements doc_graph_lib (dependency direction).
+[[edges]]
+from = "gate_doc_graph_pr"
+to = "doc_graph_lib"
+type = "references"
+severity = "advisory"
+note = "gate_doc_graph_pr imports doc_graph_lib; gate changes may require lib review."

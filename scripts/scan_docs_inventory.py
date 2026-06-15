@@ -38,6 +38,12 @@ ALLOWED_TOP_LEVEL_DOCS = frozenset(
 EXEMPT_INVENTORY_PREFIXES = (
     "docs/generated/scripts/",
     "docs/generated/workflows/",
+    # docs/generated/graph/ holds the auto-generated Mermaid doc-dependency
+    # diagram produced by scripts/doc_graph_viz.py and owned by the post-merge
+    # automation. Exempt for the same reason as scripts/ and workflows/: the
+    # set of files changes as the graph evolves, so per-file INDEX linking
+    # would drift. The directory is described once in docs/INDEX.md. Refs #1754.
+    "docs/generated/graph/",
 )
 
 INLINE_LINK_RE = re.compile(r"!?\[[^\]\n]*\]\(([^)\n]+)\)")
