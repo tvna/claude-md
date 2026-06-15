@@ -146,12 +146,11 @@ def _heavy_fingerprint(heavy: Sequence[Step], cwd: Path) -> str | None:
 # run concurrently with the working-tree-reading static gates, so the parallel
 # tier runs them first, sequentially (refs #1245):
 #   * preflight_branch_base -- ``git fetch`` writes .git refs and takes a lock.
-#   * workflow_diagram_doc -- writes tracked docs into the working tree.
-# The per-script AST docs are no longer regenerated here: docs/generated/scripts/
-# is owned by the post-merge automation (#1540).
+# No generated docs are regenerated here: docs/generated/scripts/ (#1540) and
+# docs/generated/workflows/ (#1771) are both owned by the post-merge automation,
+# so the pre-push lane writes nothing under docs/generated/.
 _SERIAL_CHEAP: frozenset[str] = frozenset({
     "preflight_branch_base",
-    "workflow_diagram_doc",
 })
 
 
