@@ -224,6 +224,13 @@ jobs:
         # the weekly security-control-drift job as a redundant visibility signal.
         run: uv run python scripts/owasp_asi_mapping.py verify
 
+      - name: Verify harness file documentation coverage
+        # Refs #1761: fails when a public scripts/*.py or .github/workflows/*.yml
+        # has no specific area_paths entry in .github/label-policy.toml --
+        # only the broad catch-all (scripts/**, .github/**). Closes the gap
+        # where new scripts land without a functional area label.
+        run: uv run python scripts/scan_harness_doc_coverage.py verify
+
       - name: Warn if uv pin trails upstream
         env:
           GH_TOKEN: ${{ github.token }}

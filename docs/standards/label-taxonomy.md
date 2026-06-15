@@ -172,7 +172,7 @@ needs both responsibility and file ownership context.
 | `area:agent-instructions` | `CLAUDE.md`, `AGENTS.md`, `.agents/**` |
 | `area:apm` | `.apm/**`, `apm.yml`, `apm.lock.yaml` |
 | `area:hooks` | `.claude/settings.json`, `.codex/hooks.json`, `.githooks/**`, `.pre-commit-config.yaml`, `docs/runbooks/prek.md` |
-| `area:preflight` | `scripts/preflight_*.py`, `scripts/gate_*.py`, `scripts/check_*.py`, preflight runbooks |
+| `area:preflight` | `scripts/preflight_*.py`, `scripts/gate_*.py`, `scripts/check_*.py`, `scripts/scan_*.py`, `scripts/verify_*.py`, and individual policy gate scripts; preflight runbooks |
 | `area:github-workflows` | `.github/**`, ruleset and workflow runbooks, generated workflow diagrams |
 | `area:scripts-tests` | `scripts/**`, `tests/**` |
 | `area:docs` | `README*.md`, `docs/**` |
@@ -181,6 +181,8 @@ needs both responsibility and file ownership context.
 | `area:security-intel` | Threat triage, security drift, non-ASCII defense, and security runbooks |
 | `area:metrics` | `metrics/**`, performance, maintainability, and host-unit metric docs/scripts |
 | `area:area-policy` | Label policy, label catalog, issue triage, and label apply code |
+| `area:ci-ops` | CI automation scripts, issue/PR operation utilities, and maintenance workflows |
+| `area:governance` | Repo structure analysis, document dependency graph, and governance tooling |
 
 When a path matches more than one area, apply every relevant area. For
 example, `.github/workflows/post-merge.yml` with coverage-failure behavior is
