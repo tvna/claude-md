@@ -82,6 +82,7 @@
       },
       {
         "label": "apm: compile",
+        "detail": "Compile instructions through the repo-pinned uv resolved from ~/.uv-pins/claude-md in macOS rescue terminals.",
         "type": "shell",
         "command": "uv run --with \"apm-cli==0.12.1\" apm compile",
         "problemMatcher": [],
@@ -92,6 +93,7 @@
       },
       {
         "label": "uv: sync (locked)",
+        "detail": "Synchronize the locked project environment through the repo-pinned uv resolved from ~/.uv-pins/claude-md in macOS rescue terminals.",
         "type": "shell",
         "command": "uv sync --locked",
         "problemMatcher": [],
