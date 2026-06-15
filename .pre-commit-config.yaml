@@ -65,6 +65,14 @@ repos:
         language: system
         pass_filenames: false
         files: ^\.github/workflows/.*\.ya?ml$
+      - id: scan-harness-doc-coverage
+        name: scan harness doc coverage (scripts/scan_harness_doc_coverage.py verify)
+        # Refs #1761: fails when a public scripts/*.py or .github/workflows/*.ya?ml
+        # has no specific area_paths entry in .github/label-policy.toml.
+        entry: uv run python scripts/scan_harness_doc_coverage.py verify
+        language: system
+        pass_filenames: false
+        files: ^(scripts/.*\.py|\.github/workflows/.*\.ya?ml|\.github/label-policy\.toml)$
       - id: scan-secrets
         name: scan secrets (scripts/scan_secrets.py verify)
         entry: uv run python scripts/scan_secrets.py verify

@@ -327,6 +327,14 @@ STEPS: tuple[Step, ...] = (
         argv=("python3", "scripts/scan_allowlist_parser_parity.py", "verify"),
     ),
     Step(
+        # Refs #1761. Fails when a public scripts/*.py or .github/workflows/*.yml
+        # matches only the broad catch-all area_paths entries in
+        # .github/label-policy.toml and has no specific functional area
+        # ownership. No base-ref needed: reads the working tree only.
+        name="scan_harness_doc_coverage",
+        argv=("python3", "scripts/scan_harness_doc_coverage.py", "verify"),
+    ),
+    Step(
         # Refs #1153. Fails when a pinned binary's flake.nix SHA256 is
         # hardcoded under scripts/ or .github/workflows/, so flake.nix stays
         # the single source of truth and a bump cannot leave a stale copy.
