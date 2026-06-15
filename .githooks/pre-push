@@ -33,4 +33,7 @@ fi
 # and short-circuits the suite on any cheap failure. Calling it twice was pure
 # redundant fetch overhead (issue #985, Codex CI-log analysis).
 echo "pre-push: running scripts/preflight_all.py" >&2
+while IFS= read -r git_env_var; do
+    unset "${git_env_var}"
+done < <(git rev-parse --local-env-vars)
 python3 "${preflight}"

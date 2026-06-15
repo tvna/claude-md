@@ -218,12 +218,70 @@ command -v bwrap
 command -v python3
 ```
 
-If Codex starts but later reports
+### Codex CLI prompt-response triage
+
+Use this procedure when Codex starts in the Codex DevContainer, accepts a
+prompt, and then produces no model response or reports
 `Falling back from WebSockets to HTTPS transport. request timed out`
-followed by `Conversation interrupted`, treat that as a Codex CLI
-transport failure, not a SessionStart or MCP startup failure. Do not
-paste Codex logs or tokens into issues. First capture only the network
-boundary checks below from inside the Codex DevContainer:
+followed by `Conversation interrupted`. The pasted terminal symptom often
+contains several unrelated-looking failures in one startup: missing
+`bubblewrap`, `codex_apps` MCP timeout, `SessionStart` / `UserPromptSubmit`
+hook failures, and the final transport timeout. Treat those as separate
+boundaries and prove which one blocks the prompt response before changing
+repo policy.
+
+Safety boundary: record only command names, exit codes, status lines, and
+redacted network headers. Do not paste Codex logs, full HTTP headers, tokens,
+cookies, `~/.codex/auth.json`, session database files, shell history, or an
+environment dump into issues, PRs, chat, or generated artifacts. `Set-Cookie`
+headers are especially out of scope; record only that they were omitted.
+
+1. Runtime prerequisite boundary. Verify the container setup that Codex needs
+   before debugging hooks or network transport:
+
+   ```sh
+   id -un
+   codex --version
+   command -v bwrap
+   command -v python3
+   ```
+
+   If `bwrap` or `python3` is missing, run the runtime refresh above:
+
+   ```sh
+   bash .devcontainer/scripts/configure-agent-runtime.sh codex
+   ```
+
+   Restart Codex after the refresh. A missing prerequisite can explain
+   sandbox warnings and hook `exit code 127`, but it does not prove the
+   OpenAI transport path is broken.
+
+2. Hook boundary. If the prompt submission reports `SessionStart hook
+   (failed)`, `UserPromptSubmit hook (failed)`, `Broken pipe`, or `exit code
+   127`, run the named repo hook command directly from `/workspaces/claude-md`
+   with the same user. For the prompt hook, the current repo command is:
+
+   ```sh
+   python3 scripts/prompt_context7_gate.py
+   ```
+
+   For SessionStart failures, inspect `.codex/hooks.json` and run only the
+   failing command shown in the terminal. Record the command and exit code,
+   not the full hook payload. Do not disable hooks as the final fix: a
+   temporary no-hook comparison is diagnosis only, and any durable fix must
+   repair the failing hook command, runtime prerequisite, or generated hook
+   configuration.
+
+3. MCP boundary. If Codex reports `MCP client for codex_apps timed out` or
+   `MCP startup incomplete`, classify it separately from prompt transport.
+   A missing app connector can break connector tools, but it is not by itself
+   evidence that the model request cannot reach OpenAI. Record whether the
+   timeout appears before the user prompt, after the user prompt, or only
+   while invoking a connector tool.
+
+4. Transport boundary. If the prompt still reaches
+   `Falling back from WebSockets to HTTPS transport. request timed out`, run
+   only these network boundary checks from inside the Codex DevContainer:
 
 ```sh
 getent hosts api.openai.com auth.openai.com
@@ -243,8 +301,8 @@ Interpretation:
   `cf-ray` fields only. Do not paste `Set-Cookie` values or full
   headers into issues.
 
-If those fail, compare with the egress allowlist disabled for one
-container start:
+5. Egress allowlist boundary. If the transport checks fail, compare with the
+   egress allowlist disabled for one container start:
 
 ```sh
 DEVCONTAINER_APPLY_EGRESS_ALLOWLIST=0
@@ -256,6 +314,17 @@ next fix belongs in `.devcontainer/network/shared.allowlist` or the
 allowlist apply script. If the checks pass with and without the
 allowlist, keep the issue scoped to Codex CLI transport behavior or the
 upstream service path rather than changing repository network policy.
+
+Decision matrix:
+
+| Observation | Next owner |
+|---|---|
+| `command -v bwrap` or `command -v python3` fails | DevContainer runtime setup |
+| A named repo hook fails when run directly | Hook script or generated hook config |
+| Only `codex_apps` startup fails, and the model prompt still responds | MCP app startup |
+| `getent` fails only with the allowlist enabled | Egress allowlist / DNS proxy |
+| `curl -I` fails only with the allowlist enabled | Egress allowlist host or IP resolution |
+| `getent` and `curl -I` pass with and without the allowlist, but Codex still times out | Codex CLI transport or upstream service path |
 
 After the container opens, verify the runtime identity and workspace
 write access before starting agent work:

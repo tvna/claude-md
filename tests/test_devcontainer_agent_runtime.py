@@ -92,13 +92,20 @@ def test_runbook_documents_existing_codex_volume_refresh() -> None:
 def test_runbook_documents_codex_transport_timeout_diagnostics() -> None:
     runbook = (REPO_ROOT / "docs/runbooks/devcontainers.md").read_text(encoding="utf-8")
 
+    assert "Codex CLI prompt-response triage" in runbook
+    assert "Hook boundary" in runbook
+    assert "MCP boundary" in runbook
+    assert "Transport boundary" in runbook
     assert "Falling back from WebSockets to HTTPS transport" in runbook
     assert "Conversation interrupted" in runbook
+    assert "codex --version" in runbook
     assert "getent hosts api.openai.com auth.openai.com" in runbook
     assert "curl -I --max-time 20 https://api.openai.com" in runbook
     assert "HTTP/2 421" in runbook
     assert "cf-mitigated: challenge" in runbook
     assert "Set-Cookie" in runbook
+    assert "~/.codex/auth.json" in runbook
+    assert "Do not disable hooks as the final fix" in runbook
     assert "DEVCONTAINER_APPLY_EGRESS_ALLOWLIST=0" in runbook
 
 

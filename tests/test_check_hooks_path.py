@@ -9,12 +9,15 @@ from __future__ import annotations
 
 import json
 import subprocess
+from pathlib import Path
 from unittest.mock import patch
 
 import check_hooks_path as subject
 import pytest
 
 pytestmark = pytest.mark.shard_preflight
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 def _run(returncode: int, stdout: str) -> subprocess.CompletedProcess[str]:
@@ -86,6 +89,14 @@ def test_main_exits_zero_when_check_raises() -> None:
     with patch("check_hooks_path.check", side_effect=RuntimeError("unexpected")), pytest.raises(SystemExit) as exc_info:
         subject.main()
     assert exc_info.value.code == 0
+
+
+def test_pre_push_hook_clears_git_hook_environment_before_preflight() -> None:
+    hook = (REPO_ROOT / ".githooks" / "pre-push").read_text(encoding="utf-8")
+
+    assert "git rev-parse --local-env-vars" in hook
+    assert "unset" in hook
+    assert 'python3 "${preflight}"' in hook
 
 
 class TestGitConfig:
