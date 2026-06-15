@@ -435,7 +435,7 @@ Run:
 python3 scripts/uv_pin.py read pyproject.toml
 ```
 
-Expected: prints the current pinned version, for example `0.11.11`.
+Expected: prints the current pinned version from `pyproject.toml`.
 
 - [ ] **Step 5: Inspect git status**
 
@@ -446,4 +446,3 @@ git status --short
 ```
 
 Expected: clean working tree after the task commits, except for unrelated user changes if any appear.
-
