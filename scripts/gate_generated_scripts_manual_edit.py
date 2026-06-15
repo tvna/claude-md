@@ -40,7 +40,13 @@ import subprocess
 import sys
 
 # Folders owned by the post-merge automation; hand edits are forbidden here.
-PROTECTED_PREFIXES = ("docs/generated/scripts/", "docs/generated/workflows/")
+# docs/generated/graph/ holds the Mermaid doc-dependency diagram produced by
+# scripts/doc_graph_viz.py (wired into post-merge.yml). Refs #1754.
+PROTECTED_PREFIXES = (
+    "docs/generated/scripts/",
+    "docs/generated/workflows/",
+    "docs/generated/graph/",
+)
 
 # The post-merge bot branches that legitimately regenerate the folder, each a
 # fixed PR_BRANCH used by a post-merge job:

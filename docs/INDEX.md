@@ -42,6 +42,7 @@ for `archive/` is documented separately in
 | [privileged-operation-runbooks.md](prd/privileged-operation-runbooks.md) | Six-control contract (authorizing issue, dry-run, live apply, rollback, audit, secret-leak evidence) for every privileged operation. | #182, #178 | `.github/workflows/apply-rulesets.yml`; `.github/workflows/apply-labels.yml`; `.github/workflows/weekly-maintenance.yml` |
 | [non-ascii-defense.md](prd/non-ascii-defense.md) | Three-layer ASCII discipline at the GitHub-post boundary. | #102 | `scripts/scan_non_ascii.py`; `scripts/preflight_non_ascii.py`; `scripts/sanitize_history.py`; `.github/workflows/issue-pr-triage.yml` |
 | [freshness-precondition-gate.md](prd/freshness-precondition-gate.md) | Concrete companion to the universal time-boxed-gate refresh rule: the create_branch freshness preflight, the interim per-operation refresh, and the future auto-refresh skill. | #894, #654, #859 | `scripts/preflight_main_freshness.py`; `.claude/settings.json`; `.apm/instructions/master.instructions.md` (section 3) |
+| [doc-dependency-graph.md](prd/doc-dependency-graph.md) | Design rationale for the typed document dependency graph gate: graph schema, edge types, waiver mechanism, advisory-to-required rollout, and the PR#1737-class failure mode this gate prevents. | #1754 | `docs/graph/doc-dependencies.toml`; `scripts/gate_doc_graph_pr.py`; `scripts/doc_graph.py`; `scripts/doc_graph_viz.py`; `.github/workflows/validate-doc-graph.yml` |
 
 The last three `prd/` entries are adopted contracts with legacy
 placement. They should move to `standards/` in a scoped follow-up rather
@@ -67,6 +68,8 @@ design/plan pair that guided a scoped implementation.
 | [survey-followup-timing.sequence.ja.md](uml/survey-followup-timing.sequence.ja.md) | Japanese translation of `survey-followup-timing.sequence.md` (owner-language reading copy of the sequence diagram and gap analysis). | #1594, #1581 | `docs/uml/survey-followup-timing.sequence.md` |
 | [branch-local-remote.state.md](uml/branch-local-remote.state.md) | Two state diagrams (local working branch in the ephemeral container; remote branch on GitHub) of the branch lifecycle the agent drives in one session, with a grounded gap analysis of state divergence across the container boundary (unrecorded-session fail-open; no HEAD-vs-remote-tip gate; ephemeral unpushed loss; no remote merged-branch delete path). | #1627, #785, #1513, #31 | `scripts/preflight_push_session_branch.py`; `scripts/preflight_branch_base.py`; `scripts/branch_cleanup.py`; `scripts/gate_update_pr_branch.py` |
 | [branch-local-remote.state.ja.md](uml/branch-local-remote.state.ja.md) | Japanese translation of `branch-local-remote.state.md` (owner-language reading copy of the local/remote branch state diagrams and gap analysis). | #1627, #785, #1513, #31 | `docs/uml/branch-local-remote.state.md` |
+| [doc-dependency-graph-governance.gap.md](uml/doc-dependency-graph-governance.gap.md) | Gap analysis for the typed document dependency graph gate (PR #1755): before/after enforcement map (1 edge → 8 blocking + 8 advisory), CI gate sequence diagram, and class diagram of the graph data model. Residual gaps: undeclared edges still rely on reviewer memory; gate is advisory in Phase 1; waivers are per-PR with no cross-PR persistence. | #1754 | `scripts/gate_doc_graph_pr.py`; `scripts/doc_graph.py`; `docs/graph/doc-dependencies.toml`; `.github/workflows/validate-doc-graph.yml` |
+| [doc-dependency-graph-governance.gap.ja.md](uml/doc-dependency-graph-governance.gap.ja.md) | Japanese translation of `doc-dependency-graph-governance.gap.md` (owner-language reading copy of the gap analysis, gate sequence, and data model). | #1754 | `docs/uml/doc-dependency-graph-governance.gap.md` |
 
 ## standards/ -- adopted rules, schemas, and contracts
 
@@ -158,6 +161,17 @@ hand-editable and is exempt from per-file INDEX linking (a non-bot edit fails
 `python3 scripts/script_trigger_map.py all-doc` (trigger reverse-map), and
 `python3 scripts/auto_retro.py triage-report` (triage snapshot).
 Tracking issues: #598, #605, #960, #1540, #1543, #1546.
+
+### generated/graph/ -- document dependency diagram
+
+`generated/graph/doc-dependency-graph.md` holds the Mermaid flowchart of the
+typed document dependency graph declared in `docs/graph/doc-dependencies.toml`.
+This folder is owned by the post-merge automation
+(the `decision-tree` job in `.github/workflows/post-merge.yml`); it is not
+hand-editable and is exempt from per-file INDEX linking. The diagram is
+regenerated whenever the graph TOML or its generator script changes.
+Source: `python3 scripts/doc_graph_viz.py all-doc`.
+Tracking issue: #1754.
 
 ### generated/workflows/ -- workflow if-branch diagrams
 
