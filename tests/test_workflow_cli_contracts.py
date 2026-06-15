@@ -75,6 +75,7 @@ import scan_devcontainer_tool_drift
 import scan_doc_workflow_refs
 import scan_docs_inventory
 import scan_flake_pin_drift
+import scan_harness_doc_coverage
 import scan_hook_coverage_drift
 import scan_input_contract_drift
 import scan_issue_anchor_drift
@@ -96,7 +97,6 @@ import scan_workflow_action_pins
 import scan_workflow_gh_calls
 import scan_workflow_injection
 import scan_workflow_pip
-import scan_harness_doc_coverage
 import scan_workflow_unsigned_commit
 import script_ast_graph
 import script_dependency_graph
