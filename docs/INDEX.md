@@ -3,7 +3,8 @@
 This file enumerates every document under `docs/` by the lane that owns
 it. Lanes are the buckets that `ls docs/` already shows:
 `proposals/` (pre-decision evaluations with open questions), `prd/`
-(design-stage rationale and decision records), `standards/`
+(design-stage rationale and decision records), `superpowers/` (agentic
+design and plan artifacts prepared before implementation), `standards/`
 (adopted rules, schemas, and contracts), `runbooks/` (operator
 procedures), `uml/` (UML diagram artifacts), `generated/` (checked-in
 generated views), `archive/` (frozen historical evidence).
@@ -45,6 +46,18 @@ for `archive/` is documented separately in
 The last three `prd/` entries are adopted contracts with legacy
 placement. They should move to `standards/` in a scoped follow-up rather
 than serving as precedent for new PRD files.
+
+## superpowers/ -- agentic design and plan artifacts
+
+These are implementation-prep artifacts produced by the agentic planning
+workflow before code, docs, or tests change. Lane README files remain the
+placement authority for durable docs; this lane records the worker-facing
+design/plan pair that guided a scoped implementation.
+
+| File | Territory | Tracking issues | Companion |
+|---|---|---|---|
+| [specs/2026-06-15-macos-rescue-pinned-uv-design.md](superpowers/specs/2026-06-15-macos-rescue-pinned-uv-design.md) | Design for fixing the macOS rescue pinned-uv path across VS Code, Claude Desktop, and Codex Desktop before implementation. | #1745 | `docs/superpowers/plans/2026-06-15-macos-rescue-pinned-uv.md`; implementation targets: `docs/runbooks/host-uv-pin.md`; `claude-md.code-workspace`; `tests/test_vscode_workspace_uv_pin.py`; `tests/test_claude_settings_config.py`; `tests/test_codex_hooks_config.py` |
+| [plans/2026-06-15-macos-rescue-pinned-uv.md](superpowers/plans/2026-06-15-macos-rescue-pinned-uv.md) | Worker execution plan for the macOS rescue pinned-uv implementation and verification sequence. | #1745 | `docs/superpowers/specs/2026-06-15-macos-rescue-pinned-uv-design.md`; implementation targets: `docs/runbooks/host-uv-pin.md`; `claude-md.code-workspace`; `tests/test_vscode_workspace_uv_pin.py`; `tests/test_claude_settings_config.py`; `tests/test_codex_hooks_config.py` |
 
 ## uml/ -- UML diagram artifacts
 
