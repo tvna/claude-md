@@ -96,6 +96,7 @@ import scan_workflow_action_pins
 import scan_workflow_gh_calls
 import scan_workflow_injection
 import scan_workflow_pip
+import scan_harness_doc_coverage
 import scan_workflow_unsigned_commit
 import script_ast_graph
 import script_dependency_graph
@@ -210,6 +211,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("rulesets_apply.py", "$MODE"): "test_rulesets_apply_plan_and_auto_delete_match_workflow_args",
     ("rulesets_apply.py", "auto-delete"): "test_rulesets_apply_plan_and_auto_delete_match_workflow_args",
     ("rulesets_apply.py", "workflow-permissions"): "test_rulesets_apply_workflow_permissions_matches_workflow_args",
+    ("scan_harness_doc_coverage.py", "verify"): "test_scan_harness_doc_coverage_verify_matches_workflow_args",
     ("scan_allowlist_parser_parity.py", "verify"): "test_scan_allowlist_parser_parity_verify_matches_workflow_args",
     ("scan_allowlist_rationale.py", "verify"): "test_scan_allowlist_rationale_verify_matches_workflow_args",
     ("scan_apm_ascii.py", "verify"): "test_scan_apm_ascii_verify_matches_workflow_paths",
@@ -1607,6 +1609,12 @@ def test_scan_devcontainer_tool_drift_verify_matches_workflow_args() -> None:
     """Mirrors the ``Verify devcontainer provisions gate-required tools``
     step in ``.github/workflows/verify-agents.yml``."""
     assert scan_devcontainer_tool_drift.main(["verify"]) == 0
+
+
+def test_scan_harness_doc_coverage_verify_matches_workflow_args() -> None:
+    """Mirrors the ``Verify harness file documentation coverage`` step in
+    ``.github/workflows/verify-agents.yml``. Refs #1761."""
+    assert scan_harness_doc_coverage.main(["verify"]) == 0
 
 
 def test_scan_allowlist_parser_parity_verify_matches_workflow_args() -> None:
