@@ -43,6 +43,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -55,6 +56,14 @@ from typing import TypedDict
 _HEADING = "Resource Consumption"
 _UNAVAILABLE = "unavailable (no session data)"
 _CCUSAGE_TIMEOUT_S = 20
+
+# UUID v4 pattern used to extract the session identifier from Codex rollout
+# filenames (rollout-<TIMESTAMP>-<UUID>.jsonl).  The ``$`` anchor ensures we
+# match the UUID at the end of the stem regardless of the TIMESTAMP format.
+_ROLLOUT_UUID_RE = re.compile(
+    r"([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$",
+    re.IGNORECASE,
+)
 
 # Session-scoped per-PR checkpoint file. The directory defaults to the system
 # temp dir (ephemeral, container-lifetime); ``CCR_CCUSAGE_CHECKPOINT_DIR``
@@ -74,6 +83,7 @@ class Usage(TypedDict):
     total: int
     cost: float
     models: list[str]
+    reasoning: int
 
 
 class Checkpoint(TypedDict):
@@ -85,6 +95,9 @@ class Checkpoint(TypedDict):
 
 
 _USAGE_INT_FIELDS = ("input", "output", "cache_create", "cache_read", "total")
+# ``reasoning`` is not in _USAGE_INT_FIELDS because old checkpoints (written
+# before this field existed) legitimately omit it; _coerce_stored_usage reads
+# it with a default of 0 for backward compatibility.
 
 
 def _coerce_number(value: object) -> float:
@@ -169,6 +182,7 @@ def parse_usage(raw: object, session_id: str) -> Usage | None:
             total=int(_coerce_number(row["totalTokens"])),
             cost=_coerce_number(row["totalCost"]),
             models=models,
+            reasoning=0,
         )
     except (KeyError, TypeError, ValueError):
         return None
@@ -187,13 +201,15 @@ def _coerce_stored_usage(value: object) -> Usage | None:
     try:
         ints = {field: int(_coerce_number(value[field])) for field in _USAGE_INT_FIELDS}
         cost = _coerce_number(value["cost"])
+        # Old checkpoints (pre-reasoning field) omit "reasoning"; default to 0.
+        reasoning = int(_coerce_number(value.get("reasoning", 0)))
     except (KeyError, TypeError, ValueError):
         return None
     models_raw = value.get("models", [])
     models = (
         [str(m) for m in models_raw if m] if isinstance(models_raw, list) else []
     )
-    return Usage(cost=cost, models=models, **ints)  # type: ignore[typeddict-item]
+    return Usage(cost=cost, models=models, reasoning=reasoning, **ints)  # type: ignore[typeddict-item]
 
 
 def delta_usage(cumulative: Usage, baseline: Usage | None) -> Usage:
@@ -213,7 +229,11 @@ def delta_usage(cumulative: Usage, baseline: Usage | None) -> Usage:
     d_cache_read = cumulative["cache_read"] - baseline["cache_read"]
     d_total = cumulative["total"] - baseline["total"]
     d_cost = cumulative["cost"] - baseline["cost"]
-    if min(d_input, d_output, d_cache_create, d_cache_read, d_total) < 0 or d_cost < 0:
+    d_reasoning = cumulative["reasoning"] - baseline["reasoning"]
+    if (
+        min(d_input, d_output, d_cache_create, d_cache_read, d_total, d_reasoning) < 0
+        or d_cost < 0
+    ):
         return cumulative
     return Usage(
         input=d_input,
@@ -223,6 +243,7 @@ def delta_usage(cumulative: Usage, baseline: Usage | None) -> Usage:
         total=d_total,
         cost=d_cost,
         models=cumulative["models"],
+        reasoning=d_reasoning,
     )
 
 
@@ -274,9 +295,13 @@ def render_section(elapsed: str | None, usage: Usage | None) -> str:
     """
     elapsed_txt = elapsed if elapsed else _UNAVAILABLE
     if usage is not None:
+        reasoning_part = (
+            f" / reasoning {usage['reasoning']:,}" if usage["reasoning"] > 0 else ""
+        )
         total = (
             f"{usage['total']:,} (input {usage['input']:,} / "
-            f"output {usage['output']:,} / cache-create {usage['cache_create']:,} / "
+            f"output {usage['output']:,}{reasoning_part} / "
+            f"cache-create {usage['cache_create']:,} / "
             f"cache-read {usage['cache_read']:,})"
         )
         cost = f"${usage['cost']:.4f}"
@@ -325,6 +350,125 @@ def _run_ccusage(session_id: str) -> str | None:
     if proc.returncode != 0:
         return None
     return proc.stdout
+
+
+def _is_codex(env: Mapping[str, str]) -> bool:
+    """Return True when running inside a Codex container.
+
+    ``AGENT_CONTAINER=codex`` is the only reliable agent signal in the Codex
+    runtime (confirmed from the Codex environment capture; no session-id env
+    is available there).
+    """
+    return env.get("AGENT_CONTAINER") == "codex"
+
+
+def _run_ccusage_codex() -> str | None:
+    """Return ``ccusage codex session --json`` stdout, or ``None`` on any failure.
+
+    Codex-specific counterpart to :func:`_run_ccusage`.  No session-id
+    argument is passed because per-row filtering is not applied (the
+    ``sessions`` array was empty in all available captures; per-row schema is
+    unconfirmed -- see #1467).
+    """
+    binary = shutil.which("ccusage")
+    if binary is None:
+        return None
+    try:
+        proc = subprocess.run(  # noqa: S603 -- argv is fixed literals; binary from shutil.which, no shell, no user input
+            [binary, "codex", "session", "--json"],
+            capture_output=True,
+            text=True,
+            timeout=_CCUSAGE_TIMEOUT_S,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if proc.returncode != 0:
+        return None
+    return proc.stdout
+
+
+def parse_usage_codex(raw: object) -> Usage | None:
+    """Return a usage dict from ``ccusage codex session --json`` totals.
+
+    Reads from ``totals`` only -- per-row matching is not implemented because
+    the ``sessions`` array was empty in all available captures (DATA blocker:
+    per-row schema and model key are unconfirmed; see #1467).
+
+    Confirmed field mapping (ccusage 20.0.6, captured 2026-06-14, #1467):
+      totals.inputTokens           -> input
+      totals.outputTokens          -> output
+      totals.cachedInputTokens     -> cache_read  (no cache-creation split)
+      totals.totalTokens           -> total
+      totals.costUSD               -> cost
+      totals.reasoningOutputTokens -> reasoning
+      cache_create = 0             (Codex schema has no cache-creation split)
+      models = []                  (no model key confirmed in totals; see #1467)
+    """
+    try:
+        data = json.loads(raw)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    totals = data.get("totals")
+    if not isinstance(totals, dict):
+        return None
+    try:
+        return Usage(
+            input=int(_coerce_number(totals["inputTokens"])),
+            output=int(_coerce_number(totals["outputTokens"])),
+            cache_create=0,
+            cache_read=int(_coerce_number(totals["cachedInputTokens"])),
+            total=int(_coerce_number(totals["totalTokens"])),
+            cost=_coerce_number(totals["costUSD"]),
+            models=[],
+            reasoning=int(_coerce_number(totals["reasoningOutputTokens"])),
+        )
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+def _codex_rollout_session_id(_base: Path | None = None) -> str:
+    """Return a stable session key derived from the most-recent Codex rollout filename.
+
+    Codex CLI persists each session to
+    ``~/.codex/sessions/YYYY/MM/DD/rollout-<TIMESTAMP>-<UUID>.jsonl``
+    (openai/codex primary source: Session/Rollout Files discussion #3827).
+    The UUID in the filename is extracted with a regex and used as the
+    checkpoint key -- the JSON content (``session_meta``) is NOT parsed
+    because its field names are unconfirmed (DATA blocker; see #1467).
+
+    Returns empty string when:
+    - no rollout files exist (ccusage-codex has not run yet in this container)
+    - two or more files share the same mtime within 1 s (concurrent sessions:
+      ambiguous which is the active one -- degrade rather than guess wrong tokens)
+    - any filesystem error or unexpected filename format
+
+    *_base* is injectable for tests; defaults to ``~/.codex/sessions``.
+    """
+    base = _base if _base is not None else (Path.home() / ".codex" / "sessions")
+    try:
+        files = sorted(
+            base.glob("**/rollout-*.jsonl"),
+            key=lambda p: p.stat().st_mtime,
+            reverse=True,
+        )
+    except OSError:
+        return ""
+    if not files:
+        return ""
+    if len(files) >= 2:
+        try:
+            t0 = files[0].stat().st_mtime
+            t1 = files[1].stat().st_mtime
+        except OSError:
+            return ""
+        if abs(t0 - t1) < 1.0:
+            return ""
+    m = _ROLLOUT_UUID_RE.search(files[0].stem)
+    if m is None:
+        return ""
+    return m.group(1)
 
 
 def _checkpoint_path(session_id: str, env: Mapping[str, str]) -> Path | None:
@@ -404,14 +548,23 @@ def gather(
     env = os.environ if env is None else env
     if now_ms is None:
         now_ms = time.time() * 1000.0
-    session_id = env.get("CLAUDE_CODE_SESSION_ID", "")
-    checkpoint = load_checkpoint(session_id, env)
-    window_start = (
-        checkpoint["ts_ms"] if checkpoint else env.get("CCR_SPAWN_TIMESTAMP_MS")
-    )
+    if _is_codex(env):
+        session_id = _codex_rollout_session_id()
+        checkpoint = load_checkpoint(session_id, env)
+        # No Codex session-start env var; rollout timestamp format unconfirmed
+        # (DATA blocker, #1467) -- use checkpoint ts for PR #2+, else unavailable.
+        window_start: object = checkpoint["ts_ms"] if checkpoint else None
+        raw = _run_ccusage_codex()
+        cumulative = parse_usage_codex(raw) if raw is not None else None
+    else:
+        session_id = env.get("CLAUDE_CODE_SESSION_ID", "")
+        checkpoint = load_checkpoint(session_id, env)
+        window_start = (
+            checkpoint["ts_ms"] if checkpoint else env.get("CCR_SPAWN_TIMESTAMP_MS")
+        )
+        raw = _run_ccusage(session_id)
+        cumulative = parse_usage(raw, session_id) if raw is not None else None
     elapsed = compute_elapsed(window_start, now_ms)
-    raw = _run_ccusage(session_id)
-    cumulative = parse_usage(raw, session_id) if raw is not None else None
     baseline = checkpoint["usage"] if checkpoint else None
     usage = delta_usage(cumulative, baseline) if cumulative is not None else None
     return render_section(elapsed, usage)
@@ -431,9 +584,14 @@ def write_checkpoint(
     env = os.environ if env is None else env
     if now_ms is None:
         now_ms = time.time() * 1000.0
-    session_id = env.get("CLAUDE_CODE_SESSION_ID", "")
-    raw = _run_ccusage(session_id)
-    cumulative = parse_usage(raw, session_id) if raw is not None else None
+    if _is_codex(env):
+        session_id = _codex_rollout_session_id()
+        raw = _run_ccusage_codex()
+        cumulative = parse_usage_codex(raw) if raw is not None else None
+    else:
+        session_id = env.get("CLAUDE_CODE_SESSION_ID", "")
+        raw = _run_ccusage(session_id)
+        cumulative = parse_usage(raw, session_id) if raw is not None else None
     if cumulative is None:
         return
     save_checkpoint(session_id, now_ms, cumulative, env)

@@ -4,7 +4,7 @@ This file is generated from live GitHub retro-issue labels by `python3 scripts/a
 
 Retros observed: **50**
 
-Open untriaged: **12**
+Open untriaged: **14**
 
 ## Anomalies
 
@@ -16,29 +16,31 @@ None: no fired signal clears both the FP-rate and sample-size thresholds.
 pie showData
     title Triage status
     "retro:tp" : 8
-    "retro:fp" : 30
+    "retro:fp" : 28
     "retro:fp-candidate" : 0
     "retro:tentative" : 0
-    "unlabelled" : 12
+    "unlabelled" : 14
 ```
 
 ## Signal occurrence and false-positive rates
 
 | Signal | Fired | Fire rate | FP | FP rate | n | Anomaly |
 | --- | --: | --: | --: | --: | --: | :-: |
-| `inline_review_comments` | 1 | 0.02 | 0 | 0.00 | 1 |  |
-| `fix_typed_title` | 18 | 0.36 | 7 | 0.39 | 18 |  |
-| `multi_commit_pr` | 21 | 0.42 | 8 | 0.38 | 21 |  |
+| `inline_review_comments` | 3 | 0.06 | 0 | 0.00 | 3 |  |
+| `fix_typed_title` | 16 | 0.32 | 5 | 0.31 | 16 |  |
+| `multi_commit_pr` | 23 | 0.46 | 8 | 0.35 | 23 |  |
 
 ## False-positive rate trend
 
-- All-time: 0.79 (n=38 triaged)
-- Last 20 retros: 0.88 (n=8 triaged) -- rising
+- All-time: 0.78 (n=36 triaged)
+- Last 20 retros: 0.83 (n=6 triaged) -- rising
 
 ## Recent retros
 
 | # | State | Status | Title |
 | --: | :-- | :-- | :-- |
+| 1747 | open | untriaged | chore(auto-retro): review PR #1746 repair loops |
+| 1741 | open | untriaged | chore(auto-retro): review PR #1738 repair loops |
 | 1733 | open | untriaged | chore(auto-retro): review PR #1730 repair loops |
 | 1661 | open | untriaged | chore(auto-retro): review PR #1659 repair loops |
 | 1600 | open | untriaged | chore(auto-retro): review PR #1599 repair loops |
@@ -47,5 +49,3 @@ pie showData
 | 1568 | open | untriaged | chore(auto-retro): review PR #1567 repair loops |
 | 1518 | open | untriaged | chore(auto-retro): review PR #1517 repair loops |
 | 1505 | open | untriaged | chore(auto-retro): review PR #1500 repair loops |
-| 1483 | open | untriaged | chore(auto-retro): review PR #1481 repair loops |
-| 1482 | open | untriaged | chore(auto-retro): review PR #1480 repair loops |

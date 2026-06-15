@@ -38,6 +38,7 @@ def _resource_section(cost: float) -> str:
         total=10,
         cost=cost,
         models=["claude-opus-4-8"],
+        reasoning=0,
     )
     return srr.render_section("0:10:00", usage)
 
