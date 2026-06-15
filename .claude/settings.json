@@ -599,6 +599,14 @@
             "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/gate_cache_regime_advisor.py"
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/gate_stop_pr_review_reply.py"
+          }
+        ]
       }
     ]
   }
