@@ -1,0 +1,45 @@
+name: Validate document dependency graph
+
+# Advisory gate (continue-on-error: true) per the selection mechanism in
+# docs/prd/agent-rules-design-philosophy.md section 6.4: new gates enter as
+# advisory and are promoted to required checks in .github/rulesets/main.json
+# only after establishing a low false-positive rate across successive merges.
+# Promotion criteria: two consecutive sprints at FP rate < 5%.
+#
+# Companion to: scripts/gate_doc_graph_pr.py (the gate script)
+#               docs/graph/doc-dependencies.toml (the graph declaration)
+#               docs/prd/doc-dependency-graph.md (the design rationale)
+#
+# NOT mirrored in preflight_all.STEPS: the gate is diff-based (requires a PR
+# base-ref) and has no local working-tree equivalent. Listed in
+# scripts/scan_preflight_drift.py ALLOWLIST with rationale. Refs #1754.
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions: {}
+
+jobs:
+  validate:
+    name: Doc dependency graph / gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    continue-on-error: true
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          fetch-depth: 0
+
+      - name: Set up uv and project environment
+        uses: ./.github/actions/setup-uv
+
+      - name: Validate document dependency co-changes
+        env:
+          BASE_REF: origin/${{ github.base_ref }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: uv run python scripts/gate_doc_graph_pr.py
