@@ -11,21 +11,24 @@ This file is generated from `scripts/*.py` import statements by `python3 scripts
 | `_git` | 12 | `check_hooks_path`, `check_session_branch`, `devcontainer_pin_pr`, `pr_upsert`, `preflight_branch_base`, `preflight_cache`, `preflight_coverage`, `preflight_main_freshness`, `preflight_push_nonempty`, `refresh_pr_branch`, `scan_area_path_coverage`, `scan_secrets` |
 | `_github_tool_names` | 9 | `gate_handoff_retro_survey_askuserquestion`, `pr_body_close_keyword_gate`, `preflight_angle_token_drop`, `preflight_codex_github_footer`, `preflight_github_secrets`, `preflight_non_ascii`, `preflight_pr_body_required_sections`, `preflight_pr_template_shape`, `preflight_title_policy` |
 | `body_policy` | 9 | `post_pr_create_body_fix`, `pr_body_builder`, `preflight_angle_token_drop`, `preflight_codex_github_footer`, `preflight_pr_body`, `preflight_pr_body_required_sections`, `preflight_pr_template_shape`, `verify_instruction_text_growth`, `verify_text_delta_section` |
-| `_trusted_bots` | 7 | `auto_retro`, `body_policy`, `dependabot_automerge`, `issue_link`, `scan_non_ascii`, `title_policy`, `verify_dependabot_author` |
+| `_trusted_bots` | 8 | `_auto_retro_parse`, `auto_retro`, `body_policy`, `dependabot_automerge`, `issue_link`, `scan_non_ascii`, `title_policy`, `verify_dependabot_author` |
 | `issue_anchors` | 6 | `_security_drift_issues`, `ci_budget_issue`, `coverage_failure_issue`, `devcontainer_pin_pr`, `scan_issue_anchor_drift`, `security_drift_report` |
+| `issue_link` | 6 | `_auto_retro_parse`, `_auto_retro_render`, `auto_retro`, `body_policy`, `preflight_angle_token_drop`, `scan_retro_followup_drift` |
 | `_ref_classifier` | 5 | `issue_link`, `np_strategy_tracking`, `pr_body_close_keyword_gate`, `preflight_pr_body`, `verify_linked_issue_titles` |
+| `_retro_labels` | 4 | `_auto_retro_render`, `_auto_retro_triage`, `auto_retro`, `scan_retro_followup_drift` |
 | `_session_branches` | 4 | `check_session_branch`, `preflight_commit_session_branch`, `preflight_push_session_branch`, `preflight_session_branch_authz` |
-| `issue_link` | 4 | `auto_retro`, `body_policy`, `preflight_angle_token_drop`, `scan_retro_followup_drift` |
+| `_auto_retro_parse` | 3 | `_auto_retro_render`, `_auto_retro_triage`, `auto_retro` |
 | `doc_graph` | 3 | `doc_graph_viz`, `gate_doc_graph_pr`, `scan_doc_graph_registration` |
 | `pr_upsert` | 3 | `_pr_merge`, `auto_retro`, `devcontainer_pin_pr` |
 | `_allowlist` | 2 | `scan_allowlist_parser_parity`, `scan_allowlist_rationale` |
 | `_pr_commit_batch` | 2 | `devcontainer_pin_pr`, `pr_upsert` |
 | `_pr_merge` | 2 | `bot_pr_automerge`, `devcontainer_pin_pr` |
-| `_retro_labels` | 2 | `auto_retro`, `scan_retro_followup_drift` |
 | `_secret_patterns` | 2 | `preflight_github_secrets`, `scan_secrets` |
 | `_security_drift_families` | 2 | `_security_drift_issues`, `security_drift_report` |
 | `scan_non_ascii` | 2 | `preflight_non_ascii`, `preflight_pr_body` |
 | `title_policy` | 2 | `preflight_title_policy`, `verify_linked_issue_titles` |
+| `_auto_retro_render` | 1 | `auto_retro` |
+| `_auto_retro_triage` | 1 | `auto_retro` |
 | `_security_drift_issues` | 1 | `security_drift_report` |
 | `auto_retro` | 1 | `gate_reserved_retro_scope` |
 | `check_pr_mergeability` | 1 | `gate_merge_safety` |
@@ -56,12 +59,22 @@ This file is generated from `scripts/*.py` import statements by `python3 scripts
 
 ```mermaid
 flowchart TD
+    _auto_retro_parse --> _trusted_bots
+    _auto_retro_parse --> issue_link
+    _auto_retro_render --> _auto_retro_parse
+    _auto_retro_render --> _retro_labels
+    _auto_retro_render --> issue_link
+    _auto_retro_triage --> _auto_retro_parse
+    _auto_retro_triage --> _retro_labels
     _ci_watch --> _github_api
     _pr_commit_batch --> _github_api
     _pr_merge --> _github_api
     _pr_merge --> pr_upsert
     _security_drift_issues --> _security_drift_families
     _security_drift_issues --> issue_anchors
+    auto_retro --> _auto_retro_parse
+    auto_retro --> _auto_retro_render
+    auto_retro --> _auto_retro_triage
     auto_retro --> _retro_labels
     auto_retro --> _trusted_bots
     auto_retro --> issue_link
