@@ -126,6 +126,7 @@ Detection is string-match based:
 | `preflight_coverage.py` | agent-hook | `claude:PreToolUse` |
 | `preflight_coverage.py` | agent-hook | `codex:PreToolUse` |
 | `preflight_coverage.py` | pre-commit | `preflight-coverage` |
+| `preflight_coverage.py` | workflow | `verify-agents.yml (coverage)` |
 | `preflight_github_secrets.py` | agent-hook | `claude:PreToolUse` |
 | `preflight_github_secrets.py` | agent-hook | `codex:PreToolUse` |
 | `preflight_hook_event_keys.py` | pre-commit | `preflight-hook-event-keys` |
