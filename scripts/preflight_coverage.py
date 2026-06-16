@@ -51,7 +51,9 @@ def changed_scripts(repo: Path, *, base_ref: str = "origin/main") -> list[str]:
     they are always exercised indirectly through their public callers and
     lack standalone CLI entry points.
     """
-    completed = run_git(["diff", "--name-only", base_ref, "--", "scripts/"], cwd=repo)
+    # --diff-filter=d excludes deleted paths so a script-removal PR is never
+    # penalised for a file that no longer exists in coverage.json.
+    completed = run_git(["diff", "--name-only", "--diff-filter=d", base_ref, "--", "scripts/"], cwd=repo)
     if completed.returncode != 0:
         detail = (completed.stderr or completed.stdout).strip()
         raise RuntimeError(f"git diff failed ({base_ref}): {detail}")
