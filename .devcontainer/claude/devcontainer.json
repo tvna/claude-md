@@ -12,7 +12,8 @@
   ],
   "mounts": [
     "source=claude-md-claude-session,target=/home/claude/.claude,type=volume",
-    "source=${localEnv:HOME}/.config/gh,target=/home/claude/.config/gh,type=bind,consistency=cached"
+    "source=${localEnv:HOME}/.config/gh,target=/home/claude/.config/gh,type=bind,consistency=cached",
+    "source=${localEnv:HOME}/.ssh,target=/home/claude/.ssh,type=bind,consistency=cached,readonly"
   ],
   "remoteEnv": {
     "AGENT_CONTAINER": "claude"

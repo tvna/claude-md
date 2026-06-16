@@ -13,7 +13,8 @@
   ],
   "mounts": [
     "source=claude-md-codex-session,target=/home/codex/.codex,type=volume",
-    "source=${localEnv:HOME}/.config/gh,target=/home/codex/.config/gh,type=bind,consistency=cached"
+    "source=${localEnv:HOME}/.config/gh,target=/home/codex/.config/gh,type=bind,consistency=cached",
+    "source=${localEnv:HOME}/.ssh,target=/home/codex/.ssh,type=bind,consistency=cached,readonly"
   ],
   "remoteEnv": {
     "AGENT_CONTAINER": "codex"

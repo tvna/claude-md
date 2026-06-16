@@ -87,4 +87,6 @@ esac
 "${sudo_command[@]}" cp "${config_dir}/profile.d/claude-md-nix-path.sh" /etc/profile.d/claude-md-nix-path.sh
 "${sudo_command[@]}" cp "${config_dir}/profile.d/claude-md-agent-prompt.sh" /etc/profile.d/claude-md-agent-prompt.sh
 
+bash "${script_dir}/configure-git-signing.sh" "$agent" "$home_dir"
+
 echo "configured devcontainer runtime for $agent"
