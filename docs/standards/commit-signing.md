@@ -50,7 +50,9 @@ managed git proxy. These commits are treated exactly like any other
 inherit GitHub's web-flow signature when the PR is squash-merged. A PR built
 solely from web-session commits is therefore mergeable once it is green and
 up to date with `main` -- the squash commit GitHub creates is `Verified` and
-satisfies `required_signatures`.
+satisfies `required_signatures`. This holds when the only unsigned objects are
+the commits being squashed; for the unsigned-*ancestor* exception (for example
+an in-session `Merge origin/main` commit), see the exception bullet below.
 
 Client-side signing inside the session is both unnecessary and ineffective,
 so it is **not** part of this standard:
@@ -70,6 +72,24 @@ so it is **not** part of this standard:
   not attempt to re-sign the branch commits. Refs
   [#1496](https://github.com/tvna/claude-md/issues/1496),
   [#1494](https://github.com/tvna/claude-md/issues/1494).
+- **Exception (unsigned ancestor commits).** The squash property above assumes
+  the branch's only unsigned objects are the commits being squashed. A branch
+  that has accumulated an unsigned *ancestor* it no longer rewrites -- for
+  example an in-session `Merge origin/main` commit, or the legacy
+  `github-actions[bot]` ancestor in
+  [#1560](https://github.com/tvna/claude-md/issues/1560) -- can instead have the
+  merge box report `Commits must have verified signatures` and block the squash.
+  Because `non_fast_forward` forbids rewriting that ancestor in place, the fix is
+  to **recreate the branch off current `main` so the stale unsigned ancestor is
+  dropped** (a delete+create or a replacement PR), exactly as the triage-report
+  flow does with `recreate=True` (see
+  [Bot-generated PR commits](#bot-generated-pr-commits-app-bot-signed)). The
+  recreated feature commits follow the normal keyless path -- they stay
+  **unsigned** and inherit the squash signature; do **not** try to sign them
+  (ineffective, per the first bullet above). Do **not** relax
+  `required_signatures` or add a `bypass_actors` entry to force the merge -- that
+  breaks the normative invariant below. Confirm the squash-signature behaviour
+  per "Verify before enforcing" before relying on it.
 
 ## Normative invariant (reviewers MUST enforce)
 
