@@ -82,12 +82,19 @@ so it is **not** part of this standard:
   `gh pr merge --squash` then fails with `the base branch policy prohibits the
   merge`. Two resolutions, in order of preference:
   1. **Primary -- repo-admin `--admin` override.** A repository administrator
-     merges with `gh pr merge <pr-number> --squash --admin`. The `--admin` flag
-     bypasses only the PR-stage branch-protection pre-check; GitHub still creates
-     the squash commit and signs it web-flow `Verified`, so the `main` signature
-     invariant below is preserved -- no GPG/local signing is involved and no
-     ruleset is relaxed. This is the live-observed resolution for the
-     unsigned-ancestor block (Refs
+     merges with `gh pr merge <pr-number> --squash --admin`. Per the
+     [`gh pr merge` manual](https://cli.github.com/manual/gh_pr_merge), `--admin`
+     uses administrator privileges to "merge a pull request that does not meet
+     requirements", so it bypasses *every* unmet `main.json` requirement on the
+     PR -- not only the unsigned-ancestor signature block but also required
+     status checks, review-thread resolution, and code-owner review. The
+     administrator MUST therefore treat `--admin` as a signature-block clearer
+     only, and independently confirm the PR is otherwise ready first: required
+     checks green, review threads resolved, code-owner review present, and the
+     exact head SHA being merged. The signature invariant below holds regardless
+     -- GitHub still creates the squash commit and signs it web-flow `Verified`,
+     so no GPG/local signing is involved and no ruleset is relaxed. This is the
+     live-observed resolution for the unsigned-ancestor block (Refs
      [#1780](https://github.com/tvna/claude-md/issues/1780),
      [#1727](https://github.com/tvna/claude-md/issues/1727)). It is
      **repo-admin only**: because `bypass_actors: []`, non-admin actors --
