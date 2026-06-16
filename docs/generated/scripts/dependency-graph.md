@@ -16,6 +16,7 @@ This file is generated from `scripts/*.py` import statements by `python3 scripts
 | `_ref_classifier` | 5 | `issue_link`, `np_strategy_tracking`, `pr_body_close_keyword_gate`, `preflight_pr_body`, `verify_linked_issue_titles` |
 | `_session_branches` | 4 | `check_session_branch`, `preflight_commit_session_branch`, `preflight_push_session_branch`, `preflight_session_branch_authz` |
 | `issue_link` | 4 | `auto_retro`, `body_policy`, `preflight_angle_token_drop`, `scan_retro_followup_drift` |
+| `doc_graph` | 3 | `doc_graph_viz`, `gate_doc_graph_pr`, `scan_doc_graph_registration` |
 | `pr_upsert` | 3 | `_pr_merge`, `auto_retro`, `devcontainer_pin_pr` |
 | `_allowlist` | 2 | `scan_allowlist_parser_parity`, `scan_allowlist_rationale` |
 | `_pr_commit_batch` | 2 | `devcontainer_pin_pr`, `pr_upsert` |
@@ -23,7 +24,6 @@ This file is generated from `scripts/*.py` import statements by `python3 scripts
 | `_retro_labels` | 2 | `auto_retro`, `scan_retro_followup_drift` |
 | `_secret_patterns` | 2 | `preflight_github_secrets`, `scan_secrets` |
 | `_security_drift_families` | 2 | `_security_drift_issues`, `security_drift_report` |
-| `doc_graph` | 2 | `doc_graph_viz`, `gate_doc_graph_pr` |
 | `scan_non_ascii` | 2 | `preflight_non_ascii`, `preflight_pr_body` |
 | `title_policy` | 2 | `preflight_title_policy`, `verify_linked_issue_titles` |
 | `_security_drift_issues` | 1 | `security_drift_report` |
@@ -195,6 +195,7 @@ flowchart TD
     scan_allowlist_rationale --> _allowlist
     scan_area_path_coverage --> _git
     scan_devcontainer_tool_drift --> preflight_all
+    scan_doc_graph_registration --> doc_graph
     scan_input_contract_drift --> scan_preflight_drift
     scan_issue_anchor_drift --> issue_anchors
     scan_module_size_distribution --> scan_maintainability_metrics
