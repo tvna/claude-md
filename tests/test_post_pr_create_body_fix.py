@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import io
 import json
+from typing import Any
 
 import post_pr_create_body_fix as fix
 import pytest
@@ -272,7 +273,7 @@ class TestDecide:
 # ---------------------------------------------------------------------------
 
 
-def _normalized_section(output: dict) -> str:
+def _normalized_section(output: dict[str, Any]) -> str:
     return output["hookSpecificOutput"]["additionalContext"].split(
         "--- NORMALIZED BODY ---", 1
     )[1]

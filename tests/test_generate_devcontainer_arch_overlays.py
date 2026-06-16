@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 import generate_devcontainer_arch_overlays as overlays
 import pytest
@@ -11,7 +12,7 @@ pytestmark = pytest.mark.shard_ci_ops
 SHA = "a" * 40
 
 
-def _base_config(agent: str) -> dict:
+def _base_config(agent: str) -> dict[str, Any]:
     return {
         "name": f"claude-md {agent.capitalize()}",
         "image": f"ghcr.io/tvna/claude-md-devcontainer-{agent}:{SHA}",

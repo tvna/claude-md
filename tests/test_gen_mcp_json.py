@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 import gen_mcp_json as gen
 import pytest
@@ -59,7 +60,7 @@ def test_render_no_mcp_block_yields_empty_servers() -> None:
         {"dependencies": {"mcp": [{"name": "s", "transport": "carrier-pigeon"}]}},  # unknown transport
     ],
 )
-def test_render_rejects_malformed_declarations(data: dict) -> None:
+def test_render_rejects_malformed_declarations(data: dict[str, Any]) -> None:
     with pytest.raises(ValueError):
         gen.render_mcp_config(data)
 

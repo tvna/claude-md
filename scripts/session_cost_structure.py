@@ -61,7 +61,7 @@ import subprocess
 import sys
 from collections.abc import Iterable
 from pathlib import Path
-from typing import NamedTuple
+from typing import Any, NamedTuple
 
 _CCUSAGE_TIMEOUT_S = 20
 
@@ -122,7 +122,7 @@ def _coerce_int(value: object) -> int:
     return max(0, int(value))
 
 
-def _message_usage(entry: object) -> tuple[str, dict] | None:
+def _message_usage(entry: object) -> tuple[str, dict[str, Any]] | None:
     """Return ``(message_id, usage_dict)`` for an assistant entry, or ``None``.
 
     Only assistant entries carry billable ``usage``; user / tool-result entries
@@ -152,7 +152,7 @@ def aggregate_usages(entries: Iterable[object]) -> Tokens:
     object is absent the flat ``cache_creation_input_tokens`` is attributed to
     the 5m bucket (the API default TTL) so an older transcript shape still sums.
     """
-    by_id: dict[str, dict] = {}
+    by_id: dict[str, dict[str, Any]] = {}
     for entry in entries:
         found = _message_usage(entry)
         if found is not None:

@@ -14,6 +14,7 @@ Refs #1492.
 from __future__ import annotations
 
 import json
+from typing import Any
 
 import auto_retro
 import compare_cache_regimes as ccr
@@ -44,7 +45,7 @@ def _resource_section(cost: float) -> str:
 
 
 def _repair_table(
-    check_runs: list[dict] | None,
+    check_runs: list[dict[str, Any]] | None,
     commit_subjects: list[str],
     pr_commit_count: int,
     pr_type: str = "",
@@ -60,7 +61,7 @@ def _repair_table(
     )
 
 
-def _doc() -> dict:
+def _doc() -> dict[str, Any]:
     return {
         "regimes": [
             {"name": "baseline-5m", "prs": [{"cost": 2.0, "repairs": 2}, {"cost": 4.0, "repairs": 0}]},

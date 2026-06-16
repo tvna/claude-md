@@ -15,6 +15,7 @@ Refs #1492.
 from __future__ import annotations
 
 import json
+from typing import Any
 
 import pytest
 import session_cost_structure as scs
@@ -22,7 +23,7 @@ import session_cost_structure as scs
 pytestmark = pytest.mark.shard_preflight
 
 
-def _assistant(message_id: str, usage: dict) -> dict:
+def _assistant(message_id: str, usage: dict[str, Any]) -> dict[str, Any]:
     """Return a transcript entry shaped like an assistant turn with *usage*."""
     return {"type": "assistant", "message": {"id": message_id, "usage": usage}}
 

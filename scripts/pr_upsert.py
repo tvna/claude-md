@@ -610,6 +610,14 @@ def _collect_worktree_changes(
     an addition, one that no longer exists is a deletion. Paths are de-duped, with
     explicit adds winning. Assumes ASCII paths without spaces (the repository's
     generated-doc tree), matching git's unquoted porcelain output for such names.
+
+    When an entire directory is untracked (no parent directory in the index), git
+    porcelain v1 emits the directory itself (e.g. ``?? docs/generated/graph/``)
+    rather than the individual files inside it.  Passing such a directory path as a
+    ``deletions`` entry to ``createCommitOnBranch`` is invalid -- the mutation only
+    accepts file paths -- and produces a generic "Something went wrong" GraphQL
+    error.  When ``candidate.is_dir()``, expand it recursively so every file inside
+    becomes an addition instead. Refs #1772.
     """
     additions: dict[str, bytes] = {}
     deletions: set[str] = set()
@@ -634,6 +642,17 @@ def _collect_worktree_changes(
             if candidate.is_file():
                 additions[path] = candidate.read_bytes()
                 deletions.discard(path)
+            elif candidate.is_dir():
+                # Use git ls-files to respect .gitignore when expanding the
+                # untracked directory.  rglob("*") would add files that git
+                # status deliberately omits (e.g. .DS_Store, *.pyc) (Refs #1772).
+                ls_result = run_git(["ls-files", "--others", "--exclude-standard", path])
+                if ls_result.returncode == 0:
+                    for sub_path in sorted(ls_result.stdout.splitlines()):
+                        sub_path = sub_path.strip()
+                        if sub_path and sub_path not in additions:
+                            additions[sub_path] = Path(sub_path).read_bytes()
+                            deletions.discard(sub_path)
             else:
                 deletions.add(path)
     return list(additions.items()), sorted(deletions)

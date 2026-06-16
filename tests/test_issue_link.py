@@ -8,6 +8,7 @@ The ``scripts/`` directory is added to ``sys.path`` via the
 from __future__ import annotations
 
 import subprocess
+from typing import Any
 
 import issue_link
 import pytest
@@ -144,7 +145,7 @@ class TestIssueExists:
             stderr = b""
             returncode = 0
 
-        captured: dict = {}
+        captured: dict[str, Any] = {}
 
         def _run(cmd, **kwargs):
             captured["cmd"] = cmd
@@ -172,7 +173,7 @@ class TestIssueExists:
 
 class TestVerifyRefExists:
     def test_runner_success_returns_true(self) -> None:
-        captured: dict = {}
+        captured: dict[str, Any] = {}
 
         def _run(cmd, **kwargs):
             captured["cmd"] = cmd
@@ -236,7 +237,7 @@ class TestCLI:
     def test_happy_path(
         self,
         monkeypatch: pytest.MonkeyPatch,
-        capsys: pytest.CaptureFixture,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
         monkeypatch.setenv("PR_BODY", "Closes #42\n")
         monkeypatch.setattr(issue_link, "issue_exists", lambda *_a: True)
@@ -249,7 +250,7 @@ class TestCLI:
     def test_no_refs_exits_nonzero(
         self,
         monkeypatch: pytest.MonkeyPatch,
-        capsys: pytest.CaptureFixture,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
         monkeypatch.setenv("PR_BODY", "Body with no refs at all.\n")
         exit_code = issue_link.main(["verify", "--repo", "owner/repo"])
@@ -261,7 +262,7 @@ class TestCLI:
     def test_empty_body_exits_nonzero(
         self,
         monkeypatch: pytest.MonkeyPatch,
-        capsys: pytest.CaptureFixture,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
         monkeypatch.setenv("PR_BODY", "")
         exit_code = issue_link.main(["verify", "--repo", "owner/repo"])
@@ -271,7 +272,7 @@ class TestCLI:
     def test_missing_pr_body_env_exits_nonzero(
         self,
         monkeypatch: pytest.MonkeyPatch,
-        capsys: pytest.CaptureFixture,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
         monkeypatch.delenv("PR_BODY", raising=False)
         exit_code = issue_link.main(["verify", "--repo", "owner/repo"])
@@ -282,7 +283,7 @@ class TestCLI:
         self,
         tmp_path,
         monkeypatch: pytest.MonkeyPatch,
-        capsys: pytest.CaptureFixture,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
         monkeypatch.setenv("PR_BODY", "Closes #999\n")
         body_file = tmp_path / "pr-body.md"
@@ -305,7 +306,7 @@ class TestCLI:
     def test_one_missing_ref_among_resolvable(
         self,
         monkeypatch: pytest.MonkeyPatch,
-        capsys: pytest.CaptureFixture,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
         monkeypatch.setenv("PR_BODY", "Refs #1\nCloses #2\n")
         monkeypatch.setattr(
@@ -321,7 +322,7 @@ class TestCLI:
     def test_html_commented_ref_is_skipped(
         self,
         monkeypatch: pytest.MonkeyPatch,
-        capsys: pytest.CaptureFixture,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
         monkeypatch.setenv(
             "PR_BODY",
@@ -337,7 +338,7 @@ class TestCLI:
     def test_crlf_is_normalized(
         self,
         monkeypatch: pytest.MonkeyPatch,
-        capsys: pytest.CaptureFixture,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
         # GitHub sometimes delivers PR bodies with CRLF.
         monkeypatch.setenv("PR_BODY", "Refs #1\r\nCloses #2\r\n")
@@ -351,14 +352,14 @@ class TestCLI:
     def test_verify_subcommand_requires_repo(
         self,
         monkeypatch: pytest.MonkeyPatch,
-        capsys: pytest.CaptureFixture,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
         monkeypatch.setenv("PR_BODY", "Refs #1\n")
         with pytest.raises(SystemExit):
             issue_link.main(["verify"])
 
     def test_unknown_subcommand_exits(
-        self, capsys: pytest.CaptureFixture
+        self, capsys: pytest.CaptureFixture[str]
     ) -> None:
         with pytest.raises(SystemExit):
             issue_link.main(["bogus"])
@@ -380,7 +381,7 @@ class TestTrustedBotAllowlist:
     def test_dependabot_no_refs_exits_zero_with_skip_note(
         self,
         monkeypatch: pytest.MonkeyPatch,
-        capsys: pytest.CaptureFixture,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
         monkeypatch.setenv("PR_BODY", "Bumps foo from 1.0 to 1.1.\n")
         exit_code = issue_link.main([
@@ -398,7 +399,7 @@ class TestTrustedBotAllowlist:
     def test_non_bot_no_refs_still_fails(
         self,
         monkeypatch: pytest.MonkeyPatch,
-        capsys: pytest.CaptureFixture,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
         monkeypatch.setenv("PR_BODY", "Body with no refs at all.\n")
         exit_code = issue_link.main([
@@ -414,7 +415,7 @@ class TestTrustedBotAllowlist:
     def test_non_bot_with_refs_still_passes(
         self,
         monkeypatch: pytest.MonkeyPatch,
-        capsys: pytest.CaptureFixture,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
         monkeypatch.setenv("PR_BODY", "Closes #136\n")
         monkeypatch.setattr(issue_link, "issue_exists", lambda *_a: True)
@@ -432,7 +433,7 @@ class TestTrustedBotAllowlist:
     def test_unknown_bot_no_refs_still_fails(
         self,
         monkeypatch: pytest.MonkeyPatch,
-        capsys: pytest.CaptureFixture,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
         """Allowlist is exact-match: an unrecognized bot login is not exempt."""
         monkeypatch.setenv("PR_BODY", "Bumps foo.\n")
@@ -451,7 +452,7 @@ class TestTrustedBotAllowlist:
     def test_author_from_env_var(
         self,
         monkeypatch: pytest.MonkeyPatch,
-        capsys: pytest.CaptureFixture,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
         """``--author`` falls back to $PR_AUTHOR (mirrors PR_BODY contract)."""
         monkeypatch.setenv("PR_BODY", "Bumps foo from 1.0 to 1.1.\n")
@@ -463,7 +464,7 @@ class TestTrustedBotAllowlist:
     def test_empty_author_falls_through(
         self,
         monkeypatch: pytest.MonkeyPatch,
-        capsys: pytest.CaptureFixture,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
         """An empty author string must NOT be treated as the allowlist entry."""
         monkeypatch.setenv("PR_BODY", "Body with no refs.\n")
@@ -480,7 +481,7 @@ class TestTrustedBotAllowlist:
     def test_bot_author_does_not_resolve_unverifiable_refs(
         self,
         monkeypatch: pytest.MonkeyPatch,
-        capsys: pytest.CaptureFixture,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
         """Trusted-bot skip short-circuits even when the body has dangling refs.
 
@@ -603,7 +604,7 @@ class TestBodyHasPartialMarker:
 
 class TestGetIssueLabels:
     def test_returns_label_list_on_success(self) -> None:
-        captured: dict = {}
+        captured: dict[str, Any] = {}
 
         class _Result:
             stdout = b"type:tracking\nlayer:meta\n"
@@ -698,7 +699,7 @@ class TestClosingKeywordGate:
     def test_closes_keyword_passes(
         self,
         monkeypatch: pytest.MonkeyPatch,
-        capsys: pytest.CaptureFixture,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
         self._setup_mocks(monkeypatch)
         monkeypatch.setenv("PR_BODY", "Closes #1\n")
@@ -709,7 +710,7 @@ class TestClosingKeywordGate:
     def test_fixes_keyword_passes(
         self,
         monkeypatch: pytest.MonkeyPatch,
-        capsys: pytest.CaptureFixture,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
         self._setup_mocks(monkeypatch)
         monkeypatch.setenv("PR_BODY", "Fixes #1\n")
@@ -720,7 +721,7 @@ class TestClosingKeywordGate:
     def test_resolves_keyword_passes(
         self,
         monkeypatch: pytest.MonkeyPatch,
-        capsys: pytest.CaptureFixture,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
         self._setup_mocks(monkeypatch)
         monkeypatch.setenv("PR_BODY", "Resolves #1\n")
@@ -731,7 +732,7 @@ class TestClosingKeywordGate:
     def test_mixed_refs_and_closes_passes(
         self,
         monkeypatch: pytest.MonkeyPatch,
-        capsys: pytest.CaptureFixture,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
         self._setup_mocks(monkeypatch)
         monkeypatch.setenv("PR_BODY", "Refs #1\nCloses #2\n")
@@ -742,7 +743,7 @@ class TestClosingKeywordGate:
     def test_refs_to_tracking_umbrella_passes_with_note(
         self,
         monkeypatch: pytest.MonkeyPatch,
-        capsys: pytest.CaptureFixture,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
         self._setup_mocks(
             monkeypatch,
@@ -759,7 +760,7 @@ class TestClosingKeywordGate:
     def test_refs_to_non_tracking_fails_with_new_error(
         self,
         monkeypatch: pytest.MonkeyPatch,
-        capsys: pytest.CaptureFixture,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
         self._setup_mocks(
             monkeypatch,
@@ -778,7 +779,7 @@ class TestClosingKeywordGate:
     def test_refs_to_mixed_tracking_and_non_tracking_fails(
         self,
         monkeypatch: pytest.MonkeyPatch,
-        capsys: pytest.CaptureFixture,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
         self._setup_mocks(
             monkeypatch,
@@ -797,7 +798,7 @@ class TestClosingKeywordGate:
     def test_partial_marker_opts_out(
         self,
         monkeypatch: pytest.MonkeyPatch,
-        capsys: pytest.CaptureFixture,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
         # No tracking label, but the marker opts out of the gate.
         self._setup_mocks(monkeypatch, labels_for={214: ["type:fix"]})
@@ -814,7 +815,7 @@ class TestClosingKeywordGate:
     def test_plaintext_partial_marker_opts_out(
         self,
         monkeypatch: pytest.MonkeyPatch,
-        capsys: pytest.CaptureFixture,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
         # The MCP-safe plain-text 'partial-pr' line opts out of the gate
         # even though no referenced issue carries the tracking label
@@ -833,7 +834,7 @@ class TestClosingKeywordGate:
     def test_get_issue_labels_failure_treated_as_not_tracking(
         self,
         monkeypatch: pytest.MonkeyPatch,
-        capsys: pytest.CaptureFixture,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
         # Simulate gh api flake / network failure -> labels=None -> fail.
         self._setup_mocks(monkeypatch, labels_for={214: None})
@@ -846,7 +847,7 @@ class TestClosingKeywordGate:
     def test_existence_failure_short_circuits_before_gate(
         self,
         monkeypatch: pytest.MonkeyPatch,
-        capsys: pytest.CaptureFixture,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
         # If a Refs target does not exist, the existence error fires
         # first; the new closing-keyword gate is never reached and
