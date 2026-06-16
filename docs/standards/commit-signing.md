@@ -78,18 +78,36 @@ so it is **not** part of this standard:
   example an in-session `Merge origin/main` commit, or the legacy
   `github-actions[bot]` ancestor in
   [#1560](https://github.com/tvna/claude-md/issues/1560) -- can instead have the
-  merge box report `Commits must have verified signatures` and block the squash.
-  Because `non_fast_forward` forbids rewriting that ancestor in place, the fix is
-  to **recreate the branch off current `main` so the stale unsigned ancestor is
-  dropped** (a delete+create or a replacement PR), exactly as the triage-report
-  flow does with `recreate=True` (see
-  [Bot-generated PR commits](#bot-generated-pr-commits-app-bot-signed)). The
-  recreated feature commits follow the normal keyless path -- they stay
-  **unsigned** and inherit the squash signature; do **not** try to sign them
-  (ineffective, per the first bullet above). Do **not** relax
-  `required_signatures` or add a `bypass_actors` entry to force the merge -- that
-  breaks the normative invariant below. Confirm the squash-signature behaviour
-  per "Verify before enforcing" before relying on it.
+  merge box report `Commits must have verified signatures` and block the squash;
+  `gh pr merge --squash` then fails with `the base branch policy prohibits the
+  merge`. Two resolutions, in order of preference:
+  1. **Primary -- repo-admin `--admin` override.** A repository administrator
+     merges with `gh pr merge <pr-number> --squash --admin`. The `--admin` flag
+     bypasses only the PR-stage branch-protection pre-check; GitHub still creates
+     the squash commit and signs it web-flow `Verified`, so the `main` signature
+     invariant below is preserved -- no GPG/local signing is involved and no
+     ruleset is relaxed. This is the live-observed resolution for the
+     unsigned-ancestor block (Refs
+     [#1780](https://github.com/tvna/claude-md/issues/1780),
+     [#1727](https://github.com/tvna/claude-md/issues/1727)). It is
+     **repo-admin only**: because `bypass_actors: []`, non-admin actors --
+     including remote agent / web sessions -- cannot self-merge and must use
+     option 2 or request an admin merge.
+  2. **Fallback (no admin override available) -- recreate the branch.** Because
+     `non_fast_forward` forbids rewriting the unsigned ancestor in place,
+     **recreate the branch off current `main` so the stale unsigned ancestor is
+     dropped** (a delete+create or a replacement PR), exactly as the
+     triage-report flow does with `recreate=True` (see
+     [Bot-generated PR commits](#bot-generated-pr-commits-app-bot-signed)). The
+     recreated feature commits follow the normal keyless path -- they stay
+     **unsigned** and inherit the squash signature; do **not** try to sign them
+     (ineffective, per the first bullet above).
+
+  In neither case relax `required_signatures` or add a `bypass_actors` entry to
+  force the merge -- that breaks the normative invariant below. The `--admin`
+  override does **not** do this: it leaves the ruleset intact and still yields a
+  `Verified` squash commit on `main`. Confirm the squash-signature behaviour per
+  "Verify before enforcing" before relying on it.
 
 ## Normative invariant (reviewers MUST enforce)
 
