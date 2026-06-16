@@ -60,3 +60,7 @@ backing = ["script:scan_input_contract_drift"]
 [M10]
 status = "enforced"
 backing = ["script:scan_workflow_pip"]
+
+[M11]
+status = "enforced"
+backing = ["script:preflight_coverage"]

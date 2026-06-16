@@ -9,11 +9,19 @@ If ``coverage.json`` already exists (the developer ran pytest --cov
 locally), the script reuses it.  Otherwise it runs the full test suite
 via ``uv run pytest --cov --cov-report=json -q`` to generate it.
 
-Exit codes:
-* ``0`` -- every changed scripts/*.py file meets the per-file floor, or
-  no public scripts/*.py files changed relative to the base ref.
-* ``1`` -- at least one changed file is absent from the coverage report
-  or falls below the per-file floor.
+Contract:
+- Inputs: ``--base-ref`` (default ``origin/main``, the git ref to diff
+  against for changed scripts); ``--floor`` (default 90.0, per-file
+  coverage percentage); ``--coverage-json`` (default None, path to an
+  existing report -- skips the pytest run when supplied).
+- Outputs: ``OK: <path> <pct>%`` lines on stdout for passing files;
+  ``::error file=<path>::per-file coverage: <reason>`` annotations on
+  stderr for each failing file; exit 0 when all changed files meet the
+  floor (or no public scripts/*.py changed), exit 1 otherwise.
+- Failure policy: fails loud per CLAUDE.md section 4 (it is both a CI
+  gate and a pre-push hook; a file below the floor always exits non-zero).
+
+Tested by ``tests/test_preflight_coverage.py``. Refs #952, #1800.
 """
 
 from __future__ import annotations
@@ -43,7 +51,9 @@ def changed_scripts(repo: Path, *, base_ref: str = "origin/main") -> list[str]:
     they are always exercised indirectly through their public callers and
     lack standalone CLI entry points.
     """
-    completed = run_git(["diff", "--name-only", base_ref, "--", "scripts/"], cwd=repo)
+    # --diff-filter=d excludes deleted paths so a script-removal PR is never
+    # penalised for a file that no longer exists in coverage.json.
+    completed = run_git(["diff", "--name-only", "--diff-filter=d", base_ref, "--", "scripts/"], cwd=repo)
     if completed.returncode != 0:
         detail = (completed.stderr or completed.stdout).strip()
         raise RuntimeError(f"git diff failed ({base_ref}): {detail}")

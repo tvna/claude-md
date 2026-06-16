@@ -525,6 +525,19 @@ STEPS: tuple[Step, ...] = (
         heavy=True,
     ),
     Step(
+        # Refs #952/#1800. Per-file 90 % coverage floor for changed
+        # scripts/*.py. Runs ``pytest --cov --cov-report=json`` only when
+        # coverage.json is absent; reuses a pre-existing report otherwise.
+        # ``heavy=True`` so it runs in the skip-cached heavy phase after all
+        # cheap gates pass. CI equivalent: verify-agents.yml ``coverage`` job
+        # (``Per-file coverage floor`` required status check).
+        name="preflight_coverage",
+        argv=("uv", "run", "python", "scripts/preflight_coverage.py"),
+        required_bin=("uv",),
+        soft=True,
+        heavy=True,
+    ),
+    Step(
         name="prek",
         argv=("uv", "tool", "run", "prek", "run", "--all-files", "--show-diff-on-failure"),
         required_bin=("uv",),
