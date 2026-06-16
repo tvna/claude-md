@@ -114,6 +114,21 @@ class TestChangedScripts:
         cmd = mock_run.call_args[0][0]
         assert "HEAD~1" in cmd
 
+    def test_diff_filter_excludes_deleted_files(self, tmp_path: Path) -> None:
+        with (
+            patch("preflight_coverage.shutil.which", return_value="/usr/bin/git"),
+            patch("preflight_coverage.subprocess.run") as mock_run,
+        ):
+            mock_run.return_value = subprocess.CompletedProcess(
+                args=[],
+                returncode=0,
+                stdout="",
+                stderr="",
+            )
+            cov.changed_scripts(tmp_path)
+        cmd = mock_run.call_args[0][0]
+        assert "--diff-filter=d" in cmd
+
 
 # ---------------------------------------------------------------------------
 # ensure_coverage_json

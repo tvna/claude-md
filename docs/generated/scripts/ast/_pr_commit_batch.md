@@ -2,6 +2,36 @@
 
 This file is generated from `scripts/_pr_commit_batch.py` by `python3 scripts/script_ast_graph.py all-doc`. Do not edit it by hand: content under `docs/generated/scripts/` is owned by the post-merge automation (refs #1540) -- update the source script instead.
 
+## _is_valid_commit_path(...)
+
+```mermaid
+flowchart TD
+    N001["_is_valid_commit_path(...)"]
+    N002["if not path or not path.strip() or path.endswith('/')"]
+    N003["return False"]
+    N004["return all((segment not in ('<str>', '<str>', '<str>') for segment in path.split('<str>')))"]
+    N001 -->|"start"| N002
+    N002 -->|"true"| N003
+    N002 -->|"false"| N004
+```
+
+## _validate_commit_paths(...)
+
+```mermaid
+flowchart TD
+    N001["_validate_commit_paths(...)"]
+    N002["bad = [f'<str>{p!r}' for p, _ in additions if not _is_valid_commit_path(p)]"]
+    N003["bad += [f'<str>{p!r}' for p in deletions if not _is_valid_commit_path(p)]"]
+    N004["if bad"]
+    N005["raise RuntimeError(f'<str>{'<str>'.join(bad)}')"]
+    N006["end"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 --> N004
+    N004 -->|"true"| N005
+    N004 -->|"false"| N006
+```
+
 ## _create_commit_on_branch(...)
 
 ```mermaid

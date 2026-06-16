@@ -39,7 +39,7 @@ from _github_api import graphql_call as _github_graphql_call
 # Signed commit creation (createCommitOnBranch) and the payload batching that
 # keeps a large backlog from overflowing the mutation live in a sibling module
 # to keep this one within the script size budget. Refs #1437, #1578.
-from _pr_commit_batch import _create_commits_in_batches
+from _pr_commit_batch import _create_commits_in_batches, _validate_commit_paths
 
 _API_ROOT = "https://api.github.com"
 
@@ -297,6 +297,10 @@ def upsert_files_pr(
     """
     if not additions and not deletions:
         return "up-to-date"
+
+    # Reject malformed paths before any network call so a bad payload fails loud
+    # here instead of being masked as a retried "transient" GraphQL error (#1784).
+    _validate_commit_paths(additions, deletions)
 
     if not _ref_drifts(
         repo=repo, ref=base, additions=additions, deletions=deletions, token=token, apply_call=apply_call
@@ -610,6 +614,14 @@ def _collect_worktree_changes(
     an addition, one that no longer exists is a deletion. Paths are de-duped, with
     explicit adds winning. Assumes ASCII paths without spaces (the repository's
     generated-doc tree), matching git's unquoted porcelain output for such names.
+
+    When an entire directory is untracked (no parent directory in the index), git
+    porcelain v1 emits the directory itself (e.g. ``?? docs/generated/graph/``)
+    rather than the individual files inside it.  Passing such a directory path as a
+    ``deletions`` entry to ``createCommitOnBranch`` is invalid -- the mutation only
+    accepts file paths -- and produces a generic "Something went wrong" GraphQL
+    error.  When ``candidate.is_dir()``, expand it recursively so every file inside
+    becomes an addition instead. Refs #1772.
     """
     additions: dict[str, bytes] = {}
     deletions: set[str] = set()
@@ -634,6 +646,17 @@ def _collect_worktree_changes(
             if candidate.is_file():
                 additions[path] = candidate.read_bytes()
                 deletions.discard(path)
+            elif candidate.is_dir():
+                # Use git ls-files to respect .gitignore when expanding the
+                # untracked directory.  rglob("*") would add files that git
+                # status deliberately omits (e.g. .DS_Store, *.pyc) (Refs #1772).
+                ls_result = run_git(["ls-files", "--others", "--exclude-standard", path])
+                if ls_result.returncode == 0:
+                    for sub_path in sorted(ls_result.stdout.splitlines()):
+                        sub_path = sub_path.strip()
+                        if sub_path and sub_path not in additions:
+                            additions[sub_path] = Path(sub_path).read_bytes()
+                            deletions.discard(sub_path)
             else:
                 deletions.add(path)
     return list(additions.items()), sorted(deletions)

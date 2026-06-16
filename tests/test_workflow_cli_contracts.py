@@ -57,6 +57,7 @@ import nixpkgs_cooldown
 import owasp_asi_mapping
 import post_issue_comment
 import pr_upsert
+import preflight_coverage
 import preflight_uv_version
 import prune_devcontainer_images
 import publish_instruction_release
@@ -255,6 +256,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("title_policy.py", "verify"): "test_title_policy_verify_matches_workflow_kind_env",
     ("update_devcontainer_image_pins.py", "$GITHUB_SHA"): "test_update_devcontainer_image_pins_matches_workflow_args",
     ("uv_download_checksum.py", "verify"): "test_uv_download_checksum_verify_matches_action_args",
+    ("preflight_coverage.py", None): "test_preflight_coverage_matches_workflow_args",
     ("preflight_uv_version.py", "verify"): "test_preflight_uv_version_verify_matches_workflow_args",
     ("uv_pin.py", "drift"): "test_uv_pin_workflow_subcommands_match_ci_usage",
     ("uv_pin.py", "read"): "test_uv_pin_workflow_subcommands_match_ci_usage",
@@ -3135,3 +3137,18 @@ def test_doc_graph_viz_all_doc_matches_workflow_args(
     # No graph file present -> viz returns 1 (missing graph).
     result = doc_graph_viz.main(["all-doc"])
     assert result == 1
+
+
+def test_preflight_coverage_matches_workflow_args(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Mirror the argv shape used by verify-agents.yml coverage job.
+
+    The workflow invokes:
+        uv run python scripts/preflight_coverage.py --base-ref "$BASE_REF"
+    where BASE_REF=origin/<github.base_ref>. The contract test exercises the
+    no-changed-scripts exit-0 path so no real pytest --cov run is triggered.
+    Refs #1800.
+    """
+    monkeypatch.setattr(preflight_coverage, "changed_scripts", lambda *a, **kw: [])
+    assert preflight_coverage.main(["--base-ref", "origin/main"]) == 0

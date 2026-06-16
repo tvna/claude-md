@@ -1006,6 +1006,30 @@ class TestCreateCommitOnBranchDeletions:
 # ---------------------------------------------------------------------------
 
 
+class TestValidateCommitPaths:
+    @pytest.mark.parametrize(
+        "path",
+        ["docs/generated/x.md", "CLAUDE.md", "a/b/c.txt"],
+    )
+    def test_valid_paths_accepted(self, path: str) -> None:
+        assert pcb._is_valid_commit_path(path) is True
+
+    @pytest.mark.parametrize(
+        "path",
+        ["", "   ", "docs/generated/graph/", "/abs/path.md", "a//b.md", "a/./b.md", "a/../b.md", "."],
+    )
+    def test_malformed_paths_rejected(self, path: str) -> None:
+        assert pcb._is_valid_commit_path(path) is False
+
+    def test_validate_lists_every_offending_entry(self) -> None:
+        with pytest.raises(RuntimeError, match="invalid entries.*addition.*deletion"):
+            pcb._validate_commit_paths([("bad/", b"x")], ["also/bad/"])
+
+    def test_validate_passes_clean_payload(self) -> None:
+        # A well-formed payload raises nothing (the function returns None).
+        pcb._validate_commit_paths([("CLAUDE.md", b"x")], ["docs/gone.md"])
+
+
 class TestUpsertFilesPr:
     def test_both_empty_is_noop(self) -> None:
         router = _Router([])
@@ -1017,6 +1041,36 @@ class TestUpsertFilesPr:
         )
         assert result == "up-to-date"
         assert router.log == []
+
+    def test_directory_level_deletion_path_fails_loud(self) -> None:
+        # A directory-level path (trailing slash) is the #1772 payload GitHub
+        # rejects with the generic "Something went wrong" error. It must fail
+        # loud here, before any network or GraphQL call. Refs #1784.
+        router = _Router([])
+        gql = _RecordingGraphql()
+        with pytest.raises(RuntimeError, match="concrete file paths"):
+            pu.upsert_files_pr(
+                repo="o/r", additions=[("CLAUDE.md", b"c\n")],
+                deletions=["docs/generated/graph/"],
+                base="main", branch="chore/x", title="t", body="b",
+                commit_subject="s", commit_body="", token="tok",
+                apply_call=router.apply_call, graphql_call=gql.graphql_call,
+            )
+        assert router.log == []
+        assert gql.calls == []
+
+    def test_empty_addition_path_fails_loud(self) -> None:
+        router = _Router([])
+        gql = _RecordingGraphql()
+        with pytest.raises(RuntimeError, match="concrete file paths"):
+            pu.upsert_files_pr(
+                repo="o/r", additions=[("", b"c\n")], deletions=[],
+                base="main", branch="chore/x", title="t", body="b",
+                commit_subject="s", commit_body="", token="tok",
+                apply_call=router.apply_call, graphql_call=gql.graphql_call,
+            )
+        assert router.log == []
+        assert gql.calls == []
 
     def test_no_drift_across_all_files_is_noop(self) -> None:
         router = _Router([
@@ -1135,6 +1189,61 @@ class TestCollectWorktreeChanges:
         additions, deletions = pu._collect_worktree_changes(adds=[], diff_prefixes=["docs/generated/"])
         assert dict(additions) == {"docs/generated/new.md": b"new\n", "docs/generated/mod.md": b"mod\n"}
         assert deletions == ["docs/generated/gone.md"]
+
+    def test_from_diff_untracked_directory_expands_to_files(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # git porcelain shows "?? docs/generated/graph/" (directory, not individual
+        # files) when the entire directory is new and has no tracked parent.
+        # Passing that directory path as a deletion to createCommitOnBranch is
+        # invalid and causes a "Something went wrong" GraphQL error (Refs #1772).
+        # The fix: is_dir() -> use git ls-files to expand, respecting .gitignore.
+        monkeypatch.chdir(tmp_path)
+        graph_dir = tmp_path / "docs" / "generated" / "graph"
+        graph_dir.mkdir(parents=True)
+        (graph_dir / "doc-dependency-graph.md").write_bytes(b"graph\n")
+        (graph_dir / "sub" / "nested.md").parent.mkdir()
+        (graph_dir / "sub" / "nested.md").write_bytes(b"nested\n")
+
+        def fake_run_git(args: list[str], **kwargs: object) -> _FakeGitStatus:
+            if args[0] == "status":
+                return _FakeGitStatus("?? docs/generated/graph/\n")
+            # ls-files --others --exclude-standard: return non-ignored files only.
+            return _FakeGitStatus(
+                "docs/generated/graph/doc-dependency-graph.md\n"
+                "docs/generated/graph/sub/nested.md\n"
+            )
+
+        monkeypatch.setattr(pu, "run_git", fake_run_git)
+        additions, deletions = pu._collect_worktree_changes(adds=[], diff_prefixes=["docs/generated/"])
+        assert dict(additions) == {
+            "docs/generated/graph/doc-dependency-graph.md": b"graph\n",
+            "docs/generated/graph/sub/nested.md": b"nested\n",
+        }
+        assert deletions == []
+
+    def test_from_diff_untracked_directory_excludes_gitignored_files(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # git ls-files --others --exclude-standard omits gitignored paths.
+        # Verify that _collect_worktree_changes does NOT add ignored files even
+        # when they exist on disk inside the untracked directory (Refs #1772).
+        monkeypatch.chdir(tmp_path)
+        graph_dir = tmp_path / "docs" / "generated" / "graph"
+        graph_dir.mkdir(parents=True)
+        (graph_dir / "doc.md").write_bytes(b"doc\n")
+        (graph_dir / ".DS_Store").write_bytes(b"ignored\n")  # exists on disk
+
+        def fake_run_git(args: list[str], **kwargs: object) -> _FakeGitStatus:
+            if args[0] == "status":
+                return _FakeGitStatus("?? docs/generated/graph/\n")
+            # ls-files honours .gitignore and omits .DS_Store.
+            return _FakeGitStatus("docs/generated/graph/doc.md\n")
+
+        monkeypatch.setattr(pu, "run_git", fake_run_git)
+        additions, deletions = pu._collect_worktree_changes(adds=[], diff_prefixes=["docs/generated/"])
+        assert dict(additions) == {"docs/generated/graph/doc.md": b"doc\n"}
+        assert deletions == []
 
     def test_from_diff_git_failure_raises(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.chdir(tmp_path)

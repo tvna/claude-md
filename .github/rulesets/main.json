@@ -31,6 +31,7 @@
         "strict_required_status_checks_policy": true,
         "required_status_checks": [
           {"context": "Verify repository scripts / gate"},
+          {"context": "Per-file coverage floor"},
           {"context": "Portable PR policy / gate"},
           {"context": "Verify dependabot labels / verify"},
           {"context": "Verify design philosophy doc / verify"},

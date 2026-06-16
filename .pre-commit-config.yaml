@@ -144,6 +144,20 @@ repos:
         pass_filenames: false
         files: ^docs/.*\.md$
 
+      - id: scan-doc-graph-registration
+        name: scan doc graph registration (scripts/scan_doc_graph_registration.py verify)
+        # Refs #1793: gate_doc_graph_pr.py only enforces co-changes for files
+        # already registered in doc-dependencies.toml; new files are invisible
+        # until registered. This hook fails loud for new blocking-path files
+        # (docs/standards/**, docs/prd/**) that are not yet in the graph, and
+        # emits advisory warnings for docs/runbooks/**, scripts/*.py, and
+        # .github/workflows/*.yml. Waivers via PR body are supported in workflow
+        # context (PR_BODY env); locally the hook requires registration.
+        entry: uv run python scripts/scan_doc_graph_registration.py verify
+        language: system
+        pass_filenames: false
+        always_run: true
+
       - id: uv-mypy
         name: mypy type gate (uv run mypy scripts tests)
         # Mirrors the mypy step in verify-agents.yml so TypedDict key errors,
