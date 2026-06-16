@@ -1078,7 +1078,7 @@ class TestSearchRetroIssues:
     def test_passes_url_encoded_query(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        seen: list[tuple] = []
+        seen: list[tuple[str, str, Any]] = []
 
         def fake_api(method, path, body=None, **_kw):
             seen.append((method, path, body))
@@ -1141,7 +1141,7 @@ class TestHasReviewComments:
     def test_calls_correct_endpoint(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        seen: list[tuple] = []
+        seen: list[tuple[str, str, Any]] = []
 
         def fake_api(method, path, body=None, **_kw):
             seen.append((method, path, body))
@@ -1766,7 +1766,7 @@ class TestCreateIssue:
     def test_posts_title_body_labels(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        seen: list[tuple] = []
+        seen: list[tuple[str, str, Any]] = []
 
         def fake_api(method, path, body=None, **_kw):
             seen.append((method, path, body))
@@ -1829,7 +1829,7 @@ class TestFindExistingBackLink:
     def test_calls_correct_endpoint(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        seen: list[tuple] = []
+        seen: list[tuple[str, str, Any]] = []
 
         def fake_api(method, path, body=None, **_kw):
             seen.append((method, path))
@@ -1846,7 +1846,7 @@ class TestPostBackLinkComment:
     def test_creates_when_no_existing_marker(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        seen: list[tuple] = []
+        seen: list[tuple[str, str, Any]] = []
 
         def fake_api(method, path, body=None, **_kw):
             seen.append((method, path, body))
@@ -1866,7 +1866,7 @@ class TestPostBackLinkComment:
     def test_patches_when_marker_present(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        seen: list[tuple] = []
+        seen: list[tuple[str, str, Any]] = []
 
         def fake_api(method, path, body=None, **_kw):
             seen.append((method, path, body))
@@ -1914,7 +1914,7 @@ class TestApplyTerminalLabel:
     def test_posts_terminal_label(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        seen: list[tuple] = []
+        seen: list[tuple[str, str, Any]] = []
 
         def fake_api(method, path, body=None, **_kw):
             seen.append((method, path, body))
@@ -1977,7 +1977,7 @@ def _orchestrator_recorder(
     back_link_comments: list[dict[str, Any]] | None = None,
     back_link_post_error: bool = False,
     terminal_label_post_error: bool = False,
-) -> list[tuple]:
+) -> list[tuple[str, str, Any]]:
     """Replace ar.gh_api with a recorder that returns canned data per path.
 
     Defaults ``review_comments`` to a single non-empty entry so existing
@@ -1994,7 +1994,7 @@ def _orchestrator_recorder(
     ``check_runs`` controls the second-call response; ``check_runs_error``
     makes the PR-detail call raise to exercise the fail-soft path.
     """
-    seen: list[tuple] = []
+    seen: list[tuple[str, str, Any]] = []
     existing = existing or []
     commits = commits or []
     if review_comments is None:
@@ -3797,7 +3797,7 @@ class TestAppendRepairHistoryRowIntegration:
     def test_patches_retro_body_when_marker_present(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        seen: list[tuple] = []
+        seen: list[tuple[str, str, Any]] = []
 
         def fake_api(method, path, body=None, **_kw):
             seen.append((method, path, body))
@@ -3819,7 +3819,7 @@ class TestAppendRepairHistoryRowIntegration:
     def test_no_patch_when_markers_missing(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        seen: list[tuple] = []
+        seen: list[tuple[str, str, Any]] = []
 
         def fake_api(method, path, body=None, **_kw):
             seen.append((method, path, body))
@@ -4028,7 +4028,7 @@ def _sentinel_recorder(
     comments_error_for: set[int] | None = None,
     post_error_for: set[int] | None = None,
     patch_error_for: set[int] | None = None,
-) -> list[tuple]:
+) -> list[tuple[str, str, Any]]:
     """Record gh_api calls for sentinel_run tests.
 
     Mirrors :func:`_orchestrator_recorder` for the run() flow. Each
@@ -4041,7 +4041,7 @@ def _sentinel_recorder(
     comments_error_for = comments_error_for or set()
     post_error_for = post_error_for or set()
     patch_error_for = patch_error_for or set()
-    seen: list[tuple] = []
+    seen: list[tuple[str, str, Any]] = []
 
     def _number_from_path(path: str) -> int:
         # Paths look like /repos/o/r/issues/123/comments or

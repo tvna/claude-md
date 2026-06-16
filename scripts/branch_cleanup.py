@@ -13,7 +13,7 @@ import subprocess
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 IssueAction = Literal["create", "append", "close", "silent"]
 
@@ -67,7 +67,7 @@ def format_summary_row(
 def decide_issue_action(
     *,
     candidate_count: int,
-    existing_issue: dict | None,
+    existing_issue: dict[str, Any] | None,
     idle_seconds: int,
     idle_threshold_seconds: int,
 ) -> IssueAction:
@@ -155,7 +155,7 @@ def find_rolling_issue(
     title: str,
     *,
     runner=subprocess.run,
-) -> dict | None:
+) -> dict[str, Any] | None:
     result = _run(
         [
             "gh",
@@ -531,7 +531,7 @@ def _format_github_datetime(value: datetime) -> str:
     return value.astimezone(UTC).isoformat().replace("+00:00", "Z")
 
 
-def _normalize_issue(issue: dict) -> dict:
+def _normalize_issue(issue: dict[str, Any]) -> dict[str, Any]:
     normalized = dict(issue)
     if "createdAt" in normalized:
         normalized["created_at"] = normalized.pop("createdAt")

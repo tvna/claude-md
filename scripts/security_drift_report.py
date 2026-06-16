@@ -36,6 +36,7 @@ import os
 import sys
 from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 import issue_anchors
 from _github_api import apply_call as github_apply_call
@@ -463,7 +464,7 @@ def target_families_covered(families: list[FamilyRow]) -> list[str]:
 # ---------------------------------------------------------------------------
 
 def find_existing_comment(
-    comments_json: list[dict], marker: str = DEFAULT_MARKER
+    comments_json: list[dict[str, Any]], marker: str = DEFAULT_MARKER
 ) -> int | None:
     """Return the id of the first comment whose body contains the marker."""
     for entry in comments_json:

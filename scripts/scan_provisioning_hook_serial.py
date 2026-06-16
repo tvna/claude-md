@@ -43,6 +43,7 @@ import argparse
 import re
 import sys
 from pathlib import Path
+from typing import Any
 
 import yaml
 
@@ -53,9 +54,9 @@ CONFIG_PATH = REPO_ROOT / ".pre-commit-config.yaml"
 _PROVISIONING_RE = re.compile(r"install_\w+\.sh")
 
 
-def provisioning_hooks(config: dict) -> list[dict]:
+def provisioning_hooks(config: dict[str, Any]) -> list[dict[str, Any]]:
     """Return every hook whose entry references an installer script."""
-    hooks: list[dict] = []
+    hooks: list[dict[str, Any]] = []
     for repo in config.get("repos", []) or []:
         for hook in repo.get("hooks", []) or []:
             entry = str(hook.get("entry", ""))
@@ -64,7 +65,7 @@ def provisioning_hooks(config: dict) -> list[dict]:
     return hooks
 
 
-def find_gaps(config: dict) -> list[str]:
+def find_gaps(config: dict[str, Any]) -> list[str]:
     """Return ``::error::`` strings for provisioning hooks not require_serial."""
     errors: list[str] = []
     for hook in provisioning_hooks(config):
@@ -79,7 +80,7 @@ def find_gaps(config: dict) -> list[str]:
     return errors
 
 
-def _load_config(path: Path = CONFIG_PATH) -> dict:
+def _load_config(path: Path = CONFIG_PATH) -> dict[str, Any]:
     try:
         text = path.read_text(encoding="utf-8")
     except OSError as exc:

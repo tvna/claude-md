@@ -275,7 +275,7 @@ class TestFetchLatestUvRelease:
 
 
 class TestCLI:
-    def test_read_cli(self, tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
+    def test_read_cli(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
         p = tmp_path / "pyproject.toml"
         p.write_text('[tool.uv]\nrequired-version = "==4.5.6"\n')
         exit_code = uv_pin.main(["read", str(p)])
@@ -283,7 +283,7 @@ class TestCLI:
         assert capsys.readouterr().out.strip() == "4.5.6"
 
     def test_read_cli_bad_spec_exits_nonzero(
-        self, tmp_path: Path, capsys: pytest.CaptureFixture
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
         p = tmp_path / "pyproject.toml"
         p.write_text('[tool.uv]\nrequired-version = ">=4.5.6"\n')
@@ -292,7 +292,7 @@ class TestCLI:
         assert "exact pin" in capsys.readouterr().err
 
     def test_drift_cli_clean(
-        self, tmp_path: Path, capsys: pytest.CaptureFixture
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
         _make_repo(tmp_path, pin="7.8.9")
         exit_code = uv_pin.main(["drift", "--repo-root", str(tmp_path)])
@@ -300,7 +300,7 @@ class TestCLI:
         assert "OK" in capsys.readouterr().out
 
     def test_drift_cli_dirty(
-        self, tmp_path: Path, capsys: pytest.CaptureFixture
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
         repo = _make_repo(tmp_path, pin="7.8.9")
         (repo / "scripts/x.sh").write_text('UV="7.8.9"\n')
@@ -312,7 +312,7 @@ class TestCLI:
         self,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
-        capsys: pytest.CaptureFixture,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
         _make_repo(tmp_path, pin="1.2.3")
         monkeypatch.setattr(
@@ -328,7 +328,7 @@ class TestCLI:
         self,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
-        capsys: pytest.CaptureFixture,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
         _make_repo(tmp_path, pin="1.2.3")
         monkeypatch.setattr(
@@ -344,7 +344,7 @@ class TestCLI:
         self,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
-        capsys: pytest.CaptureFixture,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
         _make_repo(tmp_path, pin="1.2.3")
         monkeypatch.setattr(

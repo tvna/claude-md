@@ -6,14 +6,16 @@ must be require_serial so prek does not race parallel copies (#1150, #1155).
 
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 import scan_provisioning_hook_serial as gate
 
 pytestmark = pytest.mark.shard_ci_ops
 
 
-def _cfg(entry: str, *, serial: bool | None) -> dict:
-    hook: dict = {"id": "h", "entry": entry}
+def _cfg(entry: str, *, serial: bool | None) -> dict[str, Any]:
+    hook: dict[str, Any] = {"id": "h", "entry": entry}
     if serial is not None:
         hook["require_serial"] = serial
     return {"repos": [{"repo": "local", "hooks": [hook]}]}

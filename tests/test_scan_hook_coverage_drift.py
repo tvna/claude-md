@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 import pytest
 import scan_hook_coverage_drift as shcd
@@ -23,23 +24,23 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 # ---------------------------------------------------------------------------
 
 
-def _make_claude_settings(hooks: dict) -> dict:
+def _make_claude_settings(hooks: dict[str, Any]) -> dict[str, Any]:
     return {"hooks": hooks}
 
 
-def _make_codex_hooks(hooks: dict) -> dict:
+def _make_codex_hooks(hooks: dict[str, Any]) -> dict[str, Any]:
     return {"hooks": hooks}
 
 
-def _claude_group(command: str, matcher: str | None = None) -> dict:
-    group: dict = {"hooks": [{"type": "command", "command": command}]}
+def _claude_group(command: str, matcher: str | None = None) -> dict[str, Any]:
+    group: dict[str, Any] = {"hooks": [{"type": "command", "command": command}]}
     if matcher is not None:
         group["matcher"] = matcher
     return group
 
 
-def _codex_group(command: str, matcher: str | None = None) -> dict:
-    group: dict = {"hooks": [{"type": "command", "command": command}]}
+def _codex_group(command: str, matcher: str | None = None) -> dict[str, Any]:
+    group: dict[str, Any] = {"hooks": [{"type": "command", "command": command}]}
     if matcher is not None:
         group["matcher"] = matcher
     return group
@@ -301,7 +302,7 @@ def test_real_configs_are_parity_clean_with_shipped_exemptions() -> None:
 # ---------------------------------------------------------------------------
 
 
-def _write_json(path: Path, data: dict) -> None:
+def _write_json(path: Path, data: dict[str, Any]) -> None:
     path.write_text(json.dumps(data), encoding="utf-8")
 
 

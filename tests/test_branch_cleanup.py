@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 
 import branch_cleanup
 import pytest
@@ -328,7 +329,7 @@ def _candidate(
 def _action(
     *,
     candidate_count: int,
-    existing_issue: dict | None,
+    existing_issue: dict[str, Any] | None,
     idle_days: int = 0,
 ) -> branch_cleanup.IssueAction:
     return branch_cleanup.decide_issue_action(

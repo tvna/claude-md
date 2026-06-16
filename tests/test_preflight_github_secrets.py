@@ -15,6 +15,7 @@ import io
 import json
 import sys
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -28,7 +29,7 @@ pytestmark = pytest.mark.shard_preflight
 _FAKE_TOKEN = "ghp_" + "0123456789abcdefghijklmnopqrstuvwxyzAB"
 
 
-def _decision(d: dict | None) -> dict:
+def _decision(d: dict[str, Any] | None) -> dict[str, Any]:
     assert d is not None
     return d["hookSpecificOutput"]
 

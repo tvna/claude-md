@@ -32,7 +32,7 @@ import re
 import sys
 from collections.abc import Iterator
 from pathlib import Path
-from typing import NamedTuple
+from typing import Any, NamedTuple
 
 import yaml
 
@@ -80,7 +80,7 @@ _ALLOWLIST_KEYS: frozenset[tuple[str, str]] = frozenset(
 )
 
 
-def _load_yaml(wf_path: Path) -> dict | None:
+def _load_yaml(wf_path: Path) -> dict[str, Any] | None:
     """Return parsed YAML dict, or None if the file is missing or not a dict."""
     try:
         data = yaml.safe_load(wf_path.read_text(encoding="utf-8"))

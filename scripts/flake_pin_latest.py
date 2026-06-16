@@ -51,6 +51,7 @@ import sys
 import types
 from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 PYPROJECT_PATH = REPO_ROOT / "pyproject.toml"
@@ -78,10 +79,10 @@ class LatestPinError(RuntimeError):
 
 
 # A fetcher takes "owner/name" and returns the parsed /releases/latest JSON.
-Fetcher = Callable[[str], dict]
+Fetcher = Callable[[str], dict[str, Any]]
 
 
-def github_latest_release(repo: str) -> dict:
+def github_latest_release(repo: str) -> dict[str, Any]:
     """Fetch ``/repos/<repo>/releases/latest`` via the approved API wrapper.
 
     Uses ``scripts/_github_api.apply_call`` (CLAUDE.md section 3: read through
@@ -116,7 +117,7 @@ def _version_tuple(version: str) -> tuple[int, ...]:
         raise LatestPinError(f"unparseable version: {version!r}") from exc
 
 
-def _parse_release(payload: dict, repo: str) -> tuple[str, dt.datetime]:
+def _parse_release(payload: dict[str, Any], repo: str) -> tuple[str, dt.datetime]:
     """Extract ``(bare_version, published_at)`` from a release payload."""
     tag = payload.get("tag_name")
     if not isinstance(tag, str) or not tag:
