@@ -59,6 +59,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 
 SKILLS_SUBDIR = ".agents/skills"
 
@@ -110,7 +111,7 @@ def _normalize_target(repo_root: Path, raw: str) -> Path | None:
     return None
 
 
-def run_waza_check(waza: str, skill_dir: Path) -> dict:
+def run_waza_check(waza: str, skill_dir: Path) -> dict[str, Any]:
     """Run ``waza check --format json`` for one skill and parse the result.
 
     Raises RuntimeError (loudly) if waza cannot run or emits unparseable
@@ -135,7 +136,7 @@ def run_waza_check(waza: str, skill_dir: Path) -> dict:
         ) from exc
 
 
-def evaluate_skill(entry: dict) -> tuple[list[str], list[str]]:
+def evaluate_skill(entry: dict[str, Any]) -> tuple[list[str], list[str]]:
     """Return (spec_failures, token_warnings) message lists for one skill."""
     spec_failures: list[str] = []
     token_warnings: list[str] = []

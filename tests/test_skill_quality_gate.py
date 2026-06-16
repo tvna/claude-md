@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+from typing import Any
 
 import pytest
 import skill_quality_gate
@@ -20,11 +21,11 @@ pytestmark = pytest.mark.shard_ci_ops
 def _skill_entry(
     path: str,
     *,
-    spec: list[dict] | None = None,
+    spec: list[dict[str, Any]] | None = None,
     token_count: int = 100,
     token_limit: int = 500,
     exceeded: bool = False,
-) -> dict:
+) -> dict[str, Any]:
     """Build a minimal waza-check skill entry for tests."""
     return {
         "path": path,
@@ -212,7 +213,7 @@ class TestCmdVerify:
         assert rc == 0
 
     def test_all_skills_pass(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
         d = tmp_path / ".agents" / "skills" / "alpha"
         d.mkdir(parents=True)
@@ -231,7 +232,7 @@ class TestCmdVerify:
         assert "::warning" in err  # token warning surfaced
 
     def test_spec_failure_blocks(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
         d = tmp_path / ".agents" / "skills" / "bad"
         d.mkdir(parents=True)
@@ -254,7 +255,7 @@ class TestCmdVerify:
         assert "::error" in capsys.readouterr().err
 
     def test_explicit_skill_and_skip_invalid(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
         d = tmp_path / "alpha"
         d.mkdir()
@@ -272,7 +273,7 @@ class TestCmdVerify:
         assert "skipping" in capsys.readouterr().err
 
     def test_path_outside_repo_root_kept_absolute(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
         # Entry path not under repo_root exercises the relative_to suppression.
         d = tmp_path / "alpha"

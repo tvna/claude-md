@@ -186,6 +186,7 @@ files = ["scripts", "tests"]
 # own scoped PR rather than gating this one).
 warn_unused_ignores = true
 no_implicit_optional = true
+disallow_any_generics = true
 pretty = true
 show_error_codes = true
 

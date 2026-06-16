@@ -42,6 +42,7 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 MERMAID_PARSER = REPO_ROOT / "scripts" / "mermaid_parse.mjs"
@@ -153,7 +154,7 @@ def format_error(block: MermaidBlock, message: str, root: Path) -> str:
     return f"::error file={location},line={block.line}::Mermaid parse error: {message}"
 
 
-def run_parser(blocks: list[MermaidBlock], bun: str) -> list[dict]:
+def run_parser(blocks: list[MermaidBlock], bun: str) -> list[dict[str, Any]]:
     """Parse *blocks* via ``bun scripts/mermaid_parse.mjs`` and return results.
 
     Each block is sent as ``{id, text}`` where ``id`` is ``path:line`` so the
@@ -179,7 +180,7 @@ def run_parser(blocks: list[MermaidBlock], bun: str) -> list[dict]:
         raise RuntimeError(f"mermaid_parse.mjs produced non-JSON output: {exc}") from exc
 
 
-def diagnostics(blocks: list[MermaidBlock], results: list[dict], root: Path) -> list[str]:
+def diagnostics(blocks: list[MermaidBlock], results: list[dict[str, Any]], root: Path) -> list[str]:
     """Return one diagnostic per block the parser rejected, in source order."""
     by_id = {f"{block.source}:{block.line}": block for block in blocks}
     errors: list[str] = []

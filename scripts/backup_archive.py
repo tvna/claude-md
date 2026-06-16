@@ -26,6 +26,7 @@ import gzip
 import json
 import sys
 from pathlib import Path
+from typing import Any
 
 # (payload key, capture filename) pairs, in archive order.
 _SOURCES: tuple[tuple[str, str], ...] = (
@@ -42,13 +43,13 @@ def build_payload(
     timestamp: str,
     repo: str,
     sources: tuple[tuple[str, str], ...] = _SOURCES,
-) -> tuple[dict, list[tuple[str, int]]]:
+) -> tuple[dict[str, Any], list[tuple[str, int]]]:
     """Read each capture file and return the combined payload and per-source counts.
 
     Raises ValueError when a source file is missing or does not contain a JSON
     list (fail loud rather than archive a partial backup).
     """
-    payload: dict = {"captured_at": timestamp, "repo": repo}
+    payload: dict[str, Any] = {"captured_at": timestamp, "repo": repo}
     counts: list[tuple[str, int]] = []
     for key, fname in sources:
         path = indir / fname
@@ -67,7 +68,7 @@ def build_payload(
     return payload, counts
 
 
-def write_gzip(payload: dict, archive: Path) -> None:
+def write_gzip(payload: dict[str, Any], archive: Path) -> None:
     """Write ``payload`` as an ASCII-only, unindented JSON gzip archive."""
     with gzip.open(archive, "wt", encoding="utf-8") as fh:
         json.dump(payload, fh, ensure_ascii=True, indent=None)

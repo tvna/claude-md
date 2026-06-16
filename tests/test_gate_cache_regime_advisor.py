@@ -15,6 +15,7 @@ Refs #1492.
 from __future__ import annotations
 
 import json
+from typing import Any
 
 import gate_cache_regime_advisor as advisor
 import pytest
@@ -22,7 +23,7 @@ import pytest
 pytestmark = pytest.mark.shard_preflight
 
 
-def _assistant(message_id: str, usage: dict) -> dict:
+def _assistant(message_id: str, usage: dict[str, Any]) -> dict[str, Any]:
     return {"type": "assistant", "message": {"id": message_id, "usage": usage}}
 
 

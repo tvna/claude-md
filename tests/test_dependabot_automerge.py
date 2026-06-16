@@ -513,9 +513,9 @@ class TestEnableAutoMerge:
 
         return apply_call
 
-    def _make_graphql_call(self, http_status: int = 200, errors: list | None = None) -> Callable[..., tuple[int, dict[str, Any]]]:
-        def graphql_call(*, query: str, variables: dict, token: str) -> tuple[int, dict]:
-            body: dict = {"data": {"enablePullRequestAutoMerge": {"pullRequest": {"number": 42}}}}
+    def _make_graphql_call(self, http_status: int = 200, errors: list[dict[str, Any]] | None = None) -> Callable[..., tuple[int, dict[str, Any]]]:
+        def graphql_call(*, query: str, variables: dict[str, Any], token: str) -> tuple[int, dict[str, Any]]:
+            body: dict[str, Any] = {"data": {"enablePullRequestAutoMerge": {"pullRequest": {"number": 42}}}}
             if errors is not None:
                 body["errors"] = errors
             return http_status, body
@@ -523,9 +523,9 @@ class TestEnableAutoMerge:
         return graphql_call
 
     def test_calls_graphql_with_node_id(self) -> None:
-        captured_vars: list[dict] = []
+        captured_vars: list[dict[str, Any]] = []
 
-        def graphql_call(*, query: str, variables: dict, token: str) -> tuple[int, dict]:
+        def graphql_call(*, query: str, variables: dict[str, Any], token: str) -> tuple[int, dict[str, Any]]:
             captured_vars.append(variables)
             return 200, {"data": {}}
 
@@ -644,10 +644,10 @@ class TestDisableAutoMerge:
         return apply_call
 
     def _make_graphql_call(
-        self, http_status: int = 200, errors: list | None = None
+        self, http_status: int = 200, errors: list[dict[str, Any]] | None = None
     ) -> Callable[..., tuple[int, dict[str, Any]]]:
-        def graphql_call(*, query: str, variables: dict, token: str) -> tuple[int, dict]:
-            body: dict = {"data": {"disablePullRequestAutoMerge": {"pullRequest": {"number": 42}}}}
+        def graphql_call(*, query: str, variables: dict[str, Any], token: str) -> tuple[int, dict[str, Any]]:
+            body: dict[str, Any] = {"data": {"disablePullRequestAutoMerge": {"pullRequest": {"number": 42}}}}
             if errors is not None:
                 body["errors"] = errors
             return http_status, body
@@ -655,9 +655,9 @@ class TestDisableAutoMerge:
         return graphql_call
 
     def test_disables_when_enabled(self) -> None:
-        captured_vars: list[dict] = []
+        captured_vars: list[dict[str, Any]] = []
 
-        def graphql_call(*, query: str, variables: dict, token: str) -> tuple[int, dict]:
+        def graphql_call(*, query: str, variables: dict[str, Any], token: str) -> tuple[int, dict[str, Any]]:
             captured_vars.append(variables)
             assert "disablePullRequestAutoMerge" in query
             return 200, {"data": {}}
@@ -673,7 +673,7 @@ class TestDisableAutoMerge:
         assert captured_vars[0]["pullRequestId"] == "PR_node_xyz"
 
     def test_noop_when_not_enabled(self) -> None:
-        def graphql_call(*, query: str, variables: dict, token: str) -> tuple[int, dict]:
+        def graphql_call(*, query: str, variables: dict[str, Any], token: str) -> tuple[int, dict[str, Any]]:
             raise AssertionError("graphql must not be called when auto_merge is null")
 
         disabled = da._disable_auto_merge(

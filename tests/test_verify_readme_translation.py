@@ -28,12 +28,12 @@ def _fake_runner(stdout: str = "", returncode: int = 0):
     path in ``main()`` is reachable from tests.
     """
 
-    def runner(cmd: list[str], **kwargs: Any) -> subprocess.CompletedProcess:
+    def runner(cmd: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
         if kwargs.get("check") and returncode != 0:
             raise subprocess.CalledProcessError(
                 returncode, cmd, output=stdout, stderr=""
             )
-        return subprocess.CompletedProcess(
+        return subprocess.CompletedProcess[str](
             args=cmd, returncode=returncode, stdout=stdout, stderr=""
         )
 
