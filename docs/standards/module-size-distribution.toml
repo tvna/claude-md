@@ -8,7 +8,7 @@ max_module_lines = 800
 warn_module_lines = 640
 
 [summary]
-total_modules = 179
+total_modules = 180
 in_warn_band = 9
 exactly_at_limit = 1
 over_budget = 2
