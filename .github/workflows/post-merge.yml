@@ -169,6 +169,13 @@ jobs:
       - name: Generate workflow if-branch diagrams
         run: uv run python scripts/workflow_diagram.py diagram-doc
 
+      - name: Generate document dependency graph diagram
+        # Writes docs/generated/graph/doc-dependency-graph.md from
+        # docs/graph/doc-dependencies.toml. Same single-producer ownership as
+        # the AST/dependency graphs above; the pre-push and pre-merge gates do
+        # not regenerate it. Refs #1754.
+        run: uv run python scripts/doc_graph_viz.py all-doc
+
       - name: Detect generated-doc drift
         id: drift
         run: |
@@ -204,6 +211,7 @@ jobs:
           - `docs/generated/scripts/dependency-graph.md` from `scripts/*.py` sibling-import edges.
           - `docs/generated/scripts/trigger-map.md` from the four `scripts/*.py` launch sources.
           - `docs/generated/workflows/*-if-branches.md` from `.github/workflows/*.yml` if-branch analysis.
+          - `docs/generated/graph/doc-dependency-graph.md` from `docs/graph/doc-dependencies.toml` (Mermaid dependency diagram).
 
           ## Related Issue
 
@@ -235,6 +243,8 @@ jobs:
           - command: `uv run python scripts/script_trigger_map.py all-doc`
             result: `exit 0`
           - command: `uv run python scripts/workflow_diagram.py diagram-doc`
+            result: `exit 0`
+          - command: `uv run python scripts/doc_graph_viz.py all-doc`
             result: `exit 0`
 
           ## Checklist

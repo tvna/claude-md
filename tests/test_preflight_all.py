@@ -372,10 +372,9 @@ class TestRunCheap:
             return pa.StepResult(name=step.name, status="pass")
 
         monkeypatch.setattr(pa, "run_step", recording)
-        # Interleave the working-tree-mutating serial steps among parallel ones.
+        # Interleave the working-tree-mutating serial step among parallel ones.
         names = [
             "a",
-            "workflow_diagram_doc",
             "b",
             "preflight_branch_base",
             "c",
@@ -385,13 +384,10 @@ class TestRunCheap:
         steps = [pa.Step(name=n, argv=("true",)) for n in names]
         # Force the parallel tier serial so the call order is deterministic.
         pa._run_cheap(steps, pa.REPO_ROOT, {"PREFLIGHT_CHEAP_WORKERS": "1"})
-        # The serial steps run first, in their declaration order.
-        assert calls[:2] == [
-            "workflow_diagram_doc",
-            "preflight_branch_base",
-        ]
+        # The serial step runs first, ahead of the parallel ones.
+        assert calls[:1] == ["preflight_branch_base"]
         # The parallel steps follow, in declaration order under WORKERS=1.
-        assert calls[2:] == ["a", "b", "c", "d", "e"]
+        assert calls[1:] == ["a", "b", "c", "d", "e"]
 
     def test_workers_one_preserves_serial_order(
         self, monkeypatch: pytest.MonkeyPatch

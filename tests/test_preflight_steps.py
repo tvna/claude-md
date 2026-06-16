@@ -32,6 +32,38 @@ class TestStepsRegistry:
         for step in preflight_steps.STEPS:
             assert step.argv, f"step {step.name!r} has empty argv"
 
+    def test_no_step_generates_docs_generated(self) -> None:
+        # Issue #1771 (Refs #1764): docs/generated/ is owned by the post-merge
+        # automation as a single-producer surface -- docs/generated/scripts/
+        # (#1540/#1543/#1546) and docs/generated/workflows/ (#1771) alike. The
+        # pre-push lane must regenerate nothing there: generating left a
+        # perpetually-untracked diagram that tripped the untracked-file stop
+        # hook. This gate keeps a generator command from silently re-entering
+        # STEPS, the way workflow_diagram_doc lingered after its siblings were
+        # removed. Each entry is (script basename, write subcommand).
+        forbidden_producers = {
+            ("script_ast_graph.py", "all-doc"),
+            ("script_dependency_graph.py", "all-doc"),
+            ("script_trigger_map.py", "all-doc"),
+            ("workflow_diagram.py", "diagram-doc"),
+            ("doc_graph_viz.py", "all-doc"),
+        }
+        for step in preflight_steps.STEPS:
+            tokens = list(step.argv)
+            scripts = {
+                token.rsplit("/", 1)[-1]
+                for token in tokens
+                if token.endswith(".py")
+            }
+            for script, subcommand in forbidden_producers:
+                if script in scripts and subcommand in tokens:
+                    raise AssertionError(
+                        f"step {step.name!r} invokes the docs/generated/ "
+                        f"producer '{script} {subcommand}'. docs/generated/ is "
+                        "owned by the post-merge automation; the pre-push lane "
+                        "must not regenerate it (Refs #1771, #1764)."
+                    )
+
     def test_new_growth_gate_is_registered(self) -> None:
         # Issue #1670: the net-growth gate must ship in the local preflight
         # set so an unjustified instruction-text growth surfaces pre-push.

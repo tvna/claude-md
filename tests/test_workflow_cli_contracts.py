@@ -42,8 +42,10 @@ import coverage_failure_issue
 import dependabot_automerge
 import dependabot_labels
 import devcontainer_pin_pr
+import doc_graph_viz
 import flake_pin
 import flake_pin_latest
+import gate_doc_graph_pr
 import gate_generated_scripts_manual_edit
 import github_paginate
 import issue_anchors
@@ -73,6 +75,7 @@ import scan_devcontainer_tool_drift
 import scan_doc_workflow_refs
 import scan_docs_inventory
 import scan_flake_pin_drift
+import scan_harness_doc_coverage
 import scan_hook_coverage_drift
 import scan_input_contract_drift
 import scan_issue_anchor_drift
@@ -171,6 +174,8 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("script_dependency_graph.py", "all-doc"): "test_script_dependency_graph_all_doc_matches_workflow_args",
     ("script_trigger_map.py", "all-doc"): "test_script_trigger_map_all_doc_matches_workflow_args",
     ("gate_generated_scripts_manual_edit.py", "verify"): "test_gate_generated_scripts_manual_edit_matches_workflow_args",
+    ("gate_doc_graph_pr.py", None): "test_gate_doc_graph_pr_matches_workflow_env",
+    ("doc_graph_viz.py", "all-doc"): "test_doc_graph_viz_all_doc_matches_workflow_args",
     ("auto_retro.py", "triage-report"): "test_auto_retro_triage_report_matches_workflow_env",
     ("auto_retro.py", "triage-report-pr"): "test_auto_retro_triage_report_pr_matches_workflow_env",
     ("workflow_diagram.py", "diagram-doc"): "test_workflow_diagram_doc_matches_workflow_args",
@@ -206,6 +211,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("rulesets_apply.py", "$MODE"): "test_rulesets_apply_plan_and_auto_delete_match_workflow_args",
     ("rulesets_apply.py", "auto-delete"): "test_rulesets_apply_plan_and_auto_delete_match_workflow_args",
     ("rulesets_apply.py", "workflow-permissions"): "test_rulesets_apply_workflow_permissions_matches_workflow_args",
+    ("scan_harness_doc_coverage.py", "verify"): "test_scan_harness_doc_coverage_verify_matches_workflow_args",
     ("scan_allowlist_parser_parity.py", "verify"): "test_scan_allowlist_parser_parity_verify_matches_workflow_args",
     ("scan_allowlist_rationale.py", "verify"): "test_scan_allowlist_rationale_verify_matches_workflow_args",
     ("scan_apm_ascii.py", "verify"): "test_scan_apm_ascii_verify_matches_workflow_paths",
@@ -1603,6 +1609,12 @@ def test_scan_devcontainer_tool_drift_verify_matches_workflow_args() -> None:
     """Mirrors the ``Verify devcontainer provisions gate-required tools``
     step in ``.github/workflows/verify-agents.yml``."""
     assert scan_devcontainer_tool_drift.main(["verify"]) == 0
+
+
+def test_scan_harness_doc_coverage_verify_matches_workflow_args() -> None:
+    """Mirrors the ``Verify harness file documentation coverage`` step in
+    ``.github/workflows/verify-agents.yml``. Refs #1761."""
+    assert scan_harness_doc_coverage.main(["verify"]) == 0
 
 
 def test_scan_allowlist_parser_parity_verify_matches_workflow_args() -> None:
@@ -3086,3 +3098,40 @@ def test_no_unallowlisted_gh_calls_in_workflows() -> None:
         + "\n\nMigrate the gh call to a tested Python script, or add an allowlist entry "
         "with rationale in scripts/scan_workflow_gh_calls.py ALLOWLIST_ENTRIES."
     )
+
+
+def test_gate_doc_graph_pr_matches_workflow_env(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Mirror the env shape used by validate-doc-graph.yml.
+
+    The workflow invokes `uv run python scripts/gate_doc_graph_pr.py` with
+    BASE_REF and PR_BODY as environment variables (no subcommand). The graph
+    file is expected at the repository default path; the contract test
+    exercises the missing-graph fail-open path so no real git subprocess runs.
+    Refs #1754.
+    """
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("BASE_REF", "origin/main")
+    monkeypatch.setenv("PR_BODY", "")
+    # No graph file in tmp_path -> gate returns 0 (fail-open, missing graph).
+    result = gate_doc_graph_pr.main([])
+    assert result == 0
+
+
+def test_doc_graph_viz_all_doc_matches_workflow_args(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Mirror the ``all-doc`` subcommand invocation from post-merge.yml.
+
+    The workflow calls `uv run python scripts/doc_graph_viz.py all-doc` with
+    no additional arguments; the default graph path and output path are used.
+    The contract test uses tmp_path so no real graph file is required and no
+    output is written to docs/generated/. Refs #1754.
+    """
+    monkeypatch.chdir(tmp_path)
+    # No graph file present -> viz returns 1 (missing graph).
+    result = doc_graph_viz.main(["all-doc"])
+    assert result == 1

@@ -65,6 +65,14 @@ repos:
         language: system
         pass_filenames: false
         files: ^\.github/workflows/.*\.ya?ml$
+      - id: scan-harness-doc-coverage
+        name: scan harness doc coverage (scripts/scan_harness_doc_coverage.py verify)
+        # Refs #1761: fails when a public scripts/*.py or .github/workflows/*.ya?ml
+        # has no specific area_paths entry in .github/label-policy.toml.
+        entry: uv run python scripts/scan_harness_doc_coverage.py verify
+        language: system
+        pass_filenames: false
+        files: ^(scripts/.*\.py|\.github/workflows/.*\.ya?ml|\.github/label-policy\.toml)$
       - id: scan-secrets
         name: scan secrets (scripts/scan_secrets.py verify)
         entry: uv run python scripts/scan_secrets.py verify
@@ -135,6 +143,18 @@ repos:
         language: system
         pass_filenames: false
         files: ^docs/.*\.md$
+
+      - id: uv-mypy
+        name: mypy type gate (uv run mypy scripts tests)
+        # Mirrors the mypy step in verify-agents.yml so TypedDict key errors,
+        # unused type: ignore suppressions, and missing imports surface at
+        # commit time rather than CI. Refs #1756 (PR #1746 retro repair #2-4,#7).
+        # pyproject.toml and uv.lock are included so mypy config changes or
+        # stub upgrades/removals also trigger the gate (Codex review P2).
+        entry: uv run mypy scripts tests
+        language: system
+        pass_filenames: false
+        files: ^(scripts/.*\.py|tests/.*\.py|pyproject\.toml|uv\.lock)$
 
       - id: preflight-branch-base
         name: preflight branch base (scripts/preflight_branch_base.py verify)
