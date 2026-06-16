@@ -239,47 +239,49 @@ flowchart TD
     N001["upsert_files_pr(...)"]
     N002["if not additions and (not deletions)"]
     N003["return '<str>'"]
-    N004["if not _ref_drifts(repo=repo, ref=base, additions=additions, deletions=deletions, token=token, apply_call=apply_call)"]
-    N005["return '<str>'"]
-    N006["api_additions = [{'<str>': path, '<str>': base64.b64encode(content).decode('<str>')} for path, content in additions]"]
-    N007["api_deletions = [{'<str>': path} for path in deletions]"]
-    N008["if recreate"]
-    N009["_delete_branch(...)"]
-    N010["head_oid = _get_branch_head_oid(...)"]
-    N011["if head_oid is None"]
-    N012["base_sha = _get_ref_sha(...)"]
-    N013["_create_branch_ref(...)"]
-    N014["_create_commits_in_batches(...)"]
-    N015["verb = '<str>'"]
-    N016["if not _ref_drifts(repo=repo, ref=branch, additions=additions, deletions=deletions, token=token, apply_call=apply_call)"]
-    N017["verb = '<str>'"]
-    N018["_create_commits_in_batches(...)"]
-    N019["verb = '<str>'"]
-    N020["(_, number) = _upsert_pr(...)"]
-    N021["return f'{verb}<str>{number}'"]
+    N004["_validate_commit_paths(...)"]
+    N005["if not _ref_drifts(repo=repo, ref=base, additions=additions, deletions=deletions, token=token, apply_call=apply_call)"]
+    N006["return '<str>'"]
+    N007["api_additions = [{'<str>': path, '<str>': base64.b64encode(content).decode('<str>')} for path, content in additions]"]
+    N008["api_deletions = [{'<str>': path} for path in deletions]"]
+    N009["if recreate"]
+    N010["_delete_branch(...)"]
+    N011["head_oid = _get_branch_head_oid(...)"]
+    N012["if head_oid is None"]
+    N013["base_sha = _get_ref_sha(...)"]
+    N014["_create_branch_ref(...)"]
+    N015["_create_commits_in_batches(...)"]
+    N016["verb = '<str>'"]
+    N017["if not _ref_drifts(repo=repo, ref=branch, additions=additions, deletions=deletions, token=token, apply_call=apply_call)"]
+    N018["verb = '<str>'"]
+    N019["_create_commits_in_batches(...)"]
+    N020["verb = '<str>'"]
+    N021["(_, number) = _upsert_pr(...)"]
+    N022["return f'{verb}<str>{number}'"]
     N001 -->|"start"| N002
     N002 -->|"true"| N003
     N002 -->|"false"| N004
-    N004 -->|"true"| N005
-    N004 -->|"false"| N006
-    N006 --> N007
+    N004 --> N005
+    N005 -->|"true"| N006
+    N005 -->|"false"| N007
     N007 --> N008
-    N008 -->|"true"| N009
-    N009 --> N010
-    N008 -->|"false"| N010
+    N008 --> N009
+    N009 -->|"true"| N010
     N010 --> N011
-    N011 -->|"true"| N012
-    N012 --> N013
+    N009 -->|"false"| N011
+    N011 --> N012
+    N012 -->|"true"| N013
     N013 --> N014
     N014 --> N015
-    N011 -->|"false"| N016
-    N016 -->|"true"| N017
-    N016 -->|"false"| N018
-    N018 --> N019
-    N015 --> N020
-    N017 --> N020
+    N015 --> N016
+    N012 -->|"false"| N017
+    N017 -->|"true"| N018
+    N017 -->|"false"| N019
     N019 --> N020
+    N016 --> N021
+    N018 --> N021
     N020 --> N021
+    N021 --> N022
 ```
 
 ## _ref_drifts(...)
