@@ -390,6 +390,7 @@ jobs:
           uv run python scripts/script_dependency_graph.py all-doc
           uv run python scripts/script_trigger_map.py all-doc
           uv run python scripts/workflow_diagram.py diagram-doc
+          uv run python scripts/doc_graph_viz.py all-doc
 
       - name: Fail when docs/generated/ drifted from the regeneration
         run: |
