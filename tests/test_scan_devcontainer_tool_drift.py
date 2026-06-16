@@ -94,7 +94,7 @@ class TestCmd:
 
     def test_cmd_verify_fail(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
-        capsys: pytest.CaptureFixture,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
         monkeypatch.setattr(drift, "verify", lambda _root: ["::error::boom"])
         args = argparse.Namespace(repo_root=str(tmp_path))

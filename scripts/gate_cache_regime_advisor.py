@@ -36,6 +36,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from typing import Any
 
 from _hook_runtime import emit_decision, read_event
 from session_cost_structure import aggregate_usages, load_transcript
@@ -74,7 +75,7 @@ def amortization_advice(read_tokens: int, write_tokens: int) -> str | None:
     )
 
 
-def evaluate(event: dict) -> str | None:
+def evaluate(event: dict[str, Any]) -> str | None:
     """Return advisory text for a Stop *event*, or None to stay silent."""
     if event.get("hook_event_name") not in (None, "Stop"):
         return None

@@ -538,7 +538,7 @@ class TestPostOrUpdateComment:
     def test_creates_when_none_exists(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        seen: list[tuple] = []
+        seen: list[tuple[str, str, Any]] = []
 
         def fake_api(method, path, body=None, **_kw):
             seen.append((method, path, body))
@@ -557,7 +557,7 @@ class TestPostOrUpdateComment:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         existing = [{"id": 77, "body": san.COMMENT_MARKER + "\n\nold"}]
-        seen: list[tuple] = []
+        seen: list[tuple[str, str, Any]] = []
 
         def fake_api(method, path, body=None, **_kw):
             seen.append((method, path, body))
@@ -573,7 +573,7 @@ class TestPostOrUpdateComment:
 
 class TestApplyLabel:
     def test_posts_label(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        seen: list[tuple] = []
+        seen: list[tuple[str, str, Any]] = []
         monkeypatch.setattr(
             san,
             "gh_api",
@@ -594,7 +594,7 @@ class TestBlockExternal:
     def test_pr_kinds_request_changes(
         self, monkeypatch: pytest.MonkeyPatch, kind: str
     ) -> None:
-        seen: list[tuple] = []
+        seen: list[tuple[str, str, Any]] = []
         monkeypatch.setattr(
             san,
             "gh_api",
@@ -612,7 +612,7 @@ class TestBlockExternal:
     def test_issue_kinds_close_not_planned(
         self, monkeypatch: pytest.MonkeyPatch, kind: str
     ) -> None:
-        seen: list[tuple] = []
+        seen: list[tuple[str, str, Any]] = []
         monkeypatch.setattr(
             san,
             "gh_api",
@@ -670,12 +670,12 @@ class TestNoSelfClearingReview:
 # ---------------------------------------------------------------------------
 
 
-def _capture_gh_api(monkeypatch: pytest.MonkeyPatch) -> list[tuple]:
+def _capture_gh_api(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, str, Any]]:
     """Replace san.gh_api with a recorder and return the calls list.
 
     The GET for find_existing_comment_id returns "[]" (no existing comment).
     """
-    seen: list[tuple] = []
+    seen: list[tuple[str, str, Any]] = []
 
     def fake_api(method, path, body=None, **_kw):
         seen.append((method, path, body))
@@ -689,7 +689,7 @@ def _capture_gh_api(monkeypatch: pytest.MonkeyPatch) -> list[tuple]:
 
 class TestRun:
     def test_action_none_does_no_api_calls(
-        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
     ) -> None:
         seen = _capture_gh_api(monkeypatch)
         event = {
@@ -942,7 +942,7 @@ class TestRun:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Idempotency: a prior advisory is PATCHed, not duplicated."""
-        seen: list[tuple] = []
+        seen: list[tuple[str, str, Any]] = []
 
         def fake_api(method, path, body=None, **_kw):
             seen.append((method, path, body))
@@ -1029,7 +1029,7 @@ class TestCLI:
         assert san.main(["run"]) == 0
 
     def test_run_missing_event_path_errors(
-        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
     ) -> None:
         monkeypatch.delenv("GITHUB_EVENT_PATH", raising=False)
         monkeypatch.setenv("GITHUB_EVENT_NAME", "issues")
@@ -1041,7 +1041,7 @@ class TestCLI:
         self,
         monkeypatch: pytest.MonkeyPatch,
         tmp_path: Path,
-        capsys: pytest.CaptureFixture,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
         event_file = tmp_path / "event.json"
         event_file.write_text("{}")
@@ -1055,7 +1055,7 @@ class TestCLI:
         self,
         monkeypatch: pytest.MonkeyPatch,
         tmp_path: Path,
-        capsys: pytest.CaptureFixture,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
         event_file = tmp_path / "event.json"
         event_file.write_text("{}")
@@ -1070,7 +1070,7 @@ class TestCLI:
         self,
         monkeypatch: pytest.MonkeyPatch,
         tmp_path: Path,
-        capsys: pytest.CaptureFixture,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
         event_file = tmp_path / "event.json"
         event_file.write_text("{not json")
@@ -1089,7 +1089,7 @@ class TestCLI:
         self,
         monkeypatch: pytest.MonkeyPatch,
         tmp_path: Path,
-        capsys: pytest.CaptureFixture,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
         event_file = tmp_path / "event.json"
         event_file.write_text("{}")
@@ -1108,7 +1108,7 @@ class TestCLI:
         self,
         monkeypatch: pytest.MonkeyPatch,
         tmp_path: Path,
-        capsys: pytest.CaptureFixture,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
         def _raise(*_a, **_kw):
             raise subprocess.CalledProcessError(1, "gh", stderr="auth fail")

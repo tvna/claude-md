@@ -644,7 +644,7 @@ class TestDetect:
 
 class TestCli:
     def test_detect_prints_counts(
-        self, tmp_path: Path, capsys: pytest.CaptureFixture, monkeypatch: pytest.MonkeyPatch
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
     ) -> None:
         sot_dir = _write_sot(tmp_path, {"main.json": SOT_MAIN})
         summary = tmp_path / "summary.md"
@@ -718,7 +718,7 @@ class TestCli:
         assert rc == 1
 
     def test_reconcile_maps_kind_and_parses_detected(
-        self, tmp_path: Path, capsys: pytest.CaptureFixture, monkeypatch: pytest.MonkeyPatch
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
     ) -> None:
         body = tmp_path / "sot.md"
         body.write_text("Parent: #30\n", encoding="utf-8")

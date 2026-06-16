@@ -147,7 +147,7 @@ def test_verify_fails_for_uncovered_workflow(tmp_path: Path) -> None:
     assert "verify-pr.yml" in errors[0]
 
 
-def test_verify_skips_missing_policy(tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
+def test_verify_skips_missing_policy(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     errors = scan_harness_doc_coverage.verify(
         root=tmp_path,
         policy_path=tmp_path / "missing.toml",
