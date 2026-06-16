@@ -343,12 +343,12 @@ actionlint) continue to come from the Nix devShell, not the base.
 ## Prebuilt images
 
 Local devcontainers use immutable commit-SHA image tags. The currently
-pinned images were published from `fe5b957548b39902328d6f09dc6dcd9b34e0bba4`:
+pinned images were published from `0189fbc3e49354da1033515fd60ebb9191ce0e65`:
 
 | Agent | Image |
 |---|---|
-| Claude | `ghcr.io/tvna/claude-md-devcontainer-claude:fe5b957548b39902328d6f09dc6dcd9b34e0bba4` |
-| Codex | `ghcr.io/tvna/claude-md-devcontainer-codex:fe5b957548b39902328d6f09dc6dcd9b34e0bba4` |
+| Claude | `ghcr.io/tvna/claude-md-devcontainer-claude:0189fbc3e49354da1033515fd60ebb9191ce0e65` |
+| Codex | `ghcr.io/tvna/claude-md-devcontainer-codex:0189fbc3e49354da1033515fd60ebb9191ce0e65` |
 
 The `Publish devcontainer images` workflow builds both images with the
 Dev Containers CLI and pushes them to GHCR on `main` changes to

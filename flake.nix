@@ -470,9 +470,45 @@ EOF
             packages = networkPackages;
           };
         };
+      darwinSystems = [
+        "aarch64-darwin"
+        "x86_64-darwin"
+      ];
+      # Minimal devShell for macOS developers using `nix develop`.
+      # Only git is needed; the shellHook configures SSH commit signing
+      # for the local repo when a public key is found in ~/.ssh.
+      # The linux agent tools (claude-cli, codex-cli, etc.) have no darwin
+      # prebuilt binaries and are intentionally omitted from this shell.
+      mkDarwinShell = system:
+        let
+          pkgs = import nixpkgs {
+            inherit system;
+          };
+        in
+        {
+          default = pkgs.mkShellNoCC {
+            packages = [ pkgs.git ];
+            shellHook = ''
+              if git rev-parse --git-dir >/dev/null 2>&1; then
+                _signing_key=""
+                for _k in "$HOME/.ssh/id_ed25519.pub" "$HOME/.ssh/id_rsa.pub" "$HOME/.ssh/id_ecdsa.pub"; do
+                  if [ -f "$_k" ]; then _signing_key="$_k"; break; fi
+                done
+                if [ -n "$_signing_key" ]; then
+                  git config --local gpg.format ssh
+                  git config --local user.signingKey "$_signing_key"
+                  git config --local commit.gpgsign true
+                  echo "git SSH signing configured: $_signing_key"
+                fi
+                unset _signing_key _k
+              fi
+            '';
+          };
+        };
+      forAllDarwinSystems = nixpkgs.lib.genAttrs darwinSystems;
     in
     {
       packages = forAllSystems mkPackages;
-      devShells = forAllSystems mkShells;
+      devShells = forAllSystems mkShells // forAllDarwinSystems mkDarwinShell;
     };
 }

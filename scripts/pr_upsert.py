@@ -39,7 +39,7 @@ from _github_api import graphql_call as _github_graphql_call
 # Signed commit creation (createCommitOnBranch) and the payload batching that
 # keeps a large backlog from overflowing the mutation live in a sibling module
 # to keep this one within the script size budget. Refs #1437, #1578.
-from _pr_commit_batch import _create_commits_in_batches
+from _pr_commit_batch import _create_commits_in_batches, _validate_commit_paths
 
 _API_ROOT = "https://api.github.com"
 
@@ -297,6 +297,10 @@ def upsert_files_pr(
     """
     if not additions and not deletions:
         return "up-to-date"
+
+    # Reject malformed paths before any network call so a bad payload fails loud
+    # here instead of being masked as a retried "transient" GraphQL error (#1784).
+    _validate_commit_paths(additions, deletions)
 
     if not _ref_drifts(
         repo=repo, ref=base, additions=additions, deletions=deletions, token=token, apply_call=apply_call

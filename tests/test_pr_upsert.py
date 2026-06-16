@@ -1006,6 +1006,30 @@ class TestCreateCommitOnBranchDeletions:
 # ---------------------------------------------------------------------------
 
 
+class TestValidateCommitPaths:
+    @pytest.mark.parametrize(
+        "path",
+        ["docs/generated/x.md", "CLAUDE.md", "a/b/c.txt"],
+    )
+    def test_valid_paths_accepted(self, path: str) -> None:
+        assert pcb._is_valid_commit_path(path) is True
+
+    @pytest.mark.parametrize(
+        "path",
+        ["", "   ", "docs/generated/graph/", "/abs/path.md", "a//b.md", "a/./b.md", "a/../b.md", "."],
+    )
+    def test_malformed_paths_rejected(self, path: str) -> None:
+        assert pcb._is_valid_commit_path(path) is False
+
+    def test_validate_lists_every_offending_entry(self) -> None:
+        with pytest.raises(RuntimeError, match="invalid entries.*addition.*deletion"):
+            pcb._validate_commit_paths([("bad/", b"x")], ["also/bad/"])
+
+    def test_validate_passes_clean_payload(self) -> None:
+        # A well-formed payload raises nothing (the function returns None).
+        pcb._validate_commit_paths([("CLAUDE.md", b"x")], ["docs/gone.md"])
+
+
 class TestUpsertFilesPr:
     def test_both_empty_is_noop(self) -> None:
         router = _Router([])
@@ -1017,6 +1041,36 @@ class TestUpsertFilesPr:
         )
         assert result == "up-to-date"
         assert router.log == []
+
+    def test_directory_level_deletion_path_fails_loud(self) -> None:
+        # A directory-level path (trailing slash) is the #1772 payload GitHub
+        # rejects with the generic "Something went wrong" error. It must fail
+        # loud here, before any network or GraphQL call. Refs #1784.
+        router = _Router([])
+        gql = _RecordingGraphql()
+        with pytest.raises(RuntimeError, match="concrete file paths"):
+            pu.upsert_files_pr(
+                repo="o/r", additions=[("CLAUDE.md", b"c\n")],
+                deletions=["docs/generated/graph/"],
+                base="main", branch="chore/x", title="t", body="b",
+                commit_subject="s", commit_body="", token="tok",
+                apply_call=router.apply_call, graphql_call=gql.graphql_call,
+            )
+        assert router.log == []
+        assert gql.calls == []
+
+    def test_empty_addition_path_fails_loud(self) -> None:
+        router = _Router([])
+        gql = _RecordingGraphql()
+        with pytest.raises(RuntimeError, match="concrete file paths"):
+            pu.upsert_files_pr(
+                repo="o/r", additions=[("", b"c\n")], deletions=[],
+                base="main", branch="chore/x", title="t", body="b",
+                commit_subject="s", commit_body="", token="tok",
+                apply_call=router.apply_call, graphql_call=gql.graphql_call,
+            )
+        assert router.log == []
+        assert gql.calls == []
 
     def test_no_drift_across_all_files_is_noop(self) -> None:
         router = _Router([

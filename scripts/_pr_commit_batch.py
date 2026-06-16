@@ -59,6 +59,39 @@ _MAX_BATCH_FILES = 40
 _MAX_BATCH_BASE64_BYTES = 256 * 1024
 
 
+def _is_valid_commit_path(path: str) -> bool:
+    """Return True when *path* is a concrete, relative file path.
+
+    createCommitOnBranch accepts only individual file paths: a directory entry
+    (trailing ``/``), an empty/absolute path, or an empty/``.``/``..`` segment
+    is not a valid target. Refs #1784.
+    """
+    if not path or not path.strip() or path.endswith("/"):
+        return False
+    return all(segment not in ("", ".", "..") for segment in path.split("/"))
+
+
+def _validate_commit_paths(
+    additions: list[tuple[str, bytes]], deletions: list[str]
+) -> None:
+    """Fail loud at the API boundary on a malformed commit path.
+
+    GitHub rejects a directory-level path with its generic "Something went
+    wrong" error, which ``_github_api._graphql_is_transient`` retries three
+    times before failing with a misleading "transient" label -- the #1772 mode
+    (a ``docs/generated/graph/`` directory used as a deletion target). Validating
+    here turns that opaque retried failure into an immediate named error and
+    guards every caller of the createCommitOnBranch path. Refs #1784, #1772.
+    """
+    bad = [f"addition {p!r}" for p, _ in additions if not _is_valid_commit_path(p)]
+    bad += [f"deletion {p!r}" for p in deletions if not _is_valid_commit_path(p)]
+    if bad:
+        raise RuntimeError(
+            "createCommitOnBranch requires concrete file paths; refusing "
+            f"invalid entries: {', '.join(bad)}"
+        )
+
+
 def _create_commit_on_branch(
     *,
     repo: str,

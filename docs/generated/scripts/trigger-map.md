@@ -42,10 +42,13 @@ Detection is string-match based:
 | `devcontainer_pin_pr.py` | workflow | `devcontainer-pin-refresh.yml (refresh)` |
 | `devcontainer_pin_pr.py` | workflow | `publish-devcontainer-images.yml (update-pins)` |
 | `devcontainer_pin_pr.py` | workflow | `weekly-maintenance.yml (flake-pin-refresh)` |
+| `doc_graph_viz.py` | workflow | `post-merge.yml (decision-tree)` |
+| `doc_graph_viz.py` | workflow | `post-merge.yml (verify-docs-drift)` |
 | `flake_pin.py` | workflow | `weekly-maintenance.yml (flake-pin-refresh)` |
 | `flake_pin_latest.py` | workflow | `weekly-maintenance.yml (flake-pin-refresh)` |
 | `gate_cache_regime_advisor.py` | agent-hook | `claude:Stop` |
 | `gate_decision_handoff_askuserquestion.py` | agent-hook | `claude:Stop` |
+| `gate_doc_graph_pr.py` | workflow | `validate-doc-graph.yml (validate)` |
 | `gate_generated_scripts_manual_edit.py` | workflow | `verify-pr.yml (portable-pr-policy)` |
 | `gate_gh_cli.py` | agent-hook | `claude:PreToolUse` |
 | `gate_gh_cli.py` | agent-hook | `codex:PreToolUse` |
@@ -66,6 +69,7 @@ Detection is string-match based:
 | `gate_merge_safety.py` | agent-hook | `codex:PreToolUse` |
 | `gate_reserved_retro_scope.py` | agent-hook | `claude:PreToolUse` |
 | `gate_reserved_retro_scope.py` | agent-hook | `codex:PreToolUse` |
+| `gate_stop_pr_review_reply.py` | agent-hook | `claude:Stop` |
 | `gate_unsigned_commit_bash.py` | agent-hook | `claude:PreToolUse` |
 | `gate_unsigned_commit_bash.py` | agent-hook | `codex:PreToolUse` |
 | `gate_update_pr_branch.py` | agent-hook | `claude:PreToolUse` |
@@ -171,6 +175,8 @@ Detection is string-match based:
 | `scan_docs_inventory.py` | pre-commit | `scan-docs-inventory` |
 | `scan_docs_inventory.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
 | `scan_flake_pin_drift.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
+| `scan_harness_doc_coverage.py` | pre-commit | `scan-harness-doc-coverage` |
+| `scan_harness_doc_coverage.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
 | `scan_hook_coverage_drift.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
 | `scan_input_contract_drift.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
 | `scan_issue_anchor_drift.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
@@ -242,6 +248,6 @@ Detection is string-match based:
 
 ## Unreferenced scripts (dead script candidates)
 
-36 script(s) are referenced by no scanned launch source (see the detection caveats above before treating one as dead):
+37 script(s) are referenced by no scanned launch source (see the detection caveats above before treating one as dead):
 
-`_allowlist.py`, `_ci_watch.py`, `_git.py`, `_github_api.py`, `_github_tool_names.py`, `_hook_runtime.py`, `_pr_commit_batch.py`, `_pr_merge.py`, `_ref_classifier.py`, `_retro_labels.py`, `_secret_patterns.py`, `_security_drift_families.py`, `_security_drift_issues.py`, `_session_branches.py`, `_trusted_bots.py`, `backup_non_ascii.py`, `ccusage_pin.py`, `compare_cache_regimes.py`, `generate_devcontainer_arch_overlays.py`, `github_api.py`, `measure_prefix_tokens.py`, `mint_github_app_token.py`, `np_strategy_tracking.py`, `pr_body_builder.py`, `preflight_all.py`, `preflight_cache.py`, `preflight_pr_body.py`, `preflight_push_prek.py`, `preflight_replacement_pr.py`, `preflight_steps.py`, `refresh_pr_branch.py`, `sanitize_history.py`, `scan_area_path_coverage.py`, `session_cost_structure.py`, `uv_download_checksum.py`, `waza_pin.py`
+`_allowlist.py`, `_ci_watch.py`, `_git.py`, `_github_api.py`, `_github_tool_names.py`, `_hook_runtime.py`, `_pr_commit_batch.py`, `_pr_merge.py`, `_ref_classifier.py`, `_retro_labels.py`, `_secret_patterns.py`, `_security_drift_families.py`, `_security_drift_issues.py`, `_session_branches.py`, `_trusted_bots.py`, `backup_non_ascii.py`, `ccusage_pin.py`, `compare_cache_regimes.py`, `doc_graph.py`, `generate_devcontainer_arch_overlays.py`, `github_api.py`, `measure_prefix_tokens.py`, `mint_github_app_token.py`, `np_strategy_tracking.py`, `pr_body_builder.py`, `preflight_all.py`, `preflight_cache.py`, `preflight_pr_body.py`, `preflight_push_prek.py`, `preflight_replacement_pr.py`, `preflight_steps.py`, `refresh_pr_branch.py`, `sanitize_history.py`, `scan_area_path_coverage.py`, `session_cost_structure.py`, `uv_download_checksum.py`, `waza_pin.py`
