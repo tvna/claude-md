@@ -136,7 +136,9 @@ reintroduced. An audited exception carries an inline `# unsigned-ack`.
 
 - No GPG/SSH signing key for bot or agent commits. (For optional human
   local signing, SSH signing `gpg.format = ssh` is the lighter choice,
-  but it is not required by this standard.)
+  but it is not required by this standard. The automated Nix-based setup
+  for devcontainers and macOS is documented in
+  [`docs/runbooks/commit-signing.md`](../runbooks/commit-signing.md).)
 - No committer-side key-management program. The App-bot signing above
   relies only on the existing App installation token; the agent (`claude/*`)
   and human feature-branch commits remain unsigned and inherit the GitHub
