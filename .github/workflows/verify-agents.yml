@@ -473,13 +473,45 @@ jobs:
           sudo iptables -P OUTPUT ACCEPT || true
           sudo iptables -F OUTPUT || true
 
+  coverage:
+    name: Per-file coverage floor
+    # Refs #1800. Runs pytest --cov to generate coverage.json, then checks
+    # each changed scripts/*.py file individually against the 90 % per-file
+    # floor (scripts/preflight_coverage.py PER_FILE_FLOOR = 90.0). Separate
+    # from lint-scripts-pytest because the shard matrix runs without --cov
+    # (to stay fast) while this job needs the full coverage report.
+    # fetch-depth: 0 is required so `git diff origin/<base_ref>` can
+    # identify which scripts changed on the PR head.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Set up uv and project environment
+        uses: ./.github/actions/setup-uv
+
+      - name: Run per-file coverage gate
+        env:
+          BASE_REF: origin/${{ github.base_ref }}
+        run: |
+          uv run pytest --cov --cov-report=json -q
+          uv run python scripts/preflight_coverage.py --base-ref "$BASE_REF"
+
   gate:
     name: "Verify repository scripts / gate"
     # Refs #545: depends on `lint-scripts-pytest-gate` (the marker-matrix
     # completeness gate) rather than the matrix job directly so the
     # aggregate result reflects both "every shard passed" and "the union
     # of executed tests covered the collected universe".
-    needs: [lint-scripts-static, lint-scripts-pytest-gate]
+    # Refs #1800: also depends on `coverage` so the per-file 90 % floor
+    # is a blocking component of this required status check.
+    needs: [lint-scripts-static, lint-scripts-pytest-gate, coverage]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -488,6 +520,7 @@ jobs:
         env:
           LINT_STATIC_RESULT: ${{ needs.lint-scripts-static.result }}
           LINT_PYTEST_RESULT: ${{ needs.lint-scripts-pytest-gate.result }}
+          COVERAGE_RESULT: ${{ needs.coverage.result }}
         run: |
           if [ "$LINT_STATIC_RESULT" != 'success' ]; then
             echo "::error::script lint static gate result=${LINT_STATIC_RESULT} (expected 'success')."
@@ -497,7 +530,11 @@ jobs:
             echo "::error::script lint pytest gate result=${LINT_PYTEST_RESULT} (expected 'success')."
             exit 1
           fi
-          echo "Script lint static + pytest gates passed."
+          if [ "$COVERAGE_RESULT" != 'success' ]; then
+            echo "::error::per-file coverage gate result=${COVERAGE_RESULT} (expected 'success')."
+            exit 1
+          fi
+          echo "Script lint static + pytest + coverage gates passed."
 
   legacy-agent-instructions-context:
     name: "Verify agent instructions / gate"
