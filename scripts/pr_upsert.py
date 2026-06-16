@@ -643,14 +643,15 @@ def _collect_worktree_changes(
                 additions[path] = candidate.read_bytes()
                 deletions.discard(path)
             elif candidate.is_dir():
-                # Untracked directory: expand recursively so all contained files
-                # become additions. A directory path is not a valid deletion target
-                # for createCommitOnBranch (Refs #1772).
-                for sub in sorted(candidate.rglob("*")):
-                    if sub.is_file():
-                        sub_path = sub.as_posix()
-                        if sub_path not in additions:
-                            additions[sub_path] = sub.read_bytes()
+                # Use git ls-files to respect .gitignore when expanding the
+                # untracked directory.  rglob("*") would add files that git
+                # status deliberately omits (e.g. .DS_Store, *.pyc) (Refs #1772).
+                ls_result = run_git(["ls-files", "--others", "--exclude-standard", path])
+                if ls_result.returncode == 0:
+                    for sub_path in sorted(ls_result.stdout.splitlines()):
+                        sub_path = sub_path.strip()
+                        if sub_path and sub_path not in additions:
+                            additions[sub_path] = Path(sub_path).read_bytes()
                             deletions.discard(sub_path)
             else:
                 deletions.add(path)

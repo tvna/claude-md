@@ -1143,21 +1143,52 @@ class TestCollectWorktreeChanges:
         # files) when the entire directory is new and has no tracked parent.
         # Passing that directory path as a deletion to createCommitOnBranch is
         # invalid and causes a "Something went wrong" GraphQL error (Refs #1772).
-        # The fix: is_dir() -> recursively expand to additions, never to deletions.
+        # The fix: is_dir() -> use git ls-files to expand, respecting .gitignore.
         monkeypatch.chdir(tmp_path)
         graph_dir = tmp_path / "docs" / "generated" / "graph"
         graph_dir.mkdir(parents=True)
         (graph_dir / "doc-dependency-graph.md").write_bytes(b"graph\n")
         (graph_dir / "sub" / "nested.md").parent.mkdir()
         (graph_dir / "sub" / "nested.md").write_bytes(b"nested\n")
-        # git status reports the whole new directory as a single untracked entry.
-        status = "?? docs/generated/graph/\n"
-        monkeypatch.setattr(pu, "run_git", _FakeGitStatus(status))
+
+        def fake_run_git(args: list[str], **kwargs: object) -> _FakeGitStatus:
+            if args[0] == "status":
+                return _FakeGitStatus("?? docs/generated/graph/\n")
+            # ls-files --others --exclude-standard: return non-ignored files only.
+            return _FakeGitStatus(
+                "docs/generated/graph/doc-dependency-graph.md\n"
+                "docs/generated/graph/sub/nested.md\n"
+            )
+
+        monkeypatch.setattr(pu, "run_git", fake_run_git)
         additions, deletions = pu._collect_worktree_changes(adds=[], diff_prefixes=["docs/generated/"])
         assert dict(additions) == {
             "docs/generated/graph/doc-dependency-graph.md": b"graph\n",
             "docs/generated/graph/sub/nested.md": b"nested\n",
         }
+        assert deletions == []
+
+    def test_from_diff_untracked_directory_excludes_gitignored_files(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # git ls-files --others --exclude-standard omits gitignored paths.
+        # Verify that _collect_worktree_changes does NOT add ignored files even
+        # when they exist on disk inside the untracked directory (Refs #1772).
+        monkeypatch.chdir(tmp_path)
+        graph_dir = tmp_path / "docs" / "generated" / "graph"
+        graph_dir.mkdir(parents=True)
+        (graph_dir / "doc.md").write_bytes(b"doc\n")
+        (graph_dir / ".DS_Store").write_bytes(b"ignored\n")  # exists on disk
+
+        def fake_run_git(args: list[str], **kwargs: object) -> _FakeGitStatus:
+            if args[0] == "status":
+                return _FakeGitStatus("?? docs/generated/graph/\n")
+            # ls-files honours .gitignore and omits .DS_Store.
+            return _FakeGitStatus("docs/generated/graph/doc.md\n")
+
+        monkeypatch.setattr(pu, "run_git", fake_run_git)
+        additions, deletions = pu._collect_worktree_changes(adds=[], diff_prefixes=["docs/generated/"])
+        assert dict(additions) == {"docs/generated/graph/doc.md": b"doc\n"}
         assert deletions == []
 
     def test_from_diff_git_failure_raises(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
