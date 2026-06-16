@@ -4,7 +4,7 @@ This file is generated from live GitHub retro-issue labels by `python3 scripts/a
 
 Retros observed: **50**
 
-Open untriaged: **17**
+Open untriaged: **18**
 
 ## Anomalies
 
@@ -15,11 +15,11 @@ None: no fired signal clears both the FP-rate and sample-size thresholds.
 ```mermaid
 pie showData
     title Triage status
-    "retro:tp" : 8
+    "retro:tp" : 7
     "retro:fp" : 25
     "retro:fp-candidate" : 0
     "retro:tentative" : 0
-    "unlabelled" : 17
+    "unlabelled" : 18
 ```
 
 ## Signal occurrence and false-positive rates
@@ -28,17 +28,18 @@ pie showData
 | --- | --: | --: | --: | --: | --: | :-: |
 | `inline_review_comments` | 6 | 0.12 | 0 | 0.00 | 6 |  |
 | `fix_typed_title` | 17 | 0.34 | 5 | 0.29 | 17 |  |
-| `multi_commit_pr` | 24 | 0.48 | 6 | 0.25 | 24 |  |
+| `multi_commit_pr` | 25 | 0.50 | 6 | 0.24 | 25 |  |
 
 ## False-positive rate trend
 
-- All-time: 0.76 (n=33 triaged)
-- Last 20 retros: 0.67 (n=3 triaged) -- falling
+- All-time: 0.78 (n=32 triaged)
+- Last 20 retros: 1.00 (n=2 triaged) -- rising
 
 ## Recent retros
 
 | # | State | Status | Title |
 | --: | :-- | :-- | :-- |
+| 1786 | open | untriaged | chore(auto-retro): review PR #1785 repair loops |
 | 1781 | open | untriaged | chore(auto-retro): review PR #1777 repair loops |
 | 1760 | open | untriaged | chore(auto-retro): review PR #1757 repair loops |
 | 1758 | open | untriaged | chore(auto-retro): review PR #1755 repair loops |
@@ -48,4 +49,3 @@ pie showData
 | 1661 | open | untriaged | chore(auto-retro): review PR #1659 repair loops |
 | 1600 | open | untriaged | chore(auto-retro): review PR #1599 repair loops |
 | 1592 | open | untriaged | chore(auto-retro): review PR #1589 repair loops |
-| 1585 | open | untriaged | chore(auto-retro): review PR #1584 repair loops |
