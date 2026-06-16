@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
+from typing import Any
 
 import pytest
 import verify_linked_issue_titles as vlit
@@ -73,7 +74,7 @@ class TestGetIssueTitle:
         assert vlit.get_issue_title("owner/repo", 42, runner=runner) == "fix: simple"
 
     def test_gh_api_command_shape(self) -> None:
-        captured: dict = {}
+        captured: dict[str, Any] = {}
 
         class _Result:
             stdout = b"fix: title\n"
@@ -199,14 +200,14 @@ def _make_runner(titles: dict[int, str | None]):
 
 class TestVerifyLinkedIssueTitles:
     def test_no_refs_returns_zero_with_note(
-        self, capsys: pytest.CaptureFixture
+        self, capsys: pytest.CaptureFixture[str]
     ) -> None:
         rc = vlit.verify_linked_issue_titles("owner/repo", "No refs here.\n")
         assert rc == 0
         assert "skipped" in capsys.readouterr().out
 
     def test_valid_issue_title_passes(
-        self, capsys: pytest.CaptureFixture
+        self, capsys: pytest.CaptureFixture[str]
     ) -> None:
         runner = _make_runner({42: "fix: valid issue title\n"})
         rc = vlit.verify_linked_issue_titles(
@@ -218,7 +219,7 @@ class TestVerifyLinkedIssueTitles:
         assert "::error::" not in out
 
     def test_invalid_issue_title_fails(
-        self, capsys: pytest.CaptureFixture
+        self, capsys: pytest.CaptureFixture[str]
     ) -> None:
         runner = _make_runner({42: "INVALID TITLE WITHOUT CONVENTION\n"})
         rc = vlit.verify_linked_issue_titles(
@@ -230,7 +231,7 @@ class TestVerifyLinkedIssueTitles:
         assert "#42" in out
 
     def test_multiple_refs_one_invalid_fails_and_names_offender(
-        self, capsys: pytest.CaptureFixture
+        self, capsys: pytest.CaptureFixture[str]
     ) -> None:
         runner = _make_runner({
             1: "fix: valid title\n",
@@ -246,7 +247,7 @@ class TestVerifyLinkedIssueTitles:
         assert "::error::" in out
 
     def test_api_failure_treated_as_gate_failure(
-        self, capsys: pytest.CaptureFixture
+        self, capsys: pytest.CaptureFixture[str]
     ) -> None:
         def _always_fail(*_a, **_k):
             raise subprocess.CalledProcessError(1, "gh")
@@ -261,7 +262,7 @@ class TestVerifyLinkedIssueTitles:
         assert "GH_TOKEN" in out
 
     def test_html_commented_refs_are_ignored(
-        self, capsys: pytest.CaptureFixture
+        self, capsys: pytest.CaptureFixture[str]
     ) -> None:
         # The commented ref must NOT trigger a title fetch.
         called: list[int] = []
@@ -286,7 +287,7 @@ class TestVerifyLinkedIssueTitles:
         assert 1 in called
 
     def test_crlf_body_is_normalized(
-        self, capsys: pytest.CaptureFixture
+        self, capsys: pytest.CaptureFixture[str]
     ) -> None:
         runner = _make_runner({10: "ci: valid title\n"})
         rc = vlit.verify_linked_issue_titles(
@@ -296,7 +297,7 @@ class TestVerifyLinkedIssueTitles:
         assert "OK: issue #10 title passes title policy." in capsys.readouterr().out
 
     def test_non_ascii_issue_title_fails_with_context(
-        self, capsys: pytest.CaptureFixture
+        self, capsys: pytest.CaptureFixture[str]
     ) -> None:
         runner = _make_runner({7: "fix: 日本語タイトル\n"})
         rc = vlit.verify_linked_issue_titles(
@@ -317,7 +318,7 @@ class TestCLI:
     def test_happy_path_via_env(
         self,
         monkeypatch: pytest.MonkeyPatch,
-        capsys: pytest.CaptureFixture,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
         monkeypatch.setenv("PR_BODY", "Closes #1\n")
         monkeypatch.setattr(
@@ -332,7 +333,7 @@ class TestCLI:
         self,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
-        capsys: pytest.CaptureFixture,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
         monkeypatch.setenv("PR_BODY", "Closes #999\n")
         body_file = tmp_path / "body.md"
@@ -350,7 +351,7 @@ class TestCLI:
     def test_no_refs_exits_zero(
         self,
         monkeypatch: pytest.MonkeyPatch,
-        capsys: pytest.CaptureFixture,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
         monkeypatch.setenv("PR_BODY", "No refs at all.\n")
         rc = vlit.main(["verify", "--repo", "owner/repo"])
@@ -360,7 +361,7 @@ class TestCLI:
     def test_invalid_title_exits_nonzero(
         self,
         monkeypatch: pytest.MonkeyPatch,
-        capsys: pytest.CaptureFixture,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
         monkeypatch.setenv("PR_BODY", "Closes #42\n")
         monkeypatch.setattr(
@@ -376,7 +377,7 @@ class TestCLI:
     def test_missing_body_env_defaults_to_empty(
         self,
         monkeypatch: pytest.MonkeyPatch,
-        capsys: pytest.CaptureFixture,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
         monkeypatch.delenv("PR_BODY", raising=False)
         rc = vlit.main(["verify", "--repo", "owner/repo"])

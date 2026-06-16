@@ -14,6 +14,7 @@ Refs #938.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import pr_body_builder as builder
 import pytest
@@ -141,7 +142,7 @@ class TestBuiltBodyPassesBodyPolicy:
         ],
     )
     def test_passes_all_policy_checks(
-        self, agent: str, kwargs: dict
+        self, agent: str, kwargs: dict[str, Any]
     ) -> None:
         body = builder.build(_ISSUE, agent=agent, **kwargs)
         assert missing_sections(

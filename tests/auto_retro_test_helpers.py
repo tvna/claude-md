@@ -44,9 +44,9 @@ def orchestrator_recorder(
     back_link_comments: list[dict[str, Any]] | None = None,
     back_link_post_error: bool = False,
     terminal_label_post_error: bool = False,
-) -> list[tuple]:
+) -> list[tuple[str, str, Any]]:
     """Replace ar.gh_api with a recorder that returns canned data per path."""
-    seen: list[tuple] = []
+    seen: list[tuple[str, str, Any]] = []
     existing = existing or []
     commits = commits or []
     if review_comments is None:

@@ -531,9 +531,9 @@ class TestRunCcusage:
     def test_success_returns_stdout(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(srr.shutil, "which", lambda _name: "/fake/ccusage")
 
-        def fake_run(argv: list[str], **_kw: object) -> subprocess.CompletedProcess:
+        def fake_run(argv: list[str], **_kw: object) -> subprocess.CompletedProcess[str]:
             assert argv == ["/fake/ccusage", "session", "--json"]
-            return subprocess.CompletedProcess(argv, 0, stdout='{"session": []}', stderr="")
+            return subprocess.CompletedProcess[str](argv, 0, stdout='{"session": []}', stderr="")
 
         monkeypatch.setattr(srr.subprocess, "run", fake_run)
         assert srr._run_ccusage("sess") == '{"session": []}'
@@ -543,8 +543,8 @@ class TestRunCcusage:
     ) -> None:
         monkeypatch.setattr(srr.shutil, "which", lambda _name: "/fake/ccusage")
 
-        def fake_run(argv: list[str], **_kw: object) -> subprocess.CompletedProcess:
-            return subprocess.CompletedProcess(argv, 1, stdout="x", stderr="boom")
+        def fake_run(argv: list[str], **_kw: object) -> subprocess.CompletedProcess[str]:
+            return subprocess.CompletedProcess[str](argv, 1, stdout="x", stderr="boom")
 
         monkeypatch.setattr(srr.subprocess, "run", fake_run)
         assert srr._run_ccusage("sess") is None
@@ -738,9 +738,9 @@ class TestRunCcusageCodex:
     def test_success_returns_stdout(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(srr.shutil, "which", lambda _name: "/fake/ccusage")
 
-        def fake_run(argv: list[str], **_kw: object) -> subprocess.CompletedProcess:
+        def fake_run(argv: list[str], **_kw: object) -> subprocess.CompletedProcess[str]:
             assert argv == ["/fake/ccusage", "codex", "session", "--json"]
-            return subprocess.CompletedProcess(argv, 0, stdout=_codex_json(), stderr="")
+            return subprocess.CompletedProcess[str](argv, 0, stdout=_codex_json(), stderr="")
 
         monkeypatch.setattr(srr.subprocess, "run", fake_run)
         assert srr._run_ccusage_codex() == _codex_json()
@@ -750,8 +750,8 @@ class TestRunCcusageCodex:
     ) -> None:
         monkeypatch.setattr(srr.shutil, "which", lambda _name: "/fake/ccusage")
 
-        def fake_run(argv: list[str], **_kw: object) -> subprocess.CompletedProcess:
-            return subprocess.CompletedProcess(argv, 1, stdout="x", stderr="boom")
+        def fake_run(argv: list[str], **_kw: object) -> subprocess.CompletedProcess[str]:
+            return subprocess.CompletedProcess[str](argv, 1, stdout="x", stderr="boom")
 
         monkeypatch.setattr(srr.subprocess, "run", fake_run)
         assert srr._run_ccusage_codex() is None

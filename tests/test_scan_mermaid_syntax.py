@@ -223,21 +223,21 @@ def test_resolve_bun_delegates_to_which(monkeypatch: pytest.MonkeyPatch) -> None
     assert scan_mermaid_syntax.resolve_bun() == "/x/bun"
 
 
-def test_cmd_verify_fails_when_bun_missing(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture) -> None:
+def test_cmd_verify_fails_when_bun_missing(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
     monkeypatch.setattr(scan_mermaid_syntax, "resolve_bun", lambda: None)
     args = argparse.Namespace(root=str(REPO_ROOT), bun=None)
     assert scan_mermaid_syntax.cmd_verify(args) == 1
     assert "bun is required" in capsys.readouterr().err
 
 
-def test_cmd_verify_reports_runtime_error(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture) -> None:
+def test_cmd_verify_reports_runtime_error(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
     monkeypatch.setattr(scan_mermaid_syntax, "verify", lambda root, bun: (_ for _ in ()).throw(RuntimeError("worker died")))
     args = argparse.Namespace(root=str(REPO_ROOT), bun="/x/bun")
     assert scan_mermaid_syntax.cmd_verify(args) == 1
     assert "worker died" in capsys.readouterr().err
 
 
-def test_cmd_verify_prints_errors_and_fails(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture) -> None:
+def test_cmd_verify_prints_errors_and_fails(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
     monkeypatch.setattr(scan_mermaid_syntax, "verify", lambda root, bun: ["::error file=docs/x.md,line=1::Mermaid parse error: x"])
     args = argparse.Namespace(root=str(REPO_ROOT), bun="/x/bun")
     assert scan_mermaid_syntax.cmd_verify(args) == 1
@@ -245,7 +245,7 @@ def test_cmd_verify_prints_errors_and_fails(monkeypatch: pytest.MonkeyPatch, cap
     assert "1 Mermaid block(s) failed" in err
 
 
-def test_cmd_verify_passes_when_clean(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture) -> None:
+def test_cmd_verify_passes_when_clean(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
     monkeypatch.setattr(scan_mermaid_syntax, "verify", lambda root, bun: [])
     args = argparse.Namespace(root=str(REPO_ROOT), bun="/x/bun")
     assert scan_mermaid_syntax.cmd_verify(args) == 0

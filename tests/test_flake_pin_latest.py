@@ -12,6 +12,7 @@ import datetime as dt
 import importlib.util
 import sys
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -31,7 +32,7 @@ _NOW = dt.datetime(2026, 6, 3, tzinfo=dt.UTC)
 
 
 def _fetcher(tag: str, published: str):
-    def fetch(_repo: str) -> dict:
+    def fetch(_repo: str) -> dict[str, Any]:
         return {"tag_name": tag, "published_at": published}
 
     return fetch
