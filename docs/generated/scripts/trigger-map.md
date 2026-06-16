@@ -171,6 +171,7 @@ Detection is string-match based:
 | `scan_design_philosophy_drift.py` | workflow | `verify-pr.yml (portable-pr-policy)` |
 | `scan_design_philosophy_drift.py` | workflow | `verify-pr.yml (verify-design-philosophy)` |
 | `scan_devcontainer_tool_drift.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
+| `scan_doc_graph_registration.py` | pre-commit | `scan-doc-graph-registration` |
 | `scan_doc_workflow_refs.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
 | `scan_docs_inventory.py` | pre-commit | `scan-docs-inventory` |
 | `scan_docs_inventory.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
