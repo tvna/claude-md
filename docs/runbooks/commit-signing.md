@@ -41,22 +41,37 @@ machine is decommissioned; remove the old Signing Key from
 
 ## Devcontainer setup (automated)
 
-`postCreateCommand` in `.devcontainer/claude/devcontainer.json` and
-`.devcontainer/codex/devcontainer.json` calls `configure-agent-runtime.sh`,
-which runs `.devcontainer/scripts/configure-git-signing.sh`.
+The setup runs in two phases: a HOST-side `initializeCommand` step that
+isolates the public keys, and a container-side `postCreateCommand` step that
+writes the git config.
 
-That script:
+### Host-side key preparation (`initializeCommand`)
 
-1. Searches `~/.ssh/` for `id_ed25519.pub`, `id_rsa.pub`, or `id_ecdsa.pub`
-   (first match wins).
+`initializeCommand` in each `devcontainer.json` calls
+`.devcontainer/scripts/prepare-signing-keys.sh` on the **host**, before the
+container starts. That script:
+
+1. Creates `~/.ssh/devcontainer-signing-keys/` on the host (mode `700`).
+2. Copies only `id_ed25519.pub`, `id_rsa.pub`, and `id_ecdsa.pub` into that
+   subdirectory — private keys are never copied.
+3. Exits 0 even when no public keys are found.
+
+The `mounts` entry in each `devcontainer.json` binds **only** that
+`devcontainer-signing-keys` subdirectory into the container at
+`~/.ssh/devcontainer-signing-keys` (read-only). This means no private key
+material ever enters the container, regardless of the agent user's UID.
+
+### Container-side git config (`postCreateCommand`)
+
+`postCreateCommand` calls `configure-agent-runtime.sh`, which runs
+`.devcontainer/scripts/configure-git-signing.sh`. That script:
+
+1. Searches `~/.ssh/devcontainer-signing-keys/` for `id_ed25519.pub`,
+   `id_rsa.pub`, or `id_ecdsa.pub` (first match wins).
 2. Writes `gpg.format = ssh`, `user.signingKey`, and `commit.gpgsign = true`
    into `~/.gitconfig` via `git config --file`.
-3. Exits 0 and emits `INFO: no SSH public key found` when no key is present —
-   the container is fully functional without signing.
-
-The host `~/.ssh` directory is bind-mounted read-only at container build time
-(`mounts` entry in each `devcontainer.json`). No private key material is
-written inside the container.
+3. Exits 0 and emits `INFO: no SSH public key found` when the directory is
+   empty — the container is fully functional without signing.
 
 ### Verify devcontainer signing
 
@@ -70,7 +85,7 @@ Expected output:
 
 ```
 gpg.format=ssh
-user.signingkey=/home/claude/.ssh/id_ed25519.pub
+user.signingkey=/home/claude/.ssh/devcontainer-signing-keys/id_ed25519.pub
 commit.gpgsign=true
 ```
 
@@ -115,8 +130,9 @@ commit.gpgsign=true
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| `INFO: no SSH public key found` in postCreateCommand logs | `id_ed25519.pub`, `id_rsa.pub`, and `id_ecdsa.pub` all absent from host `~/.ssh/` | Generate a key (`ssh-keygen -t ed25519`) and re-create the container |
+| `INFO: no SSH public keys found` in initializeCommand logs | `id_ed25519.pub`, `id_rsa.pub`, and `id_ecdsa.pub` all absent from host `~/.ssh/` | Generate a key (`ssh-keygen -t ed25519`) on the host and re-open the container |
+| `INFO: no SSH public key found` in postCreateCommand logs | `~/.ssh/devcontainer-signing-keys/` is empty (initializeCommand found no keys) | Check host `~/.ssh/` for `.pub` files; see row above |
 | `git log --show-signature` shows `BAD signature` | Private key does not match the configured public key | Run `git config user.signingKey` and compare with the registered Signing Key on GitHub |
 | GitHub shows `Unverified` | `user.email` in git config does not match a GitHub account with the Signing Key registered | `git config --global user.email your@email.com` (must match GitHub account email) |
 | `nix develop` shellHook does nothing on macOS | Shell started outside a git repository | `cd` to the repository root before running `nix develop` |
-| Signing key path changes after re-keying | `~/.gitconfig` retains the old key path | Re-run `configure-git-signing.sh` or set: `git config --global user.signingKey ~/.ssh/id_ed25519.pub` |
+| Signing key path changes after re-keying | `~/.gitconfig` retains the old key path | Re-run `prepare-signing-keys.sh` on the host then re-open the container, or set: `git config --global user.signingKey ~/.ssh/devcontainer-signing-keys/id_ed25519.pub` |

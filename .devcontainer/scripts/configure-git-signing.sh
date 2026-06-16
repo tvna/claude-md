@@ -11,7 +11,7 @@ fi
 
 agent="$1"
 home_dir="$2"
-ssh_dir="${home_dir}/.ssh"
+ssh_dir="${home_dir}/.ssh/devcontainer-signing-keys"
 
 if [[ "$(id -u)" -eq 0 ]]; then
   sudo_command=()
