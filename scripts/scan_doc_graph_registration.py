@@ -92,13 +92,22 @@ def parse_waivers(body: str) -> frozenset[str]:
 
 
 def get_added_files(base_ref: str) -> list[str] | None:
-    """Return paths added on HEAD relative to *base_ref*.
+    """Return paths added on HEAD relative to *base_ref*, plus staged additions.
 
-    Uses ``git diff --name-only --diff-filter=A <base_ref>...HEAD``. Returns
-    ``None`` when the git call fails (fail-open: the gate skips rather than
-    blocks when the diff is unavailable).
+    Unions two sources so the gate fires at commit time (pre-commit hook) as
+    well as in CI (where HEAD already includes the new files):
+
+    1. ``git diff --name-only --diff-filter=A <base_ref>...HEAD`` -- committed
+       additions on the branch since *base_ref*.
+    2. ``git diff --cached --name-only --diff-filter=A`` -- staged additions
+       not yet committed (HEAD does not include them when the hook runs before
+       ``git commit`` completes).
+
+    Returns ``None`` when the first git call fails (fail-open: the gate skips
+    rather than blocks when the diff is unavailable). A failure of the cached
+    call is ignored; staged files are simply omitted from that source.
     """
-    result = subprocess.run(  # noqa: S603 -- fixed argv, shell=False
+    committed_result = subprocess.run(  # noqa: S603 -- fixed argv, shell=False
         [  # noqa: S607
             "git",
             "diff",
@@ -110,9 +119,25 @@ def get_added_files(base_ref: str) -> list[str] | None:
         text=True,
         timeout=30,
     )
-    if result.returncode != 0:
+    if committed_result.returncode != 0:
         return None
-    return [f.strip() for f in result.stdout.splitlines() if f.strip()]
+    committed = {
+        f.strip() for f in committed_result.stdout.splitlines() if f.strip()
+    }
+
+    cached_result = subprocess.run(  # noqa: S603 -- fixed argv, shell=False
+        ["git", "diff", "--cached", "--name-only", "--diff-filter=A"],  # noqa: S607
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    staged = (
+        {f.strip() for f in cached_result.stdout.splitlines() if f.strip()}
+        if cached_result.returncode == 0
+        else set()
+    )
+
+    return sorted(committed | staged)
 
 
 def registered_paths(graph: DocGraph) -> frozenset[str]:

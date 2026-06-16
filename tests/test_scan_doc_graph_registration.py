@@ -273,6 +273,66 @@ class TestRegisteredPaths:
 
 
 # ---------------------------------------------------------------------------
+# get_added_files (subprocess patched)
+# ---------------------------------------------------------------------------
+
+
+class TestGetAddedFiles:
+    def test_committed_additions_returned(self) -> None:
+        with patch("scan_doc_graph_registration.subprocess.run") as mock_run:
+            mock_run.side_effect = [
+                type("R", (), {"returncode": 0, "stdout": "docs/standards/foo.md\n"})(),
+                type("R", (), {"returncode": 0, "stdout": ""})(),
+            ]
+            result = gate.get_added_files("origin/main")
+        assert result == ["docs/standards/foo.md"]
+
+    def test_staged_additions_unioned_with_committed(self) -> None:
+        with patch("scan_doc_graph_registration.subprocess.run") as mock_run:
+            mock_run.side_effect = [
+                type("R", (), {"returncode": 0, "stdout": "docs/standards/a.md\n"})(),
+                type("R", (), {"returncode": 0, "stdout": "docs/prd/b.md\n"})(),
+            ]
+            result = gate.get_added_files("origin/main")
+        assert result == ["docs/prd/b.md", "docs/standards/a.md"]
+
+    def test_staged_only_no_committed(self) -> None:
+        with patch("scan_doc_graph_registration.subprocess.run") as mock_run:
+            mock_run.side_effect = [
+                type("R", (), {"returncode": 0, "stdout": ""})(),
+                type("R", (), {"returncode": 0, "stdout": "docs/standards/foo.md\n"})(),
+            ]
+            result = gate.get_added_files("origin/main")
+        assert result == ["docs/standards/foo.md"]
+
+    def test_committed_diff_failure_returns_none(self) -> None:
+        with patch("scan_doc_graph_registration.subprocess.run") as mock_run:
+            mock_run.side_effect = [
+                type("R", (), {"returncode": 1, "stdout": "", "stderr": "fatal"})(),
+            ]
+            result = gate.get_added_files("origin/main")
+        assert result is None
+
+    def test_cached_diff_failure_ignored(self) -> None:
+        with patch("scan_doc_graph_registration.subprocess.run") as mock_run:
+            mock_run.side_effect = [
+                type("R", (), {"returncode": 0, "stdout": "docs/standards/foo.md\n"})(),
+                type("R", (), {"returncode": 1, "stdout": "", "stderr": "fatal"})(),
+            ]
+            result = gate.get_added_files("origin/main")
+        assert result == ["docs/standards/foo.md"]
+
+    def test_deduplication_when_staged_equals_committed(self) -> None:
+        with patch("scan_doc_graph_registration.subprocess.run") as mock_run:
+            mock_run.side_effect = [
+                type("R", (), {"returncode": 0, "stdout": "docs/standards/foo.md\n"})(),
+                type("R", (), {"returncode": 0, "stdout": "docs/standards/foo.md\n"})(),
+            ]
+            result = gate.get_added_files("origin/main")
+        assert result == ["docs/standards/foo.md"]
+
+
+# ---------------------------------------------------------------------------
 # main() integration (subprocess patched)
 # ---------------------------------------------------------------------------
 
