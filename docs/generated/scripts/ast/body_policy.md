@@ -256,6 +256,38 @@ flowchart TD
     N005 --> N006
 ```
 
+## detect_placeholder_tokens(...)
+
+```mermaid
+flowchart TD
+    N001["detect_placeholder_tokens(...)"]
+    N002["cleaned = strip_html_comments(...)"]
+    N003["seen = set(...)"]
+    N004["errors = []"]
+    N005["for token in _ANGLE_TOKEN_RE.findall(cleaned):     if token not in seen:         seen.add(token)         errors.append(f'<str>{token!r}<str>')"]
+    N006["return errors"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 --> N004
+    N004 --> N005
+    N005 --> N006
+```
+
+## verify_section_substantive_content(...)
+
+```mermaid
+flowchart TD
+    N001["verify_section_substantive_content(...)"]
+    N002["required = required_sections(...)"]
+    N003["errors = []"]
+    N004["for section_name in required:     content = extract_section_body(body, section_name)     non_empty = [line for line in content.splitlines() if line.strip() and (not _BARE_DASH_RE.fullmatch(line.strip())) and (not _AGENT_ATTRIBUTION_FOOTER_RE.fullmatch(line.strip()))]     if not non_empty:         errors.append(f'<str>{section_name}<str>')"]
+    N005["return errors"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 --> N004
+    N004 --> N005
+```
+
 ## build_codex_attribution_footer(...)
 
 ```mermaid
@@ -383,7 +415,7 @@ flowchart TD
     N017["for msg in allowlist_errors:     print(msg)"]
     N018["return 1"]
     N019["if kind == 'pull_request' and shape_cutoff and (not created_at or is_within_gate_window(created_at, shape_cutoff))"]
-    N020["shape_errors = verify_pr_verification_pairs(body) + verify_pr_checklist_subsections(body) + verify_pr_agent_attribution_footer(body)"]
+    N020["shape_errors = verify_pr_verification_pairs(body) + verify_pr_checklist_subsections(body) + verify_pr_agent_attribution_footer(body) + detect_placeholder_tokens(body) + verify_section_substantive_content(body)"]
     N021["if shape_errors"]
     N022["for msg in shape_errors:     print(msg)"]
     N023["return 1"]
