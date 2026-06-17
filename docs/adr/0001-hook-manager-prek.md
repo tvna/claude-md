@@ -50,8 +50,12 @@ Use **prek** (`j178/prek`) as the hook manager for this repository.
    dependency resolution messages appear in the tool output.
 
 5. **Drop-in config compatibility** — the existing `.pre-commit-config.yaml`
-   is read by prek without modification, so the pre-push hook definitions
-   (`preflight-branch-base`, `preflight-coverage`) required no changes.
+   is read by prek without modification; the pre-push hook definitions
+   (`preflight-branch-base`, `preflight-coverage`) required no config changes.
+   Note: activating the pre-push hooks still requires `prek install
+   --hook-type pre-push` (same step as with pre-commit), or is superseded by
+   the broader `.githooks/pre-push` gate when `core.hooksPath=.githooks` is
+   set. See `docs/runbooks/prek.md` and `docs/runbooks/preflight.md`.
 
 ## Token cost comparison (per push)
 
