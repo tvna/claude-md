@@ -50,6 +50,11 @@ DEFERRED_OVERSIZE_MODULES: dict[Path, str] = {
         "legacy multi-source intelligence gate; split OSV, KEV, NVD, EPSS, "
         "and malicious-package adapters before tightening the budget"
     ),
+    Path("scripts/body_policy.py"): (
+        "placeholder-token and substantive-content gates added in refs #1826 "
+        "pushed the module to 849 lines; split verification helpers into a "
+        "dedicated _body_policy_shape.py module to restore budget"
+    ),
 }
 
 

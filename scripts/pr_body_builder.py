@@ -44,7 +44,7 @@ _FOOTER_PLACEHOLDER_RE = re.compile(
 _DEFAULT_AGENT = "Claude Code"
 _DEFAULT_SESSION_URL = "https://claude.ai/code"
 _VERIFICATION_PLACEHOLDER = (
-    "- command: `<verification command>`\n  result: `<verification result>`"
+    "- command: `COMMAND`\n  result: `RESULT`"
 )
 
 
@@ -87,6 +87,10 @@ def build(
 
     # Fill in the issue number.
     body = _CLOSES_PLACEHOLDER_RE.sub(f"Closes #{issue}", body)
+
+    # Replace bare dash bullets left by the template (content placeholders)
+    # with "TBD" so the skeleton passes verify_section_substantive_content.
+    body = re.sub(r"^-\s*$", "- TBD", body, flags=re.MULTILINE)
 
     # Replace the template's empty command/result placeholders with
     # non-empty ones that satisfy the shape gate regex.
