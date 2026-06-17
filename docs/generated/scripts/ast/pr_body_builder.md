@@ -29,9 +29,10 @@ flowchart TD
     N004["body = sub(...)"]
     N005["body = sub(...)"]
     N006["body = sub(...)"]
-    N007["footer = _build_footer(...)"]
-    N008["body = sub(...)"]
-    N009["return body.rstrip('<str>') + '<str>'"]
+    N007["body = sub(...)"]
+    N008["footer = _build_footer(...)"]
+    N009["body = sub(...)"]
+    N010["return body.rstrip('<str>') + '<str>'"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 --> N004
@@ -40,6 +41,7 @@ flowchart TD
     N006 --> N007
     N007 --> N008
     N008 --> N009
+    N009 --> N010
 ```
 
 ## main(...)
