@@ -11,6 +11,42 @@ flowchart TD
     N001 -->|"start"| N002
 ```
 
+## _current_branch(...)
+
+```mermaid
+flowchart TD
+    N001["_current_branch(...)"]
+    N002["_repo = repo if repo is not None else REPO_ROOT"]
+    N003["try"]
+    N004["cp = run_git(...)"]
+    N005["return cp.stdout.strip() or None"]
+    N006["except Exception"]
+    N007["return None"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 -->|"try"| N004
+    N004 --> N005
+    N003 -->|"raises"| N006
+    N006 --> N007
+```
+
+## _force_push_blocked(...)
+
+```mermaid
+flowchart TD
+    N001["_force_push_blocked(...)"]
+    N002["if branch is None"]
+    N003["return False"]
+    N004["if branch == 'main'"]
+    N005["return False"]
+    N006["return not branch.startswith('<str>')"]
+    N001 -->|"start"| N002
+    N002 -->|"true"| N003
+    N002 -->|"false"| N004
+    N004 -->|"true"| N005
+    N004 -->|"false"| N006
+```
+
 ## base_is_stale(...)
 
 ```mermaid
@@ -43,8 +79,15 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["_build_warning(...)"]
-    N002["return f'<str>{sha[:12]}<str>'"]
+    N002["if force_push_blocked"]
+    N003["remedy = f'<str>{_RUNBOOK}<str>'"]
+    N004["remedy = '<str>'"]
+    N005["return f'<str>{sha[:12]}<str>{remedy}<str>'"]
     N001 -->|"start"| N002
+    N002 -->|"true"| N003
+    N002 -->|"false"| N004
+    N003 --> N005
+    N004 --> N005
 ```
 
 ## _build_deny_reason(...)
@@ -52,8 +95,15 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["_build_deny_reason(...)"]
-    N002["return f'<str>{sha[:12]}<str>'"]
+    N002["if force_push_blocked"]
+    N003["remedy = f'<str>{_RUNBOOK}<str>'"]
+    N004["remedy = '<str>'"]
+    N005["return f'<str>{sha[:12]}<str>{remedy}<str>'"]
     N001 -->|"start"| N002
+    N002 -->|"true"| N003
+    N002 -->|"false"| N004
+    N003 --> N005
+    N004 --> N005
 ```
 
 ## _emit_context(...)
@@ -83,8 +133,9 @@ flowchart TD
     N010["except Exception"]
     N011["return 0"]
     N012["if result.status != 'pass'"]
-    N013["_emit_context(...)"]
-    N014["return 0"]
+    N013["branch = _current_branch(...)"]
+    N014["_emit_context(...)"]
+    N015["return 0"]
     N001 -->|"start"| N002
     N002 -->|"true"| N003
     N002 -->|"false"| N004
@@ -98,7 +149,8 @@ flowchart TD
     N009 --> N012
     N012 -->|"true"| N013
     N013 --> N014
-    N012 -->|"false"| N014
+    N014 --> N015
+    N012 -->|"false"| N015
 ```
 
 ## decide(...)
@@ -122,7 +174,8 @@ flowchart TD
     N015["return None"]
     N016["if result.status == 'pass'"]
     N017["return None"]
-    N018["return build_deny(_build_deny_reason(stamp.sha))"]
+    N018["branch = _current_branch(...)"]
+    N019["return build_deny(_build_deny_reason(stamp.sha, force_push_blocked=_force_push_blocked(branch)))"]
     N001 -->|"start"| N002
     N002 -->|"true"| N003
     N002 -->|"false"| N004
@@ -140,6 +193,7 @@ flowchart TD
     N013 --> N016
     N016 -->|"true"| N017
     N016 -->|"false"| N018
+    N018 --> N019
 ```
 
 ## cmd_check(...)
@@ -154,8 +208,11 @@ flowchart TD
     N006["if not stale"]
     N007["print(...)"]
     N008["return 0"]
-    N009["print(...)"]
-    N010["return 1"]
+    N009["branch = _current_branch(...)"]
+    N010["if _force_push_blocked(branch)"]
+    N011["print(...)"]
+    N012["print(...)"]
+    N013["return 1"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 -->|"true"| N004
@@ -165,6 +222,10 @@ flowchart TD
     N007 --> N008
     N006 -->|"false"| N009
     N009 --> N010
+    N010 -->|"true"| N011
+    N010 -->|"false"| N012
+    N011 --> N013
+    N012 --> N013
 ```
 
 ## main(...)

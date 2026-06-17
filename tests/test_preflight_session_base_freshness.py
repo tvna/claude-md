@@ -103,6 +103,23 @@ class TestBaseIsStale:
         assert gate.base_is_stale(repo=repo, stamp_path=tmp_path / "absent") is None
 
 
+class TestForcePushBlocked:
+    @pytest.mark.parametrize(
+        "branch,expected",
+        [
+            ("claude/my-feature", True),
+            ("feature/foo", True),
+            ("fix/some-bug", True),
+            ("dependabot/update-pkg", False),
+            ("dependabot/npm_and_yarn/x-1.0", False),
+            ("main", False),
+            (None, False),
+        ],
+    )
+    def test_force_push_blocked(self, branch: str | None, expected: bool) -> None:
+        assert gate._force_push_blocked(branch) is expected
+
+
 class TestDecide:
     def test_denies_commit_on_stale_base(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -117,7 +134,45 @@ class TestDecide:
         assert decision is not None
         reason = decision["hookSpecificOutput"]["permissionDecisionReason"]
         assert "stale" in reason
+        # "feature" branch is subject to non_fast_forward -> shows runbook, not rebase
+        assert gate._RUNBOOK in reason
+        assert "git rebase origin/main" not in reason
+
+    def test_denies_commit_non_fast_forward_branch_shows_runbook(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """claude/* branch (non_fast_forward) must point to the server-side runbook."""
+        repo, main_sha = _stale_repo(tmp_path)
+        stamp = tmp_path / "STAMP"
+        pmf.write_stamp(main_sha, path=stamp)
+        _point_module_at(monkeypatch, repo, stamp)
+        monkeypatch.setattr(gate, "_current_branch", lambda *_: "claude/my-feature")
+
+        decision = gate.decide(_COMMIT_EVENT)
+
+        assert decision is not None
+        reason = decision["hookSpecificOutput"]["permissionDecisionReason"]
+        assert "stale" in reason
+        assert gate._RUNBOOK in reason
+        assert "git rebase origin/main" not in reason
+
+    def test_denies_commit_dependabot_branch_shows_rebase(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """dependabot/* branch (force-push allowed) must show the git rebase path."""
+        repo, main_sha = _stale_repo(tmp_path)
+        stamp = tmp_path / "STAMP"
+        pmf.write_stamp(main_sha, path=stamp)
+        _point_module_at(monkeypatch, repo, stamp)
+        monkeypatch.setattr(gate, "_current_branch", lambda *_: "dependabot/update-pkg")
+
+        decision = gate.decide(_COMMIT_EVENT)
+
+        assert decision is not None
+        reason = decision["hookSpecificOutput"]["permissionDecisionReason"]
+        assert "stale" in reason
         assert "git rebase origin/main" in reason
+        assert gate._RUNBOOK not in reason
 
     def test_allows_commit_after_rebase(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -214,6 +269,30 @@ class TestSessionStart:
         self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
     ) -> None:
         monkeypatch.setenv("CLAUDE_CODE_REMOTE", "true")
+        monkeypatch.setattr(gate, "_current_branch", lambda *_: "claude/test-feature")
+        monkeypatch.setattr(
+            pmf,
+            "fetch_and_record",
+            lambda **k: pmf.FreshnessStamp(sha="a" * 40, fetched_at=_now()),
+        )
+        monkeypatch.setattr(
+            preflight_branch_base,
+            "check_base_freshness",
+            lambda **k: preflight_branch_base.BranchBaseResult(status="fail", detail="stale"),
+        )
+        assert gate.main(["session-start"]) == 0
+        out = capsys.readouterr().out
+        assert "STALE BRANCH BASE" in out
+        # claude/* branch is non_fast_forward -> shows runbook, not rebase
+        assert gate._RUNBOOK in out
+        assert "git rebase origin/main" not in out
+
+    def test_warns_on_stale_base_dependabot_shows_rebase(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """dependabot/* branch can force-push -> session-start warning shows git rebase."""
+        monkeypatch.setenv("CLAUDE_CODE_REMOTE", "true")
+        monkeypatch.setattr(gate, "_current_branch", lambda *_: "dependabot/update-pkg")
         monkeypatch.setattr(
             pmf,
             "fetch_and_record",
@@ -228,6 +307,7 @@ class TestSessionStart:
         out = capsys.readouterr().out
         assert "STALE BRANCH BASE" in out
         assert "git rebase origin/main" in out
+        assert gate._RUNBOOK not in out
 
     def test_silent_when_fresh(
         self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
