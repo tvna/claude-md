@@ -9,9 +9,9 @@ warn_module_lines = 640
 
 [summary]
 total_modules = 180
-in_warn_band = 9
+in_warn_band = 8
 exactly_at_limit = 1
-over_budget = 2
+over_budget = 3
 
 # Module counts by inclusive physical-line range.
 [histogram]
@@ -19,8 +19,8 @@ over_budget = 2
 "161-320" = 83
 "321-480" = 19
 "481-640" = 11
-"641-800" = 9
-"801+" = 2
+"641-800" = 8
+"801+" = 3
 
 # warn_band: passing modules in [warn_module_lines, max_module_lines].
 # over_budget: modules above the budget (deferred legacy debt). Names
@@ -30,7 +30,6 @@ warn_band = [
     "scripts/_auto_retro_parse.py",
     "scripts/_auto_retro_render.py",
     "scripts/analyze_ci_timings.py",
-    "scripts/body_policy.py",
     "scripts/measure_tool_overlap.py",
     "scripts/pr_upsert.py",
     "scripts/ruleset_drift.py",
@@ -39,5 +38,6 @@ warn_band = [
 ]
 over_budget = [
     "scripts/auto_retro.py",
+    "scripts/body_policy.py",
     "scripts/threat_intel_triage.py",
 ]

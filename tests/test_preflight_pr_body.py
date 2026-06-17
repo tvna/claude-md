@@ -68,7 +68,7 @@ _SECTIONS_OK = (
     "## Facts\n\n- Fact: x\n\n"
     "## Assumptions\n\n- speculation: y\n\n"
     "## Risk and blast radius\n\n- Low\n\n"
-    "## Rollback\n\n- `git revert <sha>`\n\n"
+    "## Rollback\n\n- `git revert abc1234`\n\n"
 )
 
 _RESOURCE_OK = (
@@ -201,6 +201,55 @@ class TestEvaluate:
     def test_harness_mode_with_footer_rejected(self) -> None:
         errors = prb.evaluate(_GOOD_BODY, harness_appends_footer=True)
         assert any("auto-appends" in e for e in errors), errors
+
+
+class TestPlaceholderAndSubstantiveContentGates:
+    """Checks #7 (placeholder tokens) and #8 (substantive content) in evaluate()."""
+
+    def test_unfilled_angle_token_in_rollback_flagged(self) -> None:
+        body = _GOOD_BODY.replace(
+            "## Rollback\n\n- `git revert abc1234`\n\n",
+            "## Rollback\n\n- git revert <sha>\n\n",
+        )
+        errors = prb.evaluate(body)
+        assert any("<sha>" in e for e in errors), errors
+
+    def test_unfilled_verification_template_token_flagged(self) -> None:
+        body = _GOOD_BODY.replace(
+            _VERIFICATION_OK,
+            "## Verification\n\n- command: `<inline-code>`\n  result: `<result>`\n",
+        )
+        errors = prb.evaluate(body)
+        assert any("<inline-code>" in e for e in errors), errors
+
+    def test_clean_body_no_placeholder_errors(self) -> None:
+        errors = prb.evaluate(_GOOD_BODY)
+        assert all("<" not in e or "::" in e for e in errors), errors
+        assert not any("placeholder" in e for e in errors), errors
+
+    def test_bare_dash_summary_flagged(self) -> None:
+        body = _GOOD_BODY.replace(
+            "## Summary\n\nAdd connector PR body preflight.\n\n",
+            "## Summary\n\n-\n\n",
+        )
+        errors = prb.evaluate(body)
+        assert any("Summary" in e for e in errors), errors
+
+    def test_blank_only_section_flagged(self) -> None:
+        body = _GOOD_BODY.replace(
+            "## Facts\n\n- Fact: x\n\n",
+            "## Facts\n\n\n\n",
+        )
+        errors = prb.evaluate(body)
+        assert any("Facts" in e for e in errors), errors
+
+    def test_html_comment_only_section_flagged(self) -> None:
+        body = _GOOD_BODY.replace(
+            "## Assumptions\n\n- speculation: y\n\n",
+            "## Assumptions\n\n<!-- fill this in -->\n\n",
+        )
+        errors = prb.evaluate(body)
+        assert any("Assumptions" in e for e in errors), errors
 
 
 class TestHarnessEnvResolution:
