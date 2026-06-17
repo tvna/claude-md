@@ -582,7 +582,9 @@ def verify_section_substantive_content(body: str) -> list[str]:
         # extract_section_body already strips HTML comments
         non_empty = [
             line for line in content.splitlines()
-            if line.strip() and not _BARE_DASH_RE.fullmatch(line.strip())
+            if line.strip()
+            and not _BARE_DASH_RE.fullmatch(line.strip())
+            and not _AGENT_ATTRIBUTION_FOOTER_RE.fullmatch(line.strip())
         ]
         if not non_empty:
             errors.append(

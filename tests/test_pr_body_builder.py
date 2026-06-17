@@ -19,11 +19,13 @@ from typing import Any
 import pr_body_builder as builder
 import pytest
 from body_policy import (
+    detect_placeholder_tokens,
     missing_sections,
     required_sections,
     verify_pr_agent_attribution_footer,
     verify_pr_checklist_subsections,
     verify_pr_verification_pairs,
+    verify_section_substantive_content,
 )
 
 pytestmark = pytest.mark.shard_preflight
@@ -160,6 +162,8 @@ class TestBuiltBodyPassesBodyPolicy:
         assert verify_pr_verification_pairs(body) == []
         assert verify_pr_checklist_subsections(body) == []
         assert verify_pr_agent_attribution_footer(body) == []
+        assert detect_placeholder_tokens(body) == []
+        assert verify_section_substantive_content(body) == []
 
 
 # ---------------------------------------------------------------------------
