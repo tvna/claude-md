@@ -17,8 +17,9 @@ docs/standards/issue-pr-body-standard.md.
 <!--
 The conclusion, in one or two sentences: what this PR changes, whether
 verification passed, and the risk level. Lead with the outcome, not the
-journey. Example: "Adds the H2 allowlist gate; pytest green (684 passed);
-low risk, CI-only, single git revert to roll back."
+journey.
+GOOD: "Adds the H2 allowlist gate; pytest green (684 passed); low risk, CI-only, single git revert to roll back."
+BAD:  "Updates the code." / "Various improvements." / any sentence that describes the journey rather than the outcome.
 -->
 
 -
@@ -28,6 +29,8 @@ Facts -- CLAUDE.md section 2.
 State only what is observable: diffs, command output, test names, log lines.
 No speculation in this section. If you cannot point to evidence, move the
 line to Assumptions below.
+GOOD: "- Fact: scripts/body_policy.py line 58 defines 9 required PR sections."
+BAD:  "- The change should improve performance." (unverified -- move to Assumptions with a Speculation: tag)
 -->
 ## Facts
 
@@ -38,6 +41,8 @@ Assumptions -- CLAUDE.md section 2.
 List what you are trusting but did not verify (library behavior, runtime
 environment, upstream contracts, reviewer intent). Tag each line with
 "speculation:" when it is a guess rather than a documented fact.
+GOOD: "- Speculation: upstream library behavior is unchanged because no release notes mention it."
+BAD:  "- Fact: this will work correctly." (unverified claim presented as a fact -- tag it Speculation: instead)
 -->
 ## Assumptions
 
@@ -93,6 +98,11 @@ for PRs created on or after 2026-05-26):
 
 - command: `<inline-code>`
   result: `<exit 0, OK marker, N passed summary, or explicit failure>`
+
+GOOD:
+- command: `uv run python -m pytest -q`
+  result: `684 passed in 12.3s`
+BAD:  leaving command or result as empty backtick pairs (the template default ``); replace both with actual run output before creating the PR.
 -->
 ## Verification
 
