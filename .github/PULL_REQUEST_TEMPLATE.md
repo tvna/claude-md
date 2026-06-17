@@ -100,8 +100,8 @@ for PRs created on or after 2026-05-26):
   result: `<exit 0, OK marker, N passed summary, or explicit failure>`
 
 GOOD:
-  - command: `uv run python -m pytest -q`
-    result: `684 passed in 12.3s`
+- command: `uv run python -m pytest -q`
+  result: `684 passed in 12.3s`
 BAD:  leaving command or result as empty backtick pairs (the template default ``); replace both with actual run output before creating the PR.
 -->
 ## Verification
