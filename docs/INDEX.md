@@ -47,6 +47,17 @@ The last three `prd/` entries are adopted contracts with legacy
 placement. They should move to `standards/` in a scoped follow-up rather
 than serving as precedent for new PRD files.
 
+## adr/ -- architecture decision records
+
+Confirmed, owner-approved decisions recorded in MADR format. Each file
+captures context, the decision, the rationale, rejected alternatives, and
+consequences. This lane was established as part of the decision-capture
+mechanism designed in [#1049](https://github.com/tvna/claude-md/issues/1049).
+
+| File | Territory | Tracking issues | Companion |
+|---|---|---|---|
+| [0001-hook-manager-prek.md](adr/0001-hook-manager-prek.md) | Decision to use prek over pre-commit as the git hook manager: token-efficiency rationale, performance comparison, and rejected alternative. | #408, #1049 | `.pre-commit-config.yaml`; `docs/runbooks/prek.md`; `docs/standards/pre-push-gate-performance.md` |
+
 ## uml/ -- UML diagram artifacts
 
 | File | Territory | Tracking issues | Companion |
