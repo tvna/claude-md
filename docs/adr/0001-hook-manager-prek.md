@@ -1,7 +1,7 @@
 # ADR-0001: prek over pre-commit as the git hook manager
 
-Status: Accepted  
-Date: 2026-06-17  
+Status: Accepted
+Date: 2026-06-17
 Refs: [#408](https://github.com/tvna/claude-md/issues/408), [#1049](https://github.com/tvna/claude-md/issues/1049)
 
 ## Context
@@ -55,7 +55,7 @@ Use **prek** (`j178/prek`) as the hook manager for this repository.
 
 ## Token cost comparison (per push)
 
-Hook output consumed by the model is the primary token variable.  
+Hook output consumed by the model is the primary token variable.
 With both tools configured identically for `pre-push` stage:
 
 | Source | pre-commit | prek |
