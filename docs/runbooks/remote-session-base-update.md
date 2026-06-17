@@ -96,12 +96,12 @@ For each conflicting file, read its content at the merge-base commit and push
 that version to the branch via `mcp__github__create_or_update_file`.
 
 ```sh
-# Get the file content at merge-base (for reference / diffing)
+# Get the file content at merge-base (pipe directly into the MCP call)
 git show "$MERGE_BASE:<path/to/file>"
 
-# Get the current HEAD SHA of the file on the remote branch (needed as `sha`
-# parameter for the API call)
-git ls-tree -r HEAD -- <path/to/file>
+# Get the blob SHA of the file currently on the branch (required by the MCP tool
+# when updating an existing file)
+git rev-parse HEAD:<path/to/file>
 ```
 
 Then call `mcp__github__create_or_update_file` with:
@@ -109,8 +109,9 @@ Then call `mcp__github__create_or_update_file` with:
 - `path`: the file path (e.g. `docs/standards/module-size-distribution.toml`)
 - `message`: a commit message citing the issue (e.g.
   `chore: set generated file to merge-base for server-side base-update #1802`)
-- `content`: the base64-encoded merge-base content
-- `sha`: the blob SHA of the current HEAD version of the file (from `git ls-tree` above)
+- `content`: the **raw file content** from `git show "$MERGE_BASE:<path>"` above
+  (the MCP tool accepts a plain string; do not base64-encode it)
+- `sha`: the blob SHA from `git rev-parse HEAD:<path>` above
 - `branch`: the current branch name
 
 This push is a plain non-force append commit; it satisfies `non_fast_forward`.
@@ -119,19 +120,21 @@ version, so merging `main` into the branch will have no conflict there.
 
 Repeat for each conflicting file.
 
-### Step 4 — Server-side merge of main
+### Step 4 — Server-side merge of main (owner action required)
 
-Call `mcp__github__update_pull_request_branch` for the open PR.
+**The agent cannot perform this step directly.**
+`scripts/gate_update_pr_branch.py` (PreToolUse hook) unconditionally denies
+`mcp__github__update_pull_request_branch` with a hard `permissionDecision:
+deny`; the hook contract does not offer an override prompt.
 
-> **Gate note**: `scripts/gate_update_pr_branch.py` (PreToolUse hook) will
-> show a denial prompt for this tool. In the base-update context described
-> here, **approve the operation**. The gate exists to prevent unnecessary
-> merge commits on clean branches; here the merge commit is the intended
-> mechanism and is acceptable because the final merge is squash-only (the
-> merge commit does not appear in `main`'s history).
+**The owner must click the "Update branch" button** on the PR page in the
+GitHub web UI. This performs the same server-side merge that
+`update_pull_request_branch` would: it merges `main` into the feature branch
+as a Verified, non-force merge commit and satisfies `non_fast_forward`.
 
-After this call the remote branch HEAD is a Verified merge commit that
-contains `origin/main`. The freshness invariant is now satisfied.
+After the owner completes this step, the remote branch HEAD is a Verified
+merge commit that contains `origin/main`. The freshness invariant is now
+satisfied.
 
 ### Step 5 — Sync local worktree to the merged state
 
@@ -161,10 +164,10 @@ For each regenerated file, push it via `mcp__github__create_or_update_file`:
 
 - `path`: the file path
 - `message`: e.g. `chore(generated): regenerate after server-side base-update #1802`
-- `content`: the base64-encoded regenerated content
+- `content`: the **raw file content** (plain string, not base64-encoded)
 - `sha`: the blob SHA of the file currently on the remote branch (i.e. the
-  merge-base version pushed in Step 3; get it with `git ls-tree` against the
-  latest remote HEAD after Step 5)
+  merge-base version pushed in Step 3); get it with
+  `git rev-parse origin/<branch>:<path>` after Step 5's fetch
 - `branch`: the current branch name
 
 ### Step 8 — Verify CI and base freshness
@@ -182,16 +185,30 @@ via the merge commit).
 
 The PR cannot be self-merged from a remote session:
 `main-protection` requires `require_code_owner_review: true` and
-`bypass_actors: []`. The owner must merge using:
+`bypass_actors: []`. In a solo-dev repository the code-owner and PR author
+are the same person and cannot self-approve, so the only available path is an
+admin override.
+
+**Preconditions before running the command below — verify all of these first:**
+
+1. All required CI checks are green on the PR head commit.
+2. All review threads are resolved.
+3. The only remaining `mergeable_state` blocker is `require_code_owner_review`.
+
+Only when all three hold should the owner run:
 
 ```sh
 gh pr merge <PR-number> --squash --admin
 ```
 
-The `--admin` flag bypasses the code-owner review requirement (the reviewer
-and owner are the same person in a solo-dev repository). The squash-merge
-produces a single Verified commit on `main`; the branch's merge commit does
-not appear in `main`'s history.
+`--admin` overrides branch-protection rules (including code-owner review). It
+does **not** skip CI: if any required check is still failing, the merge will
+fail even with `--admin` unless the repo uses admin-bypass rules — in this
+repo there are none (`bypass_actors: []`). Confirm CI is green before
+running.
+
+The squash-merge produces a single Verified commit on `main`; the branch's
+intermediate merge commit does not appear in `main`'s history.
 
 ---
 
