@@ -63,6 +63,7 @@ from typing import Any
 
 import preflight_branch_base
 import preflight_main_freshness
+from _git import run_git
 from _hook_runtime import build_deny, run_event_hook
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -74,9 +75,38 @@ _REMOTE_ENV_VAR = "CLAUDE_CODE_REMOTE"
 # git commit``), but keep plumbing like ``git commit-tree`` out.
 _GIT_COMMIT_RE = re.compile(r"\bgit\s+commit(?![\w-])")
 
+# Runbook for the server-side base-update path (non_fast_forward branches).
+_RUNBOOK = "docs/runbooks/remote-session-base-update.md"
+
 
 def _is_remote() -> bool:
     return os.environ.get(_REMOTE_ENV_VAR, "").lower() == "true"
+
+
+def _current_branch(repo: Path | None = None) -> str | None:
+    """Return the current branch name, or None on failure (detached HEAD, error)."""
+    _repo = repo if repo is not None else REPO_ROOT
+    try:
+        cp = run_git(["symbolic-ref", "--short", "-q", "HEAD"], cwd=_repo)
+        return cp.stdout.strip() or None
+    except Exception:
+        return None
+
+
+def _force_push_blocked(branch: str | None) -> bool:
+    """Return True when the branch is subject to the non_fast_forward ruleset.
+
+    Mirrors .github/rulesets/all-branches.json: ~ALL except ~DEFAULT_BRANCH
+    (``main``) and ``refs/heads/dependabot/*``. On these branches git rebase +
+    force-push is unavailable; the server-side runbook is the correct path.
+    Returns False (fail-open) when branch is None so an unknown branch does not
+    change existing behaviour.
+    """
+    if branch is None:
+        return False
+    if branch == "main":
+        return False
+    return not branch.startswith("dependabot/")
 
 
 def base_is_stale(*, repo: Path | None = None, stamp_path: Path | None = None) -> bool | None:
@@ -99,29 +129,52 @@ def base_is_stale(*, repo: Path | None = None, stamp_path: Path | None = None) -
     return result.status != "pass"
 
 
-def _build_warning(sha: str) -> str:
+def _build_warning(sha: str, *, force_push_blocked: bool = False) -> str:
+    if force_push_blocked:
+        remedy = (
+            f"Force-push is blocked on this branch (all-branches-no-force-push\n"
+            f"ruleset, bypass_actors: []). Use the server-side base-update\n"
+            f"runbook instead of git rebase + force-push:\n"
+            f"  {_RUNBOOK}\n"
+            f"That path needs no local commit, force-push, or GPG."
+        )
+    else:
+        remedy = "  git fetch origin main && git rebase origin/main"
     return (
         f"STALE BRANCH BASE: this branch does not contain origin/main as "
-        f"observed at session start (SHA={sha[:12]}). Rebase BEFORE implementing "
-        f"so the late-rebase loop from PR #1625 (retro #1632, Fact 3) does not "
-        f"recur:\n"
-        f"  git fetch origin main && git rebase origin/main\n"
+        f"observed at session start (SHA={sha[:12]}). Update the base BEFORE "
+        f"implementing so the late-rebase loop from PR #1625 (retro #1632, "
+        f"Fact 3) does not recur:\n"
+        f"{remedy}\n"
         f"Until you do, a git commit on this branch is blocked by "
         f"scripts/preflight_session_base_freshness.py."
     )
 
 
-def _build_deny_reason(sha: str) -> str:
+def _build_deny_reason(sha: str, *, force_push_blocked: bool = False) -> str:
+    if force_push_blocked:
+        remedy = (
+            f"Force-push is blocked on this branch (all-branches-no-force-push\n"
+            f"ruleset, bypass_actors: []), so git rebase + force-push is not an\n"
+            f"option. Use the server-side base-update runbook:\n"
+            f"  {_RUNBOOK}\n"
+            f"A merge commit that brings origin/main into HEAD satisfies the\n"
+            f"same invariant the gate verifies. Refs #1802, #1775."
+        )
+    else:
+        remedy = (
+            "Rebase before committing:\n"
+            "  git fetch origin main && git rebase origin/main\n\n"
+            "After the rebase HEAD contains the base and commits proceed."
+        )
     return (
         f"Blocked by scripts/preflight_session_base_freshness.py: this branch "
         f"does not contain origin/main as observed at session start "
         f"(SHA={sha[:12]}), so its base is stale. Committing now reproduces the "
         f"PR #1625 late-rebase loop (retro #1632, Fact 3): the work would only "
         f"fail the pre-push branch-base gate after it is done.\n\n"
-        f"Rebase before committing:\n"
-        f"  git fetch origin main && git rebase origin/main\n\n"
-        f"After the rebase HEAD contains the base and commits proceed. Refs "
-        f"#1632, #745."
+        f"{remedy}\n\n"
+        f"Refs #1632, #745."
     )
 
 
@@ -150,7 +203,8 @@ def cmd_session_start(args: argparse.Namespace) -> int:
     except Exception:
         return 0
     if result.status != "pass":
-        _emit_context(_build_warning(stamp.sha))
+        branch = _current_branch(REPO_ROOT)
+        _emit_context(_build_warning(stamp.sha, force_push_blocked=_force_push_blocked(branch)))
     return 0
 
 
@@ -175,7 +229,8 @@ def decide(event: dict[str, Any]) -> dict[str, Any] | None:
         return None
     if result.status == "pass":
         return None
-    return build_deny(_build_deny_reason(stamp.sha))
+    branch = _current_branch(REPO_ROOT)
+    return build_deny(_build_deny_reason(stamp.sha, force_push_blocked=_force_push_blocked(branch)))
 
 
 # ---------------------------------------------------------------------------
@@ -189,11 +244,20 @@ def cmd_check(_args: argparse.Namespace) -> int:
     if not stale:
         print("OK: branch contains the session-start origin/main base.")
         return 0
-    print(
-        "FAIL: branch base is stale (HEAD does not contain the session-start "
-        "origin/main). Rebase: git fetch origin main && git rebase origin/main",
-        file=sys.stderr,
-    )
+    branch = _current_branch(REPO_ROOT)
+    if _force_push_blocked(branch):
+        print(
+            f"FAIL: branch base is stale (HEAD does not contain the session-start "
+            f"origin/main). Force-push is blocked on this branch; use the "
+            f"server-side base-update runbook: {_RUNBOOK}",
+            file=sys.stderr,
+        )
+    else:
+        print(
+            "FAIL: branch base is stale (HEAD does not contain the session-start "
+            "origin/main). Rebase: git fetch origin main && git rebase origin/main",
+            file=sys.stderr,
+        )
     return 1
 
 
