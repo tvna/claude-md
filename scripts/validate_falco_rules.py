@@ -18,6 +18,16 @@ Exit codes:
     1  One or more validation errors found.
     2  Usage error (missing argument or import failure).
 
+Contract:
+- Inputs: ``--file PATH`` (repeatable via ``action="append"``); each PATH
+  must be a readable UTF-8 YAML file containing a top-level sequence.
+- Outputs: ``::error file=<path>::<message>`` annotations written to stderr
+  for every violation found; exit 0 when all files are valid, exit 1 on
+  any violation, exit 2 on a usage error or missing PyYAML dependency.
+- Failure policy: fails loud per CLAUDE.md section 4; an empty ``catch`` or
+  silent default is never used -- every error path surfaces a human-readable
+  annotation before exiting non-zero.
+
 Refs #1847, #1846.
 """
 

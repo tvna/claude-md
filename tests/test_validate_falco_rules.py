@@ -11,9 +11,9 @@ import textwrap
 from pathlib import Path
 
 import pytest
-
 import validate_falco_rules as vfr
 
+pytestmark = pytest.mark.shard_preflight
 
 # ---------------------------------------------------------------------------
 # Fixtures
