@@ -86,6 +86,8 @@
     and (fd.name startswith "/home/claude/.ssh/"
          or fd.name startswith "/home/claude/.aws/"
          or fd.name = "/home/claude/.config/gh/hosts.yml"
+         or fd.name startswith "/home/codex/.ssh/"
+         or fd.name = "/home/codex/.config/gh/hosts.yml"
          or fd.name startswith "/root/.ssh/")
     and not is_known_tool
   output: >
@@ -104,12 +106,12 @@
   condition: >
     in_claude_md_devcontainer
     and spawned_process
-    and (proc.exe startswith "/tmp/"
-         or proc.exe startswith "/dev/shm/")
+    and (proc.exepath startswith "/tmp/"
+         or proc.exepath startswith "/dev/shm/")
     and not proc.name in (claude_md_known_tools)
   output: >
     Dropped binary executed from temporary path
-    container=%container.name proc=%proc.name exe=%proc.exe
+    container=%container.name proc=%proc.name exepath=%proc.exepath
     cmdline=%proc.cmdline pid=%proc.pid user=%user.name
   priority: CRITICAL
   tags: [execution, T1059, T1620, claude-md-devcontainer]
@@ -131,24 +133,29 @@
   priority: WARNING
   tags: [defense-evasion, T1055, claude-md-devcontainer]
 
-# Reverse shell: shell with network fd, no tty.
-# The iptables egress allowlist will block the outbound connection to
-# non-allowlisted destinations; this rule fires the Falco alert for SIEM
-# visibility before the packet is dropped.
-- rule: Shell with open network connection (potential reverse shell)
+# Reverse shell: stdin/stdout redirected to a network socket via dup(2).
+# Follows the official Falco pattern ("Redirect STDOUT/STDIN to Network
+# Connection in Container"): dup events with evt.rawres in (0,1,2) and
+# fd.type ipv4/ipv6 reliably capture the fd-redirect moment. The prior
+# spawned_process+fd.type approach was unreliable because fd.* fields do
+# not apply to execve events. The iptables egress allowlist blocks the
+# outbound connection; this rule fires the Falco alert for SIEM visibility.
+- rule: Shell stdin/stdout redirected to network connection (potential reverse shell)
   desc: >
-    A shell process has an open network file descriptor without a controlling
-    terminal. This is the canonical reverse-shell indicator: a supply-chain
-    dropper or compromised tool redirects stdin/stdout over a TCP socket.
+    A shell process duplicated a network file descriptor onto stdin (0),
+    stdout (1), or stderr (2) via dup/dup2/dup3. This is the canonical
+    reverse-shell indicator: a supply-chain dropper redirects the shell's
+    I/O streams over a TCP socket. Follows the official Falco
+    "Redirect STDOUT/STDIN to Network Connection in Container" pattern.
     The iptables egress allowlist drops the packet; this rule adds the alert.
   condition: >
     in_claude_md_devcontainer
-    and spawned_process
+    and dup
     and proc.name in (claude_md_allowed_shells)
+    and evt.rawres in (0, 1, 2)
     and fd.type in (ipv4, ipv6)
-    and not is_interactive_shell
   output: >
-    Shell with open network connection (potential reverse shell)
+    Shell stdin/stdout redirected to network connection (potential reverse shell)
     container=%container.name proc=%proc.name fd=%fd.name
     cmdline=%proc.cmdline pid=%proc.pid user=%user.name
   priority: CRITICAL
