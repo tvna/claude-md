@@ -1,45 +1,44 @@
 ## Summary
 
-- Adds `--warn-at` threshold flag to `scripts/scan_maintainability_metrics.py`; `uv run python -m pytest tests/test_scan_maintainability_metrics.py -q` green (12 passed in 0.3s); low risk, scan-only change, revert to roll back.
+- TBD (new capability, test evidence, risk level, rollback)
 
 ## Facts
 
-- Fact: `scripts/scan_maintainability_metrics.py` previously hardcoded the warn threshold at 600 lines with no CLI override.
-- Fact: the new `--warn-at N` flag defaults to 600, so no existing CI invocation changes behaviour.
-- Fact: `uv run python -m pytest tests/test_scan_maintainability_metrics.py -q` returned `12 passed in 0.3s` on the feature branch.
+- Fact: TBD (observable pre-condition that motivated the work)
+- Fact: TBD (test output or measurement that proves the feature works)
 
 ## Assumptions
 
-- Assumption: downstream CI jobs that call `scan_maintainability_metrics.py` do not pass positional arguments that conflict with the new flag; the double-dash prefix avoids ambiguity.
+- Assumption: TBD (downstream contract or runtime environment not directly verified)
 
 ## Risk and blast radius
 
-- Limited to `scripts/scan_maintainability_metrics.py`; no data file, CI job, or hook is modified.
-- The flag is additive; callers that omit it continue to observe the 600-line default.
+- Limited to TBD (which files or services are affected)
+- The change is additive; TBD (callers that omit it are unaffected)
 
 ## Rollback
 
-- Revert this PR to restore the hardcoded 600-line warn threshold.
+- Revert this PR to restore the previous behaviour.
 
 ## Verification
 
-- command: `uv run python -m pytest tests/test_scan_maintainability_metrics.py -q`
-  result: `12 passed in 0.3s`
+- command: `TBD`
+  result: `TBD`
 
 ## Checklist
 
 ### Bootstrap
 
-- [x] Facts vs. Assumptions split is honest (no speculation lurking in Facts)
-- [x] Risk and blast radius assessed; Rollback steps are runnable
-- [x] Issue number recorded on the `Closes #` line below
-- [x] Replacement PR preflight passed (N/A -- first PR for this issue)
+- [ ] Facts vs. Assumptions split is honest (no speculation lurking in Facts)
+- [ ] Risk and blast radius assessed; Rollback steps are runnable
+- [ ] Issue number recorded on the `Closes #` line below
+- [ ] Replacement PR preflight passed (N/A -- first PR for this issue)
 
 ### After-merge (CI)
 
-- [x] `uv run python -m pytest -q` exits 0 (paired in Verification above)
-- [x] CI green on the merge commit (all required status checks)
-- [x] CLAUDE.md / AGENTS.md regenerated if applicable (`apm compile` produced no diff)
+- [ ] `uv run python -m pytest -q` exits 0 (paired in Verification above)
+- [ ] CI green on the merge commit (all required status checks)
+- [ ] CLAUDE.md / AGENTS.md regenerated if applicable (`apm compile` produced no diff)
 
 ### Post-merge (auto-retro signal)
 

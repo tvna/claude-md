@@ -315,3 +315,14 @@ class TestKind:
         captured = capsys.readouterr()
         assert rc == 0
         assert f"Closes #{_ISSUE}" in captured.out
+
+    def test_list_kinds_excludes_workflow_only_templates(self) -> None:
+        kinds = builder.list_kinds()
+        assert "devcontainer-image-pins" not in kinds
+        assert "flake-pin" not in kinds
+
+    def test_workflow_only_kind_falls_back_to_universal(self) -> None:
+        body = builder.build(_ISSUE, kind="flake-pin")
+        assert "__ISSUE_ANCHOR:" not in body
+        assert "__GITHUB_SHA__" not in body
+        assert f"Closes #{_ISSUE}" in body

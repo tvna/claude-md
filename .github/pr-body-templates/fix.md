@@ -1,46 +1,45 @@
 ## Summary
 
-- Fixes false-positive in `verify_section_substantive_content` that flagged the agent attribution footer as missing content in the last PR body section; `uv run python -m pytest tests/test_body_policy.py -q` green (47 passed in 0.5s); low risk, gate-logic-only fix, revert to roll back.
+- Fixes TBD (bug description, root cause, regression test evidence, risk level, rollback)
 
 ## Facts
 
-- Fact: `body_policy.extract_section_body` slices to EOF for the last H2, so the attribution footer line was included in the "Related Issue" section content scan.
-- Fact: before the fix, a PR body with only `Closes #N` plus a footer in "Related Issue" triggered a false-positive `verify_section_substantive_content` error because the footer was counted as the sole content line.
-- Fact: the root cause was a missing `_AGENT_ATTRIBUTION_FOOTER_RE.fullmatch` guard in the content filter; adding the guard resolved the false positive.
-- Fact: `uv run python -m pytest tests/test_body_policy.py -q` returned `47 passed in 0.5s` after the fix.
+- Fact: TBD (observable symptom before the fix)
+- Fact: TBD (root cause location, e.g. file/line where the bug lived)
+- Fact: TBD (test output confirming the fix)
 
 ## Assumptions
 
-- Assumption: no other section suffers the same footer-as-content false positive because only the last H2 (typically "Related Issue") is followed by EOF rather than a subsequent heading.
+- Assumption: TBD (scope of callers or codepaths affected by this bug)
 
 ## Risk and blast radius
 
-- Limited to the `verify_section_substantive_content` function in `scripts/body_policy.py`; no CI job, hook, or data file is modified.
-- The fix tightens the filter, so previously passing bodies continue to pass.
+- Limited to TBD (which files or functions are changed)
+- The fix narrows a gate; TBD (passing bodies continue to pass)
 
 ## Rollback
 
-- Revert this PR to restore the pre-fix filter logic.
+- Revert this PR to restore the pre-fix behaviour.
 
 ## Verification
 
-- command: `uv run python -m pytest tests/test_body_policy.py -q`
-  result: `47 passed in 0.5s`
+- command: `TBD`
+  result: `TBD`
 
 ## Checklist
 
 ### Bootstrap
 
-- [x] Facts vs. Assumptions split is honest (no speculation lurking in Facts)
-- [x] Risk and blast radius assessed; Rollback steps are runnable
-- [x] Issue number recorded on the `Closes #` line below
-- [x] Replacement PR preflight passed (N/A -- first PR for this issue)
+- [ ] Facts vs. Assumptions split is honest (no speculation lurking in Facts)
+- [ ] Risk and blast radius assessed; Rollback steps are runnable
+- [ ] Issue number recorded on the `Closes #` line below
+- [ ] Replacement PR preflight passed (N/A -- first PR for this issue)
 
 ### After-merge (CI)
 
-- [x] `uv run python -m pytest -q` exits 0 (paired in Verification above)
-- [x] CI green on the merge commit (all required status checks)
-- [x] CLAUDE.md / AGENTS.md regenerated if applicable (`apm compile` produced no diff)
+- [ ] `uv run python -m pytest -q` exits 0 (paired in Verification above)
+- [ ] CI green on the merge commit (all required status checks)
+- [ ] CLAUDE.md / AGENTS.md regenerated if applicable (`apm compile` produced no diff)
 
 ### Post-merge (auto-retro signal)
 

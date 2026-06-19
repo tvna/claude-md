@@ -1,48 +1,47 @@
 ## Summary
 
-- Splits `scripts/body_policy.py` (849 lines) into `body_policy.py` (core gate) and `_body_policy_shape.py` (shape-gate helpers) to restore the 800-line module budget; `uv run python -m pytest tests/ -q` green (N passed); zero behaviour change, revert to roll back.
+- Refactors TBD (what was moved/split/renamed, net-zero behaviour change, diff evidence, rollback)
 
 ## Facts
 
-- Fact: `scripts/body_policy.py` reached 849 lines after the placeholder-token and empty-section gates were added in refs #1826, exceeding the 800-line budget enforced by `scripts/scan_maintainability_metrics.py`.
-- Fact: the split moves `verify_pr_verification_pairs`, `verify_pr_checklist_subsections`, `verify_pr_agent_attribution_footer`, `detect_placeholder_tokens`, and `verify_section_substantive_content` to `_body_policy_shape.py`; `body_policy.py` re-exports them for backward compatibility.
-- Fact: `git diff --stat` shows +N/-N lines across the two files with a net line change of 0 (pure relocation, no logic edits).
-- Fact: `uv run python -m pytest tests/ -q` returned `N passed in Xs` after the split.
+- Fact: TBD (pre-condition that motivated the refactor, e.g. module exceeded size budget)
+- Fact: TBD (net line-count delta: additions roughly equal deletions, pure relocation)
+- Fact: TBD (test output confirming no behaviour change)
 
 ## Assumptions
 
-- Assumption: no caller imports from `_body_policy_shape` directly; all external callers use the `body_policy` re-exports, so the split is transparent.
+- Assumption: TBD (callers use the public API only; internal layout change is transparent)
 
 ## Risk and blast radius
 
-- Limited to `scripts/body_policy.py` and the new `scripts/_body_policy_shape.py`; CI gates, hooks, and data files are unchanged.
-- Backward-compatible: the public API of `body_policy` is preserved via re-exports.
+- Limited to TBD (which files are changed; no data file, CI job, or hook is modified)
+- The public API is preserved via TBD (re-exports / unchanged signatures)
 
 ## Rollback
 
-- Revert this PR to restore the single-file layout.
+- Revert this PR to restore the pre-refactor layout.
 
 ## Verification
 
-- command: `uv run python -m pytest tests/ -q`
-  result: `N passed in Xs`
+- command: `TBD`
+  result: `TBD`
 - command: `git diff --stat HEAD~1`
-  result: `scripts/_body_policy_shape.py | +N, scripts/body_policy.py | -N, net 0`
+  result: `TBD (additions roughly match deletions)`
 
 ## Checklist
 
 ### Bootstrap
 
-- [x] Facts vs. Assumptions split is honest (no speculation lurking in Facts)
-- [x] Risk and blast radius assessed; Rollback steps are runnable
-- [x] Issue number recorded on the `Closes #` line below
-- [x] Replacement PR preflight passed (N/A -- first PR for this issue)
+- [ ] Facts vs. Assumptions split is honest (no speculation lurking in Facts)
+- [ ] Risk and blast radius assessed; Rollback steps are runnable
+- [ ] Issue number recorded on the `Closes #` line below
+- [ ] Replacement PR preflight passed (N/A -- first PR for this issue)
 
 ### After-merge (CI)
 
-- [x] `uv run python -m pytest -q` exits 0 (paired in Verification above)
-- [x] CI green on the merge commit (all required status checks)
-- [x] CLAUDE.md / AGENTS.md regenerated if applicable (`apm compile` produced no diff)
+- [ ] `uv run python -m pytest -q` exits 0 (paired in Verification above)
+- [ ] CI green on the merge commit (all required status checks)
+- [ ] CLAUDE.md / AGENTS.md regenerated if applicable (`apm compile` produced no diff)
 
 ### Post-merge (auto-retro signal)
 
