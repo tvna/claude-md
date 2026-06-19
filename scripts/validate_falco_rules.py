@@ -78,7 +78,7 @@ _WRONG_FIELDS: dict[str, str] = {
 }
 
 _WRONG_FIELD_RE = re.compile(
-    r"\b(" + "|".join(re.escape(f) for f in _WRONG_FIELDS) + r")\b"
+    r"\b(" + "|".join(re.escape(f) for f in _WRONG_FIELDS) + r")\b(?!\.)"
 )
 
 

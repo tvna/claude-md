@@ -179,6 +179,11 @@ def test_correct_field_proc_exepath_passes() -> None:
     assert vfr.validate_entries("f.yaml", [entry]) == []
 
 
+def test_correct_field_container_image_repository_passes() -> None:
+    entry = {**VALID_RULE, "condition": "container.image.repository startswith evil"}
+    assert vfr.validate_entries("f.yaml", [entry]) == []
+
+
 # ---------------------------------------------------------------------------
 # validate_entries: non-dict entries
 # ---------------------------------------------------------------------------
