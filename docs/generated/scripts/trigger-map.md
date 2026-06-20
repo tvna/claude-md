@@ -231,6 +231,7 @@ Detection is string-match based:
 | `uv_pin.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
 | `uv_pin.py` | workflow | `weekly-maintenance.yml (dependency-freshness)` |
 | `uv_pin.py` | workflow | `weekly-maintenance.yml (security-control-drift)` |
+| `validate_falco_rules.py` | workflow | `verify-falco-rules.yml (gate)` |
 | `validate_json_syntax.py` | workflow | `apply-rulesets.yml (apply)` |
 | `validate_json_syntax.py` | workflow | `weekly-maintenance.yml (ruleset-drift)` |
 | `verify_apm_checksums.py` | workflow | `verify-pr.yml (portable-pr-policy)` |
