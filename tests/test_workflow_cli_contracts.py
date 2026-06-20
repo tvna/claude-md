@@ -109,6 +109,7 @@ import title_policy
 import update_devcontainer_image_pins
 import uv_download_checksum
 import uv_pin
+import validate_falco_rules
 import validate_json_syntax
 import verify_apm_checksums
 import verify_control_inventory_currency
@@ -170,6 +171,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("attack_review_reminder.py", "assemble"): "test_attack_review_reminder_assemble_matches_workflow_args",
     ("backup_archive.py", "build"): "test_backup_archive_build_matches_workflow_args",
     ("github_paginate.py", "fetch-run-jobs"): "test_github_paginate_fetch_run_jobs_matches_workflow_args",
+    ("validate_falco_rules.py", "verify"): "test_validate_falco_rules_verify_matches_workflow_args",
     ("validate_json_syntax.py", "verify"): "test_validate_json_syntax_verify_matches_workflow_args",
     ("script_ast_graph.py", "all-doc"): "test_script_ast_graph_all_doc_matches_workflow_args",
     ("script_dependency_graph.py", "all-doc"): "test_script_dependency_graph_all_doc_matches_workflow_args",
@@ -2179,6 +2181,14 @@ def test_prune_devcontainer_images_prune_matches_workflow_args(
         "--summary-file", str(summary),
     ])
     assert rc == 0
+
+
+def test_validate_falco_rules_verify_matches_workflow_args() -> None:
+    """verify subcommand accepts the --file arg used in verify-falco-rules.yml."""
+    assert validate_falco_rules.main([
+        "verify",
+        "--file", ".devcontainer/falco/custom-rules.yaml",
+    ]) == 0
 
 
 def test_validate_json_syntax_verify_matches_workflow_args() -> None:

@@ -342,6 +342,19 @@ STEPS: tuple[Step, ...] = (
         argv=("python3", "scripts/scan_harness_doc_coverage.py", "verify"),
     ),
     Step(
+        # Refs #1847. Validates .devcontainer/falco/custom-rules.yaml YAML
+        # syntax, required fields, and known wrong field names (e.g. proc.exe
+        # vs proc.exepath) before PR review, mirroring verify-falco-rules.yml.
+        name="validate_falco_rules",
+        argv=(
+            "python3",
+            "scripts/validate_falco_rules.py",
+            "verify",
+            "--file",
+            ".devcontainer/falco/custom-rules.yaml",
+        ),
+    ),
+    Step(
         # Refs #1153. Fails when a pinned binary's flake.nix SHA256 is
         # hardcoded under scripts/ or .github/workflows/, so flake.nix stays
         # the single source of truth and a bump cannot leave a stale copy.
