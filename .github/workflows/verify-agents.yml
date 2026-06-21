@@ -118,6 +118,12 @@ jobs:
         # and every `enforced`/`partial` row resolves its backing gate.
         run: uv run python scripts/scan_quality_standard_drift.py verify
 
+      - name: Verify PR body content-quality enforcement map
+        # Refs #1828: every enforced/partial row in
+        # docs/standards/pr-body-quality.enforcement.toml resolves its
+        # backing gate, and no orphaned defect class exists.
+        run: uv run python scripts/scan_pr_body_quality_drift.py verify
+
       - name: Verify section 2/4 safety enumerations stay non-exhaustive
         # Refs #1241/#1242/#1243 (and #1239, #178 criterion b): the
         # destructive-operation, untrusted-data, and adversarial-payload
