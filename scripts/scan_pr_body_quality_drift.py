@@ -16,7 +16,8 @@ internally consistent:
   artifact (`script:` -> scripts/<name>.py, `test:` -> tests/<name>.py);
 - every `doc-only` row has an empty `backing` list, so a claim of enforcement
   always carries a resolvable gate;
-- every key in the registry is a known defect class (no orphaned rows).
+- every key in the registry is a known defect class (no orphaned rows);
+- every known defect class has a row in the registry (no missing rows).
 
 It does not prove the backing gate is *correct* -- only that a row marked
 enforced has a gate that exists. Tightening a row from doc-only/partial to
@@ -87,6 +88,10 @@ def find_drift(
     for orphan in sorted(registry_keys - KNOWN_DEFECTS):
         defects.append(
             f"'{orphan}' is in the registry but is not a known defect class"
+        )
+    for missing in sorted(KNOWN_DEFECTS - registry_keys):
+        defects.append(
+            f"'{missing}' is a known defect class but has no row in the registry"
         )
 
     for key in sorted(registry_keys & KNOWN_DEFECTS):

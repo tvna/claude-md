@@ -119,6 +119,19 @@ class TestFindDrift:
         defects = spbqd.find_drift(registry, tmp_path)
         assert any("not a table" in d for d in defects)
 
+    def test_missing_known_defect_row_is_defect(self, tmp_path: Path) -> None:
+        # Registry omits one known class; symmetric check must flag it.
+        registry = _registry(
+            **{k: {"status": "doc-only", "backing": []} for k in spbqd.KNOWN_DEFECTS - {"retro-feedback-loop"}}
+        )
+        defects = spbqd.find_drift(registry, tmp_path)
+        assert any("retro-feedback-loop" in d and "no row in the registry" in d for d in defects)
+
+    def test_empty_registry_flags_all_known_defects(self, tmp_path: Path) -> None:
+        defects = spbqd.find_drift({}, tmp_path)
+        missing = {d for d in defects if "no row in the registry" in d}
+        assert len(missing) == len(spbqd.KNOWN_DEFECTS)
+
 
 # ---------------------------------------------------------------------------
 # Live tree: the shipped registry must be internally consistent.
