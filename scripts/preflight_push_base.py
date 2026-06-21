@@ -8,7 +8,7 @@ latest origin/main.
 
 Fail-open: any hook error exits 0 so a script bug never wedges a push.
 
-Refs #856.
+Refs #856, #1854.
 """
 
 from __future__ import annotations
@@ -63,8 +63,11 @@ def decide(
             "(client-side preflight): "
             "the branch is out-of-date with the base branch.\n\n"
             f"{detail}\n\n"
-            "Repair: `git fetch origin main && git rebase origin/main`, "
-            "then re-run the push. Refs #856."
+            "Repair: `git fetch origin main && git merge FETCH_HEAD --no-edit`, "
+            "then re-run the push. "
+            "Use merge (not rebase) to avoid a non-fast-forward conflict "
+            "when the branch is already published and force-push is prohibited. "
+            "Refs #856, #1854."
         )
     return None
 

@@ -65,6 +65,9 @@ def test_decide_denies_push_when_branch_behind() -> None:
     reason = result["hookSpecificOutput"]["permissionDecisionReason"]
     assert "out-of-date" in reason
     assert "Repair" in reason
+    assert "merge FETCH_HEAD --no-edit" in reason
+    # repair command must not recommend rebase (rewrites SHAs, conflicts with force-push rules)
+    assert "git rebase" not in reason
 
 
 def test_decide_denies_push_with_force_flag() -> None:
