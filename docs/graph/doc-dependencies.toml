@@ -78,6 +78,12 @@ type = "standard"
 description = "Quality gates M1 through M9 for Python scripts invoked from workflows."
 
 [[nodes]]
+id = "pr_body_quality_enforcement"
+path = "docs/standards/pr-body-quality.enforcement.toml"
+type = "standard"
+description = "Enforcement registry for PR body content-quality defect classes; verified by scan_pr_body_quality_drift.py."
+
+[[nodes]]
 id = "doc_dependency_prd"
 path = "docs/prd/doc-dependency-graph.md"
 type = "prd"
