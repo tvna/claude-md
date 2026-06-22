@@ -38,20 +38,25 @@ class TestDecide:
 
     @pytest.mark.parametrize(
         "tool_name",
+        sorted(gmu.READ_ONLY_TOOLS),
+    )
+    def test_read_only_tools_pass_through(self, tool_name: str) -> None:
+        assert gmu.decide(tool_name) is None
+
+    @pytest.mark.parametrize(
+        "tool_name",
         [
-            "mcp__github__list_issues",
-            "mcp__github__pull_request_read",
-            "mcp__github__search_issues",
-            "mcp__github__list_commits",
-            "mcp__github__get_file_contents",
-            "mcp__github__list_pull_requests",
+            "mcp__github__create_or_update_file",
+            "mcp__github__delete_file",
+            "mcp__github__push_files",
+            "mcp__github__fork_repository",
+            "mcp__github__enable_pr_auto_merge",
         ],
     )
-    def test_uncovered_tools_are_denied(self, tool_name: str) -> None:
+    def test_uncovered_write_tools_are_denied(self, tool_name: str) -> None:
         decision = gmu.decide(tool_name)
         assert decision is not None
         assert decision["permissionDecision"] == "deny"
-        assert "scripts/github_api.py" in decision["decisionReason"]
         assert "PreToolUse" in decision["decisionReason"]
 
     @pytest.mark.parametrize(
@@ -68,9 +73,16 @@ class TestDecide:
         assert gmu.decide(tool_name) is None
 
     def test_deny_message_contains_tool_short_name(self) -> None:
-        decision = gmu.decide("mcp__github__list_issues")
+        decision = gmu.decide("mcp__github__create_or_update_file")
         assert decision is not None
-        assert "list_issues" in decision["decisionReason"]
+        assert "create_or_update_file" in decision["decisionReason"]
+
+    def test_read_only_tools_not_in_hook_covered_tools(self) -> None:
+        overlap = gmu.READ_ONLY_TOOLS & gmu.HOOK_COVERED_TOOLS
+        assert not overlap, (
+            f"READ_ONLY_TOOLS and HOOK_COVERED_TOOLS must be disjoint; "
+            f"overlap: {overlap}"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -149,13 +161,20 @@ class TestMain:
         )
         assert stdout == ""
 
-    def test_uncovered_tool_produces_deny(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_uncovered_write_tool_produces_deny(self, monkeypatch: pytest.MonkeyPatch) -> None:
         stdout, _ = self._run(
-            {"tool_name": "mcp__github__list_issues", "tool_input": {}},
+            {"tool_name": "mcp__github__create_or_update_file", "tool_input": {}},
             monkeypatch,
         )
         decision = json.loads(stdout)
         assert decision["permissionDecision"] == "deny"
+
+    def test_read_only_tool_produces_no_output(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        stdout, _ = self._run(
+            {"tool_name": "mcp__github__list_issues", "tool_input": {}},
+            monkeypatch,
+        )
+        assert stdout == ""
 
     def test_empty_stdin_is_handled(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr("sys.stdin", io.StringIO(""))
