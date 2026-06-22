@@ -67,6 +67,8 @@ Detection is string-match based:
 | `gate_mcp_github_uncovered.py` | agent-hook | `codex:PreToolUse` |
 | `gate_merge_safety.py` | agent-hook | `claude:PreToolUse` |
 | `gate_merge_safety.py` | agent-hook | `codex:PreToolUse` |
+| `gate_pr_body_retro_issue_link.py` | agent-hook | `claude:PreToolUse` |
+| `gate_pr_body_retro_issue_link.py` | agent-hook | `codex:PreToolUse` |
 | `gate_reserved_retro_scope.py` | agent-hook | `claude:PreToolUse` |
 | `gate_reserved_retro_scope.py` | agent-hook | `codex:PreToolUse` |
 | `gate_stop_pr_review_reply.py` | agent-hook | `claude:Stop` |
