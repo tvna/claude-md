@@ -1,7 +1,6 @@
 """Tests for ``scripts/gate_pr_body_retro_issue_link.py``.
 
 Verifies that:
-- ``has_retro_label``: returns True for retro labels, False otherwise.
 - ``decide``:
   - off-target tool -> None (pass-through)
   - missing body -> None
@@ -9,10 +8,10 @@ Verifies that:
   - no refs in body -> None
   - missing owner/repo -> None
   - no token -> None (fail-open)
-  - retro issue linked (``type:retrospective``) -> deny
-  - retro issue linked (``auto-retro``) -> deny
+  - retro issue linked (``chore(auto-retro): ...`` title) -> deny
+  - retro issue linked (legacy ``fix(auto-retro): ...`` title) -> deny
   - non-retro issue linked -> None
-  - label lookup failure -> None (fail-open)
+  - title lookup failure -> None (fail-open)
   - multiple refs: one retro -> deny naming it
   - Codex canonicalised tool name -> deny
 - stdin/stdout boundary: block written to stdout when a retro issue is linked.
@@ -35,6 +34,10 @@ _TOKEN = "tok"
 _OWNER = "o"
 _REPO = "r"
 
+_RETRO_TITLE = "chore(auto-retro): review PR #1 repair loops"
+_RETRO_TITLE_LEGACY = "fix(auto-retro): review PR #1 repair loops"
+_NON_RETRO_TITLE = "feat(scope): do the thing"
+
 
 def _input(
     body: str,
@@ -50,38 +53,16 @@ def _decide(
     body: str,
     *,
     title: str = "fix(x): do the thing",
-    labels_by_number: dict[int, list[str] | None] | None = None,
+    titles_by_number: dict[int, str | None] | None = None,
     token: str | None = _TOKEN,
 ) -> dict[str, Any] | None:
-    labels = labels_by_number or {}
+    titles = titles_by_number or {}
     return gate.decide(
         tool_name,
         _input(body, title=title),
         token_getter=lambda: token,
-        label_getter=lambda _o, _r, n: labels.get(n, []),
+        title_getter=lambda _o, _r, n: titles.get(n),
     )
-
-
-# ---------------------------------------------------------------------------
-# has_retro_label
-# ---------------------------------------------------------------------------
-
-
-class TestHasRetroLabel:
-    def test_type_retrospective(self) -> None:
-        assert gate.has_retro_label(["type:retrospective"]) is True
-
-    def test_auto_retro(self) -> None:
-        assert gate.has_retro_label(["auto-retro"]) is True
-
-    def test_both(self) -> None:
-        assert gate.has_retro_label(["type:retrospective", "auto-retro"]) is True
-
-    def test_non_retro_labels(self) -> None:
-        assert gate.has_retro_label(["type:fix", "layer:p3-harness"]) is False
-
-    def test_empty(self) -> None:
-        assert gate.has_retro_label([]) is False
 
 
 # ---------------------------------------------------------------------------
@@ -96,7 +77,7 @@ class TestDecidePassThrough:
                 "mcp__github__merge_pull_request",
                 _input("Closes #1"),
                 token_getter=lambda: _TOKEN,
-                label_getter=lambda _o, _r, _n: ["type:retrospective"],
+                title_getter=lambda _o, _r, _n: _RETRO_TITLE,
             )
             is None
         )
@@ -106,7 +87,7 @@ class TestDecidePassThrough:
             "mcp__github__create_pull_request",
             {"owner": _OWNER, "repo": _REPO},
             token_getter=lambda: _TOKEN,
-            label_getter=lambda _o, _r, _n: ["type:retrospective"],
+            title_getter=lambda _o, _r, _n: _RETRO_TITLE,
         )
         assert result is None
 
@@ -117,7 +98,7 @@ class TestDecidePassThrough:
                 "mcp__github__create_pull_request",
                 "Closes #42",
                 title="chore(auto-retro): review PR #42 repair loops",
-                labels_by_number={42: ["type:retrospective", "auto-retro"]},
+                titles_by_number={42: _RETRO_TITLE},
             )
             is None
         )
@@ -136,7 +117,7 @@ class TestDecidePassThrough:
             "mcp__github__create_pull_request",
             {"repo": _REPO, "body": "Closes #1"},
             token_getter=lambda: _TOKEN,
-            label_getter=lambda _o, _r, _n: ["type:retrospective"],
+            title_getter=lambda _o, _r, _n: _RETRO_TITLE,
         )
         assert result is None
 
@@ -145,19 +126,19 @@ class TestDecidePassThrough:
             _decide(
                 "mcp__github__create_pull_request",
                 "Closes #42",
-                labels_by_number={42: ["type:retrospective"]},
+                titles_by_number={42: _RETRO_TITLE},
                 token=None,
             )
             is None
         )
 
-    def test_label_lookup_failure_is_fail_open(self) -> None:
-        # None from label_getter means API failure -> fail-open.
+    def test_title_lookup_failure_is_fail_open(self) -> None:
+        # None from title_getter means API failure -> fail-open.
         assert (
             _decide(
                 "mcp__github__create_pull_request",
                 "Closes #42",
-                labels_by_number={42: None},
+                titles_by_number={42: None},
             )
             is None
         )
@@ -167,7 +148,7 @@ class TestDecidePassThrough:
             _decide(
                 "mcp__github__create_pull_request",
                 "Closes #42",
-                labels_by_number={42: ["type:fix", "layer:p3-harness"]},
+                titles_by_number={42: _NON_RETRO_TITLE},
             )
             is None
         )
@@ -179,7 +160,7 @@ class TestDecidePassThrough:
             _decide(
                 "mcp__github__create_pull_request",
                 body,
-                labels_by_number={42: ["type:retrospective"], 99: ["type:fix"]},
+                titles_by_number={42: _RETRO_TITLE, 99: _NON_RETRO_TITLE},
             )
             is None
         )
@@ -195,7 +176,7 @@ class TestDecideDeny:
         decision = _decide(
             "mcp__github__create_pull_request",
             "Closes #42",
-            labels_by_number={42: ["type:retrospective"]},
+            titles_by_number={42: "chore(auto-retro): review PR #42 repair loops"},
         )
         assert decision is not None
         out = decision["hookSpecificOutput"]
@@ -209,7 +190,16 @@ class TestDecideDeny:
         decision = _decide(
             "mcp__github__create_pull_request",
             "Refs #7",
-            labels_by_number={7: ["auto-retro"]},
+            titles_by_number={7: "chore(auto-retro): review PR #7 repair loops"},
+        )
+        assert decision is not None
+        assert decision["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+    def test_legacy_fix_auto_retro_title_is_denied(self) -> None:
+        decision = _decide(
+            "mcp__github__create_pull_request",
+            "Closes #7",
+            titles_by_number={7: "fix(auto-retro): review PR #7 repair loops"},
         )
         assert decision is not None
         assert decision["hookSpecificOutput"]["permissionDecision"] == "deny"
@@ -218,7 +208,7 @@ class TestDecideDeny:
         decision = _decide(
             "mcp__github__update_pull_request",
             "Closes #7",
-            labels_by_number={7: ["type:retrospective"]},
+            titles_by_number={7: "chore(auto-retro): review PR #7 repair loops"},
         )
         assert decision is not None
         assert decision["hookSpecificOutput"]["permissionDecision"] == "deny"
@@ -228,7 +218,10 @@ class TestDecideDeny:
         decision = _decide(
             "mcp__github__create_pull_request",
             "Closes #10\nCloses #20",
-            labels_by_number={10: ["type:retrospective"], 20: ["type:fix"]},
+            titles_by_number={
+                10: "chore(auto-retro): review PR #10 repair loops",
+                20: _NON_RETRO_TITLE,
+            },
         )
         assert decision is not None
         reason = decision["hookSpecificOutput"]["permissionDecisionReason"]
@@ -241,7 +234,7 @@ class TestDecideDeny:
             "mcp__codex_apps__github._create_pull_request",
             _input("Closes #5"),
             token_getter=lambda: _TOKEN,
-            label_getter=lambda _o, _r, _n: ["type:retrospective"],
+            title_getter=lambda _o, _r, _n: "chore(auto-retro): review PR #5 repair loops",
         )
         assert decision is not None
         assert decision["hookSpecificOutput"]["permissionDecision"] == "deny"
@@ -258,7 +251,7 @@ class TestMain:
         monkeypatch: pytest.MonkeyPatch,
         tool_name: str,
         body: str,
-        labels_by_number: dict[int, list[str]],
+        titles_by_number: dict[int, str | None],
         token: str = _TOKEN,
     ) -> str:
         event = json.dumps({
@@ -270,10 +263,10 @@ class TestMain:
         out = io.StringIO()
         monkeypatch.setattr("sys.stdout", out)
 
-        def _fake_fetch(owner: str, repo: str, number: int, *, token: str, **_: object) -> list[str] | None:
-            return labels_by_number.get(number)
+        def _fake_fetch(owner: str, repo: str, number: int, *, token: str, **_: object) -> str | None:
+            return titles_by_number.get(number)
 
-        monkeypatch.setattr(gate, "fetch_labels", _fake_fetch)
+        monkeypatch.setattr(gate, "fetch_issue_title", _fake_fetch)
         assert gate.main() == 0
         return out.getvalue()
 
@@ -282,7 +275,7 @@ class TestMain:
             monkeypatch,
             "mcp__github__create_pull_request",
             "Closes #42",
-            {42: ["type:retrospective"]},
+            {42: "chore(auto-retro): review PR #42 repair loops"},
         )
         payload = json.loads(out)
         assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
@@ -292,6 +285,6 @@ class TestMain:
             monkeypatch,
             "mcp__github__create_pull_request",
             "Closes #42",
-            {42: ["type:fix"]},
+            {42: _NON_RETRO_TITLE},
         )
         assert out == ""
