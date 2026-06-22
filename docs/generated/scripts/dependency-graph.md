@@ -6,14 +6,14 @@ This file is generated from `scripts/*.py` import statements by `python3 scripts
 
 | Module | Imported by | Importers |
 | --- | --- | --- |
-| `_hook_runtime` | 42 | `block_sensitive_reads`, `check_pr_mergeability`, `ci_early_status_probe`, `gate_cache_regime_advisor`, `gate_decision_handoff_askuserquestion`, `gate_gh_cli`, `gate_handoff_retro_survey_askuserquestion`, `gate_instruction_body_advisory`, `gate_irreversible_bash`, `gate_issue_classification_labels`, `gate_issue_close_comment`, `gate_mcp_github_uncovered`, `gate_merge_safety`, `gate_reserved_retro_scope`, `gate_stop_pr_review_reply`, `gate_unsigned_commit_bash`, `gate_update_pr_branch`, `issue_closure_fast_path`, `plan_approval_gate`, `plan_language_context`, `post_merge_new_session_prompt`, `post_merge_retro_append`, `post_pr_create_body_fix`, `post_pr_create_ci_monitor`, `pr_body_close_keyword_gate`, `preflight_angle_token_drop`, `preflight_codex_github_footer`, `preflight_commit_session_branch`, `preflight_github_secrets`, `preflight_main_freshness`, `preflight_non_ascii`, `preflight_pr_body_required_sections`, `preflight_pr_template_shape`, `preflight_push_base`, `preflight_push_nonempty`, `preflight_push_prek`, `preflight_push_session_branch`, `preflight_session_base_freshness`, `preflight_session_branch_authz`, `preflight_title_policy`, `prompt_context7_gate`, `stop_new_session_handoff_prompt` |
-| `_github_api` | 22 | `_ci_watch`, `_pr_commit_batch`, `_pr_merge`, `check_pr_mergeability`, `ci_budget_issue`, `ci_early_status_probe`, `dependabot_automerge`, `github_api`, `issue_closure_fast_path`, `labels_apply`, `np_strategy_tracking`, `post_issue_comment`, `post_merge_new_session_prompt`, `pr_body_close_keyword_gate`, `pr_upsert`, `preflight_replacement_pr`, `prune_devcontainer_images`, `publish_instruction_release`, `ruleset_drift`, `sanitize_history`, `security_drift_report`, `verify_ruleset_sync` |
+| `_hook_runtime` | 43 | `block_sensitive_reads`, `check_pr_mergeability`, `ci_early_status_probe`, `gate_cache_regime_advisor`, `gate_decision_handoff_askuserquestion`, `gate_gh_cli`, `gate_handoff_retro_survey_askuserquestion`, `gate_instruction_body_advisory`, `gate_irreversible_bash`, `gate_issue_classification_labels`, `gate_issue_close_comment`, `gate_mcp_github_uncovered`, `gate_merge_safety`, `gate_pr_body_retro_issue_link`, `gate_reserved_retro_scope`, `gate_stop_pr_review_reply`, `gate_unsigned_commit_bash`, `gate_update_pr_branch`, `issue_closure_fast_path`, `plan_approval_gate`, `plan_language_context`, `post_merge_new_session_prompt`, `post_merge_retro_append`, `post_pr_create_body_fix`, `post_pr_create_ci_monitor`, `pr_body_close_keyword_gate`, `preflight_angle_token_drop`, `preflight_codex_github_footer`, `preflight_commit_session_branch`, `preflight_github_secrets`, `preflight_main_freshness`, `preflight_non_ascii`, `preflight_pr_body_required_sections`, `preflight_pr_template_shape`, `preflight_push_base`, `preflight_push_nonempty`, `preflight_push_prek`, `preflight_push_session_branch`, `preflight_session_base_freshness`, `preflight_session_branch_authz`, `preflight_title_policy`, `prompt_context7_gate`, `stop_new_session_handoff_prompt` |
+| `_github_api` | 23 | `_ci_watch`, `_pr_commit_batch`, `_pr_merge`, `check_pr_mergeability`, `ci_budget_issue`, `ci_early_status_probe`, `dependabot_automerge`, `gate_pr_body_retro_issue_link`, `github_api`, `issue_closure_fast_path`, `labels_apply`, `np_strategy_tracking`, `post_issue_comment`, `post_merge_new_session_prompt`, `pr_body_close_keyword_gate`, `pr_upsert`, `preflight_replacement_pr`, `prune_devcontainer_images`, `publish_instruction_release`, `ruleset_drift`, `sanitize_history`, `security_drift_report`, `verify_ruleset_sync` |
 | `_git` | 13 | `check_hooks_path`, `check_session_branch`, `devcontainer_pin_pr`, `pr_upsert`, `preflight_branch_base`, `preflight_cache`, `preflight_coverage`, `preflight_main_freshness`, `preflight_push_nonempty`, `preflight_session_base_freshness`, `refresh_pr_branch`, `scan_area_path_coverage`, `scan_secrets` |
-| `_github_tool_names` | 9 | `gate_handoff_retro_survey_askuserquestion`, `pr_body_close_keyword_gate`, `preflight_angle_token_drop`, `preflight_codex_github_footer`, `preflight_github_secrets`, `preflight_non_ascii`, `preflight_pr_body_required_sections`, `preflight_pr_template_shape`, `preflight_title_policy` |
+| `_github_tool_names` | 10 | `gate_handoff_retro_survey_askuserquestion`, `gate_pr_body_retro_issue_link`, `pr_body_close_keyword_gate`, `preflight_angle_token_drop`, `preflight_codex_github_footer`, `preflight_github_secrets`, `preflight_non_ascii`, `preflight_pr_body_required_sections`, `preflight_pr_template_shape`, `preflight_title_policy` |
 | `body_policy` | 9 | `post_pr_create_body_fix`, `pr_body_builder`, `preflight_angle_token_drop`, `preflight_codex_github_footer`, `preflight_pr_body`, `preflight_pr_body_required_sections`, `preflight_pr_template_shape`, `verify_instruction_text_growth`, `verify_text_delta_section` |
 | `_trusted_bots` | 8 | `_auto_retro_parse`, `auto_retro`, `body_policy`, `dependabot_automerge`, `issue_link`, `scan_non_ascii`, `title_policy`, `verify_dependabot_author` |
+| `issue_link` | 7 | `_auto_retro_parse`, `_auto_retro_render`, `auto_retro`, `body_policy`, `gate_pr_body_retro_issue_link`, `preflight_angle_token_drop`, `scan_retro_followup_drift` |
 | `issue_anchors` | 6 | `_security_drift_issues`, `ci_budget_issue`, `coverage_failure_issue`, `devcontainer_pin_pr`, `scan_issue_anchor_drift`, `security_drift_report` |
-| `issue_link` | 6 | `_auto_retro_parse`, `_auto_retro_render`, `auto_retro`, `body_policy`, `preflight_angle_token_drop`, `scan_retro_followup_drift` |
 | `_ref_classifier` | 5 | `issue_link`, `np_strategy_tracking`, `pr_body_close_keyword_gate`, `preflight_pr_body`, `verify_linked_issue_titles` |
 | `_retro_labels` | 4 | `_auto_retro_render`, `_auto_retro_triage`, `auto_retro`, `scan_retro_followup_drift` |
 | `_session_branches` | 4 | `check_session_branch`, `preflight_commit_session_branch`, `preflight_push_session_branch`, `preflight_session_branch_authz` |
@@ -25,12 +25,12 @@ This file is generated from `scripts/*.py` import statements by `python3 scripts
 | `_pr_merge` | 2 | `bot_pr_automerge`, `devcontainer_pin_pr` |
 | `_secret_patterns` | 2 | `preflight_github_secrets`, `scan_secrets` |
 | `_security_drift_families` | 2 | `_security_drift_issues`, `security_drift_report` |
+| `auto_retro` | 2 | `gate_pr_body_retro_issue_link`, `gate_reserved_retro_scope` |
 | `scan_non_ascii` | 2 | `preflight_non_ascii`, `preflight_pr_body` |
 | `title_policy` | 2 | `preflight_title_policy`, `verify_linked_issue_titles` |
 | `_auto_retro_render` | 1 | `auto_retro` |
 | `_auto_retro_triage` | 1 | `auto_retro` |
 | `_security_drift_issues` | 1 | `security_drift_report` |
-| `auto_retro` | 1 | `gate_reserved_retro_scope` |
 | `check_pr_mergeability` | 1 | `gate_merge_safety` |
 | `generate_devcontainer_arch_overlays` | 1 | `update_devcontainer_image_pins` |
 | `preflight_all` | 1 | `scan_devcontainer_tool_drift` |
@@ -117,6 +117,11 @@ flowchart TD
     gate_mcp_github_uncovered --> _hook_runtime
     gate_merge_safety --> _hook_runtime
     gate_merge_safety --> check_pr_mergeability
+    gate_pr_body_retro_issue_link --> _github_api
+    gate_pr_body_retro_issue_link --> _github_tool_names
+    gate_pr_body_retro_issue_link --> _hook_runtime
+    gate_pr_body_retro_issue_link --> auto_retro
+    gate_pr_body_retro_issue_link --> issue_link
     gate_reserved_retro_scope --> _hook_runtime
     gate_reserved_retro_scope --> auto_retro
     gate_stop_pr_review_reply --> _hook_runtime
