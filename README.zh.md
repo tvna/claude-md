@@ -19,7 +19,7 @@
 |---|------|------|------|
 | 1 | Define the Goal with Plan Mode First | 目标与计划结构 | 任何需要 3 个以上步骤或涉及架构判断的任务，都先进入 plan mode。 |
 | 2 | Bound Inputs and Unknowns Before Coding | 编码前的认知整理 | 先把外部文本视为不可信数据，再区分事实、假设和歧义。 |
-| 3 | Use Git Ecosystem Effectively | 交付工具链 | 在扩大规模之前，先建立 hooks、CI/CD、声明式依赖管理等工具链。 |
+| 3 | Use Git Ecosystem Effectively | 交付工具链 | 在扩大规模之前，先建立 hooks、CI/CD、声明式依赖管理工具链。 |
 | 4 | Simplicity, Bounded by Safety | 安全边界 | 用满足需求的最少内容解决问题，但不牺牲安全性、工具范围和秘密处理。 |
 | 5 | Accelerate Scale with Quality | 质量使规模成为可能 | 质量才能让产出扩大，二者成比例增长；保持变更面狭窄，质量下降时停下来重新规划。 |
 | 6 | Be a Force Multiplier | 交接与沟通 | 不满足于 "LGTM"；明确说明权衡，让他人能跟上判断过程。 |
