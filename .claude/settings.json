@@ -300,6 +300,7 @@
         "hooks": [
           {
             "type": "command",
+            "if": "Bash(*git *)",
             "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/gate_unsigned_commit_bash.py"
           }
         ]
@@ -309,6 +310,7 @@
         "hooks": [
           {
             "type": "command",
+            "if": "Bash(*git push*)",
             "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/preflight_push_base.py"
           }
         ]
@@ -318,6 +320,7 @@
         "hooks": [
           {
             "type": "command",
+            "if": "Bash(*git push*)",
             "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/preflight_push_session_branch.py"
           }
         ]
@@ -327,6 +330,7 @@
         "hooks": [
           {
             "type": "command",
+            "if": "Bash(*git commit*)",
             "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/preflight_commit_session_branch.py"
           }
         ]
@@ -336,6 +340,7 @@
         "hooks": [
           {
             "type": "command",
+            "if": "Bash(*git *)",
             "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/preflight_session_branch_authz.py"
           }
         ]
@@ -354,6 +359,7 @@
         "hooks": [
           {
             "type": "command",
+            "if": "Bash(*git commit*)",
             "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/preflight_session_base_freshness.py"
           }
         ]
@@ -363,6 +369,7 @@
         "hooks": [
           {
             "type": "command",
+            "if": "Bash(*git commit*)",
             "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/gate_instruction_body_advisory.py"
           }
         ]
@@ -372,6 +379,7 @@
         "hooks": [
           {
             "type": "command",
+            "if": "Bash(*git push*)",
             "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/preflight_push_nonempty.py"
           }
         ]
