@@ -57,9 +57,11 @@ _SCRIPT_NAME = "gate_stop_pr_review_reply"
 # Two marker sets cover the same events on different surfaces:
 #   - API-style (underscore): raw GitHub webhook payload field names, present
 #     when the system embeds the raw payload body.
-#   - Human-readable (space): the Claude Code system injects a description
-#     prefix such as "The following is a GitHub review comment left on the PR."
-#     using space-separated words, none of which match the underscore form.
+#   - System-description prefix: the Claude Code system injects an exact header
+#     "The following is a GitHub review[...] left on the PR." before the
+#     user-authored comment body. Matching this full prefix (not a short
+#     substring like "review comment") avoids false positives when the
+#     user-authored comment body happens to mention review-related words.
 # Both sets must be present so the gate fires on either format. Refs #1860.
 REVIEW_MARKERS: tuple[str, ...] = (
     "REVIEW_COMMENT",
@@ -67,8 +69,7 @@ REVIEW_MARKERS: tuple[str, ...] = (
     "changes_requested",
     "Changes requested",
     "pull_request_review",
-    "review comment",   # matches "GitHub review comment left on the PR."
-    "GitHub review",    # matches "GitHub review left on the PR." (top-level)
+    "The following is a GitHub review",  # matches system description header
 )
 
 # Tool names that count as posting a reply to a review thread.
