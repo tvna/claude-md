@@ -127,6 +127,8 @@ REQUIRED_GLOSSARY_ENTRIES: tuple[str, ...] = (
     "in-line carve-out",
 )
 
+GLOSSARY_PATH = "docs/standards/ubiquitous-language.md"
+
 _GIT_TIMEOUT_SECONDS: int = 15
 
 # The two files the coupling gate pairs: editing the master principle
@@ -230,6 +232,21 @@ def parse_doc_row_labels(section_lines: list[str]) -> dict[int, str]:
     }
 
 
+def parse_file_entries(text: str) -> set[str]:
+    """Return all bolded entry names from *text* regardless of heading context.
+
+    Scans every line of the form ``- **name**: ...`` across the entire file.
+    Used for the standalone ``docs/standards/ubiquitous-language.md`` where
+    entries are spread across multiple categorised sections rather than
+    collected under a single ``### 2.5 Glossary`` heading.
+    """
+    return {
+        match.group(1)
+        for line in text.splitlines()
+        if (match := DOC_GLOSSARY_ENTRY_RE.match(line)) is not None
+    }
+
+
 def parse_glossary_entries(text: str) -> set[str]:
     """Return bolded entry names under the ``### 2.5 Glossary`` heading.
 
@@ -282,7 +299,11 @@ def _safe_int(token: str) -> int | None:
         return None
 
 
-def _verify(master_path: Path, doc_path: Path) -> int:
+def _verify(
+    master_path: Path,
+    doc_path: Path,
+    glossary_path: Path | None = None,
+) -> int:
     if not master_path.exists():
         print(
             f"::error::missing master file: {master_path}",
@@ -292,6 +313,12 @@ def _verify(master_path: Path, doc_path: Path) -> int:
     if not doc_path.exists():
         print(
             f"::error::missing doc file: {doc_path}",
+            file=sys.stderr,
+        )
+        return 1
+    if glossary_path is not None and not glossary_path.exists():
+        print(
+            f"::error::missing glossary file: {glossary_path}",
             file=sys.stderr,
         )
         return 1
@@ -382,17 +409,32 @@ def _verify(master_path: Path, doc_path: Path) -> int:
             )
             failures += 1
 
-    glossary_entries = parse_glossary_entries(doc_text)
+    if glossary_path is not None:
+        glossary_entries = parse_file_entries(
+            glossary_path.read_text(encoding="utf-8")
+        )
+        glossary_ref = glossary_path
+        glossary_hint = (
+            f"Add '- **name**: ...' lines in {glossary_path} so "
+            "terms used in master and in the section 3 invariant have "
+            "a single source of truth."
+        )
+    else:
+        glossary_entries = parse_glossary_entries(doc_text)
+        glossary_ref = doc_path
+        glossary_hint = (
+            f"Add '- **name**: ...' lines under '### 2.5 Glossary' in "
+            f"{doc_path} so terms used in master and in the section 3 "
+            "invariant have a single source of truth."
+        )
     missing_glossary = sorted(
         set(REQUIRED_GLOSSARY_ENTRIES) - glossary_entries
     )
     if missing_glossary:
         labels = ", ".join(missing_glossary)
         print(
-            f"::error file={doc_path}::section 2.5 glossary is missing "
-            f"required entries: {labels}. Add '- **<term>**: ...' lines "
-            f"under '### 2.5 Glossary' so terms used in master and in "
-            f"the section 3 invariant have a single source of truth.",
+            f"::error file={glossary_ref}::glossary is missing required "
+            f"entries: {labels}. {glossary_hint}",
             file=sys.stderr,
         )
         failures += 1
@@ -418,7 +460,8 @@ def _cmd_verify(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
         return 2
-    return _verify(Path(args.master), Path(args.doc))
+    glossary_path = Path(args.glossary) if args.glossary else None
+    return _verify(Path(args.master), Path(args.doc), glossary_path)
 
 
 def resolve_base() -> str:
@@ -585,6 +628,15 @@ def main(argv: list[str] | None = None) -> int:
         "--doc",
         required=True,
         help="Path to docs/prd/agent-rules-design-philosophy.md.",
+    )
+    p_verify.add_argument(
+        "--glossary",
+        help=(
+            "Path to the standalone ubiquitous-language doc "
+            "(default: docs/standards/ubiquitous-language.md). "
+            "When supplied, the glossary check reads entries from this file "
+            "instead of from section 2.5 of --doc."
+        ),
     )
     p_verify.set_defaults(func=_cmd_verify)
 
