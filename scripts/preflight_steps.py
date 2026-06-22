@@ -80,6 +80,15 @@ STEPS: tuple[Step, ...] = (
             "AGENTS.md",
         ),
     ),
+    Step(
+        name="scan_repo_em_dash",
+        argv=(
+            "python3",
+            "scripts/scan_repo_em_dash.py",
+            "verify",
+            "--git-tracked",
+        ),
+    ),
     Step(name="verify_apm_checksums", argv=("python3", "scripts/verify_apm_checksums.py", "verify")),
     Step(name="scan_apm_lock_drift", argv=("python3", "scripts/scan_apm_lock_drift.py", "verify")),
     Step(

@@ -129,15 +129,15 @@ def fetch_latest_uv_release() -> str | None:
     """Return the latest ``astral-sh/uv`` release tag, or None if unavailable.
 
     Uses ``gh release view``. Returns None on any subprocess failure (missing
-    gh, network error, auth failure, empty output) — callers should treat
+    gh, network error, auth failure, empty output) -- callers should treat
     None as "skip the check" rather than as drift.
     """
     try:
         # S603/S607 justification: fixed argv (no shell, no caller-supplied input);
         # `gh` is provisioned on the GitHub Actions runner via setup-gh.
         # FileNotFoundError below covers the local-dev case where gh is absent.
-        result = subprocess.run(  # noqa: S603 — fixed argv, shell=False
-            [  # noqa: S607 — `gh` resolved via runner PATH; FileNotFoundError handled below
+        result = subprocess.run(  # noqa: S603 -- fixed argv, shell=False
+            [  # noqa: S607 -- `gh` resolved via runner PATH; FileNotFoundError handled below
                 "gh", "release", "view",
                 "--repo", "astral-sh/uv",
                 "--json", "tagName",

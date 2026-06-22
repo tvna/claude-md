@@ -103,7 +103,7 @@ def _extract_push_remote_ref(command: str) -> str | None:
             elif tok in _FLAGS_WITH_VALUE:
                 i += 2
             else:
-                i += 1  # unknown flag — skip conservatively
+                i += 1  # unknown flag -- skip conservatively
             continue
         positionals.append(tok)
         i += 1
@@ -117,7 +117,7 @@ def _extract_push_remote_ref(command: str) -> str | None:
     if refspec.startswith("+"):
         refspec = refspec[1:]
 
-    # local:remote form — return remote side.
+    # local:remote form -- return remote side.
     if ":" in refspec:
         return refspec.split(":", 1)[1]
 
@@ -142,7 +142,7 @@ def decide(event: dict[str, Any]) -> dict[str, Any] | None:
 
     remote_ref = _extract_push_remote_ref(command)
     if not remote_ref:
-        return None  # no explicit refspec — fail-open
+        return None  # no explicit refspec -- fail-open
 
     if remote_ref == "HEAD" or is_authorized(remote_ref, authorized):
         return None

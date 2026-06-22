@@ -75,7 +75,7 @@ def get_changed_files(base_ref: str) -> list[str]:
     when the git call fails (fail-open: the gate skips rather than blocks
     when the diff is unavailable).
     """
-    result = subprocess.run(  # noqa: S603 — fixed argv, shell=False
+    result = subprocess.run(  # noqa: S603 -- fixed argv, shell=False
         ["git", "diff", "--name-only", f"{base_ref}...HEAD"],  # noqa: S607
         capture_output=True,
         text=True,

@@ -73,7 +73,7 @@ def _current_branch() -> str | None:
     except OSError:
         return None
     if not head.startswith(_HEAD_REF_PREFIX):
-        return None  # detached HEAD — fail-open
+        return None  # detached HEAD -- fail-open
     branch = head[len(_HEAD_REF_PREFIX):].strip()
     return branch or None
 
@@ -96,7 +96,7 @@ def decide(event: dict[str, Any]) -> dict[str, Any] | None:
 
     current_branch = _current_branch()
     if not current_branch:
-        return None  # detached HEAD / unknown — fail-open
+        return None  # detached HEAD / unknown -- fail-open
 
     if is_authorized(current_branch, authorized):
         return None

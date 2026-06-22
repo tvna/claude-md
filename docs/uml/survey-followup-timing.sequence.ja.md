@@ -39,13 +39,13 @@
 すでに `create_pull_request` を呼び出し単位で 1 回ゲートしている（`post_pr_create_ci_monitor`
 / `post_pr_create_body_fix` はまさにその tool への PostToolUse）。したがってサーベイは
 create 呼び出しの識別子を dedup キーにできたはずだ。それを Family B の Stop フックとして
-実装したため、代わりに transcript から PR 番号を走査してリプレイする —— これが #1594 の
+実装したため、代わりに transcript から PR 番号を走査してリプレイする ---- これが #1594 の
 構造的な根因である。
 
 ## superpowers の関与点
 
 `[fact]` 両族はいずれも `scripts/` 配下の repo-owned スクリプトで、code-owner マージ
-ゲートの背後にある。ライフサイクルにはもう 1 つの出自も関与する: **superpowers** ——
+ゲートの背後にある。ライフサイクルにはもう 1 つの出自も関与する: **superpowers** ----
 `apm.yml` / `apm.lock.yaml` でピン留めされた外部 APM プラグイン
 （`obra/superpowers@f2cbfbe`, `package_type: marketplace_plugin`）。その信頼は実行ごとの
 レビューではなく lockfile のピンによってガバナンスゲートされる（CLAUDE.md 第 2 節）。
@@ -64,7 +64,7 @@ create 呼び出しの識別子を dedup キーにできたはずだ。それを
 エージェントが選択的に呼ぶ *スキル* なので、ゲートではなく advisory（助言的）である。
 サーベイ/フォローアップのタイミング問題にとってこれは重要だ: 並行ディスパッチや
 レビューのスキルは本成果物を **どう作ったか** を形作ったが、サーベイが **いつ発火するか**
-には何の強制力も加えない —— それは完全に repo-owned の Family B Stop フックに委ねられて
+には何の強制力も加えない ---- それは完全に repo-owned の Family B Stop フックに委ねられて
 いる。ここでの superpowers はビルド時の force-multiplier であり、#1594 の制御面の一部
 ではない。
 
@@ -146,8 +146,8 @@ sequenceDiagram
 | # | ギャップ `[analysis]` | 証拠 `[fact]`（file:line） | 追跡 |
 |---|---|---|---|
 | 1 | retro_survey（Family B）は作成PRをすべて反復しマーカーを PR 単位でキーにするため、マルチPRセッション（#1582/#1584/#1589）はセッション単位の dedup なしに PR ごとにサーベイ全体を再発火する。 | `evaluate()` が `created_pr_numbers(entries)` をループしマーカー欠如ごとに block -- `scripts/gate_handoff_retro_survey_askuserquestion.py:257`; マーカーは PR 単位 `/tmp/claude-pre-merge-retro-survey/<pr>` -- `:140`, `:85`。 | #1594 |
-| 2 | サーベイは GitHub アーティファクトをゲートするのにエージェント純正族に属するため、実際の create 呼び出しをキーにできず、PR 番号を transcript 走査する —— これがリプレイを可能にする機構。Family A は同じ tool に既に PostToolUse フックを持つ。 | `created_pr_numbers` が transcript の `tool_use`/`tool_result` から PR を再構成 -- `gate_handoff_retro_survey_askuserquestion.py:208-248`; `post_pr_create_ci_monitor` は `create_pull_request` への PostToolUse -- `.claude/settings.json` PostToolUse。 | #1594 |
-| 3 | new_session_prompt（Family B, Stop フェーズ）の検出は保守的な cue-word ヒューリスティックで、実ハンドオフを見逃しうる —— 同一 Stop イベント上の沈黙的な偽陰性。 | `signals_handoff` は `HANDOFF_CUES` の部分一致のみ -- `scripts/stop_new_session_handoff_prompt.py:140`, `:55`。 | #1581 |
+| 2 | サーベイは GitHub アーティファクトをゲートするのにエージェント純正族に属するため、実際の create 呼び出しをキーにできず、PR 番号を transcript 走査する ---- これがリプレイを可能にする機構。Family A は同じ tool に既に PostToolUse フックを持つ。 | `created_pr_numbers` が transcript の `tool_use`/`tool_result` から PR を再構成 -- `gate_handoff_retro_survey_askuserquestion.py:208-248`; `post_pr_create_ci_monitor` は `create_pull_request` への PostToolUse -- `.claude/settings.json` PostToolUse。 | #1594 |
+| 3 | new_session_prompt（Family B, Stop フェーズ）の検出は保守的な cue-word ヒューリスティックで、実ハンドオフを見逃しうる ---- 同一 Stop イベント上の沈黙的な偽陰性。 | `signals_handoff` は `HANDOFF_CUES` の部分一致のみ -- `scripts/stop_new_session_handoff_prompt.py:140`, `:55`。 | #1581 |
 | 4 | Family B の Stop 順序は固定（decision_handoff -> retro_survey -> new_session_prompt -> cache_regime_advisor）。先行 block が `stop_hook_active` で再入し連鎖を no-op 化するため、継続時に後続フックがスキップされる。 | `Stop` 配列順 -- `.claude/settings.json:466-499`; `stop_hook_active -> return None` -- `gate_handoff_retro_survey_askuserquestion.py:255`。 | #1581 |
 | 5 | in-session retro 責務（D1）と CI バックストップが 1 つの PR を両方対象にしうる。dedup は CI `find_existing_retro` が正規タイトルを認識することに依存し、さもないと 2 つの retro が競合する。 | `run` は `find_existing_retro` 一致時に skip -- `scripts/auto_retro.py:2862`; CI `open-retro` はマージ済みPRでゲート -- `.github/workflows/post-merge.yml:29-30`。 | #1581 |
 | 6 | retro->follow-up ドリフトループは、解析可能な `#N` フォローアップ箇条書きを既に持つ retro しか再分類しない。retro を開かないサーベイ（修復なし）はスキャナが見る行を残さない。 | `parse_followup_refs` は `#N` 箇条書きを要求 -- `scripts/scan_retro_followup_drift.py:84`; `aggregate_drift` は参照ゼロで `None` を返す -- `:171`。 | #1581 |
@@ -174,4 +174,4 @@ transcript はすべて exit 0）: `gate_handoff_retro_survey_askuserquestion.py
 `[analysis]` フォローアッププロンプトは 2 つの契機で描かれている: その **出力**
 （Stop の block -> エージェントがフェンス付きプロンプトを出力）と、オペレータの **応答**
 （後続セッションへ貼り付け、SessionStart へ再入）。この応答エッジこそが、図の先頭へ
-ライフサイクルの環を閉じる —— セッション内の出力だけでなく、クロスセッションの継続である。
+ライフサイクルの環を閉じる ---- セッション内の出力だけでなく、クロスセッションの継続である。

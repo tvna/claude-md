@@ -90,6 +90,7 @@ import scan_pr_body_quality_drift
 import scan_preflight_drift
 import scan_provisioning_hook_serial
 import scan_quality_standard_drift
+import scan_repo_em_dash
 import scan_retro_followup_drift
 import scan_secret_runbooks
 import scan_secrets
@@ -220,6 +221,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("scan_allowlist_rationale.py", "verify"): "test_scan_allowlist_rationale_verify_matches_workflow_args",
     ("scan_apm_ascii.py", "verify"): "test_scan_apm_ascii_verify_matches_workflow_paths",
     ("scan_apm_portability.py", "verify"): "test_scan_apm_portability_verify_matches_workflow_paths",
+    ("scan_repo_em_dash.py", "verify"): "test_scan_repo_em_dash_verify_matches_workflow_args",
     ("scan_design_philosophy_drift.py", "verify"): "test_scan_design_philosophy_drift_verify_matches_workflow_paths",
     ("scan_design_philosophy_drift.py", "verify-coupling"): "test_scan_design_philosophy_drift_verify_coupling_matches_workflow_args",
     ("scan_apm_lock_drift.py", "verify"): "test_scan_apm_lock_drift_verify_matches_workflow_args",
@@ -1225,6 +1227,23 @@ def test_scan_apm_ascii_verify_matches_workflow_paths(tmp_path: Path) -> None:
     assert scan_apm_ascii.main(
         ["verify", "--path", str(path), "--path", str(path), "--path", str(path)]
     ) == 0
+
+
+def test_scan_repo_em_dash_verify_matches_workflow_args(tmp_path: Path) -> None:
+    """Mirrors the ``Scan all tracked files for em-dash (U+2014)`` step in
+    ``.github/workflows/verify-pr.yml`` (issue #1889).
+
+    The workflow passes ``--git-tracked``; the contract exercises the same
+    subcommand shape against a real (empty) git-ls-files mock so the
+    ``verify`` path is exercised end-to-end.
+    """
+    from unittest.mock import MagicMock, patch
+
+    mock_result = MagicMock()
+    mock_result.returncode = 0
+    mock_result.stdout = ""
+    with patch("subprocess.run", return_value=mock_result):
+        assert scan_repo_em_dash.main(["verify", "--git-tracked"]) == 0
 
 
 def test_scan_apm_portability_verify_matches_workflow_paths(tmp_path: Path) -> None:

@@ -113,7 +113,7 @@ def test_extract_pr_info_returns_none_when_missing() -> None:
 
 
 # ---------------------------------------------------------------------------
-# decide_post_tool_use — target tool filtering
+# decide_post_tool_use -- target tool filtering
 # ---------------------------------------------------------------------------
 
 
@@ -140,7 +140,7 @@ def test_decide_handles_update_pull_request_branch() -> None:
 
 
 # ---------------------------------------------------------------------------
-# decide_post_tool_use — mergeability states
+# decide_post_tool_use -- mergeability states
 # ---------------------------------------------------------------------------
 
 
@@ -601,7 +601,7 @@ class TestDetectRepo:
 
 
 # ---------------------------------------------------------------------------
-# _extract_pr_info — structured fallbacks and _walk list branch
+# _extract_pr_info -- structured fallbacks and _walk list branch
 # ---------------------------------------------------------------------------
 
 
@@ -624,7 +624,7 @@ def test_extract_pr_info_walks_nested_list() -> None:
 
 
 # ---------------------------------------------------------------------------
-# decide_post_tool_use — owner/repo undetermined branch
+# decide_post_tool_use -- owner/repo undetermined branch
 # ---------------------------------------------------------------------------
 
 
@@ -688,7 +688,7 @@ class TestListOpenPrs:
 
 
 # ---------------------------------------------------------------------------
-# run_session_start — per-PR skip branches
+# run_session_start -- per-PR skip branches
 # ---------------------------------------------------------------------------
 
 
@@ -733,7 +733,7 @@ def test_session_start_skips_when_poll_returns_none(
 
 
 # ---------------------------------------------------------------------------
-# main() — stdin error paths (PostToolUse mode)
+# main() -- stdin error paths (PostToolUse mode)
 # ---------------------------------------------------------------------------
 
 

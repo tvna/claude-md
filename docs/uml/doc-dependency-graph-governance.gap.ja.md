@@ -26,7 +26,7 @@ verify-coupling`、`scan_design_philosophy_drift.py:437-470`）。
 
 ```mermaid
 graph TD
-    subgraph BEFORE["Before PR #1755 — 強制エッジ: 1本"]
+    subgraph BEFORE["Before PR #1755 -- 強制エッジ: 1本"]
         direction TB
         MI_B["master.instructions.md"]
         DP_B["design_philosophy_prd ✅ blocking\n(scan_design_philosophy_drift)"]
@@ -41,7 +41,7 @@ graph TD
         MI_B -. "レビュワーの記憶" .-> WQ_B
     end
 
-    subgraph AFTER["After PR #1755 — blocking エッジ: 8本 + advisory エッジ: 8本"]
+    subgraph AFTER["After PR #1755 -- blocking エッジ: 8本 + advisory エッジ: 8本"]
         direction TB
         MI_A["master.instructions.md"]
         DP_A["design_philosophy_prd\n🔴 governs · blocking"]

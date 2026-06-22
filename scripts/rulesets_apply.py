@@ -102,7 +102,7 @@ def render_summary_row(
     action: str,
     live_id: str | int | None,
 ) -> str:
-    result_id = "\u2014" if live_id in (None, "") else str(live_id)
+    result_id = "--" if live_id in (None, "") else str(live_id)
     return f"| {file} | {name} | {matches} | {action} | {result_id} |"
 
 
@@ -213,7 +213,7 @@ def render_dispatch_header(
 ) -> str:
     return "\n".join(
         [
-            "## Apply rulesets \u2014 dispatch summary",
+            "## Apply rulesets -- dispatch summary",
             "",
             f"- ruleset: `{choice}`",
             f"- dry_run: `{str(dry_run).lower()}`",
@@ -641,7 +641,7 @@ def _request(
     # `url` is built from API_ROOT (https://api.github.com) + workflow-supplied
     # repo and ruleset_id values; opener is injectable for tests but defaults
     # to urllib.request.urlopen on the fixed https endpoint.
-    request = urllib.request.Request(  # noqa: S310 — fixed https endpoint
+    request = urllib.request.Request(  # noqa: S310 -- fixed https endpoint
         url,
         data=data,
         headers=headers,

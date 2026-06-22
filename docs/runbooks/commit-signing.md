@@ -1,4 +1,4 @@
-# SSH Commit Signing — Developer Setup Runbook
+# SSH Commit Signing -- Developer Setup Runbook
 
 This runbook covers setup for SSH commit signing on local feature branches
 in devcontainer and macOS environments.
@@ -11,7 +11,7 @@ feature branches. Refs [#1789](https://github.com/tvna/claude-md/issues/1789).
 ## Why this runbook exists
 
 GitHub's `required_signatures` rule on `main` is satisfied by GitHub's
-squash-merge web-flow signature — unsigned feature-branch commits are fine.
+squash-merge web-flow signature -- unsigned feature-branch commits are fine.
 Client-side SSH signing gives developers `Verified` badges on feature-branch
 commits (useful under Vigilant Mode and for supply-chain hygiene) and is now
 automated for devcontainer and macOS `nix develop` environments via Nix.
@@ -22,7 +22,7 @@ with a registered signing key. Those commits are intentionally unsigned on
 their branch; the normative rationale is in
 [`docs/standards/commit-signing.md`](../standards/commit-signing.md).
 
-## Prerequisites — Register an SSH Signing Key on GitHub
+## Prerequisites -- Register an SSH Signing Key on GitHub
 
 SSH signing requires a *Signing* key registered on GitHub, **separate** from
 the authentication key used for `git push`. The same public key may be
@@ -53,7 +53,7 @@ container starts. That script:
 
 1. Creates `~/.ssh/devcontainer-signing-keys/` on the host (mode `700`).
 2. Copies only `id_ed25519.pub`, `id_rsa.pub`, and `id_ecdsa.pub` into that
-   subdirectory — private keys are never copied.
+   subdirectory -- private keys are never copied.
 3. Exits 0 even when no public keys are found.
 
 The `mounts` entry in each `devcontainer.json` binds **only** that
@@ -71,7 +71,7 @@ material ever enters the container, regardless of the agent user's UID.
 2. Writes `gpg.format = ssh`, `user.signingKey`, and `commit.gpgsign = true`
    into `~/.gitconfig` via `git config --file`.
 3. Exits 0 and emits `INFO: no SSH public key found` when the directory is
-   empty — the container is fully functional without signing.
+   empty -- the container is fully functional without signing.
 
 ### Verify devcontainer signing
 

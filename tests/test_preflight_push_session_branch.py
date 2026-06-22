@@ -40,7 +40,7 @@ def _with_session(
 
 
 # ---------------------------------------------------------------------------
-# decide() — environment gate
+# decide() -- environment gate
 # ---------------------------------------------------------------------------
 
 
@@ -68,14 +68,14 @@ def test_decide_passthrough_bash_non_push(monkeypatch: pytest.MonkeyPatch) -> No
 
 
 def test_decide_passthrough_no_session_branch(monkeypatch: pytest.MonkeyPatch) -> None:
-    # Empty authorized set (bootstrap / unrecorded session) — fail-open.
+    # Empty authorized set (bootstrap / unrecorded session) -- fail-open.
     monkeypatch.setenv("CLAUDE_CODE_REMOTE", "true")
     monkeypatch.setattr(subject, "_read_authorized_branches", set)
     assert subject.decide(_bash_event("git push origin other-branch")) is None
 
 
 # ---------------------------------------------------------------------------
-# decide() — no explicit refspec (fail-open)
+# decide() -- no explicit refspec (fail-open)
 # ---------------------------------------------------------------------------
 
 
@@ -90,7 +90,7 @@ def test_decide_allows_push_remote_only(monkeypatch: pytest.MonkeyPatch) -> None
 
 
 # ---------------------------------------------------------------------------
-# decide() — allowed pushes
+# decide() -- allowed pushes
 # ---------------------------------------------------------------------------
 
 
@@ -128,7 +128,7 @@ def test_decide_allows_push_to_head(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 # ---------------------------------------------------------------------------
-# decide() — denied pushes
+# decide() -- denied pushes
 # ---------------------------------------------------------------------------
 
 
@@ -184,7 +184,7 @@ def test_decide_denies_force_push_to_other_branch(monkeypatch: pytest.MonkeyPatc
 
 
 # ---------------------------------------------------------------------------
-# decide() — multi-factor authorized set (Refs #1513)
+# decide() -- multi-factor authorized set (Refs #1513)
 # ---------------------------------------------------------------------------
 
 
@@ -236,7 +236,7 @@ def test_decide_allows_rtk_rewritten_push_to_session_branch(monkeypatch: pytest.
 
 
 # ---------------------------------------------------------------------------
-# _extract_push_remote_ref() — parser unit tests
+# _extract_push_remote_ref() -- parser unit tests
 # ---------------------------------------------------------------------------
 
 
