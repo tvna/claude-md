@@ -14,12 +14,12 @@ outer fence when the file is pasted into a chat input.
 
 ---
 
-# Handoff: [Scope -- one line]
+# Handoff: [Scope]
 
 ## Context
 
 - Issue: #NNNN
-- Branch: `branch-name` (existing -- do not create a new branch)
+- Branch: `branch-name` (existing; do not create a new branch)
 - Closes: #NNNN
 
 ## Background
@@ -31,9 +31,9 @@ Include the session or PR where it was observed if known.]
 
 List in read order. Read every file fully before writing a single line.
 
-1. `path/to/primary-target.py` -- role in one line
-2. `path/to/related-file.py` -- role in one line
-3. `path/to/test-file.py` -- role in one line
+1. `path/to/primary-target.py`: role in one line
+2. `path/to/related-file.py`: role in one line
+3. `path/to/test-file.py`: role in one line
 
 ## Implementation
 
@@ -51,7 +51,7 @@ Run after implementing:
     uv run pytest tests/relevant_test.py -v
 
 Expected: all tests pass. If a test asserts the exact text of a string you
-changed, update the assertion to match the new text -- do not revert the fix.
+changed, update the assertion to match the new text; do not revert the fix.
 
 ## PR creation
 
