@@ -16,8 +16,8 @@ The contract is:
 
 * ``--git-tracked`` enumerates all files known to git (``git ls-files``) and
   scans each one, excluding paths listed in ``_SKIP_PREFIXES`` (see below).
-  Files whose UTF-8 decoding fails are skipped with a notice (never a failure
-  -- the scan is about the character, not about encoding).
+  Files whose UTF-8 decoding fails are skipped with a notice (never a failure;
+  the scan is about the character, not about encoding).
 * ``--path`` adds one explicit path; repeatable. May be combined with
   ``--git-tracked`` (paths are unioned and de-duplicated). Explicit ``--path``
   targets are not filtered by ``_SKIP_PREFIXES``.
@@ -30,7 +30,7 @@ The contract is:
   Actions UI surfaces individual violations.
 
 Excluded path prefixes (``_SKIP_PREFIXES``):
-    ``.agents/skills/`` -- Files expanded from the APM upstream dependency
+    ``.agents/skills/``: files expanded from the APM upstream dependency
     (``obra/superpowers`` pinned in ``apm.yml``). These files must not be
     edited directly; any em-dash content there originates upstream and is
     outside this repo's fix scope.
@@ -42,7 +42,7 @@ Contract:
         for each U+2014 hit, plus an ``OK:`` / ``FAIL:`` summary line; exit
         0 when every scanned file is clean, 1 on any violation, 2 when no
         scan targets are supplied.
-    Failure policy: fails loud per CLAUDE.md section 4 -- a U+2014 character
+    Failure policy: fails loud per CLAUDE.md section 4; a U+2014 character
         or a ``git ls-files`` failure exits non-zero rather than passing
         silently.
 
@@ -56,7 +56,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-_EM_DASH = "\u2014"  # U+2014 EM DASH -- use escape to keep this file ASCII-clean
+_EM_DASH = "\u2014"  # U+2014 EM DASH; use escape to keep this file ASCII-clean
 
 # Files under these path prefixes are excluded from --git-tracked scans.
 # .agents/skills/ is expanded from the upstream APM dependency (obra/superpowers
@@ -72,7 +72,7 @@ def scan_text(text: str) -> list[tuple[int, int]]:
     ``::error file=`` annotations and an editor's cursor. Only ``"\\n"``
     advances the line counter.
 
-    The function is pure -- it never touches the filesystem -- so the
+    The function is pure (it never touches the filesystem); so the
     detection is unit-tested directly on string fixtures.
     """
     hits: list[tuple[int, int]] = []
@@ -106,7 +106,7 @@ def _git_tracked_files() -> list[Path] | None:
     """Return git-tracked files, excluding paths in ``_SKIP_PREFIXES``.
 
     Returns ``None`` (and emits an ``::error::`` annotation) when
-    ``git ls-files`` fails -- the caller must treat ``None`` as a hard
+    ``git ls-files`` fails; the caller must treat ``None`` as a hard
     error rather than an empty file list, so the gate never silently
     passes when it cannot enumerate the repository.
     """
