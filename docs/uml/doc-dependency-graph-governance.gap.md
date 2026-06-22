@@ -27,7 +27,7 @@ table is derived from all three.
 
 ```mermaid
 graph TD
-    subgraph BEFORE["Before PR #1755 — enforced edges: 1"]
+    subgraph BEFORE["Before PR #1755 -- enforced edges: 1"]
         direction TB
         MI_B["master.instructions.md"]
         DP_B["design_philosophy_prd ✅ blocking\n(scan_design_philosophy_drift)"]
@@ -42,7 +42,7 @@ graph TD
         MI_B -. "reviewer memory" .-> WQ_B
     end
 
-    subgraph AFTER["After PR #1755 — blocking edges: 8 + advisory edges: 8"]
+    subgraph AFTER["After PR #1755 -- blocking edges: 8 + advisory edges: 8"]
         direction TB
         MI_A["master.instructions.md"]
         DP_A["design_philosophy_prd\n🔴 governs · blocking"]

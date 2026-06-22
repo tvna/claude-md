@@ -1,4 +1,4 @@
-# Security control drift report — Runbook
+# Security control drift report -- Runbook
 
 Operator-facing companion to
 [`.github/workflows/weekly-maintenance.yml`](../../.github/workflows/weekly-maintenance.yml)
@@ -89,7 +89,7 @@ JST Monday 05:00 trigger to reduce scheduled workflow sprawl.
 1. Go to **Actions -> Weekly maintenance -> Run workflow**.
 2. Select `task=security-control-drift` and leave `security_control_dry_run` as `true` (default).
 3. After the run completes, open the run page and read the **Summary** tab
-   — the assembled Markdown table is appended to `$GITHUB_STEP_SUMMARY`.
+   -- the assembled Markdown table is appended to `$GITHUB_STEP_SUMMARY`.
 4. Confirm the table rows look as expected. No comment is posted on #178
    while `dry_run=true`.
 
@@ -111,7 +111,7 @@ detector failure does not hide the status of the remaining families.
 
 ## Rollback
 
-The aggregator is read-only and idempotent — it only `GET`s detector
+The aggregator is read-only and idempotent -- it only `GET`s detector
 outputs and `PATCH`es / `POST`s a single comment on a tracking issue. To
 roll back, disable the workflow via **Actions -> Weekly maintenance -> Disable
 workflow**; no repository state changes need reverting.

@@ -159,6 +159,12 @@ jobs:
             --path CLAUDE.md \
             --path AGENTS.md
 
+      - name: Scan all tracked files for em-dash (U+2014)
+        # Refs #1889: repo-wide gate so no tracked file can regress to U+2014.
+        # scan_apm_ascii.py guards only the three APM artifacts; this step
+        # covers the full tree.
+        run: python3 scripts/scan_repo_em_dash.py verify --git-tracked
+
       - name: Set up uv and project environment
         uses: ./.github/actions/setup-uv
 

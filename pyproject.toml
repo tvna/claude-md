@@ -127,12 +127,12 @@ ignore = [
 # legitimately trigger B011/B017. The flake8-bandit (S) family flags
 # patterns that are intrinsic to a unit-test suite and are not
 # security defects when scoped to tests/:
-#   S101 — assert is the pytest assertion primitive.
-#   S105/S106 — fixture token strings are dummy literals, not secrets.
-#   S108 — /tmp paths appear in fixtures that verify workflow-supplied
+#   S101 -- assert is the pytest assertion primitive.
+#   S105/S106 -- fixture token strings are dummy literals, not secrets.
+#   S108 -- /tmp paths appear in fixtures that verify workflow-supplied
 #          absolute paths; tmp_path is preferred but a few legacy
 #          fixtures still string-construct under /tmp by design.
-#   S404/S603/S607 — tests import subprocess and monkeypatch runners to
+#   S404/S603/S607 -- tests import subprocess and monkeypatch runners to
 #          verify the production scripts' fixed-argv call shape.
 "tests/*" = [
     "B011", "B017",

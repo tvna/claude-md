@@ -57,7 +57,7 @@ def _paginate_get(
     next_url: str | None = url
 
     while next_url:
-        request = urllib.request.Request(next_url, method="GET")  # noqa: S310 — fixed https://api.github.com endpoint
+        request = urllib.request.Request(next_url, method="GET")  # noqa: S310 -- fixed https://api.github.com endpoint
         request.add_header("Authorization", f"Bearer {token}")
         request.add_header("Accept", "application/vnd.github+json")
         request.add_header("X-GitHub-Api-Version", _API_VERSION)
@@ -101,7 +101,7 @@ def _get_single(
     opener: Callable[..., Any] = urllib.request.urlopen,
 ) -> str:
     """Make a single GET request and return the raw response body as a string."""
-    request = urllib.request.Request(url, method="GET")  # noqa: S310 — fixed https://api.github.com endpoint
+    request = urllib.request.Request(url, method="GET")  # noqa: S310 -- fixed https://api.github.com endpoint
     request.add_header("Authorization", f"Bearer {token}")
     request.add_header("Accept", "application/vnd.github+json")
     request.add_header("X-GitHub-Api-Version", _API_VERSION)

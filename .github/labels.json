@@ -1,32 +1,32 @@
 [
   {
     "name": "layer:p1-goal-plan",
-    "description": "CLAUDE.md §1 — Goal & plan structure (what the work is and how it will be verified).",
+    "description": "CLAUDE.md §1 -- Goal & plan structure (what the work is and how it will be verified).",
     "color": "1d76db"
   },
   {
     "name": "layer:p2-precode",
-    "description": "CLAUDE.md §2 — Input and pre-code reasoning (untrusted text, facts, assumptions).",
+    "description": "CLAUDE.md §2 -- Input and pre-code reasoning (untrusted text, facts, assumptions).",
     "color": "5319e7"
   },
   {
     "name": "layer:p3-harness",
-    "description": "CLAUDE.md §3 — Delivery harness (issues, CI, hooks, deps, PR loop).",
+    "description": "CLAUDE.md §3 -- Delivery harness (issues, CI, hooks, deps, PR loop).",
     "color": "0e8a16"
   },
   {
     "name": "layer:p4-artifact",
-    "description": "CLAUDE.md §4 — Safety boundary (simplicity, tool scope, secret exposure).",
+    "description": "CLAUDE.md §4 -- Safety boundary (simplicity, tool scope, secret exposure).",
     "color": "fbca04"
   },
   {
     "name": "layer:p5-scope-split",
-    "description": "CLAUDE.md §5 — Change scope & agent split.",
+    "description": "CLAUDE.md §5 -- Change scope & agent split.",
     "color": "d93f0b"
   },
   {
     "name": "layer:p6-handoff",
-    "description": "CLAUDE.md §6 — Handoff & communication.",
+    "description": "CLAUDE.md §6 -- Handoff & communication.",
     "color": "b60205"
   },
   {

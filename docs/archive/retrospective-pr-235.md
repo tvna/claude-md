@@ -1,11 +1,11 @@
-# Retrospective — PR #235 Security Control Inventory Repair-Free Merge
+# Retrospective -- PR #235 Security Control Inventory Repair-Free Merge
 
-This document is the retrospective for [#236](https://github.com/tvna/claude-md/issues/236) — the post-merge review of PR [#235](https://github.com/tvna/claude-md/pull/235), which closed issue [#179](https://github.com/tvna/claude-md/issues/179) ("docs(security): inventory ATT&CK control coverage"). The retrospective framework lives in `.apm/instructions/master.instructions.md` §3: classify each pre-merge repair, identify the earliest deterministic gate that should have prevented it, and state the no-repair reproduction path for the next similar PR. This is a positive-control entry: zero repairs were observed, so the classification and prevention sections explain the no-repair path that the existing harness already delivers.
+This document is the retrospective for [#236](https://github.com/tvna/claude-md/issues/236) -- the post-merge review of PR [#235](https://github.com/tvna/claude-md/pull/235), which closed issue [#179](https://github.com/tvna/claude-md/issues/179) ("docs(security): inventory ATT&CK control coverage"). The retrospective framework lives in `.apm/instructions/master.instructions.md` §3: classify each pre-merge repair, identify the earliest deterministic gate that should have prevented it, and state the no-repair reproduction path for the next similar PR. This is a positive-control entry: zero repairs were observed, so the classification and prevention sections explain the no-repair path that the existing harness already delivers.
 
 ## Scope
 
 - Target PR: [#235](https://github.com/tvna/claude-md/pull/235), merged as commit `ca1bd43` on 2026-05-23.
-- Requested issue: [#179](https://github.com/tvna/claude-md/issues/179) — a baseline inventory of security-relevant repository surfaces mapped to MITRE ATT&CK tactics.
+- Requested issue: [#179](https://github.com/tvna/claude-md/issues/179) -- a baseline inventory of security-relevant repository surfaces mapped to MITRE ATT&CK tactics.
 - Parent tracker: [#178](https://github.com/tvna/claude-md/issues/178).
 - Out of scope: the contents of the inventory file (`docs/security-control-inventory.md`) and any follow-up gate work for the surfaces it lists (those are tracked under reused issues #56, #63, #102, #120, #170, #180-184).
 
@@ -15,7 +15,7 @@ PR #235 landed via one commit on branch `claude/github-issue-209-1bxbq`. No repa
 
 | # | Repair | What the reviewer caught |
 |---|---|---|
-| — | none | — |
+| -- | none | -- |
 
 Observed CI surface at merge time: nine check runs, seven success (gate x4, detect, lint-scripts, scan), two correctly-skipped (verify-agents short-circuits when no APM or script paths change; dependabot-automerge audit runs only for `dependabot[bot]` PRs). No review comments were posted on PR #235. No PR-level comments were posted on PR #235. Time from PR open to merge was under ten minutes.
 
@@ -27,7 +27,7 @@ Per the `.apm/instructions/master.instructions.md` §3 taxonomy ("missing determ
 
 | Repair | Classification | Reasoning |
 |---|---|---|
-| — | n/a | The repair set is empty, so no entry maps into any of the three categories. The classification framework is restated here so the next retrospective writer has a template even when the positive-control case fires. |
+| -- | n/a | The repair set is empty, so no entry maps into any of the three categories. The classification framework is restated here so the next retrospective writer has a template even when the positive-control case fires. |
 
 The pre-open `stale info` push friction was an external repository-state event (the remote ref was deleted between branch creation and push), not a repair tied to PR review or CI. It is recorded under Repair history for completeness but does not require a follow-up gate.
 
@@ -45,7 +45,7 @@ Reframed for the positive-control case as "earliest deterministic gates that alr
 
 For the next PR that follows the same shape as #235 (docs-only inventory or runbook addition that does not touch agent rules, scripts, workflows, or CLAUDE.md / AGENTS.md), the path to a repair-free merge is:
 
-1. **Scope phase**: keep the change docs-only when the goal is to record state rather than change behavior. Inventory updates, runbook edits, and retrospective entries qualify. Avoid touching `.apm/**`, `scripts/**`, `.github/**`, `CLAUDE.md`, or `AGENTS.md` in the same PR — those paths trigger compile, portability, and agent-verification gates that would invite repair loops on a docs-only intent.
+1. **Scope phase**: keep the change docs-only when the goal is to record state rather than change behavior. Inventory updates, runbook edits, and retrospective entries qualify. Avoid touching `.apm/**`, `scripts/**`, `.github/**`, `CLAUDE.md`, or `AGENTS.md` in the same PR -- those paths trigger compile, portability, and agent-verification gates that would invite repair loops on a docs-only intent.
 2. **Edit phase**: place the file under `docs/<descriptive-name>.md`. Keep the content ASCII-safe where downstream consumers might re-post it through `mcp__github__*` write tools; em-dashes and similar punctuation are acceptable in the file itself.
 3. **Title phase**: pick a conventional-commit title that matches `verify-title-policy.yml` (`^(?:build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test|tracking)(?:\([a-z0-9][a-z0-9-]*\))?: .+`). Do not embed the issue number in the title.
 4. **Body phase**: copy `.github/PULL_REQUEST_TEMPLATE.md` and fill every section in order. Cite the closing issue with `Closes #NN` on the `Related Issue` line so the tracker auto-closes on merge.
@@ -56,7 +56,7 @@ For the next PR that follows the same shape as #235 (docs-only inventory or runb
 
 | Gate | Introduced here | Reasoning |
 |---|---|---|
-| — | no | This is a positive-control retrospective: no repairs were observed, so no preventive gate is needed. The contrast with PR #232 (which shipped `scan_apm_portability.py` to close PR #229 repair loop B) is intentional and documents that the existing harness already delivers the no-repair path for docs-only PRs that follow the existing body and title policies. |
+| -- | no | This is a positive-control retrospective: no repairs were observed, so no preventive gate is needed. The contrast with PR #232 (which shipped `scan_apm_portability.py` to close PR #229 repair loop B) is intentional and documents that the existing harness already delivers the no-repair path for docs-only PRs that follow the existing body and title policies. |
 
 A single follow-up is restated rather than introduced: bump issue [#149](https://github.com/tvna/claude-md/issues/149) (the formally-open tracker for the auto-open retrospective workflow). PR [#237](https://github.com/tvna/claude-md/pull/237) shipped `.github/workflows/auto-retro.yml` against issue #234 ("centralize post-merge follow-up tracking") and substantively closes the operator-memory dependency that #149 was opened to fix; formal closure of #149 can be folded into the next pass on #234 part 2.
 

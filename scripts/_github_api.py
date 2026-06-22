@@ -31,7 +31,7 @@ def _default_opener(request: urllib.request.Request) -> Any:
     """
     # S310 justification: the request URL is always the fixed
     # https://api.github.com endpoint built by the callers in this module.
-    return urllib.request.urlopen(request, timeout=_HTTP_TIMEOUT_SECONDS)  # noqa: S310 — fixed https://api.github.com endpoint
+    return urllib.request.urlopen(request, timeout=_HTTP_TIMEOUT_SECONDS)  # noqa: S310 -- fixed https://api.github.com endpoint
 
 
 def apply_call(
@@ -57,7 +57,7 @@ def apply_call(
         # S310 justification: callers construct `url` from `API_ROOT` (https://api.github.com)
         # + repo/path segments built from trusted env vars; opener is injectable for tests
         # but defaults to urllib.request.urlopen on the fixed https endpoint.
-        request = urllib.request.Request(url, data=data, method=method)  # noqa: S310 — fixed https://api.github.com endpoint
+        request = urllib.request.Request(url, data=data, method=method)  # noqa: S310 -- fixed https://api.github.com endpoint
         request.add_header("Authorization", f"Bearer {token}")
         request.add_header("Accept", "application/vnd.github+json")
         request.add_header("X-GitHub-Api-Version", API_VERSION)
@@ -115,7 +115,7 @@ def upload_release_asset(
         # https://uploads.github.com endpoint plus repo/path segments from
         # trusted env vars; opener is injectable for tests but defaults to the
         # bounded urlopen on the fixed host.
-        request = urllib.request.Request(url, data=content, method="POST")  # noqa: S310 — fixed https://uploads.github.com endpoint
+        request = urllib.request.Request(url, data=content, method="POST")  # noqa: S310 -- fixed https://uploads.github.com endpoint
         request.add_header("Authorization", f"Bearer {token}")
         request.add_header("Accept", "application/vnd.github+json")
         request.add_header("X-GitHub-Api-Version", API_VERSION)
