@@ -4,7 +4,7 @@ This file is generated from live GitHub retro-issue labels by `python3 scripts/a
 
 Retros observed: **50**
 
-Open untriaged: **33**
+Open untriaged: **0**
 
 ## Anomalies
 
@@ -39,13 +39,13 @@ pie showData
 
 | # | State | Status | Title |
 | --: | :-- | :-- | :-- |
-| 1865 | open | untriaged | chore(auto-retro): review PR #1864 repair loops |
-| 1862 | open | untriaged | chore(auto-retro): review PR #1861 repair loops |
-| 1857 | open | untriaged | chore(auto-retro): review PR #1856 repair loops |
-| 1849 | open | untriaged | chore(auto-retro): review PR #1848 repair loops |
-| 1845 | open | untriaged | chore(auto-retro): review PR #1841 repair loops |
-| 1842 | open | untriaged | chore(auto-retro): review PR #1838 repair loops |
-| 1835 | open | untriaged | chore(auto-retro): review PR #1834 repair loops |
-| 1831 | open | untriaged | chore(auto-retro): review PR #1830 repair loops |
-| 1823 | open | untriaged | chore(auto-retro): review PR #1822 repair loops |
-| 1816 | open | untriaged | chore(auto-retro): review PR #1815 repair loops |
+| 1865 | closed | untriaged | chore(auto-retro): review PR #1864 repair loops |
+| 1862 | closed | untriaged | chore(auto-retro): review PR #1861 repair loops |
+| 1857 | closed | untriaged | chore(auto-retro): review PR #1856 repair loops |
+| 1849 | closed | untriaged | chore(auto-retro): review PR #1848 repair loops |
+| 1845 | closed | untriaged | chore(auto-retro): review PR #1841 repair loops |
+| 1842 | closed | untriaged | chore(auto-retro): review PR #1838 repair loops |
+| 1835 | closed | untriaged | chore(auto-retro): review PR #1834 repair loops |
+| 1831 | closed | untriaged | chore(auto-retro): review PR #1830 repair loops |
+| 1823 | closed | untriaged | chore(auto-retro): review PR #1822 repair loops |
+| 1816 | closed | untriaged | chore(auto-retro): review PR #1815 repair loops |
