@@ -189,6 +189,7 @@ Detection is string-match based:
 | `scan_module_size_distribution.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
 | `scan_non_ascii.py` | workflow | `issue-pr-triage.yml (scan)` |
 | `scan_nonexhaustive_invariant_drift.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
+| `scan_pr_body_quality_drift.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
 | `scan_preflight_drift.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
 | `scan_provisioning_hook_serial.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
 | `scan_quality_standard_drift.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
