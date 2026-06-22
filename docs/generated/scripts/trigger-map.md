@@ -195,6 +195,7 @@ Detection is string-match based:
 | `scan_preflight_drift.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
 | `scan_provisioning_hook_serial.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
 | `scan_quality_standard_drift.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
+| `scan_repo_em_dash.py` | workflow | `verify-pr.yml (portable-pr-policy)` |
 | `scan_retro_followup_drift.py` | workflow | `daily-maintenance.yml (scan)` |
 | `scan_secret_runbooks.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
 | `scan_secrets.py` | pre-commit | `scan-secrets` |
