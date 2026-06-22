@@ -4,7 +4,7 @@ This file is generated from live GitHub retro-issue labels by `python3 scripts/a
 
 Retros observed: **50**
 
-Open untriaged: **4**
+Open untriaged: **3**
 
 ## Anomalies
 
@@ -41,7 +41,7 @@ pie showData
 | --: | :-- | :-- | :-- |
 | 1894 | open | untriaged | chore(auto-retro): review PR #1891 repair loops |
 | 1887 | open | untriaged | chore(auto-retro): review PR #1883 repair loops |
-| 1885 | open | untriaged | chore(auto-retro): review PR #1883 repair loops |
+| 1885 | closed | untriaged | chore(auto-retro): review PR #1883 repair loops |
 | 1879 | open | untriaged | chore(auto-retro): review PR #1877 repair loops |
 | 1865 | closed | untriaged | chore(auto-retro): review PR #1864 repair loops |
 | 1862 | closed | untriaged | chore(auto-retro): review PR #1861 repair loops |
