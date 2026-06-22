@@ -54,12 +54,22 @@ _SCRIPT_NAME = "gate_stop_pr_review_reply"
 
 # Substrings that identify a pull-request review-comment webhook event.
 # Intentionally specific to review event types; CI and push webhooks lack them.
+# Two marker sets cover the same events on different surfaces:
+#   - API-style (underscore): raw GitHub webhook payload field names, present
+#     when the system embeds the raw payload body.
+#   - System-description prefix: the Claude Code system injects an exact header
+#     "The following is a GitHub review[...] left on the PR." before the
+#     user-authored comment body. Matching this full prefix (not a short
+#     substring like "review comment") avoids false positives when the
+#     user-authored comment body happens to mention review-related words.
+# Both sets must be present so the gate fires on either format. Refs #1860.
 REVIEW_MARKERS: tuple[str, ...] = (
     "REVIEW_COMMENT",
     "review_comment",
     "changes_requested",
     "Changes requested",
     "pull_request_review",
+    "The following is a GitHub review",  # matches system description header
 )
 
 # Tool names that count as posting a reply to a review thread.

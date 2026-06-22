@@ -33,6 +33,20 @@ from _retro_labels import (
     RETRO_TP,
 )
 
+# CLAUDE.md section 3 taxonomy labels used to classify each repair row in a
+# retro issue. Slugs match the backtick names in _auto_retro_render.py's
+# operator-fill block. `pr-body-content-quality` is the fourth category,
+# tracking defects observable in the PR body itself (placeholder residue,
+# empty sections, missing examples, retro-feedback-loop). Refs #1828.
+KNOWN_REPAIR_CATEGORIES: frozenset[str] = frozenset(
+    {
+        "missing-deterministic-gate",
+        "unclear-agent-instruction",
+        "external-human-decision",
+        "pr-body-content-quality",
+    }
+)
+
 
 @dataclass(frozen=True)
 class PastRetro:
