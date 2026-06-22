@@ -1,6 +1,7 @@
 """Tests for ``scripts/gate_pr_body_retro_issue_link.py``.
 
 Verifies that:
+- ``fetch_issue_title``: returns title on 200, None on HTTP errors.
 - ``decide``:
   - off-target tool -> None (pass-through)
   - missing body -> None
@@ -23,6 +24,7 @@ from __future__ import annotations
 
 import io
 import json
+import urllib.error
 from typing import Any
 
 import gate_pr_body_retro_issue_link as gate
@@ -37,6 +39,92 @@ _REPO = "r"
 _RETRO_TITLE = "chore(auto-retro): review PR #1 repair loops"
 _RETRO_TITLE_LEGACY = "fix(auto-retro): review PR #1 repair loops"
 _NON_RETRO_TITLE = "feat(scope): do the thing"
+
+
+class _FakeResponse:
+    def __init__(self, status: int, body: bytes) -> None:
+        self.status = status
+        self._body = body
+
+    def __enter__(self) -> _FakeResponse:
+        return self
+
+    def __exit__(self, *_a: Any) -> None:
+        return None
+
+    def read(self) -> bytes:
+        return self._body
+
+
+def _opener_returning(status: int, body: bytes):
+    def _opener(_request, *_a, **_k):
+        return _FakeResponse(status, body)
+
+    return _opener
+
+
+# ---------------------------------------------------------------------------
+# fetch_issue_title
+# ---------------------------------------------------------------------------
+
+
+class TestFetchIssueTitle:
+    def test_returns_title_on_200(self) -> None:
+        body = json.dumps({"title": "chore(auto-retro): review PR #42 repair loops"}).encode()
+        result = gate.fetch_issue_title(
+            "owner", "repo", 42,
+            token="t",
+            opener=_opener_returning(200, body),
+            sleeper=lambda _s: None,
+        )
+        assert result == "chore(auto-retro): review PR #42 repair loops"
+
+    def test_non_200_returns_none(self) -> None:
+        def _opener(request, *_a, **_k):
+            raise urllib.error.HTTPError(
+                url=request.full_url,
+                code=404,
+                msg="Not Found",
+                hdrs=None,
+                fp=io.BytesIO(b'{"message":"Not Found"}'),
+            )
+
+        result = gate.fetch_issue_title(
+            "owner", "repo", 42,
+            token="t",
+            opener=_opener,
+            sleeper=lambda _s: None,
+        )
+        assert result is None
+
+    def test_malformed_json_returns_none(self) -> None:
+        result = gate.fetch_issue_title(
+            "owner", "repo", 42,
+            token="t",
+            opener=_opener_returning(200, b"not-json"),
+            sleeper=lambda _s: None,
+        )
+        assert result is None
+
+    def test_missing_title_field_returns_none(self) -> None:
+        body = json.dumps({"number": 42}).encode()
+        result = gate.fetch_issue_title(
+            "owner", "repo", 42,
+            token="t",
+            opener=_opener_returning(200, body),
+            sleeper=lambda _s: None,
+        )
+        assert result is None
+
+    def test_non_string_title_returns_none(self) -> None:
+        body = json.dumps({"title": 99}).encode()
+        result = gate.fetch_issue_title(
+            "owner", "repo", 42,
+            token="t",
+            opener=_opener_returning(200, body),
+            sleeper=lambda _s: None,
+        )
+        assert result is None
 
 
 def _input(
@@ -288,3 +376,17 @@ class TestMain:
             {42: _NON_RETRO_TITLE},
         )
         assert out == ""
+
+    def test_no_token_is_noop(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # When GH_TOKEN is absent the _title_getter returns None and fail-opens.
+        monkeypatch.delenv("GH_TOKEN", raising=False)
+        monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+        event = json.dumps({
+            "tool_name": "mcp__github__create_pull_request",
+            "tool_input": _input("Closes #42"),
+        })
+        monkeypatch.setattr("sys.stdin", io.StringIO(event))
+        out = io.StringIO()
+        monkeypatch.setattr("sys.stdout", out)
+        assert gate.main() == 0
+        assert out.getvalue() == ""
