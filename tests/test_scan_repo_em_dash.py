@@ -133,6 +133,7 @@ class TestGitTrackedFiles:
         )
         with patch("subprocess.run", return_value=mock_result):
             result = srd._git_tracked_files()
+        assert result is not None
         paths = [str(p) for p in result]
         assert "CLAUDE.md" in paths
         assert "README.md" in paths
