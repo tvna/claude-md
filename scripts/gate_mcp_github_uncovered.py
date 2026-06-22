@@ -54,23 +54,38 @@ HOOK_COVERED_TOOLS: frozenset[str] = frozenset(
 # Known read-only MCP tools. These carry no write risk and are allowed
 # through without a dedicated hook. Not added to HOOK_COVERED_TOOLS --
 # that set is reserved for write tools that have their own paired hooks.
+#
+# Includes both the consolidated names used by the current deployment
+# (issue_read, pull_request_read) and the pre-consolidation names used
+# by the Nix-pinned github-mcp-server v0.3.0 in the devcontainer
+# (get_issue, get_pull_request, etc. -- see pkg/github/tools.go@v0.3.0).
 # Refs #1869.
 READ_ONLY_TOOLS: frozenset[str] = frozenset(
     {
         "mcp__github__actions_get",
         "mcp__github__actions_list",
+        "mcp__github__get_code_scanning_alert",
         "mcp__github__get_commit",
         "mcp__github__get_file_contents",
+        "mcp__github__get_issue",
+        "mcp__github__get_issue_comments",
         "mcp__github__get_job_logs",
         "mcp__github__get_label",
         "mcp__github__get_latest_release",
         "mcp__github__get_me",
+        "mcp__github__get_pull_request",
+        "mcp__github__get_pull_request_comments",
+        "mcp__github__get_pull_request_files",
+        "mcp__github__get_pull_request_reviews",
+        "mcp__github__get_pull_request_status",
         "mcp__github__get_release_by_tag",
+        "mcp__github__get_secret_scanning_alert",
         "mcp__github__get_tag",
         "mcp__github__get_team_members",
         "mcp__github__get_teams",
         "mcp__github__issue_read",
         "mcp__github__list_branches",
+        "mcp__github__list_code_scanning_alerts",
         "mcp__github__list_commits",
         "mcp__github__list_issue_fields",
         "mcp__github__list_issue_types",
@@ -78,6 +93,7 @@ READ_ONLY_TOOLS: frozenset[str] = frozenset(
         "mcp__github__list_pull_requests",
         "mcp__github__list_releases",
         "mcp__github__list_repository_collaborators",
+        "mcp__github__list_secret_scanning_alerts",
         "mcp__github__list_tags",
         "mcp__github__pull_request_read",
         "mcp__github__search_code",
