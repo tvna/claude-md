@@ -22,8 +22,8 @@ The contract is:
   ``--git-tracked`` (paths are unioned and de-duplicated). Explicit ``--path``
   targets are not filtered by ``_SKIP_PREFIXES``.
 * Every occurrence of U+2014 EM DASH is a violation. There is no allowlist:
-  the ASCII separator ``--`` is the approved substitute for every context this
-  repository uses (comments, docstrings, Markdown prose, table cells).
+  use ASCII punctuation (semicolon, comma, or parentheses) as the substitute
+  in every context this repository uses (comments, docstrings, Markdown prose, table cells).
 * Exit 0 when every scanned file is clean; exit 1 on any violation; exit 2
   when neither ``--git-tracked`` nor ``--path`` is supplied. Each hit emits
   ``::error file=<path>,line=<n>,col=<c>::...`` on stderr so the GitHub
@@ -135,8 +135,8 @@ def _verify(paths: list[Path]) -> int:
         for lineno, column in scan_file(path):
             print(
                 f"::error file={path},line={lineno},col={column}::"
-                "em-dash (U+2014) found. Replace with the ASCII separator"
-                " ' -- '. Refs #1889.",
+                "em-dash (U+2014) found. Replace with ASCII punctuation"
+                " (semicolon, comma, or parentheses). Refs #1889.",
                 file=sys.stderr,
             )
             total += 1
