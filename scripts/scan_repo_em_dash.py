@@ -15,10 +15,12 @@ Invoked from ``verify-pr.yml`` (portable-pr-policy job) and registered in
 The contract is:
 
 * ``--git-tracked`` enumerates all files known to git (``git ls-files``) and
-  scans each one. Files whose UTF-8 decoding fails are skipped with a notice
-  (never a failure -- the scan is about the character, not about encoding).
+  scans each one, excluding paths listed in ``_SKIP_PREFIXES`` (see below).
+  Files whose UTF-8 decoding fails are skipped with a notice (never a failure
+  -- the scan is about the character, not about encoding).
 * ``--path`` adds one explicit path; repeatable. May be combined with
-  ``--git-tracked`` (paths are unioned and de-duplicated).
+  ``--git-tracked`` (paths are unioned and de-duplicated). Explicit ``--path``
+  targets are not filtered by ``_SKIP_PREFIXES``.
 * Every occurrence of U+2014 EM DASH is a violation. There is no allowlist:
   the ASCII separator ``--`` is the approved substitute for every context this
   repository uses (comments, docstrings, Markdown prose, table cells).
@@ -26,6 +28,12 @@ The contract is:
   when neither ``--git-tracked`` nor ``--path`` is supplied. Each hit emits
   ``::error file=<path>,line=<n>,col=<c>::...`` on stderr so the GitHub
   Actions UI surfaces individual violations.
+
+Excluded path prefixes (``_SKIP_PREFIXES``):
+    ``.agents/skills/`` -- Files expanded from the APM upstream dependency
+    (``obra/superpowers`` pinned in ``apm.yml``). These files must not be
+    edited directly; any em-dash content there originates upstream and is
+    outside this repo's fix scope.
 
 Contract:
     Inputs: the ``verify`` subcommand plus ``--git-tracked`` and/or one or
@@ -49,6 +57,12 @@ import sys
 from pathlib import Path
 
 _EM_DASH = "\u2014"  # U+2014 EM DASH -- use escape to keep this file ASCII-clean
+
+# Files under these path prefixes are excluded from --git-tracked scans.
+# .agents/skills/ is expanded from the upstream APM dependency (obra/superpowers
+# pinned in apm.yml); editing it directly is prohibited, so em-dashes there are
+# outside this repo's fix scope.
+_SKIP_PREFIXES = (".agents/skills/",)
 
 
 def scan_text(text: str) -> list[tuple[int, int]]:
@@ -89,7 +103,7 @@ def scan_file(path: Path) -> list[tuple[int, int]]:
 
 
 def _git_tracked_files() -> list[Path]:
-    """Return all files enumerated by ``git ls-files``."""
+    """Return git-tracked files, excluding paths in ``_SKIP_PREFIXES``."""
     result = subprocess.run(  # noqa: S603 -- fixed argv, shell=False
         ["git", "ls-files"],  # noqa: S607 -- git resolved via PATH
         capture_output=True,
@@ -102,7 +116,11 @@ def _git_tracked_files() -> list[Path]:
             file=sys.stderr,
         )
         return []
-    return [Path(p) for p in result.stdout.splitlines() if p]
+    return [
+        Path(p)
+        for p in result.stdout.splitlines()
+        if p and not any(p.startswith(prefix) for prefix in _SKIP_PREFIXES)
+    ]
 
 
 def _verify(paths: list[Path]) -> int:
