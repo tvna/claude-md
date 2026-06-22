@@ -99,6 +99,22 @@ class TestIsReviewWebhook:
     def test_webhook_tag_without_review_marker_does_not_match(self) -> None:
         assert not gate.is_review_webhook(_webhook("PR merged successfully."))
 
+    # --- human-readable system description format (refs #1860) ---
+
+    def test_system_review_comment_description_matches(self) -> None:
+        # Actual format delivered by Claude Code system for inline comments.
+        msg = "The following is a GitHub review comment left on the PR."
+        assert gate.is_review_webhook(_webhook(msg))
+
+    def test_system_review_description_matches(self) -> None:
+        # Actual format delivered by Claude Code system for top-level reviews.
+        msg = "The following is a GitHub review left on the PR."
+        assert gate.is_review_webhook(_webhook(msg))
+
+    def test_system_ci_description_does_not_match(self) -> None:
+        msg = "The following is a CI failure on the PR."
+        assert not gate.is_review_webhook(_webhook(msg))
+
 
 # ---------------------------------------------------------------------------
 # has_reply_tool_call
