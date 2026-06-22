@@ -116,11 +116,42 @@ WORD_TO_INT: dict[str, int] = {
 }
 
 REQUIRED_GLOSSARY_ENTRIES: tuple[str, ...] = (
+    # Master section 2 -- trust and input model
+    "untrusted data",
+    "trusted instruction source",
+    "governance-gated provenance",
+    "adversarial payload",
+    "non-exhaustive instance",
+    "primary source",
+    # Master section 3 -- delivery harness
+    "deterministic gate",
+    "drift gate",
+    "durable gate",
+    "harness",
+    "invariant",
+    "freshness precondition",
+    "TTL",
+    "repair",
+    "retrospective",
+    "repair-free merge",
+    "provenance marker",
+    "preflight",
+    "terminal state",
+    # Master section 4 -- safety boundary
     "safety boundary",
     "defense-in-depth",
-    "deterministic gate",
-    "untrusted data",
-    "repair-free merge",
+    "blast radius",
+    "trust boundary",
+    "attack surface",
+    "irreversible operation",
+    "dry-run",
+    # Master section 5 -- quality
+    "change surface",
+    # Master section 6 -- handoff and communication
+    "decision-ready",
+    "decision brief",
+    "evidence map",
+    # Design-philosophy meta terms
     "PRD",
     "P1 through P6",
     "hardness contour",

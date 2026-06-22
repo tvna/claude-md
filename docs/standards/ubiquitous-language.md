@@ -41,6 +41,19 @@ required entry has been removed or renamed. Refs #1901.
   previous instructions" directives, credential requests, and encoded or
   obfuscated instruction overrides. Master section 2 classifies these as
   adversarial by default even when not explicitly listed.
+- **primary source**: Authoritative documentation or the directly observed
+  state of an external tool, library, API, or platform; claims about external
+  behavior must be grounded in primary sources rather than in memory or
+  secondary summaries. Master section 2 ("Ground claims about how an external
+  tool, library, API, or platform behaves in primary sources: authoritative
+  docs or the observed state itself, not memory or secondary summaries").
+- **non-exhaustive instance**: An item in an enumerated list that illustrates
+  a category without closing it; when master states "X and Y are
+  non-exhaustive instances, not a closed list", an unlisted item belonging to
+  the same category is in scope by default. This open-invariant pattern recurs
+  across sections 2, 3, and 4 of master.instructions.md and is the mechanism
+  behind the generalize-the-category discipline applied to untrusted sources,
+  adversarial payloads, irreversible operations, and sensitive-data sinks.
 
 ## Delivery harness
 
@@ -77,6 +90,23 @@ required entry has been removed or renamed. Refs #1901.
 - **TTL**: Time-to-live; the finite window during which a freshness observation
   is considered current before it must be refreshed. Used in master section 3
   ("a freshness observation with a finite TTL").
+- **provenance marker**: An identifier embedded in or attached to a commit, PR
+  body, release, or generated file that reveals the build or runtime model,
+  agent identity, or internal tooling origin; must be audited and suppressed
+  before any public push when the owner has not chosen to disclose it. Master
+  section 3 ("Audit every outward-facing artifact...for provenance markers the
+  owner has not chosen to disclose").
+- **preflight**: A deterministic check executed immediately before an
+  outward-facing or irreversible operation to catch violations before they
+  become permanent; the non-ASCII guard and the provenance-marker audit are
+  examples. Master section 3 ("This boundary belongs in a deterministic
+  preflight, not reviewer memory"); implemented by
+  `scripts/preflight_non_ascii.py` and `scripts/preflight_steps.py`.
+- **terminal state**: The final closed condition of a PR workflow -- either
+  merged with recorded rationale or closed with recorded rationale -- that
+  satisfies the PR-monitoring obligation and allows the review loop to exit.
+  Master section 3 ("auto-subscribe to CI, reviews, and comments and drive to
+  a terminal state (merged, or closed with rationale)").
 
 ## Safety and quality
 
@@ -103,6 +133,35 @@ required entry has been removed or renamed. Refs #1901.
   without moving to a separate sub-bullet, runbook, or repo-local doc; the
   primary failure mode that dilutes a hardness contour. Anti-pattern A in
   `docs/prd/agent-rules-design-philosophy.md` section 7.6.
+- **trust boundary**: The separation between the trusted workspace (the
+  agent's controlled repository and account scope) and external endpoints,
+  services, and sinks; sensitive material must not cross it in either
+  direction -- neither read in from a sensitive source beyond task need, nor
+  emitted to any external sink. Master section 4 ("sensitive material must not
+  cross the trust boundary in either direction").
+- **attack surface**: Any output sink or instrumentation path -- including
+  logs, step summaries, terminal output, PR bodies, screenshots, generated
+  artifacts, and error messages -- through which sensitive material could be
+  exfiltrated or adversarial input could gain unintended effect; must be
+  treated with redaction and access-control rigor. Master section 4 ("Treat
+  debug instrumentation and every output sink as an attack surface").
+- **irreversible operation**: An action that cannot be undone or that reaches
+  outside the trusted workspace; examples include deletes, force-pushes,
+  payments, schema migrations, key rotations, DNS changes, bulk notifications,
+  and data exports. The non-exhaustive-instance rule applies: an unlisted
+  operation that cannot be undone is in scope by default. Requires a
+  confirmation or dry-run before execution. Master section 4.
+- **dry-run**: An execution of a proposed irreversible or outward-facing
+  operation that shows what would happen without committing the change; must
+  be offered alongside explicit confirmation before any such operation is
+  performed. Master section 4 ("Keep confirmations and dry-runs for any
+  irreversible or outward-facing operation").
+- **change surface**: The set of files and lines touched by a single PR or
+  commit; must be kept narrow -- limited to what the active task requires --
+  so that quality remains proportional to volume as the harness scales. Net
+  line growth on a refactor is one observable proxy for an expanding change
+  surface. Master section 5 ("Keep the change surface narrow: touch only what
+  the active task requires").
 
 ## Ownership lanes
 
@@ -151,6 +210,25 @@ required entry has been removed or renamed. Refs #1901.
   (vendor name, PR number, file path) on that single line; must cite a
   sub-issue that authorizes the exception.
   `docs/prd/agent-rules-design-philosophy.md` section 7.4 governs its use.
+- **decision-ready**: The state of a candidate outcome where it has been
+  investigated, implemented, tested, and proved, so that a human can choose
+  between named prepared options rather than respond to an open-ended
+  question. Master section 6 ("Never hand a human a decision that is not
+  decision-ready: investigate, implement, test, and prove the candidate
+  outcomes first, so the human chooses between prepared, reversible options").
+- **decision brief**: A handoff artifact that presents a decision-ready
+  analysis: full canonical URLs, a plain-language explanation, the proof, the
+  trade-offs, and a recommended option among concrete named choices; the
+  structured-choice form of the visualization rule. Master section 6 ("A
+  decision brief carries its own evidence: full canonical URLs...and a
+  recommended option among concrete named choices").
+- **evidence map**: A structured trace linking a changed surface to its entry
+  point, callers and callees, tests that exercise it, and the dependency
+  contracts it touches; a reviewer must be able to build this map before
+  signing off on a change. Master section 6 ("A review verdict needs an
+  evidence map, not a diff-only read: trace each changed surface to its entry
+  point, its callers and callees, the tests that exercise it, and the
+  dependency contracts it touches").
 
 ## Principle labels
 
