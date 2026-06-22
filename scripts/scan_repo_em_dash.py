@@ -102,8 +102,14 @@ def scan_file(path: Path) -> list[tuple[int, int]]:
         return []
 
 
-def _git_tracked_files() -> list[Path]:
-    """Return git-tracked files, excluding paths in ``_SKIP_PREFIXES``."""
+def _git_tracked_files() -> list[Path] | None:
+    """Return git-tracked files, excluding paths in ``_SKIP_PREFIXES``.
+
+    Returns ``None`` (and emits an ``::error::`` annotation) when
+    ``git ls-files`` fails -- the caller must treat ``None`` as a hard
+    error rather than an empty file list, so the gate never silently
+    passes when it cannot enumerate the repository.
+    """
     result = subprocess.run(  # noqa: S603 -- fixed argv, shell=False
         ["git", "ls-files"],  # noqa: S607 -- git resolved via PATH
         capture_output=True,
@@ -115,7 +121,7 @@ def _git_tracked_files() -> list[Path]:
             f"::error::git ls-files failed: {result.stderr.strip()}",
             file=sys.stderr,
         )
-        return []
+        return None
     return [
         Path(p)
         for p in result.stdout.splitlines()
@@ -153,7 +159,10 @@ def _cmd_verify(args: argparse.Namespace) -> int:
         return 2
     paths: list[Path] = [Path(p) for p in args.path]
     if args.git_tracked:
-        paths.extend(_git_tracked_files())
+        tracked = _git_tracked_files()
+        if tracked is None:
+            return 1  # git ls-files failed; error already printed
+        paths.extend(tracked)
     return _verify(paths)
 
 

@@ -104,13 +104,13 @@ class TestGitTrackedFiles:
             result = srd._git_tracked_files()
         assert result == [Path("CLAUDE.md"), Path("README.md")]
 
-    def test_returns_empty_on_git_failure(self, capsys: pytest.CaptureFixture[str]) -> None:
+    def test_returns_none_on_git_failure(self, capsys: pytest.CaptureFixture[str]) -> None:
         mock_result = MagicMock()
         mock_result.returncode = 1
         mock_result.stderr = "not a git repo"
         with patch("subprocess.run", return_value=mock_result):
             result = srd._git_tracked_files()
-        assert result == []
+        assert result is None
         captured = capsys.readouterr()
         assert "git ls-files failed" in captured.err
 
@@ -209,6 +209,17 @@ class TestCmdVerify:
         # subprocess.run was called with git ls-files
         call_args = mock_run.call_args
         assert call_args[0][0] == ["git", "ls-files"]
+
+    def test_git_tracked_exits_1_when_git_fails(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        mock_result = MagicMock()
+        mock_result.returncode = 1
+        mock_result.stderr = "fatal: not a git repository"
+        with patch("subprocess.run", return_value=mock_result):
+            result = srd.main(["verify", "--git-tracked"])
+        assert result == 1
+        assert "git ls-files failed" in capsys.readouterr().err
 
     def test_path_and_git_tracked_combined(self, tmp_path: Path) -> None:
         p = tmp_path / "extra.md"
