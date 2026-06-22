@@ -477,6 +477,15 @@
               "hooks": [
                 {
                   "type": "command",
+                  "command": "python3 scripts/gate_pr_body_retro_issue_link.py"
+                }
+              ]
+            },
+            {
+              "matcher": "mcp__github__(create_pull_request|update_pull_request)",
+              "hooks": [
+                {
+                  "type": "command",
                   "command": "python3 scripts/preflight_coverage.py"
                 }
               ]
@@ -539,6 +548,10 @@
                 {
                   "type": "command",
                   "command": "python3 scripts/pr_body_close_keyword_gate.py"
+                },
+                {
+                  "type": "command",
+                  "command": "python3 scripts/gate_pr_body_retro_issue_link.py"
                 },
                 {
                   "type": "command",
@@ -1122,6 +1135,16 @@
                   "type": "command",
                   "command": "python3 scripts/pr_body_close_keyword_gate.py",
                   "statusMessage": "Checking PR issue links"
+                }
+              ]
+            },
+            {
+              "matcher": "^mcp__github__(create_pull_request|update_pull_request)$",
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "python3 scripts/gate_pr_body_retro_issue_link.py",
+                  "statusMessage": "Checking for retro issue links in PR body"
                 }
               ]
             },

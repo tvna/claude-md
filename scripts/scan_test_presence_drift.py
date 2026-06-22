@@ -133,6 +133,7 @@ GITHUB_API_SCRIPTS: frozenset[str] = frozenset(
         "ci_budget_issue",
         "ci_early_status_probe",
         "dependabot_automerge",
+        "gate_pr_body_retro_issue_link",
         "github_api",
         "issue_closure_fast_path",
         "labels_apply",
