@@ -140,6 +140,7 @@ from _auto_retro_triage import (
     _RECENT_RETRO_COUNT,
     _TRIAGE_LABELS,
     _UNLABELLED_KEY,
+    KNOWN_REPAIR_CATEGORIES,
     PastRetro,
     RecentRetro,
     SignalStat,
@@ -186,6 +187,7 @@ from script_ast_graph import (
 # unused-import check is satisfied by listing the re-exports in ``__all__``.
 __all__ = [
     "ALL_RETRO_LABELS",
+    "KNOWN_REPAIR_CATEGORIES",
     "PRIOR_MIN_SAMPLE_SIZE",
     "PRIOR_SKIP_THRESHOLD",
     "PRIOR_TENTATIVE_THRESHOLD",

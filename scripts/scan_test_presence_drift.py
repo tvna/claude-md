@@ -103,12 +103,6 @@ ALLOW_NO_TEST_MODULE: dict[str, str] = {
         "every moved symbol is re-exported by auto_retro and exercised "
         "indirectly via tests/test_auto_retro.py."
     ),
-    "_auto_retro_triage": (
-        "Pure triage/prior layer extracted from auto_retro.py (refs #1725); "
-        "every moved symbol is re-exported by auto_retro and exercised "
-        "indirectly via tests/test_auto_retro.py and "
-        "tests/test_auto_retro_triage_report.py."
-    ),
     "_github_tool_names": (
         "Tool-name constant table; exercised indirectly via its caller in "
         "tests/test_preflight_codex_connector_tools.py."

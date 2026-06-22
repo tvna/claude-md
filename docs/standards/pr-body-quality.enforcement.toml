@@ -1,0 +1,35 @@
+# Enforcement map for PR body content-quality defects. Refs #1828.
+#
+# Each key is a known defect class (matching KNOWN_REPAIR_CATEGORIES in
+# scripts/_auto_retro_triage.py and the pr-body-content-quality category).
+# `status` is one of:
+#
+#   enforced  -- a deterministic gate fails CI when the defect regresses.
+#   partial   -- a gate covers part of the item; the rest relies on review.
+#   doc-only  -- no backing gate today; the item relies on reviewer memory.
+#
+# `backing` lists the deterministic artifacts that sustain the item:
+#
+#   script:<name>  -- scripts/<name>.py must exist.
+#   test:<name>    -- tests/<name>.py must exist.
+#
+# scripts/scan_pr_body_quality_drift.py verifies that every `enforced` row
+# resolves its backing gate, and every `doc-only` row has an empty backing
+# list. Tightening a row from doc-only/partial to enforced is the unit of
+# follow-up work as companion issues (#1829, #1830, #1831, #1832) land.
+
+[placeholder-residue]
+status = "doc-only"
+backing = []
+
+[empty-section]
+status = "doc-only"
+backing = []
+
+[missing-good-bad-examples]
+status = "doc-only"
+backing = []
+
+[retro-feedback-loop]
+status = "doc-only"
+backing = []

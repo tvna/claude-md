@@ -280,6 +280,13 @@ STEPS: tuple[Step, ...] = (
         argv=("python3", "scripts/scan_quality_standard_drift.py", "verify"),
     ),
     Step(
+        # Refs #1828. Fails when an `enforced`/`partial` row in
+        # docs/standards/pr-body-quality.enforcement.toml names a backing gate
+        # that does not exist, or an orphaned defect class is present.
+        name="scan_pr_body_quality_drift",
+        argv=("python3", "scripts/scan_pr_body_quality_drift.py", "verify"),
+    ),
+    Step(
         # Refs #1241/#1242/#1243 (and #1239, #178). Fails when a section 2/4
         # safety enumeration in master.instructions.md drops its
         # non-exhaustive marker, re-closing an open invariant into a finite
