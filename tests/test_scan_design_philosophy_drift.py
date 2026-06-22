@@ -24,7 +24,7 @@ def _master(n: int, *, subtitles: dict[int, str] | None = None) -> str:
     """Return a minimal master.instructions.md body with N sections.
 
     Each section emits a ``*Layer: <text> -- desc.*`` subtitle by
-    default (em-dash separator) so the post-#329 label-parity check
+    default (ASCII -- separator) so the post-#329 label-parity check
     has a subtitle to read. Pass ``subtitles={n: "..."}`` to override
     individual section subtitles; pass ``subtitles={}`` to drop them
     entirely.
@@ -40,7 +40,7 @@ def _master(n: int, *, subtitles: dict[int, str] | None = None) -> str:
         sections.append("")
         sub = pick.get(i)
         if sub is not None:
-            sections.append(f"*Layer: {sub} — desc {i}.*")
+            sections.append(f"*Layer: {sub} -- desc {i}.*")
             sections.append("")
         sections.append(f"body for section {i}.")
         sections.append("")
@@ -416,10 +416,10 @@ class TestParseMasterSubtitles:
         result = sdpd.parse_master_subtitles(text)
         assert result == {1: "first", 3: "third"}
 
-    def test_captures_only_text_before_em_dash(self) -> None:
+    def test_captures_only_text_before_separator(self) -> None:
         text = (
             "## 1. Heading\n"
-            "*Layer: layer name — description with em-dash.*\n"
+            "*Layer: layer name -- description with separator.*\n"
         )
         assert sdpd.parse_master_subtitles(text) == {1: "layer name"}
 

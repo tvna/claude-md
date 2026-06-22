@@ -416,7 +416,7 @@ def _cmd_reconcile(args: argparse.Namespace) -> int:
         # Narrowing: idle_seconds is set only when last_activity is not None
         # (see the matching branch above). CI runs Python without -O, so this
         # assert still raises if the invariant is ever violated. Tracked in #190.
-        assert last_activity is not None  # noqa: S101 — type-narrowing invariant
+        assert last_activity is not None  # noqa: S101 -- type-narrowing invariant
         print(
             f"Issue #{number} idle for {idle_days}d "
             f"(>= {args.idle_close_days}d). Auto-closing."

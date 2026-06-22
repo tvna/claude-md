@@ -132,7 +132,7 @@ class TestRendering:
     def test_render_summary_row_empty_id_uses_dash(self) -> None:
         assert (
             ra.render_summary_row("main.json", "main", 0, "plan-only (POST)", None)
-            == "| main.json | main | 0 | plan-only (POST) | — |"
+            == "| main.json | main | 0 | plan-only (POST) | -- |"
         )
 
 
@@ -324,8 +324,8 @@ class TestCliFlows:
             == 0
         )
         text = summary.read_text(encoding="utf-8")
-        assert "| all-branches.json | all | 0 | plan-only (POST) | — |" in text
-        assert "| main.json | main | 0 | plan-only (POST) | — |" in text
+        assert "| all-branches.json | all | 0 | plan-only (POST) | -- |" in text
+        assert "| main.json | main | 0 | plan-only (POST) | -- |" in text
 
     def test_plan_ambiguous_exits_nonzero(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -357,7 +357,7 @@ class TestCliFlows:
             )
             == 1
         )
-        assert "| main.json | main | 2 | abort | — |" in summary.read_text(
+        assert "| main.json | main | 2 | abort | -- |" in summary.read_text(
             encoding="utf-8"
         )
 

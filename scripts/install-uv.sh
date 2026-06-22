@@ -11,8 +11,8 @@
 set -euo pipefail
 
 # Only run in a recognised remote environment.
-# CLAUDE_CODE_REMOTE=true  — Claude Code on the Web (set by the platform).
-# CODEX_CODE_REMOTE=true   — Codex cloud (set by the operator in the Codex
+# CLAUDE_CODE_REMOTE=true  -- Claude Code on the Web (set by the platform).
+# CODEX_CODE_REMOTE=true   -- Codex cloud (set by the operator in the Codex
 #                            cloud environment configuration; no built-in
 #                            platform signal exists as of 2026-05-30,
 #                            confirmed via openai/codex#13416).

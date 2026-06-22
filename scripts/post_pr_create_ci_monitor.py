@@ -22,7 +22,7 @@ agent has had a chance to call ``subscribe_pr_activity``.
 | Trigger          | PostToolUse (``create_pull_request``) | GitHub App / ``check_suite`` push |
 | Delivery         | ``_ci_watch.py`` REST poll loop    | HTTP POST to registered endpoint  |
 | Latency          | Poll interval (≥ 15 s)             | Near real-time                    |
-| Retry on failure | None — fire-and-forget subprocess  | GitHub redeliver mechanism        |
+| Retry on failure | None -- fire-and-forget subprocess  | GitHub redeliver mechanism        |
 | Failure mode     | Log written to ``/tmp``; silent    | HTTP error logged by GitHub       |
 
 ## Early-failure watch phase vs steady-state heartbeat

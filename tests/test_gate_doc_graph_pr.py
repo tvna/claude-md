@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import textwrap
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import gate_doc_graph_pr as gate
 import pytest
@@ -99,6 +99,32 @@ class TestParseWaivers:
     def test_irrelevant_text_ignored(self) -> None:
         body = "Some PR description.\nNo waivers here.\n"
         assert gate.parse_waivers(body) == frozenset()
+
+
+# ---------------------------------------------------------------------------
+# get_changed_files
+# ---------------------------------------------------------------------------
+
+
+class TestGetChangedFiles:
+    def test_returns_paths_on_success(self) -> None:
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = "docs/prd/a.md\nscripts/x.py\n"
+        with patch("subprocess.run", return_value=mock_result):
+            result = gate.get_changed_files("origin/main")
+        assert result == ["docs/prd/a.md", "scripts/x.py"]
+
+    def test_returns_empty_and_warns_on_git_failure(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        mock_result = MagicMock()
+        mock_result.returncode = 1
+        mock_result.stderr = "fatal: not a git repo"
+        with patch("subprocess.run", return_value=mock_result):
+            result = gate.get_changed_files("origin/main")
+        assert result == []
+        assert "git diff failed" in capsys.readouterr().err
 
 
 # ---------------------------------------------------------------------------
@@ -255,6 +281,24 @@ class TestMain:
                 ]
             )
         # body-file has no waiver, env is ignored, so gate fails
+        assert result == 1
+
+    def test_unreadable_body_file_falls_back_to_no_waivers(
+        self, tmp_path: Path
+    ) -> None:
+        graph_path = _write_graph(tmp_path)
+        with patch(
+            "gate_doc_graph_pr.get_changed_files",
+            return_value=[".apm/instructions/master.instructions.md"],
+        ):
+            result = gate.main(
+                [
+                    "--graph", str(graph_path),
+                    "--body-file", str(tmp_path / "nonexistent-body.txt"),
+                    "--base-ref", "origin/main",
+                ]
+            )
+        # Body unreadable -> no waivers -> gate fails (prd_a not changed)
         assert result == 1
 
     def test_env_pr_body_used_when_no_body_file(

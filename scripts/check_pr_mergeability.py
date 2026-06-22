@@ -115,7 +115,7 @@ def _detect_repo() -> str | None:
     if repo and _OWNER_REPO_RE.match(repo):
         return repo
     try:
-        result = subprocess.run(  # noqa: S603 — fixed args, not user input
+        result = subprocess.run(  # noqa: S603 -- fixed args, not user input
             ["git", "remote", "get-url", "origin"],  # noqa: S607
             capture_output=True, text=True, timeout=5, check=False,
         )
@@ -277,7 +277,7 @@ def decide_post_tool_use(
     if state == "clean":
         return _build_context(f"Mergeability OK: {pr_label} has mergeable_state=clean. No conflicts detected.")
 
-    # blocked / unknown / draft / etc — advisory
+    # blocked / unknown / draft / etc -- advisory
     return _build_context(
         f"Mergeability advisory for {pr_label}: mergeable_state={state}. "
         "This may indicate required status checks are pending (blocked) or "

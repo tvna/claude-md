@@ -18,7 +18,7 @@ pytestmark = pytest.mark.shard_preflight
 
 
 # ---------------------------------------------------------------------------
-# check() — environment gate
+# check() -- environment gate
 # ---------------------------------------------------------------------------
 
 
@@ -39,7 +39,7 @@ def test_check_returns_none_when_branch_unavailable(monkeypatch: pytest.MonkeyPa
 
 
 # ---------------------------------------------------------------------------
-# check() — notice content
+# check() -- notice content
 # ---------------------------------------------------------------------------
 
 
@@ -71,7 +71,7 @@ def test_check_message_includes_refspec_example(monkeypatch: pytest.MonkeyPatch,
 
 
 # ---------------------------------------------------------------------------
-# check() — file write
+# check() -- file write
 # ---------------------------------------------------------------------------
 
 
@@ -198,7 +198,7 @@ def test_main_exits_zero_when_check_raises() -> None:
 
 
 # ---------------------------------------------------------------------------
-# _current_branch() — subprocess handling
+# _current_branch() -- subprocess handling
 # ---------------------------------------------------------------------------
 
 

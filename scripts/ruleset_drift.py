@@ -9,7 +9,7 @@ take injectable boundaries so the CLI is fully unit-testable.
 See #126 (refactor) and #30 / #116 (origin) for context. #1004 added
 server-default parameter normalization and canonical rule-list ordering to the
 projection (superseding the #30 / #116 "preserve raw rule order" decision, which
-predated the evidence that GitHub re-orders rules on PUT — see #1036), and the
+predated the evidence that GitHub re-orders rules on PUT -- see #1036), and the
 `reconcile` rolling-issue dedup / auto-close replacing the per-run flood
 (#998 / #1000 / #1002).
 """
@@ -273,7 +273,7 @@ def decide_issue_action(
 
 def render_summary_header(*, run_date: str, run_url: str) -> str:
     return (
-        f"## Ruleset drift detection — run {run_date}\n"
+        f"## Ruleset drift detection -- run {run_date}\n"
         "\n"
         f"- Run: {run_url}\n"
         "\n"
@@ -374,7 +374,7 @@ def fetch_live_rulesets_list(
 ) -> list[dict[str, Any]]:
     # API_ROOT is the constant https://api.github.com endpoint; `repo` is sourced
     # from workflow `github.repository`. opener is injectable for tests.
-    request = urllib.request.Request(f"{API_ROOT}/repos/{repo}/rulesets")  # noqa: S310 — fixed https endpoint
+    request = urllib.request.Request(f"{API_ROOT}/repos/{repo}/rulesets")  # noqa: S310 -- fixed https endpoint
     request.add_header("Authorization", f"Bearer {token}")
     request.add_header("Accept", "application/vnd.github+json")
     request.add_header("X-GitHub-Api-Version", API_VERSION)
@@ -391,7 +391,7 @@ def fetch_live_ruleset(
 ) -> dict[str, Any]:
     # API_ROOT is the constant https://api.github.com endpoint; `ruleset_id` is
     # an int narrowed upstream. opener is injectable for tests.
-    request = urllib.request.Request(f"{API_ROOT}/repos/{repo}/rulesets/{ruleset_id}")  # noqa: S310 — fixed https endpoint
+    request = urllib.request.Request(f"{API_ROOT}/repos/{repo}/rulesets/{ruleset_id}")  # noqa: S310 -- fixed https endpoint
     request.add_header("Authorization", f"Bearer {token}")
     request.add_header("Accept", "application/vnd.github+json")
     request.add_header("X-GitHub-Api-Version", API_VERSION)
@@ -533,7 +533,7 @@ def detect(
 
         if decision["status"] == "ambiguous":
             ambiguous_row = render_status_row(
-                file=filename, name=name, live_id="—", status="ambiguous"
+                file=filename, name=name, live_id="--", status="ambiguous"
             )
             summary_chunks.append(ambiguous_row)
             _append(summary_file, "".join(summary_chunks))
@@ -544,7 +544,7 @@ def detect(
 
         if decision["status"] == "missing-on-live":
             row = render_status_row(
-                file=filename, name=name, live_id="—", status="missing-on-live"
+                file=filename, name=name, live_id="--", status="missing-on-live"
             )
             summary_chunks.append(row)
             sot_body_chunks.append(row)
@@ -561,7 +561,7 @@ def detect(
             # live_path is a label that appears only inside the diff header
             # rendered into the drift issue body; nothing is read from or
             # written to this path.
-            live_path=f"/tmp/live-{filename}",  # noqa: S108 — diff label only, no fs access
+            live_path=f"/tmp/live-{filename}",  # noqa: S108 -- diff label only, no fs access
         )
         if not diff_text:
             summary_chunks.append(
@@ -643,10 +643,10 @@ def reconcile(
     if action == "create":
         file_issue(repo, title, body_file, labels)
     elif action == "append":
-        assert existing is not None  # noqa: S101 — invariant from decide_issue_action
+        assert existing is not None  # noqa: S101 -- invariant from decide_issue_action
         comment_on_issue(repo, existing["number"], body_file)
     elif action == "close":
-        assert existing is not None  # noqa: S101 — invariant from decide_issue_action
+        assert existing is not None  # noqa: S101 -- invariant from decide_issue_action
         close_issue_with_comment(repo, existing["number"], close_comment)
     return action
 
@@ -745,12 +745,12 @@ def main(argv: list[str] | None = None) -> int:
         # CLI default for the detect subcommand. The workflow always passes an
         # explicit --sot-body-file under the runner home directory; this default
         # is for local one-shot debugging on a single-tenant runner.
-        default=Path("/tmp/drift-sot-issue.md"),  # noqa: S108 — workflow-supplied override expected in CI
+        default=Path("/tmp/drift-sot-issue.md"),  # noqa: S108 -- workflow-supplied override expected in CI
     )
     p_detect.add_argument(
         "--unknown-body-file",
         type=Path,
-        default=Path("/tmp/drift-unknown-issue.md"),  # noqa: S108 — workflow-supplied override expected in CI
+        default=Path("/tmp/drift-unknown-issue.md"),  # noqa: S108 -- workflow-supplied override expected in CI
     )
     p_detect.set_defaults(func=_cmd_detect)
 

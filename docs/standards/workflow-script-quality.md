@@ -452,7 +452,7 @@ The aggregate gate (`[tool.coverage.report].fail_under` in
 the source tree. When the tree is large, a newly added file with 0%
 coverage barely moves the aggregate. For example, with a 9 000-line
 tree at 92% coverage, a new 100-line file with no tests drops the
-aggregate to only 91.2% — well above a typical 90% floor. The new
+aggregate to only 91.2% -- well above a typical 90% floor. The new
 file ships with zero coverage while all gates appear green.
 
 **Gate 1: aggregate post-merge threshold**

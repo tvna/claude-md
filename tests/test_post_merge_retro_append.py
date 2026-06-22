@@ -67,7 +67,7 @@ class TestExtractMergeCoords:
 
 
 # ---------------------------------------------------------------------------
-# decide — non-merge tool: silent
+# decide -- non-merge tool: silent
 # ---------------------------------------------------------------------------
 
 
@@ -84,7 +84,7 @@ class TestDecideNonMergeTool:
 
 
 # ---------------------------------------------------------------------------
-# decide — merge event with auto-retro found (append path)
+# decide -- merge event with auto-retro found (append path)
 # ---------------------------------------------------------------------------
 
 
@@ -159,7 +159,7 @@ class TestDecideAppendPath:
 
 
 # ---------------------------------------------------------------------------
-# decide — merge event with no auto-retro (create fallback path)
+# decide -- merge event with no auto-retro (create fallback path)
 # ---------------------------------------------------------------------------
 
 
@@ -192,7 +192,7 @@ class TestDecideCreateFallbackPath:
 
 
 # ---------------------------------------------------------------------------
-# decide — PR number missing
+# decide -- PR number missing
 # ---------------------------------------------------------------------------
 
 
