@@ -3,7 +3,7 @@
 Covers heuristic helpers and evaluate() gate logic. main() is exercised
 via monkeypatched stdin in the integration class.
 
-Refs #1768.
+Refs #1768, #1860.
 """
 
 from __future__ import annotations
@@ -12,6 +12,7 @@ import io
 import json
 from pathlib import Path
 from typing import Any
+from unittest.mock import patch
 
 import gate_stop_pr_review_reply as gate
 import pytest
@@ -232,6 +233,46 @@ class TestEvaluate:
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# _content_blocks / _entry_role / _entry_text edge cases (coverage lines
+# 100, 103, 107, 113, 119-120, 126, 129, 141)
+# ---------------------------------------------------------------------------
+
+
+class TestContentBlocks:
+    def test_non_dict_entry_returns_empty(self) -> None:
+        assert gate._content_blocks("not-a-dict") == []
+
+    def test_non_dict_message_returns_empty(self) -> None:
+        assert gate._content_blocks({"message": "string"}) == []
+
+    def test_non_list_content_returns_empty(self) -> None:
+        assert gate._content_blocks({"message": {"content": "raw string"}}) == []
+
+
+class TestEntryRole:
+    def test_non_dict_entry_returns_empty_string(self) -> None:
+        assert gate._entry_role(42) == ""
+
+    def test_entry_type_used_when_no_message(self) -> None:
+        # Falls back to entry["type"] when message has no role key.
+        assert gate._entry_role({"type": "tool_result"}) == "tool_result"
+
+    def test_entry_type_non_string_returns_empty(self) -> None:
+        assert gate._entry_role({"type": 99}) == ""
+
+
+class TestEntryText:
+    def test_non_dict_entry_returns_empty_string(self) -> None:
+        assert gate._entry_text(None) == ""
+
+    def test_non_dict_message_returns_empty_string(self) -> None:
+        assert gate._entry_text({"message": 42}) == ""
+
+    def test_non_str_non_list_content_returns_empty_string(self) -> None:
+        assert gate._entry_text({"message": {"content": 99}}) == ""
+
+
 class TestLoadTranscript:
     def test_returns_empty_for_missing_path(self) -> None:
         assert gate.load_transcript("/nonexistent/path.jsonl") == []
@@ -253,6 +294,12 @@ class TestLoadTranscript:
     def test_skips_malformed_lines(self, tmp_path: Path) -> None:
         f = tmp_path / "transcript.jsonl"
         f.write_text('{"ok": 1}\nNOT JSON\n{"ok": 2}\n')
+        entries = gate.load_transcript(str(f))
+        assert len(entries) == 2
+
+    def test_skips_blank_lines(self, tmp_path: Path) -> None:
+        f = tmp_path / "transcript.jsonl"
+        f.write_text('{"ok": 1}\n\n   \n{"ok": 2}\n')
         entries = gate.load_transcript(str(f))
         assert len(entries) == 2
 
@@ -303,3 +350,26 @@ class TestMain:
         rc = gate.main()
         assert rc == 0
         assert stdout_capture.getvalue() == ""  # no block emitted
+
+    def test_main_returns_zero_when_read_event_returns_none(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # read_event() returns None on invalid/empty stdin -> main exits 0.
+        monkeypatch.setattr("sys.stdin", io.StringIO(""))
+        rc = gate.main()
+        assert rc == 0
+
+    def test_main_fails_open_on_exception(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        # If evaluate() raises, main catches it and exits 0 (fail-open).
+        transcript = tmp_path / "t.jsonl"
+        transcript.write_text(json.dumps(REVIEW_COMMENT_WEBHOOK))
+        event = {"hook_event_name": "Stop", "transcript_path": str(transcript)}
+        monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(event)))
+        stderr_capture = io.StringIO()
+        monkeypatch.setattr("sys.stderr", stderr_capture)
+        with patch.object(gate, "evaluate", side_effect=RuntimeError("boom")):
+            rc = gate.main()
+        assert rc == 0
+        assert "boom" in stderr_capture.getvalue()
