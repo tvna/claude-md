@@ -6,7 +6,8 @@ it. Lanes are the buckets that `ls docs/` already shows:
 (design-stage rationale and decision records), `standards/`
 (adopted rules, schemas, and contracts), `runbooks/` (operator
 procedures), `uml/` (UML diagram artifacts), `generated/` (checked-in
-generated views), `archive/` (frozen historical evidence).
+generated views), `archive/` (frozen historical evidence),
+`next-session/` (session handoff prompt templates).
 
 If you only want one entry per lane, read the first row of each table
 below -- that is the highest-traffic document in the lane. Otherwise
@@ -210,6 +211,12 @@ naming convention and the per-30-entries year-folder cutover.
 | [retrospective-pr-257.md](archive/retrospective-pr-257.md) | Retrospective for PR #257 (workflow permissions audit, repair-free). |
 | [retrospective-pr-337.md](archive/retrospective-pr-337.md) | Retrospective for PR #337 (no-override rule, repair-free). |
 | [retrospective-pr-349.md](archive/retrospective-pr-349.md) | Retrospective for PR #349 (GitHub Advisory Database direct query, repair-free). |
+
+## next-session/ -- session handoff prompt templates
+
+| File | Territory | Tracking issues | Companion |
+|---|---|---|---|
+| [TEMPLATE.md](next-session/TEMPLATE.md) | Reusable template for session handoff prompts. Uses 4-space-indented code blocks (no fenced blocks) to prevent Markdown renderers from breaking the outer fence when prompts are pasted into a new session. | #1884 | `docs/next-session/` |
 
 ## Navigation aids
 
