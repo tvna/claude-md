@@ -85,7 +85,7 @@ import sys
 from pathlib import Path
 
 MASTER_SECTION_RE = re.compile(r"^## (\d+)\. ")
-MASTER_SUBTITLE_RE = re.compile(r"^\*Layer:\s*(.+?)\s+--\s")
+MASTER_SUBTITLE_RE = re.compile(r"^\*Layer:\s*(.+?);\s")
 DOC_SECTION_3_HEADING_RE = re.compile(r"^## 3\. ")
 DOC_NEXT_SECTION_RE = re.compile(r"^## \d+\. ")
 DOC_MATRIX_ROW_RE = re.compile(r"^\|\s*P(\d+)\s*-")

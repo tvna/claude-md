@@ -28,13 +28,13 @@ _EM_DASH = "\u2014"  # U+2014 EM DASH
 
 class TestScanText:
     def test_pure_ascii_is_clean(self) -> None:
-        assert srd.scan_text("hello -- world\n") == []
+        assert srd.scan_text("hello; world\n") == []
 
     def test_empty_is_clean(self) -> None:
         assert srd.scan_text("") == []
 
     def test_double_hyphen_is_clean(self) -> None:
-        assert srd.scan_text("*Layer: goal -- desc.*\n") == []
+        assert srd.scan_text("*Layer: goal; desc.*\n") == []
 
     def test_em_dash_flagged_line_and_column(self) -> None:
         text = f"ab{_EM_DASH}cd\n"
@@ -68,7 +68,7 @@ class TestScanText:
 class TestScanFile:
     def test_clean_file(self, tmp_path: Path) -> None:
         p = tmp_path / "clean.md"
-        p.write_text("No em-dash here -- ASCII only.\n", encoding="utf-8")
+        p.write_text("No em-dash here; ASCII only.\n", encoding="utf-8")
         assert srd.scan_file(p) == []
 
     def test_file_with_em_dash(self, tmp_path: Path) -> None:
@@ -178,7 +178,7 @@ class TestVerify:
     def test_deduplication(self, tmp_path: Path) -> None:
         p = tmp_path / "ok.md"
         p.write_text("clean\n", encoding="utf-8")
-        # Same path repeated twice -- should only scan once
+        # Same path repeated twice; should only scan once
         result = srd._verify([p, p])
         assert result == 0
 
