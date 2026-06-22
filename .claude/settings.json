@@ -402,6 +402,15 @@
         "hooks": [
           {
             "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/gate_pr_body_retro_issue_link.py"
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__github__(create_pull_request|update_pull_request)",
+        "hooks": [
+          {
+            "type": "command",
             "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/preflight_coverage.py"
           }
         ]
