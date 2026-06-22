@@ -11,14 +11,16 @@ flowchart TD
     N003["return None"]
     N004["if tool_name in HOOK_COVERED_TOOLS"]
     N005["return None"]
-    N006["short = tool_name[len(_MCP_GITHUB_PREFIX):]"]
-    N007["return {'<str>': '<str>', '<str>': f'<str>{tool_name}<str>{short.replace('<str>', '<str>')}<str>'}"]
+    N006["if tool_name in READ_ONLY_TOOLS"]
+    N007["return None"]
+    N008["return {'<str>': '<str>', '<str>': f'<str>{tool_name}<str>'}"]
     N001 -->|"start"| N002
     N002 -->|"true"| N003
     N002 -->|"false"| N004
     N004 -->|"true"| N005
     N004 -->|"false"| N006
-    N006 --> N007
+    N006 -->|"true"| N007
+    N006 -->|"false"| N008
 ```
 
 ## main(...)
