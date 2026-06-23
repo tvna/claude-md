@@ -1,6 +1,6 @@
 # AST graph: scripts/backup_non_ascii.py
 
-This file is generated from `scripts/backup_non_ascii.py` by `python3 scripts/script_ast_graph.py all-doc`. Do not edit it by hand: content under `docs/generated/scripts/` is owned by the post-merge automation (refs #1540) -- update the source script instead.
+This file is generated from `scripts/backup_non_ascii.py` by `python3 scripts/script_ast_graph.py all-doc`. Do not edit it by hand: content under `docs/generated/scripts/` is owned by the post-merge automation (refs #1540); update the source script instead.
 
 ## _parent_number_from_url(...)
 

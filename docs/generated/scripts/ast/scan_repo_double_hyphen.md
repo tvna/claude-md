@@ -1,6 +1,15 @@
-# AST graph: scripts/scan_repo_em_dash.py
+# AST graph: scripts/scan_repo_double_hyphen.py
 
-This file is generated from `scripts/scan_repo_em_dash.py` by `python3 scripts/script_ast_graph.py all-doc`. Do not edit it by hand: content under `docs/generated/scripts/` is owned by the post-merge automation (refs #1540); update the source script instead.
+This file is generated from `scripts/scan_repo_double_hyphen.py` by `python3 scripts/script_ast_graph.py all-doc`. Do not edit it by hand: content under `docs/generated/scripts/` is owned by the post-merge automation (refs #1540); update the source script instead.
+
+## _should_skip_line(...)
+
+```mermaid
+flowchart TD
+    N001["_should_skip_line(...)"]
+    N002["return '<str>' in line or '<str>' in line"]
+    N001 -->|"start"| N002
+```
 
 ## scan_text(...)
 
@@ -8,15 +17,11 @@ This file is generated from `scripts/scan_repo_em_dash.py` by `python3 scripts/s
 flowchart TD
     N001["scan_text(...)"]
     N002["hits = []"]
-    N003["lineno = 1"]
-    N004["column = 0"]
-    N005["for char in text:     if char == '<str>':         lineno += 1         column = 0         continue     column += 1     if char == _EM_DASH:         hits.append((lineno, column))"]
-    N006["return hits"]
+    N003["for lineno, line in enumerate(text.splitlines(), start=1):     if _should_skip_line(line):         continue     start = 0     while True:         idx = line.find(_DOUBLE_HYPHEN, start)         if idx == -1:             break         hits.append((lineno, idx + 1))         start = idx + len(_DOUBLE_HYPHEN)"]
+    N004["return hits"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 --> N004
-    N004 --> N005
-    N005 --> N006
 ```
 
 ## scan_file(...)
@@ -45,7 +50,7 @@ flowchart TD
     N003["if result.returncode != 0"]
     N004["print(...)"]
     N005["return None"]
-    N006["return [Path(p) for p in result.stdout.splitlines() if p and (not any((p.startswith(prefix) for prefix in _SKIP_PREFIXES)))]"]
+    N006["return [Path(p) for p in result.stdout.splitlines() if p and (not any((p.startswith(prefix) for prefix in _SKIP_PREFIXES))) and (Path(p).suffix not in _SKIP_EXTENSIONS)]"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 -->|"true"| N004
@@ -59,7 +64,7 @@ flowchart TD
 flowchart TD
     N001["_verify(...)"]
     N002["total = 0"]
-    N003["for path in sorted({p for p in paths if p.is_file()}):     for lineno, column in scan_file(path):         print(f'<str>{path}<str>{lineno}<str>{column}<str>', file=sys.stderr)         total += 1"]
+    N003["for path in sorted({p for p in paths if p.is_file()}):     for lineno, column in scan_file(path):         print(f'<str>{path}<str>{lineno}<str>{column}<str>{_DOUBLE_HYPHEN}<str>', file=sys.stderr)         total += 1"]
     N004["if total"]
     N005["print(...)"]
     N006["return 1"]

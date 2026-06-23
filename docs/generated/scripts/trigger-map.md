@@ -1,6 +1,6 @@
 # Script trigger reverse-map
 
-This file is generated from the repository launch surfaces by `python3 scripts/script_trigger_map.py all-doc`. Do not edit it by hand: content under `docs/generated/scripts/` is owned by the post-merge automation (refs #1540, #1543) -- update the source instead.
+This file is generated from the repository launch surfaces by `python3 scripts/script_trigger_map.py all-doc`. Do not edit it by hand: content under `docs/generated/scripts/` is owned by the post-merge automation (refs #1540, #1543); update the source instead.
 
 Detection is string-match based:
 
@@ -195,6 +195,7 @@ Detection is string-match based:
 | `scan_preflight_drift.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
 | `scan_provisioning_hook_serial.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
 | `scan_quality_standard_drift.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
+| `scan_repo_double_hyphen.py` | workflow | `verify-pr.yml (portable-pr-policy)` |
 | `scan_repo_em_dash.py` | workflow | `verify-pr.yml (portable-pr-policy)` |
 | `scan_retro_followup_drift.py` | workflow | `daily-maintenance.yml (scan)` |
 | `scan_secret_runbooks.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
