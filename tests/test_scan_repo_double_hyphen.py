@@ -2,9 +2,9 @@
 
 The ``scripts/`` directory is added to ``sys.path`` via the
 ``pythonpath`` key under ``[tool.pytest.ini_options]`` in
-``pyproject.toml``. Double-hyphen fixtures use the literal string
-``" -- "`` since it is plain ASCII and not flagged by the gate being
-tested; unlike the em-dash gate, this gate detects ASCII sequences.
+``pyproject.toml``. Double-hyphen fixtures use the ``_DH`` constant
+(defined by concatenation below) so this test file does not itself
+contain the space-hyphen-hyphen-space sequence and avoids self-flagging.
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ import scan_repo_double_hyphen as srdh
 pytestmark = pytest.mark.shard_default
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
-_DH = " -- "  # the prose separator pattern under test
+_DH = " " + "--" + " "  # space-hyphen-hyphen-space; defined by concatenation to avoid self-flagging
 
 
 # ---------------------------------------------------------------------------
@@ -44,17 +44,17 @@ class TestShouldSkipLine:
         )
 
     def test_markdown_table_row_skipped(self) -> None:
-        assert srdh._should_skip_line("| col1 | col2 -- col3 |")
+        assert srdh._should_skip_line(f"| col1 | col2{_DH}col3 |")
 
     def test_markdown_table_row_with_leading_spaces_skipped(self) -> None:
-        assert srdh._should_skip_line("  | indented | table -- row |")
+        assert srdh._should_skip_line(f"  | indented | table{_DH}row |")
 
     def test_empty_line_not_skipped(self) -> None:
         assert not srdh._should_skip_line("")
 
     def test_line_with_pipe_in_middle_not_skipped(self) -> None:
         # A pipe that is not the first non-whitespace char is not a table row
-        assert not srdh._should_skip_line("code | value -- reason")
+        assert not srdh._should_skip_line(f"code | value{_DH}reason")
 
 
 # ---------------------------------------------------------------------------
@@ -82,7 +82,7 @@ class TestScanText:
 
     def test_double_hyphen_on_second_line(self) -> None:
         text = f"clean line\nsecond{_DH}line\n"
-        # "second" is 6 chars, so " -- " starts at column 7
+        # "second" is 6 chars, so the pattern starts at column 7
         assert srdh.scan_text(text) == [(2, 7)]
 
     def test_multiple_occurrences_same_line(self) -> None:
@@ -404,13 +404,13 @@ class TestLiveRepoClean:
 
     This test exercises the actual ``git ls-files`` path against the real
     working tree, proving the repo is currently clean. It will fail whenever
-    a commit introduces ` -- ` into any tracked prose file, providing the
-    earliest possible feedback. Refs #1903.
+    a commit introduces a double-hyphen prose separator into any tracked file,
+    providing the earliest possible feedback. Refs #1903.
     """
 
     def test_repo_tree_has_no_prose_double_hyphen(self) -> None:
         result = srdh.main(["verify", "--git-tracked"])
         assert result == 0, (
-            "Prose ` -- ` separator found in tracked files. "
+            "Prose double-hyphen separator found in tracked files. "
             "Run: python3 scripts/scan_repo_double_hyphen.py verify --git-tracked"
         )

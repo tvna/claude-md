@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""Verify no prose ` -- ` separator appears in tracked repository files.
+"""Verify no prose double-hyphen separator appears in tracked repository files.
 
 Issue #1903 (follow-up to #1899/#1902, PR #1900): those changes eliminated
-` -- ` prose separators from ``.apm/instructions/master.instructions.md``
-and its compiled artifacts. The remaining tracked files still carry the
-pattern with no deterministic gate; an agent editing any of those files can
-reintroduce ` -- ` without a CI failure. This script is the re-entry gate.
+space-hyphen-hyphen-space prose separators from
+``.apm/instructions/master.instructions.md`` and its compiled artifacts.
+The remaining tracked files still carry the pattern with no deterministic
+gate; an agent editing any of those files can reintroduce it without a CI
+failure. This script is the re-entry gate.
 
 Invoked from ``verify-pr.yml`` (portable-pr-policy job) and registered in
 ``preflight_steps.py`` as::
@@ -16,16 +17,17 @@ The contract is:
 
 * ``--git-tracked`` enumerates all files known to git (``git ls-files``) and
   scans each one, excluding paths in ``_SKIP_PREFIXES`` and files whose
-  extension is in ``_SKIP_EXTENSIONS`` (DSL files where ` -- ` is syntax, not
-  prose). Files whose UTF-8 decoding fails are skipped with a notice (never a
-  failure; the scan is about the pattern, not about encoding).
+  extension is in ``_SKIP_EXTENSIONS`` (DSL files where the separator pattern
+  is syntax, not prose). Files whose UTF-8 decoding fails are skipped with a
+  notice (never a failure; the scan is about the pattern, not about encoding).
 * ``--path`` adds one explicit path; repeatable. May be combined with
   ``--git-tracked`` (paths are unioned and de-duplicated). Explicit ``--path``
   targets are not filtered by ``_SKIP_PREFIXES`` or ``_SKIP_EXTENSIONS``.
-* Every occurrence of ` -- ` is a violation unless the containing line is
-  excluded by ``_should_skip_line``:
+* Every occurrence of ``_DOUBLE_HYPHEN`` is a violation unless the containing
+  line is excluded by ``_should_skip_line``:
     - Lines containing ``# noqa:`` (ruff/flake8 suppression annotations carry
-      ` -- ` in their inline rationale by convention and MUST NOT be altered).
+      the separator in their inline rationale by convention and MUST NOT be
+      altered).
     - Lines containing ``# dh-ok`` (project-local gate-suppress marker for
       intentional non-prose uses such as git end-of-options syntax; use when
       ``# noqa:`` would trigger RUF100 because there is no Ruff violation).
@@ -41,7 +43,7 @@ The contract is:
 Excluded path prefixes (``_SKIP_PREFIXES``):
     ``.agents/skills/``: files expanded from the APM upstream dependency
         (``obra/superpowers`` pinned in ``apm.yml``). These files must not be
-        edited directly; any ` -- ` content there originates upstream and is
+        edited directly; any such content there originates upstream and is
         outside this repo's fix scope.
     ``docs/archive/``: frozen historical documents; not maintained by this
         repo's change process.
@@ -50,19 +52,19 @@ Excluded path prefixes (``_SKIP_PREFIXES``):
 
 Excluded file extensions (``_SKIP_EXTENSIONS``):
     ``.yml``, ``.yaml``: workflow and config files where ``--`` is valid YAML
-        comment or flag syntax (e.g. ``actionlint -- shellcheck``).
+        comment or flag syntax (e.g. ``actionlint --shellcheck``).
     ``.sh``: shell scripts where ``--`` terminates option processing.
     ``.json``, ``.toml``, ``.lock``, ``.sql``: structured data formats where
-        ` -- ` could appear in values outside this gate's prose scope.
+        the pattern could appear in values outside this gate's prose scope.
 
 Contract:
     Inputs: the ``verify`` subcommand plus ``--git-tracked`` and/or one or
         more ``--path`` arguments. No stdin, no environment variables.
     Outputs: ``::error file=<path>,line=<n>,col=<c>::`` annotation on stderr
-        for each ` -- ` hit (excluding skipped lines), plus an ``OK:`` /
+        for each hit (excluding skipped lines), plus an ``OK:`` /
         ``FAIL:`` summary line; exit 0 when every scanned file is clean,
         1 on any violation, 2 when no scan targets are supplied.
-    Failure policy: fails loud per CLAUDE.md section 4; a ` -- ` prose
+    Failure policy: fails loud per CLAUDE.md section 4; a double-hyphen prose
         separator or a ``git ls-files`` failure exits non-zero rather than
         passing silently.
 
@@ -76,7 +78,9 @@ import subprocess
 import sys
 from pathlib import Path
 
-_DOUBLE_HYPHEN = " -- "
+# Defined by concatenation so this source file does not contain the literal
+# space-hyphen-hyphen-space sequence and does not flag itself.
+_DOUBLE_HYPHEN = " " + "--" + " "
 
 _SKIP_PREFIXES = (
     ".agents/skills/",
@@ -96,17 +100,17 @@ _SKIP_EXTENSIONS = {
 
 
 def _should_skip_line(line: str) -> bool:
-    """Return True when *line* must not be scanned for ` -- `.
+    """Return True when *line* must not be scanned for the double-hyphen pattern.
 
     Excluded line classes:
     - Lines containing ``# noqa:`` (ruff/flake8 inline suppression comments
-      conventionally carry ` -- ` in their rationale; altering them would
-      break the suppression syntax or lose context).
+      conventionally carry the separator in their rationale; altering them
+      would break the suppression syntax or lose context).
     - Lines containing ``# dh-ok`` (project-local gate-suppress marker for
       intentional non-prose uses such as git end-of-options syntax; use when
       ``# noqa:`` would trigger RUF100 because there is no Ruff violation).
     - Markdown table rows: lines whose first non-whitespace character is ``|``
-      (the ` -- ` in a table row is structural column-alignment syntax, not
+      (the pattern in a table row is structural column-alignment syntax, not
       a prose separator).
     """
     if "# noqa:" in line:
@@ -117,7 +121,7 @@ def _should_skip_line(line: str) -> bool:
 
 
 def scan_text(text: str) -> list[tuple[int, int]]:
-    """Return ``(line, column)`` for every ` -- ` in *text*, skipping excluded lines.
+    """Return ``(line, column)`` for every double-hyphen separator in *text*.
 
     Line and column numbers are 1-based to match GitHub Actions
     ``::error file=`` annotations and an editor's cursor.
@@ -140,7 +144,7 @@ def scan_text(text: str) -> list[tuple[int, int]]:
 
 
 def scan_file(path: Path) -> list[tuple[int, int]]:
-    """Return ``(line, column)`` for every ` -- ` in *path*.
+    """Return ``(line, column)`` for every double-hyphen separator in *path*.
 
     Returns an empty list and prints a notice when the file cannot be decoded
     as UTF-8 (binary files) or when the path is a directory.
@@ -187,7 +191,7 @@ def _verify(paths: list[Path]) -> int:
         for lineno, column in scan_file(path):
             print(
                 f"::error file={path},line={lineno},col={column}::"
-                "prose ` -- ` separator found. Replace with ASCII punctuation"
+                f"prose{_DOUBLE_HYPHEN}separator found. Replace with ASCII punctuation"
                 " (semicolon, comma, or parentheses). Refs #1903.",
                 file=sys.stderr,
             )
@@ -198,7 +202,7 @@ def _verify(paths: list[Path]) -> int:
             file=sys.stderr,
         )
         return 1
-    print("OK: no prose ` -- ` separator found in scanned files.")
+    print(f"OK: no prose{_DOUBLE_HYPHEN}separator found in scanned files.")
     return 0
 
 
@@ -224,7 +228,7 @@ def main(argv: list[str] | None = None) -> int:
 
     p_verify = sub.add_parser(
         "verify",
-        help="Scan for prose ` -- ` separator in tracked repository files.",
+        help="Scan for prose double-hyphen separator in tracked repository files.",
     )
     p_verify.add_argument(
         "--git-tracked",
