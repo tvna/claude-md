@@ -40,7 +40,7 @@ Each documented prohibition falls into one of three classes:
 
 | Documented prohibition (section) | Enforcing gate | Wiring |
 |---|---|---|
-| Keep confirmations/dry-runs for irreversible, outward-facing operations -- merge is outward and effectively irreversible (S4) | `scripts/gate_merge_safety.py` | PreToolUse `mcp__github__merge_pull_request` (claude + codex) |
+| Keep confirmations/dry-runs for irreversible, outward-facing operations; merge is outward and effectively irreversible (S4) | `scripts/gate_merge_safety.py` | PreToolUse `mcp__github__merge_pull_request` (claude + codex) |
 
 `gate_merge_safety.py` allows the merge only when GitHub reports the PR as
 `mergeable == true` and `mergeable_state == "clean"`; every other state, and

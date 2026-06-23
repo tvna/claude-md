@@ -26,7 +26,7 @@ does not open any issue.
 
 | Trigger | Cron | Effect |
 |---|---|---|
-| `schedule` | `0 20 * * 0` (UTC) -- Monday 05:00 JST | Always assembles the report; uploads the artifact and appends the step summary. No issue comment (the input is unset on cron). |
+| `schedule` | `0 20 * * 0` (UTC); Monday 05:00 JST | Always assembles the report; uploads the artifact and appends the step summary. No issue comment (the input is unset on cron). |
 | `workflow_dispatch` | manual | Select `task=measure-timings`. Same artifact + summary. When `measure_issue_number` is supplied, the workflow additionally posts the report as a comment on that issue. When `measure_cutoff` is supplied (a UTC `YYYY-MM-DD`), the report switches to compare mode: pre-cutoff (baseline) and post-cutoff (post-change) tables side-by-side with a delta p50 column. |
 
 The timing report now runs with the rest of weekly maintenance at JST Monday

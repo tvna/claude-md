@@ -48,7 +48,7 @@ rolling-comment path never opens an issue.
 
 | Trigger | Cron | Effect |
 |---|---|---|
-| `schedule` | `0 20 * * 0` (UTC) -- Mon 05:00 JST | Always assembles the report and updates the rolling comment on #178 (the dry-run field is forced to `false`). |
+| `schedule` | `0 20 * * 0` (UTC); Mon 05:00 JST | Always assembles the report and updates the rolling comment on #178 (the dry-run field is forced to `false`). |
 | `workflow_dispatch` | manual | Select `task=security-control-drift`; the `security_control_dry_run` input defaults to `true` (no comment) so an operator can preview the table in the step summary before publishing. |
 | `push` (on `main`; control-family SoT paths) | event-driven (#1390) | A change to `.github/rulesets/**`, `.github/labels.json`, `.apm/instructions/**`, `pyproject.toml`, `CLAUDE.md`, or `AGENTS.md` runs this job immediately (dry-run forced to `false`), so drift is caught near the change instead of up to a week later. Every other weekly job is skipped on push. |
 
@@ -61,7 +61,7 @@ JST Monday 05:00 trigger to reduce scheduled workflow sprawl.
 |---|---|---|
 | `rulesets` | `scripts/ruleset_drift.py detect` | Requires `RULESETS_PAT` (read-only PAT, same secret as the `ruleset-drift` job). Outputs `drift_count` / `unknown_count`. |
 | `labels` | `scripts/labels_apply.py plan` | Uses `GITHUB_TOKEN` (metadata read suffices). Summary file is parsed for `plan-only` / `report-only` rows. |
-| `apm-instructions` | `apm compile` + `git diff --exit-code -- CLAUDE.md AGENTS.md` | Compile is pinned via `APM_CLI_VERSION` env (`0.12.1`) and `uv run --with apm-cli==<pin> --exclude-newer "14 days"` to suppress transient drift, mirroring `verify-pr.yml`. |
+| `apm-instructions` | `apm compile` + `git diff --exit-code CLAUDE.md AGENTS.md` | Compile is pinned via `APM_CLI_VERSION` env (`0.12.1`) and `uv run --with apm-cli==<pin> --exclude-newer "14 days"` to suppress transient drift, mirroring `verify-pr.yml`. |
 | `uv-pin-literal` | `scripts/uv_pin.py drift` | Asserts the pin literal lives only in `pyproject.toml`. |
 | `uv-pin-staleness` | `scripts/uv_pin.py stale` | Informational; emits `::warning::` when the pin trails upstream latest. |
 | `owasp-asi-mapping` | `scripts/owasp_asi_mapping.py verify` | Tree-only completeness check that `docs/prd/security-control-inventory.md` carries an ASI01-ASI10 status row per item (peer axis to the ATT&CK mapping). Authoritative enforcement is the PR-time `lint-scripts-static` gate; this weekly row is a redundant visibility signal, so a drift here is unreachable on `main`. |
