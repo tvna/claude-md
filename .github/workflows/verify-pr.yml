@@ -214,7 +214,8 @@ jobs:
         run: |
           python3 scripts/scan_design_philosophy_drift.py verify \
             --master .apm/instructions/master.instructions.md \
-            --doc docs/prd/agent-rules-design-philosophy.md
+            --doc docs/prd/agent-rules-design-philosophy.md \
+            --glossary docs/standards/ubiquitous-language.md
 
   verify-dependabot-labels:
     name: "Verify dependabot labels / verify"
