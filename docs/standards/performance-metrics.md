@@ -8,7 +8,7 @@ No numbers, no harness code, and no CI wiring land with this document. Phase 3 (
 
 | File / branch | Target | Purpose |
 |---|---|---|
-| `docs/standards/performance-metrics.md` *(this file)* | -- | Contract: metric set, harness shape, result record schema, branch layout |
+| `docs/standards/performance-metrics.md` *(this file)* | (none) | Contract: metric set, harness shape, result record schema, branch layout |
 | `benchmarks/spec/v<N>/` on `main` | committed alongside the source | Version-pinned benchmark task spec (created by Phase 3, [#62](https://github.com/tvna/claude-md/issues/62)) |
 | `benchmarks` orphan branch | `origin/benchmarks` | Long-lived store of immutable result records, keyed by compiled-source SHA |
 
@@ -28,7 +28,7 @@ Token count of `CLAUDE.md` and `AGENTS.md` as produced by `apm compile` (`apm-cl
 Pass/fail tally over the version-pinned task spec at `benchmarks/spec/v<N>/`, run with a specific model id against the compiled instructions at a specific source SHA.
 
 - **Unit**: `tasks_passed / tasks_total`, a float in `[0, 1]`.
-- **Variance**: this metric is non-deterministic by construction (see *Reproducibility contract* below). A single number is a point estimate; baselines must aggregate ≥3 runs.
+- **Variance**: this metric is non-deterministic by construction (see *Reproducibility contract* below). A single number is a point estimate; baselines must aggregate >=3 runs.
 
 ## Harness
 
@@ -36,7 +36,7 @@ Pass/fail tally over the version-pinned task spec at `benchmarks/spec/v<N>/`, ru
 
 A local script invoked via `uv run`, matching the toolchain already pinned for `apm compile`. Rationale: simplest reproducible path; the maintainer can re-run on any Phase-2-or-later SHA without spinning up CI; `uv.lock` already locks the Python environment.
 
-CI integration is **deferred to Phase ≥5** (e.g. a workflow that runs the harness on tagged commits and pushes records to the `benchmarks` branch). Rationale: until Phase 3 produces a few baselines and we know the variance band of metric (b), gating CI on a noisy signal would create false-positive churn.
+CI integration is **deferred to Phase >=5** (e.g. a workflow that runs the harness on tagged commits and pushes records to the `benchmarks` branch). Rationale: until Phase 3 produces a few baselines and we know the variance band of metric (b), gating CI on a noisy signal would create false-positive churn.
 
 ### What it ingests
 
@@ -83,7 +83,7 @@ Phase 3's `docs/performance-baseline.md` quotes these fields by name; renames re
 
 - **Metric (a)**: byte-identical reproducibility. Same `compiled_source_sha` + same `tokeniser` MUST yield the same integers. Any divergence is a bug in the harness or the tokeniser pin.
 - **Metric (b)**: non-deterministic. The contract is:
-  - Report the **median** of N≥3 runs, with `min`/`max` also recorded.
+  - Report the **median** of N>=3 runs, with `min`/`max` also recorded.
   - Pin `model_id` (including version suffix), `temperature`, and `seed` where the model exposes it.
   - Pin `benchmark_spec_version` (the directory name under `benchmarks/spec/`).
   - Document the observed variance band in `docs/performance-baseline.md` (Phase 3); single-run numbers are point estimates, not baselines.
@@ -116,7 +116,7 @@ benchmarks branch (orphan)
 ### Append-only update procedure
 
 - Each harness run produces a new timestamped JSON file. Records are **immutable**; re-running the same `(compiled_source_sha, benchmark_spec_version)` pair adds a new timestamped file rather than overwriting an existing one.
-- Pushes to the `benchmarks` branch are normal commits (no force-push). Once a CI workflow exists (Phase ≥5), the workflow pushes; until then, the maintainer pushes locally.
+- Pushes to the `benchmarks` branch are normal commits (no force-push). Once a CI workflow exists (Phase >=5), the workflow pushes; until then, the maintainer pushes locally.
 
 ### Why a dedicated orphan branch
 
@@ -160,7 +160,7 @@ Explicitly deferred to later phases / sub-issues:
 - Acquiring baseline numbers (Phase 3, [#62](https://github.com/tvna/claude-md/issues/62)).
 - Implementing the harness script and the `benchmarks/spec/v0/` content (Phase 3, [#62](https://github.com/tvna/claude-md/issues/62)).
 - A ruleset / branch protection entry for the `benchmarks` branch (separate sub-issue once Phase 3 lands and the access pattern is concrete).
-- Wiring the harness into CI as a gate (Phase ≥5).
+- Wiring the harness into CI as a gate (Phase >=5).
 - Redundancy / section-overlap scoring as a third metric (v2).
 - Downstream submodule consumer measurement (v2; see Open Q2 above).
 - Changing the compiled `CLAUDE.md` / `AGENTS.md` content.
