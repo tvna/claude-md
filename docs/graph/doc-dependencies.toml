@@ -90,10 +90,16 @@ type = "prd"
 description = "Design rationale for the document dependency graph governance gate."
 
 [[nodes]]
+id = "ubiquitous_language"
+path = "docs/standards/ubiquitous-language.md"
+type = "standard"
+description = "Single source of truth for repository-wide term definitions; supersedes section 2.5 of design_philosophy_prd."
+
+[[nodes]]
 id = "scan_design_philosophy_drift"
 path = "scripts/scan_design_philosophy_drift.py"
 type = "harness_script"
-description = "Enforces label parity and glossary presence between master and philosophy PRD."
+description = "Enforces label parity and glossary presence between master, philosophy PRD, and ubiquitous-language doc."
 
 [[nodes]]
 id = "preflight_non_ascii"
@@ -199,6 +205,27 @@ note = "P3 deterministic-gate requirement motivates this graph system."
 # Advisory edges: policy documents informing their enforcing scripts.
 # When the policy changes, the enforcing script should be reviewed, but
 # the enforcing script changing does not require the policy to change.
+[[edges]]
+from = "master_instructions"
+to = "ubiquitous_language"
+type = "governs"
+severity = "blocking"
+note = "Terms used in master principles must be defined in ubiquitous-language.md."
+
+[[edges]]
+from = "design_philosophy_prd"
+to = "ubiquitous_language"
+type = "derives_from"
+severity = "blocking"
+note = "section 2.5 now points to ubiquitous_language as SSoT; co-change required when either changes."
+
+[[edges]]
+from = "ubiquitous_language"
+to = "scan_design_philosophy_drift"
+type = "enforced_by"
+severity = "advisory"
+note = "scan_design_philosophy_drift verifies REQUIRED_GLOSSARY_ENTRIES are present in ubiquitous-language.md."
+
 [[edges]]
 from = "design_philosophy_prd"
 to = "scan_design_philosophy_drift"
