@@ -42,7 +42,7 @@ pie showData
 | 1910 | open | untriaged | chore(auto-retro): review PR #1908 repair loops |
 | 1905 | open | untriaged | chore(auto-retro): review PR #1900 repair loops |
 | 1894 | open | untriaged | chore(auto-retro): review PR #1891 repair loops |
-| 1887 | open | untriaged | chore(auto-retro): review PR #1887 repair loops |
+| 1887 | open | untriaged | chore(auto-retro): review PR #1883 repair loops |
 | 1885 | closed | untriaged | chore(auto-retro): review PR #1883 repair loops |
 | 1879 | open | untriaged | chore(auto-retro): review PR #1877 repair loops |
 | 1865 | closed | untriaged | chore(auto-retro): review PR #1864 repair loops |
