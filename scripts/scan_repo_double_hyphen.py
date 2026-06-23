@@ -31,10 +31,9 @@ The contract is:
     - Lines containing ``# dh-ok`` (project-local gate-suppress marker for
       intentional non-prose uses such as git end-of-options syntax; use when
       ``# noqa:`` would trigger RUF100 because there is no Ruff violation).
-    - Markdown table rows: lines whose first non-whitespace character is ``|``.
   There is no other allowlist: use ASCII punctuation (semicolon, comma, or
   parentheses) as the substitute in every prose context this repository uses
-  (comments, docstrings, Markdown prose).
+  (comments, docstrings, Markdown prose, including table cells).
 * Exit 0 when every scanned file is clean; exit 1 on any violation; exit 2
   when neither ``--git-tracked`` nor ``--path`` is supplied. Each hit emits
   ``::error file=<path>,line=<n>,col=<c>::...`` on stderr so the GitHub
@@ -109,15 +108,8 @@ def _should_skip_line(line: str) -> bool:
     - Lines containing ``# dh-ok`` (project-local gate-suppress marker for
       intentional non-prose uses such as git end-of-options syntax; use when
       ``# noqa:`` would trigger RUF100 because there is no Ruff violation).
-    - Markdown table rows: lines whose first non-whitespace character is ``|``
-      (the pattern in a table row is structural column-alignment syntax, not
-      a prose separator).
     """
-    if "# noqa:" in line:
-        return True
-    if "# dh-ok" in line:
-        return True
-    return bool(line.lstrip().startswith("|"))
+    return "# noqa:" in line or "# dh-ok" in line
 
 
 def scan_text(text: str) -> list[tuple[int, int]]:

@@ -43,17 +43,16 @@ class TestShouldSkipLine:
             'assert func("git push origin -- feat/x") == "feat/x"  # dh-ok: git end-of-options'
         )
 
-    def test_markdown_table_row_skipped(self) -> None:
-        assert srdh._should_skip_line(f"| col1 | col2{_DH}col3 |")
+    def test_markdown_table_row_not_skipped(self) -> None:
+        assert not srdh._should_skip_line(f"| col1 | col2{_DH}col3 |")
 
-    def test_markdown_table_row_with_leading_spaces_skipped(self) -> None:
-        assert srdh._should_skip_line(f"  | indented | table{_DH}row |")
+    def test_markdown_table_row_with_leading_spaces_not_skipped(self) -> None:
+        assert not srdh._should_skip_line(f"  | indented | table{_DH}row |")
 
     def test_empty_line_not_skipped(self) -> None:
         assert not srdh._should_skip_line("")
 
     def test_line_with_pipe_in_middle_not_skipped(self) -> None:
-        # A pipe that is not the first non-whitespace char is not a table row
         assert not srdh._should_skip_line(f"code | value{_DH}reason")
 
 
@@ -93,18 +92,18 @@ class TestScanText:
         text = f"cmd  # noqa: S603{_DH}reason\n"
         assert srdh.scan_text(text) == []
 
-    def test_markdown_table_row_skipped(self) -> None:
+    def test_markdown_table_row_flagged(self) -> None:
         text = f"| cell1{_DH}cell2 |\n"
-        assert srdh.scan_text(text) == []
+        assert srdh.scan_text(text) == [(1, 8)]
 
-    def test_mixed_lines_only_prose_flagged(self) -> None:
+    def test_mixed_lines_prose_and_table_flagged(self) -> None:
         text = (
             f"prose{_DH}word\n"
             f"| table{_DH}row |\n"
             f"cmd  # noqa: S603{_DH}reason\n"
             "clean line\n"
         )
-        assert srdh.scan_text(text) == [(1, 6)]
+        assert srdh.scan_text(text) == [(1, 6), (2, 8)]
 
     def test_newline_advances_line_counter(self) -> None:
         lines = ["a\n", "b\n", f"c{_DH}d\n"]
@@ -336,11 +335,11 @@ class TestVerify:
         result = srdh._verify([p])
         assert result == 0
 
-    def test_table_row_not_counted(self, tmp_path: Path) -> None:
+    def test_table_row_is_counted(self, tmp_path: Path) -> None:
         p = tmp_path / "table.md"
         p.write_text(f"| col1{_DH}col2 |\n", encoding="utf-8")
         result = srdh._verify([p])
-        assert result == 0
+        assert result == 1
 
 
 class TestCmdVerify:
