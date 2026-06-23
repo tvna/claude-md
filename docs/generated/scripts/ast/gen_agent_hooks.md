@@ -1,6 +1,6 @@
 # AST graph: scripts/gen_agent_hooks.py
 
-This file is generated from `scripts/gen_agent_hooks.py` by `python3 scripts/script_ast_graph.py all-doc`. Do not edit it by hand: content under `docs/generated/scripts/` is owned by the post-merge automation (refs #1540) -- update the source script instead.
+This file is generated from `scripts/gen_agent_hooks.py` by `python3 scripts/script_ast_graph.py all-doc`. Do not edit it by hand: content under `docs/generated/scripts/` is owned by the post-merge automation (refs #1540); update the source script instead.
 
 ## command_needs_wrap(...)
 
