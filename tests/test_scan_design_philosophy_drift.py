@@ -589,15 +589,21 @@ class TestVerifyGlossary:
     ) -> None:
         master = tmp_path / "master.md"
         doc = tmp_path / "doc.md"
+        glossary = tmp_path / "ubiquitous-language.md"
         _write(master, _master(6))
+        _write(doc, _doc(matrix_rows=6, wording_count=6, glossary=[]))
         partial = [
             e for e in sdpd.REQUIRED_GLOSSARY_ENTRIES if e != "defense-in-depth"
         ]
         _write(
-            doc,
-            _doc(matrix_rows=6, wording_count=6, glossary=partial),
+            glossary,
+            "# Glossary\n\n"
+            + "\n".join(f"- **{t}**: definition." for t in partial)
+            + "\n",
         )
-        rc = sdpd.main(["verify", "--master", str(master), "--doc", str(doc)])
+        rc = sdpd.main(
+            ["verify", "--master", str(master), "--doc", str(doc), "--glossary", str(glossary)]
+        )
         assert rc == 1
         err = capsys.readouterr().err
         assert "defense-in-depth" in err
@@ -608,9 +614,13 @@ class TestVerifyGlossary:
     ) -> None:
         master = tmp_path / "master.md"
         doc = tmp_path / "doc.md"
+        glossary = tmp_path / "ubiquitous-language.md"
         _write(master, _master(6))
         _write(doc, _doc(matrix_rows=6, wording_count=6, glossary=[]))
-        rc = sdpd.main(["verify", "--master", str(master), "--doc", str(doc)])
+        _write(glossary, "# Glossary\n\nNo entries here.\n")
+        rc = sdpd.main(
+            ["verify", "--master", str(master), "--doc", str(doc), "--glossary", str(glossary)]
+        )
         assert rc == 1
         err = capsys.readouterr().err
         for term in sdpd.REQUIRED_GLOSSARY_ENTRIES:

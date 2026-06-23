@@ -662,11 +662,12 @@ def main(argv: list[str] | None = None) -> int:
     )
     p_verify.add_argument(
         "--glossary",
+        default=GLOSSARY_PATH,
         help=(
-            "Path to the standalone ubiquitous-language doc "
-            "(default: docs/standards/ubiquitous-language.md). "
-            "When supplied, the glossary check reads entries from this file "
-            "instead of from section 2.5 of --doc."
+            "Path to the standalone ubiquitous-language doc. "
+            f"Defaults to {GLOSSARY_PATH}. "
+            "The glossary check reads entries from this file; "
+            "pass an explicit path to override."
         ),
     )
     p_verify.set_defaults(func=_cmd_verify)
