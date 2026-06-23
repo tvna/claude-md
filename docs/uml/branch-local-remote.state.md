@@ -110,8 +110,8 @@ stateDiagram-v2
 
 `[fact]` Merge readiness conditions observed in `.github/rulesets/main.json`: (a)
 `require_code_owner_review: true` (when a PR touches a CODEOWNERS-protected path
-(`.github/rulesets/**`, `docs/graph/**`, `.github/CODEOWNERS`, `docs/runbooks/rulesets.md`),
-@tvna approval is required before merge); (b) `required_review_thread_resolution: true`
+(`.github/rulesets/**`, `docs/graph/**`, `.github/CODEOWNERS`, `docs/runbooks/rulesets.md`,
+`.github/workflows/apply-rulesets.yml`), @tvna approval is required before merge); (b) `required_review_thread_resolution: true`
 (all review threads must be resolved); (c) `dismiss_stale_reviews_on_push: true` (a
 commit pushed after approval dismisses that approval immediately); (d)
 `strict_required_status_checks_policy: true` (the branch must be up to date with main

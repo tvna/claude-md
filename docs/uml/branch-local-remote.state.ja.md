@@ -107,8 +107,8 @@ stateDiagram-v2
 
 `[fact]` マージ合流条件（`.github/rulesets/main.json` 実測）: (a)
 `require_code_owner_review: true` ---- CODEOWNERS 保護パス（`.github/rulesets/**`、
-`docs/graph/**`、`.github/CODEOWNERS`、`docs/runbooks/rulesets.md`）を変更する PR は
-@tvna 承認が必須; (b) `required_review_thread_resolution: true` ---- 全レビュースレッド
+`docs/graph/**`、`.github/CODEOWNERS`、`docs/runbooks/rulesets.md`、
+`.github/workflows/apply-rulesets.yml`）を変更する PR は @tvna 承認が必須; (b) `required_review_thread_resolution: true` ---- 全レビュースレッド
 の解決が必須; (c) `dismiss_stale_reviews_on_push: true` ---- 承認後の push で既存
 承認が即時失効; (d) `strict_required_status_checks_policy: true` ---- マージ試行時点で
 ブランチが main と同期している必要（CI 実行時点ではなく）; (e)
