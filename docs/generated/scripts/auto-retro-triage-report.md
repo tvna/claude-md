@@ -33,7 +33,7 @@ pie showData
 ## False-positive rate trend
 
 - All-time: 0.73 (n=11 triaged)
-- Last 20 retros: 0.00 (n=0 triaged) -- n/a
+- Last 20 retros: 0.00 (n=0 triaged); n/a
 
 ## Recent retros
 
