@@ -229,6 +229,8 @@ STEPS: tuple[Step, ...] = (
             ".apm/instructions/master.instructions.md",
             "--doc",
             "docs/prd/agent-rules-design-philosophy.md",
+            "--glossary",
+            "docs/standards/ubiquitous-language.md",
         ),
     ),
     Step(
