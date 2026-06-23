@@ -66,5 +66,5 @@ flowchart LR
 | `-->\|derives from\|` solid | `derives_from` | blocking |
 | `-.->` dashed | `enforced_by`, `implements`, `references` | advisory |
 
-Blocking edges: co-change required or waived (`doc-graph-waiver: NODE_ID -- reason`).
+Blocking edges: co-change required or waived (`doc-graph-waiver: NODE_ID; reason`).
 Advisory edges: informational note only.
