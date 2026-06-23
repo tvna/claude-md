@@ -5,7 +5,7 @@ Each output file is named ``<workflow-stem>-if-branches.md`` and placed in
 
 CLI
 ---
-  # Write Markdown diagrams -- omit paths to process all .github/workflows/*.yml
+  # Write Markdown diagrams; omit paths to process all .github/workflows/*.yml
   python3 scripts/workflow_diagram.py diagram-doc \\
       [<workflow.yml> ...] [--output-dir docs/generated/workflows]
 

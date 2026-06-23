@@ -175,7 +175,7 @@ class TestSlowPathMismatch:
 
 class TestFailureModes:
     def test_unreadable_pin_exits_zero_with_warning(self, tmp_path: Path) -> None:
-        """A broken pyproject.toml must NOT wedge the session -- fail open
+        """A broken pyproject.toml must NOT wedge the session; fail open
         with a stderr notice, exit 0. Same posture as other SessionStart
         hooks (refs scripts/check_session_branch.py).
         """

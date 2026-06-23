@@ -9,7 +9,7 @@ Master repository for personally tuned agent instructions, compiled with [`micro
 ## Purpose
 
 - Centralize the principles I use with AI coding agents so that every project stays consistent.
-- Keep only **universal, individual-level guidelines** here -- never project-specific rules.
+- Keep only **universal, individual-level guidelines** here; never project-specific rules.
 - Use APM as the source-of-truth harness: edit `.apm/instructions/`, then compile `CLAUDE.md` and `AGENTS.md`.
 - Each project's local agent instructions reference this master and only add their own delta.
 
@@ -46,7 +46,7 @@ python3 scripts/verify_apm_checksums.py verify
 
 ## Using This From Another Project
 
-Import the compiled `CLAUDE.md` / `AGENTS.md` as **committed real files** -- not a
+Import the compiled `CLAUDE.md` / `AGENTS.md` as **committed real files**; not a
 submodule and not a symlink. A submodule is stored only as a commit pointer, so a
 fresh `git clone` (such as a Claude Code on the web session) leaves it empty and a
 symlinked `CLAUDE.md` becomes a broken link that silently loads nothing. The

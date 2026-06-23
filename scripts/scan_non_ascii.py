@@ -167,7 +167,7 @@ def classify_action(
 
     Exception 2 (issues #480, #504, #620): when *login* is in
     :data:`_NON_ASCII_SKIP_LOGINS` (e.g. ``codecov``, ``devin-ai-integration[bot]``),
-    the scan returns ``none`` immediately -- no label, no comment.
+    the scan returns ``none`` immediately; no label, no comment.
     These bots post generated content whose non-ASCII is not a security concern.
     """
     if not has_non_ascii:
@@ -290,7 +290,7 @@ def build_summary(
 
 
 # ---------------------------------------------------------------------------
-# Side-effecting boundary -- mocked in tests
+# Side-effecting boundary; mocked in tests
 # ---------------------------------------------------------------------------
 
 
@@ -392,7 +392,7 @@ def block_external(repo: str, number: int, kind: str) -> str:
             {
                 "event": "REQUEST_CHANGES",
                 "body": (
-                    "Blocked by .github/workflows/issue-pr-triage.yml -- "
+                    "Blocked by .github/workflows/issue-pr-triage.yml; "
                     "non-ASCII content from external contributor. See the "
                     "advisory comment above; re-submit with ASCII-only content."
                 ),

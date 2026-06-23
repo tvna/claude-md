@@ -46,7 +46,7 @@ def test_wrap_command_is_idempotent() -> None:
 
 
 def test_wrap_command_leaves_non_script_commands_untouched() -> None:
-    # PATH binary -- no repo path to resolve.
+    # PATH binary; no repo path to resolve.
     assert gen.wrap_command("rtk hook claude") == "rtk hook claude"
     # APM/superpowers passthrough is already location-independent.
     plugin = '"${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd" session-start'

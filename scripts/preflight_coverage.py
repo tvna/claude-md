@@ -13,7 +13,7 @@ Contract:
 - Inputs: ``--base-ref`` (default ``origin/main``, the git ref to diff
   against for changed scripts); ``--floor`` (default 90.0, per-file
   coverage percentage); ``--coverage-json`` (default None, path to an
-  existing report -- skips the pytest run when supplied).
+  existing report; skips the pytest run when supplied).
 - Outputs: ``OK: <path> <pct>%`` lines on stdout for passing files;
   ``::error file=<path>::per-file coverage: <reason>`` annotations on
   stderr for each failing file; exit 0 when all changed files meet the

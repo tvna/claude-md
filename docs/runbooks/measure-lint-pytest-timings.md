@@ -59,10 +59,10 @@ column.
 3. The report's per-job and per-step tables become
    `pre count | pre p50 | post count | post p50 | delta p50`. The delta
    column carries one of:
-   - `+X.Y%` / `-X.Y%` -- both windows have samples; signed change.
-   - `new` -- no pre-cutoff sample (the row appeared after the change).
-   - `gone` -- no post-cutoff sample (the row existed only before).
-   - `+inf` -- pre p50 was zero but post samples exist (edge case).
+   - `+X.Y%` / `-X.Y%`; both windows have samples; signed change.
+   - `new`; no pre-cutoff sample (the row appeared after the change).
+   - `gone`; no post-cutoff sample (the row existed only before).
+   - `+inf`; pre p50 was zero but post samples exist (edge case).
 
 The single-window mode (no cutoff) remains the cron default, so the
 scheduled weekly report is unchanged.
@@ -117,8 +117,8 @@ Both legends are intentionally ASCII so the comment passes
 
 ## Permissions
 
-- `contents: read` -- checkout only.
-- `issues: write` -- only used by the optional comment step on
+- `contents: read`; checkout only.
+- `issues: write`; only used by the optional comment step on
   `workflow_dispatch`.
 
 No fine-grained PAT or app installation is required. The GitHub-managed

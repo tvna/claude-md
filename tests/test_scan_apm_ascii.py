@@ -37,7 +37,7 @@ _ARTIFACTS = (
 
 class TestScanText:
     def test_pure_ascii_is_clean(self) -> None:
-        text = "Open a GitHub issue before any branch -- no exceptions.\n"
+        text = "Open a GitHub issue before any branch; no exceptions.\n"
         assert saa.scan_text(text) == []
 
     def test_empty_text_is_clean(self) -> None:
@@ -80,7 +80,7 @@ class TestScanText:
 class TestScanFile:
     def test_clean_file(self, tmp_path: Path) -> None:
         target = tmp_path / "clean.md"
-        target.write_text(f"ASCII only -- and a {_SECTION} sign.\n", encoding="utf-8")
+        target.write_text(f"ASCII only; and a {_SECTION} sign.\n", encoding="utf-8")
         assert saa.scan_file(target) == []
 
     def test_dirty_file(self, tmp_path: Path) -> None:

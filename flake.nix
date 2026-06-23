@@ -34,7 +34,7 @@
           # into the nix devShell / sharedPackages. flake.nix stays the single
           # pin source of truth (scripts/flake_pin.py reads these via the same
           # contract as rtk/waza), but the let-bindings below are intentionally
-          # unused by any derivation -- they exist so the pin lives in exactly
+          # unused by any derivation; they exist so the pin lives in exactly
           # one place and scan_flake_pin_drift.py can guard the checksum. They
           # run alongside the existing scan_workflow_*/scan_markdown_links/
           # scan_secrets gates during the effectiveness-measurement phase; no
@@ -148,7 +148,7 @@
           # zizmor (zizmorcore/zizmor) ships per-target release tarballs, each
           # unpacking to a single bare ``zizmor`` binary. Only a gnu linux build
           # is published per arch, so the asset carries no shared target suffix
-          # to template -- the full filename is stored verbatim (rtk shape). The
+          # to template; the full filename is stored verbatim (rtk shape). The
           # filename embeds no version, so a bump only rewrites version + hashes.
           zizmorNative = {
             aarch64-linux = {
@@ -162,7 +162,7 @@
           }.${system};
           # lychee (lycheeverse/lychee) publishes musl-static per-target tarballs
           # that unpack to ``lychee-<target>/lychee`` (a nested dir, unlike rtk's
-          # bare layout -- the installer locates the binary with ``find``). The
+          # bare layout; the installer locates the binary with ``find``). The
           # release tag is ``lychee-v<version>`` (not ``v<version>``); the
           # flake_pin.py url_template encodes that prefix. Asset embeds no
           # version.
@@ -178,7 +178,7 @@
           }.${system};
           # betterleaks (betterleaks/betterleaks) ships per-arch Go-static
           # tarballs holding a bare ``betterleaks`` binary (plus LICENSE/README).
-          # The asset filenames EMBED the version, so -- like actionlintNative --
+          # The asset filenames EMBED the version, so; like actionlintNative --
           # they MUST stay STATIC strings (no ``${betterleaksVersion}``): the
           # flake_pin.py _native_block regex is brace-naive and a ``}`` inside an
           # interpolation would truncate the match. A version bump must rewrite
@@ -332,7 +332,7 @@ EOF
           };
           # actionlint (rhysd/actionlint) ships prebuilt release tarballs, each
           # holding a single bare ``actionlint`` binary (no enclosing dir), so
-          # point sourceRoot at the unpack dir itself -- mirrors rtk-cli. Pinned
+          # point sourceRoot at the unpack dir itself; mirrors rtk-cli. Pinned
           # by SHA256 for supply-chain hardening. Refs #1263.
           actionlint-cli = pkgs.stdenvNoCC.mkDerivation {
             pname = "actionlint";
@@ -401,7 +401,7 @@ EOF
             git
             jq
             # bun, not nodejs_22 + npm/pnpm: this repo has no package.json and
-            # never invokes node/npm/npx -- the agent CLIs (claude/codex/ccusage)
+            # never invokes node/npm/npx; the agent CLIs (claude/codex/ccusage)
             # are self-contained native binaries and the only MCP server is the
             # native github-mcp-server, so a full Node toolchain (nodejs ~91 MB +
             # its ~69 MB -dev output + npm/pnpm) was unused weight in the baked
@@ -421,7 +421,7 @@ EOF
           ];
           pythonQualityPackages = with pkgs; [
             # Bare `mypy` (= pkgs.mypy) is built against the nixpkgs-default
-            # interpreter, which in nixpkgs 25.05 is python312 -- the same
+            # interpreter, which in nixpkgs 25.05 is python312; the same
             # interpreter the project now targets (pyproject requires-python
             # >=3.12) and that sharedPackages provides. So mypy shares the one
             # python in the closure; there is no duplicate interpreter to avoid,
@@ -444,7 +444,7 @@ EOF
           # This repo's `uv sync` installs only wheels (pyyaml/pytest/ruff/mypy/
           # hypothesis/pytest-xdist all ship manylinux wheels), and the agents run
           # no from-source C/native builds, so the compiler is dead weight in the
-          # closure -- and in the baked claude image (#1491). Drop it with the
+          # closure; and in the baked claude image (#1491). Drop it with the
           # NoCC stdenv. If a future dependency needs to compile from sdist,
           # restore mkShell (or add a cc to packages) and document the need.
           mkAgentShell = name: extraPackages:

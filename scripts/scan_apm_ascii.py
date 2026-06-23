@@ -3,9 +3,9 @@
 
 Issue #1688 (follow-up to #1682): PR #1682 replaced the 34 em-dash
 (U+2014) occurrences in the universal text source
-``.apm/instructions/master.instructions.md`` with the ASCII ` -- `
+``.apm/instructions/master.instructions.md`` with the ASCII `; `
 separator, but its own issue body and commit message note that "no
-repo-tree ASCII gate exists" -- nothing stops an em-dash (or any other
+repo-tree ASCII gate exists"; nothing stops an em-dash (or any other
 smart-punctuation glyph) from regressing back in on the next edit. The
 universal text is distributed downstream via submodule import, so a
 downstream agent that lifts a rule phrase into a GitHub post would carry
@@ -35,8 +35,8 @@ The contract is:
   code-owner-reviewed change (governance-gated per CLAUDE.md section 2),
   not a self-service bypass.
 * The whole file text is scanned directly (not via ``str.splitlines``)
-  so a non-ASCII line/paragraph separator such as U+2028 / U+2029 -- one
-  of the sneakier injections -- is itself flagged instead of being
+  so a non-ASCII line/paragraph separator such as U+2028 / U+2029; one
+  of the sneakier injections; is itself flagged instead of being
   silently consumed as a line boundary. Only ``"\n"`` advances the line
   counter, so reported line numbers match an editor's view.
 * Exit 0 when every scanned file is clean; exit 1 on any violation; the
@@ -72,7 +72,7 @@ from pathlib import Path
 # as possible: each entry is a glyph the universal text deliberately uses
 # and that has no plain-ASCII substitute carrying the same meaning.
 #
-# * U+00A7 SECTION SIGN -- the section cross-reference glyph (e.g. the
+# * U+00A7 SECTION SIGN; the section cross-reference glyph (e.g. the
 #   "section 2 applies" shorthand). One occurrence per artifact today;
 #   #1682 explicitly scoped it out of the em-dash normalization.
 _ALLOWED_NON_ASCII: frozenset[str] = frozenset(
@@ -97,7 +97,7 @@ def scan_text(text: str) -> list[tuple[int, int, str]]:
     the raw text so a non-ASCII line separator is reported rather than
     consumed; only ``"\\n"`` advances the line counter.
 
-    The function is pure -- it never touches the filesystem -- so the
+    The function is pure; it never touches the filesystem; so the
     classification is unit-tested directly on string fixtures.
     """
     hits: list[tuple[int, int, str]] = []
@@ -134,7 +134,7 @@ def _verify(paths: Iterable[Path]) -> int:
                 f"::error file={path},line={lineno},col={column}::"
                 f"non-ASCII character {_codepoint_label(char)} in APM "
                 "artifact. Replace it with its ASCII equivalent (em-dash "
-                "U+2014 -> ' -- '), or, if it is an intentional and "
+                "U+2014 -> '; '), or, if it is an intentional and "
                 "downstream-safe glyph, add it to "
                 "scan_apm_ascii._ALLOWED_NON_ASCII in a code-owner-reviewed "
                 "change.",

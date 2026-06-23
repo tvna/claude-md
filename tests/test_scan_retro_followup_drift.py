@@ -52,7 +52,7 @@ class TestLabelSoT:
 
 class TestParseFollowupRefs:
     def test_single_unchecked_bullet(self) -> None:
-        body = "- [ ] feat(harness): add gate -- needed because #500"
+        body = "- [ ] feat(harness): add gate; needed because #500"
         assert srfd.parse_followup_refs(body) == [500]
 
     def test_checked_bullet_also_matches(self) -> None:
@@ -618,7 +618,7 @@ class TestBuildSummary:
 
 
 # ---------------------------------------------------------------------------
-# _parse_iso() -- empty string branch (line 108)
+# _parse_iso(); empty string branch (line 108)
 # ---------------------------------------------------------------------------
 
 
@@ -633,7 +633,7 @@ class TestParseIso:
 
 
 # ---------------------------------------------------------------------------
-# decide_target_label() -- unknown aggregate returns None (line 220)
+# decide_target_label(); unknown aggregate returns None (line 220)
 # ---------------------------------------------------------------------------
 
 
@@ -643,7 +643,7 @@ class TestDecideTargetLabelUnknownAggregate:
 
 
 # ---------------------------------------------------------------------------
-# gh_api() -- mock subprocess.run (lines 272-293)
+# gh_api(); mock subprocess.run (lines 272-293)
 # ---------------------------------------------------------------------------
 
 
@@ -682,7 +682,7 @@ class TestGhApi:
 
 # ---------------------------------------------------------------------------
 # search_retro_issues() / fetch_issue_or_pr() / fetch_pr_merged() / apply_label()
-# -- mock gh_api (lines 316-320, 330-336, 349-351, 356)
+#; mock gh_api (lines 316-320, 330-336, 349-351, 356)
 # ---------------------------------------------------------------------------
 
 
@@ -746,7 +746,7 @@ class TestBoundaryFunctions:
 
 
 # ---------------------------------------------------------------------------
-# run() -- non-int retro_number skip (line 443)
+# run(); non-int retro_number skip (line 443)
 # ---------------------------------------------------------------------------
 
 
@@ -762,7 +762,7 @@ class TestRunNonIntRetroNumber:
 
 
 # ---------------------------------------------------------------------------
-# _cmd_run() -- missing repo (lines 487-491)
+# _cmd_run(); missing repo (lines 487-491)
 # ---------------------------------------------------------------------------
 
 
@@ -778,7 +778,7 @@ class TestCmdRunMissingRepo:
 
 
 # ---------------------------------------------------------------------------
-# main() -- CalledProcessError handler (lines 525-533)
+# main(); CalledProcessError handler (lines 525-533)
 # ---------------------------------------------------------------------------
 
 

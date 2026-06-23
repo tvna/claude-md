@@ -33,7 +33,7 @@ Detection heuristic (fail-open, no network calls)
   webhook events. This is conservative: CI and push events lack these markers.
 * A subsequent (later in transcript) assistant tool_use call with a name in
   :data:`REPLY_TOOLS` counts as "addressed". The earliest such call satisfies
-  the check; N webhooks need not each have an exactly paired reply call -- one
+  the check; N webhooks need not each have an exactly paired reply call; one
   reply call in scope clears all webhooks seen before it.
 * Any missing field, unreadable transcript, or exception exits 0 (fail open).
   A gate bug must never wedge the session (CLAUDE.md section 4).
@@ -86,7 +86,7 @@ _BLOCK_REASON = (
     "that has no subsequent reply via a GitHub comment tool "
     "(mcp__github__add_reply_to_pull_request_comment or equivalent). "
     "For every open review thread contributing to or causing a merge block, "
-    "post a reply before ending the turn -- regardless of whether the outcome "
+    "post a reply before ending the turn; regardless of whether the outcome "
     "is a code fix, a won't-fix decision, or an acknowledgement. "
     "A reply citing the fix commit SHA (when applicable) or stating the "
     "disposition closes the review loop visibly; without it, the reviewer "

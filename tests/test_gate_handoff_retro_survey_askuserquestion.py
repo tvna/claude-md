@@ -14,7 +14,7 @@ Covers:
   #1374), and de-duplicates oldest-first.
 - ``evaluate``: blocks an unrecorded created PR; no-op with a marker,
   with ``stop_hook_active``, off-target event, or no created PR. Surveys
-  ONCE per session -- a session opening N PRs fires the gate once, not N
+  ONCE per session; a session opening N PRs fires the gate once, not N
   times, and recording any one PR covers the whole session (#1594).
 - ``load_transcript``: missing / unreadable / bad-line tolerance.
 - ``record`` / ``run_record``: marker write and invalid-PR fail-open.

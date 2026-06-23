@@ -11,14 +11,14 @@ security-guidance plugin without importing any LLM/agent runtime.
 
 Design choices (CLAUDE.md S4: minimal, fail loud, never echo secrets):
 
-* ``*.py`` is excluded -- ruff already owns it, and scanning it would
+* ``*.py`` is excluded; ruff already owns it, and scanning it would
   double-flag and trip on the patterns embedded in this scanner's own
   tests.
 * Only high-confidence rules are used (vendor-prefixed tokens, PEM private
   keys, and a guarded generic ``key = "value"`` rule). The generic rule
   ignores interpolations (``${{ ... }}``, ``$VAR``), template/placeholder
   values, and low-entropy values to avoid config-file noise.
-* Matched secret values are NEVER printed -- only the rule id, file, and
+* Matched secret values are NEVER printed; only the rule id, file, and
   line are reported, so the gate output is safe to surface in CI logs,
   PR comments, and terminals.
 
@@ -48,7 +48,7 @@ Contract:
     Outputs: ``::error file=...,line=...::`` annotations on stderr naming
         only the rule id (never the secret value), plus a one-line
         summary; exit code as documented above.
-    Failure policy: loud -- a file that cannot be decoded as UTF-8 text is
+    Failure policy: loud; a file that cannot be decoded as UTF-8 text is
         skipped, but any detected secret fails the gate with a non-zero
         exit rather than passing silently.
 """

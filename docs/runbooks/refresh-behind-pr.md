@@ -21,7 +21,7 @@ contract and the decision the helper encodes.
 
 `git merge --no-edit origin/<base>` followed by a plain `git push` advances
 the branch ref by a *fast-forward* (the new merge commit is a descendant of
-the old tip), so the `non_fast_forward` ruleset is satisfied -- no force is
+the old tip), so the `non_fast_forward` ruleset is satisfied; no force is
 involved. The extra merge commit is not a problem for clean linear history:
 `main-protection` is squash-only, so the final squash-merge flattens the
 branch to a single commit regardless. This is the same effect
@@ -59,7 +59,7 @@ merge would conflict, pointing here at the replacement-branch runbook.
    ```
 
    It fetches `origin/main`, confirms the branch is behind and conflict-free,
-   merges `origin/main` in, and pushes (plain push -- never `--force`).
+   merges `origin/main` in, and pushes (plain push; never `--force`).
 
 2. **Preview first if you want to inspect the plan.**
 
@@ -75,15 +75,15 @@ merge would conflict, pointing here at the replacement-branch runbook.
 
 ## Exit codes
 
-- `0` -- already up to date, or merged (and pushed with `--push`) cleanly.
-- `2` -- the merge would conflict; use the replacement-branch runbook.
-- `3` -- precondition failed (dirty worktree, on the base branch, git error).
+- `0`; already up to date, or merged (and pushed with `--push`) cleanly.
+- `2`; the merge would conflict; use the replacement-branch runbook.
+- `3`; precondition failed (dirty worktree, on the base branch, git error).
 
 ## Companion
 
-- `scripts/refresh_pr_branch.py` -- the deterministic helper.
-- `scripts/check_pr_mergeability.py` -- surfaces `behind` and points here.
-- `docs/runbooks/update-pr-branch-recovery.md` -- the conflict / replacement path.
-- `docs/runbooks/merge-readiness-loop.md` -- where this step sits in the loop.
-- `docs/runbooks/rulesets.md` -- the `non_fast_forward` rule rationale.
+- `scripts/refresh_pr_branch.py`; the deterministic helper.
+- `scripts/check_pr_mergeability.py`; surfaces `behind` and points here.
+- `docs/runbooks/update-pr-branch-recovery.md`; the conflict / replacement path.
+- `docs/runbooks/merge-readiness-loop.md`; where this step sits in the loop.
+- `docs/runbooks/rulesets.md`; the `non_fast_forward` rule rationale.
 - Refs #1361, #893.

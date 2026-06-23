@@ -16,7 +16,7 @@ tracking issue or explicitly recorded as parked here.
   #1383. The eBook framing is captured in #178.
 - Method: the full control set (50+ scripts under `scripts/`, the workflows
   under `.github/workflows/`, and the runbooks under `docs/`) was swept and
-  mapped against the eBook framework -- three principles, the "impossible, not
+  mapped against the eBook framework; three principles, the "impossible, not
   tedious" design test, Least Agency and blast radius, three maturity tiers
   (Foundation, Enterprise, Advanced), and seven capability domains.
 - Evidence tags: `[fact]` is observed in-tree or in issue state; `[analysis]`
@@ -38,8 +38,8 @@ tracking issue or explicitly recorded as parked here.
   (CLAUDE.md section 3).
 - `[fact]` Resolved by #1387: the inventory was resynced (closed #181 / #182 /
   #184 / #312 removed from the Gap columns; the landed privileged-workflow rows
-  -- `devcontainer-pin-refresh.yml`, `publish-devcontainer-images.yml`,
-  `post-merge.yml`, `monthly-maintenance.yml`, `tvna-bot-automerge.yml` -- added)
+ ; `devcontainer-pin-refresh.yml`, `publish-devcontainer-images.yml`,
+  `post-merge.yml`, `monthly-maintenance.yml`, `tvna-bot-automerge.yml`; added)
   and a deterministic gate now enforces currency:
   `scripts/verify_control_inventory_currency.py` in the `lint-scripts-static`
   job. Its scope model is an explicit manifest
@@ -74,7 +74,7 @@ tracking issue or explicitly recorded as parked here.
 - Enterprise: partial (audit trail and a permissions audit exist). Holes:
   residual PAT scope (#56), detection latency (#1390), mixed fail posture
   (#1389).
-- Advanced: largely unmet -- agent identity / short-lived credentials (#1381),
+- Advanced: largely unmet; agent identity / short-lived credentials (#1381),
   runtime behavioral anomaly detection and blast-radius caps (#1380), active
   defense, and recovery validation.
 

@@ -1,7 +1,7 @@
 """Tests for ``.devcontainer/scripts/_egress-dnsproxy.sh``.
 
-These exercise the ``generate-config`` seam -- pure stdout, no root, no kernel
-calls -- and the default-off no-op behaviour of ``start`` / ``stop``. The
+These exercise the ``generate-config`` seam; pure stdout, no root, no kernel
+calls; and the default-off no-op behaviour of ``start`` / ``stop``. The
 dnsmasq / ipset / resolv.conf kernel effects CANNOT be exercised here (no
 NET_ADMIN in CI/sandbox); the end-to-end steps live in
 ``docs/runbooks/devcontainers.md`` for a NET_ADMIN devcontainer.

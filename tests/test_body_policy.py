@@ -429,7 +429,7 @@ class TestGateWindow:
 
 
 # ---------------------------------------------------------------------------
-# _verify -- PR
+# _verify; PR
 # ---------------------------------------------------------------------------
 
 
@@ -474,7 +474,7 @@ class TestVerifyPRBody:
 
 
 # ---------------------------------------------------------------------------
-# _verify -- issue
+# _verify; issue
 # ---------------------------------------------------------------------------
 
 
@@ -535,7 +535,7 @@ class TestVerifyIssueBody:
 
 
 # ---------------------------------------------------------------------------
-# _verify -- bypass paths
+# _verify; bypass paths
 # ---------------------------------------------------------------------------
 
 
@@ -1039,7 +1039,7 @@ class TestVerifyPrAgentAttributionFooter:
         assert errors
         assert "multiple" in errors[0]
 
-    # -- harness_appends_footer path (Claude web harness create, #1025) --
+    #; harness_appends_footer path (Claude web harness create, #1025) --
 
     def test_harness_mode_no_footer_passes(self) -> None:
         # Under the harness the agent submits no footer; the harness will
@@ -1456,7 +1456,7 @@ class TestVerifySectionSubstantiveContent:
 
     def test_footer_in_last_section_does_not_count_as_content(self) -> None:
         # A Related Issue section that has only blank lines plus the footer
-        # should be flagged -- the footer is NOT substantive section content.
+        # should be flagged; the footer is NOT substantive section content.
         body = _NEW_SHAPE_PR_BODY.replace(
             "## Related Issue\n\nRefs #205\n",
             "## Related Issue\n\n"

@@ -153,7 +153,7 @@ def _now_iso() -> str:
 
 
 # ---------------------------------------------------------------------------
-# Subprocess boundary -- monkeypatched in tests
+# Subprocess boundary; monkeypatched in tests
 # ---------------------------------------------------------------------------
 
 

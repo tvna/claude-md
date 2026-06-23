@@ -32,7 +32,7 @@ def _table(rows: str) -> str:
 
 def _all_rows(status: str = "covered", rationale: str = "evidence here") -> str:
     return "".join(
-        f"| `ASI{n:02d}` | Risk {n} | {status} | {rationale} | -- |\n"
+        f"| `ASI{n:02d}` | Risk {n} | {status} | {rationale} |; |\n"
         for n in range(1, 11)
     )
 
@@ -59,14 +59,14 @@ class TestEvaluate:
 
     def test_missing_item_is_violation(self) -> None:
         rows = "".join(
-            f"| `ASI{n:02d}` | Risk | covered | evidence | -- |\n"
+            f"| `ASI{n:02d}` | Risk | covered | evidence |; |\n"
             for n in range(1, 10)  # ASI10 absent
         )
         errors = oam.evaluate(_table(rows))
         assert any("ASI10" in message and "no mapping row" in message for message in errors)
 
     def test_duplicate_item_is_violation(self) -> None:
-        rows = _all_rows() + "| `ASI01` | Risk | covered | evidence | -- |\n"
+        rows = _all_rows() + "| `ASI01` | Risk | covered | evidence |; |\n"
         errors = oam.evaluate(_table(rows))
         assert any("ASI01" in message and "exactly once" in message for message in errors)
 
@@ -106,5 +106,5 @@ class TestMain:
 
     def test_verify_incomplete_fails(self, tmp_path: Path) -> None:
         doc = tmp_path / "inv.md"
-        doc.write_text(_table(_all_rows().replace("| `ASI09` | Risk 9 | covered | evidence here | -- |\n", "")), encoding="utf-8")
+        doc.write_text(_table(_all_rows().replace("| `ASI09` | Risk 9 | covered | evidence here |; |\n", "")), encoding="utf-8")
         assert oam.main(["verify", "--inventory", str(doc)]) == 1

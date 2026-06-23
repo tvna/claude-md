@@ -198,8 +198,8 @@ def test_devin_hooks_match_codex_hooks_exactly() -> None:
     """The Devin adapter must stay byte-for-byte in sync with the Codex config.
 
     Refs #1030. ``.devin/hooks.v1.json`` mirrors ``.codex/hooks.json`` (see
-    docs/standards/devin-apm-compatibility.md). A one-sided edit -- such as
-    fixing a bad hook key in one file but not the other -- would silently
+    docs/standards/devin-apm-compatibility.md). A one-sided edit; such as
+    fixing a bad hook key in one file but not the other; would silently
     diverge the two adapters. Asserting full equality of the parsed configs
     forces every hook change to land in both files together.
     """

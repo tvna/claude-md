@@ -1,4 +1,4 @@
-"""Tests for scripts/ccusage_pin.py -- reading the pinned ccusage coordinates.
+"""Tests for scripts/ccusage_pin.py; reading the pinned ccusage coordinates.
 
 flake.nix is the single source of truth for the ccusage version, npm
 scoped-package basename, and SHA256 (#1404). These tests pin the parsing +

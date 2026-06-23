@@ -17,9 +17,9 @@ and invokes this script. Keeping pytest invocation out of this script makes
 unit testing trivial (text + xml inputs only) and keeps the gate fast.
 
 Exit codes:
-* ``0`` -- union of executed node IDs equals the collected universe and no
+* ``0``; union of executed node IDs equals the collected universe and no
   duplicates.
-* ``1`` -- at least one collected node was not executed by any shard, or
+* ``1``; at least one collected node was not executed by any shard, or
   at least one node was executed by more than one shard.
 
 Tested by ``tests/test_verify_shard_coverage.py``.
@@ -39,7 +39,7 @@ def parse_collected(text: str) -> set[str]:
 
     Lines that do not look like node IDs (blank lines, summary tail such as
     ``"57 tests collected in 0.32s"``, error banners) are ignored. A node
-    ID is any line containing ``"::"`` -- pytest's path-versus-id separator.
+    ID is any line containing ``"::"``; pytest's path-versus-id separator.
     """
     nodes: set[str] = set()
     for raw in text.splitlines():
@@ -80,7 +80,7 @@ def parse_junit(xml_text: str) -> set[str]:
 
     Accepts either ``<testsuites>`` (default-family) or a bare
     ``<testsuite>`` root (legacy-family). Skipped testcases are still
-    counted as executed -- pytest reports them in the JUnit XML, and the
+    counted as executed; pytest reports them in the JUnit XML, and the
     completeness gate's job is to confirm dispatch coverage, not pass
     coverage.
     """
@@ -136,7 +136,7 @@ def format_errors(
     for node in sorted(extra):
         lines.append(
             f"::error::test node `{node}` was executed by a shard but not present "
-            "in the collected universe. JUnit and collection drifted -- rerun "
+            "in the collected universe. JUnit and collection drifted; rerun "
             "`pytest --collect-only -q` on the same commit."
         )
     return lines

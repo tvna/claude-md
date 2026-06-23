@@ -5,7 +5,7 @@
 uv binary (see scripts/scan_flake_pin_drift.py and #1153). The CI uv install
 (`.github/actions/setup-uv`) downloads the uv release tarball over the network;
 without a checksum that download is an unverified supply-chain input. This gate
-closes the gap by re-using the hash nix already enforces -- no second hardcoded
+closes the gap by re-using the hash nix already enforces; no second hardcoded
 copy, so a uv bump that updates flake.nix updates this check automatically.
 
 It reads the ``uvNative`` entry in flake.nix whose ``target`` matches, converts

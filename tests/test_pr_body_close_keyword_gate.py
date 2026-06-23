@@ -250,7 +250,7 @@ class TestFetchLabels:
             sleeper=lambda _s: None,
         )
         assert result is None
-        # apply_call retries up to 3 times on 5xx -- verify the path is taken.
+        # apply_call retries up to 3 times on 5xx; verify the path is taken.
         assert len(calls) == 3
 
     def test_url_error_returns_none(self) -> None:
@@ -476,7 +476,7 @@ class TestDecide:
             token_getter=lambda: "t",
             label_getter=lambda *_a: ["type:fix"],
         )
-        # owner/repo malformed -- fail-open, server gate is backstop.
+        # owner/repo malformed; fail-open, server gate is backstop.
         assert decision is None
 
     def test_repo_missing_returns_none_fail_open(self) -> None:

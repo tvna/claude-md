@@ -185,7 +185,7 @@ class TestEvaluate:
         for e in errors:
             assert e.isascii(), f"error message is not ASCII: {e!r}"
 
-    # -- harness_appends_footer path (Claude web harness create, #1025) --
+    #; harness_appends_footer path (Claude web harness create, #1025) --
 
     def test_harness_mode_no_footer_passes(self) -> None:
         body = (

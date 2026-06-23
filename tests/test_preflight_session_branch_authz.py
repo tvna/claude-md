@@ -48,7 +48,7 @@ def _with_session(
 
 
 # ---------------------------------------------------------------------------
-# decide() -- environment gate
+# decide(); environment gate
 # ---------------------------------------------------------------------------
 
 
@@ -85,7 +85,7 @@ def test_decide_passthrough_no_session_branch(monkeypatch: pytest.MonkeyPatch) -
 
 
 # ---------------------------------------------------------------------------
-# decide() -- Bash branch creation / switch
+# decide(); Bash branch creation / switch
 # ---------------------------------------------------------------------------
 
 
@@ -157,7 +157,7 @@ def test_allows_switch_to_any_set_member(monkeypatch: pytest.MonkeyPatch) -> Non
 
 def test_passthrough_plain_checkout(monkeypatch: pytest.MonkeyPatch) -> None:
     # Plain ``git checkout <arg>`` is ambiguous (branch vs pathspec); not gated
-    # here -- the Edit/Write surface and commit-time gate cover it.
+    # here; the Edit/Write surface and commit-time gate cover it.
     _with_session(_SESSION_BRANCH, _SESSION_BRANCH, monkeypatch)
     assert subject.decide(_bash_event("git checkout other/branch")) is None
     assert subject.decide(_bash_event("git checkout README.md")) is None
@@ -173,7 +173,7 @@ def test_passthrough_checkout_pathspec_after_dashdash(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _with_session(_SESSION_BRANCH, _SESSION_BRANCH, monkeypatch)
-    assert subject.decide(_bash_event("git checkout -- some/file.py")) is None
+    assert subject.decide(_bash_event("git checkout; some/file.py")) is None
 
 
 def test_passthrough_switch_dash(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -213,7 +213,7 @@ def test_passthrough_echoed_switch(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 # ---------------------------------------------------------------------------
-# decide() -- Edit/Write first-edit surface
+# decide(); Edit/Write first-edit surface
 # ---------------------------------------------------------------------------
 
 

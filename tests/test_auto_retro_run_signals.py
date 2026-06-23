@@ -69,7 +69,7 @@ class TestRunAggregateSignals:
     ) -> None:
         # Refs #1236: verification-prose failures are non-actionable
         # policy-artifact anomaly hints. A PR whose only repair evidence is
-        # a failed `## Verification` row no longer opens a retro -- the prose
+        # a failed `## Verification` row no longer opens a retro; the prose
         # heuristic over untrusted body text was the dominant FP source.
         seen = orchestrator_recorder(monkeypatch, review_comments=[])
         event = merged_event(
@@ -220,7 +220,7 @@ class TestRunAggregateSignals:
         """Revert is subtracted without over-suppressing real multi-commit.
 
         With two real dev commits left after subtracting the revert,
-        ``multi_commit_pr`` stays True (the subtraction is precise) -- but a
+        ``multi_commit_pr`` stays True (the subtraction is precise); but a
         revert-bearing multi-commit PR whose rows are all policy-artifact and
         with no co-firing actionable signal (review / CI / verification) still
         skips. Per the user's design: multi-commit alone cannot determine an

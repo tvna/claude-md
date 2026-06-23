@@ -4,9 +4,9 @@
 This module owns the deterministic, low-false-positive secret patterns and
 the line/text scanners that two callers reuse so they cannot drift:
 
-* ``scripts/scan_secrets.py`` -- the committed-file gate (#1129) that scans
+* ``scripts/scan_secrets.py``; the committed-file gate (#1129) that scans
   tracked non-Python files at CI / pre-commit time.
-* ``scripts/preflight_github_secrets.py`` -- the PreToolUse gate (#1388)
+* ``scripts/preflight_github_secrets.py``; the PreToolUse gate (#1388)
   that blocks a secret from leaving the trust boundary through a
   ``mcp__github__*`` write tool body before the API call is made.
 
@@ -16,7 +16,7 @@ Design choices (CLAUDE.md S4: minimal, fail loud, never echo secrets):
   keys, and a guarded generic ``key = "value"`` rule). The generic rule
   ignores interpolations (``${{ ... }}``, ``$VAR``), template/placeholder
   values, and low-entropy values to avoid noise.
-* Matched secret values are NEVER returned to callers -- the scanners hand
+* Matched secret values are NEVER returned to callers; the scanners hand
   back only the rule id (and, for :func:`scan_text`, the line number), so a
   caller can safely surface the result in CI logs, PR comments, and
   terminals.

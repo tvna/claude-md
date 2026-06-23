@@ -147,7 +147,7 @@ class TestIsRetroPr:
     @pytest.mark.parametrize(
         "title",
         [
-            # (auto-retro) scope -- covers the auto-opened retro shape and
+            # (auto-retro) scope; covers the auto-opened retro shape and
             # retro-closing PRs that title policy forces to use an allowed
             # Conventional Commit type with the auto-retro scope.
             "fix(auto-retro): review PR #234 repair loops",
@@ -284,7 +284,7 @@ class TestBuildRetroTitle:
     )
     def test_emits_single_paren_group(self, source_title: str) -> None:
         """For any source title shape, the generated retro title contains
-        exactly one (...) group -- never nested."""
+        exactly one (...) group; never nested."""
         pr = _make_pr(number=1, title=source_title)
         title = ar.build_retro_title(pr)
         assert "((" not in title
@@ -383,7 +383,7 @@ class TestBuildRetroBody:
         # The canonical subject must not also appear with the
         # iteration-commit narration.
         assert (
-            "`fix(ci): close verify skip bypass (#366)` -- signals"
+            "`fix(ci): close verify skip bypass (#366)`; signals"
             not in body
         )
 
@@ -624,7 +624,7 @@ class TestRepairHistoryTable:
     ) -> None:
         """Footnote fires even when only synthetic rows (no Merge from
         main) are present. Refs #453."""
-        # Iteration commit alone with single PR commit -- no merge row,
+        # Iteration commit alone with single PR commit; no merge row,
         # no multi-commit row, but the synthetic Iteration row exists.
         table = ar._build_repair_history_table(None, ["fixup! prior"], 1)
         assert "Iteration commit" in table
@@ -645,7 +645,7 @@ class TestRepairHistoryTable:
         assert "(no automated repair signals detected)" in table
         assert "positive-control" in table
         assert "repair taxonomy classification requested" in table
-        # No numbered rows: only the "| -- |" sentinel.
+        # No numbered rows: only the "|; |" sentinel.
         assert "| 1 |" not in table
 
     def test_sentinel_absent_when_any_signal_fires(self) -> None:
@@ -728,7 +728,7 @@ class TestRepairHistoryTableCheckRunContext:
 
     def test_omits_annotation_section_when_summary_is_none(self) -> None:
         """Acceptance criterion 3: annotation-less rows still emit the base
-        conclusion / completed_at signal -- no `annotation:` token."""
+        conclusion / completed_at signal; no `annotation:` token."""
         check_runs = [
             {
                 "name": "gate",
@@ -955,7 +955,7 @@ class TestFindExistingRetro:
         assert ar.find_existing_retro(items, 249) is None
 
     def test_matches_case_insensitive_prefix(self) -> None:
-        """``Fix(Auto-Retro):`` (mixed case) must still match -- prefix is lowered."""
+        """``Fix(Auto-Retro):`` (mixed case) must still match; prefix is lowered."""
         items = [
             {"number": 12, "title": "Fix(Auto-Retro): review PR #42 repair loops"}
         ]
@@ -1196,7 +1196,7 @@ class TestFetchCheckRuns:
     ) -> list[tuple[str, str]]:
         seen: list[tuple[str, str]] = []
         # Index lives in a single-element list so the closure can mutate
-        # it without needing nonlocal -- matches the in-tree pattern for
+        # it without needing nonlocal; matches the in-tree pattern for
         # hand-rolled counters in _orchestrator_recorder.
         idx = [0]
 
@@ -1531,7 +1531,7 @@ class TestFetchCheckRunsAnnotationEnrichment:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Acceptance criterion 3 of issue #381: a transient annotation API
-        error must not break the retro -- the row falls back to
+        error must not break the retro; the row falls back to
         summary-less and other runs still get their summaries."""
         check_runs = [
             {
@@ -1984,7 +1984,7 @@ def _orchestrator_recorder(
     happy-path tests still reach the issue-creation branch. New tests
     that exercise the zero-review-comments skip pass ``review_comments=[]``.
     Set ``comments_error=True`` to make the comments endpoint raise the
-    same ``CalledProcessError`` that gh_api raises in production -- used
+    same ``CalledProcessError`` that gh_api raises in production; used
     to test the fail-safe fallback in run().
 
     ``pr_detail`` controls the response of ``GET /repos/{repo}/pulls/{n}``
@@ -2633,7 +2633,7 @@ class TestExtractVerificationPairs:
             "pytest 1828 passed in 203.91s; ruff / mypy / prek pass;",
             "one commit on the branch",
             "`::error file=/tmp/synthetic.md,line=2::assertive-existence "
-            "phrase` and exit 1 -- gate trips as designed",
+            "phrase` and exit 1; gate trips as designed",
         ],
     )
     def test_issue_596_g3_success_observations_are_passing(
@@ -2694,7 +2694,7 @@ class TestExtractVerificationPairs:
             "`sha256-oLiW6MvdEEQRJemJqhm+FakeTestHashValue=`",
             # #810 corpus: grep output with "guard block present" observation.
             (
-                'guard block present -- `if [[ ! -x "/usr/local/bin/apm" ]];'
+                'guard block present; `if [[ ! -x "/usr/local/bin/apm" ]];'
                 " then install_nix_binary apm-cli apm;"
                 " else echo apm already present; fi`"
             ),
@@ -2871,7 +2871,7 @@ class TestRepairHistoryTableNewRows:
         table = ar._build_repair_history_table(None, [], 1, pairs)
         # Failing pair retains the Verification fail: prefix.
         assert "Verification fail: `ruff check .`" in table
-        # Passing pair leaves no row -- in particular not a fail row.
+        # Passing pair leaves no row; in particular not a fail row.
         assert "Verification fail: `uv run pytest -v`" not in table
         assert "246 passed in 198.59s" not in table
 
@@ -2890,7 +2890,7 @@ class TestRepairHistoryTableNewRows:
             "  result: no matches; both files are ASCII-clean\n"
             "- command: `negative fixture`\n"
             "  result: `::error file=/tmp/synthetic.md,line=2::"
-            "assertive-existence phrase` and exit 1 -- gate trips as designed\n"
+            "assertive-existence phrase` and exit 1; gate trips as designed\n"
             "- command: `ruff check .`\n"
             "  result: `exit 1`\n"
         )
@@ -3081,7 +3081,7 @@ class TestIssue927Corpus:
                 {"body_cites_refs": True},
                 ["build(devcontainer): skip apm install when already baked into image (#805)"],
                 [
-                    'guard block present -- `if [[ ! -x "/usr/local/bin/apm" ]];'
+                    'guard block present; `if [[ ! -x "/usr/local/bin/apm" ]];'
                     " then install_nix_binary apm-cli apm;"
                     " else echo apm already present; fi`"
                 ],
@@ -3294,8 +3294,8 @@ class TestRepairHistoryFourColumnSchema:
         )
         cells = [c.strip() for c in row_line.strip()[1:-1].split("|")]
         assert len(cells) == 4
-        assert cells[0] == "--"
-        assert cells[3] == "--"
+        assert cells[0] == "n/a"
+        assert cells[3] == "n/a"
 
     def test_render_appended_row_returns_three_cells(self) -> None:
         pr = _make_pr(number=88, title="fix(x): y", merged_at="2026-06-01T00:00:00Z")
@@ -3345,15 +3345,15 @@ class TestVerifyRetroRepairCompleteness:
     def test_artifact_only_passes(self) -> None:
         body = self._wrap(
             f"| 1 | Multi-commit PR | {ar._POLICY_ARTIFACT_MARKER} 3 commits "
-            f"| -- |\n"
+            f"|; |\n"
         )
         assert ar.verify_retro_repair_completeness(body) == []
 
     def test_positive_control_passes(self) -> None:
         body = self._wrap(
-            "| -- | (no automated repair signals detected) | "
+            "|; | (no automated repair signals detected) | "
             "positive-control: no repair taxonomy classification requested "
-            "| -- |\n"
+            "|; |\n"
         )
         assert ar.verify_retro_repair_completeness(body) == []
 
@@ -3867,7 +3867,7 @@ def _retro_body(checked: int = 0) -> str:
     Mirrors the literal section emitted by :func:`auto_retro.build_retro_body`
     so the slicer reads it the same way it would read a real auto-opened
     retro. Keeping the section text byte-aligned with the production
-    body protects against drift -- a future template change that breaks
+    body protects against drift; a future template change that breaks
     the slice would also break these fixtures, surfacing the regression.
     """
     boxes = ["[ ]"] * 5
@@ -4045,7 +4045,7 @@ def _sentinel_recorder(
 
     def _number_from_path(path: str) -> int:
         # Paths look like /repos/o/r/issues/123/comments or
-        # /repos/o/r/issues/123 -- split and grab the integer segment.
+        # /repos/o/r/issues/123; split and grab the integer segment.
         for part in path.split("?", 1)[0].split("/"):
             if part.isdigit():
                 return int(part)
@@ -4582,7 +4582,7 @@ class TestParseSignalsFromRetroBody:
 
     def test_body_without_signals_line_returns_empty(self) -> None:
         # Pre-#582 legacy retros must contribute zero observations.
-        body = "## Facts\n\n- Source PR: #1 -- feat(x): hi\n"
+        body = "## Facts\n\n- Source PR: #1; feat(x): hi\n"
         assert ar.parse_signals_from_retro_body(body) == frozenset()
 
     def test_none_sentinel_returns_empty(self) -> None:
@@ -4618,7 +4618,7 @@ class TestParseSignalsFromRetroBody:
 
     def test_html_comment_signals_line_is_ignored(self) -> None:
         # An HTML-commented heading must NOT leak into the parser
-        # output -- the strip_html_comments boundary is exercised.
+        # output; the strip_html_comments boundary is exercised.
         body = (
             "## Facts\n\n<!-- - Signals fired: multi_commit_pr -->\n"
             "- Signals fired: fix_typed_title\n"
@@ -4701,7 +4701,7 @@ class TestComputePriorFromLabels:
 
     def test_unlabelled_retros_count_toward_denominator_only(self) -> None:
         # A past retro with no retro:tp/fp label still observes the
-        # signal -- it just doesn't move the numerator. This is the
+        # signal; it just doesn't move the numerator. This is the
         # "operator hasn't closed yet" case.
         past = [
             ar.PastRetro(
@@ -4759,7 +4759,7 @@ class TestShouldSkipByPrior:
 
     def test_inactive_signal_with_high_fp_rate_does_not_skip(self) -> None:
         # multi_commit_pr is the high-FP signal, but it did NOT fire on
-        # the current PR -- the prior should not block.
+        # the current PR; the prior should not block.
         prior = {"multi_commit_pr": (0.9, 10)}
         skip, _reason = ar.should_skip_by_prior(
             self._signals_with("inline_review_comments"), prior

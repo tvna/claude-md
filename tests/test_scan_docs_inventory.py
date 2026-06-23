@@ -89,7 +89,7 @@ def test_repository_docs_inventory_is_current() -> None:
 
 
 # ---------------------------------------------------------------------------
-# rel() -- ValueError branch (path outside root)
+# rel(); ValueError branch (path outside root)
 # ---------------------------------------------------------------------------
 
 
@@ -100,7 +100,7 @@ def test_rel_returns_absolute_posix_when_outside_root(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# extract_target() -- angle-bracket and space formats
+# extract_target(); angle-bracket and space formats
 # ---------------------------------------------------------------------------
 
 
@@ -113,7 +113,7 @@ def test_extract_target_space_separated_title() -> None:
 
 
 # ---------------------------------------------------------------------------
-# iter_docs_markdown() -- no docs directory
+# iter_docs_markdown(); no docs directory
 # ---------------------------------------------------------------------------
 
 
@@ -122,7 +122,7 @@ def test_iter_docs_markdown_returns_empty_when_no_docs_dir(tmp_path: Path) -> No
 
 
 # ---------------------------------------------------------------------------
-# collect_index_entries() -- no INDEX.md; protocol-relative URL; empty path; absolute path
+# collect_index_entries(); no INDEX.md; protocol-relative URL; empty path; absolute path
 # ---------------------------------------------------------------------------
 
 
@@ -148,7 +148,7 @@ def test_collect_index_entries_handles_absolute_md_link(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# main() CLI -- error output path (monkeypatched verify)
+# main() CLI; error output path (monkeypatched verify)
 # ---------------------------------------------------------------------------
 
 

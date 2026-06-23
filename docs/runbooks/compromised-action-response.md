@@ -80,7 +80,7 @@ If a secret is suspected exposed:
    permissions (Metadata read, Contents read/write, Pull requests read/write),
    the new key stored only in the `devcontainer-image-pins` Environment. If the
    App ID itself is not sensitive, only the key needs rotation.
-2. **Treat `GITHUB_TOKEN` as rotated automatically** -- it expires at job end --
+2. **Treat `GITHUB_TOKEN` as rotated automatically**; it expires at job end --
    but if a job's `GITHUB_TOKEN` was exposed mid-run, assume any write it had
    (for `build`/`publish`: `packages: write`) was usable until expiry and check
    the image quarantine steps above.
@@ -138,7 +138,7 @@ lockstep):
    `ghcr.io/aquasecurity/trivy@sha256:<digest>` reference and the adjacent
    `# threat-intel-pin: Go github.com/aquasecurity/trivy <version>` comment to
    the new digest and version together. A digest bumped without its
-   threat-intel-pin version (or vice versa) is a drift defect -- they are one
+   threat-intel-pin version (or vice versa) is a drift defect; they are one
    change.
 3. Verify the workflow still passes the action-pin gate (the digest lives in a
    `run:` step, so it is out of that gate's `uses:` scope, but the check must
@@ -161,11 +161,11 @@ be automated. Link the advisory primary source and the revert PR.
 
 ## Related
 
-- [`revert-first-rollback.md`](revert-first-rollback.md) -- rollback mechanics.
-- [`devcontainers.md`](devcontainers.md) -- GitHub App pin-PR credential
+- [`revert-first-rollback.md`](revert-first-rollback.md); rollback mechanics.
+- [`devcontainers.md`](devcontainers.md); GitHub App pin-PR credential
   (`DEVCONTAINER_PIN_APP_ID` / `DEVCONTAINER_PIN_APP_PRIVATE_KEY`) issuance and
   the publish/pin workflows.
-- [`dependabot-automerge.md`](dependabot-automerge.md) -- auto-merge audit policy
+- [`dependabot-automerge.md`](dependabot-automerge.md); auto-merge audit policy
   and the threat-intel / severity block conditions.
-- [`workflow-permissions-audit.md`](workflow-permissions-audit.md) -- per-job
+- [`workflow-permissions-audit.md`](workflow-permissions-audit.md); per-job
   permission scoping that bounds blast radius.

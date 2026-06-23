@@ -125,7 +125,7 @@ the destination is admitted.
 - Admit: add the hostname to the single egress allowlist --
   `.devcontainer/network/shared.allowlist`, applied by every agent container
   (the former per-agent `claude.allowlist` / `codex.allowlist` were
-  consolidated into it, #1420) -- with an inline trailing rationale comment:
+  consolidated into it, #1420); with an inline trailing rationale comment:
 
   ```
   api.example.com  # Why this destination is required at runtime.
@@ -171,14 +171,14 @@ it can only tighten egress, never widen it.
 
 ## References
 
-- [`devcontainers.md`](devcontainers.md) -- devcontainer entrypoints and the
+- [`devcontainers.md`](devcontainers.md); devcontainer entrypoints and the
   Egress allowlist operational section.
 - [`devcontainer-tooling.md`](../standards/devcontainer-tooling.md) --
   provisioning standard and the build-time vs runtime distinction; the
   rationale gate is registered there.
-- [`agent-provenance.md`](agent-provenance.md) -- provenance metadata and
+- [`agent-provenance.md`](agent-provenance.md); provenance metadata and
   review-question template this runbook adapts for network destinations.
-- [`label-taxonomy.md`](../standards/label-taxonomy.md) -- `threat:*` label
+- [`label-taxonomy.md`](../standards/label-taxonomy.md); `threat:*` label
   semantics used in the Evaluate step.
 - Gate: `scripts/scan_allowlist_rationale.py`; tested by
   `tests/test_scan_allowlist_rationale.py`.

@@ -145,17 +145,17 @@ class TestMain:
 
 class TestExtractShardMarkersEdgeCases:
     def test_non_attribute_value_ignored(self) -> None:
-        # pytestmark = foo.shard_default -- foo is a Name, not an Attribute chain
+        # pytestmark = foo.shard_default; foo is a Name, not an Attribute chain
         source = "pytestmark = foo.shard_default\n"
         assert vtsm.extract_shard_markers(source) == []
 
     def test_wrong_intermediate_attr_ignored(self) -> None:
-        # pytestmark = foo.bar.shard_default -- "bar" != "mark"
+        # pytestmark = foo.bar.shard_default; "bar" != "mark"
         source = "pytestmark = foo.bar.shard_default\n"
         assert vtsm.extract_shard_markers(source) == []
 
     def test_wrong_library_name_ignored(self) -> None:
-        # pytestmark = mylib.mark.shard_default -- "mylib" != "pytest"
+        # pytestmark = mylib.mark.shard_default; "mylib" != "pytest"
         source = "pytestmark = mylib.mark.shard_default\n"
         assert vtsm.extract_shard_markers(source) == []
 

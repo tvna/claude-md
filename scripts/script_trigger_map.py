@@ -3,21 +3,21 @@
 
 The dependency graph (#1543) shows how scripts import one another; it does not
 show how the harness *invokes* them. This generator answers the inverse
-question -- "where is ``scripts/X.py`` triggered from?" -- by scanning the four
+question; "where is ``scripts/X.py`` triggered from?"; by scanning the four
 launch surfaces of the repository for literal ``scripts/<name>.py`` references:
 
-* ``.github/workflows/*.yml`` -- ``run:`` steps (location: ``<file> (<job>)``).
-* ``.pre-commit-config.yaml`` -- hook ``entry`` strings (location: hook ``id``).
-* ``scripts/preflight_all.py`` -- the ``Step(argv=...)`` definitions, read via
+* ``.github/workflows/*.yml``; ``run:`` steps (location: ``<file> (<job>)``).
+* ``.pre-commit-config.yaml``; hook ``entry`` strings (location: hook ``id``).
+* ``scripts/preflight_all.py``; the ``Step(argv=...)`` definitions, read via
   :mod:`ast` so a step name maps to the scripts its argv invokes.
-* agent hooks (``scripts/agent_hooks_source.json``) -- hook ``command`` strings
+* agent hooks (``scripts/agent_hooks_source.json``); hook ``command`` strings
   (location: ``<agent>:<event>``).
 
 ``all-doc`` writes ``docs/generated/scripts/trigger-map.md`` with a
 script -> (trigger kind, location) table and an unreferenced-scripts list
 (dead-script candidates). Content under ``docs/generated/scripts/`` is owned by
 the post-merge automation; the pre-push and pre-merge gates do not regenerate
-it -- the same single-producer model as the dependency graph (refs #1540,
+it; the same single-producer model as the dependency graph (refs #1540,
 #1543).
 
 Detection is string-match based, so its coverage is bounded:
@@ -95,7 +95,7 @@ def _workflow_refs(root: Path) -> list[TriggerRef]:
 
     Each workflow YAML is walked structurally (``jobs.<job>.steps[*].run``).
     A workflow whose GitHub Actions extensions defeat ``yaml.safe_load`` falls
-    back to a raw-text scan so it still contributes -- the same robustness
+    back to a raw-text scan so it still contributes; the same robustness
     posture as the workflow CLI-contract inventory.
     """
     wf_dir = root / WORKFLOWS_DIR
@@ -263,7 +263,7 @@ def render_trigger_markdown(
         "This file is generated from the repository launch surfaces by "
         "`python3 scripts/script_trigger_map.py all-doc`. Do not edit it by "
         "hand: content under `docs/generated/scripts/` is owned by the "
-        "post-merge automation (refs #1540, #1543) -- update the source "
+        "post-merge automation (refs #1540, #1543); update the source "
         "instead.",
         "",
         "Detection is string-match based:",

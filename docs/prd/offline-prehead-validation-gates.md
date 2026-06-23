@@ -24,13 +24,13 @@ files or code with a **base-branch** checkout, so they never see a PR's own
 changes. The original motivating example was the per-event `triage` job in
 `.github/workflows/issue-pr-triage.yml`, a `pull_request_target` job whose
 `actions/checkout` step specified no `ref:` and therefore checked out the
-**base** branch (main) -- both the *code* that ran and the *files* it scanned.
+**base** branch (main); both the *code* that ran and the *files* it scanned.
 That per-event job was retired in
 [#1645](https://github.com/tvna/claude-md/issues/1645); the OSV querybatch
 submission it performed now runs in the scheduled `dependency-threat-triage`
 job in `.github/workflows/weekly-maintenance.yml`, which fires on `schedule` /
 `workflow_dispatch` and so does not run on PRs at all. Either way the PR head
-is never scanned by the privileged path -- which is exactly the blind spot
+is never scanned by the privileged path; which is exactly the blind spot
 this gate closes, and is now the *only* PR-time check of OSV coordinates.
 
 The consequence is a structural blind spot. On a PR, such a job exercises
@@ -49,7 +49,7 @@ executes the new code against the new files. #1511 was exactly this: an
 unanchored regex false-matched a prose line into a garbage OSV coordinate
 (ecosystem `` ` ``, name `line`, version `in`); OSV querybatch rejected the
 whole batch with HTTP 400 and hid every finding. The #1511 fix corrected the
-parser but added no gate that would have caught it before merge -- a missing
+parser but added no gate that would have caught it before merge; a missing
 deterministic gate (CLAUDE.md section 3).
 
 ## The rejected "obvious" fix
@@ -58,7 +58,7 @@ The tempting fix is to add `ref: ${{ github.head_ref }}` to the
 `pull_request_target` checkout so the job runs PR-head code. This is
 **rejected on security grounds**: it executes untrusted PR-author code in a
 context that holds `issues: write` / `pull-requests: write` and repository
-secrets -- the textbook `pull_request_target` privilege-escalation
+secrets; the textbook `pull_request_target` privilege-escalation
 anti-pattern (CLAUDE.md section 4 safety boundary). `verify-agents.yml`
 already forbids interpolating `github.head_ref` for the same reason. Running
 PR-head code is only safe when it is **offline and unprivileged**, which is
@@ -76,25 +76,25 @@ already trusts for offline checks: `pre-commit`, `prek run --all-files`
 A conforming gate has five parts. Use this as the checklist when adding a new
 one:
 
-1. **Pure validator** -- a function that takes the already-parsed inputs and
+1. **Pure validator**; a function that takes the already-parsed inputs and
    returns the malformed entries (does not raise, makes no network call, reads
    no secrets). For #1519 this is `validate_osv_coordinates(dependencies) ->
    list[(Dependency, reason)]`. Its allowlists/contracts are a checked-in
    mirror of the external service's input contract (the OSV "Defined
    Ecosystems" list), treated as untrusted reference data, not fetched live.
-2. **Defense-in-depth call on the live path** -- the privileged scanner
+2. **Defense-in-depth call on the live path**; the privileged scanner
    itself calls the validator immediately before the network submission, so
    the real run fails loud *offline*, naming the offending source file,
    instead of as an opaque downstream error (HTTP 400). The downstream error
    handler stays as a backstop.
-3. **A `verify` CLI subcommand** -- runs discovery + validation against
+3. **A `verify` CLI subcommand**; runs discovery + validation against
    `--repo-root .` and exits non-zero on any malformed entry. Stdlib-only so
    it runs under a bare interpreter, with no project venv required.
 4. **A pre-commit hook** wired to the relevant input globs, mirrored onto the
    PR head by the existing `prek run --all-files` required check. No new
-   workflow file is added -- the gate rides an existing required check
+   workflow file is added; the gate rides an existing required check
    (surface minimization, CLAUDE.md sections 4-5).
-5. **A real-repo integration test** -- runs the PR-head parser over the
+5. **A real-repo integration test**; runs the PR-head parser over the
    PR-head repo tree and asserts zero malformed entries. This is the
    regression guard that would have caught #1511, and it also fails loud if a
    *legitimate* input (e.g. a newly added OSV ecosystem) is missing from the
@@ -112,7 +112,7 @@ Apply this pattern whenever a `pull_request_target` (or otherwise
 base-checkout) workflow runs a scanner over repository files or code that a
 PR can change, and a deterministic offline check could catch a malformed
 input or a broken parser before merge. If the check needs secrets or network
-to decide pass/fail, it is **not** a candidate -- only the offline,
+to decide pass/fail, it is **not** a candidate; only the offline,
 deterministic slice qualifies.
 
 ## Registry of offline PR-head mirror gates
@@ -132,5 +132,5 @@ and consistently designed.
 - The validator allowlists (e.g. `_KNOWN_OSV_ECOSYSTEMS`) are checked-in
   mirrors of an external contract. A future enhancement could add a
   *separate, non-gating* scheduled job that diffs the mirror against the live
-  source and opens an issue on drift -- keeping the gate offline while still
+  source and opens an issue on drift; keeping the gate offline while still
   surfacing staleness. This stays out of the PR-head gate by design.

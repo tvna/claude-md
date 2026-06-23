@@ -4,7 +4,7 @@
 Registered as a ``PreToolUse`` hook for the ``Bash`` matcher in
 ``.claude/settings.json`` (and mirrored in ``.codex/hooks.json``). It denies a
 Bash command whose leading command in any shell segment is a high-confidence
-irreversible or outward-facing operation -- the section 4.1 "keep confirmations
+irreversible or outward-facing operation; the section 4.1 "keep confirmations
 and dry-runs for any irreversible or outward-facing operation" rule, which had
 no deterministic backstop beyond the force-push freshness check
 (``preflight_branch_base.py``). Issue #1453.
@@ -13,19 +13,19 @@ Covered operations (command-position only, so a benign mention such as
 ``echo "rm -rf /"`` is never denied):
 
 - ``rm`` carrying BOTH a recursive (``-r``/``-R``/``--recursive``) and a force
-  (``-f``/``--force``) flag -- unrecoverable recursive delete.
-- ``git push`` with ``--force``/``-f`` -- history overwrite. ``--force-with-lease``
+  (``-f``/``--force``) flag; unrecoverable recursive delete.
+- ``git push`` with ``--force``/``-f``; history overwrite. ``--force-with-lease``
   is the safer, allowed form and passes.
-- ``find ... -delete`` -- bulk delete.
-- ``dd of=...`` -- raw device/file overwrite.
-- ``mkfs`` / ``mkfs.*`` -- filesystem creation (destroys the target).
-- ``shred`` -- unrecoverable overwrite.
-- ``truncate -s`` -- in-place file truncation.
+- ``find ... -delete``; bulk delete.
+- ``dd of=...``; raw device/file overwrite.
+- ``mkfs`` / ``mkfs.*``; filesystem creation (destroys the target).
+- ``shred``; unrecoverable overwrite.
+- ``truncate -s``; in-place file truncation.
 
 Design (CLAUDE.md section 4: make wrong actions hard, right actions easy):
 
 - The gate denies rather than silently allowing; the deny reason names the
-  matched operation and points at the two safe paths -- run a dry-run/reversible
+  matched operation and points at the two safe paths; run a dry-run/reversible
   variant, or, when the destruction is genuinely intended and reviewed, append a
   ``# irreversible-ack`` comment to opt in. The ack mirrors the
   ``# compile-source-ack`` escape-hatch precedent (``scan_compile_from_source``).
@@ -35,7 +35,7 @@ Design (CLAUDE.md section 4: make wrong actions hard, right actions easy):
   argument or a quoted string does not trip the gate.
 - Parse-error fail-open is intentional and narrow: a malformed stdin event logs
   to stderr and exits 0 so a hook bug never wedges the session. The fail-open
-  applies only to the stdin I/O boundary -- a matched destructive command is
+  applies only to the stdin I/O boundary; a matched destructive command is
   always denied.
 
 The gate is deliberately high-confidence / low-false-positive: it covers the

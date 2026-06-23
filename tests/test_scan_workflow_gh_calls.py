@@ -30,7 +30,7 @@ class TestAllowlistEntries:
     def test_all_required_keys_present(self) -> None:
         for i, entry in enumerate(swgc.ALLOWLIST_ENTRIES):
             missing = _REQUIRED_KEYS - entry.keys()
-            assert not missing, f"entry[{i}] missing keys: {missing!r} -- {entry}"
+            assert not missing, f"entry[{i}] missing keys: {missing!r}; {entry}"
 
     def test_all_values_are_non_empty_strings(self) -> None:
         for i, entry in enumerate(swgc.ALLOWLIST_ENTRIES):
@@ -141,7 +141,7 @@ class TestFindViolations:
 
     def test_allowlisted_step_produces_no_violation(self, tmp_path: Path) -> None:
         if not swgc.ALLOWLIST_ENTRIES:
-            pytest.skip("ALLOWLIST_ENTRIES is empty -- no entries to validate")
+            pytest.skip("ALLOWLIST_ENTRIES is empty; no entries to validate")
         first = swgc.ALLOWLIST_ENTRIES[0]
         content = yaml.dump(
             {

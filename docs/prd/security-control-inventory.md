@@ -8,16 +8,16 @@ This file is the deliverable for [#179](https://github.com/tvna/claude-md/issues
 
 ## How to read this document
 
-- **Surface** -- exact path. Every file under the [#179 scope](https://github.com/tvna/claude-md/issues/179) is represented in exactly one section (its primary section); secondary appearances are cross-referenced, not duplicated.
-- **ATT&CK tactic(s)** -- abbreviated codes from #178's table. See *Tactic abbreviations* below.
-- **Existing defense** -- the deterministic check, gate, or runbook that defends this surface today.
-- **Evidence** -- the file, test, workflow, or runbook that proves the defense is in place. Internal repo paths are bare; GitHub issues use `#NNN`.
+- **Surface**; exact path. Every file under the [#179 scope](https://github.com/tvna/claude-md/issues/179) is represented in exactly one section (its primary section); secondary appearances are cross-referenced, not duplicated.
+- **ATT&CK tactic(s)**; abbreviated codes from #178's table. See *Tactic abbreviations* below.
+- **Existing defense**; the deterministic check, gate, or runbook that defends this surface today.
+- **Evidence**; the file, test, workflow, or runbook that proves the defense is in place. Internal repo paths are bare; GitHub issues use `#NNN`.
 - **Status**
-  - `covered` -- defense is operational, evidence is current, and no follow-up gap is needed.
-  - `partially covered` -- defense exists but at least one dimension (least-privilege audit, scheduled drift detection, documented rollback, dry-run, log redaction, downstream review) is incomplete. A follow-up issue tracks the gap.
-  - `not covered` -- no defense beyond default GitHub controls. A follow-up issue is mandatory.
-  - `not applicable` -- surface is not security-relevant; included only because the #179 verification rg keyword matched incidentally.
-- **Gap** -- issue number(s) for tracked follow-up. Existing issues are reused per #178's "Existing related issues reused instead of duplicated" rule. No new issues are opened by this inventory; novel gaps would be added here by a follow-up PR.
+  - `covered`; defense is operational, evidence is current, and no follow-up gap is needed.
+  - `partially covered`; defense exists but at least one dimension (least-privilege audit, scheduled drift detection, documented rollback, dry-run, log redaction, downstream review) is incomplete. A follow-up issue tracks the gap.
+  - `not covered`; no defense beyond default GitHub controls. A follow-up issue is mandatory.
+  - `not applicable`; surface is not security-relevant; included only because the #179 verification rg keyword matched incidentally.
+- **Gap**; issue number(s) for tracked follow-up. Existing issues are reused per #178's "Existing related issues reused instead of duplicated" rule. No new issues are opened by this inventory; novel gaps would be added here by a follow-up PR.
 
 ### Scheduled-detection floor
 
@@ -89,8 +89,8 @@ Notes:
 
 Notes:
 
-- The dedicated `dependabot.json` ruleset (`non_fast_forward` on `dependabot/*`, no bypass actors) was **removed in #1014**. After GitHub deprecated the standalone Dependabot App the Rulesets API rejected the bypass actor (#273), so with `bypass_actors: []` the rule blocked `@dependabot rebase` and forced close + reopen. The branch namespace is no longer ruleset-protected -- `non_fast_forward` never gated branch creation or actor identity. Auto-merge trust stays anchored on the author login `dependabot[bot]` (`scripts/dependabot_automerge.py`), and the deterministic gate `scripts/verify_dependabot_author.py` (wired into `issue-pr-triage.yml`, tested by `tests/test_verify_dependabot_author.py`) now fails any `dependabot/*` PR whose author is not a trusted bot login. This closes the #273 rebase gap (RD/IA) without re-protecting the branch.
-- `bypass_actors` is `[]` on both remaining rulesets -- the "Merge without waiting for requirements" UI path is unreachable. Emergency escape requires the [Emergency disable / re-enable procedure](../runbooks/rulesets.md#emergency-disable--re-enable-procedure), which leaves `repository_ruleset.update` audit events and is detected by `weekly-maintenance.yml` if the re-enable step is forgotten.
+- The dedicated `dependabot.json` ruleset (`non_fast_forward` on `dependabot/*`, no bypass actors) was **removed in #1014**. After GitHub deprecated the standalone Dependabot App the Rulesets API rejected the bypass actor (#273), so with `bypass_actors: []` the rule blocked `@dependabot rebase` and forced close + reopen. The branch namespace is no longer ruleset-protected; `non_fast_forward` never gated branch creation or actor identity. Auto-merge trust stays anchored on the author login `dependabot[bot]` (`scripts/dependabot_automerge.py`), and the deterministic gate `scripts/verify_dependabot_author.py` (wired into `issue-pr-triage.yml`, tested by `tests/test_verify_dependabot_author.py`) now fails any `dependabot/*` PR whose author is not a trusted bot login. This closes the #273 rebase gap (RD/IA) without re-protecting the branch.
+- `bypass_actors` is `[]` on both remaining rulesets; the "Merge without waiting for requirements" UI path is unreachable. Emergency escape requires the [Emergency disable / re-enable procedure](../runbooks/rulesets.md#emergency-disable--re-enable-procedure), which leaves `repository_ruleset.update` audit events and is detected by `weekly-maintenance.yml` if the re-enable step is forgotten.
 - The drift gate is the `ruleset-drift` job in `weekly-maintenance.yml`; the cross-family aggregator is the `security-control-drift` job (#180), which wires that drift output into #178 as evidence rather than duplicating the detector.
 
 ## 3. Label source of truth (`.github/labels.json`)
@@ -202,7 +202,7 @@ This table answers, for each row of #178's coverage table: which surfaces in thi
 
 Peer axis to the MITRE ATT&CK mapping above. ATT&CK answers "which attacker tactic is covered"; the OWASP Top 10 for Agentic Applications 2026 (ASI01-ASI10, OWASP GenAI Security Project, published 2025-12) answers "which agent-class risk is covered". The two run as cross-linked peer axes under [#178](https://github.com/tvna/claude-md/issues/178), not merged. This section is the deliverable for [#1378](https://github.com/tvna/claude-md/issues/1378) (re-homed from the retired umbrella #1023).
 
-Status vocabulary matches the per-surface tables above (`covered`, `partially covered`, `not applicable`). Here `not applicable` means the risk is structurally out of scope for this single-author instruction repository -- no persistent agent memory store (ASI06), no inter-agent message bus (ASI07) -- not that the item was skipped.
+Status vocabulary matches the per-surface tables above (`covered`, `partially covered`, `not applicable`). Here `not applicable` means the risk is structurally out of scope for this single-author instruction repository; no persistent agent memory store (ASI06), no inter-agent message bus (ASI07); not that the item was skipped.
 
 Mapping completeness is itself a deterministic gate, not reviewer memory: the PR-time `lint-scripts-static` job runs `scripts/owasp_asi_mapping.py verify`, which fails CI if any ASI item loses its status row, and the weekly `security-control-drift` job carries an `owasp-asi-mapping` family that re-runs the same tree-only check on cron and surfaces drift in the #178 rolling comment.
 
@@ -221,8 +221,8 @@ Mapping completeness is itself a deterministic gate, not reviewer memory: the PR
 
 ### Accepted residual risks (the three gaps from #1023)
 
-- **ASI03 -- agent identity / non-human identity (Gap 1).** The repo runs multiple coding agents (Claude, Codex, Devin) against one Git remote with no per-agent attribution at action time, and authenticates privileged workflows with long-lived PATs rather than short-lived / OIDC tokens. Accepted as residual risk for now: privilege is already bounded by Environment-scoped secrets, `bypass_actors: []`, and code-owner review, so an unattributed agent still cannot bypass the merge gate. Tracked for closure by #1381 (short-lived / OIDC identity) and #1380 (per-session blast-radius cap). Re-evaluate when either lands.
-- **ASI08 / ASI10 -- runtime anomaly / containment (Gap 3).** There is no in-session deviation detection or per-session mutation blast-radius cap; a compromised or drifting agent is contained only at the merge boundary. Accepted as residual risk: the merge boundary is a hard gate (`bypass_actors: []`, required code-owner review, squash-only, no direct push), so the blast radius of a rogue in-session action stops at an unmerged branch. Tracked by #1380. Re-evaluate when a runtime anomaly signal is scoped.
+- **ASI03; agent identity / non-human identity (Gap 1).** The repo runs multiple coding agents (Claude, Codex, Devin) against one Git remote with no per-agent attribution at action time, and authenticates privileged workflows with long-lived PATs rather than short-lived / OIDC tokens. Accepted as residual risk for now: privilege is already bounded by Environment-scoped secrets, `bypass_actors: []`, and code-owner review, so an unattributed agent still cannot bypass the merge gate. Tracked for closure by #1381 (short-lived / OIDC identity) and #1380 (per-session blast-radius cap). Re-evaluate when either lands.
+- **ASI08 / ASI10; runtime anomaly / containment (Gap 3).** There is no in-session deviation detection or per-session mutation blast-radius cap; a compromised or drifting agent is contained only at the merge boundary. Accepted as residual risk: the merge boundary is a hard gate (`bypass_actors: []`, required code-owner review, squash-only, no direct push), so the blast radius of a rogue in-session action stops at an unmerged branch. Tracked by #1380. Re-evaluate when a runtime anomaly signal is scoped.
 - **ASI mapping itself (Gap 2)** is closed by this section plus its deterministic re-verification (the `scripts/owasp_asi_mapping.py` gate and the `owasp-asi-mapping` drift family), so the mapping cannot silently drift.
 
 ## Gap summary
@@ -248,7 +248,7 @@ Resolved gaps (closed-completed; their controls landed and are recorded in the r
 
 Surfaces explicitly marked `not applicable`:
 
-- `docs/standards/performance-metrics.md` -- design-only doc, no operational control.
+- `docs/standards/performance-metrics.md`; design-only doc, no operational control.
 
 ## Re-verification
 
@@ -260,7 +260,7 @@ rg -n "PAT|secret|token|bypass|permissions|workflow_dispatch|audit log|rollback|
 
 Expected behavior:
 
-- Every distinct file that matches the keywords and is part of #179's scope is represented in exactly one of sections 1-7 above. Matches inside `uv.lock` (locked package metadata) and inside ASCII translation fixtures count as one surface -- `uv.lock` -- and are covered under section 5.
+- Every distinct file that matches the keywords and is part of #179's scope is represented in exactly one of sections 1-7 above. Matches inside `uv.lock` (locked package metadata) and inside ASCII translation fixtures count as one surface; `uv.lock`; and are covered under section 5.
 - A match in a file already represented in this inventory under its primary section is acceptable and does not require a new entry.
 - A match in a file NOT represented here is a defect in this inventory and should be added by a PR that closes #179 follow-up.
 
@@ -272,7 +272,7 @@ of `verify-agents.yml` (refs #1387). The gate fails CI when
 - a surface that crosses a secret / privilege boundary (a workflow using a
   non-`GITHUB_TOKEN` secret or declaring an `environment:`, or a script
   importing `_secret_patterns`) is not declared in
-  `.github/security-surface-inventory.toml` -- so a NEW privileged surface
+  `.github/security-surface-inventory.toml`; so a NEW privileged surface
   cannot land without either an inventory row or a justified exemption;
 - a manifest entry marked `status = "inventory"` has no row here, or a
   `status = "exempt"` entry carries no reason;
@@ -283,6 +283,6 @@ The gate is tree-only and runs with no network, so it cannot read GitHub issue
 state; reconciling a *closed* tracking issue that lingers in a Gap column stays
 a periodic resync plus the weekly drift job's domain. Because the row counts in
 sections 1-7 grow as controls land, this document no longer asserts a fixed row
-count per section -- the gate, not a hardcoded number, is the currency check.
+count per section; the gate, not a hardcoded number, is the currency check.
 
 Closes #179.

@@ -9,12 +9,12 @@ English | [日本語](./survey-followup-timing.sequence.ja.md)
 This document visualizes the agent / CI / human collaboration across one full
 session lifecycle: it starts the timeline at the moment the operator submits a
 prompt into a SessionStart-booted session, and traces through to the two
-Stop-event handoff moments -- the pre-merge retro/satisfaction survey and the
+Stop-event handoff moments; the pre-merge retro/satisfaction survey and the
 new-session follow-up prompt. A temporally ordered sequence view is the right
 lens because the defect is not in any single hook's logic but in the ordering
 and repetition of messages across actors on one turn: a multi-PR session replays
-the survey leg once per created PR. Only a timeline -- anchored at SessionStart
-so every phase is traceable -- makes the duplicate firing legible.
+the survey leg once per created PR. Only a timeline; anchored at SessionStart
+so every phase is traceable; makes the duplicate firing legible.
 
 - Evidence tags: `[fact]` is observed in-tree (cited file:line); `[analysis]` is
   a gap judgement.
@@ -40,7 +40,7 @@ the per-PR handoff of a GitHub PR, yet it lives in Family B. Family A already
 gates `create_pull_request` once per call (`post_pr_create_ci_monitor` /
 `post_pr_create_body_fix` are PostToolUse on that exact tool), so the survey
 could key its dedup off the create-call identity. As a Family B Stop hook it
-instead transcript-scrapes PR numbers and replays -- the structural root of #1594.
+instead transcript-scrapes PR numbers and replays; the structural root of #1594.
 
 ## superpowers involvement points
 
@@ -64,7 +64,7 @@ SessionStart hook plus skills the agent loads at decision points:
 rest are *skills* the agent elects to invoke, so they are advisory, not gates.
 For the survey/follow-up timing problem this matters: the parallel-dispatch and
 review skills shaped HOW this artifact was built, but they add no enforcement to
-WHEN the survey fires -- that stays entirely with the repo-owned Family B Stop
+WHEN the survey fires; that stays entirely with the repo-owned Family B Stop
 hook. superpowers is a build-time force-multiplier here, not part of the #1594
 control surface.
 
@@ -81,7 +81,7 @@ sequenceDiagram
 
     Note over Agent,Stop: SessionStart (Family B, boot phase): install-* toolchain,<br/>gen_mcp_json, plan_language_context (owner-language policy),<br/>check_session_branch, check_pr_mergeability
     Note over Agent,Stop: SP SessionStart hook (superpowers, _apm_source):<br/>run-hook.cmd loads the skill catalog (using-superpowers)
-    Note over Human,Agent: TIMELINE START -- operator submits the prompt
+    Note over Human,Agent: TIMELINE START - operator submits the prompt
     Human->>Agent: submit prompt (the task)
     Note over Agent,Stop: UserPromptSubmit (Family B): prompt_context7_gate<br/>injects the primary-source-docs advisory
     Note over Agent: SP plan phase: brainstorming + writing-plans skills (CLAUDE.md s1)
@@ -123,7 +123,7 @@ sequenceDiagram
     alt turn signals handoff AND no paste-ready prompt
         Stop-->>Agent: block: emit paste-ready next-session prompt
         Agent->>Human: fenced paste-ready prompt
-        Note over Human,Agent: operator RESPONSE timing -- pasting it into a follow-up<br/>session re-enters at SessionStart (loops back to the top)
+        Note over Human,Agent: operator RESPONSE timing - pasting it into a follow-up<br/>session re-enters at SessionStart (loops back to the top)
     else cue missed or fence present
         Note over Stop: no-op (can miss handoffs)
     end
@@ -169,7 +169,7 @@ unreadable transcript exits 0): `gate_handoff_retro_survey_askuserquestion.py:34
 and `stop_new_session_handoff_prompt.py:197`. `[analysis]` The CI `open-retro`
 job is the Family B backstop, but it only opens a retro (not a satisfaction
 survey), so a double-fired survey (#1594) is an agent/operator-friction defect,
-not a correctness loss -- the fix belongs at the session-marker / hook-family
+not a correctness loss; the fix belongs at the session-marker / hook-family
 layer, not in CI.
 
 `[analysis]` The follow-up prompt is depicted at two moments: its **emission**

@@ -3,7 +3,7 @@ invoking ``gh`` as the executable.
 
 Hook scripts registered in ``.claude/settings.json`` and ``.codex/hooks.json``
 run in remote execution environments where the ``gh`` CLI may be absent.
-This test catches regressions early -- before a broken hook surfaces at runtime.
+This test catches regressions early; before a broken hook surfaces at runtime.
 """
 
 from __future__ import annotations
@@ -30,7 +30,7 @@ def _collect_hook_scripts() -> list[Path]:
     Walks each hook config structurally and collects every ``scripts/*.py``
     token from each command. Token-based extraction is robust to the CWD
     wrapper the generator injects (``cd "$(git rev-parse --show-toplevel)" &&
-    python3 scripts/foo.py``) -- the ``scripts/foo.py`` token is still present
+    python3 scripts/foo.py``); the ``scripts/foo.py`` token is still present
     regardless of any prefix.
     """
     scripts: set[str] = set()
@@ -100,7 +100,7 @@ def _gh_subprocess_violations(path: Path) -> list[str]:
 def test_hook_scripts_contain_no_gh_subprocess_calls() -> None:
     """All hook scripts must be free of direct ``gh`` subprocess invocations."""
     hook_scripts = _collect_hook_scripts()
-    assert hook_scripts, "No hook scripts found -- check settings.json / hooks.json paths"
+    assert hook_scripts, "No hook scripts found; check settings.json / hooks.json paths"
 
     all_violations: list[str] = []
     for script in hook_scripts:

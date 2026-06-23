@@ -12,7 +12,7 @@ paired PreToolUse hook before using a new write tool.
 Rationale: dedicated hooks gate and audit the write tools listed in
 :data:`HOOK_COVERED_TOOLS`. Any tool NOT in that set has no preflight at
 all. Read-only operations (list, get, search) are safe to pass through
-directly -- they carry no write risk -- and are enumerated in
+directly; they carry no write risk; and are enumerated in
 :data:`READ_ONLY_TOOLS`. Write operations require a hook before they can
 be unblocked.
 See #887 for the MCP-vs-GitHub-API design decision.
@@ -33,7 +33,7 @@ from _hook_runtime import emit_decision, read_event
 # Tools that already have dedicated PreToolUse hooks in
 # .claude/settings.json. Calls to these tools are allowed through;
 # their own hooks handle the gating. Keep in sync with the matcher
-# groups in settings.json PreToolUse -- drift is caught by
+# groups in settings.json PreToolUse; drift is caught by
 # test_gate_mcp_github_uncovered.py::test_covered_set_matches_settings.
 HOOK_COVERED_TOOLS: frozenset[str] = frozenset(
     {
@@ -58,7 +58,7 @@ HOOK_COVERED_TOOLS: frozenset[str] = frozenset(
 # Includes both the consolidated names used by the current deployment
 # (issue_read, pull_request_read) and the pre-consolidation names used
 # by the Nix-pinned github-mcp-server v0.3.0 in the devcontainer
-# (get_issue, get_pull_request, etc. -- see pkg/github/tools.go@v0.3.0).
+# (get_issue, get_pull_request, etc.; see pkg/github/tools.go@v0.3.0).
 # Refs #1869.
 READ_ONLY_TOOLS: frozenset[str] = frozenset(
     {

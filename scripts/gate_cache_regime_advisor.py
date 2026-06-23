@@ -4,14 +4,14 @@
 Prompt caching is the dominant cost lever in Claude Code web sessions: cache
 *writes* are billed at 1.25x base input, cache *reads* at 0.1x. The regime only
 pays off when each written prefix is read back enough times to amortise the
-write premium -- if a silent invalidator (a timestamp in the prompt prefix, a
+write premium; if a silent invalidator (a timestamp in the prompt prefix, a
 reordered tool list, a per-turn id) breaks the prefix every turn, the session
 keeps re-writing the cache and rarely reads it, paying the write premium for no
 benefit. ``scripts/session_cost_structure.py`` (#1492) makes that structure
 visible after the fact; this hook surfaces it *to the agent at end of turn* so a
 thrashing regime is noticed in-session rather than in a post-mortem.
 
-The signal is the **amortisation ratio** -- cache-read tokens divided by
+The signal is the **amortisation ratio**; cache-read tokens divided by
 cache-write tokens. A healthy session reads each written token back several
 times: the session this gate was calibrated against measured ~5.3x
 (cache_read 1.39M / cache_write 262k). The advisory floor is therefore 1.0:
@@ -23,7 +23,7 @@ constant.
 
 This gate is **advisory only and never blocks**. It mirrors the Claude-only Stop
 registration of ``stop_new_session_handoff_prompt.py`` but, unlike that gate,
-emits no ``decision: block`` -- it writes a single ``::warning::`` advisory to
+emits no ``decision: block``; it writes a single ``::warning::`` advisory to
 stderr (visible in the hook log / verbose transcript) and exits 0. A caching
 heuristic must never wedge a turn, and a regime warning is information, not a
 gate.

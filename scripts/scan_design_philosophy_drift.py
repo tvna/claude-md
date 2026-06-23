@@ -24,7 +24,7 @@ The contract is:
 * ``--master`` is the APM source file. Its top-level numbered sections
   are enumerated as ``^## (\\d+)\\. ``. The maximum section number N
   determines the expected principle count. Each section's subtitle
-  ``*Layer: <text> -- ...*`` (em-dash separator) yields the layer name
+  ``*Layer: <text>; ...*`` (em-dash separator) yields the layer name
   for label-parity checking.
 * ``--doc`` is the design-philosophy doc. Its Section 3 responsibility
   matrix is extracted (everything between the ``## 3. `` heading and
@@ -54,7 +54,7 @@ The ``verify-coupling`` subcommand adds a diff-aware gate (Refs #1190):
 when a PR changes ``.apm/instructions/master.instructions.md`` it must,
 in the same PR, also change ``docs/prd/agent-rules-design-philosophy.md``
 so the Section 3 responsibility matrix is reviewed alongside the
-principle edit -- or carry a plain-text ``philosophy-matrix-ack`` line in
+principle edit; or carry a plain-text ``philosophy-matrix-ack`` line in
 the PR body to consciously opt out (for example a typo-only edit that
 changes no responsibility). This catches the per-bullet matrix drift the
 structural ``verify`` check cannot see, deterministically rather than by
@@ -526,7 +526,7 @@ def _cmd_verify_coupling(args: argparse.Namespace) -> int:
 
 
 def _run(cmd: list[str], *, runner=subprocess.run):
-    """Thin subprocess boundary -- the only impure surface for diffing.
+    """Thin subprocess boundary; the only impure surface for diffing.
 
     ``check=True`` raises ``CalledProcessError`` on non-zero exit; the
     caller in :func:`_cmd_verify_coupling` translates that into the

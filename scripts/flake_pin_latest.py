@@ -6,7 +6,7 @@ is the writer; the refresh workflow recomputes hashes). For a given tool it:
 
 1. reads the currently pinned version from ``flake.nix`` (via ``flake_pin``);
 2. fetches the latest GitHub Release tag for the tool's repo;
-3. enforces a cooldown window -- the release's ``published_at`` must be at
+3. enforces a cooldown window; the release's ``published_at`` must be at
    least ``[tool.uv].exclude-newer`` days old (the same freshness budget the
    repository already applies to Python packages and the locked nixpkgs, reused
    here as the single source of truth, mirroring ``nixpkgs_cooldown.py``).
@@ -35,7 +35,7 @@ Contract:
     Outputs: prints the adoptable target version to stdout when a newer release
         is past the cooldown window, otherwise prints nothing; exit 0 in both
         the adopt and hold cases so the workflow branches on stdout.
-    Failure policy: fails loud per CLAUDE.md section 4 -- a non-2xx API status,
+    Failure policy: fails loud per CLAUDE.md section 4; a non-2xx API status,
         a non-JSON / non-object body, a missing ``tag_name`` / ``published_at``,
         or an unparseable version exits non-zero rather than silently holding.
 """
@@ -148,7 +148,7 @@ def decide(
 
     Holds (returns ``None``) when the latest release is not newer than the pin
     or has not yet aged past the cooldown window. Raises ``LatestPinError`` on
-    any malformed input -- never silently treats an error as "hold".
+    any malformed input; never silently treats an error as "hold".
     """
     if now is None:
         now = dt.datetime.now(dt.UTC)

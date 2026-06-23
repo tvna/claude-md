@@ -61,8 +61,8 @@ belongs.
 
 `scripts/scan_docs_inventory.py verify` also enforces a byte budget on
 `docs/INDEX.md` (`MAX_INDEX_BYTES`, 40 KiB). INDEX is read on demand
-whenever an agent navigates `docs/` -- it is not part of the per-request
-prefix -- so its byte weight is a per-navigation read cost. The budget
+whenever an agent navigates `docs/`; it is not part of the per-request
+prefix; so its byte weight is a per-navigation read cost. The budget
 blocks runaway growth rather than discovering it after the fact, and
 forces the split decision at a documented threshold instead of leaving it
 to agent memory.

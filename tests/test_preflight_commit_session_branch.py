@@ -38,7 +38,7 @@ def _with_session(
 
 
 # ---------------------------------------------------------------------------
-# decide() -- environment gate
+# decide(); environment gate
 # ---------------------------------------------------------------------------
 
 
@@ -72,7 +72,7 @@ def test_decide_passthrough_commit_tree(monkeypatch: pytest.MonkeyPatch) -> None
 
 
 def test_decide_passthrough_no_session_branch(monkeypatch: pytest.MonkeyPatch) -> None:
-    # Empty authorized set (bootstrap / unrecorded session) -- fail-open.
+    # Empty authorized set (bootstrap / unrecorded session); fail-open.
     monkeypatch.setenv("CLAUDE_CODE_REMOTE", "true")
     monkeypatch.setattr(subject, "_read_authorized_branches", set)
     monkeypatch.setattr(subject, "_current_branch", lambda: "other/branch")
@@ -80,13 +80,13 @@ def test_decide_passthrough_no_session_branch(monkeypatch: pytest.MonkeyPatch) -
 
 
 def test_decide_passthrough_detached_head(monkeypatch: pytest.MonkeyPatch) -> None:
-    # Unknown current branch (detached HEAD / read error) -- fail-open.
+    # Unknown current branch (detached HEAD / read error); fail-open.
     _with_session(_SESSION_BRANCH, None, monkeypatch)
     assert subject.decide(_bash_event("git commit -m x")) is None
 
 
 # ---------------------------------------------------------------------------
-# decide() -- allowed commits (on the session branch)
+# decide(); allowed commits (on the session branch)
 # ---------------------------------------------------------------------------
 
 
@@ -104,7 +104,7 @@ def test_decide_allows_chained_commit_on_session_branch(
 
 
 # ---------------------------------------------------------------------------
-# decide() -- denied commits (on a non-session branch)
+# decide(); denied commits (on a non-session branch)
 # ---------------------------------------------------------------------------
 
 
@@ -159,7 +159,7 @@ def test_decide_denies_commit_amend_on_other_branch(
 
 
 # ---------------------------------------------------------------------------
-# decide() -- multi-factor authorized set (Refs #1513)
+# decide(); multi-factor authorized set (Refs #1513)
 # ---------------------------------------------------------------------------
 
 

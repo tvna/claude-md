@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Step registry for :mod:`preflight_all` -- the gate set CI mirrors locally.
+"""Step registry for :mod:`preflight_all`; the gate set CI mirrors locally.
 
 Issue #1670 extraction: ``preflight_all.py`` had reached its 800-line
 maintainability budget (scripts/scan_maintainability_metrics.py), and the
@@ -11,7 +11,7 @@ gate keeps protecting both files. :mod:`preflight_all` re-exports
 ``preflight_all.Step`` references (scan_preflight_drift.py,
 scan_devcontainer_tool_drift.py, tests) resolve unchanged.
 
-This module is pure data plus a frozen dataclass -- it imports nothing
+This module is pure data plus a frozen dataclass; it imports nothing
 from :mod:`preflight_all`, so the re-export creates no import cycle.
 
 Tested by ``tests/test_preflight_steps.py`` (data invariants) and, via
@@ -89,6 +89,19 @@ STEPS: tuple[Step, ...] = (
             "--git-tracked",
         ),
     ),
+    Step(
+        # Refs #1903. Repo-wide gate: no tracked prose file may carry a
+        # space-hyphen-hyphen-space prose separator. Skips noqa lines,
+        # Markdown table rows, and structured-data extensions (.yml, .yaml,
+        # .sh, .json, .toml, .lock, .sql). Complements scan_repo_em_dash.py.
+        name="scan_repo_double_hyphen",
+        argv=(
+            "python3",
+            "scripts/scan_repo_double_hyphen.py",
+            "verify",
+            "--git-tracked",
+        ),
+    ),
     Step(name="verify_apm_checksums", argv=("python3", "scripts/verify_apm_checksums.py", "verify")),
     Step(name="scan_apm_lock_drift", argv=("python3", "scripts/scan_apm_lock_drift.py", "verify")),
     Step(
@@ -106,7 +119,7 @@ STEPS: tuple[Step, ...] = (
     Step(
         # Refs #1207. Runtime gate: fails when ``uv --version`` does not match
         # ``[tool.uv].required-version``. Complements the static drift gate
-        # above -- that one catches literal-value drift across the source
+        # above; that one catches literal-value drift across the source
         # tree; this one catches the host-uv vs pin gap PR #1206 left open
         # for Claude Code's process PATH. ``soft=True`` so a contributor
         # laptop without uv warn-skips (the same posture as ruff/mypy below);
@@ -152,8 +165,8 @@ STEPS: tuple[Step, ...] = (
     ),
     Step(
         # Refs #1256. Workflow correctness gate: actionlint validates
-        # workflow syntax, ${{ }} expressions, and -- with shellcheck on
-        # PATH -- the shell in every ``run:`` block. Complements the
+        # workflow syntax, ${{ }} expressions, and; with shellcheck on
+        # PATH; the shell in every ``run:`` block. Complements the
         # security-focused scan_workflow_* gates above (syntax/shell
         # correctness is a different concern from pinning/injection). The
         # binaries come from flake.nix (sharedPackages); soft so a
@@ -184,7 +197,7 @@ STEPS: tuple[Step, ...] = (
     ),
     Step(
         # Refs #1325. Fails when a Markdown doc outside docs/archive/ cites a
-        # .github/workflows/<name>.yml path that no longer exists -- the drift
+        # .github/workflows/<name>.yml path that no longer exists; the drift
         # class #1319's workflow consolidation left behind.
         name="scan_doc_workflow_refs",
         argv=("python3", "scripts/scan_doc_workflow_refs.py", "verify"),
@@ -395,7 +408,7 @@ STEPS: tuple[Step, ...] = (
     Step(
         # Refs #1230. Fails when a scripts/*.sh writes $CLAUDE_ENV_FILE
         # directly instead of persisting PATH via persist_session_path from
-        # scripts/_session_path.sh -- the duplication that refactor removed.
+        # scripts/_session_path.sh; the duplication that refactor removed.
         name="scan_session_path_drift",
         argv=("python3", "scripts/scan_session_path_drift.py", "verify"),
     ),

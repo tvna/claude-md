@@ -10,15 +10,15 @@ the trust boundary into an issue, PR, comment, or review body.
 
 Why this gate (CLAUDE.md S4): ``scripts/scan_secrets.py`` covers committed
 files and ``scripts/block_sensitive_reads.py`` blocks reads of credential
-files, but no gate scanned ``mcp__github__*`` write bodies -- a token pasted
+files, but no gate scanned ``mcp__github__*`` write bodies; a token pasted
 into an issue or PR body would post uncaught, and a published secret cannot
 be fully unpublished (it may be cached or indexed even after deletion).
 This hook closes that sink. Refs #1388, umbrella #178.
 
 Architecture mirrors :mod:`preflight_non_ascii`: pure functions on top, one
 thin stdin/stdout boundary at the bottom (:func:`main`). The detection
-patterns are imported from :mod:`_secret_patterns` -- shared with
-``scan_secrets.py`` -- so the committed-file gate and this write gate cannot
+patterns are imported from :mod:`_secret_patterns`; shared with
+``scan_secrets.py``; so the committed-file gate and this write gate cannot
 drift. The matched secret value is NEVER echoed: the deny reason names only
 the field and the rule id, keeping the gate output safe to surface.
 
@@ -81,7 +81,7 @@ def first_finding(tool_input: dict[str, Any]) -> tuple[str, str] | None:
     value is never read out of the scan result, so the returned tuple carries
     no secret. Named ``first_finding`` (not ``find_secret``) so a name-based
     sensitive-data / taint heuristic does not mark the rule-name result as a
-    secret -- it is not, and emitting it exposes nothing (CWE-312 false
+    secret; it is not, and emitting it exposes nothing (CWE-312 false
     positive). The no-echo property is pinned by
     ``test_deny_reason_does_not_echo_secret``.
     """
@@ -119,7 +119,7 @@ def decide(tool_name: str, tool_input: dict[str, Any]) -> dict[str, Any] | None:
     finding = first_finding(tool_input)
     if finding is None:
         return None
-    # `finding` is (field locator, rule id) only -- never the matched value
+    # `finding` is (field locator, rule id) only; never the matched value
     # (pinned by test_deny_reason_does_not_echo_secret), so emitting it in the
     # deny reason exposes no secret: the rule id is a fixed constant such as
     # "github-token", not the token itself.
@@ -128,7 +128,7 @@ def decide(tool_name: str, tool_input: dict[str, Any]) -> dict[str, Any] | None:
 
 
 # ---------------------------------------------------------------------------
-# Side-effecting boundary -- the only impure surface, monkeypatched in tests
+# Side-effecting boundary; the only impure surface, monkeypatched in tests
 # ---------------------------------------------------------------------------
 
 
@@ -138,9 +138,9 @@ def main(argv: list[str] | None = None) -> int:
     Fails open per CLAUDE.md S4: a malformed event or unexpected payload
     shape emits ``::error::...`` to stderr and exits 0 with no decision, so a
     hook bug never wedges the session. As with the sibling ``Bash``-style
-    gates (#1389), the event JSON envelope is harness-generated -- only the
+    gates (#1389), the event JSON envelope is harness-generated; only the
     string field *values* are attacker-influenced, and a string value cannot
-    corrupt the surrounding JSON object -- so an attacker cannot force the
+    corrupt the surrounding JSON object; so an attacker cannot force the
     parse error to bypass this gate. ``auditable=False`` so
     ``CLAUDE_GATE_MODE=audit`` can never disable this security-boundary gate.
     """

@@ -2,10 +2,10 @@
 """PreToolUse advisory: surface the PR-body obligation at commit time.
 
 Refs #1710 (retro #1703, repair 1). The universal-instruction-text PR body
-gates -- ``verify_text_delta_section`` (a ``## Text delta`` section is required
+gates; ``verify_text_delta_section`` (a ``## Text delta`` section is required
 when ``CLAUDE.md`` / ``AGENTS.md`` / ``.apm/instructions/**`` change) and
 ``verify_instruction_text_growth`` (a ``text-growth-ack:`` line is required when
-``.apm/instructions/**`` grows net-positive) -- run only at pre-push, after the
+``.apm/instructions/**`` grows net-positive); run only at pre-push, after the
 work is committed. PR #1698 hit exactly that gap: the agent committed an
 instruction-text edit before preparing the body, and learned the requirement
 only when the first ``git push`` was rejected. That is the same after-the-work

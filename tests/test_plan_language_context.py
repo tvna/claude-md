@@ -181,7 +181,7 @@ class TestBuildContextMessage:
 
     def test_scope_covers_execution_not_only_plan_mode(self) -> None:
         # Refs #817: the binding scope must cover operator-facing chat in
-        # every mode (planning AND execution), not plan mode alone -- the
+        # every mode (planning AND execution), not plan mode alone; the
         # plan-mode-only scope was the gap that let execution-turn tool
         # narration drift back to English.
         msg = plc.build_context_message("@tvna", "ja")

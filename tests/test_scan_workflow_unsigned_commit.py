@@ -114,7 +114,7 @@ class TestFindViolations:
 
     def test_ack_marker_suppresses(self, tmp_path: Path) -> None:
         # The ack marker must live inside the run script body (a `run: |` block),
-        # not as a trailing YAML comment -- YAML would strip a `# ...` comment
+        # not as a trailing YAML comment; YAML would strip a `# ...` comment
         # before the scanner ever sees it.
         wf_dir = _make_workflow_dir(tmp_path)
         (wf_dir / "ok.yml").write_text(

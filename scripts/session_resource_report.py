@@ -16,7 +16,7 @@ two metrics then describe different windows (#1435).
 The fix is a per-PR checkpoint. On each real PR-create the ``checkpoint``
 subcommand snapshots the cumulative ccusage totals and a timestamp to a
 session-scoped file. The report then subtracts that baseline so both the token
-window and the Elapsed window start at the same point -- the previous
+window and the Elapsed window start at the same point; the previous
 PR-create. The checkpoint is advanced only by the ``checkpoint`` subcommand
 (wired to the ``mcp__github__create_pull_request`` PostToolUse hook), never by
 generating the section, so regenerating a body is idempotent.
@@ -31,8 +31,8 @@ its input is missing: no checkpoint and no ``CCR_SPAWN_TIMESTAMP_MS`` -> elapsed
 unavailable; no session id, ``ccusage`` absent from PATH, a non-zero ccusage
 exit, unparseable JSON, or no row for the session -> token/cost/model
 unavailable. The script never raises and always prints a presence-valid section
-to stdout (exit 0), so a PR author on a host without ccusage -- or a
-human-authored PR with no session at all -- still gets a section they can paste
+to stdout (exit 0), so a PR author on a host without ccusage; or a
+human-authored PR with no session at all; still gets a section they can paste
 verbatim.
 
 Refs #1413, #1435.
@@ -121,7 +121,7 @@ def compute_elapsed(spawn_ms: object, now_ms: float) -> str | None:
     ``CCR_SPAWN_TIMESTAMP_MS`` session-spawn value (typically a string from the
     environment). ``None`` is returned when it is missing, non-numeric, or
     yields a negative interval (a clock skew or a start timestamp in the
-    future) -- the caller renders that as the unavailable marker rather than a
+    future); the caller renders that as the unavailable marker rather than a
     bogus duration.
     """
     if spawn_ms is None:
@@ -146,7 +146,7 @@ def parse_usage(raw: object, session_id: str) -> Usage | None:
     usable row. ccusage groups sessions under the ``period`` field, so a row
     whose ``period`` equals *session_id* is the exact match. ``--id`` already
     filters server-side, so when exactly one row is returned it is treated as
-    the requested session even if the ``period`` text differs -- a schema
+    the requested session even if the ``period`` text differs; a schema
     variation must not blank the numbers ccusage did return.
     """
     try:
@@ -217,7 +217,7 @@ def delta_usage(cumulative: Usage, baseline: Usage | None) -> Usage:
 
     With no *baseline* (the first PR of a session) the cumulative total is the
     window. When any field would go negative the *baseline* is treated as stale
-    or belonging to a different session and is ignored -- the cumulative total
+    or belonging to a different session and is ignored; the cumulative total
     is returned rather than a nonsensical negative delta. ``models`` always
     reflects the current cumulative row.
     """
@@ -330,7 +330,7 @@ def _run_ccusage(session_id: str) -> str | None:
     *session_id* against the ``period`` field instead.
 
     ``None`` on any failure: missing session id, ccusage not on PATH, a
-    non-zero exit, or a timeout. Never raises -- the generator must degrade,
+    non-zero exit, or a timeout. Never raises; the generator must degrade,
     not crash, when the tool is unavailable.
     """
     if not session_id:
@@ -368,7 +368,7 @@ def _run_ccusage_codex() -> str | None:
     Codex-specific counterpart to :func:`_run_ccusage`.  No session-id
     argument is passed because per-row filtering is not applied (the
     ``sessions`` array was empty in all available captures; per-row schema is
-    unconfirmed -- see #1467).
+    unconfirmed; see #1467).
     """
     binary = shutil.which("ccusage")
     if binary is None:
@@ -390,7 +390,7 @@ def _run_ccusage_codex() -> str | None:
 def parse_usage_codex(raw: object) -> Usage | None:
     """Return a usage dict from ``ccusage codex session --json`` totals.
 
-    Reads from ``totals`` only -- per-row matching is not implemented because
+    Reads from ``totals`` only; per-row matching is not implemented because
     the ``sessions`` array was empty in all available captures (DATA blocker:
     per-row schema and model key are unconfirmed; see #1467).
 
@@ -435,13 +435,13 @@ def _codex_rollout_session_id(_base: Path | None = None) -> str:
     ``~/.codex/sessions/YYYY/MM/DD/rollout-<TIMESTAMP>-<UUID>.jsonl``
     (openai/codex primary source: Session/Rollout Files discussion #3827).
     The UUID in the filename is extracted with a regex and used as the
-    checkpoint key -- the JSON content (``session_meta``) is NOT parsed
+    checkpoint key; the JSON content (``session_meta``) is NOT parsed
     because its field names are unconfirmed (DATA blocker; see #1467).
 
     Returns empty string when:
     - no rollout files exist (ccusage-codex has not run yet in this container)
     - two or more files share the same mtime within 1 s (concurrent sessions:
-      ambiguous which is the active one -- degrade rather than guess wrong tokens)
+      ambiguous which is the active one; degrade rather than guess wrong tokens)
     - any filesystem error or unexpected filename format
 
     *_base* is injectable for tests; defaults to ``~/.codex/sessions``.
@@ -490,7 +490,7 @@ def load_checkpoint(session_id: str, env: Mapping[str, str]) -> Checkpoint | Non
     """Return the persisted per-PR checkpoint for *session_id*, or ``None``.
 
     ``None`` when no checkpoint exists yet (first PR of the session), the file
-    is unreadable, or its contents are malformed -- any of those falls back to
+    is unreadable, or its contents are malformed; any of those falls back to
     the session-start baseline rather than crashing.
     """
     path = _checkpoint_path(session_id, env)
@@ -552,7 +552,7 @@ def gather(
         session_id = _codex_rollout_session_id()
         checkpoint = load_checkpoint(session_id, env)
         # No Codex session-start env var; rollout timestamp format unconfirmed
-        # (DATA blocker, #1467) -- use checkpoint ts for PR #2+, else unavailable.
+        # (DATA blocker, #1467); use checkpoint ts for PR #2+, else unavailable.
         window_start: object = checkpoint["ts_ms"] if checkpoint else None
         raw = _run_ccusage_codex()
         cumulative = parse_usage_codex(raw) if raw is not None else None
@@ -578,7 +578,7 @@ def write_checkpoint(
     Called by the ``mcp__github__create_pull_request`` PostToolUse hook (the
     real PR-create event). Reads the cumulative ccusage totals and records them
     with *now_ms* so the next report subtracts this boundary. A no-op when
-    ccusage yields nothing (no session id, ccusage absent, unparseable) -- any
+    ccusage yields nothing (no session id, ccusage absent, unparseable); any
     prior checkpoint is left intact rather than blanked.
     """
     env = os.environ if env is None else env

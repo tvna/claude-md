@@ -11,12 +11,12 @@ Avoids a PyYAML dependency by parsing the narrow subset of YAML used
 by Dependabot's ``labels:`` list: a key named exactly ``labels`` at
 any indent, followed by a contiguous run of ``- value`` items at a
 deeper indent. Inline comments and ``#`` characters inside label
-values are NOT supported -- the repo's labels.json names contain no
+values are NOT supported; the repo's labels.json names contain no
 ``#``, and Dependabot's schema has no inline-comment idiom here.
 
 Exit codes:
-* 0 -- every label reference resolves in the SoT.
-* 1 -- at least one drift found, or a file is missing/malformed.
+* 0; every label reference resolves in the SoT.
+* 1; at least one drift found, or a file is missing/malformed.
 
 Tested by ``tests/test_dependabot_labels.py``. CLAUDE.md section 3
 (deterministic harness in CI).
@@ -40,7 +40,7 @@ def parse_dependabot_labels(yaml_text: str) -> list[str]:
     ``labels:`` line itself. The block ends at the first non-blank
     line whose indent is less than or equal to the ``labels:`` line.
 
-    Order is preserved across blocks and duplicates are kept -- callers
+    Order is preserved across blocks and duplicates are kept; callers
     that want unique references should deduplicate.
     """
     labels: list[str] = []

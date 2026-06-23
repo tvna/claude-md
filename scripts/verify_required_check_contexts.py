@@ -4,7 +4,7 @@ GitHub Rulesets matches `required_status_checks[].context` against the
 `check_run.name` reported by GitHub Actions. For GitHub Actions check_runs
 this defaults to the job id unless `jobs.<job_id>.name` is set explicitly,
 so a workflow with `name: Verify ruleset sync` and `jobs.gate.<no name>:`
-reports a check_run named `gate` -- which does NOT match a SoT context
+reports a check_run named `gate`; which does NOT match a SoT context
 of `"Verify ruleset sync / gate"`. Issue #287 captures the silent break
 this caused (PR #271, PR #274 both merged via admin bypass because the
 required gates never resolved).

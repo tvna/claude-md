@@ -13,11 +13,11 @@ each file and checks that every Claude entry has a Codex counterpart.
 
 The check covers two surfaces:
 
-* ``scripts/*.py`` hook commands -- compared Claude → Codex only: Codex
+* ``scripts/*.py`` hook commands; compared Claude → Codex only: Codex
   may add extra hooks for its own tooling (e.g.
   ``preflight_codex_github_footer.py``). Gaps that are structurally
   impossible to mirror in Codex are listed in :data:`ALLOWLIST`.
-* ``scripts/install-*.sh`` SessionStart provisioners -- checked for
+* ``scripts/install-*.sh`` SessionStart provisioners; checked for
   three-way cross-agent *parity* (Refs #1607, #1609). An installer wired
   into any agent must be wired into **every** agent (``claude``, ``codex``,
   ``devin``) unless it carries a per-agent exemption in
@@ -26,7 +26,7 @@ The check covers two surfaces:
   blanket skip: a genuinely-missing agent can no longer hide behind an
   entry that merely names the installer, and a stale exemption fails loudly.
   This closes the false negative where an installer wired into ``claude``
-  alone -- as ``install-bun.sh`` once was -- slipped past the gate.
+  alone; as ``install-bun.sh`` once was; slipped past the gate.
 
 Devin is read directly from ``.devin/hooks.v1.json`` rather than assumed to
 mirror Codex, so a broken ``"mirror": "codex"`` invariant cannot hide a
@@ -35,8 +35,8 @@ per-agent gap.
 APM-managed superpowers hooks are skipped on both surfaces.
 
 Exit codes:
-* ``0`` -- no unsupported drift found.
-* ``1`` -- at least one Claude hook script is absent from Codex coverage,
+* ``0``; no unsupported drift found.
+* ``1``; at least one Claude hook script is absent from Codex coverage,
   or an installer violates three-way parity (subset-wired without a
   matching exemption, or a malformed/stale/dangling exemption).
 
@@ -60,7 +60,7 @@ DEVIN_HOOKS = REPO_ROOT / ".devin" / "hooks.v1.json"
 
 # The three agents whose SessionStart provisioners must stay at parity. Devin
 # is read directly (not assumed to mirror Codex) so a broken mirror cannot hide
-# a per-agent installer gap -- defense in depth over the generator's
+# a per-agent installer gap; defense in depth over the generator's
 # ``"mirror": "codex"`` invariant (Refs #1609).
 AGENTS = ("claude", "codex", "devin")
 
@@ -86,12 +86,12 @@ ALLOWLIST: dict[str, str] = {
 # wired into a strict subset of agents. Each entry is a PER-AGENT CONTRACT, not
 # a blanket skip (Refs #1607): it must declare the EXACT set of agents the
 # installer is meant to run on, a rationale, and the tracking issue. The gate
-# then verifies the declared set matches reality -- so an installer that is
+# then verifies the declared set matches reality; so an installer that is
 # *genuinely* missing from an agent can no longer hide behind an exemption that
 # merely names it, and a stale exemption (declared set != actual wiring, e.g.
 # left behind after an installer became fully shared) fails loudly instead of
 # rotting. A declaration covering all agents, or naming an installer wired into
-# no agent, is itself rejected -- it would be a no-op exemption.
+# no agent, is itself rejected; it would be a no-op exemption.
 #
 # Shape:
 #   "install-foo": {
@@ -170,8 +170,8 @@ def collect_installers(data: dict[str, object]) -> set[str]:
     """Return the set of ``scripts/install-*.sh`` names referenced in *data*.
 
     Names are bare installer stems, e.g. ``"install-bun"``. The event is
-    irrelevant for parity -- an installer either provisions an agent or it
-    does not -- so only the names are collected.
+    irrelevant for parity; an installer either provisions an agent or it
+    does not; so only the names are collected.
     """
     result: set[str] = set()
     for _event, command in _iter_commands(data):
@@ -230,7 +230,7 @@ def validate_exemption(name: str, spec: object) -> str:
         )
     if set(agents) == set(AGENTS):
         return (
-            f"exemption for {name!r} declares all agents -- a fully-shared installer "
+            f"exemption for {name!r} declares all agents; a fully-shared installer "
             "needs no exemption; remove the entry"
         )
     rationale = spec.get("rationale")
@@ -340,7 +340,7 @@ def cmd_verify(args: argparse.Namespace) -> int:
 
     for script, rationale in sorted(ALLOWLIST.items()):
         print(
-            f"::notice::Allowlisted gap: scripts/{script}.py -- {rationale}",
+            f"::notice::Allowlisted gap: scripts/{script}.py; {rationale}",
             file=sys.stderr,
         )
 
@@ -349,7 +349,7 @@ def cmd_verify(args: argparse.Namespace) -> int:
         exempt_rationale = spec.get("rationale")
         print(
             f"::notice::Installer parity exemption: scripts/{name}.sh "
-            f"(agents={exempt_agents}) -- {exempt_rationale}",
+            f"(agents={exempt_agents}); {exempt_rationale}",
             file=sys.stderr,
         )
 

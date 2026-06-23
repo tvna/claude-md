@@ -2,10 +2,10 @@
 
 These lock the two properties that make the action safe and single-sourced:
 
-* it is **permission-agnostic** -- it reads no GITHUB_TOKEN and no secrets, the
+* it is **permission-agnostic**; it reads no GITHUB_TOKEN and no secrets, the
   same invariant the setup-uv action documents (it runs inline under the union
   of caller permissions);
-* its CI self-test is **isolated** -- the dedicated job exercises the egress
+* its CI self-test is **isolated**; the dedicated job exercises the egress
   layer on its own, so it must not be a step in lint-scripts-static and must
   not feed the required `gate` aggregation, or a runner-specific network quirk
   would block unrelated work. PR5 promotes the job from audit to block mode

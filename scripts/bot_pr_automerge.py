@@ -9,7 +9,7 @@ for PRs authored by the App bot: it lists every open PR whose author login is
 (all required checks green and the branch up to date), squash-merges it via the
 REST merge API and deletes the head branch.
 
-Branch protection (``main`` ruleset) still gates the merge -- a non-clean PR is
+Branch protection (``main`` ruleset) still gates the merge; a non-clean PR is
 left for the next trigger. The merge method is fixed to ``squash`` so the keyless
 commit-signature invariant on ``main`` documented in
 ``docs/standards/commit-signing.md`` is preserved: the squash commit GitHub

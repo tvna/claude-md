@@ -3,10 +3,10 @@
 The top pure layer of the auto-retro refactor (Refs #1725, a precondition
 for #1702): building the retro issue title and body, rendering the Repair
 history table, the completeness verifier, the dedup / append helpers, and
-the sentinel age/untouched predicates. Every function here is pure -- it
+the sentinel age/untouched predicates. Every function here is pure; it
 turns parsed inputs (a :class:`_auto_retro_parse.MergedPR`, fetched
 check_runs / commit subjects, an existing issue body) into Markdown or a
-verdict -- with no GitHub API calls or filesystem access. The IO layer in
+verdict; with no GitHub API calls or filesystem access. The IO layer in
 ``auto_retro.py`` fetches the inputs and posts the rendered output.
 
 Depends on :mod:`_auto_retro_parse` for the shared dataclasses, the
@@ -68,7 +68,7 @@ def build_retro_title(pr: MergedPR) -> str:
 # Anchored and fully literal so the match is the *single* title an agent is
 # permitted to mint under the otherwise-reserved ``auto-retro`` scope (the
 # pre-merge handoff survey opens this retro in-session when a problem is
-# found -- Refs #1581 / D1). Kept deliberately narrow: only the colon form
+# found; Refs #1581 / D1). Kept deliberately narrow: only the colon form
 # ``chore(auto-retro): review PR #<N> repair loops`` matches, so every other
 # ``auto-retro``-scoped title stays denied by gate_reserved_retro_scope, and
 # CI dedup (:func:`find_existing_retro`) still recognises the in-session retro
@@ -137,7 +137,7 @@ def _repair_history_rows(
 
     Walks deterministic signal classes in fixed order: CI failures,
     fix-up commits (canonical fix exempted on fix-typed PRs as a
-    distinct ``Fix commit`` row -- see #413), merge-from-main commits,
+    distinct ``Fix commit`` row; see #413), merge-from-main commits,
     multi-commit summary, and failed Verification pairs. Emits a
     sentinel row only when all classes produced zero rows. The
     Post-merge checklist class was removed in #418 because its items
@@ -224,7 +224,7 @@ def _repair_history_rows(
             rows.append(
                 RepairHistoryRow(
                     "Fix commit",
-                    f"{_POLICY_ARTIFACT_MARKER} `{subject}` -- "
+                    f"{_POLICY_ARTIFACT_MARKER} `{subject}`; "
                     "canonical fix commit on fix-typed PR",
                     policy_artifact=True,
                     next_action="--",
@@ -239,7 +239,7 @@ def _repair_history_rows(
             rows.append(
                 RepairHistoryRow(
                     "Iteration commit",
-                    f"{_POLICY_ARTIFACT_MARKER} `{subject}` -- "
+                    f"{_POLICY_ARTIFACT_MARKER} `{subject}`; "
                     "signals an earlier silent failure",
                     policy_artifact=True,
                     next_action="--",
@@ -254,7 +254,7 @@ def _repair_history_rows(
             rows.append(
                 RepairHistoryRow(
                     "Merge from main",
-                    f"{_POLICY_ARTIFACT_MARKER} `{subject}` -- "
+                    f"{_POLICY_ARTIFACT_MARKER} `{subject}`; "
                     "rebase debt before merge",
                     policy_artifact=True,
                     next_action="--",
@@ -274,7 +274,7 @@ def _repair_history_rows(
             rows.append(
                 RepairHistoryRow(
                     "Revert commit",
-                    f"{_POLICY_ARTIFACT_MARKER} `{subject}` -- rollback; "
+                    f"{_POLICY_ARTIFACT_MARKER} `{subject}`; rollback; "
                     "confirm via co-firing CI / review / verification signal",
                     policy_artifact=True,
                     next_action="--",
@@ -300,14 +300,14 @@ def _repair_history_rows(
     # recognize. The row is kept for co-fire correlation when a deterministic
     # signal (CI failure, inline review, iteration commit) opens the retro,
     # but marked policy-artifact so `_has_only_exempt_policy_artifact_rows`
-    # skips a verification-only PR -- mirroring the `Revert commit` row.
+    # skips a verification-only PR; mirroring the `Revert commit` row.
     for pair in verification_pairs or []:
         if pair.passed:
             continue
         rows.append(
             RepairHistoryRow(
                 f"Verification fail: {pair.command}",
-                f"{_POLICY_ARTIFACT_MARKER} observed: {pair.result} -- "
+                f"{_POLICY_ARTIFACT_MARKER} observed: {pair.result}; "
                 "PR-body prose heuristic; confirm via co-firing CI / review / "
                 "iteration signal before classifying",
                 policy_artifact=True,
@@ -356,9 +356,9 @@ def _build_repair_history_table(
     if not rows:
         return (
             header
-            + "| -- | (no automated repair signals detected) "
+            + "| n/a | (no automated repair signals detected) "
             "| positive-control: no repair taxonomy classification requested "
-            "| -- |\n"
+            "| n/a |\n"
         )
     body_rows = "".join(
         f"| {idx} | {_escape_table_cell(row.repair)} "
@@ -398,7 +398,7 @@ def build_retro_body(
     the Facts section so future :func:`compute_prior_from_labels`
     invocations can reconstruct the signal set deterministically
     without re-fetching the source PR. When omitted (legacy callers),
-    the line is rendered as ``- Signals fired: (none)`` -- contributing
+    the line is rendered as ``- Signals fired: (none)``; contributing
     zero observations to the prior, which is the safe degradation. Refs #582.
     """
     type_scope = extract_type_scope(pr.title)
@@ -435,16 +435,16 @@ def build_retro_body(
     proposed_work_tail = (
         "\n"
         "<!-- operator-fill:remaining-steps -->\n"
-        "2. Classification -- (operator) tag each repair above as one of: "
+        "2. Classification; (operator) tag each repair above as one of: "
         "`missing deterministic gate` / `unclear agent instruction` / "
         "`external or human decision that cannot be automated`.\n"
-        "3. Earliest prevention point -- (operator) per repair, name the "
+        "3. Earliest prevention point; (operator) per repair, name the "
         "deterministic gate that should have caught it (workflow, hook, "
         "ruleset, label, preflight).\n"
-        "4. No-repair reproduction path -- (operator) numbered steps the next "
+        "4. No-repair reproduction path; (operator) numbered steps the next "
         "similar PR should follow to land in one shot.\n"
-        "5. Follow-up issues -- (operator) list deferred gates as "
-        "`- [ ] type(scope): TITLE -- RATIONALE` or write `(none)`.\n"
+        "5. Follow-up issues; (operator) list deferred gates as "
+        "`- [ ] type(scope): TITLE; RATIONALE` or write `(none)`.\n"
         "<!-- /operator-fill:remaining-steps -->\n"
     )
     verification_block = (
@@ -470,7 +470,7 @@ def build_retro_body(
     if positive_control:
         proposed_work_tail = (
             "\n"
-            "2. Positive-control outcome -- no automated repair signals were "
+            "2. Positive-control outcome; no automated repair signals were "
             "detected, so no repair taxonomy classification is requested.\n"
         )
         verification_block = (
@@ -493,7 +493,7 @@ def build_retro_body(
         "\n"
         "## Facts\n"
         "\n"
-        f"- Source PR: #{pr.number} -- {pr.title}\n"
+        f"- Source PR: #{pr.number}; {pr.title}\n"
         f"- Source PR URL: {pr.html_url}\n"
         f"- Merged at (UTC): {pr.merged_at}\n"
         f"- Merged by: {pr.merged_by_login or '(unknown)'}\n"
@@ -507,7 +507,7 @@ def build_retro_body(
         "## Proposed work\n"
         "\n"
         "<!-- auto-filled:repair-history -->\n"
-        "1. Repair history -- the table below is pre-filled from "
+        "1. Repair history; the table below is pre-filled from "
         "check_runs + commit subjects. Fill the Next action cell of every "
         "non-artifact row; edit Cause only to correct or add missed "
         "repairs.\n"

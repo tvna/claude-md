@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Flag ``git push`` in workflow ``run:`` blocks -- the unsigned-commit authoring path.
+"""Flag ``git push`` in workflow ``run:`` blocks; the unsigned-commit authoring path.
 
 A commit pushed via ``git push`` from a runner is authored by whatever token
 ``actions/checkout`` persisted (the default ``github-actions[bot]``) and is
@@ -41,7 +41,7 @@ Contract:
     Inputs: the ``.github/workflows/*.yml`` tree (no stdin, no env input).
     Outputs: ``::error file=...::`` annotations on stderr and a one-line summary;
         exit code as documented above.
-    Failure policy: loud -- a workflow that cannot be parsed as YAML is skipped,
+    Failure policy: loud; a workflow that cannot be parsed as YAML is skipped,
         but any detected ``git push`` fails the gate with a non-zero exit rather
         than passing silently.
 """

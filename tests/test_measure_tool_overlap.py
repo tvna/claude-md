@@ -8,12 +8,12 @@ Two layers, matching the repo conventions:
   text rather than executing SQL.
 * Functional tests of the collector's pure functions and thin-IO adapters,
   with the external binaries replaced by injected callables / monkeypatched
-  ``_run`` -- the binaries are web-session only and absent on the coverage
+  ``_run``; the binaries are web-session only and absent on the coverage
   runner.
 
 The redaction test is deliberately adversarial: it feeds a betterleaks fixture
 whose ``Match``/``Secret`` carry a (fake) secret VALUE and proves the value
-never reaches a Finding, a record, or the rendered Markdown -- i.e. the
+never reaches a Finding, a record, or the rendered Markdown; i.e. the
 redaction boundary lives in our parser, not only in the ``--redact`` flag.
 """
 
@@ -433,7 +433,7 @@ class TestSmoke:
 
     def test_empty_stdout_is_a_loud_fail(self) -> None:
         # The exact Fact 1 shape: a rejected flag prints help to stderr and
-        # leaves stdout empty -- which must NOT pass as a clean (zero) scan.
+        # leaves stdout empty; which must NOT pass as a clean (zero) scan.
         result = mto.smoke_pair(self._spec(), REPO_ROOT, run=lambda argv, cwd: ("", 10.0))
         assert result.status == "fail"
         assert "no stdout" in result.detail
@@ -444,7 +444,7 @@ class TestSmoke:
         assert "parseable JSON" in result.detail
 
     def test_valid_json_is_ok(self) -> None:
-        # betterleaks emits the literal `null` for a clean scan -- valid JSON,
+        # betterleaks emits the literal `null` for a clean scan; valid JSON,
         # non-empty stdout, so the argv was accepted.
         result = mto.smoke_pair(self._spec(), REPO_ROOT, run=lambda argv, cwd: ("null\n", 1.0))
         assert result.status == "ok"

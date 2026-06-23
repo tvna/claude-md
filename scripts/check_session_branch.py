@@ -10,14 +10,14 @@ HTTP 403 with no branch name.
 When the environment is remote:
 * Emits an additionalContext notice naming the session push target.
 * Repairs the seed's trailing newline before appending, so "the lock file
-  ends with a newline" is a writer-enforced invariant -- the write-side half
+  ends with a newline" is a writer-enforced invariant; the write-side half
   of the defense against the concatenation corruption that wedged the gate
   (Refs #1522). append_branch covers the append path; this covers the
   dedup early-return path it cannot reach.
 * Appends the branch name to <repo-root>/.git/CLAUDE_SESSION_BRANCH so that
   preflight_push_session_branch.py can validate push refspecs without an
   extra subprocess call. Appending (rather than overwriting) lets a second
-  session in the same container -- paired work or a post-merge follow-up --
+  session in the same container; paired work or a post-merge follow-up --
   authorize its branch without clobbering the partner's entry (Refs #1513).
 
 Fails open (exit 0) on any error so a broken git install never wedges a
@@ -50,7 +50,7 @@ def _ensure_seed_trailing_newline(path: Path) -> None:
     remote harness may lack a trailing newline. ``append_branch`` inserts a
     separator on the append path, but when the current branch is already a
     member it dedup-returns without touching the file, so a malformed seed
-    survives and the next session's append concatenates onto it -- the exact
+    survives and the next session's append concatenates onto it; the exact
     failure that wedged ``preflight_*_session_branch``.
 
     Normalizing the seed here makes "the lock file ends with a newline" a

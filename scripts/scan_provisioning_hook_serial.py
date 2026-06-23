@@ -13,7 +13,7 @@ The rule:
 
 * Parse ``.pre-commit-config.yaml``.
 * A hook is "provisioning" when its ``entry`` references an installer script
-  -- matched by ``install_<name>.sh`` (e.g. ``scripts/install_waza.sh``). These
+ ; matched by ``install_<name>.sh`` (e.g. ``scripts/install_waza.sh``). These
   write a shared binary to a fixed path, so parallel copies race.
 * Every provisioning hook must declare ``require_serial: true``. Fail loud
   otherwise.

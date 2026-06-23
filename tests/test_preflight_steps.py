@@ -34,7 +34,7 @@ class TestStepsRegistry:
 
     def test_no_step_generates_docs_generated(self) -> None:
         # Issue #1771 (Refs #1764): docs/generated/ is owned by the post-merge
-        # automation as a single-producer surface -- docs/generated/scripts/
+        # automation as a single-producer surface; docs/generated/scripts/
         # (#1540/#1543/#1546) and docs/generated/workflows/ (#1771) alike. The
         # pre-push lane must regenerate nothing there: generating left a
         # perpetually-untracked diagram that tripped the untracked-file stop

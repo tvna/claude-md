@@ -304,7 +304,7 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _run(cmd: list[str], *, runner=subprocess.run):
-    """Thin subprocess boundary -- the only impure surface in this module.
+    """Thin subprocess boundary; the only impure surface in this module.
 
     ``check=True`` raises ``CalledProcessError`` on non-zero exit; the
     caller in :func:`_cmd_verify` translates that into the fail-loud

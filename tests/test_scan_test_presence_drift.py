@@ -1,8 +1,8 @@
 """Tests for scripts/scan_test_presence_drift.py (#1088).
 
-These cover the three static checks the gate performs -- M2 test-module
+These cover the three static checks the gate performs; M2 test-module
 presence with a shrink-only allowlist, the O6 GitHub-API boundary registry
-drift check, and the M3 CLI-contract registration check -- plus the
+drift check, and the M3 CLI-contract registration check; plus the
 end-to-end ``verify`` CLI over synthetic ``scripts/``/``tests/`` trees, and
 a self-check that the real repository tree passes the gate.
 """
@@ -299,7 +299,7 @@ class TestPreCommitWiring:
     ) -> None:
         # Reproduce Fact 4 in miniature: a new public script invoked by a
         # workflow, with a test module (M2 ok) but no CONTRACT_REGISTRY entry,
-        # must be reported as missing its M3 contract test -- the exact class the
+        # must be reported as missing its M3 contract test; the exact class the
         # #1625 first attempt missed.
         scripts = tmp_path / "scripts"
         tests = tmp_path / "tests"

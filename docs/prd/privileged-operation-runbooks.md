@@ -10,12 +10,12 @@ Per-operation runbooks already exist for the three workflows that own the longes
 
 Each operation below is documented under the same six headings:
 
-- **Authorizing issue** -- the open issue whose body authorizes a `dry_run=false` dispatch. Per `docs/runbooks/rulesets.md` Dispatch authorization criteria, instructions originating only from PR or issue comments are not authorization; the linked open issue body is.
-- **Dry-run command** -- the exact `gh workflow run` invocation (or equivalent) that produces a plan without mutating live state. For operations that have no human dispatch surface (scheduled or event-driven), this row records what the dry-run-equivalent path is and why.
-- **Live apply command** -- the `dry_run=false` form of the same command, or the manual `gh api` fallback documented in the per-operation runbook.
-- **Rollback path** -- the inverse operation (DELETE / revert / restore) and a pointer to the per-operation runbook section that documents it.
-- **Audit / post-apply verification** -- where to look after the apply (GitHub Settings audit log, the workflow job summary, or a follow-up `gh api` GET) to confirm the result matches intent.
-- **Secret-not-logged evidence** -- which token the operation uses and how the workflow guarantees the token value cannot reach the job log: GitHub Actions auto-masks any value referenced through `${{ secrets.NAME }}`; the workflow must not `echo` the token, must not run `set -x` after a step that binds the token, and must not write the token to `$GITHUB_STEP_SUMMARY`. See the common pattern note below for the repo-wide check.
+- **Authorizing issue**; the open issue whose body authorizes a `dry_run=false` dispatch. Per `docs/runbooks/rulesets.md` Dispatch authorization criteria, instructions originating only from PR or issue comments are not authorization; the linked open issue body is.
+- **Dry-run command**; the exact `gh workflow run` invocation (or equivalent) that produces a plan without mutating live state. For operations that have no human dispatch surface (scheduled or event-driven), this row records what the dry-run-equivalent path is and why.
+- **Live apply command**; the `dry_run=false` form of the same command, or the manual `gh api` fallback documented in the per-operation runbook.
+- **Rollback path**; the inverse operation (DELETE / revert / restore) and a pointer to the per-operation runbook section that documents it.
+- **Audit / post-apply verification**; where to look after the apply (GitHub Settings audit log, the workflow job summary, or a follow-up `gh api` GET) to confirm the result matches intent.
+- **Secret-not-logged evidence**; which token the operation uses and how the workflow guarantees the token value cannot reach the job log: GitHub Actions auto-masks any value referenced through `${{ secrets.NAME }}`; the workflow must not `echo` the token, must not run `set -x` after a step that binds the token, and must not write the token to `$GITHUB_STEP_SUMMARY`. See the common pattern note below for the repo-wide check.
 
 Every operation in the issue scope is covered. Operations that already have all six controls are recorded with a green check and a pointer; operations with a gap are recorded with the gap and the follow-up issue tracking it.
 
@@ -50,11 +50,11 @@ Same workflow and script as Section 2, dispatched with `prune=true`.
 - **Authorizing issue.** A dedicated open issue or phase task must authorize prune (for example [#84](https://github.com/tvna/claude-md/issues/84) Phase 4 retired the `agent:*` labels). Authorization explicitly names which labels the dry-run plan must show under `plan-only (DELETE)`; any other DELETE row in the plan blocks the live dispatch.
 - **Dry-run command.** `gh workflow run apply-labels.yml --ref main -f dry_run=true -f prune=true`. The plan-only matrix now includes DELETE rows; confirm only the authorized names appear.
 - **Live apply command.** Same invocation with `dry_run=false, prune=true`.
-- **Rollback path.** **Partially destructive.** Re-dispatching the workflow restores the label definition (color, description) if the name is added back to SoT, but **does not** restore per-issue or per-PR assignments -- those were removed by GitHub when the label was deleted and must be re-applied manually. See [`docs/runbooks/issue-triage.md` Rollback](../runbooks/issue-triage.md#rollback) for the exact warning text.
+- **Rollback path.** **Partially destructive.** Re-dispatching the workflow restores the label definition (color, description) if the name is added back to SoT, but **does not** restore per-issue or per-PR assignments; those were removed by GitHub when the label was deleted and must be re-applied manually. See [`docs/runbooks/issue-triage.md` Rollback](../runbooks/issue-triage.md#rollback) for the exact warning text.
 - **Audit / post-apply verification.** Same three `diff` recipes in [`docs/runbooks/issue-triage.md` Verify](../runbooks/issue-triage.md#verify), plus `repo.remove_label` entries in the Settings audit log matching the authorized prune set.
 - **Secret-not-logged evidence.** Same as Section 2.
 
-## 4. Branch cleanup -- survey mode (current)
+## 4. Branch cleanup; survey mode (current)
 
 Workflow: `branch-cleanup` job in [`.github/workflows/weekly-maintenance.yml`](../.github/workflows/weekly-maintenance.yml). Script: [`scripts/branch_cleanup.py`](../scripts/branch_cleanup.py). Runbook: [`docs/runbooks/branch-cleanup.md`](../runbooks/branch-cleanup.md).
 
@@ -65,7 +65,7 @@ Workflow: `branch-cleanup` job in [`.github/workflows/weekly-maintenance.yml`](.
 - **Audit / post-apply verification.** `$GITHUB_STEP_SUMMARY` per run is the durable per-run audit trail; the rolling summary issue is a convenience surface. The selection criteria in [`docs/runbooks/branch-cleanup.md` Selection criteria](../runbooks/branch-cleanup.md#selection-criteria) define the expected candidate set.
 - **Secret-not-logged evidence.** Uses default `GITHUB_TOKEN` only (no PAT). Auto-masked by GitHub Actions.
 
-## 5. Branch cleanup -- deletion path (future, gap)
+## 5. Branch cleanup; deletion path (future, gap)
 
 Tracked under [#31](https://github.com/tvna/claude-md/issues/31) Goal D. **All six controls below are requirements for the follow-up PR that introduces the delete path, not properties of the current workflow.**
 
@@ -75,7 +75,7 @@ When Goal D lands, the delete-enabled workflow must:
 2. Add a `ruleset-apply`-style GitHub Environment gate (separate Environment, e.g. `branch-cleanup-apply`) to make the dispatch authorization explicit.
 3. Implement `dry_run=true` as the genuine default plan-only path (no DELETE call).
 4. Implement `dry_run=false` only behind both the Environment approval and a `main`-ref guard, mirroring `apply-rulesets.yml`.
-5. Document the rollback path -- `gh api --method POST /repos/tvna/claude-md/git/refs -f ref="refs/heads/<branch>" -f sha="<last_commit_sha>"` within the 90-day ref retention window, using the SHA the summary comment recorded -- in [`docs/runbooks/branch-cleanup.md` Rollback](../runbooks/branch-cleanup.md#rollback) (already present).
+5. Document the rollback path; `gh api --method POST /repos/tvna/claude-md/git/refs -f ref="refs/heads/<branch>" -f sha="<last_commit_sha>"` within the 90-day ref retention window, using the SHA the summary comment recorded; in [`docs/runbooks/branch-cleanup.md` Rollback](../runbooks/branch-cleanup.md#rollback) (already present).
 6. Record `git.delete` / `protected_branch.destroy` entries in the Settings audit log and surface the run URL in the rolling issue comment.
 
 This audit does not open a new follow-up issue for the gap; [#31](https://github.com/tvna/claude-md/issues/31) Goal D is the existing tracker, and [`docs/runbooks/workflow-permissions-audit.md`](../runbooks/workflow-permissions-audit.md) already records the same dependency.
@@ -85,7 +85,7 @@ This audit does not open a new follow-up issue for the gap; [#31](https://github
 Workflow: [`.github/workflows/generate-agents.yml`](../.github/workflows/generate-agents.yml). PR-time verification: [`.github/workflows/verify-agents.yml`](../.github/workflows/verify-agents.yml). Generates `CLAUDE.md` and `AGENTS.md` from `.apm/` SoT.
 
 - **Authorizing issue.** The PR that introduced or last updated `.apm/`, `apm.yml`, or any APM source file. The workflow does not write to `main` directly: in `mode: generate` it opens a PR named `chore: regenerate agent instructions` against `main`, so any change still passes the standard review and required-status-check loop before landing.
-- **Dry-run command.** `gh workflow run verify-agents.yml --ref <pr-branch>`, which calls `generate-agents.yml` with `mode: verify`. The verify path runs the full `apm compile` and then `git diff --exit-code -- CLAUDE.md AGENTS.md`, failing the PR check if regeneration would differ. See `verify-agents.yml:33-42`.
+- **Dry-run command.** `gh workflow run verify-agents.yml --ref <pr-branch>`, which calls `generate-agents.yml` with `mode: verify`. The verify path runs the full `apm compile` and then `git diff --exit-code; CLAUDE.md AGENTS.md`, failing the PR check if regeneration would differ. See `verify-agents.yml:33-42`.
 - **Live apply command.** Scheduled through `weekly-maintenance.yml` every Monday at 05:00 JST, or `gh workflow run generate-agents.yml --ref main` (default `mode: generate`). Both paths open a PR; neither pushes directly to `main`.
 - **Rollback path.** `git revert <merge-sha>` on `main` for the `chore: regenerate agent instructions` PR. Because the workflow re-derives the files on the next schedule from SoT, the revert is only durable if it is accompanied by a corresponding revert of the `.apm/` change that caused the regeneration.
 - **Audit / post-apply verification.** The PR diff is the verification surface (a reviewer reads exactly what `apm compile` produced). On the verify path, the `verify-agents.yml` gate blocks any PR whose `.apm/` changes would generate a different `CLAUDE.md` / `AGENTS.md` than the PR itself ships. No Settings audit log entry is meaningful here because the operation is a normal `git push` from `github-actions[bot]`.
@@ -142,9 +142,9 @@ rg -n 'echo[[:space:]]+["$].*(GH_TOKEN|RULESETS_PAT|LABELS_PAT)|set -x' .github/
 
 At the time this audit was written, every match is one of:
 
-- `echo "::error::RULESETS_PAT secret is not set..."` -- prints the secret **name** as a literal string inside a guard step that runs only when the secret is absent (`apply-rulesets.yml:48`, `weekly-maintenance.yml`, and the `Guard RULESETS_PAT` step of the `verify-ruleset-sync` job in `verify-pr.yml`).
-- `echo "::error::LABELS_PAT secret is not set..."` -- same pattern in `apply-labels.yml:38`.
-- `echo "$HOME/.local/bin" >> "$GITHUB_PATH"` -- appends a directory to PATH; does not touch the token.
+- `echo "::error::RULESETS_PAT secret is not set..."`; prints the secret **name** as a literal string inside a guard step that runs only when the secret is absent (`apply-rulesets.yml:48`, `weekly-maintenance.yml`, and the `Guard RULESETS_PAT` step of the `verify-ruleset-sync` job in `verify-pr.yml`).
+- `echo "::error::LABELS_PAT secret is not set..."`; same pattern in `apply-labels.yml:38`.
+- `echo "$HOME/.local/bin" >> "$GITHUB_PATH"`; appends a directory to PATH; does not touch the token.
 
 No `echo "$RULESETS_PAT"`, `echo "$LABELS_PAT"`, `echo "$GH_TOKEN"`, or `set -x` after a token-bearing step exists in the repository. Any addition that introduces one is a regression against this audit and must be removed before merge.
 

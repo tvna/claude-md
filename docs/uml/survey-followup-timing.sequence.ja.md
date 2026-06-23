@@ -81,7 +81,7 @@ sequenceDiagram
 
     Note over Agent,Stop: SessionStart (Family B 起動フェーズ): install-* ツールチェーン,<br/>gen_mcp_json, plan_language_context (オーナー言語ポリシー),<br/>check_session_branch, check_pr_mergeability
     Note over Agent,Stop: SP SessionStart フック (superpowers, _apm_source):<br/>run-hook.cmd がスキルカタログをロード (using-superpowers)
-    Note over Human,Agent: タイムライン開始 -- オペレータがプロンプトを投入
+    Note over Human,Agent: タイムライン開始 - オペレータがプロンプトを投入
     Human->>Agent: プロンプト投入 (タスク)
     Note over Agent,Stop: UserPromptSubmit (Family B): prompt_context7_gate<br/>が一次ソース文献の advisory を注入
     Note over Agent: SP Plan: brainstorming + writing-plans スキル (CLAUDE.md s1)
@@ -123,7 +123,7 @@ sequenceDiagram
     alt ターンがハンドオフを示し かつ 貼り付け可能プロンプトなし
         Stop-->>Agent: block: 貼り付け可能な次セッションプロンプトを出力
         Agent->>Human: フェンス付き貼り付け可能プロンプト
-        Note over Human,Agent: オペレータの応答タイミング -- 後続セッションへ貼り付けると<br/>SessionStart へ再入 (先頭へループバック)
+        Note over Human,Agent: オペレータの応答タイミング - 後続セッションへ貼り付けると<br/>SessionStart へ再入 (先頭へループバック)
     else cue を取りこぼし or フェンス既出
         Note over Stop: no-op (ハンドオフを見逃しうる)
     end

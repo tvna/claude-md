@@ -52,7 +52,7 @@ def _stale_repo(tmp_path: Path) -> tuple[Path, str]:
     """Return (repo, main_sha) for a feature branch cut from an OLD main.
 
     main advances past where feature was branched, so HEAD (feature) does not
-    contain the current main tip -- the Fact 3 stale-base shape. ``main_sha`` is
+    contain the current main tip; the Fact 3 stale-base shape. ``main_sha`` is
     the advanced main tip, i.e. what a session-start stamp would record.
     """
     repo = tmp_path / "repo"

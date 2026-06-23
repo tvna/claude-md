@@ -6,14 +6,14 @@ The cache-cost work in #1492 measures one session's cost structure
 under-amortised (``gate_cache_regime_advisor.py``). This script closes the loop
 at the *portfolio* level: given samples of PRs produced under two or more
 caching regimes, it reports each regime's mean cost per PR and mean repairs per
-PR, and the delta of each candidate against the first (baseline) regime -- the
+PR, and the delta of each candidate against the first (baseline) regime; the
 two numbers that decide whether a regime change paid off. Cost is the spend
 lever; repairs/PR is the quality lever (a cheaper regime that doubles the repair
 rate is not actually cheaper), so the comparison reports both side by side per
 CLAUDE.md section 5 (quality must scale with volume, observably).
 
-**Input is supplied, never scraped.** The script reads a JSON document -- from a
-``--input`` file or stdin -- of the shape::
+**Input is supplied, never scraped.** The script reads a JSON document; from a
+``--input`` file or stdin; of the shape::
 
     {"regimes": [
        {"name": "baseline-5m", "prs": [{"cost": 2.71, "repairs": 1}, ...]},
@@ -24,9 +24,9 @@ Each PR record yields a per-PR ``cost`` (USD) and ``repairs`` (the count of
 repairs between PR open and merge). The two fields resolve independently, each
 from one of two sources, so a record may mix them:
 
-* a *fixture* number supplied inline -- ``"cost": 3.14`` / ``"repairs": 0``; or
+* a *fixture* number supplied inline; ``"cost": 3.14`` / ``"repairs": 0``; or
 * an *auto-collected* number read from the observed record the harness already
-  produces -- ``"pr_body"`` (the cost is parsed from its ``## Resource
+  produces; ``"pr_body"`` (the cost is parsed from its ``## Resource
   Consumption`` ``- Cost (USD): $X`` line, which ``session_resource_report.py``
   renders from the per-PR ccusage checkpoint delta) and ``"retro_body"`` (the
   repairs are counted from the Repair history table that ``auto_retro.py``
@@ -38,7 +38,7 @@ deterministic, unit-testable, and bounded to arithmetic plus parsing over data
 the caller already trusted (CLAUDE.md sections 2 and 4).
 
 Malformed input fails loudly (exit 1 with a specific message) rather than
-silently averaging garbage -- this is an analysis tool a human reads, not a
+silently averaging garbage; this is an analysis tool a human reads, not a
 fail-open hook. The report is ASCII so it is safe to paste into a GitHub issue.
 
 Refs #1492.
@@ -83,7 +83,7 @@ def _as_number(value: object, where: str) -> float:
 # The fixture path takes inline ``cost`` / ``repairs`` numbers. The
 # auto-collection path resolves those same two numbers from the durable,
 # observed records the harness already produces, so a portfolio comparison can
-# run on real samples without hand-transcribing them -- yet the script still
+# run on real samples without hand-transcribing them; yet the script still
 # performs no network fetch: the caller supplies the body text it already
 # pulled through the approved GitHub read path (CLAUDE.md sections 2 and 4).
 # ---------------------------------------------------------------------------
@@ -138,7 +138,7 @@ def parse_pr_cost(pr_body: str, where: str) -> float:
     Reads the ``- Cost (USD): $<float>`` line inside the ``## Resource
     Consumption`` section that ``scripts/session_resource_report.py`` renders
     into every PR body from the per-PR ccusage checkpoint delta. Raises
-    :class:`InputError` -- loudly, never a silent default -- when the section is
+    :class:`InputError`; loudly, never a silent default; when the section is
     absent, when the cost is the ``unavailable (no session data)`` marker
     (ccusage produced no figure for that PR), or when no cost line is found.
     """
@@ -178,7 +178,7 @@ def parse_retro_repairs(retro_body: str, where: str) -> int:
     ``Iteration commit`` rows, mirroring auto_retro's own actionable-repair
     predicate. The sentinel "no automated repair signals detected" row has a
     ``--`` index and contributes zero. Raises :class:`InputError` when no
-    Repair history table is present -- a retro body that lost its table is
+    Repair history table is present; a retro body that lost its table is
     malformed input, not a zero-repair PR.
     """
     lines = retro_body.splitlines()

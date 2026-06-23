@@ -23,7 +23,7 @@ See ``docs/runbooks/refresh-behind-pr.md``. Refs #1361 (R2).
 
 Exit codes:
   0  branch already up to date, or merged (and pushed when --push) cleanly.
-  2  the merge would conflict -- use the replacement-branch runbook.
+  2  the merge would conflict; use the replacement-branch runbook.
   3  precondition failed (dirty worktree, on base branch, git error).
 """
 
@@ -170,7 +170,7 @@ def refresh(
 
     return 0, (
         f"Merged '{remote}/{base}' into '{branch}' ({count} commit(s)). Run 'git push' "
-        f"to update the PR (plain push -- do NOT force-push)."
+        f"to update the PR (plain push; do NOT force-push)."
     )
 
 

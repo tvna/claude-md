@@ -2,8 +2,8 @@
 
 Issue #740: the preflight title/body gates only recognized Claude-style
 ``mcp__github__*`` tool names, so a PR/issue write issued through the
-Codex GitHub connector -- which uses the
-``mcp__codex_apps__github._<verb>`` naming shape -- slipped past the
+Codex GitHub connector; which uses the
+``mcp__codex_apps__github._<verb>`` naming shape; slipped past the
 client-side gate and was only caught after it had already reached
 GitHub. These tests pin the connector-name routing for every preflight
 that classifies a call by its tool name, plus the shared canonicalizer.

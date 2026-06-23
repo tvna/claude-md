@@ -4,19 +4,19 @@
 When a PR adds a file whose path matches a managed path pattern, this gate
 requires that the file is either declared as a node in
 ``docs/graph/doc-dependencies.toml`` or carries an explicit
-``doc-graph-registration-waiver: <FILE_PATH> -- <reason>`` line in the PR body.
+``doc-graph-registration-waiver: <FILE_PATH>; <reason>`` line in the PR body.
 
 Managed path patterns and their severity:
 
-- ``docs/standards/**``       -- blocking (exit 1 when unregistered and not waived)
-- ``docs/prd/**``             -- blocking
-- ``docs/runbooks/**``        -- advisory (warning only; never exit 1)
-- ``scripts/*.py``            -- advisory (direct children only; no subdirectories)
-- ``.github/workflows/*.yml`` -- advisory (direct children only)
+- ``docs/standards/**``      ; blocking (exit 1 when unregistered and not waived)
+- ``docs/prd/**``            ; blocking
+- ``docs/runbooks/**``       ; advisory (warning only; never exit 1)
+- ``scripts/*.py``           ; advisory (direct children only; no subdirectories)
+- ``.github/workflows/*.yml``; advisory (direct children only)
 
 Waiver mechanism (plain text in PR body):
 
-    doc-graph-registration-waiver: docs/runbooks/commit-signing.md -- reason
+    doc-graph-registration-waiver: docs/runbooks/commit-signing.md; reason
 
 Multiple waivers are supported (one per line). The waiver value is the
 repository-relative file path (not a node ID, since the file is not yet
@@ -60,9 +60,11 @@ _GRAPH_PATH = Path("docs/graph/doc-dependencies.toml")
 _SCRIPT = "scan_doc_graph_registration"
 
 # Waiver marker: optional leading whitespace, the key, whitespace, the file
-# path (non-whitespace), optional ` -- reason`.
+# path (stops at whitespace or semicolon), optional `; reason`.
+# Using [^\s;]+ so `doc-graph-registration-waiver: path/to.md; reason`
+# captures `path/to.md` instead of `path/to.md;`.
 _WAIVER_RE = re.compile(
-    r"^\s*doc-graph-registration-waiver:\s*(\S+)",
+    r"^\s*doc-graph-registration-waiver:\s*([^\s;]+)",
     re.IGNORECASE | re.MULTILINE,
 )
 
@@ -97,9 +99,9 @@ def get_added_files(base_ref: str) -> list[str] | None:
     Unions two sources so the gate fires at commit time (pre-commit hook) as
     well as in CI (where HEAD already includes the new files):
 
-    1. ``git diff --name-only --diff-filter=A <base_ref>...HEAD`` -- committed
+    1. ``git diff --name-only --diff-filter=A <base_ref>...HEAD``; committed
        additions on the branch since *base_ref*.
-    2. ``git diff --cached --name-only --diff-filter=A`` -- staged additions
+    2. ``git diff --cached --name-only --diff-filter=A``; staged additions
        not yet committed (HEAD does not include them when the hook runs before
        ``git commit`` completes).
 
@@ -189,7 +191,7 @@ def run_gate(
                 f"in docs/graph/doc-dependencies.toml. "
                 f"Add a [[nodes]] entry with path = {file_path!r} to "
                 f"docs/graph/doc-dependencies.toml, or add "
-                f"'doc-graph-registration-waiver: {file_path} -- <reason>' "
+                f"'doc-graph-registration-waiver: {file_path}; <reason>' "
                 f"to the PR body. Refs #1793.",
                 file=sys.stderr,
             )
@@ -200,7 +202,7 @@ def run_gate(
                 f"{file_path!r} is a new governed file but is not registered "
                 f"in docs/graph/doc-dependencies.toml. "
                 f"Consider adding a [[nodes]] entry or add "
-                f"'doc-graph-registration-waiver: {file_path} -- <reason>' "
+                f"'doc-graph-registration-waiver: {file_path}; <reason>' "
                 f"to the PR body. Refs #1793.",
                 file=sys.stderr,
             )

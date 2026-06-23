@@ -1,7 +1,7 @@
-# Host-Unit DuckDB Metrics Store -- OTel-Compatible Design Contract
+# Host-Unit DuckDB Metrics Store; OTel-Compatible Design Contract
 
 This document is the adopted contract for the **first measurement setup** of the
-repository's declared purpose (2) -- "measuring the performance impact of those
+repository's declared purpose (2); "measuring the performance impact of those
 edits" ([`docs/standards/repo-scope.md`](repo-scope.md)). It is the deliverable
 for [#815](https://github.com/tvna/claude-md/issues/815) and supersedes the
 orphan-branch JSON approach designed in
@@ -16,7 +16,7 @@ signal per change so the proportionality between quality and scalability
 > Aggregating measurement data across hosts eventually needs an OpenTelemetry-
 > style platform. But abandoning early data collection until that platform
 > exists is the wrong trade-off. So: start collecting **now**, locally, in
-> DuckDB -- and shape the storage to be OpenTelemetry-compatible so that
+> DuckDB; and shape the storage to be OpenTelemetry-compatible so that
 > cross-host aggregation later is an **export** step, not a re-collection.
 
 Two consequences follow and bound everything below:
@@ -77,7 +77,7 @@ Two consequences follow and bound everything below:
   measured change). No rotation is required for v1; if a host's file is lost it
   is rebuilt by re-recording from `main`'s history. Because it is host-local
   state, losing it costs reproducible work, not irreplaceable data.
-- **Ephemeral environments record nothing -- by decision, not by accident.**
+- **Ephemeral environments record nothing; by decision, not by accident.**
   Claude agent / web / CI sessions are explicitly out of measurement scope
   unless they use the manual R2 escrow handoff path; see
   *Ephemeral-environment measurement boundary* below for the recorded decisions
@@ -91,7 +91,7 @@ Two consequences follow and bound everything below:
 
 The write path above is operator-local by design: one durable DuckDB file per
 host, written by an operator-local step, with no CI write path in v1. That
-leaves an implicit gap -- measurement produced inside an **ephemeral** Claude
+leaves an implicit gap; measurement produced inside an **ephemeral** Claude
 agent / web / CI environment persists nowhere. This section records the
 deliberate decision that closes the gap as an explicit, documented boundary
 rather than a silent exception to the "collect early, do not abandon early
@@ -115,20 +115,20 @@ plus git-ignore).
   explicitly out of measurement scope; only durable operator hosts record rows.
   Lowest cost; no new infrastructure; the proportionality signal is openly
   partial.
-- (B) Per-session export at session end -- emit OTLP-shaped rows to an external
+- (B) Per-session export at session end; emit OTLP-shaped rows to an external
   sink or OTLP collector before the container is reclaimed. Requires an egress
   destination and must honour the #88 anonymization and #824 redaction
   contracts.
 - (C) Commit a redacted, aggregated row to a durable branch or artifact (never
   the raw `*.duckdb`). Requires a reviewed write path.
 
-**Decision for #826: (A) -- accept and document the boundary.** Ephemeral agent
+**Decision for #826: (A); accept and document the boundary.** Ephemeral agent
 / web / CI sessions are explicitly **out of measurement scope** by default;
 only durable operator hosts record rows. This is consistent with the v1 "no CI
 write path" stance (see the lifecycle table and *Out of scope*): the same
 ephemerality that excludes CI runners excludes agent / web sessions. The signal
-is therefore **openly partial by record** -- changes made in an ephemeral
-session are knowingly absent from the store, not silently dropped -- which
+is therefore **openly partial by record**; changes made in an ephemeral
+session are knowingly absent from the store, not silently dropped; which
 removes the silent bias an undocumented boundary would introduce toward changes
 made on durable hosts.
 
@@ -151,10 +151,10 @@ repository dependency.
 **Artifact shape.** Upload one redacted OTLP-shaped export bundle per session or
 change. The bundle is a directory or archive containing:
 
-- `manifest.json` -- schema version, opaque session id, producing commit SHA,
+- `manifest.json`; schema version, opaque session id, producing commit SHA,
   bundle digest, generated-at time, row counts, and artifact file digests.
-- `metrics.parquet` -- rows shaped like `otlp_metric_data_point`.
-- `logs.parquet` -- optional rows shaped like `otlp_log_record` / `session_log`
+- `metrics.parquet`; rows shaped like `otlp_metric_data_point`.
+- `logs.parquet`; optional rows shaped like `otlp_log_record` / `session_log`
   after the #824 redaction contract is applied.
 
 Raw `*.duckdb` and `*.duckdb.wal` files are not valid escrow artifacts. A raw
@@ -240,14 +240,14 @@ handoff feasible without adding DuckDB or R2 client libraries to this
 repository. Cloudflare's R2 get-started and pricing documentation further
 records that R2 must be enabled through an R2 subscription checkout and that a
 payment method is required on the account before a bucket can be created, even
-for the free tier -- the provisioning facts behind *First-time R2 provisioning*
+for the free tier; the provisioning facts behind *First-time R2 provisioning*
 above.
 
 ## OTLP-compatible schema
 
-The schema separates the three OpenTelemetry layers -- **Resource** (who
+The schema separates the three OpenTelemetry layers; **Resource** (who
 produced it), **Scope** (which instrumentation), and the **record** (the
-measurement) -- exactly as OTLP does.
+measurement); exactly as OTLP does.
 
 - **Storage form (`change_measurement`).** One wide, deterministic-dedup row per
   measured change, keyed by `(commit_sha, spec_version)`. It holds the
@@ -297,7 +297,7 @@ anonymization obligation lives at write time.
 
 - **Who writes.** An operator-local step (a script or a one-off `duckdb`
   invocation) on the host that produced the change. There is no CI write path in
-  v1 -- CI runners are ephemeral and have no host-local database, and `duckdb`
+  v1; CI runners are ephemeral and have no host-local database, and `duckdb`
   is not a repo dependency.
 - **When.** Once per measured change against `main`, after the signals are
   computed.
@@ -308,13 +308,13 @@ anonymization obligation lives at write time.
 
 ## Observation
 
-- **Read back:** `SELECT * FROM v_proportionality;` -- one row per change over
+- **Read back:** `SELECT * FROM v_proportionality;`; one row per change over
   time, ready to plot quality against scope.
 - **Export (later cross-host aggregation):**
   `COPY (SELECT * FROM otlp_metric_data_point) TO 'export.parquet' (FORMAT parquet);`
   The exported rows are OTLP-shaped gauge data points; a downstream step feeds
   them to an OTLP collector that aggregates across hosts. That collector and its
-  wiring are **out of scope here** -- the point of this contract is that they
+  wiring are **out of scope here**; the point of this contract is that they
   can be added later without changing how any host collects.
 
 ## OTLP logs extension (Refs #824)
@@ -322,15 +322,15 @@ anonymization obligation lives at write time.
 Schema v2 ([`metrics/duckdb/schema/v2/schema.sql`](../../metrics/duckdb/schema/v2/schema.sql))
 adds an OpenTelemetry-**logs**-shaped surface next to the metrics. Where v1
 records OTLP **gauge data points** (one measurement per change), v2 records
-**redacted operational session events** -- for example a commit-signing
-failure -- as OTLP `LogRecord`s. It is an additive migration: it touches no v1
+**redacted operational session events**; for example a commit-signing
+failure; as OTLP `LogRecord`s. It is an additive migration: it touches no v1
 object, records a `'2'` row in `schema_meta`, and is idempotent.
 
 The motivation is concrete. A commit-signing failure observed during the #815
 work exposed a host-local filesystem path to a signing key, a signing-server
 request identifier, and a raw error payload. Capturing severity-tagged events
 next to the metrics makes such anomalies noticeable by intuition (CLAUDE.md
-Section 6) without re-collection -- **but only if every host-identifying field
+Section 6) without re-collection; **but only if every host-identifying field
 is removed first.**
 
 ### Storage form (`session_log`)
@@ -376,18 +376,18 @@ hash every one of these field classes:
 - **key locations** (key files, keyring entries, agent socket paths),
 - **tokens** (signing tokens, credentials, secrets of any kind),
 - **request identifiers** (signing-server request ids, correlation ids),
-- **hostnames** (and any raw host identity -- only an opaque `host.id` survives),
+- **hostnames** (and any raw host identity; only an opaque `host.id` survives),
 - **raw error payloads** (the verbatim error string or server response).
 
 What survives is **only** a severity (`severity_number` + `severity_text`) and a
 classified, non-identifying `event_code`. **No raw free text reaches the table.**
-The raw signing-server error -- and every operational log like it -- is stored
+The raw signing-server error; and every operational log like it; is stored
 **only** in this redacted form, citing #88 and CLAUDE.md Section 4.
 
 This contract is enforced primarily at the source (redact before insert). As
 defense-in-depth (CLAUDE.md Section 4), the `session_log` table adds a coarse
-CHECK that rejects the most unambiguous un-redacted marker -- a path separator
-in `body` -- so an un-redacted write **fails loudly** rather than being silently
+CHECK that rejects the most unambiguous un-redacted marker; a path separator
+in `body`; so an un-redacted write **fails loudly** rather than being silently
 stored. The CHECK is a backstop, not the contract: it cannot detect a hostname
 or a token, so the writer remains responsible for full redaction.
 
@@ -423,8 +423,8 @@ their still-valid requirements are carried into the columns above.
   recorder is ever justified.
 - **A CI write path or a CI gate over the store.** Excluded for v1 (ephemeral
   runners, no host-local DB). The ephemeral agent / web / CI measurement
-  boundary is now an explicit recorded decision -- option (A), accept and
-  document -- not an implicit gap (Refs #826; see *Ephemeral-environment
+  boundary is now an explicit recorded decision; option (A), accept and
+  document; not an implicit gap (Refs #826; see *Ephemeral-environment
   measurement boundary*). The #1212 R2 escrow path adopts option (B) only as a
   manual temporary handoff; it does not create a CI write path, a shared remote
   DuckDB database, or an automated recorder. A future phase could still add a
@@ -434,9 +434,9 @@ their still-valid requirements are carried into the columns above.
 - **The OTLP *logs* signal (operational session logs, e.g. commit-signing
   failures).** Landed in schema v2 (Refs
   [#824](https://github.com/tvna/claude-md/issues/824)); see *OTLP logs
-  extension* above. The redaction contract -- drop or hash paths, key locations,
+  extension* above. The redaction contract; drop or hash paths, key locations,
   tokens, request ids, hostnames, and raw payloads before any row is written
-  (Refs #88, CLAUDE.md Section 4) -- is defined there. Still deferred: a runtime
+  (Refs #88, CLAUDE.md Section 4); is defined there. Still deferred: a runtime
   recorder that emits these events automatically (the write path stays
   operator-local, and `duckdb` stays out of the repo dependency set).
 - **The structure-sensitive task signal** (Refs #90/#83): a candidate quality
@@ -474,17 +474,17 @@ unrelated regression is introduced (`pytest`).
 
 ## References
 
-- [#815](https://github.com/tvna/claude-md/issues/815) -- this contract (host-unit DuckDB store).
-- [#824](https://github.com/tvna/claude-md/issues/824) -- OTLP logs extension (schema v2: redacted operational session logs).
-- [#826](https://github.com/tvna/claude-md/issues/826) -- ephemeral-environment measurement boundary (decision: option (A), accept and document).
-- [#1212](https://github.com/tvna/claude-md/issues/1212) -- manual Cloudflare R2 escrow handoff for ephemeral measurement export.
-- [#1326](https://github.com/tvna/claude-md/issues/1326) -- from-scratch Cloudflare R2 provisioning for the escrow runbook.
-- [#814](https://github.com/tvna/claude-md/issues/814) -- parent: Section 5 quality-scalability proportionality reframe.
-- [#226](https://github.com/tvna/claude-md/issues/226) -- CLAUDE.md / AGENTS.md evolution tracker.
-- [#89](https://github.com/tvna/claude-md/issues/89) -- instruction-source versioning (OPEN; provides `compiled_source_version`).
-- [#61](https://github.com/tvna/claude-md/issues/61), [#62](https://github.com/tvna/claude-md/issues/62), [#88](https://github.com/tvna/claude-md/issues/88), [#90](https://github.com/tvna/claude-md/issues/90) -- superseded orphan-branch benchmark approach (requirements carried forward).
-- [`docs/standards/performance-metrics.md`](performance-metrics.md) -- the superseded storage design.
-- [`docs/standards/repo-scope.md`](repo-scope.md) -- declared repo purpose (2).
-- OpenTelemetry metric data model and the ClickHouse-exporter / DuckDB OTLP-extension column layout -- the external compatibility target the schema mirrors.
-- Cloudflare R2 temporary credentials, object lifecycle, and S3 compatibility documentation -- the external escrow capability.
-- DuckDB S3 API / R2 secret and secrets manager documentation -- the compatibility and secret-storage boundary used for the decision.
+- [#815](https://github.com/tvna/claude-md/issues/815); this contract (host-unit DuckDB store).
+- [#824](https://github.com/tvna/claude-md/issues/824); OTLP logs extension (schema v2: redacted operational session logs).
+- [#826](https://github.com/tvna/claude-md/issues/826); ephemeral-environment measurement boundary (decision: option (A), accept and document).
+- [#1212](https://github.com/tvna/claude-md/issues/1212); manual Cloudflare R2 escrow handoff for ephemeral measurement export.
+- [#1326](https://github.com/tvna/claude-md/issues/1326); from-scratch Cloudflare R2 provisioning for the escrow runbook.
+- [#814](https://github.com/tvna/claude-md/issues/814); parent: Section 5 quality-scalability proportionality reframe.
+- [#226](https://github.com/tvna/claude-md/issues/226); CLAUDE.md / AGENTS.md evolution tracker.
+- [#89](https://github.com/tvna/claude-md/issues/89); instruction-source versioning (OPEN; provides `compiled_source_version`).
+- [#61](https://github.com/tvna/claude-md/issues/61), [#62](https://github.com/tvna/claude-md/issues/62), [#88](https://github.com/tvna/claude-md/issues/88), [#90](https://github.com/tvna/claude-md/issues/90); superseded orphan-branch benchmark approach (requirements carried forward).
+- [`docs/standards/performance-metrics.md`](performance-metrics.md); the superseded storage design.
+- [`docs/standards/repo-scope.md`](repo-scope.md); declared repo purpose (2).
+- OpenTelemetry metric data model and the ClickHouse-exporter / DuckDB OTLP-extension column layout; the external compatibility target the schema mirrors.
+- Cloudflare R2 temporary credentials, object lifecycle, and S3 compatibility documentation; the external escrow capability.
+- DuckDB S3 API / R2 secret and secrets manager documentation; the compatibility and secret-storage boundary used for the decision.

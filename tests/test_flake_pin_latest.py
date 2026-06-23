@@ -1,4 +1,4 @@
-"""Tests for scripts/flake_pin_latest.py -- the auto-follow decision logic.
+"""Tests for scripts/flake_pin_latest.py; the auto-follow decision logic.
 
 The cooldown + version-comparison decision is exercised here with an injected
 fetcher and a fixed ``now``, so it never hits the GitHub API. This pins the two

@@ -452,7 +452,7 @@ class TestDecideReconstructsHarnessFooter:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         # Refs #1441 / #1439: the web-harness create response is {id, url}
-        # only -- no body to lift. The fixer must reconstruct the session
+        # only; no body to lift. The fixer must reconstruct the session
         # footer from the env so the mandated update carries exactly one.
         monkeypatch.setenv("CLAUDE_CODE_REMOTE", "true")
         monkeypatch.setenv("CLAUDE_CODE_REMOTE_SESSION_ID", "cse_01XYZ")

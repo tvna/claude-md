@@ -1,6 +1,6 @@
 #!/usr/bin/env bpftrace
 /*
- * egress-correlation.bt -- best-effort process<->egress correlation monitor.
+ * egress-correlation.bt; best-effort process<->egress correlation monitor.
  *
  * Records, per event, ONLY:
  *   - the originating process (pid + comm),
@@ -12,7 +12,7 @@
  * It DELIBERATELY never reads syscall payload buffers: no write()/read()/send()
  * buffer contents are captured, so secrets in transit or on disk are not
  * recorded. Output is a local-only report (see _egress-ebpf.sh); nothing is
- * sent off-box -- this is a self-hosted monitor with no third-party telemetry.
+ * sent off-box; this is a self-hosted monitor with no third-party telemetry.
  *
  * Honest limitation: an agent holding NET_ADMIN/CAP_BPF can kill bpftrace or
  * detach these probes from within the container (CVE-2025-32955 class bypass).
@@ -49,7 +49,7 @@ kprobe:tcp_connect
 }
 
 /*
- * File opens. Record the path argument ONLY -- never the contents of any
+ * File opens. Record the path argument ONLY; never the contents of any
  * subsequent read()/write() against the returned fd.
  */
 tracepoint:syscalls:sys_enter_openat
@@ -62,7 +62,7 @@ tracepoint:syscalls:sys_enter_openat
  * Supply-chain detection: malicious postinstall/build scripts typically exec
  * a shell or download a dropper here. Filter by comm in downstream analysis
  * to separate legitimate build tools from unexpected callers.
- * Only the filename argument is read -- never the argv payload.
+ * Only the filename argument is read; never the argv payload.
  */
 tracepoint:syscalls:sys_enter_execve
 {

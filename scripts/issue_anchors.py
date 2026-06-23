@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Resolve tracking-issue anchors from ``.github/tracking-issues.toml``.
 
-CI writes to specific GitHub issues -- rolling comments, ``Closes #`` lines,
+CI writes to specific GitHub issues; rolling comments, ``Closes #`` lines,
 commit trailers, PR-body ``Refs #`` lines. Hardcoding those numbers across
 workflow YAML, PR-body templates, and script constants made an
 umbrella-issue renumbering a multi-file hunt. This module is the single
@@ -29,7 +29,7 @@ Contract:
   rewrites the file and prints a status line; exit 0 on success, exit 1
   with a ``::error::`` annotation on a missing or malformed config, an
   unknown key, or an unresolvable token.
-- Failure policy: fails loud per CLAUDE.md section 4 -- a missing or wrong
+- Failure policy: fails loud per CLAUDE.md section 4; a missing or wrong
   anchor must stop the calling workflow rather than let a comment, trailer,
   or PR body target the wrong issue.
 

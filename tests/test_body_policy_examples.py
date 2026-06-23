@@ -181,7 +181,7 @@ class TestValidatedExamples:
         missing = body_policy.missing_sections(required, headings)
         assert missing == [], (
             f"{example.heading}: body_policy.py would reject this {kind} "
-            f"example -- missing required section(s): {missing}"
+            f"example; missing required section(s): {missing}"
         )
 
     def test_pr_shape_when_requested(self, example: _Example) -> None:

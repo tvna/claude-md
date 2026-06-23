@@ -8,7 +8,7 @@
 //
 // Why jsdom: mermaid's flowchart path calls DOMPurify.addHook at module load,
 // which needs a browser DOM. Without it, every flowchart parse throws
-// "DOMPurify.addHook is not a function" -- a false failure, not a syntax error.
+// "DOMPurify.addHook is not a function"; a false failure, not a syntax error.
 // A single jsdom window injected before importing mermaid fixes this; the DOM is
 // created once and reused for every block (measured ~5s for 1489 blocks).
 //
@@ -30,7 +30,7 @@ globalThis.DOMParser = dom.window.DOMParser;
 
 const { default: mermaid } = await import("mermaid");
 // startOnLoad false keeps mermaid from scanning the (empty) DOM on import; parse
-// does not need a render pass. Defaults otherwise -- we only want syntax checks.
+// does not need a render pass. Defaults otherwise; we only want syntax checks.
 mermaid.initialize({ startOnLoad: false });
 
 function firstLine(message) {

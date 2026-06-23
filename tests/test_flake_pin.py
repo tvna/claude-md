@@ -1,4 +1,4 @@
-"""Tests for scripts/flake_pin.py -- reading and bumping flake.nix tool pins.
+"""Tests for scripts/flake_pin.py; reading and bumping flake.nix tool pins.
 
 flake.nix is the single source of truth for the version + per-system SHA256 of
 the GitHub-Releases-sourced tools (waza, apm, rtk). These tests pin the parsing and

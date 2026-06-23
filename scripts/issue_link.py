@@ -50,7 +50,7 @@ from _trusted_bots import _TRUSTED_BOT_LOGINS
 
 # ``_REF_LINE`` is the keyword-non-capturing variant used only by
 # :func:`extract_refs`. The keyword-capturing form lives in
-# ``_ref_classifier`` (shared with the client-side hook) -- this regex
+# ``_ref_classifier`` (shared with the client-side hook); this regex
 # is local because no other module needs the bare number-only view.
 _REF_LINE = re.compile(
     r"^[ \t]*(?:Refs|Closes|Fixes|Resolves)[ \t]+#(\d+)",
@@ -78,7 +78,7 @@ def extract_refs(body: str) -> list[int]:
 
     Matching is case-insensitive and line-anchored: only references where
     the keyword appears at the start of the line (optionally indented)
-    are returned. Composes with :func:`strip_html_comments` -- callers
+    are returned. Composes with :func:`strip_html_comments`; callers
     that want HTML-commented refs ignored must pre-process *body*.
     """
     found = {int(m.group(1)) for m in _REF_LINE.finditer(body)}
@@ -156,7 +156,7 @@ def get_issue_labels(
 
     Uses ``gh api ... --jq '.labels[].name'`` so the output is one label
     per line and no JSON parsing is needed. ``None`` means "could not
-    determine" -- callers should fail-safe (treat as not tracking) so
+    determine"; callers should fail-safe (treat as not tracking) so
     flaky API calls cannot silently unlock the closing-keyword gate.
     """
     if runner is None:
@@ -210,7 +210,7 @@ def _verify(repo: str, body: str, author: str | None = None) -> int:
         return 1
 
     # Closing-keyword gate (per #216 PR-A): if at least one reference is
-    # a closing keyword, the PR will auto-close its issue on merge -- pass.
+    # a closing keyword, the PR will auto-close its issue on merge; pass.
     classified = classify_refs(cleaned)
     if any(kw in _CLOSING_KEYWORDS for kw, _ in classified):
         return 0

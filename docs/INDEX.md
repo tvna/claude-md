@@ -10,7 +10,7 @@ generated views), `archive/` (frozen historical evidence),
 `next-session/` (session handoff prompt templates).
 
 If you only want one entry per lane, read the first row of each table
-below -- that is the highest-traffic document in the lane. Otherwise
+below; that is the highest-traffic document in the lane. Otherwise
 scan the `Territory` column for the domain you care about and follow
 the `Companion` column to the workflow or script that implements it.
 
@@ -21,14 +21,14 @@ and [`runbooks/README.md`](runbooks/README.md). The append-only policy
 for `archive/` is documented separately in
 [`archive/RETENTION.md`](archive/RETENTION.md).
 
-## proposals/ -- pre-decision evaluations with open questions
+## proposals/; pre-decision evaluations with open questions
 
 | File | Territory | Tracking issues | Companion |
 |---|---|---|---|
 | [README.md](proposals/README.md) | Placement rules for pre-decision evaluations whose requirements are not yet decidable, and their graduation path into `prd/` / `standards/` / `runbooks/`. | #1001 | `docs/INDEX.md`; `docs/prd/README.md` |
 | [instruction-distribution-mechanism.md](proposals/instruction-distribution-mechanism.md) | Decision (A+C: shipped sync template plus tagged release artifacts pinned by tag+sha256) for how downstream projects import the compiled instructions as committed real files; retraction of the submodule+symlink method; deferred reusable-workflow option B and its re-open condition. | #1678 | `.github/workflows/publish-instructions-release.yml`; `scripts/publish_instruction_release.py`; `docs/runbooks/consumer-instruction-sync.md` |
 
-## prd/ -- design-stage rationale and decision records
+## prd/; design-stage rationale and decision records
 
 | File | Territory | Tracking issues | Companion |
 |---|---|---|---|
@@ -48,7 +48,7 @@ The last three `prd/` entries are adopted contracts with legacy
 placement. They should move to `standards/` in a scoped follow-up rather
 than serving as precedent for new PRD files.
 
-## adr/ -- architecture decision records
+## adr/; architecture decision records
 
 Confirmed, owner-approved decisions recorded in MADR format. Each file
 captures context, the decision, the rationale, rejected alternatives, and
@@ -59,7 +59,7 @@ mechanism designed in [#1049](https://github.com/tvna/claude-md/issues/1049).
 |---|---|---|---|
 | [0001-hook-manager-prek.md](adr/0001-hook-manager-prek.md) | Decision to use prek over pre-commit as the git hook manager: token-efficiency rationale, performance comparison, and rejected alternative. | #408, #1049 | `.pre-commit-config.yaml`; `docs/runbooks/prek.md`; `docs/standards/pre-push-gate-performance.md` |
 
-## uml/ -- UML diagram artifacts
+## uml/; UML diagram artifacts
 
 | File | Territory | Tracking issues | Companion |
 |---|---|---|---|
@@ -70,7 +70,7 @@ mechanism designed in [#1049](https://github.com/tvna/claude-md/issues/1049).
 | [doc-dependency-graph-governance.gap.md](uml/doc-dependency-graph-governance.gap.md) | Gap analysis for the typed document dependency graph gate (PR #1755): before/after enforcement map (1 edge → 8 blocking + 8 advisory), CI gate sequence diagram, and class diagram of the graph data model. Residual gaps: undeclared edges still rely on reviewer memory; gate is advisory in Phase 1; waivers are per-PR with no cross-PR persistence. | #1754 | `scripts/gate_doc_graph_pr.py`; `scripts/doc_graph.py`; `docs/graph/doc-dependencies.toml`; `.github/workflows/validate-doc-graph.yml` |
 | [doc-dependency-graph-governance.gap.ja.md](uml/doc-dependency-graph-governance.gap.ja.md) | Japanese translation of `doc-dependency-graph-governance.gap.md` (owner-language reading copy of the gap analysis, gate sequence, and data model). | #1754 | `docs/uml/doc-dependency-graph-governance.gap.md` |
 
-## standards/ -- adopted rules, schemas, and contracts
+## standards/; adopted rules, schemas, and contracts
 
 | File | Territory | Tracking issues | Companion |
 |---|---|---|---|
@@ -99,7 +99,7 @@ mechanism designed in [#1049](https://github.com/tvna/claude-md/issues/1049).
 | [host-unit-duckdb-metrics.md](standards/host-unit-duckdb-metrics.md) | OTel-compatible per-host DuckDB store for the quality-vs-scope proportionality signal. Supersedes the orphan-branch JSON approach; collect early in DuckDB, export to OTLP later. | #815, #814, #226 | `metrics/duckdb/schema/v1/schema.sql`; `docs/standards/performance-metrics.md` |
 | [tool-overlap-measurement.md](standards/tool-overlap-measurement.md) | Effectiveness-measurement contract for running each new tool (zizmor / lychee / betterleaks) alongside its overlapping gate on the same scope: what is recorded, the redaction rule, the measurement window, and the keep / replace / drop decision rule. | #1618, #1610 | `scripts/measure_tool_overlap.py`; `metrics/duckdb/schema/v3/schema.sql`; `.github/workflows/measure-tool-overlap.yml`; `tests/test_measure_tool_overlap.py` |
 
-## runbooks/ -- operator procedures
+## runbooks/; operator procedures
 
 | File | Territory | Tracking issues | Companion |
 |---|---|---|---|
@@ -142,9 +142,9 @@ mechanism designed in [#1049](https://github.com/tvna/claude-md/issues/1049).
 | [pr-body-policy-recovery.md](runbooks/pr-body-policy-recovery.md) | Approved recovery for a PR body that fails a body-policy gate after open: edit the body for a fresh `edited` event instead of re-running the stale run, never add an empty retrigger commit, and a decision tree mapping symptom to repair. | #675 | `scripts/preflight_pr_body.py`; `scripts/preflight_push_nonempty.py`; `.github/workflows/verify-pr.yml`; `docs/runbooks/replacement-pr-preflight.md` |
 | [parallel-agent-dispatch.md](runbooks/parallel-agent-dispatch.md) | Operating procedure for dispatching parallel agents when the work is clear-responsibility, individually simple, high-volume, and independent (not when one change is complex): the two-mode decision (independent domains -> concurrent; same workspace -> sequential or worktree-isolated), the worktree path that recovers concurrency, and the integration step. | #1709, #226 | `.agents/skills/dispatching-parallel-agents/SKILL.md`; `.agents/skills/subagent-driven-development/SKILL.md`; `.agents/skills/using-git-worktrees/SKILL.md`; `CLAUDE.md` (section 3) |
 
-## generated/ -- checked-in generated views
+## generated/; checked-in generated views
 
-### generated/scripts/ -- per-script AST graphs
+### generated/scripts/; per-script AST graphs
 
 `generated/scripts/ast/<stem>.md` holds one Mermaid AST control-flow doc per
 `scripts/*.py` file, `generated/scripts/dependency-graph.md` holds the
@@ -163,7 +163,7 @@ hand-editable and is exempt from per-file INDEX linking (a non-bot edit fails
 `python3 scripts/auto_retro.py triage-report` (triage snapshot).
 Tracking issues: #598, #605, #960, #1540, #1543, #1546.
 
-### generated/graph/ -- document dependency diagram
+### generated/graph/; document dependency diagram
 
 `generated/graph/doc-dependency-graph.md` holds the Mermaid flowchart of the
 typed document dependency graph declared in `docs/graph/doc-dependencies.toml`.
@@ -174,7 +174,7 @@ regenerated whenever the graph TOML or its generator script changes.
 Source: `python3 scripts/doc_graph_viz.py all-doc`.
 Tracking issue: #1754.
 
-### generated/workflows/ -- workflow if-branch diagrams
+### generated/workflows/; workflow if-branch diagrams
 
 `generated/workflows/<name>-if-branches.md` holds one Mermaid if-branch diagram
 per `.github/workflows/<name>.yml`. Each diagram shows job-level `if:`
@@ -188,7 +188,7 @@ skipped by `scripts/scan_docs_inventory.py`.
 Source: `python3 scripts/workflow_diagram.py diagram-doc`.
 Tracking issues: #960, #1613.
 
-## archive/ -- frozen historical evidence
+## archive/; frozen historical evidence
 
 These files are append-only. Their narrative references to pre-restructure
 paths reflect the state at PR-merge time and are preserved as historical
@@ -212,7 +212,7 @@ naming convention and the per-30-entries year-folder cutover.
 | [retrospective-pr-337.md](archive/retrospective-pr-337.md) | Retrospective for PR #337 (no-override rule, repair-free). |
 | [retrospective-pr-349.md](archive/retrospective-pr-349.md) | Retrospective for PR #349 (GitHub Advisory Database direct query, repair-free). |
 
-## next-session/ -- session handoff prompt templates
+## next-session/; session handoff prompt templates
 
 | File | Territory | Tracking issues | Companion |
 |---|---|---|---|
@@ -220,6 +220,6 @@ naming convention and the per-30-entries year-folder cutover.
 
 ## Navigation aids
 
-- [archive/RETENTION.md](archive/RETENTION.md) -- append-only policy and auto-retro placement convention for `archive/`.
-- [agent-provenance.md](agent-provenance.md) -- compatibility pointer to `runbooks/agent-provenance.md` for the original #312 target path.
+- [archive/RETENTION.md](archive/RETENTION.md); append-only policy and auto-retro placement convention for `archive/`.
+- [agent-provenance.md](agent-provenance.md); compatibility pointer to `runbooks/agent-provenance.md` for the original #312 target path.
 - This INDEX is reviewed whenever a file is added, removed, or moved across lanes. Treat it as a self-describing supplement to `ls docs/`, not a replacement for the folder layout: the lane is visible at the filesystem level; this index just names what each file owns.

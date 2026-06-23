@@ -4,8 +4,8 @@ Tracked by [#1237](https://github.com/tvna/claude-md/issues/1237).
 
 This standard records the decision to adopt **CodeQL** as the dataflow
 (taint) static-analysis layer for the workflow scripts, and the explicit
-rejection of Pyre and Pysa. It exists so the choice -- and the alternatives
-weighed against it -- survive as a reviewable record rather than reviewer
+rejection of Pyre and Pysa. It exists so the choice; and the alternatives
+weighed against it; survive as a reviewable record rather than reviewer
 memory (CLAUDE.md section 1).
 
 ## Problem
@@ -17,9 +17,9 @@ webhook payloads, and CI logs as untrusted data, so the real threat shape is
 GitHub API). Observed surface across `scripts/`: subprocess in 33 files,
 urllib/HTTP in 24 files, token/environ references in 68 files.
 
-Existing static controls -- mypy (type gate, #192), ruff `S`/flake8-bandit
+Existing static controls; mypy (type gate, #192), ruff `S`/flake8-bandit
 (pattern-based security lint, #190), and the pre-commit scanners
-(scan-secrets, scan-workflow-injection, scan-workflow-pip) -- do **not**
+(scan-secrets, scan-workflow-injection, scan-workflow-pip); do **not**
 perform interprocedural dataflow analysis. bandit-style checks are pattern
 matches, not source->sink tracking. That dataflow gap is the problem.
 
@@ -70,5 +70,5 @@ matches, not source->sink tracking. That dataflow gap is the problem.
 
 CodeQL analysis runs on GitHub-hosted runners and cannot complete inside the
 remote-execution container; verification therefore happens in CI on the PR,
-not locally. A green workflow alone is not proof of coverage -- confirm via
+not locally. A green workflow alone is not proof of coverage; confirm via
 the Security tab / SARIF that files under `scripts/` were actually analyzed.

@@ -8,14 +8,14 @@ start. ``check_session_branch.py`` records those branches and the
 
 The lock was originally a single overwritten branch name, which made the
 workflow non-continuable whenever more than one branch was legitimately in
-play -- paired work (codex/claude alternating across sessions) or a
+play; paired work (codex/claude alternating across sessions) or a
 post-merge follow-up branch. This module replaces the single value with a
 governed, multi-entry *authorized set*: the gate decision becomes a
 conjunction (member of the set AND not a protected branch), not a single
 equality.
 
-Entries are added through exactly one governed path -- a new session
-starting on a branch (``check_session_branch.append_branch``) -- so an
+Entries are added through exactly one governed path; a new session
+starting on a branch (``check_session_branch.append_branch``); so an
 arbitrary branch the agent never started a session on stays unauthorized.
 
 The set is persisted at ``.git/CLAUDE_SESSION_BRANCH`` as a newline-

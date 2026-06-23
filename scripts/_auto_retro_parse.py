@@ -3,7 +3,7 @@
 The base (lowest) layer of the auto-retro refactor (Refs #1725, a
 precondition for #1702): non-IO, non-orchestration functions and the
 module-level constants they consume. Everything here is a pure function
-of its arguments -- no GitHub API calls, no subprocess, no filesystem --
+of its arguments; no GitHub API calls, no subprocess, no filesystem --
 so the parser, the signal computation, and the label-derived prior tally
 can be unit-tested in isolation and reused by the triage and renderer
 layers without importing the IO/orchestration shell.
@@ -153,7 +153,7 @@ _RESULT_PASSING_NON_ASCII_ZERO_RE = re.compile(
 _RESULT_PASSING_NIX_QUOTED_RE = re.compile(r'^"[^"\n]+"$')
 
 # grep -n match output: `18:aka.ms`. A non-empty `linenum:content` result
-# means the operator's pattern was found in the file -- i.e. the file
+# means the operator's pattern was found in the file; i.e. the file
 # contains the expected entry. Refs #927.
 _RESULT_PASSING_GREP_N_RE = re.compile(r"^\d+:\S")
 
@@ -221,9 +221,9 @@ _APPENDED_CLOSE = "<!-- /appended-follow-up-fixes -->"
 # cell. They let verify_retro_repair_completeness mechanically detect rows
 # the operator has not yet completed. Static strings keep build_retro_body
 # byte-identical on event re-run.
-_REPAIR_CAUSE_FILL = "(fill: cause -- how this repair arose)"
+_REPAIR_CAUSE_FILL = "(fill: cause; how this repair arose)"
 _REPAIR_NEXT_ACTION_FILL = (
-    "(fill: next action -- gate or issue to prevent recurrence)"
+    "(fill: next action; gate or issue to prevent recurrence)"
 )
 
 # Logins whose comments do NOT count as operator engagement for the
@@ -309,7 +309,7 @@ def is_retro_pr(pr_title: str) -> bool:
     """True if the PR is itself a retrospective (skip to avoid recursion).
 
     Matches when the title's ``type(scope)`` token literally contains
-    ``(auto-retro)`` -- covering both auto-opened retros and retro-closing
+    ``(auto-retro)``; covering both auto-opened retros and retro-closing
     PRs like ``fix(auto-retro): ...`` / ``docs(auto-retro): ...`` that the
     title policy forces to use an allowed Conventional Commit type with an
     ``auto-retro`` scope.
@@ -402,7 +402,7 @@ def _count_merge_from_main(subjects: list[str]) -> int:
 # while the Conventional forms (`revert(scope): ...`) carry a type slot, so a
 # single literal-prefix list cannot cover both without muddying each. Per
 # CLAUDE.md section 3 `git revert` is the default rollback path, so a revert
-# commit is an expected artifact, not a repair loop on its own -- but unlike
+# commit is an expected artifact, not a repair loop on its own; but unlike
 # merge-from-main (pure structural rebase debt) it is an anomaly *hint*: it
 # subtracts from the multi_commit_pr count yet is still recorded for co-fire
 # correlation (refs #1287).
@@ -411,7 +411,7 @@ _REVERT_PREFIXES: tuple[str, ...] = ('Revert "',)
 # Conventional revert subjects: `revert: ...`, `revert(scope): ...`, and the
 # breaking `revert!: ` / `revert(scope)!: `. The `: ` separator is required so
 # `revert this thing` (no colon) and `fix(revert): ...` (revert only in the
-# scope slot, a real fix commit) do NOT match -- consistent with
+# scope slot, a real fix commit) do NOT match; consistent with
 # title_policy.pr_title_ref_is_exempt, which only treats the *type* slot as a
 # revert. Matched case-sensitively: Git emits capital `Revert "`, Conventional
 # types are lowercase per .github/title-policy.toml `scope_pattern`
@@ -659,7 +659,7 @@ def compute_repair_signals(
     Each signal is independently weak; their logical OR is the gate. The
     historical signal (`has_inline_comments`) is retained verbatim; the
     remaining heuristics catch repair loops captured outside the PR's
-    review thread -- in sibling issues, in fix-typed titles, or in
+    review thread; in sibling issues, in fix-typed titles, or in
     fix-up commits squashed at merge. See issue #298 for the reproducer:
     PR #275 and PR #288 merged with zero inline review comments yet
     carried substantial repair history in issues #287 and #273.
@@ -683,15 +683,15 @@ def compute_repair_signals(
       commits (see :data:`_MERGE_FROM_MAIN_PREFIXES`) and revert commits
       (see :func:`_count_revert`) are subtracted from the count. Rebase
       debt created by the squash-only, linear-history merge policy does
-      not fire the gate on its own, and a revert -- the default rollback
-      path per CLAUDE.md section 3 -- is an anomaly *hint* that must not
+      not fire the gate on its own, and a revert; the default rollback
+      path per CLAUDE.md section 3; is an anomaly *hint* that must not
       open a retro alone: it only matters when it co-fires with another
       signal (review comments, failed CI, failed verification). The revert
       is still surfaced as a ``Revert commit`` row in the repair-history
       table for that correlation (refs #1287). When *commit_subjects* is
       ``None`` (the legacy two-arg call shape, retained for tests that do
       not exercise the gate ordering in :func:`run`) the gate falls back
-      to ``pr.commits > 1`` -- subjects are required to subtract either
+      to ``pr.commits > 1``; subjects are required to subtract either
       artifact class, so the fallback fires more readily by design.
     """
     fix_typed = pr.title.lstrip().lower().startswith("fix(")
@@ -738,7 +738,7 @@ def render_repair_signals(signals: dict[str, bool]) -> str:
 # returned by :func:`compute_repair_signals` and is consumed by the
 # label-derived prior helpers below. Kept as a tuple (not a frozenset)
 # so the rendered "Signals fired:" line has a stable ordering across
-# runs -- required for byte-identical retro bodies on re-run of the
+# runs; required for byte-identical retro bodies on re-run of the
 # same merge event. Refs #582.
 _SIGNAL_NAMES: tuple[str, ...] = (
     "inline_review_comments",
@@ -752,7 +752,7 @@ def render_signals_fired_line(signals: dict[str, bool]) -> str:
 
     Lists every signal whose ``fired`` flag is True in declaration
     order, comma-separated. Returns ``- Signals fired: (none)`` when
-    no signal fires -- empty payload is still parseable by
+    no signal fires; empty payload is still parseable by
     :func:`parse_signals_from_retro_body`.
 
     The shape is fixed because :func:`parse_signals_from_retro_body`

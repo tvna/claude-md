@@ -5,8 +5,8 @@ The ``createCommitOnBranch`` GraphQL mutation is the repository's adopted path
 for bot-authored, Verified commits (a GitHub App cannot hold its own signing
 key, so a runner ``git commit`` is always unsigned; Refs #1437). This module
 owns that mutation and the batching that keeps its single request from
-overflowing: a large addition set -- e.g. the full ``docs/generated/scripts/ast``
-tree regenerated after the fixed branch fell far behind ``main`` -- is split
+overflowing: a large addition set; e.g. the full ``docs/generated/scripts/ast``
+tree regenerated after the fixed branch fell far behind ``main``; is split
 into several chained signed commits instead of one oversized mutation that
 GitHub rejects with a generic "Something went wrong" error (Refs #1578).
 
@@ -19,7 +19,7 @@ Contract:
 - :func:`_batch_additions` splits additions by file count and cumulative size.
 - :func:`_create_commits_in_batches` chains the two: one commit for a small
   payload (unchanged headline), several chained commits for a large one.
-- Failure policy: fails loud per CLAUDE.md section 4 -- a non-2xx response, a
+- Failure policy: fails loud per CLAUDE.md section 4; a non-2xx response, a
   GraphQL ``errors`` array, or a missing commit oid each raise ``RuntimeError``
   rather than returning a silent default.
 """
@@ -46,8 +46,8 @@ mutation($input: CreateCommitOnBranchInput!) {
 """
 
 # createCommitOnBranch carries every addition's bytes (base64) in one GraphQL
-# request. A large backlog -- e.g. the full docs/generated/scripts/ast/ tree
-# regenerated after the fixed branch fell far behind main -- overflows the
+# request. A large backlog; e.g. the full docs/generated/scripts/ast/ tree
+# regenerated after the fixed branch fell far behind main; overflows the
 # mutation and GitHub returns a generic "Something went wrong while executing
 # your query" error. A manual decision-tree run reproduced it at 152 files /
 # ~1.3 MB of base64 even with a fresh branch (so it is the payload, not the
@@ -78,7 +78,7 @@ def _validate_commit_paths(
 
     GitHub rejects a directory-level path with its generic "Something went
     wrong" error, which ``_github_api._graphql_is_transient`` retries three
-    times before failing with a misleading "transient" label -- the #1772 mode
+    times before failing with a misleading "transient" label; the #1772 mode
     (a ``docs/generated/graph/`` directory used as a deletion target). Validating
     here turns that opaque retried failure into an immediate named error and
     guards every caller of the createCommitOnBranch path. Refs #1784, #1772.

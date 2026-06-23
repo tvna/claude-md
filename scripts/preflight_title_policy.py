@@ -28,13 +28,13 @@ Three rules are mirrored from :mod:`title_policy`:
 
 The hook evaluates the three rules in the order above; the first
 violation wins so the deny reason stays focused. Issue titles are gated
-on the first two rules only -- the ``(#NNN)`` rule is PR-specific because
+on the first two rules only; the ``(#NNN)`` rule is PR-specific because
 the issue link is enforced on the PR body, not the issue body.
 
 Architecture mirrors :mod:`preflight_non_ascii`: pure functions on top,
 one thin stdin/stdout boundary at the bottom (:func:`main`). The main
 function fails open on parse / shape errors so a hook bug cannot wedge
-the session -- the server-side gate (``verify-title-policy.yml``)
+the session; the server-side gate (``verify-title-policy.yml``)
 remains as backstop.
 
 Refs #496. Supersedes ``scripts/preflight_pr_title_issue_ref.py``
@@ -281,7 +281,7 @@ def decide(tool_name: str, tool_input: dict[str, Any]) -> dict[str, Any] | None:
 
 
 # ---------------------------------------------------------------------------
-# Side-effecting boundary -- the only impure surface, monkeypatched in tests
+# Side-effecting boundary; the only impure surface, monkeypatched in tests
 # ---------------------------------------------------------------------------
 
 

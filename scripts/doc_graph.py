@@ -15,21 +15,21 @@ has a unique ``id``, a repository-relative ``path``, and a ``type``.
 enforcement:
 
 - ``blocking``: the CI gate fails when TO is absent from the PR diff (unless
-  a ``doc-graph-waiver: TO_ID -- reason`` line is present in the PR body).
+  a ``doc-graph-waiver: TO_ID; reason`` line is present in the PR body).
 - ``advisory``: the gate emits a note but does not fail.
 
 Valid edge types:
 
-- ``governs``     -- upstream principles define/constrain downstream; blocking.
-- ``compiled_to`` -- upstream compiles deterministically into downstream; blocking.
+- ``governs``    ; upstream principles define/constrain downstream; blocking.
+- ``compiled_to``; upstream compiles deterministically into downstream; blocking.
 - ``derives_from``-- downstream design was derived from upstream; blocking.
-- ``enforced_by`` -- downstream script enforces upstream rule; advisory.
-- ``implements``  -- downstream is the concrete implementation of upstream; advisory.
-- ``references``  -- upstream cites downstream; advisory.
+- ``enforced_by``; downstream script enforces upstream rule; advisory.
+- ``implements`` ; downstream is the concrete implementation of upstream; advisory.
+- ``references`` ; upstream cites downstream; advisory.
 
 Architecture: pure functions on top (:func:`load_graph`, :func:`impact_report`,
 :func:`render_mermaid`), no side effects. A single filesystem read in
-:func:`load_graph` -- the TOML file -- feeds all downstream operations.
+:func:`load_graph`; the TOML file; feeds all downstream operations.
 
 Contract:
 - Inputs: a ``Path`` pointing at the TOML graph file.

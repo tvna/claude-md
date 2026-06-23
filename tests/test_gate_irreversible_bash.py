@@ -73,7 +73,7 @@ class TestDecideAllowed:
             # safer / non-forced git push
             "git push origin main",
             "git push --force-with-lease origin main",
-            # mention only -- leading command is echo, not rm
+            # mention only; leading command is echo, not rm
             "echo 'rm -rf /'",
             'echo "git push --force"',
             # non-destructive readers / listers

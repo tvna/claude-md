@@ -223,7 +223,7 @@ def test_apply_call_returns_body_verbatim_when_not_json() -> None:
 
 
 # ---------------------------------------------------------------------------
-# graphql_call -- previously untested (#985 coverage top-up alongside the
+# graphql_call; previously untested (#985 coverage top-up alongside the
 # apply_call sleeper-seam change that lifts _github_api into the changed-set).
 # ---------------------------------------------------------------------------
 
@@ -397,7 +397,7 @@ def test_graphql_call_does_not_leak_bearer_token(capsys: pytest.CaptureFixture[s
 
 
 # ---------------------------------------------------------------------------
-# _default_opener -- the production default must bound every call with a
+# _default_opener; the production default must bound every call with a
 # timeout so a stalled connection cannot hang the job (CWE-400 / CWE-770).
 # ---------------------------------------------------------------------------
 

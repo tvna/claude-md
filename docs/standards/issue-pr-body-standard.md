@@ -168,7 +168,7 @@ headings form an allowlist enforced by `scripts/body_policy.py`
 (`unexpected_pr_sections`, mirrored client-side by
 `scripts/preflight_pr_template_shape.py`): only the headings listed below
 may appear, and a PR body carrying any other H2 is rejected. The body is
-conclusion-first (BLUF) -- `## Summary` leads, and `## Related Issue` is
+conclusion-first (BLUF); `## Summary` leads, and `## Related Issue` is
 kept last, just before the agent-attribution footer, per GitHub
 convention. The headings, in order, are:
 
@@ -365,7 +365,7 @@ would become a duplicate that fails the server gate and forces a manual
 does; the harness then supplies the single footer. The exception is
 deliberately create-only: `update_pull_request` is not auto-appended, so
 it keeps requiring exactly one trailing footer. Local Claude CLI and CI
-leave `CLAUDE_CODE_REMOTE` unset and are unaffected -- they keep requiring
+leave `CLAUDE_CODE_REMOTE` unset and are unaffected; they keep requiring
 a trailing footer. The server-side `verify_pr_agent_attribution_footer`
 gate is unchanged, so a genuine duplicate (two footers) still fails.
 Refs #1025.
@@ -378,7 +378,7 @@ normalized body (built from the footerless authored body) lacked the
 footer the update gate requires. The fixer now lifts the
 harness-appended footer out of the stored body and re-appends it to the
 normalized body it hands back, so the mandated update already carries
-exactly one footer -- the create-vs-update asymmetry is bridged
+exactly one footer; the create-vs-update asymmetry is bridged
 harness-enforced, not agent-remembered, without relaxing the update gate
 and without relying on PreToolUse `updatedInput` (unreliable under the
 multiple-hook PR matcher; see
@@ -459,7 +459,7 @@ verified on PRs #1033 and #1034, per #1035; the third in #1255 and
   because it uses only a single hyphen between two letters.
 - An angle-bracket placeholder token is stripped as an unknown HTML tag.
   A bare token such as `<sha>` (a less-than sign, an identifier, a
-  greater-than sign) -- for example a `git revert` argument -- is
+  greater-than sign); for example a `git revert` argument; is
   deleted **entirely** from the stored body, not even preserved as an
   `&lt;...&gt;` entity, and the deletion happens inside fenced code
   blocks too (verified in the original body of #1265, where the

@@ -153,7 +153,7 @@ class TestBuiltBodyPassesBodyPolicy:
         assert missing_sections(
             required_sections("pull_request", body=body), []
         ) == list(required_sections("pull_request", body=body)), (
-            "headings not checked in isolation -- check via extract_headings"
+            "headings not checked in isolation; check via extract_headings"
         )
         from body_policy import extract_headings
 

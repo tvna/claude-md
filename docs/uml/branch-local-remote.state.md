@@ -40,8 +40,8 @@ PreToolUse gates plus a PostToolUse follow-up. All of them live in
 | Server-side branch update (merge commit) | `gate_update_pr_branch.py:4-9` (deny) | PreToolUse `mcp__github__update_pull_request_branch` |
 | Surface a follow-up after a config-touching merge | `post_merge_new_session_prompt.py` | PostToolUse `mcp__github__merge_pull_request` |
 
-`[analysis]` The authorized-branch predicate is a conjunction -- member of the
-recorded set AND not a protected branch (`_session_branches.py:84-87`) -- but
+`[analysis]` The authorized-branch predicate is a conjunction; member of the
+recorded set AND not a protected branch (`_session_branches.py:84-87`); but
 an empty or unreadable set is treated as fail-open by every gate, so an
 unrecorded session is unconstrained until server-side branch protection and CI
 act as the backstop.
@@ -119,7 +119,7 @@ stateDiagram-v2
   base into an actionable deny.
 - `[analysis]` Gap 4: keep the destructive delete out of the in-session agent
   path, but close the accumulation with a deterministic post-merge cleanup
-  job (CI), not agent memory -- the same backstop pattern the survey already
+  job (CI), not agent memory; the same backstop pattern the survey already
   assumes.
 
 ## Scope note
@@ -127,8 +127,8 @@ stateDiagram-v2
 `[fact]` The local gates are advisory-with-backstop, not authoritative: each
 fails open and names CI plus server-side branch protection as the real guard
 (`preflight_push_session_branch.py:18`). `[analysis]` So the local/remote
-divergence modeled here is an agent/operator friction class -- a missing
-guided transition -- not a correctness hole: the server-side rules still
+divergence modeled here is an agent/operator friction class; a missing
+guided transition; not a correctness hole: the server-side rules still
 reject an illegitimate push. The `finishing-a-development-branch` skill
 (advisory, CLAUDE.md section 3) shapes how a branch is wrapped up, but adds no
 enforcement to these transitions.

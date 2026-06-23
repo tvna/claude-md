@@ -1,6 +1,6 @@
 """Tests for ``scripts/title_policy.py``.
 
-Refs #199 -- ``TestPropertyInvariants`` below is the narrow Hypothesis
+Refs #199; ``TestPropertyInvariants`` below is the narrow Hypothesis
 pilot documented in ``docs/standards/workflow-script-quality.md`` O1.
 """
 

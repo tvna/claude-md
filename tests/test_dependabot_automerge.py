@@ -139,7 +139,7 @@ def test_threat_blocking_labels_are_inert_defense_in_depth() -> None:
     # nothing applies these labels anymore. The guard is kept as inert
     # defense-in-depth (CLAUDE.md s4): if a threat:* label is ever re-created
     # and applied by hand, auto-merge must still block. The literals are now
-    # self-contained -- there is no producer constant left to mirror, so this
+    # self-contained; there is no producer constant left to mirror, so this
     # pins the expected set directly.
     assert set(da._THREAT_BLOCKING_LABELS) == {"threat:response-needed", "threat:intel-needed"}
 

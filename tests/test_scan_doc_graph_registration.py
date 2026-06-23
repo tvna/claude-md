@@ -129,24 +129,24 @@ class TestParseWaivers:
         assert gate.parse_waivers("") == frozenset()
 
     def test_single_waiver(self) -> None:
-        body = "doc-graph-registration-waiver: docs/runbooks/foo.md -- standalone\n"
+        body = "doc-graph-registration-waiver: docs/runbooks/foo.md; standalone\n"
         assert gate.parse_waivers(body) == frozenset(["docs/runbooks/foo.md"])
 
     def test_multiple_waivers(self) -> None:
         body = (
-            "doc-graph-registration-waiver: docs/standards/a.md -- r1\n"
-            "doc-graph-registration-waiver: docs/runbooks/b.md -- r2\n"
+            "doc-graph-registration-waiver: docs/standards/a.md; r1\n"
+            "doc-graph-registration-waiver: docs/runbooks/b.md; r2\n"
         )
         assert gate.parse_waivers(body) == frozenset(
             ["docs/standards/a.md", "docs/runbooks/b.md"]
         )
 
     def test_case_insensitive_marker(self) -> None:
-        body = "DOC-GRAPH-REGISTRATION-WAIVER: docs/standards/foo.md -- reason"
+        body = "DOC-GRAPH-REGISTRATION-WAIVER: docs/standards/foo.md; reason"
         assert gate.parse_waivers(body) == frozenset(["docs/standards/foo.md"])
 
     def test_leading_whitespace_ignored(self) -> None:
-        body = "  doc-graph-registration-waiver: docs/prd/foo.md -- reason"
+        body = "  doc-graph-registration-waiver: docs/prd/foo.md; reason"
         assert gate.parse_waivers(body) == frozenset(["docs/prd/foo.md"])
 
     def test_waiver_without_reason(self) -> None:
@@ -159,7 +159,7 @@ class TestParseWaivers:
 
     def test_doc_graph_waiver_not_matched(self) -> None:
         # The old gate_doc_graph_pr.py marker must not be confused with ours.
-        body = "doc-graph-waiver: prd_a -- reason\n"
+        body = "doc-graph-waiver: prd_a; reason\n"
         assert gate.parse_waivers(body) == frozenset()
 
 
@@ -386,7 +386,7 @@ class TestMain:
         assert self._run_main(tmp_path, ["docs/standards/new.md"]) == 1
 
     def test_blocking_waiver_exits_0(self, tmp_path: Path) -> None:
-        body = "doc-graph-registration-waiver: docs/standards/new.md -- reason\n"
+        body = "doc-graph-registration-waiver: docs/standards/new.md; reason\n"
         assert self._run_main(tmp_path, ["docs/standards/new.md"], body=body) == 0
 
     def test_prd_unregistered_exits_1(self, tmp_path: Path) -> None:
@@ -486,7 +486,7 @@ class TestMain:
     ) -> None:
         monkeypatch.setenv(
             "PR_BODY",
-            "doc-graph-registration-waiver: docs/standards/new.md -- env waiver\n",
+            "doc-graph-registration-waiver: docs/standards/new.md; env waiver\n",
         )
         graph_path = _write_graph(tmp_path)
         with patch(
@@ -507,7 +507,7 @@ class TestMain:
     ) -> None:
         monkeypatch.setenv(
             "PR_BODY",
-            "doc-graph-registration-waiver: docs/standards/new.md -- from env\n",
+            "doc-graph-registration-waiver: docs/standards/new.md; from env\n",
         )
         graph_path = _write_graph(tmp_path)
         body_path = _body_file(tmp_path, "")  # no waiver in file

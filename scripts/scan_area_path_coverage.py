@@ -8,7 +8,7 @@ conservative: "a new top-level directory, hidden configuration directory, or
 generated-document lane must add an ``area:*`` mapping in the same design issue
 that introduces it." Nothing enforced that promise, so a new top-level
 directory could ship with no owning area, a declared area could have no paths,
-or an ``area_paths`` entry could point at an undeclared area -- and no test
+or an ``area_paths`` entry could point at an undeclared area; and no test
 would catch it.
 
 This scan is the deterministic gate. It fails loudly when the ``area:*``
@@ -16,9 +16,9 @@ family and the ``area_paths`` mapping disagree with each other or with the
 repository tree.
 
 Exit codes:
-* ``0`` -- every area is mapped, every mapping targets a declared area, and
+* ``0``; every area is mapped, every mapping targets a declared area, and
   every top-level directory is claimed by at least one area glob.
-* ``1`` -- at least one of those invariants is violated.
+* ``1``; at least one of those invariants is violated.
 
 Tested by ``tests/test_scan_area_path_coverage.py``.
 """

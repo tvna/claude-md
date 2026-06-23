@@ -13,7 +13,7 @@ check instead of reviewer memory (CLAUDE.md section 3).
 
 The gate runs three static checks:
 
-* **M2 -- test-module presence.** Every ``scripts/<name>.py`` must have a
+* **M2; test-module presence.** Every ``scripts/<name>.py`` must have a
   matching ``tests/test_<name>.py`` (private ``_<name>.py`` helpers also
   satisfy the check with ``tests/test_<name>.py``, the established naming
   for ``_git`` -> ``test_git`` etc.). Private helpers that are tested only
@@ -22,7 +22,7 @@ The gate runs three static checks:
   a ratchet: an entry that gains a direct test module, or whose script is
   removed, is reported as stale so the exemption set can only shrink.
 
-* **O6 -- GitHub API boundary registry.** Every public script that imports
+* **O6; GitHub API boundary registry.** Every public script that imports
   the GitHub API boundary (``_github_api`` / ``github_api``) is enumerated
   in :data:`GITHUB_API_SCRIPTS`. The gate fails when AST detection and the
   registry disagree in either direction, so a new API-touching script
@@ -30,7 +30,7 @@ The gate runs three static checks:
   acknowledging the boundary-test expectation that #194 promoted from
   optional O6). The matching test module is guaranteed by the M2 check.
 
-* **M3 -- CLI contract registration.** Every public script invoked by a
+* **M3; CLI contract registration.** Every public script invoked by a
   workflow must appear in the ``CONTRACT_REGISTRY`` of
   ``tests/test_workflow_cli_contracts.py``. That test module is the
   authority for M3 (#189, #193); this check is its static, earlier mirror
@@ -88,7 +88,7 @@ _GITHUB_API_BOUNDARY = frozenset({"_github_api", "github_api"})
 # Private ``_<name>.py`` helpers that have no direct ``tests/test_<name>.py``
 # module because they are exercised indirectly through their callers' tests.
 # Each entry names where the coverage actually lives. This is the tested
-# allowlist required by #1088; it is a ratchet -- an entry that gains a direct
+# allowlist required by #1088; it is a ratchet; an entry that gains a direct
 # test module (or whose helper is deleted) is reported stale and must be
 # removed, so the exemption set can only shrink.
 ALLOW_NO_TEST_MODULE: dict[str, str] = {
@@ -182,7 +182,7 @@ def module_imports(path: Path) -> set[str]:
 
     Walks the AST so both ``import x`` and ``from x import y`` (including
     imports nested inside functions) contribute ``x``. Returns an empty set
-    when the file cannot be parsed -- a syntax error is caught by the lint
+    when the file cannot be parsed; a syntax error is caught by the lint
     gate, not this presence gate.
     """
     try:
@@ -254,7 +254,7 @@ def find_missing_tests(
 
     ``missing`` lists script stems with neither a matching test module nor an
     allowlist entry. ``stale_allowlist`` lists allowlist entries that now have
-    a direct test module, or whose script no longer exists -- either way the
+    a direct test module, or whose script no longer exists; either way the
     exemption is dead and must be removed.
     """
     script_set = set(scripts)
@@ -317,8 +317,8 @@ def cmd_verify(args: argparse.Namespace) -> int:
     for stem in missing:
         print(
             f"::error file=scripts/{stem}.py::scripts/{stem}.py has no matching "
-            f"test module (M2). Add tests/test_{stem.lstrip('_')}.py, or -- only "
-            f"for a private _ helper tested through its callers -- add an entry "
+            f"test module (M2). Add tests/test_{stem.lstrip('_')}.py, or; only "
+            f"for a private _ helper tested through its callers; add an entry "
             f"to ALLOW_NO_TEST_MODULE in scripts/scan_test_presence_drift.py with "
             f"a rationale.",
             file=sys.stderr,

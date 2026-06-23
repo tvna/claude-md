@@ -31,7 +31,7 @@ The SRI ``sha256-<base64>`` from the flake is converted to the lowercase hex
 digest that ``sha256sum -c`` expects.
 
 Fails loud (exit != 0) when the flake is missing or a requested field cannot be
-parsed -- never returns a partial or guessed value (CLAUDE.md section 4).
+parsed; never returns a partial or guessed value (CLAUDE.md section 4).
 
 Tested by ``tests/test_ccusage_pin.py``.
 """

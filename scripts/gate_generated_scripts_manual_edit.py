@@ -28,7 +28,7 @@ Contract:
 - Outputs: a single ``OK``/``::error::`` line; exit 0 when no protected path is
   touched or the branch is the exempt bot branch, exit 1 when a non-exempt
   branch edits a protected folder.
-- Failure policy: fails loud per CLAUDE.md section 4 -- a forbidden edit and a
+- Failure policy: fails loud per CLAUDE.md section 4; a forbidden edit and a
   failed git invocation both exit non-zero rather than passing silently.
 """
 
@@ -104,8 +104,8 @@ def changed_generated_docs(
     reports only what the branch introduced relative to the common ancestor,
     not whatever the base accumulated after the branch was cut. The two-dot
     ``{base_ref}..{head}`` form compares the two tips directly, so once ``main``
-    advances while the PR is open -- e.g. a post-merge ``docs/generated``
-    regeneration lands on ``main`` -- two-dot surfaces that base-only churn as
+    advances while the PR is open; e.g. a post-merge ``docs/generated``
+    regeneration lands on ``main``; two-dot surfaces that base-only churn as
     if this branch had touched the folder, the false positive recorded in retro
     #1703 (repair 4). Three-dot is anchored at the merge-base, so base-only
     commits never appear; a genuine hand-edit on the branch still does.
@@ -202,7 +202,7 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _run(cmd: list[str], *, runner=subprocess.run):
-    """Thin subprocess boundary -- the only impure surface in this module."""
+    """Thin subprocess boundary; the only impure surface in this module."""
     return runner(
         cmd,
         capture_output=True,

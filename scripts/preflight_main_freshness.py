@@ -116,7 +116,7 @@ def check_freshness(
         return FreshnessResult(
             status="missing",
             detail=(
-                "no origin/main freshness stamp found -- run "
+                "no origin/main freshness stamp found; run "
                 "`python3 scripts/preflight_main_freshness.py record`"
             ),
         )
@@ -127,7 +127,7 @@ def check_freshness(
             status="stale",
             detail=(
                 f"origin/main stamp is {age_minutes} minute(s) old "
-                f"(TTL={ttl_seconds // 60} min, SHA={stamp.sha[:12]}) -- run "
+                f"(TTL={ttl_seconds // 60} min, SHA={stamp.sha[:12]}); run "
                 f"`python3 scripts/preflight_main_freshness.py record`"
             ),
             stamp=stamp,

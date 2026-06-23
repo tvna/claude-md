@@ -50,7 +50,7 @@ AGENTS: tuple[str, ...] = ("claude", "codex")
 ARCHES: tuple[str, ...] = ("amd64", "arm64")
 
 _MARKER_TEMPLATE = (
-    "GENERATED FILE -- do not edit. Source: "
+    "GENERATED FILE; do not edit. Source: "
     ".devcontainer/{agent}/devcontainer.json. Regenerate: "
     "python3 scripts/generate_devcontainer_arch_overlays.py generate. This "
     "overlay pins --platform=linux/{arch} for explicit cross-arch selection; "

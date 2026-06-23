@@ -6,18 +6,18 @@ Companion inventory: [`docs/prd/security-control-inventory.md`](../prd/security-
 
 ## How to read this document
 
-- **Workflow** -- filename under `.github/workflows/`.
-- **Trigger** -- primary `on:` events. Push-style triggers (`pull_request`, `pull_request_target`, `issues`, `issue_comment`, `pull_request_review_comment`, `schedule`) and `workflow_dispatch` / `workflow_call` are listed verbatim. Path filters and event types are summarized only when material to the risk.
-- **Token / secret** -- what the workflow authenticates with. `GITHUB_TOKEN` is the default workflow token; named PATs (`LABELS_PAT`, `RULESETS_PAT`) are fine-grained tokens scoped to a GitHub Environment. "none" means no token-bearing API call is made.
-- **Minimum required** -- the least privilege permission set inferred from the operations the workflow actually performs (see *Inference rules* below). Listed as `<scope>: read|write` lines, comma-separated, in the same scope vocabulary GitHub uses for `permissions:` blocks.
-- **Current declared** -- the union of the top-level `permissions:` block and any job-level overrides. `(top-level)` and `(job: <name>)` qualifiers are added when scopes differ between levels.
+- **Workflow**; filename under `.github/workflows/`.
+- **Trigger**; primary `on:` events. Push-style triggers (`pull_request`, `pull_request_target`, `issues`, `issue_comment`, `pull_request_review_comment`, `schedule`) and `workflow_dispatch` / `workflow_call` are listed verbatim. Path filters and event types are summarized only when material to the risk.
+- **Token / secret**; what the workflow authenticates with. `GITHUB_TOKEN` is the default workflow token; named PATs (`LABELS_PAT`, `RULESETS_PAT`) are fine-grained tokens scoped to a GitHub Environment. "none" means no token-bearing API call is made.
+- **Minimum required**; the least privilege permission set inferred from the operations the workflow actually performs (see *Inference rules* below). Listed as `<scope>: read|write` lines, comma-separated, in the same scope vocabulary GitHub uses for `permissions:` blocks.
+- **Current declared**; the union of the top-level `permissions:` block and any job-level overrides. `(top-level)` and `(job: <name>)` qualifiers are added when scopes differ between levels.
 - **Mismatch / residual risk**
-  - `none` -- declared matches minimum.
-  - `over-grant: <scope>` -- declared permission is broader than required; risk if the workflow is compromised.
-  - `under-grant: <scope>` -- declared permission is narrower than required; would surface as a runtime API failure.
-  - `implicit default` -- no `permissions:` block is declared; the workflow runs with the repository default permissions (which today is the GitHub default for new repos). Treated as a residual risk requiring an explicit declaration even when the default happens to be sufficient.
+  - `none`; declared matches minimum.
+  - `over-grant: <scope>`; declared permission is broader than required; risk if the workflow is compromised.
+  - `under-grant: <scope>`; declared permission is narrower than required; would surface as a runtime API failure.
+  - `implicit default`; no `permissions:` block is declared; the workflow runs with the repository default permissions (which today is the GitHub default for new repos). Treated as a residual risk requiring an explicit declaration even when the default happens to be sufficient.
   - Additional risk notes (PAT scope, `pull_request_target` from forks, supply-chain `curl`) are appended after the primary classification.
-- **Follow-up** -- issue number(s) for tracked remediation. Existing issues are reused per #178's "reuse instead of duplicate" rule; no new issues are opened by this audit.
+- **Follow-up**; issue number(s) for tracked remediation. Existing issues are reused per #178's "reuse instead of duplicate" rule; no new issues are opened by this audit.
 
 ### Inference rules used to derive *minimum required*
 
@@ -65,11 +65,11 @@ A workflow that does only `checkout` plus a pure local script (no API call, no `
 
 ## Notes on privileged-mutation workflows
 
-The three workflows below are the only ones whose declared minimum is `contents: read` while the *actual* mutation power they carry comes from an Environment-scoped fine-grained PAT. Their risk profile is therefore controlled by the PAT scope, the Environment gate, and the dispatch authorization criteria -- not by the workflow `permissions:` block. The matrix above lists their workflow scope as `none` mismatch because the workflow token is correctly minimized; the residual surface is the PAT and its handling.
+The three workflows below are the only ones whose declared minimum is `contents: read` while the *actual* mutation power they carry comes from an Environment-scoped fine-grained PAT. Their risk profile is therefore controlled by the PAT scope, the Environment gate, and the dispatch authorization criteria; not by the workflow `permissions:` block. The matrix above lists their workflow scope as `none` mismatch because the workflow token is correctly minimized; the residual surface is the PAT and its handling.
 
-- `apply-labels.yml` -- `LABELS_PAT` (`Issues: Read and write`); `labels-apply` Environment; dispatch `main`-ref guarded; `dry_run` default true; `prune` opt-in. See `docs/runbooks/issue-triage.md`.
-- `apply-rulesets.yml` -- `RULESETS_PAT` (`Administration: Read and write`); `ruleset-apply` Environment; dispatch `main`-ref guarded; `dry_run` default true; `enable_auto_delete` opt-in. See `docs/runbooks/rulesets.md`.
-- `generate-agents.yml` -- `GITHUB_TOKEN` (not a separate PAT), but the top-level `contents: write` + `pull-requests: write` are real mutation rights. The mitigation is that the workflow opens a PR rather than committing directly, so any change still goes through CI gates before reaching `main`.
+- `apply-labels.yml`; `LABELS_PAT` (`Issues: Read and write`); `labels-apply` Environment; dispatch `main`-ref guarded; `dry_run` default true; `prune` opt-in. See `docs/runbooks/issue-triage.md`.
+- `apply-rulesets.yml`; `RULESETS_PAT` (`Administration: Read and write`); `ruleset-apply` Environment; dispatch `main`-ref guarded; `dry_run` default true; `enable_auto_delete` opt-in. See `docs/runbooks/rulesets.md`.
+- `generate-agents.yml`; `GITHUB_TOKEN` (not a separate PAT), but the top-level `contents: write` + `pull-requests: write` are real mutation rights. The mitigation is that the workflow opens a PR rather than committing directly, so any change still goes through CI gates before reaching `main`.
 
 ## Note on generate workflow widening
 
@@ -82,9 +82,9 @@ The remaining least-privilege question is whether `generate-agents.yml` should b
 
 Three `pull_request_target` surfaces carry write-capable tokens even for fork PRs:
 
-- `post-merge.yml` -- gated by `merged == true` (fork PRs cannot self-merge into base without maintainer review).
-- `dependabot-automerge.yml` -- gated by `user.login == dependabot[bot]`.
-- `issue-pr-triage.yml` / `scan` -- gated by `actor != github-actions[bot]` plus trusted-bot allowlist; intentional in this design (#102, `docs/prd/non-ascii-defense.md`). (The per-event `triage` job that also ran here was retired in #1645; threat-intel triage now runs in the scheduled `weekly-maintenance.yml` / `dependency-threat-triage` job, which is not `pull_request_target`.)
+- `post-merge.yml`; gated by `merged == true` (fork PRs cannot self-merge into base without maintainer review).
+- `dependabot-automerge.yml`; gated by `user.login == dependabot[bot]`.
+- `issue-pr-triage.yml` / `scan`; gated by `actor != github-actions[bot]` plus trusted-bot allowlist; intentional in this design (#102, `docs/prd/non-ascii-defense.md`). (The per-event `triage` job that also ran here was retired in #1645; threat-intel triage now runs in the scheduled `weekly-maintenance.yml` / `dependency-threat-triage` job, which is not `pull_request_target`.)
 
 These workflows all check out the SoT (base branch) rather than the PR head, which is the standard `pull_request_target` mitigation. The audit confirms that pattern holds in every case above; no `pull_request_target` workflow checks out the PR head with the write-capable token attached.
 

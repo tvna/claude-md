@@ -12,7 +12,7 @@ or a conflicted branch. This is the gap between the documented prohibition and
 the enforced one that this gate closes.
 
 The merge is allowed (pass-through) only when GitHub reports the PR as
-``mergeable == true`` AND ``mergeable_state == "clean"`` -- no conflicts, all
+``mergeable == true`` AND ``mergeable_state == "clean"``; no conflicts, all
 required checks green, no pending required review. Any other state is denied
 with a state-specific remediation:
 
@@ -22,7 +22,7 @@ with a state-specific remediation:
   optional checks pending or failing; re-check once CI settles.
 
 This does NOT contradict CLAUDE.md section 3 ("drive to a terminal state
-(merged, or closed)"): merge remains reachable -- it is gated on objective
+(merged, or closed)"): merge remains reachable; it is gated on objective
 safety, not prohibited. The human approval that authorises a merge happens in
 the operator chat (the agent posts review comments on the operator's behalf),
 which a deterministic hook cannot read; this gate enforces only the objective
@@ -30,14 +30,14 @@ safety floor that is machine-verifiable.
 
 Fail-closed: unlike most gates (which fail open per CLAUDE.md section 4 so a
 hook bug never wedges the session), this gate DENIES when it cannot determine
-mergeability -- a missing ``GH_TOKEN``, an API failure, an unidentifiable PR,
+mergeability; a missing ``GH_TOKEN``, an API failure, an unidentifiable PR,
 or an unparseable event. Merge is irreversible-leaning, so the safe default is
 to block and let the operator resolve, not to wave it through unverified.
 Side effect: in an environment without ``GH_TOKEN`` every MCP merge is blocked
 until a token is present; that is the intended safety posture for this
 operation. (The stdin-parse fail-open in ``read_event`` still applies: a
 malformed event yields no decision rather than a deny, because at that point
-the tool/PR is unidentifiable -- the catch-all ``gate_mcp_github_uncovered``
+the tool/PR is unidentifiable; the catch-all ``gate_mcp_github_uncovered``
 does not cover merge, so a no-decision there simply lets the other merge
 preflights run; the operator still sees no false safety signal.)
 
@@ -72,7 +72,7 @@ _STATE_REMEDIATION: dict[str, str] = {
     ),
     "behind": (
         "mergeable_state=behind: the branch is out of date (no conflict). Bring "
-        "it up to date deterministically -- do NOT force-push: from the PR branch "
+        "it up to date deterministically; do NOT force-push: from the PR branch "
         "run `python3 scripts/refresh_pr_branch.py --push`. "
         "See docs/runbooks/refresh-behind-pr.md."
     ),

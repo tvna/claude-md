@@ -1,4 +1,4 @@
-# ATT&CK coverage review cadence -- Runbook
+# ATT&CK coverage review cadence; Runbook
 
 Operator-facing companion to the `remind` job in
 [`.github/workflows/monthly-maintenance.yml`](../../.github/workflows/monthly-maintenance.yml).
@@ -82,7 +82,7 @@ reproducible and comparable across quarters:
    list (#56, #63, #102, #120, #170). Flag any that have been open
    without movement for the whole quarter as `stale`.
 5. **Recent merges to security-relevant surfaces.** `git log
-   --since="3 months ago" --pretty=format:"%h %s" -- .github
+   --since="3 months ago" --pretty=format:"%h %s"; .github
    scripts docs/prd docs/runbooks .apm pyproject.toml uv.lock`
    then map each match to the inventory section it touches.
 6. **`docs/runbooks/workflow-permissions-audit.md`.** Re-check the
@@ -94,7 +94,7 @@ reproducible and comparable across quarters:
    checklist before merge.
 8. **OWASP Agentic Top 10 (ASI01-ASI10) mapping.** Re-read the
    `OWASP Top 10 for Agentic Applications 2026` section of
-   `docs/prd/security-control-inventory.md` -- the peer axis to the
+   `docs/prd/security-control-inventory.md`; the peer axis to the
    ATT&CK table. Confirm every ASI item still carries a status and that
    the ASI03 / ASI08 / ASI10 residual-risk notes are still accurate.
    Completeness is gated deterministically by
@@ -177,7 +177,7 @@ the date the reminder workflow will fire again.
 1. **Preview (recommended).** Go to **Actions -> ATT&CK coverage review
    reminder -> Run workflow**, leave `dry_run` at the default `true`,
    and start the run. After it completes, open the run page and read
-   the **Summary** tab -- the assembled comment is appended to
+   the **Summary** tab; the assembled comment is appended to
    `$GITHUB_STEP_SUMMARY`.
 2. **Post.** When the preview looks correct, re-run with `dry_run` set
    to `false`. The workflow `POST`s the assembled comment on #178.
@@ -192,7 +192,7 @@ the date the reminder workflow will fire again.
 
 ## Rollback
 
-The workflow is read-only on the repository side -- it only `POST`s
+The workflow is read-only on the repository side; it only `POST`s
 one comment per quarter to a tracking issue. To roll back:
 
 - **Stop further posts.** **Actions -> ATT&CK coverage review reminder
@@ -229,9 +229,9 @@ python3 -c "import yaml; yaml.safe_load(open('.github/workflows/monthly-maintena
 
 - [`.github/workflows/monthly-maintenance.yml`](../../.github/workflows/monthly-maintenance.yml) --
   the `remind` job (monthly cadence) this runbook drives.
-- [#178](https://github.com/tvna/claude-md/issues/178) -- ATT&CK coverage
+- [#178](https://github.com/tvna/claude-md/issues/178); ATT&CK coverage
   tracking issue (target of every review comment).
-- [#184](https://github.com/tvna/claude-md/issues/184) -- the sub-issue
+- [#184](https://github.com/tvna/claude-md/issues/184); the sub-issue
   this runbook closes.
 - [`docs/prd/security-control-inventory.md`](../prd/security-control-inventory.md) --
   per-surface inventory that backs the ATT&CK table and carries the
@@ -243,7 +243,7 @@ python3 -c "import yaml; yaml.safe_load(open('.github/workflows/monthly-maintena
   least-privilege matrix referenced by evidence item 6.
 - [`docs/runbooks/downstream-instruction-review-checklist.md`](downstream-instruction-review-checklist.md) --
   downstream review checklist referenced by evidence item 7.
-- [CLAUDE.md](../../CLAUDE.md) section 3 -- "After each merge, auto-open
-  a retrospective issue -- make this deterministic, not operator-memory."
+- [CLAUDE.md](../../CLAUDE.md) section 3; "After each merge, auto-open
+  a retrospective issue; make this deterministic, not operator-memory."
   The reminder workflow applies the same discipline to the quarterly
   review.

@@ -1,4 +1,4 @@
-# Proposals -- Pre-Decision Evaluations
+# Proposals; Pre-Decision Evaluations
 
 This lane holds design-stage evaluations whose requirements are not yet
 decidable: documents that still carry one or more open questions that
@@ -19,7 +19,7 @@ what still blocks the decision.
 
 ## Difference from `prd/`
 
-`docs/prd/` is for design-stage rationale and **decision records** -- the
+`docs/prd/` is for design-stage rationale and **decision records**; the
 reasoning behind a choice that has already been made. `docs/proposals/`
 is for evaluations where the decision is still **pending** because a
 requirement cannot yet be resolved. Do not place a document with an

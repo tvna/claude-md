@@ -5,7 +5,7 @@ Refs #1658, #1632, #1181, #785. In remote execution environments
 (CLAUDE_CODE_REMOTE=true) the transport layer only permits pushes to the
 branches recorded at session start (the authorized set in
 .git/CLAUDE_SESSION_BRANCH, written by check_session_branch.py).
-``preflight_commit_session_branch.py`` already enforces that -- but only at
+``preflight_commit_session_branch.py`` already enforces that; but only at
 *commit* time, which is the last moment before push. #1658 traced a real
 near-miss to exactly that gap: an agent created an unauthorized branch for a
 follow-up task, implemented the full change (7 files, 255 tests passing), and
@@ -31,8 +31,8 @@ The commit-time gate and the push-time gate remain as backstops; this is a
 left-shift, not a replacement, so the defense-in-depth layers stay intact.
 
 Single source: the authorized set and the ``is_authorized`` predicate come from
-``_session_branches.py`` -- byte-for-byte the same source the commit/push gates
-read -- so the gates cannot drift. The current branch is read from .git/HEAD
+``_session_branches.py``; byte-for-byte the same source the commit/push gates
+read; so the gates cannot drift. The current branch is read from .git/HEAD
 (no subprocess), so ``decide`` is unit-testable without a live repository.
 
 Fail-open: a non-remote environment, an empty authorized set, a detached/unknown
@@ -41,7 +41,7 @@ exit without a decision so the tool call proceeds and the commit/push gates plus
 CI act as backstop.
 
 Contract:
-- Inputs: a PreToolUse event dict -- a Bash ``command`` string, or an
+- Inputs: a PreToolUse event dict; a Bash ``command`` string, or an
   Edit/Write/MultiEdit/NotebookEdit ``file_path``/``notebook_path``.
 - Outputs: nothing (pass-through), or a PreToolUse deny payload (build_deny).
 - Failure policy: fails open (any error or ambiguity exits without a decision).
@@ -71,8 +71,8 @@ _EDIT_TOOLS: frozenset[str] = frozenset({"Edit", "Write", "MultiEdit", "Notebook
 # Split a command line into simple-command segments on shell control operators
 # (``&&``/``||``/``;``/``|``/newline/subshell parens). The switch/checkout match
 # is then anchored to a *segment start*, so a ``git switch``/``git checkout``
-# that appears inside an argument or a commit message body -- e.g.
-# ``git commit -m "... git switch -c x ..."`` -- is not mistaken for a real
+# that appears inside an argument or a commit message body; e.g.
+# ``git commit -m "... git switch -c x ..."``; is not mistaken for a real
 # branch operation. This mirrors the line-anchored detection in
 # preflight_push_session_branch.py; chained forms like
 # ``git fetch && git checkout -b foo`` still match because the checkout begins
@@ -90,7 +90,7 @@ _GIT_SWITCH_HEAD_RE = re.compile(
 _CREATE_FLAGS_SWITCH: frozenset[str] = frozenset({"-c", "-C", "--create", "--force-create", "--orphan"})
 _CREATE_FLAGS_CHECKOUT: frozenset[str] = frozenset({"-b", "-B", "--orphan"})
 
-# Flags that put HEAD in a detached state -- no branch target, so fail open.
+# Flags that put HEAD in a detached state; no branch target, so fail open.
 _DETACH_FLAGS: frozenset[str] = frozenset({"-d", "--detach"})
 
 
@@ -109,7 +109,7 @@ def _current_branch() -> str | None:
     except OSError:
         return None
     if not head.startswith(_HEAD_REF_PREFIX):
-        return None  # detached HEAD -- fail-open
+        return None  # detached HEAD; fail-open
     branch = head[len(_HEAD_REF_PREFIX):].strip()
     return branch or None
 
@@ -119,7 +119,7 @@ def _resolve_target(verb: str, tokens: list[str]) -> tuple[str, str] | None:
 
     ``mode`` is ``"create"`` (a ``-c``/``-b``/``--orphan`` style new branch) or
     ``"switch"`` (an existing branch the command moves HEAD to). Returns None
-    when the command names no branch we can confidently resolve -- a detach, a
+    when the command names no branch we can confidently resolve; a detach, a
     plain ``git checkout <pathspec>`` (ambiguous file-vs-branch; left to the
     Edit/Write surface and the commit-time backstop), or an unparseable form --
     so the caller fails open.
@@ -131,10 +131,10 @@ def _resolve_target(verb: str, tokens: list[str]) -> tuple[str, str] | None:
     while i < n:
         tok = tokens[i]
         if tok == "--":
-            break  # everything after -- is a pathspec, not a branch
+            break  # everything after; is a pathspec, not a branch
         if tok.startswith("-") and tok != "-":
             if tok in _DETACH_FLAGS:
-                return None  # detached HEAD -- no branch target
+                return None  # detached HEAD; no branch target
             if "=" in tok:
                 flag, value = tok.split("=", 1)
                 if flag in create_flags:
@@ -147,7 +147,7 @@ def _resolve_target(verb: str, tokens: list[str]) -> tuple[str, str] | None:
                 if i + 1 < n and not tokens[i + 1].startswith("-"):
                     return ("create", tokens[i + 1])
                 return None
-            i += 1  # unknown flag -- skip conservatively (assume no value)
+            i += 1  # unknown flag; skip conservatively (assume no value)
             continue
         if positional is None and tok != "-":
             positional = tok
@@ -155,7 +155,7 @@ def _resolve_target(verb: str, tokens: list[str]) -> tuple[str, str] | None:
 
     # A bare ``git switch <branch>`` moves HEAD to an existing branch. A plain
     # ``git checkout <arg>`` is ambiguous (branch vs pathspec) and is NOT gated
-    # here -- the Edit/Write surface and the commit-time gate cover it.
+    # here; the Edit/Write surface and the commit-time gate cover it.
     if verb == "switch" and positional:
         return ("switch", positional)
     return None
@@ -177,7 +177,7 @@ def _iter_branch_targets(command: str) -> list[tuple[str, str]]:
         try:
             tokens = shlex.split(match.group(2))
         except ValueError:
-            continue  # unbalanced quotes -- fail open for this segment
+            continue  # unbalanced quotes; fail open for this segment
         resolved = _resolve_target(verb, tokens)
         if resolved is not None:
             targets.append(resolved)
@@ -203,7 +203,7 @@ def _deny_switch(mode: str, branch: str, authorized: set[str]) -> dict[str, Any]
         f"Blocked by scripts/preflight_session_branch_authz.py: this remote "
         f"session can only push to an authorized branch ({authorized_list}), but "
         f"you are about to {action} '{branch}', which is not authorized. Work done "
-        f"there could not be pushed and would have to be redone -- the commit-time "
+        f"there could not be pushed and would have to be redone; the commit-time "
         f"and push-time gates would refuse it (this gate just surfaces the limit "
         f"earlier, before the work).\n\n"
         f"Do one of the following:\n"
@@ -249,7 +249,7 @@ def _decide_bash(command: str) -> dict[str, Any] | None:
 def _decide_edit(tool_input: dict[str, Any]) -> dict[str, Any] | None:
     raw_path = tool_input.get("file_path") or tool_input.get("notebook_path")
     if not isinstance(raw_path, str) or not raw_path:
-        return None  # no target path -- fail open
+        return None  # no target path; fail open
     try:
         resolved = Path(raw_path).resolve()
     except (OSError, RuntimeError, ValueError):
@@ -262,7 +262,7 @@ def _decide_edit(tool_input: dict[str, Any]) -> dict[str, Any] | None:
         return None  # fail-open: no session branch recorded yet
     current = _current_branch()
     if not current:
-        return None  # detached HEAD / unknown -- fail-open
+        return None  # detached HEAD / unknown; fail-open
     if is_authorized(current, authorized):
         return None
     return _deny_edit(current, authorized, raw_path)
@@ -288,7 +288,7 @@ def decide(event: dict[str, Any]) -> dict[str, Any] | None:
 def main(argv: list[str] | None = None) -> int:
     del argv
     # auditable=False: a security/governance boundary gate, like the commit and
-    # push session-branch gates -- CLAUDE_GATE_MODE=audit must not disable it.
+    # push session-branch gates; CLAUDE_GATE_MODE=audit must not disable it.
     return run_event_hook("preflight_session_branch_authz", decide, auditable=False)
 
 

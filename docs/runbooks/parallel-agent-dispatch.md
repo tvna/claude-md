@@ -2,7 +2,7 @@
 
 Operator procedure for the case where the work is a set of
 clear-responsibility, individually simple changes whose volume is high
-but whose domains are independent -- not the case where a single change
+but whose domains are independent; not the case where a single change
 has become complex. Complexity is not the trigger; **task independence
 is**. This runbook names the two dispatch modes, the worktree-isolation
 path that lets the high-volume case run concurrently without conflicts,
@@ -34,7 +34,7 @@ view at once. Those belong to a single agent, per the
 `dispatching-parallel-agents` "Don't use when" list.
 
 Per CLAUDE.md section 3, dispatch happens **after** the deterministic
-gates pass, at one concentrated point -- not continuously and not as a
+gates pass, at one concentrated point; not continuously and not as a
 substitute for the harness gates.
 
 ## Decision: which mode
@@ -70,7 +70,7 @@ For tasks that touch disjoint files or subsystems with no shared state.
    code outside <area>"), and a required output summary. See the
    `dispatching-parallel-agents` "Agent Prompt Structure" section.
 2. Dispatch one agent per group, concurrently. Each agent gets only the
-   context it needs -- it does not inherit the coordinator's history.
+   context it needs; it does not inherit the coordinator's history.
 3. Integrate (see [Integration](#integration-and-verification)).
 
 ## Mode B: same-workspace work
@@ -114,7 +114,7 @@ Concurrency is not done until the results are reconciled. Per the
 `dispatching-parallel-agents` "Verification" section:
 
 1. Read each agent's summary; confirm each stayed within its scope.
-2. Check for conflicts -- did any two agents edit the same code despite
+2. Check for conflicts; did any two agents edit the same code despite
    the independence assumption? If so, the decomposition was wrong;
    reconcile before proceeding.
 3. Run the full test suite so the combined result is verified, not just
@@ -133,8 +133,8 @@ Concurrency is not done until the results are reconciled. Per the
 
 ## Companion
 
-- [`.agents/skills/dispatching-parallel-agents/SKILL.md`](../../.agents/skills/dispatching-parallel-agents/SKILL.md) -- independent-domain concurrent dispatch
-- [`.agents/skills/subagent-driven-development/SKILL.md`](../../.agents/skills/subagent-driven-development/SKILL.md) -- fresh subagent per task plus two-stage review
-- [`.agents/skills/using-git-worktrees/SKILL.md`](../../.agents/skills/using-git-worktrees/SKILL.md) -- workspace isolation that enables Mode B2
-- [CLAUDE.md](../../CLAUDE.md) section 3 -- dispatch after gates, at one concentrated point
+- [`.agents/skills/dispatching-parallel-agents/SKILL.md`](../../.agents/skills/dispatching-parallel-agents/SKILL.md); independent-domain concurrent dispatch
+- [`.agents/skills/subagent-driven-development/SKILL.md`](../../.agents/skills/subagent-driven-development/SKILL.md); fresh subagent per task plus two-stage review
+- [`.agents/skills/using-git-worktrees/SKILL.md`](../../.agents/skills/using-git-worktrees/SKILL.md); workspace isolation that enables Mode B2
+- [CLAUDE.md](../../CLAUDE.md) section 3; dispatch after gates, at one concentrated point
 - Refs #226, #1709

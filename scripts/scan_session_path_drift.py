@@ -6,12 +6,12 @@ Refs #1230. The SessionStart provisioning scripts (``install-uv.sh``,
 "append ``export PATH`` to ``$CLAUDE_ENV_FILE``" block. #1230 extracted that
 into ``scripts/_session_path.sh`` (``persist_session_path``). This gate keeps
 the symmetry from regressing: any *future* ``scripts/*.sh`` that writes to
-``$CLAUDE_ENV_FILE`` directly -- instead of sourcing the helper and calling
-``persist_session_path`` -- re-creates the duplication this refactor removed.
+``$CLAUDE_ENV_FILE`` directly; instead of sourcing the helper and calling
+``persist_session_path``; re-creates the duplication this refactor removed.
 
 The rule:
 
-* Exactly one file -- ``scripts/_session_path.sh`` -- may redirect (``>>`` /
+* Exactly one file; ``scripts/_session_path.sh``; may redirect (``>>`` /
   ``>``) into ``$CLAUDE_ENV_FILE``. Every other ``scripts/*.sh`` must persist
   PATH via ``persist_session_path``, never a private inline write.
 * The helper itself MUST keep that write, so the centralization cannot be
@@ -36,7 +36,7 @@ Contract:
     Outputs: ``verify`` prints ``::error::`` per stray write and per missing
         helper write, exit 0 when the invariant holds and exit 1 otherwise;
         ``list`` prints ``<file>:<lineno>: <line>`` for every env-file write.
-    Failure policy: fails loud per CLAUDE.md section 4 -- a stray write, or a
+    Failure policy: fails loud per CLAUDE.md section 4; a stray write, or a
         helper that no longer writes the env file, exits non-zero.
 """
 

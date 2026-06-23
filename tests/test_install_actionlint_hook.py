@@ -132,7 +132,7 @@ def test_codex_remote_true_enters_active_path(tmp_path: Path) -> None:
 
     Anchors the #1608 gate widening: under Codex cloud the script must NOT be
     a no-op. With a pinned actionlint already on PATH it hits the idempotent
-    reuse branch -- proof the dual-signal gate let it past, mirroring the
+    reuse branch; proof the dual-signal gate let it past, mirroring the
     CLAUDE_CODE_REMOTE case above.
     """
     version = _pinned_actionlint_version()

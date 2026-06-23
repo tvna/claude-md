@@ -3,7 +3,7 @@
 
 ``scripts/session_resource_report.py`` (#1413, #1435) reports a session's *total*
 ccusage cost as a single number for the PR body. That number answers "how much
-did this PR cost" but not "*where* did the cost go" -- and for cache-heavy web
+did this PR cost" but not "*where* did the cost go"; and for cache-heavy web
 sessions the where is the actionable part. Cache-read is billed at 0.1x base
 input but paid on every request; cache *writes* are billed at 1.25x (5-minute
 TTL) or 2x (1-hour TTL), so a session that writes the same large prefix to the
@@ -16,11 +16,11 @@ This script makes the structure visible. It reads the session transcript
 objects by message id (streaming writes the same id more than once), and sums
 the token counts into four cost categories:
 
-* **cache-read**     -- ``cache_read_input_tokens`` (0.1x input).
-* **cache-write 5m** -- ``cache_creation.ephemeral_5m_input_tokens`` (1.25x).
-* **cache-write 1h** -- ``cache_creation.ephemeral_1h_input_tokens`` (2x).
-* **uncached input** -- ``input_tokens`` (full input rate).
-* **output**         -- ``output_tokens`` (full output rate).
+* **cache-read**    ; ``cache_read_input_tokens`` (0.1x input).
+* **cache-write 5m**; ``cache_creation.ephemeral_5m_input_tokens`` (1.25x).
+* **cache-write 1h**; ``cache_creation.ephemeral_1h_input_tokens`` (2x).
+* **uncached input**; ``input_tokens`` (full input rate).
+* **output**        ; ``output_tokens`` (full output rate).
 
 It then prices each category with per-1M-token rates and prints the cost
 structure (USD and percent of total).
@@ -30,8 +30,8 @@ verified to the cent against a real session ($2.7147 derived vs $2.7147 ccusage
 across five independent categories): input $5.00, output $25.00, cache-read
 $0.50, and cache-write at $6.25 (1.25x input) for **both** TTLs. That last point
 is a measure-first finding, not a typo: Anthropic's published list price is 2x
-input ($10.00) for the 1-hour TTL, but ccusage -- the cost authority here
-(measure-first) -- prices every ``cache_creation`` token at the flat 1.25x
+input ($10.00) for the 1-hour TTL, but ccusage; the cost authority here
+(measure-first); prices every ``cache_creation`` token at the flat 1.25x
 regardless of TTL, so matching ccusage means defaulting the 1h write rate to
 $6.25, not $10.00. Each rate is overridable on the CLI, so an operator who wants
 to model the published list price passes ``--cache-write-1h-rate 10.0``; the 5m
@@ -40,7 +40,7 @@ observable even when both are priced the same.
 
 When ``ccusage`` is on PATH and ``--session-id`` is given (or discoverable), the
 ``--ccusage-check`` flag runs it and reports the percent agreement between this
-script's derived total and ccusage's ``totalCost`` -- a derived breakdown that
+script's derived total and ccusage's ``totalCost``; a derived breakdown that
 disagrees with ccusage by more than a few percent means the token-to-cost model
 drifted from billing and should not be trusted.
 
@@ -128,7 +128,7 @@ def _message_usage(entry: object) -> tuple[str, dict[str, Any]] | None:
     Only assistant entries carry billable ``usage``; user / tool-result entries
     are skipped. A missing id falls back to ``""`` so the entry still counts
     once (an empty id is a single de-dup bucket, which slightly under-counts
-    rather than crashing -- acceptable for a best-effort report).
+    rather than crashing; acceptable for a best-effort report).
     """
     if not isinstance(entry, dict):
         return None
@@ -168,7 +168,7 @@ def aggregate_usages(entries: Iterable[object]) -> Tokens:
             write_5m += _coerce_int(creation.get("ephemeral_5m_input_tokens"))
             write_1h += _coerce_int(creation.get("ephemeral_1h_input_tokens"))
         else:
-            # No TTL split available -- attribute the flat count to 5m (default).
+            # No TTL split available; attribute the flat count to 5m (default).
             write_5m += _coerce_int(usage.get("cache_creation_input_tokens"))
     return Tokens(
         input=input_t,
@@ -234,7 +234,7 @@ def discover_transcript(projects_dir: Path, cwd: Path) -> Path | None:
 
     Looks under ``<projects_dir>/<slug>/`` for the current project's
     transcripts and picks the newest by mtime. ``None`` when the directory is
-    absent or holds no transcript -- the caller then reports an empty session.
+    absent or holds no transcript; the caller then reports an empty session.
     """
     session_dir = projects_dir / _slug_for(cwd)
     try:

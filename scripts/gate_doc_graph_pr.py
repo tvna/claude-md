@@ -10,7 +10,7 @@ absent documents and show the waiver syntax.
 Waiver mechanism (MCP-safe plain text, mirrors the ``philosophy-matrix-ack``
 pattern): add a line to the PR body:
 
-    doc-graph-waiver: NODE_ID -- reason for skipping co-change
+    doc-graph-waiver: NODE_ID; reason for skipping co-change
 
 Multiple waivers are supported (one per line). The gate checks all required
 co-changes and then checks the waiver set; a waived node is reported as
@@ -56,9 +56,12 @@ _SCRIPT = "gate_doc_graph_pr"
 
 # Plain-text waiver marker (MCP-safe; HTML comments are stripped by GitHub MCP
 # write tools). Pattern: optional leading whitespace, `doc-graph-waiver:`,
-# whitespace, the node id (non-whitespace), optional ` -- reason`.
+# whitespace, the node id (stops at whitespace or semicolon), optional reason.
+# Accepts both `doc-graph-waiver: NODE; reason` and `doc-graph-waiver: NODE`
+# (reason is optional). The semicolon-terminated form is the canonical format
+# per #1903 (prose separator policy: use semicolons, not double hyphens).
 _WAIVER_RE = re.compile(
-    r"^\s*doc-graph-waiver:\s*(\S+)",
+    r"^\s*doc-graph-waiver:\s*([^\s;]+)",
     re.IGNORECASE | re.MULTILINE,
 )
 
@@ -121,7 +124,7 @@ def run_gate(
             f"changing {changed_node.path!r} requires a co-change of "
             f"{required_node.path!r} (node {required_node.id!r}). "
             f"Either add the file to this PR or add "
-            f"'doc-graph-waiver: {required_node.id} -- <reason>' "
+            f"'doc-graph-waiver: {required_node.id}; <reason>' "
             f"to the PR body. Refs #1754.",
             file=sys.stderr,
         )

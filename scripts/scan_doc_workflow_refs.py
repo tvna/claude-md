@@ -11,7 +11,7 @@ Refs #1325. When #1319 consolidated CI workflows by trigger class
 deleted filenames lived on as inline-code references across PRD / standards /
 runbook docs. ``scan_markdown_links.py`` did not catch them because they are
 not Markdown links, and ``scan_docs_inventory.py`` only validates the docs
-index -- so the drift class was invisible to every deterministic gate.
+index; so the drift class was invisible to every deterministic gate.
 
 This gate closes that gap. It scans every tracked Markdown file (outside
 ``docs/archive/``, which is a historical record of past state) for the literal

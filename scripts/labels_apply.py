@@ -192,10 +192,10 @@ def run(
         if prune_action == "skip":
             continue
         if prune_action == "report":
-            rows.append(render_action_row(live_name, "report-only (not in SoT)", "--", "--", "kept (prune=false)"))
+            rows.append(render_action_row(live_name, "report-only (not in SoT)", "n/a", "n/a", "kept (prune=false)"))
             continue
         if prune_action == "plan-delete":
-            rows.append(render_action_row(live_name, "plan-only (DELETE)", "--", "--", "dry-run"))
+            rows.append(render_action_row(live_name, "plan-only (DELETE)", "n/a", "n/a", "dry-run"))
             continue
 
         code, body = apply_call(
@@ -209,7 +209,7 @@ def run(
             _append_error(summary_file, f"Error deleting `{live_name}` (HTTP {_format_code(code)}):", body)
             print(f"::error::Failed to DELETE label '{live_name}' (last HTTP {_format_code(code)}).")
             return 1
-        rows.append(render_action_row(live_name, "DELETE applied", "--", "--", f"HTTP {code}"))
+        rows.append(render_action_row(live_name, "DELETE applied", "n/a", "n/a", f"HTTP {code}"))
 
     _append_rows(summary_file, rows)
     return 0
@@ -256,7 +256,7 @@ def _add_common_args(parser: argparse.ArgumentParser) -> None:
 def _write_summary_header(summary_file: Path, *, dry_run: bool, prune: bool, sot_count: int, live_count: int) -> None:
     summary_file.parent.mkdir(parents=True, exist_ok=True)
     with summary_file.open("a", encoding="utf-8") as handle:
-        handle.write("## Apply labels -- dispatch summary\n\n")
+        handle.write("## Apply labels; dispatch summary\n\n")
         handle.write(f"- dry_run: `{str(dry_run).lower()}`\n")
         handle.write(f"- prune: `{str(prune).lower()}`\n")
         handle.write(f"- SoT entries: {sot_count}\n")
@@ -293,7 +293,7 @@ def _parse_bool(raw: str | bool) -> bool:
 
 def _changed_cell(changed: bool, *, is_post: bool) -> str:
     if is_post:
-        return "--"
+        return "n/a"
     return "yes" if changed else "no"
 
 

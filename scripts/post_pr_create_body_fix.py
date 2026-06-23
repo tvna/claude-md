@@ -5,7 +5,7 @@ mcp__github__create_pull_request has three defects that corrupt the stored body:
   1. HTML-encodes characters before storing (& -> &amp;, " -> &#34;,
      > -> &gt;, < -> &lt;).
   2. Drops angle-bracket tokens (e.g. the <sha> in `git revert <sha>`)
-     entirely -- this is content loss, not encoding.
+     entirely; this is content loss, not encoding.
   3. Appends a duplicate footer even when one already exists.
 
 This hook normalizes the authored body deterministically via
@@ -90,8 +90,8 @@ def build_harness_session_footer(env: Mapping[str, str]) -> str | None:
     the mandated ``update_pull_request`` body carries it even when the create
     MCP response omits the stored body (the ``{id, url}``-only shape observed
     on #1439). Returns None when not under the remote web harness
-    (``CLAUDE_CODE_REMOTE`` not truthy) -- so the local CLI never has a footer
-    fabricated for it -- and None when the session id is absent or empty -- so
+    (``CLAUDE_CODE_REMOTE`` not truthy); so the local CLI never has a footer
+    fabricated for it; and None when the session id is absent or empty; so
     a malformed ``.../session_`` URL is never produced.
 
     The constructed line is asserted against ``_AGENT_ATTRIBUTION_FOOTER_RE``
@@ -264,7 +264,7 @@ def decide(event: dict[str, Any]) -> dict[str, Any] | None:
             f"\n\nWARNING: the stored body dropped these angle-bracket tokens "
             f"(content loss, not recoverable by re-encoding): {tokens}. The "
             f"normalized body above keeps them, but the MCP tool will drop them "
-            f"again on update -- rephrase each (e.g. wrap in backticks) so it "
+            f"again on update; rephrase each (e.g. wrap in backticks) so it "
             f"survives, then verify the stored body."
         )
 

@@ -1,7 +1,7 @@
 """Tests for ``.devcontainer/scripts/collect-devcontainer-debug.sh`` (Issue #1460).
 
-These exercise the pure, unprivileged seams -- ``plan`` (lists sources, writes
-nothing) and ``redact`` (the best-effort secret-masking filter) -- plus a
+These exercise the pure, unprivileged seams; ``plan`` (lists sources, writes
+nothing) and ``redact`` (the best-effort secret-masking filter); plus a
 ``collect`` run whose podman binary and VS Code logs dir are overridden via env
 so the bundle structure and redaction are verified WITHOUT a real macOS host or
 Podman VM. The end-to-end macOS ``collect`` path (a running podman-machine VM,
@@ -107,7 +107,7 @@ def test_redact_masks_common_token_formats() -> None:
 
 def test_redact_masks_full_authorization_and_bearer_value() -> None:
     # Regression: the Authorization value must be masked to end of line, not
-    # just the scheme word -- otherwise the credential after "Bearer " leaks.
+    # just the scheme word; otherwise the credential after "Bearer " leaks.
     sample = "\n".join(
         [
             "Authorization: Bearer abc.def-secret-12345",

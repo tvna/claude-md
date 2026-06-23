@@ -29,7 +29,7 @@ The rule:
   back-catalog is not retro-failed (mirrors ``scripts/body_policy.py``
   and ``scripts/verify_text_delta_section.py``).
 
-It does not forbid growth -- some clarifications legitimately grow. It
+It does not forbid growth; some clarifications legitimately grow. It
 forces the justification to be recorded, which is exactly what section 5
 already requires. The ack matches per-PR, not per-commit, so a
 multi-commit PR declares growth once.
@@ -128,7 +128,7 @@ def net_char_delta(diff_text: str) -> int:
     as one removed plus one added line, so an expanded bullet yields the
     positive net the gate is built to surface.
 
-    The function is pure -- it never touches git -- so the character
+    The function is pure; it never touches git; so the character
     arithmetic is unit-tested directly on diff fixtures.
     """
     added = 0
@@ -320,7 +320,7 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _run(cmd: list[str], *, runner=subprocess.run):
-    """Thin subprocess boundary -- the only impure surface in this module.
+    """Thin subprocess boundary; the only impure surface in this module.
 
     ``check=True`` raises ``CalledProcessError`` on non-zero exit; the
     caller in :func:`_cmd_verify` translates that into the fail-loud
