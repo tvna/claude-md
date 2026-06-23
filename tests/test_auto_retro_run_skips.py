@@ -56,6 +56,29 @@ class TestRunSkips:
         assert not any("/commits" in p for _, p in methods_paths)
         assert not any(p == "/repos/o/r/issues" for _, p in methods_paths)
 
+    def test_skip_when_insession_canonical_retro_exists(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # The in-session Stop-hook path creates retros with the canonical
+        # 'chore(auto-retro)' prefix (Refs #1581/D1). CI must recognize that
+        # title and skip, preventing a duplicate when both paths run close to
+        # a merge. Accepted-risk race analysis: #1916.
+        seen = orchestrator_recorder(
+            monkeypatch,
+            existing=[
+                {
+                    "number": 200,
+                    "title": "chore(auto-retro): review PR #42 repair loops",
+                }
+            ],
+        )
+        event = merged_event(number=42)
+        assert ar.run(event, "o/r") == 0
+        methods_paths = [(c[0], c[1]) for c in seen]
+        assert any("/search/issues" in p for _, p in methods_paths)
+        assert not any("/commits" in p for _, p in methods_paths)
+        assert not any(p == "/repos/o/r/issues" for _, p in methods_paths)
+
     def test_skip_when_existing_retro_closed(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -214,6 +237,23 @@ class TestSkipComment:
                 {
                     "number": 100,
                     "title": "fix(auto-retro): review PR #42 repair loops",
+                }
+            ],
+        )
+        assert ar.run(merged_event(number=42), "o/r") == 0
+        assert not any(self._is_skip_comment_post(*t) for t in seen)
+
+    def test_existing_canonical_retro_skip_no_comment(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Canonical in-session retro (chore(auto-retro)) must also suppress
+        # the skip comment, same as the legacy fix(auto-retro) case (#1916).
+        seen = orchestrator_recorder(
+            monkeypatch,
+            existing=[
+                {
+                    "number": 200,
+                    "title": "chore(auto-retro): review PR #42 repair loops",
                 }
             ],
         )
