@@ -9,7 +9,7 @@ This document is the operator-facing companion to [#102](https://github.com/tvna
 | File | Target | Purpose |
 |---|---|---|
 | `.github/workflows/issue-pr-triage.yml` / `scan` | GitHub Actions | Write-side trigger; marshals env vars and shells out to the Python entry point below |
-| `scripts/scan_non_ascii.py` | repo working tree | All Layer 2 logic (extract / classify / label / advisory / block). Per the refactor strategy in [#123](https://github.com/tvna/claude-md/issues/123) -- mirrors `scripts/uv_pin.py` |
+| `scripts/scan_non_ascii.py` | repo working tree | All Layer 2 logic (extract / classify / label / advisory / block). Per the refactor strategy in [#123](https://github.com/tvna/claude-md/issues/123); mirrors `scripts/uv_pin.py` |
 | `tests/test_scan_non_ascii.py` | repo working tree | pytest coverage for the above; runs in `verify-agents.yml` on every PR |
 | `.github/workflows/verify-github-content.yml` (issue titles); `.github/workflows/verify-pr.yml` `portable-pr-policy` job (PR titles) | GitHub Actions | Title-boundary gate for ASCII-only, convention-compliant issue and PR titles ([#155](https://github.com/tvna/claude-md/issues/155)) |
 | `scripts/title_policy.py` | repo working tree | Pure title policy validator used by the workflows above |
@@ -25,7 +25,7 @@ This document is the operator-facing companion to [#102](https://github.com/tvna
 | `.claude/settings.json` entry `PreToolUse` | Claude Code harness (in-tree) | Registers the client-side `PreToolUse` hook; carve-out per `docs/standards/repo-scope.md` lines 46-48 |
 | `~/.claude/settings.json` (developer-local) | Claude Code harness | Registers the `PostToolUse` hook below |
 | `~/.claude/hooks/sanitize-github-response.sh` (developer-local) | Claude Code harness | Escapes non-ASCII in `mcp__github__*` responses before Claude consumes them |
-| `docs/prd/non-ascii-defense.md` *(this file)* | -- | Runbook |
+| `docs/prd/non-ascii-defense.md` *(this file)* | (none) | Runbook |
 
 The two `~/.claude/*` paths live in `$HOME`, **not** the repo. `.claude/` is broadly prohibited per [`docs/standards/repo-scope.md`](../standards/repo-scope.md) (issue [#58](https://github.com/tvna/claude-md/issues/58)) and enforced by `.gitignore` + `.claudeignore`. The hook is a developer-local artifact; only this documentation lands in the repo.
 
@@ -201,7 +201,7 @@ This is fine as defense-in-depth: Layer 2 prevents new non-ASCII from accumulati
      exit 0  # all ASCII; no banner needed
    fi
 
-   ESCAPED=$(printf '%s' "$TR_STR" | jq -Rsa '.' | sed 's/^"//; s/"$//')
+   ESCAPED=$(printf '%s' "$TR_STR" | jq -Rsa '.' | sed 's/^"//' | sed 's/"$//')
    # Truncate to keep the warning bounded
    if [ ${#ESCAPED} -gt 8000 ]; then
      ESCAPED="${ESCAPED:0:8000}... [truncated]"
@@ -277,9 +277,9 @@ gh issue list --state all --json title,body \
 
 | Layer | Path |
 |---|---|
-| 1 -- past sanitization | `python3 scripts/sanitize_history.py restore --backup originals-YYYYMMDD.json.gz`. The SHA-256 idempotency check makes restore safe even if some items were not yet patched. |
-| 2 -- write-side workflow | Revert the PR that added the `scan` job in `.github/workflows/issue-pr-triage.yml`. The `severity:non-ascii-content` label remains harmless without the workflow; delete it via `Apply labels` (`prune=true`) if desired. |
-| 3 -- read-side hook | Remove the `PostToolUse` entry from `~/.claude/settings.json` (or rename `~/.claude/hooks/sanitize-github-response.sh` to disable). No repo change. |
+| 1: past sanitization | `python3 scripts/sanitize_history.py restore --backup originals-YYYYMMDD.json.gz`. The SHA-256 idempotency check makes restore safe even if some items were not yet patched. |
+| 2: write-side workflow | Revert the PR that added the `scan` job in `.github/workflows/issue-pr-triage.yml`. The `severity:non-ascii-content` label remains harmless without the workflow; delete it via `Apply labels` (`prune=true`) if desired. |
+| 3: read-side hook | Remove the `PostToolUse` entry from `~/.claude/settings.json` (or rename `~/.claude/hooks/sanitize-github-response.sh` to disable). No repo change. |
 
 ## References
 

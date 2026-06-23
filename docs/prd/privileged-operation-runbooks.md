@@ -154,7 +154,7 @@ This audit does not open new follow-up issues. Per CLAUDE.md Section 3 (reuse in
 
 | Gap | Operation | Existing tracker |
 |---|---|---|
-| No live delete path; needs Environment gate, dry-run, rollback, audit when added | Branch cleanup -- deletion path | [#31](https://github.com/tvna/claude-md/issues/31) Goal D |
+| No live delete path; needs Environment gate, dry-run, rollback, audit when added | Branch cleanup; deletion path | [#31](https://github.com/tvna/claude-md/issues/31) Goal D |
 | Top-level `contents: write` / `pull-requests: write` over-granted on the verify-mode reuse path | Generated instruction publication | [#181](https://github.com/tvna/claude-md/issues/181), [#183](https://github.com/tvna/claude-md/issues/183) |
 | `RULESETS_PAT` reused by scheduled read-only workflows without Environment scoping | (Cross-operation) `weekly-maintenance.yml` ruleset and security-control jobs | [#56](https://github.com/tvna/claude-md/issues/56), [#181](https://github.com/tvna/claude-md/issues/181) |
 
