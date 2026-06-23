@@ -67,3 +67,24 @@ def test_check_file_passes_pascalcase(tmp_path: Path) -> None:
     good = tmp_path / "hooks.json"
     good.write_text(json.dumps({"hooks": {"SessionStart": []}}), encoding="utf-8")
     assert gate.check_file(good) == []
+
+
+def test_verify_missing_config_file_fails(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # verify() must add a violation and return 1 when a config file is absent
+    # (lines 86-87: violations.append + continue; lines 91-93: print violations).
+    monkeypatch.setattr(gate, "HOOK_CONFIG_FILES", ("nonexistent.json",))
+    monkeypatch.setattr(gate, "REPO_ROOT", tmp_path)
+    assert gate.verify() == 1
+
+
+def test_verify_camelcase_key_fails(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # A camelCase key in an existing file propagates through verify() -> return 1.
+    bad = tmp_path / "bad.json"
+    bad.write_text(json.dumps({"hooks": {"sessionStart": []}}), encoding="utf-8")
+    monkeypatch.setattr(gate, "HOOK_CONFIG_FILES", ("bad.json",))
+    monkeypatch.setattr(gate, "REPO_ROOT", tmp_path)
+    assert gate.verify() == 1

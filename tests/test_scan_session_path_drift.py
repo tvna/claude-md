@@ -132,3 +132,24 @@ def test_gate_runs_in_ci_and_preflight() -> None:
         text=True,
     ).stdout
     assert "scan_session_path_drift" in manifest
+
+
+def test_verify_gutted_helper_flagged(tmp_path: Path) -> None:
+    # When the helper exists but never writes $CLAUDE_ENV_FILE, _cmd_verify
+    # must increment errors and print the ::error:: annotation (lines 112-113).
+    scripts = _stage(tmp_path, {"_session_path.sh": "#!/bin/bash\necho hi\n"})
+    assert gate.main(["verify", "--scripts-dir", str(scripts)]) == 1
+
+
+def test_list_command_prints_writers(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    # _cmd_list iterates _iter_writes and prints each one (lines 132-134).
+    scripts = _stage(
+        tmp_path,
+        {
+            "_session_path.sh": _HELPER_BODY,
+            "x.sh": 'echo foo >> "${CLAUDE_ENV_FILE}"\n',
+        },
+    )
+    rc = gate.main(["list", "--scripts-dir", str(scripts)])
+    assert rc == 0
+    assert "x.sh" in capsys.readouterr().out

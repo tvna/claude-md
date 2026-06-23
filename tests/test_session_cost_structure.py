@@ -15,6 +15,7 @@ Refs #1492.
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -221,3 +222,71 @@ class TestTranscriptIO:
         out = capsys.readouterr().out
         assert "Session cache cost structure" in out
         assert "output" in out
+
+    def test_message_usage_non_dict_message_returns_none(self) -> None:
+        # entry is a dict but message value is not a dict -> line 137 return None.
+        entry = {"message": "not-a-dict"}
+        assert scs._message_usage(entry) is None
+
+    def test_discover_transcript_oserror_returns_none(self, tmp_path: Path) -> None:
+        # Place a file where glob expects a directory -> OSError -> lines 242-243.
+        file_as_dir = tmp_path / "-x"
+        file_as_dir.write_text("data")
+        assert scs.discover_transcript(tmp_path, Path("/x")) is None
+
+    def test_run_ccusage_empty_session_id_returns_none(self) -> None:
+        # Empty session_id short-circuits immediately (lines 258-259).
+        assert scs._run_ccusage_total("") is None
+
+    def test_run_ccusage_no_binary_returns_none(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # ccusage not on PATH -> lines 260-262.
+        import shutil as _shutil
+        monkeypatch.setattr(_shutil, "which", lambda _: None)
+        assert scs._run_ccusage_total("session-abc") is None
+
+    def test_run_ccusage_nonzero_exit_returns_none(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # ccusage exits non-zero -> lines 263-264, 273-274.
+        import shutil as _shutil
+        import subprocess as _subprocess
+        from unittest.mock import MagicMock
+
+        monkeypatch.setattr(_shutil, "which", lambda _: "/usr/bin/ccusage")
+        mock_proc = MagicMock()
+        mock_proc.returncode = 1
+        monkeypatch.setattr(_subprocess, "run", lambda *a, **kw: mock_proc)
+        assert scs._run_ccusage_total("session-abc") is None
+
+    def test_run_ccusage_subprocess_error_returns_none(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # subprocess.run raises OSError -> lines 271-272.
+        import shutil as _shutil
+        import subprocess as _subprocess
+
+        def _raise_oserror(*a: object, **kw: object) -> None:
+            raise OSError("mock subprocess error")
+
+        monkeypatch.setattr(_shutil, "which", lambda _: "/usr/bin/ccusage")
+        monkeypatch.setattr(_subprocess, "run", _raise_oserror)
+        assert scs._run_ccusage_total("session-abc") is None
+
+    def test_main_with_rate_override(self, tmp_path: Path, capsys) -> None:
+        # Passing --output-rate triggers the override branch in _build_rates (line 335).
+        path = tmp_path / "t.jsonl"
+        path.write_text(
+            json.dumps(_assistant("m1", {"output_tokens": 1_000})) + "\n",
+            encoding="utf-8",
+        )
+        rc = scs.main(["--transcript", str(path), "--output-rate", "30.0"])
+        assert rc == 0
+        assert "Session cache cost structure" in capsys.readouterr().out
+
+    def test_main_auto_discovers_when_transcript_not_given(self, capsys) -> None:
+        # Without --transcript, discover_transcript is called (line 379).
+        rc = scs.main(["--projects-dir", "/nonexistent"])
+        assert rc == 0
+        assert "Session cache cost structure" in capsys.readouterr().out

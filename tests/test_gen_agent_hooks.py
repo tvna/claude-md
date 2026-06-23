@@ -152,3 +152,156 @@ def test_render_rejects_mirror_to_unknown_agent() -> None:
     }
     with pytest.raises(ValueError, match="mirror"):
         gen.render_targets(bad)
+
+
+# ---------------------------------------------------------------------------
+# _wrap_config defensive type checks (lines 112, 115, 118, 121)
+# ---------------------------------------------------------------------------
+
+
+def test_wrap_config_skips_non_list_groups() -> None:
+    # hooks value is a string, not a list -> line 112 continue.
+    result = gen._wrap_config({"hooks": {"SessionStart": "not-a-list"}})
+    assert result["hooks"]["SessionStart"] == "not-a-list"
+
+
+def test_wrap_config_skips_non_dict_group() -> None:
+    # Group in list is a string, not a dict -> line 115 continue.
+    result = gen._wrap_config({"hooks": {"PreToolUse": ["not-a-dict"]}})
+    assert result["hooks"]["PreToolUse"] == ["not-a-dict"]
+
+
+def test_wrap_config_skips_non_list_handlers() -> None:
+    # Group is a dict but 'hooks' value is a string -> line 118 continue.
+    result = gen._wrap_config({"hooks": {"PreToolUse": [{"hooks": "not-a-list"}]}})
+    assert result["hooks"]["PreToolUse"][0]["hooks"] == "not-a-list"
+
+
+def test_wrap_config_skips_non_dict_handler() -> None:
+    # Handler in hooks list is a string -> line 121 continue.
+    result = gen._wrap_config({"hooks": {"PreToolUse": [{"hooks": ["not-a-dict"]}]}})
+    assert result["hooks"]["PreToolUse"][0]["hooks"] == ["not-a-dict"]
+
+
+# ---------------------------------------------------------------------------
+# render_targets input validation (lines 142, 147, 150, 154, 162)
+# ---------------------------------------------------------------------------
+
+
+def test_render_rejects_missing_targets_key() -> None:
+    # 'targets' absent -> not a list -> line 142 raise ValueError.
+    with pytest.raises(ValueError, match="non-empty list"):
+        gen.render_targets({})
+
+
+def test_render_rejects_non_dict_target_entry() -> None:
+    # Target entry is a number, not a mapping -> line 147 raise ValueError.
+    with pytest.raises(ValueError, match="must be a mapping"):
+        gen.render_targets({"targets": [42]})
+
+
+def test_render_rejects_non_string_agent() -> None:
+    # 'agent' key is an int -> line 150 raise ValueError.
+    with pytest.raises(ValueError, match="missing a string"):
+        gen.render_targets({"targets": [{"agent": 42, "path": "x.json"}]})
+
+
+def test_render_rejects_non_dict_config_value() -> None:
+    # 'config' is a string -> line 154 raise ValueError.
+    with pytest.raises(ValueError, match="must be a mapping"):
+        gen.render_targets({"targets": [{"agent": "x", "config": "str", "path": "p"}]})
+
+
+def test_render_rejects_target_without_string_path() -> None:
+    # Target has no 'path' key -> line 162 raise ValueError.
+    with pytest.raises(ValueError, match="missing a string 'path'"):
+        gen.render_targets({"targets": [{"agent": "x", "config": {"hooks": {}}}]})
+
+
+# ---------------------------------------------------------------------------
+# _load_source error paths (lines 179-181, 184-186, 188-189)
+# ---------------------------------------------------------------------------
+
+
+def test_main_unreadable_source_exits_2(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # SOURCE does not exist -> OSError -> lines 179-181 -> SystemExit(2).
+    monkeypatch.setattr(gen, "SOURCE", tmp_path / "nonexistent.json")
+    with pytest.raises(SystemExit) as exc_info:
+        gen.main([])
+    assert exc_info.value.code == 2
+
+
+def test_main_invalid_json_source_exits_2(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # SOURCE is not valid JSON -> lines 184-186 -> SystemExit(2).
+    bad = tmp_path / "source.json"
+    bad.write_text("not json", encoding="utf-8")
+    monkeypatch.setattr(gen, "SOURCE", bad)
+    with pytest.raises(SystemExit) as exc_info:
+        gen.main([])
+    assert exc_info.value.code == 2
+
+
+def test_main_non_dict_source_exits_2(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # SOURCE top-level is a list -> lines 188-189 -> SystemExit(2).
+    bad = tmp_path / "source.json"
+    bad.write_text("[1, 2, 3]", encoding="utf-8")
+    monkeypatch.setattr(gen, "SOURCE", bad)
+    with pytest.raises(SystemExit) as exc_info:
+        gen.main([])
+    assert exc_info.value.code == 2
+
+
+# ---------------------------------------------------------------------------
+# main() error and write paths (lines 204-206, 214-217, 223-225)
+# ---------------------------------------------------------------------------
+
+
+def test_main_render_value_error_returns_2(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # render_targets raises ValueError -> lines 204-206 -> return 2.
+    def _raise(_: object) -> None:
+        raise ValueError("bad targets")
+
+    monkeypatch.setattr(gen, "render_targets", _raise)
+    rc = gen.main([])
+    assert rc == 2
+    assert "bad targets" in capsys.readouterr().err
+
+
+def test_main_check_missing_rendered_file_returns_1(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # --check with a rendered path that doesn't exist -> lines 214-217 -> return 1.
+    source = tmp_path / "source.json"
+    source.write_text(
+        json.dumps({"targets": [{"agent": "x", "config": {"hooks": {}}, "path": "x.json"}]}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(gen, "SOURCE", source)
+    monkeypatch.setattr(gen, "REPO_ROOT", tmp_path)
+    rc = gen.main(["--check"])
+    assert rc == 1
+
+
+def test_main_write_mode_creates_files(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # Without --check, main writes rendered configs (lines 223-225).
+    source = tmp_path / "source.json"
+    source.write_text(
+        json.dumps({"targets": [{"agent": "x", "config": {"hooks": {}}, "path": "x.json"}]}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(gen, "SOURCE", source)
+    monkeypatch.setattr(gen, "REPO_ROOT", tmp_path)
+    rc = gen.main([])
+    assert rc == 0
+    assert (tmp_path / "x.json").exists()

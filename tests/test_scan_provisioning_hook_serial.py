@@ -6,6 +6,7 @@ must be require_serial so prek does not race parallel copies (#1150, #1155).
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -63,3 +64,17 @@ def test_cli_verify_clean() -> None:
 def test_cli_list(capsys: pytest.CaptureFixture[str]) -> None:
     assert gate.main(["list"]) == 0
     assert "require_serial" in capsys.readouterr().out
+
+
+def test_load_config_missing_file_raises_systemexit(tmp_path: Path) -> None:
+    # OSError when config file is absent -> lines 86-87 (except + raise SystemExit).
+    with pytest.raises(SystemExit):
+        gate._load_config(tmp_path / "nonexistent.yaml")
+
+
+def test_load_config_non_dict_yaml_raises_systemexit(tmp_path: Path) -> None:
+    # YAML that parses to a list (not a mapping) -> line 90 (raise SystemExit).
+    bad = tmp_path / "bad.yaml"
+    bad.write_text("- list\n- item\n", encoding="utf-8")
+    with pytest.raises(SystemExit):
+        gate._load_config(bad)
