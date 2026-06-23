@@ -64,7 +64,7 @@ jobs:
         # Persist the default token; the merge step authenticates with the App
         # token in GH_TOKEN, but checkout needs working credentials to fetch the
         # scripts.
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       # Mint a short-lived GitHub App installation token so the merge's push to
       # main still triggers the downstream push workflows. Refs #1401.
