@@ -9,7 +9,7 @@ warn_module_lines = 640
 
 [summary]
 total_modules = 185
-in_warn_band = 8
+in_warn_band = 9
 exactly_at_limit = 1
 over_budget = 3
 
@@ -18,8 +18,8 @@ over_budget = 3
 "1-160" = 56
 "161-320" = 88
 "321-480" = 19
-"481-640" = 11
-"641-800" = 8
+"481-640" = 10
+"641-800" = 9
 "801+" = 3
 
 # warn_band: passing modules in [warn_module_lines, max_module_lines].
@@ -34,6 +34,7 @@ warn_band = [
     "scripts/pr_upsert.py",
     "scripts/ruleset_drift.py",
     "scripts/rulesets_apply.py",
+    "scripts/scan_design_philosophy_drift.py",
     "scripts/security_drift_report.py",
 ]
 over_budget = [

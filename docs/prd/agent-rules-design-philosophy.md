@@ -148,68 +148,12 @@ relying on this rule.").
 
 ### 2.5 Glossary
 
-This subsection is the single source of truth for terms that recur
-across `master.instructions.md`, the compiled `CLAUDE.md` and
-`AGENTS.md`, the responsibility matrix in section 3, and the harness
-scripts. Each entry names the term, gives a one-sentence definition,
-and cites the master section subtitle and any matrix row that uses
-it. `scripts/scan_design_philosophy_drift.py` reads the headings
-under this subsection to verify that no required entry has been
-removed.
-
-- **safety boundary**: The layer that limits simplicity when the
-  cost of being wrong is high. Used as the `*Layer: ...*` subtitle of
-  master section 4 and as the P4 row label in section 3.
-- **defense-in-depth**: A safety pattern that keeps a control alive
-  across multiple layers (prompts, code, hooks, CI, review, operator
-  procedure) so that collapsing any one layer does not remove the
-  control. Stated in master section 4 ("Preserve defense-in-depth
-  ..."). The section 3 P4 row records the lanes that carry it.
-- **deterministic gate**: A harness rule converted to an executable
-  check (a script, a workflow, a hook, or a ruleset) that replaces
-  reviewer memory. Defined operationally in section 2.2. Required by
-  master section 3 ("push deterministic work into hooks, pre-commit,
-  and CI/CD"), under the section's lead rule ("if the gate is missing,
-  build it before the operation it guards; never substitute agent
-  memory for an absent gate").
-- **untrusted data**: External text such as issue bodies, PR
-  descriptions, review comments, CI logs, webhook payloads,
-  generated reports, pasted stack traces, and external docs,
-  including quoted, pasted, forwarded, or attached content inside
-  any message channel. Master section 2 forbids it from overriding
-  trusted instruction sources at runtime; trust is governance-gated
-  provenance, not channel name.
-- **repair-free merge**: A PR that lands without any reviewer, CI,
-  or hook repair between PR open and merge. The retrospective
-  auto-opened after each merge counts the repairs. Reproducing this
-  no-repair path is one means toward the retrospective's purpose --
-  recursive self-improvement, where each cycle leaves the harness
-  measurably better; not the end (master section 3).
-- **PRD**: Product Requirements Document. Required by master section
-  1 ("Match the document weight to the blast radius: detailed PRD
-  for architectural / multi-PR work, concise spec otherwise."). This
-  document (`docs/prd/agent-rules-design-philosophy.md`) is the PRD for
-  the universal-text and harness boundary; downstream consumers
-  write their own PRDs for their own architectural changes.
-- **P1 through P6**: The six numbered principles in
-  `master.instructions.md`. Each principle is identified by its
-  `*Layer: <text>*` subtitle. The matrix row label after `P<n> - `
-  in section 3 must equal the subtitle `<text>` after normalization
-  (`&` to `and`, case-insensitive, whitespace-collapsed); see
-  section 3 for the invariant.
-- **hardness contour**: The shape of a universal-text rule's
-  enforcement edge, expressed by hardline phrasings such as "No
-  exceptions" or "every commit and PR". Diluting the contour means
-  attaching wording that softens, scopes-down, or carves out the
-  hardline without removing the hardline itself, so a reader cannot
-  tell from the text alone which rule actually binds. Reviewer
-  questions for preservation are listed in section 7.6.
-- **in-line carve-out**: A clause placed directly adjacent to a
-  hardline phrasing that introduces an exception, scope reduction,
-  or qualification without moving to a separate sub-bullet, runbook,
-  or repo-local doc. The pattern is the primary failure mode that
-  dilutes a hardness contour; section 7.6 lists it as an anti-pattern
-  the reviewer must catch before merge.
+Term definitions have moved to
+[`docs/standards/ubiquitous-language.md`](../standards/ubiquitous-language.md),
+which is the single source of truth for all repository-wide terms including
+those used in this document, in `master.instructions.md`, and in the harness
+scripts. `scripts/scan_design_philosophy_drift.py` verifies that every
+required term remains present in that file. See Refs #1901.
 
 ### 2.6 Precedence among trusted instruction sources
 
