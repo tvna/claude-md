@@ -201,3 +201,13 @@ class TestMain:
         rc = rpb.main(["--no-fetch"])
         assert rc == rpb._CONFLICT_EXIT
         assert "CONFLICTS" in capsys.readouterr().err
+
+
+class TestFetchFailure:
+    def test_fetch_failure_is_precondition_error(self, tmp_path: Path) -> None:
+        # do_fetch=True on a repo with no remote "origin" -> fetch fails ->
+        # lines 116-118 (_PRECONDITION_EXIT return in refresh()).
+        repo = _base_repo(tmp_path)
+        code, msg = rpb.refresh(cwd=repo, do_fetch=True)
+        assert code == rpb._PRECONDITION_EXIT
+        assert "fetch" in msg

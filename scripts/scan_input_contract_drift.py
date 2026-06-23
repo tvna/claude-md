@@ -11,7 +11,7 @@ module docstring).
 
 The check is static and narrow. For every public ``scripts/<name>.py``
 referenced by any workflow under ``.github/workflows/`` (private helpers
-prefixed with ``_`` are out of scope -- they are never CLI entry points),
+prefixed with ``_`` are out of scope; they are never CLI entry points),
 the module docstring must carry the canonical ``Contract:`` block shown in
 the standard's skeleton:
 
@@ -184,7 +184,7 @@ def find_violations(
     ``violations`` is the sorted list of ``(name, defects)`` for every
     target script that is not in *baseline* and fails the contract check.
     ``stale_baseline`` is the sorted list of baseline entries that are now
-    compliant, or that no workflow references any more -- either way the
+    compliant, or that no workflow references any more; either way the
     entry is dead and must be removed so the ratchet stays honest.
     """
     violations: list[tuple[str, list[str]]] = []

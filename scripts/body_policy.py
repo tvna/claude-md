@@ -111,7 +111,7 @@ _VERIFICATION_COMMAND_RE = re.compile(
 )
 # A command line that is well-formed up to the closing backtick but
 # carries trailing non-whitespace after it (e.g. ``(pre-push hooks)``).
-# Detected only to emit a targeted deny reason -- such a line already
+# Detected only to emit a targeted deny reason; such a line already
 # fails _VERIFICATION_COMMAND_RE, so this never widens what passes.
 # Recurring author defect: retro #1054 row 2(a), retro #1376 repair 2.
 _VERIFICATION_COMMAND_TRAILING_RE = re.compile(
@@ -333,7 +333,7 @@ def verify_pr_verification_pairs(body: str) -> list[str]:
                 "shape)."
             )
             # Consume an immediately-following result line so it is not
-            # also flagged as an orphan -- the trailing-text error is the
+            # also flagged as an orphan; the trailing-text error is the
             # single actionable signal.
             if i + 1 < len(lines) and _VERIFICATION_RESULT_RE.fullmatch(
                 lines[i + 1]
@@ -459,7 +459,7 @@ def verify_pr_agent_attribution_footer(
             return [
                 "::error::Under the Claude web harness (CLAUDE_CODE_REMOTE), "
                 "create_pull_request auto-appends exactly one session footer. "
-                "Do not add an agent-attribution footer to the create body -- "
+                "Do not add an agent-attribution footer to the create body; "
                 "the manual footer plus the auto-appended footer produces a "
                 "duplicate. Remove the trailing footer line."
             ]

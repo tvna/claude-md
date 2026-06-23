@@ -25,31 +25,31 @@ BAD:  "Updates the code." / "Various improvements." / any sentence that describe
 -
 
 <!--
-Facts -- CLAUDE.md section 2.
+Facts; CLAUDE.md section 2.
 State only what is observable: diffs, command output, test names, log lines.
 No speculation in this section. If you cannot point to evidence, move the
 line to Assumptions below.
 GOOD: "- Fact: scripts/body_policy.py line 58 defines 9 required PR sections."
-BAD:  "- The change should improve performance." (unverified -- move to Assumptions with a Speculation: tag)
+BAD:  "- The change should improve performance." (unverified; move to Assumptions with a Speculation: tag)
 -->
 ## Facts
 
 -
 
 <!--
-Assumptions -- CLAUDE.md section 2.
+Assumptions; CLAUDE.md section 2.
 List what you are trusting but did not verify (library behavior, runtime
 environment, upstream contracts, reviewer intent). Tag each line with
 "speculation:" when it is a guess rather than a documented fact.
 GOOD: "- Speculation: upstream library behavior is unchanged because no release notes mention it."
-BAD:  "- Fact: this will work correctly." (unverified claim presented as a fact -- tag it Speculation: instead)
+BAD:  "- Fact: this will work correctly." (unverified claim presented as a fact; tag it Speculation: instead)
 -->
 ## Assumptions
 
 -
 
 <!--
-Risk and blast radius -- CLAUDE.md section 4.
+Risk and blast radius; CLAUDE.md section 4.
 Who or what is affected if this change is wrong, and how reversible is it?
 Call out destructive or irreversible operations (deletes, force-push,
 schema migrations, outbound sends, payments).
@@ -59,7 +59,7 @@ schema migrations, outbound sends, payments).
 -
 
 <!--
-Rollback -- CLAUDE.md section 4.
+Rollback; CLAUDE.md section 4.
 Exact steps to revert or disable this change when it misbehaves in prod.
 For low-risk changes a single `git revert <sha>` is fine; say so explicitly.
 For risky changes list the feature flag, config toggle, or migration-down
@@ -70,7 +70,7 @@ command a responder would run.
 -
 
 <!--
-Text delta -- required ONLY when this PR changes universal instruction text
+Text delta; required ONLY when this PR changes universal instruction text
 (.apm/instructions/**, CLAUDE.md, or AGENTS.md). When it does, ADD a section
 exactly like the following (heading included), filled in. It is enforced by
 scripts/verify_text_delta_section.py inside the portable-pr-policy job of
@@ -87,7 +87,7 @@ section entirely when the PR touches no instruction text.
 -->
 
 <!--
-Verification -- CLAUDE.md section 1.
+Verification; CLAUDE.md section 1.
 Each entry is one observed verification, listed as a `command:` line and
 its `result:` line. Treat these as Facts-tier evidence (CLAUDE.md section
 2): only what was actually run, no plans, no speculation. Multiple
@@ -110,7 +110,7 @@ BAD:  leaving command or result as empty backtick pairs (the template default ``
   result: ``
 
 <!--
-Checklist -- CLAUDE.md section 3.
+Checklist; CLAUDE.md section 3.
 Three H3 subsections separate items by automation layer. Required shape
 enforced by scripts/body_policy.py verify_pr_checklist_subsections for
 PRs created on or after 2026-05-26.
@@ -148,7 +148,7 @@ Check the box only when the matching pair is present.
 <!--
 Operator checklist filled AFTER observing the merge. The merge-time
 auto-retro (the open-retro job of .github/workflows/post-merge.yml) no longer scans this
-subsection -- per #418, the items below are unchecked at merge time by
+subsection; per #418, the items below are unchecked at merge time by
 design, so treating them as repair signals at that moment produced
 structural false positives. A deferred re-scan workflow (#421) will
 revisit this subsection later and append rows to the retro issue for
@@ -160,10 +160,10 @@ items that remain unchecked once the observation window has closed.
 - [ ] No follow-up `fix(...)` PR needed within 24h of merge
 
 <!--
-Resource Consumption -- CLAUDE.md section 3 / section 6.
+Resource Consumption; CLAUDE.md section 3 / section 6.
 The resource cost of producing this PR, measured as a per-PR window: the
 time and tokens spent since the previous PR-create in this session (or since
-session start for the first PR), not the cumulative session total -- so a
+session start for the first PR), not the cumulative session total; so a
 session that opens several PRs does not re-count an earlier PR's tokens
 (#1435). Generate it with `python3 scripts/session_resource_report.py` (which
 reads the current Claude Code session id, the per-PR checkpoint advanced by
@@ -176,8 +176,8 @@ the generator collapses the ccusage modelsUsed id deterministically so the
 canonical output carries the tier and the verbatim version string is never
 written into the body. Do not hand-edit it back to a precise id.
 
-When no session data is available -- a human-authored PR with no ccusage
-session, or ccusage absent -- the generator emits the
+When no session data is available; a human-authored PR with no ccusage
+session, or ccusage absent; the generator emits the
 `unavailable (no session data)` form shown below; keep that marker rather
 than deleting the section. The section is required on every PR; trusted-bot
 authors (dependabot) are skipped by scripts/body_policy.py, so their PRs
@@ -191,7 +191,7 @@ need not carry it.
 - Model(s): unavailable (no session data)
 
 <!--
-Related Issue -- CLAUDE.md section 3. Kept last (before the footer) per
+Related Issue; CLAUDE.md section 3. Kept last (before the footer) per
 GitHub convention: the closing keyword reads naturally at the end of the
 body and the conclusion (Summary) stays at the top.
 
@@ -203,14 +203,14 @@ via the `Portable PR policy / gate` context (see
 .github/rulesets/main.json).
 
 The reference lives on the `Closes #<number>` / `Refs #<number>` line in
-this body ONLY -- it must NOT be duplicated in the PR title. A `(#NNN)`
+this body ONLY; it must NOT be duplicated in the PR title. A `(#NNN)`
 token in the title is rejected by scripts/title_policy.py
 (portable-pr-policy job of verify-pr.yml) per #167 / #214, because this
 body line is the
 single source of truth for the issue link. "Cite the issue number in every
 PR" (CLAUDE.md section 3) means this body line, not the title. Exception:
 a `revert(<scope>): ...` title may keep a `(#NNN)` token that names the
-reverted PR/commit -- that reference identifies the rolled-back change, not
+reverted PR/commit; that reference identifies the rolled-back change, not
 a redundant copy of this issue link.
 
 Default: `Closes #<number>` so the linked issue auto-closes on merge.
@@ -229,7 +229,7 @@ merge must NOT close the linked issue, AND one of the following holds:
 Closes #
 
 <!--
-Agent attribution -- required by scripts/body_policy.py for PRs created on
+Agent attribution; required by scripts/body_policy.py for PRs created on
 or after 2026-05-26. Replace the label and URL with the agent/session that
 created or last corrected this body, for example Claude Code. Codex-authored
 GitHub posts must use the model-aware Codex form.

@@ -8,8 +8,8 @@ waste: a single PR cycle re-runs the whole suite 2-3 times (rebase, stale
 PR #983 alone burned ~14.5 minutes this way, none of it exercising a source
 change after the first green run.
 
-This module preserves *strict* coverage parity with CI -- the same full suite
-runs, never a subset -- while skipping a re-run only when the inputs that can
+This module preserves *strict* coverage parity with CI; the same full suite
+runs, never a subset; while skipping a re-run only when the inputs that can
 affect the suite outcome are byte-for-byte unchanged since the last recorded
 green run. The fingerprint covers the working-tree contents (not the index) of
 the test-relevant path set (``scripts/``, ``tests/``, ``pyproject.toml``,
@@ -17,13 +17,13 @@ the test-relevant path set (``scripts/``, ``tests/``, ``pyproject.toml``,
 dependency bump, or command change busts the cache and forces a full run, so a
 stale skip is impossible short of a SHA-256 collision.
 
-The cache lives at ``<git-dir>/preflight_heavy_cache.json`` -- per-clone,
+The cache lives at ``<git-dir>/preflight_heavy_cache.json``; per-clone,
 untracked, and naturally absent on a fresh clone, so the first run in any
 checkout is always a full run. Export ``PREFLIGHT_NO_CACHE=1`` to force a full
 run and refresh the fingerprint regardless of cache state.
 
 Exit codes (CLI ``status``):
-* ``0`` -- always; ``status`` is read-only and never gates a push on its own.
+* ``0``; always; ``status`` is read-only and never gates a push on its own.
 
 Tested by ``tests/test_preflight_cache.py``.
 """
@@ -103,8 +103,8 @@ def compute_fingerprint(
 
     * each tracked input file's repo-relative POSIX path and the SHA-256 of its
       on-disk bytes (working-tree state, so uncommitted edits bust the cache);
-    * each token in *extra* (the pytest argv), so changing the command -- e.g.
-      adding ``-n auto`` -- forces a fresh run rather than reusing a digest
+    * each token in *extra* (the pytest argv), so changing the command; e.g.
+      adding ``-n auto``; forces a fresh run rather than reusing a digest
       recorded under the old command.
 
     Raises ``subprocess.CalledProcessError`` / ``OSError`` when git or a file is

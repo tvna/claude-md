@@ -11,10 +11,10 @@ MCP write tools delete (#1035).
 
 This module turns that manual relabel into a deterministic step. Given
 an issue and the sibling PR numbers, it computes the label set with the
-``type`` family swapped to ``type:tracking`` -- per
+``type`` family swapped to ``type:tracking``; per
 ``.github/label-policy.toml`` the ``type`` family is
 ``exactly_one_for_normal_issues``, so the swap removes the prior type
-label rather than adding a second one -- and, in ``apply`` mode, writes
+label rather than adding a second one; and, in ``apply`` mode, writes
 the new label set and records the rationale as an issue comment.
 
 The label decision is a pure function (:func:`plan_label_swap`) so it is
@@ -47,10 +47,10 @@ def plan_label_swap(labels: list[str]) -> dict[str, Any]:
     Drops every ``type:*`` label and adds ``type:tracking`` once,
     preserving the order of the non-type labels. The returned dict has:
 
-    * ``already_tracking`` -- True iff the only ``type:*`` label present
+    * ``already_tracking``; True iff the only ``type:*`` label present
       is the tracking label (nothing to change).
-    * ``removed`` -- the ``type:*`` labels that will be dropped.
-    * ``result`` -- the full, de-duplicated label-name list to PUT.
+    * ``removed``; the ``type:*`` labels that will be dropped.
+    * ``result``; the full, de-duplicated label-name list to PUT.
     """
     type_labels = [name for name in labels if name.startswith(TYPE_PREFIX)]
     non_type = [name for name in labels if not name.startswith(TYPE_PREFIX)]

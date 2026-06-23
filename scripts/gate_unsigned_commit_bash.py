@@ -5,7 +5,7 @@ Registered as a ``PreToolUse`` hook for the ``Bash`` matcher in
 ``.claude/settings.json`` (and mirrored in ``.codex/hooks.json`` /
 ``.devin/hooks.v1.json`` via ``scripts/agent_hooks_source.json``). It denies a
 Bash command whose leading command in any shell segment is ``git`` and which
-turns off commit signing for that invocation -- the agent-Bash-tool sibling of
+turns off commit signing for that invocation; the agent-Bash-tool sibling of
 ``scan_workflow_unsigned_commit.py`` (which guards the CI-side unsigned
 ``git push`` authoring path). Issue #1713.
 
@@ -13,27 +13,27 @@ This repository configures ``commit.gpgsign=true`` with an ssh signing key, so a
 plain ``git commit`` produces a Verified commit. The only reason to disable
 signing inline is to defeat that requirement, so the gate denies the two
 equivalent spellings of that one bypass (the section 4 "generalize the category"
-discipline -- both forms are the same harm):
+discipline; both forms are the same harm):
 
-- ``-c commit.gpgsign=<false-ish>`` -- the inline config override named in the
+- ``-c commit.gpgsign=<false-ish>``; the inline config override named in the
   request. A false-ish value is one of git's documented booleans for false:
   ``false``, ``0``, ``no``, ``off`` (case-insensitive). The value must follow a
   ``-c`` token, so a positional argument that merely looks like the assignment
   is not matched.
-- ``--no-gpg-sign`` -- the per-command flag accepted by the committing
+- ``--no-gpg-sign``; the per-command flag accepted by the committing
   subcommands (``commit``, ``merge``, ``rebase``, ``cherry-pick``, ...), which
   has the identical effect.
 
 The benign forms pass through: a plain ``git commit`` (signs per repo config),
 ``-c commit.gpgsign=true``, and ``git config commit.gpgsign false`` is out of
-scope here -- this gate targets the per-invocation override, not a persistent
+scope here; this gate targets the per-invocation override, not a persistent
 config change (which the operator can still make deliberately).
 
 Design (CLAUDE.md section 4: make wrong actions hard, right actions easy):
 
 - The gate denies rather than silently allowing; the deny reason names the
-  matched bypass and points at the safe path -- commit normally so signing
-  applies -- or, when the unsigned commit is genuinely intended and reviewed
+  matched bypass and points at the safe path; commit normally so signing
+  applies; or, when the unsigned commit is genuinely intended and reviewed
   (e.g. a throwaway scratch repo), append an ``# unsigned-ack`` comment to opt
   in. The ack reuses the marker established by ``scan_workflow_unsigned_commit``
   for the same unsigned-commit category.
@@ -44,7 +44,7 @@ Design (CLAUDE.md section 4: make wrong actions hard, right actions easy):
   trip the gate.
 - Parse-error fail-open is intentional and narrow: a malformed stdin event logs
   to stderr and exits 0 so a hook bug never wedges the session. The fail-open
-  applies only to the stdin I/O boundary -- a matched bypass is always denied.
+  applies only to the stdin I/O boundary; a matched bypass is always denied.
 
 Contract:
 - Inputs: a PreToolUse hook event as JSON on stdin (``tool_name`` plus

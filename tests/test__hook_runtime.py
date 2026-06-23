@@ -1,7 +1,7 @@
 """Unit tests for the shared PreToolUse hook runtime helpers.
 
 Refs #1240. Covers ``build_deny`` / ``split_tool_event`` / ``run_event_hook``
-/ ``run_tool_hook`` -- the helpers that absorbed the per-gate ``main()`` and
+/ ``run_tool_hook``; the helpers that absorbed the per-gate ``main()`` and
 deny-payload boilerplate. Testing them directly keeps the moved fail-open and
 missing-shape branches covered now that they no longer live in each gate.
 """
@@ -66,7 +66,7 @@ def test_split_tool_event_returns_pair() -> None:
 
 
 def test_split_tool_event_missing_input_defaults_empty() -> None:
-    # A missing tool_input collapses to {} -- the per-gate ``or {}`` behaviour.
+    # A missing tool_input collapses to {}; the per-gate ``or {}`` behaviour.
     assert hr.split_tool_event({"tool_name": "Bash"}, "gate") == ("Bash", {})
 
 
@@ -117,7 +117,7 @@ def test_run_event_hook_malformed_json_fails_open(
 
     rc = hr.run_event_hook("gate", decide)
     assert rc == 0
-    assert called is False  # never reached -- read_event returned None
+    assert called is False  # never reached; read_event returned None
     assert "malformed stdin JSON" in capsys.readouterr().err
 
 

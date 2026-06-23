@@ -114,7 +114,7 @@ class TestFindViolations:
 
     def test_ack_marker_suppresses(self, tmp_path: Path) -> None:
         # The ack marker must live inside the run script body (a `run: |` block),
-        # not as a trailing YAML comment -- YAML would strip a `# ...` comment
+        # not as a trailing YAML comment; YAML would strip a `# ...` comment
         # before the scanner ever sees it.
         wf_dir = _make_workflow_dir(tmp_path)
         (wf_dir / "ok.yml").write_text(
@@ -143,3 +143,28 @@ def test_repository_workflows_have_no_git_push() -> None:
         "git push found in workflow run blocks (unsigned authoring path): "
         + ", ".join(f"{v.workflow}:{v.job}:{v.line}" for v in violations)
     )
+
+
+def test_iter_run_steps_skips_non_dict_jobs(tmp_path: Path) -> None:
+    # When YAML has 'jobs' as a list (not a dict), _iter_run_steps continues (line 101).
+    wf_dir = _make_workflow_dir(tmp_path)
+    (wf_dir / "weird.yml").write_text("name: x\njobs:\n  - foo\n")
+    assert scan.find_violations(wf_dir) == []
+
+
+def test_main_list_with_violations(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # main(["list"]) with a planted git push -> prints violations (lines 158-160).
+    wf_dir = _make_workflow_dir(tmp_path)
+    (wf_dir / "bad.yml").write_text(
+        "name: bad\njobs:\n  push:\n    steps:\n      - name: push\n        run: |\n"
+        "          git push origin main\n"
+    )
+    monkeypatch.setattr(scan, "WORKFLOW_DIR", wf_dir)
+    rc = scan.main(["list"])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "bad.yml" in out

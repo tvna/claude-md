@@ -26,7 +26,7 @@ does not open any issue.
 
 | Trigger | Cron | Effect |
 |---|---|---|
-| `schedule` | `0 20 * * 0` (UTC) -- Monday 05:00 JST | Always assembles the report; uploads the artifact and appends the step summary. No issue comment (the input is unset on cron). |
+| `schedule` | `0 20 * * 0` (UTC); Monday 05:00 JST | Always assembles the report; uploads the artifact and appends the step summary. No issue comment (the input is unset on cron). |
 | `workflow_dispatch` | manual | Select `task=measure-timings`. Same artifact + summary. When `measure_issue_number` is supplied, the workflow additionally posts the report as a comment on that issue. When `measure_cutoff` is supplied (a UTC `YYYY-MM-DD`), the report switches to compare mode: pre-cutoff (baseline) and post-cutoff (post-change) tables side-by-side with a delta p50 column. |
 
 The timing report now runs with the rest of weekly maintenance at JST Monday
@@ -59,10 +59,10 @@ column.
 3. The report's per-job and per-step tables become
    `pre count | pre p50 | post count | post p50 | delta p50`. The delta
    column carries one of:
-   - `+X.Y%` / `-X.Y%` -- both windows have samples; signed change.
-   - `new` -- no pre-cutoff sample (the row appeared after the change).
-   - `gone` -- no post-cutoff sample (the row existed only before).
-   - `+inf` -- pre p50 was zero but post samples exist (edge case).
+   - `+X.Y%` / `-X.Y%`; both windows have samples; signed change.
+   - `new`; no pre-cutoff sample (the row appeared after the change).
+   - `gone`; no post-cutoff sample (the row existed only before).
+   - `+inf`; pre p50 was zero but post samples exist (edge case).
 
 The single-window mode (no cutoff) remains the cron default, so the
 scheduled weekly report is unchanged.
@@ -117,8 +117,8 @@ Both legends are intentionally ASCII so the comment passes
 
 ## Permissions
 
-- `contents: read` -- checkout only.
-- `issues: write` -- only used by the optional comment step on
+- `contents: read`; checkout only.
+- `issues: write`; only used by the optional comment step on
   `workflow_dispatch`.
 
 No fine-grained PAT or app installation is required. The GitHub-managed

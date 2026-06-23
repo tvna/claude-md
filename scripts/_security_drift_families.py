@@ -4,7 +4,7 @@
 Split out of ``scripts/security_drift_report.py`` (#1488) to keep that module
 within its maintainability size budget: this file holds only the inert data --
 which families auto-file an issue on drift, the issue labels, and the per-family
-issue text -- while the aggregator keeps the runtime classify/report/IO logic.
+issue text; while the aggregator keeps the runtime classify/report/IO logic.
 ``security_drift_report`` re-imports these names, so ``sdr.TARGET_FAMILIES`` etc.
 stay stable for callers and tests. Refs #180, parent #178.
 """
@@ -41,7 +41,7 @@ ISSUE_LABELS: tuple[str, ...] = ("layer:meta", "type:fix")
 
 # Families this aggregator auto-files an issue for when they drift, raising them
 # to the `detect-and-file` floor (.github/security-control-floor.toml). The
-# `rulesets` family is deliberately excluded -- the dedicated ruleset-drift job
+# `rulesets` family is deliberately excluded; the dedicated ruleset-drift job
 # already files its own issues, so including it here would double-file. The
 # advisory `uv-pin-staleness` signal is excluded by design (warning-only).
 TARGET_FAMILIES: tuple[str, ...] = (
@@ -65,7 +65,7 @@ FAMILY_ISSUE_SPEC: dict[str, dict[str, str]] = {
     },
     "apm-instructions": {
         "scope": "apm-drift",
-        "detector": "apm compile + git diff --exit-code -- CLAUDE.md AGENTS.md",
+        "detector": "apm compile + git diff --exit-code; CLAUDE.md AGENTS.md",
         "evidence": ".apm/instructions/master.instructions.md",
         "remediation": (
             "Recompile with `uv run --with apm-cli==<pin> --exclude-newer \"14 days\" "

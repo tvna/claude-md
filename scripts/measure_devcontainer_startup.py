@@ -8,13 +8,13 @@ evidence (CLAUDE.md section 2), not intuition.
 
 What it measures, reading the lifecycle straight from a devcontainer config:
 
-* ``pull``           -- time to pull the prebuilt image, plus the image size.
-* ``postCreate``     -- time of each ``&&``-split segment of
+* ``pull``          ; time to pull the prebuilt image, plus the image size.
+* ``postCreate``    ; time of each ``&&``-split segment of
   ``postCreateCommand`` (``nix develop ... uv sync``, ``install-agent-cli``,
   ``configure-agent-runtime`` ...), run sequentially in one container so each
   segment builds on the previous one exactly as a real start does.
-* ``postStart``      -- time of each segment of ``postStartCommand``.
-* ``composition``    -- (opt-in ``--probe-composition``) on-disk byte split of
+* ``postStart``     ; time of each segment of ``postStartCommand``.
+* ``composition``   ; (opt-in ``--probe-composition``) on-disk byte split of
   the pulled image: total ``/nix/store`` bytes vs the base-distro dirs, plus
   the largest store entries. Measured with ``du`` (coreutils, always present)
   so it works even where ``nix develop`` does not in the CI exec context. This
@@ -27,7 +27,7 @@ What it measures, reading the lifecycle straight from a devcontainer config:
   dir instead, so the top entries name the dominant derivations (Refs #1332).
 
 The web remote session cannot run a container runtime, so this is driven from
-CI (``.github/workflows/measure-devcontainer-startup.yml``) -- mirroring the
+CI (``.github/workflows/measure-devcontainer-startup.yml``); mirroring the
 reproducible-in-CI measurement posture of #1173. ``initializeCommand`` is a
 host-side podman call and is intentionally NOT replayed here; the
 container-side costs above are the portable, environment-independent signal.
@@ -45,7 +45,7 @@ Contract:
 - Outputs: the JSON report on stdout (and to ``--output`` when given), an ASCII
   markdown summary on stderr (for ``$GITHUB_STEP_SUMMARY``); exit 0 on success.
   With ``--probe-composition`` the report gains a ``composition`` block.
-- Failure policy: fails loud per CLAUDE.md section 4 -- a missing runtime,
+- Failure policy: fails loud per CLAUDE.md section 4; a missing runtime,
   unreadable/malformed config, mutable image tag, or failed pull/start/inspect
   raises and exits non-zero. A per-segment non-zero exit is recorded as data
   (the postStart egress step is best-effort off the real host), not swallowed;
@@ -172,7 +172,7 @@ def split_segments(command: str | None) -> list[str]:
 
 # Base-distro directories whose byte total is reported separately from the nix
 # closure, so the summary splits "image bloat from the base" from "image bloat
-# from the nix store" -- the two have different cut levers.
+# from the nix store"; the two have different cut levers.
 _COMPOSITION_BASE_DIRS = ("/usr", "/opt", "/var", "/home", "/etc", "/root", "/bin", "/lib")
 # ``du -d1`` lists each immediate child of /nix/store plus the store total on
 # its own line, so no shell glob expansion (which would blow past ARG_MAX on a
@@ -181,7 +181,7 @@ _COMPOSITION_BASE_DIRS = ("/usr", "/opt", "/var", "/home", "/etc", "/root", "/bi
 # store optimisation every store file is hardlinked into .links, and because
 # du counts each inode once at first encounter and .links sorts first, an
 # un-excluded walk piles the whole closure onto the .links line and reports
-# the real package dirs as ~0 bytes -- hiding the per-derivation cut target.
+# the real package dirs as ~0 bytes; hiding the per-derivation cut target.
 # Excluding .links makes du meet each inode first in its own package dir, so
 # the depth-1 lines name the dominant derivations while the /nix/store total
 # stays the true (deduplicated) closure size. ``|| true`` keeps a transient
@@ -218,7 +218,7 @@ def probe_composition(session: Session, *, top_n: int = 30) -> dict[str, Any]:
     """Probe the on-disk byte composition of the started container image.
 
     Returns the ``/nix/store`` total, the ``top_n`` largest store entries, and
-    the base-distro dir sizes -- the evidence that names the image's dominant
+    the base-distro dir sizes; the evidence that names the image's dominant
     cost so Phase 1 (#1332) cuts the right thing instead of guessing. The store
     walk excludes ``/nix/store/.links`` (see ``_STORE_DU_CMD``) so the per-entry
     sizes resolve real derivations instead of collapsing into the hardlink farm.
@@ -298,12 +298,12 @@ class DockerSession:
 
 
 # Bound on the failure diagnostic kept per segment. A non-zero lifecycle
-# segment is the measurement's signal, but its cause lives in stderr -- which
+# segment is the measurement's signal, but its cause lives in stderr; which
 # the orchestrator was discarding, leaving a failed measurement undiagnosable
 # (CLAUDE.md section 4: a check that fires must say what went wrong). Keep the
 # tail (the actionable error is the last thing written), ASCII-sanitised so it
 # survives the GitHub posting boundary, and length-capped so a runaway log
-# cannot bloat the report. Diagnostic only -- never an env or secret dump.
+# cannot bloat the report. Diagnostic only; never an env or secret dump.
 _STDERR_TAIL_LINES = 20
 _STDERR_TAIL_CHARS = 2000
 

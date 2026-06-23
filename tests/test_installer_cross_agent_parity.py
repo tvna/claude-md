@@ -6,7 +6,7 @@ provisioner as *shared*, and #1608 wired the formerly Claude-only ones
 into the codex target (devin mirrors codex) and widened each script's remote
 gate to fire under Codex cloud as well as Claude Code on the Web.
 
-These tests pin both halves of that contract so a future regression -- an
+These tests pin both halves of that contract so a future regression; an
 installer wired into a strict subset of agents, or a provisioner that still
 gates on ``CLAUDE_CODE_REMOTE`` alone and is therefore a no-op under Codex --
 fails loudly:

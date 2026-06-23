@@ -9,7 +9,7 @@ the same version + asset + checksum to download the prebuilt binary in CI.
 Hardcoding those values a second time in ``install_waza.sh`` created a drift
 surface: a waza bump (manual or automated) would update ``flake.nix`` but
 silently leave the shell copy stale. This module makes ``flake.nix`` the
-single source of truth -- ``install_waza.sh`` resolves the coordinates from it
+single source of truth; ``install_waza.sh`` resolves the coordinates from it
 at runtime, so there is exactly one place to update (#1150).
 
 CLI::
@@ -23,7 +23,7 @@ The SRI ``sha256-<base64>`` from the flake is converted to the lowercase hex
 digest that ``sha256sum -c`` expects.
 
 Fails loud (exit != 0) when the flake is missing or a requested field cannot
-be parsed -- never returns a partial or guessed value (CLAUDE.md section 4).
+be parsed; never returns a partial or guessed value (CLAUDE.md section 4).
 
 Tested by ``tests/test_waza_pin.py``. Refs #1150, #1103.
 """

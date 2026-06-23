@@ -32,7 +32,7 @@
 - [ ] Facts vs. Assumptions split is honest (no speculation lurking in Facts)
 - [ ] Risk and blast radius assessed; Rollback steps are runnable
 - [ ] Issue number recorded on the `Closes #` line below
-- [ ] Replacement PR preflight passed (N/A -- first PR for this issue)
+- [ ] Replacement PR preflight passed (N/A; first PR for this issue)
 
 ### After-merge (CI)
 

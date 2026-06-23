@@ -2,9 +2,9 @@
 
 Couples the two label sources of truth so they cannot drift apart:
 
-* ``scripts/_retro_labels.py`` -- the ``retro:*`` feedback-loop constants
+* ``scripts/_retro_labels.py``; the ``retro:*`` feedback-loop constants
   (``ALL_RETRO_LABELS``) consumed by the scanner and the prior calculator.
-* ``.github/labels.json`` -- the SoT that ``apply-labels.yml`` reconciles
+* ``.github/labels.json``; the SoT that ``apply-labels.yml`` reconciles
   against (and prunes against).
 
 A ``prune=true`` reconciliation (run 26839401015) deleted ``retro:fp``,
@@ -13,7 +13,7 @@ absent from ``.github/labels.json``, wiping ``retro:fp`` triage state from 23
 auto-retro issues (root cause #1119; one-time restore PR #1120). Declaring the
 family stopped the bleeding, but only this test makes the coupling enforceable:
 if any retro label constant is ever missing from the JSON SoT, a future prune
-could delete it again -- and this gate fails first.
+could delete it again; and this gate fails first.
 
 Refs #1121 (this gate), #1119 (root cause), #1120 (restore).
 """

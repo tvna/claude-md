@@ -1,7 +1,7 @@
 """Tests for the SessionStart lychee installer shell guard.
 
 scripts/install-lychee.sh provisions the flake-pinned lychee binary onto PATH
-in Claude Code on the Web (CLAUDE_CODE_REMOTE=true) sessions only -- lychee is
+in Claude Code on the Web (CLAUDE_CODE_REMOTE=true) sessions only; lychee is
 web-only by design (not wired into the nix devShell). These tests pin the
 remote gate (silent no-op off-remote), the idempotent skip when a lychee at the
 pinned version is already on PATH, and the SessionStart registration. The

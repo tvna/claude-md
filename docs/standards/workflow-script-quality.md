@@ -398,7 +398,7 @@ disk I/O inside strategies).
 **Adoption procedure.** Follow the M10 dependency procedure to add
 `hypothesis` (already declared in `[dependency-groups].dev`,
 introduced by #199). New property tests live next to the existing
-example-based tests for the same script -- they extend the test
+example-based tests for the same script; they extend the test
 module, never replace its parametrized cases.
 
 **Mutation testing is deferred (#199).** Tools such as `mutmut` and
@@ -452,7 +452,7 @@ The aggregate gate (`[tool.coverage.report].fail_under` in
 the source tree. When the tree is large, a newly added file with 0%
 coverage barely moves the aggregate. For example, with a 9 000-line
 tree at 92% coverage, a new 100-line file with no tests drops the
-aggregate to only 91.2% -- well above a typical 90% floor. The new
+aggregate to only 91.2%; well above a typical 90% floor. The new
 file ships with zero coverage while all gates appear green.
 
 **Gate 1: aggregate post-merge threshold**
@@ -471,7 +471,7 @@ it fires after merge and opens a tracking issue via
 `PreToolUse` hook before `mcp__github__(create_pull_request|update_pull_request)`
 and as a `pre-push` pre-commit stage hook. It:
 
-1. Runs `git diff --name-only origin/main -- scripts/` to identify
+1. Runs `git diff --name-only origin/main; scripts/` to identify
    changed public `scripts/*.py` files (private helpers prefixed with
    `_` are skipped; they are tested indirectly through their callers).
 2. Reads or generates `coverage.json` (`pytest --cov --cov-report=json`).

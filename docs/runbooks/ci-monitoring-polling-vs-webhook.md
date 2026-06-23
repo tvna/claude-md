@@ -9,7 +9,7 @@ so operators can choose the right one for their latency and reliability needs.
 `PostToolUse` hook (`scripts/post_pr_create_ci_monitor.py`) launches
 `gh pr checks --watch` as a detached background process.
 
-**Event source.** GitHub REST API -- polled on a fixed interval by the `gh`
+**Event source.** GitHub REST API; polled on a fixed interval by the `gh`
 CLI until all check runs settle.
 
 **Delivery path.** Subprocess → `/tmp/claude-md-pr-ci-monitor-<pr>.log`.
@@ -34,7 +34,7 @@ running immediately after PR creation, with no additional operator action.
 `workflow_run`, `pull_request_review`, and `issue_comment` events to the
 session via push.
 
-**Event source.** GitHub App webhook -- push delivery on each qualifying event.
+**Event source.** GitHub App webhook; push delivery on each qualifying event.
 
 **Delivery path.** GitHub HTTP POST → Claude Code session event queue.
 
@@ -46,7 +46,7 @@ the operator manually re-checks CI. The session receives no notification.
 
 **Latency.** Near real-time (typically < 1 s after the event fires on GitHub).
 
-**When to use.** Whenever webhook semantics are required -- e.g., the operator
+**When to use.** Whenever webhook semantics are required; e.g., the operator
 expects to be notified immediately when CI fails or a review is posted, rather
 than waiting for the next poll cycle.
 
@@ -79,7 +79,7 @@ failure go unnoticed until a 30-minute heartbeat fired
 - **Steady-state heartbeat (follow-up).** Only after that initial CI signal
   is known should a longer session-level heartbeat interval (for example
   `FREQ=MINUTELY;INTERVAL=30`) take over. The heartbeat is for ongoing
-  follow-up -- re-runs, new pushes, late reviews -- not for first CI discovery.
+  follow-up; re-runs, new pushes, late reviews; not for first CI discovery.
 
 **The gap to avoid.** Do not make a long heartbeat the *only* monitor on a
 freshly opened PR. A 30-minute interval as the first signal can leave a

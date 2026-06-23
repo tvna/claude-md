@@ -285,7 +285,7 @@ def _normalize_policy_text(text: str) -> str:
 
 # The required ``## Resource Consumption`` PR section
 # (scripts/session_resource_report.py) always carries fixed ``resource``
-# wording in its heading -- it reports the session cost of producing the PR,
+# wording in its heading; it reports the session cost of producing the PR,
 # never the PR's own work. Left in the type-fit scan it would mis-classify
 # every non-bot PR that merely carries the section as performance work. This
 # is the same relayed/boilerplate-text root cause as the trusted-bot body

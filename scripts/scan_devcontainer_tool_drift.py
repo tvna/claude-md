@@ -11,8 +11,8 @@ tool X" to "the devcontainer provides tool X".
 This is the deterministic gate that closes that loop. The authoritative list
 of tools a gate needs at runtime is the union of ``required_bin`` across
 ``scripts/preflight_all.py`` STEPS. For each such tool this gate asserts that
-``flake.nix`` provisions it -- matched by a registered marker string in
-:data:`TOOL_FLAKE_MARKERS` -- or that the tool is explicitly excused in
+``flake.nix`` provisions it; matched by a registered marker string in
+:data:`TOOL_FLAKE_MARKERS`; or that the tool is explicitly excused in
 :data:`ALLOWLIST` with a rationale. A new ``required_bin`` entry with neither
 a marker nor an allowlist entry fails the gate with a remediation message.
 

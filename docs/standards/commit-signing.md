@@ -13,7 +13,7 @@ procedure lives in [`docs/runbooks/rulesets.md`](../runbooks/rulesets.md).
 - `.github/rulesets/main.json` declares the `required_signatures` rule, so
   every commit object on `main` must carry a verified signature.
 - Signature verification on `main` is satisfied by **GitHub's web-flow
-  signature on the squash-merge commit** -- not by signing feature-branch
+  signature on the squash-merge commit**; not by signing feature-branch
   commits.
 - No signing key is placed in any agent / CI runner container. Agent commits
   (`claude/*`) and human feature-branch commits stay unsigned on their feature
@@ -49,7 +49,7 @@ managed git proxy. These commits are treated exactly like any other
 `claude/*` feature-branch commit: they stay **unsigned on the branch** and
 inherit GitHub's web-flow signature when the PR is squash-merged. A PR built
 solely from web-session commits is therefore mergeable once it is green and
-up to date with `main` -- the squash commit GitHub creates is `Verified` and
+up to date with `main`; the squash commit GitHub creates is `Verified` and
 satisfies `required_signatures`. This holds when the only unsigned objects are
 the commits being squashed; for the unsigned-*ancestor* exception (for example
 an in-session `Merge origin/main` commit), see the exception bullet below.
@@ -60,7 +60,7 @@ so it is **not** part of this standard:
 - A session may have an SSH signing key configured, but its committer identity
   (`noreply@anthropic.com`) is not a GitHub account that has registered that
   key as a *signing* key. GitHub marks such a commit `Unverified`, and an
-  `Unverified` signature does **not** satisfy `required_signatures` -- only the
+  `Unverified` signature does **not** satisfy `required_signatures`; only the
   squash-merge web-flow signature does. Provisioning a key into the session
   would not change this without also re-homing the committer identity onto a
   GitHub account that owns the registered signing key, which the keyless
@@ -74,44 +74,44 @@ so it is **not** part of this standard:
   [#1494](https://github.com/tvna/claude-md/issues/1494).
 - **Exception (unsigned ancestor commits).** The squash property above assumes
   the branch's only unsigned objects are the commits being squashed. A branch
-  that has accumulated an unsigned *ancestor* it no longer rewrites -- for
+  that has accumulated an unsigned *ancestor* it no longer rewrites; for
   example an in-session `Merge origin/main` commit, or the legacy
   `github-actions[bot]` ancestor in
-  [#1560](https://github.com/tvna/claude-md/issues/1560) -- can instead have the
+  [#1560](https://github.com/tvna/claude-md/issues/1560); can instead have the
   merge box report `Commits must have verified signatures` and block the squash;
   `gh pr merge --squash` then fails with `the base branch policy prohibits the
   merge`. Two resolutions, in order of preference:
-  1. **Primary -- repo-admin `--admin` override.** A repository administrator
+  1. **Primary; repo-admin `--admin` override.** A repository administrator
      merges with `gh pr merge <pr-number> --squash --admin`. Per the
      [`gh pr merge` manual](https://cli.github.com/manual/gh_pr_merge), `--admin`
      uses administrator privileges to "merge a pull request that does not meet
      requirements", so it bypasses *every* unmet `main.json` requirement on the
-     PR -- not only the unsigned-ancestor signature block but also required
+     PR; not only the unsigned-ancestor signature block but also required
      status checks, review-thread resolution, and code-owner review. The
      administrator MUST therefore treat `--admin` as a signature-block clearer
      only, and independently confirm the PR is otherwise ready first: required
      checks green, review threads resolved, code-owner review present, and the
      exact head SHA being merged. The signature invariant below holds regardless
-     -- GitHub still creates the squash commit and signs it web-flow `Verified`,
+    ; GitHub still creates the squash commit and signs it web-flow `Verified`,
      so no GPG/local signing is involved and no ruleset is relaxed. This is the
      live-observed resolution for the unsigned-ancestor block (Refs
      [#1780](https://github.com/tvna/claude-md/issues/1780),
      [#1727](https://github.com/tvna/claude-md/issues/1727)). It is
      **repo-admin only**: because `bypass_actors: []`, non-admin actors --
-     including remote agent / web sessions -- cannot self-merge and must use
+     including remote agent / web sessions; cannot self-merge and must use
      option 2 or request an admin merge.
-  2. **Fallback (no admin override available) -- recreate the branch.** Because
+  2. **Fallback (no admin override available); recreate the branch.** Because
      `non_fast_forward` forbids rewriting the unsigned ancestor in place,
      **recreate the branch off current `main` so the stale unsigned ancestor is
      dropped** (a delete+create or a replacement PR), exactly as the
      triage-report flow does with `recreate=True` (see
      [Bot-generated PR commits](#bot-generated-pr-commits-app-bot-signed)). The
-     recreated feature commits follow the normal keyless path -- they stay
+     recreated feature commits follow the normal keyless path; they stay
      **unsigned** and inherit the squash signature; do **not** try to sign them
      (ineffective, per the first bullet above).
 
   In neither case relax `required_signatures` or add a `bypass_actors` entry to
-  force the merge -- that breaks the normative invariant below. The `--admin`
+  force the merge; that breaks the normative invariant below. The `--admin`
   override does **not** do this: it leaves the ruleset intact and still yields a
   `Verified` squash commit on `main`. Confirm the squash-signature behaviour per
   "Verify before enforcing" before relying on it.
@@ -131,7 +131,7 @@ Workflows that open automated PRs (`generate-agents.yml`,
 `post-merge.yml` decision-tree and triage-report jobs, and the
 devcontainer pin / flake-bump flows) do **not** use a runner `git push`.
 A commit pushed via `git` from a runner is authored by the persisted
-`github-actions[bot]` token and is **not** signed -- `git` cannot mint
+`github-actions[bot]` token and is **not** signed; `git` cannot mint
 GitHub's web-flow signature, and a GitHub App account cannot hold its own
 signing key. Instead these workflows author the commit through the GitHub
 GraphQL `createCommitOnBranch` mutation (`scripts/pr_upsert.py` ->
@@ -155,7 +155,7 @@ deleted and re-created off `main` with a single signed commit, never
 accumulating ancestry. The append variant left a legacy unsigned ancestor
 (an old `github-actions[bot]` `git push` commit) permanently on the reused
 branch, which `required_signatures` rejected while `non_fast_forward`
-blocked rewriting it -- the branch could only be cleared by deletion. A
+blocked rewriting it; the branch could only be cleared by deletion. A
 delete+create is not a force-push, so `non_fast_forward` still holds. The
 decision-tree generated-docs branch keeps the append path (its history
 carries no unsigned ancestor). Refs

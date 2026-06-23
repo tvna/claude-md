@@ -3,8 +3,8 @@
 
 The per-script AST docs under ``docs/generated/scripts/ast/`` (#1540) show
 intra-function control flow but not how the scripts depend on one another. This
-generator parses every ``scripts/*.py`` source with :mod:`ast` -- it never
-imports them, so it runs without triggering workflow side effects -- and keeps
+generator parses every ``scripts/*.py`` source with :mod:`ast`; it never
+imports them, so it runs without triggering workflow side effects; and keeps
 only the edges that point at a *sibling* script (e.g. ``from _git import ...``
 resolves to ``scripts/_git.py``). Standard-library and third-party imports are
 discarded.
@@ -121,7 +121,7 @@ def render_dependency_markdown(
         "This file is generated from `scripts/*.py` import statements by "
         "`python3 scripts/script_dependency_graph.py all-doc`. Do not edit it "
         "by hand: content under `docs/generated/scripts/` is owned by the "
-        "post-merge automation (refs #1540, #1543) -- update the source "
+        "post-merge automation (refs #1540, #1543); update the source "
         "scripts instead.",
         "",
     ]

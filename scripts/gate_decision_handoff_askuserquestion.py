@@ -2,8 +2,8 @@
 """Stop hook: nudge delegated decisions toward the AskUserQuestion tool.
 
 When the agent ends its turn by handing a decision back to the user in
-free-form chat -- outside plan mode and without having used the
-structured single-select question tool -- this hook returns a Stop
+free-form chat; outside plan mode and without having used the
+structured single-select question tool; this hook returns a Stop
 ``decision: block`` with a reason telling the agent to re-present the
 choice through that tool so the options are inspectable rather than
 buried in prose.

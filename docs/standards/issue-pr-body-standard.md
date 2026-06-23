@@ -168,7 +168,7 @@ headings form an allowlist enforced by `scripts/body_policy.py`
 (`unexpected_pr_sections`, mirrored client-side by
 `scripts/preflight_pr_template_shape.py`): only the headings listed below
 may appear, and a PR body carrying any other H2 is rejected. The body is
-conclusion-first (BLUF) -- `## Summary` leads, and `## Related Issue` is
+conclusion-first (BLUF); `## Summary` leads, and `## Related Issue` is
 kept last, just before the agent-attribution footer, per GitHub
 convention. The headings, in order, are:
 
@@ -365,7 +365,7 @@ would become a duplicate that fails the server gate and forces a manual
 does; the harness then supplies the single footer. The exception is
 deliberately create-only: `update_pull_request` is not auto-appended, so
 it keeps requiring exactly one trailing footer. Local Claude CLI and CI
-leave `CLAUDE_CODE_REMOTE` unset and are unaffected -- they keep requiring
+leave `CLAUDE_CODE_REMOTE` unset and are unaffected; they keep requiring
 a trailing footer. The server-side `verify_pr_agent_attribution_footer`
 gate is unchanged, so a genuine duplicate (two footers) still fails.
 Refs #1025.
@@ -378,7 +378,7 @@ normalized body (built from the footerless authored body) lacked the
 footer the update gate requires. The fixer now lifts the
 harness-appended footer out of the stored body and re-appends it to the
 normalized body it hands back, so the mandated update already carries
-exactly one footer -- the create-vs-update asymmetry is bridged
+exactly one footer; the create-vs-update asymmetry is bridged
 harness-enforced, not agent-remembered, without relaxing the update gate
 and without relying on PreToolUse `updatedInput` (unreliable under the
 multiple-hook PR matcher; see
@@ -459,7 +459,7 @@ verified on PRs #1033 and #1034, per #1035; the third in #1255 and
   because it uses only a single hyphen between two letters.
 - An angle-bracket placeholder token is stripped as an unknown HTML tag.
   A bare token such as `<sha>` (a less-than sign, an identifier, a
-  greater-than sign) -- for example a `git revert` argument -- is
+  greater-than sign); for example a `git revert` argument; is
   deleted **entirely** from the stored body, not even preserved as an
   `&lt;...&gt;` entity, and the deletion happens inside fenced code
   blocks too (verified in the original body of #1265, where the
@@ -513,7 +513,7 @@ are recorded here so future contributors do not need to re-derive them.
 | Surface | Status | Rationale |
 |---|---|---|
 | PR body | Enforced. | `verify-pr.yml` (`Validate PR-issue link` job) runs `scripts/issue_link.py verify`, which calls `gh api /repos/<repo>/issues/<N>` per ref and fails with `Referenced #N does not exist in <repo>.` for unresolved numbers. |
-| PR title | Inversely enforced. | `scripts/preflight_title_policy.py` (client-side preflight) and `scripts/title_policy.py` (`verify-pr.yml` `Validate title policy` job) deny any `(#NNN)` token in the title per [#167](https://github.com/tvna/claude-md/issues/167) / [#214](https://github.com/tvna/claude-md/issues/214). With the token forbidden, no number reaches the title to existence-check. Exception: a `revert(<scope>): ...` title may keep a `(#NNN)` token (`title_policy.pr_title_ref_is_exempt`) because it names the reverted PR/commit, not a redundant copy of the body issue link -- consistent with the `git revert` rollback default in CLAUDE.md section 3. |
+| PR title | Inversely enforced. | `scripts/preflight_title_policy.py` (client-side preflight) and `scripts/title_policy.py` (`verify-pr.yml` `Validate title policy` job) deny any `(#NNN)` token in the title per [#167](https://github.com/tvna/claude-md/issues/167) / [#214](https://github.com/tvna/claude-md/issues/214). With the token forbidden, no number reaches the title to existence-check. Exception: a `revert(<scope>): ...` title may keep a `(#NNN)` token (`title_policy.pr_title_ref_is_exempt`) because it names the reverted PR/commit, not a redundant copy of the body issue link; consistent with the `git revert` rollback default in CLAUDE.md section 3. |
 | Squash commit subject | Transitively covered. | GitHub's squash-merge default forms the subject as `<PR title> (#<PR-number>)`. The PR title is already gated, and `(#<PR-number>)` is the merge-event-issued PR number for this repository, so a separate existence check would be redundant. |
 | Individual commit message | Intentionally not enforced. | Only one commit lands on `main` per PR (squash merge), and that commit carries a PR body that has already passed the `Validate PR-issue link` job in `verify-pr.yml`. Gating every intermediate commit would (a) force a `Refs #N` line into commits whose link is already covered transitively, and (b) duplicate a check that the squash step makes structurally guaranteed. |
 

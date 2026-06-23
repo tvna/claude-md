@@ -7,7 +7,7 @@ python``, so pinning an exact patch makes the interpreter byte-deterministic
 across the post-merge doc committer (#1571), the verify-docs-drift gate
 (#1574), and a local checkout. Without it, ``uv run python`` binds to whatever
 3.12.x the host already has, and ``ast.unparse`` renders nested f-string format
-specs differently across patch releases -- producing phantom drift in
+specs differently across patch releases; producing phantom drift in
 ``docs/generated/`` (#1680, follow-up to #1533).
 
 This module is the deterministic counterpart to ``scripts/uv_pin.py``: where
@@ -37,7 +37,7 @@ Contract:
         prints the pin and an ``OK`` line on stdout when consistent, or one
         ``::error::`` line per drift. Exit 0 when consistent, 1 on drift,
         a malformed/missing pin, or an unreadable ``requires-python``.
-    Failure policy: fails loud per CLAUDE.md section 4 -- a non-exact pin or a
+    Failure policy: fails loud per CLAUDE.md section 4; a non-exact pin or a
         minor mismatch across requires-python / ruff / mypy / flake.nix is the
         *intended* signal, never silently swallowed.
 """
@@ -66,7 +66,7 @@ def read_pin(python_version_path: Path) -> str:
     """Return the stripped exact pin from ``.python-version``.
 
     Raises :class:`ValueError` on a missing file, an empty file, multiple
-    lines, or a non-exact value -- callers (CLI, CI) should let that surface
+    lines, or a non-exact value; callers (CLI, CI) should let that surface
     so failures are loud (CLAUDE.md section 4).
     """
     try:

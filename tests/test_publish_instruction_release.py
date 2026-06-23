@@ -139,3 +139,46 @@ def test_main_publish_happy_path(monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     rc = pir.main(["publish", "--tag", "instructions-v1.0.0", "--asset", str(asset)])
     assert rc == 0
     assert "https://x/rel" in capsys.readouterr().out
+
+
+def test_create_release_non_json_response_fails_loud(tmp_path: Path) -> None:
+    # HTTP 200 but non-JSON body -> lines 88-89 (JSONDecodeError path).
+    asset = tmp_path / "CLAUDE.md"
+    asset.write_text("x", encoding="utf-8")
+
+    def _non_json(*, method: str, url: str, payload: Any, token: str) -> tuple[int, str]:
+        return 200, "not-json"
+
+    with pytest.raises(RuntimeError, match="non-JSON"):
+        pir.publish(repo="o/r", tag="t", asset_paths=[str(asset)], token="t",
+                    apply_call=_non_json, upload_asset=_ok_upload([]))
+
+
+def test_create_release_missing_id_fails_loud(tmp_path: Path) -> None:
+    # HTTP 200, valid JSON but missing "id" key -> line 91.
+    asset = tmp_path / "CLAUDE.md"
+    asset.write_text("x", encoding="utf-8")
+
+    def _no_id(*, method: str, url: str, payload: Any, token: str) -> tuple[int, str]:
+        return 200, json.dumps({"html_url": "https://x/r"})
+
+    with pytest.raises(RuntimeError, match="no release id"):
+        pir.publish(repo="o/r", tag="t", asset_paths=[str(asset)], token="t",
+                    apply_call=_no_id, upload_asset=_ok_upload([]))
+
+
+def test_cmd_publish_runtime_error_returns_1(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # When publish() raises RuntimeError, _cmd_publish prints and returns 1 (lines 151-153).
+    asset = tmp_path / "CLAUDE.md"
+    asset.write_text("x", encoding="utf-8")
+    monkeypatch.setenv("GH_TOKEN", "t")
+    monkeypatch.setenv("REPO", "o/r")
+    monkeypatch.setattr(pir, "_github_apply_call", lambda **kw: (200, "bad-json"))
+    monkeypatch.setattr(pir, "_github_upload_asset", _ok_upload([]))
+    rc = pir.main(["publish", "--tag", "t", "--asset", str(asset)])
+    assert rc == 1
+    assert "Error" in capsys.readouterr().err

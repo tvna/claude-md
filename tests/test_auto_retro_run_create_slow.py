@@ -44,7 +44,7 @@ class TestRunCreateFailSoft:
     def test_back_link_failure_does_not_abort_retro(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """If the back-link POST fails, run() must still return 0 -- the
+        """If the back-link POST fails, run() must still return 0; the
         retro issue is already created and rolling it back would be
         worse than a missing back-link.
 
@@ -69,7 +69,7 @@ class TestRunCreateFailSoft:
     def test_terminal_label_failure_does_not_abort_retro(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """If the label POST fails, run() must still return 0 -- the retro
+        """If the label POST fails, run() must still return 0; the retro
         issue and back-link comment are already in place; the label is a
         secondary signal and must not roll back the audit trail.
 

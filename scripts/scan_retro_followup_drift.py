@@ -9,7 +9,7 @@ in ``tests/test_scan_retro_followup_drift.py``.
 This is PR1 of the TP/FP retrofit that addresses retro-issue
 non-convergence: ``scripts/auto_retro.py:compute_repair_signals`` uses
 only single-PR local features, with no mid-to-long-term context. The
-scanner closes the loop in the opposite direction -- it watches the
+scanner closes the loop in the opposite direction; it watches the
 follow-up issues/PRs the retro proposed and labels the retro when those
 follow-ups drift (stale, abandoned, missing). Operators upgrade
 ``retro:fp-candidate`` to ``retro:fp`` (or relabel ``retro:tp``) at
@@ -21,7 +21,7 @@ and ``scripts/auto_retro.py``: pure functions on top, a thin
 :func:`gh_api` subprocess boundary at the bottom, monkeypatched in tests.
 
 Drift rules (deterministic, no body-text interpretation per
-CLAUDE.md section 2 -- state, label, link-structure only):
+CLAUDE.md section 2; state, label, link-structure only):
 
 * Follow-up issue closed with ``state_reason == "not_planned"`` -> ``fp_confirmed``.
 * Follow-up PR closed unmerged (``state == "closed"`` and ``merged is False``)
@@ -35,7 +35,7 @@ CLAUDE.md section 2 -- state, label, link-structure only):
 Idempotency:
 
 * Skip retros that already carry ``retro:tp`` or ``retro:fp``
-  (operator-confirmed -- the scanner must not overwrite operator state).
+  (operator-confirmed; the scanner must not overwrite operator state).
 * Skip relabelling when ``retro:fp-candidate`` is already present for a
   candidate-level drift result.
 * Upgrade ``retro:fp-candidate`` to ``retro:fp`` when the drift result
@@ -199,7 +199,7 @@ def decide_target_label(
     Idempotency rules:
 
     * Operator-confirmed retros (``retro:tp`` or ``retro:fp`` already
-      present) are never modified -- the scanner must not overwrite
+      present) are never modified; the scanner must not overwrite
       operator state.
     * A candidate-level result is suppressed when the retro already
       carries ``retro:fp-candidate``.
@@ -251,7 +251,7 @@ def build_summary(
 
 
 # ---------------------------------------------------------------------------
-# Side-effecting boundary -- mocked in tests
+# Side-effecting boundary; mocked in tests
 # ---------------------------------------------------------------------------
 
 

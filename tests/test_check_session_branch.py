@@ -18,7 +18,7 @@ pytestmark = pytest.mark.shard_preflight
 
 
 # ---------------------------------------------------------------------------
-# check() -- environment gate
+# check(); environment gate
 # ---------------------------------------------------------------------------
 
 
@@ -39,7 +39,7 @@ def test_check_returns_none_when_branch_unavailable(monkeypatch: pytest.MonkeyPa
 
 
 # ---------------------------------------------------------------------------
-# check() -- notice content
+# check(); notice content
 # ---------------------------------------------------------------------------
 
 
@@ -71,7 +71,7 @@ def test_check_message_includes_refspec_example(monkeypatch: pytest.MonkeyPatch,
 
 
 # ---------------------------------------------------------------------------
-# check() -- file write
+# check(); file write
 # ---------------------------------------------------------------------------
 
 
@@ -124,7 +124,7 @@ def test_check_repairs_seed_missing_trailing_newline(monkeypatch: pytest.MonkeyP
     # newline. append_branch only inserts a separator on the append path;
     # when the current branch is already a member it dedup-returns WITHOUT
     # touching the file, so a malformed seed would persist on disk and the
-    # NEXT session's append would concatenate onto it -- the exact corruption
+    # NEXT session's append would concatenate onto it; the exact corruption
     # that wedged the gate. The hook must guarantee the seed ends with a
     # newline independently of append_branch.
     monkeypatch.setenv("CLAUDE_CODE_REMOTE", "true")
@@ -198,7 +198,7 @@ def test_main_exits_zero_when_check_raises() -> None:
 
 
 # ---------------------------------------------------------------------------
-# _current_branch() -- subprocess handling
+# _current_branch(); subprocess handling
 # ---------------------------------------------------------------------------
 
 

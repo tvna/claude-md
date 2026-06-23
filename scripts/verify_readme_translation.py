@@ -9,7 +9,7 @@ Contract:
 
 * Read the changed-file list as ``git diff --name-only {base}..HEAD``.
 * If ``README.md`` is in that set, ``README.ja.md`` and ``README.zh.md``
-  must also be in it -- unless the PR body carries the literal opt-out
+  must also be in it; unless the PR body carries the literal opt-out
   marker ``<!-- readme-translation-ack -->`` (case-insensitive, optional
   surrounding whitespace inside the comment).
 * Read the PR body from ``--body-file`` when supplied, otherwise from
@@ -28,7 +28,7 @@ Wiring:
   ``fetch-depth: 0``, so the diff range is reachable without an extra
   checkout step.
 
-Failure policy: gate per CLAUDE.md section 4 -- exits 1 with
+Failure policy: gate per CLAUDE.md section 4; exits 1 with
 ``::error::`` annotations when drift is detected or git invocation
 fails. Empty input (no README touched, or PR body without marker) is
 the happy path, not a skip.
@@ -129,7 +129,7 @@ def evaluate_drift(
     * Anything else (no README touched, all three touched, translations
       only, or skip marker present) -> exit 0.
 
-    Note: a PR that touches only ``README.ja.md`` is allowed -- the
+    Note: a PR that touches only ``README.ja.md`` is allowed; the
     contract guards the English-only-edit failure mode, not the inverse.
     Reviewers catch translation-only churn through normal review.
     """
@@ -242,7 +242,7 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _run(cmd: list[str], *, runner=subprocess.run):
-    """Thin subprocess boundary -- the only impure surface in this module.
+    """Thin subprocess boundary; the only impure surface in this module.
 
     ``check=True`` raises ``CalledProcessError`` on non-zero exit; the
     caller in :func:`_cmd_verify` translates that into the fail-loud

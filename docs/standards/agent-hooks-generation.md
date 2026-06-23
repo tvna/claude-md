@@ -20,7 +20,7 @@ relative paths:
 A relative `scripts/...` path only resolves when the agent launches the hook
 with the working directory at the repository root. When a session starts from a
 subdirectory (`cd subdir && claude`), the path misses the script and the hook
-silently fails to run -- including the safety gates (branch/base checks,
+silently fails to run; including the safety gates (branch/base checks,
 non-ASCII preflight, sensitive-read blocks). The scripts themselves already
 resolve the repo root internally (`Path(__file__).resolve().parents[...]` for
 Python, `$(dirname "$0")` for shell); the gap was purely that the **command
@@ -53,10 +53,10 @@ generated config or the `--check` drift gate.
 Rationale: every web installer reproduces a devcontainer capability that the nix
 path skips, and codex/devin web sessions equally lack that nix path, so all
 installers are provisioned for uniform cross-agent parity. Each entry still
-records `functionally_required` -- whether a pre-commit / local gate invokes the
+records `functionally_required`; whether a pre-commit / local gate invokes the
 binary directly (`true` for `uv`, `bun`, `actionlint`; `false` for the
 explicit-use binaries `rtk`, `apm`, `waza`, `ccusage`, `zizmor`, `lychee`,
-`betterleaks`) -- to show which installers are already operationally needed
+`betterleaks`); to show which installers are already operationally needed
 versus provisioned for uniformity. `ccusage` is an accepted no-op under
 codex/devin, where its Claude-scoped telemetry has no data source.
 
@@ -79,7 +79,7 @@ directly (devin is not assumed to mirror codex) and fails when an installer is
 wired into a strict subset of agents. The only escape hatch is a per-agent
 **contract** in `INSTALLER_PARITY_EXEMPTIONS`: an entry must declare the exact
 `agents` subset, a `rationale`, and a tracking `issue`, and the gate verifies
-that declaration matches the actual wiring -- a stale, dangling, or
+that declaration matches the actual wiring; a stale, dangling, or
 all-agents-covering exemption fails loudly, so a genuinely-missing agent can no
 longer hide behind it. This turns the `install-bun` claude-only miss that
 reached the operator's eye into a gate.
@@ -110,7 +110,7 @@ the generator is safe to run repeatedly.
 
 If `git rev-parse --show-toplevel` fails (the CWD is outside any git worktree,
 or git is absent), the `cd` fails and the `&&` short-circuits, so the hook does
-not run -- the same outcome as the pre-existing relative-path behavior in that
+not run; the same outcome as the pre-existing relative-path behavior in that
 already-broken context, not a regression. The wrapper fixes the in-repo
 subdirectory case, which is the reported defect.
 
@@ -122,7 +122,7 @@ be forgotten when a hook is added. The contract is enforced deterministically:
 - `gen-agent-hooks` in [`.pre-commit-config.yaml`](../../.pre-commit-config.yaml)
   runs `scripts/gen_agent_hooks.py --check` whenever the source or any generated
   config changes. It also runs in CI via `prek` inside `preflight_all.py`.
-- `--check` fails when a committed config does not match a fresh render -- i.e.
+- `--check` fails when a committed config does not match a fresh render; i.e.
   the moment someone hand-edits a config (and could reintroduce a CWD-relative
   command) instead of regenerating.
 

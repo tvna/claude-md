@@ -19,7 +19,7 @@ internally consistent:
 - every key in the registry is a known defect class (no orphaned rows);
 - every known defect class has a row in the registry (no missing rows).
 
-It does not prove the backing gate is *correct* -- only that a row marked
+It does not prove the backing gate is *correct*; only that a row marked
 enforced has a gate that exists. Tightening a row from doc-only/partial to
 enforced (and adding the gate it names) is the unit of follow-up work.
 

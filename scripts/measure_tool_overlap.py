@@ -19,8 +19,8 @@ the precedent for; the host DuckDB store is the metrics convention the records
 match. The workflow never writes the DB (ephemeral CI is out of scope for the
 host-local store by the #826 decision); it uploads the JSON instead.
 
-Design (M1): pure functions on top -- ``parse_*`` JSON parsers, ``diff_findings``,
-``build_record``, ``render_markdown`` -- and a thin IO boundary at the bottom
+Design (M1): pure functions on top; ``parse_*`` JSON parsers, ``diff_findings``,
+``build_record``, ``render_markdown``; and a thin IO boundary at the bottom
 (``_run`` subprocess wrapper, the ``collect_*_gate`` adapters that import the
 existing scan modules, and ``main``). ``measure_pair`` takes the tool runner and
 gate collector as injected callables so the orchestration is unit-tested without
@@ -28,7 +28,7 @@ the external binaries (which are NOT on the coverage runner).
 
 Redaction (CLAUDE.md Section 4, #88): betterleaks is run with ``--redact=100``
 and only its rule id / repo-relative path / line are read. The matched secret
-VALUE never enters a Finding, a record, the JSON, or the Markdown -- only
+VALUE never enters a Finding, a record, the JSON, or the Markdown; only
 non-sensitive counts, paths, rule ids, and per-side durations are recorded.
 
 Contract:
@@ -43,7 +43,7 @@ Contract:
            to ``--report`` or stdout; exit 0 on success. With ``--smoke``,
            prints one status line per pair and exits 1 iff any tool rejected its
            argv (empty / unparseable JSON stdout); an absent binary is skipped.
-  Failure policy: fails loud per CLAUDE.md Section 4 -- a measurement is never
+  Failure policy: fails loud per CLAUDE.md Section 4; a measurement is never
            faked with an empty result. A configured tool binary that is absent
            raises ``ToolUnavailableError``; a tool that exits unexpectedly or
            emits unparseable JSON raises ``RuntimeError``/``ValueError``; an
@@ -103,7 +103,7 @@ def parse_zizmor(stdout: str) -> list[Finding]:
 
     zizmor emits a JSON array of audit findings; each has an ``ident`` (rule)
     and one or more ``locations`` carrying a local ``given_path`` and a
-    tree-sitter ``start_point.row`` (0-based -- converted to a 1-based line to
+    tree-sitter ``start_point.row`` (0-based; converted to a 1-based line to
     line up with the 1-based lines the bespoke gates report).
     """
     data = json.loads(stdout) if stdout.strip() else []
@@ -367,8 +367,8 @@ def collect_markdown_links_gate(repo_root: Path) -> list[Finding]:
 def collect_secrets_gate(repo_root: Path) -> list[Finding]:
     """Run scan_secrets over its tracked-file set (betterleaks's surface).
 
-    scan_secrets already returns only ``(path, line, rule_id)`` -- it never
-    surfaces the secret value -- so this adapter inherits the redaction.
+    scan_secrets already returns only ``(path, line, rule_id)``; it never
+    surfaces the secret value; so this adapter inherits the redaction.
     """
     return [
         Finding(rule_id=f.rule_id, path=f.path.as_posix(), line=f.line)
@@ -391,7 +391,7 @@ def _run(argv: Sequence[str], cwd: Path) -> tuple[str, float]:
 
     A non-zero exit is NOT an error here: every measured tool uses a non-zero
     exit to mean "findings present", which is normal measurement data. Only a
-    missing binary (FileNotFoundError) is fatal -- an absent tool must fail
+    missing binary (FileNotFoundError) is fatal; an absent tool must fail
     loud, never be recorded as an empty (zero-finding) result.
     """
     start = time.monotonic()
@@ -444,7 +444,7 @@ def betterleaks_argv() -> list[str]:
 
     ``dir .`` respects ``.gitignore`` (verified: a 97 MB gitignored ``.venv`` is
     not scanned), so the scope is the tracked + untracked-non-ignored working
-    tree -- which on a fresh CI checkout is the tracked files. It includes
+    tree; which on a fresh CI checkout is the tracked files. It includes
     Python files, which the gate (``scan_secrets``) delegates to ruff, so
     betterleaks's broader coverage surfaces as new-tool-only evidence rather
     than being hidden. A single positional path is used deliberately: passing
@@ -594,7 +594,7 @@ def measure_pair(
 
 # ---------------------------------------------------------------------------
 # Opt-in smoke validation (Refs #1632, Fact 1). The measurement collector
-# parses leniently -- an empty stdout yields zero findings -- so a tool that
+# parses leniently; an empty stdout yields zero findings; so a tool that
 # REJECTS its argv (e.g. betterleaks's `--no-git` on the `dir` subcommand, which
 # printed help to stderr and emitted no JSON) was recorded as a false
 # zero-finding result. This smoke step re-runs each tool's argv and asserts the
@@ -623,7 +623,7 @@ def smoke_pair(
 
     Returns a ``SmokeResult``: ``skipped`` when the binary is absent (opt-in:
     the coverage runner has no binaries) or the pair declares no argv builder;
-    ``fail`` -- loud -- when the tool produced no stdout (argv rejected) or
+    ``fail``; loud; when the tool produced no stdout (argv rejected) or
     unparseable JSON; ``ok`` otherwise. ``run`` is injected so the check is
     unit-tested without the external binaries; it resolves to :func:`_run` at
     call time (not def time) so a test can monkeypatch the module attribute.
@@ -642,7 +642,7 @@ def smoke_pair(
             spec.pair_name,
             spec.new_tool,
             "fail",
-            f"{spec.new_tool} produced no stdout for argv {argv!r} -- the tool "
+            f"{spec.new_tool} produced no stdout for argv {argv!r}; the tool "
             f"likely rejected a flag (help goes to stderr); a zero-finding "
             f"result here would be a false measurement",
         )
@@ -675,7 +675,7 @@ def cmd_smoke(specs: Sequence[PairSpec], repo_root: Path) -> int:
                 file=sys.stderr,
             )
         else:
-            print(f"smoke {result.pair_name} ({result.tool}): {result.status} -- {result.detail}")
+            print(f"smoke {result.pair_name} ({result.tool}): {result.status}; {result.detail}")
     return 1 if failed else 0
 
 

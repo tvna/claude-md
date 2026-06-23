@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """Render the per-agent hook configs from one source of truth.
 
-The three agent hook configs -- ``.claude/settings.json``,
-``.codex/hooks.json`` and ``.devin/hooks.v1.json`` -- previously each carried
+The three agent hook configs; ``.claude/settings.json``,
+``.codex/hooks.json`` and ``.devin/hooks.v1.json``; previously each carried
 their hook ``command`` strings as **repo-root-relative paths** such as
 ``python3 scripts/check_hooks_path.py`` or ``scripts/install-uv.sh``. Those
 only resolve when the agent happens to launch the hook with the working
 directory at the repository root. When a session starts from a subdirectory
 (``cd subdir && claude``), the relative path misses the script and the hook
-silently fails to run -- including the safety gates (branch/base checks,
+silently fails to run; including the safety gates (branch/base checks,
 non-ASCII preflight, sensitive-read blocks). See the recurrence-prevention
 design in ``docs/standards/agent-hooks-generation.md``.
 
@@ -17,7 +17,7 @@ This generator closes that gap structurally:
 * ``scripts/agent_hooks_source.json`` is the single source of truth. Its
   ``command`` strings stay in the clean repo-relative form humans read.
 * For every command that references a repo script, the generator injects a
-  **working-directory-independence wrapper** -- :data:`HOOK_CWD_PREFIX` --
+  **working-directory-independence wrapper**; :data:`HOOK_CWD_PREFIX` --
   that ``cd``\\ s to ``git rev-parse --show-toplevel`` before running the
   command. That is the same repo-root resolution ``.githooks/pre-push``
   already uses, and it deliberately does **not** use ``$CLAUDE_PROJECT_DIR``
@@ -28,7 +28,7 @@ This generator closes that gap structurally:
   with ``"mirror": "codex"`` rather than duplicating the config.
 
 The wrapper is applied at generation time, so it can never drift per agent or
-be forgotten when a new hook is added -- the recurrence-prevention contract is
+be forgotten when a new hook is added; the recurrence-prevention contract is
 the ``--check`` drift gate wired into ``.pre-commit-config.yaml`` and CI, which
 fails when a committed config does not match a fresh render of the source.
 
@@ -71,8 +71,8 @@ def command_needs_wrap(command: str) -> bool:
 
     The wrapper is only meaningful for commands that reference a path
     relative to the repository root. Commands that are already
-    location-independent -- the APM/superpowers ``${CLAUDE_PLUGIN_ROOT}``
-    passthrough, or a ``PATH`` binary such as ``rtk hook claude`` -- carry no
+    location-independent; the APM/superpowers ``${CLAUDE_PLUGIN_ROOT}``
+    passthrough, or a ``PATH`` binary such as ``rtk hook claude``; carry no
     ``scripts/`` token and are left untouched.
     """
     return any(token.startswith("scripts/") for token in command.split())
@@ -134,7 +134,7 @@ def render_targets(source: dict[str, Any]) -> dict[str, str]:
     """Map each target path to its rendered (wrapped) JSON text.
 
     A target may declare ``"mirror": "<agent>"`` instead of its own
-    ``config`` to reuse another target's rendered config verbatim -- this is
+    ``config`` to reuse another target's rendered config verbatim; this is
     how the Devin adapter stays byte-for-byte identical to Codex.
     """
     targets = source.get("targets")

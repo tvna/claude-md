@@ -55,7 +55,7 @@ identically across agents without it. See
 
 ## Verifying agent parity
 
-- `python3 scripts/gen_agent_hooks.py --check` -- the generated configs match
+- `python3 scripts/gen_agent_hooks.py --check`; the generated configs match
   the source of truth (no drift).
 - `tests/test_codex_hooks_config.py` / `tests/test_devin_hooks_config.py` --
   assert the CI-monitor and mergeability hooks are wired on PR creation for
@@ -65,9 +65,9 @@ identically across agents without it. See
 
 ## Companion
 
-- `docs/runbooks/refresh-behind-pr.md` -- the deterministic behind step.
-- `docs/runbooks/update-pr-branch-recovery.md` -- the conflict / replacement path.
-- `docs/runbooks/ci-monitoring-polling-vs-webhook.md` -- the CI monitor options.
-- `docs/standards/agent-hooks-generation.md` -- how per-agent configs are generated.
-- `scripts/agent_hooks_source.json` -- single source of truth for the hooks.
+- `docs/runbooks/refresh-behind-pr.md`; the deterministic behind step.
+- `docs/runbooks/update-pr-branch-recovery.md`; the conflict / replacement path.
+- `docs/runbooks/ci-monitoring-polling-vs-webhook.md`; the CI monitor options.
+- `docs/standards/agent-hooks-generation.md`; how per-agent configs are generated.
+- `scripts/agent_hooks_source.json`; single source of truth for the hooks.
 - Refs #1361, #1359.

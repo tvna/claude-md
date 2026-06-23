@@ -14,10 +14,10 @@ prohibition is added to the master instructions or a new gate lands.
 
 Each documented prohibition falls into one of three classes:
 
-- **A. Enforced** -- a deterministic gate already blocks the prohibited action.
-- **B. Enforceable gap** -- the action is machine-verifiable but had no gate
+- **A. Enforced**; a deterministic gate already blocks the prohibited action.
+- **B. Enforceable gap**; the action is machine-verifiable but had no gate
   (the rows this audit closes).
-- **C. Not deterministically enforceable** -- a judgment-based rule that a hook
+- **C. Not deterministically enforceable**; a judgment-based rule that a hook
   cannot decide; it stays a prompt-layer rule and is verified by review.
 
 ## A. Enforced (deterministic gate exists)
@@ -40,13 +40,13 @@ Each documented prohibition falls into one of three classes:
 
 | Documented prohibition (section) | Enforcing gate | Wiring |
 |---|---|---|
-| Keep confirmations/dry-runs for irreversible, outward-facing operations -- merge is outward and effectively irreversible (S4) | `scripts/gate_merge_safety.py` | PreToolUse `mcp__github__merge_pull_request` (claude + codex) |
+| Keep confirmations/dry-runs for irreversible, outward-facing operations; merge is outward and effectively irreversible (S4) | `scripts/gate_merge_safety.py` | PreToolUse `mcp__github__merge_pull_request` (claude + codex) |
 
 `gate_merge_safety.py` allows the merge only when GitHub reports the PR as
 `mergeable == true` and `mergeable_state == "clean"`; every other state, and
 every case where mergeability cannot be verified (missing `GH_TOKEN`, API
-failure, unidentifiable PR), is denied. It is **fail-closed** -- a deliberate
-deviation from the fail-open default of most gates -- because a merge is
+failure, unidentifiable PR), is denied. It is **fail-closed**; a deliberate
+deviation from the fail-open default of most gates; because a merge is
 irreversible-leaning, so the safe default is to block and let the operator
 resolve. This does not contradict CLAUDE.md section 3 (`merged` remains a
 legitimate terminal state): merge is gated on objective safety, not prohibited.
@@ -69,9 +69,9 @@ checked by human/agent review.
 
 ## Companion
 
-- `scripts/agent_hooks_source.json` -- single source of truth for the gates above.
-- `scripts/gen_agent_hooks.py` -- regenerates the per-agent configs (`--check` drift gate).
-- `docs/standards/agent-hooks-generation.md` -- how the configs are generated.
-- `docs/runbooks/merge-readiness-loop.md` -- the open-PR to just-before-merge loop the merge gate guards.
-- `scripts/gate_merge_safety.py` / `tests/test_gate_merge_safety.py` -- the gap-B gate and its tests.
+- `scripts/agent_hooks_source.json`; single source of truth for the gates above.
+- `scripts/gen_agent_hooks.py`; regenerates the per-agent configs (`--check` drift gate).
+- `docs/standards/agent-hooks-generation.md`; how the configs are generated.
+- `docs/runbooks/merge-readiness-loop.md`; the open-PR to just-before-merge loop the merge gate guards.
+- `scripts/gate_merge_safety.py` / `tests/test_gate_merge_safety.py`; the gap-B gate and its tests.
 - Refs #1563.

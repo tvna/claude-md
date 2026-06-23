@@ -98,12 +98,12 @@ def find_drift(
         if name not in servers:
             errors.append(
                 f"::error file={APM_LOCK_REL}::declared MCP server '{name}' is "
-                f"missing from mcp_servers -- {remediation}."
+                f"missing from mcp_servers; {remediation}."
             )
         if name not in configs:
             errors.append(
                 f"::error file={APM_LOCK_REL}::declared MCP server '{name}' is "
-                f"missing from mcp_configs -- {remediation}."
+                f"missing from mcp_configs; {remediation}."
             )
             continue
         for field, want in decl.items():
@@ -111,13 +111,13 @@ def find_drift(
             if got != want:
                 errors.append(
                     f"::error file={APM_LOCK_REL}::MCP server '{name}' {field} "
-                    f"drifted: apm.yml='{want}' lock='{got}' -- {remediation}."
+                    f"drifted: apm.yml='{want}' lock='{got}'; {remediation}."
                 )
     for name in sorted(servers | set(configs)):
         if name not in declared:
             errors.append(
                 f"::error file={APM_LOCK_REL}::locked MCP server '{name}' is not "
-                f"declared in apm.yml -- {remediation}."
+                f"declared in apm.yml; {remediation}."
             )
     return errors
 

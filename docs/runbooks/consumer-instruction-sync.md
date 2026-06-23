@@ -7,7 +7,7 @@ This runbook is for a downstream project that wants the compiled `CLAUDE.md` /
 symlink method (see
 [`docs/proposals/instruction-distribution-mechanism.md`](../proposals/instruction-distribution-mechanism.md)
 for why that method fails on a fresh clone). The result of this procedure is a
-**committed real file** -- never a symlink, never a submodule -- so it survives a
+**committed real file**; never a symlink, never a submodule; so it survives a
 fresh `git clone` such as a Claude Code on the web session.
 
 ## How it works
@@ -45,7 +45,7 @@ fresh `git clone` such as a Claude Code on the web session.
 - Pin a specific release **tag** (for example `instructions-v1.0.0`) in the
   workflow `env`. Bump it deliberately in a reviewed PR; do not follow `main`.
 - Every fetched file is verified against the release's `SHA256SUMS` with
-  `sha256sum -c`. A mismatch fails the job loudly -- it never commits an
+  `sha256sum -c`. A mismatch fails the job loudly; it never commits an
   unverified file.
 - For full supply-chain pinning, also record the expected sha256 of
   `SHA256SUMS` itself in the workflow and check it before trusting the manifest;
@@ -55,7 +55,7 @@ fresh `git clone` such as a Claude Code on the web session.
 
 Copy this into the consumer repository as `sync-claude-md.yml` inside its
 `.github/workflows/` directory, and adjust the marked values. Pin every action
-to a full commit SHA: the SHAs below are illustrative -- verify the current SHA
+to a full commit SHA: the SHAs below are illustrative; verify the current SHA
 from each action's releases before use.
 
 ```yaml
@@ -86,12 +86,12 @@ jobs:
     steps:
       # Recommended: restrict egress to the GitHub download hosts.
       - name: Harden runner
-        uses: step-security/harden-runner@<COMMIT_SHA>  # vX.Y.Z -- pin to a full commit SHA
+        uses: step-security/harden-runner@<COMMIT_SHA>  # vX.Y.Z; pin to a full commit SHA
         with:
           egress-policy: audit
 
       - name: Checkout consumer repository
-        uses: actions/checkout@<COMMIT_SHA>  # v6.0.3 -- pin to a full commit SHA
+        uses: actions/checkout@<COMMIT_SHA>  # v6.0.3; pin to a full commit SHA
         with:
           persist-credentials: false
 
@@ -116,7 +116,7 @@ jobs:
           rm -rf "$tmp"
 
       - name: Open a pull request on change
-        uses: peter-evans/create-pull-request@<COMMIT_SHA>  # vX.Y.Z -- pin to a full commit SHA
+        uses: peter-evans/create-pull-request@<COMMIT_SHA>  # vX.Y.Z; pin to a full commit SHA
         with:
           branch: chore/sync-claude-md
           title: "chore: sync agent instructions from tvna/claude-md"
@@ -149,6 +149,6 @@ test -f CLAUDE.md && ! test -L CLAUDE.md && echo "OK: committed real file"
 
 ## References
 
-- [`docs/proposals/instruction-distribution-mechanism.md`](../proposals/instruction-distribution-mechanism.md) -- the options, decision, and the retraction rationale.
-- [`.github/workflows/publish-instructions-release.yml`](../../.github/workflows/publish-instructions-release.yml) -- the master release workflow that produces the assets this template consumes.
-- [`README.md`](../../README.md) -- the consumer-facing summary that links here.
+- [`docs/proposals/instruction-distribution-mechanism.md`](../proposals/instruction-distribution-mechanism.md); the options, decision, and the retraction rationale.
+- [`.github/workflows/publish-instructions-release.yml`](../../.github/workflows/publish-instructions-release.yml); the master release workflow that produces the assets this template consumes.
+- [`README.md`](../../README.md); the consumer-facing summary that links here.

@@ -82,7 +82,7 @@ Add a plain-text line to the PR body (MCP-safe; mirrors the
 `philosophy-matrix-ack` pattern):
 
 ```
-doc-graph-waiver: NODE_ID -- reason for skipping co-change
+doc-graph-waiver: NODE_ID; reason for skipping co-change
 ```
 
 Multiple waivers are supported (one per line). A waived node is reported as

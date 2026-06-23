@@ -138,7 +138,7 @@ def fetch_live_ruleset_by_name(
         )
     if not matches:
         raise RuntimeError(
-            f"No live ruleset named {name!r} exists. The SoT declares one -- "
+            f"No live ruleset named {name!r} exists. The SoT declares one; "
             "dispatch the 'Apply rulesets' workflow first."
         )
     ruleset_id = matches[0]["id"]

@@ -7,7 +7,7 @@ marshals env vars; all logic lives here and is unit-tested in
 ``tests/test_auto_retro.py``.
 
 Implements CLAUDE.md section 3: "After each merge, auto-open a
-retrospective issue -- make this deterministic, not operator-memory."
+retrospective issue; make this deterministic, not operator-memory."
 Refs #234.
 
 Follows the refactor pattern established by ``scripts/scan_non_ascii.py``:
@@ -18,7 +18,7 @@ Skip conditions:
 
 * the merged PR is itself a retrospective. Detected when the title's
   ``type(scope)`` token contains the literal ``(auto-retro)`` scope (e.g.
-  ``fix(auto-retro):``, ``docs(auto-retro):``) -- covering both the
+  ``fix(auto-retro):``, ``docs(auto-retro):``); covering both the
   auto-opened retro shape and retro-closing PRs. Avoids recursion.
 * the merged PR was authored or merged by a login in
   ``_trusted_bots._TRUSTED_BOT_LOGINS``
@@ -350,7 +350,7 @@ def render_decision_tree_mermaid() -> str:
 
 
 # ---------------------------------------------------------------------------
-# Side-effecting boundary -- mocked in tests
+# Side-effecting boundary; mocked in tests
 # ---------------------------------------------------------------------------
 
 
@@ -417,7 +417,7 @@ def fetch_check_runs(
        PR-detail call is retried up to :data:`_MERGE_SHA_RETRY_ATTEMPTS`
        times with the :data:`_MERGE_SHA_RETRY_BACKOFF` sequence between
        attempts. If every attempt still yields ``None``, emit a
-       ``::warning::`` line and soft-fail to ``[]`` -- check_runs is an
+       ``::warning::`` line and soft-fail to ``[]``; check_runs is an
        augmenting signal for the Repair history table, not a correctness
        invariant. The ``sleeper`` parameter is injectable for tests
        (mirrors ``scripts/_github_api.py`` ``apply_call`` precedent).
@@ -578,7 +578,7 @@ def fetch_past_retro_labels(
     ``auto_retro.issue_labels`` convention (``type:docs`` +
     ``layer:meta`` + title contains ``retro``), then parses each
     item's body for the ``- Signals fired:`` line. Soft-fails on
-    search errors and on per-item JSON shape errors -- the prior
+    search errors and on per-item JSON shape errors; the prior
     degrades to empty (no skip, no tentative) rather than aborting
     the retro flow.
 
@@ -956,7 +956,7 @@ def search_open_retro_issues(repo: str) -> list[dict[str, Any]]:
     the GitHub search API does not honor leading parens in ``in:title``.
 
     The per-page cap (:data:`_SENTINEL_SEARCH_PAGE_SIZE`) is a soft
-    ceiling -- if it overflows the next cron tick processes the
+    ceiling; if it overflows the next cron tick processes the
     remainder. Returns the raw search items so the caller can read
     ``number``, ``title``, ``created_at``, and ``body``.
     """
@@ -1038,7 +1038,7 @@ def close_issue_as_not_planned(repo: str, number: int) -> None:
     """PATCH the issue to ``state=closed`` with ``state_reason=not_planned``.
 
     ``not_planned`` is the GitHub state_reason that semantically maps
-    to "closed without action" -- preserves the audit trail (the issue
+    to "closed without action"; preserves the audit trail (the issue
     existed) while signalling that no follow-up landed.
     """
     gh_api(
@@ -1209,7 +1209,7 @@ def run(event: dict[str, Any], repo: str) -> int:
     except subprocess.CalledProcessError as exc:
         # Fail-soft: check-runs is an augmenting signal for the Repair
         # history table. A transient API failure here must NOT block the
-        # retro -- the commit-subject signals still carry it. fetch_pr_commits
+        # retro; the commit-subject signals still carry it. fetch_pr_commits
         # remains fail-loud because its data is required for the body.
         print(
             f"::warning::fetch_check_runs failed (exit {exc.returncode}); "
@@ -1292,7 +1292,7 @@ def run(event: dict[str, Any], repo: str) -> int:
         except subprocess.CalledProcessError as exc:
             # Fail-soft: the terminal label is a secondary signal layered on
             # top of the retro+back-link audit trail. A label-add failure
-            # must NOT roll back the retro -- warn and continue so the
+            # must NOT roll back the retro; warn and continue so the
             # primary outputs remain intact.
             print(
                 f"::warning::apply_terminal_label failed "
@@ -1992,7 +1992,7 @@ def _cmd_triage_report_pr(args: argparse.Namespace) -> int:
     Reads the snapshot the preceding ``triage-report`` step wrote and upserts it
     onto the fixed refresh branch via :func:`pr_upsert.upsert_single_file_pr`,
     which creates a signed commit (createCommitOnBranch) instead of force-pushing
-    -- the #1466 fix. The upsert is called with ``recreate=True``: on each drift
+   ; the #1466 fix. The upsert is called with ``recreate=True``: on each drift
     the fixed branch is deleted and re-created off *base* with a single signed
     commit, so it never accumulates ancestry. Reusing-and-appending instead left a
     legacy unsigned ancestor on the branch that permanently violated the main
@@ -2052,7 +2052,7 @@ def _cmd_verify_retro_completeness(args: argparse.Namespace) -> int:
     """Gate a ``fix(auto-retro):`` PR on Repair history Cause/Next action.
 
     Skips (exit 0) for any PR that is not a retro-close PR, or whose body
-    links no retro issue, or whose linked retro cannot be fetched -- the
+    links no retro issue, or whose linked retro cannot be fetched; the
     gate must never block an unrelated PR or a transient API failure. When
     the linked retro is readable, it fails (exit 1) only if a non-artifact
     repair row still carries an empty / sentinel Cause or Next action cell.
@@ -2123,7 +2123,7 @@ def find_linked_retro_refs(
     *titles* maps issue number to title (typically from
     :func:`fetch_issue_titles`). A ref counts as a retro issue when its
     fetched title satisfies :func:`is_retro_issue_title`. Refs whose title
-    could not be fetched are skipped -- the caller must not block on a
+    could not be fetched are skipped; the caller must not block on a
     transient lookup failure (Refs #1069).
     """
     out: list[int] = []
@@ -2139,7 +2139,7 @@ def _cmd_verify_no_direct_retro_pr(args: argparse.Namespace) -> int:
 
     A retro issue is a triage signal, not a unit of work to implement
     directly. A PR that links (``Closes``/``Refs``) a retro issue must
-    itself be a retro-close PR -- a title whose ``type(scope)`` token
+    itself be a retro-close PR; a title whose ``type(scope)`` token
     carries the ``auto-retro`` scope (:func:`is_retro_pr`). Any other PR
     that links a retro issue is rejected (exit 1) so direct PRs off
     un-triaged retros are blocked at CI (Refs #1069).
@@ -2147,7 +2147,7 @@ def _cmd_verify_no_direct_retro_pr(args: argparse.Namespace) -> int:
     Fail-open boundary (matches :func:`_cmd_verify_retro_completeness`):
     the gate skips (exit 0) when the PR is itself a retro-close PR, when no
     linked issue resolves to a retro title, or when the linked-title lookup
-    cannot run -- it must never block an unrelated PR or a transient API
+    cannot run; it must never block an unrelated PR or a transient API
     failure.
     """
     repo = (

@@ -90,7 +90,7 @@ def build_comment(
     """Return the assembled review-reminder comment markdown."""
     header = "\n".join(
         [
-            f"## ATT&CK coverage review reminder -- {run_date}",
+            f"## ATT&CK coverage review reminder; {run_date}",
             "",
             "Quarterly review reminder for the MITRE ATT&CK coverage tracker.",
             f"Runbook: [`{runbook_path}`](https://github.com/{repo}/blob/main/{runbook_path}).",

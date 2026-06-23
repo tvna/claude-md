@@ -16,7 +16,7 @@ sources".
 ## How it is declared here
 
 This repository is the master that distributes `CLAUDE.md` / `AGENTS.md` /
-skills to downstream projects, so it declares context7 only -- it does not
+skills to downstream projects, so it declares context7 only; it does not
 wire any client config of its own. The declaration in `apm.yml` is:
 
 ```yaml
@@ -77,14 +77,14 @@ operator running `apm install` by hand. This supersedes the earlier stance
 - **Source of truth:** the `dependencies.mcp` block in `apm.yml`.
 - **Renderer:** `scripts/gen_mcp_json.py` reads `apm.yml` and writes
   `.mcp.json` offline and idempotently. It does *not* call `apm install`,
-  reach the MCP endpoint, or touch user-scope `~/.claude.json` -- it renders
+  reach the MCP endpoint, or touch user-scope `~/.claude.json`; it renders
   only the project-scope file from the in-repo declaration.
 - **Trigger:** the `SessionStart` hook chain in `.claude/settings.json`
   (`uv run python3 scripts/gen_mcp_json.py`), so generation is guaranteed
   every session rather than relying on operator memory.
 - **Not committed:** `.mcp.json` is a rendered build artefact and can carry
   per-client credentials, so it stays git-ignored
-  (`docs/standards/repo-scope.md`). The secret rule above still holds -- the
+  (`docs/standards/repo-scope.md`). The secret rule above still holds; the
   renderer never bakes a key into the file; an authenticated server supplies
   its key via the runtime `env` indirection.
 - **Drift check:** `scripts/gen_mcp_json.py --check` exits non-zero when the
@@ -106,7 +106,7 @@ operator running `apm install` by hand. This supersedes the earlier stance
 
 ## See also
 
-- [`apm.yml`](../../apm.yml) -- the declaration of record.
-- [`README.md`](../../README.md) -- "Using This From Another Project".
-- [`docs/runbooks/agent-provenance.md`](agent-provenance.md) -- provenance
+- [`apm.yml`](../../apm.yml); the declaration of record.
+- [`README.md`](../../README.md); "Using This From Another Project".
+- [`docs/runbooks/agent-provenance.md`](agent-provenance.md); provenance
   review criteria for MCP servers and other agent extensions.

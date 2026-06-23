@@ -57,7 +57,7 @@ _ADVISORY_NON_BLOCKING_LABEL = "severity:non-ascii-content"
 # safety layer without reason): if a threat:* label is ever re-created and applied
 # by hand, an otherwise-eligible Dependabot bump must still block and reach a human
 # (the disable-automerge path below closes the after-enable race). The strings are
-# self-contained literals -- there is no producer constant left to mirror;
+# self-contained literals; there is no producer constant left to mirror;
 # tests/test_dependabot_automerge.py pins the expected set.
 _THREAT_BLOCKING_LABELS = ("threat:response-needed", "threat:intel-needed")
 

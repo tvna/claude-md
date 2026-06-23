@@ -468,7 +468,7 @@ def test_store_du_cmd_excludes_links_farm() -> None:
     # Phase 1b (#1332): the store walk MUST exclude /nix/store/.links, else nix
     # store optimisation (a content-addressed hardlink farm) makes du pile the
     # whole closure onto the .links line and report the real package dirs as ~0
-    # bytes -- hiding the per-derivation cut target. This is the contract that
+    # bytes; hiding the per-derivation cut target. This is the contract that
     # made the breakdown resolvable; lock it so a refactor cannot silently drop
     # the exclude and regress to an unusable composition probe.
     assert "--exclude=.links" in mod._STORE_DU_CMD

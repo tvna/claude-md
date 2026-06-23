@@ -113,7 +113,7 @@ def build(
 
     raw = template_path.read_text(encoding="utf-8")
 
-    # Strip HTML comments -- they are for human template readers, not for
+    # Strip HTML comments; they are for human template readers, not for
     # the body policy parser, and keeping them clutters the generated body.
     body = _HTML_COMMENT_RE.sub("", raw)
 

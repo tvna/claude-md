@@ -424,7 +424,7 @@ class TestCheckpointRoundTrip:
 class TestMultiPRWindowing:
     """The #1435 regression: a second PR in one session must report the delta
     since the first PR-create, and the two deltas must sum to the session
-    total -- no double-counting of the first PR's tokens."""
+    total; no double-counting of the first PR's tokens."""
 
     def test_second_pr_reports_delta_not_cumulative(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: pytest.TempPathFactory

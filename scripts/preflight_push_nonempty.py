@@ -4,15 +4,15 @@
 Refs #1130. Retrospective for PR #1128 found a silent-commit-then-push-stale-HEAD
 failure mode: a chained ``git add && git commit -q && git push`` aborted at the
 quiet commit (a pre-commit hook rejected it, but ``-q`` swallowed the output),
-so the subsequent push shipped the unchanged base commit -- i.e. main's state
-WITHOUT the intended fix -- to the session branch. ``preflight_push_base.py``
+so the subsequent push shipped the unchanged base commit; i.e. main's state
+WITHOUT the intended fix; to the session branch. ``preflight_push_base.py``
 checks that HEAD *contains* the base, but not that HEAD has advanced *beyond*
 it, so the empty push slipped through.
 
 This hook closes that gap deterministically: when a ``git push`` is detected and
 the local ``HEAD`` resolves to the very same commit as the base tip
 (``origin/main``), there is no new work to push, so the push is denied. The
-loud denial points the agent back to inspecting ``git log -1`` -- exactly the
+loud denial points the agent back to inspecting ``git log -1``; exactly the
 manual save that caught the original incident.
 
 Fail-open: any hook error, a missing base ref, or a delete / dry-run push exits
@@ -77,7 +77,7 @@ def decide(
     if not _GIT_PUSH_RE.search(command):
         return None
     if _SKIP_FLAG_RE.search(command):
-        return None  # delete / dry-run pushes do not ship HEAD -- fail-open
+        return None  # delete / dry-run pushes do not ship HEAD; fail-open
 
     head = _resolve(runner, "HEAD")
     base = _resolve(runner, BASE_REF)

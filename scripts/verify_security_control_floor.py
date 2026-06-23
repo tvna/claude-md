@@ -10,8 +10,8 @@ explicit, non-empty exemption reason.
 Why a gate (CLAUDE.md section 3): the project raised ``labels``,
 ``apm-instructions`` and ``uv-pin-literal`` to the ``detect-and-file`` floor
 (auto-filing a per-family issue on drift, matching ``rulesets``). Without a
-deterministic check, a future family could land at ``detect-only`` -- detected
-but silently un-filed -- and only reviewer memory would catch it. This gate
+deterministic check, a future family could land at ``detect-only``; detected
+but silently un-filed; and only reviewer memory would catch it. This gate
 makes the floor a continuous, fail-loud invariant.
 
 Tier ladder (see the TOML header for the full contract):

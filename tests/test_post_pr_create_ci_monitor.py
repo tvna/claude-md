@@ -159,7 +159,7 @@ def test_main_emits_post_tool_context(monkeypatch: pytest.MonkeyPatch, capsys: p
 
 
 # ---------------------------------------------------------------------------
-# _walk() -- list branch
+# _walk(); list branch
 # ---------------------------------------------------------------------------
 
 
@@ -171,7 +171,7 @@ def test_walk_traverses_nested_list() -> None:
 
 
 # ---------------------------------------------------------------------------
-# extract_pr_number() -- string decimal branch
+# extract_pr_number(); string decimal branch
 # ---------------------------------------------------------------------------
 
 
@@ -181,7 +181,7 @@ def test_extract_pr_number_from_string_decimal() -> None:
 
 
 # ---------------------------------------------------------------------------
-# extract_repo() -- non-dict skip and REPO_KEYS branch
+# extract_repo(); non-dict skip and REPO_KEYS branch
 # ---------------------------------------------------------------------------
 
 
@@ -201,7 +201,7 @@ def test_extract_repo_finds_repository_full_name_key() -> None:
 
 
 # ---------------------------------------------------------------------------
-# main() -- malformed JSON and non-dict event
+# main(); malformed JSON and non-dict event
 # ---------------------------------------------------------------------------
 
 

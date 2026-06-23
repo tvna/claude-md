@@ -2,7 +2,7 @@
 """Verify that every Mermaid block under ``docs/`` parses before it renders.
 
 Refs #1597. Merged PR #1595 shipped a sequence-diagram whose message body
-contained a ``;`` -- which Mermaid treats as a statement separator -- producing
+contained a ``;``; which Mermaid treats as a statement separator; producing
 a render error that flowed into both the en and ja documents and was only
 caught after merge by author review. This gate replaces that author-review
 reliance with a deterministic check: it extracts every ` ```mermaid ` fenced
@@ -11,7 +11,7 @@ block from ``docs/**/*.md`` and parses it with the official Mermaid parser.
 Architecture mirrors the other ``scan_*.py`` gates: pure functions on top
 (block extraction, exemption, diagnostic formatting) and a single thin I/O
 boundary at the bottom that shells out to ``bun scripts/mermaid_parse.mjs``.
-The parser is the REAL Mermaid parser on purpose -- a bracket-balance heuristic
+The parser is the REAL Mermaid parser on purpose; a bracket-balance heuristic
 is explicitly not a substitute for proving a block renders (measure-first).
 
 Scope: every ` ```mermaid ` block under ``docs/`` is gated, including the

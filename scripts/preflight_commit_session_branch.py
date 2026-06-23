@@ -5,7 +5,7 @@ Refs #1181, #785. In remote execution environments (CLAUDE_CODE_REMOTE=true)
 the transport layer only permits pushes to the single branch that was
 checked out at session start (recorded in .git/CLAUDE_SESSION_BRANCH by
 check_session_branch.py). ``preflight_push_session_branch.py`` already
-enforces that at push time -- but that is the *last* moment the constraint
+enforces that at push time; but that is the *last* moment the constraint
 surfaces, after commits have already been stacked.
 
 The PR #1174 retrospective (#1181) traced a real failure to exactly that
@@ -73,7 +73,7 @@ def _current_branch() -> str | None:
     except OSError:
         return None
     if not head.startswith(_HEAD_REF_PREFIX):
-        return None  # detached HEAD -- fail-open
+        return None  # detached HEAD; fail-open
     branch = head[len(_HEAD_REF_PREFIX):].strip()
     return branch or None
 
@@ -96,7 +96,7 @@ def decide(event: dict[str, Any]) -> dict[str, Any] | None:
 
     current_branch = _current_branch()
     if not current_branch:
-        return None  # detached HEAD / unknown -- fail-open
+        return None  # detached HEAD / unknown; fail-open
 
     if is_authorized(current_branch, authorized):
         return None

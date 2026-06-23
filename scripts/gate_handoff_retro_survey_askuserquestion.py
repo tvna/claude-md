@@ -13,12 +13,12 @@ exact branching survey to run through the ``AskUserQuestion`` tool.
 Once per session, not once per PR
 ---------------------------------
 The survey is a session-handoff quality signal, so it fires once per
-*session*, aggregating every PR opened in the session -- not once per PR.
+*session*, aggregating every PR opened in the session; not once per PR.
 ``created_pr_numbers`` reads the current session's transcript only (a new
 session uses a fresh transcript), so it already returns just this session's
 PRs; ``evaluate`` blocks only when NONE of them carries a marker yet.
 Recording any one PR's survey covers the whole session, so a session that
-opens N PRs in a burst fires the gate once, not N times (#1594) -- repeated
+opens N PRs in a burst fires the gate once, not N times (#1594); repeated
 per-PR surveys added friction without proportional signal (CLAUDE.md
 section 5).
 
@@ -28,7 +28,7 @@ The earlier design (issue #1052 / PR #1053) gated
 ``mcp__github__merge_pull_request``. That only fires when the agent
 itself merges through the tool; under the human-UI-merge UX the agent
 never calls it, so the survey never appeared (observed on PR #1062).
-The handoff -- the agent's ``Stop`` -- is the only in-session moment
+The handoff; the agent's ``Stop``; is the only in-session moment
 that matches a human UI merge. Issue #1073 moves the trigger here.
 
 This Stop trigger is a settled design decision, not an open question. Retro
@@ -36,13 +36,13 @@ This Stop trigger is a settled design decision, not an open question. Retro
 trigger would be better, but the repository owner re-confirmed ``Stop`` is
 correct: under the human-UI-merge UX the agent never calls
 ``mcp__github__merge_pull_request``, so the ``Stop`` handoff remains the only
-in-session moment that matches a human merge. The trigger stays here -- do not
+in-session moment that matches a human merge. The trigger stays here; do not
 re-derive this conflict (refs #1672 / #1593).
 
 Why a Claude-only gate
 ----------------------
 ``AskUserQuestion`` is a Claude Code harness tool with no Codex / Devin
-equivalent, so -- exactly like ``gate_decision_handoff_askuserquestion``
+equivalent, so; exactly like ``gate_decision_handoff_askuserquestion``
 -- this gate lives only in ``.claude/settings.json``. The ``Stop`` event
 is outside the ``scan_hook_coverage_drift`` parity scope (SessionStart /
 PreToolUse / PostToolUse), so it needs no allowlist entry.
@@ -65,7 +65,7 @@ the survey. The flow is satisfaction-first, then scenario-branched:
    marker lets a later stop in the same session pass.
 
 When the survey derives "open a retro" (problem at high satisfaction, or any
-low-satisfaction handoff), the Stop-hook path -- not CI -- owns opening it
+low-satisfaction handoff), the Stop-hook path; not CI; owns opening it
 (Refs #1581 / responsibility-separation design D1). The agent first checks for
 an existing CI retro for the PR: it comments the local-specific repair detail
 (the process repairs CI cannot see) on that retro if one exists, otherwise it
@@ -76,14 +76,14 @@ the marker (so the Stop gate re-blocks) until that issue number is supplied.
 **Gate mode** (default): block the stop when a created PR has no marker.
 **Recorder mode** (``--record <pullNumber>``): write the marker. Optional
 ``--satisfaction <2..5>`` and ``--problem <text>`` persist the survey answers
-in the marker body -- the non-interactive fallback for when the interactive
+in the marker body; the non-interactive fallback for when the interactive
 ``AskUserQuestion`` confirmation cannot be submitted (issue #1081).
 ``--needs-retro`` (with the required ``--retro-issue <N>``) records that the
 survey derived a retro and which issue captured it.
 
 Fail-open per CLAUDE.md section 4: any malformed event, unreadable
 transcript, or unexpected exception exits 0 with no output. A gate bug
-must never wedge the session -- the server-side post-merge retro
+must never wedge the session; the server-side post-merge retro
 (``.github/workflows/post-merge.yml``) remains the backstop.
 """
 
@@ -123,14 +123,14 @@ _BLOCK_REASON = (
     "  1. Ask SATISFACTION first, anchored to an EXPLICIT timepoint: frame "
     "the question as 'satisfaction with the work as of the pre-merge handoff "
     "of this session (covering {pr_list}), stating today's date, time, and "
-    "timezone as YYYY-MM-DD HH:MM TZ -- e.g. JST and UTC together)' so the "
+    "timezone as YYYY-MM-DD HH:MM TZ; e.g. JST and UTC together)' so the "
     "score's reference moment is unambiguous when the marker is read back "
-    "later -- a date alone is ambiguous because a session can span hours and "
+    "later; a date alone is ambiguous because a session can span hours and "
     "cross the day boundary (single-select: 5 very satisfied / 4 satisfied / "
     "3 neutral / 2 somewhat dissatisfied).\n"
     "  2. Branch on that answer (emit the next question right away):\n"
     "     - high (4-5): ask whether any problem (rework / fix / surprise) "
-    "occurred, and DERIVE retro necessity from it -- repair-free means "
+    "occurred, and DERIVE retro necessity from it; repair-free means "
     "skip the retro, minor means a short note only, problem means open a "
     "retro issue.\n"
     "     - low (2-3): ask the main pain points (multi-select) and "
@@ -153,16 +153,16 @@ _BLOCK_REASON = (
     "number in ``created_pr_numbers``, read the ``mergeable`` and "
     "``mergeable_state`` fields, and include the result in the handoff "
     "message. If ``mergeable_state`` is not ``clean``, state the reason "
-    "explicitly (e.g. 'PR #N: blocked -- required reviews pending') so "
+    "explicitly (e.g. 'PR #N: blocked; required reviews pending') so "
     "the operator is never handed a silently blocked PR.\n"
     "  5. Record the handoff ONCE for the session. For a repair-free / minor "
     "outcome run 'python3 scripts/gate_handoff_retro_survey_askuserquestion.py "
     "--record {primary}'. For a retro outcome run it with "
     "'--record {primary} --needs-retro --retro-issue <N>' where <N> is the "
-    "issue you created or commented on -- the recorder refuses the marker "
+    "issue you created or commented on; the recorder refuses the marker "
     "(the Stop gate re-blocks) until that number is supplied. Recording any "
     "one of this session's PRs satisfies the gate for all of them. Then end "
-    "your turn. Do NOT call merge_pull_request -- the human merges {pr_list} "
+    "your turn. Do NOT call merge_pull_request; the human merges {pr_list} "
     "through the GitHub UI."
 )
 
@@ -254,8 +254,8 @@ def created_pr_numbers(entries: list[Any]) -> list[int]:
     error and whose body carries a ``/pull/<n>`` URL.
 
     A failed ``create_pull_request`` call is marked ``is_error: true`` by
-    the harness regardless of its body, and a common failure -- "A pull
-    request already exists for owner:branch .../pull/<n>" -- carries a
+    the harness regardless of its body, and a common failure; "A pull
+    request already exists for owner:branch .../pull/<n>"; carries a
     ``/pull/<n>`` URL pointing at the *existing* PR. Counting that as a
     creation would fire the handoff survey for a PR this session never
     opened (#1374), so error results are skipped.
@@ -296,7 +296,7 @@ def session_surveyed(created: list[int]) -> bool:
     only ever returns PRs opened in the current session (a fresh session uses a
     fresh transcript), so a single existing marker means the session's handoff
     survey is already done. The gate must then NOT re-fire for the sibling PRs
-    opened in the same multi-PR burst -- that double/triple-firing is #1594.
+    opened in the same multi-PR burst; that double/triple-firing is #1594.
     """
     return any(_marker_path(pr_number).exists() for pr_number in created)
 
@@ -355,7 +355,7 @@ def record(
     The marker's *existence* is all the gate checks, so a bare ``--record``
     stays valid. When ``satisfaction`` and/or ``problem`` answers are given
     (the non-interactive fallback for when ``AskUserQuestion`` cannot be
-    confirmed -- issue #1081), they are persisted as JSON in the marker body
+    confirmed; issue #1081), they are persisted as JSON in the marker body
     so a real signal is captured instead of an empty file.
 
     When the survey derives that a retrospective is needed (a problem at high

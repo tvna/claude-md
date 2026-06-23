@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Pre-push hook: run scripts/preflight_all.py before letting a push leave the
-# working tree. Refs #493 -- closes the verification-drift gap where CI gates
+# working tree. Refs #493; closes the verification-drift gap where CI gates
 # reject a push that no local gate ran first.
 #
 # Activation is opt-in (Git refuses to follow symlinks into a tracked hooks
@@ -8,7 +8,7 @@
 #
 #     git config core.hooksPath .githooks
 #
-# Escape hatch -- when a push is genuinely urgent (e.g. a security rollback)
+# Escape hatch; when a push is genuinely urgent (e.g. a security rollback)
 # the preflight loop can be bypassed by exporting PREFLIGHT_SKIP=1. This is an
 # explicit, observable bypass so the next retro can see it in shell history.
 

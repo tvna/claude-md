@@ -53,7 +53,7 @@ Out of scope:
 ## Assumptions
 
 - speculation: The mid-flow denial is most expensive not as latency but as
-  misdiagnosis risk -- the agent can read the denial as a branch-protection
+  misdiagnosis risk; the agent can read the denial as a branch-protection
   failure and take an incorrect recovery action.
 - speculation: Auto-refresh is safe to fold into the gate only when the
   refresh is itself deterministic and verifiable (a successful `git fetch`
@@ -70,7 +70,7 @@ call ... run `python scripts/preflight_main_freshness.py record`") names a
 vendor tool and a repository script. Walking the decision tree in
 `docs/prd/agent-rules-design-philosophy.md` section 4:
 
-- Q1 (tool-agnostic?): No -- it names `mcp__github__create_branch` and a
+- Q1 (tool-agnostic?): No; it names `mcp__github__create_branch` and a
   concrete script path. The rule is therefore demoted out of the universal
   text in its literal form.
 - The abstract, tool-agnostic form ("refresh a time-boxed precondition
@@ -106,7 +106,7 @@ is harness-enforced rather than agent-remembered. The intended shape:
    failure, diverged remote), keep the hard deny with the existing
    `build_deny_reason` message. Fail loud, never silently stamp.
 
-This sequence -- prove currency, then refresh, else deny -- is the reusable
+This sequence; prove currency, then refresh, else deny; is the reusable
 unit. The skill-ification premise is that this unit is packaged as a skill
 so any future time-boxed precondition gate (not only branch creation) can
 adopt auto-refresh without re-implementing the fetch-and-prove logic. The
@@ -136,7 +136,7 @@ that prove it are deterministic:
 # Universal artifacts are the verbatim apm compile output and carry no
 # repo-local nouns.
 uv run --with "apm-cli==0.12.1" --exclude-newer "14 days" apm compile
-git diff --exit-code -- CLAUDE.md AGENTS.md
+git diff --exit-code; CLAUDE.md AGENTS.md
 python3 scripts/scan_apm_portability.py verify \
   --path .apm/instructions/master.instructions.md \
   --path CLAUDE.md --path AGENTS.md
@@ -152,12 +152,12 @@ be implemented; it is tracked as the future issue in the acceptance criteria.
 
 ## References
 
-- #894 -- this issue: stamp expires mid-session, blocking create_branch in
+- #894; this issue: stamp expires mid-session, blocking create_branch in
   multi-PR flows. Source of Option A / B / C.
-- #654 -- the freshness preflight that introduced the 60-minute TTL gate.
-- #859 -- the multi-PR session where the mid-flow denial was observed
+- #654; the freshness preflight that introduced the 60-minute TTL gate.
+- #859; the multi-PR session where the mid-flow denial was observed
   (between PR #876 and PR #880).
-- `scripts/preflight_main_freshness.py` -- the concrete gate.
-- `.claude/settings.json` -- the `PreToolUse` hook registration.
-- `docs/prd/agent-rules-design-philosophy.md` -- the lane decision tree this
+- `scripts/preflight_main_freshness.py`; the concrete gate.
+- `.claude/settings.json`; the `PreToolUse` hook registration.
+- `docs/prd/agent-rules-design-philosophy.md`; the lane decision tree this
   document follows; not modified here.

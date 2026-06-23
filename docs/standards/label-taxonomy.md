@@ -93,10 +93,10 @@ Tracking issues may carry broad areas, but agents act on children.
 
 Apply `type:tracking` only when both conditions hold:
 
-1. **Sub-issue umbrella** -- the issue coordinates one or more child issues
+1. **Sub-issue umbrella**; the issue coordinates one or more child issues
    and takes no direct implementation commit itself; it closes only when all
    children close.
-2. **1-issue/N-PR** -- multiple PRs reference it with non-closing `Refs #N`
+2. **1-issue/N-PR**; multiple PRs reference it with non-closing `Refs #N`
    and none of them closes it on its own. The label is the structural
    requirement that lets those Refs-only PRs pass `verify-issue-link.yml`
    (`scripts/issue_link.py`), which otherwise rejects a Refs-only body unless

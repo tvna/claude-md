@@ -45,7 +45,7 @@ shared ``pr_upsert._merge_pr_if_clean`` helper. Refs #1352, #1539.
 The pin commit is created through the GitHub API (GraphQL
 ``createCommitOnBranch``), not a local ``git commit``: API commits are signed by
 GitHub and shown as Verified, with the App-bot token as author. A local runner
-commit is always unsigned -- and an App bot cannot hold a GPG/SSH signing key --
+commit is always unsigned; and an App bot cannot hold a GPG/SSH signing key --
 so the ``required_signatures`` rule on ``main`` would block it. Refs #1437.
 
 Environment variables:
@@ -136,7 +136,7 @@ def _create_pin_branch(
 
     The commit is authored through GraphQL ``createCommitOnBranch`` rather than a
     local ``git commit``/``git push`` so GitHub signs it (Verified) with the App
-    bot as author -- the only way to satisfy the ``required_signatures`` rule on
+    bot as author; the only way to satisfy the ``required_signatures`` rule on
     ``main`` for an App-bot author, which cannot hold a signing key. The pin
     files are read from the working tree (already rewritten by the caller) and
     sent as base64 additions. Raises :class:`RuntimeError` on any API failure.

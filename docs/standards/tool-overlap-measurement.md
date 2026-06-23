@@ -8,8 +8,8 @@ single-binary tools to run **alongside** the bespoke deterministic gates they
 overlap, and deliberately deferred the output comparison. This standard records
 the contract for that comparison: what is measured, how it is recorded, how long
 the window runs, and the rule that turns the recorded evidence into a
-keep / replace / drop decision. It exists so the decision -- and the data behind
-it -- survives as a reviewable record rather than reviewer memory (CLAUDE.md
+keep / replace / drop decision. It exists so the decision; and the data behind
+it; survives as a reviewable record rather than reviewer memory (CLAUDE.md
 section 1), and so anomaly detection is a table scan, not prose reading
 (CLAUDE.md section 6).
 
@@ -34,8 +34,8 @@ each new tool and its paired gate over the **same scope**, normalizes both sides
 to `(rule_id, path, line)` findings, and records, per pair per run:
 
 - each side's finding count (distinct `(path, line)` locations),
-- the diff partition over locations -- `agree`, `new-tool-only`,
-  `existing-gate-only` -- as both counts (in the record) and full listings (in
+- the diff partition over locations; `agree`, `new-tool-only`,
+  `existing-gate-only`; as both counts (in the record) and full listings (in
   the Markdown artifact), and
 - each side's wall-clock duration.
 
@@ -65,7 +65,7 @@ never a secret value (CLAUDE.md section 4, #88):
 - betterleaks runs with `--redact=100`, so `Match`/`Secret` are redacted at the
   source, and
 - the collector's parser reads only `RuleID`, the repo-relative `File`, and
-  `StartLine` -- it never reads the value fields, so the redaction boundary
+  `StartLine`; it never reads the value fields, so the redaction boundary
   lives in our code, not only in the tool flag.
 
 The secret value never reaches a record, the JSON, the Markdown, a log, the
@@ -77,8 +77,8 @@ step summary, the uploaded artifact, the commit, or the PR.
   (>= 4 data points per pair), via the scheduled workflow, plus any manual
   `workflow_dispatch` runs. Manual runs accumulate into the same series.
 - **Stopping condition.** Stop a pair's measurement once its `new-tool-only`
-  and `existing-gate-only` sets are stable -- the same locations across two
-  consecutive runs at the same `commit_sha` -- and at least the four-week
+  and `existing-gate-only` sets are stable; the same locations across two
+  consecutive runs at the same `commit_sha`; and at least the four-week
   minimum is met. A pair whose diff is still moving keeps measuring.
 
 ## Decision rule (keep / replace / drop)
@@ -90,7 +90,7 @@ Read the per-pair series in
 - **REPLACE candidate.** `existing_gate_only_count == 0` across the whole window
   (the new tool covers everything the gate flags) **and** `new_tool_only_count`
   is consistently > 0 (it adds coverage). Propose replacing the gate in a
-  separate follow-up issue -- not in the measurement issue.
+  separate follow-up issue; not in the measurement issue.
 - **KEEP both.** `new_tool_only_count > 0` **and** `existing_gate_only_count > 0`
   across the window (each side has unique coverage). Keep running both.
 - **DROP candidate (new tool).** `new_tool_only_count == 0` across the whole

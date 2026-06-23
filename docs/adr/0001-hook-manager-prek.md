@@ -31,25 +31,25 @@ Use **prek** (`j178/prek`) as the hook manager for this repository.
 
 ## Rationale
 
-1. **Concise tool output** -- a Rust binary emits no Python runtime preamble or
+1. **Concise tool output**; a Rust binary emits no Python runtime preamble or
    environment-setup chatter. Every line of framework overhead that does not
    carry check signal is a token consumed by the model without value.
 
-2. **Faster per-hook execution** -- at 4.5× the per-hook speed, hook results
+2. **Faster per-hook execution**; at 4.5× the per-hook speed, hook results
    return to the model sooner. Wall-clock speed and context consumption are
    independent, but a shorter blocking operation reduces the latency window
    during which the model must hold the push context open.
 
-3. **Parallel hook execution** -- hooks at the same `priority` level run
+3. **Parallel hook execution**; hooks at the same `priority` level run
    concurrently. Their combined output arrives in one batch rather than
    accumulating sequentially, keeping the result block compact.
 
-4. **Zero runtime dependency at invocation time** -- `uvx prek` fetches and
+4. **Zero runtime dependency at invocation time**; `uvx prek` fetches and
    runs the binary without a separate install step, matching the `uv`-first
    toolchain policy already in place. No Python virtualenv activation or
    dependency resolution messages appear in the tool output.
 
-5. **Drop-in config compatibility** -- the existing `.pre-commit-config.yaml`
+5. **Drop-in config compatibility**; the existing `.pre-commit-config.yaml`
    is read by prek without modification; the pre-push hook definitions
    (`preflight-branch-base`, `preflight-coverage`) required no config changes.
    Note: activating the pre-push hooks still requires `prek install

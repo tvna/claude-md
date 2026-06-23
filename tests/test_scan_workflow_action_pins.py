@@ -39,7 +39,7 @@ class TestScanLine:
             "      - uses: ./.github/workflows/generate-agents.yml",
             "      - uses: ../shared/reusable.yml",
             "      - uses: docker://alpine:3.20",
-            "      # uses: actions/checkout@v4  -- doc only",
+            "      # uses: actions/checkout@v4 ; doc only",
             "  # forbidden form documented inline",
             f"      - uses: actions/checkout@v4  {scan_workflow_action_pins.ACK_MARKER}",
             "",

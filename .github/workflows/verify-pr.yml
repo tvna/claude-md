@@ -165,6 +165,13 @@ jobs:
         # covers the full tree.
         run: python3 scripts/scan_repo_em_dash.py verify --git-tracked
 
+      - name: Scan all tracked files for prose double-hyphen separator
+        # Refs #1903: repo-wide gate so no tracked prose file can reintroduce
+        # ' -- ' as a separator. Skips noqa lines, Markdown table rows, and
+        # structured-data file extensions (.yml, .yaml, .sh, .json, .toml,
+        # .lock, .sql). Complements the em-dash gate above.
+        run: python3 scripts/scan_repo_double_hyphen.py verify --git-tracked
+
       - name: Set up uv and project environment
         uses: ./.github/actions/setup-uv
 

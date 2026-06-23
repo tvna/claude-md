@@ -5,14 +5,14 @@ The primary rule collects external intelligence from OSV.dev and CISA KEV,
 correlates it with this repository's locked dependencies, and classifies
 the repository-global response need:
 
-* ``intel_needed`` -- external intelligence matched a locked dependency.
-* ``response_needed`` -- confirmed exploitation (CISA KEV) or malware
+* ``intel_needed``; external intelligence matched a locked dependency.
+* ``response_needed``; confirmed exploitation (CISA KEV) or malware
   evidence; do not create an autonomous fix without investigation.
 
 Findings are repository-global (``discover_dependencies`` walks the tree,
 not a single issue/PR), so they are recorded as one aggregated, idempotent
 comment on the security tracking issue rather than stamped onto whatever
-item triggered a run -- the per-item ``threat:*`` labelling was retired in
+item triggered a run; the per-item ``threat:*`` labelling was retired in
 #1645 (consolidate into the #178 umbrella). The metadata classifier
 (``classify``) remains as a helper for issue/PR text.
 
@@ -24,8 +24,8 @@ Contract:
   and the ``classify`` subcommand (``--title`` / ``$TITLE``, ``--body`` /
   ``--body-file``, ``--labels`` / ``$LABELS``); ``REPO`` plus ``--issue``
   (or ``$NUMBER``) and ``GH_TOKEN`` for the aggregated ``comment`` write.
-- Outputs: a Markdown step summary, GitHub Actions outputs, and -- via the
-  ``comment`` subcommand -- an idempotent marker-anchored aggregated
+- Outputs: a Markdown step summary, GitHub Actions outputs, and; via the
+  ``comment`` subcommand; an idempotent marker-anchored aggregated
   comment on the security tracking issue (the correlation table co-located
   with the umbrella per CLAUDE.md section 6); ``::error::`` annotations on
   stderr; exit 0 on success, exit 1 on missing env or an API failure.
@@ -82,7 +82,7 @@ SCRIPTS_SUBDIR = "scripts"
 # non-response finding from flipping ``intel_needed`` true; an *expired*
 # entry re-surfaces it (fail-loud per CLAUDE.md s4) instead of
 # silently persisting. Suppressions never apply to known-exploited or
-# malware findings -- those always escalate. Resolved relative to
+# malware findings; those always escalate. Resolved relative to
 # ``--repo-root`` so the scan auto-loads it without a CLI flag, mirroring
 # ``verify_security_control_floor`` reading its committed TOML.
 SUPPRESSIONS_RELPATH = ".github/threat-intel-suppressions.json"
@@ -122,7 +122,7 @@ class NvdEnrichment(NamedTuple):
 
     NVD is consulted only for CVEs already surfaced by OSV/GHSA. Missing
     or malformed enrichment is silently ignored so the underlying finding
-    is never suppressed -- "no NVD data" is not evidence that the
+    is never suppressed; "no NVD data" is not evidence that the
     vulnerability is not relevant.
     """
 
@@ -149,7 +149,7 @@ class Finding(NamedTuple):
     # authoritative known-exploitation signal.
     epss_score: float | None = None
     epss_percentile: float | None = None
-    # NVD CVE enrichment (#174). Supplemental only -- empty tuple means
+    # NVD CVE enrichment (#174). Supplemental only; empty tuple means
     # "no NVD enrichment available", not "vulnerability not relevant".
     nvd_metadata: tuple[NvdEnrichment, ...] = ()
 
@@ -213,18 +213,18 @@ def discover_dependencies(repo_root: Path) -> list[Dependency]:
 
     Surfaces scanned (#176):
 
-    * ``uv.lock`` -- PyPI transitive lock.
-    * ``pyproject.toml`` -- exact PyPI pins from ``project.dependencies``
+    * ``uv.lock``; PyPI transitive lock.
+    * ``pyproject.toml``; exact PyPI pins from ``project.dependencies``
       and ``dependency-groups``.
-    * ``.github/workflows/**/*.{yml,yaml}`` -- GitHub Actions ``uses:``
+    * ``.github/workflows/**/*.{yml,yaml}``; GitHub Actions ``uses:``
       references. SHA-pinned actions take the tag from the trailing
       ``# <tag>`` comment so OSV correlates against the released version
       rather than the opaque commit SHA.
     * ``.github/workflows/**/*.{yml,yaml}`` and ``scripts/**/*.{sh,py}``
-      -- transient PyPI pins inside ``uv run --with pkg==version``
+     ; transient PyPI pins inside ``uv run --with pkg==version``
       invocations. Non-executable docs prose is intentionally excluded
       so README / runbook examples cannot create noisy findings.
-    * ``.github/workflows/**/*.{yml,yaml}`` -- digest-pinned container
+    * ``.github/workflows/**/*.{yml,yaml}``; digest-pinned container
       images declared via ``# threat-intel-pin: <ecosystem> <name>
       <version>`` comments (#1276). Keeps a ``run:``-step image (which
       carries no ``uses:`` action ref) on the OSV correlation surface.
@@ -301,7 +301,7 @@ def parse_exact_python_requirement(requirement: str) -> tuple[str, str] | None:
 # whitespace, ``#``, or end-of-line) and optionally the trailing
 # ``# <tag>`` comment used by SHA-pinned references. Tolerates the YAML
 # list-dash prefix and arbitrary leading whitespace. Mirrors the parsing
-# contract enforced by ``scripts/scan_workflow_action_pins.py`` -- the
+# contract enforced by ``scripts/scan_workflow_action_pins.py``; the
 # two scripts intentionally diverge on intent (this one ingests refs
 # into the threat-intel pipeline; the other is a deterministic
 # SHA-pin gate).
@@ -348,7 +348,7 @@ def parse_workflow_actions(repo_root: Path) -> list[Dependency]:
       version from the trailing ``# <tag>`` comment when present so
       OSV correlates against the released version rather than the
       opaque commit SHA. When the comment is missing, the SHA itself
-      is used as a last-resort version string -- this keeps the
+      is used as a last-resort version string; this keeps the
       surface complete even when ``scan_workflow_action_pins`` has not
       yet been satisfied.
     """
@@ -433,7 +433,7 @@ def parse_workflow_pinned_images(repo_root: Path) -> list[Dependency]:
     pin comment keeps the image on the OSV correlation surface, since
     :func:`parse_workflow_actions` only matches ``uses:`` action refs.
 
-    Unlike the action parser, comment lines are *not* skipped here -- the pin
+    Unlike the action parser, comment lines are *not* skipped here; the pin
     intentionally lives in a comment so it never affects workflow execution.
     """
     workflow_dir = repo_root / WORKFLOW_SUBDIR
@@ -481,7 +481,7 @@ def _parse_action_reference(
 def parse_transient_uv_run(repo_root: Path) -> list[Dependency]:
     """Return PyPI dependencies pinned through ``uv run --with pkg==ver``.
 
-    Scans executable inputs only -- ``.github/workflows/**/*.{yml,yaml}``
+    Scans executable inputs only; ``.github/workflows/**/*.{yml,yaml}``
     and ``scripts/**/*.{sh,py}``. Markdown prose under ``docs/`` (and
     elsewhere) is intentionally excluded so a README or runbook example
     cannot create noisy findings (per #176 completion check).
@@ -586,7 +586,7 @@ def fetch_external_findings(
         malformed = validate_osv_coordinates(dependencies)
         if malformed:
             coords = "; ".join(
-                f"{dep.ecosystem}:{dep.name}@{dep.version} (from {dep.source}) -- {reason}"
+                f"{dep.ecosystem}:{dep.name}@{dep.version} (from {dep.source}); {reason}"
                 for dep, reason in malformed
             )
             raise ValueError(
@@ -653,8 +653,8 @@ def fetch_external_findings(
     return sorted(merged, key=lambda f: (f.dependency.name, f.vuln_id))
 
 
-# Authoritative OSV ecosystem identifiers -- the canonical base name before
-# any colon-suffixed release (e.g. "Debian" from "Debian:11") -- sourced from
+# Authoritative OSV ecosystem identifiers; the canonical base name before
+# any colon-suffixed release (e.g. "Debian" from "Debian:11"); sourced from
 # the OSV schema "Defined Ecosystems" list (ossf/osv-schema docs/schema.md). A
 # discovered coordinate whose ecosystem falls outside this set cannot be a real
 # dependency: the parsers emit a fixed constant (``PyPI`` / ``GitHub Actions``)
@@ -700,7 +700,7 @@ def validate_osv_coordinates(
     Offline pre-check that mirrors OSV querybatch's input contract: it catches
     the #1511 class (a parser false-match yielding e.g. ecosystem='`',
     name='line', version='in') BEFORE any network call, naming ``dep.source``,
-    instead of relying on OSV to reject the whole batch with HTTP 400 -- which
+    instead of relying on OSV to reject the whole batch with HTTP 400; which
     fails the entire scan and hides every finding (CLAUDE.md s4: fail loud, and
     do so as early and as precisely as possible). An empty list means every
     coordinate is well-formed. Pure and offline so it is safe to run on PR-head
@@ -734,7 +734,7 @@ def query_osv_batch(dependencies: list[Dependency]) -> dict[str, object]:
             # malformed (e.g. an invalid ecosystem or version produced by a
             # parser false-match, #1511). Surface the submitted coordinates
             # so the offending dependency is identifiable, rather than soft-
-            # failing to an empty result -- hiding findings would mask real
+            # failing to an empty result; hiding findings would mask real
             # vulnerabilities (CLAUDE.md s4: fail loudly). Non-400 errors
             # (rate limits, 5xx outages) propagate unchanged.
             coords = ", ".join(
@@ -831,7 +831,7 @@ def fetch_epss_scores(
 
     EPSS lookups soft-fail: any transport, JSON, or parse error returns
     an empty dict so the OSV / GHSA / KEV pipeline keeps working. EPSS
-    is advisory-only per #173 -- the absence of scores must not block
+    is advisory-only per #173; the absence of scores must not block
     routing on confirmed exploitation evidence (KEV / malware).
     """
     if not cves:
@@ -1037,7 +1037,7 @@ def fetch_ossf_malicious_packages(
     ``"malicious_packages"`` array of OSV-shaped records (each carrying
     ``id``, optional ``aliases``, and ``affected[].package.{ecosystem,name}``).
     Live mode queries ``api.osv.dev/v1/query`` per dependency with the
-    version field omitted and keeps only IDs prefixed ``MAL-`` -- this
+    version field omitted and keeps only IDs prefixed ``MAL-``; this
     is the OSSF malicious-packages syndication channel on OSV.dev and
     is the documented stable access path for the corpus.
 
@@ -1195,7 +1195,7 @@ def fetch_nvd_metadata(
     request per CVE.
 
     Missing, malformed, or transport-failed entries are silently skipped
-    per #174 -- absence of NVD enrichment is not evidence that the
+    per #174; absence of NVD enrichment is not evidence that the
     underlying OSV/GHSA finding is not relevant.
     """
     if not cve_ids:
@@ -1383,7 +1383,7 @@ def attach_nvd_to_findings(
 def load_suppressions(path: Path) -> list[Suppression]:
     """Return reviewed accepted-intel waivers parsed from *path* (#1277).
 
-    Fails loud (``ValueError``) on a malformed envelope or entry -- a missing
+    Fails loud (``ValueError``) on a malformed envelope or entry; a missing
     required field or a non-ISO ``review_by`` date is a defect that must stop
     the run, never be silently dropped (CLAUDE.md s4). Expiry is *not* a load
     error: an expired entry parses successfully and is re-surfaced downstream
@@ -1580,7 +1580,7 @@ def _cmd_verify(args: argparse.Namespace) -> int:
     Mirrors the pre-network check in :func:`fetch_external_findings` on the
     *PR head* so a PR that breaks the parser, or adds a workflow line that
     mis-parses into a junk coordinate (the #1511 class), is caught offline
-    -- no network, no secrets -- rather than only after merge, when the
+   ; no network, no secrets; rather than only after merge, when the
     ``pull_request_target`` triage job (which checks out base, not the PR
     head) finally runs the new code against the new files. Wired through
     pre-commit / ``prek run --all-files`` and ``preflight_all.py``; see
@@ -1940,9 +1940,9 @@ def _resolve_issue_target(
     """Return ``(token, repo, number)`` for the aggregated comment write.
 
     ``token`` and ``repo`` come from ``GH_TOKEN`` / ``REPO``. The issue
-    number is *explicit_number* when given -- the workflow resolves the
+    number is *explicit_number* when given; the workflow resolves the
     security tracking issue via ``scripts/issue_anchors.py`` and passes it
-    as ``--issue`` so the number is never hardcoded -- and otherwise falls
+    as ``--issue`` so the number is never hardcoded; and otherwise falls
     back to ``$NUMBER``. Returns None (never raises) so the caller maps it
     to exit 1 per the fail-loud policy in CLAUDE.md section 4.
     """
@@ -2197,7 +2197,7 @@ def main(argv: list[str] | None = None) -> int:
         type=Path,
         help=(
             "Fixture file containing an NVD CVE-shaped response. "
-            "Supplemental enrichment per #174 -- missing data never "
+            "Supplemental enrichment per #174; missing data never "
             "suppresses an OSV/GHSA finding."
         ),
     )

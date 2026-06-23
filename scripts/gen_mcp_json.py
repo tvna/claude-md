@@ -4,8 +4,8 @@
 ``apm.yml`` is the single source of truth for this repo's MCP server
 declarations (the ``dependencies.mcp`` block). Claude Code, however, reads
 project-scope MCP servers from a rendered ``.mcp.json`` at the repo root.
-That rendered file is a build artifact -- it can carry per-client
-credentials in ``env`` blocks -- so it is ``.gitignore``-d and never
+That rendered file is a build artifact; it can carry per-client
+credentials in ``env`` blocks; so it is ``.gitignore``-d and never
 committed (see ``docs/standards/repo-scope.md``).
 
 This generator closes the gap the ignore rule opens: it deterministically
@@ -16,7 +16,7 @@ Code session starts with a current ``.mcp.json``.
 
 The render is offline and idempotent: it only reads ``apm.yml`` and writes
 ``.mcp.json``; it never contacts an MCP endpoint or mutates user-scope
-config such as ``~/.claude.json``. Secrets are never baked in -- an
+config such as ``~/.claude.json``. Secrets are never baked in; an
 authenticated server supplies its key via the runtime ``env`` indirection
 documented in ``docs/runbooks/context7-mcp.md``, not from this file.
 
@@ -79,7 +79,7 @@ def _server_entry(server: dict[str, Any]) -> dict[str, Any]:
 def render_mcp_config(apm_data: dict[str, Any]) -> dict[str, Any]:
     """Return the ``.mcp.json`` document rendered from parsed ``apm.yml`` data.
 
-    Servers without a ``name`` are rejected -- the key is the server's
+    Servers without a ``name`` are rejected; the key is the server's
     identity in ``.mcp.json`` and a nameless entry is a declaration error.
     """
     servers = (apm_data.get("dependencies") or {}).get("mcp") or []

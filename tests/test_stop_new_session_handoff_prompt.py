@@ -1,7 +1,7 @@
 """Tests for ``scripts/stop_new_session_handoff_prompt.py`` (Stop hook).
 
 Pure heuristics get focused unit tests; ``main()`` is exercised by
-monkeypatching stdin and pointing the event at a temp transcript file -- the
+monkeypatching stdin and pointing the event at a temp transcript file; the
 same shape as ``test_gate_decision_handoff_askuserquestion.py``.
 
 Refs #1334.
@@ -73,7 +73,7 @@ class TestSignalsHandoff:
 
     def test_topic_mention_without_directive_does_not_match(self) -> None:
         # #1711: an RCA that NAMES a handoff as a topic word but directs no
-        # continuation must not count -- the cue has no nearby directive.
+        # continuation must not count; the cue has no nearby directive.
         assert not hook.signals_handoff(
             "新規セッションのハンドオフプロンプトの誤検知を調査した。"
         )
@@ -222,7 +222,7 @@ class TestEvaluate:
         assert hook.evaluate({}, entries) is None
 
     def test_pr1694_regression_turn_is_noop(self) -> None:
-        # #1704 regression: the exact shape that false-fired on PR #1694 -- a
+        # #1704 regression: the exact shape that false-fired on PR #1694; a
         # survey report plus a pre-merge wait, with no fenced prompt.
         turn = (
             "## まとめ\n"
@@ -241,7 +241,7 @@ class TestEvaluate:
         assert hook.evaluate({}, entries) == {"decision": "block", "reason": hook._BLOCK_REASON}
 
     def test_post_merge_completion_report_is_noop(self) -> None:
-        # #1711: the residual false positive -- a post-merge RCA that NAMES a
+        # #1711: the residual false positive; a post-merge RCA that NAMES a
         # handoff as a topic word while the work is merged / done, with no
         # paste-ready prompt. Both the terminal-done suppressor and the missing
         # directive keep it from blocking.

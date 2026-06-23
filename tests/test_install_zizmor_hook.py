@@ -1,7 +1,7 @@
 """Tests for the SessionStart zizmor installer shell guard.
 
 scripts/install-zizmor.sh provisions the flake-pinned zizmor binary onto PATH
-in Claude Code on the Web (CLAUDE_CODE_REMOTE=true) sessions only -- zizmor is
+in Claude Code on the Web (CLAUDE_CODE_REMOTE=true) sessions only; zizmor is
 web-only by design (not wired into the nix devShell). These tests pin the
 remote gate (silent no-op off-remote), the idempotent skip when a zizmor at the
 pinned version is already on PATH, and the SessionStart registration. The

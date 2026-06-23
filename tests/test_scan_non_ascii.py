@@ -870,7 +870,7 @@ class TestRun:
         self, monkeypatch: pytest.MonkeyPatch, login: str
     ) -> None:
         """Regression for #480/#504/#620: Codecov is now fully exempt (action=none).
-        No label, no advisory comment -- the post is silently passed through."""
+        No label, no advisory comment; the post is silently passed through."""
         seen = _capture_gh_api(monkeypatch)
         event = {
             "issue": {"number": 478, "pull_request": {"url": "..."}},

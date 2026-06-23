@@ -249,7 +249,7 @@ class TestRunApplyHappyPath:
             opener=opener, sleeper=lambda _s: None,
         )
         assert counts["patched"] == 2
-        # 2 GETs only -- no PATCHes
+        # 2 GETs only; no PATCHes
         assert [c["method"] for c in opener.calls] == ["GET", "GET"]
 
     def test_skips_already_applied_items(self) -> None:
@@ -264,7 +264,7 @@ class TestRunApplyHappyPath:
         )
         assert counts["patched"] == 0
         assert counts["skipped"] == 1
-        # Only the GET ran -- no PATCH
+        # Only the GET ran; no PATCH
         assert [c["method"] for c in opener.calls] == ["GET"]
 
 
@@ -285,7 +285,7 @@ class TestRunApplyDrift:
         assert excinfo.value.code == 1
         err = capsys.readouterr().err
         assert "::error::Drift detected" in err
-        # Second item never reached -- only one GET fired.
+        # Second item never reached; only one GET fired.
         assert len(opener.calls) == 1
 
 
@@ -512,7 +512,7 @@ class TestCmdRestore:
         ])
         monkeypatch.setenv("REPO", "x/y")
         monkeypatch.setenv("GH_TOKEN", "fake")
-        # Patch fetch_live_field / patch_field paths -- dry-run must not
+        # Patch fetch_live_field / patch_field paths; dry-run must not
         # invoke either, so we replace patch_field with a tripwire.
         called: list[object] = []
         monkeypatch.setattr(

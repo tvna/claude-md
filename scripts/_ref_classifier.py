@@ -4,7 +4,7 @@ Single source of truth consumed by both the server-side gate
 (``scripts/issue_link.py``, the ``verify-issue-link.yml`` workflow body)
 and the client-side PreToolUse hook
 (``scripts/pr_body_close_keyword_gate.py``). Centralizing them here
-prevents the two layers from drifting -- which was the failure mode the
+prevents the two layers from drifting; which was the failure mode the
 old self-contained advisory hook encoded as a known cost (PR #220,
 issue #222).
 
@@ -24,12 +24,12 @@ module-private names without leaking implementation details):
 * :data:`HTML_COMMENT_RE`, :data:`REF_LINE_KEYWORD_RE`,
   :data:`PARTIAL_MARKER_RE`, :data:`PARTIAL_MARKER_PLAINTEXT_RE` --
   compiled regexes.
-* :data:`CLOSING_KEYWORDS` -- frozenset of auto-closing GitHub
+* :data:`CLOSING_KEYWORDS`; frozenset of auto-closing GitHub
   keywords (lowercase).
-* :data:`TRACKING_LABEL` -- the carve-out label name.
+* :data:`TRACKING_LABEL`; the carve-out label name.
 * :func:`strip_html_comments`, :func:`classify_refs`,
-  :func:`body_has_partial_marker` -- pure parsers.
-* :func:`format_no_closing_keyword_msg` -- shared deny/error text;
+  :func:`body_has_partial_marker`; pure parsers.
+* :func:`format_no_closing_keyword_msg`; shared deny/error text;
   callers pass ``prefix="::error::"`` for GitHub Actions annotations
   and ``prefix=""`` for the Claude Code transcript.
 """
@@ -102,7 +102,7 @@ def format_no_closing_keyword_msg(
 
     ``prefix`` is the GitHub Actions annotation prefix on the
     server-side path (``"::error::"``) and empty on the client-side
-    PreToolUse path -- the hook output is already wrapped in a
+    PreToolUse path; the hook output is already wrapped in a
     ``permissionDecisionReason`` field, so a stray ``::error::`` would
     confuse readers of the Claude Code transcript.
     """

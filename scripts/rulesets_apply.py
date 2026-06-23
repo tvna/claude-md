@@ -102,7 +102,7 @@ def render_summary_row(
     action: str,
     live_id: str | int | None,
 ) -> str:
-    result_id = "--" if live_id in (None, "") else str(live_id)
+    result_id = "n/a" if live_id in (None, "") else str(live_id)
     return f"| {file} | {name} | {matches} | {action} | {result_id} |"
 
 
@@ -213,7 +213,7 @@ def render_dispatch_header(
 ) -> str:
     return "\n".join(
         [
-            "## Apply rulesets -- dispatch summary",
+            "## Apply rulesets; dispatch summary",
             "",
             f"- ruleset: `{choice}`",
             f"- dry_run: `{str(dry_run).lower()}`",

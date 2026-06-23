@@ -2,7 +2,7 @@
 """Surface a stale branch base at session start / before the first commit.
 
 Refs #1632 (PR #1625 retrospective, Fact 3). ``preflight_branch_base.py`` runs
-only at pre-push -- after all the work is done -- so a branch cut from an old
+only at pre-push; after all the work is done; so a branch cut from an old
 ``main`` was discovered only when the first push failed three pre-push gates at
 once, forcing a late rebase. This module shifts that detection LEFT, reusing the
 existing primitives rather than re-deriving them:
@@ -16,12 +16,12 @@ existing primitives rather than re-deriving them:
 
 Three modes:
 
-* ``session-start`` -- a SessionStart hook. In a remote session it fetches
-  ``origin/main``, records the SHA, and -- when HEAD does not yet contain that
-  SHA -- emits a loud ``additionalContext`` telling the operator to rebase
+* ``session-start``; a SessionStart hook. In a remote session it fetches
+  ``origin/main``, records the SHA, and; when HEAD does not yet contain that
+  SHA; emits a loud ``additionalContext`` telling the operator to rebase
   BEFORE implementing. Always exits 0; never wedges a session (fail-open).
 
-* hook mode (no subcommand, event JSON on stdin) -- a PreToolUse ``Bash`` hook.
+* hook mode (no subcommand, event JSON on stdin); a PreToolUse ``Bash`` hook.
   It DENIES a ``git commit`` while the branch base is stale (HEAD lacks the
   recorded session-start ``origin/main`` SHA), so the rebase happens before the
   first commit lands rather than at push. It reads only the stamp (no fetch), so
@@ -29,7 +29,7 @@ Three modes:
   commits proceed; genuine mid-session drift is still caught by the pre-push
   ``preflight_branch_base`` gate (defense-in-depth, CLAUDE.md Section 4).
 
-* ``check`` -- print the staleness verdict and exit 0 (fresh / no stamp) or 1
+* ``check``; print the staleness verdict and exit 0 (fresh / no stamp) or 1
   (stale). Used to reproduce Fact 3 deterministically.
 
 Fail-open everywhere a guard cannot be evaluated (no stamp, detached HEAD,

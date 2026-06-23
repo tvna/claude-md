@@ -53,7 +53,7 @@ def bash_resolve_hosts(allowlist: Path, lib: Path) -> set[str]:
     """Return the host set the bash ``read_allowlist`` resolves for *allowlist*.
 
     Sources *lib* under ``bash`` and runs ``read_allowlist`` on *allowlist*.
-    Pure parsing -- no name resolution -- so no network is touched. Raises
+    Pure parsing; no name resolution; so no network is touched. Raises
     ``RuntimeError`` if ``bash`` is not on PATH and
     ``subprocess.CalledProcessError`` when the bash parse exits non-zero, so the
     caller can surface either as a loud failure.

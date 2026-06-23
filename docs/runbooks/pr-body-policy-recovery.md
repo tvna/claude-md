@@ -50,7 +50,7 @@ is what makes the gate pass.
 
    Use `mcp__github__update_pull_request` to replace the body. This emits a
    fresh `pull_request: edited` event, and `verify-pr.yml` re-validates the
-   corrected body. Do **not** press "Re-run jobs" on the failed run -- it
+   corrected body. Do **not** press "Re-run jobs" on the failed run; it
    reuses the stale payload (see the table above).
 
 3. **Confirm the new check run, not the old one, goes green.**
@@ -72,7 +72,7 @@ the body fix, and it breaks the single-commit contract:
   signal post-merge, so extra commits surface in the retrospective even when
   a push slips through.
 - Force-push is blocked by the ruleset, so a stray commit cannot be squashed
-  away in place -- which is exactly the trap that pushes a session toward a
+  away in place; which is exactly the trap that pushes a session toward a
   replacement PR.
 
 The correct way to re-trigger the PR-body gate is the body edit in step 2,

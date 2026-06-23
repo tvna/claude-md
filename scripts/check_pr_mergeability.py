@@ -268,7 +268,7 @@ def decide_post_tool_use(
     if state == "behind":
         return _build_context(
             f"OUT OF DATE: {pr_label} has mergeable_state=behind (no conflict). "
-            "Bring it up to date deterministically -- do NOT force-push or call "
+            "Bring it up to date deterministically; do NOT force-push or call "
             "update_pull_request_branch (both are blocked): run "
             "`python3 scripts/refresh_pr_branch.py --push` from the PR branch. "
             "See docs/runbooks/refresh-behind-pr.md."
@@ -277,7 +277,7 @@ def decide_post_tool_use(
     if state == "clean":
         return _build_context(f"Mergeability OK: {pr_label} has mergeable_state=clean. No conflicts detected.")
 
-    # blocked / unknown / draft / etc -- advisory
+    # blocked / unknown / draft / etc; advisory
     return _build_context(
         f"Mergeability advisory for {pr_label}: mergeable_state={state}. "
         "This may indicate required status checks are pending (blocked) or "
@@ -392,7 +392,7 @@ def run_session_start(
         for url in behind:
             lines.append(f"  - {url}")
         lines.append(
-            "Update each (no conflict) deterministically -- do NOT force-push: from the PR "
+            "Update each (no conflict) deterministically; do NOT force-push: from the PR "
             "branch run `python3 scripts/refresh_pr_branch.py --push`. "
             "See docs/runbooks/refresh-behind-pr.md."
         )

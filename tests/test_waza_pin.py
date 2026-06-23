@@ -1,4 +1,4 @@
-"""Tests for scripts/waza_pin.py -- reading the pinned waza coordinates.
+"""Tests for scripts/waza_pin.py; reading the pinned waza coordinates.
 
 flake.nix is the single source of truth for the waza version, release asset,
 and SHA256 (#1150). These tests pin the parsing + SRI->hex conversion against

@@ -64,7 +64,7 @@ def test_mermaid_text_escapes_quotes_and_newlines() -> None:
 
 def test_render_mermaid_labels_stay_on_one_line_without_escaped_quotes() -> None:
     # A ``for`` statement that is not decomposed unparses with its multi-line
-    # body and a double-quoted f-string -- exactly the shape that broke Mermaid
+    # body and a double-quoted f-string; exactly the shape that broke Mermaid
     # parsing before issue #1598. After sanitizing, no label may leak a raw
     # newline or carry a backslash-escaped quote.
     source = textwrap.dedent(

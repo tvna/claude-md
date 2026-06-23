@@ -24,7 +24,7 @@ required entry has been removed or renamed. Refs #1901.
   source is considered authoritative: trust is confirmed by platform-level
   deployment or by passing the code-owner-reviewed merge gate, not by the
   channel name through which the content arrives. Master section 2 ("Trust is
-  governance-gated provenance -- not the channel name").
+  governance-gated provenance; not the channel name").
 - **merge gate**: The code-owner-reviewed PR merge process that establishes
   trust for repository-owned instruction files; the concrete mechanism behind
   governance-gated provenance for the harness and repo-local-doc lanes.
@@ -63,7 +63,7 @@ required entry has been removed or renamed. Refs #1901.
   `docs/prd/agent-rules-design-philosophy.md` section 2.2; required by master
   section 3 ("push deterministic work into hooks, pre-commit, and CI/CD").
 - **drift gate**: A deterministic gate whose purpose is to detect when an
-  invariant -- a "single source of truth" or "only here" rule -- has been
+  invariant (a "single source of truth" or "only here" rule) has been
   violated; must be shipped in the same change that establishes the invariant
   so the harness hardens at birth rather than retroactively. Master section 3
   ("ship its drift gate in the same change, not a follow-up").
@@ -102,8 +102,8 @@ required entry has been removed or renamed. Refs #1901.
   examples. Master section 3 ("This boundary belongs in a deterministic
   preflight, not reviewer memory"); implemented by
   `scripts/preflight_non_ascii.py` and `scripts/preflight_steps.py`.
-- **terminal state**: The final closed condition of a PR workflow -- either
-  merged with recorded rationale or closed with recorded rationale -- that
+- **terminal state**: The final closed condition of a PR workflow: either
+  merged with recorded rationale or closed with recorded rationale; this
   satisfies the PR-monitoring obligation and allows the review loop to exit.
   Master section 3 ("auto-subscribe to CI, reviews, and comments and drive to
   a terminal state (merged, or closed with rationale)").
@@ -136,12 +136,12 @@ required entry has been removed or renamed. Refs #1901.
 - **trust boundary**: The separation between the trusted workspace (the
   agent's controlled repository and account scope) and external endpoints,
   services, and sinks; sensitive material must not cross it in either
-  direction -- neither read in from a sensitive source beyond task need, nor
+  direction: neither read in from a sensitive source beyond task need, nor
   emitted to any external sink. Master section 4 ("sensitive material must not
   cross the trust boundary in either direction").
-- **attack surface**: Any output sink or instrumentation path -- including
+- **attack surface**: Any output sink or instrumentation path, including
   logs, step summaries, terminal output, PR bodies, screenshots, generated
-  artifacts, and error messages -- through which sensitive material could be
+  artifacts, and error messages, through which sensitive material could be
   exfiltrated or adversarial input could gain unintended effect; must be
   treated with redaction and access-control rigor. Master section 4 ("Treat
   debug instrumentation and every output sink as an attack surface").
@@ -157,7 +157,7 @@ required entry has been removed or renamed. Refs #1901.
   performed. Master section 4 ("Keep confirmations and dry-runs for any
   irreversible or outward-facing operation").
 - **change surface**: The set of files and lines touched by a single PR or
-  commit; must be kept narrow -- limited to what the active task requires --
+  commit; must be kept narrow (limited to what the active task requires)
   so that quality remains proportional to volume as the harness scales. Net
   line growth on a refactor is one observable proxy for an expanding change
   surface. Master section 5 ("Keep the change surface narrow: touch only what

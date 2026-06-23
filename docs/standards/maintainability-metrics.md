@@ -33,7 +33,7 @@ Policy:
 - Fails CI for any non-deferred Python module under `scripts/` above
   800 physical lines.
 - Emits a non-failing `::warning` for any passing module in the warning
-  band -- at or above `WARN_MODULE_LINES` (80% of the budget, 640 lines)
+  band; at or above `WARN_MODULE_LINES` (80% of the budget, 640 lines)
   but still within the 800-line limit.
 - Reports only for explicitly listed baseline debt, with a reason in
   `DEFERRED_OVERSIZE_MODULES`.
@@ -44,7 +44,7 @@ Policy:
 
 The hard limit alone is a binary gate: a module is invisible until it
 crosses 800 lines, and a hard ceiling tends to be treated as a target
-(Goodhart's law). The current distribution shows the effect -- several
+(Goodhart's law). The current distribution shows the effect; several
 modules cluster within a handful of lines of the limit, two landing
 exactly on it. The warning band at 80% (640 lines) makes "approaching
 the limit" observable in review before a module reaches the ceiling or

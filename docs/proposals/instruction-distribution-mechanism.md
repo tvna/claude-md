@@ -63,7 +63,7 @@ SHA-pinned; no auto-merge anywhere.
   `scripts/publish_instruction_release.py` (first-party REST publisher, chosen
   over a third-party release action so no new supply-chain dependency is added;
   the upload stays on the single `_github_api` HTTP boundary, must-have M7).
-- `docs/runbooks/consumer-instruction-sync.md` -- the operator procedure and the
+- `docs/runbooks/consumer-instruction-sync.md`; the operator procedure and the
   copyable sync workflow template.
 - README (three languages) retraction of submodule + symlink and the
   committed-real-file method.
@@ -86,8 +86,8 @@ file with no master-side runtime coupling.
 
 ## References
 
-- [`docs/runbooks/consumer-instruction-sync.md`](../runbooks/consumer-instruction-sync.md) -- consumer procedure and template.
-- [`.github/workflows/publish-instructions-release.yml`](../../.github/workflows/publish-instructions-release.yml) -- the master release workflow.
-- [`scripts/publish_instruction_release.py`](../../scripts/publish_instruction_release.py) -- the first-party release publisher.
-- [`docs/runbooks/downstream-instruction-review-checklist.md`](../runbooks/downstream-instruction-review-checklist.md) -- security review for instruction-shipping PRs.
-- [`README.md`](../../README.md) -- the consumer-facing integration section this proposal updates.
+- [`docs/runbooks/consumer-instruction-sync.md`](../runbooks/consumer-instruction-sync.md); consumer procedure and template.
+- [`.github/workflows/publish-instructions-release.yml`](../../.github/workflows/publish-instructions-release.yml); the master release workflow.
+- [`scripts/publish_instruction_release.py`](../../scripts/publish_instruction_release.py); the first-party release publisher.
+- [`docs/runbooks/downstream-instruction-review-checklist.md`](../runbooks/downstream-instruction-review-checklist.md); security review for instruction-shipping PRs.
+- [`README.md`](../../README.md); the consumer-facing integration section this proposal updates.

@@ -139,14 +139,14 @@ or local environment setup still references the removed version.
 
 ## References
 
-- Parent: [#63](https://github.com/tvna/claude-md/issues/63) -- residual
+- Parent: [#63](https://github.com/tvna/claude-md/issues/63); residual
   workflow risks, prompt-injection boundaries, tool surface, supply
   chain.
 - Tracking: [#312](https://github.com/tvna/claude-md/issues/312) --
   define extension provenance policy.
 - [`docs/prd/security-control-inventory.md`](../prd/security-control-inventory.md)
-  -- repository security surface inventory.
+ ; repository security surface inventory.
 - [`docs/runbooks/downstream-instruction-review-checklist.md`](downstream-instruction-review-checklist.md)
-  -- reviewer checklist for instruction changes.
+ ; reviewer checklist for instruction changes.
 - [`docs/standards/repo-scope.md`](../standards/repo-scope.md) --
   repository scope and agent-tool configuration boundaries.

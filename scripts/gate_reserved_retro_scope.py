@@ -15,7 +15,7 @@ reports a problem the CI detector cannot see (process repairs such as a
 wrong-branch re-placement or a discarded-drift cleanup leave no PR-diff / CI /
 review trace). That single permitted title is exactly the shape
 :func:`auto_retro.build_retro_title` emits --
-``chore(auto-retro): review PR #<N> repair loops`` -- matched by
+``chore(auto-retro): review PR #<N> repair loops``; matched by
 :func:`auto_retro.is_canonical_handoff_retro_title`. Allowing only that exact
 literal keeps every other ``auto-retro`` title denied, and because the
 in-session retro uses the canonical shape, CI dedup
@@ -30,9 +30,9 @@ titled ``chore(auto-retro): ...`` satisfied
 :func:`auto_retro.is_retro_issue_title`, so the linking PR looked like a direct
 PR off an un-triaged retro. That cost one manual repair (the issue was renamed
 to ``chore(retro-visibility): ...``). The ``auto-retro`` scope is reserved for
-the CI ``open-retro`` job in ``.github/workflows/post-merge.yml`` -- which opens
+the CI ``open-retro`` job in ``.github/workflows/post-merge.yml``; which opens
 the retro via ``scripts/auto_retro.py run`` through the ``gh`` REST boundary,
-NOT through ``mcp__github__issue_write`` -- so this PreToolUse hook only ever
+NOT through ``mcp__github__issue_write``; so this PreToolUse hook only ever
 fires on the agent's own tool calls and never on the CI path. The boundary is
 the tool surface itself; no event-source sniffing is needed.
 
@@ -51,7 +51,7 @@ Architecture mirrors :mod:`gate_issue_classification_labels`: pure
 
 Failure modes (fail-open per CLAUDE.md section 4): off-target tool name, a
 non-``create`` method, an absent or non-string ``title``, or malformed stdin
-JSON -- all exit 0 with no decision so a hook bug never wedges the session. The
+JSON; all exit 0 with no decision so a hook bug never wedges the session. The
 server-side ``verify-no-direct-retro-pr`` gate remains the backstop.
 
 Refs #1395.
@@ -78,10 +78,10 @@ def uses_reserved_scope(title: str) -> bool:
 
     Logical OR of the two single-source detectors in :mod:`auto_retro`:
 
-    * :func:`auto_retro.is_retro_pr` -- the title's ``type(scope)`` token
+    * :func:`auto_retro.is_retro_pr`; the title's ``type(scope)`` token
       contains ``(auto-retro)`` for any Conventional Commit type (``chore``,
       ``fix``, ``docs``, ...). This is the literal "reserved scope" test.
-    * :func:`auto_retro.is_retro_issue_title` -- the canonical
+    * :func:`auto_retro.is_retro_issue_title`; the canonical
       ``chore(auto-retro)`` and legacy ``fix(auto-retro)`` retro-issue title
       prefixes that downstream dedup / no-direct-PR detection keys on, covering
       the malformed no-colon shapes that the regex-based ``is_retro_pr`` would
@@ -106,8 +106,8 @@ def build_reason() -> str:
         "so the verify-no-direct-retro-pr CI gate then treats the linking PR "
         "as a direct PR off an un-triaged retro and blocks it (the #1394 "
         "false positive).\n\n"
-        "Rename the title to a non-reserved scope -- e.g. "
-        "`chore(retro-visibility): ...` -- and retry.\n\n"
+        "Rename the title to a non-reserved scope; e.g. "
+        "`chore(retro-visibility): ...`; and retry.\n\n"
         "The ONLY permitted exception is the canonical pre-merge handoff "
         "retro, whose title must be EXACTLY "
         "`chore(auto-retro): review PR #<N> repair loops` (the shape "

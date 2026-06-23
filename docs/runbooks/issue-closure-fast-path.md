@@ -9,7 +9,7 @@ merged-PR evidence before expanding to parent or sibling issues (issue #187).
 `scripts/issue_closure_fast_path.py` fires as a **PreToolUse** hook
 whenever `mcp__github__issue_write` is called with `state: closed`.  It
 searches GitHub for merged PRs that reference the issue number and surfaces
-the result as `additionalContext` -- never as a deny.
+the result as `additionalContext`; never as a deny.
 
 | Hook output | Meaning |
 |---|---|
@@ -22,12 +22,12 @@ the result as `additionalContext` -- never as a deny.
 If the hook is unavailable, follow these steps in order:
 
 1. **Resolve the issue number** from the URL, including any query parameters.
-   Use only the concrete issue number -- do not begin by reading parent or
+   Use only the concrete issue number; do not begin by reading parent or
    sibling issues.
 
 2. **Search for merged PRs** that reference it:
    ```sh
-   gh search prs --repo tvna/claude-md --state merged -- "#<issue_number>"
+   gh search prs --repo tvna/claude-md --state merged; "#<issue_number>"
    ```
 
 3. **If exactly one PR matches**, verify:

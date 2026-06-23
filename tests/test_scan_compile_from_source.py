@@ -8,6 +8,8 @@ hatch, and a real-repo self-check.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 import scan_compile_from_source as gate
 
@@ -70,3 +72,29 @@ def test_cli_list(capsys: pytest.CaptureFixture[str]) -> None:
     assert gate.main(["list"]) == 0
     # Clean repo -> no output lines; just assert it ran without error.
     capsys.readouterr()
+
+
+def test_cli_verify_with_hits(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # Planted source build -> verify returns 1 and prints FAIL (lines 113-127).
+    (tmp_path / "scripts").mkdir()
+    (tmp_path / "scripts" / "build.sh").write_text("go install github.com/foo/bar@v1\n")
+    monkeypatch.setattr(gate, "REPO_ROOT", tmp_path)
+    assert gate.main(["verify"]) == 1
+    assert "FAIL" in capsys.readouterr().err
+
+
+def test_cli_list_with_hits(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # Planted source build -> list prints the hit path (line 136).
+    (tmp_path / "scripts").mkdir()
+    (tmp_path / "scripts" / "build.sh").write_text("go install github.com/foo/bar@v1\n")
+    monkeypatch.setattr(gate, "REPO_ROOT", tmp_path)
+    assert gate.main(["list"]) == 0
+    assert "build.sh" in capsys.readouterr().out

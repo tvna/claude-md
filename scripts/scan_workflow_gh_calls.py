@@ -6,7 +6,7 @@ CLI, nor ``curl`` the GitHub REST API (``api.github.com`` /
 ``uploads.github.com``) directly, unless the (workflow, step) pair is
 documented in :data:`ALLOWLIST_ENTRIES` with an explicit migration rationale.
 Both shapes embed GitHub behaviour in YAML where it cannot be unit tested;
-the fix is the same -- move it behind a tested ``scripts/*.py`` helper.
+the fix is the same; move it behind a tested ``scripts/*.py`` helper.
 
 ALLOWLIST_ENTRIES is expected to shrink as each migration PR lands.  When
 the list is empty the gate is fully strict: any new ``gh`` call or direct

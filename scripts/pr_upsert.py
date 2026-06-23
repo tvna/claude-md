@@ -186,8 +186,8 @@ def _get_branch_head_oid(
 ) -> str | None:
     """Return the head commit oid of ``refs/heads/{branch}``, or ``None`` if absent.
 
-    A 404 means the branch does not exist yet -- the first run, or a prior run's
-    branch that was merged and deleted -- so the caller creates it off the base
+    A 404 means the branch does not exist yet; the first run, or a prior run's
+    branch that was merged and deleted; so the caller creates it off the base
     instead. Any other non-2xx is a real error and raises.
     """
     url = f"{_API_ROOT}/repos/{repo}/git/ref/heads/{branch}"
@@ -218,8 +218,8 @@ def _get_file_bytes(
 
     Uses the contents API, which returns the file base64-encoded. A 404 means the
     path does not exist at *ref* (the snapshot has never been committed, or the
-    branch is absent). A non-base64 encoding -- the API returns ``encoding: "none"``
-    for blobs over 1 MB -- raises, so a silently truncated body can never
+    branch is absent). A non-base64 encoding; the API returns ``encoding: "none"``
+    for blobs over 1 MB; raises, so a silently truncated body can never
     masquerade as matching content. Any other non-2xx is a real error and raises.
     """
     url = f"{_API_ROOT}/repos/{repo}/contents/{path}?ref={ref}"
@@ -268,7 +268,7 @@ def upsert_files_pr(
     *additions* is a list of ``(path, content_bytes)`` pairs to write; *deletions*
     is a list of paths to remove in the same commit. The commit is created server
     side via GraphQL ``createCommitOnBranch`` (Refs #1437), which is signed/Verified
-    and, by construction, a fast-forward append -- the #1466 replacement for the
+    and, by construction, a fast-forward append; the #1466 replacement for the
     ``git checkout -B`` + ``git push --force-with-lease`` pattern the all-branches
     ``non_fast_forward`` ruleset rejects once the fixed *branch* already exists:
 
@@ -276,7 +276,7 @@ def upsert_files_pr(
       absent on *base* (no drift), returns ``"up-to-date"`` without touching the
       branch or any PR.
     * When *branch* is absent, it is created off *base* and the commit is added on
-      top -- a plain create, no force.
+      top; a plain create, no force.
     * When *branch* already exists, the commit is appended onto its current tip
       (``expectedHeadOid`` = the branch head). If the tip already carries the same
       additions/deletions, no commit is made; the open PR (if any) is reconciled.
@@ -291,7 +291,7 @@ def upsert_files_pr(
     append semantics for every other caller.
 
     Returns ``"up-to-date"``, or ``"<verb>:<pr_number>"`` where *verb* is
-    ``created`` (new branch -- always the verb under *recreate*), ``committed``
+    ``created`` (new branch; always the verb under *recreate*), ``committed``
     (appended onto an existing branch), or ``branch-current`` (branch tip already
     matched, PR reconciled only).
     """
@@ -434,9 +434,9 @@ def _merge_pr(
     expected "not mergeable right now" races, which the caller retries on the
     next keeper trigger instead of failing the run:
 
-    - ``405 Method Not Allowed`` -- base-branch protection is not yet satisfied
+    - ``405 Method Not Allowed``; base-branch protection is not yet satisfied
       (a required check still pending, the branch is behind, etc.).
-    - ``409 Conflict`` -- the provided *sha* no longer matches the PR head (a
+    - ``409 Conflict``; the provided *sha* no longer matches the PR head (a
       newer commit landed); pinning the sha guarantees we never merge a stale
       tree.
 
@@ -609,7 +609,7 @@ def _collect_worktree_changes(
 
     *adds* are explicit paths whose current working-tree bytes become additions; a
     missing path raises, since an explicit add of an absent file is a mistake. For
-    each prefix in *diff_prefixes*, ``git status --porcelain -- <prefix>`` lists the
+    each prefix in *diff_prefixes*, ``git status --porcelain; <prefix>`` lists the
     changed paths under it: a path that still exists in the working tree is read as
     an addition, one that no longer exists is a deletion. Paths are de-duped, with
     explicit adds winning. Assumes ASCII paths without spaces (the repository's
@@ -618,8 +618,8 @@ def _collect_worktree_changes(
     When an entire directory is untracked (no parent directory in the index), git
     porcelain v1 emits the directory itself (e.g. ``?? docs/generated/graph/``)
     rather than the individual files inside it.  Passing such a directory path as a
-    ``deletions`` entry to ``createCommitOnBranch`` is invalid -- the mutation only
-    accepts file paths -- and produces a generic "Something went wrong" GraphQL
+    ``deletions`` entry to ``createCommitOnBranch`` is invalid; the mutation only
+    accepts file paths; and produces a generic "Something went wrong" GraphQL
     error.  When ``candidate.is_dir()``, expand it recursively so every file inside
     becomes an addition instead. Refs #1772.
     """

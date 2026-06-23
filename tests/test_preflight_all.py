@@ -44,7 +44,7 @@ class TestStepsManifest:
                     )
 
     def test_soft_flag_requires_prereq_declaration(self) -> None:
-        # Soft steps must declare at least one prereq -- otherwise
+        # Soft steps must declare at least one prereq; otherwise
         # ``soft=True`` would silently swallow a real failure.
         for step in pa.STEPS:
             if step.soft:
@@ -226,7 +226,7 @@ class TestMainCli:
 
 
 # ---------------------------------------------------------------------------
-# run_all -- fail-fast cheap tier + heavy-tier skip cache (refs #985)
+# run_all; fail-fast cheap tier + heavy-tier skip cache (refs #985)
 # ---------------------------------------------------------------------------
 
 

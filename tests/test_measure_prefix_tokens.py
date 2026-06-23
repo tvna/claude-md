@@ -274,7 +274,7 @@ class TestMakeApiCounter:
         _install_fake_anthropic(monkeypatch, {})
         monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
         monkeypatch.setenv("ANTHROPIC_AUTH_TOKEN", "dummy")
-        # Should not raise -- AUTH_TOKEN alone is a valid credential.
+        # Should not raise; AUTH_TOKEN alone is a valid credential.
         assert mpt.make_api_counter("claude-opus-4-8")("ab") == 2
 
 

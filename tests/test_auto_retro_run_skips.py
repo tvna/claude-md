@@ -224,7 +224,7 @@ class TestSkipComment:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Default (no AUTO_RETRO_PR_COMMENTS): an evaluation skip posts no
-        comment -- the skip is recorded only in the step summary (#1386)."""
+        comment; the skip is recorded only in the step summary (#1386)."""
         monkeypatch.delenv("AUTO_RETRO_PR_COMMENTS", raising=False)
         seen = orchestrator_recorder(monkeypatch, review_comments=[])
         assert ar.run(merged_event(number=42), "o/r") == 0

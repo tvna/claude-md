@@ -3,7 +3,7 @@
 Every client-side gate under ``scripts/`` follows the same wire protocol with
 the Claude Code hook harness: the event JSON arrives on stdin, and a decision
 payload (or nothing) is written to stdout. Historically each gate's ``main()``
-re-implemented that plumbing -- read stdin, parse JSON, emit a
+re-implemented that plumbing; read stdin, parse JSON, emit a
 ``::error::<gate>: malformed stdin JSON`` line and exit 0 on a parse failure
 (fail-open per CLAUDE.md section 4), then serialise the decision with
 ``json.dumps``. This module owns that plumbing once so each gate keeps only its
@@ -76,7 +76,7 @@ def read_event(script_name: str) -> dict[str, Any] | None:
     """Read and parse the hook event JSON from stdin.
 
     Returns the parsed event dict on success. Empty (or whitespace-only) stdin
-    yields an empty dict ``{}`` -- the same off-target pass-through the gates
+    yields an empty dict ``{}``; the same off-target pass-through the gates
     relied on. On malformed JSON the function logs
 
         ``::error::<script_name>: malformed stdin JSON: <exc>``
@@ -105,13 +105,13 @@ def emit_decision(
     """Write *decision* to stdout as compact JSON, or nothing when ``None``.
 
     Mirrors the ``if decision is not None: sys.stdout.write(json.dumps(...))``
-    tail every gate ended with -- no trailing newline, default ``json.dumps``
-    separators -- so the bytes the harness reads are unchanged in the default
+    tail every gate ended with; no trailing newline, default ``json.dumps``
+    separators; so the bytes the harness reads are unchanged in the default
     (``block``) mode.
 
     Audit mode (``CLAUDE_GATE_MODE=audit``): when *auditable* is ``True`` (the
     default, for governance / workflow gates) a *blocking* decision is
-    downgraded to pass-through -- nothing is written to stdout, and a single
+    downgraded to pass-through; nothing is written to stdout, and a single
     ``::warning::<script_name>: [AUDIT] suppressed blocking decision`` line
     naming the suppressed reason is emitted to stderr so the would-be block is
     auditable rather than silently dropped. Security-boundary gates pass

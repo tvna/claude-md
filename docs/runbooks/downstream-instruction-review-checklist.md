@@ -12,9 +12,9 @@ This checklist is not a deterministic gate. It is a manual review pass executed 
 
 Each of the five dimensions below records:
 
-- **Question** -- what the reviewer asks the diff.
-- **Evidence** -- where the reviewer looks (file paths, deterministic gate names, PR body sections).
-- **Hard block** -- what the reviewer requests changes for when the answer is unsafe.
+- **Question**; what the reviewer asks the diff.
+- **Evidence**; where the reviewer looks (file paths, deterministic gate names, PR body sections).
+- **Hard block**; what the reviewer requests changes for when the answer is unsafe.
 
 Open the checklist only when the PR is in scope (see "Scope" below). Walk the five dimensions in order; later dimensions depend on earlier ones being satisfied.
 
@@ -33,13 +33,13 @@ If the diff touches `CLAUDE.md` or `AGENTS.md` directly without a corresponding 
 ## 1. Universal vs project-specific
 
 - **Question.** Does the wording in the diff hold for every downstream consumer of this repository, or only for `tvna/claude-md`?
-- **Evidence.** Walk the decision tree (Q1 through Q5) in [`docs/prd/agent-rules-design-philosophy.md` section 4](../prd/agent-rules-design-philosophy.md#4-decision-tree---where-does-a-new-candidate-rule-belong). The `verify-pr.yml` gate runs `scripts/scan_apm_portability.py` and automatically blocks two violation classes: Pattern A (literal repo-local tokens such as issue numbers, doc paths, script names, tool product names) and Pattern B (assertive-existence phrasing such as "lives in a dedicated runbook" or "see the companion guide" -- introduced by #535 after the #530 -> #533 regression where the same defect was repaired twice at different abstraction levels). The reviewer still inspects sentences that name no token and use no assertive-existence verb yet still encode a `tvna/claude-md`-only assumption; the automation backs the manual step rather than replacing it.
+- **Evidence.** Walk the decision tree (Q1 through Q5) in [`docs/prd/agent-rules-design-philosophy.md` section 4](../prd/agent-rules-design-philosophy.md#4-decision-tree---where-does-a-new-candidate-rule-belong). The `verify-pr.yml` gate runs `scripts/scan_apm_portability.py` and automatically blocks two violation classes: Pattern A (literal repo-local tokens such as issue numbers, doc paths, script names, tool product names) and Pattern B (assertive-existence phrasing such as "lives in a dedicated runbook" or "see the companion guide"; introduced by #535 after the #530 -> #533 regression where the same defect was repaired twice at different abstraction levels). The reviewer still inspects sentences that name no token and use no assertive-existence verb yet still encode a `tvna/claude-md`-only assumption; the automation backs the manual step rather than replacing it.
 - **Hard block.** Q4 = yes in the decision tree, or `verify-pr.yml` red on either Pattern A or Pattern B, or any `portability-ack:` marker introduced without the section 7.4 escape-hatch conditions met. Request demotion to a repo-local doc or a harness check.
 
 ## 2. Compiled-output drift
 
 - **Question.** Are `CLAUDE.md` and `AGENTS.md` byte-identical to the output of `apm compile` for the diff's `.apm/instructions/master.instructions.md`?
-- **Evidence.** `verify-pr.yml` runs `apm compile` and `git diff --exit-code -- CLAUDE.md AGENTS.md` on every PR. The reviewer confirms the gate is green; no manual diff is required.
+- **Evidence.** `verify-pr.yml` runs `apm compile` and `git diff --exit-code; CLAUDE.md AGENTS.md` on every PR. The reviewer confirms the gate is green; no manual diff is required.
 - **Hard block.** `verify-pr.yml` red. The author must regenerate the artifacts (`uv run --with "apm-cli==<pin>" --exclude-newer "14 days" apm compile`) and commit the result. Do not advance to dimensions 3 through 5 until this gate is green.
 
 ## 3. Unsafe agent behavior
@@ -78,7 +78,7 @@ This document and any PR that updates it are subject to the same drift gate it d
 ```bash
 uv sync --locked
 uv run --with "apm-cli==0.12.1" apm compile
-git diff --exit-code -- CLAUDE.md AGENTS.md
+git diff --exit-code; CLAUDE.md AGENTS.md
 ```
 
 Expected outcome: exit 0 and no diff. A diff means either the PR forgot to regenerate the compiled artifacts, or the PR is editing `CLAUDE.md` / `AGENTS.md` directly instead of `.apm/instructions/master.instructions.md` (which fails dimension 2 and is a hard block).
@@ -102,13 +102,13 @@ Doc-only updates to this checklist (without an instruction change) revert via th
 
 ## References
 
-- Parent: [#178](https://github.com/tvna/claude-md/issues/178) -- MITRE ATT&CK coverage tracking.
-- Related: [#63](https://github.com/tvna/claude-md/issues/63) -- residual workflow risks, prompt-injection boundaries, supply-chain gaps.
-- Companion: [`docs/prd/agent-rules-design-philosophy.md`](../prd/agent-rules-design-philosophy.md) section 7 -- ownership and portability review criteria.
-- [`docs/prd/security-control-inventory.md`](../prd/security-control-inventory.md) -- repo-wide security surface inventory (Lateral Movement row is the parent of this checklist).
-- [`docs/runbooks/agent-provenance.md`](agent-provenance.md) -- provenance review for skills, subagents, MCP servers, and comparable agent extensions.
-- [`docs/prd/privileged-operation-runbooks.md`](../prd/privileged-operation-runbooks.md) -- six-control runbook for privileged dispatch operations.
-- [`docs/prd/non-ascii-defense.md`](../prd/non-ascii-defense.md) -- non-ASCII defense layers.
-- [`.github/PULL_REQUEST_TEMPLATE.md`](../../.github/PULL_REQUEST_TEMPLATE.md) -- links this checklist in the merge checklist.
-- [`scripts/scan_apm_portability.py`](../../scripts/scan_apm_portability.py) -- deterministic gate for dimension 1.
-- [`.github/workflows/verify-pr.yml`](../../.github/workflows/verify-pr.yml) -- deterministic gate for dimensions 1 and 2 (`portable-pr-policy` job).
+- Parent: [#178](https://github.com/tvna/claude-md/issues/178); MITRE ATT&CK coverage tracking.
+- Related: [#63](https://github.com/tvna/claude-md/issues/63); residual workflow risks, prompt-injection boundaries, supply-chain gaps.
+- Companion: [`docs/prd/agent-rules-design-philosophy.md`](../prd/agent-rules-design-philosophy.md) section 7; ownership and portability review criteria.
+- [`docs/prd/security-control-inventory.md`](../prd/security-control-inventory.md); repo-wide security surface inventory (Lateral Movement row is the parent of this checklist).
+- [`docs/runbooks/agent-provenance.md`](agent-provenance.md); provenance review for skills, subagents, MCP servers, and comparable agent extensions.
+- [`docs/prd/privileged-operation-runbooks.md`](../prd/privileged-operation-runbooks.md); six-control runbook for privileged dispatch operations.
+- [`docs/prd/non-ascii-defense.md`](../prd/non-ascii-defense.md); non-ASCII defense layers.
+- [`.github/PULL_REQUEST_TEMPLATE.md`](../../.github/PULL_REQUEST_TEMPLATE.md); links this checklist in the merge checklist.
+- [`scripts/scan_apm_portability.py`](../../scripts/scan_apm_portability.py); deterministic gate for dimension 1.
+- [`.github/workflows/verify-pr.yml`](../../.github/workflows/verify-pr.yml); deterministic gate for dimensions 1 and 2 (`portable-pr-policy` job).

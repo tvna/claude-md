@@ -40,8 +40,8 @@ PreToolUse gates plus a PostToolUse follow-up. All of them live in
 | Server-side branch update (merge commit) | `gate_update_pr_branch.py:4-9` (deny) | PreToolUse `mcp__github__update_pull_request_branch` |
 | Surface a follow-up after a config-touching merge | `post_merge_new_session_prompt.py` | PostToolUse `mcp__github__merge_pull_request` |
 
-`[analysis]` The authorized-branch predicate is a conjunction -- member of the
-recorded set AND not a protected branch (`_session_branches.py:84-87`) -- but
+`[analysis]` The authorized-branch predicate is a conjunction; member of the
+recorded set AND not a protected branch (`_session_branches.py:84-87`); but
 an empty or unreadable set is treated as fail-open by every gate, so an
 unrecorded session is unconstrained until server-side branch protection and CI
 act as the backstop.
@@ -99,11 +99,11 @@ stateDiagram-v2
 
 | # | Gap `[analysis]` | Evidence `[fact]` (file:line) | Tracking |
 |---|---|---|---|
-| 1 | Unrecorded-session fail-open: when `.git/CLAUDE_SESSION_BRANCH` is empty or unreadable the authorized set is empty, and every session-branch gate then permits a commit/push to ANY branch -- the lock only holds once SessionStart actually recorded a branch. | `_session_branches.py:43`, `:84-87`; fail-open noted in `preflight_commit_session_branch.py:27` and `preflight_push_session_branch.py:18`. | #785, #1513, #1181 |
-| 2 | No local gate compares HEAD against the remote session-branch tip. The push gates only assert HEAD contains `origin/main` and HEAD is beyond the base tip -- a partner session advancing the same remote branch (paired codex/claude) creates a non-fast-forward divergence surfaced only as a raw push reject, not a guided rebase. | `preflight_branch_base.py:45-58`; `preflight_push_nonempty.py:40`; paired-work rationale in `_session_branches.py` docstring. | #1513 |
-| 3 | Ephemeral-container loss: local commits not pushed before the container is reclaimed are unrecoverable. The push gates fire only on an explicit `git push`, so nothing nudges a push before idle reclamation. | Environment contract (container reclaimed after inactivity); push gates gated on a literal `git push` -- `preflight_push_nonempty.py:45-46`. | #1627 |
+| 1 | Unrecorded-session fail-open: when `.git/CLAUDE_SESSION_BRANCH` is empty or unreadable the authorized set is empty, and every session-branch gate then permits a commit/push to ANY branch; the lock only holds once SessionStart actually recorded a branch. | `_session_branches.py:43`, `:84-87`; fail-open noted in `preflight_commit_session_branch.py:27` and `preflight_push_session_branch.py:18`. | #785, #1513, #1181 |
+| 2 | No local gate compares HEAD against the remote session-branch tip. The push gates only assert HEAD contains `origin/main` and HEAD is beyond the base tip; a partner session advancing the same remote branch (paired codex/claude) creates a non-fast-forward divergence surfaced only as a raw push reject, not a guided rebase. | `preflight_branch_base.py:45-58`; `preflight_push_nonempty.py:40`; paired-work rationale in `_session_branches.py` docstring. | #1513 |
+| 3 | Ephemeral-container loss: local commits not pushed before the container is reclaimed are unrecoverable. The push gates fire only on an explicit `git push`, so nothing nudges a push before idle reclamation. | Environment contract (container reclaimed after inactivity); push gates gated on a literal `git push`; `preflight_push_nonempty.py:45-46`. | #1627 |
 | 4 | Remote merged-branch deletion is intentionally out of scope: `branch_cleanup` is a read-only survey with no DELETE code path, so merged remote branches accumulate with no deterministic delete gate. | `branch_cleanup.py:5`, `:342-343` (no DELETE path; #31 Goal D). | #31 |
-| 5 | `update_pull_request_branch` is denied (it does a server-side merge that adds a merge commit), but the recovery -- a local rebase then push -- is operator/agent procedure in a runbook, not an automated transition. | `gate_update_pr_branch.py:4-9`, recovery runbook at `:40`. | #893 |
+| 5 | `update_pull_request_branch` is denied (it does a server-side merge that adds a merge commit), but the recovery; a local rebase then push; is operator/agent procedure in a runbook, not an automated transition. | `gate_update_pr_branch.py:4-9`, recovery runbook at `:40`. | #893 |
 | 6 | Defense-in-depth assumption: every local commit/push gate fails open on internal error, so a silently broken gate permits the action it guards; correctness then rests entirely on server-side branch protection plus CI. | Fail-open in `preflight_push_session_branch.py:18`, `preflight_commit_session_branch.py:27`, `check_session_branch.py:23`. | #785 |
 
 ## Recommended direction (speculation)
@@ -119,7 +119,7 @@ stateDiagram-v2
   base into an actionable deny.
 - `[analysis]` Gap 4: keep the destructive delete out of the in-session agent
   path, but close the accumulation with a deterministic post-merge cleanup
-  job (CI), not agent memory -- the same backstop pattern the survey already
+  job (CI), not agent memory; the same backstop pattern the survey already
   assumes.
 
 ## Scope note
@@ -127,8 +127,8 @@ stateDiagram-v2
 `[fact]` The local gates are advisory-with-backstop, not authoritative: each
 fails open and names CI plus server-side branch protection as the real guard
 (`preflight_push_session_branch.py:18`). `[analysis]` So the local/remote
-divergence modeled here is an agent/operator friction class -- a missing
-guided transition -- not a correctness hole: the server-side rules still
+divergence modeled here is an agent/operator friction class; a missing
+guided transition; not a correctness hole: the server-side rules still
 reject an illegitimate push. The `finishing-a-development-branch` skill
 (advisory, CLAUDE.md section 3) shapes how a branch is wrapped up, but adds no
 enforcement to these transitions.

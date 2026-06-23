@@ -1,4 +1,4 @@
-# Auto-retrospective automation -- operator runbook
+# Auto-retrospective automation; operator runbook
 
 Operator entry point for the auto-retrospective pipeline: the `open-retro`
 job in [`.github/workflows/post-merge.yml`](../../.github/workflows/post-merge.yml)
@@ -34,7 +34,7 @@ CI failures, fix-up commits, merge-from-main, multi-commit PRs, and prose
 Verification-fail rows. The last is a non-actionable policy-artifact anomaly
 hint after #1236 (it does not open a retro on its own, mirroring the
 Revert-commit row); `verification_pairs_failed` was retired as a standalone
-signal there for the same reason #1227 retired `body_cites_refs` -- a
+signal there for the same reason #1227 retired `body_cites_refs`; a
 free-form-prose heuristic over untrusted PR-body text dominated the
 false-positive rate.
 
@@ -109,22 +109,22 @@ wrongful close is reversible by re-opening.
 
 ## 7. Related procedures
 
-- [`retro-labels.md`](retro-labels.md) -- classify retro issues (TP/FP) and
+- [`retro-labels.md`](retro-labels.md); classify retro issues (TP/FP) and
   the scanner-applied label set the generator consumes as prior information.
 - [`retrospective-noise-flooding-procedure.md`](retrospective-noise-flooding-procedure.md)
-  -- spot noise-commit and flooding patterns during the retrospective.
-- [`pre-merge-retro-survey.md`](pre-merge-retro-survey.md) -- the
+ ; spot noise-commit and flooding patterns during the retrospective.
+- [`pre-merge-retro-survey.md`](pre-merge-retro-survey.md); the
   complementary pre-merge survey Stop hook (a distinct gate).
 - [`docs/standards/pr-subscription-lifecycle.md`](../standards/pr-subscription-lifecycle.md)
-  -- terminal-state signal contract after the pipeline opens or reuses the
+ ; terminal-state signal contract after the pipeline opens or reuses the
   retro issue.
 
 ## References
 
-- [`.github/workflows/post-merge.yml`](../../.github/workflows/post-merge.yml) -- trigger.
-- [`scripts/auto_retro.py`](../../scripts/auto_retro.py) -- retro issue generator.
-- [`scripts/script_ast_graph.py`](../../scripts/script_ast_graph.py) -- generated AST graph document generator.
-- [`tests/test_auto_retro.py`](../../tests/test_auto_retro.py) -- branch coverage and dry-run surface.
-- [`docs/prd/privileged-operation-runbooks.md`](../prd/privileged-operation-runbooks.md) section 9 -- six-control contract.
-- [#149](https://github.com/tvna/claude-md/issues/149) -- tracking issue.
-- [#1454](https://github.com/tvna/claude-md/issues/1454) -- this runbook's issue.
+- [`.github/workflows/post-merge.yml`](../../.github/workflows/post-merge.yml); trigger.
+- [`scripts/auto_retro.py`](../../scripts/auto_retro.py); retro issue generator.
+- [`scripts/script_ast_graph.py`](../../scripts/script_ast_graph.py); generated AST graph document generator.
+- [`tests/test_auto_retro.py`](../../tests/test_auto_retro.py); branch coverage and dry-run surface.
+- [`docs/prd/privileged-operation-runbooks.md`](../prd/privileged-operation-runbooks.md) section 9; six-control contract.
+- [#149](https://github.com/tvna/claude-md/issues/149); tracking issue.
+- [#1454](https://github.com/tvna/claude-md/issues/1454); this runbook's issue.

@@ -5,7 +5,7 @@ The #1150 slowdown (~138s) came from ``install_waza.sh`` compiling waza via
 ``go install`` instead of downloading the pinned prebuilt. Caching cannot
 defend against that (branch-scoped caches do not restore cross-PR), and CI
 wall time is not statically decidable. But "a tool is built from source" IS
-decidable, and it is the actual failure class -- so this gate makes it a
+decidable, and it is the actual failure class; so this gate makes it a
 deterministic check (retro #1152, #1153, #1154).
 
 ``scan_workflow_pip.py`` already bans ``pip install`` in workflows; this gate
@@ -19,7 +19,7 @@ The rule:
   merely mentions the phrase inside a string is not a false positive.
 * Comment lines (first non-whitespace char ``#``) are skipped, so the rule can
   be documented without self-tripping.
-* A line carrying ``# compile-source-ack`` is allowed -- the escape hatch for a
+* A line carrying ``# compile-source-ack`` is allowed; the escape hatch for a
   deliberate, reviewed source build (e.g. the install_waza.sh backstop reached
   only on a platform with no pinned prebuilt). Mirrors the
   ``scan_workflow_pip.py`` ACK precedent.
@@ -114,7 +114,7 @@ def _cmd_verify(_args: argparse.Namespace) -> int:
             path, lineno = hit.rsplit(":", 1)
             print(
                 f"::error file={path},line={lineno}::source build "
-                f"(go/cargo install) on the CI surface -- prefer a pinned "
+                f"(go/cargo install) on the CI surface; prefer a pinned "
                 f"prebuilt download. If a deliberate backstop, append "
                 f"'{ACK_MARKER}' with a rationale (#1154).",
                 file=sys.stderr,

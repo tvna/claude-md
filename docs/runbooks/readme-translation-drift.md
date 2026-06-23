@@ -51,7 +51,7 @@ review.
 The step lives inside the `gate` job of
 `.github/workflows/verify-pr.yml`. The job's existing
 required-status-check context `Portable PR policy / gate` (pinned in
-`.github/rulesets/main.json`) covers this step too -- no ruleset
+`.github/rulesets/main.json`) covers this step too; no ruleset
 change was needed when the gate landed.
 
 The job already checks out with `fetch-depth: 0`, so

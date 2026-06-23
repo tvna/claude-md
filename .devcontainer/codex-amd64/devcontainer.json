@@ -1,5 +1,5 @@
 {
-  "//": "GENERATED FILE -- do not edit. Source: .devcontainer/codex/devcontainer.json. Regenerate: python3 scripts/generate_devcontainer_arch_overlays.py generate. This overlay pins --platform=linux/amd64 for explicit cross-arch selection; see docs/runbooks/devcontainers.md.",
+  "//": "GENERATED FILE; do not edit. Source: .devcontainer/codex/devcontainer.json. Regenerate: python3 scripts/generate_devcontainer_arch_overlays.py generate. This overlay pins --platform=linux/amd64 for explicit cross-arch selection; see docs/runbooks/devcontainers.md.",
   "name": "claude-md Codex (linux/amd64)",
   "image": "ghcr.io/tvna/claude-md-devcontainer-codex:14a09ea8b83892e2ac42682ce9fc7a4c0648baae",
   "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",

@@ -29,19 +29,19 @@ the survey, records completion, and ends its turn for the human to merge.
 ```mermaid
 flowchart TD
     A["Stop (handoff): session opened a PR"] --> B{"Stop gate:<br/>survey marker recorded for the PR?"}
-    B -- "recorded" --> Z["Allow stop (gate passes)"]
-    B -- "not recorded" --> D["block -> launch AskUserQuestion<br/>(present consecutively, no prose between)"]
+    B -->|recorded| Z["Allow stop (gate passes)"]
+    B -->|not recorded| D["block -> launch AskUserQuestion<br/>(present consecutively, no prose between)"]
 
     D --> Q1["Q1 SATISFACTION first, anchored to the pre-merge handoff of PR #N<br/>state date + time + timezone (YYYY-MM-DD HH:MM TZ, e.g. JST and UTC)<br/>single-select: 5 very / 4 satisfied / 3 neutral / 2 dissatisfied"]
     Q1 --> SW{"branch on satisfaction"}
 
-    SW -- "high (4-5)" --> Q2a["Q2a any problem?<br/>rework / fix / surprise"]
+    SW -->|high 4-5| Q2a["Q2a any problem?<br/>rework / fix / surprise"]
     Q2a --> P1{"derive retro need from answer"}
-    P1 -- "repair-free" --> R1["no retro -> skip"]
-    P1 -- "minor" --> R2["short note only"]
-    P1 -- "problem" --> R3["open retro issue"]
+    P1 -->|repair-free| R1["no retro -> skip"]
+    P1 -->|minor| R2["short note only"]
+    P1 -->|problem| R3["open retro issue"]
 
-    SW -- "low (2-3)" --> Q2b["Q2b main pain points, multi-select<br/>rework / intent drift / unclear docs / time"]
+    SW -->|low 2-3| Q2b["Q2b main pain points, multi-select<br/>rework / intent drift / unclear docs / time"]
     Q2b --> R4["recommend retro -> open issue<br/>seed rows from answers"]
 
     R1 --> REC["record: --record &lt;pr&gt;"]
@@ -68,7 +68,7 @@ flowchart TD
    - Ask satisfaction first (single-select), anchored to an explicit date +
      time + timezone (`YYYY-MM-DD HH:MM TZ`, e.g. JST and UTC together) so the
      score's reference moment is unambiguous when the marker is read back later
-     -- a date alone is ambiguous because a session can span hours and cross the
+    ; a date alone is ambiguous because a session can span hours and cross the
      day boundary (refs #1565).
    - Emit the branched follow-up immediately after the answer, with no prose in
      between, so the survey reads as one continuous flow (plan-mode style).

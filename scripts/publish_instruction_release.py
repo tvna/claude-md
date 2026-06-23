@@ -22,7 +22,7 @@ Contract:
   ``GH_TOKEN``/``GITHUB_TOKEN`` from the environment.
 - Outputs: a created GitHub release for ``--tag`` with each asset uploaded; the
   release HTML URL on stdout; exit 0 on success, 1 on any error.
-- Failure policy: fails loud per CLAUDE.md section 4 -- a missing env var, a
+- Failure policy: fails loud per CLAUDE.md section 4; a missing env var, a
   missing asset file, or any non-2xx API response exits non-zero rather than
   publishing a partial or empty release.
 

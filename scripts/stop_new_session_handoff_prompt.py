@@ -29,11 +29,11 @@ call):
 * The turn must NOT be a human/CI terminal wait (#1704). When the only
   remaining work is awaiting a GitHub-UI merge, a code-owner review, or CI,
   there is no agent work to hand to a follow-up session, so the paste-ready
-  prompt is noise -- such a turn no-ops even if it mentions a handoff.
+  prompt is noise; such a turn no-ops even if it mentions a handoff.
 * The turn must NOT be a terminal-done completion report (#1711). After a merge,
   a turn that frames the work as complete ("all done", "merged", "no follow-up")
   has nothing to hand off, so an RCA / status report that merely NAMES a handoff
-  as a topic word must not trip a block -- such a turn no-ops too.
+  as a topic word must not trip a block; such a turn no-ops too.
 * The final assistant turn must signal a handoff to a new / follow-up session,
   AFTER the mandatory pre-merge retro-survey vocabulary is stripped (#1704) --
   the survey gate names its own event a "session handoff", so merely reporting
@@ -41,7 +41,7 @@ call):
   a cue sits NEAR a forward-continuation directive (#1711): a bare topic mention
   with no directive (an RCA discussing this very hook) is not a handoff ...
 * ... AND must NOT already carry a paste-ready prompt (a fenced code block or
-  an explicit paste marker) -- otherwise the goal is already met.
+  an explicit paste marker); otherwise the goal is already met.
 
 Fails open per CLAUDE.md section 4: any missing field, unreadable transcript, or
 parse error exits 0 with no output. A hook bug must never wedge the session.
@@ -85,12 +85,12 @@ HANDOFF_CUES: tuple[str, ...] = (
 
 # A handoff cue is a real handoff only when an instruction to CARRY THE WORK
 # FORWARD sits nearby (#1711). Without such a directive, a cue is just a topic
-# word -- an RCA of this very hook says "新規セッションのハンドオフプロンプト",
+# word; an RCA of this very hook says "新規セッションのハンドオフプロンプト",
 # naming the session but directing nothing. Listed lowercase (en) / verbatim
 # (ja); matched against the lowercased, survey-stripped turn text. Kept to
 # unambiguous forward verbs: completion- or negation-prone tokens (bare "対応",
 # "残り") are deliberately excluded so a completion report is not misread as a
-# directive -- terminal-done (below) handles those.
+# directive; terminal-done (below) handles those.
 HANDOFF_DIRECTIVES: tuple[str, ...] = (
     "続き",
     "続け",
@@ -149,8 +149,8 @@ SURVEY_NEUTRALIZE: tuple[str, ...] = (
     "session-handoff survey",
 )
 
-# A turn whose only remaining work is a human/CI terminal action -- awaiting a
-# GitHub-UI merge, a code-owner review, or CI -- has NO agent work to hand to a
+# A turn whose only remaining work is a human/CI terminal action; awaiting a
+# GitHub-UI merge, a code-owner review, or CI; has NO agent work to hand to a
 # follow-up session, so a paste-ready new-session prompt is noise (#1704).
 # Presence of any cue suppresses the nag. Kept narrow and specific to the "work
 # is done, waiting on a human or CI" framing so a genuine parked-work handoff is
@@ -174,8 +174,8 @@ TERMINAL_WAIT_CUES: tuple[str, ...] = (
     "merge via the github ui",
 )
 
-# A turn that frames the WHOLE task as complete -- merged and nothing left to do
-# -- has no agent work to hand to a follow-up session, so a paste-ready prompt is
+# A turn that frames the WHOLE task as complete; merged and nothing left to do
+#; has no agent work to hand to a follow-up session, so a paste-ready prompt is
 # noise even when the turn names a handoff as a topic word (#1711). This is the
 # residual case PR #1706 missed: a post-merge RCA / completion report. Cues are
 # deliberately whole-task ("対応完了", "merged") rather than bare completion
@@ -217,7 +217,7 @@ _BLOCK_REASON = (
     "issue / PR / branch / commit; what is already done; the next steps; and "
     "the key constraints (push-target branch lock, ASCII-only GitHub posts, "
     "owner-language output, measure-first). Do not summarize or act on it "
-    "yourself -- present it for the operator to copy."
+    "yourself; present it for the operator to copy."
 )
 
 
@@ -314,7 +314,7 @@ def signals_terminal_wait(text: str) -> bool:
 
 
 def signals_terminal_done(text: str) -> bool:
-    """True when *text* frames the whole task as complete -- nothing to hand off (#1711)."""
+    """True when *text* frames the whole task as complete; nothing to hand off (#1711)."""
     lowered = text.lower()
     return any(cue in lowered for cue in TERMINAL_DONE_CUES)
 

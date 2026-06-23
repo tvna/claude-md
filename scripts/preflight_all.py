@@ -10,20 +10,20 @@ contract, and reports per-step pass / fail / skip.
 
 The set of steps lives in :data:`STEPS`. Each step declares:
 
-* ``name`` -- a short identifier used in annotations and the
+* ``name``; a short identifier used in annotations and the
   ``--list`` machine-readable manifest consumed by
   :mod:`scan_preflight_drift`.
-* ``argv`` -- the exact command line CI runs.
-* ``required_env`` -- environment variables that must be set for the
+* ``argv``; the exact command line CI runs.
+* ``required_env``; environment variables that must be set for the
   step to be meaningful (e.g. ``RULESETS_PAT`` for the live ruleset
   diff).
-* ``soft`` -- when true and ``required_env`` is missing, the step is
+* ``soft``; when true and ``required_env`` is missing, the step is
   reported as a warning skip rather than a failure. Hard-required gates
   are kept ``soft=False`` so contributors cannot accidentally silence
   them.
 
 Steps whose CI input is the PR / issue body (``title_policy``,
-``body_policy``, ``issue_link``) are intentionally absent here -- their
+``body_policy``, ``issue_link``) are intentionally absent here; their
 client-side equivalents are the MCP PreToolUse hooks
 ``scripts/preflight_title_policy.py`` /
 ``scripts/preflight_pr_body_required_sections.py`` /
@@ -33,8 +33,8 @@ write-tool boundary instead of the working tree. The drift gate
 silent CI-vs-local drift is still detected.
 
 Exit codes:
-* ``0`` -- every step passed (or was correctly soft-skipped).
-* ``1`` -- at least one step failed, or a hard-required step's
+* ``0``; every step passed (or was correctly soft-skipped).
+* ``1``; at least one step failed, or a hard-required step's
   ``required_env`` was missing.
 
 Tested by ``tests/test_preflight_all.py``. Refs #493.
@@ -131,7 +131,7 @@ def _heavy_fingerprint(heavy: Sequence[Step], cwd: Path) -> str | None:
 
     The fingerprint folds in every heavy step's argv so a command change (e.g.
     adding ``-n auto``) busts a cache recorded under the old command. Any git or
-    filesystem error degrades to ``None`` -- the caller then runs the full suite
+    filesystem error degrades to ``None``; the caller then runs the full suite
     rather than trusting a fingerprint it could not compute (fail-open to the
     *slower, safer* path, never to a skip).
     """
@@ -145,7 +145,7 @@ def _heavy_fingerprint(heavy: Sequence[Step], cwd: Path) -> str | None:
 # Cheap steps that mutate the working tree or take a git lock; they must not
 # run concurrently with the working-tree-reading static gates, so the parallel
 # tier runs them first, sequentially (refs #1245):
-#   * preflight_branch_base -- ``git fetch`` writes .git refs and takes a lock.
+#   * preflight_branch_base; ``git fetch`` writes .git refs and takes a lock.
 # No generated docs are regenerated here: docs/generated/scripts/ (#1540) and
 # docs/generated/workflows/ (#1771) are both owned by the post-merge automation,
 # so the pre-push lane writes nothing under docs/generated/.
@@ -158,7 +158,7 @@ def _cheap_workers(n: int, environ: dict[str, str]) -> int:
     """Return the worker count for the parallel cheap tier.
 
     Honours ``PREFLIGHT_CHEAP_WORKERS`` (a positive int) as an override and
-    escape hatch -- ``=1`` restores the fully serial behaviour for bisecting a
+    escape hatch; ``=1`` restores the fully serial behaviour for bisecting a
     suspected ordering bug. Otherwise scales to ``2x`` cores (the steps are
     subprocess / I-O bound), capped at 16 to avoid a fork storm, and never
     exceeds *n*.
@@ -181,8 +181,8 @@ def _run_cheap(
 
     Steps named in :data:`_SERIAL_CHEAP` mutate the working tree or take a git
     lock, so they run first and sequentially, before any working-tree-reading
-    gate runs in parallel. The remaining steps -- pure static file reads and
-    read-only git -- run on a thread pool, where each step is a subprocess that
+    gate runs in parallel. The remaining steps; pure static file reads and
+    read-only git; run on a thread pool, where each step is a subprocess that
     releases the GIL while it waits. The returned list is rebuilt in *cheap*
     declaration order so ``emit_summary``, the manifest, and the drift gate are
     byte-for-byte unaffected by the concurrency.
@@ -220,7 +220,7 @@ def run_all(
 
     Cheap steps run first, in declaration order, and all of them run so a single
     invocation reports every cheap failure at once. Heavy steps (the ~5-min
-    pytest suite) then run only when **every** cheap step passed -- a sub-second
+    pytest suite) then run only when **every** cheap step passed; a sub-second
     gate failure (branch-base, ruff, mypy) short-circuits the
     suite instead of wasting it (refs #985, the PR #983 "5 minutes then rejected
     for an unrelated reason" failure mode).

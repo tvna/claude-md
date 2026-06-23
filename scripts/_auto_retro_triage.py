@@ -3,9 +3,9 @@
 The middle layer of the auto-retro refactor (Refs #1725, a precondition
 for #1702): the label-derived prior, the cross-retro triage-report
 aggregate, and the prior-based skip / tentative decisions. Every function
-here is pure -- it operates on :class:`_auto_retro_parse.PastRetro`
+here is pure; it operates on :class:`_auto_retro_parse.PastRetro`
 populations supplied by the IO layer, computes statistics, and renders the
-triage-report Markdown -- with no GitHub API calls or filesystem access.
+triage-report Markdown; with no GitHub API calls or filesystem access.
 
 Depends on :mod:`_auto_retro_parse` for the signal universe
 (``_SIGNAL_NAMES``) and shared dataclasses, plus the constants-only
@@ -55,7 +55,7 @@ class PastRetro:
     ``signals`` is the frozenset of signal names parsed from the retro
     body's ``- Signals fired:`` line (empty for pre-#582 retros).
     ``labels`` is the frozenset of label strings currently applied to
-    the retro -- the prior only cares whether ``retro:fp`` is among
+    the retro; the prior only cares whether ``retro:fp`` is among
     them, but the full set is preserved so future retrofits can layer
     on other labels without changing the dataclass shape.
 
@@ -86,13 +86,13 @@ def compute_prior_from_labels(
         / max(1, |{r in eligible : signal in r.signals}|)
 
     and ``sample_size`` is the denominator (un-floored). Empty input
-    yields ``(0.0, 0)`` for every signal -- the consumer
+    yields ``(0.0, 0)`` for every signal; the consumer
     (:func:`should_skip_by_prior`) gates on ``sample_size >=
     PRIOR_MIN_SAMPLE_SIZE`` so the empty-prior case degrades to
     "open normally" rather than to a silent skip. Refs #582.
 
     *epoch_min_number* drops retros whose issue ``number`` is below the
-    boundary from the population before any counting -- the live skip
+    boundary from the population before any counting; the live skip
     decision in :func:`run` passes
     :data:`PRIOR_EPOCH_MIN_RETRO_NUMBER` so retros opened under the old
     (pre-#1227) signal semantics do not poison the prior. The default
@@ -220,7 +220,7 @@ class TriageReport:
 
     ``total`` is the size of the observed retro population. ``label_counts``
     maps each triage label (and the :data:`_UNLABELLED_KEY` bucket) to the
-    number of retros carrying it -- a single retro may carry more than one
+    number of retros carrying it; a single retro may carry more than one
     triage label, so the label counts are independent tallies and need not
     sum to ``total``. ``signal_stats`` is ordered by :data:`_SIGNAL_NAMES`.
 
@@ -245,7 +245,7 @@ class TriageReport:
 
     @property
     def anomalies(self) -> tuple[SignalStat, ...]:
-        """Signals whose prior would skip a future retro -- the headline set."""
+        """Signals whose prior would skip a future retro; the headline set."""
         return tuple(s for s in self.signal_stats if s.is_anomaly)
 
 
@@ -424,7 +424,7 @@ def _render_fp_trend(report: TriageReport) -> list[str]:
     )
     lines.append(
         f"- Last {_FP_TREND_WINDOW} retros: {report.fp_rate_recent:.2f} "
-        f"(n={report.fp_recent_triaged} triaged) -- {direction}"
+        f"(n={report.fp_recent_triaged} triaged); {direction}"
     )
     return lines
 
@@ -480,7 +480,7 @@ def should_skip_by_prior(
     PR (and meet the sample-size floor) is greater than or equal to
     ``skip_threshold``. The "worst signal wins" rule matches
     :func:`scripts.scan_retro_followup_drift.aggregate_drift`. When
-    no signal qualifies, returns ``(False, "")`` -- the empty-prior
+    no signal qualifies, returns ``(False, "")``; the empty-prior
     safety net.
     """
     rate, name, sample = _max_active_fp(signals, prior, min_sample_size)

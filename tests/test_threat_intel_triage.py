@@ -296,7 +296,7 @@ class TestDependencyDiscovery:
             "      - run: |\n"
             # The mention ends the line, so the unanchored ``.search()`` used
             # to match ecosystem=`` ` ``, name="line", version="in" up to
-            # ``$`` -- the exact false-match from publish-devcontainer-images.
+            # ``$``; the exact false-match from publish-devcontainer-images.
             "          # the `# threat-intel-pin:` line in\n"
             "          docker run ghcr.io/aquasecurity/trivy@sha256:abc image\n",
             encoding="utf-8",
@@ -966,7 +966,7 @@ class TestEpssEnrichment:
         epss = tmp_path / "epss.json"
         self._write_osv_with_cve(osv, "GHSA-abcd-1234-wxyz", "CVE-2026-1111")
         self._write_empty_kev(kev)
-        # EPSS payload omits the relevant CVE -- FIRST returns no row when
+        # EPSS payload omits the relevant CVE; FIRST returns no row when
         # the score is not yet published.
         epss.write_text(json.dumps({"data": []}), encoding="utf-8")
 
@@ -1002,7 +1002,7 @@ class TestEpssEnrichment:
 class TestNvdEnrichment:
     """NVD CVE metadata enrichment (#174).
 
-    NVD is a *supplemental* enrichment source -- it must never widen the
+    NVD is a *supplemental* enrichment source; it must never widen the
     finding set, never suppress findings on missing data, and never be
     treated as evidence-of-absence for response decisions.
     """
@@ -1543,7 +1543,7 @@ class TestCli:
 
 
 # ---------------------------------------------------------------------------
-# parse_uv_lock() -- non-list packages and non-dict package entries
+# parse_uv_lock(); non-list packages and non-dict package entries
 # ---------------------------------------------------------------------------
 
 
@@ -1595,7 +1595,7 @@ class TestParseUvLockEdgeCases:
 
 
 # ---------------------------------------------------------------------------
-# parse_workflow_actions() -- missing .github/workflows directory (line 307)
+# parse_workflow_actions(); missing .github/workflows directory (line 307)
 # ---------------------------------------------------------------------------
 
 
@@ -1606,7 +1606,7 @@ class TestParseWorkflowActionsNoDir:
 
 
 # ---------------------------------------------------------------------------
-# scan_dependencies() -- empty list returns [] immediately (line 438)
+# scan_dependencies(); empty list returns [] immediately (line 438)
 # ---------------------------------------------------------------------------
 
 
@@ -1617,7 +1617,7 @@ class TestFetchExternalFindingsEmpty:
 
 
 # ---------------------------------------------------------------------------
-# parse_osv_batch_results() -- defensive isinstance checks (lines 540, 545-546, 549-550)
+# parse_osv_batch_results(); defensive isinstance checks (lines 540, 545-546, 549-550)
 # ---------------------------------------------------------------------------
 
 
@@ -1639,7 +1639,7 @@ class TestParseOsvBatchResultsDefensiveChecks:
 
 
 # ---------------------------------------------------------------------------
-# parse_kev_cves() -- non-list vulnerabilities raises; non-dict entry skipped
+# parse_kev_cves(); non-list vulnerabilities raises; non-dict entry skipped
 # ---------------------------------------------------------------------------
 
 
@@ -1654,7 +1654,7 @@ class TestParseKevCvesEdgeCases:
 
 
 # ---------------------------------------------------------------------------
-# request_json_any() -- mock urlopen (lines 1471-1488)
+# request_json_any(); mock urlopen (lines 1471-1488)
 # ---------------------------------------------------------------------------
 
 
@@ -1728,7 +1728,7 @@ class TestRequestJsonAny:
 
 
 # ---------------------------------------------------------------------------
-# query_osv_batch() and fetch_cisa_kev() -- mock request_json (lines 499-510)
+# query_osv_batch() and fetch_cisa_kev(); mock request_json (lines 499-510)
 # ---------------------------------------------------------------------------
 
 
@@ -1799,7 +1799,7 @@ class TestNetworkBoundaryFunctions:
 
 
 # ---------------------------------------------------------------------------
-# parse_uv_lock() -- file not found (line 195)
+# parse_uv_lock(); file not found (line 195)
 # ---------------------------------------------------------------------------
 
 
@@ -1810,7 +1810,7 @@ class TestParseUvLockFileMissing:
 
 
 # ---------------------------------------------------------------------------
-# parse_workflow_actions() -- non-yml file triggers continue (line 307)
+# parse_workflow_actions(); non-yml file triggers continue (line 307)
 # ---------------------------------------------------------------------------
 
 
@@ -1824,7 +1824,7 @@ class TestParseWorkflowActionsNonYml:
 
 
 # ---------------------------------------------------------------------------
-# _parse_action_ref() -- missing @ (line 348) and malformed ref (line 351)
+# _parse_action_ref(); missing @ (line 348) and malformed ref (line 351)
 # ---------------------------------------------------------------------------
 
 
@@ -1837,7 +1837,7 @@ class TestParseActionRefEdgeCases:
 
 
 # ---------------------------------------------------------------------------
-# fetch_osv_details() -- file mode with non-dict details (line 523)
+# fetch_osv_details(); file mode with non-dict details (line 523)
 # ---------------------------------------------------------------------------
 
 
@@ -1851,7 +1851,7 @@ class TestFetchOsvDetailsNonDictDetails:
 
 
 # ---------------------------------------------------------------------------
-# fetch_epss_scores() -- empty CVEs (594), no live (601-602), live mode (603-608)
+# fetch_epss_scores(); empty CVEs (594), no live (601-602), live mode (603-608)
 # ---------------------------------------------------------------------------
 
 
@@ -1879,7 +1879,7 @@ class TestFetchEpssScoresEdgeCases:
 
 
 # ---------------------------------------------------------------------------
-# _parse_epss_payload() -- non-list rows (614), non-dict row (618)
+# _parse_epss_payload(); non-list rows (614), non-dict row (618)
 # ---------------------------------------------------------------------------
 
 
@@ -1894,7 +1894,7 @@ class TestParseEpssPayloadEdgeCases:
 
 
 # ---------------------------------------------------------------------------
-# _coerce_epss_float() -- string branch (629-635)
+# _coerce_epss_float(); string branch (629-635)
 # ---------------------------------------------------------------------------
 
 
@@ -1916,7 +1916,7 @@ class TestCoerceEpssFloat:
 
 
 # ---------------------------------------------------------------------------
-# _attach_epss() -- non-str candidate (654), no match found (659)
+# _attach_epss(); non-str candidate (654), no match found (659)
 # ---------------------------------------------------------------------------
 
 
@@ -1950,7 +1950,7 @@ class TestAttachEpssEdgeCases:
 
 
 # ---------------------------------------------------------------------------
-# fetch_ghsa_advisories() -- empty deps (679), live mode (686-699),
+# fetch_ghsa_advisories(); empty deps (679), live mode (686-699),
 # no vuln_id (705), dep not affected (712), load ValueError (731)
 # ---------------------------------------------------------------------------
 
@@ -2019,7 +2019,7 @@ class TestFetchGhsaAdvisories:
 
 
 # ---------------------------------------------------------------------------
-# _ghsa_aliases() -- identifier items (749, 752)
+# _ghsa_aliases(); identifier items (749, 752)
 # ---------------------------------------------------------------------------
 
 
@@ -2042,7 +2042,7 @@ class TestGhsaAliases:
 
 
 # ---------------------------------------------------------------------------
-# _ghsa_affects_dependency() -- all branch paths (764, 767, 770, 773, 775, 779)
+# _ghsa_affects_dependency(); all branch paths (764, 767, 770, 773, 775, 779)
 # ---------------------------------------------------------------------------
 
 
@@ -2083,7 +2083,7 @@ class TestGhsaAffectsDependency:
 
 
 # ---------------------------------------------------------------------------
-# fetch_ossf_malicious_packages() -- early returns (804, 806), live mode (813-815)
+# fetch_ossf_malicious_packages(); early returns (804, 806), live mode (813-815)
 # ---------------------------------------------------------------------------
 
 
@@ -2117,7 +2117,7 @@ class TestFetchOssfMaliciousPackages:
 
 
 # ---------------------------------------------------------------------------
-# query_osv_malicious_for_dependency() -- network call (855-862)
+# query_osv_malicious_for_dependency(); network call (855-862)
 # ---------------------------------------------------------------------------
 
 
@@ -2144,7 +2144,7 @@ class TestQueryOsvMaliciousForDependency:
 
 
 # ---------------------------------------------------------------------------
-# _ossf_affected_dependencies() -- all defensive branches (876, 880, 883, 887)
+# _ossf_affected_dependencies(); all defensive branches (876, 880, 883, 887)
 # ---------------------------------------------------------------------------
 
 
@@ -2171,7 +2171,7 @@ class TestOssfAffectedDependencies:
 
 
 # ---------------------------------------------------------------------------
-# merge_findings() -- new alias added (line 921)
+# merge_findings(); new alias added (line 921)
 # ---------------------------------------------------------------------------
 
 
@@ -2198,7 +2198,7 @@ class TestMergeFindingsNewAlias:
 
 
 # ---------------------------------------------------------------------------
-# fetch_nvd_metadata() -- file mode error branches (963-964, 967), live mode (980-998)
+# fetch_nvd_metadata(); file mode error branches (963-964, 967), live mode (980-998)
 # ---------------------------------------------------------------------------
 
 
@@ -2262,7 +2262,7 @@ class TestFetchNvdMetadata:
 
 
 # ---------------------------------------------------------------------------
-# _extract_nvd_cvss() -- branch paths (1051, 1054, 1064, 1066)
+# _extract_nvd_cvss(); branch paths (1051, 1054, 1064, 1066)
 # ---------------------------------------------------------------------------
 
 
@@ -2292,7 +2292,7 @@ class TestExtractNvdCvss:
 
 
 # ---------------------------------------------------------------------------
-# _extract_nvd_cwes() -- branch paths (1076, 1079, 1082)
+# _extract_nvd_cwes(); branch paths (1076, 1079, 1082)
 # ---------------------------------------------------------------------------
 
 
@@ -2311,7 +2311,7 @@ class TestExtractNvdCwes:
 
 
 # ---------------------------------------------------------------------------
-# _extract_nvd_references() -- branch paths (1096, 1101)
+# _extract_nvd_references(); branch paths (1096, 1101)
 # ---------------------------------------------------------------------------
 
 
@@ -2329,7 +2329,7 @@ class TestExtractNvdReferences:
 
 
 # ---------------------------------------------------------------------------
-# attach_nvd_to_findings() -- no matching NVD enrichment (line 1132)
+# attach_nvd_to_findings(); no matching NVD enrichment (line 1132)
 # ---------------------------------------------------------------------------
 
 
@@ -2359,7 +2359,7 @@ class TestAttachNvdToFindingsNoMatch:
 
 
 # ---------------------------------------------------------------------------
-# _nvd_cvss_cell() / _nvd_cwe_cell() -- empty metadata (1350, 1362)
+# _nvd_cvss_cell() / _nvd_cwe_cell(); empty metadata (1350, 1362)
 # ---------------------------------------------------------------------------
 
 
@@ -2382,7 +2382,7 @@ class TestNvdCellHelpers:
 
 
 # ---------------------------------------------------------------------------
-# _string_list() -- non-list input (line 1436)
+# _string_list(); non-list input (line 1436)
 # ---------------------------------------------------------------------------
 
 
@@ -2395,7 +2395,7 @@ class TestStringList:
 
 
 # ---------------------------------------------------------------------------
-# load_json() -- non-dict raises (line 1443)
+# load_json(); non-dict raises (line 1443)
 # ---------------------------------------------------------------------------
 
 
@@ -2408,7 +2408,7 @@ class TestLoadJsonNonDict:
 
 
 # ---------------------------------------------------------------------------
-# request_json() -- non-dict response raises (lines 1453-1456)
+# request_json(); non-dict response raises (lines 1453-1456)
 # ---------------------------------------------------------------------------
 
 
@@ -2428,7 +2428,7 @@ class TestRequestJsonNonDict:
 
 
 # ---------------------------------------------------------------------------
-# main() -- OSError/ValueError exception handler (lines 1620-1622)
+# main(); OSError/ValueError exception handler (lines 1620-1622)
 # ---------------------------------------------------------------------------
 
 
@@ -2475,7 +2475,7 @@ class _FakeResponse:
 
 
 # ---------------------------------------------------------------------------
-# render_summary_markdown() -- the pure renderer shared by the step summary
+# render_summary_markdown(); the pure renderer shared by the step summary
 # and the idempotent issue/PR evidence comment (#1285).
 # ---------------------------------------------------------------------------
 
@@ -2564,7 +2564,7 @@ class TestRenderSummaryMarkdown:
 
 
 # ---------------------------------------------------------------------------
-# Live-source outage accumulation -- silent soft-fail sources surface their
+# Live-source outage accumulation; silent soft-fail sources surface their
 # outage so confidence loss is visible (#1285).
 # ---------------------------------------------------------------------------
 
@@ -2609,7 +2609,7 @@ class TestLiveSourceOutages:
 
 
 # ---------------------------------------------------------------------------
-# _upsert_comment() -- marker-anchored idempotent comment (#1285).
+# _upsert_comment(); marker-anchored idempotent comment (#1285).
 # ---------------------------------------------------------------------------
 
 
@@ -2741,7 +2741,7 @@ class TestCmdComment:
         monkeypatch.delenv("NUMBER", raising=False)
         body_file = tmp_path / "c.md"
         body_file.write_text("body", encoding="utf-8")
-        # Neither --issue nor $NUMBER set -- fail loud rather than guess a target.
+        # Neither --issue nor $NUMBER set; fail loud rather than guess a target.
         assert triage.main(["comment", "--body-file", str(body_file)]) == 1
         assert "--issue or NUMBER" in capsys.readouterr().err
 
@@ -3205,7 +3205,7 @@ class TestValidateOsvCoordinates:
     def test_against_real_repo_has_no_malformed_coordinates(self) -> None:
         # Regression guard (#1511 / #1519): run the PR-head parser over the
         # PR-head repo tree and assert every discovered OSV coordinate is
-        # well-formed -- the offline check the base-checkout pull_request_target
+        # well-formed; the offline check the base-checkout pull_request_target
         # triage job cannot perform on the PR. If a future workflow line
         # mis-parses, or a legitimate ecosystem is missing from
         # _KNOWN_OSV_ECOSYSTEMS, this fails here (before merge) naming the
@@ -3217,7 +3217,7 @@ class TestValidateOsvCoordinates:
         assert malformed == [], (
             "malformed OSV coordinates discovered in the repo: "
             + "; ".join(
-                f"{d.ecosystem}:{d.name}@{d.version} (from {d.source}) -- {r}"
+                f"{d.ecosystem}:{d.name}@{d.version} (from {d.source}); {r}"
                 for d, r in malformed
             )
         )

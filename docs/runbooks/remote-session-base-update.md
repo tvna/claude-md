@@ -4,7 +4,7 @@ Use this runbook when:
 
 - You are in a **remote Claude session** (container, web, or CI environment),
 - The branch is a `claude/*` branch (or any branch subject to the
-  `all-branches-no-force-push` ruleset -- i.e., not `main` and not
+  `all-branches-no-force-push` ruleset; i.e., not `main` and not
   `dependabot/*`), and
 - `scripts/preflight_session_base_freshness.py` warns that the branch base is
   stale.
@@ -61,7 +61,7 @@ server-side because:
 
 - A local `git commit` (needed to record the conflict resolution) is blocked
   by `scripts/preflight_session_base_freshness.py` until HEAD already
-  contains `origin/main` -- a chicken-and-egg deadlock.
+  contains `origin/main`; a chicken-and-egg deadlock.
 - Force-push after a local rebase is denied by `non_fast_forward`.
 
 The server-side procedure below works around both constraints using only
@@ -73,7 +73,7 @@ and `mcp__github__update_pull_request_branch` (server-side merge of `main`).
 - The PR is open and the branch is the one shown by `git branch --show-current`.
 - You have the GitHub MCP tools available (`mcp__github__*`).
 
-### Step 1 -- Identify conflicting files
+### Step 1; Identify conflicting files
 
 ```sh
 git fetch origin main
@@ -83,14 +83,14 @@ git merge-tree --write-tree HEAD origin/main 2>&1 | grep "^CONFLICT"
 Record the conflicting paths. In most cases these are generated artifacts
 (e.g. `docs/standards/module-size-distribution.toml`).
 
-### Step 2 -- Find the merge-base SHA
+### Step 2; Find the merge-base SHA
 
 ```sh
 MERGE_BASE=$(git merge-base HEAD origin/main)
 echo "$MERGE_BASE"
 ```
 
-### Step 3 -- Neutralize each conflicting file
+### Step 3; Neutralize each conflicting file
 
 For each conflicting file, read its content at the merge-base commit and push
 that version to the branch via `mcp__github__create_or_update_file`.
@@ -120,7 +120,7 @@ version, so merging `main` into the branch will have no conflict there.
 
 Repeat for each conflicting file.
 
-### Step 4 -- Server-side merge of main (owner action required)
+### Step 4; Server-side merge of main (owner action required)
 
 **The agent cannot perform this step directly.**
 `scripts/gate_update_pr_branch.py` (PreToolUse hook) unconditionally denies
@@ -136,7 +136,7 @@ After the owner completes this step, the remote branch HEAD is a Verified
 merge commit that contains `origin/main`. The freshness invariant is now
 satisfied.
 
-### Step 5 -- Sync local worktree to the merged state
+### Step 5; Sync local worktree to the merged state
 
 ```sh
 git fetch origin
@@ -146,7 +146,7 @@ git reset --hard origin/<branch-name>
 This is a local-only operation (no push), so `non_fast_forward` does not
 apply.
 
-### Step 6 -- Regenerate generated artifacts
+### Step 6; Regenerate generated artifacts
 
 Re-run whatever script produces the generated files that were neutralized in
 Step 3. For example, to regenerate `module-size-distribution.toml`:
@@ -158,7 +158,7 @@ python3 scripts/gen_module_size_distribution.py
 Confirm the output differs from the merge-base version (it should now reflect
 the merged state of `main` plus the feature-branch changes).
 
-### Step 7 -- Push the regenerated artifacts
+### Step 7; Push the regenerated artifacts
 
 For each regenerated file, push it via `mcp__github__create_or_update_file`:
 
@@ -170,7 +170,7 @@ For each regenerated file, push it via `mcp__github__create_or_update_file`:
   `git rev-parse origin/<branch>:<path>` after Step 5's fetch
 - `branch`: the current branch name
 
-### Step 8 -- Verify CI and base freshness
+### Step 8; Verify CI and base freshness
 
 1. Monitor the PR's CI checks until all required checks pass.
 2. Confirm `python3 scripts/preflight_session_base_freshness.py check` exits 0.
@@ -189,7 +189,7 @@ The PR cannot be self-merged from a remote session:
 are the same person and cannot self-approve, so the only available path is an
 admin override.
 
-**Preconditions before running the command below -- verify all of these first:**
+**Preconditions before running the command below; verify all of these first:**
 
 1. All required CI checks are green on the PR head commit.
 2. All review threads are resolved.
@@ -203,7 +203,7 @@ gh pr merge <PR-number> --squash --admin
 
 `--admin` overrides branch-protection rules (including code-owner review). It
 does **not** skip CI: if any required check is still failing, the merge will
-fail even with `--admin` unless the repo uses admin-bypass rules -- in this
+fail even with `--admin` unless the repo uses admin-bypass rules; in this
 repo there are none (`bypass_actors: []`). Confirm CI is green before
 running.
 
@@ -217,12 +217,12 @@ intermediate merge commit does not appear in `main`'s history.
 **Constraint**: `mcp__github__actions_run_trigger` (workflow_dispatch) returns
 `403 Resource not accessible by integration` from a remote Claude session
 because the integration token lacks `actions: write`. This cannot be lifted by
-operator approval -- it is a token-scope limit, not a permission prompt.
+operator approval; it is a token-scope limit, not a permission prompt.
 
 **When it matters**: Any PR that merges a change to `.github/rulesets/*.json`
 onto `main` leaves the live ruleset behind the SoT JSON until the owner
 manually dispatches the `Apply rulesets` workflow. While the live ruleset lags,
-`Verify ruleset sync / gate` fails on **every open PR** -- this is an effective
+`Verify ruleset sync / gate` fails on **every open PR**; this is an effective
 repo-wide merge freeze, not a per-PR defect.
 
 **Symptom**: All open PRs show `Verify ruleset sync / gate` red after a
@@ -237,7 +237,7 @@ ruleset files.
    merged SoT JSON.
 4. Re-run with `dry_run=false`.
 5. Re-run `Verify ruleset sync / gate` on each open PR (re-push or re-run
-   the check in the Actions UI) -- the check caches the stale result until
+   the check in the Actions UI); the check caches the stale result until
    re-triggered.
 
 See `docs/runbooks/rulesets.md` for the full `Apply rulesets` procedure and
@@ -247,13 +247,13 @@ the `Dispatch authorization criteria`.
 
 ## Companion documents
 
-- `docs/runbooks/refresh-behind-pr.md` -- conflict-free fast path
-- `docs/runbooks/update-pr-branch-recovery.md` -- replacement-branch path for
+- `docs/runbooks/refresh-behind-pr.md`; conflict-free fast path
+- `docs/runbooks/update-pr-branch-recovery.md`; replacement-branch path for
   persistent conflicts
-- `docs/runbooks/merge-readiness-loop.md` -- where base-update sits in the
+- `docs/runbooks/merge-readiness-loop.md`; where base-update sits in the
   overall PR loop
-- `docs/runbooks/rulesets.md` -- `non_fast_forward` rationale and `Apply
+- `docs/runbooks/rulesets.md`; `non_fast_forward` rationale and `Apply
   rulesets` procedure
-- `scripts/preflight_session_base_freshness.py` -- the gate that detects a
+- `scripts/preflight_session_base_freshness.py`; the gate that detects a
   stale base and blocks `git commit`
-- `scripts/refresh_pr_branch.py` -- the conflict-free helper
+- `scripts/refresh_pr_branch.py`; the conflict-free helper

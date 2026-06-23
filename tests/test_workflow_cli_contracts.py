@@ -8,8 +8,8 @@ Drift guard (issue #193):
 * ``_iter_workflow_invocations()`` parses every workflow YAML
   structurally with ``yaml.safe_load`` and walks
   ``jobs.<job>.steps[*].run``. Each ``python3 scripts/foo.py bar`` or
-  ``uv run python scripts/foo.py bar`` invocation -- including command
-  substitutions like ``$(python3 scripts/uv_pin.py read)`` -- is
+  ``uv run python scripts/foo.py bar`` invocation; including command
+  substitutions like ``$(python3 scripts/uv_pin.py read)``; is
   emitted as a :class:`WorkflowInvocation`.
 * ``CONTRACT_REGISTRY`` maps each ``(script, subcommand)`` pair seen in
   workflows to the contract test function name that exercises it.
@@ -90,6 +90,7 @@ import scan_pr_body_quality_drift
 import scan_preflight_drift
 import scan_provisioning_hook_serial
 import scan_quality_standard_drift
+import scan_repo_double_hyphen
 import scan_repo_em_dash
 import scan_retro_followup_drift
 import scan_secret_runbooks
@@ -132,7 +133,7 @@ pytestmark = pytest.mark.shard_ci_ops_2
 REPO = "owner/repo"
 
 _WORKFLOWS_DIR = Path(".github/workflows")
-# Composite actions invoke scripts from their own ``runs.steps`` -- those calls
+# Composite actions invoke scripts from their own ``runs.steps``; those calls
 # must stay under the same CLI-contract governance as workflow steps, else
 # moving a call into an action (e.g. .github/actions/setup-uv) becomes a blind
 # spot. The inventory below scans both surfaces.
@@ -163,7 +164,7 @@ class WorkflowInvocation(NamedTuple):
 # punctuation stripped; shell variables like ``"$MODE"`` are stored as
 # ``$MODE``. ``None`` means the workflow invokes the script with only
 # flags (no subcommand). Keys must mirror what
-# ``_iter_workflow_invocations`` observes -- the two drift tests below
+# ``_iter_workflow_invocations`` observes; the two drift tests below
 # enforce that in both directions.
 CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("analyze_ci_timings.py", None): "test_analyze_ci_timings_matches_workflow_args",
@@ -222,6 +223,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("scan_apm_ascii.py", "verify"): "test_scan_apm_ascii_verify_matches_workflow_paths",
     ("scan_apm_portability.py", "verify"): "test_scan_apm_portability_verify_matches_workflow_paths",
     ("scan_repo_em_dash.py", "verify"): "test_scan_repo_em_dash_verify_matches_workflow_args",
+    ("scan_repo_double_hyphen.py", "verify"): "test_scan_repo_double_hyphen_verify_matches_workflow_args",
     ("scan_design_philosophy_drift.py", "verify"): "test_scan_design_philosophy_drift_verify_matches_workflow_paths",
     ("scan_design_philosophy_drift.py", "verify-coupling"): "test_scan_design_philosophy_drift_verify_coupling_matches_workflow_args",
     ("scan_apm_lock_drift.py", "verify"): "test_scan_apm_lock_drift_verify_matches_workflow_args",
@@ -366,7 +368,7 @@ def _iter_workflow_invocations() -> list[WorkflowInvocation]:
     ``.pre-commit-config.yaml`` already excludes ``.github/workflows/`` from
     ``check-yaml`` for the same reason. When structured parsing fails, fall
     back to scanning the raw text so the affected file still contributes to
-    the inventory -- structured walk is preferred but cannot be the only path.
+    the inventory; structured walk is preferred but cannot be the only path.
     """
     found: list[WorkflowInvocation] = []
 
@@ -732,7 +734,7 @@ def test_generated_bot_pr_titles_pass_title_policy() -> None:
     Regression guard for #1549: three bot workflows hard-coded a PR title that
     embedded a `(#NNN)` issue ref, which ``title_policy`` (the required
     ``Portable PR policy / gate``) rejects (#167), so every PR they reopened was
-    unmergeable -- PR #1485 being the visible instance. The titles are sourced
+    unmergeable; PR #1485 being the visible instance. The titles are sourced
     from their authoritative locations (workflow ``PR_TITLE`` env and the
     ``auto_retro`` constant) so a reintroduced `(#NNN)` fails this gate loudly.
     """
@@ -1222,7 +1224,7 @@ def test_coverage_failure_issue_run_matches_workflow_env(
 
 def test_scan_apm_ascii_verify_matches_workflow_paths(tmp_path: Path) -> None:
     path = tmp_path / "ascii.md"
-    path.write_text("ascii prose -- clean\n", encoding="utf-8")
+    path.write_text("ascii prose; clean\n", encoding="utf-8")
 
     assert scan_apm_ascii.main(
         ["verify", "--path", str(path), "--path", str(path), "--path", str(path)]
@@ -1244,6 +1246,23 @@ def test_scan_repo_em_dash_verify_matches_workflow_args(tmp_path: Path) -> None:
     mock_result.stdout = ""
     with patch("subprocess.run", return_value=mock_result):
         assert scan_repo_em_dash.main(["verify", "--git-tracked"]) == 0
+
+
+def test_scan_repo_double_hyphen_verify_matches_workflow_args(tmp_path: Path) -> None:
+    """Mirrors the ``Scan all tracked files for prose double-hyphen separator`` step in
+    ``.github/workflows/verify-pr.yml`` (issue #1903).
+
+    The workflow passes ``--git-tracked``; the contract exercises the same
+    subcommand shape against a real (empty) git-ls-files mock so the
+    ``verify`` path is exercised end-to-end.
+    """
+    from unittest.mock import MagicMock, patch
+
+    mock_result = MagicMock()
+    mock_result.returncode = 0
+    mock_result.stdout = ""
+    with patch("subprocess.run", return_value=mock_result):
+        assert scan_repo_double_hyphen.main(["verify", "--git-tracked"]) == 0
 
 
 def test_scan_apm_portability_verify_matches_workflow_paths(tmp_path: Path) -> None:
@@ -1622,7 +1641,7 @@ def test_scan_mermaid_syntax_verify_matches_workflow_args() -> None:
     the pinned node_modules the gate parses the current docs (exit 0, since
     docs/generated/scripts/ast/ is exempt); without them it reaches the
     bun-missing branch (exit 1). Either way ``verify`` is a real, parseable
-    subcommand -- the contract this test guards.
+    subcommand; the contract this test guards.
     """
     has_deps = bool(scan_mermaid_syntax.resolve_bun()) and (
         scan_mermaid_syntax.REPO_ROOT / "node_modules" / "mermaid"
@@ -2402,7 +2421,7 @@ def test_tvna_bot_automerge_workflow_contract() -> None:
     suites (recursion suppression), so the keeper is driven by ``workflow_run``
     on the workflows that own the required status checks, plus a ``schedule``
     safety net. The merge subcommand filters by author and clean state, so unlike
-    the old pin keeper the job is not branch-prefix-gated -- it runs on any
+    the old pin keeper the job is not branch-prefix-gated; it runs on any
     successful run and no-ops when nothing is eligible. Refs #1539, #1352, #1363,
     #1401.
     """
@@ -2462,7 +2481,7 @@ def test_devcontainer_pin_refresh_persists_checkout_credentials() -> None:
     ``git ls-remote origin <fresh-branch>`` (the branch-existence check) which
     authenticates with the GITHUB_TOKEN that ``actions/checkout`` persists by
     default. The pin commit itself is now created via the GitHub API
-    (createCommitOnBranch), not ``git push``, so it is signed -- but a
+    (createCommitOnBranch), not ``git push``, so it is signed; but a
     ``persist-credentials: false`` on this checkout would still strip the
     ls-remote credential. Assert the checkout step does not disable credential
     persistence. Refs #1229, #1301, #1303, #1437.
@@ -2731,7 +2750,7 @@ def test_verify_test_shard_markers_matches_workflow_args(tmp_path: Path) -> None
     """Mirror the argv shape used by verify-agents.yml lint-scripts-static.
 
     The workflow shells to ``uv run python scripts/verify_test_shard_markers.py``
-    with no subcommand and no flags -- it relies on the script defaulting
+    with no subcommand and no flags; it relies on the script defaulting
     ``--tests-dir`` to ``<repo>/tests``. Exercise the same shape against a
     tiny conformant fixture so the contract pins the no-argv invocation.
     Refs #545.
@@ -2785,7 +2804,7 @@ def test_uv_pin_workflow_subcommands_match_ci_usage(
 def test_python_pin_verify_matches_workflow_args(tmp_path: Path) -> None:
     """Mirror the workflow step in ``.github/workflows/verify-agents.yml`` and
     ``weekly-maintenance.yml`` that runs
-    ``uv run python scripts/python_pin.py verify`` -- no extra flags, cwd is the
+    ``uv run python scripts/python_pin.py verify``; no extra flags, cwd is the
     repo root. Refs #1680.
     """
     (tmp_path / "pyproject.toml").write_text(

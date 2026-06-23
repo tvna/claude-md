@@ -9,7 +9,7 @@ take injectable boundaries so the CLI is fully unit-testable.
 See #126 (refactor) and #30 / #116 (origin) for context. #1004 added
 server-default parameter normalization and canonical rule-list ordering to the
 projection (superseding the #30 / #116 "preserve raw rule order" decision, which
-predated the evidence that GitHub re-orders rules on PUT -- see #1036), and the
+predated the evidence that GitHub re-orders rules on PUT; see #1036), and the
 `reconcile` rolling-issue dedup / auto-close replacing the per-run flood
 (#998 / #1000 / #1002).
 """
@@ -273,7 +273,7 @@ def decide_issue_action(
 
 def render_summary_header(*, run_date: str, run_url: str) -> str:
     return (
-        f"## Ruleset drift detection -- run {run_date}\n"
+        f"## Ruleset drift detection; run {run_date}\n"
         "\n"
         f"- Run: {run_url}\n"
         "\n"

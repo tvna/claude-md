@@ -2,9 +2,9 @@
 """Deterministic gate: the section 2/4 safety enumerations stay non-exhaustive.
 
 Issues #1241, #1242, #1243 generalized three closed enumerations in
-``.apm/instructions/master.instructions.md`` -- the section 4
+``.apm/instructions/master.instructions.md``; the section 4
 destructive-operation list, the section 2 untrusted-data source list, and
-the section 2 adversarial-payload list -- into open invariants whose
+the section 2 adversarial-payload list; into open invariants whose
 enumerations are explicitly non-exhaustive instances (the pattern #1239
 introduced for the section 4 secret-handling bullet). Each bullet now
 carries the marker phrase ``non-exhaustive instances`` and a
@@ -78,7 +78,7 @@ def find_violations(master_text: str, path: str) -> list[str]:
         if not matches:
             problems.append(
                 f"::error::registered invariant bullet not found ({label}): "
-                f"anchor {anchor!r} is absent -- the bullet was renamed or "
+                f"anchor {anchor!r} is absent; the bullet was renamed or "
                 f"removed; restore it or update REGISTERED_BULLETS"
             )
             continue
@@ -87,7 +87,7 @@ def find_violations(master_text: str, path: str) -> list[str]:
                 problems.append(
                     f"::error file={path},line={lineno}::non-exhaustive marker "
                     f"{MARKER!r} missing from {label}; the enumeration was "
-                    f"re-closed -- restore the open invariant"
+                    f"re-closed; restore the open invariant"
                 )
     return problems
 

@@ -5,7 +5,7 @@ Mirrors the pattern in ``scripts/_trusted_bots.py`` and
 importable from both ``scripts/`` and ``tests/``.
 
 The labels here govern the TP/FP feedback loop that retrofits the
-retro convergence problem -- ``scripts/auto_retro.py`` opens retros from
+retro convergence problem; ``scripts/auto_retro.py`` opens retros from
 single-PR-local signals with no mid-to-long-term context, so retros
 accumulate without converging. The labels are how operators (and the
 scanner under ``scripts/scan_retro_followup_drift.py``) record whether
@@ -14,17 +14,17 @@ follow-ups settle.
 
 Operator convention (see ``docs/runbooks/retro-labels.md``):
 
-* ``retro:tp``             -- operator-confirmed true positive: the
+* ``retro:tp``            ; operator-confirmed true positive: the
   follow-up gate or instruction change has landed and is producing the
   expected reduction in repair loops.
-* ``retro:fp``             -- confirmed false positive: either the
+* ``retro:fp``            ; confirmed false positive: either the
   operator marked it so, or the scanner auto-confirmed it because the
   follow-up was closed not-planned or the follow-up PR was closed
   unmerged.
-* ``retro:fp-candidate``   -- the scanner detected drift (follow-up
+* ``retro:fp-candidate``  ; the scanner detected drift (follow-up
   stale or referenced ``#N`` does not resolve) and is asking the
   operator to confirm ``retro:fp`` or relabel ``retro:tp``.
-* ``retro:tentative``      -- auto-opened with low prior confidence
+* ``retro:tentative``     ; auto-opened with low prior confidence
   (reserved for a future PR that retrofits
   ``scripts/auto_retro.py:compute_repair_signals`` with a label-derived
   prior). Not used by the PR1 scanner.
@@ -52,8 +52,8 @@ ALL_RETRO_LABELS: Final[frozenset[str]] = frozenset(
 # `fix_typed_title`, `multi_commit_pr`, `verification_pairs_failed`) to
 # its historical false-positive rate, computed from past retros that
 # carry ``retro:fp``. (`body_cites_refs` was retired as a standalone
-# trigger in #1227 because it fired on nearly every PR -- CLAUDE.md
-# section 3 mandates a ``Refs #N`` line -- and dominated prior pollution.)
+# trigger in #1227 because it fired on nearly every PR; CLAUDE.md
+# section 3 mandates a ``Refs #N`` line; and dominated prior pollution.)
 # ``auto_retro.run``
 # evaluates the prior AFTER signal computation and uses the MAX
 # fp_rate across active signals to decide:
@@ -66,7 +66,7 @@ ALL_RETRO_LABELS: Final[frozenset[str]] = frozenset(
 # prior (fewer than N past observations of the signal) does not skip:
 # the gate degrades safely toward "open normally" when the population
 # is too thin to estimate. This replaces the date-based
-# ``BOOTSTRAP_UNTIL`` from the original plan -- sample-size driven
+# ``BOOTSTRAP_UNTIL`` from the original plan; sample-size driven
 # safety is more robust than a date and self-clears as the operator +
 # the #560 scanner populate labels organically.
 PRIOR_SKIP_THRESHOLD: Final[float] = 0.5
@@ -77,7 +77,7 @@ PRIOR_FETCH_LIMIT: Final[int] = 50
 # Prior epoch boundary (refs #1227, advanced for #1236). Retros opened
 # before a signal-semantics fix measured the OLD (buggy) signal
 # definitions, so their ``retro:fp`` labels must not drive
-# ``should_skip_by_prior`` after the fix -- otherwise a mass ``retro:fp``
+# ``should_skip_by_prior`` after the fix; otherwise a mass ``retro:fp``
 # cleanup would poison the prior and suppress genuine post-fix repair
 # retros. Only retros whose issue number is at or above this boundary
 # contribute to the live skip decision (``auto_retro.run`` passes it; the

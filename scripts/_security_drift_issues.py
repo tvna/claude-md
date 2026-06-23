@@ -6,7 +6,7 @@ maintainability size budget (``docs/standards/module-size-distribution.toml``),
 mirroring the ``_security_drift_families.py`` split (#1488).
 
 This module owns the GitHub-issue lifecycle that maintains exactly ONE rolling
-issue per control family instead of flooding a fresh issue every run -- the root
+issue per control family instead of flooding a fresh issue every run; the root
 cause of the #1432/#1507/#1653 pile-up. The HTTP boundary is injected as
 ``apply`` (``_github_api.apply_call`` in production), so tests stay offline.
 
@@ -51,7 +51,7 @@ def render_family_issue_title(family: str) -> str:
 
     The date is intentionally NOT in the title (it lives in the body) so a
     re-detected drift maps to the SAME open rolling issue instead of stacking a
-    fresh one each run -- the root cause of the #1432/#1507/#1653 pile-up (#1726).
+    fresh one each run; the root cause of the #1432/#1507/#1653 pile-up (#1726).
     """
     spec = FAMILY_ISSUE_SPEC[family]
     return f"fix({spec['scope']}): scheduled drift detected"
@@ -277,7 +277,7 @@ def reconcile_family_issues(
             )
         elif family in resolved:
             failed |= not _close_all(apply, repo, family, matches, token)
-        # else: detector error / unknown -- leave any open issue untouched.
+        # else: detector error / unknown; leave any open issue untouched.
     return 1 if failed else 0
 
 

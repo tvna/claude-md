@@ -8,14 +8,14 @@ mint a fresh GitHub App *installation* token at launch time. Installation
 tokens expire after about an hour, so binding the mint to the launch keeps the
 credential current without any operator handoff (Refs #1063).
 
-Inputs come from the environment only -- nothing is read from a tracked file:
+Inputs come from the environment only; nothing is read from a tracked file:
 
-* ``GITHUB_APP_ID`` -- the numeric App id (the JWT ``iss`` claim).
-* ``GITHUB_APP_INSTALLATION_ID`` -- the installation to mint a token for.
-* ``GITHUB_APP_PRIVATE_KEY`` -- the App private key, PEM text. This is the only
+* ``GITHUB_APP_ID``; the numeric App id (the JWT ``iss`` claim).
+* ``GITHUB_APP_INSTALLATION_ID``; the installation to mint a token for.
+* ``GITHUB_APP_PRIVATE_KEY``; the App private key, PEM text. This is the only
   root secret; it is held in memory, written to a ``0600`` temp file only for
   the duration of the openssl signing call, and removed immediately after.
-* ``GITHUB_API_URL`` -- optional API base (default ``https://api.github.com``)
+* ``GITHUB_API_URL``; optional API base (default ``https://api.github.com``)
   for GitHub Enterprise Server installs.
 
 The minted token is written to stdout and nowhere else. The JWT, the private
@@ -128,7 +128,7 @@ def request_installation_token(
     """Exchange an App JWT for an installation access token.
 
     Returns the token string. Raises :class:`MintError` on any HTTP, network,
-    or response-shape failure -- never returning an empty or partial token.
+    or response-shape failure; never returning an empty or partial token.
     """
     if not api_url.startswith("https://"):
         # Refuse to send the App JWT (a bearer credential) over cleartext. A

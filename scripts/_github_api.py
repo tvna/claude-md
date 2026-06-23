@@ -146,7 +146,7 @@ def upload_release_asset(
 # GitHub's GraphQL endpoint, like the REST one, returns transient HTTP 5xx and
 # network failures; it ALSO returns a generic "Something went wrong while
 # executing your query ... Please include <id> when reporting this issue" entry
-# in the response ``errors`` array -- its internal-error / timeout signature --
+# in the response ``errors`` array; its internal-error / timeout signature --
 # usually with HTTP 200. A manual decision-tree run reproduced this on
 # createCommitOnBranch even for a single small batch (Refs #1580), and the same
 # generic error also appears when a mutation races a just-recreated branch ref.
@@ -164,8 +164,8 @@ def _graphql_is_transient(code: int, body: dict[str, Any]) -> bool:
     Transient: a network failure (``code == 0``), an HTTP 5xx, or a body whose
     ``errors`` array carries GitHub's generic "Something went wrong while
     executing your query" entry (its internal-error/timeout signature, usually
-    delivered with HTTP 200). A permanent client error -- a validation failure or
-    a malformed query -- is not transient and is returned to the caller as-is so
+    delivered with HTTP 200). A permanent client error; a validation failure or
+    a malformed query; is not transient and is returned to the caller as-is so
     it fails loud rather than retrying pointlessly.
     """
     if code == 0 or code >= 500:

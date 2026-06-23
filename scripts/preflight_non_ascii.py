@@ -96,7 +96,7 @@ def build_deny_reason(
         f"trigger the server-side issue-pr-triage.yml workflow on every "
         f"post. Pick one and retry:\n"
         f"  1. Translate the {where} to English.\n"
-        f"  2. Append `\\n\\n{ack_marker}` to the body (OWNER opt-out -- "
+        f"  2. Append `\\n\\n{ack_marker}` to the body (OWNER opt-out; "
         f"keeps non-ASCII intact, suppresses the Layer 2 advisory by "
         f"making classify_action return `skip`).\n"
         f"\n"
@@ -128,7 +128,7 @@ def decide(tool_name: str, tool_input: dict[str, Any]) -> dict[str, Any] | None:
 
 
 # ---------------------------------------------------------------------------
-# Side-effecting boundary -- the only impure surface, monkeypatched in tests
+# Side-effecting boundary; the only impure surface, monkeypatched in tests
 # ---------------------------------------------------------------------------
 
 

@@ -80,18 +80,18 @@ class TestParseWaivers:
         assert gate.parse_waivers("") == frozenset()
 
     def test_single_waiver(self) -> None:
-        body = "doc-graph-waiver: prd_a -- typo fix\n"
+        body = "doc-graph-waiver: prd_a; typo fix\n"
         assert gate.parse_waivers(body) == frozenset(["prd_a"])
 
     def test_multiple_waivers(self) -> None:
-        body = "doc-graph-waiver: prd_a -- reason1\ndoc-graph-waiver: prd_b -- reason2\n"
+        body = "doc-graph-waiver: prd_a; reason1\ndoc-graph-waiver: prd_b; reason2\n"
         assert gate.parse_waivers(body) == frozenset(["prd_a", "prd_b"])
 
     def test_case_insensitive_marker(self) -> None:
-        assert gate.parse_waivers("DOC-GRAPH-WAIVER: prd_a -- reason") == frozenset(["prd_a"])
+        assert gate.parse_waivers("DOC-GRAPH-WAIVER: prd_a; reason") == frozenset(["prd_a"])
 
     def test_leading_whitespace_ignored(self) -> None:
-        assert gate.parse_waivers("   doc-graph-waiver: prd_a -- reason") == frozenset(["prd_a"])
+        assert gate.parse_waivers("   doc-graph-waiver: prd_a; reason") == frozenset(["prd_a"])
 
     def test_waiver_without_reason(self) -> None:
         assert gate.parse_waivers("doc-graph-waiver: prd_a") == frozenset(["prd_a"])
@@ -239,7 +239,7 @@ class TestMain:
         assert self._run_main(
             tmp_path,
             [".apm/instructions/master.instructions.md"],
-            body="doc-graph-waiver: prd_a -- typo only\n",
+            body="doc-graph-waiver: prd_a; typo only\n",
         ) == 0
 
     def test_no_changed_files_exits_0(self, tmp_path: Path) -> None:
@@ -266,7 +266,7 @@ class TestMain:
     def test_body_file_takes_precedence_over_env(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setenv("PR_BODY", "doc-graph-waiver: prd_a -- from env\n")
+        monkeypatch.setenv("PR_BODY", "doc-graph-waiver: prd_a; from env\n")
         graph_path = _write_graph(tmp_path)
         body_path = _body_file(tmp_path, "")  # no waiver in file
         with patch(
@@ -304,7 +304,7 @@ class TestMain:
     def test_env_pr_body_used_when_no_body_file(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setenv("PR_BODY", "doc-graph-waiver: prd_a -- from env\n")
+        monkeypatch.setenv("PR_BODY", "doc-graph-waiver: prd_a; from env\n")
         graph_path = _write_graph(tmp_path)
         with patch(
             "gate_doc_graph_pr.get_changed_files",

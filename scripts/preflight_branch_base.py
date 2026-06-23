@@ -92,7 +92,7 @@ def cmd_verify(args: argparse.Namespace) -> int:
     print(f"repair: git fetch {args.remote} {args.base_branch}", file=sys.stderr)
     print(
         "repair: git merge FETCH_HEAD --no-edit  "
-        "# use merge, not rebase -- rebase rewrites SHAs and conflicts with "
+        "# use merge, not rebase; rebase rewrites SHAs and conflicts with "
         "force-push restrictions on already-published branches (Refs #1854)",
         file=sys.stderr,
     )

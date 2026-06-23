@@ -9,8 +9,8 @@ placeholder token (e.g. ``<sha>``, ``<issue-number>``), emits a
 BEFORE the write.
 
 Why a forward-looking gate: the GitHub MCP write tools corrupt
-angle-bracket-delimited tokens on write -- dropping them entirely or
-HTML-encoding them -- even inside backticks (observed in retro #1593 R2; see
+angle-bracket-delimited tokens on write; dropping them entirely or
+HTML-encoding them; even inside backticks (observed in retro #1593 R2; see
 ``body_policy.detect_dropped_angle_tokens`` / ``normalize_pr_body``). The
 existing detector diffs an authored body against the stored body, but that only
 runs PostToolUse, after the corruption has shipped. This hook runs PreToolUse,
@@ -28,7 +28,7 @@ stdin/stdout boundary at the bottom (:func:`main`). The detection regex lives in
 drift.
 
 Failure modes (fail-open): off-target tool name, body/title absent or
-non-string, malformed stdin JSON, ``tool_input`` shape invalid -- exit 0 with no
+non-string, malformed stdin JSON, ``tool_input`` shape invalid; exit 0 with no
 output. A hook bug must never wedge unrelated tool calls.
 
 Refs #1673, #1593 (R2).
@@ -76,8 +76,8 @@ def find_angle_tokens(text: str) -> list[str]:
     """Return distinct ``<...>`` tokens in *text* at risk of MCP-write drop.
 
     The GitHub MCP write tools corrupt angle-bracket-delimited tokens on write
-    -- dropping them entirely (e.g. the ``<sha>`` in ``git revert <sha>``,
-    observed in retro #1593 R2) or HTML-encoding them -- even when the token is
+   ; dropping them entirely (e.g. the ``<sha>`` in ``git revert <sha>``,
+    observed in retro #1593 R2) or HTML-encoding them; even when the token is
     wrapped in backticks (see ``tests/test_body_policy.py`` ``test_detects_dropped_token``,
     where a backtick-wrapped ``<sha>`` is still lost). A PreToolUse gate has only
     the outgoing/authored body, with no stored body yet to diff against, so this
@@ -134,7 +134,7 @@ def build_deny_reason(tool_name: str, offending: dict[str, list[str]]) -> str:
 
     Names which fields carry tokens, lists the tokens verbatim, and explains
     the only safe remediation (replace with the concrete value or remove the
-    angle brackets -- NOT backticks, which do not protect the token).
+    angle brackets; NOT backticks, which do not protect the token).
     """
     where = " and ".join(offending)
     listed = "; ".join(
@@ -171,7 +171,7 @@ def decide(tool_name: str, tool_input: dict[str, Any]) -> dict[str, Any] | None:
 
 
 # ---------------------------------------------------------------------------
-# Side-effecting boundary -- the only impure surface, monkeypatched in tests
+# Side-effecting boundary; the only impure surface, monkeypatched in tests
 # ---------------------------------------------------------------------------
 
 

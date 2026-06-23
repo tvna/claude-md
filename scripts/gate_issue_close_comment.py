@@ -20,7 +20,7 @@ number in the current session by inspecting a tmp-file tracker.
   fail-closed default here cannot "block all legitimate work".
 
 Off-target calls (any tool other than ``issue_write``, or ``issue_write``
-without ``state: "closed"``) always pass through untouched -- the gate only
+without ``state: "closed"``) always pass through untouched; the gate only
 acts on a positively identified close attempt.
 
 **PostToolUse recorder** (``--record`` mode)
@@ -112,7 +112,7 @@ def decide(tool_name: str, tool_input: dict[str, Any]) -> dict[str, Any] | None:
     - Close with a resolvable number and a recorded comment: ``None``.
     - Close with a resolvable number but no recorded comment: deny.
     - Close whose ``issue_number`` cannot be resolved: deny (fail-closed,
-      #1389) -- the comment precondition cannot be checked, so the close is
+      #1389); the comment precondition cannot be checked, so the close is
       refused rather than allowed through.
     """
     if not _is_close_action(tool_name, tool_input):

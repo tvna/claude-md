@@ -18,7 +18,7 @@ job re-runs the same check on cron as a redundant visibility signal.
 
 The gate is tree-only and runs with no network: it reads the committed
 inventory document and nothing else. It does not, and cannot, judge whether a
-status is *correct* -- that stays the job of review and the quarterly cadence in
+status is *correct*; that stays the job of review and the quarterly cadence in
 ``docs/runbooks/attack-coverage-review-cadence.md``.
 
 Contract:
