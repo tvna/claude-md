@@ -70,9 +70,9 @@ or `git log` query.
 
 | # | Signal | Where to read it | What it means |
 |---|--------|------------------|---------------|
-| S1 | High commit count on a single PR | Auto-retro repair-history table `Multi-commit PR` row; or `git log --oneline <base>..<head> | wc -l` | The PR did not squash to a single intent. Either the author iterated in public (legitimate when each commit is a discrete step) or the branch absorbed unrelated work. Note: the `multi_commit_pr` gate that triggers auto-retro creation subtracts merge-from-main commits AND revert commits (Git-standard `Revert "..."` and Conventional `revert:`/`revert(scope):`) from the count, so neither rebase debt forced by the squash-only, linear-history policy nor a `git revert` (the default rollback path per CLAUDE.md section 3) fires the gate on its own; the repair-history table still records `Merge from main` and `Revert commit` rows for review visibility. A revert is an anomaly hint, not a standalone trigger -- a retro opens only when it co-fires with another signal (review comments, failed CI, failed verification). |
-| S2 | Low-information commit subjects | Auto-retro `Iteration commit` row (the canonical `fix(...)` commit on a fix-typed PR is rendered as `Fix commit` instead and is exempt from this count -- see #413); or scan commit subjects for `wip`, `fix`, `fixup!`, `squash!`, `update`, `more`, `tweak`, generic verbs with no scope | Subjects that do not state intent erase the audit trail. A reviewer cannot reconstruct what each commit changed without diffing it. |
-| S3 | Repeated repair commits | Auto-retro `Iteration commit` row with three or more entries (the canonical `fix(...)` commit on a fix-typed PR is exempt -- see #413); or `git log --grep='^fix' <base>..<head>` count | Repeated `fix(...)` commits on the same PR indicate the deterministic gates caught defects late. The pattern points at a missing earlier gate or an unclear agent instruction. |
+| S1 | High commit count on a single PR | Auto-retro repair-history table `Multi-commit PR` row; or `git log --oneline <base>..<head> | wc -l` | The PR did not squash to a single intent. Either the author iterated in public (legitimate when each commit is a discrete step) or the branch absorbed unrelated work. Note: the `multi_commit_pr` gate that triggers auto-retro creation subtracts merge-from-main commits AND revert commits (Git-standard `Revert "..."` and Conventional `revert:`/`revert(scope):`) from the count, so neither rebase debt forced by the squash-only, linear-history policy nor a `git revert` (the default rollback path per CLAUDE.md section 3) fires the gate on its own; the repair-history table still records `Merge from main` and `Revert commit` rows for review visibility. A revert is an anomaly hint, not a standalone trigger; a retro opens only when it co-fires with another signal (review comments, failed CI, failed verification). |
+| S2 | Low-information commit subjects | Auto-retro `Iteration commit` row (the canonical `fix(...)` commit on a fix-typed PR is rendered as `Fix commit` instead and is exempt from this count; see #413); or scan commit subjects for `wip`, `fix`, `fixup!`, `squash!`, `update`, `more`, `tweak`, generic verbs with no scope | Subjects that do not state intent erase the audit trail. A reviewer cannot reconstruct what each commit changed without diffing it. |
+| S3 | Repeated repair commits | Auto-retro `Iteration commit` row with three or more entries (the canonical `fix(...)` commit on a fix-typed PR is exempt; see #413); or `git log --grep='^fix' <base>..<head>` count | Repeated `fix(...)` commits on the same PR indicate the deterministic gates caught defects late. The pattern points at a missing earlier gate or an unclear agent instruction. |
 | S4 | Force-update churn | `git reflog show origin/<branch>` from the local checkout if available; or the PR `force-pushed` timeline events visible in the GitHub UI | Force pushes rewrite the audit log. A small number is normal (rebase onto main, fix-up squash before merge). A large number obscures which version a reviewer approved. |
 | S5 | Unrelated churn in the diff | `git diff --stat <base>..<head>` against the PR scope stated in the closing issue | Files outside the PR scope appearing in the diff (e.g. a docs PR that also touches `scripts/`, an APM-source PR that also rewrites `tests/`) widens blast radius beyond what the closing issue authorized. |
 
@@ -109,7 +109,7 @@ As of [#593](https://github.com/tvna/claude-md/issues/593), the
 auto-retro opener also applies this distinction at issue-creation
 time. A merged PR does not open a standalone retrospective when the
 only rendered rows are `[policy-artifact]` rows (`Merge from main`,
-`Revert commit`, `Fix commit`, `Multi-commit PR`, and; as of #1236 --
+`Revert commit`, `Fix commit`, `Multi-commit PR`, and; as of #1236,
 `Verification fail`), a `(no automated repair signals detected)`
 sentinel, or successful Verification evidence. The opener still creates
 a retrospective for inline review comments, failed CI check runs, or
@@ -333,11 +333,11 @@ its evidence base grows monotonically with each
 - [`docs/prd/agent-rules-design-philosophy.md`](../prd/agent-rules-design-philosophy.md)
   section 6.4; the retrospective-classification-to-lane mapping
   table consumed by [section 3](#3-classification-mapping).
-- [`docs/standards/issue-pr-body-standard.md`](../standards/issue-pr-body-standard.md) --
+- [`docs/standards/issue-pr-body-standard.md`](../standards/issue-pr-body-standard.md);
   body shape for the follow-up sub-issue produced by
   [section 5](#5-when-to-file-a-follow-up-gate).
-- [`docs/archive/retrospective-pr-237.md`](../archive/retrospective-pr-237.md)
- ; the non-noise worked example in section 4.1.
+- [`docs/archive/retrospective-pr-237.md`](../archive/retrospective-pr-237.md);
+  the non-noise worked example in section 4.1.
 - CLAUDE.md section 3; the three-category repair taxonomy
   consumed by section 3.
 - CLAUDE.md section 5; the "touch only what you must" rule
