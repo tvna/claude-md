@@ -8,9 +8,9 @@ This document is the operator-facing companion to [#58](https://github.com/tvna/
 
 | File | Target | Purpose |
 |---|---|---|
-| `.gitignore` | repo working tree | Canonical exclude list -- git refuses to track matched paths. **This is the source of truth.** |
-| `.claudeignore` | (no official Claude Code support -- see *Note on `.claudeignore`* below) | Forward-looking mirror, kept on speculation. Not authoritative. |
-| `docs/standards/repo-scope.md` *(this file)* | -- | Runbook: purpose statement, prohibition list, rationale, update procedure |
+| `.gitignore` | repo working tree | Canonical exclude list; git refuses to track matched paths. **This is the source of truth.** |
+| `.claudeignore` | (no official Claude Code support; see *Note on `.claudeignore`* below) | Forward-looking mirror, kept on speculation. Not authoritative. |
+| `docs/standards/repo-scope.md` *(this file)* | (none) | Runbook: purpose statement, prohibition list, rationale, update procedure |
 
 ## Declared purpose
 
@@ -66,7 +66,7 @@ env file; add an explicit `!.env.example` line if that changes.
 | `.github/` | Repo governance (workflows, rulesets, labels, PR template). Not agent-tool config. |
 | `docs/` | Operator runbooks. Subject to the *Open Q1 resolution* rule above. |
 | `claude-md.code-workspace` ([#49](https://github.com/tvna/claude-md/issues/49)) | VS Code multi-root workspace pointer. Editor metadata, not agent config. |
-| `.claude/settings.local.json` | Documented developer-local file. The broader `.claude/` directory rule transitively keeps it out of commits -- the historical entry remains documented here so future contributors understand it predated the broader rule. |
+| `.claude/settings.local.json` | Documented developer-local file. The broader `.claude/` directory rule transitively keeps it out of commits; the historical entry remains documented here so future contributors understand it predated the broader rule. |
 | `.claude/settings.json` ([#109](https://github.com/tvna/claude-md/issues/109)) | **Narrow file-level carve-out** to host deterministic lifecycle hooks. The broader `.claude/` directory rule still applies to every other path under `.claude/` (e.g. `.claude/hooks/`, `.claude/commands/`). See *Security tradeoff* below. |
 | `.codex/hooks.json` ([#604](https://github.com/tvna/claude-md/issues/604), [#606](https://github.com/tvna/claude-md/issues/606)) | **Narrow file-level carve-out** to host deterministic Codex lifecycle hooks that mirror existing repo-owned Claude hook scripts where Codex supports the event shape. The broader `.codex/` directory rule still applies to every other path under `.codex/`. |
 | `.agents/skills/` ([#728](https://github.com/tvna/claude-md/issues/728)) | **Narrow directory carve-out** for APM-deployed, cross-client skills from pinned dependencies. The source of truth remains `apm.yml` plus `apm.lock.yaml`; local tool-specific mirrors such as `.claude/skills/` remain prohibited by `.gitignore`. |
@@ -90,7 +90,7 @@ The `.claude/settings.json` carve-out is conscious risk-acceptance, recorded und
 - **Bounded mitigations.**
   1. Only this one file is carved out; `.claude/hooks/`, `.claude/commands/`, and any other subdir remain prohibited. Hook logic that does not fit inline lives under `scripts/` (already permitted) or inside a pinned APM dependency recorded in `apm.lock.yaml`, and is invoked from `settings.json`.
   2. Content remains subject to the *Open Q1 resolution* rule above. `settings.json` content that exists solely for one agent tool's UX (slash-command catalogues, model selection, custom permissions tuning, etc.) is still out of scope; only **deterministic provisioning** (CI parity, dependency install) belongs here.
-  3. PR review enforces 1–2 until a CI lint is added (tracked as a future phase under #58). The uv-pin drift gate in `.github/workflows/verify-agents.yml` (landed in [#112](https://github.com/tvna/claude-md/issues/112)) is a precedent; a narrow deterministic check that complements PR review without trying to police hook content as a whole.
+  3. PR review enforces 1-2 until a CI lint is added (tracked as a future phase under #58). The uv-pin drift gate in `.github/workflows/verify-agents.yml` (landed in [#112](https://github.com/tvna/claude-md/issues/112)) is a precedent; a narrow deterministic check that complements PR review without trying to police hook content as a whole.
 
 ## Rationale
 
