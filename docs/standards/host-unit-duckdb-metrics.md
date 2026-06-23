@@ -32,11 +32,11 @@ Two consequences follow and bound everything below:
 
 | File / path | Target | Purpose |
 |---|---|---|
-| `docs/standards/host-unit-duckdb-metrics.md` *(this file)* | -- | Adopted contract: trade-off, lifecycle, schema, write path, observation, export |
+| `docs/standards/host-unit-duckdb-metrics.md` *(this file)* | (none) | Adopted contract: trade-off, lifecycle, schema, write path, observation, export |
 | [`metrics/duckdb/schema/v1/schema.sql`](../../metrics/duckdb/schema/v1/schema.sql) | host-local `*.duckdb` | Versioned init path: metrics tables, OTLP gauge export view, read-back view, baseline template |
 | [`metrics/duckdb/schema/v2/schema.sql`](../../metrics/duckdb/schema/v2/schema.sql) | host-local `*.duckdb` | Additive migration: OTLP-logs `session_log` table, `otlp_log_record` export view, read-back view, redacted write template (Refs #824) |
 | [`metrics/duckdb/init.sh`](../../metrics/duckdb/init.sh) | operator shell | Environment-aware init helper: applies v1 then v2 in order, detects devcontainer vs. local path, supports `CLAUDE_MD_METRICS_DB` override |
-| `*.duckdb` (host-local, git-ignored) | each host | The database itself -- local measurement state, never committed (Refs #88) |
+| `*.duckdb` (host-local, git-ignored) | each host | The database itself; local measurement state, never committed (Refs #88) |
 
 ## Storage location and lifecycle
 
@@ -50,7 +50,7 @@ Two consequences follow and bound everything below:
   | devcontainer (claude) | `/home/claude/.claude/metrics.duckdb` |
   | devcontainer (codex) | `/home/codex/.codex/metrics.duckdb` |
   | local machine / Codespaces / other persistent host | `$HOME/.local/state/claude-md/metrics.duckdb` |
-  | CI runners / Claude agent / web sessions (ephemeral) | -- (out of measurement scope unless the manual R2 escrow path is used; see *Ephemeral-environment measurement boundary*) |
+  | CI runners / Claude agent / web sessions (ephemeral) | (out of measurement scope unless the manual R2 escrow path is used; see *Ephemeral-environment measurement boundary*) |
 
   The devcontainer paths land inside the named Docker volumes
   (`claude-md-claude-session` and `claude-md-codex-session`) that are already
@@ -344,7 +344,7 @@ OTLP LogRecord data model:
 | `event_code` | (classified attribute) | **Required** classified, non-identifying code from a controlled vocabulary (e.g. `commit_signing.failure`). This replaces raw text as the descriptor. |
 | `severity_number` | `SeverityNumber` | Integer `1..24` (TRACE=1..FATAL=24), CHECK-bounded |
 | `severity_text` | `SeverityText` | e.g. `ERROR` |
-| `body` | `Body` | **Redacted** summary only, or NULL -- never a raw payload |
+| `body` | `Body` | **Redacted** summary only, or NULL; never a raw payload |
 | `scope_name` / `scope_version` | InstrumentationScope | who emitted it |
 | `time_unix_nano` | `TimeUnixNano` | when the event occurred |
 | `observed_time_unix_nano` | `ObservedTimeUnixNano` | when it was recorded |

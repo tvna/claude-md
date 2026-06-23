@@ -15,11 +15,11 @@ The Claude Code on the Web remote environment ships with a stale `uv` (`0.8.17`)
 | `scripts/install-uv.sh` | Remote session | Calls `scripts/uv_pin.py read` to derive the pin, then installs `uv` at SessionStart. |
 | `.claude/settings.json` | Remote session | Registers `scripts/install-uv.sh` as the `SessionStart` hook. Permitted under the [#109](https://github.com/tvna/claude-md/issues/109) carve-out in `docs/standards/repo-scope.md`. |
 | `.codex/hooks.json` | Codex session | Registers the same SessionStart hook shape for Codex. The uv installer remains Claude-remote-gated until Codex documents a stable remote-only signal; the language-context hook consumes Codex's `cwd` event field. Tracked by [#604](https://github.com/tvna/claude-md/issues/604) / [#606](https://github.com/tvna/claude-md/issues/606) / [#616](https://github.com/tvna/claude-md/issues/616). |
-| `.github/workflows/verify-agents.yml` (`lint-uv-pin` job) | CI | Drift gate -- runs `pytest tests/test_uv_pin.py` then `scripts/uv_pin.py drift`. Fails any PR that re-introduces a uv version literal outside `pyproject.toml`. See [#112](https://github.com/tvna/claude-md/issues/112). |
+| `.github/workflows/verify-agents.yml` (`lint-uv-pin` job) | CI | Drift gate; runs `pytest tests/test_uv_pin.py` then `scripts/uv_pin.py drift`. Fails any PR that re-introduces a uv version literal outside `pyproject.toml`. See [#112](https://github.com/tvna/claude-md/issues/112). |
 | `.python-version` | All | **Single source of truth for the pinned Python interpreter.** Exact `X.Y.Z` patch so `uv run python` resolves the same interpreter everywhere. See the [Python interpreter pin](#python-interpreter-pin) section and [#1680](https://github.com/tvna/claude-md/issues/1680). |
 | `scripts/python_pin.py` | All | Pin reader / consistency checker for `.python-version`. Verifies the pin is exact and its minor matches `requires-python`, ruff, mypy, and `flake.nix`. Mirrored as a `preflight_all` step and run by `verify-agents` / `weekly-maintenance`. Tested by `tests/test_python_pin.py`. |
 | `.github/dependabot.yml` | CI | Bumps GitHub Actions SHAs and `uv.lock` entries weekly. The uv binary pin itself is bumped manually (see *Update procedure* below). |
-| `docs/standards/remote-environment.md` *(this file)* | -- | Runbook: how the hook works, how the SoT propagates, verification, update procedure. |
+| `docs/standards/remote-environment.md` *(this file)* | (none) | Runbook: how the hook works, how the SoT propagates, verification, update procedure. |
 
 ## How it works
 
@@ -83,7 +83,7 @@ uv sync --locked                # must exit 0
 
 ## Why not nix
 
-- Nix is not pre-installed in the remote environment; installing it adds 60–90 s to every container creation just to deliver one binary.
+- Nix is not pre-installed in the remote environment; installing it adds 60-90 s to every container creation just to deliver one binary.
 - `nixpkgs.uv` trails upstream uv releases by up to several days, working against the "always current" goal.
 - A `flake.nix` for a single binary conflicts with CLAUDE.md §4 ("minimum code that solves the problem").
 
@@ -130,7 +130,7 @@ Upstream-follow: Dependabot (`.github/dependabot.yml`) does not natively bump `[
 
 ## Python interpreter pin
 
-`uv run python` is the interpreter that writes the deterministic `docs/generated/` tree (the AST graphs, dependency graph, and trigger map). `requires-python = ">=3.12"` in `pyproject.toml` is a *range*, so without a patch pin `uv run python` binds to whatever 3.12.x the host already has. `ast.unparse` renders nested f-string format specs differently across 3.12 patch releases, so the same generator on two patches produces a one-line diff in `docs/generated/scripts/ast/preflight_all.md`; phantom drift between the post-merge committer ([#1571](https://github.com/tvna/claude-md/issues/1571)), the `verify-docs-drift` gate ([#1574](https://github.com/tvna/claude-md/issues/1574)), and a local pre-push. Follow-up to [#1533](https://github.com/tvna/claude-md/issues/1533); decision record [#1680](https://github.com/tvna/claude-md/issues/1680).
+`uv run python` is the interpreter that writes the deterministic `docs/generated/` tree (the AST graphs, dependency graph, and trigger map). `requires-python = ">=3.12"` in `pyproject.toml` is a *range*, so without a patch pin `uv run python` binds to whatever 3.12.x the host already has. `ast.unparse` renders nested f-string format specs differently across 3.12 patch releases, so the same generator on two patches produces a one-line diff in `docs/generated/scripts/ast/preflight_all.md`; phantom drift between the post-merge committer ([#1571](https://github.com/tvna/claude-md/issues/1571)), the `verify-docs-drift` gate ([#1574](https://github.com/tvna/claude-md/issues/1574)), and a local pre-push. Follow-up to [#1533](https://github.com/tvna/claude-md/issues/1533)); decision record [#1680](https://github.com/tvna/claude-md/issues/1680).
 
 `.python-version` closes that gap. It pins one exact patch (`X.Y.Z`); uv reads it when resolving `uv run python` and downloads that exact interpreter, so every environment converges on the same one.
 
