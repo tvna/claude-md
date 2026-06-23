@@ -18,9 +18,9 @@ The taxonomy is introduced incrementally per the phased rollout in [#84](https:/
 |---|---|---|
 | `.github/label-policy.toml` | Final target policy after #970 | Adopted design contract; not applied until #972 |
 | `.github/labels.json` | `/repos/tvna/claude-md/labels` | JSON source of truth for repository labels |
-| `docs/runbooks/issue-triage.md` *(this file)* | -- | Runbook |
-| `docs/standards/label-taxonomy.md` | -- | Adopted taxonomy, area mapping, and operational-label rules |
-| `docs/standards/issue-pr-body-standard.md` | -- | Sibling runbook for issue/PR body shape (read after labels route an issue) |
+| `docs/runbooks/issue-triage.md` *(this file)* | (none) | Runbook |
+| `docs/standards/label-taxonomy.md` | (none) | Adopted taxonomy, area mapping, and operational-label rules |
+| `docs/standards/issue-pr-body-standard.md` | (none) | Sibling runbook for issue/PR body shape (read after labels route an issue) |
 
 ## Axes
 
@@ -39,12 +39,12 @@ Slug names are stable historical layer keys; descriptions track the current `mas
 | Label | § | Meaning |
 |---|---|---|
 | `layer:p1-goal-plan` | §1 | Goal & plan structure |
-| `layer:p2-precode` | §2 | Input and pre-code reasoning -- untrusted text, facts, assumptions, ambiguity |
-| `layer:p3-harness` | §3 | Delivery harness -- issues, CI, hooks, deps, PR loop |
-| `layer:p4-artifact` | §4 | Safety boundary -- simplicity, tool scope, secret exposure |
+| `layer:p2-precode` | §2 | Input and pre-code reasoning; untrusted text, facts, assumptions, ambiguity |
+| `layer:p3-harness` | §3 | Delivery harness; issues, CI, hooks, deps, PR loop |
+| `layer:p4-artifact` | §4 | Safety boundary; simplicity, tool scope, secret exposure |
 | `layer:p5-scope-split` | §5 | Change scope & agent split |
 | `layer:p6-handoff` | §6 | Handoff & communication |
-| `layer:meta` | -- | Repo infrastructure governing the meta-document itself (labels, rulesets, workflows). NOT a CLAUDE.md principle. |
+| `layer:meta` | (none) | Repo infrastructure governing the meta-document itself (labels, rulesets, workflows). NOT a CLAUDE.md principle. |
 
 Multi-layer issues (e.g. an RFC that moves a rule from §1 to §3) carry every applicable `layer:*` label. Coverage check is cardinality ≥ 1.
 
@@ -72,7 +72,7 @@ mark the umbrella with the label.
 
 | Label | Meaning |
 |---|---|
-| `state:rfc` | Open but unactioned per §2 -- speculative proposal awaiting evidence |
+| `state:rfc` | Open but unactioned per §2; speculative proposal awaiting evidence |
 | `state:parked` | Explicitly deferred; requires evidence to revive |
 
 ### `severity:*` (0 or 1)
@@ -296,7 +296,7 @@ Agents read `(type, state, severity, threat)` from the header alone and apply th
 | `severity:security` (regardless of other labels) | investigate (no autonomous PR) | yes |
 | `type:fix` AND NOT `severity:security` | auto-fix candidate (mechanical PR allowed) | yes |
 | `type:docs` | auto-fix candidate | yes |
-| `type:feat` OR `type:refactor` | investigate -- plan first, implementation awaits approval | yes |
+| `type:feat` OR `type:refactor` | investigate; plan first, implementation awaits approval | yes |
 | No `type:*` yet | triage-needed: read title only, set `type:*`, re-route | title only |
 
 Rows are evaluated top-to-bottom; the first match wins. This table is the routing decision; the labels do not encode the decision themselves. The `threat:*` rows were removed when the labels were retired ([#1645](https://github.com/tvna/claude-md/issues/1645), [#1647](https://github.com/tvna/claude-md/issues/1647)); threat-intelligence findings live on the #178 umbrella, so an agent acts on a finding by reading that umbrella comment, not by waiting for a per-item label.
