@@ -37,6 +37,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from _github_tool_names import canonical_github_tool
 from _hook_runtime import build_deny, run_tool_hook
 
 # Only intercept issue creation calls.
@@ -105,7 +106,7 @@ def decide(tool_name: str, tool_input: dict[str, Any]) -> dict[str, Any] | None:
     tools and update calls are allowed immediately. Fails open on any
     unexpected payload shape (CLAUDE.md S4).
     """
-    if tool_name != _TARGET_TOOL:
+    if canonical_github_tool(tool_name) != _TARGET_TOOL:
         return None
     if tool_input.get("method") != _TARGET_METHOD:
         return None

@@ -9,7 +9,6 @@ from __future__ import annotations
 import io
 import json
 from typing import Any
-from unittest.mock import patch
 
 import preflight_issue_ci_staleness as gate
 import pytest
@@ -113,6 +112,22 @@ class TestHasVerificationPhrase:
 class TestDecide:
     def test_non_target_tool_allowed(self) -> None:
         assert gate.decide("mcp__github__create_pull_request", _create_input("CI failure", "")) is None
+
+    def test_codex_connector_ci_failure_without_phrase_blocked(self) -> None:
+        result = gate.decide(
+            "mcp__codex_apps__github._create_issue",
+            _create_input("CI failure in main", "The job failed."),
+        )
+        assert result is not None
+        assert result.get("hookSpecificOutput", {}).get("permissionDecision") == "deny"
+
+    def test_codex_connector_ci_failure_with_phrase_allowed(self) -> None:
+        body = f"The job failed. {gate.FRESH_MAIN_CHECK_PHRASE}"
+        result = gate.decide(
+            "mcp__codex_apps__github._create_issue",
+            _create_input("CI failure in main", body),
+        )
+        assert result is None
 
     def test_update_method_allowed(self) -> None:
         assert gate.decide("mcp__github__issue_write", _update_input("CI failure", "")) is None

@@ -42,7 +42,7 @@ When a `verify-generated-docs-drift` CI failure is reported:
 
 1. **First**: run `git fetch origin main` and check current main HEAD.
 2. If a `chore/update-generated-docs` PR has already been merged, the
-   failure is resolved -- do **not** open a duplicate issue.
+   failure is resolved; do **not** open a duplicate issue.
 3. Only open an issue if the failure is confirmed to be still present on the
    current main HEAD.
 
