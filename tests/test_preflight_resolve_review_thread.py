@@ -55,3 +55,24 @@ class TestMain:
             monkeypatch,
         )
         assert stdout == ""
+
+    def test_malformed_json_is_handled(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr("sys.stdin", io.StringIO("not valid json {"))
+        stdout_buf = io.StringIO()
+        stderr_buf = io.StringIO()
+        monkeypatch.setattr("sys.stdout", stdout_buf)
+        monkeypatch.setattr("sys.stderr", stderr_buf)
+        result = prt.main()
+        assert result == 0
+        assert stdout_buf.getvalue() == ""
+
+    def test_emit_decision_exception_is_handled(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps({"tool_name": "x"})))
+        monkeypatch.setattr(prt, "emit_decision", lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("boom")))
+        stdout_buf = io.StringIO()
+        stderr_buf = io.StringIO()
+        monkeypatch.setattr("sys.stdout", stdout_buf)
+        monkeypatch.setattr("sys.stderr", stderr_buf)
+        result = prt.main()
+        assert result == 0
+        assert "boom" in stderr_buf.getvalue()
