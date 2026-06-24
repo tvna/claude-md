@@ -365,6 +365,16 @@
         "hooks": [
           {
             "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/gate_unsigned_commit_push.py",
+            "statusMessage": "Checking for unsigned commits before push"
+          }
+        ]
+      },
+      {
+        "matcher": "^Bash$",
+        "hooks": [
+          {
+            "type": "command",
             "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/preflight_push_session_branch.py",
             "statusMessage": "Checking session push target before push"
           }

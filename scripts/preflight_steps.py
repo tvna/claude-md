@@ -465,6 +465,16 @@ STEPS: tuple[Step, ...] = (
         argv=("python3", "scripts/preflight_branch_base.py", "verify"),
     ),
     Step(
+        # Refs #1959. Fails before push when an unsigned commit is in the
+        # branch range (origin/main..HEAD), the local counterpart to the
+        # server-side required_signatures ruleset. Preflight-only (no CI
+        # mirror): %G? cannot verify a signed commit in CI without the
+        # signer's public key, so a CI run would see only E/N, not G --
+        # the server ruleset is the CI-equivalent gate. Refs #1959.
+        name="preflight_signed_commits",
+        argv=("python3", "scripts/preflight_signed_commits.py", "verify"),
+    ),
+    Step(
         # Refs #476. PR body is optional locally (PR_BODY env unset means
         # the opt-out marker is absent, which is the stricter default --
         # contributors who run preflight see drift before push). The

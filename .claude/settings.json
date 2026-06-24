@@ -330,6 +330,16 @@
           {
             "type": "command",
             "if": "Bash(*git push*)",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/gate_unsigned_commit_push.py"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "if": "Bash(*git push*)",
             "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/preflight_push_session_branch.py"
           }
         ]
