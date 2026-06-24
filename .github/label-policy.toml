@@ -432,6 +432,7 @@ paths = [
   "docs/standards/maintainability-metrics.md",
   "docs/standards/host-unit-duckdb-metrics.md",
   "scripts/scan_maintainability_metrics.py",
+  "scripts/codebase_maturity_summary.py",
   "scripts/analyze_ci_timings.py", "scripts/compare_cache_regimes.py",
   "scripts/session_cost_structure.py", "scripts/session_resource_report.py",
   "scripts/measure_devcontainer_startup.py", "scripts/measure_prefix_tokens.py",
