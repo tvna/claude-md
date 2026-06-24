@@ -228,10 +228,10 @@ def _is_self_authored_webhook(entry: object, session_login: str | None) -> bool:
     """Return True when the webhook comment was authored by the session itself.
 
     Checks two formats:
-    1. JSON payload: ``"login": "<session_login>"`` — present when the system
+    1. JSON payload: ``"login": "<session_login>"``; present when the system
        embeds a raw GitHub webhook payload.
-    2. Plain-text: ``Author: <session_login>`` at the start of a line — the
-       format used by Claude Code's webhook delivery system.
+    2. Plain-text: ``Author: <session_login>`` at the start of a line;
+       the format used by Claude Code's webhook delivery system.
 
     Plain-text ``@<login>`` mentions in comment bodies use different syntax and
     will not produce a false positive. When *session_login* is None the
