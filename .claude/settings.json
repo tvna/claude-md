@@ -567,6 +567,17 @@
         ]
       },
       {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "if": "Bash(*git push*)",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/check_pr_mergeability.py git-push",
+            "statusMessage": "Checking post-push PR mergeability"
+          }
+        ]
+      },
+      {
         "matcher": "mcp__github__merge_pull_request",
         "hooks": [
           {

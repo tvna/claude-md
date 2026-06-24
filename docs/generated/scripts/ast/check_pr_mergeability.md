@@ -317,6 +317,105 @@ flowchart TD
     N013 -->|"false"| N018
 ```
 
+## _get_current_branch(...)
+
+```mermaid
+flowchart TD
+    N001["_get_current_branch(...)"]
+    N002["try"]
+    N003["result = run(...)"]
+    N004["if result.returncode == 0"]
+    N005["branch = strip(...)"]
+    N006["return branch if branch else None"]
+    N007["except (OSError, subprocess.SubprocessError)"]
+    N008["pass"]
+    N009["return None"]
+    N001 -->|"start"| N002
+    N002 -->|"try"| N003
+    N003 --> N004
+    N004 -->|"true"| N005
+    N005 --> N006
+    N002 -->|"raises"| N007
+    N007 --> N008
+    N004 -->|"false"| N009
+    N008 --> N009
+```
+
+## run_git_push(...)
+
+```mermaid
+flowchart TD
+    N001["run_git_push(...)"]
+    N002["repo_str = _detect_repo(...)"]
+    N003["if not repo_str"]
+    N004["return None"]
+    N005["branch = _get_current_branch(...)"]
+    N006["if not branch"]
+    N007["return None"]
+    N008["(owner, _, repo) = partition(...)"]
+    N009["if not owner or not repo"]
+    N010["return None"]
+    N011["actual_token = token or _get_token()"]
+    N012["prs = _rest_get_list(...)"]
+    N013["if not prs"]
+    N014["return None"]
+    N015["pr = prs[0]"]
+    N016["if not isinstance(pr, dict)"]
+    N017["return None"]
+    N018["pr_number = get(...)"]
+    N019["if not isinstance(pr_number, int) or pr_number <= 0"]
+    N020["return None"]
+    N021["pr_label = f'{owner}<str>{repo}<str>{pr_number}'"]
+    N022["pr_data = _poll_mergeability(...)"]
+    N023["if pr_data is None"]
+    N024["return None"]
+    N025["mergeable = get(...)"]
+    N026["state = lower(...)"]
+    N027["if mergeable is None"]
+    N028["return _build_context(f'<str>{pr_label}<str>{_MAX_POLLS}<str>')"]
+    N029["if state == 'clean'"]
+    N030["return _build_context(f'<str>{pr_label}<str>')"]
+    N031["if state == 'dirty'"]
+    N032["return _build_context(f'<str>{pr_label}<str>')"]
+    N033["if state == 'behind'"]
+    N034["return _build_context(f'<str>{pr_label}<str>')"]
+    N035["return _build_context(f'<str>{pr_label}<str>{state}<str>')"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 -->|"true"| N004
+    N003 -->|"false"| N005
+    N005 --> N006
+    N006 -->|"true"| N007
+    N006 -->|"false"| N008
+    N008 --> N009
+    N009 -->|"true"| N010
+    N009 -->|"false"| N011
+    N011 --> N012
+    N012 --> N013
+    N013 -->|"true"| N014
+    N013 -->|"false"| N015
+    N015 --> N016
+    N016 -->|"true"| N017
+    N016 -->|"false"| N018
+    N018 --> N019
+    N019 -->|"true"| N020
+    N019 -->|"false"| N021
+    N021 --> N022
+    N022 --> N023
+    N023 -->|"true"| N024
+    N023 -->|"false"| N025
+    N025 --> N026
+    N026 --> N027
+    N027 -->|"true"| N028
+    N027 -->|"false"| N029
+    N029 -->|"true"| N030
+    N029 -->|"false"| N031
+    N031 -->|"true"| N032
+    N031 -->|"false"| N033
+    N033 -->|"true"| N034
+    N033 -->|"false"| N035
+```
+
 ## main(...)
 
 ```mermaid
@@ -326,18 +425,24 @@ flowchart TD
     N003["if args and args[0] == 'session-start'"]
     N004["run_session_start(...)"]
     N005["return 0"]
-    N006["event = read_event(...)"]
-    N007["if event is None or not isinstance(event, dict)"]
+    N006["if args and args[0] == 'git-push'"]
+    N007["emit_decision(...)"]
     N008["return 0"]
-    N009["emit_decision(...)"]
-    N010["return 0"]
+    N009["event = read_event(...)"]
+    N010["if event is None or not isinstance(event, dict)"]
+    N011["return 0"]
+    N012["emit_decision(...)"]
+    N013["return 0"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 -->|"true"| N004
     N004 --> N005
     N003 -->|"false"| N006
-    N006 --> N007
-    N007 -->|"true"| N008
-    N007 -->|"false"| N009
+    N006 -->|"true"| N007
+    N007 --> N008
+    N006 -->|"false"| N009
     N009 --> N010
+    N010 -->|"true"| N011
+    N010 -->|"false"| N012
+    N012 --> N013
 ```
