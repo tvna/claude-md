@@ -66,6 +66,7 @@ checked by human/agent review.
 | Never let indirect signals stand in for proof (S1) | Requires judging whether a check actually proves behaviour. |
 | Quality must stay proportional to volume; stop and re-plan when it degrades (S5) | Requires a qualitative judgement of the change. |
 | Do not settle for "LGTM"; require real understanding (S6) | Requires assessing reviewer comprehension. |
+| Before opening an issue for a reported CI failure, verify the failure is still present on current main HEAD (S3) | Requires fetching and re-running the failing check; no hook intercepts "create issue" with a repo-state query. Workaround: agent must run `git fetch origin main` and reproduce the check locally before calling `mcp__github__issue_write`. |
 
 ## Companion
 
