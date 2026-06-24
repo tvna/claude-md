@@ -143,6 +143,7 @@ GITHUB_API_SCRIPTS: frozenset[str] = frozenset(
         "pr_body_close_keyword_gate",
         "pr_upsert",
         "preflight_replacement_pr",
+        "prune_codespaces",
         "prune_devcontainer_images",
         "publish_instruction_release",
         "ruleset_drift",

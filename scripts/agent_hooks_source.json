@@ -4,67 +4,111 @@
   "installer_scope_audit": {
     "scripts/install-uv.sh": {
       "scope": "shared",
-      "wired": ["claude", "codex", "devin"],
+      "wired": [
+        "claude",
+        "codex",
+        "devin"
+      ],
       "functionally_required": true,
       "rationale": "Python runtime foundation: every agent runs python3/uv-run SessionStart and PreToolUse hooks. Genuinely operative in every agent -- gates on both CLAUDE_CODE_REMOTE and CODEX_CODE_REMOTE and is the gate-widening reference for #1608."
     },
     "scripts/session_uv_local_pin.sh": {
       "scope": "shared",
-      "wired": ["claude", "codex", "devin"],
+      "wired": [
+        "claude",
+        "codex",
+        "devin"
+      ],
       "functionally_required": true,
       "rationale": "Aligns the local-host uv with the repo pin so any agent's process PATH resolves the pinned uv; agent-agnostic and genuinely operative -- gates on both remote signals."
     },
     "scripts/install-bun.sh": {
       "scope": "shared",
-      "wired": ["claude", "codex", "devin"],
+      "wired": [
+        "claude",
+        "codex",
+        "devin"
+      ],
       "functionally_required": true,
       "rationale": "Backs the agent-agnostic Mermaid pre-commit gate (scan-mermaid-syntax soft-skips when bun/node_modules absent); any agent editing docs trips it. Wired into codex+devin in #1603; remote gate widened to CODEX_CODE_REMOTE in #1608 so it is operative there."
     },
     "scripts/install-actionlint.sh": {
       "scope": "shared",
-      "wired": ["claude", "codex", "devin"],
+      "wired": [
+        "claude",
+        "codex",
+        "devin"
+      ],
       "functionally_required": true,
       "rationale": "Backs the agent-agnostic workflow-lint pre-commit gate (id: actionlint soft-skips when the binary is absent); structurally identical to install-bun.sh (soft-skip pre-commit + nix CI hard gate). Wired into codex+devin and gate widened to CODEX_CODE_REMOTE in #1608."
     },
     "scripts/install-rtk.sh": {
       "scope": "shared",
-      "wired": ["claude", "codex", "devin"],
+      "wired": [
+        "claude",
+        "codex",
+        "devin"
+      ],
       "functionally_required": false,
       "rationale": "Explicit `rtk <cmd>` affordance (no pre-commit gate invokes it; its `rtk hook claude` hook is Claude-named and unshipped). Shared for uniform cross-agent provisioning of devcontainer-parity tools; wired into codex+devin and gate widened to CODEX_CODE_REMOTE in #1608."
     },
     "scripts/install-apm.sh": {
       "scope": "shared",
-      "wired": ["claude", "codex", "devin"],
+      "wired": [
+        "claude",
+        "codex",
+        "devin"
+      ],
       "functionally_required": false,
       "rationale": "Explicit `apm <cmd>` affordance (no in-session gate depends on it; compilation runs via CI / local `apm compile`). Shared for uniform cross-agent provisioning of devcontainer-parity tools; wired into codex+devin and gate widened to CODEX_CODE_REMOTE in #1608."
     },
     "scripts/install-waza.sh": {
       "scope": "shared",
-      "wired": ["claude", "codex", "devin"],
+      "wired": [
+        "claude",
+        "codex",
+        "devin"
+      ],
       "functionally_required": false,
       "rationale": "Explicit `waza <cmd>` affordance (the skill-quality pre-commit gate uses the separate scripts/install_waza.sh, not this SessionStart installer). Shared for uniform cross-agent provisioning of devcontainer-parity tools; wired into codex+devin and gate widened to CODEX_CODE_REMOTE in #1608."
     },
     "scripts/install-ccusage.sh": {
       "scope": "shared",
-      "wired": ["claude", "codex", "devin"],
+      "wired": [
+        "claude",
+        "codex",
+        "devin"
+      ],
       "functionally_required": false,
       "rationale": "ccusage reads Claude Code's local usage-telemetry JSONL; the metric it feeds (session_resource_report/cache-regime) is Claude-scoped. Shared per operator decision (#1606) for uniform provisioning; it is an ACCEPTED no-op under codex/devin where no telemetry data source exists. Wired into codex+devin and gate widened to CODEX_CODE_REMOTE in #1608."
     },
     "scripts/install-zizmor.sh": {
       "scope": "shared",
-      "wired": ["claude", "codex", "devin"],
+      "wired": [
+        "claude",
+        "codex",
+        "devin"
+      ],
       "functionally_required": false,
       "rationale": "Explicit-use binary for an effectiveness-measurement phase; the deterministic gate is the pure-python scan_workflow_injection.py (needs no binary). Shared for uniform cross-agent provisioning of devcontainer-parity tools; wired into codex+devin and gate widened to CODEX_CODE_REMOTE in #1608."
     },
     "scripts/install-lychee.sh": {
       "scope": "shared",
-      "wired": ["claude", "codex", "devin"],
+      "wired": [
+        "claude",
+        "codex",
+        "devin"
+      ],
       "functionally_required": false,
       "rationale": "Explicit-use binary for an effectiveness-measurement phase; the deterministic gate is the pure-python scan_markdown_links.py (needs no binary). Shared for uniform cross-agent provisioning of devcontainer-parity tools; wired into codex+devin and gate widened to CODEX_CODE_REMOTE in #1608."
     },
     "scripts/install-betterleaks.sh": {
       "scope": "shared",
-      "wired": ["claude", "codex", "devin"],
+      "wired": [
+        "claude",
+        "codex",
+        "devin"
+      ],
       "functionally_required": false,
       "rationale": "Explicit-use binary for an effectiveness-measurement phase; the deterministic gate is the pure-python scan_secrets.py (needs no binary). Shared for uniform cross-agent provisioning of devcontainer-parity tools; wired into codex+devin and gate widened to CODEX_CODE_REMOTE in #1608."
     }
@@ -564,6 +608,15 @@
               ]
             },
             {
+              "matcher": "mcp__github__resolve_review_thread",
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "python3 scripts/preflight_resolve_review_thread.py"
+                }
+              ]
+            },
+            {
               "matcher": "mcp__github__",
               "hooks": [
                 {
@@ -980,6 +1033,16 @@
                   "type": "command",
                   "command": "python3 scripts/gate_update_pr_branch.py",
                   "statusMessage": "Blocking update_pull_request_branch -- use new-branch recovery path"
+                }
+              ]
+            },
+            {
+              "matcher": "^mcp__github__resolve_review_thread$",
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "python3 scripts/preflight_resolve_review_thread.py",
+                  "statusMessage": "Gate: resolve_review_thread"
                 }
               ]
             },
