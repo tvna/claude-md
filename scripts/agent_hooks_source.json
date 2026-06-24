@@ -695,6 +695,17 @@
               ]
             },
             {
+              "matcher": "Bash",
+              "hooks": [
+                {
+                  "type": "command",
+                  "if": "Bash(*git push*)",
+                  "command": "python3 scripts/check_pr_mergeability.py git-push",
+                  "statusMessage": "Checking post-push PR mergeability"
+                }
+              ]
+            },
+            {
               "matcher": "mcp__github__merge_pull_request",
               "hooks": [
                 {
@@ -1374,6 +1385,17 @@
                   "type": "command",
                   "command": "python3 scripts/check_pr_mergeability.py",
                   "statusMessage": "Checking PR mergeability"
+                }
+              ]
+            },
+            {
+              "matcher": "^Bash$",
+              "hooks": [
+                {
+                  "type": "command",
+                  "if": "Bash(*git push*)",
+                  "command": "python3 scripts/check_pr_mergeability.py git-push",
+                  "statusMessage": "Checking post-push PR mergeability"
                 }
               ]
             },

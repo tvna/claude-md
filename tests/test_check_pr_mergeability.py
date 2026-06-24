@@ -749,3 +749,138 @@ def test_main_non_dict_stdin_is_fail_open(monkeypatch: pytest.MonkeyPatch, capsy
     rc = subject.main([])
     assert rc == 0
     assert capsys.readouterr().out == ""
+
+
+# ---------------------------------------------------------------------------
+# run_git_push
+# ---------------------------------------------------------------------------
+
+
+def _make_pr_item(number: int, state: str, mergeable: bool | None) -> dict[str, Any]:
+    return {"number": number, "mergeable": mergeable, "mergeable_state": state}
+
+
+class TestRunGitPush:
+    def _setup(self, monkeypatch: pytest.MonkeyPatch, branch: str = "feat/test") -> None:
+        monkeypatch.setattr(subject, "_detect_repo", lambda: "tvna/claude-md")
+        monkeypatch.setattr(subject, "_get_current_branch", lambda: branch)
+
+    def test_clean_returns_ok_context(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        self._setup(monkeypatch)
+        pr_list = [_make_pr_item(100, "clean", True)]
+        monkeypatch.setattr(
+            subject, "_rest_get_list", lambda *a, **k: pr_list
+        )
+        monkeypatch.setattr(
+            subject, "_poll_mergeability",
+            lambda *a, **k: {"mergeable": True, "mergeable_state": "clean"},
+        )
+        result = subject.run_git_push(token=_TOKEN, sleeper=lambda _: None)
+        assert result is not None
+        ctx = result["hookSpecificOutput"]["additionalContext"]
+        assert "Mergeability OK" in ctx
+        assert "clean" in ctx
+
+    def test_behind_returns_behind_context(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        self._setup(monkeypatch)
+        pr_list = [_make_pr_item(101, "behind", True)]
+        monkeypatch.setattr(subject, "_rest_get_list", lambda *a, **k: pr_list)
+        monkeypatch.setattr(
+            subject, "_poll_mergeability",
+            lambda *a, **k: {"mergeable": True, "mergeable_state": "behind"},
+        )
+        result = subject.run_git_push(token=_TOKEN, sleeper=lambda _: None)
+        assert result is not None
+        ctx = result["hookSpecificOutput"]["additionalContext"]
+        assert "behind" in ctx
+        assert "refresh_pr_branch.py" in ctx
+
+    def test_dirty_returns_conflict_context(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        self._setup(monkeypatch)
+        pr_list = [_make_pr_item(102, "dirty", False)]
+        monkeypatch.setattr(subject, "_rest_get_list", lambda *a, **k: pr_list)
+        monkeypatch.setattr(
+            subject, "_poll_mergeability",
+            lambda *a, **k: {"mergeable": False, "mergeable_state": "dirty"},
+        )
+        result = subject.run_git_push(token=_TOKEN, sleeper=lambda _: None)
+        assert result is not None
+        ctx = result["hookSpecificOutput"]["additionalContext"]
+        assert "MERGE CONFLICT" in ctx
+        assert "dirty" in ctx
+
+    def test_blocked_returns_advisory_context(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        self._setup(monkeypatch)
+        pr_list = [_make_pr_item(103, "blocked", True)]
+        monkeypatch.setattr(subject, "_rest_get_list", lambda *a, **k: pr_list)
+        monkeypatch.setattr(
+            subject, "_poll_mergeability",
+            lambda *a, **k: {"mergeable": True, "mergeable_state": "blocked"},
+        )
+        result = subject.run_git_push(token=_TOKEN, sleeper=lambda _: None)
+        assert result is not None
+        ctx = result["hookSpecificOutput"]["additionalContext"]
+        assert "blocked" in ctx
+
+    def test_no_open_pr_returns_none(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        self._setup(monkeypatch)
+        monkeypatch.setattr(subject, "_rest_get_list", lambda *a, **k: [])
+        result = subject.run_git_push(token=_TOKEN, sleeper=lambda _: None)
+        assert result is None
+
+    def test_api_failure_returns_none(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        self._setup(monkeypatch)
+        monkeypatch.setattr(subject, "_rest_get_list", lambda *a, **k: None)
+        result = subject.run_git_push(token=_TOKEN, sleeper=lambda _: None)
+        assert result is None
+
+    def test_no_repo_returns_none(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(subject, "_detect_repo", lambda: None)
+        result = subject.run_git_push(token=_TOKEN, sleeper=lambda _: None)
+        assert result is None
+
+    def test_no_branch_returns_none(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(subject, "_detect_repo", lambda: "tvna/claude-md")
+        monkeypatch.setattr(subject, "_get_current_branch", lambda: None)
+        result = subject.run_git_push(token=_TOKEN, sleeper=lambda _: None)
+        assert result is None
+
+    def test_poll_returns_none_is_fail_open(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        self._setup(monkeypatch)
+        pr_list = [_make_pr_item(104, "unknown", None)]
+        monkeypatch.setattr(subject, "_rest_get_list", lambda *a, **k: pr_list)
+        monkeypatch.setattr(subject, "_poll_mergeability", lambda *a, **k: None)
+        result = subject.run_git_push(token=_TOKEN, sleeper=lambda _: None)
+        assert result is None
+
+    def test_mergeable_none_returns_timeout_advisory(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        self._setup(monkeypatch)
+        pr_list = [_make_pr_item(105, "unknown", None)]
+        monkeypatch.setattr(subject, "_rest_get_list", lambda *a, **k: pr_list)
+        monkeypatch.setattr(
+            subject, "_poll_mergeability",
+            lambda *a, **k: {"mergeable": None, "mergeable_state": "unknown"},
+        )
+        result = subject.run_git_push(token=_TOKEN, sleeper=lambda _: None)
+        assert result is not None
+        ctx = result["hookSpecificOutput"]["additionalContext"]
+        assert "timed out" in ctx
+
+
+# ---------------------------------------------------------------------------
+# main(); git-push routing
+# ---------------------------------------------------------------------------
+
+
+def test_main_git_push_mode_calls_run_git_push(monkeypatch: pytest.MonkeyPatch) -> None:
+    called: list[bool] = []
+
+    def fake_run_git_push(**_: Any) -> dict[str, Any] | None:
+        called.append(True)
+        return None
+
+    monkeypatch.setattr(subject, "run_git_push", fake_run_git_push)
+
+    rc = subject.main(["git-push"])
+    assert rc == 0
+    assert called == [True]
