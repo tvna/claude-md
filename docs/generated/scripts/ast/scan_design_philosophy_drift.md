@@ -90,32 +90,6 @@ flowchart TD
     N001 -->|"start"| N002
 ```
 
-## parse_glossary_entries(...)
-
-```mermaid
-flowchart TD
-    N001["parse_glossary_entries(...)"]
-    N002["lines = splitlines(...)"]
-    N003["start = None"]
-    N004["end = None"]
-    N005["for i, line in enumerate(lines):     if DOC_GLOSSARY_HEADING_RE.match(line):         start = i + 1         continue     if start is not None and DOC_HEADING_RE.match(line):         end = i         break"]
-    N006["if start is None"]
-    N007["return set()"]
-    N008["if end is None"]
-    N009["end = len(...)"]
-    N010["return {match.group(1) for line in lines[start:end] if (match := DOC_GLOSSARY_ENTRY_RE.match(line)) is not None}"]
-    N001 -->|"start"| N002
-    N002 --> N003
-    N003 --> N004
-    N004 --> N005
-    N005 --> N006
-    N006 -->|"true"| N007
-    N006 -->|"false"| N008
-    N008 -->|"true"| N009
-    N009 --> N010
-    N008 -->|"false"| N010
-```
-
 ## parse_doc_wording_counts(...)
 
 ```mermaid
@@ -155,7 +129,7 @@ flowchart TD
     N005["if not doc_path.exists()"]
     N006["print(...)"]
     N007["return 1"]
-    N008["if glossary_path is not None and (not glossary_path.exists())"]
+    N008["if not glossary_path.exists()"]
     N009["print(...)"]
     N010["return 1"]
     N011["master_text = read_text(...)"]
@@ -190,23 +164,17 @@ flowchart TD
     N040["master_subtitles = parse_master_subtitles(...)"]
     N041["doc_row_labels = parse_doc_row_labels(...)"]
     N042["for n in sorted(master_sections & matrix_rows):     sub_text = master_subtitles.get(n)     label_text = doc_row_labels.get(n)     if sub_text is None or label_text is None:         continue     if normalize_label(sub_text) != normalize_label(label_text):         print(f'<str>{doc_path}<str>{section_offset}<str>{n}<str>{label_text}<str>{n}<str>{sub_text}<str>', file=sys.stderr)         failures += 1"]
-    N043["if glossary_path is not None"]
-    N044["glossary_entries = parse_file_entries(...)"]
-    N045["glossary_ref = glossary_path"]
-    N046["glossary_hint = f'<str>{glossary_path}<str>'"]
-    N047["glossary_entries = parse_glossary_entries(...)"]
-    N048["glossary_ref = doc_path"]
-    N049["glossary_hint = f'<str>{doc_path}<str>'"]
-    N050["missing_glossary = sorted(...)"]
-    N051["if missing_glossary"]
-    N052["labels = join(...)"]
-    N053["print(...)"]
-    N054["failures += 1"]
-    N055["if failures"]
-    N056["print(...)"]
-    N057["return 1"]
-    N058["print(...)"]
-    N059["return 0"]
+    N043["glossary_entries = parse_file_entries(...)"]
+    N044["missing_glossary = sorted(...)"]
+    N045["if missing_glossary"]
+    N046["labels = join(...)"]
+    N047["print(...)"]
+    N048["failures += 1"]
+    N049["if failures"]
+    N050["print(...)"]
+    N051["return 1"]
+    N052["print(...)"]
+    N053["return 0"]
     N001 -->|"start"| N002
     N002 -->|"true"| N003
     N003 --> N004
@@ -251,24 +219,17 @@ flowchart TD
     N040 --> N041
     N041 --> N042
     N042 --> N043
-    N043 -->|"true"| N044
+    N043 --> N044
     N044 --> N045
-    N045 --> N046
-    N043 -->|"false"| N047
+    N045 -->|"true"| N046
+    N046 --> N047
     N047 --> N048
     N048 --> N049
-    N046 --> N050
-    N049 --> N050
+    N045 -->|"false"| N049
+    N049 -->|"true"| N050
     N050 --> N051
-    N051 -->|"true"| N052
+    N049 -->|"false"| N052
     N052 --> N053
-    N053 --> N054
-    N054 --> N055
-    N051 -->|"false"| N055
-    N055 -->|"true"| N056
-    N056 --> N057
-    N055 -->|"false"| N058
-    N058 --> N059
 ```
 
 ## _cmd_verify(...)
@@ -279,13 +240,11 @@ flowchart TD
     N002["if not args.master or not args.doc"]
     N003["print(...)"]
     N004["return 2"]
-    N005["glossary_path = Path(args.glossary) if args.glossary else None"]
-    N006["return _verify(Path(args.master), Path(args.doc), glossary_path)"]
+    N005["return _verify(Path(args.master), Path(args.doc), Path(args.glossary))"]
     N001 -->|"start"| N002
     N002 -->|"true"| N003
     N003 --> N004
     N002 -->|"false"| N005
-    N005 --> N006
 ```
 
 ## resolve_base(...)
