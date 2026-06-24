@@ -36,6 +36,7 @@ Detection is string-match based:
 | `check_session_branch.py` | agent-hook | `codex:SessionStart` |
 | `ci_budget_issue.py` | workflow | `weekly-maintenance.yml (measure-timings)` |
 | `ci_early_status_probe.py` | agent-hook | `codex:PostToolUse` |
+| `codebase_maturity_summary.py` | workflow | `post-merge.yml (maturity-summary)` |
 | `coverage_failure_issue.py` | workflow | `post-merge.yml (coverage-failure-issue)` |
 | `dependabot_automerge.py` | workflow | `dependabot-automerge.yml (audit)` |
 | `dependabot_labels.py` | workflow | `verify-pr.yml (verify-dependabot-labels)` |
