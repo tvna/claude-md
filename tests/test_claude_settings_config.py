@@ -186,6 +186,17 @@ def test_claude_post_tool_use_starts_ci_monitor_after_mcp_pr_create() -> None:
             ],
         },
         {
+            "matcher": "Bash",
+            "hooks": [
+                {
+                    "type": "command",
+                    "if": "Bash(*git push*)",
+                    "command": "python3 scripts/check_pr_mergeability.py git-push",
+                    "statusMessage": "Checking post-push PR mergeability",
+                },
+            ],
+        },
+        {
             "matcher": "mcp__github__merge_pull_request",
             "hooks": [
                 {
