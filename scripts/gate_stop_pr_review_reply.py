@@ -107,6 +107,12 @@ _BLOCK_REASON = (
 # Matches the JSON key-value form "login": "...", not plain-text @-mentions.
 _LOGIN_RE: re.Pattern[str] = re.compile(r'"login"\s*:\s*"([^"]+)"')
 
+# Regex to extract the author login from the Claude Code plain-text webhook
+# delivery format: "Author: <login>" at the start of a line. This format is
+# used by the Claude Code system when injecting webhook events; it does not
+# carry a raw JSON payload. Refs #1932.
+_AUTHOR_RE: re.Pattern[str] = re.compile(r"^Author:\s*(\S+)\s*$", re.MULTILINE)
+
 
 def _content_blocks(entry: object) -> list[dict[str, Any]]:
     """Return the list of content blocks for a transcript entry, or []."""
@@ -221,9 +227,14 @@ def _extract_session_login(entries: list[Any]) -> str | None:
 def _is_self_authored_webhook(entry: object, session_login: str | None) -> bool:
     """Return True when the webhook comment was authored by the session itself.
 
-    Searches for ``"login": "<session_login>"`` as a JSON field in the webhook
-    payload text. Plain-text @-mentions in comment bodies use different syntax
-    and will not produce a false positive. When *session_login* is None the
+    Checks two formats:
+    1. JSON payload: ``"login": "<session_login>"`` — present when the system
+       embeds a raw GitHub webhook payload.
+    2. Plain-text: ``Author: <session_login>`` at the start of a line — the
+       format used by Claude Code's webhook delivery system.
+
+    Plain-text ``@<login>`` mentions in comment bodies use different syntax and
+    will not produce a false positive. When *session_login* is None the
     function returns False (fail-open toward the existing block behaviour).
     Refs #1932.
     """
@@ -231,7 +242,10 @@ def _is_self_authored_webhook(entry: object, session_login: str | None) -> bool:
         return False
     text = _entry_text(entry)
     m = _LOGIN_RE.search(text)
-    return m is not None and m.group(1) == session_login
+    if m is not None and m.group(1) == session_login:
+        return True
+    m2 = _AUTHOR_RE.search(text)
+    return m2 is not None and m2.group(1) == session_login
 
 
 def has_reply_tool_call(entries: list[Any], after_idx: int) -> bool:
