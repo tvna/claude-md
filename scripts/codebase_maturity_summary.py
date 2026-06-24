@@ -81,26 +81,17 @@ class MaturityReport:
     def ast_doc_coverage(self) -> float:
         """Fraction of ``scripts/*.py`` modules with a generated AST doc.
 
-        Denominator is every script module because
-        ``script_ast_graph.iter_script_paths`` documents all ``scripts/*.py``
-        files (private ``_`` helpers included). A freshly added script has no
-        AST doc until the post-merge ``decision-tree`` job regenerates them,
-        so the ratio briefly dips below 1.0 between merge and that follow-up.
+        Denominator is ``script_modules`` (every module the size gate walks,
+        private ``_`` helpers included), the same population
+        ``script_ast_graph`` documents one AST doc per. The value tracks the
+        post-merge ``decision-tree`` regeneration lag and can briefly leave
+        ``[0, 1]`` in either direction until that job runs: a just-added script
+        has no AST doc yet (ratio < 1.0), and a just-deleted script can leave
+        an un-pruned orphan doc (ratio > 1.0).
         """
         if self.script_modules == 0:
             return 0.0
         return self.ast_doc_count / self.script_modules
-
-
-def _count_lines(path: Path) -> int:
-    return len(path.read_text(encoding="utf-8", errors="ignore").splitlines())
-
-
-def _iter_script_modules(repo_root: Path) -> list[Path]:
-    scripts_dir = repo_root / "scripts"
-    if not scripts_dir.exists():
-        return []
-    return [p for p in sorted(scripts_dir.rglob("*.py")) if p.is_file()]
 
 
 def _glob_files(base: Path, pattern: str) -> list[Path]:
@@ -110,16 +101,30 @@ def _glob_files(base: Path, pattern: str) -> list[Path]:
 
 
 def measure(repo_root: Path) -> MaturityReport:
-    """Measure every scale and maturity signal for *repo_root*."""
-    script_modules = _iter_script_modules(repo_root)
-    public_scripts = [
-        p
-        for p in _glob_files(repo_root / "scripts", "*.py")
-        if not p.name.startswith("_")
-    ]
+    """Measure every scale and maturity signal for *repo_root*.
+
+    Every ``scripts/``-scoped count is derived from the single
+    ``find_module_sizes`` walk: it returns one ``ModuleSize`` per
+    ``scripts/*.py`` (repo-relative ``path``, physical ``line_count``), so the
+    script count, total line count, gate-script count, and the maintainability
+    partition all share one script set and one line-count definition with the
+    size gate. This is what keeps the report from drifting away from the gate,
+    and avoids walking ``scripts/`` more than once.
+    """
+    sizes = find_module_sizes(repo_root)
+    # Gate prefixes never start with ``_``, so this also excludes private
+    # helpers without a separate public-only filter.
     gate_scripts = [
-        p for p in public_scripts if p.name.startswith(GATE_PREFIXES)
+        m for m in sizes if m.path.name.startswith(GATE_PREFIXES)
     ]
+    # Partition the modules above the line budget into active violations
+    # (not deferred) and deferred debt so the two over-budget rows sum to the
+    # total over-budget count; the warn band is a disjoint within-budget set.
+    active_over_budget = sum(1 for m in sizes if m.is_violation)
+    warn_band = sum(1 for m in sizes if m.is_in_warn_band)
+    deferred_over_budget = sum(
+        1 for m in sizes if m.is_over_budget and m.deferred_reason is not None
+    )
 
     docs_dir = repo_root / "docs"
     doc_count = (
@@ -128,19 +133,9 @@ def measure(repo_root: Path) -> MaturityReport:
         else 0
     )
 
-    # Partition the modules above the line budget into active violations
-    # (not deferred) and deferred debt so the two over-budget rows sum to the
-    # total over-budget count; the warn band is a disjoint within-budget set.
-    sizes = find_module_sizes(repo_root)
-    active_over_budget = sum(1 for m in sizes if m.is_violation)
-    warn_band = sum(1 for m in sizes if m.is_in_warn_band)
-    deferred_over_budget = sum(
-        1 for m in sizes if m.is_over_budget and m.deferred_reason is not None
-    )
-
     return MaturityReport(
-        script_modules=len(script_modules),
-        script_total_lines=sum(_count_lines(p) for p in script_modules),
+        script_modules=len(sizes),
+        script_total_lines=sum(m.line_count for m in sizes),
         test_modules=len(_glob_files(repo_root / "tests", "test_*.py")),
         workflow_count=len(
             _glob_files(repo_root / ".github" / "workflows", "*.yml")
