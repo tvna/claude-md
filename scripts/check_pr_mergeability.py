@@ -470,7 +470,11 @@ def run_git_push(
     state = str(pr_data.get("mergeable_state") or "unknown").lower()
 
     if mergeable is None:
-        return None
+        return _build_context(
+            f"Mergeability check timed out for {pr_label}: GitHub has not yet computed "
+            f"mergeability after {_MAX_POLLS} polls. Re-check the PR mergeable_state "
+            "shortly via the GitHub REST API or UI."
+        )
 
     if state == "clean":
         return _build_context(f"Mergeability OK: {pr_label} has mergeable_state=clean. No conflicts detected.")

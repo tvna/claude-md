@@ -853,7 +853,7 @@ class TestRunGitPush:
         result = subject.run_git_push(token=_TOKEN, sleeper=lambda _: None)
         assert result is None
 
-    def test_mergeable_none_is_fail_open(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_mergeable_none_returns_timeout_advisory(self, monkeypatch: pytest.MonkeyPatch) -> None:
         self._setup(monkeypatch)
         pr_list = [_make_pr_item(105, "unknown", None)]
         monkeypatch.setattr(subject, "_rest_get_list", lambda *a, **k: pr_list)
@@ -862,7 +862,9 @@ class TestRunGitPush:
             lambda *a, **k: {"mergeable": None, "mergeable_state": "unknown"},
         )
         result = subject.run_git_push(token=_TOKEN, sleeper=lambda _: None)
-        assert result is None
+        assert result is not None
+        ctx = result["hookSpecificOutput"]["additionalContext"]
+        assert "timed out" in ctx
 
 
 # ---------------------------------------------------------------------------
