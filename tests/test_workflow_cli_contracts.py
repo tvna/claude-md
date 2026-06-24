@@ -59,6 +59,7 @@ import post_issue_comment
 import pr_upsert
 import preflight_coverage
 import preflight_uv_version
+import prune_codespaces
 import prune_devcontainer_images
 import publish_instruction_release
 import pytest
@@ -284,6 +285,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("github_paginate.py", "fetch"): "test_github_paginate_fetch_matches_workflow_args",
     ("github_paginate.py", "get"): "test_github_paginate_get_matches_workflow_args",
     ("post_issue_comment.py", "create"): "test_post_issue_comment_create_matches_workflow_args",
+    ("prune_codespaces.py", "prune"): "test_prune_codespaces_prune_matches_workflow_args",
     ("prune_devcontainer_images.py", "prune"): "test_prune_devcontainer_images_prune_matches_workflow_args",
     ("publish_instruction_release.py", "publish"): "test_publish_instruction_release_publish_matches_workflow_args",
     ("pr_upsert.py", "upsert-files"): "test_pr_upsert_upsert_files_matches_workflow_args",
@@ -2200,6 +2202,25 @@ def test_github_paginate_fetch_run_jobs_matches_workflow_args(
     ])
     assert rc == 0
     assert (tmp_path / "jobs" / "42.json").exists()
+
+
+def test_prune_codespaces_prune_matches_workflow_args(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """prune subcommand accepts the --org/--min-age-days/--dry-run/--summary-file args
+    used by the ``Prune inactive codespaces`` step in weekly-maintenance.yml. Refs #1930."""
+    monkeypatch.setenv("GH_TOKEN", "tok")
+    monkeypatch.setattr(prune_codespaces, "_list_codespaces", lambda *a, **k: [])
+    monkeypatch.setattr(prune_codespaces, "_delete_codespace", lambda *a, **k: (202, ""))
+    summary = tmp_path / "summary.md"
+    rc = prune_codespaces.main([
+        "prune",
+        "--org", "myorg",
+        "--min-age-days", "30",
+        "--dry-run", "true",
+        "--summary-file", str(summary),
+    ])
+    assert rc == 0
 
 
 def test_prune_devcontainer_images_prune_matches_workflow_args(

@@ -187,7 +187,12 @@ def test_cmd_prune_no_candidates_is_success(
     monkeypatch.setenv("GH_TOKEN", "tok")
     monkeypatch.setattr(pc, "_list_codespaces", lambda *a, **k: [_cs("cs4", "Available", 60)])
     deleted: list[str] = []
-    monkeypatch.setattr(pc, "_delete_codespace", lambda *a, **k: deleted.append("x") or (202, ""))
+
+    def _record(*a: Any, **k: Any) -> tuple[int, str]:
+        deleted.append("x")
+        return 202, ""
+
+    monkeypatch.setattr(pc, "_delete_codespace", _record)
     rc = pc.main(["prune", "--org", "org", "--min-age-days", "30", "--dry-run", "false"])
     assert rc == 0
     assert deleted == []

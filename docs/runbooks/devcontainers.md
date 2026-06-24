@@ -614,6 +614,31 @@ If this token is suspected leaked rather than rotated on schedule, follow the
 emergency revoke-then-reissue steps in
 [`compromised-action-response.md`](compromised-action-response.md).
 
+### One-time setup for `CODESPACES_CLEANUP_TOKEN`
+
+Deleting an organisation Codespace is **not** possible with the Actions
+`GITHUB_TOKEN`: the API returns `403`. The `codespace-cleanup` job authenticates
+with a dedicated personal access token.
+
+1. Create a **classic** PAT at `github.com/settings/tokens` with minimum
+   permissions `admin:org` (the `manage codespaces` sub-permission is sufficient
+   if your PAT UI shows it separately). Do not grant `repo`, `write:packages`,
+   or any broader scope than needed.
+2. Store it as the `CODESPACES_CLEANUP_TOKEN` Environment secret in a dedicated
+   `codespace-cleanup` GitHub Environment (Settings → Environments). Keeping it
+   in its own environment isolates the delete-capable token from other secrets.
+3. Set an expiry of 90 days or less. Record the next rotation date with the
+   Environment secret owner and rotate the token before expiry.
+4. Verify the handoff: dispatch `Weekly maintenance` selecting the
+   `codespace-cleanup` task and confirming `codespace_cleanup_dry_run` is `true`
+   (the default). The `Guard CODESPACES_CLEANUP_TOKEN` step fails loud if the
+   secret is unset, so nothing is deleted until the handoff is complete. Never
+   print the token value in logs.
+
+If this token is suspected leaked rather than rotated on schedule, follow the
+emergency revoke-then-reissue steps in
+[`compromised-action-response.md`](compromised-action-response.md).
+
 ## Runtime
 
 Podman is the supported local runtime for these devcontainers. VS Code's
