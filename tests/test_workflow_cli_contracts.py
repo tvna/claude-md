@@ -1361,7 +1361,7 @@ def test_verify_readme_translation_matches_workflow_args(
         verify_readme_translation,
         "changed_readmes",
         lambda base, head="HEAD", **kwargs: frozenset(
-            {"README.md", "README.ja.md", "README.zh.md"}
+            {"README.md", "README.ja.md", "README.zh.md", "README.ko.md"}
         ),
     )
 
