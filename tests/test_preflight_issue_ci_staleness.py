@@ -129,6 +129,22 @@ class TestDecide:
         )
         assert result is None
 
+    def test_codex_connector_real_payload_without_phrase_blocked(self) -> None:
+        """Real _create_issue payloads have no 'method' field; gate must still fire."""
+        inp = {"title": "CI failure in main", "body": "The job failed."}
+        result = gate.decide("mcp__codex_apps__github._create_issue", inp)
+        assert result is not None
+        assert result.get("hookSpecificOutput", {}).get("permissionDecision") == "deny"
+
+    def test_codex_connector_real_payload_with_phrase_allowed(self) -> None:
+        """Real _create_issue payloads with verification phrase must pass through."""
+        inp = {
+            "title": "CI failure in main",
+            "body": f"The job failed. {gate.FRESH_MAIN_CHECK_PHRASE}",
+        }
+        result = gate.decide("mcp__codex_apps__github._create_issue", inp)
+        assert result is None
+
     def test_update_method_allowed(self) -> None:
         assert gate.decide("mcp__github__issue_write", _update_input("CI failure", "")) is None
 

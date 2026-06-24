@@ -108,7 +108,8 @@ def decide(tool_name: str, tool_input: dict[str, Any]) -> dict[str, Any] | None:
     """
     if canonical_github_tool(tool_name) != _TARGET_TOOL:
         return None
-    if tool_input.get("method") != _TARGET_METHOD:
+    method = tool_input.get("method")
+    if method is not None and method != _TARGET_METHOD:
         return None
 
     title = tool_input.get("title", "")

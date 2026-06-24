@@ -588,6 +588,10 @@
                 {
                   "type": "command",
                   "command": "python3 scripts/preflight_angle_token_drop.py"
+                },
+                {
+                  "type": "command",
+                  "command": "python3 scripts/preflight_issue_ci_staleness.py"
                 }
               ]
             },
@@ -1308,6 +1312,11 @@
                   "type": "command",
                   "command": "python3 scripts/preflight_angle_token_drop.py",
                   "statusMessage": "Checking GitHub text for bare angle-bracket tokens"
+                },
+                {
+                  "type": "command",
+                  "command": "python3 scripts/preflight_issue_ci_staleness.py",
+                  "statusMessage": "Checking CI-failure staleness before issue creation"
                 }
               ]
             },
