@@ -89,9 +89,28 @@ class TestMeasure:
 
         report = codebase_maturity_summary.measure(tmp_path)
 
-        assert report.over_budget_modules == 1
+        assert report.active_over_budget_modules == 1
         assert report.warn_band_modules == 1
-        assert report.deferred_modules == 0
+        assert report.deferred_over_budget_modules == 0
+
+    def test_deferred_oversized_module_counts_as_deferred_not_active(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _seed_minimal_repo(tmp_path)
+        over = scan_maintainability_metrics.MAX_MODULE_LINES + 1
+        _write(repo=tmp_path, rel="scripts/legacy.py", lines=over)
+        monkeypatch.setattr(
+            scan_maintainability_metrics,
+            "DEFERRED_OVERSIZE_MODULES",
+            {Path("scripts/legacy.py"): "documented legacy debt"},
+        )
+
+        report = codebase_maturity_summary.measure(tmp_path)
+
+        # The deferred over-budget module must not vanish: it belongs to the
+        # deferred row, never the active-violations row (#1961 review).
+        assert report.active_over_budget_modules == 0
+        assert report.deferred_over_budget_modules == 1
 
     def test_empty_repo_ratios_do_not_divide_by_zero(
         self, tmp_path: Path

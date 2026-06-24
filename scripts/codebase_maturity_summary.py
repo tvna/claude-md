@@ -20,9 +20,12 @@ Maturity signals (proxies for review/test/automation discipline):
   public ``scripts/*.py`` modules the post-merge automation documents).
 - deterministic-gate script count (``gate_`` / ``preflight_`` / ``scan_`` /
   ``verify_`` prefixed modules).
-- maintainability budget health: over-budget, warn-band, and deferred module
+- maintainability budget health: active-over-budget (non-deferred
+  violations), deferred-over-budget (acknowledged debt), and warn-band module
   counts, reused from ``scan_maintainability_metrics.find_module_sizes`` so
-  this report and the size gate cannot drift apart.
+  this report and the size gate cannot drift apart. The two over-budget rows
+  are reported separately so an "over budget (active) = 0" line is not read as
+  "no module exceeds the budget" when deferred debt exists.
 
 The report is a pure function of repository content: no timestamps, hostnames,
 or environment values, so the same tree always renders the same Markdown.
@@ -64,9 +67,9 @@ class MaturityReport:
     doc_count: int
     ast_doc_count: int
     gate_script_modules: int
-    over_budget_modules: int
+    active_over_budget_modules: int
     warn_band_modules: int
-    deferred_modules: int
+    deferred_over_budget_modules: int
 
     @property
     def test_to_script_ratio(self) -> float:
@@ -125,10 +128,13 @@ def measure(repo_root: Path) -> MaturityReport:
         else 0
     )
 
+    # Partition the modules above the line budget into active violations
+    # (not deferred) and deferred debt so the two over-budget rows sum to the
+    # total over-budget count; the warn band is a disjoint within-budget set.
     sizes = find_module_sizes(repo_root)
-    over_budget = sum(1 for m in sizes if m.is_violation)
+    active_over_budget = sum(1 for m in sizes if m.is_violation)
     warn_band = sum(1 for m in sizes if m.is_in_warn_band)
-    deferred = sum(
+    deferred_over_budget = sum(
         1 for m in sizes if m.is_over_budget and m.deferred_reason is not None
     )
 
@@ -146,9 +152,9 @@ def measure(repo_root: Path) -> MaturityReport:
             )
         ),
         gate_script_modules=len(gate_scripts),
-        over_budget_modules=over_budget,
+        active_over_budget_modules=active_over_budget,
         warn_band_modules=warn_band,
-        deferred_modules=deferred,
+        deferred_over_budget_modules=deferred_over_budget,
     )
 
 
@@ -169,9 +175,15 @@ def render_markdown(report: MaturityReport) -> str:
             f"({report.ast_doc_count}/{report.script_modules})",
         ),
         ("Deterministic-gate scripts", f"{report.gate_script_modules}"),
-        ("Maintainability over budget", f"{report.over_budget_modules}"),
+        (
+            "Maintainability over budget (active)",
+            f"{report.active_over_budget_modules}",
+        ),
+        (
+            "Maintainability over budget (deferred)",
+            f"{report.deferred_over_budget_modules}",
+        ),
         ("Maintainability warn band", f"{report.warn_band_modules}"),
-        ("Maintainability deferred debt", f"{report.deferred_modules}"),
     ]
 
     lines = ["# Codebase maturity and scale", ""]
