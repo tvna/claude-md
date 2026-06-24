@@ -866,6 +866,21 @@ class TestRunGitPush:
         ctx = result["hookSpecificOutput"]["additionalContext"]
         assert "timed out" in ctx
 
+    def test_run_git_push_uses_max_polls_1_no_sleep(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """run_git_push must pass max_polls=1 so the sleeper is never called."""
+        self._setup(monkeypatch)
+        pr_list = [_make_pr_item(106, "unknown", None)]
+        monkeypatch.setattr(subject, "_rest_get_list", lambda *a, **k: pr_list)
+        sleep_calls: list[float] = []
+        monkeypatch.setattr(subject, "_get_token", lambda: _TOKEN)
+
+        def fake_rest_get(path: str, *, token: str = "", opener: Any = None) -> dict[str, Any] | None:
+            return {"mergeable": None, "mergeable_state": "unknown"}
+
+        monkeypatch.setattr(subject, "_rest_get", fake_rest_get)
+        subject.run_git_push(token=_TOKEN, sleeper=sleep_calls.append)
+        assert sleep_calls == [], "sleeper must not be called with max_polls=1"
+
 
 # ---------------------------------------------------------------------------
 # main(); git-push routing

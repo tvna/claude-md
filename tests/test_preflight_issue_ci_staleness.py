@@ -49,8 +49,11 @@ class TestLooksLikeCiFailure:
     def test_ci_failure_keyword_matches(self) -> None:
         assert gate._looks_like_ci_failure("CI failure in main", "")
 
-    def test_docs_generated_keyword_matches(self) -> None:
-        assert gate._looks_like_ci_failure("", "docs/generated/ drift detected")
+    def test_docs_generated_stale_keyword_matches(self) -> None:
+        assert gate._looks_like_ci_failure("", "docs/generated/ is stale after merge")
+
+    def test_docs_generated_path_alone_not_matched(self) -> None:
+        assert not gate._looks_like_ci_failure("", "docs/generated/ drift detected")
 
     def test_workflow_failed_keyword_matches(self) -> None:
         assert gate._looks_like_ci_failure("", "workflow failed after merge")

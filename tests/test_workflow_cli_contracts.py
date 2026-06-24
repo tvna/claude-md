@@ -38,6 +38,7 @@ import body_policy
 import bot_pr_automerge
 import branch_cleanup
 import ci_budget_issue
+import codebase_maturity_summary
 import coverage_failure_issue
 import dependabot_automerge
 import dependabot_labels
@@ -236,6 +237,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("scan_markdown_links.py", "verify"): "test_scan_markdown_links_verify_matches_workflow_args",
     ("scan_mermaid_syntax.py", "verify"): "test_scan_mermaid_syntax_verify_matches_workflow_args",
     ("scan_maintainability_metrics.py", "verify"): "test_scan_maintainability_metrics_verify_matches_workflow_args",
+    ("codebase_maturity_summary.py", "summary"): "test_codebase_maturity_summary_summary_matches_workflow_args",
     ("scan_module_size_distribution.py", "verify"): "test_scan_module_size_distribution_verify_matches_workflow_args",
     ("scan_non_ascii.py", "run"): "test_scan_non_ascii_run_matches_workflow_env",
     ("scan_nonexhaustive_invariant_drift.py", "verify"): "test_scan_nonexhaustive_invariant_drift_verify_matches_workflow_args",
@@ -3214,6 +3216,24 @@ def test_doc_graph_viz_all_doc_matches_workflow_args(
     # No graph file present -> viz returns 1 (missing graph).
     result = doc_graph_viz.main(["all-doc"])
     assert result == 1
+
+
+def test_codebase_maturity_summary_summary_matches_workflow_args(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Mirror the ``summary`` invocation from post-merge.yml.
+
+    The maturity-summary job calls
+    ``uv run python scripts/codebase_maturity_summary.py summary`` and
+    redirects stdout to ``$GITHUB_STEP_SUMMARY``; the script takes no extra
+    arguments (``--repo-root`` defaults to ``.``). Exercise the flag-free
+    subcommand against an empty tmp tree so no real repo scan is needed; the
+    contract is the argv shape and the Markdown-on-stdout behaviour. Refs #1955.
+    """
+    rc = codebase_maturity_summary.main(["summary", "--repo-root", str(tmp_path)])
+    assert rc == 0
+    assert "# Codebase maturity and scale" in capsys.readouterr().out
 
 
 def test_preflight_coverage_matches_workflow_args(
