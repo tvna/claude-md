@@ -16,6 +16,7 @@ flowchart TD
     S_J_coverage_1(("Upload test results to Codecov"))
     S_J_coverage_2(("Fail coverage job when coverage gate failed"))
     J_coverage_failure_issue["coverage-failure-issue"]
+    J_maturity_summary["maturity-summary"]
     J_decision_tree["decision-tree"]
     S_J_decision_tree_0(("Mint GitHub App token"))
     S_J_decision_tree_1(("Open pull request if any generated doc changed"))
@@ -29,6 +30,8 @@ flowchart TD
     J_coverage -->|"always()"| S_J_coverage_1
     J_coverage -->|"steps.coverage-tests.outcome == 'failure'"| S_J_coverage_2
     J_coverage -->|"always() && needs.coverage.outputs.coverage_gate_result == 'failure'"| J_coverage_failure_issue
+    T_push -->|"github.event_name == 'push' || (github.event_name == 'workflow_dispatch~"| J_maturity_summary
+    T_workflow_dispatch -->|"github.event_name == 'push' || (github.event_name == 'workflow_dispatch~"| J_maturity_summary
     T_push -->|"github.event_name == 'push' || (github.event_name == 'workflow_dispatch~"| J_decision_tree
     T_workflow_dispatch -->|"github.event_name == 'push' || (github.event_name == 'workflow_dispatch~"| J_decision_tree
     J_decision_tree -->|"${{ steps.drift.outputs.changed == 'true' }}"| S_J_decision_tree_0
