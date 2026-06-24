@@ -251,6 +251,16 @@
         ]
       },
       {
+        "matcher": "^mcp__github__issue_write$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/preflight_issue_ci_staleness.py",
+            "statusMessage": "Checking CI-failure staleness before issue creation"
+          }
+        ]
+      },
+      {
         "matcher": "^mcp__github__(issue_write|add_issue_comment|create_pull_request|update_pull_request|add_reply_to_pull_request_comment|pull_request_review_write|add_comment_to_pending_review)$",
         "hooks": [
           {

@@ -51,19 +51,23 @@ _ACTIONS_RUN_RE = re.compile(
     r"github\.com/[^/\s]+/[^/\s]+/actions/runs/\d+", re.IGNORECASE
 )
 
-# CI-failure keywords in title or body.
+# CI-failure keywords in title or body. Intentionally specific to avoid
+# false positives on retro issues (which mention "post-merge" in a different
+# context). Standalone "post-merge" or "stale" are too broad; they only
+# qualify when combined with explicit CI/workflow context.
 _CI_KEYWORDS: tuple[str, ...] = (
-    "stale",
-    "docs/generated",
-    "post-merge",
-    "ci fail",
+    "docs/generated/",
     "ci failure",
+    "ci fail",
     "failing ci",
     "job failed",
     "jobs failed",
     "workflow failed",
     "check failed",
-    "post merge",
+    "post-merge ci",
+    "post merge ci",
+    "post-merge workflow",
+    "post-merge job",
 )
 
 _DENY_REASON = (

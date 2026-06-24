@@ -361,6 +361,15 @@
               ]
             },
             {
+              "matcher": "mcp__github__issue_write",
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "python3 scripts/preflight_issue_ci_staleness.py"
+                }
+              ]
+            },
+            {
               "matcher": "mcp__github__update_pull_request_branch",
               "hooks": [
                 {
@@ -1013,6 +1022,16 @@
                   "type": "command",
                   "command": "python3 scripts/gate_reserved_retro_scope.py",
                   "statusMessage": "Checking reserved auto-retro scope"
+                }
+              ]
+            },
+            {
+              "matcher": "^mcp__github__issue_write$",
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "python3 scripts/preflight_issue_ci_staleness.py",
+                  "statusMessage": "Checking CI-failure staleness before issue creation"
                 }
               ]
             },
