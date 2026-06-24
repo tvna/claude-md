@@ -105,6 +105,44 @@ flowchart TD
     N005 -->|"false"| N007
 ```
 
+## _extract_session_login(...)
+
+```mermaid
+flowchart TD
+    N001["_extract_session_login(...)"]
+    N002["get_me_ids = set(...)"]
+    N003["get_me_found = False"]
+    N004["for entry in entries:     for block in _content_blocks(entry):         if block.get('<str>') == '<str>' and block.get('<str>') == '<str>':             get_me_found = True             tool_id = block.get('<str>')             if isinstance(tool_id, str) and tool_id:                 get_me_ids.add(tool_id)"]
+    N005["if not get_me_found"]
+    N006["return None"]
+    N007["for entry in entries:     if _entry_role(entry) != '<str>':         continue     for block in _content_blocks(entry):         if block.get('<str>') != '<str>':             continue         tool_use_id = block.get('<str>', '<str>')         if get_me_ids and tool_use_id not in get_me_ids:             continue         result_content = block.get('<str>')         texts: list[str] = []         if isinstance(result_content, str):             texts.append(result_content)         elif isinstance(result_content, list):             for c in result_content:                 if isinstance(c, dict) and c.get('<str>') == '<str>':                     t = c.get('<str>')                     if isinstance(t, str):                         texts.append(t)         for text in texts:             try:                 data = json.loads(text)                 if isinstance(data, dict):                     login = data.get('<str>')                     if isinstance(login, str) and login:                         return login             except json.JSONDecodeError:                 pass"]
+    N008["return None"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 --> N004
+    N004 --> N005
+    N005 -->|"true"| N006
+    N005 -->|"false"| N007
+    N007 --> N008
+```
+
+## _is_self_authored_webhook(...)
+
+```mermaid
+flowchart TD
+    N001["_is_self_authored_webhook(...)"]
+    N002["if not session_login"]
+    N003["return False"]
+    N004["text = _entry_text(...)"]
+    N005["m = search(...)"]
+    N006["return m is not None and m.group(1) == session_login"]
+    N001 -->|"start"| N002
+    N002 -->|"true"| N003
+    N002 -->|"false"| N004
+    N004 --> N005
+    N005 --> N006
+```
+
 ## has_reply_tool_call(...)
 
 ```mermaid
@@ -121,7 +159,7 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["find_unaddressed_review_webhooks(...)"]
-    N002["return [idx for idx, entry in enumerate(entries) if is_review_webhook(entry) and (not has_reply_tool_call(entries, idx))]"]
+    N002["return [idx for idx, entry in enumerate(entries) if is_review_webhook(entry) and (not _is_self_authored_webhook(entry, session_login)) and (not has_reply_tool_call(entries, idx))]"]
     N001 -->|"start"| N002
 ```
 
@@ -134,16 +172,18 @@ flowchart TD
     N003["return None"]
     N004["if event.get('stop_hook_active')"]
     N005["return None"]
-    N006["if not find_unaddressed_review_webhooks(entries)"]
-    N007["return None"]
-    N008["return {'<str>': '<str>', '<str>': _BLOCK_REASON}"]
+    N006["session_login = _extract_session_login(...)"]
+    N007["if not find_unaddressed_review_webhooks(entries, session_login)"]
+    N008["return None"]
+    N009["return {'<str>': '<str>', '<str>': _BLOCK_REASON}"]
     N001 -->|"start"| N002
     N002 -->|"true"| N003
     N002 -->|"false"| N004
     N004 -->|"true"| N005
     N004 -->|"false"| N006
-    N006 -->|"true"| N007
-    N006 -->|"false"| N008
+    N006 --> N007
+    N007 -->|"true"| N008
+    N007 -->|"false"| N009
 ```
 
 ## load_transcript(...)
