@@ -461,30 +461,6 @@ class TestParseDocRowLabels:
 
 
 # ---------------------------------------------------------------------------
-# parse_glossary_entries
-# ---------------------------------------------------------------------------
-
-
-class TestParseGlossaryEntries:
-    def test_extracts_bolded_terms(self) -> None:
-        doc = _doc(matrix_rows=1, wording_count=1, glossary=["alpha", "beta"])
-        assert sdpd.parse_glossary_entries(doc) == {"alpha", "beta"}
-
-    def test_returns_empty_when_section_missing(self) -> None:
-        doc = _doc(matrix_rows=1, wording_count=1, glossary=[])
-        assert sdpd.parse_glossary_entries(doc) == set()
-
-    def test_stops_at_next_heading(self) -> None:
-        doc = (
-            "### 2.5 Glossary\n"
-            "- **alpha**: first.\n"
-            "## 3. Matrix\n"
-            "- **beta**: should not be counted.\n"
-        )
-        assert sdpd.parse_glossary_entries(doc) == {"alpha"}
-
-
-# ---------------------------------------------------------------------------
 # verify: label parity
 # ---------------------------------------------------------------------------
 
@@ -625,6 +601,25 @@ class TestVerifyGlossary:
         err = capsys.readouterr().err
         for term in sdpd.REQUIRED_GLOSSARY_ENTRIES:
             assert term in err
+
+    def test_default_glossary_resolves_regardless_of_cwd(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        # The default --glossary is anchored to the script location, so a
+        # verify run from any working directory finds the real repo glossary
+        # (which carries every required entry) rather than resolving the path
+        # against the caller's CWD.
+        master = tmp_path / "master.md"
+        doc = tmp_path / "doc.md"
+        _write(master, _master(6))
+        _write(doc, _doc(matrix_rows=6, wording_count=6))
+        monkeypatch.chdir(tmp_path)
+        rc = sdpd.main(
+            ["verify", "--master", str(master), "--doc", str(doc)]
+        )
+        assert rc == 0
 
 
 # ---------------------------------------------------------------------------
