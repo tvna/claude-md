@@ -91,12 +91,12 @@ class TestChangedReadmes:
             {"README.md"}
         )
 
-    def test_detects_all_three(self) -> None:
+    def test_detects_all_four(self) -> None:
         runner = _fake_runner(
-            "README.md\nREADME.ja.md\nREADME.zh.md\nunrelated.md\n"
+            "README.md\nREADME.ja.md\nREADME.zh.md\nREADME.ko.md\nunrelated.md\n"
         )
         assert gate.changed_readmes("origin/main", runner=runner) == frozenset(
-            {"README.md", "README.ja.md", "README.zh.md"}
+            {"README.md", "README.ja.md", "README.zh.md", "README.ko.md"}
         )
 
     def test_other_files_filtered_out(self) -> None:
@@ -182,9 +182,9 @@ class TestEvaluateDrift:
     def test_no_readme_changed(self) -> None:
         assert gate.evaluate_drift(frozenset(), skip=False) == (0, [])
 
-    def test_all_three_changed(self) -> None:
+    def test_all_four_changed(self) -> None:
         changed = frozenset(
-            {"README.md", "README.ja.md", "README.zh.md"}
+            {"README.md", "README.ja.md", "README.zh.md", "README.ko.md"}
         )
         assert gate.evaluate_drift(changed, skip=False) == (0, [])
 
@@ -199,6 +199,11 @@ class TestEvaluateDrift:
             frozenset({"README.zh.md"}), skip=False
         ) == (0, [])
 
+    def test_ko_only_changed_passes(self) -> None:
+        assert gate.evaluate_drift(
+            frozenset({"README.ko.md"}), skip=False
+        ) == (0, [])
+
     def test_english_only_no_skip_fails(self) -> None:
         code, errors = gate.evaluate_drift(
             frozenset({"README.md"}), skip=False
@@ -207,14 +212,18 @@ class TestEvaluateDrift:
         assert len(errors) == 1
         assert "README.ja.md" in errors[0]
         assert "README.zh.md" in errors[0]
+        assert "README.ko.md" in errors[0]
         assert errors[0].startswith("::error::")
 
-    def test_english_plus_ja_only_no_skip_fails_listing_zh(self) -> None:
+    def test_english_plus_ja_only_no_skip_fails_listing_zh_and_ko(
+        self,
+    ) -> None:
         code, errors = gate.evaluate_drift(
             frozenset({"README.md", "README.ja.md"}), skip=False
         )
         assert code == 1
         assert "README.zh.md" in errors[0]
+        assert "README.ko.md" in errors[0]
         assert "README.ja.md" not in errors[0]
 
     def test_english_only_with_skip_passes(self) -> None:
@@ -237,14 +246,15 @@ def _patch_runner(
 
 
 class TestMainExitCode:
-    def test_happy_path_all_three_changed(
+    def test_happy_path_all_four_changed(
         self,
         monkeypatch: pytest.MonkeyPatch,
         tmp_path: Path,
         capsys: pytest.CaptureFixture[str],
     ) -> None:
         _patch_runner(
-            monkeypatch, "README.md\nREADME.ja.md\nREADME.zh.md\n"
+            monkeypatch,
+            "README.md\nREADME.ja.md\nREADME.zh.md\nREADME.ko.md\n",
         )
         body_file = tmp_path / "body.md"
         body_file.write_text("nothing special", encoding="utf-8")
@@ -362,7 +372,10 @@ class TestMainExitCode:
         tmp_path: Path,
         capsys: pytest.CaptureFixture[str],
     ) -> None:
-        _patch_runner(monkeypatch, "README.md\nREADME.ja.md\nREADME.zh.md\n")
+        _patch_runner(
+            monkeypatch,
+            "README.md\nREADME.ja.md\nREADME.zh.md\nREADME.ko.md\n",
+        )
         missing = tmp_path / "does-not-exist.md"
         code = gate.main(
             [
@@ -395,7 +408,8 @@ class TestMainExitCode:
         tmp_path: Path,
     ) -> None:
         _patch_runner(
-            monkeypatch, "README.md\nREADME.ja.md\nREADME.zh.md\n"
+            monkeypatch,
+            "README.md\nREADME.ja.md\nREADME.zh.md\nREADME.ko.md\n",
         )
         monkeypatch.setenv("BASE_REF", "origin/main")
         body_file = tmp_path / "body.md"

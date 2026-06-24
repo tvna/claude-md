@@ -3,11 +3,11 @@
 Tracking issue: [#1094](https://github.com/tvna/claude-md/issues/1094)
 
 This is the adopted contract for the structure of the repository's
-top-level READMEs (`README.md`, `README.ja.md`, `README.zh.md`). It exists
-so a reviewer can decide, by inspection, whether a README change keeps the
-document coherent: whether a new line lands in the right section, whether a
-tool-specific note breaks the reader's flow, and whether the three language
-copies still move together.
+top-level READMEs (`README.md`, `README.ja.md`, `README.zh.md`,
+`README.ko.md`). It exists so a reviewer can decide, by inspection,
+whether a README change keeps the document coherent: whether a new line
+lands in the right section, whether a tool-specific note breaks the
+reader's flow, and whether the four language copies still move together.
 
 It records prose rules rather than a new CI gate. Required-heading checking
 is the deferred check in
@@ -18,11 +18,12 @@ applies by hand. The link and inventory gates already cover these files
 
 ## Scope
 
-This standard governs the three top-level READMEs:
+This standard governs the four top-level READMEs:
 
 - `README.md` (English, canonical)
 - `README.ja.md` (Japanese)
 - `README.zh.md` (Simplified Chinese)
+- `README.ko.md` (Korean)
 
 It does not govern lane README files under `docs/` (`docs/standards/README.md`
 and siblings); their placement rules live in
@@ -69,19 +70,19 @@ This is the core rule and the reason this standard exists.
   [`devin-apm-compatibility.md`](./devin-apm-compatibility.md).
 
 The translations use the localized equivalent of `### Tool-specific notes`
-as their heading; the Japanese and Chinese READMEs carry that heading in
-their own language so the three files still match one-to-one.
+as their heading; the Japanese, Chinese, and Korean READMEs carry that
+heading in their own language so the four files still match one-to-one.
 
 ## Multi-language sync
 
-The three READMEs are a trio that moves together. A substantive change to
-`README.md` must land with the equivalent change to `README.ja.md` and
-`README.zh.md` in the same PR. This is enforced by the deterministic gate
-documented in
+The four READMEs are a set that moves together. A substantive change to
+`README.md` must land with the equivalent change to `README.ja.md`,
+`README.zh.md`, and `README.ko.md` in the same PR. This is enforced by
+the deterministic gate documented in
 [`docs/runbooks/readme-translation-drift.md`](../runbooks/readme-translation-drift.md)
 (`scripts/verify_readme_translation.py`).
 
-- Keep headings in one-to-one correspondence across the three files; the
+- Keep headings in one-to-one correspondence across the four files; the
   matching position is then obvious when adding a translated line.
 - The opt-out marker `<!-- readme-translation-ack -->` is for genuinely
   English-only edits (a typo, a renderer fix). A new section, bullet, or

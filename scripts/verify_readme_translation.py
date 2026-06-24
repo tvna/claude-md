@@ -8,10 +8,11 @@ makes the parity contract deterministic.
 Contract:
 
 * Read the changed-file list as ``git diff --name-only {base}..HEAD``.
-* If ``README.md`` is in that set, ``README.ja.md`` and ``README.zh.md``
-  must also be in it; unless the PR body carries the literal opt-out
-  marker ``<!-- readme-translation-ack -->`` (case-insensitive, optional
-  surrounding whitespace inside the comment).
+* If ``README.md`` is in that set, every translation in
+  :data:`README_TRANSLATIONS` (``README.ja.md``, ``README.zh.md``,
+  ``README.ko.md``) must also be in it; unless the PR body carries the
+  literal opt-out marker ``<!-- readme-translation-ack -->``
+  (case-insensitive, optional surrounding whitespace inside the comment).
 * Read the PR body from ``--body-file`` when supplied, otherwise from
   ``PR_BODY``.
 
@@ -47,9 +48,17 @@ from pathlib import Path
 
 _GIT_TIMEOUT_SECONDS: int = 15
 
-README_PATHS: frozenset[str] = frozenset(
-    {"README.md", "README.ja.md", "README.zh.md"}
+README_CANONICAL: str = "README.md"
+
+# The canonical English README and its translations move together. To add
+# a language, append its file here; the gate, its OK/error messages, and
+# the parity contract all derive from this set, so no other code in this
+# module hardcodes the language list.
+README_TRANSLATIONS: frozenset[str] = frozenset(
+    {"README.ja.md", "README.zh.md", "README.ko.md"}
 )
+
+README_PATHS: frozenset[str] = README_TRANSLATIONS | {README_CANONICAL}
 
 # The marker is itself an HTML comment so it survives MD renderers
 # without being visible. Matching is case-insensitive and tolerates
@@ -123,19 +132,19 @@ def evaluate_drift(
 
     Rules:
 
-    * ``README.md`` changed AND both translations missing AND no skip
+    * ``README.md`` changed AND any translation missing AND no skip
       marker -> exit 1 with a single ``::error::`` line listing the
       missing translations.
-    * Anything else (no README touched, all three touched, translations
-      only, or skip marker present) -> exit 0.
+    * Anything else (no README touched, every translation touched,
+      translations only, or skip marker present) -> exit 0.
 
     Note: a PR that touches only ``README.ja.md`` is allowed; the
     contract guards the English-only-edit failure mode, not the inverse.
     Reviewers catch translation-only churn through normal review.
     """
-    if "README.md" not in changed:
+    if README_CANONICAL not in changed:
         return 0, []
-    missing = sorted({"README.ja.md", "README.zh.md"} - changed)
+    missing = sorted(README_TRANSLATIONS - changed)
     if not missing:
         return 0, []
     if skip:
@@ -189,16 +198,14 @@ def _cmd_verify(args: argparse.Namespace) -> int:
     skip = body_has_skip_marker(body)
     code, errors = evaluate_drift(changed, skip)
     if code == 0:
-        if "README.md" in changed and skip:
+        if README_CANONICAL in changed and skip:
             print(
                 "OK: README.md changed; opt-out marker present "
                 "('<!-- readme-translation-ack -->')."
             )
-        elif "README.md" in changed:
-            print(
-                "OK: README.md changed along with README.ja.md and "
-                "README.zh.md."
-            )
+        elif README_CANONICAL in changed:
+            translations = ", ".join(sorted(README_TRANSLATIONS))
+            print(f"OK: README.md changed along with {translations}.")
         elif changed:
             pretty = ", ".join(sorted(changed))
             print(
