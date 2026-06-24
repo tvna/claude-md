@@ -146,6 +146,8 @@ Detection is string-match based:
 | `preflight_push_nonempty.py` | agent-hook | `codex:PreToolUse` |
 | `preflight_push_session_branch.py` | agent-hook | `claude:PreToolUse` |
 | `preflight_push_session_branch.py` | agent-hook | `codex:PreToolUse` |
+| `preflight_resolve_review_thread.py` | agent-hook | `claude:PreToolUse` |
+| `preflight_resolve_review_thread.py` | agent-hook | `codex:PreToolUse` |
 | `preflight_session_base_freshness.py` | agent-hook | `claude:PreToolUse` |
 | `preflight_session_base_freshness.py` | agent-hook | `claude:SessionStart` |
 | `preflight_session_base_freshness.py` | agent-hook | `codex:PreToolUse` |

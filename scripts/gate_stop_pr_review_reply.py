@@ -35,15 +35,24 @@ Detection heuristic (fail-open, no network calls)
   :data:`REPLY_TOOLS` counts as "addressed". The earliest such call satisfies
   the check; N webhooks need not each have an exactly paired reply call; one
   reply call in scope clears all webhooks seen before it.
+* Self-reply echo suppression: when the session posts a reply GitHub echoes
+  it back as a new review-comment webhook. :func:`_extract_session_login`
+  searches the transcript for a prior ``mcp__github__get_me`` tool result to
+  obtain the session's own login, then :func:`_is_self_authored_webhook`
+  checks whether ``"login": "<session_login>"`` appears in the webhook payload
+  JSON. A self-authored webhook is excluded from the unaddressed set and never
+  triggers a block. When no login can be found the check is skipped (fail-open
+  toward the existing block behaviour). Refs #1932.
 * Any missing field, unreadable transcript, or exception exits 0 (fail open).
   A gate bug must never wedge the session (CLAUDE.md section 4).
 
-Tested by ``tests/test_gate_stop_pr_review_reply.py``. Refs #1768.
+Tested by ``tests/test_gate_stop_pr_review_reply.py``. Refs #1768, #1932.
 """
 
 from __future__ import annotations
 
 import json
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -93,6 +102,10 @@ _BLOCK_REASON = (
     "cannot tell the comment was seen. Address all such threads, then end "
     "the turn. Refs #1768."
 )
+
+# Regex to extract "login" JSON field values from a webhook payload.
+# Matches the JSON key-value form "login": "...", not plain-text @-mentions.
+_LOGIN_RE: re.Pattern[str] = re.compile(r'"login"\s*:\s*"([^"]+)"')
 
 
 def _content_blocks(entry: object) -> list[dict[str, Any]]:
@@ -152,6 +165,75 @@ def is_review_webhook(entry: object) -> bool:
     return any(marker in text for marker in REVIEW_MARKERS)
 
 
+def _extract_session_login(entries: list[Any]) -> str | None:
+    """Return the session's GitHub login found in a prior mcp__github__get_me result.
+
+    Scans the transcript for ``mcp__github__get_me`` tool_use blocks, collects
+    their IDs, then searches user-message tool_result blocks for a matching ID
+    containing a ``"login"`` JSON field. Returns the first login found, or None
+    when no ``get_me`` call or its result is present. Fail-open: any parse
+    error or missing field returns None rather than raising. Refs #1932.
+    """
+    get_me_ids: set[str] = set()
+    get_me_found = False
+    for entry in entries:
+        for block in _content_blocks(entry):
+            if block.get("type") == "tool_use" and block.get("name") == "mcp__github__get_me":
+                get_me_found = True
+                tool_id = block.get("id")
+                if isinstance(tool_id, str) and tool_id:
+                    get_me_ids.add(tool_id)
+
+    if not get_me_found:
+        return None
+
+    for entry in entries:
+        if _entry_role(entry) != "user":
+            continue
+        for block in _content_blocks(entry):
+            if block.get("type") != "tool_result":
+                continue
+            tool_use_id = block.get("tool_use_id", "")
+            if get_me_ids and tool_use_id not in get_me_ids:
+                continue
+            result_content = block.get("content")
+            texts: list[str] = []
+            if isinstance(result_content, str):
+                texts.append(result_content)
+            elif isinstance(result_content, list):
+                for c in result_content:
+                    if isinstance(c, dict) and c.get("type") == "text":
+                        t = c.get("text")
+                        if isinstance(t, str):
+                            texts.append(t)
+            for text in texts:
+                try:
+                    data = json.loads(text)
+                    if isinstance(data, dict):
+                        login = data.get("login")
+                        if isinstance(login, str) and login:
+                            return login
+                except json.JSONDecodeError:
+                    pass
+    return None
+
+
+def _is_self_authored_webhook(entry: object, session_login: str | None) -> bool:
+    """Return True when the webhook comment was authored by the session itself.
+
+    Searches for ``"login": "<session_login>"`` as a JSON field in the webhook
+    payload text. Plain-text @-mentions in comment bodies use different syntax
+    and will not produce a false positive. When *session_login* is None the
+    function returns False (fail-open toward the existing block behaviour).
+    Refs #1932.
+    """
+    if not session_login:
+        return False
+    text = _entry_text(entry)
+    m = _LOGIN_RE.search(text)
+    return m is not None and m.group(1) == session_login
+
+
 def has_reply_tool_call(entries: list[Any], after_idx: int) -> bool:
     """Return True if a reply tool was called in *entries* after *after_idx*."""
     for entry in entries[after_idx + 1 :]:
@@ -161,12 +243,21 @@ def has_reply_tool_call(entries: list[Any], after_idx: int) -> bool:
     return False
 
 
-def find_unaddressed_review_webhooks(entries: list[Any]) -> list[int]:
-    """Return indices of review webhook events with no subsequent reply tool call."""
+def find_unaddressed_review_webhooks(
+    entries: list[Any], session_login: str | None = None
+) -> list[int]:
+    """Return indices of review webhook events with no subsequent reply tool call.
+
+    Webhooks authored by *session_login* are excluded (self-reply echo
+    suppression, refs #1932). When *session_login* is None the exclusion is
+    skipped and behaviour is identical to the pre-#1932 implementation.
+    """
     return [
         idx
         for idx, entry in enumerate(entries)
-        if is_review_webhook(entry) and not has_reply_tool_call(entries, idx)
+        if is_review_webhook(entry)
+        and not _is_self_authored_webhook(entry, session_login)
+        and not has_reply_tool_call(entries, idx)
     ]
 
 
@@ -176,7 +267,8 @@ def evaluate(event: dict[str, Any], entries: list[Any]) -> dict[str, Any] | None
         return None
     if event.get("stop_hook_active"):
         return None
-    if not find_unaddressed_review_webhooks(entries):
+    session_login = _extract_session_login(entries)
+    if not find_unaddressed_review_webhooks(entries, session_login):
         return None
     return {"decision": "block", "reason": _BLOCK_REASON}
 
