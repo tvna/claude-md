@@ -1,16 +1,43 @@
 repos:
-  - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v5.0.0
-    hooks:
-      - id: trailing-whitespace
-      - id: end-of-file-fixer
-      - id: check-yaml
-        args: [--unsafe]
-        exclude: ^\.github/workflows/
-      - id: check-merge-conflict
-
   - repo: local
     hooks:
+      # Generic hygiene hooks from pre-commit/pre-commit-hooks v5.0.0, sourced
+      # from PyPI (pinned) rather than the upstream git repo. Refs #1967: the
+      # remote Claude (web) session git proxy returns 403 for any github.com
+      # clone outside the session repo scope, so `repo: https://github.com/...`
+      # could not init and forced --no-verify / PREFLIGHT_SKIP=1. PyPI installs
+      # (pypi.org) bypass that proxy, so `language: python` +
+      # additional_dependencies restores the gate in every environment with the
+      # exact upstream code (no behaviour drift). The entry points and default
+      # `types` mirror pre-commit-hooks' own .pre-commit-hooks.yaml at v5.0.0.
+      - id: trailing-whitespace
+        name: trim trailing whitespace
+        entry: trailing-whitespace-fixer
+        language: python
+        additional_dependencies: ["pre-commit-hooks==5.0.0"]
+        types: [text]
+      - id: end-of-file-fixer
+        name: fix end of files
+        entry: end-of-file-fixer
+        language: python
+        additional_dependencies: ["pre-commit-hooks==5.0.0"]
+        types: [text]
+      - id: check-yaml
+        name: check yaml
+        entry: check-yaml
+        args: [--unsafe]
+        language: python
+        additional_dependencies: ["pre-commit-hooks==5.0.0"]
+        types: [yaml]
+        exclude: ^\.github/workflows/
+      - id: check-merge-conflict
+        name: check for merge conflicts
+        entry: check-merge-conflict
+        language: python
+        additional_dependencies: ["pre-commit-hooks==5.0.0"]
+        types: [text]
+
+
       - id: uv-pin-drift
         name: uv pin drift (scripts/uv_pin.py drift)
         entry: uv run python scripts/uv_pin.py drift

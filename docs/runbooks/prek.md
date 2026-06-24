@@ -19,12 +19,19 @@ uvx prek run --all-files
 
 ## Configured hooks
 
-Generic hygiene hooks from `pre-commit/pre-commit-hooks v5.0.0`:
+Generic hygiene hooks from `pre-commit/pre-commit-hooks v5.0.0`, wired as
+`repo: local` `language: python` hooks that install the pinned
+`pre-commit-hooks==5.0.0` package from PyPI via `additional_dependencies`
+(Refs [#1967](https://github.com/tvna/claude-md/issues/1967)). The remote Claude
+(web) session git proxy returns `403` for any `github.com` clone outside the
+session repo scope, so a `repo: https://github.com/...` entry could not init and
+forced `--no-verify` / `PREFLIGHT_SKIP=1`. PyPI installs bypass that proxy, so
+the gate now runs in every environment with the exact upstream code:
 
-- `trailing-whitespace`
-- `end-of-file-fixer`
-- `check-yaml` (with `--unsafe`, excludes `^\.github/workflows/`)
-- `check-merge-conflict`
+- `trailing-whitespace` (entry `trailing-whitespace-fixer`)
+- `end-of-file-fixer` (entry `end-of-file-fixer`)
+- `check-yaml` (entry `check-yaml`, with `--unsafe`, excludes `^\.github/workflows/`)
+- `check-merge-conflict` (entry `check-merge-conflict`)
 
 Repo-local hooks (`language: system`, run via `uv run python`):
 
