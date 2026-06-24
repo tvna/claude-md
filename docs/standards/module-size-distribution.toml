@@ -15,8 +15,8 @@ over_budget = 3
 
 # Module counts by inclusive physical-line range.
 [histogram]
-"1-160" = 61
-"161-320" = 88
+"1-160" = 60
+"161-320" = 89
 "321-480" = 19
 "481-640" = 11
 "641-800" = 9

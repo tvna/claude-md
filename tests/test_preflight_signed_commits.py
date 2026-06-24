@@ -89,3 +89,19 @@ def test_fallback_to_head_when_no_base(tmp_path: Path, capsys: pytest.CaptureFix
 def test_unknown_command_raises() -> None:
     with pytest.raises(SystemExit):
         gate.main(["bogus"])
+
+
+def test_verify_fails_loud_on_git_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # A git failure while reading the range must fail the gate loudly (exit 1),
+    # never pass silently (CLAUDE.md section 4).
+    repo = _init_repo(tmp_path)
+    _commit(repo, "base.txt")
+
+    def _boom(*_args: object, **_kwargs: object) -> list[object]:
+        raise RuntimeError("git exploded")
+
+    monkeypatch.setattr(gate, "list_signatures", _boom)
+    assert _run(repo) == 1
+    assert "signed-commits preflight failed" in capsys.readouterr().err

@@ -18,20 +18,24 @@ the gate cannot be silently dropped from one agent; that drift gate is the
 
 Range under inspection
 ----------------------
-The commits the push would publish: ``<base>..HEAD`` where ``base`` is the
-remote-tracking ref ``origin/<current-branch>`` when it resolves, else
-``origin/main``. Only ``%G?`` code ``N`` (no signature present) is unsigned;
-``E`` / ``U`` (signed but unverifiable locally) are NOT flagged. A deliberately
+The local refs the push command actually names, parsed from its refspec (not a
+hard-coded HEAD): ``git push origin feature`` inspects ``feature``,
+``git push origin HEAD:main`` inspects ``HEAD``, ``git push --all`` inspects
+every local branch head, and a bare ``git push`` inspects the current branch
+(HEAD). For each ref the range is ``<base>..<ref>`` where ``base`` is that ref's
+own ``origin/<ref>`` remote-tracking branch when it resolves, else
+``origin/main``. Signed-ness is the ``gpgsig``-header presence check from
+``_commit_signatures`` (format-agnostic, no verification infra). A deliberately
 unsigned push can carry the ``unsigned-ack`` marker in the command, mirroring
 ``gate_unsigned_commit_bash``.
 
 Failure policy
 --------------
 Fail-open everywhere except a matched unsigned commit (CLAUDE.md section 4): a
-non-Bash event, a non-push command, a detached HEAD, an unresolved base, or any
-git error yields no decision so the push proceeds and the preflight step plus
-the server-side ``required_signatures`` ruleset remain as backstops. A push
-carrying a confirmed unsigned, non-acked commit is always denied.
+non-Bash event, a non-push command, a delete-only push, an unresolved base, or
+any git error yields no decision so the push proceeds and the preflight step
+plus the server-side ``required_signatures`` ruleset remain as backstops. A
+push carrying a confirmed unsigned, non-acked commit is always denied.
 
 Contract:
 - Inputs: a PreToolUse hook event as JSON on stdin (``tool_name`` plus
@@ -46,6 +50,8 @@ Tested by ``tests/test_gate_unsigned_commit_push.py``. Refs #1959.
 from __future__ import annotations
 
 import re
+import shlex
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -59,50 +65,139 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 # ``rtk git push`` (Refs #1199), so match both. Mirrors the sibling push gates.
 _GIT_PUSH_RE = re.compile(r"(?m)^\s*(?:rtk\s+)?git\s+push\b")
 
+# Local ref to inspect when the push names no explicit refspec: git's
+# ``push.default`` publishes the current branch, which HEAD resolves to.
+_HEAD = "HEAD"
 _FALLBACK_BASE = "origin/main"
 
+# git push flags that consume one following token as their value, so the token
+# after them is NOT a positional (remote / refspec). Mirrors the value-flag set
+# in preflight_push_session_branch.py.
+_FLAGS_WITH_VALUE: frozenset[str] = frozenset({
+    "-o", "--push-option", "--receive-pack", "--exec", "--repo",
+    "--recurse-submodules", "--signed",
+})
+# Flags that mean "this push deletes a remote ref"; no local content is
+# published, so there is nothing to inspect.
+_DELETE_FLAGS: frozenset[str] = frozenset({"-d", "--delete"})
+# Flags that publish every local branch; the inspected set is all branch heads.
+_ALL_BRANCH_FLAGS: frozenset[str] = frozenset({"--all", "--mirror"})
 
-def _current_branch(repo: Path) -> str | None:
-    """Return the checked-out branch name, or None on detached HEAD / error."""
-    completed = run_git(["rev-parse", "--abbrev-ref", "HEAD"], cwd=repo)
-    if completed.returncode != 0:
-        return None
-    branch = completed.stdout.strip()
-    if not branch or branch == "HEAD":  # empty or detached
-        return None
-    return branch
 
+@dataclass(frozen=True)
+class PushPlan:
+    """Which local refs a ``git push`` command publishes.
 
-def _resolve_push_base(repo: Path, branch: str) -> str | None:
-    """Return the ref the push range diffs against, or None when none resolves.
-
-    Prefers ``origin/<branch>`` (the commits not yet on the remote branch); when
-    the branch is new on the remote, falls back to ``origin/main``.
+    ``all_branches`` means ``--all`` / ``--mirror`` (inspect every local branch
+    head). Otherwise ``refs`` is the explicit local source refs; an empty
+    ``refs`` with ``all_branches`` False means a delete-only push with no
+    content to inspect.
     """
-    for ref in (f"origin/{branch}", _FALLBACK_BASE):
-        completed = run_git(["rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}"], cwd=repo)
+
+    all_branches: bool
+    refs: tuple[str, ...]
+
+
+def parse_push_sources(command: str) -> PushPlan:
+    """Parse the local refs a ``git push`` *command* would publish.
+
+    Pure function (no I/O) so the refspec parsing is unit-testable. Resolves the
+    Codex review point: a hard-coded ``HEAD`` range inspects the current branch,
+    not the ref the command actually names, so ``git push origin feature`` run
+    from another branch would miss an unsigned commit on ``feature``. The local
+    source of each refspec is the part before ``:`` (``src`` in ``src:dst``,
+    ``HEAD`` in ``HEAD:dst``); a bare ``git push`` inspects HEAD.
+    """
+    match = re.search(r"git\s+push\b([^&;|\n]*)", command)
+    if not match:
+        return PushPlan(all_branches=False, refs=(_HEAD,))
+    try:
+        tokens = shlex.split(match.group(1))
+    except ValueError:
+        return PushPlan(all_branches=False, refs=(_HEAD,))
+
+    positionals: list[str] = []
+    index = 0
+    while index < len(tokens):
+        token = tokens[index]
+        if token in _ALL_BRANCH_FLAGS:
+            return PushPlan(all_branches=True, refs=())
+        if token in _DELETE_FLAGS:
+            return PushPlan(all_branches=False, refs=())
+        if token in _FLAGS_WITH_VALUE:
+            index += 2  # skip the flag and its value token
+            continue
+        if token.startswith("-"):
+            index += 1  # any other flag consumes no positional
+            continue
+        positionals.append(token)
+        index += 1
+
+    # The first positional is the remote; the rest are refspecs. With no
+    # refspec, git publishes the current branch (HEAD). With refspecs present,
+    # inspect exactly their local sources -- if every one is a delete
+    # (``:dst``), the result is empty (nothing to inspect), NOT a HEAD fallback.
+    refspecs = positionals[1:]
+    if not refspecs:
+        return PushPlan(all_branches=False, refs=(_HEAD,))
+
+    sources: list[str] = []
+    for spec in refspecs:
+        source = spec.lstrip("+").split(":", 1)[0]
+        if source:  # empty source (``:dst``) is a delete refspec; no content
+            sources.append(source)
+    return PushPlan(all_branches=False, refs=tuple(sources))
+
+
+def _all_branch_heads(repo: Path) -> list[str]:
+    """Return every local branch head name under *repo* (for ``--all`` pushes)."""
+    completed = run_git(["for-each-ref", "--format=%(refname:short)", "refs/heads/"], cwd=repo)
+    if completed.returncode != 0:
+        return []
+    return [line.strip() for line in completed.stdout.splitlines() if line.strip()]
+
+
+def _resolve_push_base(repo: Path, ref: str) -> str | None:
+    """Return the base ``ref`` diffs against, or None when none resolves.
+
+    Prefers the ref's own remote-tracking branch (the commits not yet on the
+    remote); when that does not exist (a new branch, or HEAD), falls back to
+    ``origin/main``. ``HEAD`` has no ``origin/HEAD`` content counterpart, so it
+    resolves straight to the fallback.
+    """
+    candidates = (_FALLBACK_BASE,) if ref == _HEAD else (f"origin/{ref}", _FALLBACK_BASE)
+    for base in candidates:
+        completed = run_git(["rev-parse", "--verify", "--quiet", f"{base}^{{commit}}"], cwd=repo)
         if completed.returncode == 0 and completed.stdout.strip():
-            return ref
+            return base
     return None
 
 
-def _unsigned_in_push(repo: Path) -> list[CommitSignature]:
-    """Return the unsigned, non-acked commits the current push would publish.
+def _unsigned_in_push(repo: Path, command: str) -> list[CommitSignature]:
+    """Return the unsigned, non-acked commits *command*'s push would publish.
 
-    Fail-open: returns ``[]`` on a detached HEAD, an unresolved base, or any git
-    error so the gate never blocks on an inconclusive read.
+    Inspects the actual local refs the push names (not a hard-coded HEAD), so a
+    push of another branch is checked against that branch. Fail-open: returns
+    ``[]`` on an unresolved base or any git error so the gate never blocks on an
+    inconclusive read; the preflight step and the server ruleset remain
+    backstops.
     """
     try:
-        branch = _current_branch(repo)
-        if branch is None:
-            return []
-        base = _resolve_push_base(repo, branch)
-        if base is None:
-            return []
-        records = list_signatures(repo, [f"{base}..HEAD"])
+        plan = parse_push_sources(command)
+        refs = _all_branch_heads(repo) if plan.all_branches else list(plan.refs)
+        seen: set[str] = set()
+        unsigned: list[CommitSignature] = []
+        for ref in refs:
+            base = _resolve_push_base(repo, ref)
+            if base is None:
+                continue
+            for record in select_unsigned(list_signatures(repo, [f"{base}..{ref}"])):
+                if record.sha not in seen:
+                    seen.add(record.sha)
+                    unsigned.append(record)
     except (RuntimeError, OSError):
         return []
-    return select_unsigned(records)
+    return unsigned
 
 
 def decide(tool_name: str, tool_input: dict[str, Any]) -> dict[str, Any] | None:
@@ -115,7 +210,7 @@ def decide(tool_name: str, tool_input: dict[str, Any]) -> dict[str, Any] | None:
     if ACK_MARKER in command:
         return None
 
-    unsigned = _unsigned_in_push(REPO_ROOT)
+    unsigned = _unsigned_in_push(REPO_ROOT, command)
     if not unsigned:
         return None
 
