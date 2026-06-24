@@ -1037,6 +1037,16 @@
               ]
             },
             {
+              "matcher": "^mcp__github__resolve_review_thread$",
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "python3 scripts/preflight_resolve_review_thread.py",
+                  "statusMessage": "Gate: resolve_review_thread"
+                }
+              ]
+            },
+            {
               "matcher": "^mcp__github__merge_pull_request$",
               "hooks": [
                 {
