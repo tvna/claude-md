@@ -90,9 +90,7 @@ DOC_SECTION_3_HEADING_RE = re.compile(r"^## 3\. ")
 DOC_NEXT_SECTION_RE = re.compile(r"^## \d+\. ")
 DOC_MATRIX_ROW_RE = re.compile(r"^\|\s*P(\d+)\s*-")
 DOC_ROW_LABEL_RE = re.compile(r"^\|\s*P(\d+)\s*-\s*([^|]+?)\s*\|")
-DOC_GLOSSARY_HEADING_RE = re.compile(r"^### 2\.5 Glossary\s*$")
 DOC_GLOSSARY_ENTRY_RE = re.compile(r"^- \*\*(.+?)\*\*:")
-DOC_HEADING_RE = re.compile(r"^#{1,3} ")
 DOC_WORDING_RE = re.compile(
     r"\b(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|\d+)"
     r"\s+(principles|layers)\b",
@@ -158,7 +156,9 @@ REQUIRED_GLOSSARY_ENTRIES: tuple[str, ...] = (
     "in-line carve-out",
 )
 
-GLOSSARY_PATH = "docs/standards/ubiquitous-language.md"
+GLOSSARY_PATH = str(
+    Path(__file__).resolve().parent.parent / "docs/standards/ubiquitous-language.md"
+)
 
 _GIT_TIMEOUT_SECONDS: int = 15
 
@@ -278,35 +278,6 @@ def parse_file_entries(text: str) -> set[str]:
     }
 
 
-def parse_glossary_entries(text: str) -> set[str]:
-    """Return bolded entry names under the ``### 2.5 Glossary`` heading.
-
-    The slice begins at the heading (exclusive) and ends before the
-    next ``#``, ``##``, or ``###`` heading. Each entry line of the form
-    ``- **<term>**: ...`` contributes ``<term>`` to the result. Returns
-    an empty set when the glossary heading is absent.
-    """
-    lines = text.splitlines()
-    start: int | None = None
-    end: int | None = None
-    for i, line in enumerate(lines):
-        if DOC_GLOSSARY_HEADING_RE.match(line):
-            start = i + 1
-            continue
-        if start is not None and DOC_HEADING_RE.match(line):
-            end = i
-            break
-    if start is None:
-        return set()
-    if end is None:
-        end = len(lines)
-    return {
-        match.group(1)
-        for line in lines[start:end]
-        if (match := DOC_GLOSSARY_ENTRY_RE.match(line)) is not None
-    }
-
-
 def parse_doc_wording_counts(text: str) -> list[tuple[int, str, int]]:
     """Return ``(line_number, raw_phrase, count)`` for each wording hit.
 
@@ -333,7 +304,7 @@ def _safe_int(token: str) -> int | None:
 def _verify(
     master_path: Path,
     doc_path: Path,
-    glossary_path: Path | None = None,
+    glossary_path: Path,
 ) -> int:
     if not master_path.exists():
         print(
@@ -347,7 +318,7 @@ def _verify(
             file=sys.stderr,
         )
         return 1
-    if glossary_path is not None and not glossary_path.exists():
+    if not glossary_path.exists():
         print(
             f"::error::missing glossary file: {glossary_path}",
             file=sys.stderr,
@@ -440,32 +411,19 @@ def _verify(
             )
             failures += 1
 
-    if glossary_path is not None:
-        glossary_entries = parse_file_entries(
-            glossary_path.read_text(encoding="utf-8")
-        )
-        glossary_ref = glossary_path
-        glossary_hint = (
-            f"Add '- **name**: ...' lines in {glossary_path} so "
-            "terms used in master and in the section 3 invariant have "
-            "a single source of truth."
-        )
-    else:
-        glossary_entries = parse_glossary_entries(doc_text)
-        glossary_ref = doc_path
-        glossary_hint = (
-            f"Add '- **name**: ...' lines under '### 2.5 Glossary' in "
-            f"{doc_path} so terms used in master and in the section 3 "
-            "invariant have a single source of truth."
-        )
+    glossary_entries = parse_file_entries(
+        glossary_path.read_text(encoding="utf-8")
+    )
     missing_glossary = sorted(
         set(REQUIRED_GLOSSARY_ENTRIES) - glossary_entries
     )
     if missing_glossary:
         labels = ", ".join(missing_glossary)
         print(
-            f"::error file={glossary_ref}::glossary is missing required "
-            f"entries: {labels}. {glossary_hint}",
+            f"::error file={glossary_path}::glossary is missing required "
+            f"entries: {labels}. Add '- **name**: ...' lines in "
+            f"{glossary_path} so terms used in master and in the section 3 "
+            "invariant have a single source of truth.",
             file=sys.stderr,
         )
         failures += 1
@@ -491,8 +449,7 @@ def _cmd_verify(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
         return 2
-    glossary_path = Path(args.glossary) if args.glossary else None
-    return _verify(Path(args.master), Path(args.doc), glossary_path)
+    return _verify(Path(args.master), Path(args.doc), Path(args.glossary))
 
 
 def resolve_base() -> str:
@@ -665,8 +622,10 @@ def main(argv: list[str] | None = None) -> int:
         default=GLOSSARY_PATH,
         help=(
             "Path to the standalone ubiquitous-language doc. "
-            f"Defaults to {GLOSSARY_PATH}. "
-            "The glossary check reads entries from this file; "
+            "Defaults to the repository-standard "
+            "docs/standards/ubiquitous-language.md (resolved relative to "
+            "this script, so it is independent of the current working "
+            "directory). The glossary check reads entries from this file; "
             "pass an explicit path to override."
         ),
     )

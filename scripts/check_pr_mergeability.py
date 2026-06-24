@@ -188,12 +188,18 @@ def _poll_mergeability(
     opener: _Opener = urllib.request.urlopen,
     token: str = "",
     sleeper: Callable[[float], None] = time.sleep,
+    max_polls: int | None = None,
 ) -> dict[str, Any] | None:
-    """Poll until ``mergeable`` is non-null; return the PR data or None."""
+    """Poll until ``mergeable`` is non-null; return the PR data or None.
+
+    max_polls overrides _MAX_POLLS when provided; pass 1 for a single
+    non-blocking probe (e.g. git-push path where latency must stay low).
+    """
     actual_token = token or _get_token()
     path = f"repos/{owner}/{repo}/pulls/{pr_number}"
+    polls = _MAX_POLLS if max_polls is None else max_polls
     data: dict[str, Any] | None = None
-    for attempt in range(_MAX_POLLS):
+    for attempt in range(polls):
         if attempt > 0:
             sleeper(_POLL_INTERVAL_SECONDS)
         data = _rest_get(path, token=actual_token, opener=opener)
@@ -462,7 +468,10 @@ def run_git_push(
 
     pr_label = f"{owner}/{repo}#{pr_number}"
 
-    pr_data = _poll_mergeability(owner, repo, str(pr_number), opener=opener, token=token, sleeper=sleeper)
+    pr_data = _poll_mergeability(
+        owner, repo, str(pr_number),
+        opener=opener, token=actual_token, sleeper=sleeper, max_polls=1,
+    )
     if pr_data is None:
         return None
 
@@ -472,7 +481,7 @@ def run_git_push(
     if mergeable is None:
         return _build_context(
             f"Mergeability check timed out for {pr_label}: GitHub has not yet computed "
-            f"mergeability after {_MAX_POLLS} polls. Re-check the PR mergeable_state "
+            "mergeability on the first probe. Re-check the PR mergeable_state "
             "shortly via the GitHub REST API or UI."
         )
 
