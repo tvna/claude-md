@@ -400,6 +400,7 @@ paths = [
   ".devcontainer/**", "docs/runbooks/devcontainers.md",
   "scripts/devcontainer_pin_pr.py",
   "scripts/generate_devcontainer_arch_overlays.py",
+  "scripts/prune_codespaces.py",
   "scripts/prune_devcontainer_images.py",
   "scripts/update_devcontainer_image_pins.py",
   ".github/workflows/devcontainer-pin-refresh.yml",

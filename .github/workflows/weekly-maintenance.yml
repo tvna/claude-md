@@ -52,6 +52,17 @@ on:
           - ruleset-drift
           - security-control-drift
           - flake-pin-refresh
+          - codespace-cleanup
+      codespace_cleanup_dry_run:
+        description: 'Codespace cleanup: preview only, do not delete codespaces.'
+        type: boolean
+        required: true
+        default: true
+      codespace_cleanup_min_age_days:
+        description: 'Codespace cleanup: minimum idle days (by last_used_at) for a Shutdown codespace to qualify.'
+        type: number
+        required: true
+        default: 30
       branch_cleanup_dry_run:
         description: 'Branch cleanup: plan only. The workflow currently has no delete code path.'
         type: boolean
@@ -785,3 +796,45 @@ jobs:
             --commit-trailer "Refs #${TRACKING_ISSUE}" \
             --template .github/pr-body-templates/flake-pin.md \
             --file flake.nix
+
+  # Delete Shutdown Codespaces idle for longer than codespace_cleanup_min_age_days
+  # (default 30 days). Requires a PAT with admin:org scope stored as
+  # CODESPACES_CLEANUP_TOKEN in the codespace-cleanup environment; the built-in
+  # GITHUB_TOKEN cannot delete codespaces (API returns 403). Refs #1930.
+  codespace-cleanup:
+    if: github.event_name == 'schedule' || inputs.task == 'all' || inputs.task == 'codespace-cleanup'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: codespace-cleanup
+    permissions:
+      contents: read
+    concurrency:
+      group: codespace-cleanup
+      cancel-in-progress: false
+    env:
+      GH_TOKEN: ${{ secrets.CODESPACES_CLEANUP_TOKEN }}
+      ORG: ${{ github.repository_owner }}
+      DRY_RUN: ${{ github.event_name == 'schedule' && 'false' || inputs.codespace_cleanup_dry_run }}
+      MIN_AGE_DAYS: ${{ inputs.codespace_cleanup_min_age_days || 30 }}
+    steps:
+      - name: Guard CODESPACES_CLEANUP_TOKEN
+        run: |
+          if [ -z "${GH_TOKEN}" ]; then
+            echo "::error::CODESPACES_CLEANUP_TOKEN secret is not set. Provision a PAT with admin:org scope and store it in the codespace-cleanup environment."
+            exit 1
+          fi
+
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Prune inactive codespaces
+        run: |
+          set -euo pipefail
+          python3 scripts/prune_codespaces.py prune \
+            --org "${ORG}" \
+            --min-age-days "${MIN_AGE_DAYS}" \
+            --dry-run "${DRY_RUN}" \
+            --summary-file "${GITHUB_STEP_SUMMARY}"

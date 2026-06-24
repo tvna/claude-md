@@ -473,6 +473,19 @@ class TestIsSelfAuthoredWebhook:
         entry = _webhook(f"REVIEW_COMMENT\nNice comment @{SESSION_LOGIN}!")
         assert not gate._is_self_authored_webhook(entry, SESSION_LOGIN)
 
+    def test_plain_text_author_line_matches(self) -> None:
+        # Claude Code webhook delivery format uses "Author: <login>" plain text.
+        entry = _webhook(
+            f"The following is a GitHub review comment left on the PR.\n\nAuthor: {SESSION_LOGIN}\nLine: 1"
+        )
+        assert gate._is_self_authored_webhook(entry, SESSION_LOGIN)
+
+    def test_plain_text_author_line_other_login_does_not_match(self) -> None:
+        entry = _webhook(
+            f"The following is a GitHub review comment left on the PR.\n\nAuthor: {OTHER_LOGIN}\nLine: 1"
+        )
+        assert not gate._is_self_authored_webhook(entry, SESSION_LOGIN)
+
     def test_non_review_entry_returns_false(self) -> None:
         assert not gate._is_self_authored_webhook(_user("hello"), SESSION_LOGIN)
 
@@ -529,3 +542,33 @@ class TestSelfReplyEchoSuppression:
             _assistant(REPLY),
         ]
         assert gate.evaluate({}, entries) is None
+
+    def test_plain_text_author_format_suppressed(self) -> None:
+        # Regression: Claude Code delivers webhooks as "Author: <login>" plain text,
+        # not as a raw JSON payload. Verify the gate suppresses these self-echoes.
+        plain_text_echo = _webhook(
+            "The following is a GitHub review comment left on the PR.\n\n"
+            f"Author: {SESSION_LOGIN}\nLine: 163\nFile: scripts/foo.py\n"
+            "Comment: Fixed in the same PR."
+        )
+        entries = [
+            _get_me_call(),
+            _get_me_result(SESSION_LOGIN),
+            plain_text_echo,
+        ]
+        session_login = gate._extract_session_login(entries)
+        assert gate.find_unaddressed_review_webhooks(entries, session_login) == []
+
+    def test_plain_text_author_other_login_still_blocks(self) -> None:
+        plain_text_review = _webhook(
+            "The following is a GitHub review comment left on the PR.\n\n"
+            f"Author: {OTHER_LOGIN}\nLine: 10\nFile: scripts/foo.py\n"
+            "Comment: Please fix this."
+        )
+        entries = [
+            _get_me_call(),
+            _get_me_result(SESSION_LOGIN),
+            plain_text_review,
+        ]
+        session_login = gate._extract_session_login(entries)
+        assert gate.find_unaddressed_review_webhooks(entries, session_login) == [2]
