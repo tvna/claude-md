@@ -132,6 +132,8 @@ Detection is string-match based:
 | `preflight_github_secrets.py` | agent-hook | `claude:PreToolUse` |
 | `preflight_github_secrets.py` | agent-hook | `codex:PreToolUse` |
 | `preflight_hook_event_keys.py` | pre-commit | `preflight-hook-event-keys` |
+| `preflight_issue_ci_staleness.py` | agent-hook | `claude:PreToolUse` |
+| `preflight_issue_ci_staleness.py` | agent-hook | `codex:PreToolUse` |
 | `preflight_main_freshness.py` | agent-hook | `claude:PreToolUse` |
 | `preflight_main_freshness.py` | agent-hook | `codex:PreToolUse` |
 | `preflight_non_ascii.py` | agent-hook | `claude:PreToolUse` |
