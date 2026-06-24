@@ -150,6 +150,7 @@ def _list_codespaces(
 
 def _delete_codespace(
     org: str,
+    username: str,
     name: str,
     token: str,
     *,
@@ -158,9 +159,10 @@ def _delete_codespace(
     """Delete one codespace. Returns ``(status, body)`` of the API call.
 
     GitHub returns 202 (Accepted) for an async delete; any 2xx is treated
-    as success by the caller.
+    as success by the caller. The organisation member delete endpoint
+    requires the owner's login as a path parameter.
     """
-    url = f"{API_ROOT}/orgs/{org}/codespaces/{name}"
+    url = f"{API_ROOT}/orgs/{org}/members/{username}/codespaces/{name}"
     return _call(method="DELETE", url=url, token=token, opener=opener)
 
 
@@ -236,7 +238,11 @@ def cmd_prune(args: argparse.Namespace) -> int:
             if not name:
                 failures.append("codespace missing name, skipped")
                 continue
-            code, body = _delete_codespace(args.org, name, token)
+            username = cs.get("owner", {}).get("login") if isinstance(cs.get("owner"), dict) else None
+            if not username:
+                failures.append(f"{name}: missing owner login, skipped")
+                continue
+            code, body = _delete_codespace(args.org, username, name, token)
             if 200 <= code < 300:
                 deleted += 1
                 print(f"  deleted: {name}")

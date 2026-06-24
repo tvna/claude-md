@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -128,7 +129,7 @@ def test_cmd_prune_dry_run_does_not_delete(
     monkeypatch.setattr(pc, "_list_codespaces", lambda *a, **k: [_cs("cs1", "Shutdown", 60)])
     deleted: list[str] = []
 
-    def _fake_delete(org: str, name: str, token: str, **kw: Any) -> tuple[int, str]:
+    def _fake_delete(org: str, username: str, name: str, token: str, **kw: Any) -> tuple[int, str]:
         deleted.append(name)
         return 202, ""
 
@@ -150,7 +151,7 @@ def test_cmd_prune_live_calls_delete(
     monkeypatch.setattr(pc, "_list_codespaces", lambda *a, **k: [_cs("cs2", "Shutdown", 60)])
     deleted: list[str] = []
 
-    def _fake_delete(org: str, name: str, token: str, **kw: Any) -> tuple[int, str]:
+    def _fake_delete(org: str, username: str, name: str, token: str, **kw: Any) -> tuple[int, str]:
         deleted.append(name)
         return 202, ""
 
@@ -211,3 +212,154 @@ def test_cmd_prune_summary_written_on_dry_run(
     assert rc == 0
     assert summary.exists()
     assert "Codespace prune" in summary.read_text(encoding="utf-8")
+
+
+def test_cmd_prune_invalid_dry_run(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GH_TOKEN", "tok")
+    rc = pc.main(["prune", "--org", "org", "--min-age-days", "30", "--dry-run", "${{ inputs.dry_run }}"])
+    assert rc == 1
+
+
+def test_cmd_prune_codespace_missing_name(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GH_TOKEN", "tok")
+    nameless: dict[str, Any] = {
+        "state": "Shutdown",
+        "created_at": (NOW - timedelta(days=60)).isoformat().replace("+00:00", "Z"),
+        "owner": {"login": "user1"},
+    }
+    monkeypatch.setattr(pc, "_list_codespaces", lambda *a, **k: [nameless])
+    rc = pc.main(["prune", "--org", "org", "--min-age-days", "30", "--dry-run", "false"])
+    assert rc == 1
+
+
+def test_cmd_prune_codespace_missing_owner(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GH_TOKEN", "tok")
+    ownerless: dict[str, Any] = {
+        "name": "cs-ownerless",
+        "state": "Shutdown",
+        "created_at": (NOW - timedelta(days=60)).isoformat().replace("+00:00", "Z"),
+    }
+    monkeypatch.setattr(pc, "_list_codespaces", lambda *a, **k: [ownerless])
+    rc = pc.main(["prune", "--org", "org", "--min-age-days", "30", "--dry-run", "false"])
+    assert rc == 1
+
+
+# ---------------------------------------------------------------------------
+# _call
+# ---------------------------------------------------------------------------
+
+
+def test_call_without_opener(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: list[dict[str, Any]] = []
+
+    def fake_apply(*, method: str, url: str, payload: Any, token: str, **kw: Any) -> tuple[int, str]:
+        captured.append({"method": method, "url": url})
+        return 200, json.dumps({"codespaces": []})
+
+    monkeypatch.setattr(pc, "apply_call", fake_apply)
+    code, _ = pc._call(method="GET", url="https://api.github.com/test", token="tok", opener=None)
+    assert code == 200
+    assert captured[0]["method"] == "GET"
+
+
+def test_call_with_opener(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: list[dict[str, Any]] = []
+
+    def fake_apply(*, method: str, url: str, payload: Any, token: str, **kw: Any) -> tuple[int, str]:
+        captured.append(kw)
+        return 202, ""
+
+    monkeypatch.setattr(pc, "apply_call", fake_apply)
+    fake_opener: Any = object()
+    code, _ = pc._call(method="DELETE", url="https://api.github.com/test", token="tok", opener=fake_opener)
+    assert code == 202
+    assert captured[0].get("opener") is fake_opener
+
+
+# ---------------------------------------------------------------------------
+# _list_codespaces (direct HTTP boundary tests)
+# ---------------------------------------------------------------------------
+
+
+def test_list_codespaces_single_page(monkeypatch: pytest.MonkeyPatch) -> None:
+    items = [_cs("cs1", "Shutdown", 10)]
+    monkeypatch.setattr(pc, "apply_call", lambda **k: (200, json.dumps({"codespaces": items})))
+    result = pc._list_codespaces("myorg", "tok")
+    assert [c["name"] for c in result] == ["cs1"]
+
+
+def test_list_codespaces_paginates(monkeypatch: pytest.MonkeyPatch) -> None:
+    page1 = [_cs(f"cs{i}", "Shutdown", 5) for i in range(100)]
+    page2 = [_cs("cslast", "Shutdown", 5)]
+    call_count = [0]
+
+    def fake_apply(**k: Any) -> tuple[int, str]:
+        call_count[0] += 1
+        items = page1 if call_count[0] == 1 else page2
+        return 200, json.dumps({"codespaces": items})
+
+    monkeypatch.setattr(pc, "apply_call", fake_apply)
+    result = pc._list_codespaces("myorg", "tok")
+    assert len(result) == 101
+    assert call_count[0] == 2
+
+
+def test_list_codespaces_http_error_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(pc, "apply_call", lambda **k: (500, "internal error"))
+    with pytest.raises(RuntimeError, match="HTTP 500"):
+        pc._list_codespaces("myorg", "tok")
+
+
+def test_list_codespaces_bad_json_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(pc, "apply_call", lambda **k: (200, "not-json{{"))
+    with pytest.raises(RuntimeError, match="unexpected response"):
+        pc._list_codespaces("myorg", "tok")
+
+
+def test_list_codespaces_response_not_dict_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(pc, "apply_call", lambda **k: (200, json.dumps([])))
+    with pytest.raises(RuntimeError, match="expected an object"):
+        pc._list_codespaces("myorg", "tok")
+
+
+def test_list_codespaces_codespaces_not_list_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(pc, "apply_call", lambda **k: (200, json.dumps({"codespaces": "bad"})))
+    with pytest.raises(RuntimeError, match="not a list"):
+        pc._list_codespaces("myorg", "tok")
+
+
+# ---------------------------------------------------------------------------
+# _delete_codespace (direct HTTP boundary test)
+# ---------------------------------------------------------------------------
+
+
+def test_delete_codespace_uses_member_endpoint(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: list[str] = []
+
+    def fake_apply(*, method: str, url: str, payload: Any, token: str, **kw: Any) -> tuple[int, str]:
+        captured.append(url)
+        return 202, ""
+
+    monkeypatch.setattr(pc, "apply_call", fake_apply)
+    code, _ = pc._delete_codespace("myorg", "alice", "cs-abc-123", "tok")
+    assert code == 202
+    assert "/orgs/myorg/members/alice/codespaces/cs-abc-123" in captured[0]
+
+
+# ---------------------------------------------------------------------------
+# _format_report (branch coverage for non-dict owner / repo)
+# ---------------------------------------------------------------------------
+
+
+def test_format_report_owner_and_repo_not_dict() -> None:
+    cs: dict[str, Any] = {
+        "name": "cs1",
+        "state": "Shutdown",
+        "owner": "alice",
+        "repository": "org/repo",
+        "last_used_at": "2026-01-01T00:00:00Z",
+    }
+    lines = pc._format_report([cs], mode="dry-run", deleted=0, failures=[])
+    text = "\n".join(lines)
+    assert "owner=?" in text
+    assert "repo=?" in text
