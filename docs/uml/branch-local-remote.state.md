@@ -95,7 +95,7 @@ stateDiagram-v2
     AwaitingApproval --> MergeReady: @tvna approves
     AwaitingApproval --> CIRunning: fix push, dismiss_stale_reviews_on_push dismisses approval
     AwaitingApproval --> Behind: main advances while awaiting approval
-    ThreadsUnresolved --> CIGreen: all threads resolved, no CODEOWNERS approval needed
+    ThreadsUnresolved --> CIGreen: all threads resolved (reply posted + resolve_review_thread called), no CODEOWNERS approval needed
     ThreadsUnresolved --> AwaitingApproval: threads resolved, CODEOWNERS approval still needed
     Behind --> CIRunning: branch refresh push, CI reruns, existing approval dismissed
     MergeReady --> Merged: merge_pull_request (gate_merge_safety, mergeable_state=clean)
@@ -145,6 +145,7 @@ CODEOWNERS-protected path groups (`.github/CODEOWNERS`, `.github/rulesets/**`,
 | 7 | `CIGreen --> Merged` was a single direct transition omitting all server-side merge-readiness conditions: CODEOWNERS approval, review-thread resolution, branch staleness under the strict policy, draft state, and merge-method restriction. `CIGreen` is a necessary but not sufficient precondition for merge; `MergeReady` requires all five conditions to hold simultaneously. | `.github/rulesets/main.json` (five conditions); `gate_merge_safety.py:17-19` (fail-closed on `mergeable_state != "clean"`). | #1923 |
 | 8 | Two feedback loops are unmodeled: (1) a CI-fix push dismisses the existing @tvna approval (`dismiss_stale_reviews_on_push: true`), requiring CI rerun and re-approval after every fix iteration; (2) a competing merge to main after @tvna approves triggers `strict_required_status_checks_policy`, sending the branch `Behind`, which requires a refresh push (again dismissing approval), CI rerun, and re-approval. Both loops apply only to PRs touching CODEOWNERS-protected paths. | `main.json: dismiss_stale_reviews_on_push=true`, `strict_required_status_checks_policy=true`; `.github/CODEOWNERS` (5 protected path groups including `docs/graph/**`). | #1923 |
 | 9 | `gate_merge_safety.py` maps all non-`clean` `blocked` states to a single generic remediation message, giving no sub-condition diagnosis. An agent receiving `mergeable_state=blocked` cannot determine whether to wait for CI, request @tvna review, resolve a thread, or refresh the branch. | `gate_merge_safety.py:79-84` (`_STATE_REMEDIATION["blocked"]` is a single generic string). | #1923 |
+| 10 | `ThreadsUnresolved` has no sub-transitions for posting a reply and calling `resolve_review_thread`; an agent reading the diagram cannot see the required two-step sequence. Linked to Gap A (self-reply echo in the stop hook) and Gap B (missing resolve instruction after fix push). | Gap A: `scripts/gate_stop_pr_review_reply.py` (self-authored webhook skip); Gap B: `.apm/instructions/master.instructions.md` section 3 (resolve instruction added). | #1932 |
 
 ## Recommended direction (speculation)
 

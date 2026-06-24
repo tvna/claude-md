@@ -3,7 +3,7 @@
 Covers heuristic helpers and evaluate() gate logic. main() is exercised
 via monkeypatched stdin in the integration class.
 
-Refs #1768, #1860.
+Refs #1768, #1860, #1932.
 """
 
 from __future__ import annotations
@@ -373,3 +373,159 @@ class TestMain:
             rc = gate.main()
         assert rc == 0
         assert "boom" in stderr_capture.getvalue()
+
+
+# ---------------------------------------------------------------------------
+# Self-reply echo suppression (refs #1932)
+# ---------------------------------------------------------------------------
+
+SESSION_LOGIN = "claude-code[bot]"
+OTHER_LOGIN = "human-reviewer"
+
+
+def _get_me_call(tool_id: str = "tool_001") -> dict[str, Any]:
+    """Assistant entry with a mcp__github__get_me tool_use block."""
+    return {
+        "type": "assistant",
+        "message": {
+            "role": "assistant",
+            "content": [{"type": "tool_use", "id": tool_id, "name": "mcp__github__get_me", "input": {}}],
+        },
+    }
+
+
+def _get_me_result(login: str, tool_id: str = "tool_001") -> dict[str, Any]:
+    """User entry with a tool_result for mcp__github__get_me."""
+    return {
+        "type": "user",
+        "message": {
+            "role": "user",
+            "content": [
+                {
+                    "type": "tool_result",
+                    "tool_use_id": tool_id,
+                    "content": [{"type": "text", "text": json.dumps({"login": login, "id": 99})}],
+                }
+            ],
+        },
+    }
+
+
+def _self_review_webhook(login: str = SESSION_LOGIN) -> dict[str, Any]:
+    """Review webhook whose comment author is *login* (simulates a self-reply echo)."""
+    payload = json.dumps({"action": "created", "comment": {"user": {"login": login}, "body": "reply"}, "event_type": "REVIEW_COMMENT"})
+    return _webhook(f"REVIEW_COMMENT\n{payload}")
+
+
+class TestExtractSessionLogin:
+    def test_returns_none_when_no_get_me_call(self) -> None:
+        entries = [_user("hello"), _assistant(BASH_TOOL)]
+        assert gate._extract_session_login(entries) is None
+
+    def test_returns_login_from_get_me_result(self) -> None:
+        entries = [_get_me_call(), _get_me_result(SESSION_LOGIN)]
+        assert gate._extract_session_login(entries) == SESSION_LOGIN
+
+    def test_returns_none_when_get_me_result_missing(self) -> None:
+        entries = [_get_me_call()]
+        assert gate._extract_session_login(entries) is None
+
+    def test_returns_none_when_result_id_mismatch(self) -> None:
+        entries = [_get_me_call("id_A"), _get_me_result(SESSION_LOGIN, "id_B")]
+        assert gate._extract_session_login(entries) is None
+
+    def test_skips_non_json_result_text(self) -> None:
+        bad_result: dict[str, Any] = {
+            "type": "user",
+            "message": {
+                "role": "user",
+                "content": [{"type": "tool_result", "tool_use_id": "tool_001", "content": [{"type": "text", "text": "not-json"}]}],
+            },
+        }
+        entries = [_get_me_call(), bad_result]
+        assert gate._extract_session_login(entries) is None
+
+    def test_returns_login_when_no_ids_present(self) -> None:
+        # When tool_use has no "id", get_me_ids stays empty so any tool_result is accepted.
+        no_id_call: dict[str, Any] = {
+            "type": "assistant",
+            "message": {"role": "assistant", "content": [{"type": "tool_use", "name": "mcp__github__get_me", "input": {}}]},
+        }
+        entries = [no_id_call, _get_me_result(SESSION_LOGIN, "")]
+        assert gate._extract_session_login(entries) == SESSION_LOGIN
+
+
+class TestIsSelfAuthoredWebhook:
+    def test_none_login_returns_false(self) -> None:
+        assert not gate._is_self_authored_webhook(_self_review_webhook(), None)
+
+    def test_empty_login_returns_false(self) -> None:
+        assert not gate._is_self_authored_webhook(_self_review_webhook(), "")
+
+    def test_matching_login_returns_true(self) -> None:
+        assert gate._is_self_authored_webhook(_self_review_webhook(SESSION_LOGIN), SESSION_LOGIN)
+
+    def test_different_login_returns_false(self) -> None:
+        assert not gate._is_self_authored_webhook(_self_review_webhook(OTHER_LOGIN), SESSION_LOGIN)
+
+    def test_plain_text_mention_does_not_match(self) -> None:
+        # Body text that mentions the login without JSON syntax must not trigger the check.
+        entry = _webhook(f"REVIEW_COMMENT\nNice comment @{SESSION_LOGIN}!")
+        assert not gate._is_self_authored_webhook(entry, SESSION_LOGIN)
+
+    def test_non_review_entry_returns_false(self) -> None:
+        assert not gate._is_self_authored_webhook(_user("hello"), SESSION_LOGIN)
+
+
+class TestSelfReplyEchoSuppression:
+    """Regression tests for the self-reply echo false-positive fix. Refs #1932."""
+
+    def test_self_authored_webhook_excluded_from_unaddressed(self) -> None:
+        entries = [
+            _get_me_call(),
+            _get_me_result(SESSION_LOGIN),
+            _self_review_webhook(SESSION_LOGIN),
+        ]
+        session_login = gate._extract_session_login(entries)
+        assert gate.find_unaddressed_review_webhooks(entries, session_login) == []
+
+    def test_non_self_authored_webhook_still_blocks(self) -> None:
+        entries = [
+            _get_me_call(),
+            _get_me_result(SESSION_LOGIN),
+            _self_review_webhook(OTHER_LOGIN),
+        ]
+        session_login = gate._extract_session_login(entries)
+        assert gate.find_unaddressed_review_webhooks(entries, session_login) == [2]
+
+    def test_no_login_in_transcript_still_blocks_self_echo(self) -> None:
+        # When login cannot be determined, fail-open toward blocking.
+        entries = [_self_review_webhook(SESSION_LOGIN)]
+        assert gate.find_unaddressed_review_webhooks(entries, None) == [0]
+
+    def test_evaluate_passes_when_only_self_authored_webhook(self) -> None:
+        entries = [
+            _get_me_call(),
+            _get_me_result(SESSION_LOGIN),
+            _self_review_webhook(SESSION_LOGIN),
+        ]
+        assert gate.evaluate({}, entries) is None
+
+    def test_evaluate_blocks_when_non_self_webhook_unaddressed(self) -> None:
+        entries = [
+            _get_me_call(),
+            _get_me_result(SESSION_LOGIN),
+            _self_review_webhook(OTHER_LOGIN),
+        ]
+        decision = gate.evaluate({}, entries)
+        assert decision is not None
+        assert decision.get("decision") == "block"
+
+    def test_evaluate_passes_when_reviewer_webhook_has_reply(self) -> None:
+        entries = [
+            _get_me_call(),
+            _get_me_result(SESSION_LOGIN),
+            _self_review_webhook(OTHER_LOGIN),
+            _assistant(REPLY),
+        ]
+        assert gate.evaluate({}, entries) is None
