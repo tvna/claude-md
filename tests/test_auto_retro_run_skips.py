@@ -36,20 +36,25 @@ class TestRunSkips:
         assert ar.run(event, "o/r") == 0
         assert seen == []
 
+    @pytest.mark.parametrize(
+        "existing_number,title_prefix",
+        [(100, "fix"), (200, "chore")],
+        ids=["legacy-prefix", "canonical-prefix"],
+    )
     def test_skip_when_existing_retro_open(
-        self, monkeypatch: pytest.MonkeyPatch
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        existing_number: int,
+        title_prefix: str,
     ) -> None:
         seen = orchestrator_recorder(
             monkeypatch,
-            existing=[
-                {
-                    "number": 100,
-                    "title": "fix(auto-retro): review PR #42 repair loops",
-                }
-            ],
+            existing=[{
+                "number": existing_number,
+                "title": f"{title_prefix}(auto-retro): review PR #42 repair loops",
+            }],
         )
-        event = merged_event(number=42)
-        assert ar.run(event, "o/r") == 0
+        assert ar.run(merged_event(number=42), "o/r") == 0
         # Only the search call should fire; no commits fetch, no create.
         methods_paths = [(c[0], c[1]) for c in seen]
         assert any("/search/issues" in p for _, p in methods_paths)
@@ -204,18 +209,24 @@ class TestSkipComment:
                 for method, path, _ in seen
             ), f"Unexpected skip comment posted for {event}"
 
+    @pytest.mark.parametrize(
+        "existing_number,title_prefix",
+        [(100, "fix"), (200, "chore")],
+        ids=["legacy-prefix", "canonical-prefix"],
+    )
     def test_existing_retro_skip_does_not_post_skip_comment(
-        self, monkeypatch: pytest.MonkeyPatch
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        existing_number: int,
+        title_prefix: str,
     ) -> None:
         """When a retro already exists the PR has a back-link; no skip comment."""
         seen = orchestrator_recorder(
             monkeypatch,
-            existing=[
-                {
-                    "number": 100,
-                    "title": "fix(auto-retro): review PR #42 repair loops",
-                }
-            ],
+            existing=[{
+                "number": existing_number,
+                "title": f"{title_prefix}(auto-retro): review PR #42 repair loops",
+            }],
         )
         assert ar.run(merged_event(number=42), "o/r") == 0
         assert not any(self._is_skip_comment_post(*t) for t in seen)
