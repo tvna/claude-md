@@ -92,7 +92,7 @@ stateDiagram-v2
     AwaitingApproval --> MergeReady: @tvna approves
     AwaitingApproval --> CIRunning: fix push, dismiss_stale_reviews_on_push dismisses approval
     AwaitingApproval --> Behind: main advances while awaiting approval
-    ThreadsUnresolved --> CIGreen: all threads resolved, no CODEOWNERS approval needed
+    ThreadsUnresolved --> CIGreen: all threads resolved (reply posted + resolve_review_thread called), no CODEOWNERS approval needed
     ThreadsUnresolved --> AwaitingApproval: threads resolved, CODEOWNERS approval still needed
     Behind --> CIRunning: branch refresh push, CI reruns, existing approval dismissed
     MergeReady --> Merged: merge_pull_request (gate_merge_safety, mergeable_state=clean)
@@ -141,6 +141,7 @@ push（再び承認失効）→ CI 再実行 → 再承認 のサイクルが繰
 | 7 | `CIGreen --> Merged` が単一の直接遷移として描かれており、サーバ側のマージ合流条件（CODEOWNERS 承認・レビュースレッド解決・strict ポリシーによるブランチ陳腐化・ドラフト状態・マージ手法制約）がすべて欠落していた。`CIGreen` はマージの必要条件であって十分条件ではなく、`MergeReady` には 5 条件の同時充足が必要。 | `.github/rulesets/main.json`（5 条件）; `gate_merge_safety.py:17-19`（`mergeable_state != "clean"` でのブロック）。 | #1923 |
 | 8 | 2 つのフィードバックループが未モデル化: (1) CI 修正 push で @tvna 承認が失効し CI 再実行と再承認が必要（`dismiss_stale_reviews_on_push: true`）; (2) @tvna 承認後に別 PR が main にマージされるとブランチが `Behind` に遷移し、更新 push で承認が再失効するループ（`strict_required_status_checks_policy: true`）。いずれも CODEOWNERS 保護パスを含む PR にのみ発生。 | `main.json: dismiss_stale_reviews_on_push=true`, `strict_required_status_checks_policy=true`; `.github/CODEOWNERS`（`docs/graph/**` を含む 5 パス群）。 | #1923 |
 | 9 | `gate_merge_safety.py` は `blocked` 状態のサブ条件を単一の汎用メッセージに集約しており、エージェントは「CI 待機」「@tvna レビュー要求」「スレッド解決」「ブランチ更新」のいずれが必要かを判断できない。 | `gate_merge_safety.py:79-84`（`_STATE_REMEDIATION["blocked"]` が汎用文字列）。 | #1923 |
+| 10 | `ThreadsUnresolved` 状態に返信投稿と `resolve_review_thread` 呼び出しのサブ遷移がなく、エージェントが読んでも必要な 2 ステップの手順が見えない。ギャップ A（stop hook の自己返信 echo 誤発火）およびギャップ B（fix push 後の resolve 手順未定義）と連動。 | ギャップ A: `scripts/gate_stop_pr_review_reply.py`（自己投稿 webhook スキップを追加）; ギャップ B: `.apm/instructions/master.instructions.md` セクション 3（resolve 手順を追記）。 | #1932 |
 
 ## 推奨される方向（speculation）
 
