@@ -137,6 +137,18 @@ path = ".github/workflows/validate-doc-graph.yml"
 type = "harness_workflow"
 description = "Advisory CI workflow that runs gate_doc_graph_pr on every pull_request."
 
+[[nodes]]
+id = "docs_generated_ownership"
+path = "docs/standards/docs-generated-ownership.md"
+type = "standard"
+description = "Documents the single-producer rule for docs/generated/: owned exclusively by post-merge automation; agents and pre-push gates must not write to it. Refs #1771, #1764."
+
+[[nodes]]
+id = "preflight_issue_ci_staleness"
+path = "scripts/preflight_issue_ci_staleness.py"
+type = "harness_script"
+description = "PreToolUse gate: blocks mcp__github__issue_write create calls for CI failures when the issue body lacks the main-HEAD verification phrase. Refs #1944, #1943."
+
 # ---------------------------------------------------------------------------
 # Edges
 # ---------------------------------------------------------------------------

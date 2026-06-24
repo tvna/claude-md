@@ -35,6 +35,7 @@ Each documented prohibition falls into one of three classes:
 | Commit/push only on the authorized session branch (S3) | `scripts/preflight_commit_session_branch.py`, `scripts/preflight_push_session_branch.py` | PreToolUse `Bash` |
 | Agent-created issues must carry classification labels (S3) | `scripts/gate_issue_classification_labels.py` | PreToolUse `mcp__github__issue_write` |
 | Operator-facing output in the owner's language (S6) | `scripts/plan_language_context.py` | SessionStart |
+| Before opening an issue for a reported CI failure, verify the failure is still present on current main HEAD (S3) | `scripts/preflight_issue_ci_staleness.py` | PreToolUse `mcp__github__issue_write` |
 
 ## B. Enforceable gap closed by this audit (issue #1563)
 

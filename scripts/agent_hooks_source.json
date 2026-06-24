@@ -361,6 +361,15 @@
               ]
             },
             {
+              "matcher": "mcp__github__issue_write",
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "python3 scripts/preflight_issue_ci_staleness.py"
+                }
+              ]
+            },
+            {
               "matcher": "mcp__github__update_pull_request_branch",
               "hooks": [
                 {
@@ -579,6 +588,10 @@
                 {
                   "type": "command",
                   "command": "python3 scripts/preflight_angle_token_drop.py"
+                },
+                {
+                  "type": "command",
+                  "command": "python3 scripts/preflight_issue_ci_staleness.py"
                 }
               ]
             },
@@ -682,6 +695,17 @@
                 {
                   "type": "command",
                   "command": "python3 scripts/check_pr_mergeability.py"
+                }
+              ]
+            },
+            {
+              "matcher": "Bash",
+              "hooks": [
+                {
+                  "type": "command",
+                  "if": "Bash(*git push*)",
+                  "command": "python3 scripts/check_pr_mergeability.py git-push",
+                  "statusMessage": "Checking post-push PR mergeability"
                 }
               ]
             },
@@ -1017,6 +1041,16 @@
               ]
             },
             {
+              "matcher": "^mcp__github__issue_write$",
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "python3 scripts/preflight_issue_ci_staleness.py",
+                  "statusMessage": "Checking CI-failure staleness before issue creation"
+                }
+              ]
+            },
+            {
               "matcher": "^mcp__github__(issue_write|add_issue_comment|create_pull_request|update_pull_request|add_reply_to_pull_request_comment|pull_request_review_write|add_comment_to_pending_review)$",
               "hooks": [
                 {
@@ -1278,6 +1312,11 @@
                   "type": "command",
                   "command": "python3 scripts/preflight_angle_token_drop.py",
                   "statusMessage": "Checking GitHub text for bare angle-bracket tokens"
+                },
+                {
+                  "type": "command",
+                  "command": "python3 scripts/preflight_issue_ci_staleness.py",
+                  "statusMessage": "Checking CI-failure staleness before issue creation"
                 }
               ]
             },
@@ -1355,6 +1394,17 @@
                   "type": "command",
                   "command": "python3 scripts/check_pr_mergeability.py",
                   "statusMessage": "Checking PR mergeability"
+                }
+              ]
+            },
+            {
+              "matcher": "^Bash$",
+              "hooks": [
+                {
+                  "type": "command",
+                  "if": "Bash(*git push*)",
+                  "command": "python3 scripts/check_pr_mergeability.py git-push",
+                  "statusMessage": "Checking post-push PR mergeability"
                 }
               ]
             },
