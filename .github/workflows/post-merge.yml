@@ -21,6 +21,7 @@ on:
           - decision-tree
           - coverage
           - triage-report
+          - maturity-summary
           - all
 
 permissions: {}
@@ -117,6 +118,29 @@ jobs:
           WORKFLOW: ${{ github.workflow }}
           COVERAGE_RESULT: ${{ needs.coverage.result }}
         run: python3 scripts/coverage_failure_issue.py run
+
+  # Read-only per-merge view of codebase scale and maturity (#1955). Renders a
+  # deterministic Markdown report (script/test/workflow/doc counts, test:script
+  # ratio, generated AST-doc coverage, gate-script count, and the maintainability
+  # budget health reused from scan_maintainability_metrics) and appends it to the
+  # job summary. It writes nothing to the repo and mints no token (contents:
+  # read), so it shares no Environment with the write-capable jobs below and
+  # cannot drift a committed doc.
+  maturity-summary:
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && (inputs.task == 'maturity-summary' || inputs.task == 'all'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Set up uv and project environment
+        uses: ./.github/actions/setup-uv
+
+      - name: Render codebase maturity summary to the job summary
+        run: uv run python scripts/codebase_maturity_summary.py summary >> "$GITHUB_STEP_SUMMARY"
 
   decision-tree:
     if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && (inputs.task == 'decision-tree' || inputs.task == 'all'))
