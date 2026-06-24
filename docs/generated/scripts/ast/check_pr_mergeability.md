@@ -161,14 +161,16 @@ flowchart TD
     N001["_poll_mergeability(...)"]
     N002["actual_token = token or _get_token()"]
     N003["path = f'<str>{owner}<str>{repo}<str>{pr_number}'"]
-    N004["data = None"]
-    N005["for attempt in range(_MAX_POLLS):     if attempt > 0:         sleeper(_POLL_INTERVAL_SECONDS)     data = _rest_get(path, token=actual_token, opener=opener)     if data is None:         return None     if data.get('<str>') is not None:         return data"]
-    N006["return data"]
+    N004["polls = _MAX_POLLS if max_polls is None else max_polls"]
+    N005["data = None"]
+    N006["for attempt in range(polls):     if attempt > 0:         sleeper(_POLL_INTERVAL_SECONDS)     data = _rest_get(path, token=actual_token, opener=opener)     if data is None:         return None     if data.get('<str>') is not None:         return data"]
+    N007["return data"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 --> N004
     N004 --> N005
     N005 --> N006
+    N006 --> N007
 ```
 
 ## _build_context(...)
@@ -372,7 +374,7 @@ flowchart TD
     N025["mergeable = get(...)"]
     N026["state = lower(...)"]
     N027["if mergeable is None"]
-    N028["return _build_context(f'<str>{pr_label}<str>{_MAX_POLLS}<str>')"]
+    N028["return _build_context(f'<str>{pr_label}<str>')"]
     N029["if state == 'clean'"]
     N030["return _build_context(f'<str>{pr_label}<str>')"]
     N031["if state == 'dirty'"]
