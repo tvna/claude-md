@@ -135,7 +135,7 @@ def parse_push_sources(command: str) -> PushPlan:
 
     # The first positional is the remote; the rest are refspecs. With no
     # refspec, git publishes the current branch (HEAD). With refspecs present,
-    # inspect exactly their local sources -- if every one is a delete
+    # inspect exactly their local sources; if every one is a delete
     # (``:dst``), the result is empty (nothing to inspect), NOT a HEAD fallback.
     refspecs = positionals[1:]
     if not refspecs:
