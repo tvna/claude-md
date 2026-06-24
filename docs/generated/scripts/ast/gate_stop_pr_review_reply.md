@@ -135,12 +135,18 @@ flowchart TD
     N003["return False"]
     N004["text = _entry_text(...)"]
     N005["m = search(...)"]
-    N006["return m is not None and m.group(1) == session_login"]
+    N006["if m is not None and m.group(1) == session_login"]
+    N007["return True"]
+    N008["m2 = search(...)"]
+    N009["return m2 is not None and m2.group(1) == session_login"]
     N001 -->|"start"| N002
     N002 -->|"true"| N003
     N002 -->|"false"| N004
     N004 --> N005
     N005 --> N006
+    N006 -->|"true"| N007
+    N006 -->|"false"| N008
+    N008 --> N009
 ```
 
 ## has_reply_tool_call(...)

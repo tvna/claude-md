@@ -159,6 +159,7 @@ Detection is string-match based:
 | `preflight_uv_version.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
 | `prompt_context7_gate.py` | agent-hook | `claude:UserPromptSubmit` |
 | `prompt_context7_gate.py` | agent-hook | `codex:UserPromptSubmit` |
+| `prune_codespaces.py` | workflow | `weekly-maintenance.yml (codespace-cleanup)` |
 | `prune_devcontainer_images.py` | workflow | `monthly-maintenance.yml (prune-devcontainer-images)` |
 | `publish_instruction_release.py` | workflow | `publish-instructions-release.yml (publish)` |
 | `python_pin.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
