@@ -30,8 +30,9 @@ The contract is:
   Actions UI surfaces individual violations.
 
 Excluded path prefixes (``_SKIP_PREFIXES``):
-    ``.agents/skills/``: files expanded from the APM upstream dependency
-    (``obra/superpowers`` pinned in ``apm.yml``). These files must not be
+    ``.agents/skills/`` and ``.claude/skills/``: the two committed copies of the
+    APM-deployed upstream dependency (``obra/superpowers`` pinned in ``apm.yml``;
+    deployed to both surfaces per ``apm.lock.yaml``). These files must not be
     edited directly; any em-dash content there originates upstream and is
     outside this repo's fix scope.
 
@@ -59,10 +60,11 @@ from pathlib import Path
 _EM_DASH = "\u2014"  # U+2014 EM DASH; use escape to keep this file ASCII-clean
 
 # Files under these path prefixes are excluded from --git-tracked scans.
-# .agents/skills/ is expanded from the upstream APM dependency (obra/superpowers
-# pinned in apm.yml); editing it directly is prohibited, so em-dashes there are
+# .agents/skills/ and .claude/skills/ are the two committed copies of the upstream
+# APM dependency (obra/superpowers pinned in apm.yml, deployed to both surfaces per
+# apm.lock.yaml); editing them directly is prohibited, so em-dashes there are
 # outside this repo's fix scope.
-_SKIP_PREFIXES = (".agents/skills/",)
+_SKIP_PREFIXES = (".agents/skills/", ".claude/skills/")
 
 
 def scan_text(text: str) -> list[tuple[int, int]]:

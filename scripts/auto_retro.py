@@ -103,6 +103,7 @@ from _auto_retro_parse import (
     extract_post_merge_checklist,
     extract_type_scope,
     extract_verification_pairs,
+    is_per_pr_retro_title,
     is_retro_issue_title,
     is_retro_pr,
     parse_event,
@@ -276,6 +277,7 @@ __all__ = [
     "find_existing_retro",
     "find_target_retro_from_refs",
     "is_canonical_handoff_retro_title",
+    "is_per_pr_retro_title",
     "is_retro_age_exceeded",
     "is_retro_issue_title",
     "is_retro_pr",
@@ -1061,6 +1063,30 @@ def _append_summary(text: str) -> None:
         fp.write(text)
 
 
+# Cap on how many per-item identifiers a step summary lists inline. The retro
+# issues / source PRs themselves are the full audit record; the summary is a
+# compact index into them, so a tick that touches many items stays scannable
+# instead of producing one bullet per item. Refs #1979.
+_SUMMARY_LIST_CAP = 5
+
+
+def _compact_join(items: list[str], cap: int = _SUMMARY_LIST_CAP) -> str:
+    """Join *items* onto one line, capped to *cap* with an overflow count.
+
+    Returns ``(none)`` for an empty list. Lists longer than *cap* show the
+    first *cap* entries followed by ``(+N more)`` so the count-bearing
+    identifiers stay visible without the full list inflating the summary.
+    """
+    if not items:
+        return "(none)"
+    head = items[:cap]
+    extra = len(items) - len(head)
+    line = ", ".join(head)
+    if extra > 0:
+        line += f" (+{extra} more)"
+    return line
+
+
 def _build_summary(pr: MergedPR, action: str, detail: str) -> str:
     return (
         "## auto-retro summary\n"
@@ -1331,26 +1357,18 @@ def _build_sentinel_summary(
     tuples for retros that did not qualify (still inside the inactivity
     window, operator-touched, or already sentinel-closed).
     """
-    closed_block = (
-        "\n".join(f"- #{n}" for n in closed) if closed else "- (none)"
-    )
-    skipped_block = (
-        "\n".join(f"- #{n}: {reason}" for n, reason in skipped)
-        if skipped
-        else "- (none)"
+    closed_line = _compact_join([f"#{n}" for n in closed])
+    skipped_line = _compact_join(
+        [f"#{n} ({reason})" for n, reason in skipped]
     )
     return (
         "## auto-retro sentinel summary\n"
         "\n"
-        f"Inactivity threshold: {days} days.\n"
+        f"Inactivity threshold: {days} days. "
+        f"Closed: {len(closed)}. Skipped: {len(skipped)}.\n"
         "\n"
-        "### Closed\n"
-        "\n"
-        f"{closed_block}\n"
-        "\n"
-        "### Skipped\n"
-        "\n"
-        f"{skipped_block}\n"
+        f"- Closed: {closed_line}\n"
+        f"- Skipped: {skipped_line}\n"
     )
 
 
@@ -1662,31 +1680,20 @@ def _build_rescan_summary(
     PRs whose unsatisfied gates were appended to their retro.
     ``skipped`` is a list of ``(pr_number, reason)`` tuples.
     """
-    appended_block = (
-        "\n".join(
-            f"- PR #{pr}: appended to retro #{retro}"
-            for pr, retro in appended
-        )
-        if appended
-        else "- (none)"
+    appended_line = _compact_join(
+        [f"PR #{pr} to retro #{retro}" for pr, retro in appended]
     )
-    skipped_block = (
-        "\n".join(f"- PR #{pr}: {reason}" for pr, reason in skipped)
-        if skipped
-        else "- (none)"
+    skipped_line = _compact_join(
+        [f"PR #{pr} ({reason})" for pr, reason in skipped]
     )
     return (
         "## auto-retro post-merge rescan summary\n"
         "\n"
-        f"Lookback window: {hours} hours.\n"
+        f"Lookback window: {hours} hours. "
+        f"Appended: {len(appended)}. Skipped: {len(skipped)}.\n"
         "\n"
-        "### Appended\n"
-        "\n"
-        f"{appended_block}\n"
-        "\n"
-        "### Skipped\n"
-        "\n"
-        f"{skipped_block}\n"
+        f"- Appended: {appended_line}\n"
+        f"- Skipped: {skipped_line}\n"
     )
 
 

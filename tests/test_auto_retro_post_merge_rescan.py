@@ -529,6 +529,39 @@ class TestBuildRescanSummary:
         assert "PR #43" in text
         assert "too recent" in text
 
+    def test_reports_counts(self) -> None:
+        text = ar._build_rescan_summary(
+            [(42, 200), (44, 201)],
+            [(43, "too recent")],
+            48,
+        )
+        assert "Appended: 2" in text
+        assert "Skipped: 1" in text
+
+    def test_long_list_is_capped_with_overflow(self) -> None:
+        appended = [(pr, 900 + pr) for pr in range(1, 9)]
+        text = ar._build_rescan_summary(appended, [], 48)
+        # Count is exact; only the first _SUMMARY_LIST_CAP items are listed
+        # inline, the rest collapse to a (+N more) marker.
+        assert "Appended: 8" in text
+        assert "PR #1 to retro #901" in text
+        assert "PR #5 to retro #905" in text
+        assert "PR #6 to retro #906" not in text
+        assert "(+3 more)" in text
+
+
+class TestCompactJoin:
+    def test_empty_is_none(self) -> None:
+        assert ar._compact_join([]) == "(none)"
+
+    def test_under_cap_lists_all(self) -> None:
+        assert ar._compact_join(["a", "b", "c"]) == "a, b, c"
+
+    def test_over_cap_appends_overflow_count(self) -> None:
+        items = [str(i) for i in range(7)]
+        out = ar._compact_join(items, cap=5)
+        assert out == "0, 1, 2, 3, 4 (+2 more)"
+
 
 # ---------------------------------------------------------------------------
 # CLI wiring

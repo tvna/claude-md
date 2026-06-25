@@ -205,6 +205,12 @@ required entry has been removed or renamed. Refs #1901.
   1, "Match the document weight to the blast radius: detailed PRD for
   architectural / multi-PR work"). This repository's PRDs live under
   `docs/prd/`.
+- **live-proof completion gate**: The finish-line rule that a task is done
+  only after the change is exercised against real artifacts and the real
+  service path, never a proxy or a green type-check standing in for behavior;
+  the indirect-signal ban binds at completion, not only at plan time, and is
+  waived only on the owner's explicit, recorded approval. Master section 1
+  ("Gate completion on live proof, not plan-time intent alone").
 - **portability-ack**: A `portability-ack: refs #N` marker on a line of
   universal text that permits an otherwise-banned repository-specific noun
   (vendor name, PR number, file path) on that single line; must cite a
