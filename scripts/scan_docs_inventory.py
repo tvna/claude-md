@@ -61,6 +61,22 @@ IGNORED_SCHEMES = frozenset({"http", "https", "mailto", "tel", "data"})
 # docs/standards/documentation-quality.md (D3), not a budget bump.
 MAX_INDEX_BYTES = 40 * 1024
 
+# Refs #2005. Lane READMEs that own their full document table after the
+# per-lane split. INDEX keeps only a description and a pointer to each of
+# these; the inventory follows the link hop into exactly these READMEs, not
+# every linked ``README.md``. Restricting the hop to the declared split lanes
+# is the drift gate for the "small lanes keep their full table inline in
+# INDEX" invariant: without it, a small-lane doc could migrate its only
+# listing into that lane's README and silently escape the inventory check.
+# Adding a new large lane to the split means adding its README here.
+SPLIT_LANE_READMES = frozenset(
+    {
+        "docs/prd/README.md",
+        "docs/standards/README.md",
+        "docs/runbooks/README.md",
+    }
+)
+
 
 def rel(path: Path, root: Path) -> str:
     """Return a stable repository-relative path string."""
@@ -124,10 +140,13 @@ def collect_index_entries(root: Path) -> set[str]:
 
     Refs #2005. A large lane keeps its full document table in its
     ``README.md`` rather than inline in INDEX, so coverage follows links one
-    hop: INDEX's own ``.md`` links, plus the ``.md`` links inside any lane
-    ``README.md`` that INDEX points at. The recursion is fixed at two levels
-    (INDEX -> lane README -> leaf) and only steps through ``/README.md``
-    targets, so it cannot cycle.
+    hop: INDEX's own ``.md`` links, plus the ``.md`` links inside the declared
+    split-lane READMEs (:data:`SPLIT_LANE_READMES`) that INDEX points at. The
+    hop is restricted to those READMEs, not every linked ``README.md``, so a
+    small lane whose table stays inline in INDEX cannot migrate its listing
+    into a README and escape the gate. The recursion is fixed at two levels
+    (INDEX -> split-lane README -> leaf) and only steps through that fixed
+    set, so it cannot cycle.
     """
     index = root / INDEX_PATH
     if not index.exists():
@@ -135,7 +154,7 @@ def collect_index_entries(root: Path) -> set[str]:
 
     entries = _md_links_in(index, root)
     for entry in tuple(entries):
-        if entry.endswith("/README.md"):
+        if entry in SPLIT_LANE_READMES:
             entries |= _md_links_in(root / entry, root)
     return entries
 
