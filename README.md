@@ -2,7 +2,7 @@
 
 [![codecov](https://codecov.io/gh/tvna/claude-md/branch/main/graph/badge.svg)](https://codecov.io/gh/tvna/claude-md)
 
-[English](./README.md) | [日本語](./README.ja.md) | [简体中文](./README.zh.md)
+[English](./README.md) | [日本語](./README.ja.md) | [简体中文](./README.zh.md) | [한국어](./README.ko.md)
 
 This is the master repository for personally tuned agent instructions. It compiles [`CLAUDE.md`](./CLAUDE.md) and [`AGENTS.md`](./AGENTS.md) via [`microsoft/apm`](https://github.com/microsoft/apm) for reference in other projects.
 

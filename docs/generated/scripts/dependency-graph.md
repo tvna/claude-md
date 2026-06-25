@@ -26,6 +26,7 @@ This file is generated from `scripts/*.py` import statements by `python3 scripts
 | `_secret_patterns` | 2 | `preflight_github_secrets`, `scan_secrets` |
 | `_security_drift_families` | 2 | `_security_drift_issues`, `security_drift_report` |
 | `auto_retro` | 2 | `gate_pr_body_retro_issue_link`, `gate_reserved_retro_scope` |
+| `scan_maintainability_metrics` | 2 | `codebase_maturity_summary`, `scan_module_size_distribution` |
 | `scan_non_ascii` | 2 | `preflight_non_ascii`, `preflight_pr_body` |
 | `title_policy` | 2 | `preflight_title_policy`, `verify_linked_issue_titles` |
 | `_auto_retro_render` | 1 | `auto_retro` |
@@ -38,7 +39,6 @@ This file is generated from `scripts/*.py` import statements by `python3 scripts
 | `preflight_cache` | 1 | `preflight_all` |
 | `preflight_main_freshness` | 1 | `preflight_session_base_freshness` |
 | `preflight_steps` | 1 | `preflight_all` |
-| `scan_maintainability_metrics` | 1 | `scan_module_size_distribution` |
 | `scan_markdown_links` | 1 | `measure_tool_overlap` |
 | `scan_preflight_drift` | 1 | `scan_input_contract_drift` |
 | `scan_secrets` | 1 | `measure_tool_overlap` |
@@ -93,6 +93,7 @@ flowchart TD
     ci_budget_issue --> issue_anchors
     ci_early_status_probe --> _github_api
     ci_early_status_probe --> _hook_runtime
+    codebase_maturity_summary --> scan_maintainability_metrics
     coverage_failure_issue --> issue_anchors
     dependabot_automerge --> _github_api
     dependabot_automerge --> _trusted_bots

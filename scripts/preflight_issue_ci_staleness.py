@@ -17,11 +17,14 @@ failure still exists in the issue body (FRESH_MAIN_CHECK_PHRASE). Refs #1944.
 Detection heuristics
 ---------------------
 * Actions run URL pattern: github.com/.../actions/runs/<id>
-* CI-failure keywords (title + body): "stale", "docs/generated/ is stale",
-  "post-merge", "CI fail", "CI failure", "failing CI", "job failed".
-* Keywords are case-insensitive and intentionally broad; false positives
-  (e.g. a doc issue that mentions "post-merge") are cleared by adding
-  FRESH_MAIN_CHECK_PHRASE to the body.
+* CI-failure keywords (title + body): "docs/generated/ is stale",
+  "ci fail", "failing ci", "job failed", "jobs failed", "workflow failed",
+  "check failed", "post-merge ci", "post merge ci", "post-merge workflow",
+  "post-merge job".
+* Keywords are case-insensitive and scoped to avoid false positives on
+  retro or planning issues; standalone "post-merge" or "docs/generated/"
+  do not qualify without explicit CI/workflow context. False positives are
+  cleared by adding FRESH_MAIN_CHECK_PHRASE to the body. Refs #1969, #1970.
 
 Opt-out mechanism
 -----------------
@@ -57,8 +60,7 @@ _ACTIONS_RUN_RE = re.compile(
 # context). Standalone "post-merge" or "stale" are too broad; they only
 # qualify when combined with explicit CI/workflow context.
 _CI_KEYWORDS: tuple[str, ...] = (
-    "docs/generated/",
-    "ci failure",
+    "docs/generated/ is stale",
     "ci fail",
     "failing ci",
     "job failed",

@@ -2,7 +2,7 @@
 
 [![codecov](https://codecov.io/gh/tvna/claude-md/branch/main/graph/badge.svg)](https://codecov.io/gh/tvna/claude-md)
 
-[English](./README.md) | [日本語](./README.ja.md) | 简体中文
+[English](./README.md) | [日本語](./README.ja.md) | 简体中文 | [한국어](./README.ko.md)
 
 这是一个用于集中管理个人调优后的代理指令的主仓库。它通过 [`microsoft/apm`](https://github.com/microsoft/apm) 编译生成 [`CLAUDE.md`](./CLAUDE.md) 和 [`AGENTS.md`](./AGENTS.md)，供其他项目引用。
 
