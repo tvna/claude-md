@@ -484,6 +484,30 @@ flowchart TD
     N005 --> N006
 ```
 
+## _compact_join(...)
+
+```mermaid
+flowchart TD
+    N001["_compact_join(...)"]
+    N002["if not items"]
+    N003["return '<str>'"]
+    N004["head = items[:cap]"]
+    N005["extra = len(items) - len(head)"]
+    N006["line = join(...)"]
+    N007["if extra > 0"]
+    N008["line += f'<str>{extra}<str>'"]
+    N009["return line"]
+    N001 -->|"start"| N002
+    N002 -->|"true"| N003
+    N002 -->|"false"| N004
+    N004 --> N005
+    N005 --> N006
+    N006 --> N007
+    N007 -->|"true"| N008
+    N008 --> N009
+    N007 -->|"false"| N009
+```
+
 ## _build_summary(...)
 
 ```mermaid
@@ -755,9 +779,9 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["_build_sentinel_summary(...)"]
-    N002["closed_block = '<str>'.join((f'<str>{n}' for n in closed)) if closed else '<str>'"]
-    N003["skipped_block = '<str>'.join((f'<str>{n}<str>{reason}' for n, reason in skipped)) if skipped else '<str>'"]
-    N004["return f'<str>{days}<str>{closed_block}<str>{skipped_block}<str>'"]
+    N002["closed_line = _compact_join(...)"]
+    N003["skipped_line = _compact_join(...)"]
+    N004["return f'<str>{days}<str>{len(closed)}<str>{len(skipped)}<str>{closed_line}<str>{skipped_line}<str>'"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 --> N004
@@ -927,9 +951,9 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["_build_rescan_summary(...)"]
-    N002["appended_block = '<str>'.join((f'<str>{pr}<str>{retro}' for pr, retro in appended)) if appended else '<str>'"]
-    N003["skipped_block = '<str>'.join((f'<str>{pr}<str>{reason}' for pr, reason in skipped)) if skipped else '<str>'"]
-    N004["return f'<str>{hours}<str>{appended_block}<str>{skipped_block}<str>'"]
+    N002["appended_line = _compact_join(...)"]
+    N003["skipped_line = _compact_join(...)"]
+    N004["return f'<str>{hours}<str>{len(appended)}<str>{len(skipped)}<str>{appended_line}<str>{skipped_line}<str>'"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 --> N004

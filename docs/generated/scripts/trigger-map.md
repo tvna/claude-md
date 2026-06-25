@@ -26,6 +26,10 @@ Detection is string-match based:
 | `body_policy.py` | workflow | `verify-pr.yml (portable-pr-policy)` |
 | `bot_pr_automerge.py` | workflow | `tvna-bot-automerge.yml (merge)` |
 | `branch_cleanup.py` | workflow | `weekly-maintenance.yml (branch-cleanup)` |
+| `check_commit_signing_ready.py` | agent-hook | `claude:PreToolUse` |
+| `check_commit_signing_ready.py` | agent-hook | `claude:SessionStart` |
+| `check_commit_signing_ready.py` | agent-hook | `codex:PreToolUse` |
+| `check_commit_signing_ready.py` | agent-hook | `codex:SessionStart` |
 | `check_hooks_path.py` | agent-hook | `claude:SessionStart` |
 | `check_hooks_path.py` | agent-hook | `codex:SessionStart` |
 | `check_pr_mergeability.py` | agent-hook | `claude:PostToolUse` |
@@ -37,6 +41,7 @@ Detection is string-match based:
 | `ci_budget_issue.py` | workflow | `weekly-maintenance.yml (measure-timings)` |
 | `ci_early_status_probe.py` | agent-hook | `codex:PostToolUse` |
 | `codebase_maturity_summary.py` | workflow | `post-merge.yml (maturity-summary)` |
+| `codebase_maturity_summary.py` | workflow | `post-merge.yml (open-retro)` |
 | `coverage_failure_issue.py` | workflow | `post-merge.yml (coverage-failure-issue)` |
 | `dependabot_automerge.py` | workflow | `dependabot-automerge.yml (audit)` |
 | `dependabot_labels.py` | workflow | `verify-pr.yml (verify-dependabot-labels)` |

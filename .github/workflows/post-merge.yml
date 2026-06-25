@@ -42,6 +42,17 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
+      # Lead the merge-run job summary with the maturity report, then let the
+      # retro step append its auto-retro summary below it (same job, so step
+      # order is summary order). The script is stdlib-only, so the system
+      # python3 runs it without setup-uv. A render failure only warns: opening
+      # the retro is the load-bearing audit action and must not be blocked by a
+      # cosmetic summary. Refs #1979.
+      - name: Render codebase maturity summary to the job summary
+        run: |
+          python3 scripts/codebase_maturity_summary.py summary >> "$GITHUB_STEP_SUMMARY" \
+            || echo "::warning::maturity summary render failed; continuing to open the retro"
+
       - name: Open retrospective issue
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

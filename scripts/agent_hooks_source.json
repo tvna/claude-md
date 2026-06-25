@@ -146,7 +146,8 @@
               "hooks": [
                 {
                   "type": "command",
-                  "command": "scripts/install-rtk.sh"
+                  "command": "scripts/install-rtk.sh",
+                  "async": true
                 }
               ]
             },
@@ -154,7 +155,8 @@
               "hooks": [
                 {
                   "type": "command",
-                  "command": "scripts/install-apm.sh"
+                  "command": "scripts/install-apm.sh",
+                  "async": true
                 }
               ]
             },
@@ -170,7 +172,8 @@
               "hooks": [
                 {
                   "type": "command",
-                  "command": "scripts/install-waza.sh"
+                  "command": "scripts/install-waza.sh",
+                  "async": true
                 }
               ]
             },
@@ -178,7 +181,8 @@
               "hooks": [
                 {
                   "type": "command",
-                  "command": "scripts/install-ccusage.sh"
+                  "command": "scripts/install-ccusage.sh",
+                  "async": true
                 }
               ]
             },
@@ -194,7 +198,8 @@
               "hooks": [
                 {
                   "type": "command",
-                  "command": "scripts/install-zizmor.sh"
+                  "command": "scripts/install-zizmor.sh",
+                  "async": true
                 }
               ]
             },
@@ -202,7 +207,8 @@
               "hooks": [
                 {
                   "type": "command",
-                  "command": "scripts/install-lychee.sh"
+                  "command": "scripts/install-lychee.sh",
+                  "async": true
                 }
               ]
             },
@@ -210,7 +216,8 @@
               "hooks": [
                 {
                   "type": "command",
-                  "command": "scripts/install-betterleaks.sh"
+                  "command": "scripts/install-betterleaks.sh",
+                  "async": true
                 }
               ]
             },
@@ -267,6 +274,14 @@
                 {
                   "type": "command",
                   "command": "python3 scripts/check_pr_mergeability.py session-start"
+                }
+              ]
+            },
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "python3 scripts/check_commit_signing_ready.py session-start"
                 }
               ]
             },
@@ -460,6 +475,16 @@
                   "type": "command",
                   "if": "Bash(*git commit*)",
                   "command": "python3 scripts/preflight_commit_session_branch.py"
+                }
+              ]
+            },
+            {
+              "matcher": "Bash",
+              "hooks": [
+                {
+                  "type": "command",
+                  "if": "Bash(*git commit*)",
+                  "command": "python3 scripts/check_commit_signing_ready.py"
                 }
               ]
             },
@@ -952,6 +977,16 @@
               ]
             },
             {
+              "matcher": "startup|resume|clear|compact",
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "python3 scripts/check_commit_signing_ready.py session-start",
+                  "statusMessage": "Checking commit signing readiness"
+                }
+              ]
+            },
+            {
               "matcher": "startup|clear|compact",
               "hooks": [
                 {
@@ -1167,6 +1202,16 @@
                   "type": "command",
                   "command": "python3 scripts/preflight_commit_session_branch.py",
                   "statusMessage": "Checking session branch before commit"
+                }
+              ]
+            },
+            {
+              "matcher": "^Bash$",
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "python3 scripts/check_commit_signing_ready.py",
+                  "statusMessage": "Checking commit signing readiness before commit"
                 }
               ]
             },

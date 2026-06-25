@@ -41,6 +41,7 @@ from _auto_retro_parse import (
     _is_revert_subject,
     _slice_section,
     extract_type_scope,
+    is_per_pr_retro_title,
     is_retro_issue_title,
     render_signals_fired_line,
 )
@@ -697,17 +698,17 @@ def find_existing_retro(
 ) -> int | None:
     """Return the matching retro issue number from search results, or None.
 
-    Match heuristic: title is a retro issue title (see
-    :func:`is_retro_issue_title`) AND contains ``PR #<N>`` not followed by
-    another digit. The trailing ``(?!\\d)`` lookahead prevents PR-number
-    prefix collisions (e.g. a lookup for #249 must not match a retro for
-    #2490). The prefix guard avoids matching an unrelated issue that
-    happens to mention the same PR number.
+    Match heuristic: title is a per-PR retro title (auto-retro shape via
+    :func:`is_retro_issue_title` OR hand-authored ``chore(retro)`` via
+    :func:`is_per_pr_retro_title`; additive OR so both creation paths dedup,
+    Refs #1995) AND contains ``PR #<N>`` not followed by another digit. The
+    trailing ``(?!\\d)`` lookahead prevents PR-number prefix collisions (e.g. a
+    lookup for #249 must not match a retro for #2490).
     """
     needle = re.compile(rf"PR #{pr_number}(?!\d)")
     for item in search_items:
         title = item.get("title") or ""
-        if not is_retro_issue_title(title):
+        if not (is_retro_issue_title(title) or is_per_pr_retro_title(title)):
             continue
         if needle.search(title):
             return item.get("number")
