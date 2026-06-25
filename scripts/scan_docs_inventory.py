@@ -88,14 +88,19 @@ def iter_docs_markdown(root: Path) -> list[Path]:
     return sorted(path for path in docs.rglob("*.md") if path.is_file())
 
 
-def collect_index_entries(root: Path) -> set[str]:
-    """Return repository-relative docs paths linked from ``docs/INDEX.md``."""
-    index = root / INDEX_PATH
-    if not index.exists():
+def _md_links_in(path: Path, root: Path) -> set[str]:
+    """Return repository-relative ``.md`` link targets found in *path*.
+
+    Reuses the inline/reference link patterns, scheme exclusion, and
+    relative resolution shared with the link gate. Relative targets resolve
+    against *path*'s own directory, so the same helper works for
+    ``docs/INDEX.md`` and for a lane README whose rows link to its siblings.
+    """
+    if not path.exists():
         return set()
 
-    text = index.read_text(encoding="utf-8")
-    entries: set[str] = set()
+    text = path.read_text(encoding="utf-8")
+    links: set[str] = set()
     for pattern in (INLINE_LINK_RE, REFERENCE_LINK_RE):
         for match in pattern.finditer(text):
             target = extract_target(match.group(1))
@@ -108,9 +113,30 @@ def collect_index_entries(root: Path) -> set[str]:
             if Path(raw_path).is_absolute():
                 resolved = root / raw_path.lstrip("/")
             else:
-                resolved = index.parent / raw_path
+                resolved = path.parent / raw_path
             if resolved.suffix.lower() == ".md":
-                entries.add(rel(resolved.resolve(), root.resolve()))
+                links.add(rel(resolved.resolve(), root.resolve()))
+    return links
+
+
+def collect_index_entries(root: Path) -> set[str]:
+    """Return repository-relative docs paths reachable from ``docs/INDEX.md``.
+
+    Refs #2005. A large lane keeps its full document table in its
+    ``README.md`` rather than inline in INDEX, so coverage follows links one
+    hop: INDEX's own ``.md`` links, plus the ``.md`` links inside any lane
+    ``README.md`` that INDEX points at. The recursion is fixed at two levels
+    (INDEX -> lane README -> leaf) and only steps through ``/README.md``
+    targets, so it cannot cycle.
+    """
+    index = root / INDEX_PATH
+    if not index.exists():
+        return set()
+
+    entries = _md_links_in(index, root)
+    for entry in tuple(entries):
+        if entry.endswith("/README.md"):
+            entries |= _md_links_in(root / entry, root)
     return entries
 
 
