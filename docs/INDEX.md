@@ -34,7 +34,7 @@ for `archive/` is documented separately in
 | File | Territory | Tracking issues | Companion |
 |---|---|---|---|
 | [README.md](prd/README.md) | Compatibility entrypoint for PRD/design placement rules. | #202 | `docs/INDEX.md`; `docs/standards/documentation-quality.md` |
-| [TEMPLATE.md](prd/TEMPLATE.md) | Authoring skeleton for design notes and PRDs: canonical PRD fields plus Why / Why not, Considered Alternatives, and the Graduation Path back to standards/runbooks. Optional sections marked for lightweight notes. | #2000 | `docs/prd/README.md`; `docs/next-session/TEMPLATE.md` |
+| [TEMPLATE.md](prd/TEMPLATE.md) | Authoring skeleton for prd/ design notes and decision records. | #2000 | `docs/prd/README.md`; `docs/next-session/TEMPLATE.md` |
 | [agent-rules-design-philosophy.md](prd/agent-rules-design-philosophy.md) | Meta-runbook for evolving `.apm/instructions/master.instructions.md` and its compiled `CLAUDE.md` / `AGENTS.md`. Six principles plus the four-lane responsibility matrix. | #226, #246 | `.apm/instructions/master.instructions.md` (source); `scripts/scan_design_philosophy_drift.py`; `.github/workflows/verify-pr.yml` (`verify-design-philosophy` job) |
 | [codex-permission-request-policy-gate.md](prd/codex-permission-request-policy-gate.md) | Design-stage plan for a future Codex `PermissionRequest` adapter backed by a shared repository policy predicate and Claude parity evidence. | #711, #617, #604 | `.codex/hooks.json`; `.claude/settings.json`; `tests/test_codex_hooks_config.py` |
 | [repair-loops-proliferation-analysis.md](prd/repair-loops-proliferation-analysis.md) | Read-only analysis of auto-retro repair-loop signal branches; feeds future follow-up issues rather than defining a gate. | #412 | `scripts/auto_retro.py`; `docs/archive/retrospective-pr-*.md` |
@@ -59,7 +59,7 @@ mechanism designed in [#1049](https://github.com/tvna/claude-md/issues/1049).
 
 | File | Territory | Tracking issues | Companion |
 |---|---|---|---|
-| [TEMPLATE.md](adr/TEMPLATE.md) | MADR-style authoring skeleton for new ADRs: Status, Context, Decision, Why / Why not, Consequences, Considered Alternatives. | #2000 | `docs/adr/0001-hook-manager-prek.md`; `docs/next-session/TEMPLATE.md` |
+| [TEMPLATE.md](adr/TEMPLATE.md) | MADR-style authoring skeleton for new ADRs. | #2000 | `docs/adr/0001-hook-manager-prek.md`; `docs/next-session/TEMPLATE.md` |
 | [0001-hook-manager-prek.md](adr/0001-hook-manager-prek.md) | Decision to use prek over pre-commit as the git hook manager: token-efficiency rationale, performance comparison, and rejected alternative. | #408, #1049 | `.pre-commit-config.yaml`; `docs/runbooks/prek.md`; `docs/standards/pre-push-gate-performance.md` |
 
 ## uml/; UML diagram artifacts
@@ -78,7 +78,7 @@ mechanism designed in [#1049](https://github.com/tvna/claude-md/issues/1049).
 | File | Territory | Tracking issues | Companion |
 |---|---|---|---|
 | [README.md](standards/README.md) | Placement rules for adopted repository standards. | #202 | `docs/INDEX.md`; `docs/standards/documentation-quality.md` |
-| [TEMPLATE.md](standards/TEMPLATE.md) | Authoring skeleton for new standards: Scope, Rule, Why / Why not, Exceptions and Evidence, Enforcement, Verification. | #2000 | `docs/standards/README.md`; `docs/standards/documentation-quality.md` |
+| [TEMPLATE.md](standards/TEMPLATE.md) | Authoring skeleton for new standards. | #2000 | `docs/standards/README.md`; `docs/standards/documentation-quality.md` |
 | [commit-signing.md](standards/commit-signing.md) | Adopted `required_signatures` rule on `main`, satisfied keylessly by GitHub's squash-merge signature; the squash-only invariant reviewers must enforce. | #32, #18 | `.github/rulesets/main.json`; `docs/runbooks/rulesets.md`; `docs/runbooks/commit-signing.md`; `docs/prd/security-control-inventory.md` |
 | [label-taxonomy.md](standards/label-taxonomy.md) | Adopted post-#970 label taxonomy, TOML policy contract, area-to-path mapping, and operational-label rules. | #970, #972, #1761 | `.github/label-policy.toml`; `.github/labels.json`; `docs/runbooks/issue-triage.md`; `.github/workflows/apply-labels.yml`; `scripts/scan_area_path_coverage.py`; `scripts/scan_harness_doc_coverage.py` |
 | [issue-pr-body-standard.md](standards/issue-pr-body-standard.md) | Required H2 sections, ordering, and Facts / Assumptions discipline for issue and PR bodies. | #226 section 7 | `scripts/body_policy.py`; `scripts/preflight_pr_body_required_sections.py`; `scripts/preflight_pr_template_shape.py`; `.github/workflows/verify-pr.yml` (`portable-pr-policy` job); `.github/workflows/verify-github-content.yml`; `.github/PULL_REQUEST_TEMPLATE.md` |
@@ -110,7 +110,7 @@ mechanism designed in [#1049](https://github.com/tvna/claude-md/issues/1049).
 | File | Territory | Tracking issues | Companion |
 |---|---|---|---|
 | [README.md](runbooks/README.md) | Placement rules for operator procedures. | #202 | `docs/INDEX.md`; `docs/standards/documentation-quality.md` |
-| [TEMPLATE.md](runbooks/TEMPLATE.md) | Authoring skeleton for new runbooks: Scope, Why / Why not, Procedure, Verification, Rollback, References. | #2000 | `docs/runbooks/README.md`; `docs/next-session/TEMPLATE.md` |
+| [TEMPLATE.md](runbooks/TEMPLATE.md) | Authoring skeleton for new runbooks. | #2000 | `docs/runbooks/README.md`; `docs/next-session/TEMPLATE.md` |
 | [consumer-instruction-sync.md](runbooks/consumer-instruction-sync.md) | Downstream consumer procedure for importing the compiled `CLAUDE.md` / `AGENTS.md` as committed real files via a copyable sync workflow that fetches a tag-pinned release asset, verifies sha256, and opens a PR (no auto-merge). | #1678 | `.github/workflows/publish-instructions-release.yml`; `scripts/publish_instruction_release.py`; `docs/proposals/instruction-distribution-mechanism.md` |
 | [commit-signing.md](runbooks/commit-signing.md) | Developer setup for optional SSH commit signing on feature branches in devcontainer and macOS nix develop environments; GitHub Signing Key registration, automated Nix setup, verification, and troubleshooting. | #1789 | `.devcontainer/scripts/configure-git-signing.sh`; `.devcontainer/claude/devcontainer.json`; `.devcontainer/codex/devcontainer.json`; `flake.nix`; `docs/standards/commit-signing.md` |
 | [rulesets.md](runbooks/rulesets.md) | Apply / verify / rollback runbook for `.github/rulesets/*.json` SoT. | #18 | `.github/workflows/apply-rulesets.yml`; `.github/workflows/verify-pr.yml` (`verify-ruleset-sync` job); `.github/workflows/weekly-maintenance.yml`; `scripts/rulesets_apply.py`; `scripts/ruleset_drift.py`; `scripts/verify_ruleset_sync.py` |
