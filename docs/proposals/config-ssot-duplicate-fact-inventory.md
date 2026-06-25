@@ -130,11 +130,6 @@ source nor a drift gate.
   so the histogram tracks the budget without a manual edit. No drift gate is
   warranted for a cosmetic, non-divergent coupling.
 
-Revision note: an earlier draft classified this budget as a Class A "two
-independent `800` literals" gap. That was a factual error
-(`scan_module_size_distribution.py` imports the constants rather than
-re-hardcoding them); corrected after PR #2004 review.
-
 ### Class C: duplicate-but-gated (keep)
 
 #### C1. Python version pins
