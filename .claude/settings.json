@@ -45,8 +45,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "cd \"$(git rev-parse --show-toplevel)\" && scripts/install-actionlint.sh",
-            "async": true
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && scripts/install-actionlint.sh"
           }
         ]
       },
@@ -72,8 +71,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "cd \"$(git rev-parse --show-toplevel)\" && scripts/install-bun.sh",
-            "async": true
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && scripts/install-bun.sh"
           }
         ]
       },

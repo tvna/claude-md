@@ -164,8 +164,7 @@
               "hooks": [
                 {
                   "type": "command",
-                  "command": "scripts/install-actionlint.sh",
-                  "async": true
+                  "command": "scripts/install-actionlint.sh"
                 }
               ]
             },
@@ -191,8 +190,7 @@
               "hooks": [
                 {
                   "type": "command",
-                  "command": "scripts/install-bun.sh",
-                  "async": true
+                  "command": "scripts/install-bun.sh"
                 }
               ]
             },
