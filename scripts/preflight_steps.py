@@ -465,6 +465,17 @@ STEPS: tuple[Step, ...] = (
         argv=("python3", "scripts/preflight_branch_base.py", "verify"),
     ),
     Step(
+        # Refs #2012. Measures docs/INDEX.md in the test-merge of HEAD with the
+        # freshly fetched live base (git merge-tree --write-tree, no working-tree
+        # mutation), catching additive merge-time budget overflow (the #2007
+        # class) that the working-tree scan_docs_inventory budget gate cannot
+        # see. Runs after preflight_branch_base so a behind/conflicting base is
+        # reported by that gate first. preflight-only (no pull_request: workflow
+        # invokes it; same posture as preflight_branch_base).
+        name="preflight_merge_index_budget",
+        argv=("python3", "scripts/preflight_merge_index_budget.py", "verify"),
+    ),
+    Step(
         # Refs #476. PR body is optional locally (PR_BODY env unset means
         # the opt-out marker is absent, which is the stricter default --
         # contributors who run preflight see drift before push). The

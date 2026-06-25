@@ -78,6 +78,17 @@ That split also requires teaching the inventory gate to follow links
 transitively (INDEX -> lane README -> leaf docs), because today
 `collect_index_entries` reads links from `docs/INDEX.md` directly only.
 
+The working-tree budget is not the only read cost that can trip: two
+independent docs PRs can each stay under budget while their additive merge
+result crosses it, so the overflow surfaces only at merge-time CI (the PR
+#2007 class). `scripts/preflight_merge_index_budget.py` closes that blind
+spot by measuring `docs/INDEX.md` in the test-merge of HEAD with the freshly
+fetched live base (`git merge-tree --write-tree`, no working-tree mutation)
+during branch preflight. It imports `MAX_INDEX_BYTES` from
+`scan_docs_inventory` so the budget stays single-sourced; the remediation it
+names is still the per-lane split, never a bump. The decision record is
+[`docs/adr/0002-index-merge-budget.md`](../adr/0002-index-merge-budget.md).
+
 ## Deferred Checks
 
 These checks were evaluated for issue #202 but are not blocking yet:
