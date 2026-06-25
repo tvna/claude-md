@@ -149,6 +149,24 @@ path = "scripts/preflight_issue_ci_staleness.py"
 type = "harness_script"
 description = "PreToolUse gate: blocks mcp__github__issue_write create calls for CI failures when the issue body lacks the main-HEAD verification phrase. Refs #1944, #1943."
 
+[[nodes]]
+id = "prd_template"
+path = "docs/prd/TEMPLATE.md"
+type = "prd"
+description = "Authoring skeleton for prd-lane design notes and PRDs: canonical PRD fields plus split Why / Why not, Considered Alternatives, and the Graduation Path. Refs #2000."
+
+[[nodes]]
+id = "standard_template"
+path = "docs/standards/TEMPLATE.md"
+type = "standard"
+description = "Authoring skeleton for new standards: Scope, Rule, split Why / Why not, Exceptions and Evidence, Enforcement, Verification. Refs #2000."
+
+[[nodes]]
+id = "runbook_template"
+path = "docs/runbooks/TEMPLATE.md"
+type = "runbook"
+description = "Authoring skeleton for new runbooks: Scope, split Why / Why not, Procedure, Verification, required Rollback, References. Refs #2000."
+
 # ---------------------------------------------------------------------------
 # Edges
 # ---------------------------------------------------------------------------
