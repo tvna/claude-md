@@ -20,6 +20,8 @@ import _retro_labels as rl
 import auto_retro as ar
 import body_policy as bp
 import pytest
+from hypothesis import given
+from hypothesis import strategies as st
 
 pytestmark = pytest.mark.shard_ci_ops_2
 # ---------------------------------------------------------------------------
@@ -1093,6 +1095,49 @@ class TestIsPerPrRetroTitle:
         title = "chore(retro): post-merge retrospective for PR #1933"
         assert ar.is_per_pr_retro_title(title) is True
         assert ar.is_retro_issue_title(title) is False
+
+
+class TestRetroDedupAutoRetroInvariant:
+    """Property guard (Refs #1999 row 1): no predicate ORed into
+    ``find_existing_retro`` may dedup an ``(auto-retro)``-scoped title that
+    ``is_retro_issue_title`` rejects.
+
+    The Codex P2 on PR #1998 had ``is_per_pr_retro_title`` match every
+    ``(auto-retro)`` scope (``endswith("(auto-retro)")``), so a non-retro
+    ``feat/docs(auto-retro)`` issue would dedup and suppress opening the real
+    retro. The example regression is ``test_ignores_noncanonical_auto_retro_scopes``;
+    these properties generalize it across the whole Conventional-Commit type
+    space so any future predicate that re-widens the auto-retro family is
+    caught, not just the two shapes the example pins.
+    """
+
+    # A Conventional-Commit type token: lowercase, may carry hyphens, bounded
+    # length. Covers chore/fix (the canonical retro types) and every other
+    # type (feat/docs/perf/build/...) that must NOT dedup under an auto-retro
+    # scope.
+    _CC_TYPE = st.from_regex(r"[a-z][a-z0-9-]{0,12}", fullmatch=True)
+
+    @given(cc_type=_CC_TYPE)
+    def test_auto_retro_scope_deduped_iff_is_retro_issue_title(
+        self, cc_type: str
+    ) -> None:
+        """find_existing_retro dedups an ``<type>(auto-retro): ... PR #N`` title
+        if and only if ``is_retro_issue_title`` accepts it. The ORed per-PR
+        predicate must add nothing for the auto-retro scope family."""
+        title = f"{cc_type}(auto-retro): review PR #42 repair loops"
+        items = [{"number": 7, "title": title}]
+        deduped = ar.find_existing_retro(items, 42) is not None
+        assert deduped is ar.is_retro_issue_title(title)
+
+    @given(cc_type=_CC_TYPE)
+    def test_per_pr_predicate_never_accepts_auto_retro_scope(
+        self, cc_type: str
+    ) -> None:
+        """The dedup-only predicate must never accept an ``(auto-retro)`` scope;
+        those titles are governed by ``is_retro_issue_title`` (type-filtered to
+        chore/fix), not by the per-PR predicate."""
+        title = f"{cc_type}(auto-retro): review PR #42"
+        assert ar.is_per_pr_retro_title(title) is False
 
 
 class TestIssueLabels:
