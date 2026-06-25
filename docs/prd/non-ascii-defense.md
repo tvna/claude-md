@@ -27,7 +27,7 @@ This document is the operator-facing companion to [#102](https://github.com/tvna
 | `~/.claude/hooks/sanitize-github-response.sh` (developer-local) | Claude Code harness | Escapes non-ASCII in `mcp__github__*` responses before Claude consumes them |
 | `docs/prd/non-ascii-defense.md` *(this file)* | (none) | Runbook |
 
-The two `~/.claude/*` paths live in `$HOME`, **not** the repo. `.claude/` is broadly prohibited per [`docs/standards/repo-scope.md`](../standards/repo-scope.md) (issue [#58](https://github.com/tvna/claude-md/issues/58)) and enforced by `.gitignore` + `.claudeignore`. The hook is a developer-local artifact; only this documentation lands in the repo.
+The two `~/.claude/*` paths live in `$HOME`, **not** the repo. `.claude/` is broadly prohibited per [`docs/standards/repo-scope.md`](../standards/repo-scope.md) (issue [#58](https://github.com/tvna/claude-md/issues/58)) and enforced by `.gitignore`. The hook is a developer-local artifact; only this documentation lands in the repo.
 
 ## Threat model
 
@@ -176,7 +176,7 @@ This is fine as defense-in-depth: Layer 2 prevents new non-ASCII from accumulati
 
 ### Why `$HOME`, not the repo
 
-`docs/standards/repo-scope.md` forbids committing `.claude/` (see [#58](https://github.com/tvna/claude-md/issues/58) and the `.gitignore` / `.claudeignore` entries). The hook is therefore a developer-local artifact installed in the operator's home directory. This documentation is the only thing that lives in the repo.
+`docs/standards/repo-scope.md` forbids committing `.claude/` (see [#58](https://github.com/tvna/claude-md/issues/58) and the `.gitignore` entries). The hook is therefore a developer-local artifact installed in the operator's home directory. This documentation is the only thing that lives in the repo.
 
 ### Install steps (operator's machine)
 

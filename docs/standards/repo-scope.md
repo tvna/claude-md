@@ -2,14 +2,13 @@
 
 > Design rationale: see [`docs/prd/agent-rules-design-philosophy.md`](../prd/agent-rules-design-philosophy.md). This document is the concrete content-based prohibition that grounds the Q1 disqualifier in the meta-doc's decision tree.
 
-This document is the operator-facing companion to [#58](https://github.com/tvna/claude-md/issues/58); the governance decision that declares this repo's purpose and forbids agent-tool-specific configuration files. The deterministic enforcement (CI gate) is parked as Phase 4 of #58; until it lands, this runbook plus the widened `.gitignore` / `.claudeignore` are the enforcement.
+This document is the operator-facing companion to [#58](https://github.com/tvna/claude-md/issues/58); the governance decision that declares this repo's purpose and forbids agent-tool-specific configuration files. The deterministic enforcement (CI gate) is parked as Phase 4 of #58; until it lands, this runbook plus the widened `.gitignore` are the enforcement.
 
 ## SoT layout
 
 | File | Target | Purpose |
 |---|---|---|
 | `.gitignore` | repo working tree | Canonical exclude list; git refuses to track matched paths. **This is the source of truth.** |
-| `.claudeignore` | (no official Claude Code support; see *Note on `.claudeignore`* below) | Forward-looking mirror, kept on speculation. Not authoritative. |
 | `docs/standards/repo-scope.md` *(this file)* | (none) | Runbook: purpose statement, prohibition list, rationale, update procedure |
 
 ## Declared purpose
@@ -51,7 +50,7 @@ exception ([#1063](https://github.com/tvna/claude-md/issues/1063),
 
 `.env` / `.env.*` are git-ignored as well, but they belong to the **secrets**
 category, not the agent-tool-config prohibition; so they live in `.gitignore`
-(canonical) and `.claudeignore` (mirror) without a row in the table above.
+(canonical) without a row in the table above.
 There is no `.env.example` carve-out today because the repo ships no example
 env file; add an explicit `!.env.example` line if that changes.
 
@@ -99,20 +98,13 @@ The `.claude/settings.json` carve-out is conscious risk-acceptance, recorded und
 - **`apm.yml: target: [claude, codex]`.** The repo explicitly compiles for multiple agent tools. Pinning configuration to one tool contradicts that contract.
 - **Performance measurement bias** (Phases 2-3 of #58). Tool-specific files inject agent behaviour outside the universal master source and would pollute the measurement signal.
 
-## Note on `.claudeignore`; kept as speculation, not as an official primitive
+## Note on `.claudeignore`; retired (was speculation, never an official primitive)
 
-`.claudeignore` is **not** documented as a Claude Code primitive in the official documentation. The only file-ignore mechanism the [Claude Code Settings page](https://code.claude.com/docs/en/settings) describes is the `respectGitignore` option for the `@` file picker, which consults `.gitignore`. There is no claim by Anthropic that Claude Code consults `.claudeignore`.
+`.claudeignore` was **retired** ([#2022](https://github.com/tvna/claude-md/issues/2022), under the #58 governance umbrella). It was never a documented Claude Code primitive: the only file-ignore mechanism the [Claude Code Settings page](https://code.claude.com/docs/en/settings) describes is the `respectGitignore` option for the `@` file picker, which consults `.gitignore`. Independent reporting ([The Register, 2026-01-28](https://www.theregister.com/software/2026/01/28/claude-code-ignores-ignore-rules-meant-to-block-secrets/4336684)) further found that where `.claudeignore` is read at all it is not reliably honoured.
 
-Independent reporting ([The Register, 2026-01-28](https://www.theregister.com/software/2026/01/28/claude-code-ignores-ignore-rules-meant-to-block-secrets/4336684)) further indicates that even if `.claudeignore` is read in some configurations, it is not reliably honoured; `.env` files have been reported as readable despite a `.claudeignore` entry.
+The file had been kept on speculation; in practice it had zero functional consumers and only mirrored `.gitignore`, so removing it changed no behavior. **`.gitignore` is the canonical enforcement**; where stricter enforcement is required use `permissions.deny` (`Read()` / `Edit()`) in `.claude/settings.json` (managed settings). Reviews and CI use `git check-ignore -v` (the *Verify* recipe below) as the source of truth.
 
-This repo keeps `.claudeignore` anyway for two reasons:
-
-1. **Historical state.** The file pre-dates this runbook (commit `f513b88`, "Add ignore files", 2026-05-18). Removing it would expand the scope of #60 and is deferred to a future cleanup if/when one is opened.
-2. **Forward-looking convention.** If Anthropic ever ships `.claudeignore` as a supported primitive, the entries are already in place.
-
-**`.gitignore` is the canonical enforcement; `.claudeignore` is a courtesy mirror.** Reviews and CI must use `git check-ignore -v` (the *Verify* recipe below) as the source of truth. Do **not** rely on `.claudeignore` to keep secrets or tool-specific config out of Claude Code's view; use `.gitignore` plus, where stricter enforcement is required, `permissions.deny` in `.claude/settings.json` (managed settings).
-
-The history of this acknowledgement: [#58 comment](https://github.com/tvna/claude-md/issues/58#issuecomment-4502888322) records that the original PR #81 treated `.claudeignore` as authoritative without a primary source; i.e. the framing was hallucination-derived. This note exists so future contributors don't relitigate that finding from scratch.
+History: [#58 comment](https://github.com/tvna/claude-md/issues/58#issuecomment-4502888322) records that the original PR #81 treated `.claudeignore` as authoritative without a primary source; the framing was hallucination-derived. This note remains so future contributors do not re-add it from scratch.
 
 ## Verify
 
@@ -121,9 +113,6 @@ Confirm a candidate path is excluded by both ignore files:
 ```sh
 # git ignore check; must print a matching rule
 git check-ignore -v <path>
-
-# Claude tooling mirror; must match the same pattern
-grep -F "<pattern>" .claudeignore
 ```
 
 End-to-end exercise in a fresh worktree:
@@ -141,9 +130,8 @@ Repeat for each pattern in the prohibition table.
 To add a new prohibited path (new agent tool, or newly-discovered tool-specific path pattern):
 
 1. Open a sub-issue of [#58](https://github.com/tvna/claude-md/issues/58) describing the tool and the path pattern (per CLAUDE.md §3).
-2. Open a single PR that touches **all three**:
+2. Open a single PR that touches **both**:
    - `.gitignore`; canonical exclude
-   - `.claudeignore`; mirror exactly
    - `docs/standards/repo-scope.md` (this file); prohibition table entry
 3. The *Verify* recipe above must pass for the new pattern.
 4. Reference the parent governance issue (#58) on the `Refs #` line of the PR body.
@@ -153,7 +141,7 @@ To add a new prohibited path (new agent tool, or newly-discovered tool-specific 
 To remove a prohibited path entry (if a tool is deprecated or the prohibition no longer applies):
 
 1. Open a sub-issue of #58 explaining why the prohibition is being lifted.
-2. PR removes the entry from `.gitignore`, `.claudeignore`, and the prohibition table here.
+2. PR removes the entry from `.gitignore` and the prohibition table here.
 3. CI must remain green.
 
 Re-adding a lifted entry later uses the same *Update procedure*.
