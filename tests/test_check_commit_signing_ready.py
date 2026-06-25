@@ -243,6 +243,42 @@ class TestDecide:
         ):
             assert subject.decide(event) is None
 
+    @pytest.mark.parametrize(
+        "command",
+        [
+            "git -C /workspace/claude-md commit -m x",
+            "git -c user.name=x commit -m x",
+            "git -c user.name=x -c user.email=y commit -m x",
+            "git --no-pager commit -m x",
+            "git --git-dir=/x/.git commit -m x",
+            "cd /x && git -C /x commit -m x",
+        ],
+    )
+    def test_deny_with_git_global_options(self, _remote: None, command: str) -> None:
+        # Codex review on #1993: global options before ``commit`` must not let
+        # the live signing probe be skipped.
+        event = {"tool_name": "Bash", "tool_input": {"command": command}}
+        with (
+            patch("check_commit_signing_ready.signing_required", return_value=True),
+            patch("check_commit_signing_ready.probe_sign_status", return_value="unsigned"),
+        ):
+            assert subject.decide(event) is not None
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            "git config commit.gpgsign true",
+            "git -c x=y config commit.gpgsign true",
+            "git -C /x status",
+        ],
+    )
+    def test_none_when_commit_only_as_argument(self, _remote: None, command: str) -> None:
+        # ``commit`` appearing as a config key / non-subcommand must not match.
+        event = {"tool_name": "Bash", "tool_input": {"command": command}}
+        with patch("check_commit_signing_ready.probe_sign_status") as probe:
+            assert subject.decide(event) is None
+        probe.assert_not_called()
+
 
 # ---------------------------------------------------------------------------
 # cmd_session_start

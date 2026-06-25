@@ -107,7 +107,18 @@ _ACK_MARKER = "# unsigned-ack"
 # Match a ``git commit`` anywhere in the command (commits chain, e.g.
 # ``git add -A && git commit``) but keep plumbing like ``git commit-tree`` out.
 # Mirrors preflight_session_base_freshness / preflight_commit_session_branch.
-_GIT_COMMIT_RE = re.compile(r"\bgit\s+commit(?![\w-])")
+#
+# Git global options may legitimately sit between ``git`` and the ``commit``
+# subcommand (``git -C <path> commit``, ``git -c user.name=x commit``,
+# ``git --no-pager commit``); per ``git -h`` these are normal commit
+# invocations. The optional option run below skips them so the live signing
+# probe still fires (Codex review on #1993): ``-c``/``-C`` consume a following
+# value token, every other ``-x`` / ``--long[=value]`` is self-contained. A
+# non-option token (e.g. ``config`` in ``git config commit.gpgsign``) ends the
+# run, so ``commit`` must be the actual subcommand to match.
+_GIT_COMMIT_RE = re.compile(
+    r"\bgit\s+(?:(?:-[cC]\s+\S+|--?[\w-]+(?:=\S+)?)\s+)*commit(?![\w-])"
+)
 
 # Signing config copied verbatim into the throwaway probe repo. ``commit.gpgsign``
 # is set separately (forced true in the probe); these are the resolver inputs
