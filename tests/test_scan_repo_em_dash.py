@@ -140,6 +140,26 @@ class TestGitTrackedFiles:
         assert ".agents/skills/brainstorming/SKILL.md" not in paths
         assert ".agents/skills/writing-plans/SKILL.md" not in paths
 
+    def test_excludes_claude_skills_prefix(self) -> None:
+        # The committed Claude mirror of the upstream skills (#1983) is the same
+        # pinned dependency content as .agents/skills/ and must be skipped too.
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = (
+            "CLAUDE.md\n"
+            ".claude/skills/brainstorming/SKILL.md\n"
+            ".claude/skills/writing-plans/SKILL.md\n"
+            "README.md\n"
+        )
+        with patch("subprocess.run", return_value=mock_result):
+            result = srd._git_tracked_files()
+        assert result is not None
+        paths = [str(p) for p in result]
+        assert "CLAUDE.md" in paths
+        assert "README.md" in paths
+        assert ".claude/skills/brainstorming/SKILL.md" not in paths
+        assert ".claude/skills/writing-plans/SKILL.md" not in paths
+
 
 # ---------------------------------------------------------------------------
 # _verify / _cmd_verify
