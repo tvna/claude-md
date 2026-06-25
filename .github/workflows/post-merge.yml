@@ -211,10 +211,19 @@ jobs:
         # not regenerate it. Refs #1754.
         run: uv run python scripts/doc_graph_viz.py all-doc
 
+      - name: Regenerate script size-distribution snapshot
+        # Writes docs/standards/module-size-distribution.toml from the
+        # scripts/*.py physical-line distribution. Refs #2013: this snapshot
+        # joins the single-producer model of docs/generated/ (#1540/#1543/#1546)
+        # -- the PR and pre-push gates no longer regenerate it, so feature
+        # branches stop hitting recurring merge conflicts in this one file; the
+        # post-merge job is now the single producer.
+        run: uv run python scripts/scan_module_size_distribution.py write
+
       - name: Detect generated-doc drift
         id: drift
         run: |
-          if git diff --quiet -- docs/generated/; then
+          if git diff --quiet -- docs/generated/ docs/standards/module-size-distribution.toml; then
             echo "All generated docs are already up to date."
             echo "changed=false" >> "$GITHUB_OUTPUT"
           else
@@ -247,6 +256,7 @@ jobs:
           - `docs/generated/scripts/trigger-map.md` from the four `scripts/*.py` launch sources.
           - `docs/generated/workflows/*-if-branches.md` from `.github/workflows/*.yml` if-branch analysis.
           - `docs/generated/graph/doc-dependency-graph.md` from `docs/graph/doc-dependencies.toml` (Mermaid dependency diagram).
+          - `docs/standards/module-size-distribution.toml` from the `scripts/*.py` physical-line size distribution (single-producer snapshot, #2013).
 
           ## Related Issue
 
@@ -280,6 +290,8 @@ jobs:
           - command: `uv run python scripts/workflow_diagram.py diagram-doc`
             result: `exit 0`
           - command: `uv run python scripts/doc_graph_viz.py all-doc`
+            result: `exit 0`
+          - command: `uv run python scripts/scan_module_size_distribution.py write`
             result: `exit 0`
 
           ## Checklist
@@ -329,6 +341,7 @@ jobs:
             --commit-body "Refs #${TRACKING_ISSUE}" \
             --body-file /tmp/pr-body.md \
             --from-diff docs/generated/ \
+            --from-diff docs/standards/module-size-distribution.toml \
             --recreate
 
   # Moved here from weekly-maintenance.yml (#1386) so the triage-report
@@ -426,16 +439,26 @@ jobs:
           uv run python scripts/script_trigger_map.py all-doc
           uv run python scripts/workflow_diagram.py diagram-doc
           uv run python scripts/doc_graph_viz.py all-doc
+          # Refs #2013: the module-size snapshot joins the single-producer model
+          # (#1540/#1543/#1546). Regenerate it here too so staleness on main
+          # surfaces on the next push or the daily schedule.
+          uv run python scripts/scan_module_size_distribution.py write
 
       - name: Fail when docs/generated/ drifted from the regeneration
         run: |
           # `git add -A` stages new, modified, and deleted paths so the
           # --cached diff catches untracked additions (e.g. a new ast/<stem>.md)
-          # that a plain `git diff` would miss. No commit is made.
-          git add -A docs/generated/
-          if ! git diff --cached --quiet -- docs/generated/; then
-            echo "::error::docs/generated/ is stale: regenerating with the pinned interpreter produced changes. The post-merge decision-tree job should have opened chore/update-generated-docs; check that it merged. Drift:"
-            git diff --cached --stat -- docs/generated/ >&2
+          # that a plain `git diff` would miss. No commit is made. The
+          # module-size snapshot (#2013) is staged and diffed alongside
+          # docs/generated/ so its drift fails the same gate.
+          git add -A docs/generated/ docs/standards/module-size-distribution.toml
+          if ! git diff --cached --quiet -- docs/generated/ docs/standards/module-size-distribution.toml; then
+            # Keep the literal "docs/generated/ is stale" substring: it is one of
+            # the _CI_KEYWORDS the preflight_issue_ci_staleness hook matches to
+            # block stale post-merge CI issues, so the snapshot drift wording must
+            # not split it. Refs #2013.
+            echo "::error::docs/generated/ is stale (or docs/standards/module-size-distribution.toml drifted): regenerating with the pinned interpreter produced changes. The post-merge decision-tree job should have opened chore/update-generated-docs; check that it merged. Drift:"
+            git diff --cached --stat -- docs/generated/ docs/standards/module-size-distribution.toml >&2
             exit 1
           fi
-          echo "OK: docs/generated/ matches the pinned-interpreter regeneration."
+          echo "OK: docs/generated/ and the module-size snapshot match the pinned-interpreter regeneration."

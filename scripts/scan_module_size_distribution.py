@@ -20,8 +20,12 @@ The snapshot is generated, never hand-written:
 - ``verify`` regenerates in memory and compares; exit 1 on drift with an
   ``::error`` annotation telling the author to run ``write`` and commit.
 
-Invoked from ``.github/workflows/verify-agents.yml`` as
-``python scripts/scan_module_size_distribution.py verify``.
+Refs #2013: this snapshot follows the single-producer model of the
+``docs/generated/`` tree (#1540/#1543/#1546). The post-merge ``decision-tree``
+job in ``.github/workflows/post-merge.yml`` runs ``write`` and folds the result
+into the ``chore/update-generated-docs`` PR; the post-merge ``verify-docs-drift``
+gate runs ``write`` and fails on drift. The PR and pre-push gates no longer
+regenerate it, so feature branches never touch the snapshot.
 
 Architecture: pure functions (:func:`bucket_counts`, :func:`render_snapshot`)
 on top, a single IO boundary at the bottom (:func:`_cmd_write`,
