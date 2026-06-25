@@ -1002,6 +1002,17 @@ class TestFindExistingRetro:
         ]
         assert ar.find_existing_retro(items, 42) is None
 
+    def test_ignores_noncanonical_auto_retro_scopes(self) -> None:
+        """``feat(auto-retro)`` / ``docs(auto-retro)`` are NOT retro issues
+        (is_retro_issue_title rejects them by design). The per-PR dedup
+        predicate must not widen all ``(auto-retro)`` scopes, or dedup would
+        skip opening the real retro. Regression for the Codex P2 on PR #1998."""
+        items = [
+            {"number": 41, "title": "feat(auto-retro): something for PR #42"},
+            {"number": 42, "title": "docs(auto-retro): record outcome PR #42"},
+        ]
+        assert ar.find_existing_retro(items, 42) is None
+
 
 class TestIsRetroIssueTitle:
     @pytest.mark.parametrize(
@@ -1040,20 +1051,25 @@ class TestIsPerPrRetroTitle:
     @pytest.mark.parametrize(
         "title",
         [
-            "chore(auto-retro): review PR #42 repair loops",
-            "fix(auto-retro): close retro #42",
             "chore(retro): post-merge retrospective for PR #1933",
             "docs(retro): repairs for PR #42",
             "Chore(Retro): mixed case PR #42",
             "  chore(retro): leading whitespace PR #42",
         ],
     )
-    def test_matches_retro_family_scopes(self, title: str) -> None:
+    def test_matches_retro_scope_only(self, title: str) -> None:
         assert ar.is_per_pr_retro_title(title) is True
 
     @pytest.mark.parametrize(
         "title",
         [
+            # auto-retro scopes are covered by is_retro_issue_title, NOT here;
+            # widening to all (auto-retro) would dedup non-retro feat/docs
+            # (auto-retro) issues. Refs #1998 (Codex P2).
+            "chore(auto-retro): review PR #42 repair loops",
+            "fix(auto-retro): close retro #42",
+            "feat(auto-retro): not a retro issue shape",
+            "docs(auto-retro): record repair-free merge",
             # suffixed scopes are NON-retro tracking issues
             "chore(retro-visibility): tracking issue",
             "fix(retro-dedup): unify dedup",
@@ -1066,7 +1082,7 @@ class TestIsPerPrRetroTitle:
             "",
         ],
     )
-    def test_rejects_non_retro_family(self, title: str) -> None:
+    def test_rejects_non_retro_scope(self, title: str) -> None:
         assert ar.is_per_pr_retro_title(title) is False
 
     def test_does_not_widen_is_retro_issue_title(self) -> None:
