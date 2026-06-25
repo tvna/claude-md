@@ -254,7 +254,7 @@ flowchart TD
 flowchart TD
     N001["find_existing_retro(...)"]
     N002["needle = compile(...)"]
-    N003["for item in search_items:     title = item.get('<str>') or '<str>'     if not is_retro_issue_title(title):         continue     if needle.search(title):         return item.get('<str>')"]
+    N003["for item in search_items:     title = item.get('<str>') or '<str>'     if not (is_retro_issue_title(title) or is_per_pr_retro_title(title)):         continue     if needle.search(title):         return item.get('<str>')"]
     N004["return None"]
     N001 -->|"start"| N002
     N002 --> N003
