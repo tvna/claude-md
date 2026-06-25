@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
-"""Deterministic gate: forbid hand edits to ``docs/generated/``.
+"""Deterministic gate: forbid hand edits to post-merge-owned generated artifacts.
 
 Content under ``docs/generated/`` (both ``scripts/`` and ``workflows/``) is
 owned by the post-merge automation (refs #1540, #1545): the ``decision-tree``
 job in ``.github/workflows/post-merge.yml`` regenerates the per-script AST docs
 and the workflow if-branch diagrams after a merge to ``main`` and opens the bot
-branch ``chore/update-generated-docs`` to publish them. Neither the pre-push
-gate nor any pre-merge drift gate regenerates or drift-checks that folder, so
-this gate is the inverse control: a non-bot branch whose diff touches
-``docs/generated/scripts/**`` or ``docs/generated/workflows/**`` is rejected,
-keeping the folder a single-producer surface instead of a hand-editable one.
+branch ``chore/update-generated-docs`` to publish them. The same job also writes
+the ``docs/standards/module-size-distribution.toml`` size snapshot, which joined
+the single-producer model in #2013 and is published through that same bot PR.
+Neither the pre-push gate nor any pre-merge drift gate regenerates or
+drift-checks those paths, so this gate is the inverse control: a non-bot branch
+whose diff touches ``docs/generated/scripts/**``, ``docs/generated/workflows/**``,
+``docs/generated/graph/**``, or the size snapshot is rejected, keeping each a
+single-producer surface instead of a hand-editable one. Refs #2013.
 
 The post-merge bot branches (``chore/update-generated-docs`` for the AST docs
 and diagrams, ``chore/refresh-auto-retro-triage-report`` for the triage-report
@@ -27,7 +30,7 @@ Contract:
   ``git`` branch).
 - Outputs: a single ``OK``/``::error::`` line; exit 0 when no protected path is
   touched or the branch is the exempt bot branch, exit 1 when a non-exempt
-  branch edits a protected folder.
+  branch edits a protected folder or the module-size snapshot.
 - Failure policy: fails loud per CLAUDE.md section 4; a forbidden edit and a
   failed git invocation both exit non-zero rather than passing silently.
 """
@@ -39,13 +42,17 @@ import os
 import subprocess
 import sys
 
-# Folders owned by the post-merge automation; hand edits are forbidden here.
+# Paths owned by the post-merge automation; hand edits are forbidden here.
 # docs/generated/graph/ holds the Mermaid doc-dependency diagram produced by
 # scripts/doc_graph_viz.py (wired into post-merge.yml). Refs #1754.
+# The module-size snapshot is a single file, not a folder; it matches by exact
+# path under the same ``startswith`` filter, joining the single-producer model
+# the post-merge decision-tree job already owns. Refs #2013.
 PROTECTED_PREFIXES = (
     "docs/generated/scripts/",
     "docs/generated/workflows/",
     "docs/generated/graph/",
+    "docs/standards/module-size-distribution.toml",
 )
 
 # The post-merge bot branches that legitimately regenerate the folder, each a
@@ -132,12 +139,12 @@ def evaluate(changed: frozenset[str], branch: str) -> tuple[int, list[str]]:
         return 0, []
     pretty = ", ".join(sorted(changed))
     return 1, [
-        "::error::docs/generated/ is owned by the post-merge automation "
-        "(refs #1540, #1545) and must not be edited by hand. The following "
-        f"files were changed on branch {branch or '(unknown)'!r}: {pretty}. "
-        "Revert them; the post-merge `decision-tree` job regenerates the AST "
-        "docs and workflow diagrams and opens the `chore/update-generated-docs` "
-        "PR after merge."
+        "::error::Post-merge-owned generated artifacts (docs/generated/ and the "
+        "docs/standards/module-size-distribution.toml size snapshot; refs "
+        "#1540, #1545, #2013) must not be edited by hand. The following files "
+        f"were changed on branch {branch or '(unknown)'!r}: {pretty}. Revert "
+        "them; the post-merge `decision-tree` job regenerates them and opens "
+        "the `chore/update-generated-docs` PR after merge."
     ]
 
 
