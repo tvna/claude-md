@@ -4384,6 +4384,24 @@ class TestSentinelRun:
         assert "inside inactivity window" in text
 
 
+class TestBuildSentinelSummary:
+    def test_reports_counts(self) -> None:
+        text = ar._build_sentinel_summary(
+            [11, 12], [(13, "inside inactivity window")], 14
+        )
+        assert "Closed: 2" in text
+        assert "Skipped: 1" in text
+        assert "#11" in text
+        assert "#13 (inside inactivity window)" in text
+
+    def test_long_closed_list_is_capped_with_overflow(self) -> None:
+        text = ar._build_sentinel_summary(list(range(1, 9)), [], 14)
+        assert "Closed: 8" in text
+        assert "#5" in text
+        assert "#6" not in text
+        assert "(+3 more)" in text
+
+
 class TestSentinelCli:
     def test_cli_missing_repo_returns_1(
         self,
