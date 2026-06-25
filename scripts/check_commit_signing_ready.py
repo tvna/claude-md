@@ -86,6 +86,7 @@ import argparse
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -104,21 +105,57 @@ _REMOTE_ENV_VARS = ("CLAUDE_CODE_REMOTE", "CODEX_CODE_REMOTE")
 # category (CLAUDE.md section 4: one category, one control).
 _ACK_MARKER = "# unsigned-ack"
 
-# Match a ``git commit`` anywhere in the command (commits chain, e.g.
-# ``git add -A && git commit``) but keep plumbing like ``git commit-tree`` out.
-# Mirrors preflight_session_base_freshness / preflight_commit_session_branch.
-#
-# Git global options may legitimately sit between ``git`` and the ``commit``
-# subcommand (``git -C <path> commit``, ``git -c user.name=x commit``,
-# ``git --no-pager commit``); per ``git -h`` these are normal commit
-# invocations. The optional option run below skips them so the live signing
-# probe still fires (Codex review on #1993): ``-c``/``-C`` consume a following
-# value token, every other ``-x`` / ``--long[=value]`` is self-contained. A
-# non-option token (e.g. ``config`` in ``git config commit.gpgsign``) ends the
-# run, so ``commit`` must be the actual subcommand to match.
-_GIT_COMMIT_RE = re.compile(
-    r"\bgit\s+(?:(?:-[cC]\s+\S+|--?[\w-]+(?:=\S+)?)\s+)*commit(?![\w-])"
-)
+# Match a literal ``git commit`` anywhere in the command (commits chain, e.g.
+# ``git add -A && git commit``; trailing punctuation like ``git commit;``) but
+# keep plumbing like ``git commit-tree`` out. This pattern is intentionally
+# simple and linear (no nested quantifiers), so no catastrophic backtracking
+# (CodeQL ReDoS). The global-option case is handled by tokenization instead.
+_GIT_COMMIT_RE = re.compile(r"\bgit\s+commit(?![\w-])")
+
+# Git global options whose value is a SEPARATE following token, so the token
+# after them is the option value rather than the subcommand
+# (``git -C <path> commit``, ``git -c user.name=x commit``). Codex review on
+# #1993 flagged that these legitimate commit invocations were being skipped.
+_GIT_VALUE_OPTS = frozenset({"-c", "-C"})
+
+
+def _command_runs_git_commit(command: str) -> bool:
+    """True when *command* invokes ``git commit``.
+
+    Two complementary linear-time checks (no regex backtracking, hence no
+    ReDoS):
+
+    * :data:`_GIT_COMMIT_RE` catches the literal ``git commit`` sequence,
+      covering chains (``git add -A && git commit``) and trailing punctuation;
+    * a :func:`shlex.split` tokenization recognizes ``commit`` as the
+      subcommand even behind git global options (``git -C <path> commit``,
+      ``git -c user.name=x commit``). ``-c``/``-C`` consume the next token as
+      their value; any other ``-x``/``--long`` token is self-contained. The
+      first non-option token is the subcommand, so ``config`` in
+      ``git config commit.gpgsign`` does not match.
+    """
+    if _GIT_COMMIT_RE.search(command):
+        return True
+    try:
+        tokens = shlex.split(command, comments=False, posix=True)
+    except ValueError:
+        return False
+    i = 0
+    while i < len(tokens):
+        if tokens[i] != "git" and not tokens[i].endswith("/git"):
+            i += 1
+            continue
+        j = i + 1
+        while j < len(tokens):
+            arg = tokens[j]
+            if arg.startswith("-"):
+                j += 2 if arg in _GIT_VALUE_OPTS else 1
+                continue
+            if arg.rstrip(";&|") == "commit":
+                return True
+            break  # some other git subcommand; resume scanning for more git
+        i = j + 1
+    return False
 
 # Signing config copied verbatim into the throwaway probe repo. ``commit.gpgsign``
 # is set separately (forced true in the probe); these are the resolver inputs
@@ -279,7 +316,7 @@ def decide(event: dict[str, Any]) -> dict[str, Any] | None:
     if event.get("tool_name") != "Bash":
         return None
     command = str((event.get("tool_input") or {}).get("command") or "")
-    if not _GIT_COMMIT_RE.search(command):
+    if not _command_runs_git_commit(command):
         return None
     if _ACK_MARKER in command:
         return None
