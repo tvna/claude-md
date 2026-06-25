@@ -238,7 +238,11 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("scan_mermaid_syntax.py", "verify"): "test_scan_mermaid_syntax_verify_matches_workflow_args",
     ("scan_maintainability_metrics.py", "verify"): "test_scan_maintainability_metrics_verify_matches_workflow_args",
     ("codebase_maturity_summary.py", "summary"): "test_codebase_maturity_summary_summary_matches_workflow_args",
-    ("scan_module_size_distribution.py", "verify"): "test_scan_module_size_distribution_verify_matches_workflow_args",
+    # Refs #2013. The PR-time `verify` gate was removed; the module-size
+    # snapshot is now produced post-merge under the single-producer model
+    # (#1540/#1543/#1546), so the only workflow contract is `write` (run by
+    # the post-merge decision-tree and verify-docs-drift jobs).
+    ("scan_module_size_distribution.py", "write"): "test_scan_module_size_distribution_write_matches_workflow_args",
     ("scan_non_ascii.py", "run"): "test_scan_non_ascii_run_matches_workflow_env",
     ("scan_nonexhaustive_invariant_drift.py", "verify"): "test_scan_nonexhaustive_invariant_drift_verify_matches_workflow_args",
     ("scan_hook_coverage_drift.py", "verify"): "test_scan_hook_coverage_drift_verify_matches_workflow_args",
@@ -1712,10 +1716,23 @@ def test_scan_maintainability_metrics_verify_matches_workflow_args() -> None:
     assert scan_maintainability_metrics.main(["verify", "--repo-root", "."]) == 0
 
 
-def test_scan_module_size_distribution_verify_matches_workflow_args() -> None:
-    """Mirrors the ``Assert script size distribution snapshot is current``
-    step in ``.github/workflows/verify-agents.yml``."""
-    assert scan_module_size_distribution.main(["verify", "--repo-root", "."]) == 0
+def test_scan_module_size_distribution_write_matches_workflow_args(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Mirrors the ``write`` invocation used by the post-merge ``decision-tree``
+    and ``verify-docs-drift`` jobs in ``.github/workflows/post-merge.yml``.
+
+    Refs #2013: the PR-time ``verify`` gate was removed so feature branches no
+    longer touch the snapshot; the post-merge job is the single producer
+    (#1540/#1543/#1546), so the surviving workflow contract is ``write`` with no
+    ``--repo-root`` (it defaults to the checkout root)."""
+    monkeypatch.chdir(tmp_path)
+    scripts = tmp_path / "scripts"
+    scripts.mkdir()
+    (scripts / "alpha.py").write_text("x = 1\n", encoding="utf-8")
+
+    assert scan_module_size_distribution.main(["write"]) == 0
+    assert scan_module_size_distribution.main(["verify"]) == 0
 
 
 def test_scan_workflow_pip_verify_matches_workflow_args() -> None:
