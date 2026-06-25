@@ -336,6 +336,14 @@ def is_retro_issue_title(title: str) -> bool:
     )
 
 
+def is_per_pr_retro_title(title: str) -> bool:
+    """Dedup-only (Refs #1995): True when the Conventional Commit scope is
+    ``retro`` or ``auto-retro``; excludes retro-* and legacy retro:/retro(x).
+    Separate from is_retro_issue_title, which stays auto-retro-only."""
+    token = extract_type_scope(title.lstrip().lower())
+    return token.endswith("(auto-retro)") or token.endswith("(retro)")
+
+
 def should_skip(
     pr: MergedPR, trusted_bots: frozenset[str] = _TRUSTED_BOT_LOGINS
 ) -> tuple[bool, str]:
