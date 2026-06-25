@@ -92,13 +92,15 @@ required entry has been removed or renamed. Refs #1901.
   ("Establishing an invariant ... is such an operation: ship its drift gate in
   the same change"). A single-producer surface is one such invariant, kept by
   an inverse gate.
-- **single-producer**: An ownership model under which exactly one automated
-  producer (the post-merge `decision-tree` job in
-  `.github/workflows/post-merge.yml`) may write a generated surface, and every
-  other branch is forbidden from editing it; the invariant an inverse gate
-  keeps true. Applied to `docs/generated/` and the
-  `docs/standards/module-size-distribution.toml` snapshot. Master section 3 (an
-  "only here" invariant with a single legitimate writer).
+- **single-producer**: An ownership model under which each generated surface
+  has exactly one automated producer permitted to write it, and every other
+  branch is forbidden from editing that surface; the invariant an inverse gate
+  keeps true. Both producer jobs live in `.github/workflows/post-merge.yml`:
+  the `decision-tree` job produces `docs/generated/` (AST docs and diagrams)
+  plus the `docs/standards/module-size-distribution.toml` snapshot, and the
+  `triage-report` job produces
+  `docs/generated/scripts/auto-retro-triage-report.md`. Master section 3 (an
+  "only here" invariant with a single legitimate writer per surface).
 - **freshness precondition**: A time-boxed observation that a precondition is
   currently met (for example, that the local branch base is fresh); must be
   refreshed immediately before each guarded operation because a long flow can
