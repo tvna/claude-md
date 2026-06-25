@@ -31,7 +31,7 @@ import re
 import sys
 from pathlib import Path
 
-from body_policy import build_codex_attribution_footer
+from body_policy import _AGENT_ATTRIBUTION_FOOTER_RE, build_codex_attribution_footer
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 _TEMPLATE_PATH = REPO_ROOT / ".github" / "PULL_REQUEST_TEMPLATE.md"
@@ -152,7 +152,17 @@ def build(
         footer = _build_footer(agent, session_url, model)
         body = _FOOTER_PLACEHOLDER_RE.sub(footer, body)
     else:
+        # Drop the placeholder AND any concrete attribution footer a custom
+        # --template may already carry (a real session URL does not match the
+        # `session_example` placeholder), so the web-harness create body truly
+        # carries no footer and the harness-appended one is the only footer.
+        # Refs #1999 row 3 (Codex review on PR #2014).
         body = _FOOTER_PLACEHOLDER_RE.sub("", body)
+        body = "\n".join(
+            line
+            for line in body.splitlines()
+            if not _AGENT_ATTRIBUTION_FOOTER_RE.fullmatch(line.strip())
+        )
 
     # Ensure the body ends with a single newline.
     return body.rstrip("\n") + "\n"
