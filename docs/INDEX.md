@@ -61,6 +61,7 @@ mechanism designed in [#1049](https://github.com/tvna/claude-md/issues/1049).
 |---|---|---|---|
 | [TEMPLATE.md](adr/TEMPLATE.md) | MADR-style authoring skeleton for new ADRs. | #2000 | `docs/adr/0001-hook-manager-prek.md`; `docs/next-session/TEMPLATE.md` |
 | [0001-hook-manager-prek.md](adr/0001-hook-manager-prek.md) | Decision to use prek over pre-commit as the git hook manager: token-efficiency rationale, performance comparison, and rejected alternative. | #408, #1049 | `.pre-commit-config.yaml`; `docs/runbooks/prek.md`; `docs/standards/pre-push-gate-performance.md` |
+| [0002-index-merge-budget.md](adr/0002-index-merge-budget.md) | Merge-time INDEX budget gate; in-repo per-lane split (#2005), not extraction. | #2012 | `scripts/preflight_merge_index_budget.py` |
 
 ## uml/; UML diagram artifacts
 
