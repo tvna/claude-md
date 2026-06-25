@@ -51,6 +51,25 @@ flowchart TD
     N003 -->|"false"| N005
 ```
 
+## _md_links_in(...)
+
+```mermaid
+flowchart TD
+    N001["_md_links_in(...)"]
+    N002["if not path.exists()"]
+    N003["return set()"]
+    N004["text = read_text(...)"]
+    N005["links = set(...)"]
+    N006["for pattern in (INLINE_LINK_RE, REFERENCE_LINK_RE):     for match in pattern.finditer(text):         target = extract_target(match.group(1))         parts = urlsplit(target)         if parts.scheme in IGNORED_SCHEMES or target.startswith('<str>'):             continue         raw_path = unquote(parts.path)         if not raw_path or raw_path == '<str>':             continue         if Path(raw_path).is_absolute():             resolved = root / raw_path.lstrip('<str>')         else:             resolved = path.parent / raw_path         if resolved.suffix.lower() == '<str>':             links.add(rel(resolved.resolve(), root.resolve()))"]
+    N007["return links"]
+    N001 -->|"start"| N002
+    N002 -->|"true"| N003
+    N002 -->|"false"| N004
+    N004 --> N005
+    N005 --> N006
+    N006 --> N007
+```
+
 ## collect_index_entries(...)
 
 ```mermaid
@@ -59,17 +78,15 @@ flowchart TD
     N002["index = root / INDEX_PATH"]
     N003["if not index.exists()"]
     N004["return set()"]
-    N005["text = read_text(...)"]
-    N006["entries = set(...)"]
-    N007["for pattern in (INLINE_LINK_RE, REFERENCE_LINK_RE):     for match in pattern.finditer(text):         target = extract_target(match.group(1))         parts = urlsplit(target)         if parts.scheme in IGNORED_SCHEMES or target.startswith('<str>'):             continue         raw_path = unquote(parts.path)         if not raw_path or raw_path == '<str>':             continue         if Path(raw_path).is_absolute():             resolved = root / raw_path.lstrip('<str>')         else:             resolved = index.parent / raw_path         if resolved.suffix.lower() == '<str>':             entries.add(rel(resolved.resolve(), root.resolve()))"]
-    N008["return entries"]
+    N005["entries = _md_links_in(...)"]
+    N006["for entry in tuple(entries):     if entry in SPLIT_LANE_READMES:         entries |= _md_links_in(root / entry, root)"]
+    N007["return entries"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 -->|"true"| N004
     N003 -->|"false"| N005
     N005 --> N006
     N006 --> N007
-    N007 --> N008
 ```
 
 ## verify_index_budget(...)
