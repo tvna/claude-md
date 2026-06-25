@@ -336,6 +336,14 @@ def is_retro_issue_title(title: str) -> bool:
     )
 
 
+def is_per_pr_retro_title(title: str) -> bool:
+    """Dedup-only (Refs #1995, #1998): True only when the scope is exactly
+    ``retro`` (hand-authored). Auto-retro shapes stay with is_retro_issue_title
+    (find_existing_retro ORs both); never dedup non-retro feat/docs(auto-retro)."""
+    token = extract_type_scope(title.lstrip().lower())
+    return token.endswith("(retro)")
+
+
 def should_skip(
     pr: MergedPR, trusted_bots: frozenset[str] = _TRUSTED_BOT_LOGINS
 ) -> tuple[bool, str]:

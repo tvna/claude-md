@@ -968,6 +968,51 @@ class TestFindExistingRetro:
         ]
         assert ar.find_existing_retro(items, 42) == 13
 
+    def test_matches_hand_authored_chore_retro_scope(self) -> None:
+        """A hand-authored ``chore(retro): ... PR #N`` retro must dedup against
+        the auto path so the post-merge run does not open a second retro for the
+        same PR. Regression for the confirmed #1939/#1941 duplicate (PR #1933).
+        Refs #1995."""
+        items = [
+            {
+                "number": 1941,
+                "title": "chore(retro): post-merge retrospective for PR #1933",
+            }
+        ]
+        assert ar.find_existing_retro(items, 1933) == 1941
+
+    def test_matches_hand_authored_retro_scope_any_type(self) -> None:
+        """The scope, not the type, marks the retro family: ``docs(retro)`` and
+        ``fix(retro)`` per-PR retros also dedup. Refs #1995."""
+        items = [
+            {"number": 21, "title": "docs(retro): repairs for PR #42"},
+            {"number": 22, "title": "fix(retro): follow-ups from PR #43 merge"},
+        ]
+        assert ar.find_existing_retro(items, 42) == 21
+        assert ar.find_existing_retro(items, 43) == 22
+
+    def test_ignores_retro_suffixed_non_retro_scopes(self) -> None:
+        """``retro-visibility`` (gate escape hatch) and ``retro-dedup`` (issue
+        #1995's own scope) are NON-retro tracking issues; they must NOT be
+        treated as a per-PR retro or dedup would suppress a legitimate issue.
+        Refs #1995."""
+        items = [
+            {"number": 31, "title": "chore(retro-visibility): tracking for PR #42"},
+            {"number": 32, "title": "fix(retro-dedup): unify dedup for PR #42"},
+        ]
+        assert ar.find_existing_retro(items, 42) is None
+
+    def test_ignores_noncanonical_auto_retro_scopes(self) -> None:
+        """``feat(auto-retro)`` / ``docs(auto-retro)`` are NOT retro issues
+        (is_retro_issue_title rejects them by design). The per-PR dedup
+        predicate must not widen all ``(auto-retro)`` scopes, or dedup would
+        skip opening the real retro. Regression for the Codex P2 on PR #1998."""
+        items = [
+            {"number": 41, "title": "feat(auto-retro): something for PR #42"},
+            {"number": 42, "title": "docs(auto-retro): record outcome PR #42"},
+        ]
+        assert ar.find_existing_retro(items, 42) is None
+
 
 class TestIsRetroIssueTitle:
     @pytest.mark.parametrize(
@@ -997,6 +1042,56 @@ class TestIsRetroIssueTitle:
         ],
     )
     def test_rejects_non_retro_titles(self, title: str) -> None:
+        assert ar.is_retro_issue_title(title) is False
+
+
+class TestIsPerPrRetroTitle:
+    """The dedup-only retro-family predicate (Refs #1995)."""
+
+    @pytest.mark.parametrize(
+        "title",
+        [
+            "chore(retro): post-merge retrospective for PR #1933",
+            "docs(retro): repairs for PR #42",
+            "Chore(Retro): mixed case PR #42",
+            "  chore(retro): leading whitespace PR #42",
+        ],
+    )
+    def test_matches_retro_scope_only(self, title: str) -> None:
+        assert ar.is_per_pr_retro_title(title) is True
+
+    @pytest.mark.parametrize(
+        "title",
+        [
+            # auto-retro scopes are covered by is_retro_issue_title, NOT here;
+            # widening to all (auto-retro) would dedup non-retro feat/docs
+            # (auto-retro) issues. Refs #1998 (Codex P2).
+            "chore(auto-retro): review PR #42 repair loops",
+            "fix(auto-retro): close retro #42",
+            "feat(auto-retro): not a retro issue shape",
+            "docs(auto-retro): record repair-free merge",
+            # suffixed scopes are NON-retro tracking issues
+            "chore(retro-visibility): tracking issue",
+            "fix(retro-dedup): unify dedup",
+            # legacy no-type / type-as-retro shapes stay excluded
+            "retro: review PR #42 repair loops",
+            "retro(fix): review PR #42 repair loops",
+            # unrelated, and the no-scope / empty cases
+            "feat: unrelated",
+            "chore: no scope at all",
+            "",
+        ],
+    )
+    def test_rejects_non_retro_scope(self, title: str) -> None:
+        assert ar.is_per_pr_retro_title(title) is False
+
+    def test_does_not_widen_is_retro_issue_title(self) -> None:
+        """The new predicate must not leak into is_retro_issue_title, which
+        stays auto-retro-only for the no-direct-PR gate / sentinel / label
+        prior. A chore(retro) title is a per-PR retro for dedup but NOT a
+        reserved auto-retro issue title."""
+        title = "chore(retro): post-merge retrospective for PR #1933"
+        assert ar.is_per_pr_retro_title(title) is True
         assert ar.is_retro_issue_title(title) is False
 
 

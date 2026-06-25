@@ -66,6 +66,17 @@ flowchart TD
     N002 --> N003
 ```
 
+## is_per_pr_retro_title(...)
+
+```mermaid
+flowchart TD
+    N001["is_per_pr_retro_title(...)"]
+    N002["token = extract_type_scope(...)"]
+    N003["return token.endswith('<str>')"]
+    N001 -->|"start"| N002
+    N002 --> N003
+```
+
 ## should_skip(...)
 
 ```mermaid
