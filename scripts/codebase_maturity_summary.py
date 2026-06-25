@@ -26,6 +26,12 @@ Maturity signals (proxies for review/test/automation discipline):
   this report and the size gate cannot drift apart. The two over-budget rows
   are reported separately so an "over budget (active) = 0" line is not read as
   "no module exceeds the budget" when deferred debt exists.
+- quality-to-volume proportionality ratios (CLAUDE.md section 5): average
+  module lines (``script_total_lines`` / ``script_modules``), deterministic-gate
+  coverage (gate scripts / script modules), and active-over-budget proportion
+  (active violations / script modules). These are pure ratios of the counts
+  above; they surface whether quality stays proportional as the codebase grows
+  rather than reporting volume alone.
 
 The report is a pure function of repository content: no timestamps, hostnames,
 or environment values, so the same tree always renders the same Markdown.
@@ -92,6 +98,41 @@ class MaturityReport:
         if self.script_modules == 0:
             return 0.0
         return self.ast_doc_count / self.script_modules
+
+    @property
+    def average_module_lines(self) -> float:
+        """Mean physical line count per ``scripts/*.py`` module.
+
+        A section-5 proportionality signal: as the script count grows, this
+        shows whether the average module is staying bounded or drifting toward
+        the maintainability budget. ``0.0`` on an empty tree.
+        """
+        if self.script_modules == 0:
+            return 0.0
+        return self.script_total_lines / self.script_modules
+
+    @property
+    def gate_script_ratio(self) -> float:
+        """Fraction of ``scripts/*.py`` modules that are deterministic gates.
+
+        Whether harness-gate coverage keeps pace with script growth
+        (CLAUDE.md section 5). ``0.0`` on an empty tree.
+        """
+        if self.script_modules == 0:
+            return 0.0
+        return self.gate_script_modules / self.script_modules
+
+    @property
+    def active_over_budget_ratio(self) -> float:
+        """Fraction of ``scripts/*.py`` modules that are active size violations.
+
+        The proportion the raw active-over-budget count represents, so the
+        count is not read in isolation as the codebase scales (CLAUDE.md
+        section 5). ``0.0`` on an empty tree.
+        """
+        if self.script_modules == 0:
+            return 0.0
+        return self.active_over_budget_modules / self.script_modules
 
 
 def _glob_files(base: Path, pattern: str) -> list[Path]:
@@ -171,14 +212,25 @@ def render_markdown(report: MaturityReport) -> str:
         ),
         ("Deterministic-gate scripts", f"{report.gate_script_modules}"),
         (
+            "Deterministic-gate coverage",
+            f"{report.gate_script_ratio:.2f} "
+            f"({report.gate_script_modules}/{report.script_modules})",
+        ),
+        (
             "Maintainability over budget (active)",
             f"{report.active_over_budget_modules}",
+        ),
+        (
+            "Maintainability over-budget proportion",
+            f"{report.active_over_budget_ratio:.2f} "
+            f"({report.active_over_budget_modules}/{report.script_modules})",
         ),
         (
             "Maintainability over budget (deferred)",
             f"{report.deferred_over_budget_modules}",
         ),
         ("Maintainability warn band", f"{report.warn_band_modules}"),
+        ("Average module lines", f"{report.average_module_lines:.1f}"),
     ]
 
     lines = ["# Codebase maturity and scale", ""]

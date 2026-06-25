@@ -112,6 +112,31 @@ class TestMeasure:
         assert report.active_over_budget_modules == 0
         assert report.deferred_over_budget_modules == 1
 
+    def test_proportionality_ratios(self, tmp_path: Path) -> None:
+        _seed_minimal_repo(tmp_path)
+
+        report = codebase_maturity_summary.measure(tmp_path)
+
+        # 3 script modules totalling 35 lines (10 + 20 + 5).
+        assert report.average_module_lines == pytest.approx(35 / 3)
+        # Only scan_beta.py carries a gate prefix -> 1 of 3 modules.
+        assert report.gate_script_ratio == pytest.approx(1 / 3)
+        # No module exceeds the budget in the minimal repo.
+        assert report.active_over_budget_ratio == 0.0
+
+    def test_active_over_budget_ratio_counts_violations(
+        self, tmp_path: Path
+    ) -> None:
+        _seed_minimal_repo(tmp_path)
+        over = scan_maintainability_metrics.MAX_MODULE_LINES + 1
+        _write(repo=tmp_path, rel="scripts/huge.py", lines=over)
+
+        report = codebase_maturity_summary.measure(tmp_path)
+
+        # 1 active violation out of 4 script modules.
+        assert report.active_over_budget_modules == 1
+        assert report.active_over_budget_ratio == pytest.approx(1 / 4)
+
     def test_empty_repo_ratios_do_not_divide_by_zero(
         self, tmp_path: Path
     ) -> None:
@@ -119,6 +144,9 @@ class TestMeasure:
 
         assert report.test_to_script_ratio == 0.0
         assert report.ast_doc_coverage == 0.0
+        assert report.average_module_lines == 0.0
+        assert report.gate_script_ratio == 0.0
+        assert report.active_over_budget_ratio == 0.0
 
 
 class TestRender:
@@ -134,6 +162,18 @@ class TestRender:
         assert "## Scale" in first
         assert "## Maturity" in first
         assert "| Metric | Value |" in first
+
+    def test_render_includes_proportionality_rows(
+        self, tmp_path: Path
+    ) -> None:
+        _seed_minimal_repo(tmp_path)
+        report = codebase_maturity_summary.measure(tmp_path)
+
+        out = codebase_maturity_summary.render_markdown(report)
+
+        assert "Average module lines" in out
+        assert "Deterministic-gate coverage" in out
+        assert "Maintainability over-budget proportion" in out
 
 
 class TestCli:
