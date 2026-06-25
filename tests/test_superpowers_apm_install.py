@@ -105,16 +105,38 @@ def test_superpowers_claude_skills_are_committed() -> None:
     assert tracked == SUPERPOWERS_SKILLS
 
 
-def test_claude_and_agent_skills_are_identical() -> None:
-    """The two committed skill surfaces are byte-identical APM output.
+def _skill_tree_snapshot(root: Path) -> dict[str, tuple[bytes, bool]]:
+    """Map every file under *root* to (bytes, is-executable), keyed by rel path."""
+    snapshot: dict[str, tuple[bytes, bool]] = {}
+    for path in sorted(root.rglob("*")):
+        if path.is_file():
+            rel = path.relative_to(root).as_posix()
+            snapshot[rel] = (path.read_bytes(), bool(path.stat().st_mode & 0o111))
+    return snapshot
+
+
+def test_claude_and_agent_skill_trees_are_identical() -> None:
+    """The two committed skill surfaces are identical APM output, whole tree.
 
     apm install (target: [claude, codex]) deploys the same pinned package into
     both .agents/skills/ and .claude/skills/ (apm.lock.yaml deployed_files), so
-    they must not drift apart.
+    they must not drift apart. Compare the FULL relative tree, not just SKILL.md:
+    skills carry companion assets (scripts/, references/, prompts), and Claude
+    Code on the Web consumes the .claude/ copies of those helpers while
+    Devin/Codex use the .agents/ copies. Comparing membership, byte content, and
+    the executable bit makes this gate enforce the byte-identical invariant the
+    carve-out documents (Refs #1983 review).
     """
-    agent_skills = ROOT / ".agents" / "skills"
-    claude_skills = ROOT / ".claude" / "skills"
-    for skill in SUPERPOWERS_SKILLS:
-        agent_doc = (agent_skills / skill / "SKILL.md").read_bytes()
-        claude_doc = (claude_skills / skill / "SKILL.md").read_bytes()
-        assert agent_doc == claude_doc, f"{skill}/SKILL.md drifted between surfaces"
+    agent_tree = _skill_tree_snapshot(ROOT / ".agents" / "skills")
+    claude_tree = _skill_tree_snapshot(ROOT / ".claude" / "skills")
+
+    assert set(agent_tree) == set(claude_tree), (
+        "skill tree membership diverged: "
+        f"agents-only={sorted(set(agent_tree) - set(claude_tree))} "
+        f"claude-only={sorted(set(claude_tree) - set(agent_tree))}"
+    )
+    for rel in agent_tree:
+        agent_bytes, agent_exec = agent_tree[rel]
+        claude_bytes, claude_exec = claude_tree[rel]
+        assert agent_bytes == claude_bytes, f"content drift between surfaces: {rel}"
+        assert agent_exec == claude_exec, f"executable-bit drift between surfaces: {rel}"
