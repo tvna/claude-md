@@ -146,7 +146,8 @@
               "hooks": [
                 {
                   "type": "command",
-                  "command": "scripts/install-rtk.sh"
+                  "command": "scripts/install-rtk.sh",
+                  "async": true
                 }
               ]
             },
@@ -154,7 +155,8 @@
               "hooks": [
                 {
                   "type": "command",
-                  "command": "scripts/install-apm.sh"
+                  "command": "scripts/install-apm.sh",
+                  "async": true
                 }
               ]
             },
@@ -170,7 +172,8 @@
               "hooks": [
                 {
                   "type": "command",
-                  "command": "scripts/install-waza.sh"
+                  "command": "scripts/install-waza.sh",
+                  "async": true
                 }
               ]
             },
@@ -178,7 +181,8 @@
               "hooks": [
                 {
                   "type": "command",
-                  "command": "scripts/install-ccusage.sh"
+                  "command": "scripts/install-ccusage.sh",
+                  "async": true
                 }
               ]
             },
@@ -194,7 +198,8 @@
               "hooks": [
                 {
                   "type": "command",
-                  "command": "scripts/install-zizmor.sh"
+                  "command": "scripts/install-zizmor.sh",
+                  "async": true
                 }
               ]
             },
@@ -202,7 +207,8 @@
               "hooks": [
                 {
                   "type": "command",
-                  "command": "scripts/install-lychee.sh"
+                  "command": "scripts/install-lychee.sh",
+                  "async": true
                 }
               ]
             },
@@ -210,7 +216,8 @@
               "hooks": [
                 {
                   "type": "command",
-                  "command": "scripts/install-betterleaks.sh"
+                  "command": "scripts/install-betterleaks.sh",
+                  "async": true
                 }
               ]
             },
