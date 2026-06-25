@@ -44,7 +44,7 @@ flowchart TD
 flowchart TD
     N001["render_markdown(...)"]
     N002["scale_rows = [('<str>', f'{report.script_modules}'), ('<str>', f'{report.script_total_lines}'), ('<str>', f'{report.test_modules}'), ('<str>', f'{report.workflow_count}'), ('<str>', f'{report.doc_count}')]"]
-    N003["maturity_rows = [('<str>', f'{report.test_to_script_ratio:<str>}'), ('<str>', f'{report.ast_doc_coverage:<str>}<str>{report.ast_doc_count}<str>{report.script_modules}<str>'), ('<str>', f'{report.gate_script_modules}'), ('<str>', f'{report.active_over_budget_modules}'), ('<str>', f'{report.deferred_over_budget_modules}'), ('<str>', f'{report.warn_band_modules}')]"]
+    N003["maturity_rows = [('<str>', f'{report.test_to_script_ratio:<str>}'), ('<str>', f'{report.ast_doc_coverage:<str>}<str>{report.ast_doc_count}<str>{report.script_modules}<str>'), ('<str>', f'{report.gate_script_modules}'), ('<str>', f'{report.gate_script_ratio:<str>}<str>{report.gate_script_modules}<str>{report.script_modules}<str>'), ('<str>', f'{report.active_over_budget_modules}'), ('<str>', f'{report.active_over_budget_ratio:<str>}<str>{report.active_over_budget_modules}<str>{report.script_modules}<str>'), ('<str>', f'{report.deferred_over_budget_modules}'), ('<str>', f'{report.warn_band_modules}'), ('<str>', f'{report.average_module_lines:<str>}')]"]
     N004["lines = ['<str>', '<str>']"]
     N005["append(...)"]
     N006["append(...)"]
