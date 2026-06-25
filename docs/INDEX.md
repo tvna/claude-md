@@ -45,6 +45,7 @@ for `archive/` is documented separately in
 | [non-ascii-defense.md](prd/non-ascii-defense.md) | Three-layer ASCII discipline at the GitHub-post boundary. | #102 | `scripts/scan_non_ascii.py`; `scripts/preflight_non_ascii.py`; `scripts/sanitize_history.py`; `.github/workflows/issue-pr-triage.yml` |
 | [freshness-precondition-gate.md](prd/freshness-precondition-gate.md) | Concrete companion to the universal time-boxed-gate refresh rule: the create_branch freshness preflight, the interim per-operation refresh, and the future auto-refresh skill. | #894, #654, #859 | `scripts/preflight_main_freshness.py`; `.claude/settings.json`; `.apm/instructions/master.instructions.md` (section 3) |
 | [doc-dependency-graph.md](prd/doc-dependency-graph.md) | Design rationale for the typed document dependency graph gate: graph schema, edge types, waiver mechanism, advisory-to-required rollout, and the PR#1737-class failure mode this gate prevents. | #1754 | `docs/graph/doc-dependencies.toml`; `scripts/gate_doc_graph_pr.py`; `scripts/doc_graph.py`; `scripts/doc_graph_viz.py`; `.github/workflows/validate-doc-graph.yml` |
+| [semantic-versioning-universal-text.md](prd/semantic-versioning-universal-text.md) | Compatibility-based semver for the universal text; drift gate, post-merge `v{version}` auto-tag. | #89 | `apm.yml` |
 
 The last three `prd/` entries are adopted contracts with legacy
 placement. They should move to `standards/` in a scoped follow-up rather
