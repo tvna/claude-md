@@ -116,6 +116,91 @@ so it is **not** part of this standard:
   `Verified` squash commit on `main`. Confirm the squash-signature behaviour per
   "Verify before enforcing" before relying on it.
 
+## In-session signing-readiness gate (retro #1987)
+
+The remote execution environment for Claude Code on the Web (and the Codex /
+Devin cloud equivalents) configures `commit.gpgsign = true` with an SSH signer
+*program* (`gpg.format = ssh`, `gpg.ssh.program` -> `/tmp/code-sign`). When that
+signer is healthy, in-session feature-branch commits carry a `gpgsig` header;
+they still follow the keyless invariant above and inherit GitHub's squash
+signature on `main`, so the in-session header is belt-and-suspenders, not the
+thing `required_signatures` relies on.
+
+The hazard the gate addresses is a **mismatch between configuration and
+reality**: `commit.gpgsign = true` is set, but a `git commit` lands UNSIGNED and
+*silent* (exit 0, no `gpgsig` header). PR #1985's first commit (8d4919f) did
+exactly this, and because force-push and branch deletion are both blocked by the
+`all-branches-no-force-push` ruleset the unsigned base commit could not be
+rewritten; recovery required a squash-merge. The cost of one silent unsigned
+commit on a ruleset-protected branch is therefore effectively irreversible.
+
+`scripts/check_commit_signing_ready.py` is the deterministic gate, wired into
+every agent (`.claude/settings.json`, `.codex/hooks.json`, `.devin/hooks.v1.json`
+via `scripts/agent_hooks_source.json`) in two layers:
+
+- **SessionStart (warn).** In a remote session, if signing is required but a live
+  test-sign comes back `unsigned`, it emits a loud `additionalContext` warning so
+  a cold/broken signer is fixed *before* any commit.
+- **PreToolUse `git commit` (block).** It DENIES the commit only when a live
+  test-sign has just demonstrated an `unsigned` outcome, so the block is a proven
+  true positive, not a prediction. An explicit reviewed unsigned commit can still
+  proceed with a `# unsigned-ack` marker (the same opt-in
+  `scripts/gate_unsigned_commit_bash.py` honors).
+
+**Why a live test-sign, not a key-file check (primary-source finding).** Retro
+#1987 hypothesised that 8d4919f was unsigned *because* the session key
+`/home/claude/.ssh/commit_signing_key.pub` was empty (0 bytes). A live probe in
+the same environment refuted this: with that key file still 0 bytes,
+`git commit -S` produces a commit that DOES carry a `gpgsig` header, because the
+signer is the `gpg.ssh.program` program, not the `.pub` file. The empty key is a
+routine steady state here, not the fault. A file-size check would therefore both
+false-positive (fire every session while signing works) and miss the real cause:
+a *cold signer* early in the session that warms up shortly after (later #1985
+commits signed correctly). The only sound signal is to exercise the real signing
+path and inspect the result; the gate makes one `--allow-empty -S` commit in a
+throwaway temp repo (never touching the real repository or any key material) and
+checks for the `gpgsig` header. This is CLAUDE.md section 1's "live proof, not a
+proxy" applied to a signer. Blast radius is bounded: the active probe runs only
+in remote sessions (so a local-dev pinentry passphrase is never poked), the
+block fires only on a demonstrated unsigned outcome, and every infrastructure
+error fails open.
+
+### Retro #1987 Fact classification
+
+| Fact (PR #1985) | Classification | Disposition |
+|---|---|---|
+| 1. One full approach (SessionStart skill-mirror hook) built, then replaced by a governance carve-out after the operator paused to validate overturning `.claude/*` governance. | external/human decision (partially automatable) | See "Governance-overturn decision path" below. |
+| 2. First commit (8d4919f) landed unsigned because signing was not yet working; later commits signed once the signer was warm. | missing deterministic gate | Closed by `scripts/check_commit_signing_ready.py` (this section). |
+| 3. Force-push and branch deletion are blocked by the ruleset, so the unsigned base commit could not be rewritten; resolved by squash-merge. | unclear agent instruction | The squash-merge recovery and the no-force-push base-update path are documented in [`docs/runbooks/remote-session-base-update.md`](../runbooks/remote-session-base-update.md) and the unsigned-ancestor exception above. |
+| 4. PR body creation took several retries against deterministic gates (title policy, classification labels, angle-token drop, required sections, verification line, footer dedup). | missing deterministic gate (already built) | The gates fired as designed; the repair was learning their contract, captured in [`docs/runbooks/pr-body-policy-recovery.md`](../runbooks/pr-body-policy-recovery.md). |
+| 5. Codex review flagged the parity test compared only `SKILL.md`; fixed to compare the full skill tree (683ad77). | missing deterministic gate (closed in-PR) | Fixed within PR #1985; no carryover. |
+
+### Out-of-date-base workflow (merge-into-base, never force-push)
+
+On a `claude/*` branch the `all-branches-no-force-push` ruleset (`bypass_actors:
+[]`) makes `git rebase origin/main` + force-push unavailable. The base is brought
+forward by **merging `origin/main` into the branch** (a merge commit is fine; the
+final squash flattens it) or by the server-side `update_pull_request_branch`
+path. The full procedure, including the conflict probe, lives in
+[`docs/runbooks/remote-session-base-update.md`](../runbooks/remote-session-base-update.md);
+`scripts/preflight_session_base_freshness.py` shifts the out-of-date-base
+detection left to SessionStart and the first commit so the late-rebase loop is
+anticipated rather than hit at push.
+
+### Governance-overturn decision path
+
+When a task wants to change `.claude/*` (or other code-owner-governed
+instruction files) and a structural constraint blocks the obvious approach
+(force-push/branch-deletion denied by ruleset, or cross-agent parity), start from
+the **governance carve-out** option, not from overturning the governance: scope
+the smallest reviewed change to the governed files and let it pass the code-owner
+merge gate (CLAUDE.md section 2: trusted instruction state changes only through
+the proposal -> review -> merge path). PR #1985 first built a SessionStart hook to
+deploy skills into `.claude/skills/`, then paused and adopted a carve-out
+instead. This is an external/human decision (the operator owns whether to overturn
+governance) and only partially automatable; the automatable part is surfacing the
+constraint early, which the ruleset-aware preflights above already do.
+
 ## Normative invariant (reviewers MUST enforce)
 
 `main.json` MUST remain squash-only for this standard to hold. **Adding

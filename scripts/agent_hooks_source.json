@@ -271,6 +271,14 @@
               ]
             },
             {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "python3 scripts/check_commit_signing_ready.py session-start"
+                }
+              ]
+            },
+            {
               "matcher": "startup|clear|compact",
               "hooks": [
                 {
@@ -460,6 +468,16 @@
                   "type": "command",
                   "if": "Bash(*git commit*)",
                   "command": "python3 scripts/preflight_commit_session_branch.py"
+                }
+              ]
+            },
+            {
+              "matcher": "Bash",
+              "hooks": [
+                {
+                  "type": "command",
+                  "if": "Bash(*git commit*)",
+                  "command": "python3 scripts/check_commit_signing_ready.py"
                 }
               ]
             },
@@ -952,6 +970,16 @@
               ]
             },
             {
+              "matcher": "startup|resume|clear|compact",
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "python3 scripts/check_commit_signing_ready.py session-start",
+                  "statusMessage": "Checking commit signing readiness"
+                }
+              ]
+            },
+            {
               "matcher": "startup|clear|compact",
               "hooks": [
                 {
@@ -1167,6 +1195,16 @@
                   "type": "command",
                   "command": "python3 scripts/preflight_commit_session_branch.py",
                   "statusMessage": "Checking session branch before commit"
+                }
+              ]
+            },
+            {
+              "matcher": "^Bash$",
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "python3 scripts/check_commit_signing_ready.py",
+                  "statusMessage": "Checking commit signing readiness before commit"
                 }
               ]
             },
