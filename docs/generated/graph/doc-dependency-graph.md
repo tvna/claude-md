@@ -3,7 +3,7 @@
 Auto-generated from `docs/graph/doc-dependencies.toml`. Do not edit manually.
 Source: `python3 scripts/doc_graph_viz.py all-doc`.
 
-Nodes: 20 | Edges: 18 (10 blocking, 8 advisory)
+Nodes: 23 | Edges: 18 (10 blocking, 8 advisory)
 
 ```mermaid
 flowchart LR
@@ -27,6 +27,9 @@ flowchart LR
     validate_doc_graph_workflow[/"validate doc graph workflow"/]
     docs_generated_ownership["docs generated ownership"]
     preflight_issue_ci_staleness>"preflight issue ci staleness"]
+    prd_template["prd template"]
+    standard_template["standard template"]
+    runbook_template["runbook template"]
     master_instructions ==>|compiled to| claude_md
     master_instructions ==>|compiled to| agents_md
     master_instructions -->|governs| design_philosophy_prd
