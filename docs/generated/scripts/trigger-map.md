@@ -195,6 +195,7 @@ Detection is string-match based:
 | `scan_hook_coverage_drift.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
 | `scan_input_contract_drift.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
 | `scan_issue_anchor_drift.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
+| `scan_maintainability_metrics.py` | pre-commit | `module-size` |
 | `scan_maintainability_metrics.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
 | `scan_markdown_links.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
 | `scan_mermaid_syntax.py` | pre-commit | `scan-mermaid-syntax` |
