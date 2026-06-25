@@ -27,7 +27,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "cd \"$(git rev-parse --show-toplevel)\" && scripts/install-rtk.sh"
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && scripts/install-rtk.sh",
+            "async": true
           }
         ]
       },
@@ -35,7 +36,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "cd \"$(git rev-parse --show-toplevel)\" && scripts/install-apm.sh"
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && scripts/install-apm.sh",
+            "async": true
           }
         ]
       },
@@ -43,7 +45,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "cd \"$(git rev-parse --show-toplevel)\" && scripts/install-actionlint.sh"
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && scripts/install-actionlint.sh",
+            "async": true
           }
         ]
       },
@@ -51,7 +54,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "cd \"$(git rev-parse --show-toplevel)\" && scripts/install-waza.sh"
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && scripts/install-waza.sh",
+            "async": true
           }
         ]
       },
@@ -59,7 +63,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "cd \"$(git rev-parse --show-toplevel)\" && scripts/install-ccusage.sh"
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && scripts/install-ccusage.sh",
+            "async": true
           }
         ]
       },
@@ -67,7 +72,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "cd \"$(git rev-parse --show-toplevel)\" && scripts/install-bun.sh"
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && scripts/install-bun.sh",
+            "async": true
           }
         ]
       },
@@ -75,7 +81,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "cd \"$(git rev-parse --show-toplevel)\" && scripts/install-zizmor.sh"
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && scripts/install-zizmor.sh",
+            "async": true
           }
         ]
       },
@@ -83,7 +90,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "cd \"$(git rev-parse --show-toplevel)\" && scripts/install-lychee.sh"
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && scripts/install-lychee.sh",
+            "async": true
           }
         ]
       },
@@ -91,7 +99,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "cd \"$(git rev-parse --show-toplevel)\" && scripts/install-betterleaks.sh"
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && scripts/install-betterleaks.sh",
+            "async": true
           }
         ]
       },
