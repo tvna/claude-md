@@ -19,6 +19,14 @@ worked example.
 
 # [NNNN. Short decision title]
 
+Date: [YYYY-MM-DD]
+Refs: [#NNNN](https://github.com/tvna/claude-md/issues/NNNN)
+
+[Date is the day the decision was accepted. Refs lists the tracking issues as
+full canonical URLs; CLAUDE.md section 3 requires citing the issue number in
+every artifact. Keep both lines so each ADR matches the shape of
+`0001-hook-manager-prek.md`.]
+
 ## Status
 
 [Proposed | Accepted | Superseded by ADR-NNNN. Owner-approved decisions are

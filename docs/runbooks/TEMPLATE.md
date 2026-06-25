@@ -47,6 +47,14 @@ checkable.]
 plus its expected output, not "looks fine". CLAUDE.md section 1 forbids an
 indirect signal standing in for proof.]
 
+## Pause / Resume
+
+[For a runbook that drives a recurring or long-running automation: how to pause
+it safely and how to resume, including any state to record before pausing.
+Omit with a one-line reason for a one-shot procedure that has nothing to pause.
+For an investigation-only runbook, repurpose this section as the steps to
+gather evidence without changing state.]
+
 ## Rollback
 
 [How to undo the operation. Required: every runbook either states a rollback
