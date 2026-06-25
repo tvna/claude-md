@@ -27,6 +27,7 @@ for `archive/` is documented separately in
 |---|---|---|---|
 | [README.md](proposals/README.md) | Placement rules for pre-decision evaluations whose requirements are not yet decidable, and their graduation path into `prd/` / `standards/` / `runbooks/`. | #1001 | `docs/INDEX.md`; `docs/prd/README.md` |
 | [instruction-distribution-mechanism.md](proposals/instruction-distribution-mechanism.md) | Decision (A+C: shipped sync template plus tagged release artifacts pinned by tag+sha256) for how downstream projects import the compiled instructions as committed real files; retraction of the submodule+symlink method; deferred reusable-workflow option B and its re-open condition. | #1678 | `.github/workflows/publish-instructions-release.yml`; `scripts/publish_instruction_release.py`; `docs/runbooks/consumer-instruction-sync.md` |
+| [config-ssot-duplicate-fact-inventory.md](proposals/config-ssot-duplicate-fact-inventory.md) | Inventory of facts duplicated across config files (toml/yaml/md) inside and outside `docs/`, classified by whether a single source or a drift gate already governs them; recommends single-source vs add-gate vs keep per candidate. Open questions block the remediation decision. | #1984 | `scripts/scan_maintainability_metrics.py`; `scripts/scan_module_size_distribution.py`; `.github/title-policy.toml` |
 
 ## prd/; design-stage rationale and decision records
 
