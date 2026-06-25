@@ -54,7 +54,7 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["evaluate_drift(...)"]
-    N002["if 'README.md' not in changed"]
+    N002["if README_CANONICAL not in changed"]
     N003["return (0, [])"]
     N004["missing = sorted(...)"]
     N005["if not missing"]
@@ -119,17 +119,18 @@ flowchart TD
     N013["skip = body_has_skip_marker(...)"]
     N014["(code, errors) = evaluate_drift(...)"]
     N015["if code == 0"]
-    N016["if 'README.md' in changed and skip"]
+    N016["if README_CANONICAL in changed and skip"]
     N017["print(...)"]
-    N018["if 'README.md' in changed"]
-    N019["print(...)"]
-    N020["if changed"]
-    N021["pretty = join(...)"]
-    N022["print(...)"]
+    N018["if README_CANONICAL in changed"]
+    N019["translations = join(...)"]
+    N020["print(...)"]
+    N021["if changed"]
+    N022["pretty = join(...)"]
     N023["print(...)"]
-    N024["return 0"]
-    N025["for line in errors:     print(line, file=sys.stderr)"]
-    N026["return 1"]
+    N024["print(...)"]
+    N025["return 0"]
+    N026["for line in errors:     print(line, file=sys.stderr)"]
+    N027["return 1"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 -->|"try"| N004
@@ -148,16 +149,17 @@ flowchart TD
     N016 -->|"true"| N017
     N016 -->|"false"| N018
     N018 -->|"true"| N019
-    N018 -->|"false"| N020
-    N020 -->|"true"| N021
-    N021 --> N022
-    N020 -->|"false"| N023
-    N017 --> N024
-    N019 --> N024
-    N022 --> N024
-    N023 --> N024
-    N015 -->|"false"| N025
-    N025 --> N026
+    N019 --> N020
+    N018 -->|"false"| N021
+    N021 -->|"true"| N022
+    N022 --> N023
+    N021 -->|"false"| N024
+    N017 --> N025
+    N020 --> N025
+    N023 --> N025
+    N024 --> N025
+    N015 -->|"false"| N026
+    N026 --> N027
 ```
 
 ## main(...)
