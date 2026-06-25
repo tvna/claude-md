@@ -17,6 +17,8 @@ Usage::
         --agent "Claude Code" --session-url "https://claude.ai/code/session_XYZ"
     python3 scripts/pr_body_builder.py build --issue 938 \\
         --agent Codex --model gpt-4o
+    # Web-harness create path: omit the footer the harness auto-appends.
+    python3 scripts/pr_body_builder.py build --issue 938 --no-footer
     python3 scripts/pr_body_builder.py list-kinds
 
 Refs #938, #1825.
@@ -92,6 +94,7 @@ def build(
     session_url: str = _DEFAULT_SESSION_URL,
     model: str | None = None,
     kind: str | None = None,
+    include_footer: bool = True,
     template_path: Path = _TEMPLATE_PATH,
 ) -> str:
     """Return a PR body skeleton with *issue*, agent footer, and verification placeholder filled in.
@@ -100,6 +103,15 @@ def build(
     ``.github/pr-body-templates/<kind>.md``, that domain template is used as
     the base instead of the universal template. Falls back to *template_path*
     when no domain template is found. Run ``list-kinds`` to see available kinds.
+
+    Footer asymmetry (Refs #1999 row 3, #1427): ``mcp__github__create_pull_request``
+    under the remote web harness (``CLAUDE_CODE_REMOTE=true``) auto-appends the
+    session footer, so the body passed to *create* must carry NONE; the later
+    ``mcp__github__update_pull_request`` is not auto-appended and its gate
+    requires exactly one footer. This builder appends a footer by default,
+    which suits the local CLI and the update path. For the web-harness create
+    path, pass ``include_footer=False`` (CLI ``--no-footer``) to emit a
+    footerless body; the harness then supplies the single footer.
 
     The returned string passes ``body_policy.verify`` with the post-2026-05-26
     shape gate enabled once the placeholder sections (Summary, Facts,
@@ -132,9 +144,15 @@ def build(
     # non-empty ones that satisfy the shape gate regex.
     body = _EMPTY_VERIFICATION_RE.sub(_VERIFICATION_PLACEHOLDER, body)
 
-    # Replace the attribution footer placeholder.
-    footer = _build_footer(agent, session_url, model)
-    body = _FOOTER_PLACEHOLDER_RE.sub(footer, body)
+    # Replace the attribution footer placeholder. On the web-harness create
+    # path (include_footer=False) the placeholder is dropped entirely so the
+    # harness-appended footer is the only one; the Codex --model requirement is
+    # also moot there since no footer is built. Refs #1999 row 3, #1427.
+    if include_footer:
+        footer = _build_footer(agent, session_url, model)
+        body = _FOOTER_PLACEHOLDER_RE.sub(footer, body)
+    else:
+        body = _FOOTER_PLACEHOLDER_RE.sub("", body)
 
     # Ensure the body ends with a single newline.
     return body.rstrip("\n") + "\n"
@@ -189,6 +207,18 @@ def main(argv: list[str] | None = None) -> int:
         help="Codex model identifier (required when --agent Codex).",
     )
     p_build.add_argument(
+        "--no-footer",
+        dest="include_footer",
+        action="store_false",
+        help=(
+            "Omit the attribution footer. Use ONLY for the remote web-harness "
+            "create_pull_request path (CLAUDE_CODE_REMOTE=true), where the "
+            "harness auto-appends the session footer; the body it stores must "
+            "carry none. The default keeps a footer (local CLI / "
+            "update_pull_request path, whose gate requires one)."
+        ),
+    )
+    p_build.add_argument(
         "--template",
         default=str(_TEMPLATE_PATH),
         help="Path to the PR body template (default: .github/PULL_REQUEST_TEMPLATE.md).",
@@ -216,6 +246,7 @@ def main(argv: list[str] | None = None) -> int:
             session_url=args.session_url,
             model=args.model,
             kind=args.kind,
+            include_footer=args.include_footer,
             template_path=Path(args.template),
         )
     except ValueError as exc:

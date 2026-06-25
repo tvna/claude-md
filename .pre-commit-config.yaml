@@ -197,6 +197,21 @@ repos:
         pass_filenames: false
         files: ^(scripts/.*\.py|tests/.*\.py|pyproject\.toml|uv\.lock)$
 
+      - id: module-size
+        name: module size budget (scripts/scan_maintainability_metrics.py verify)
+        # Mirrors the module-size step in verify-agents.yml so a scripts/*.py
+        # module crossing the 800-line budget surfaces at commit time instead
+        # of the pre-push gate (preflight_all.py), avoiding the
+        # trim-and-regen round trip. Refs #1999 (PR #1998 retro row 2). Reuses
+        # the same verify (honors DEFERRED_OVERSIZE_MODULES and the warning
+        # band) so there is no divergence from the server-side gate; the
+        # scripts/*.py trigger scopes it to touched modules while the scan
+        # itself stays whole-tree, identical to CI.
+        entry: uv run python scripts/scan_maintainability_metrics.py verify
+        language: system
+        pass_filenames: false
+        files: ^scripts/.*\.py$
+
       - id: preflight-branch-base
         name: preflight branch base (scripts/preflight_branch_base.py verify)
         entry: uv run python scripts/preflight_branch_base.py verify
