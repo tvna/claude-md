@@ -1,8 +1,10 @@
 """Tests for ``scripts/scan_module_size_distribution.py``.
 
-The gate persists the ``scripts/*.py`` size distribution as a committed
-snapshot (issue #1701) and fails when the committed file drifts from the
-current distribution.
+The generator persists the ``scripts/*.py`` size distribution as a committed
+snapshot (issue #1701). Refs #2013: the snapshot is produced post-merge under
+the single-producer model (#1540/#1543/#1546); feature branches no longer
+regenerate it, so these tests exercise the ``write``/``verify`` round-trip and
+the pure rendering functions on temp dirs rather than the checked-in file.
 """
 
 from __future__ import annotations
@@ -15,7 +17,6 @@ import scan_maintainability_metrics
 import scan_module_size_distribution
 
 pytestmark = pytest.mark.shard_ci_ops
-REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 def _make_script(repo: Path, rel: str, line_count: int) -> Path:
@@ -103,13 +104,4 @@ class TestWriteVerify:
         assert (
             scan_module_size_distribution.main(["verify", "--repo-root", str(tmp_path)])
             == 1
-        )
-
-
-class TestCommittedSnapshot:
-    def test_committed_snapshot_is_current(self) -> None:
-        """The checked-in snapshot must match the live distribution."""
-        assert (
-            scan_module_size_distribution.main(["verify", "--repo-root", str(REPO_ROOT)])
-            == 0
         )
