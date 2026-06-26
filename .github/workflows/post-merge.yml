@@ -164,7 +164,12 @@ jobs:
     environment:
       name: devcontainer-image-pins
     permissions:
-      contents: write
+      # The regenerated docs are committed by the minted App token through the
+      # signed createCommitOnBranch path (see "Open pull request" step), never
+      # GITHUB_TOKEN or `git push`, so the default token only needs read for
+      # checkout. Keeping it read satisfies the OpenSSF Token-Permissions gate
+      # without regressing the bot-authored PR flow. Refs #1437, #2036.
+      contents: read
       pull-requests: write
     concurrency:
       group: generate-docs-${{ github.ref }}
@@ -365,7 +370,13 @@ jobs:
     environment:
       name: devcontainer-image-pins
     permissions:
-      contents: write
+      # The refresh-PR snapshot is committed by the minted App token through the
+      # signed createCommitOnBranch path (see "Upsert refresh PR" step), never
+      # GITHUB_TOKEN or `git push`; the regenerate step uses GITHUB_TOKEN only to
+      # read live issue labels (issues: read). So the default token needs read,
+      # not write, for contents. Satisfies the OpenSSF Token-Permissions gate
+      # without regressing the bot-authored PR flow. Refs #1437, #2036.
+      contents: read
       issues: read
       pull-requests: write
     concurrency:
