@@ -128,8 +128,13 @@ def ensure_coverage_json(repo: Path) -> Path:
     collection error, interrupted run) cannot leave the stale file in place to
     be reused; the absent-file check below then fails loud per CLAUDE.md
     section 4 instead of silently passing on the report just declared invalid.
+    If the delete itself fails (read-only mount, foreign owner) the stale file
+    survives, so the regeneration is also required to change the file's mtime:
+    an unchanged mtime means pytest never rewrote it and the gate fails loud
+    rather than reusing the report just declared invalid (Refs #2077 review).
     """
     coverage_path = repo / "coverage.json"
+    stale_mtime: float | None = None
     if coverage_path.exists():
         if not coverage_is_stale(coverage_path, repo):
             return coverage_path
@@ -138,6 +143,8 @@ def ensure_coverage_json(repo: Path) -> Path:
             "file); discarding it and regenerating instead of reusing it.",
             file=sys.stderr,
         )
+        with contextlib.suppress(OSError):
+            stale_mtime = coverage_path.stat().st_mtime
         with contextlib.suppress(OSError):
             coverage_path.unlink()
     uv = shutil.which("uv")
@@ -155,6 +162,15 @@ def ensure_coverage_json(repo: Path) -> Path:
         raise RuntimeError(
             f"coverage.json not generated after pytest run (exit {completed.returncode}). "
             "Inspect the pytest output above for test failures."
+        )
+    # The delete above is best-effort; if it failed, a stale file can still be
+    # sitting here. Require the rerun to have rewritten it (mtime changed), else
+    # the stale report could not be regenerated and must not be reused.
+    if stale_mtime is not None and coverage_path.stat().st_mtime == stale_mtime:
+        raise RuntimeError(
+            f"stale coverage.json could not be regenerated (exit {completed.returncode}); "
+            "the cached report was not rewritten. Remove it manually and rerun: "
+            "rm coverage.json && uv run pytest --cov --cov-report=json -q"
         )
     return coverage_path
 

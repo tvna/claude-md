@@ -229,6 +229,36 @@ class TestEnsureCoverageJson:
         # The stale report must not survive a failed regeneration.
         assert not cov_file.exists()
 
+    def test_stale_unlink_failure_does_not_reuse(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """If the stale file cannot be deleted AND regen does not rewrite it, fail loud."""
+        cov_file = tmp_path / "coverage.json"
+        cov_file.write_text('{"files": {"old": {"summary": {"percent_covered": 10.0}}}}')
+        scripts_dir = tmp_path / "scripts"
+        scripts_dir.mkdir()
+        src = scripts_dir / "preflight_foo.py"
+        src.write_text("x = 1\n")
+        os.utime(cov_file, (1_000_000, 1_000_000))
+        os.utime(src, (2_000_000, 2_000_000))
+
+        def deny_unlink(self: Path, *a: object, **k: object) -> None:
+            raise OSError("read-only file system")
+
+        def no_write_run(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
+            # Regeneration fails without rewriting the stale file (mtime unchanged).
+            return subprocess.CompletedProcess(args=[], returncode=1, stdout="", stderr="")
+
+        monkeypatch.setattr(Path, "unlink", deny_unlink)
+        with (
+            patch("preflight_coverage.shutil.which", return_value="/usr/bin/uv"),
+            patch("preflight_coverage.subprocess.run", side_effect=no_write_run),
+            pytest.raises(RuntimeError, match="could not be regenerated"),
+        ):
+            cov.ensure_coverage_json(tmp_path)
+        # The stale file survived the failed unlink, but it must not be returned.
+        assert cov_file.exists()
+
     def test_reuses_when_fresh_relative_to_sources(self, tmp_path: Path) -> None:
         """A coverage.json newer than all sources is reused without running pytest."""
         cov_file = tmp_path / "coverage.json"

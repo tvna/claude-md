@@ -396,6 +396,26 @@ class TestSessionStart:
         assert gate.base_is_stale(repo=repo, stamp_path=stamp) is True
 
 
+    def test_no_auto_update_on_detached_head(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """A detached HEAD (no branch) must warn, not silently fast-forward HEAD."""
+        repo, main_sha = _ffable_stale_repo(tmp_path)
+        _git(repo, "checkout", "--detach")  # detach at the feature tip
+        before = _rev(repo, "HEAD")
+        stamp = tmp_path / "STAMP"
+        _point_module_at(monkeypatch, repo, stamp)
+        pmf.write_stamp(main_sha, path=stamp)
+        monkeypatch.setattr(pmf, "fetch_and_record", lambda **k: pmf.write_stamp(main_sha, path=stamp))
+
+        assert gate.main(["session-start"]) == 0
+
+        out = capsys.readouterr().out
+        assert "STALE BRANCH BASE" in out
+        assert "AUTO-UPDATED" not in out
+        assert _rev(repo, "HEAD") == before  # detached HEAD was not moved
+
+
 class TestTryAutoUpdateBase:
     def test_updated_when_clean_and_ffable(self, tmp_path: Path) -> None:
         repo, main_sha = _ffable_stale_repo(tmp_path)

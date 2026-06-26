@@ -248,10 +248,14 @@ def cmd_session_start(args: argparse.Namespace) -> int:
     except Exception:
         return 0
     if result.status != "pass":
-        if _try_auto_update_base(stamp.sha, repo=REPO_ROOT) == "updated":
+        # Only auto-update a real, named branch. On a detached HEAD the
+        # fast-forward would silently move HEAD and the "this branch" notice
+        # would be false, so fall back to the warning (matching every other
+        # detached-HEAD path in this module, which fails open). Refs #2077 review.
+        branch = _current_branch(REPO_ROOT)
+        if branch is not None and _try_auto_update_base(stamp.sha, repo=REPO_ROOT) == "updated":
             _emit_context(_build_updated_notice(stamp.sha))
         else:
-            branch = _current_branch(REPO_ROOT)
             _emit_context(_build_warning(stamp.sha, force_push_blocked=_force_push_blocked(branch)))
     return 0
 
