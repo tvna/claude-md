@@ -67,7 +67,7 @@ apm_modules/
 # Secrets / credentials. .env-style files hold tokens and API keys; they are
 # never committed. There is no .env.example carve-out because the repo ships
 # no example env file (add one with an explicit `!.env.example` line if that
-# changes). git is the canonical secret boundary, not .claudeignore
+# changes). git is the canonical secret boundary
 # (docs/standards/repo-scope.md).
 .env
 .env.*
