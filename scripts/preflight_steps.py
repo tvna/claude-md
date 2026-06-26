@@ -455,12 +455,6 @@ STEPS: tuple[Step, ...] = (
         argv=("python3", "scripts/owasp_asi_mapping.py", "verify"),
     ),
     Step(
-        # Refs #745. Fetches the live base branch and fails before push when
-        # HEAD does not contain it, matching GitHub's out-of-date branch gate.
-        name="preflight_branch_base",
-        argv=("python3", "scripts/preflight_branch_base.py", "verify"),
-    ),
-    Step(
         # Refs #1959. Fails before push when an unsigned commit is in the
         # branch range (origin/main..HEAD), the local counterpart to the
         # server-side required_signatures ruleset. Preflight-only (no CI
@@ -469,6 +463,12 @@ STEPS: tuple[Step, ...] = (
         # the server ruleset is the CI-equivalent gate. Refs #1959.
         name="preflight_signed_commits",
         argv=("python3", "scripts/preflight_signed_commits.py", "verify"),
+    ),
+    Step(
+        # Refs #745. Fetches the live base branch and fails before push when
+        # HEAD does not contain it, matching GitHub's out-of-date branch gate.
+        name="preflight_branch_base",
+        argv=("python3", "scripts/preflight_branch_base.py", "verify"),
     ),
     Step(
         # Refs #2012. Measures docs/INDEX.md in the test-merge of HEAD with the
