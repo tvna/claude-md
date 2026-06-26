@@ -40,6 +40,11 @@ name = "ops"
 purpose = "Workflow, bot, or maintenance state outside normal triage taxonomy."
 cardinality = "unbounded_but_each_label_requires_writer_reader_lifecycle"
 
+[[families]]
+name = "semver"
+purpose = "Declared semantic-version severity of a universal-text change; read by the source version drift gate."
+cardinality = "exactly_one_for_universal_text_prs"
+
 [[labels]]
 name = "layer:p1-goal-plan"
 family = "layer"
@@ -147,6 +152,27 @@ family = "severity"
 status = "keep"
 description = "Non-ASCII content boundary signal for issue, PR, or comment text."
 color = "ff7619"
+
+[[labels]]
+name = "semver:major"
+family = "semver"
+status = "add"
+description = "Universal-text change breaks backward compatibility; bumps apm.yml MAJOR."
+color = "006b75"
+
+[[labels]]
+name = "semver:minor"
+family = "semver"
+status = "add"
+description = "Universal-text change is a backward-compatible addition or clarification; bumps apm.yml MINOR."
+color = "006b75"
+
+[[labels]]
+name = "semver:patch"
+family = "semver"
+status = "add"
+description = "Universal-text change is non-normative surface only; bumps apm.yml PATCH."
+color = "006b75"
 
 [[labels]]
 name = "area:agent-instructions"
@@ -314,6 +340,7 @@ paths = [
   ".apm/**", "apm.yml", "apm.lock.yaml",
   "scripts/gen_agent_hooks.py", "scripts/backup_archive.py",
   "scripts/publish_instruction_release.py",
+  "scripts/auto_tag_version.py",
   ".github/workflows/generate-agents.yml",
   ".github/workflows/publish-instructions-release.yml",
 ]

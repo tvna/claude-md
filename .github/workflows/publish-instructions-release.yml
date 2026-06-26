@@ -3,18 +3,18 @@ name: Publish instructions release
 # Publishes the compiled CLAUDE.md / AGENTS.md plus a SHA256SUMS manifest as
 # downloadable assets on a tagged release, so downstream consumers can pin a
 # version and verify the sha256 before landing the instructions as a committed
-# real file. Triggered by an `instructions-v*` tag (a deliberate, privileged
-# maintainer act) or a manual dispatch. See
-# docs/runbooks/consumer-instruction-sync.md and
-# docs/proposals/instruction-distribution-mechanism.md. Refs #1678.
+# real file. Triggered by a `v*` semver tag, which the post-merge auto-tag job
+# (.github/workflows/post-merge.yml) creates when apm.yml: version changes
+# (#89), or a manual dispatch. See docs/runbooks/consumer-instruction-sync.md
+# and docs/proposals/instruction-distribution-mechanism.md. Refs #1678, #89.
 on:
   push:
     tags:
-      - "instructions-v*"
+      - "v*"
   workflow_dispatch:
     inputs:
       version:
-        description: "Release tag to publish (e.g. instructions-vX.Y.Z). Must already exist as a tag."
+        description: "Release tag to publish (e.g. vX.Y.Z). Must already exist as a tag."
         type: string
         required: true
 
@@ -51,9 +51,9 @@ jobs:
             tag="$REF_NAME"
           fi
           case "$tag" in
-            instructions-v*) ;;
+            v[0-9]*) ;;
             *)
-              echo "::error::tag '$tag' must start with 'instructions-v'"
+              echo "::error::tag '$tag' must be a semver tag of the form 'v<MAJOR>.<MINOR>.<PATCH>' (e.g. v1.1.0)"
               exit 1
               ;;
           esac

@@ -408,6 +408,65 @@ jobs:
           GITHUB_REF_NAME: ${{ github.ref_name }}
         run: python3 scripts/auto_retro.py triage-report-pr
 
+  # Post-merge auto-tag (#89, requirement R5 of
+  # docs/prd/semantic-versioning-universal-text.md). When a merge to main
+  # changes apm.yml: version, push a lightweight v{version} tag. The R4 drift
+  # gate (scripts/verify_source_version_bump.py, in verify-pr.yml) guarantees
+  # the version changes only when the universal text changes, so the tag is
+  # created only on a universal-text update. The script is idempotent: an
+  # existing tag is a no-op (no force, no overwrite). It is stdlib-only, so the
+  # system python3 runs it without setup-uv. fetch-depth: 0 makes the merge
+  # commit's first parent reachable so the version diff can be read.
+  #
+  # The tag MUST be pushed with a GitHub App token, not the default
+  # GITHUB_TOKEN: GitHub does not start a new workflow run from events the
+  # GITHUB_TOKEN triggers (except workflow_dispatch / repository_dispatch), so a
+  # GITHUB_TOKEN-pushed tag would never fire publish-instructions-release.yml's
+  # `on: push: tags: v*` and a universal-text merge would get a tag but no
+  # release assets. The App token (same devcontainer-image-pins App that
+  # authors the generated-docs and triage-report PRs above) is a non-Actions
+  # identity, so its tag push does start the release workflow. The App is
+  # already trusted in this workflow; this adds no new secret surface.
+  #
+  # The job-level GITHUB_TOKEN needs only `contents: read`: the App token (not
+  # the GITHUB_TOKEN) is the git credential that creates and pushes the tag, so
+  # the default token never needs write here. Keeping it read-only satisfies the
+  # Scorecard Token-Permissions check while the App retains the write capability
+  # required for the push.
+  auto-tag-version:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: devcontainer-image-pins
+    permissions:
+      contents: read
+    concurrency:
+      group: auto-tag-version
+      cancel-in-progress: false
+    steps:
+      - name: Mint GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ secrets.DEVCONTAINER_PIN_APP_ID }}
+          private-key: ${{ secrets.DEVCONTAINER_PIN_APP_PRIVATE_KEY }}
+
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+          # Persist the App token as the git credential so the tag push in
+          # auto_tag_version.py is attributed to the App (a non-Actions
+          # identity) and therefore triggers publish-instructions-release.yml.
+          token: ${{ steps.app-token.outputs.token }}
+          persist-credentials: true
+
+      - name: Tag v{version} when apm.yml version changed
+        env:
+          MERGE_SHA: ${{ github.sha }}
+        run: python3 scripts/auto_tag_version.py run
+
   # Durable drift gate (#1574, the optional item 2 of #1533): regenerate the
   # deterministic docs/generated/ tree with the project-pinned interpreter and
   # fail loudly when main has drifted from it. The decision-tree job above is the

@@ -96,6 +96,12 @@ type = "standard"
 description = "Single source of truth for repository-wide term definitions; supersedes section 2.5 of design_philosophy_prd."
 
 [[nodes]]
+id = "semver_universal_text_prd"
+path = "docs/prd/semantic-versioning-universal-text.md"
+type = "prd"
+description = "Compatibility-based semantic versioning scheme for the universal text: MAJOR/MINOR/PATCH classification, apm.yml canonical version, v-prefixed tag, bidirectional drift gate, post-merge auto-tag. Refs #89."
+
+[[nodes]]
 id = "scan_design_philosophy_drift"
 path = "scripts/scan_design_philosophy_drift.py"
 type = "harness_script"
@@ -306,3 +312,13 @@ to = "doc_graph_lib"
 type = "references"
 severity = "advisory"
 note = "gate_doc_graph_pr imports doc_graph_lib; gate changes may require lib review."
+
+# The versioning scheme classifies changes to the universal text; it cites
+# the master structure (P1-P6, defined terms) but must not co-change on every
+# universal-text edit, so the edge is advisory.
+[[edges]]
+from = "semver_universal_text_prd"
+to = "master_instructions"
+type = "references"
+severity = "advisory"
+note = "Classification rules (R1) reference the universal-text structure; informational only."
