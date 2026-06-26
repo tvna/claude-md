@@ -185,8 +185,53 @@ def _emit_context(message: str) -> None:
     print(json.dumps({"hookSpecificOutput": {"additionalContext": message}}))
 
 
+def _build_updated_notice(sha: str) -> str:
+    return (
+        f"BRANCH BASE AUTO-UPDATED: this branch was behind origin/main as "
+        f"observed at session start (SHA={sha[:12]}). The base was clean and "
+        f"fast-forwardable (no local commits yet), so it was fast-forwarded to "
+        f"origin/main automatically BEFORE the first commit. This removes the "
+        f"mid-session merge the PR #2046 retrospective (#2047, repair 3) "
+        f"recorded. No action needed; implement on the fresh base."
+    )
+
+
+def _try_auto_update_base(sha: str, *, repo: Path) -> str:
+    """Fast-forward the current branch to *sha* when it is safe; return the outcome.
+
+    Returns ``"updated"`` only when the working tree is clean AND HEAD is an
+    ancestor of *sha* (a pure fast-forward: a freshly-cut branch with no local
+    work yet) AND ``git merge --ff-only`` succeeds. Returns ``"skipped"`` in
+    every other case (dirty tree, local commits, non-fast-forwardable, or any
+    git error). This is a LOCAL fast-forward only (no push, no merge commit, no
+    conflict resolution), so it is safe regardless of the force-push ruleset and
+    cannot lose work. Fail-open per CLAUDE.md Section 4: on any error it skips
+    and the loud warning / commit-deny gate remain the backstop. Refs #2076.
+    """
+    try:
+        status = run_git(["status", "--porcelain"], cwd=repo)
+        if status.returncode != 0 or status.stdout.strip():
+            return "skipped"  # dirty tree (or git error) -> do not touch it
+        ancestor = run_git(["merge-base", "--is-ancestor", "HEAD", sha], cwd=repo)
+        if ancestor.returncode != 0:
+            return "skipped"  # local commits / not fast-forwardable -> leave for the operator
+        merged = run_git(["merge", "--ff-only", sha], cwd=repo)
+        if merged.returncode != 0:
+            return "skipped"
+    except Exception:
+        return "skipped"
+    return "updated"
+
+
 def cmd_session_start(args: argparse.Namespace) -> int:
-    """SessionStart hook: record origin/main and warn on a stale base."""
+    """SessionStart hook: record origin/main, auto-update a stale base, else warn.
+
+    When the base is stale and a safe local fast-forward is possible (clean tree,
+    no local commits yet), the branch is fast-forwarded to origin/main so the
+    mid-session merge repair (#2047 repair 3) never happens. When that is not
+    safe, the existing loud warning is emitted and the pre-commit deny gate
+    remains the backstop. Refs #1632, #2076.
+    """
     if not _is_remote():
         return 0
     try:
@@ -203,8 +248,11 @@ def cmd_session_start(args: argparse.Namespace) -> int:
     except Exception:
         return 0
     if result.status != "pass":
-        branch = _current_branch(REPO_ROOT)
-        _emit_context(_build_warning(stamp.sha, force_push_blocked=_force_push_blocked(branch)))
+        if _try_auto_update_base(stamp.sha, repo=REPO_ROOT) == "updated":
+            _emit_context(_build_updated_notice(stamp.sha))
+        else:
+            branch = _current_branch(REPO_ROOT)
+            _emit_context(_build_warning(stamp.sha, force_push_blocked=_force_push_blocked(branch)))
     return 0
 
 
