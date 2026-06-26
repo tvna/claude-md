@@ -27,6 +27,7 @@ import json
 import urllib.error
 from typing import Any
 
+import auto_retro
 import gate_pr_body_retro_issue_link as gate
 import pytest
 
@@ -390,3 +391,10 @@ class TestMain:
         monkeypatch.setattr("sys.stdout", out)
         assert gate.main() == 0
         assert out.getvalue() == ""
+
+
+def test_uses_canonical_is_retro_issue_title_predicate() -> None:
+    # The gate must delegate retro-title identification to the canonical
+    # predicate in auto_retro rather than carry a private copy that could
+    # silently diverge. Static identity check; Refs #2067, #1887, #1883.
+    assert gate.is_retro_issue_title is auto_retro.is_retro_issue_title
