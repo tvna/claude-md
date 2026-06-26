@@ -305,3 +305,171 @@ def test_main_write_mode_creates_files(
     rc = gen.main([])
     assert rc == 0
     assert (tmp_path / "x.json").exists()
+
+
+# ---------------------------------------------------------------------------
+# Permissions single-source compiler (RFC #2022 A-2)
+# ---------------------------------------------------------------------------
+
+
+def test_build_claude_permissions_matches_committed_settings() -> None:
+    """The compiled block equals the committed .claude/settings.json permissions."""
+    source = _load_source()
+    committed = json.loads((ROOT / ".claude" / "settings.json").read_text(encoding="utf-8"))
+    assert gen.build_claude_permissions(source) == committed["permissions"]
+
+
+def test_build_claude_permissions_returns_none_without_section() -> None:
+    assert gen.build_claude_permissions({"targets": []}) is None
+
+
+def test_build_claude_permissions_concatenates_in_kind_order() -> None:
+    source = {
+        "permissions": {
+            "allow": [{"intent": "a", "claude": ["Write(x)"], "claude_only": True, "rationale": "r", "issue": "u"}],
+            "deny": [{"intent": "d", "claude": ["Bash(y)", "Bash(z)"], "realized_by": "scripts/h.py", "issue": "u"}],
+        }
+    }
+    assert gen.build_claude_permissions(source) == {"allow": ["Write(x)"], "deny": ["Bash(y)", "Bash(z)"]}
+
+
+def test_build_claude_permissions_rejects_non_mapping_section() -> None:
+    with pytest.raises(ValueError, match="must be a mapping"):
+        gen.build_claude_permissions({"permissions": ["nope"]})
+
+
+def test_build_claude_permissions_rejects_intent_without_realization() -> None:
+    bad = {"permissions": {"deny": [{"intent": "x", "claude": ["Bash(x)"], "issue": "u"}]}}
+    with pytest.raises(ValueError, match="realized_by"):
+        gen.build_claude_permissions(bad)
+
+
+def test_build_claude_permissions_rejects_claude_only_without_rationale() -> None:
+    bad = {"permissions": {"allow": [{"intent": "x", "claude": ["Write(x)"], "claude_only": True, "issue": "u"}]}}
+    with pytest.raises(ValueError, match="rationale"):
+        gen.build_claude_permissions(bad)
+
+
+def test_build_claude_permissions_requires_issue() -> None:
+    bad = {"permissions": {"deny": [{"intent": "x", "claude": ["Bash(x)"], "realized_by": "scripts/y.py"}]}}
+    with pytest.raises(ValueError, match="issue"):
+        gen.build_claude_permissions(bad)
+
+
+def test_build_claude_permissions_rejects_empty_claude_rules() -> None:
+    bad = {"permissions": {"deny": [{"intent": "x", "claude": [], "realized_by": "scripts/y.py", "issue": "u"}]}}
+    with pytest.raises(ValueError, match="non-empty list"):
+        gen.build_claude_permissions(bad)
+
+
+def test_rendered_claude_places_permissions_after_schema() -> None:
+    source = _load_source()
+    rendered = gen.render_targets(source)
+    data = json.loads(rendered[".claude/settings.json"])
+    assert list(data)[:2] == ["$schema", "permissions"]
+    assert data["permissions"] == gen.build_claude_permissions(source)
+
+
+def test_codex_devin_have_no_permissions_block() -> None:
+    rendered = gen.render_targets(_load_source())
+    for path in (".codex/hooks.json", ".devin/hooks.v1.json"):
+        assert "permissions" not in json.loads(rendered[path])
+
+
+def test_with_permissions_is_noop_when_none() -> None:
+    config = {"$schema": "s", "hooks": {}}
+    assert gen._with_permissions(config, None) is config
+
+
+def test_with_permissions_leads_when_no_schema() -> None:
+    result = gen._with_permissions({"hooks": {}}, {"deny": ["Bash(x)"]})
+    assert next(iter(result)) == "permissions"
+
+
+# ---------------------------------------------------------------------------
+# Cross-platform permission parity gate (the reconcile-with-Codex drift gate)
+# ---------------------------------------------------------------------------
+
+
+def test_permission_parity_passes_on_committed_tree() -> None:
+    source = _load_source()
+    assert gen.verify_permission_parity(source, gen.render_targets(source)) == []
+
+
+def test_permission_parity_ignores_source_without_permissions() -> None:
+    assert gen.verify_permission_parity({"targets": []}, {}) == []
+
+
+def test_permission_parity_skips_claude_only_intents() -> None:
+    source = {"permissions": {"allow": [
+        {"intent": "x", "claude": ["Write(x)"], "claude_only": True, "rationale": "r", "issue": "u"}]}}
+    assert gen.verify_permission_parity(source, {".codex/hooks.json": "{}", ".devin/hooks.v1.json": "{}"}) == []
+
+
+def test_permission_parity_flags_unwired_realized_by() -> None:
+    source = {"permissions": {"deny": [
+        {"intent": "x", "claude": ["Bash(x)"], "realized_by": "scripts/not_wired.py", "issue": "u"}]}}
+    rendered = {".codex/hooks.json": "{}", ".devin/hooks.v1.json": "{}"}
+    problems = gen.verify_permission_parity(source, rendered)
+    assert len(problems) == 2
+    assert all("not_wired.py" in p for p in problems)
+
+
+def test_permission_parity_passes_when_realized_by_wired_in_both() -> None:
+    source = {"permissions": {"deny": [
+        {"intent": "x", "claude": ["Bash(x)"], "realized_by": "scripts/h.py", "issue": "u"}]}}
+    wired = json.dumps({"hooks": {"PreToolUse": [{"hooks": [{"command": "python3 scripts/h.py"}]}]}})
+    assert gen.verify_permission_parity(source, {".codex/hooks.json": wired, ".devin/hooks.v1.json": wired}) == []
+
+
+def test_main_check_fails_on_permission_parity_drift(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """--check fails when a deny intent's realized_by hook is not wired cross-platform."""
+    source_obj = {
+        "permissions": {"deny": [
+            {"intent": "x", "claude": ["Bash(x)"], "realized_by": "scripts/missing.py", "issue": "u"}]},
+        "targets": [
+            {"agent": "claude", "path": ".claude/settings.json", "config": {"$schema": "s", "hooks": {}}},
+            {"agent": "codex", "path": ".codex/hooks.json", "config": {"hooks": {}}},
+            {"agent": "devin", "path": ".devin/hooks.v1.json", "mirror": "codex"},
+        ],
+    }
+    source = tmp_path / "source.json"
+    source.write_text(json.dumps(source_obj), encoding="utf-8")
+    monkeypatch.setattr(gen, "SOURCE", source)
+    monkeypatch.setattr(gen, "REPO_ROOT", tmp_path)
+    # Materialize the rendered tree so the stale check passes and ONLY parity fails.
+    for rel, text in gen.render_targets(source_obj).items():
+        target = tmp_path / rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(text, encoding="utf-8")
+    assert gen.main(["--check"]) == 1
+
+
+def test_main_check_passes_when_parity_holds(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A realized_by hook wired into codex (and mirrored devin) passes --check."""
+    source_obj = {
+        "permissions": {"deny": [
+            {"intent": "x", "claude": ["Bash(x)"], "realized_by": "scripts/wired.py", "issue": "u"}]},
+        "targets": [
+            {"agent": "claude", "path": ".claude/settings.json", "config": {"$schema": "s", "hooks": {}}},
+            {
+                "agent": "codex",
+                "path": ".codex/hooks.json",
+                "config": {"hooks": {"PreToolUse": [{"hooks": [{"command": "python3 scripts/wired.py"}]}]}},
+            },
+            {"agent": "devin", "path": ".devin/hooks.v1.json", "mirror": "codex"},
+        ],
+    }
+    source = tmp_path / "source.json"
+    source.write_text(json.dumps(source_obj), encoding="utf-8")
+    monkeypatch.setattr(gen, "SOURCE", source)
+    monkeypatch.setattr(gen, "REPO_ROOT", tmp_path)
+    for rel, text in gen.render_targets(source_obj).items():
+        target = tmp_path / rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(text, encoding="utf-8")
+    assert gen.main(["--check"]) == 0

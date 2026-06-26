@@ -32,6 +32,16 @@ be forgotten when a new hook is added; the recurrence-prevention contract is
 the ``--check`` drift gate wired into ``.pre-commit-config.yaml`` and CI, which
 fails when a committed config does not match a fresh render of the source.
 
+The same source also owns the Claude ``permissions`` block (RFC #2022 A-2).
+A platform-neutral top-level ``permissions`` section declares each intent's
+Claude rule strings plus its cross-platform realization: ``realized_by`` (a
+hook enforcing the same intent for codex/devin) or ``claude_only`` (a
+Claude-only intent with no portable target). :func:`build_claude_permissions`
+compiles the ``allow``/``deny`` block injected into ``.claude/settings.json``,
+and :func:`verify_permission_parity` (folded into ``--check``) fails when a
+``realized_by`` hook is not wired into both ``.codex/hooks.json`` and
+``.devin/hooks.v1.json``; the reconcile-with-Codex drift gate.
+
 Usage::
 
     python3 scripts/gen_agent_hooks.py           # write the agent configs
@@ -64,6 +74,104 @@ SOURCE = REPO_ROOT / "scripts" / "agent_hooks_source.json"
 # intentionally avoided because it is unset in the FleetView remote environment
 # (#783) and would expand to a broken path.
 HOOK_CWD_PREFIX = 'cd "$(git rev-parse --show-toplevel)" && '
+
+# The Claude ``permissions`` rule kinds, in the order they are emitted into
+# ``.claude/settings.json``. ``ask`` is accepted for forward-compatibility even
+# though the current source declares only ``allow`` and ``deny``.
+PERMISSION_KINDS = ("allow", "deny", "ask")
+
+
+def _validate_permission_intent(kind: str, intent: Any) -> None:
+    """Validate one permission intent; raise ``ValueError`` on a malformed entry.
+
+    Each intent carries its Claude rule strings (``claude``) plus its
+    cross-platform realization: either ``realized_by`` (a hook that enforces the
+    same intent for codex/devin) or ``claude_only`` (a Claude-only intent with
+    no portable target, which must still carry a ``rationale``). Every intent
+    names a tracking ``issue``.
+    """
+    if not isinstance(intent, dict):
+        raise ValueError(f"permissions.{kind} entry must be a mapping")
+    name = intent.get("intent")
+    if not isinstance(name, str) or not name:
+        raise ValueError(f"permissions.{kind} entry missing a string 'intent'")
+    rules = intent.get("claude")
+    if not isinstance(rules, list) or not rules or not all(isinstance(r, str) and r for r in rules):
+        raise ValueError(f"permissions intent {name!r}: 'claude' must be a non-empty list of strings")
+    if intent.get("claude_only"):
+        rationale = intent.get("rationale")
+        if not isinstance(rationale, str) or not rationale:
+            raise ValueError(f"permissions intent {name!r}: claude_only requires a string 'rationale'")
+    else:
+        realized_by = intent.get("realized_by")
+        if not isinstance(realized_by, str) or not realized_by:
+            raise ValueError(
+                f"permissions intent {name!r}: declare either a string 'realized_by' "
+                "(a hook enforcing the same intent for codex/devin) or 'claude_only': true"
+            )
+    issue = intent.get("issue")
+    if not isinstance(issue, str) or not issue:
+        raise ValueError(f"permissions intent {name!r}: missing a string 'issue'")
+
+
+def build_claude_permissions(source: dict[str, Any]) -> dict[str, Any] | None:
+    """Compile the Claude ``permissions`` block from the neutral source section.
+
+    Returns ``None`` when the source declares no ``permissions`` section. Each
+    intent's ``claude`` rule strings are concatenated under their kind
+    (``allow``/``deny``/``ask``) preserving declaration order, so the rendered
+    block stays byte-stable. Raises ``ValueError`` on a malformed section.
+    """
+    perms = source.get("permissions")
+    if perms is None:
+        return None
+    if not isinstance(perms, dict):
+        raise ValueError("source 'permissions' must be a mapping")
+    block: dict[str, Any] = {}
+    for kind in PERMISSION_KINDS:
+        intents = perms.get(kind)
+        if intents is None:
+            continue
+        if not isinstance(intents, list):
+            raise ValueError(f"permissions.{kind} must be a list")
+        rules: list[str] = []
+        for intent in intents:
+            _validate_permission_intent(kind, intent)
+            rules.extend(intent["claude"])
+        block[kind] = rules
+    return block
+
+
+def verify_permission_parity(source: dict[str, Any], rendered: dict[str, str]) -> list[str]:
+    """Return cross-platform permission parity problems; empty when none.
+
+    Every permission intent that declares ``realized_by`` (a hook enforcing the
+    same intent for codex/devin) must have that hook wired into BOTH the codex
+    and devin rendered configs. ``claude_only`` intents declare no
+    cross-platform target and are exempt (their well-formedness is checked when
+    the block is built). This is the reconcile-with-Codex drift gate the RFC
+    flagged: a Claude permission whose portable enforcement is missing fails.
+    """
+    perms = source.get("permissions")
+    if not isinstance(perms, dict):
+        return []
+    corpus = {path: (rendered.get(path) or "") for path in (".codex/hooks.json", ".devin/hooks.v1.json")}
+    problems: list[str] = []
+    for kind in PERMISSION_KINDS:
+        for intent in perms.get(kind) or []:
+            if not isinstance(intent, dict) or intent.get("claude_only"):
+                continue
+            realized_by = intent.get("realized_by")
+            if not isinstance(realized_by, str) or not realized_by:
+                continue
+            name = intent.get("intent")
+            for path, text in corpus.items():
+                if realized_by not in text:
+                    problems.append(
+                        f"permissions intent {name!r}: realized_by {realized_by!r} "
+                        f"is not wired in {path}; cross-platform enforcement is missing"
+                    )
+    return problems
 
 
 def command_needs_wrap(command: str) -> bool:
@@ -130,6 +238,29 @@ def _serialise(config: dict[str, Any]) -> str:
     return json.dumps(config, indent=2) + "\n"
 
 
+def _with_permissions(config: dict[str, Any], permissions: dict[str, Any] | None) -> dict[str, Any]:
+    """Return *config* with *permissions* inserted right after ``$schema``.
+
+    A no-op (returns *config* unchanged) when *permissions* is ``None``. Builds
+    a new dict rather than mutating, so the Claude target stays independent of
+    any mirror sharing. Placement after ``$schema`` keeps the rendered
+    ``.claude/settings.json`` key order (``$schema``, ``permissions``,
+    ``hooks``) byte-stable.
+    """
+    if permissions is None:
+        return config
+    result: dict[str, Any] = {}
+    placed = False
+    for key, value in config.items():
+        result[key] = value
+        if key == "$schema":
+            result["permissions"] = permissions
+            placed = True
+    if not placed:
+        result = {"permissions": permissions, **config}
+    return result
+
+
 def render_targets(source: dict[str, Any]) -> dict[str, str]:
     """Map each target path to its rendered (wrapped) JSON text.
 
@@ -154,6 +285,8 @@ def render_targets(source: dict[str, Any]) -> dict[str, str]:
                 raise ValueError(f"target {agent!r}: 'config' must be a mapping")
             configs_by_agent[agent] = config
 
+    claude_permissions = build_claude_permissions(source)
+
     rendered: dict[str, str] = {}
     for target in targets:
         agent = target["agent"]
@@ -169,6 +302,8 @@ def render_targets(source: dict[str, Any]) -> dict[str, str]:
             config = configs_by_agent[agent]
         else:
             raise ValueError(f"target {agent!r} declares neither 'config' nor 'mirror'")
+        if agent == "claude":
+            config = _with_permissions(config, claude_permissions)
         rendered[path] = _serialise(_wrap_config(config))
     return rendered
 
@@ -200,7 +335,8 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     try:
-        rendered = render_targets(_load_source())
+        source = _load_source()
+        rendered = render_targets(source)
     except ValueError as exc:
         print(f"::error file={SOURCE.name}::{exc}", file=sys.stderr)
         return 2
@@ -218,6 +354,9 @@ def main(argv: list[str] | None = None) -> int:
             if current != text:
                 print(f"::error file={rel}::stale; run python3 scripts/gen_agent_hooks.py", file=sys.stderr)
                 stale = True
+        for problem in verify_permission_parity(source, rendered):
+            print(f"::error file={SOURCE.name}::{problem}", file=sys.stderr)
+            stale = True
         return 1 if stale else 0
 
     for rel, text in rendered.items():
