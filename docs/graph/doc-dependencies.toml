@@ -165,7 +165,7 @@ description = "PreToolUse gate: blocks mcp__github__issue_write create calls for
 id = "prd_template"
 path = "docs/prd/TEMPLATE.md"
 type = "prd"
-description = "Authoring skeleton for prd-lane design notes and PRDs: canonical PRD fields plus split Why / Why not, Considered Alternatives, and the Graduation Path. Refs #2000."
+description = "Authoring skeleton for prd-lane design notes: a Date/Refs metadata header, two profiles (design PRD / decision record, and analysis / judgment aid), and first-class Facts/Assumptions/Verification/References/Maintenance-and-Rollback sections. Refs #2000, #2054."
 
 [[nodes]]
 id = "standard_template"
