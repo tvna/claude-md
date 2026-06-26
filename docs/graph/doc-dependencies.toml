@@ -66,6 +66,12 @@ type = "prd"
 description = "MITRE ATT&CK coverage SoT for repository security surfaces."
 
 [[nodes]]
+id = "installer_download_retry_prd"
+path = "docs/prd/sessionstart-installer-download-retry.md"
+type = "prd"
+description = "Decision record for retrying curl downloads in SessionStart installers via shared scripts/_retry.sh with fail-loud-but-fail-open surfacing."
+
+[[nodes]]
 id = "issue_pr_body_standard"
 path = "docs/standards/issue-pr-body-standard.md"
 type = "standard"
