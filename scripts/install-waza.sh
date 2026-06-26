@@ -41,6 +41,8 @@ fi
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=scripts/_session_path.sh
 . "${SCRIPT_DIR}/_session_path.sh"
+# shellcheck source=scripts/_retry.sh
+. "${SCRIPT_DIR}/_retry.sh"
 
 # Map this platform to the nix system double that flake.nix's wazaNative block
 # enumerates. An unsupported arch is a non-fatal skip: the binary is an
@@ -93,7 +95,7 @@ download="${tmpdir}/${asset}"
 url="https://github.com/microsoft/waza/releases/download/v${version}/${asset}"
 
 echo "install-waza: downloading pinned ${asset} v${version} ..." >&2
-curl -fsSL "${url}" -o "${download}"
+retry_download "${url}" "${download}" "waza" "scripts/install-waza.sh" || exit 0
 echo "${sha}  ${download}" | sha256sum -c - >&2
 
 staged="$(mktemp "${install_dir}/.waza.XXXXXX")"

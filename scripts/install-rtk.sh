@@ -34,6 +34,8 @@ fi
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=scripts/_session_path.sh
 . "${SCRIPT_DIR}/_session_path.sh"
+# shellcheck source=scripts/_retry.sh
+. "${SCRIPT_DIR}/_retry.sh"
 
 # Map this platform to the nix system double that flake.nix's rtkNative block
 # enumerates. An unsupported arch is a non-fatal skip: the binary is an
@@ -85,7 +87,7 @@ tarball="${tmpdir}/${asset}"
 url="https://github.com/rtk-ai/rtk/releases/download/v${version}/${asset}"
 
 echo "install-rtk: downloading pinned ${asset} v${version} ..." >&2
-curl -fsSL "${url}" -o "${tarball}"
+retry_download "${url}" "${tarball}" "rtk" "scripts/install-rtk.sh" || exit 0
 echo "${sha}  ${tarball}" | sha256sum -c - >&2
 
 # The rtk tarball unpacks to a single bare `rtk` binary (no enclosing dir).
