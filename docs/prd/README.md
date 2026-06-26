@@ -38,7 +38,7 @@ Current compatibility notes:
 | File | Territory | Tracking issues | Companion |
 |---|---|---|---|
 | [README.md](README.md) | Compatibility entrypoint for PRD/design placement rules. | #202 | `docs/INDEX.md`; `docs/standards/documentation-quality.md` |
-| [TEMPLATE.md](TEMPLATE.md) | Authoring skeleton for prd/ design notes and decision records. | #2000 | `docs/prd/README.md`; `docs/next-session/TEMPLATE.md` |
+| [TEMPLATE.md](TEMPLATE.md) | Authoring skeleton for prd/ documents in two profiles (design PRD / decision record, and analysis / judgment aid), with a Date/Refs header and first-class Facts/Verification/References/Maintenance sections. | #2000 | `docs/prd/README.md`; `docs/next-session/TEMPLATE.md` |
 | [agent-rules-design-philosophy.md](agent-rules-design-philosophy.md) | Meta-runbook for evolving `.apm/instructions/master.instructions.md` and its compiled `CLAUDE.md` / `AGENTS.md`. Six principles plus the four-lane responsibility matrix. | #226, #246 | `.apm/instructions/master.instructions.md` (source); `scripts/scan_design_philosophy_drift.py`; `.github/workflows/verify-pr.yml` (`verify-design-philosophy` job) |
 | [codex-permission-request-policy-gate.md](codex-permission-request-policy-gate.md) | Design-stage plan for a future Codex `PermissionRequest` adapter backed by a shared repository policy predicate and Claude parity evidence. | #711, #617, #604 | `.codex/hooks.json`; `.claude/settings.json`; `tests/test_codex_hooks_config.py` |
 | [repair-loops-proliferation-analysis.md](repair-loops-proliferation-analysis.md) | Read-only analysis of auto-retro repair-loop signal branches; feeds future follow-up issues rather than defining a gate. | #412 | `scripts/auto_retro.py`; `docs/archive/retrospective-pr-*.md` |

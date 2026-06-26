@@ -168,7 +168,7 @@ would promote it to a tracked issue.]
 documents, scripts, and workflows this document depends on or is depended on
 by. Mirror the `Companion` column the lane README records for this file.]
 
-## Graduation Path *(design PRD / decision record)*
+## Graduation Path
 
 [Where this document goes once the decision settles: to `docs/standards/`
 when it becomes an adopted yes/no rule, or to `docs/runbooks/` when it
