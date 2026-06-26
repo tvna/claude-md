@@ -177,6 +177,15 @@ changes (and vice versa), the tag is created only on a universal-text
 update - satisfying "assign a tag automatically only when the universal text
 is updated". The new tag triggers the existing release publish flow.
 
+The tag is pushed with a GitHub App token (the `devcontainer-image-pins` App
+already used by `post-merge.yml`), not the default `GITHUB_TOKEN`: GitHub does
+not start a new workflow run from events the `GITHUB_TOKEN` triggers (except
+`workflow_dispatch` / `repository_dispatch`), so a `GITHUB_TOKEN`-pushed tag
+would create the tag but never fire `publish-instructions-release.yml`
+(`on: push: tags: v*`), leaving a tagged version with no release assets. The
+App token is a non-Actions identity, so its tag push does start the release
+workflow.
+
 ## Why
 
 Compatibility-based semantics make "breaking for downstream consumers" the
