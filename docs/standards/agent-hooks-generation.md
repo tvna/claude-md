@@ -40,6 +40,32 @@ stays byte-for-byte identical to `.codex/hooks.json`
 (see [devin-apm-compatibility.md](devin-apm-compatibility.md)) without
 duplicating the config.
 
+## Permissions single-source (RFC #2022 A-2)
+
+`.claude/settings.json` `permissions` (allow/deny) is compiled from a
+platform-neutral top-level `permissions` section in
+`scripts/agent_hooks_source.json`, not hand-maintained inline. Each intent
+declares its Claude rule strings (`claude`) plus its cross-platform
+realization:
+
+- `realized_by: scripts/<hook>.py`: the hook that enforces the same intent
+  for codex/devin. These agents have no committed native permission file:
+  Codex permission scope lives in an uncommitted `config.toml`, and Codex
+  hooks reject `allow`/`ask` decisions (only `deny` is honored). Example: the
+  commit-signing-bypass deny is realized by `gate_unsigned_commit_bash.py`,
+  already wired into all three agents.
+- `claude_only: true` + `rationale` + `issue`: a Claude-only intent with no
+  portable target (e.g. the `/tmp/claude-plans` auto-approve UX).
+
+`gen_agent_hooks.py` compiles the `claude` rule strings into the
+`.claude/settings.json` permissions block (inserted after `$schema`,
+byte-stable). `gen_agent_hooks.py --check` is the drift gate: it fails when a
+generated config is hand-edited (render mismatch) AND when a `realized_by`
+hook is not wired into both `.codex/hooks.json` and `.devin/hooks.v1.json` --
+closing the T2 reconcile-with-Codex hole the RFC flagged. A new Claude
+permission intent that declares neither a wired `realized_by` nor a
+`claude_only` exemption fails the gate.
+
 ## Per-agent installer scope
 
 Every SessionStart provisioning installer is classified **shared** (intended for
