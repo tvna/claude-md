@@ -43,6 +43,8 @@ fi
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=scripts/_session_path.sh
 . "${SCRIPT_DIR}/_session_path.sh"
+# shellcheck source=scripts/_retry.sh
+. "${SCRIPT_DIR}/_retry.sh"
 
 # Map this platform to the nix system double that flake.nix's ccusageNative block
 # enumerates. An unsupported arch is a non-fatal skip: the binary is an
@@ -94,7 +96,7 @@ tarball="${tmpdir}/${pkg}-${version}.tgz"
 url="https://registry.npmjs.org/@ccusage/${pkg}/-/${pkg}-${version}.tgz"
 
 echo "install-ccusage: downloading pinned @ccusage/${pkg} v${version} ..." >&2
-curl -fsSL "${url}" -o "${tarball}"
+retry_download "${url}" "${tarball}" "ccusage" "scripts/install-ccusage.sh" || exit 0
 echo "${sha}  ${tarball}" | sha256sum -c - >&2
 
 # The npm tarball unpacks to a `package/` root holding `bin/ccusage`.

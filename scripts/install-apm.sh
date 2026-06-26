@@ -45,6 +45,8 @@ fi
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=scripts/_session_path.sh
 . "${SCRIPT_DIR}/_session_path.sh"
+# shellcheck source=scripts/_retry.sh
+. "${SCRIPT_DIR}/_retry.sh"
 
 # Map this platform to the nix system double that flake.nix's apmNative block
 # enumerates. An unsupported arch is a non-fatal skip: the binary is an
@@ -116,7 +118,7 @@ tarball="${tmpdir}/${archive}.tar.gz"
 url="https://github.com/microsoft/apm/releases/download/v${version}/${archive}.tar.gz"
 
 echo "install-apm: downloading pinned ${archive}.tar.gz v${version} ..." >&2
-curl -fsSL "${url}" -o "${tarball}"
+retry_download "${url}" "${tarball}" "apm" "scripts/install-apm.sh" || exit 0
 echo "${sha}  ${tarball}" | sha256sum -c - >&2
 
 # The apm tarball unpacks to an enclosing directory of the same name holding the
