@@ -131,6 +131,15 @@ class TestDecideBashDenied:
             "cat tmpl | tee .claude/skills/x.md",
             # absolute path argument
             "rm /home/user/claude-md/.agents/skills/x.md",
+            # dd writes via the of= keyword argument
+            "dd if=/dev/zero of=.agents/skills/x.md",
+            "dd of=.claude/skills/x.md bs=1M",
+            # noclobber-override redirection >|
+            "echo evil >| .agents/skills/x.md",
+            ">|.claude/skills/x.md echo hi",
+            # mutator hidden in a shell -c script (recursed into)
+            "bash -c 'cp a .agents/skills/x.md'",
+            "sh -c 'echo y > .claude/skills/x.md'",
         ],
     )
     def test_bash_write_to_managed_path_denied(self, command: str) -> None:
@@ -156,6 +165,10 @@ class TestDecideBashAllowed:
             "rm -rf build",
             # mention only; managed path is not a write target of a mutator
             "echo '.agents/skills/x.md is generated'",
+            # false-positive guard: a '>' inside a quoted string is not a real
+            # redirection (regression test for the raw-scan false positive)
+            "echo 'edit > .agents/skills/x.md to regenerate'",
+            'git commit -m "note: writes > .claude/skills/x.md on compile"',
             # sibling directory
             "cp a .agents/skillset/x.md",
             # empty

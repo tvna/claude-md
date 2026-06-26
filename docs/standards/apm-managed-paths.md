@@ -24,9 +24,14 @@ is touched:
 Both directories are the two committed copies of the upstream
 `obra/superpowers` APM dependency, expanded so Claude Code on the Web, Devin,
 and Codex all load the pinned skills from a fresh clone (`.claude/skills/` is
-the `#1983` carve-out; `.agents/skills/` the `#728` one). The two prefixes are
-byte-for-byte the same set that `scripts/scan_repo_em_dash.py` and
-`scripts/scan_repo_double_hyphen.py` already exclude in their `_SKIP_PREFIXES`.
+the `#1983` carve-out; `.agents/skills/` the `#728` one).
+
+The prefix set has a single source of truth: `scripts/_apm_managed_paths.py`
+exports `MANAGED_PREFIXES`, imported by `gate_agents_skills_edit.py` and by the
+scanners `scripts/scan_repo_em_dash.py` and `scripts/scan_repo_double_hyphen.py`
+(which skip these generated trees). `tests/test_apm_managed_paths.py` is the
+drift gate that fails if any consumer stops referencing the shared constant, so
+the copies cannot diverge (CLAUDE.md section 3).
 
 ## Other APM-generated files (governed separately)
 
