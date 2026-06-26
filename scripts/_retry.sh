@@ -18,13 +18,20 @@
 #   retry_download URL DEST TOOL_LABEL REINSTALL_CMD
 #     Fetch URL to DEST, retrying up to RETRY_MAX_RETRIES times (default 3;
 #     initial attempt + 3 retries = 4 total) with exponential backoff
-#     (RETRY_BASE_DELAY * 2^n seconds; default base 2 -> 2s, 4s, 8s). Returns 0
+#     (RETRY_BASE_DELAY * 2^n seconds; default base 1 -> 1s, 2s, 4s). Returns 0
 #     on the first success. After all attempts fail it prints a loud stderr
 #     banner plus one best-effort SessionStart additionalContext JSON object on
 #     stdout, then returns 1. Callers fail open with `|| exit 0`.
 #
+#     The default base is 1s (worst case 1+2+4 = 7s per tool) rather than 2s:
+#     .codex/hooks.json runs all ten installers synchronously with no async
+#     flag, so a cold-start full outage would otherwise add ~140s across the
+#     fleet before later startup hooks run (Refs #2038, PR #2046 Codex review).
+#     1s base halves that to ~70s while still spacing three retries for a
+#     transient blip.
+#
 # Tunables (env, primarily for tests):
-#   RETRY_BASE_DELAY   backoff base seconds (default 2; tests set 0)
+#   RETRY_BASE_DELAY   backoff base seconds (default 1; tests set 0)
 #   RETRY_MAX_RETRIES  retries after the initial attempt (default 3)
 
 # Emit the loud failure banner (stderr) and a best-effort in-session message
@@ -49,7 +56,7 @@ _retry_emit_failure() {
 # retry_download URL DEST TOOL_LABEL REINSTALL_CMD
 retry_download() {
   local url="$1" dest="$2" tool="$3" reinstall="$4"
-  local base="${RETRY_BASE_DELAY:-2}"
+  local base="${RETRY_BASE_DELAY:-1}"
   local max_retries="${RETRY_MAX_RETRIES:-3}"
   local attempt=0 delay
   while true; do

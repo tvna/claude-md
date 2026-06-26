@@ -35,7 +35,7 @@ whose gates depend on those tools being present.
 ## Goals
 
 - On curl download failure, retry up to 3 times (initial attempt plus 3
-  retries = 4 total) with exponential backoff (2s, 4s, 8s).
+  retries = 4 total) with exponential backoff (1s, 2s, 4s).
 - On exhausted retries, fail loud (stderr banner plus best-effort in-session
   message) but fail open (session startup continues).
 - One shared implementation for all ten installers (SSOT), guarded against drift.
@@ -67,10 +67,14 @@ Functional:
    path, a human tool label, and the manual reinstall command.
 2. The helper runs the curl download (`curl -fsSL URL -o DEST`) for up to four
    attempts. After
-   attempts 1-3 it sleeps `base * 2^(n-1)` seconds (2s, 4s, 8s with the default
+   attempts 1-3 it sleeps `base * 2^(n-1)` seconds (1s, 2s, 4s with the default
    base) before the next attempt. On the first success it returns 0.
-3. The backoff base delay is read from an env var (default 2; tests set it to 0)
-   so the suite runs without real sleeps.
+3. The backoff base delay is read from an env var (default 1; tests set it to 0)
+   so the suite runs without real sleeps. The default base is 1s (not 2s)
+   because `.codex/hooks.json` runs all ten installers synchronously with no
+   async flag, so a cold-start full outage would add ~140s across the fleet at
+   a 2s base; 1s halves the per-tool worst case to 1+2+4 = 7s (~70s fleet-wide)
+   while still spacing three retries for a transient blip.
 4. On exhausted retries the helper:
    a. writes a loud, ASCII stderr banner naming the tool, URL, attempt count,
       the manual reinstall command, and the gate impact;
@@ -119,7 +123,7 @@ installer fail-open, the same posture the existing hooks already take.
   supports these flags): minimal per-script edit, but no shared fail-loud path
   and no single drift anchor. Rejected.
 - **Async-to-sync conversion for guaranteed visibility**: reliable in-session
-  message for all ten, at up to ~14s added startup latency per failing tool
+  message for all ten, at up to ~7s added startup latency per failing tool
   across more hooks. Rejected; stderr is the primary loud channel.
 - **Deferred-notification machinery**: reliable async visibility via a marker
   file plus a surfacing hook. Rejected as disproportionate.
@@ -148,9 +152,14 @@ no behavior change on the success path.
 
 ## Tradeoff
 
-Sync download installers (uv, actionlint, bun) add up to ~14s of startup latency
-each on a permanent failure (sum of the backoff delays); the seven async
-installers do not block startup.
+Each synchronous installer adds up to ~7s of startup latency on a permanent
+failure (sum of the 1s/2s/4s backoff delays). Under Claude (`.claude/settings.json`)
+only three installers (uv, actionlint, bun) are synchronous. Under Codex
+(`.codex/hooks.json`) all ten run synchronously with no async flag, so a
+cold-start full outage adds up to ~70s across the fleet; the 1s base (vs an
+earlier 2s) is what bounds this. The idempotency check means a warm
+resume/clear/compact with tools already on PATH skips the download entirely, so
+the worst case only applies to a cold start during a sustained outage.
 
 ## Graduation Path
 

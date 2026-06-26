@@ -128,6 +128,36 @@ def test_exponential_backoff_schedule(tmp_path: Path) -> None:
     assert delays == ["2", "4", "8"]
 
 
+def test_default_backoff_is_one_two_four(tmp_path: Path) -> None:
+    """The default base (no RETRY_BASE_DELAY) sleeps 1, 2, 4 to cap outage cost.
+
+    .codex/hooks.json runs all ten installers synchronously, so the default
+    must keep the per-tool worst case at 1+2+4=7s (Refs #2038, PR #2046).
+    """
+    _make_curl_stub(tmp_path, fail_count=99)
+    log = _make_sleep_stub(tmp_path)
+    dest = tmp_path / "out.tgz"
+    env = {
+        "PATH": f"{tmp_path}:/usr/bin:/bin",
+        "HOME": str(tmp_path),
+    }  # RETRY_BASE_DELAY intentionally unset -> helper default applies
+    script = (
+        f'source "{_RETRY_SH}"\n'
+        f'retry_download "https://example.test/asset.tgz" "{dest}" '
+        f'"demotool" "scripts/install-demotool.sh"\n'
+    )
+    result = subprocess.run(
+        ["bash", "-c", script],
+        capture_output=True,
+        text=True,
+        env=env,
+        check=False,
+    )
+    assert result.returncode == 1
+    delays = [line for line in log.read_text(encoding="utf-8").splitlines() if line]
+    assert delays == ["1", "2", "4"]
+
+
 def test_failure_emits_loud_stderr_banner(tmp_path: Path) -> None:
     """On exhaustion the helper prints a loud, actionable stderr banner."""
     _make_curl_stub(tmp_path, fail_count=99)
