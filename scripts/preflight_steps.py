@@ -102,6 +102,21 @@ STEPS: tuple[Step, ...] = (
             "--git-tracked",
         ),
     ),
+    Step(
+        # Refs #2065. Diff-scoped gate: a new or changed docs/runbooks/*.md
+        # must follow TEMPLATE.md's canonical section skeleton. PR_BODY is
+        # unset locally and --body-file is omitted, the stricter default, so
+        # a non-conforming runbook surfaces before push without honouring a
+        # waiver. Base-ref shape mirrors CI's verify-pr.yml step.
+        name="scan_runbook_template_drift",
+        argv=(
+            "python3",
+            "scripts/scan_runbook_template_drift.py",
+            "verify",
+            "--base-ref",
+            "origin/main",
+        ),
+    ),
     Step(name="verify_apm_checksums", argv=("python3", "scripts/verify_apm_checksums.py", "verify")),
     Step(name="scan_apm_lock_drift", argv=("python3", "scripts/scan_apm_lock_drift.py", "verify")),
     Step(
