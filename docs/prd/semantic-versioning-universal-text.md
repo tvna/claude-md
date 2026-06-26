@@ -136,8 +136,12 @@ or MINOR).
 
 ### R4 - Bidirectional drift gate (the core invariant)
 
-A new CI gate `verify-source-version-bump.yml` forbids a one-sided update of
-the {universal text, `apm.yml: version`} pair in either direction. Invariant:
+A CI gate forbids a one-sided update of the
+{universal text, `apm.yml: version`} pair in either direction. It is
+implemented as a `scripts/` gate (`scripts/verify_source_version_bump.py`)
+wired as a step into the existing `verify-pr.yml` `portable-pr-policy` job and
+mirrored in `scripts/preflight_all.py` (the repository's standard gate
+pattern), rather than a new standalone workflow. Invariant:
 **"the universal text changes if and only if `apm.yml: version` is bumped,
 and the bump component matches the declared label."** On every PR:
 
@@ -154,7 +158,11 @@ by CLAUDE.md section 3, shipped in the same change that establishes the
 version-bump invariant (the "ship the drift gate with the invariant" rule;
 see `ubiquitous-language.md` term "drift gate"). It is paired with
 `tests/test_verify_source_version_bump.py` per
-`docs/standards/workflow-script-quality.md`.
+`docs/standards/workflow-script-quality.md`. The pre-push mirror cannot read
+PR labels (labels are repository state, not git-tracked), so it passes
+`labels=None`: the text-vs-version iff and the clean single-component bump are
+still enforced before push, and only the label-match is deferred to the CI
+step, which reads `PR_LABELS`.
 
 ### R5 - Post-merge auto-tag
 
@@ -199,7 +207,7 @@ updated" true by construction rather than by reviewer memory.
 
 ## Acceptance Criteria
 
-- [ ] `verify-source-version-bump.yml` + `tests/test_verify_source_version_bump.py` land and enforce R4 in both directions.
+- [ ] `scripts/verify_source_version_bump.py` (wired into `verify-pr.yml` and mirrored in `scripts/preflight_all.py`) + `tests/test_verify_source_version_bump.py` land and enforce R4 in both directions.
 - [ ] `post-merge.yml` auto-tags `v{version}` on a version change (idempotent).
 - [ ] `publish-instructions-release.yml` triggers on `v*` and validates the `v` prefix.
 - [ ] `semver:major` / `semver:minor` / `semver:patch` labels exist in the label taxonomy.
@@ -232,8 +240,9 @@ are low-risk companions.
 Files this scheme touches when implemented (CLAUDE.md section 5 - narrow
 surface):
 
-- a new `verify-source-version-bump` workflow (to be added under `.github/workflows/`, not yet created) + `tests/test_verify_source_version_bump.py`.
-- `.github/workflows/post-merge.yml` (auto-tag step).
+- `scripts/verify_source_version_bump.py` (drift gate) wired as a step in `.github/workflows/verify-pr.yml` (`portable-pr-policy` job) and mirrored in `scripts/preflight_all.py` + `tests/test_verify_source_version_bump.py`.
+- `scripts/auto_tag_version.py` (post-merge auto-tag) + `tests/test_auto_tag_version.py`.
+- `.github/workflows/post-merge.yml` (auto-tag job).
 - `.github/workflows/publish-instructions-release.yml` (`instructions-v*` -> `v*`).
 - `.github/labels.json` / `docs/standards/label-taxonomy.md` (`semver:*` labels).
 - `docs/runbooks/consumer-instruction-sync.md` and `docs/proposals/instruction-distribution-mechanism.md` (tag-example updates).
