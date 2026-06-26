@@ -9,7 +9,7 @@ Claude to either translate to English or append ``<!-- non-ascii-ack -->``
 to the body before retrying.
 
 Complements the server-side Layer 2 workflow (``issue-pr-triage.yml`` /
-``scripts/scan_non_ascii.py``); see ``docs/prd/non-ascii-defense.md``
+``scripts/scan_non_ascii.py``); see ``docs/runbooks/non-ascii-defense.md``
 client-side preflight section. Refs #146, umbrella #102.
 
 Architecture mirrors :mod:`scan_non_ascii`: pure functions on top, one
@@ -86,7 +86,7 @@ def build_deny_reason(
 
     Lists which fields contained non-ASCII, shows the escaped form so the
     model treats it as data, and offers the two remediation options in
-    the order documented in ``docs/prd/non-ascii-defense.md``
+    the order documented in ``docs/runbooks/non-ascii-defense.md``
     client-side preflight section.
     """
     where = " and ".join(fields) if fields else "input"

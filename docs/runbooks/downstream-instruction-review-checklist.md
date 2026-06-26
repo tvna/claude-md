@@ -4,7 +4,7 @@ This file is the deliverable for [#183](https://github.com/tvna/claude-md/issues
 
 Companion: [`docs/prd/agent-rules-design-philosophy.md`](../prd/agent-rules-design-philosophy.md) section 7 (instruction-PR review criteria). Section 7 decides whether a change belongs in the universal lane at all (ownership and portability); this document decides whether a change that already belongs in the universal lane is safe to merge (security). The two are independent; both must pass.
 
-Related: [#63](https://github.com/tvna/claude-md/issues/63) (residual workflow risks, prompt-injection boundaries, supply-chain gaps), [`docs/prd/security-control-inventory.md`](../prd/security-control-inventory.md), [`docs/prd/privileged-operation-runbooks.md`](../prd/privileged-operation-runbooks.md), [`docs/prd/non-ascii-defense.md`](../prd/non-ascii-defense.md), [`docs/runbooks/agent-provenance.md`](agent-provenance.md).
+Related: [#63](https://github.com/tvna/claude-md/issues/63) (residual workflow risks, prompt-injection boundaries, supply-chain gaps), [`docs/prd/security-control-inventory.md`](../prd/security-control-inventory.md), [`docs/runbooks/privileged-operation-runbooks.md`](privileged-operation-runbooks.md), [`docs/runbooks/non-ascii-defense.md`](non-ascii-defense.md), [`docs/runbooks/agent-provenance.md`](agent-provenance.md).
 
 ## How to read this document
 
@@ -107,8 +107,8 @@ Doc-only updates to this checklist (without an instruction change) revert via th
 - Companion: [`docs/prd/agent-rules-design-philosophy.md`](../prd/agent-rules-design-philosophy.md) section 7; ownership and portability review criteria.
 - [`docs/prd/security-control-inventory.md`](../prd/security-control-inventory.md); repo-wide security surface inventory (Lateral Movement row is the parent of this checklist).
 - [`docs/runbooks/agent-provenance.md`](agent-provenance.md); provenance review for skills, subagents, MCP servers, and comparable agent extensions.
-- [`docs/prd/privileged-operation-runbooks.md`](../prd/privileged-operation-runbooks.md); six-control runbook for privileged dispatch operations.
-- [`docs/prd/non-ascii-defense.md`](../prd/non-ascii-defense.md); non-ASCII defense layers.
+- [`docs/runbooks/privileged-operation-runbooks.md`](privileged-operation-runbooks.md); six-control runbook for privileged dispatch operations.
+- [`docs/runbooks/non-ascii-defense.md`](non-ascii-defense.md); non-ASCII defense layers.
 - [`.github/PULL_REQUEST_TEMPLATE.md`](../../.github/PULL_REQUEST_TEMPLATE.md); links this checklist in the merge checklist.
 - [`scripts/scan_apm_portability.py`](../../scripts/scan_apm_portability.py); deterministic gate for dimension 1.
 - [`.github/workflows/verify-pr.yml`](../../.github/workflows/verify-pr.yml); deterministic gate for dimensions 1 and 2 (`portable-pr-policy` job).

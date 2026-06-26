@@ -31,7 +31,7 @@ graph TD
         direction TB
         MI_B["master.instructions.md"]
         DP_B["design_philosophy_prd ✅ blocking\n(scan_design_philosophy_drift)"]
-        NA_B["non_ascii_prd ❌ memory only"]
+        NA_B["non_ascii_runbook ❌ memory only"]
         SC_B["security_control_inventory ❌ memory only"]
         IP_B["issue_pr_body_standard ❌ memory only"]
         WQ_B["workflow_script_quality ❌ memory only"]
@@ -46,11 +46,11 @@ graph TD
         direction TB
         MI_A["master.instructions.md"]
         DP_A["design_philosophy_prd\n🔴 governs · blocking"]
-        NA_A["non_ascii_prd\n🔴 governs · blocking"]
+        NA_A["non_ascii_runbook\n🔴 governs · blocking"]
         SC_A["security_control_inventory\n🔴 governs · blocking"]
         IP_A["issue_pr_body_standard\n🔴 governs · blocking"]
         WQ_A["workflow_script_quality\n🔴 governs · blocking"]
-        DD_A["doc_dependency_prd\n🔴 governs · blocking"]
+        DD_A["doc_dependency_runbook\n🔴 governs · blocking"]
         CL_A["claude_md\n🔴 compiled_to · blocking"]
         AG_A["agents_md\n🔴 compiled_to · blocking"]
         MI_A --> DP_A
@@ -199,7 +199,7 @@ change-auditable.
 |---|---|---|---|
 | 1 | Single-producer gap (before): only `master_instructions` → `design_philosophy_prd` was machine-enforced; all other governs/compiled_to edges depended on reviewer memory. PR #1737 merged `master.instructions.md` without touching 5 governed PRDs. | `scan_design_philosophy_drift.py:437-470` (one coupling); PR #1737 merge commit. | #1754 |
 | 2 | TOML graph is the single source of truth for declared dependencies, but edges not yet declared in the TOML are invisible to the gate. Relationships outside the current 16 edges still rely on reviewer memory. | `docs/graph/doc-dependencies.toml` (16 edges at PR #1755). | #1754 |
-| 3 | Gate is advisory in Phase 1 (`continue-on-error: true`): a genuine missing co-change is annotated but cannot block merge until promoted to a required check in `.github/rulesets/main.json`. Promotion is gated on FP rate < 5% for 2 consecutive sprints. | `validate-doc-graph.yml:28`; `docs/prd/doc-dependency-graph.md` section 6.4. | #1754 |
+| 3 | Gate is advisory in Phase 1 (`continue-on-error: true`): a genuine missing co-change is annotated but cannot block merge until promoted to a required check in `.github/rulesets/main.json`. Promotion is gated on FP rate < 5% for 2 consecutive sprints. | `validate-doc-graph.yml:28`; `docs/runbooks/doc-dependency-graph.md` section 6.4. | #1754 |
 | 4 | `compiled_to` edges (`master_instructions` → `claude_md`, `agents_md`) are blocking in the graph but the compile drift is already enforced by a separate required gate (`scan_design_philosophy_drift.py verify-apm-drift`). Declared here for completeness; no double-failure risk because `compile_to` severity can be set to advisory when Phase 2 promotes the gate. | `docs/graph/doc-dependencies.toml:[[edges]]` compiled_to entries; `gate_doc_graph_pr.py:107-117`. | #1754 |
 | 5 | Waiver audit trail lives only in the PR body text. A waiver applied by one PR does not persist as a recognized exception for subsequent PRs touching the same node pair. Each PR that intends to skip a blocking co-change must carry its own waiver line. | `gate_doc_graph_pr.py:59-67` (per-invocation parse); no cross-PR waiver store. | #1754 |
 

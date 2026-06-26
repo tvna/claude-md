@@ -3,7 +3,7 @@
 Pure-data validation; no API calls and no imports from project scripts.
 The file is consumed by ``scripts/sanitize_history.py`` (#102 Layer 1
 P5) which trusts these invariants. Anchored to the schema shape
-documented in ``docs/prd/non-ascii-defense.md`` lines 55-69.
+documented in ``docs/runbooks/non-ascii-defense.md`` lines 55-69.
 
 Refs #102.
 """

@@ -786,5 +786,5 @@ silent regression on either side.
   - #198 test(quality): extend coverage gates beyond workflow scripts (carried by the Coverage graduation policy section above)
   - #1800 ci(coverage): promote per-file coverage floor to required pre-merge CI gate (promoted to must-have M11)
 - Related runbooks: `docs/standards/issue-pr-body-standard.md`,
-  `docs/runbooks/issue-triage.md`, `docs/prd/non-ascii-defense.md`,
+  `docs/runbooks/issue-triage.md`, `docs/runbooks/non-ascii-defense.md`,
   `docs/runbooks/rulesets.md`.
