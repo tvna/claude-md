@@ -20,10 +20,16 @@ name: Verify PR
 # now also run on `edited` and `ready_for_review`. This is a superset of their
 # old triggers; it never narrows their coverage and keeps the required gates
 # resolvable on title/body edits.
+#
+# `labeled` / `unlabeled` are included (#89) so the source-version drift gate
+# re-runs when a `semver:*` label is added, changed, or removed: the gate reads
+# the label set from github.event.pull_request.labels, so without these activity
+# types a post-green label edit would leave the required check stale and let a
+# PR merge with a label that no longer matches the version bump.
 
 on:
   pull_request:
-    types: [opened, edited, synchronize, reopened, ready_for_review]
+    types: [opened, edited, synchronize, reopened, ready_for_review, labeled, unlabeled]
 
 permissions: {}
 
@@ -145,6 +151,16 @@ jobs:
             --body-file "$body_file" \
             --created-at "$PR_CREATED_AT" \
             --cutoff "$BODY_POLICY_CUTOFF"
+
+      - name: Verify source version bump drift gate
+        # Refs #89: the universal text changes iff apm.yml version bumps, and
+        # the bump component matches the declared semver:* label. PR_LABELS is
+        # read at PR time only (labels are repository state, not git-tracked).
+        env:
+          PR_LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
+        run: |
+          python3 scripts/verify_source_version_bump.py verify \
+            --base-ref "$BASE_REF"
 
       - name: Scan APM artifacts for repo-local references
         run: |

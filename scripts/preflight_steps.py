@@ -533,6 +533,23 @@ STEPS: tuple[Step, ...] = (
         ),
     ),
     Step(
+        # Refs #89. Bidirectional drift gate: the universal text changes iff
+        # apm.yml version bumps. Pre-push cannot see PR labels (they are
+        # repository state, not git-tracked), so --labels is omitted and
+        # PR_LABELS is unset locally; the gate then treats labels=None and
+        # skips only the label-match while keeping the text-vs-version iff and
+        # the clean single-component bump check. CI's verify-pr.yml step adds
+        # PR_LABELS so the label-match runs there. Base-ref shape mirrors CI.
+        name="verify_source_version_bump",
+        argv=(
+            "python3",
+            "scripts/verify_source_version_bump.py",
+            "verify",
+            "--base-ref",
+            "origin/main",
+        ),
+    ),
+    Step(
         name="verify_ruleset_sync",
         argv=(
             "python3",

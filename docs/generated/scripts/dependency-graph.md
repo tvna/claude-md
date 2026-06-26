@@ -49,6 +49,7 @@ This file is generated from `scripts/*.py` import statements by `python3 scripts
 | `session_cost_structure` | 1 | `gate_cache_regime_advisor` |
 | `update_devcontainer_image_pins` | 1 | `devcontainer_pin_pr` |
 | `uv_pin` | 1 | `preflight_uv_version` |
+| `verify_source_version_bump` | 1 | `auto_tag_version` |
 
 ## Isolated scripts
 
@@ -81,6 +82,7 @@ flowchart TD
     auto_retro --> issue_link
     auto_retro --> pr_upsert
     auto_retro --> script_ast_graph
+    auto_tag_version --> verify_source_version_bump
     block_sensitive_reads --> _hook_runtime
     body_policy --> _trusted_bots
     body_policy --> issue_link

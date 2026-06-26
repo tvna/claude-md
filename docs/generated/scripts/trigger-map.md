@@ -19,6 +19,7 @@ Detection is string-match based:
 | `auto_retro.py` | workflow | `post-merge.yml (open-retro)` |
 | `auto_retro.py` | workflow | `post-merge.yml (triage-report)` |
 | `auto_retro.py` | workflow | `verify-pr.yml (portable-pr-policy)` |
+| `auto_tag_version.py` | workflow | `post-merge.yml (auto-tag-version)` |
 | `backup_archive.py` | workflow | `backup-non-ascii-originals.yml (backup)` |
 | `block_sensitive_reads.py` | agent-hook | `claude:PreToolUse` |
 | `block_sensitive_reads.py` | agent-hook | `codex:PreToolUse` |
@@ -262,6 +263,7 @@ Detection is string-match based:
 | `verify_ruleset_sync.py` | workflow | `verify-pr.yml (verify-ruleset-sync)` |
 | `verify_security_control_floor.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
 | `verify_shard_coverage.py` | workflow | `verify-agents.yml (lint-scripts-pytest-gate)` |
+| `verify_source_version_bump.py` | workflow | `verify-pr.yml (portable-pr-policy)` |
 | `verify_test_shard_markers.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
 | `verify_text_delta_section.py` | workflow | `verify-pr.yml (portable-pr-policy)` |
 | `workflow_diagram.py` | workflow | `post-merge.yml (decision-tree)` |

@@ -5,7 +5,7 @@ This file is generated from `.github/workflows/publish-instructions-release.yml`
 ```mermaid
 flowchart TD
 
-    T_push(["on: push\ntags: ['instructions-v*']"])
+    T_push(["on: push\ntags: ['v*']"])
     T_workflow_dispatch(["on: workflow_dispatch\ninputs: {'version': {'description': 'Release ..."])
 
     J_publish["publish"]

@@ -12,7 +12,8 @@ fresh `git clone` such as a Claude Code on the web session.
 
 ## How it works
 
-1. The master publishes a tagged release (`instructions-v*`) with three assets:
+1. The master publishes a tagged release (`v*`, the semver tag auto-created
+   when `apm.yml: version` changes; see #89) with three assets:
    `CLAUDE.md`, `AGENTS.md`, and `SHA256SUMS`.
 2. The consumer runs a scheduled workflow that fetches those assets for a
    **pinned tag**, verifies each file against `SHA256SUMS`, writes the result as
@@ -42,7 +43,7 @@ fresh `git clone` such as a Claude Code on the web session.
 
 ## Pinning and integrity
 
-- Pin a specific release **tag** (for example `instructions-v1.0.0`) in the
+- Pin a specific release **tag** (for example `v1.0.0`) in the
   workflow `env`. Bump it deliberately in a reviewed PR; do not follow `main`.
 - Every fetched file is verified against the release's `SHA256SUMS` with
   `sha256sum -c`. A mismatch fails the job loudly; it never commits an
@@ -77,7 +78,7 @@ concurrency:
 env:
   MASTER_REPO: tvna/claude-md
   # Pin a specific release tag. Bump deliberately in a reviewed PR.
-  INSTRUCTIONS_TAG: instructions-v1.0.0
+  INSTRUCTIONS_TAG: v1.0.0
 
 jobs:
   sync:
