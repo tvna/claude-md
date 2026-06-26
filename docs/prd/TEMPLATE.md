@@ -153,6 +153,15 @@ gate that governs it) and how a change it drives is rolled back. Per CLAUDE.md
 section 3, prefer `git revert` of the original commit(s) over hand-authored
 inverse edits; name the smallest revert set.]
 
+## Open Questions / Future Work *(optional)*
+
+[Non-blocking unresolved questions, deferred or parked items, and non-binding
+future-work candidates that the document records but does not act on now. Keep
+only items that do NOT block a yes/no decision: an open question that blocks a
+decision belongs in [`../proposals/`](../proposals/README.md), not here (see
+[`README.md`](README.md)). Each item should say why it is deferred and what
+would promote it to a tracked issue.]
+
 ## References
 
 [Full canonical URLs and repository-relative paths for the issues, companion
