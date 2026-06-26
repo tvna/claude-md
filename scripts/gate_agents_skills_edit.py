@@ -122,15 +122,14 @@ _SEGMENT_SPLIT = re.compile(r"&&|\|\||[;\n]|(?<!>)\|")
 # A leading ``NAME=value`` environment assignment to skip before the command.
 _ASSIGN_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
 
-# A standalone redirection-operator token: optional file-descriptor digits, one
-# or two ``>``, an optional noclobber-override ``|`` (``>|``). Its target is the
+# A redirection-operator token: optional file-descriptor digits, one or two
+# ``>``, an optional noclobber-override ``|`` (``>|``), then an optional target.
+# Group 1 is the target when it shares the token (``>foo``, ``2>foo``, ``>|foo``)
+# and EMPTY for a standalone operator (``>``, ``>>``, ``>|``) whose target is the
 # NEXT token. Matching on the tokenized command (not the raw string) means a
 # ``>`` inside a quoted argument is part of one token and never read as a
 # redirection, so ``echo 'see > .agents/skills/x'`` is not a false positive.
-_REDIRECT_OP_RE = re.compile(r"^\d*>>?\|?$")
-# The attached redirection form where the operator and target share one token:
-# ``>foo``, ``>>foo``, ``2>foo``, ``>|foo``. Group 1 is the target.
-_REDIRECT_ATTACHED_RE = re.compile(r"^\d*>>?\|?(.+)$")
+_REDIRECT_RE = re.compile(r"^\d*>>?\|?(.*)$")
 
 # Bound the ``bash -c`` recursion so a pathological ``bash -c 'bash -c ...'``
 # nest cannot loop; each level consumes the ``-c`` argument so real commands
@@ -146,6 +145,14 @@ def _normalize(path: str) -> str:
     return token
 
 
+def _match_normalized(token: str) -> str | None:
+    """Return the managed prefix an ALREADY-normalized *token* falls under, or None."""
+    for prefix in MANAGED_PREFIXES:
+        if token.startswith(prefix) or ("/" + prefix) in token:
+            return prefix
+    return None
+
+
 def matched_prefix(path: str) -> str | None:
     """Return the managed prefix *path* falls under, or None.
 
@@ -156,11 +163,18 @@ def matched_prefix(path: str) -> str | None:
     required, so ``/repo.agents/skills/x`` (no slash before ``.agents``) does
     not match.
     """
-    token = _normalize(path)
-    for prefix in MANAGED_PREFIXES:
-        if token.startswith(prefix) or ("/" + prefix) in token:
-            return prefix
-    return None
+    return _match_normalized(_normalize(path))
+
+
+def _managed_target(token: str) -> str | None:
+    """Return *token* normalized when it is a managed path, else None.
+
+    The single 'is this a managed write target, and if so what is its canonical
+    form' decision shared by the redirect and mutator paths; normalizes once
+    (matched_prefix would normalize again).
+    """
+    normalized = _normalize(token)
+    return normalized if _match_normalized(normalized) is not None else None
 
 
 def _tokenize(segment: str) -> list[str]:
@@ -193,25 +207,27 @@ def _segments(command: str) -> list[str]:
 def _redirect_targets(tokens: list[str]) -> list[str]:
     """Return every redirection target token in *tokens*.
 
-    A target comes from either a standalone operator token (``>`` / ``>>`` /
-    ``2>`` / ``>|``) whose target is the next token, or an attached token that
-    carries both (``>foo``). Because this reads the *tokenized* command, a ``>``
-    inside a quoted argument is part of one token and is never read as a
+    A target comes from either an attached operator token that carries it
+    (``>foo``) or a standalone operator token (``>`` / ``>>`` / ``2>`` / ``>|``)
+    whose target is the next token. Because this reads the *tokenized* command, a
+    ``>`` inside a quoted argument is part of one token and is never read as a
     redirection.
     """
     targets: list[str] = []
-    index = 0
-    while index < len(tokens):
-        token = tokens[index]
-        if _REDIRECT_OP_RE.match(token):
-            if index + 1 < len(tokens):
-                targets.append(tokens[index + 1])
-            index += 2
+    skip_next = False
+    for index, token in enumerate(tokens):
+        if skip_next:
+            skip_next = False
             continue
-        attached = _REDIRECT_ATTACHED_RE.match(token)
+        match = _REDIRECT_RE.match(token)
+        if match is None:
+            continue
+        attached = match.group(1)
         if attached:
-            targets.append(attached.group(1))
-        index += 1
+            targets.append(attached)
+        elif index + 1 < len(tokens):
+            targets.append(tokens[index + 1])
+            skip_next = True
     return targets
 
 
@@ -223,13 +239,11 @@ def _mutator_targets(args: list[str]) -> list[str]:
     """
     targets: list[str] = []
     for arg in args:
-        if matched_prefix(arg) is not None:
-            targets.append(_normalize(arg))
-            continue
-        if "=" in arg:
-            value = arg.split("=", 1)[1]
-            if matched_prefix(value) is not None:
-                targets.append(_normalize(value))
+        target = _managed_target(arg)
+        if target is None and "=" in arg:
+            target = _managed_target(arg.split("=", 1)[1])
+        if target is not None:
+            targets.append(target)
     return targets
 
 
@@ -245,9 +259,9 @@ def _segment_write_targets(segment: str, depth: int) -> list[str]:
     """Return managed paths *segment* would write to (redirects + mutators)."""
     tokens = _tokenize(segment)
     targets: list[str] = [
-        _normalize(target)
-        for target in _redirect_targets(tokens)
-        if matched_prefix(target) is not None
+        managed
+        for raw in _redirect_targets(tokens)
+        if (managed := _managed_target(raw)) is not None
     ]
     cmd, args = _leading_command(tokens)
     if cmd in _SHELL_COMMANDS and depth < _MAX_RECURSION_DEPTH:
