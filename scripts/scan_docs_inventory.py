@@ -61,6 +61,22 @@ IGNORED_SCHEMES = frozenset({"http", "https", "mailto", "tel", "data"})
 # docs/standards/documentation-quality.md (D3), not a budget bump.
 MAX_INDEX_BYTES = 40 * 1024
 
+# Refs #2005. Lane READMEs that own their full document table after the
+# per-lane split. INDEX keeps only a description and a pointer to each of
+# these; the inventory follows the link hop into exactly these READMEs, not
+# every linked ``README.md``. Restricting the hop to the declared split lanes
+# is the drift gate for the "small lanes keep their full table inline in
+# INDEX" invariant: without it, a small-lane doc could migrate its only
+# listing into that lane's README and silently escape the inventory check.
+# Adding a new large lane to the split means adding its README here.
+SPLIT_LANE_READMES = frozenset(
+    {
+        "docs/prd/README.md",
+        "docs/standards/README.md",
+        "docs/runbooks/README.md",
+    }
+)
+
 
 def rel(path: Path, root: Path) -> str:
     """Return a stable repository-relative path string."""
@@ -88,14 +104,19 @@ def iter_docs_markdown(root: Path) -> list[Path]:
     return sorted(path for path in docs.rglob("*.md") if path.is_file())
 
 
-def collect_index_entries(root: Path) -> set[str]:
-    """Return repository-relative docs paths linked from ``docs/INDEX.md``."""
-    index = root / INDEX_PATH
-    if not index.exists():
+def _md_links_in(path: Path, root: Path) -> set[str]:
+    """Return repository-relative ``.md`` link targets found in *path*.
+
+    Reuses the inline/reference link patterns, scheme exclusion, and
+    relative resolution shared with the link gate. Relative targets resolve
+    against *path*'s own directory, so the same helper works for
+    ``docs/INDEX.md`` and for a lane README whose rows link to its siblings.
+    """
+    if not path.exists():
         return set()
 
-    text = index.read_text(encoding="utf-8")
-    entries: set[str] = set()
+    text = path.read_text(encoding="utf-8")
+    links: set[str] = set()
     for pattern in (INLINE_LINK_RE, REFERENCE_LINK_RE):
         for match in pattern.finditer(text):
             target = extract_target(match.group(1))
@@ -108,9 +129,33 @@ def collect_index_entries(root: Path) -> set[str]:
             if Path(raw_path).is_absolute():
                 resolved = root / raw_path.lstrip("/")
             else:
-                resolved = index.parent / raw_path
+                resolved = path.parent / raw_path
             if resolved.suffix.lower() == ".md":
-                entries.add(rel(resolved.resolve(), root.resolve()))
+                links.add(rel(resolved.resolve(), root.resolve()))
+    return links
+
+
+def collect_index_entries(root: Path) -> set[str]:
+    """Return repository-relative docs paths reachable from ``docs/INDEX.md``.
+
+    Refs #2005. A large lane keeps its full document table in its
+    ``README.md`` rather than inline in INDEX, so coverage follows links one
+    hop: INDEX's own ``.md`` links, plus the ``.md`` links inside the declared
+    split-lane READMEs (:data:`SPLIT_LANE_READMES`) that INDEX points at. The
+    hop is restricted to those READMEs, not every linked ``README.md``, so a
+    small lane whose table stays inline in INDEX cannot migrate its listing
+    into a README and escape the gate. The recursion is fixed at two levels
+    (INDEX -> split-lane README -> leaf) and only steps through that fixed
+    set, so it cannot cycle.
+    """
+    index = root / INDEX_PATH
+    if not index.exists():
+        return set()
+
+    entries = _md_links_in(index, root)
+    for entry in tuple(entries):
+        if entry in SPLIT_LANE_READMES:
+            entries |= _md_links_in(root / entry, root)
     return entries
 
 

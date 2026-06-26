@@ -148,6 +148,136 @@ def test_collect_index_entries_handles_absolute_md_link(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
+# collect_index_entries(); transitive lane-README following (Refs #2005)
+# ---------------------------------------------------------------------------
+
+
+def test_collect_index_entries_follows_lane_readme_hop(tmp_path: Path) -> None:
+    """A lane README's leaf rows count as listed when INDEX points at it."""
+    _write_index(tmp_path, "- [standards](standards/README.md)\n")
+    standards = tmp_path / "docs" / "standards"
+    standards.mkdir(parents=True)
+    (standards / "README.md").write_text(
+        "# Standards\n\n- [commit-signing.md](commit-signing.md)\n",
+        encoding="utf-8",
+    )
+
+    entries = scan_docs_inventory.collect_index_entries(tmp_path)
+
+    assert "docs/standards/README.md" in entries
+    assert "docs/standards/commit-signing.md" in entries
+
+
+def test_collect_index_entries_does_not_follow_non_readme_links(tmp_path: Path) -> None:
+    """Only ``/README.md`` targets are followed; other docs are leaves."""
+    _write_index(tmp_path, "- [page](standards/page.md)\n")
+    standards = tmp_path / "docs" / "standards"
+    standards.mkdir(parents=True)
+    (standards / "page.md").write_text(
+        "# Page\n\n- [hidden.md](hidden.md)\n",
+        encoding="utf-8",
+    )
+
+    entries = scan_docs_inventory.collect_index_entries(tmp_path)
+
+    assert "docs/standards/page.md" in entries
+    assert "docs/standards/hidden.md" not in entries
+
+
+def test_collect_index_entries_stops_after_one_readme_hop(tmp_path: Path) -> None:
+    """Recursion is fixed at two levels: a split-lane README linked from
+    another split-lane README is collected as a leaf but its own links are not
+    followed (only INDEX's direct split-lane links are hopped)."""
+    _write_index(tmp_path, "- [standards](standards/README.md)\n")
+    docs = tmp_path / "docs"
+    (docs / "standards").mkdir(parents=True)
+    (docs / "standards" / "README.md").write_text(
+        "# Standards\n\n- [prd](../prd/README.md)\n",
+        encoding="utf-8",
+    )
+    (docs / "prd").mkdir(parents=True)
+    (docs / "prd" / "README.md").write_text(
+        "# PRD\n\n- [deep.md](deep.md)\n",
+        encoding="utf-8",
+    )
+
+    entries = scan_docs_inventory.collect_index_entries(tmp_path)
+
+    assert "docs/prd/README.md" in entries
+    assert "docs/prd/deep.md" not in entries
+
+
+def test_collect_index_entries_does_not_follow_unsplit_lane_readme(tmp_path: Path) -> None:
+    """Refs #2005: only the declared split-lane READMEs are followed. A README
+    for a small lane (table stays inline in INDEX) is collected as a leaf but
+    its links are not, so a small-lane doc cannot be covered via its README."""
+    _write_index(tmp_path, "- [proposals](proposals/README.md)\n")
+    proposals = tmp_path / "docs" / "proposals"
+    proposals.mkdir(parents=True)
+    (proposals / "README.md").write_text(
+        "# Proposals\n\n- [foo.md](foo.md)\n",
+        encoding="utf-8",
+    )
+
+    entries = scan_docs_inventory.collect_index_entries(tmp_path)
+
+    assert "docs/proposals/README.md" in entries
+    assert "docs/proposals/foo.md" not in entries
+
+
+def test_verify_accepts_doc_listed_only_via_lane_readme(tmp_path: Path) -> None:
+    """A leaf doc absent from INDEX but present in its lane README passes."""
+    _write_index(tmp_path, "# docs/ index\n\n- [standards](standards/README.md)\n")
+    standards = tmp_path / "docs" / "standards"
+    standards.mkdir(parents=True)
+    (standards / "README.md").write_text(
+        "# Standards\n\n- [commit-signing.md](commit-signing.md)\n",
+        encoding="utf-8",
+    )
+    (standards / "commit-signing.md").write_text("# Commit signing\n", encoding="utf-8")
+
+    assert scan_docs_inventory.verify(tmp_path) == []
+
+
+def test_verify_reports_doc_hidden_behind_non_readme_link(tmp_path: Path) -> None:
+    """A leaf reachable only through a non-README link stays uncovered."""
+    _write_index(tmp_path, "# docs/ index\n\n- [page](standards/page.md)\n")
+    standards = tmp_path / "docs" / "standards"
+    standards.mkdir(parents=True)
+    (standards / "page.md").write_text(
+        "# Page\n\n- [hidden.md](hidden.md)\n",
+        encoding="utf-8",
+    )
+    (standards / "hidden.md").write_text("# Hidden\n", encoding="utf-8")
+
+    errors = scan_docs_inventory.verify(tmp_path)
+
+    assert errors == [
+        "::error file=docs/INDEX.md::docs/INDEX.md does not list docs/standards/hidden.md"
+    ]
+
+
+def test_verify_flags_small_lane_doc_listed_only_in_readme(tmp_path: Path) -> None:
+    """Refs #2005: a small-lane doc reachable only through its (unsplit) lane
+    README is still flagged, enforcing that small lanes keep their table inline
+    in INDEX rather than migrating listings into the README."""
+    _write_index(tmp_path, "# docs/ index\n\n- [proposals](proposals/README.md)\n")
+    proposals = tmp_path / "docs" / "proposals"
+    proposals.mkdir(parents=True)
+    (proposals / "README.md").write_text(
+        "# Proposals\n\n- [foo.md](foo.md)\n",
+        encoding="utf-8",
+    )
+    (proposals / "foo.md").write_text("# Foo\n", encoding="utf-8")
+
+    errors = scan_docs_inventory.verify(tmp_path)
+
+    assert errors == [
+        "::error file=docs/INDEX.md::docs/INDEX.md does not list docs/proposals/foo.md"
+    ]
+
+
+# ---------------------------------------------------------------------------
 # main() CLI; error output path (monkeypatched verify)
 # ---------------------------------------------------------------------------
 

@@ -66,7 +66,16 @@ required entry has been removed or renamed. Refs #1901.
   invariant (a "single source of truth" or "only here" rule) has been
   violated; must be shipped in the same change that establishes the invariant
   so the harness hardens at birth rather than retroactively. Master section 3
-  ("ship its drift gate in the same change, not a follow-up").
+  ("ship its drift gate in the same change, not a follow-up"). Its
+  specialization for a single-producer surface is the inverse gate.
+- **inverse gate**: A drift gate specialized for a single-producer surface:
+  instead of regenerating the artifact and failing on a mismatch, it rejects
+  any hand edit to the surface outright while exempting the automated producer
+  branch that legitimately writes it. Implemented by
+  `scripts/gate_generated_scripts_manual_edit.py` (wired through
+  `scripts/preflight_steps.py`), whose docstring names it "the inverse
+  control". Master section 3 (the same-change drift-gate obligation, applied
+  where the invariant is a single producer).
 - **durable gate**: A deterministic gate created as the permanent resolution of
   a gap identified in a retrospective, as opposed to a one-off manual repair;
   what a "missing deterministic gate" retrospective finding becomes when it is
@@ -81,7 +90,17 @@ required entry has been removed or renamed. Refs #1901.
   a property the harness must keep true at all times; establishing an invariant
   obligates shipping its drift gate in the same change. Master section 3
   ("Establishing an invariant ... is such an operation: ship its drift gate in
-  the same change").
+  the same change"). A single-producer surface is one such invariant, kept by
+  an inverse gate.
+- **single-producer**: An ownership model under which each generated surface
+  has exactly one automated producer permitted to write it, and every other
+  branch is forbidden from editing that surface; the invariant an inverse gate
+  keeps true. Both producer jobs live in `.github/workflows/post-merge.yml`:
+  the `decision-tree` job produces `docs/generated/` (AST docs and diagrams)
+  plus the `docs/standards/module-size-distribution.toml` snapshot, and the
+  `triage-report` job produces
+  `docs/generated/scripts/auto-retro-triage-report.md`. Master section 3 (an
+  "only here" invariant with a single legitimate writer per surface).
 - **freshness precondition**: A time-boxed observation that a precondition is
   currently met (for example, that the local branch base is fresh); must be
   refreshed immediately before each guarded operation because a long flow can
