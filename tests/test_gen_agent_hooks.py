@@ -356,6 +356,22 @@ def test_build_claude_permissions_requires_issue() -> None:
         gen.build_claude_permissions(bad)
 
 
+def test_build_claude_permissions_rejects_unknown_kind() -> None:
+    # A typo'd kind ('denny' instead of 'deny') must fail loudly, not silently
+    # drop the guard (Codex review on PR #2037).
+    bad = {"permissions": {"denny": [
+        {"intent": "x", "claude": ["Bash(x)"], "realized_by": "scripts/y.py", "issue": "u"}]}}
+    with pytest.raises(ValueError, match="unknown kind"):
+        gen.build_claude_permissions(bad)
+
+
+def test_build_claude_permissions_allows_underscore_doc_keys() -> None:
+    # The '_comment' doc key is exempt from the unknown-kind guard.
+    source = {"permissions": {"_comment": "note", "deny": [
+        {"intent": "x", "claude": ["Bash(x)"], "realized_by": "scripts/y.py", "issue": "u"}]}}
+    assert gen.build_claude_permissions(source) == {"deny": ["Bash(x)"]}
+
+
 def test_build_claude_permissions_rejects_empty_claude_rules() -> None:
     bad = {"permissions": {"deny": [{"intent": "x", "claude": [], "realized_by": "scripts/y.py", "issue": "u"}]}}
     with pytest.raises(ValueError, match="non-empty list"):

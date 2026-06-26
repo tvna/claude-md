@@ -127,6 +127,17 @@ def build_claude_permissions(source: dict[str, Any]) -> dict[str, Any] | None:
         return None
     if not isinstance(perms, dict):
         raise ValueError("source 'permissions' must be a mapping")
+    # Reject an unknown top-level kind (e.g. a typo'd ``denny``) loudly rather
+    # than silently dropping the entry: this file is the single source for the
+    # deny/allow rules, so a misspelled kind would otherwise render an empty
+    # guard while ``--check`` still passed (the committed render matches). Doc
+    # keys (``_comment`` and similar underscore-prefixed notes) are exempt.
+    unknown = sorted(k for k in perms if k not in PERMISSION_KINDS and not k.startswith("_"))
+    if unknown:
+        raise ValueError(
+            f"source 'permissions' has unknown kind(s) {unknown}; allowed kinds are "
+            f"{list(PERMISSION_KINDS)} (a typo such as 'denny' would silently drop the guard)"
+        )
     block: dict[str, Any] = {}
     for kind in PERMISSION_KINDS:
         intents = perms.get(kind)
