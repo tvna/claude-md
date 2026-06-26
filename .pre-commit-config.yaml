@@ -185,6 +185,18 @@ repos:
         pass_filenames: false
         always_run: true
 
+      - id: scan-install-curl-retry-drift
+        name: scan install curl retry drift (scripts/scan_install_curl_retry_drift.py verify)
+        # Refs #2038: every scripts/install-*.sh must fetch its pinned release
+        # through the shared retry_download helper (scripts/_retry.sh), never a
+        # bare curl. This gate fails loud at commit time if an installer
+        # reintroduces a bare curl download, keeping the retry/fail-loud
+        # invariant from drifting. CI runs the same prek config.
+        entry: uv run python scripts/scan_install_curl_retry_drift.py verify
+        language: system
+        pass_filenames: false
+        files: ^scripts/(install-.*\.sh|_retry\.sh|scan_install_curl_retry_drift\.py)$
+
       - id: uv-mypy
         name: mypy type gate (uv run mypy scripts tests)
         # Mirrors the mypy step in verify-agents.yml so TypedDict key errors,
