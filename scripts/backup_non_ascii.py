@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Reproducible backup of issues/PRs/comments before non-ASCII rewriting.
 
-Operator-run companion to ``docs/prd/non-ascii-defense.md`` Layer 1. The release
+Operator-run companion to ``docs/runbooks/non-ascii-defense.md`` Layer 1. The release
 asset itself is produced by ``gh release create`` (manual step); this CLI
 normalises the API responses into a deterministic ``{schema_version,
 captured_at, repo, items}`` payload and emits its SHA-256 so that

@@ -443,7 +443,7 @@ paths = [
   "scripts/attack_review_reminder.py", "scripts/backup_non_ascii.py",
   "scripts/owasp_asi_mapping.py", "scripts/mint_github_app_token.py",
   "scripts/sanitize_history.py",
-  "docs/prd/security-control-inventory.md", "docs/prd/non-ascii-defense.md",
+  "docs/prd/security-control-inventory.md", "docs/runbooks/non-ascii-defense.md",
   "docs/runbooks/security-control-drift-report.md",
   "docs/runbooks/attack-coverage-review-cadence.md",
   "docs/runbooks/downstream-instruction-review-checklist.md",

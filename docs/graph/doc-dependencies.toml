@@ -55,8 +55,8 @@ description = "Four-lane responsibility matrix and decision tree for CLAUDE.md e
 
 [[nodes]]
 id = "non_ascii_prd"
-path = "docs/prd/non-ascii-defense.md"
-type = "prd"
+path = "docs/runbooks/non-ascii-defense.md"
+type = "runbook"
 description = "Three-layer ASCII discipline rationale for GitHub post boundary."
 
 [[nodes]]
