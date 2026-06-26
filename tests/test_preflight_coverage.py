@@ -205,6 +205,30 @@ class TestEnsureCoverageJson:
         assert regenerated["called"] is True
         assert "stale" in capsys.readouterr().err
 
+    def test_stale_regen_failure_raises_and_discards(self, tmp_path: Path) -> None:
+        """A stale report whose regeneration fails is deleted and raises, never reused."""
+        cov_file = tmp_path / "coverage.json"
+        cov_file.write_text('{"files": {"old": {"summary": {"percent_covered": 10.0}}}}')
+        scripts_dir = tmp_path / "scripts"
+        scripts_dir.mkdir()
+        src = scripts_dir / "preflight_foo.py"
+        src.write_text("x = 1\n")
+        os.utime(cov_file, (1_000_000, 1_000_000))
+        os.utime(src, (2_000_000, 2_000_000))
+
+        def failed_run(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
+            # Regeneration crashes before writing a fresh report (file stays deleted).
+            return subprocess.CompletedProcess(args=[], returncode=1, stdout="", stderr="")
+
+        with (
+            patch("preflight_coverage.shutil.which", return_value="/usr/bin/uv"),
+            patch("preflight_coverage.subprocess.run", side_effect=failed_run),
+            pytest.raises(RuntimeError, match="coverage.json not generated"),
+        ):
+            cov.ensure_coverage_json(tmp_path)
+        # The stale report must not survive a failed regeneration.
+        assert not cov_file.exists()
+
     def test_reuses_when_fresh_relative_to_sources(self, tmp_path: Path) -> None:
         """A coverage.json newer than all sources is reused without running pytest."""
         cov_file = tmp_path / "coverage.json"

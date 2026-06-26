@@ -34,6 +34,7 @@ Tested by ``tests/test_preflight_coverage.py``. Refs #952, #1800.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import shutil
 import subprocess
@@ -122,17 +123,23 @@ def ensure_coverage_json(repo: Path) -> Path:
     Reuses an existing report only when it is newer than every tracked
     ``scripts/**`` / ``tests/**`` source file; a stale report is regenerated
     (Refs #2075) so a cache built before new tests were added cannot drive a
-    false per-file verdict.
+    false per-file verdict. The stale report is deleted BEFORE regenerating, so
+    a regeneration that fails before overwriting it (uv/pytest startup crash,
+    collection error, interrupted run) cannot leave the stale file in place to
+    be reused; the absent-file check below then fails loud per CLAUDE.md
+    section 4 instead of silently passing on the report just declared invalid.
     """
     coverage_path = repo / "coverage.json"
-    if coverage_path.exists() and not coverage_is_stale(coverage_path, repo):
-        return coverage_path
     if coverage_path.exists():
+        if not coverage_is_stale(coverage_path, repo):
+            return coverage_path
         print(
             "coverage.json is stale (older than a scripts/** or tests/** source "
-            "file); regenerating instead of reusing the cached report.",
+            "file); discarding it and regenerating instead of reusing it.",
             file=sys.stderr,
         )
+        with contextlib.suppress(OSError):
+            coverage_path.unlink()
     uv = shutil.which("uv")
     if uv is None:
         raise RuntimeError(
