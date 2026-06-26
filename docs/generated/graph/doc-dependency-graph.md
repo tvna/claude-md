@@ -3,7 +3,7 @@
 Auto-generated from `docs/graph/doc-dependencies.toml`. Do not edit manually.
 Source: `python3 scripts/doc_graph_viz.py all-doc`.
 
-Nodes: 23 | Edges: 18 (10 blocking, 8 advisory)
+Nodes: 24 | Edges: 19 (10 blocking, 9 advisory)
 
 ```mermaid
 flowchart LR
@@ -18,6 +18,7 @@ flowchart LR
     pr_body_quality_enforcement["pr body quality enforcement"]
     doc_dependency_prd["doc dependency prd"]
     ubiquitous_language["ubiquitous language"]
+    semver_universal_text_prd["semver universal text prd"]
     scan_design_philosophy_drift>"scan design philosophy drift"]
     preflight_non_ascii>"preflight non ascii"]
     scan_non_ascii>"scan non ascii"]
@@ -48,6 +49,7 @@ flowchart LR
     doc_dependency_prd -.->|enforced by| gate_doc_graph_pr
     doc_dependency_prd -.->|enforced by| validate_doc_graph_workflow
     gate_doc_graph_pr -.->|references| doc_graph_lib
+    semver_universal_text_prd -.->|references| master_instructions
 ```
 
 ## Legend
