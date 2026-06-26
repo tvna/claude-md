@@ -54,7 +54,7 @@ type = "prd"
 description = "Four-lane responsibility matrix and decision tree for CLAUDE.md evolution."
 
 [[nodes]]
-id = "non_ascii_prd"
+id = "non_ascii_runbook"
 path = "docs/runbooks/non-ascii-defense.md"
 type = "runbook"
 description = "Three-layer ASCII discipline rationale for GitHub post boundary."
@@ -90,7 +90,7 @@ type = "standard"
 description = "Enforcement registry for PR body content-quality defect classes; verified by scan_pr_body_quality_drift.py."
 
 [[nodes]]
-id = "doc_dependency_prd"
+id = "doc_dependency_runbook"
 path = "docs/runbooks/doc-dependency-graph.md"
 type = "runbook"
 description = "Design rationale for the document dependency graph governance gate."
@@ -211,10 +211,10 @@ note = "Principle edits must be reviewed against the responsibility matrix (sec 
 
 [[edges]]
 from = "master_instructions"
-to = "non_ascii_prd"
+to = "non_ascii_runbook"
 type = "governs"
 severity = "blocking"
-note = "P3 bullet on ASCII discipline is rationale-grounded in non_ascii_prd."
+note = "P3 bullet on ASCII discipline is rationale-grounded in non_ascii_runbook."
 
 [[edges]]
 from = "master_instructions"
@@ -239,7 +239,7 @@ note = "P4 safety boundary sets the must-have quality gates M1-M9."
 
 [[edges]]
 from = "master_instructions"
-to = "doc_dependency_prd"
+to = "doc_dependency_runbook"
 type = "governs"
 severity = "blocking"
 note = "P3 deterministic-gate requirement motivates this graph system."
@@ -276,14 +276,14 @@ severity = "advisory"
 note = "scan_design_philosophy_drift enforces the matrix-subtitle invariant."
 
 [[edges]]
-from = "non_ascii_prd"
+from = "non_ascii_runbook"
 to = "preflight_non_ascii"
 type = "enforced_by"
 severity = "advisory"
 note = "preflight_non_ascii is Layer 3 of the non-ASCII defense."
 
 [[edges]]
-from = "non_ascii_prd"
+from = "non_ascii_runbook"
 to = "scan_non_ascii"
 type = "enforced_by"
 severity = "advisory"
@@ -296,16 +296,16 @@ type = "enforced_by"
 severity = "advisory"
 note = "body_policy enforces the required H2 sections defined in the standard."
 
-# doc_dependency_prd governs the gate implementation and workflow.
+# doc_dependency_runbook governs the gate implementation and workflow.
 [[edges]]
-from = "doc_dependency_prd"
+from = "doc_dependency_runbook"
 to = "gate_doc_graph_pr"
 type = "enforced_by"
 severity = "advisory"
 note = "gate_doc_graph_pr is the deterministic enforcement of the graph policy."
 
 [[edges]]
-from = "doc_dependency_prd"
+from = "doc_dependency_runbook"
 to = "validate_doc_graph_workflow"
 type = "enforced_by"
 severity = "advisory"

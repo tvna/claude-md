@@ -30,7 +30,7 @@ graph TD
         direction TB
         MI_B["master.instructions.md"]
         DP_B["design_philosophy_prd ✅ blocking\n(scan_design_philosophy_drift)"]
-        NA_B["non_ascii_prd ❌ 記憶依存"]
+        NA_B["non_ascii_runbook ❌ 記憶依存"]
         SC_B["security_control_inventory ❌ 記憶依存"]
         IP_B["issue_pr_body_standard ❌ 記憶依存"]
         WQ_B["workflow_script_quality ❌ 記憶依存"]
@@ -45,11 +45,11 @@ graph TD
         direction TB
         MI_A["master.instructions.md"]
         DP_A["design_philosophy_prd\n🔴 governs · blocking"]
-        NA_A["non_ascii_prd\n🔴 governs · blocking"]
+        NA_A["non_ascii_runbook\n🔴 governs · blocking"]
         SC_A["security_control_inventory\n🔴 governs · blocking"]
         IP_A["issue_pr_body_standard\n🔴 governs · blocking"]
         WQ_A["workflow_script_quality\n🔴 governs · blocking"]
-        DD_A["doc_dependency_prd\n🔴 governs · blocking"]
+        DD_A["doc_dependency_runbook\n🔴 governs · blocking"]
         CL_A["claude_md\n🔴 compiled_to · blocking"]
         AG_A["agents_md\n🔴 compiled_to · blocking"]
         MI_A --> DP_A
