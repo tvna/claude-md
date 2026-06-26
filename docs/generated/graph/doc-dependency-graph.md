@@ -11,13 +11,13 @@ flowchart LR
     claude_md["claude md"]
     agents_md["agents md"]
     design_philosophy_prd["design philosophy prd"]
-    non_ascii_prd["non ascii prd"]
+    non_ascii_runbook["non ascii runbook"]
     security_control_inventory["security control inventory"]
     installer_download_retry_prd["installer download retry prd"]
     issue_pr_body_standard["issue pr body standard"]
     workflow_script_quality["workflow script quality"]
     pr_body_quality_enforcement["pr body quality enforcement"]
-    doc_dependency_prd["doc dependency prd"]
+    doc_dependency_runbook["doc dependency runbook"]
     ubiquitous_language["ubiquitous language"]
     semver_universal_text_prd["semver universal text prd"]
     scan_design_philosophy_drift>"scan design philosophy drift"]
@@ -35,20 +35,20 @@ flowchart LR
     master_instructions ==>|compiled to| claude_md
     master_instructions ==>|compiled to| agents_md
     master_instructions -->|governs| design_philosophy_prd
-    master_instructions -->|governs| non_ascii_prd
+    master_instructions -->|governs| non_ascii_runbook
     master_instructions -->|governs| security_control_inventory
     master_instructions -->|governs| issue_pr_body_standard
     master_instructions -->|governs| workflow_script_quality
-    master_instructions -->|governs| doc_dependency_prd
+    master_instructions -->|governs| doc_dependency_runbook
     master_instructions -->|governs| ubiquitous_language
     design_philosophy_prd -->|derives from| ubiquitous_language
     ubiquitous_language -.->|enforced by| scan_design_philosophy_drift
     design_philosophy_prd -.->|enforced by| scan_design_philosophy_drift
-    non_ascii_prd -.->|enforced by| preflight_non_ascii
-    non_ascii_prd -.->|enforced by| scan_non_ascii
+    non_ascii_runbook -.->|enforced by| preflight_non_ascii
+    non_ascii_runbook -.->|enforced by| scan_non_ascii
     issue_pr_body_standard -.->|enforced by| body_policy
-    doc_dependency_prd -.->|enforced by| gate_doc_graph_pr
-    doc_dependency_prd -.->|enforced by| validate_doc_graph_workflow
+    doc_dependency_runbook -.->|enforced by| gate_doc_graph_pr
+    doc_dependency_runbook -.->|enforced by| validate_doc_graph_workflow
     gate_doc_graph_pr -.->|references| doc_graph_lib
     semver_universal_text_prd -.->|references| master_instructions
 ```
