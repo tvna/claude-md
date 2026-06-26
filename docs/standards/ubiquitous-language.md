@@ -96,11 +96,13 @@ required entry has been removed or renamed. Refs #1901.
   has exactly one automated producer permitted to write it, and every other
   branch is forbidden from editing that surface; the invariant an inverse gate
   keeps true. Both producer jobs live in `.github/workflows/post-merge.yml`:
-  the `decision-tree` job produces `docs/generated/` (AST docs and diagrams)
-  plus the `docs/standards/module-size-distribution.toml` snapshot, and the
-  `triage-report` job produces
-  `docs/generated/scripts/auto-retro-triage-report.md`. Master section 3 (an
-  "only here" invariant with a single legitimate writer per surface).
+  the `decision-tree` job produces the rest of `docs/generated/` (per-script
+  AST docs, workflow if-branch diagrams, and the dependency graph) plus the
+  `docs/standards/module-size-distribution.toml` snapshot, while the
+  `triage-report` job produces the single file
+  `docs/generated/scripts/auto-retro-triage-report.md` that sits under the
+  shared `docs/generated/scripts/` tree. Master section 3 (an "only here"
+  invariant with a single legitimate writer per surface).
 - **freshness precondition**: A time-boxed observation that a precondition is
   currently met (for example, that the local branch base is fresh); must be
   refreshed immediately before each guarded operation because a long flow can
