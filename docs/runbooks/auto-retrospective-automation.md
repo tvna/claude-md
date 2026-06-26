@@ -8,7 +8,7 @@ produces, how it decides to skip, how to verify a run, and how to pause or
 roll it back.
 
 The normative six-control contract for this operation lives in
-[`docs/prd/privileged-operation-runbooks.md`](../prd/privileged-operation-runbooks.md)
+[`docs/runbooks/privileged-operation-runbooks.md`](privileged-operation-runbooks.md)
 section 9; this runbook holds the concrete operational commands that the
 contract defers to.
 
@@ -125,6 +125,6 @@ wrongful close is reversible by re-opening.
 - [`scripts/auto_retro.py`](../../scripts/auto_retro.py); retro issue generator.
 - [`scripts/script_ast_graph.py`](../../scripts/script_ast_graph.py); generated AST graph document generator.
 - [`tests/test_auto_retro.py`](../../tests/test_auto_retro.py); branch coverage and dry-run surface.
-- [`docs/prd/privileged-operation-runbooks.md`](../prd/privileged-operation-runbooks.md) section 9; six-control contract.
+- [`docs/runbooks/privileged-operation-runbooks.md`](privileged-operation-runbooks.md) section 9; six-control contract.
 - [#149](https://github.com/tvna/claude-md/issues/149); tracking issue.
 - [#1454](https://github.com/tvna/claude-md/issues/1454); this runbook's issue.
