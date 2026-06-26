@@ -17,7 +17,7 @@
 #
 # Severity: blocking = co-change required; advisory = informational note only.
 #
-# Maintained by: docs/prd/doc-dependency-graph.md
+# Maintained by: docs/runbooks/doc-dependency-graph.md
 # CODEOWNERS-protected: .github/CODEOWNERS (docs/graph/ @tvna)
 # Refs #1754.
 
@@ -91,8 +91,8 @@ description = "Enforcement registry for PR body content-quality defect classes; 
 
 [[nodes]]
 id = "doc_dependency_prd"
-path = "docs/prd/doc-dependency-graph.md"
-type = "prd"
+path = "docs/runbooks/doc-dependency-graph.md"
+type = "runbook"
 description = "Design rationale for the document dependency graph governance gate."
 
 [[nodes]]
