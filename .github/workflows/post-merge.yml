@@ -427,6 +427,12 @@ jobs:
   # authors the generated-docs and triage-report PRs above) is a non-Actions
   # identity, so its tag push does start the release workflow. The App is
   # already trusted in this workflow; this adds no new secret surface.
+  #
+  # The job-level GITHUB_TOKEN needs only `contents: read`: the App token (not
+  # the GITHUB_TOKEN) is the git credential that creates and pushes the tag, so
+  # the default token never needs write here. Keeping it read-only satisfies the
+  # Scorecard Token-Permissions check while the App retains the write capability
+  # required for the push.
   auto-tag-version:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
@@ -434,7 +440,7 @@ jobs:
     environment:
       name: devcontainer-image-pins
     permissions:
-      contents: write
+      contents: read
     concurrency:
       group: auto-tag-version
       cancel-in-progress: false
