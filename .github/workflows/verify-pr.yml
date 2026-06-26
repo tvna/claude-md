@@ -189,6 +189,17 @@ jobs:
         # .lock, .sql). Complements the em-dash gate above.
         run: python3 scripts/scan_repo_double_hyphen.py verify --git-tracked
 
+      - name: Verify runbook template conformance
+        # Refs #2065: new/changed docs/runbooks/*.md must follow TEMPLATE.md's
+        # canonical section skeleton (diff-scoped, blocking). PR-body waiver:
+        # 'runbook-template-waiver: docs/runbooks/NAME.md; reason'.
+        run: |
+          body_file="$(mktemp)"
+          printf '%s' "$PR_BODY" > "$body_file"
+          python3 scripts/scan_runbook_template_drift.py verify \
+            --base-ref "$BASE_REF" \
+            --body-file "$body_file"
+
       - name: Set up uv and project environment
         uses: ./.github/actions/setup-uv
 
