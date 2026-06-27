@@ -158,6 +158,23 @@ class TestSideEffectWrappers:
         )
         assert branch_cleanup.count_open_prs_for_head("o/r", "b") == count
 
+    def test_count_open_prs_encodes_reserved_branch_chars(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # A branch name with `#` / `&` must be percent-encoded so it is not
+        # parsed as a URL fragment / extra query param (Codex review on #2122).
+        seen: dict[str, str] = {}
+
+        def _fake(path: str, *, token: str, **_kw: object) -> list[dict[str, object]]:
+            seen["path"] = path
+            return []
+
+        monkeypatch.setattr(branch_cleanup, "paginate", _fake)
+        branch_cleanup.count_open_prs_for_head("owner/repo", "fix/a#b&c")
+        # `:` and `/` stay literal; `#` and `&` are encoded.
+        assert "head=owner:fix/a%23b%26c" in seen["path"]
+        assert "#" not in seen["path"]
+
     def test_find_rolling_issue_exact_title(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:

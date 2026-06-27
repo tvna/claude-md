@@ -107,8 +107,14 @@ def get_last_commit_date(repo: str, sha: str) -> datetime:
 
 def count_open_prs_for_head(repo: str, branch: str) -> int:
     owner = repo.split("/", 1)[0]
+    # Encode the owner:branch value: a branch ref may legally contain `#`, `&`,
+    # or a space, which would otherwise be parsed as a URL fragment / extra
+    # query parameter and silently zero the count (Codex review on #2122).
+    # Keep `:` and `/` literal so GitHub still parses the head filter and
+    # slash-containing branch names (feature/foo) match.
+    head = quote(f"{owner}:{branch}", safe=":/")
     prs = paginate(
-        f"/repos/{repo}/pulls?state=open&head={owner}:{branch}", token=_token()
+        f"/repos/{repo}/pulls?state=open&head={head}", token=_token()
     )
     return len(prs)
 
