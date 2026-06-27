@@ -21,8 +21,6 @@ import urllib.error
 from collections.abc import Iterable, Iterator
 from pathlib import Path
 
-from _github_api import GitHubApiError, rest_json
-
 # Subdirectories the literal-value drift check inspects.
 DRIFT_SUBDIRS: tuple[str, ...] = (".github", "scripts", "docs")
 WORKFLOW_SUBDIR = ".github/workflows"
@@ -136,6 +134,11 @@ def fetch_latest_uv_release() -> str | None:
     empty/malformed body); callers should treat None as "skip the check"
     rather than as drift.
     """
+    # Imported lazily so the SessionStart hot path (``read`` / ``drift``,
+    # which never reach this function) does not require ``_github_api`` to be
+    # importable; only the ``stale`` upstream check needs the REST boundary.
+    from _github_api import GitHubApiError, rest_json
+
     token = os.environ.get("GH_TOKEN", "")
     try:
         data = rest_json("GET", "/repos/astral-sh/uv/releases/latest", token=token)

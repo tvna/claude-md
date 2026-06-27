@@ -9,6 +9,7 @@ from __future__ import annotations
 import urllib.error
 from pathlib import Path
 
+import _github_api
 import pytest
 import uv_pin
 from _github_api import GitHubApiError
@@ -230,7 +231,7 @@ class TestFetchLatestUvRelease:
         def _raise(*_args, **_kwargs):
             raise urllib.error.URLError("connection refused")
 
-        monkeypatch.setattr(uv_pin, "rest_json", _raise)
+        monkeypatch.setattr(_github_api, "rest_json", _raise)
         assert uv_pin.fetch_latest_uv_release() is None
 
     def test_non_2xx_returns_none(
@@ -239,27 +240,27 @@ class TestFetchLatestUvRelease:
         def _raise(*_args, **_kwargs):
             raise GitHubApiError(404, "GET", "/repos/astral-sh/uv/releases/latest", "not found")
 
-        monkeypatch.setattr(uv_pin, "rest_json", _raise)
+        monkeypatch.setattr(_github_api, "rest_json", _raise)
         assert uv_pin.fetch_latest_uv_release() is None
 
     def test_malformed_body_returns_none(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setattr(uv_pin, "rest_json", lambda *_a, **_k: ["not", "a", "dict"])
+        monkeypatch.setattr(_github_api, "rest_json", lambda *_a, **_k: ["not", "a", "dict"])
         assert uv_pin.fetch_latest_uv_release() is None
 
     def test_success_returns_tag(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setattr(
-            uv_pin, "rest_json", lambda *_a, **_k: {"tag_name": "0.11.12"}
+            _github_api, "rest_json", lambda *_a, **_k: {"tag_name": "0.11.12"}
         )
         assert uv_pin.fetch_latest_uv_release() == "0.11.12"
 
     def test_empty_tag_returns_none(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setattr(uv_pin, "rest_json", lambda *_a, **_k: {"tag_name": "  "})
+        monkeypatch.setattr(_github_api, "rest_json", lambda *_a, **_k: {"tag_name": "  "})
         assert uv_pin.fetch_latest_uv_release() is None
 
 
