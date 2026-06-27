@@ -122,6 +122,7 @@ color = "0075ca"
 name = "type:tracking"
 family = "type"
 status = "keep"
+commit_type = false
 description = "Umbrella issue coordinating scoped child issues."
 color = "e4e669"
 
@@ -475,6 +476,7 @@ paths = [
   "scripts/labels_apply.py", "tests/test_labels_apply.py",
   "scripts/issue_anchors.py",
   "scripts/scan_area_path_coverage.py", "scripts/scan_harness_doc_coverage.py",
+  "scripts/scan_commit_type_label_drift.py",
   ".github/workflows/apply-labels.yml",
 ]
 
