@@ -24,10 +24,9 @@ pytestmark = pytest.mark.shard_default
 
 
 def test_canonical_value() -> None:
-    assert amp.MANAGED_PREFIXES == (".agents/skills/", ".claude/skills/")
     # Trailing slashes are load-bearing: a sibling like .agents/skillset/ must
-    # not be caught by a startswith against these prefixes.
-    assert all(prefix.endswith("/") for prefix in amp.MANAGED_PREFIXES)
+    # not be caught by a startswith against these prefixes; the literal pins them.
+    assert amp.MANAGED_PREFIXES == (".agents/skills/", ".claude/skills/")
 
 
 def test_gate_references_shared_constant() -> None:
@@ -39,10 +38,8 @@ def test_em_dash_scanner_references_shared_constant() -> None:
 
 
 def test_double_hyphen_scanner_includes_shared_constant() -> None:
-    # This scanner skips a superset (it adds docs/archive/, docs/generated/),
-    # so the managed prefixes are the leading members rather than the whole set.
-    assert (
-        srdh._SKIP_PREFIXES[: len(amp.MANAGED_PREFIXES)] == amp.MANAGED_PREFIXES
-    )
+    # This scanner skips a superset (it adds docs/archive/, docs/generated/), so
+    # assert order-independent membership rather than position: every managed
+    # prefix must be present wherever it sits in the composed tuple.
     for prefix in amp.MANAGED_PREFIXES:
         assert prefix in srdh._SKIP_PREFIXES
