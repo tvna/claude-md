@@ -73,6 +73,7 @@ import scan_allowlist_rationale
 import scan_apm_ascii
 import scan_apm_lock_drift
 import scan_apm_portability
+import scan_commit_type_label_drift
 import scan_compile_from_source
 import scan_design_philosophy_drift
 import scan_devcontainer_tool_drift
@@ -232,6 +233,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("scan_design_philosophy_drift.py", "verify-coupling"): "test_scan_design_philosophy_drift_verify_coupling_matches_workflow_args",
     ("scan_apm_lock_drift.py", "verify"): "test_scan_apm_lock_drift_verify_matches_workflow_args",
     ("scan_compile_from_source.py", "verify"): "test_scan_compile_from_source_verify_matches_workflow_args",
+    ("scan_commit_type_label_drift.py", "verify"): "test_scan_commit_type_label_drift_verify_matches_workflow_args",
     ("scan_devcontainer_tool_drift.py", "verify"): "test_scan_devcontainer_tool_drift_verify_matches_workflow_args",
     ("scan_doc_workflow_refs.py", "verify"): "test_scan_doc_workflow_refs_verify_matches_workflow_args",
     ("scan_docs_inventory.py", "verify"): "test_scan_docs_inventory_verify_matches_workflow_args",
@@ -1723,6 +1725,12 @@ def test_scan_compile_from_source_verify_matches_workflow_args() -> None:
     """Mirrors the ``Verify no tool is compiled from source on the CI
     surface`` step in ``.github/workflows/verify-agents.yml``."""
     assert scan_compile_from_source.main(["verify"]) == 0
+
+
+def test_scan_commit_type_label_drift_verify_matches_workflow_args() -> None:
+    """Mirrors the ``Verify type:* labels match title-policy commit types``
+    step in ``.github/workflows/verify-agents.yml`` (issue #2081)."""
+    assert scan_commit_type_label_drift.main(["verify"]) == 0
 
 
 def test_scan_devcontainer_tool_drift_verify_matches_workflow_args() -> None:

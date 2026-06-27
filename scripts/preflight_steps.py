@@ -411,6 +411,14 @@ STEPS: tuple[Step, ...] = (
         argv=("python3", "scripts/scan_session_path_drift.py", "verify"),
     ),
     Step(
+        # Refs #2081. Fails when a type:* label in .github/label-policy.toml
+        # has a stem that is not a commit type in .github/title-policy.toml,
+        # so the two partial projections of the commit-type concept cannot
+        # drift. type:tracking is exempt via a declared commit_type = false.
+        name="scan_commit_type_label_drift",
+        argv=("python3", "scripts/scan_commit_type_label_drift.py", "verify"),
+    ),
+    Step(
         # Refs #1099. Runs waza spec-compliance over every skill under
         # .agents/skills. spec failure = fail, token budget = warning only.
         # Needs the pinned waza binary (scripts/install_waza.sh); soft so a
