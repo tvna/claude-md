@@ -195,8 +195,8 @@ def _command_produces_commit(command: str) -> bool:
             if not (_NON_CREATING_FLAGS & rest):
                 return True
             i = k
-            continue
-        i = j + 1
+        else:
+            i = j + 1
     return False
 
 # Signing config copied verbatim into the throwaway probe repo. ``commit.gpgsign``
