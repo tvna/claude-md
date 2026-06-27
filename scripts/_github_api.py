@@ -95,7 +95,7 @@ def apply_call(
 class GitHubApiError(RuntimeError):
     """A GitHub REST call returned a non-2xx status.
 
-    Carries the HTTP status ``code`` so callers can branch on it -- in
+    Carries the HTTP status ``code`` so callers can branch on it; in
     particular treat 404 as "absent" rather than a hard failure, preserving
     the behaviour migrated scripts previously derived from a ``gh api``
     :class:`subprocess.CalledProcessError`. Any other non-2xx fails loud
@@ -122,7 +122,7 @@ def rest_json(
     """Call the GitHub REST API and return the parsed JSON body.
 
     ``path`` is either an API path beginning with ``/`` (e.g.
-    ``/repos/o/r/issues/1``) -- prefixed with :data:`API_ROOT` -- or an
+    ``/repos/o/r/issues/1``), which is prefixed with :data:`API_ROOT`, or an
     already-built ``https://`` URL. Retries and headers come from
     :func:`apply_call`.
 
