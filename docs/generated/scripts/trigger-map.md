@@ -241,6 +241,8 @@ Detection is string-match based:
 | `security_drift_report.py` | workflow | `weekly-maintenance.yml (security-control-drift)` |
 | `session_resource_report.py` | agent-hook | `claude:PostToolUse` |
 | `session_resource_report.py` | agent-hook | `codex:PostToolUse` |
+| `session_set_origin_head.py` | agent-hook | `claude:SessionStart` |
+| `session_set_origin_head.py` | agent-hook | `codex:SessionStart` |
 | `skill_quality_gate.py` | pre-commit | `skill-quality-gate` |
 | `skill_quality_gate.py` | workflow | `skill-quality.yml (skill-quality)` |
 | `stop_new_session_handoff_prompt.py` | agent-hook | `claude:Stop` |
