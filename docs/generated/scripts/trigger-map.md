@@ -184,6 +184,7 @@ Detection is string-match based:
 | `scan_apm_ascii.py` | workflow | `verify-pr.yml (portable-pr-policy)` |
 | `scan_apm_lock_drift.py` | workflow | `verify-pr.yml (portable-pr-policy)` |
 | `scan_apm_portability.py` | workflow | `verify-pr.yml (portable-pr-policy)` |
+| `scan_commit_type_label_drift.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
 | `scan_compile_from_source.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
 | `scan_design_philosophy_drift.py` | workflow | `verify-pr.yml (portable-pr-policy)` |
 | `scan_design_philosophy_drift.py` | workflow | `verify-pr.yml (verify-design-philosophy)` |
