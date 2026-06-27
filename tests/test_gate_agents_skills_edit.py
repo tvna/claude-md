@@ -12,6 +12,35 @@ Verifies that:
 - The deny reason names the blocked path and the `apm compile` change path.
 - The stdin -> stdout boundary works end-to-end, and malformed stdin fails
   open (exit 0, no decision emitted).
+
+Adversarial / property coverage (issue #2098)
+---------------------------------------------
+``TestAdversarialBashDetection`` and ``TestBashDetectionProperties`` add the
+deterministic gate the three Codex P2 findings on PR #2092 lacked: they exercise
+the Bash heuristic against every known bypass and false-positive class so a
+future edit to it cannot silently regress:
+
+- wrapper / cluster flags (``bash -lc`` / ``sh -euc`` / ``-xc``; ``sudo`` /
+  ``env`` / non-shell interpreters are pinned as documented limitations),
+- the managed-directory root with no trailing slash (``rm -rf .agents/skills``),
+- separators inside quotes (``git commit -m 'note ; rm .agents/skills/x'``),
+- redirection variants (``>`` ``>>`` ``2>`` ``>|`` and attached ``>file``), and
+- the quoted-redirect false positive (``echo '> .agents/skills/x'`` and the
+  no-space ``echo '>.agents/skills/x'``) the prior hand-rolled redirect regex
+  mismatched, now fixed by tokenizing with ``shlex.shlex(punctuation_chars=...)``.
+
+Tokenizer evaluation (issue #2098, "hand-rolled parse -> real tokenizer?")
+--------------------------------------------------------------------------
+The per-segment tokenizer was moved from ``shlex.split`` to ``shlex.shlex`` with
+``punctuation_chars`` so quoting is honored when classifying redirection
+operators -- the root cause of the quoted-``>`` false positive. The quote-aware
+SEGMENT splitter (``gase._segments``) is intentionally retained: ``shlex`` does
+not treat a newline as a command separator, so a wholesale replacement would
+merge ``echo hi\ncp a .agents/skills/x`` into one token stream and MISS the
+write (a bypass, strictly worse than a false positive for a safety gate).
+Unifying segmentation onto a single real tokenizer is a larger, separable change
+tracked for a follow-up issue; these property tests are the regression guard for
+that future work.
 """
 
 from __future__ import annotations
@@ -23,6 +52,8 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from hypothesis import given
+from hypothesis import strategies as st
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 import gate_agents_skills_edit as gase
@@ -262,3 +293,223 @@ class TestMainBoundary:
     ) -> None:
         monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps({"foo": "bar"})))
         assert gase.main([]) == 0
+
+
+class TestQuotedRedirectFalsePositive:
+    """A ``>`` inside quotes is a mention, never a redirection (issue #2098).
+
+    The pre-#2098 gate tokenized with ``shlex.split``, which strips quotes before
+    the redirect regex runs, so a quoted token whose content begins with ``>``
+    (``echo '> .agents/skills/x'``, or the no-space ``echo '>.agents/skills/x'``)
+    was misread as a real redirection and denied -- a false positive that wedges
+    ordinary Bash. Tokenizing with ``shlex.shlex(punctuation_chars=...)`` keeps
+    the quoted ``>`` inside its word token, so these now pass.
+    """
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            "echo '> .agents/skills/x.md'",
+            "echo '>.agents/skills/x.md'",
+            "echo '>> .claude/skills/x.md'",
+            "echo '>>.claude/skills/x.md'",
+            "printf '%s' '> .agents/skills/x.md now'",
+            'git commit -m "writes >.claude/skills/x.md on compile"',
+            "echo \"redirect 2> .agents/skills/x.md is the syntax\"",
+        ],
+    )
+    def test_quoted_redirect_mention_passes(self, command: str) -> None:
+        assert gase.decide("Bash", {"command": command}) is None
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            "echo x >.agents/skills/x.md",
+            "echo x > .agents/skills/x.md",
+            "echo x 2>.agents/skills/x.md",
+            "echo x 2> .agents/skills/x.md",
+            "echo x >>.claude/skills/x.md",
+            "echo x >| .agents/skills/x.md",
+            "echo x >|.agents/skills/x.md",
+            "echo x 1>> .agents/skills/x.md",
+        ],
+    )
+    def test_real_redirect_variants_still_denied(self, command: str) -> None:
+        """Regression guard: the fix must not blind the gate to real redirects."""
+        assert _is_deny(gase.decide("Bash", {"command": command}))
+
+
+class TestAdversarialBashDetection:
+    """Each known bypass / false-positive class from the PR #2092 Codex review.
+
+    Pinned so a future change to the Bash heuristic cannot silently reopen one.
+    """
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            # wrapper / cluster short-flag forms that carry an inline -c script
+            "bash -lc 'cp a .agents/skills/x.md'",
+            "sh -euc 'rm .claude/skills/x.md'",
+            "bash -xc 'rm .agents/skills/x.md'",
+            "zsh -c 'rm .claude/skills/x.md'",
+            "dash -c 'cp a .agents/skills/x.md'",
+            # nested shell recursion
+            'bash -c \'bash -c "rm .agents/skills/x.md"\'',
+        ],
+    )
+    def test_wrapper_cluster_flags_denied(self, command: str) -> None:
+        assert _is_deny(gase.decide("Bash", {"command": command}))
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            # Documented defense-in-depth limitations: a wrapper with its own
+            # option grammar (sudo/env) or a non-shell interpreter is not parsed.
+            # Pinned so the boundary is explicit, not an accidental silent gap;
+            # the Edit/Write matcher covers the primary edit path.
+            "sudo rm .agents/skills/x.md",
+            "env rm .claude/skills/x.md",
+            "env FOO=bar cp a .agents/skills/x.md",
+            "python3 -c \"open('.agents/skills/x.md','w')\"",
+        ],
+    )
+    def test_documented_limitations_not_detected(self, command: str) -> None:
+        assert gase.decide("Bash", {"command": command}) is None
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            # leading NAME=value assignments are skipped, so the real mutator is
+            # still classified (distinct from the env-wrapper limitation above)
+            "FOO=bar cp a .agents/skills/x.md",
+            "A=1 B=2 rm .claude/skills/x.md",
+        ],
+    )
+    def test_assignment_prefix_skipped_then_detected(self, command: str) -> None:
+        assert _is_deny(gase.decide("Bash", {"command": command}))
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            # managed-directory root with no trailing slash (whole-tree ops)
+            "rm -rf .agents/skills",
+            "rm -rf .claude/skills",
+            "mv .claude/skills /tmp/skills",
+            "rm -rf /home/user/claude-md/.agents/skills",
+        ],
+    )
+    def test_directory_root_denied(self, command: str) -> None:
+        assert _is_deny(gase.decide("Bash", {"command": command}))
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            # separators inside a single-quoted argument are not command
+            # boundaries, so the quoted 'rm'/'cp' is not a phantom mutator
+            "git commit -m 'note ; rm .agents/skills/x.md'",
+            "git commit -m 'a && cp z .claude/skills/x.md'",
+            "git commit -m 'a || rm .agents/skills/x.md'",
+            "git commit -m 'x | tee .claude/skills/y.md'",
+            "git commit -m 'bg & rm .agents/skills/x.md'",
+        ],
+    )
+    def test_quoted_separators_pass(self, command: str) -> None:
+        assert gase.decide("Bash", {"command": command}) is None
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            # a real separator DOES start a new command, so a later-segment write
+            # is still caught (the flip side of the quoted-separator guard)
+            "ls ; rm .agents/skills/x.md",
+            "ls && cp a .agents/skills/x.md",
+            "false || rm .claude/skills/x.md",
+            "cat tmpl | tee .agents/skills/x.md",
+        ],
+    )
+    def test_real_separators_still_split(self, command: str) -> None:
+        assert _is_deny(gase.decide("Bash", {"command": command}))
+
+
+# Strategy: a clean path component (no shell metacharacters, no spaces) so the
+# generated command's structure is exactly what the property asserts.
+_NAME = st.text(
+    alphabet="abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-",
+    min_size=1,
+    max_size=10,
+)
+_MANAGED_PREFIX = st.sampled_from(list(gase.MANAGED_PREFIXES))
+# A short safe phrase (letters/digits/spaces only) to sit inside a quoted arg.
+_PHRASE = st.text(alphabet="abcdefghijklmnopqrstuvwxyz ", min_size=0, max_size=20)
+
+
+@st.composite
+def _managed_path(draw: st.DrawFn) -> str:
+    """A path under a managed prefix, e.g. ``.agents/skills/foo/bar.md``."""
+    prefix = draw(_MANAGED_PREFIX)
+    parts = draw(st.lists(_NAME, min_size=1, max_size=3))
+    return prefix + "/".join(parts) + ".md"
+
+
+class TestBashDetectionProperties:
+    """Property tests over the Bash heuristic (issue #2098).
+
+    Each property names the invariant it pins so a failure points at the spec.
+    """
+
+    @given(
+        managed=_managed_path(),
+        mutator=st.sampled_from(sorted(gase._WRITE_COMMANDS)),
+    )
+    def test_mutator_writing_managed_path_is_denied(
+        self, managed: str, mutator: str
+    ) -> None:
+        # A mutating command carrying a managed path as a positional argument is
+        # always a detected write target.
+        assert gase.managed_write_targets(f"{mutator} src {managed}")
+
+    @given(
+        managed=_managed_path(),
+        op=st.sampled_from([">", ">>", "2>", ">|", "1>"]),
+        space=st.sampled_from(["", " "]),
+    )
+    def test_redirect_to_managed_path_is_denied(
+        self, managed: str, op: str, space: str
+    ) -> None:
+        # Every output-redirection variant, attached or spaced, is detected.
+        assert gase.managed_write_targets(f"echo x {op}{space}{managed}")
+
+    @given(managed=_managed_path(), phrase=_PHRASE, sep=st.sampled_from([";", "&&", "||", "|", "&", ">", ">>"]))
+    def test_quoted_mention_is_never_a_target(
+        self, managed: str, phrase: str, sep: str
+    ) -> None:
+        # A separator or redirect inside a single-quoted argument is data, not a
+        # command/redirection, so no managed write target is produced.
+        command = f"git commit -m '{phrase}{sep} rm {managed}'"
+        assert gase.managed_write_targets(command) == []
+
+    @given(
+        managed=_managed_path(),
+        shell=st.sampled_from(sorted(gase._SHELL_COMMANDS)),
+        cluster=st.sampled_from(["-c", "-lc", "-euc", "-xc"]),
+    )
+    def test_wrapper_cluster_flag_recurses(
+        self, managed: str, shell: str, cluster: str
+    ) -> None:
+        # A mutator hidden in a `<shell> <cluster> '<script>'` wrapper is seen.
+        assert gase.managed_write_targets(f"{shell} {cluster} 'rm {managed}'")
+
+    @given(reader=st.sampled_from(["cat", "grep", "ls", "head", "tail", "wc"]), managed=_managed_path())
+    def test_read_commands_are_allowed(self, reader: str, managed: str) -> None:
+        # Reading a managed path is never blocked; only writes are.
+        assert gase.managed_write_targets(f"{reader} {managed}") == []
+
+    @given(prefix=_MANAGED_PREFIX, parts=st.lists(_NAME, min_size=1, max_size=2))
+    def test_sibling_directory_never_matches(
+        self, prefix: str, parts: list[str]
+    ) -> None:
+        # `.agents/skillset/...` is a sibling of `.agents/skills/...`; a mutator
+        # targeting it must pass (the trailing-slash prefix guards the boundary).
+        sibling = prefix.rstrip("/") + "et/" + "/".join(parts) + ".md"
+        assert gase.managed_write_targets(f"rm -rf {sibling}") == []

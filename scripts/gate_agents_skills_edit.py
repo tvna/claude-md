@@ -46,7 +46,12 @@ Design (CLAUDE.md section 4: make wrong actions hard, right actions easy):
   tokenized and only its leading command is classified, redirections are read as
   operator tokens) so a managed path mentioned inside a quoted string; e.g.
   ``echo 'edit > .agents/skills/x'`` or a commit message; is not a false
-  positive: the ``>`` is part of one quoted token, not a redirection.
+  positive: the ``>`` is part of one quoted token, not a redirection. Segment
+  tokenization uses ``shlex.shlex`` with ``punctuation_chars`` so an unquoted
+  redirection operator is emitted as its own token while a ``>`` inside quotes
+  stays part of the surrounding word, even when no space follows it
+  (``echo '>.agents/skills/x'``) -- the false-positive class the prior
+  hand-rolled redirect regex still mismatched (issue #2098).
 - Fail-open is narrow and intentional: a malformed stdin event logs to stderr
   and exits 0 (per CLAUDE.md section 4, a hook bug never wedges the session).
   A matched edit/write is always denied.
@@ -122,15 +127,6 @@ _ASSIGN_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
 # is the value; ``--check`` (double dash) does not match.
 _DASH_C_RE = re.compile(r"^-[a-zA-Z]*c$")
 
-# A redirection-operator token: optional file-descriptor digits, one or two
-# ``>``, an optional noclobber-override ``|`` (``>|``), then an optional target.
-# Group 1 is the target when it shares the token (``>foo``, ``2>foo``, ``>|foo``)
-# and EMPTY for a standalone operator (``>``, ``>>``, ``>|``) whose target is the
-# NEXT token. Matching on the tokenized command (not the raw string) means a
-# ``>`` inside a quoted argument is part of one token and never read as a
-# redirection, so ``echo 'see > .agents/skills/x'`` is not a false positive.
-_REDIRECT_RE = re.compile(r"^\d*>>?\|?(.*)$")
-
 # Bound the ``bash -c`` recursion so a pathological ``bash -c 'bash -c ...'``
 # nest cannot loop; each level consumes the ``-c`` argument so real commands
 # terminate far below this.
@@ -192,9 +188,23 @@ def _managed_target(token: str) -> str | None:
 
 
 def _tokenize(segment: str) -> list[str]:
-    """Best-effort shell tokenization; fall back to whitespace split."""
+    """Tokenize one shell *segment* into word and redirection-operator tokens.
+
+    Uses ``shlex.shlex`` with ``punctuation_chars`` so an unquoted redirection
+    operator (``>`` / ``>>`` / ``>|``; a file-descriptor prefix like ``2>`` lexes
+    as a separate ``2`` word then a ``>`` operator) is emitted as its own token,
+    while a ``>`` that appears INSIDE quotes stays part of the surrounding word
+    token. That distinction is exactly what ``shlex.split`` discards: it strips
+    quotes first, so a quoted ``'> .agents/skills/x'`` (or the no-space
+    ``'>.agents/skills/x'``) became a token that the old redirect regex matched
+    as a real redirection to a managed path -- the false positive issue #2098
+    fixes. Falls back to a plain whitespace split on a malformed command
+    (unbalanced quote) so a hook bug never wedges the session (CLAUDE.md s4).
+    """
+    lexer = shlex.shlex(segment, posix=True, punctuation_chars=True)
+    lexer.whitespace_split = True
     try:
-        return shlex.split(segment)
+        return list(lexer)
     except ValueError:
         return segment.split()
 
@@ -260,30 +270,32 @@ def _segments(command: str) -> list[str]:
     return [seg.strip() for seg in segments if seg.strip()]
 
 
+def _is_redirect_op(token: str) -> bool:
+    """Return True when *token* is an output-redirection operator token.
+
+    ``punctuation_chars`` tokenization emits these as standalone tokens
+    (``>``, ``>>``, ``>|``, ``>&``, ``&>``) with any file-descriptor digits in a
+    SEPARATE preceding word token, so the operator and its target are always
+    distinct tokens. The test is "contains ``>`` and is made up only of
+    redirection punctuation", which admits every write-redirect form and rejects
+    ordinary words and the ``<`` input redirect.
+    """
+    return ">" in token and set(token) <= {">", "|", "&"}
+
+
 def _redirect_targets(tokens: list[str]) -> list[str]:
     """Return every redirection target token in *tokens*.
 
-    A target comes from either an attached operator token that carries it
-    (``>foo``) or a standalone operator token (``>`` / ``>>`` / ``2>`` / ``>|``)
-    whose target is the next token. Because this reads the *tokenized* command, a
-    ``>`` inside a quoted argument is part of one token and is never read as a
-    redirection.
+    A redirection operator token (:func:`_is_redirect_op`) takes the NEXT token
+    as its target. Because the tokens come from ``shlex.shlex`` with
+    ``punctuation_chars``, a ``>`` inside a quoted argument is part of one word
+    token and is never seen here as an operator, so a quoted mention such as
+    ``echo '> .agents/skills/x'`` yields no redirection target.
     """
     targets: list[str] = []
-    skip_next = False
     for index, token in enumerate(tokens):
-        if skip_next:
-            skip_next = False
-            continue
-        match = _REDIRECT_RE.match(token)
-        if match is None:
-            continue
-        attached = match.group(1)
-        if attached:
-            targets.append(attached)
-        elif index + 1 < len(tokens):
+        if _is_redirect_op(token) and index + 1 < len(tokens):
             targets.append(tokens[index + 1])
-            skip_next = True
     return targets
 
 
