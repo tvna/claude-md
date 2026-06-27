@@ -10,7 +10,14 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 
-from _github_api import apply_call, graphql_call, upload_release_asset
+from _github_api import (
+    GitHubApiError,
+    apply_call,
+    graphql_call,
+    paginate,
+    rest_json,
+    upload_release_asset,
+)
 
 pytestmark = pytest.mark.shard_ci_ops
 
@@ -517,3 +524,111 @@ def test_upload_release_asset_returns_4xx_without_retry() -> None:
     assert code == 422
     assert "already exists" in body
     assert len(calls) == 1
+
+
+# ---------------------------------------------------------------------------
+# rest_json
+# ---------------------------------------------------------------------------
+
+
+def test_rest_json_prefixes_api_root_and_parses() -> None:
+    seen: list[str] = []
+
+    def opener(request: urllib.request.Request) -> Response:
+        seen.append(request.full_url)
+        return Response(200, '{"number":7}')
+
+    data = rest_json("GET", "/repos/o/r/issues/7", token="t", opener=opener)
+
+    assert data == {"number": 7}
+    assert seen == ["https://api.github.com/repos/o/r/issues/7"]
+
+
+def test_rest_json_passes_through_full_url() -> None:
+    seen: list[str] = []
+
+    def opener(request: urllib.request.Request) -> Response:
+        seen.append(request.full_url)
+        return Response(200, "[]")
+
+    rest_json("GET", "https://api.github.com/search/issues?q=x", token="t", opener=opener)
+
+    assert seen == ["https://api.github.com/search/issues?q=x"]
+
+
+def test_rest_json_sends_payload_for_writes() -> None:
+    captured: list[urllib.request.Request] = []
+
+    def opener(request: urllib.request.Request) -> Response:
+        captured.append(request)
+        return Response(201, '{"id":1}')
+
+    rest_json("POST", "/repos/o/r/issues", {"title": "x"}, token="t", opener=opener)
+
+    assert captured[0].method == "POST"
+    assert json.loads(captured[0].data.decode()) == {"title": "x"}
+
+
+def test_rest_json_empty_body_returns_none() -> None:
+    data = rest_json(
+        "DELETE", "/repos/o/r/x", token="t", opener=lambda _r: Response(204, "")
+    )
+    assert data is None
+
+
+def test_rest_json_raises_on_404_with_code() -> None:
+    with pytest.raises(GitHubApiError) as excinfo:
+        rest_json(
+            "GET",
+            "/repos/o/r/issues/9",
+            token="t",
+            opener=lambda _r: (_ for _ in ()).throw(http_error(404, "not found")),
+        )
+    assert excinfo.value.code == 404
+
+
+def test_rest_json_raises_on_500_after_retries() -> None:
+    def opener(_request: urllib.request.Request) -> Response:
+        raise http_error(500, "boom")
+
+    with pytest.raises(GitHubApiError) as excinfo:
+        rest_json("GET", "/repos/o/r/x", token="t", opener=opener, sleeper=lambda _s: None)
+    assert excinfo.value.code == 500
+
+
+# ---------------------------------------------------------------------------
+# paginate
+# ---------------------------------------------------------------------------
+
+
+def test_paginate_walks_until_short_page() -> None:
+    pages = {1: [{"i": 1}, {"i": 2}], 2: [{"i": 3}]}
+    seen: list[str] = []
+
+    def opener(request: urllib.request.Request) -> Response:
+        seen.append(request.full_url)
+        page = 2 if "&page=2" in request.full_url else 1
+        return Response(200, json.dumps(pages[page]))
+
+    items = paginate("/repos/o/r/issues", token="t", opener=opener, per_page=2)
+
+    assert items == [{"i": 1}, {"i": 2}, {"i": 3}]
+    assert len(seen) == 2
+    assert "per_page=2&page=1" in seen[0]
+
+
+def test_paginate_appends_query_with_ampersand() -> None:
+    seen: list[str] = []
+
+    def opener(request: urllib.request.Request) -> Response:
+        seen.append(request.full_url)
+        return Response(200, "[]")
+
+    paginate("/repos/o/r/issues?state=all", token="t", opener=opener)
+
+    assert "?state=all&per_page=100&page=1" in seen[0]
+
+
+def test_paginate_empty_first_page_returns_empty() -> None:
+    items = paginate("/repos/o/r/issues", token="t", opener=lambda _r: Response(200, "[]"))
+    assert items == []

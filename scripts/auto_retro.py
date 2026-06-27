@@ -11,7 +11,7 @@ retrospective issue; make this deterministic, not operator-memory."
 Refs #234.
 
 Follows the refactor pattern established by ``scripts/scan_non_ascii.py``:
-pure functions on top, a thin :func:`gh_api` subprocess boundary at the
+pure functions on top, a thin :func:`gh_api` REST boundary at the
 bottom, monkeypatched in tests.
 
 Skip conditions:
@@ -39,7 +39,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import subprocess
 import sys
 import time
 from collections.abc import Callable, Mapping
@@ -157,6 +156,7 @@ from _auto_retro_triage import (
     render_triage_report_markdown,
     should_skip_by_prior,
 )
+from _github_api import GitHubApiError, rest_text
 from _retro_labels import (
     ALL_RETRO_LABELS,
     PRIOR_EPOCH_MIN_RETRO_NUMBER,
@@ -360,36 +360,9 @@ def gh_api(
     method: str,
     path: str,
     json_body: dict[str, Any] | None = None,
-    *,
-    timeout: int = 30,
 ) -> str:
-    """Thin wrapper around ``gh api``. Returns stdout text.
-
-    Raises :class:`subprocess.CalledProcessError` on any non-zero exit
-    so the orchestrator fails loudly (CLAUDE.md section 4).
-    """
-    cmd = ["gh", "api", "--method", method, path]
-    if json_body is not None:
-        # S603 justification: fixed argv (no shell, no user input in argv[0]); `gh` is
-        # provisioned by the workflow runner. `path` is built from event payload
-        # numbers narrowed to int upstream.
-        result = subprocess.run(  # noqa: S603 -- fixed argv, shell=False
-            [*cmd, "--input", "-"],
-            input=json.dumps(json_body),
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-            check=True,
-        )
-    else:
-        result = subprocess.run(  # noqa: S603 -- fixed argv, shell=False
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-            check=True,
-        )
-    return result.stdout
+    """Thin wrapper over :func:`_github_api.rest_text` (ambient GH_TOKEN auth)."""
+    return rest_text(method, path, json_body)
 
 
 def fetch_pr_commits(repo: str, pr_number: int) -> list[str]:
@@ -487,14 +460,14 @@ def fetch_check_runs(
             annotations = fetch_check_run_annotations(
                 repo, run_id, limit=_ANNOTATION_FETCH_LIMIT
             )
-        except subprocess.CalledProcessError as exc:
+        except GitHubApiError as exc:
             # Fail-soft per acceptance criterion 3 of issue #381: a
             # single annotation lookup failure must not block the other
             # rows. The base "conclusion + completed_at" cell still
             # carries the audit signal.
             print(
                 f"::warning::fetch_check_run_annotations failed for "
-                f"check_run id={run_id} (exit {exc.returncode}); falling "
+                f"check_run id={run_id} (HTTP {exc.code}); falling "
                 "back to summary-less row",
                 file=sys.stderr,
             )
@@ -512,7 +485,7 @@ def fetch_check_run_annotations(
     ``GET /repos/{repo}/check-runs/{id}/annotations?per_page={limit}``.
     Returns ``[]`` when the response is empty or not a JSON list. The
     caller (:func:`fetch_check_runs`) translates
-    :class:`subprocess.CalledProcessError` into a fail-soft summary-less
+    :class:`_github_api.GitHubApiError` into a fail-soft summary-less
     row; do not swallow it here so unexpected failures stay observable.
     Refs issue #381.
     """
@@ -600,10 +573,10 @@ def fetch_past_retro_labels(
         raw = gh_api(
             "GET", f"/search/issues?q={encoded}&per_page={per_page}"
         )
-    except subprocess.CalledProcessError as exc:
+    except GitHubApiError as exc:
         print(
             f"::warning::fetch_past_retro_labels search failed "
-            f"(exit {exc.returncode}); prior will be empty",
+            f"(HTTP {exc.code}); prior will be empty",
             file=sys.stderr,
         )
         return []
@@ -676,7 +649,7 @@ def fetch_issue_titles(
     for number in numbers:
         try:
             raw = gh_api("GET", f"/repos/{repo}/issues/{number}")
-        except subprocess.CalledProcessError:
+        except GitHubApiError:
             continue
         try:
             data = json.loads(raw) if raw.strip() else {}
@@ -692,7 +665,7 @@ def fetch_issue_body(repo: str, number: int) -> str:
     """Return the body of issue ``<repo>#<number>`` or ``""`` on failure."""
     try:
         raw = gh_api("GET", f"/repos/{repo}/issues/{number}")
-    except subprocess.CalledProcessError:
+    except GitHubApiError:
         return ""
     try:
         data = json.loads(raw) if raw.strip() else {}
@@ -936,10 +909,10 @@ def _post_skip_comment_soft(repo: str, pr_number: int, reason: str) -> None:
         return
     try:
         post_skip_comment(repo, pr_number, reason)
-    except subprocess.CalledProcessError as exc:
+    except GitHubApiError as exc:
         print(
             f"::warning::post_skip_comment failed "
-            f"(exit {exc.returncode}); skip outcome not visible on PR",
+            f"(HTTP {exc.code}); skip outcome not visible on PR",
             file=sys.stderr,
         )
 
@@ -1134,10 +1107,10 @@ def run(event: dict[str, Any], repo: str) -> int:
         if candidate_refs:
             try:
                 titles = fetch_issue_titles(repo, candidate_refs)
-            except subprocess.CalledProcessError as exc:
+            except GitHubApiError as exc:
                 print(
                     f"::warning::fetch_issue_titles failed "
-                    f"(exit {exc.returncode}); proceeding to open new retro",
+                    f"(HTTP {exc.code}); proceeding to open new retro",
                     file=sys.stderr,
                 )
                 titles = {}
@@ -1147,10 +1120,10 @@ def run(event: dict[str, Any], repo: str) -> int:
                     changed, detail = append_repair_history_row(
                         repo, target, pr
                     )
-                except subprocess.CalledProcessError as exc:
+                except GitHubApiError as exc:
                     print(
                         f"::warning::append_repair_history_row failed "
-                        f"(exit {exc.returncode}); NOT falling back to new "
+                        f"(HTTP {exc.code}); NOT falling back to new "
                         "retro to avoid duplicates",
                         file=sys.stderr,
                     )
@@ -1169,13 +1142,13 @@ def run(event: dict[str, Any], repo: str) -> int:
 
     try:
         has_inline_comments = has_review_comments(repo, pr.number)
-    except subprocess.CalledProcessError as exc:
+    except GitHubApiError as exc:
         # Fail-safe: a transient comments-endpoint failure must NOT
         # silently swallow the retro creation. Surface the warning and
         # proceed as if comments were present.
         print(
             f"::warning::has_review_comments failed "
-            f"(exit {exc.returncode}); proceeding to open retro",
+            f"(HTTP {exc.code}); proceeding to open retro",
             file=sys.stderr,
         )
         has_inline_comments = True
@@ -1187,14 +1160,14 @@ def run(event: dict[str, Any], repo: str) -> int:
     if pr.commits > 1:
         try:
             commit_subjects = fetch_pr_commits(repo, pr.number)
-        except subprocess.CalledProcessError as exc:
+        except GitHubApiError as exc:
             # Fail-soft: a transient commits-endpoint failure must NOT
             # silently swallow the gate evaluation. Fall back to the
             # legacy pr.commits-only path; the body-building fetch below
             # will retry and either succeed or surface the error there.
             print(
                 f"::warning::fetch_pr_commits failed ahead of gate "
-                f"(exit {exc.returncode}); falling back to "
+                f"(HTTP {exc.code}); falling back to "
                 "pr.commits-only multi_commit_pr evaluation",
                 file=sys.stderr,
             )
@@ -1232,13 +1205,13 @@ def run(event: dict[str, Any], repo: str) -> int:
     check_runs_unknown = False
     try:
         check_runs = fetch_check_runs(repo, pr.number)
-    except subprocess.CalledProcessError as exc:
+    except GitHubApiError as exc:
         # Fail-soft: check-runs is an augmenting signal for the Repair
         # history table. A transient API failure here must NOT block the
         # retro; the commit-subject signals still carry it. fetch_pr_commits
         # remains fail-loud because its data is required for the body.
         print(
-            f"::warning::fetch_check_runs failed (exit {exc.returncode}); "
+            f"::warning::fetch_check_runs failed (HTTP {exc.code}); "
             "Repair history table will use commit-subject signals only",
             file=sys.stderr,
         )
@@ -1299,14 +1272,14 @@ def run(event: dict[str, Any], repo: str) -> int:
                 back_link_status = post_back_link_comment(
                     repo, pr.number, new_number
                 )
-            except subprocess.CalledProcessError as exc:
+            except GitHubApiError as exc:
                 # Fail-soft: the retro issue is already created. A failure to
                 # post the PR-side back-link must NOT roll the retro back --
                 # surface a warning and continue so the audit trail keeps the
                 # retro that did land.
                 print(
                     f"::warning::post_back_link_comment failed "
-                    f"(exit {exc.returncode}); retro issue #{new_number} "
+                    f"(HTTP {exc.code}); retro issue #{new_number} "
                     "created but source PR has no back-link comment",
                     file=sys.stderr,
                 )
@@ -1315,14 +1288,14 @@ def run(event: dict[str, Any], repo: str) -> int:
         try:
             apply_terminal_label(repo, pr.number)
             terminal_label_status = "applied"
-        except subprocess.CalledProcessError as exc:
+        except GitHubApiError as exc:
             # Fail-soft: the terminal label is a secondary signal layered on
             # top of the retro+back-link audit trail. A label-add failure
             # must NOT roll back the retro; warn and continue so the
             # primary outputs remain intact.
             print(
                 f"::warning::apply_terminal_label failed "
-                f"(exit {exc.returncode}); retro issue #{new_number} created "
+                f"(HTTP {exc.code}); retro issue #{new_number} created "
                 f"but source PR was not labeled {_TERMINAL_LABEL!r}",
                 file=sys.stderr,
             )
@@ -1390,9 +1363,9 @@ def sentinel_run(repo: str, now_iso: str, days: int) -> int:
     """
     try:
         items = search_open_retro_issues(repo)
-    except subprocess.CalledProcessError as exc:
+    except GitHubApiError as exc:
         print(
-            f"::error::sentinel search failed (exit {exc.returncode}); "
+            f"::error::sentinel search failed (HTTP {exc.code}); "
             "no retros processed this tick",
             file=sys.stderr,
         )
@@ -1412,10 +1385,10 @@ def sentinel_run(repo: str, now_iso: str, days: int) -> int:
             continue
         try:
             comments = fetch_issue_comments(repo, number)
-        except subprocess.CalledProcessError as exc:
+        except GitHubApiError as exc:
             print(
                 f"::warning::fetch_issue_comments failed for retro "
-                f"#{number} (exit {exc.returncode}); skipping this "
+                f"#{number} (HTTP {exc.code}); skipping this "
                 "retro on this tick",
                 file=sys.stderr,
             )
@@ -1430,10 +1403,10 @@ def sentinel_run(repo: str, now_iso: str, days: int) -> int:
             continue
         try:
             post_sentinel_comment(repo, number, days)
-        except subprocess.CalledProcessError as exc:
+        except GitHubApiError as exc:
             print(
                 f"::warning::post_sentinel_comment failed for retro "
-                f"#{number} (exit {exc.returncode}); NOT closing to "
+                f"#{number} (HTTP {exc.code}); NOT closing to "
                 "avoid silent close without operator-visible reason",
                 file=sys.stderr,
             )
@@ -1441,10 +1414,10 @@ def sentinel_run(repo: str, now_iso: str, days: int) -> int:
             continue
         try:
             close_issue_as_not_planned(repo, number)
-        except subprocess.CalledProcessError as exc:
+        except GitHubApiError as exc:
             print(
                 f"::warning::close_issue_as_not_planned failed for retro "
-                f"#{number} (exit {exc.returncode}); sentinel comment "
+                f"#{number} (HTTP {exc.code}); sentinel comment "
                 "posted but issue remains open",
                 file=sys.stderr,
             )
@@ -1532,7 +1505,7 @@ def fetch_issue_state(repo: str, number: int) -> str:
     """
     try:
         raw = gh_api("GET", f"/repos/{repo}/issues/{number}")
-    except subprocess.CalledProcessError:
+    except GitHubApiError:
         return "unknown"
     try:
         data = json.loads(raw) if raw.strip() else {}
@@ -1559,7 +1532,7 @@ def search_fix_prs_since(
             "GET",
             f"/search/issues?q={encoded}&per_page=50",
         )
-    except subprocess.CalledProcessError:
+    except GitHubApiError:
         return []
     data = json.loads(raw) if raw.strip() else {}
     items = list(data.get("items") or [])
@@ -1576,7 +1549,7 @@ def fetch_pr_detail(repo: str, pr_number: int) -> dict[str, Any]:
     """
     try:
         raw = gh_api("GET", f"/repos/{repo}/pulls/{pr_number}")
-    except subprocess.CalledProcessError:
+    except GitHubApiError:
         return {}
     try:
         return json.loads(raw) if raw.strip() else {}
@@ -1710,10 +1683,10 @@ def post_merge_rescan_run(repo: str, now_iso: str, hours: int) -> int:
     """
     try:
         items = search_recently_merged_prs(repo, hours, now_iso)
-    except subprocess.CalledProcessError as exc:
+    except GitHubApiError as exc:
         print(
             f"::error::post-merge rescan search failed "
-            f"(exit {exc.returncode}); no PRs processed this tick",
+            f"(HTTP {exc.code}); no PRs processed this tick",
             file=sys.stderr,
         )
         _append_summary(_build_rescan_summary([], [], hours))
@@ -1845,10 +1818,10 @@ def post_merge_rescan_run(repo: str, now_iso: str, hours: int) -> int:
 
         try:
             patch_issue_body(repo, retro_number, new_body)
-        except subprocess.CalledProcessError as exc:
+        except GitHubApiError as exc:
             print(
                 f"::warning::patch_issue_body failed for retro "
-                f"#{retro_number} (exit {exc.returncode}); "
+                f"#{retro_number} (HTTP {exc.code}); "
                 "skipping this PR on this tick",
                 file=sys.stderr,
             )
@@ -2352,9 +2325,9 @@ def main(argv: list[str] | None = None) -> int:
     except ValueError as exc:
         print(f"::error::{exc}", file=sys.stderr)
         return 1
-    except subprocess.CalledProcessError as exc:
+    except GitHubApiError as exc:
         print(
-            f"::error::gh api failed (exit {exc.returncode}): {exc.stderr}",
+            f"::error::GitHub API failed (HTTP {exc.code}): {exc.body}",
             file=sys.stderr,
         )
         return 1

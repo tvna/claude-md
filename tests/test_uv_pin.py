@@ -6,11 +6,13 @@ key under ``[tool.pytest.ini_options]`` in ``pyproject.toml``.
 
 from __future__ import annotations
 
-import subprocess
+import urllib.error
 from pathlib import Path
 
+import _github_api
 import pytest
 import uv_pin
+from _github_api import GitHubApiError
 
 pytestmark = pytest.mark.shard_ci_ops
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -223,49 +225,42 @@ class TestFindDrift:
 
 
 class TestFetchLatestUvRelease:
-    def test_gh_missing_returns_none(
+    def test_network_error_returns_none(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         def _raise(*_args, **_kwargs):
-            raise FileNotFoundError("gh: command not found")
+            raise urllib.error.URLError("connection refused")
 
-        monkeypatch.setattr(subprocess, "run", _raise)
+        monkeypatch.setattr(_github_api, "rest_json", _raise)
         assert uv_pin.fetch_latest_uv_release() is None
 
-    def test_gh_nonzero_exit_returns_none(
+    def test_non_2xx_returns_none(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         def _raise(*_args, **_kwargs):
-            raise subprocess.CalledProcessError(1, "gh", stderr="auth required")
+            raise GitHubApiError(404, "GET", "/repos/astral-sh/uv/releases/latest", "not found")
 
-        monkeypatch.setattr(subprocess, "run", _raise)
+        monkeypatch.setattr(_github_api, "rest_json", _raise)
         assert uv_pin.fetch_latest_uv_release() is None
 
-    def test_gh_timeout_returns_none(
+    def test_malformed_body_returns_none(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        def _raise(*_args, **_kwargs):
-            raise subprocess.TimeoutExpired(cmd="gh", timeout=30)
-
-        monkeypatch.setattr(subprocess, "run", _raise)
+        monkeypatch.setattr(_github_api, "rest_json", lambda *_a, **_k: ["not", "a", "dict"])
         assert uv_pin.fetch_latest_uv_release() is None
 
-    def test_gh_success_returns_tag(
+    def test_success_returns_tag(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        class _Result:
-            stdout = "0.11.12\n"
-
-        monkeypatch.setattr(subprocess, "run", lambda *_a, **_k: _Result())
+        monkeypatch.setattr(
+            _github_api, "rest_json", lambda *_a, **_k: {"tag_name": "0.11.12"}
+        )
         assert uv_pin.fetch_latest_uv_release() == "0.11.12"
 
-    def test_gh_empty_output_returns_none(
+    def test_empty_tag_returns_none(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        class _Result:
-            stdout = "   \n"
-
-        monkeypatch.setattr(subprocess, "run", lambda *_a, **_k: _Result())
+        monkeypatch.setattr(_github_api, "rest_json", lambda *_a, **_k: {"tag_name": "  "})
         assert uv_pin.fetch_latest_uv_release() is None
 
 

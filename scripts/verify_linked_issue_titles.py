@@ -14,12 +14,12 @@ from __future__ import annotations
 
 import argparse
 import os
-import subprocess
 import sys
-from collections.abc import Callable
+import urllib.error
 from pathlib import Path
 
 import title_policy
+from _github_api import GitHubApiError, rest_json
 from _ref_classifier import REF_LINE_KEYWORD_RE, strip_html_comments
 
 
@@ -38,34 +38,26 @@ def get_issue_title(
     repo: str,
     number: int,
     *,
-    runner: Callable[..., object] | None = None,
+    token: str | None = None,
 ) -> str | None:
     """Return the title of issue *number* in *repo*, or ``None`` on failure.
 
-    ``None`` means the API call failed; callers must treat it as a gate
-    failure so a flaky API cannot silently allow a bad title through.
+    ``None`` means the API call failed (no token, network error, non-2xx,
+    malformed body); callers must treat it as a gate failure so a flaky API
+    cannot silently allow a bad title through.
     """
-    if runner is None:
-        runner = subprocess.run
-
+    if token is None:
+        token = os.environ.get("GH_TOKEN", "")
     try:
-        result = runner(
-            [
-                "gh", "api",
-                f"/repos/{repo}/issues/{number}",
-                "--jq", ".title",
-            ],
-            capture_output=True,
-            timeout=30,
-            check=True,
-        )
-    except (subprocess.SubprocessError, FileNotFoundError, OSError):
+        data = rest_json("GET", f"/repos/{repo}/issues/{number}", token=token)
+    except (GitHubApiError, urllib.error.URLError, OSError, ValueError):
         return None
-
-    raw = getattr(result, "stdout", b"") or b""
-    if isinstance(raw, bytes):
-        raw = raw.decode("utf-8", errors="replace")
-    return raw.strip() or None
+    if not isinstance(data, dict):
+        return None
+    title = data.get("title")
+    if not isinstance(title, str):
+        return None
+    return title.strip() or None
 
 
 def _validate_issue_title(title: str, number: int) -> list[str]:
@@ -102,7 +94,7 @@ def verify_linked_issue_titles(
     repo: str,
     body: str,
     *,
-    runner: Callable[..., object] | None = None,
+    token: str | None = None,
 ) -> int:
     """Validate linked issue titles; return 0 on success, 1 on failure."""
     cleaned = strip_html_comments(body.replace("\r", ""))
@@ -114,7 +106,7 @@ def verify_linked_issue_titles(
 
     fail = 0
     for n in refs:
-        issue_title = get_issue_title(repo, n, runner=runner)
+        issue_title = get_issue_title(repo, n, token=token)
         if issue_title is None:
             print(
                 f"::error::Could not fetch title for issue #{n} in {repo}. "

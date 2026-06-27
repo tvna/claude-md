@@ -129,13 +129,18 @@ ALLOW_NO_TEST_MODULE: dict[str, str] = {
 # guaranteed by the M2 check above.
 GITHUB_API_SCRIPTS: frozenset[str] = frozenset(
     {
+        "auto_retro",
+        "backup_non_ascii",
+        "branch_cleanup",
         "check_pr_mergeability",
         "ci_budget_issue",
         "ci_early_status_probe",
+        "coverage_failure_issue",
         "dependabot_automerge",
         "gate_pr_body_retro_issue_link",
         "github_api",
         "issue_closure_fast_path",
+        "issue_link",
         "labels_apply",
         "np_strategy_tracking",
         "post_issue_comment",
@@ -148,7 +153,11 @@ GITHUB_API_SCRIPTS: frozenset[str] = frozenset(
         "publish_instruction_release",
         "ruleset_drift",
         "sanitize_history",
+        "scan_non_ascii",
+        "scan_retro_followup_drift",
         "security_drift_report",
+        "uv_pin",
+        "verify_linked_issue_titles",
         "verify_ruleset_sync",
     }
 )

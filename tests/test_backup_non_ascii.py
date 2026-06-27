@@ -1,9 +1,9 @@
 """Tests for ``scripts/backup_non_ascii.py``.
 
 The ``scripts/`` directory is on ``sys.path`` via ``pyproject.toml``
-``[tool.pytest.ini_options].pythonpath``. The subprocess boundary
-(``backup_non_ascii.gh_paginate``) is exercised by injecting a fake
-``runner`` callable; we never shell out to a real ``gh``.
+``[tool.pytest.ini_options].pythonpath``. The REST boundary
+(``backup_non_ascii.gh_paginate``, delegating to ``_github_api.paginate``)
+is exercised by monkeypatching ``backup.paginate``; we never hit the network.
 
 Refs #102.
 """
@@ -13,7 +13,6 @@ from __future__ import annotations
 import gzip
 import io
 import json
-import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -22,34 +21,22 @@ import pytest
 
 pytestmark = pytest.mark.shard_policy
 # ---------------------------------------------------------------------------
-# Fakes for the runner boundary
+# Fakes for the REST boundary
 # ---------------------------------------------------------------------------
 
 
-def _make_runner(pages_by_path: dict[str, list[list[dict[str, Any]]]]):
-    """Return a fake ``subprocess.run`` that emits one JSON object per line.
+def _make_paginate(items_by_path: dict[str, list[dict[str, Any]]]):
+    """Return a fake ``_github_api.paginate`` keyed by REST path.
 
-    ``pages_by_path`` maps the API path (the ``gh api --paginate <path>``
-    argument) to a list of pages; each page is a list of items. The fake
-    concatenates all pages because the real ``gh api --paginate --jq '.[]'``
-    output is one flattened stream regardless of page count.
+    ``items_by_path`` maps the path passed to ``gh_paginate`` (the helper
+    appends ``per_page`` / ``page`` itself) to the full flattened item list
+    the real paginated endpoint would yield.
     """
 
-    def fake_run(cmd, **kwargs):
-        assert cmd[0:2] == ["gh", "api"], cmd
-        assert "--paginate" in cmd
-        path = cmd[cmd.index("--paginate") + 1]
-        pages = pages_by_path.get(path, [])
-        lines = []
-        for page in pages:
-            for item in page:
-                lines.append(json.dumps(item))
-        return subprocess.CompletedProcess(
-            args=cmd, returncode=0, stdout="\n".join(lines) + ("\n" if lines else ""),
-            stderr="",
-        )
+    def fake_paginate(path: str, *, token: str, **_kw: Any) -> list[dict[str, Any]]:
+        return list(items_by_path.get(path, []))
 
-    return fake_run
+    return fake_paginate
 
 
 # ---------------------------------------------------------------------------
@@ -58,21 +45,28 @@ def _make_runner(pages_by_path: dict[str, list[list[dict[str, Any]]]]):
 
 
 class TestGhPaginate:
-    def test_empty_repo_yields_empty_list(self) -> None:
-        runner = _make_runner({"/repos/x/y/issues?state=all&per_page=100": [[]]})
-        assert backup.gh_paginate(
-            "/repos/x/y/issues?state=all&per_page=100", runner=runner
-        ) == []
+    def test_empty_repo_yields_empty_list(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(backup, "paginate", _make_paginate({"/repos/x/y/issues?state=all": []}))
+        assert backup.gh_paginate("/repos/x/y/issues?state=all") == []
 
-    def test_multi_page_flattens_into_single_list(self) -> None:
-        pages = [
-            [{"id": 1}, {"id": 2}],
-            [{"id": 3}],
-            [{"id": 4}, {"id": 5}, {"id": 6}],
-        ]
-        runner = _make_runner({"/foo": pages})
-        out = backup.gh_paginate("/foo", runner=runner)
+    def test_returns_flattened_items(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        items = [{"id": 1}, {"id": 2}, {"id": 3}, {"id": 4}, {"id": 5}, {"id": 6}]
+        monkeypatch.setattr(backup, "paginate", _make_paginate({"/foo": items}))
+        out = backup.gh_paginate("/foo")
         assert [item["id"] for item in out] == [1, 2, 3, 4, 5, 6]
+
+    def test_passes_token(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        seen: dict[str, Any] = {}
+
+        def fake_paginate(path: str, *, token: str, **_kw: Any) -> list[dict[str, Any]]:
+            seen["token"] = token
+            return []
+
+        monkeypatch.setattr(backup, "paginate", fake_paginate)
+        backup.gh_paginate("/foo", token="tok")
+        assert seen["token"] == "tok"
 
 
 # ---------------------------------------------------------------------------
@@ -265,17 +259,16 @@ class TestCmdCapture:
         monkeypatch.setenv("GH_TOKEN", "fake-token")
         monkeypatch.setenv("BACKUP_CAPTURED_AT", "2026-05-24T00:00:00Z")
 
-        pages: dict[str, list[list[dict[str, Any]]]] = {
-            "/repos/x/y/issues?state=all&per_page=100": [[
+        items_by_path: dict[str, list[dict[str, Any]]] = {
+            "/repos/x/y/issues?state=all": [
                 {"id": 1, "number": 1, "title": "T", "body": "B",
                  "user": {"login": "a"}, "state": "open",
                  "author_association": "OWNER"}
-            ]],
-            "/repos/x/y/issues/comments?per_page=100": [[]],
-            "/repos/x/y/pulls/comments?per_page=100": [[]],
+            ],
+            "/repos/x/y/issues/comments": [],
+            "/repos/x/y/pulls/comments": [],
         }
-        runner = _make_runner(pages)
-        monkeypatch.setattr(backup.subprocess, "run", runner)
+        monkeypatch.setattr(backup, "paginate", _make_paginate(items_by_path))
 
         out_path = tmp_path / "snap.json.gz"
         rc = backup.main(["capture", "--out", str(out_path)])
@@ -348,20 +341,6 @@ class TestNowIso:
         result = backup._now_iso()
         assert "T" in result
         assert result.endswith("Z")
-
-
-class TestGhPaginateSkipsBlankLines:
-    def test_blank_lines_in_stdout_are_skipped(self) -> None:
-        # Line 192: the ``continue`` on empty/whitespace lines
-        import subprocess
-
-        def fake_runner(cmd, **kwargs):
-            return subprocess.CompletedProcess(
-                args=cmd, returncode=0, stdout='\n{"id": 1}\n\n   \n{"id": 2}\n', stderr=""
-            )
-
-        result = backup.gh_paginate("/foo", runner=fake_runner)
-        assert [item["id"] for item in result] == [1, 2]
 
 
 class TestCmdCaptureMissingToken:

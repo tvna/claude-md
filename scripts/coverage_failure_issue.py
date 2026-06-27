@@ -5,13 +5,13 @@ from __future__ import annotations
 
 import argparse
 import os
-import subprocess
 import sys
-from collections.abc import Callable, Mapping
+import urllib.error
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any
 
 import issue_anchors
+from _github_api import GitHubApiError, rest_json
 
 # Coverage failures are reported as comments on the continuous code-quality
 # tracking issue rather than a dedicated, marker-searched issue. The
@@ -20,8 +20,6 @@ import issue_anchors
 # anchor table so a renumbering stays a one-file diff (#1640).
 TARGET_ISSUE = issue_anchors.resolve("coverage-failure")
 COVERAGE_GATE = "pytest --cov (threshold: [tool.coverage.report].fail_under in pyproject.toml)"
-
-Runner = Callable[..., subprocess.CompletedProcess[str]]
 
 
 @dataclass(frozen=True)
@@ -72,34 +70,23 @@ def render_comment(context: CoverageFailureContext) -> str:
     )
 
 
-def _run_gh(cmd: list[str], *, runner: Runner, body: str | None = None) -> subprocess.CompletedProcess[str]:
-    kwargs: dict[str, Any] = {
-        "capture_output": True,
-        "text": True,
-        "timeout": 30,
-        "check": True,
-    }
-    if body is not None:
-        cmd = [*cmd, "--body", body]
-    return runner(cmd, **kwargs)
-
-
 def post_failure_comment(
     context: CoverageFailureContext,
     *,
-    runner: Runner = subprocess.run,
+    token: str | None = None,
 ) -> str:
-    _run_gh(
-        [
-            "gh",
-            "issue",
-            "comment",
-            str(TARGET_ISSUE),
-            "--repo",
-            context.repo,
-        ],
-        runner=runner,
-        body=render_comment(context),
+    """Post the coverage-failure comment on the tracking issue via REST.
+
+    Raises :class:`_github_api.GitHubApiError` on a non-2xx response so the
+    caller fails loud (CLAUDE.md section 4).
+    """
+    if token is None:
+        token = os.environ.get("GH_TOKEN", "")
+    rest_json(
+        "POST",
+        f"/repos/{context.repo}/issues/{TARGET_ISSUE}/comments",
+        {"body": render_comment(context)},
+        token=token,
     )
     print(f"Commented coverage failure on #{TARGET_ISSUE}.")
     return "commented"
@@ -115,7 +102,7 @@ def main(argv: list[str] | None = None) -> int:
         try:
             context = context_from_env()
             post_failure_comment(context)
-        except (RuntimeError, subprocess.CalledProcessError) as error:
+        except (RuntimeError, GitHubApiError, urllib.error.URLError, OSError) as error:
             print(f"::error::{error}", file=sys.stderr)
             return 1
         return 0
