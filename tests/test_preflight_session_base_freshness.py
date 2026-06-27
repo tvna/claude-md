@@ -428,12 +428,25 @@ class TestTryAutoUpdateBase:
         assert gate._try_auto_update_base(main_sha, repo=repo) == "skipped"
         assert _rev(repo, "HEAD") == before  # untouched
 
-    def test_skipped_when_dirty(self, tmp_path: Path) -> None:
+    def test_skipped_when_tracked_change_present(self, tmp_path: Path) -> None:
+        # A tracked, uncommitted change makes the tree dirty -> skip, so the
+        # auto fast-forward never moves HEAD over local work. base.txt is
+        # tracked (committed before feature was cut). Refs #2093 item 2.
         repo, main_sha = _ffable_stale_repo(tmp_path)
-        (repo / "dirty.txt").write_text("uncommitted\n", encoding="utf-8")
+        (repo / "base.txt").write_text("locally edited\n", encoding="utf-8")
         before = _rev(repo, "HEAD")
         assert gate._try_auto_update_base(main_sha, repo=repo) == "skipped"
-        assert _rev(repo, "HEAD") == before
+        assert _rev(repo, "HEAD") == before  # untouched
+
+    def test_updated_with_untracked_files_present(self, tmp_path: Path) -> None:
+        # Untracked files do not block the fast-forward: --ff-only never touches
+        # them, so a freshly-cut branch carrying stray untracked files still
+        # updates. The cleanliness check uses --untracked-files=no. Refs #2093.
+        repo, main_sha = _ffable_stale_repo(tmp_path)
+        (repo / "scratch.txt").write_text("untracked\n", encoding="utf-8")
+        assert gate._try_auto_update_base(main_sha, repo=repo) == "updated"
+        assert _rev(repo, "HEAD") == main_sha
+        assert (repo / "scratch.txt").read_text(encoding="utf-8") == "untracked\n"
 
     def test_skipped_on_git_error(self, tmp_path: Path) -> None:
         repo, _ = _ffable_stale_repo(tmp_path)

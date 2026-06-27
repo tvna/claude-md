@@ -57,14 +57,17 @@ import subprocess
 import sys
 from pathlib import Path
 
+from _apm_managed_paths import MANAGED_PREFIXES
+
 _EM_DASH = "\u2014"  # U+2014 EM DASH; use escape to keep this file ASCII-clean
 
 # Files under these path prefixes are excluded from --git-tracked scans.
 # .agents/skills/ and .claude/skills/ are the two committed copies of the upstream
 # APM dependency (obra/superpowers pinned in apm.yml, deployed to both surfaces per
 # apm.lock.yaml); editing them directly is prohibited, so em-dashes there are
-# outside this repo's fix scope.
-_SKIP_PREFIXES = (".agents/skills/", ".claude/skills/")
+# outside this repo's fix scope. The prefix set is the single source of truth in
+# _apm_managed_paths.py, shared with gate_agents_skills_edit.py (Refs #2066).
+_SKIP_PREFIXES = MANAGED_PREFIXES
 
 
 def scan_text(text: str) -> list[tuple[int, int]]:

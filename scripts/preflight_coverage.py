@@ -98,7 +98,7 @@ def newest_source_mtime(repo: Path) -> float | None:
 
 
 def coverage_is_stale(coverage_path: Path, repo: Path) -> bool:
-    """Return True when ``coverage_path`` predates the newest tracked source file.
+    """Return True when ``coverage_path`` does not strictly post-date every source file.
 
     A cached report generated before new tests or scripts were added reports
     stale per-file numbers (the PR #2046 session: an 88.1% reading from a
@@ -106,6 +106,21 @@ def coverage_is_stale(coverage_path: Path, repo: Path) -> bool:
     so the gate regenerates instead of trusting the cache. Fails safe: an
     unstattable report is treated as stale (regenerate); no source files means
     nothing to compare against, so the report is treated as fresh. Refs #2075.
+
+    The comparison is ``<=`` (not ``<``): a report whose mtime equals the newest
+    source mtime (both written in the same wall-clock second) is treated as
+    stale and regenerated. ``<`` would treat that report as fresh and could
+    reuse a cache produced in the same second as a later edit, reviving the
+    PR #2046 false-fresh verdict inside a one-second window; erring toward
+    regeneration is the fail-safe side. Refs #2093.
+
+    Known limit (documented, not gated): git does not preserve mtimes, so a
+    fresh clone/checkout or a branch switch stamps every file at checkout time.
+    That can make this heuristic both skip a needed run (report and sources
+    share a checkout second -> handled by the ``<=`` above, which regenerates)
+    and force an unnecessary full pytest after a no-op checkout. The per-file
+    floor and the absent-report fail-loud are the safety net; this mtime check
+    is only a cache-reuse optimization. Refs #2093 item 1.
     """
     try:
         cov_mtime = coverage_path.stat().st_mtime
@@ -114,7 +129,7 @@ def coverage_is_stale(coverage_path: Path, repo: Path) -> bool:
     newest = newest_source_mtime(repo)
     if newest is None:
         return False
-    return cov_mtime < newest
+    return cov_mtime <= newest
 
 
 def ensure_coverage_json(repo: Path) -> Path:
