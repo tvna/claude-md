@@ -33,7 +33,7 @@ Tokenizer evaluation (issue #2098, "hand-rolled parse -> real tokenizer?")
 --------------------------------------------------------------------------
 The per-segment tokenizer was moved from ``shlex.split`` to ``shlex.shlex`` with
 ``punctuation_chars`` so quoting is honored when classifying redirection
-operators -- the root cause of the quoted-``>`` false positive. The quote-aware
+operators; the root cause of the quoted-``>`` false positive. The quote-aware
 SEGMENT splitter (``gase._segments``) is intentionally retained: ``shlex`` does
 not treat a newline as a command separator, so a wholesale replacement would
 merge ``echo hi\ncp a .agents/skills/x`` into one token stream and MISS the
@@ -302,7 +302,7 @@ class TestQuotedRedirectFalsePositive:
     The pre-#2098 gate tokenized with ``shlex.split``, which strips quotes before
     the redirect regex runs, so a quoted token whose content begins with ``>``
     (``echo '> .agents/skills/x'``, or the no-space ``echo '>.agents/skills/x'``)
-    was misread as a real redirection and denied -- a false positive that wedges
+    was misread as a real redirection and denied; a false positive that wedges
     ordinary Bash. Tokenizing with ``shlex.shlex(punctuation_chars=...)`` keeps
     the quoted ``>`` inside its word token, so these now pass.
     """

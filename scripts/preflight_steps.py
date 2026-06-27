@@ -273,7 +273,7 @@ STEPS: tuple[Step, ...] = (
         # Refs #2098 (Gap B). .agents/skills/ and .claude/skills/ are generated
         # by `apm compile` from the obra/superpowers pin; the PreToolUse gate
         # (gate_agents_skills_edit.py) blocks edits in an agent session, and this
-        # is its post-merge-tree counterpart -- it fails a branch that diffs a
+        # is its post-merge-tree counterpart; it fails a branch that diffs a
         # managed tree without a matching apm.yml / apm.lock.yaml pin change.
         # Runs after preflight_branch_base fetches origin/<base>; mirrors the
         # verify-pr.yml step of the same name so the gate fires pre-push, not

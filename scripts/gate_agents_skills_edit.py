@@ -50,7 +50,7 @@ Design (CLAUDE.md section 4: make wrong actions hard, right actions easy):
   tokenization uses ``shlex.shlex`` with ``punctuation_chars`` so an unquoted
   redirection operator is emitted as its own token while a ``>`` inside quotes
   stays part of the surrounding word, even when no space follows it
-  (``echo '>.agents/skills/x'``) -- the false-positive class the prior
+  (``echo '>.agents/skills/x'``); the false-positive class the prior
   hand-rolled redirect regex still mismatched (issue #2098).
 - Fail-open is narrow and intentional: a malformed stdin event logs to stderr
   and exits 0 (per CLAUDE.md section 4, a hook bug never wedges the session).
@@ -206,7 +206,7 @@ def _tokenize(segment: str) -> list[str]:
     token. That distinction is exactly what ``shlex.split`` discards: it strips
     quotes first, so a quoted ``'> .agents/skills/x'`` (or the no-space
     ``'>.agents/skills/x'``) became a token that the old redirect regex matched
-    as a real redirection to a managed path -- the false positive issue #2098
+    as a real redirection to a managed path; the false positive issue #2098
     fixes. Falls back to a plain whitespace split on a malformed command
     (unbalanced quote) so a hook bug never wedges the session (CLAUDE.md s4).
     """
@@ -473,15 +473,19 @@ def _resolve_base() -> str:
     return "origin/main"
 
 
-def _changed_files(base_ref: str, head: str = "HEAD") -> frozenset[str]:
+def _changed_files(
+    base_ref: str, head: str = "HEAD", *, runner=subprocess.run
+) -> frozenset[str]:
     """Return the paths the branch changed relative to the merge-base.
 
     Uses the three-dot ``{base}...{head}`` form so only what the branch
     introduced is reported, not churn the base accumulated after the branch was
     cut (the false-positive class gate_generated_scripts_manual_edit.py records
-    from retro #1703). ``--name-only`` so renames and deletes also surface.
+    from retro #1703). ``--name-only`` so renames and deletes also surface. The
+    ``runner`` indirection mirrors gate_generated_scripts_manual_edit.py: a fixed
+    ``git`` argv through an injectable runner, the single impure surface here.
     """
-    result = subprocess.run(
+    result = runner(
         ["git", "diff", "--name-only", f"{base_ref}...{head}"],
         capture_output=True,
         text=True,
