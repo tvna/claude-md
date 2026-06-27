@@ -178,7 +178,7 @@ workflow**; no repository state changes need reverting.
 - [`docs/prd/security-control-inventory.md`](../prd/security-control-inventory.md) --
   the control-family inventory the report rolls up.
 - [`docs/runbooks/attack-coverage-review-cadence.md`](attack-coverage-review-cadence.md) --
-  the quarterly structured-review channel that sits alongside this weekly
+  the monthly structured-review channel that sits alongside this weekly
   live-signal channel.
 - [`docs/runbooks/rulesets.md`](rulesets.md); the `rulesets` family's own drift
   job and runbook.
