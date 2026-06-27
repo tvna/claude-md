@@ -12,7 +12,15 @@ runbook (`docs/runbooks/security-control-drift-report.md`) covers the
 weekly live-signal channel; this runbook covers the quarterly
 structured-review channel they sit alongside.
 
-## Purpose
+## Scope
+
+This runbook governs the quarterly structured review of MITRE ATT&CK coverage
+recorded on #178: which evidence an operator re-reads, how the review is posted,
+and how the reminder workflow is operated. Reach for it once a quarter, or when
+running the reminder workflow; not for the weekly automated drift signal, which
+the security-control drift report (#180) covers.
+
+## Why
 
 ATT&CK coverage on #178 is not a one-time snapshot. Every quarter a
 human (or operator running the reminder workflow) re-reads the 14
@@ -25,6 +33,16 @@ The cadence answers the only unchecked item on the #178 Tracking
 checklist: "Define a recurring review cadence for this issue and
 record each review as a comment with date, evidence checked, gaps
 opened, and residual risk."
+
+## Why not
+
+Do not use this runbook for the weekly, data-driven drift signal; that is the
+security-control drift report (#180), and running this quarterly review more
+often would only duplicate it. Quarterly is deliberate: weekly overlaps the
+drift report, monthly would too, and annual would let tactic state drift too far
+between reviews. Do not collapse the per-quarter comments into a single rolling
+comment either; the timeline of dated reviews is the history this cadence exists
+to preserve.
 
 ## Cadence
 
@@ -172,7 +190,9 @@ the date the reminder workflow will fire again.
 
 <!-- attack-coverage-review-template:end -->
 
-## How to post the review
+## Procedure
+
+Post the quarterly review:
 
 1. **Preview (recommended).** Go to **Actions -> ATT&CK coverage review
    reminder -> Run workflow**, leave `dry_run` at the default `true`,
@@ -190,21 +210,7 @@ the date the reminder workflow will fire again.
    the block between the two markers in this runbook into a new comment
    on #178 manually, then fill it in.
 
-## Rollback
-
-The workflow is read-only on the repository side; it only `POST`s
-one comment per quarter to a tracking issue. To roll back:
-
-- **Stop further posts.** **Actions -> ATT&CK coverage review reminder
-  -> Disable workflow**.
-- **Remove a stray comment.** Delete the comment on #178 via the GitHub
-  UI. Comments are append-only history; deleting a single quarterly
-  review does not affect repository state.
-- **Revert the runbook + workflow.** `git revert <merge-commit-sha>`
-  pulls back this runbook, the workflow file, and the `docs/INDEX.md`
-  row in one step.
-
-## Verify
+## Verification
 
 ```sh
 # 1. The runbook is ASCII-only (must pass issue-pr-triage.yml / scan).
@@ -224,6 +230,33 @@ awk -v b="${begin_marker}" -v e="${end_marker}" '$0 ~ b, $0 ~ e' \
 # 3. The reminder workflow file is well-formed YAML.
 python3 -c "import yaml; yaml.safe_load(open('.github/workflows/monthly-maintenance.yml'))"
 ```
+
+## Pause / Resume
+
+This drives a recurring quarterly reminder.
+
+- **Pause.** **Actions -> ATT&CK coverage review reminder -> Disable workflow**
+  stops the quarterly post. Before pausing, record the date of the last posted
+  review comment on #178 so the next review knows which quarter was last
+  covered.
+- **Resume.** Re-enable the workflow; the next first-Monday-of-quarter trigger
+  posts a fresh reminder. A quarter missed while paused is recovered through the
+  manual fallback (copy the template block into a new comment on #178) rather
+  than waiting a full quarter for the next automated post.
+
+## Rollback
+
+The workflow is read-only on the repository side; it only `POST`s
+one comment per quarter to a tracking issue. To roll back:
+
+- **Stop further posts.** **Actions -> ATT&CK coverage review reminder
+  -> Disable workflow**.
+- **Remove a stray comment.** Delete the comment on #178 via the GitHub
+  UI. Comments are append-only history; deleting a single quarterly
+  review does not affect repository state.
+- **Revert the runbook + workflow.** `git revert <merge-commit-sha>`
+  pulls back this runbook, the workflow file, and the `docs/INDEX.md`
+  row in one step.
 
 ## References
 

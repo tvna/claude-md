@@ -30,6 +30,33 @@ PRs that touch only `docs/`, `scripts/`, `tests/`, or `.github/workflows/` are o
 
 If the diff touches `CLAUDE.md` or `AGENTS.md` directly without a corresponding `.apm/instructions/master.instructions.md` change, request changes immediately: those files are compiled artifacts and the source of truth must move first. This is identical to the rule in `docs/prd/agent-rules-design-philosophy.md` section 7.3 and is enforced by `verify-pr.yml`.
 
+## Why
+
+This checklist exists because the deterministic gates cannot make the
+security judgment calls an instruction change requires. The portability, drift,
+ASCII, body, and title gates filter mechanical violations; whether a wording
+change quietly weakens a guardrail, broadens the agent's authority, or breaks a
+downstream consumer is a human call. Instructions shipped to downstream
+consumers are the Lateral Movement surface tracked on #178, so a missed judgment
+here propagates to every consumer that imports this repository.
+
+## Why not
+
+Do not run this checklist on a PR that is out of scope (see Scope): it adds
+review latency without adding signal when no instruction source or compiled
+artifact changed. Do not treat it as a substitute for the deterministic gates
+either; it runs after they are green, not instead of them. And do not use it to
+decide whether a rule belongs in the universal lane at all; that
+ownership-and-portability question is `agent-rules-design-philosophy.md`
+section 7, which is independent and must also pass.
+
+## Procedure
+
+Apply the five review dimensions below in order; each is a numbered subsection
+and later dimensions assume the earlier ones are satisfied. For each, the
+reviewer asks the **Question**, inspects the **Evidence**, and requests changes
+on the **Hard block**.
+
 ## 1. Universal vs project-specific
 
 - **Question.** Does the wording in the diff hold for every downstream consumer of this repository, or only for `tvna/claude-md`?
@@ -71,7 +98,7 @@ If the diff touches `CLAUDE.md` or `AGENTS.md` directly without a corresponding 
   - **Verification evidence** in the PR body's `## Verification` section. For a security-sensitive change, the reviewer requires output from at least one deterministic gate (`verify-pr.yml`, `issue-pr-triage.yml` / `scan`) or an explicit "this gate cannot run for this category" statement that names the residual risk.
 - **Hard block.** The PR is security-sensitive and any of the three artifacts is missing. Request changes; do not accept "trust me" as evidence.
 
-## Verify
+## Verification
 
 This document and any PR that updates it are subject to the same drift gate it describes. Before requesting review, run locally:
 
@@ -88,6 +115,14 @@ For a PR that adds, removes, or modifies a wording-level rule, also confirm:
 - `verify-pr.yml` is green for portability (dimension 1).
 - `verify-pr.yml` is green for compile drift (dimension 2).
 - The reviewer has walked dimensions 3 through 5 explicitly and noted the outcome in a review comment or PR thread.
+
+## Pause / Resume
+
+Not applicable as a pause/resume control: this is a manual, per-PR review pass
+with no scheduled run or persistent state. The review itself is read-only
+evidence gathering (it requests changes; it never mutates the PR), so it can be
+stopped after any dimension and resumed from the next without recording state,
+as long as the deterministic gates it depends on are still green.
 
 ## Rollback
 
