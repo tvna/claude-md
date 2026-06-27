@@ -8,7 +8,7 @@ marshals env vars; all logic lives here and is unit-tested in
 
 This module follows the refactor pattern established by
 ``scripts/uv_pin.py`` per the strategy in issue #123 (mirrors #112):
-pure functions on top, a thin :func:`gh_api` subprocess boundary at
+pure functions on top, a thin :func:`gh_api` REST boundary at
 the bottom, monkeypatched in tests. Surface area mirrors the prior
 inline shell exactly so behaviour is preserved byte-for-byte.
 
@@ -34,11 +34,11 @@ import argparse
 import json
 import os
 import re
-import subprocess
 import sys
 from pathlib import Path
 from typing import Any
 
+from _github_api import API_ROOT, GitHubApiError, apply_call
 from _trusted_bots import _NON_ASCII_SKIP_LOGINS, _TRUSTED_BOT_LOGINS
 
 # Trust classification per author_association.
@@ -298,37 +298,20 @@ def gh_api(
     method: str,
     path: str,
     json_body: dict[str, Any] | None = None,
-    *,
-    timeout: int = 30,
 ) -> str:
-    """Thin wrapper around ``gh api``. Returns stdout text.
+    """Call the GitHub REST API. Returns the raw response body text.
 
-    Raises :class:`subprocess.CalledProcessError` on any non-zero exit so
+    Raises :class:`_github_api.GitHubApiError` on any non-2xx response so
     the orchestrator fails loudly (CLAUDE.md §4). Authentication comes
     from the ``GH_TOKEN`` env var that the workflow sets to
     ``secrets.GITHUB_TOKEN``.
     """
-    cmd = ["gh", "api", "--method", method, path]
-    if json_body is not None:
-        # S603 justification: fixed argv (no shell); `gh` provisioned by the runner;
-        # `path` is built from int IDs narrowed upstream. Mirrors auto_retro.py.
-        result = subprocess.run(  # noqa: S603 -- fixed argv, shell=False
-            [*cmd, "--input", "-"],
-            input=json.dumps(json_body),
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-            check=True,
-        )
-    else:
-        result = subprocess.run(  # noqa: S603 -- fixed argv, shell=False
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-            check=True,
-        )
-    return result.stdout
+    token = os.environ.get("GH_TOKEN", "")
+    url = path if path.startswith("http") else f"{API_ROOT}{path}"
+    code, body = apply_call(method=method, url=url, payload=json_body, token=token)
+    if not (200 <= code < 300):
+        raise GitHubApiError(code, method, path, body)
+    return body
 
 
 def find_existing_comment_id(
@@ -532,9 +515,9 @@ def main(argv: list[str] | None = None) -> int:
     except ValueError as exc:
         print(f"::error::{exc}", file=sys.stderr)
         return 1
-    except subprocess.CalledProcessError as exc:
+    except GitHubApiError as exc:
         print(
-            f"::error::gh api failed (exit {exc.returncode}): {exc.stderr}",
+            f"::error::GitHub API failed (HTTP {exc.code}): {exc.body}",
             file=sys.stderr,
         )
         return 1

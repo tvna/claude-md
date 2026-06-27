@@ -4,19 +4,19 @@ The `scripts/` directory is added to ``sys.path`` via the ``pythonpath``
 key under ``[tool.pytest.ini_options]`` in ``pyproject.toml``.
 
 Mirrors the structure of ``tests/test_uv_pin.py`` per the strategy in
-issue #123: pure functions get table-driven tests; the subprocess
+issue #123: pure functions get table-driven tests; the REST
 boundary (:func:`scan_non_ascii.gh_api`) is monkeypatched.
 """
 
 from __future__ import annotations
 
 import json
-import subprocess
 from pathlib import Path
 from typing import Any
 
 import pytest
 import scan_non_ascii as san
+from _github_api import GitHubApiError
 
 pytestmark = pytest.mark.shard_policy
 # ---------------------------------------------------------------------------
@@ -451,57 +451,47 @@ class TestBuildSummary:
 
 
 # ---------------------------------------------------------------------------
-# gh_api (subprocess boundary)
+# gh_api (REST boundary)
 # ---------------------------------------------------------------------------
 
 
-def _fake_run_capture():
-    """Return (recorder, fake_run). recorder collects call kwargs."""
+def _fake_apply_capture():
+    """Return (recorder, fake_apply). recorder collects apply_call kwargs."""
     calls: list[dict[str, Any]] = []
 
-    class _Result:
-        def __init__(self, stdout: str = "", returncode: int = 0) -> None:
-            self.stdout = stdout
-            self.returncode = returncode
-            self.stderr = ""
+    def fake_apply(**kwargs):
+        calls.append(kwargs)
+        return 200, "OK"
 
-    def fake_run(cmd, **kwargs):
-        calls.append({"cmd": cmd, **kwargs})
-        return _Result(stdout="OK")
-
-    return calls, fake_run
+    return calls, fake_apply
 
 
 class TestGhApi:
-    def test_get_uses_no_input(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        calls, fake_run = _fake_run_capture()
-        monkeypatch.setattr(subprocess, "run", fake_run)
+    def test_get_builds_full_url(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        calls, fake_apply = _fake_apply_capture()
+        monkeypatch.setattr(san, "apply_call", fake_apply)
         out = san.gh_api("GET", "/repos/x/y/issues/1/comments")
         assert out == "OK"
-        assert calls[0]["cmd"] == [
-            "gh", "api", "--method", "GET", "/repos/x/y/issues/1/comments"
-        ]
-        assert "input" not in calls[0]
+        assert calls[0]["url"] == "https://api.github.com/repos/x/y/issues/1/comments"
+        assert calls[0]["method"] == "GET"
+        assert calls[0]["payload"] is None
 
-    def test_post_passes_json_on_stdin(
+    def test_post_passes_payload(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        calls, fake_run = _fake_run_capture()
-        monkeypatch.setattr(subprocess, "run", fake_run)
+        calls, fake_apply = _fake_apply_capture()
+        monkeypatch.setattr(san, "apply_call", fake_apply)
         san.gh_api("POST", "/repos/x/y/issues/1/labels", {"labels": ["L"]})
-        assert "--input" in calls[0]["cmd"]
-        assert calls[0]["cmd"][-1] == "-"
-        assert json.loads(calls[0]["input"]) == {"labels": ["L"]}
+        assert calls[0]["method"] == "POST"
+        assert calls[0]["payload"] == {"labels": ["L"]}
 
-    def test_nonzero_exit_raises_loudly(
+    def test_non_2xx_raises_loudly(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        def _raise(*_a, **_kw):
-            raise subprocess.CalledProcessError(1, "gh", stderr="boom")
-
-        monkeypatch.setattr(subprocess, "run", _raise)
-        with pytest.raises(subprocess.CalledProcessError):
+        monkeypatch.setattr(san, "apply_call", lambda **_kw: (500, "boom"))
+        with pytest.raises(GitHubApiError) as excinfo:
             san.gh_api("GET", "/x")
+        assert excinfo.value.code == 500
 
 
 # ---------------------------------------------------------------------------
@@ -1111,7 +1101,7 @@ class TestCLI:
         capsys: pytest.CaptureFixture[str],
     ) -> None:
         def _raise(*_a, **_kw):
-            raise subprocess.CalledProcessError(1, "gh", stderr="auth fail")
+            raise GitHubApiError(401, "GET", "/repos/o/r/issues/1/comments", "auth fail")
 
         monkeypatch.setattr(san, "gh_api", _raise)
         event = {
@@ -1133,4 +1123,4 @@ class TestCLI:
             ]
         )
         assert exit_code == 1
-        assert "gh api failed" in capsys.readouterr().err
+        assert "GitHub API failed" in capsys.readouterr().err
