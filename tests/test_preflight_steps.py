@@ -78,6 +78,22 @@ class TestStepsRegistry:
             "origin/main",
         )
 
+    def test_doc_graph_co_change_gate_is_registered(self) -> None:
+        # Issue #2011: the doc-graph co-change gate (design_philosophy_prd ->
+        # ubiquitous_language and the other blocking edges) must ship in the
+        # local preflight set so a co-change miss surfaces pre-push rather than
+        # only in the advisory validate-doc-graph.yml CI run (the #1989
+        # first-head failure class). Base-ref shape mirrors the CI workflow.
+        by_name = {s.name: s for s in preflight_steps.STEPS}
+        assert "gate_doc_graph_pr" in by_name
+        step = by_name["gate_doc_graph_pr"]
+        assert step.argv == (
+            "python3",
+            "scripts/gate_doc_graph_pr.py",
+            "--base-ref",
+            "origin/main",
+        )
+
 
 class TestReexport:
     def test_preflight_all_reexports_steps(self) -> None:
