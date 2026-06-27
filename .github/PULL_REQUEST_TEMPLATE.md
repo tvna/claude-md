@@ -108,6 +108,9 @@ GOOD:
 - command: `uv run python -m pytest -q`
   result: `684 passed in 12.3s`
 BAD:  leaving command or result as empty backtick pairs (the template default ``); replace both with actual run output before creating the PR.
+NOTE: the `command:` line must be code only; it ends at the closing backtick.
+Put any explanation on the `result:` line, never as prose after the command
+backtick (scripts/preflight_pr_template_shape.py rejects trailing prose; retro #2114).
 -->
 ## Verification
 
