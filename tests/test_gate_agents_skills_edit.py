@@ -341,6 +341,40 @@ class TestQuotedRedirectFalsePositive:
         assert _is_deny(gase.decide("Bash", {"command": command}))
 
 
+class TestFallbackRedirectDetection:
+    """When shlex cannot tokenize (unbalanced quote), the gate falls back to a
+    plain split and must STILL catch an attached redirect to a managed path.
+
+    Regression guard for the /code-review #2123 finding: the shlex refactor
+    classified redirects only as standalone operator tokens, but on the
+    ``.split()`` fallback path the operator and its target are not separated, so
+    an attached form like ``>.agents/skills/x`` was missed (a write bypass the
+    pre-#2098 regex caught). The fallback matcher restores it.
+    """
+
+    # ``'unbalanced`` leaves an open quote, forcing the shlex ValueError fallback.
+    _UNBAL = " 'unbalanced"
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            "echo x >.agents/skills/x.md" + _UNBAL,
+            "echo x 2>.agents/skills/x.md" + _UNBAL,
+            "echo x >>.claude/skills/x.md" + _UNBAL,
+            "echo x >| .agents/skills/x.md" + _UNBAL,
+            "echo x 2> .agents/skills/x.md" + _UNBAL,
+        ],
+    )
+    def test_fallback_attached_redirect_denied(self, command: str) -> None:
+        assert _is_deny(gase.decide("Bash", {"command": command}))
+
+    def test_fallback_quoted_mention_still_passes(self) -> None:
+        # On the fallback path the token keeps its literal quote char, so a
+        # quoted mention does not match the fallback redirect regex.
+        command = "echo '>.agents/skills/x.md' 'unbalanced"
+        assert gase.decide("Bash", {"command": command}) is None
+
+
 class TestAdversarialBashDetection:
     """Each known bypass / false-positive class from the PR #2092 Codex review.
 
@@ -564,6 +598,25 @@ class TestVerifyMode:
             raise subprocess.CalledProcessError(128, ["git", "show"])
 
         assert gase._superpowers_pin("nope", runner=_boom) is None
+
+    @pytest.mark.parametrize(
+        "apm_yml,expected",
+        [
+            # /code-review #2123: a YAML-quoted pin must not capture the trailing
+            # quote, or a quoting difference base vs head would falsely compare
+            # unequal and let a hand edit pass.
+            ('  - "obra/superpowers#abc123"\n', "abc123"),
+            ("  - obra/superpowers#abc123  # pinned\n", "abc123"),
+            # a commented-out dependency line must not shadow the active pin
+            # (else a legitimate regen would falsely compare unchanged and fail).
+            ("#  - obra/superpowers#OLDREF\n  - obra/superpowers#abc123\n", "abc123"),
+        ],
+    )
+    def test_superpowers_pin_ignores_quotes_and_comments(
+        self, apm_yml: str, expected: str
+    ) -> None:
+        completed = SimpleNamespace(stdout=apm_yml)
+        assert gase._superpowers_pin("HEAD", runner=lambda *a, **k: completed) == expected
 
     def test_verify_cli_passes_when_no_managed_change(
         self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]

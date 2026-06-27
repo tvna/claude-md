@@ -32,9 +32,12 @@ Covered tools:
   positional or ``key=value`` (``dd of=...``) argument; or such a write hidden
   inside ``bash -c '<script>'`` (recursed into). A read (``cat``/``grep``/``ls``
   on a managed path) is never blocked. Known defense-in-depth limitations: a
-  write through a non-shell interpreter (``python3 -c "open(...)"``) or behind a
-  wrapper with its own option grammar (``sudo``/``env``) is not parsed; the
-  Edit/Write matcher covers the primary edit path.
+  write through a non-shell interpreter (``python3 -c "open(...)"``), behind a
+  wrapper with its own option grammar (``sudo``/``env``), inside a command
+  substitution (``$(...)`` / backticks), or via the ``&``-joined fd-dup redirect
+  (``cmd >& file``, split on ``&`` before tokenization) is not parsed; the
+  Edit/Write matcher covers the primary edit path and the CI verify gate is the
+  post-merge-tree backstop.
 
 Design (CLAUDE.md section 4: make wrong actions hard, right actions easy):
 
@@ -196,8 +199,8 @@ def _managed_target(token: str) -> str | None:
     return normalized if _match_normalized(normalized) is not None else None
 
 
-def _tokenize(segment: str) -> list[str]:
-    """Tokenize one shell *segment* into word and redirection-operator tokens.
+def _tokenize(segment: str) -> tuple[list[str], bool]:
+    """Tokenize one shell *segment*; return ``(tokens, used_fallback)``.
 
     Uses ``shlex.shlex`` with ``punctuation_chars`` so an unquoted redirection
     operator (``>`` / ``>>`` / ``>|``; a file-descriptor prefix like ``2>`` lexes
@@ -208,14 +211,17 @@ def _tokenize(segment: str) -> list[str]:
     ``'>.agents/skills/x'``) became a token that the old redirect regex matched
     as a real redirection to a managed path; the false positive issue #2098
     fixes. Falls back to a plain whitespace split on a malformed command
-    (unbalanced quote) so a hook bug never wedges the session (CLAUDE.md s4).
+    (unbalanced quote) so a hook bug never wedges the session (CLAUDE.md s4);
+    the ``used_fallback`` flag tells the caller to switch to the attached-form
+    redirect matcher, since on the split path the operator and its target are not
+    separated (review on #2123).
     """
     lexer = shlex.shlex(segment, posix=True, punctuation_chars=True)
     lexer.whitespace_split = True
     try:
-        return list(lexer)
+        return list(lexer), False
     except ValueError:
-        return segment.split()
+        return segment.split(), True
 
 
 def _leading_command(tokens: list[str]) -> tuple[str, list[str]]:
@@ -283,11 +289,14 @@ def _is_redirect_op(token: str) -> bool:
     """Return True when *token* is an output-redirection operator token.
 
     ``punctuation_chars`` tokenization emits these as standalone tokens
-    (``>``, ``>>``, ``>|``, ``>&``, ``&>``) with any file-descriptor digits in a
-    SEPARATE preceding word token, so the operator and its target are always
-    distinct tokens. The test is "contains ``>`` and is made up only of
-    redirection punctuation", which admits every write-redirect form and rejects
-    ordinary words and the ``<`` input redirect.
+    (``>``, ``>>``, ``>|``) with any file-descriptor digits in a SEPARATE
+    preceding word token, so the operator and its target are distinct tokens. The
+    test is "contains ``>`` and is made up only of redirection punctuation",
+    which admits every ``>``-led write-redirect form and rejects ordinary words
+    and the ``<`` input redirect. Note: the ``&``-joined fd-dup form ``cmd >& f``
+    is a documented limitation (``_segments`` splits on ``&`` before
+    tokenization, so ``>&`` never reaches here intact); the Edit/Write matcher and
+    the CI verify gate cover that residual path.
     """
     return ">" in token and set(token) <= {">", "|", "&"}
 
@@ -305,6 +314,37 @@ def _redirect_targets(tokens: list[str]) -> list[str]:
     for index, token in enumerate(tokens):
         if _is_redirect_op(token) and index + 1 < len(tokens):
             targets.append(tokens[index + 1])
+    return targets
+
+
+# Fallback-only redirect matcher. On the ``.split()`` fallback path (a command
+# shlex cannot tokenize, e.g. an unbalanced quote) the operator and its target
+# are NOT separated, so the operator-token test above never fires. This regex
+# restores the pre-#2098 behavior on that path: an optional fd prefix, one or two
+# ``>``, an optional noclobber ``|``, then an attached target (group 1) or, when
+# empty, the next token. The quoted-``>`` false positive does not recur here:
+# ``.split()`` keeps quote characters in the token, so a quoted mention like
+# ``'>.agents/skills/x'`` starts with ``'`` and does not match. Refs #2123.
+_FALLBACK_REDIRECT_RE = re.compile(r"^\d*>>?\|?(.*)$")
+
+
+def _fallback_redirect_targets(tokens: list[str]) -> list[str]:
+    """Redirect targets for the ``.split()`` fallback path (attached + standalone)."""
+    targets: list[str] = []
+    skip_next = False
+    for index, token in enumerate(tokens):
+        if skip_next:
+            skip_next = False
+            continue
+        match = _FALLBACK_REDIRECT_RE.match(token)
+        if match is None:
+            continue
+        attached = match.group(1)
+        if attached:
+            targets.append(attached)
+        elif index + 1 < len(tokens):
+            targets.append(tokens[index + 1])
+            skip_next = True
     return targets
 
 
@@ -340,11 +380,12 @@ def _dash_c_script(args: list[str]) -> str | None:
 
 def _segment_write_targets(segment: str, depth: int) -> list[str]:
     """Return managed paths *segment* would write to (redirects + mutators)."""
-    tokens = _tokenize(segment)
+    tokens, used_fallback = _tokenize(segment)
+    raw_targets = (
+        _fallback_redirect_targets(tokens) if used_fallback else _redirect_targets(tokens)
+    )
     targets: list[str] = [
-        managed
-        for raw in _redirect_targets(tokens)
-        if (managed := _managed_target(raw)) is not None
+        managed for raw in raw_targets if (managed := _managed_target(raw)) is not None
     ]
     cmd, args = _leading_command(tokens)
     if cmd in _SHELL_COMMANDS and depth < _MAX_RECURSION_DEPTH:
@@ -457,9 +498,13 @@ def decide(tool_name: str, tool_input: dict[str, Any]) -> dict[str, Any] | None:
 # ---------------------------------------------------------------------------
 
 # apm.yml holds the pin as ``obra/superpowers#<ref>`` (the canonical source;
-# apm.lock.yaml's resolved_commit is derived from it).
+# apm.lock.yaml's resolved_commit is derived from it). The capture stops at the
+# first whitespace, quote, or comma so a YAML-quoted (``"obra/superpowers#x"``)
+# or trailing-comment form yields the bare ref, not ``x"``; otherwise a quoting
+# difference between base and head would make two identical pins compare unequal
+# (review on #2123).
 _PIN_FILE = "apm.yml"
-_SUPERPOWERS_PIN_RE = re.compile(r"obra/superpowers#(\S+)")
+_SUPERPOWERS_PIN_RE = re.compile(r"obra/superpowers#([^\s\"',]+)")
 
 
 def _resolve_base() -> str:
@@ -514,7 +559,9 @@ def _superpowers_pin(ref: str, *, runner=subprocess.run) -> str | None:
     """Return the obra/superpowers ref pinned in apm.yml at *ref*, or None.
 
     Reads apm.yml as it stood at *ref* (``git show {ref}:apm.yml``) and extracts
-    the ``obra/superpowers#<ref>`` dependency token. Returns None when the file
+    the ``obra/superpowers#<ref>`` dependency token from the first NON-COMMENT
+    line that carries it, so a commented-out ``# - obra/superpowers#old`` line
+    does not shadow the active pin (review on #2123). Returns None when the file
     or token is absent (a malformed or removed pin); the caller treats None as
     "pin not confirmably changed" so a managed-tree edit still fails closed.
     """
@@ -527,8 +574,13 @@ def _superpowers_pin(ref: str, *, runner=subprocess.run) -> str | None:
         )
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError):
         return None
-    match = _SUPERPOWERS_PIN_RE.search(result.stdout)
-    return match.group(1) if match else None
+    for line in result.stdout.splitlines():
+        if line.lstrip().startswith("#"):
+            continue
+        match = _SUPERPOWERS_PIN_RE.search(line)
+        if match:
+            return match.group(1)
+    return None
 
 
 def evaluate_pr(managed: frozenset[str], pin_changed: bool) -> tuple[int, list[str]]:
