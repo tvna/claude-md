@@ -64,9 +64,46 @@ def test_post_failure_comment_targets_quality_tracking_issue(
     assert "https://github.com/owner/repo/actions/runs/124" in call["payload"]["body"]
 
 
+def test_post_failure_comment_reads_token_from_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    rest = FakeRest()
+    monkeypatch.setattr(coverage_failure_issue, "rest_json", rest)
+    monkeypatch.setenv("GH_TOKEN", "env-token")
+    context = coverage_failure_issue.CoverageFailureContext(
+        repo="owner/repo",
+        run_url="https://github.com/owner/repo/actions/runs/125",
+        workflow="Post-merge automation",
+        coverage_result="failure",
+        run_id="125",
+        run_attempt="1",
+    )
+
+    coverage_failure_issue.post_failure_comment(context)
+
+    assert rest.calls[0]["token"] == "env-token"
+
+
 def test_context_from_env_requires_token_repo_and_run_id() -> None:
     with pytest.raises(RuntimeError, match="Missing required environment"):
         coverage_failure_issue.context_from_env({})
+
+
+def test_main_run_returns_1_when_post_raises(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from _github_api import GitHubApiError
+
+    monkeypatch.setenv("GH_TOKEN", "token")
+    monkeypatch.setenv("REPO", "owner/repo")
+    monkeypatch.setenv("RUN_ID", "123")
+
+    def _raise(*_a, **_k):
+        raise GitHubApiError(500, "POST", "/repos/owner/repo/issues/197/comments", "boom")
+
+    monkeypatch.setattr(coverage_failure_issue, "post_failure_comment", _raise)
+
+    assert coverage_failure_issue.main(["run"]) == 1
 
 
 def test_main_run_matches_workflow_env(monkeypatch: pytest.MonkeyPatch) -> None:
