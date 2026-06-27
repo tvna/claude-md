@@ -128,6 +128,20 @@ _GIT_COMMIT_PRODUCING_RE = re.compile(
     r"\bgit\s+(?:commit|merge|rebase|cherry-pick|revert|am|pull)(?![\w-])"
 )
 
+# Shell separators that end a single git invocation in a command line.
+_SHELL_OPS = frozenset({"&&", "||", "|", ";", "&"})
+
+# Flags that turn a producer subcommand into a NON-creating mode: it advances,
+# aborts, or stages without minting a commit object, so a cold signer cannot
+# leave an unsigned commit behind. Denying these would block safe recovery such
+# as ``git merge --abort`` or a fast-forward-only update (Codex review on
+# #2120). ``--continue`` is intentionally absent: it completes a merge/rebase
+# and DOES create a commit, so it stays guarded.
+_NON_CREATING_FLAGS = frozenset(
+    {"--abort", "--quit", "--skip", "--ff-only", "--no-commit"}
+)
+_NON_CREATING_RE = re.compile(r"--(?:abort|quit|skip|ff-only|no-commit)\b")
+
 # Git global options whose value is a SEPARATE following token, so the token
 # after them is the option value rather than the subcommand
 # (``git -C <path> commit``, ``git -c user.name=x commit``). Codex review on
@@ -140,43 +154,49 @@ def _command_produces_commit(command: str) -> bool:
 
     Covers ``commit`` plus the other subcommands that mint a commit object a
     cold signer can leave unsigned (``merge``, ``rebase``, ``cherry-pick``,
-    ``revert``, ``am``, ``pull``; see :data:`_COMMIT_PRODUCING_SUBCOMMANDS`).
+    ``revert``, ``am``, ``pull``; see :data:`_COMMIT_PRODUCING_SUBCOMMANDS`),
+    while EXCLUDING non-creating modes of those subcommands
+    (:data:`_NON_CREATING_FLAGS`, e.g. ``git merge --abort`` / ``--ff-only``)
+    so safe recovery is never blocked.
 
-    Two complementary linear-time checks (no regex backtracking, hence no
-    ReDoS):
-
-    * :data:`_GIT_COMMIT_PRODUCING_RE` catches the literal ``git <producer>``
-      sequence, covering chains (``git add -A && git commit``) and trailing
-      punctuation, while the ``(?![\\w-])`` boundary keeps plumbing such as
-      ``git commit-tree`` / ``git merge-base`` out;
-    * a :func:`shlex.split` tokenization recognizes the subcommand even behind
-      git global options (``git -C <path> merge``, ``git -c user.name=x
-      commit``). ``-c``/``-C`` consume the next token as their value; any other
-      ``-x``/``--long`` token is self-contained. The first non-option token is
-      the subcommand, so ``config`` in ``git config commit.gpgsign`` does not
-      match.
+    A single linear-time :func:`shlex.split` tokenization (no regex
+    backtracking, hence no ReDoS) recognizes the subcommand even behind git
+    global options (``git -C <path> merge``, ``git -c user.name=x commit``):
+    ``-c``/``-C`` consume the next token as their value; any other ``-x`` /
+    ``--long`` global option is self-contained. The first non-option token is
+    the subcommand, so ``config`` in ``git config commit.gpgsign`` and plumbing
+    such as ``git commit-tree`` / ``git merge-base`` do not match. When the
+    command cannot be tokenized (an unbalanced quote), a textual fallback still
+    honors the non-creating flags so a malformed quote cannot force a deny.
     """
-    if _GIT_COMMIT_PRODUCING_RE.search(command):
-        return True
     try:
         tokens = shlex.split(command, comments=False, posix=True)
     except ValueError:
-        return False
+        if _NON_CREATING_RE.search(command):
+            return False
+        return bool(_GIT_COMMIT_PRODUCING_RE.search(command))
+    n = len(tokens)
     i = 0
-    while i < len(tokens):
+    while i < n:
         if tokens[i] != "git" and not tokens[i].endswith("/git"):
             i += 1
             continue
+        # Advance past git global options (``-c k=v``, ``-C path``,
+        # ``--no-pager``, ``--git-dir=...``) to the subcommand token.
         j = i + 1
-        while j < len(tokens):
-            arg = tokens[j]
-            if arg.startswith("-"):
-                j += 2 if arg in _GIT_VALUE_OPTS else 1
-                continue
-            if arg.rstrip(";&|") in _COMMIT_PRODUCING_SUBCOMMANDS:
+        while j < n and tokens[j].startswith("-"):
+            j += 2 if tokens[j] in _GIT_VALUE_OPTS else 1
+        if j < n and tokens[j].rstrip(";&|") in _COMMIT_PRODUCING_SUBCOMMANDS:
+            k = j + 1
+            rest: set[str] = set()
+            while k < n and tokens[k] not in _SHELL_OPS:
+                rest.add(tokens[k].rstrip(";&|"))
+                k += 1
+            if not (_NON_CREATING_FLAGS & rest):
                 return True
-            break  # some other git subcommand; resume scanning for more git
-        i = j + 1
+            i = k
+            continue
+        i = j + 1 if j > i else i + 1
     return False
 
 # Signing config copied verbatim into the throwaway probe repo. ``commit.gpgsign``

@@ -298,6 +298,16 @@ class TestDecide:
             "git config commit.gpgsign true",
             "git -c x=y config commit.gpgsign true",
             "git -C /x status",
+            # Non-creating modes of producer subcommands cannot mint a commit,
+            # so a cold signer must not block them (Codex review on #2120).
+            "git merge --abort",
+            "git merge --ff-only origin/main",
+            "git merge --no-commit origin/x",
+            "git pull --ff-only origin main",
+            "git rebase --abort",
+            "git rebase --skip",
+            "git cherry-pick --quit",
+            "git -C /x merge --abort",
         ],
     )
     def test_none_when_commit_only_as_argument(self, _remote: None, command: str) -> None:

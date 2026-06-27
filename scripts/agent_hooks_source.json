@@ -507,7 +507,7 @@
               "hooks": [
                 {
                   "type": "command",
-                  "if": "Bash(*git commit*)",
+                  "if": "Bash(*git *)",
                   "command": "python3 scripts/check_commit_signing_ready.py"
                 }
               ]
@@ -517,7 +517,7 @@
               "hooks": [
                 {
                   "type": "command",
-                  "if": "Bash(*git commit*)",
+                  "if": "Bash(*git *)",
                   "command": "python3 scripts/gate_retro_close_keyword_commit.py"
                 }
               ]

@@ -68,13 +68,14 @@ _SCRIPT_NAME = "gate_retro_close_keyword_commit"
 # unsigned object); one category, one control (CLAUDE.md section 4).
 _ACK_MARKER = "# retro-close-ack"
 
-# Detect a ``git commit`` invocation; the negative lookahead keeps
-# ``git commit-tree`` plumbing out. Matches inside chains (``git add -A &&
-# git commit -m x``).
-_GIT_COMMIT_RE = re.compile(r"\bgit\s+commit(?![\w-])")
+# Git global options whose value is a SEPARATE following token (``git -C
+# <path> commit``, ``git -c user.name=x commit``), so the token after them is
+# the value, not the subcommand. Tokenizing past these is what lets the gate
+# see a ``commit`` behind global options (Codex review on #2120).
+_GIT_VALUE_OPTS = frozenset({"-c", "-C"})
 
-# Shell separators that end the ``git commit`` segment.
-_SEGMENT_SPLIT = re.compile(r"&&|\|\||[;|\n]")
+# Shell separators that end a single git invocation in a command line.
+_SHELL_OPS = frozenset({"&&", "||", "|", ";", "&"})
 
 # Auto-closing keyword followed by ``#N``, anywhere in the message (commit
 # messages carry no line-anchored ``Closes #N`` convention, unlike PR bodies).
@@ -91,28 +92,53 @@ _GIT_REMOTE_RE = re.compile(
 )
 
 
-def _commit_segment(command: str) -> str | None:
-    """Return the ``git commit`` shell segment (up to the next operator)."""
-    match = _GIT_COMMIT_RE.search(command)
-    if match is None:
-        return None
-    rest = command[match.end():]
-    return _SEGMENT_SPLIT.split(rest, maxsplit=1)[0]
+def _commit_message_values(command: str) -> list[str]:
+    """Return every ``-m`` / ``--message`` value of each ``git commit`` in *command*.
+
+    Tokenizes the whole command (so chains and global options are handled),
+    finds each ``git`` invocation whose subcommand is ``commit`` even behind
+    global options (``git -C <path> commit``, ``git -c k=v commit``), and
+    collects that invocation's message values up to the next shell operator.
+    Returns ``[]`` when the command cannot be tokenized (an unbalanced quote),
+    so a malformed command fails open. ``commit-tree`` and other subcommands
+    are not matched.
+    """
+    try:
+        tokens = shlex.split(command)
+    except ValueError:
+        return []
+    n = len(tokens)
+    out: list[str] = []
+    i = 0
+    while i < n:
+        if tokens[i] != "git" and not tokens[i].endswith("/git"):
+            i += 1
+            continue
+        j = i + 1
+        while j < n and tokens[j].startswith("-"):
+            j += 2 if tokens[j] in _GIT_VALUE_OPTS else 1
+        if j < n and tokens[j].rstrip(";&|") == "commit":
+            k = j + 1
+            invocation: list[str] = []
+            while k < n and tokens[k] not in _SHELL_OPS:
+                invocation.append(tokens[k])
+                k += 1
+            out.extend(_message_values(invocation))
+            i = k
+            continue
+        i = j + 1 if j > i else i + 1
+    return out
 
 
-def _message_values(segment: str) -> list[str]:
-    """Return every ``-m`` / ``--message`` value in *segment*.
+def _message_values(tokens: list[str]) -> list[str]:
+    """Return every ``-m`` / ``--message`` value in a commit's argument *tokens*.
 
     Handles the separate-token (``-m msg``), attached (``-mmsg``), combined
-    short-flag (``-am msg``), long (``--message msg``), and ``=`` (
-    ``--message=msg``) spellings. ``-F`` / ``--file`` (a file) and the editor
+    short-flag (``-am msg``), long (``--message msg``), and ``=``
+    (``--message=msg``) spellings. ``-F`` / ``--file`` (a file) and the editor
     path carry no inspectable text, so their refs stay invisible and the gate
     fails open on them.
     """
-    try:
-        tokens = shlex.split(segment)
-    except ValueError:
-        tokens = segment.split()
     values: list[str] = []
     i = 0
     n = len(tokens)
@@ -140,10 +166,7 @@ def _message_values(segment: str) -> list[str]:
 
 def _closing_refs(command: str) -> list[int]:
     """Return sorted-unique issue numbers closed by the commit message, or []."""
-    segment = _commit_segment(command)
-    if segment is None:
-        return []
-    message = "\n".join(_message_values(segment))
+    message = "\n".join(_commit_message_values(command))
     found = {int(m.group(1)) for m in _CLOSING_REF_RE.finditer(message)}
     return sorted(found)
 
@@ -211,8 +234,6 @@ def decide(
     if not command.strip():
         return None
     if _ACK_MARKER in command:
-        return None
-    if not _GIT_COMMIT_RE.search(command):
         return None
 
     refs = _closing_refs(command)
