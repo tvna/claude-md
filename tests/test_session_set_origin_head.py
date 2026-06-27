@@ -32,11 +32,11 @@ def _proc(returncode: int) -> subprocess.CompletedProcess[str]:
 class _FakeGit:
     """A git runner with scripted return codes keyed by intent.
 
-    ``head_resolves`` controls ``symbolic-ref --quiet <HEAD>`` (the
-    idempotence probe), ``main_exists`` controls
-    ``show-ref --verify --quiet <main>``, and ``set_ok`` controls the
-    ``symbolic-ref <HEAD> <main>`` write. Every invocation is recorded so a
-    test can assert the write happened (or did not).
+    ``head_resolves`` controls ``rev-parse --verify --quiet <HEAD>`` (the
+    idempotence probe: does origin/HEAD resolve to a commit), ``main_exists``
+    controls ``show-ref --verify --quiet <main>``, and ``set_ok`` controls
+    the ``symbolic-ref <HEAD> <main>`` write. Every invocation is recorded so
+    a test can assert the write happened (or did not).
     """
 
     def __init__(self, *, head_resolves: bool, main_exists: bool, set_ok: bool = True) -> None:
@@ -47,13 +47,15 @@ class _FakeGit:
 
     def __call__(self, args: list[str]) -> subprocess.CompletedProcess[str]:
         self.calls.append(args)
+        if args[:1] == ["rev-parse"]:
+            # The idempotence probe: resolves to a commit (0) or not (absent
+            # or dangling symref -> non-zero).
+            return _proc(0 if self.head_resolves else 1)
         if args[:1] == ["show-ref"]:
             return _proc(0 if self.main_exists else 1)
         if args[:1] == ["symbolic-ref"]:
-            # The idempotence probe carries --quiet and reads the ref; the
-            # write form passes the target ref as a second positional.
-            if "--quiet" in args and args[-1] == _ORIGIN_HEAD:
-                return _proc(0 if self.head_resolves else 1)
+            # Only the write form reaches the runner now; it overwrites any
+            # stale target.
             return _proc(0 if self.set_ok else 1)
         raise AssertionError(f"unexpected git invocation: {args}")
 
@@ -84,6 +86,28 @@ def test_configure_sets_head_when_absent_and_main_present() -> None:
     assert _ORIGIN_HEAD in msg
     assert _ORIGIN_MAIN in msg
     assert "WARNING" not in msg
+
+
+def test_configure_resets_dangling_symref() -> None:
+    """A dangling origin/HEAD (does not resolve) is repaired, not no-oped.
+
+    Regression for the Codex review on PR #2101: `git symbolic-ref --quiet`
+    returns 0 for a symref whose target was pruned, so the old probe would
+    no-op while `git diff origin/HEAD...HEAD` still failed. The rev-parse
+    probe treats a non-resolving ref as needing repair.
+    """
+    git = _FakeGit(head_resolves=False, main_exists=True, set_ok=True)
+    output = subject.configure(git)
+    assert git.wrote_head()  # re-pointed at origin/main, overwriting the stale target
+    assert output is not None
+    assert "WARNING" not in output["hookSpecificOutput"]["additionalContext"]
+
+
+def test_configure_probe_uses_rev_parse_verify() -> None:
+    """The idempotence probe checks resolution, not mere symref existence."""
+    git = _FakeGit(head_resolves=True, main_exists=True)
+    subject.configure(git)
+    assert git.calls[0] == ["rev-parse", "--verify", "--quiet", _ORIGIN_HEAD]
 
 
 def test_configure_soft_fails_when_origin_main_missing() -> None:

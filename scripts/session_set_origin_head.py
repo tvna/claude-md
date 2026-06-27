@@ -32,9 +32,18 @@ rename moves the default branch, ``set-head --auto`` is the documented
 fallback; this hook stays offline and simply warns when ``origin/main`` is
 absent.
 
-Idempotent: a no-op when the ref already resolves. Fail-soft: a missing
-``origin/main``, a non-git directory, or any git error warns and exits 0 so
-session start is never aborted.
+Idempotent: a no-op when ``origin/HEAD`` already *resolves to a commit*.
+The probe is ``git rev-parse --verify`` rather than ``git symbolic-ref``
+on purpose: a symbolic ref left dangling by a pruned target (e.g. a stale
+``refs/remotes/origin/master`` after a default-branch rename) satisfies
+``symbolic-ref`` yet still makes ``git diff origin/HEAD...HEAD`` fail, so
+treating "is a symref" as "is repaired" would no-op over a broken ref.
+``rev-parse --verify`` is true only when the ref resolves to an object, so
+an absent *or* dangling ``origin/HEAD`` is repaired by re-pointing it at
+``origin/main`` (``symbolic-ref`` overwrites the stale target).
+
+Fail-soft: a missing ``origin/main``, a non-git directory, or any git
+error warns and exits 0 so session start is never aborted.
 
 Tested by ``tests/test_session_set_origin_head.py``.
 """
@@ -63,9 +72,14 @@ GitRunner = Callable[[list[str]], _CompletedLike]
 
 
 def origin_head_resolves(run: GitRunner) -> bool:
-    """Return True when ``refs/remotes/origin/HEAD`` is already a symbolic ref."""
+    """Return True when ``refs/remotes/origin/HEAD`` resolves to a commit.
+
+    Uses ``git rev-parse --verify`` rather than ``git symbolic-ref`` so a
+    dangling symref (one whose target was pruned) reads as unresolved and
+    gets repaired, instead of being mistaken for an already-good ref.
+    """
     try:
-        return run(["symbolic-ref", "--quiet", _ORIGIN_HEAD]).returncode == 0
+        return run(["rev-parse", "--verify", "--quiet", _ORIGIN_HEAD]).returncode == 0
     except RuntimeError:
         return False
 
@@ -110,7 +124,7 @@ def configure(run: GitRunner) -> dict[str, Any] | None:
 
     if set_origin_head(run):
         message = (
-            f"{_ORIGIN_HEAD} was unset; pointed it at {_ORIGIN_MAIN} so "
+            f"{_ORIGIN_HEAD} did not resolve; pointed it at {_ORIGIN_MAIN} so "
             f"'git diff origin/HEAD...HEAD' resolves this session."
         )
     else:
