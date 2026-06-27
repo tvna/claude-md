@@ -18,16 +18,18 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["get_issue_title(...)"]
-    N002["if runner is None"]
-    N003["runner = subprocess.run"]
+    N002["if token is None"]
+    N003["token = get(...)"]
     N004["try"]
-    N005["result = runner(...)"]
-    N006["except (subprocess.SubprocessError, FileNotFoundError, OSError)"]
+    N005["data = rest_json(...)"]
+    N006["except (GitHubApiError, urllib.error.URLError, OSError, ValueError)"]
     N007["return None"]
-    N008["raw = getattr(result, '<str>', b'') or b''"]
-    N009["if isinstance(raw, bytes)"]
-    N010["raw = decode(...)"]
-    N011["return raw.strip() or None"]
+    N008["if not isinstance(data, dict)"]
+    N009["return None"]
+    N010["title = get(...)"]
+    N011["if not isinstance(title, str)"]
+    N012["return None"]
+    N013["return title.strip() or None"]
     N001 -->|"start"| N002
     N002 -->|"true"| N003
     N003 --> N004
@@ -36,10 +38,11 @@ flowchart TD
     N004 -->|"raises"| N006
     N006 --> N007
     N005 --> N008
-    N008 --> N009
-    N009 -->|"true"| N010
+    N008 -->|"true"| N009
+    N008 -->|"false"| N010
     N010 --> N011
-    N009 -->|"false"| N011
+    N011 -->|"true"| N012
+    N011 -->|"false"| N013
 ```
 
 ## _validate_issue_title(...)
@@ -84,7 +87,7 @@ flowchart TD
     N005["print(...)"]
     N006["return 0"]
     N007["fail = 0"]
-    N008["for n in refs:     issue_title = get_issue_title(repo, n, runner=runner)     if issue_title is None:         print(f'<str>{n}<str>{repo}<str>')         fail = 1         continue     errors = _validate_issue_title(issue_title, n)     if errors:         for line in errors:             print(line)         fail = 1     else:         print(f'<str>{n}<str>')"]
+    N008["for n in refs:     issue_title = get_issue_title(repo, n, token=token)     if issue_title is None:         print(f'<str>{n}<str>{repo}<str>')         fail = 1         continue     errors = _validate_issue_title(issue_title, n)     if errors:         for line in errors:             print(line)         fail = 1     else:         print(f'<str>{n}<str>')"]
     N009["return fail"]
     N001 -->|"start"| N002
     N002 --> N003

@@ -7,20 +7,26 @@ This file is generated from `scripts/flake_pin_latest.py` by `python3 scripts/sc
 ```mermaid
 flowchart TD
     N001["_load(...)"]
-    N002["spec = spec_from_file_location(...)"]
-    N003["if spec is None or spec.loader is None"]
-    N004["raise ImportError(f'<str>{module_name}<str>')"]
-    N005["module = module_from_spec(...)"]
-    N006["sys.modules[module_name] = module"]
-    N007["exec_module(...)"]
-    N008["return module"]
+    N002["existing = get(...)"]
+    N003["if existing is not None"]
+    N004["return existing"]
+    N005["spec = spec_from_file_location(...)"]
+    N006["if spec is None or spec.loader is None"]
+    N007["raise ImportError(f'<str>{module_name}<str>')"]
+    N008["module = module_from_spec(...)"]
+    N009["sys.modules[module_name] = module"]
+    N010["exec_module(...)"]
+    N011["return module"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 -->|"true"| N004
     N003 -->|"false"| N005
     N005 --> N006
-    N006 --> N007
-    N007 --> N008
+    N006 -->|"true"| N007
+    N006 -->|"false"| N008
+    N008 --> N009
+    N009 --> N010
+    N010 --> N011
 ```
 
 ## github_latest_release(...)

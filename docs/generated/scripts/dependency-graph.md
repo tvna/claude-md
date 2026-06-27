@@ -7,7 +7,7 @@ This file is generated from `scripts/*.py` import statements by `python3 scripts
 | Module | Imported by | Importers |
 | --- | --- | --- |
 | `_hook_runtime` | 48 | `block_sensitive_reads`, `check_commit_signing_ready`, `check_pr_mergeability`, `ci_early_status_probe`, `gate_agents_skills_edit`, `gate_cache_regime_advisor`, `gate_decision_handoff_askuserquestion`, `gate_gh_cli`, `gate_handoff_retro_survey_askuserquestion`, `gate_instruction_body_advisory`, `gate_irreversible_bash`, `gate_issue_classification_labels`, `gate_issue_close_comment`, `gate_mcp_github_uncovered`, `gate_merge_safety`, `gate_pr_body_retro_issue_link`, `gate_reserved_retro_scope`, `gate_retro_close_keyword_commit`, `gate_stop_pr_review_reply`, `gate_unsigned_commit_bash`, `gate_update_pr_branch`, `issue_closure_fast_path`, `plan_approval_gate`, `plan_language_context`, `post_merge_new_session_prompt`, `post_merge_retro_append`, `post_pr_create_body_fix`, `post_pr_create_ci_monitor`, `pr_body_close_keyword_gate`, `preflight_angle_token_drop`, `preflight_codex_github_footer`, `preflight_commit_session_branch`, `preflight_github_secrets`, `preflight_issue_ci_staleness`, `preflight_main_freshness`, `preflight_non_ascii`, `preflight_pr_body_required_sections`, `preflight_pr_template_shape`, `preflight_push_base`, `preflight_push_nonempty`, `preflight_push_prek`, `preflight_push_session_branch`, `preflight_resolve_review_thread`, `preflight_session_base_freshness`, `preflight_session_branch_authz`, `preflight_title_policy`, `prompt_context7_gate`, `stop_new_session_handoff_prompt` |
-| `_github_api` | 24 | `_ci_watch`, `_pr_commit_batch`, `_pr_merge`, `check_pr_mergeability`, `ci_budget_issue`, `ci_early_status_probe`, `dependabot_automerge`, `gate_pr_body_retro_issue_link`, `github_api`, `issue_closure_fast_path`, `labels_apply`, `np_strategy_tracking`, `post_issue_comment`, `post_merge_new_session_prompt`, `pr_body_close_keyword_gate`, `pr_upsert`, `preflight_replacement_pr`, `prune_codespaces`, `prune_devcontainer_images`, `publish_instruction_release`, `ruleset_drift`, `sanitize_history`, `security_drift_report`, `verify_ruleset_sync` |
+| `_github_api` | 33 | `_ci_watch`, `_pr_commit_batch`, `_pr_merge`, `auto_retro`, `backup_non_ascii`, `branch_cleanup`, `check_pr_mergeability`, `ci_budget_issue`, `ci_early_status_probe`, `coverage_failure_issue`, `dependabot_automerge`, `gate_pr_body_retro_issue_link`, `github_api`, `issue_closure_fast_path`, `issue_link`, `labels_apply`, `np_strategy_tracking`, `post_issue_comment`, `post_merge_new_session_prompt`, `pr_body_close_keyword_gate`, `pr_upsert`, `preflight_replacement_pr`, `prune_codespaces`, `prune_devcontainer_images`, `publish_instruction_release`, `ruleset_drift`, `sanitize_history`, `scan_non_ascii`, `scan_retro_followup_drift`, `security_drift_report`, `uv_pin`, `verify_linked_issue_titles`, `verify_ruleset_sync` |
 | `_git` | 16 | `check_commit_signing_ready`, `check_hooks_path`, `check_session_branch`, `devcontainer_pin_pr`, `pr_upsert`, `preflight_branch_base`, `preflight_cache`, `preflight_coverage`, `preflight_main_freshness`, `preflight_merge_index_budget`, `preflight_push_nonempty`, `preflight_session_base_freshness`, `refresh_pr_branch`, `scan_area_path_coverage`, `scan_secrets`, `session_set_origin_head` |
 | `_github_tool_names` | 11 | `gate_handoff_retro_survey_askuserquestion`, `gate_pr_body_retro_issue_link`, `pr_body_close_keyword_gate`, `preflight_angle_token_drop`, `preflight_codex_github_footer`, `preflight_github_secrets`, `preflight_issue_ci_staleness`, `preflight_non_ascii`, `preflight_pr_body_required_sections`, `preflight_pr_template_shape`, `preflight_title_policy` |
 | `body_policy` | 9 | `post_pr_create_body_fix`, `pr_body_builder`, `preflight_angle_token_drop`, `preflight_codex_github_footer`, `preflight_pr_body`, `preflight_pr_body_required_sections`, `preflight_pr_template_shape`, `verify_instruction_text_growth`, `verify_text_delta_section` |
@@ -55,9 +55,9 @@ This file is generated from `scripts/*.py` import statements by `python3 scripts
 
 ## Isolated scripts
 
-61 script(s) import no sibling module and are imported by none:
+60 script(s) import no sibling module and are imported by none:
 
-`analyze_ci_timings`, `attack_review_reminder`, `backup_archive`, `backup_non_ascii`, `branch_cleanup`, `ccusage_pin`, `compare_cache_regimes`, `dependabot_labels`, `flake_pin`, `flake_pin_latest`, `gate_generated_scripts_manual_edit`, `gen_agent_hooks`, `gen_mcp_json`, `github_paginate`, `measure_devcontainer_startup`, `measure_prefix_tokens`, `mint_github_app_token`, `nixpkgs_cooldown`, `owasp_asi_mapping`, `preflight_hook_event_keys`, `python_pin`, `rulesets_apply`, `scan_apm_ascii`, `scan_apm_lock_drift`, `scan_apm_portability`, `scan_commit_type_label_drift`, `scan_compile_from_source`, `scan_design_philosophy_drift`, `scan_doc_workflow_refs`, `scan_flake_pin_drift`, `scan_harness_doc_coverage`, `scan_hook_coverage_drift`, `scan_install_curl_retry_drift`, `scan_mermaid_syntax`, `scan_nonexhaustive_invariant_drift`, `scan_pr_body_quality_drift`, `scan_provisioning_hook_serial`, `scan_quality_standard_drift`, `scan_secret_runbooks`, `scan_session_path_drift`, `scan_test_presence_drift`, `scan_workflow_gh_calls`, `scan_workflow_pip`, `scan_workflow_unsigned_commit`, `script_dependency_graph`, `script_trigger_map`, `session_resource_report`, `skill_quality_gate`, `threat_intel_triage`, `uv_download_checksum`, `validate_falco_rules`, `validate_json_syntax`, `verify_apm_checksums`, `verify_control_inventory_currency`, `verify_readme_translation`, `verify_required_check_contexts`, `verify_security_control_floor`, `verify_shard_coverage`, `verify_test_shard_markers`, `waza_pin`, `workflow_diagram`
+`analyze_ci_timings`, `attack_review_reminder`, `backup_archive`, `ccusage_pin`, `compare_cache_regimes`, `dependabot_labels`, `flake_pin`, `flake_pin_latest`, `gate_generated_scripts_manual_edit`, `gen_agent_hooks`, `gen_mcp_json`, `github_paginate`, `measure_devcontainer_startup`, `measure_prefix_tokens`, `mint_github_app_token`, `nixpkgs_cooldown`, `owasp_asi_mapping`, `preflight_hook_event_keys`, `python_pin`, `rulesets_apply`, `scan_apm_ascii`, `scan_apm_lock_drift`, `scan_apm_portability`, `scan_commit_type_label_drift`, `scan_compile_from_source`, `scan_design_philosophy_drift`, `scan_doc_workflow_refs`, `scan_flake_pin_drift`, `scan_harness_doc_coverage`, `scan_hook_coverage_drift`, `scan_install_curl_retry_drift`, `scan_mermaid_syntax`, `scan_nonexhaustive_invariant_drift`, `scan_pr_body_quality_drift`, `scan_provisioning_hook_serial`, `scan_quality_standard_drift`, `scan_scripts_gh_calls`, `scan_secret_runbooks`, `scan_session_path_drift`, `scan_test_presence_drift`, `scan_workflow_gh_calls`, `scan_workflow_pip`, `scan_workflow_unsigned_commit`, `script_dependency_graph`, `script_trigger_map`, `session_resource_report`, `skill_quality_gate`, `threat_intel_triage`, `uv_download_checksum`, `validate_falco_rules`, `validate_json_syntax`, `verify_apm_checksums`, `verify_control_inventory_currency`, `verify_readme_translation`, `verify_required_check_contexts`, `verify_security_control_floor`, `verify_shard_coverage`, `verify_test_shard_markers`, `waza_pin`, `workflow_diagram`
 
 ## Dependency graph
 
@@ -79,16 +79,19 @@ flowchart TD
     auto_retro --> _auto_retro_parse
     auto_retro --> _auto_retro_render
     auto_retro --> _auto_retro_triage
+    auto_retro --> _github_api
     auto_retro --> _retro_labels
     auto_retro --> _trusted_bots
     auto_retro --> issue_link
     auto_retro --> pr_upsert
     auto_retro --> script_ast_graph
     auto_tag_version --> verify_source_version_bump
+    backup_non_ascii --> _github_api
     block_sensitive_reads --> _hook_runtime
     body_policy --> _trusted_bots
     body_policy --> issue_link
     bot_pr_automerge --> _pr_merge
+    branch_cleanup --> _github_api
     check_commit_signing_ready --> _git
     check_commit_signing_ready --> _hook_runtime
     check_hooks_path --> _git
@@ -101,6 +104,7 @@ flowchart TD
     ci_early_status_probe --> _github_api
     ci_early_status_probe --> _hook_runtime
     codebase_maturity_summary --> scan_maintainability_metrics
+    coverage_failure_issue --> _github_api
     coverage_failure_issue --> issue_anchors
     dependabot_automerge --> _github_api
     dependabot_automerge --> _trusted_bots
@@ -144,6 +148,7 @@ flowchart TD
     github_api --> _github_api
     issue_closure_fast_path --> _github_api
     issue_closure_fast_path --> _hook_runtime
+    issue_link --> _github_api
     issue_link --> _ref_classifier
     issue_link --> _trusted_bots
     labels_apply --> _github_api
@@ -238,9 +243,11 @@ flowchart TD
     scan_input_contract_drift --> scan_preflight_drift
     scan_issue_anchor_drift --> issue_anchors
     scan_module_size_distribution --> scan_maintainability_metrics
+    scan_non_ascii --> _github_api
     scan_non_ascii --> _trusted_bots
     scan_repo_double_hyphen --> _apm_managed_paths
     scan_repo_em_dash --> _apm_managed_paths
+    scan_retro_followup_drift --> _github_api
     scan_retro_followup_drift --> _retro_labels
     scan_retro_followup_drift --> issue_link
     scan_secrets --> _git
@@ -253,8 +260,10 @@ flowchart TD
     stop_new_session_handoff_prompt --> _hook_runtime
     title_policy --> _trusted_bots
     update_devcontainer_image_pins --> generate_devcontainer_arch_overlays
+    uv_pin --> _github_api
     verify_dependabot_author --> _trusted_bots
     verify_instruction_text_growth --> body_policy
+    verify_linked_issue_titles --> _github_api
     verify_linked_issue_titles --> _ref_classifier
     verify_linked_issue_titles --> title_policy
     verify_ruleset_sync --> _github_api
