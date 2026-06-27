@@ -97,6 +97,7 @@ import scan_quality_standard_drift
 import scan_repo_double_hyphen
 import scan_repo_em_dash
 import scan_retro_followup_drift
+import scan_scripts_gh_calls
 import scan_secret_runbooks
 import scan_secrets
 import scan_session_path_drift
@@ -259,6 +260,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("scan_retro_followup_drift.py", "run"): "test_scan_retro_followup_drift_run_matches_workflow_env",
     ("scan_secret_runbooks.py", "verify"): "test_scan_secret_runbooks_verify_matches_workflow_args",
     ("scan_secrets.py", "verify"): "test_scan_secrets_verify_matches_workflow_args",
+    ("scan_scripts_gh_calls.py", "verify"): "test_scan_scripts_gh_calls_verify_matches_workflow_args",
     ("scan_session_path_drift.py", "verify"): "test_scan_session_path_drift_verify_matches_workflow_args",
     ("scan_test_presence_drift.py", "verify"): "test_scan_test_presence_drift_verify_matches_workflow_args",
     ("scan_workflow_action_pins.py", "verify"): "test_scan_workflow_action_pins_verify_matches_workflow_args",
@@ -1645,6 +1647,13 @@ def test_scan_workflow_gh_calls_verify_matches_workflow_args() -> None:
     Refs #911.
     """
     assert scan_workflow_gh_calls.main(["verify"]) == 0
+
+
+def test_scan_scripts_gh_calls_verify_matches_workflow_args() -> None:
+    """Mirrors the ``Assert no direct gh CLI calls in scripts`` step in
+    ``.github/workflows/verify-agents.yml``. Refs #909.
+    """
+    assert scan_scripts_gh_calls.main(["verify"]) == 0
 
 
 def test_scan_workflow_injection_verify_matches_workflow_args() -> None:
