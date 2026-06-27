@@ -175,17 +175,8 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["gh_api(...)"]
-    N002["cmd = ['<str>', '<str>', '<str>', method, path]"]
-    N003["if json_body is not None"]
-    N004["result = run(...)"]
-    N005["result = run(...)"]
-    N006["return result.stdout"]
+    N002["return rest_text(method, path, json_body)"]
     N001 -->|"start"| N002
-    N002 --> N003
-    N003 -->|"true"| N004
-    N003 -->|"false"| N005
-    N004 --> N006
-    N005 --> N006
 ```
 
 ## is_404_error(...)
@@ -193,10 +184,8 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["is_404_error(...)"]
-    N002["text = lower(...)"]
-    N003["return '<str>' in text or '<str>' in text"]
+    N002["return exc.code == 404"]
     N001 -->|"start"| N002
-    N002 --> N003
 ```
 
 ## search_retro_issues(...)
@@ -223,7 +212,7 @@ flowchart TD
     N001["fetch_issue_or_pr(...)"]
     N002["try"]
     N003["raw = gh_api(...)"]
-    N004["except subprocess.CalledProcessError"]
+    N004["except GitHubApiError"]
     N005["if is_404_error(exc)"]
     N006["return None"]
     N007["raise"]
@@ -332,7 +321,7 @@ flowchart TD
     N003["retros = search_retro_issues(...)"]
     N004["labels_applied = {RETRO_FP_CANDIDATE: 0, RETRO_FP: 0}"]
     N005["errors = 0"]
-    N006["for retro in retros:     retro_number = retro.get('<str>')     if not isinstance(retro_number, int):         continue     existing = _retro_existing_labels(retro)     if RETRO_TP in existing or RETRO_FP in existing:         continue     body = str(retro.get('<str>') or '<str>')     refs = parse_followup_refs(body)     if not refs:         continue     per_followup: list[str] = []     for n in refs:         try:             per_followup.append(_resolve_one_followup(repo, n, today_iso, stale_days))         except subprocess.CalledProcessError as exc:             errors += 1             print(f'<str>{n}<str>{retro_number}<str>{exc.returncode}<str>', file=sys.stderr)     aggregate = aggregate_drift(per_followup)     target = decide_target_label(aggregate, existing)     if target is None:         continue     apply_label(repo, retro_number, target)     labels_applied[target] = labels_applied.get(target, 0) + 1     print(f'<str>{target!r}<str>{retro_number}<str>{aggregate}<str>')"]
+    N006["for retro in retros:     retro_number = retro.get('<str>')     if not isinstance(retro_number, int):         continue     existing = _retro_existing_labels(retro)     if RETRO_TP in existing or RETRO_FP in existing:         continue     body = str(retro.get('<str>') or '<str>')     refs = parse_followup_refs(body)     if not refs:         continue     per_followup: list[str] = []     for n in refs:         try:             per_followup.append(_resolve_one_followup(repo, n, today_iso, stale_days))         except GitHubApiError as exc:             errors += 1             print(f'<str>{n}<str>{retro_number}<str>{exc.code}<str>', file=sys.stderr)     aggregate = aggregate_drift(per_followup)     target = decide_target_label(aggregate, existing)     if target is None:         continue     apply_label(repo, retro_number, target)     labels_applied[target] = labels_applied.get(target, 0) + 1     print(f'<str>{target!r}<str>{retro_number}<str>{aggregate}<str>')"]
     N007["_append_summary(...)"]
     N008["return 0"]
     N001 -->|"start"| N002
@@ -379,7 +368,7 @@ flowchart TD
     N012["except ValueError"]
     N013["print(...)"]
     N014["return 1"]
-    N015["except subprocess.CalledProcessError"]
+    N015["except GitHubApiError"]
     N016["print(...)"]
     N017["return 1"]
     N001 -->|"start"| N002

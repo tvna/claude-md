@@ -81,19 +81,26 @@ flowchart TD
     N006 -->|"false"| N008
 ```
 
+## _token(...)
+
+```mermaid
+flowchart TD
+    N001["_token(...)"]
+    N002["return os.environ.get('<str>', '<str>')"]
+    N001 -->|"start"| N002
+```
+
 ## list_branches(...)
 
 ```mermaid
 flowchart TD
     N001["list_branches(...)"]
-    N002["result = _run(...)"]
-    N003["branches = []"]
-    N004["for line in result.stdout.splitlines():     if not line.strip():         continue     try:         name, sha = line.split('<str>', 1)     except ValueError as exc:         raise ValueError(f'<str>{line!r}') from exc     branches.append((name, sha))"]
-    N005["return branches"]
+    N002["branches = []"]
+    N003["for entry in paginate(f'<str>{repo}<str>', token=_token()):     if not isinstance(entry, dict):         continue     name = entry.get('<str>')     sha = (entry.get('<str>') or {}).get('<str>')     if not isinstance(name, str) or not isinstance(sha, str):         raise ValueError(f'<str>{entry!r}')     branches.append((name, sha))"]
+    N004["return branches"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 --> N004
-    N004 --> N005
 ```
 
 ## get_last_commit_date(...)
@@ -101,10 +108,14 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["get_last_commit_date(...)"]
-    N002["result = _run(...)"]
-    N003["return _parse_github_datetime(result.stdout.strip())"]
+    N002["data = rest_json(...)"]
+    N003["commit = (data or {}).get('<str>') or {}"]
+    N004["committer = commit.get('<str>') or {}"]
+    N005["return _parse_github_datetime(str(committer.get('<str>') or '<str>').strip())"]
     N001 -->|"start"| N002
     N002 --> N003
+    N003 --> N004
+    N004 --> N005
 ```
 
 ## count_open_prs_for_head(...)
@@ -112,10 +123,14 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["count_open_prs_for_head(...)"]
-    N002["result = _run(...)"]
-    N003["return int(result.stdout.strip())"]
+    N002["owner = repo.split('<str>', 1)[0]"]
+    N003["head = quote(...)"]
+    N004["prs = paginate(...)"]
+    N005["return len(prs)"]
     N001 -->|"start"| N002
     N002 --> N003
+    N003 --> N004
+    N004 --> N005
 ```
 
 ## find_rolling_issue(...)
@@ -123,9 +138,9 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["find_rolling_issue(...)"]
-    N002["result = _run(...)"]
-    N003["issues = loads(...)"]
-    N004["for issue in issues:     if issue.get('<str>') == title:         return _normalize_issue(issue)"]
+    N002["query = f'<str>{repo}<str>{title}<str>'"]
+    N003["data = rest_json(...)"]
+    N004["for issue in (data or {}).get('<str>') or []:     if isinstance(issue, dict) and issue.get('<str>') == title:         return _normalize_issue(issue)"]
     N005["return None"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -138,10 +153,12 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["comment_on_issue(...)"]
-    N002["_run(...)"]
-    N003["end"]
+    N002["body = read_text(...)"]
+    N003["rest_json(...)"]
+    N004["end"]
     N001 -->|"start"| N002
     N002 --> N003
+    N003 --> N004
 ```
 
 ## create_issue(...)
@@ -149,14 +166,12 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["create_issue(...)"]
-    N002["cmd = ['<str>', '<str>', '<str>', '<str>', repo, '<str>', title, '<str>', str(body_file)]"]
-    N003["for label in ROLLING_ISSUE_LABELS:     cmd.extend(['<str>', label])"]
-    N004["_run(...)"]
-    N005["end"]
+    N002["body = read_text(...)"]
+    N003["rest_json(...)"]
+    N004["end"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 --> N004
-    N004 --> N005
 ```
 
 ## close_issue_with_comment(...)
@@ -164,10 +179,14 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["close_issue_with_comment(...)"]
-    N002["_run(...)"]
-    N003["end"]
+    N002["token = _token(...)"]
+    N003["rest_json(...)"]
+    N004["rest_json(...)"]
+    N005["end"]
     N001 -->|"start"| N002
     N002 --> N003
+    N003 --> N004
+    N004 --> N005
 ```
 
 ## fetch_issue_last_activity(...)
@@ -175,16 +194,18 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["fetch_issue_last_activity(...)"]
-    N002["issue = _run(...)"]
-    N003["comments = _run(...)"]
-    N004["comment_dates = [line for line in comments.stdout.splitlines() if line.strip()]"]
-    N005["last_activity = comment_dates[-1] if comment_dates else issue.stdout.strip()"]
-    N006["return _parse_github_datetime(last_activity)"]
+    N002["token = _token(...)"]
+    N003["issue = rest_json(...)"]
+    N004["comments = paginate(...)"]
+    N005["comment_dates = [c['<str>'] for c in comments if isinstance(c, dict) and isinstance(c.get('<str>'), str)]"]
+    N006["last_activity = comment_dates[-1] if comment_dates else (issue or {}).get('<str>', '<str>')"]
+    N007["return _parse_github_datetime(str(last_activity).strip())"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 --> N004
     N004 --> N005
     N005 --> N006
+    N006 --> N007
 ```
 
 ## render_survey(...)
@@ -196,7 +217,7 @@ flowchart TD
     N003["min_age_days = parse_min_age_days(...)"]
     N004["branches = list_branches(...)"]
     N005["rows = []"]
-    N006["for branch, sha in branches:     if branch == default_branch:         continue     last_commit = get_last_commit_date(repo, sha, runner=runner)     age_seconds = int((now_utc - last_commit).total_seconds())     if age_seconds <= min_age_days * SECONDS_PER_DAY:         continue     has_open_pr = count_open_prs_for_head(repo, branch, runner=runner) > 0     if not is_candidate(branch=branch, default_branch=default_branch, last_commit_utc=last_commit, now_utc=now_utc, min_age_days=min_age_days, has_open_pr=has_open_pr):         continue     age_days = age_seconds // SECONDS_PER_DAY     rows.append(format_summary_row(branch, last_commit, age_days, sha))"]
+    N006["for branch, sha in branches:     if branch == default_branch:         continue     last_commit = get_last_commit_date(repo, sha)     age_seconds = int((now_utc - last_commit).total_seconds())     if age_seconds <= min_age_days * SECONDS_PER_DAY:         continue     has_open_pr = count_open_prs_for_head(repo, branch) > 0     if not is_candidate(branch=branch, default_branch=default_branch, last_commit_utc=last_commit, now_utc=now_utc, min_age_days=min_age_days, has_open_pr=has_open_pr):         continue     age_days = age_seconds // SECONDS_PER_DAY     rows.append(format_summary_row(branch, last_commit, age_days, sha))"]
     N007["summary_lines = _survey_header(...)"]
     N008["comment_lines = _comment_header(...)"]
     N009["if rows"]
@@ -362,15 +383,6 @@ flowchart TD
     N001 -->|"start"| N002
 ```
 
-## _run(...)
-
-```mermaid
-flowchart TD
-    N001["_run(...)"]
-    N002["return runner(cmd, capture_output=True, text=True, timeout=30, check=True)"]
-    N001 -->|"start"| N002
-```
-
 ## _parse_github_datetime(...)
 
 ```mermaid
@@ -454,7 +466,7 @@ flowchart TD
     N022["args = parse_args(...)"]
     N023["try"]
     N024["return args.func(args)"]
-    N025["except (subprocess.CalledProcessError, ValueError)"]
+    N025["except (GitHubApiError, ValueError)"]
     N026["print(...)"]
     N027["return 1"]
     N001 -->|"start"| N002

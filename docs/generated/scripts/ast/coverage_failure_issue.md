@@ -51,33 +51,22 @@ flowchart TD
     N001 -->|"start"| N002
 ```
 
-## _run_gh(...)
-
-```mermaid
-flowchart TD
-    N001["_run_gh(...)"]
-    N002["kwargs = {'<str>': True, '<str>': True, '<str>': 30, '<str>': True}"]
-    N003["if body is not None"]
-    N004["cmd = [*cmd, '<str>', body]"]
-    N005["return runner(cmd, **kwargs)"]
-    N001 -->|"start"| N002
-    N002 --> N003
-    N003 -->|"true"| N004
-    N004 --> N005
-    N003 -->|"false"| N005
-```
-
 ## post_failure_comment(...)
 
 ```mermaid
 flowchart TD
     N001["post_failure_comment(...)"]
-    N002["_run_gh(...)"]
-    N003["print(...)"]
-    N004["return '<str>'"]
+    N002["if token is None"]
+    N003["token = get(...)"]
+    N004["rest_json(...)"]
+    N005["print(...)"]
+    N006["return '<str>'"]
     N001 -->|"start"| N002
-    N002 --> N003
+    N002 -->|"true"| N003
     N003 --> N004
+    N002 -->|"false"| N004
+    N004 --> N005
+    N005 --> N006
 ```
 
 ## main(...)
@@ -93,7 +82,7 @@ flowchart TD
     N007["try"]
     N008["context = context_from_env(...)"]
     N009["post_failure_comment(...)"]
-    N010["except (RuntimeError, subprocess.CalledProcessError)"]
+    N010["except (RuntimeError, GitHubApiError, urllib.error.URLError, OSError)"]
     N011["print(...)"]
     N012["return 1"]
     N013["return 0"]

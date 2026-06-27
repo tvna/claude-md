@@ -67,18 +67,26 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["fetch_latest_uv_release(...)"]
-    N002["try"]
-    N003["result = run(...)"]
-    N004["except (subprocess.SubprocessError, FileNotFoundError, OSError)"]
-    N005["return None"]
-    N006["tag = strip(...)"]
-    N007["return tag or None"]
+    N002["from _github_api import GitHubApiError, rest_json"]
+    N003["token = get(...)"]
+    N004["try"]
+    N005["data = rest_json(...)"]
+    N006["except (GitHubApiError, urllib.error.URLError, OSError, ValueError)"]
+    N007["return None"]
+    N008["if not isinstance(data, dict)"]
+    N009["return None"]
+    N010["tag = strip(...)"]
+    N011["return tag or None"]
     N001 -->|"start"| N002
-    N002 -->|"try"| N003
-    N002 -->|"raises"| N004
-    N004 --> N005
-    N003 --> N006
+    N002 --> N003
+    N003 --> N004
+    N004 -->|"try"| N005
+    N004 -->|"raises"| N006
     N006 --> N007
+    N005 --> N008
+    N008 -->|"true"| N009
+    N008 -->|"false"| N010
+    N010 --> N011
 ```
 
 ## _iter_files(...)
