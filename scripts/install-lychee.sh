@@ -31,6 +31,8 @@ fi
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=scripts/_session_path.sh
 . "${SCRIPT_DIR}/_session_path.sh"
+# shellcheck source=scripts/_retry.sh
+. "${SCRIPT_DIR}/_retry.sh"
 
 # Map this platform to the nix system double that flake.nix's lycheeNative block
 # enumerates. An unsupported arch is a non-fatal skip: the binary is an
@@ -82,7 +84,7 @@ tarball="${tmpdir}/${asset}"
 url="https://github.com/lycheeverse/lychee/releases/download/lychee-v${version}/${asset}"
 
 echo "install-lychee: downloading pinned ${asset} v${version} ..." >&2
-curl -fsSL "${url}" -o "${tarball}"
+retry_download "${url}" "${tarball}" "lychee" "scripts/install-lychee.sh" || exit 0
 echo "${sha}  ${tarball}" | sha256sum -c - >&2
 
 # lychee's tarball unpacks to ``lychee-<target>/lychee`` (a nested dir), so

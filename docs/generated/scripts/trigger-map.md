@@ -19,6 +19,7 @@ Detection is string-match based:
 | `auto_retro.py` | workflow | `post-merge.yml (open-retro)` |
 | `auto_retro.py` | workflow | `post-merge.yml (triage-report)` |
 | `auto_retro.py` | workflow | `verify-pr.yml (portable-pr-policy)` |
+| `auto_tag_version.py` | workflow | `post-merge.yml (auto-tag-version)` |
 | `backup_archive.py` | workflow | `backup-non-ascii-originals.yml (backup)` |
 | `block_sensitive_reads.py` | agent-hook | `claude:PreToolUse` |
 | `block_sensitive_reads.py` | agent-hook | `codex:PreToolUse` |
@@ -52,6 +53,8 @@ Detection is string-match based:
 | `doc_graph_viz.py` | workflow | `post-merge.yml (verify-docs-drift)` |
 | `flake_pin.py` | workflow | `weekly-maintenance.yml (flake-pin-refresh)` |
 | `flake_pin_latest.py` | workflow | `weekly-maintenance.yml (flake-pin-refresh)` |
+| `gate_agents_skills_edit.py` | agent-hook | `claude:PreToolUse` |
+| `gate_agents_skills_edit.py` | agent-hook | `codex:PreToolUse` |
 | `gate_cache_regime_advisor.py` | agent-hook | `claude:Stop` |
 | `gate_decision_handoff_askuserquestion.py` | agent-hook | `claude:Stop` |
 | `gate_doc_graph_pr.py` | workflow | `validate-doc-graph.yml (validate)` |
@@ -181,6 +184,7 @@ Detection is string-match based:
 | `scan_apm_ascii.py` | workflow | `verify-pr.yml (portable-pr-policy)` |
 | `scan_apm_lock_drift.py` | workflow | `verify-pr.yml (portable-pr-policy)` |
 | `scan_apm_portability.py` | workflow | `verify-pr.yml (portable-pr-policy)` |
+| `scan_commit_type_label_drift.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
 | `scan_compile_from_source.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
 | `scan_design_philosophy_drift.py` | workflow | `verify-pr.yml (portable-pr-policy)` |
 | `scan_design_philosophy_drift.py` | workflow | `verify-pr.yml (verify-design-philosophy)` |
@@ -194,6 +198,7 @@ Detection is string-match based:
 | `scan_harness_doc_coverage.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
 | `scan_hook_coverage_drift.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
 | `scan_input_contract_drift.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
+| `scan_install_curl_retry_drift.py` | pre-commit | `scan-install-curl-retry-drift` |
 | `scan_issue_anchor_drift.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
 | `scan_maintainability_metrics.py` | pre-commit | `module-size` |
 | `scan_maintainability_metrics.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
@@ -237,6 +242,8 @@ Detection is string-match based:
 | `security_drift_report.py` | workflow | `weekly-maintenance.yml (security-control-drift)` |
 | `session_resource_report.py` | agent-hook | `claude:PostToolUse` |
 | `session_resource_report.py` | agent-hook | `codex:PostToolUse` |
+| `session_set_origin_head.py` | agent-hook | `claude:SessionStart` |
+| `session_set_origin_head.py` | agent-hook | `codex:SessionStart` |
 | `skill_quality_gate.py` | pre-commit | `skill-quality-gate` |
 | `skill_quality_gate.py` | workflow | `skill-quality.yml (skill-quality)` |
 | `stop_new_session_handoff_prompt.py` | agent-hook | `claude:Stop` |
@@ -262,6 +269,7 @@ Detection is string-match based:
 | `verify_ruleset_sync.py` | workflow | `verify-pr.yml (verify-ruleset-sync)` |
 | `verify_security_control_floor.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
 | `verify_shard_coverage.py` | workflow | `verify-agents.yml (lint-scripts-pytest-gate)` |
+| `verify_source_version_bump.py` | workflow | `verify-pr.yml (portable-pr-policy)` |
 | `verify_test_shard_markers.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
 | `verify_text_delta_section.py` | workflow | `verify-pr.yml (portable-pr-policy)` |
 | `workflow_diagram.py` | workflow | `post-merge.yml (decision-tree)` |
@@ -269,6 +277,6 @@ Detection is string-match based:
 
 ## Unreferenced scripts (dead script candidates)
 
-41 script(s) are referenced by no scanned launch source (see the detection caveats above before treating one as dead):
+42 script(s) are referenced by no scanned launch source (see the detection caveats above before treating one as dead):
 
-`_allowlist.py`, `_auto_retro_parse.py`, `_auto_retro_render.py`, `_auto_retro_triage.py`, `_ci_watch.py`, `_git.py`, `_github_api.py`, `_github_tool_names.py`, `_hook_runtime.py`, `_pr_commit_batch.py`, `_pr_merge.py`, `_ref_classifier.py`, `_retro_labels.py`, `_secret_patterns.py`, `_security_drift_families.py`, `_security_drift_issues.py`, `_session_branches.py`, `_trusted_bots.py`, `backup_non_ascii.py`, `ccusage_pin.py`, `compare_cache_regimes.py`, `doc_graph.py`, `generate_devcontainer_arch_overlays.py`, `github_api.py`, `measure_prefix_tokens.py`, `mint_github_app_token.py`, `np_strategy_tracking.py`, `pr_body_builder.py`, `preflight_all.py`, `preflight_cache.py`, `preflight_merge_index_budget.py`, `preflight_pr_body.py`, `preflight_push_prek.py`, `preflight_replacement_pr.py`, `preflight_steps.py`, `refresh_pr_branch.py`, `sanitize_history.py`, `scan_area_path_coverage.py`, `session_cost_structure.py`, `uv_download_checksum.py`, `waza_pin.py`
+`_allowlist.py`, `_apm_managed_paths.py`, `_auto_retro_parse.py`, `_auto_retro_render.py`, `_auto_retro_triage.py`, `_ci_watch.py`, `_git.py`, `_github_api.py`, `_github_tool_names.py`, `_hook_runtime.py`, `_pr_commit_batch.py`, `_pr_merge.py`, `_ref_classifier.py`, `_retro_labels.py`, `_secret_patterns.py`, `_security_drift_families.py`, `_security_drift_issues.py`, `_session_branches.py`, `_trusted_bots.py`, `backup_non_ascii.py`, `ccusage_pin.py`, `compare_cache_regimes.py`, `doc_graph.py`, `generate_devcontainer_arch_overlays.py`, `github_api.py`, `measure_prefix_tokens.py`, `mint_github_app_token.py`, `np_strategy_tracking.py`, `pr_body_builder.py`, `preflight_all.py`, `preflight_cache.py`, `preflight_merge_index_budget.py`, `preflight_pr_body.py`, `preflight_push_prek.py`, `preflight_replacement_pr.py`, `preflight_steps.py`, `refresh_pr_branch.py`, `sanitize_history.py`, `scan_area_path_coverage.py`, `session_cost_structure.py`, `uv_download_checksum.py`, `waza_pin.py`

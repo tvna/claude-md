@@ -37,6 +37,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 # shellcheck source=scripts/_session_path.sh
 . "${SCRIPT_DIR}/_session_path.sh"
+# shellcheck source=scripts/_retry.sh
+. "${SCRIPT_DIR}/_retry.sh"
 
 # Pinned bun release. Keep BUN_VERSION and the per-arch SHA256 in lockstep.
 BUN_VERSION="1.3.11"
@@ -102,7 +104,7 @@ download="${tmpdir}/${asset}"
 url="https://github.com/oven-sh/bun/releases/download/bun-v${BUN_VERSION}/${asset}"
 
 echo "install-bun: downloading pinned ${asset} v${BUN_VERSION} ..." >&2
-curl -fsSL "${url}" -o "${download}"
+retry_download "${url}" "${download}" "bun" "scripts/install-bun.sh" || exit 0
 echo "${bun_sha}  ${download}" | sha256sum -c - >&2
 
 unzip -q -o "${download}" -d "${tmpdir}"

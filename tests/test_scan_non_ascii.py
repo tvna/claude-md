@@ -641,14 +641,14 @@ class TestNoSelfClearingReview:
     depth, CLAUDE.md section 4). The block is one-directional; lifting a stale or
     false-positive review is a deliberate maintainer action in the GitHub UI, and
     false positives are prevented at the source by the trusted-bot exemption
-    (#1732). See docs/prd/non-ascii-defense.md "Self-clearing prohibition"."""
+    (#1732). See docs/runbooks/non-ascii-defense.md "Self-clearing prohibition"."""
 
     def test_module_has_no_review_dismissal_or_approve(self) -> None:
         source = Path(san.__file__).read_text(encoding="utf-8")
         assert "/dismissals" not in source, (
             "scan_non_ascii.py must not call the REST review-dismissal endpoint "
             "(/reviews/{id}/dismissals): self-clearing the triage's own block is "
-            "prohibited. See docs/prd/non-ascii-defense.md (#1736)."
+            "prohibited. See docs/runbooks/non-ascii-defense.md (#1736)."
         )
         # GraphQL is a second dismissal surface: gh_api("POST", "graphql", ...)
         # with a `dismissPullRequestReview` mutation carries neither token above,
@@ -656,12 +656,12 @@ class TestNoSelfClearingReview:
         assert "dismissPullRequestReview" not in source, (
             "scan_non_ascii.py must not call the GraphQL dismissPullRequestReview "
             "mutation: self-clearing the triage's own block is prohibited via any "
-            "API surface. See docs/prd/non-ascii-defense.md (#1736)."
+            "API surface. See docs/runbooks/non-ascii-defense.md (#1736)."
         )
         assert "APPROVE" not in source, (
             "scan_non_ascii.py must not submit an APPROVE review (REST or the "
             "GraphQL addPullRequestReview event): self-clearing the triage's own "
-            "block is prohibited. See docs/prd/non-ascii-defense.md (#1736)."
+            "block is prohibited. See docs/runbooks/non-ascii-defense.md (#1736)."
         )
 
 

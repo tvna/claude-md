@@ -411,6 +411,14 @@ STEPS: tuple[Step, ...] = (
         argv=("python3", "scripts/scan_session_path_drift.py", "verify"),
     ),
     Step(
+        # Refs #2081. Fails when a type:* label in .github/label-policy.toml
+        # has a stem that is not a commit type in .github/title-policy.toml,
+        # so the two partial projections of the commit-type concept cannot
+        # drift. type:tracking is exempt via a declared commit_type = false.
+        name="scan_commit_type_label_drift",
+        argv=("python3", "scripts/scan_commit_type_label_drift.py", "verify"),
+    ),
+    Step(
         # Refs #1099. Runs waza spec-compliance over every skill under
         # .agents/skills. spec failure = fail, token budget = warning only.
         # Needs the pinned waza binary (scripts/install_waza.sh); soft so a
@@ -543,6 +551,23 @@ STEPS: tuple[Step, ...] = (
         ),
     ),
     Step(
+        # Refs #89. Bidirectional drift gate: the universal text changes iff
+        # apm.yml version bumps. Pre-push cannot see PR labels (they are
+        # repository state, not git-tracked), so --labels is omitted and
+        # PR_LABELS is unset locally; the gate then treats labels=None and
+        # skips only the label-match while keeping the text-vs-version iff and
+        # the clean single-component bump check. CI's verify-pr.yml step adds
+        # PR_LABELS so the label-match runs there. Base-ref shape mirrors CI.
+        name="verify_source_version_bump",
+        argv=(
+            "python3",
+            "scripts/verify_source_version_bump.py",
+            "verify",
+            "--base-ref",
+            "origin/main",
+        ),
+    ),
+    Step(
         name="verify_ruleset_sync",
         argv=(
             "python3",
@@ -587,8 +612,9 @@ STEPS: tuple[Step, ...] = (
     ),
     Step(
         # Refs #952/#1800. Per-file 90 % coverage floor for changed
-        # scripts/*.py. Runs ``pytest --cov --cov-report=json`` only when
-        # coverage.json is absent; reuses a pre-existing report otherwise.
+        # scripts/*.py. Runs ``pytest --cov --cov-report=json`` when
+        # coverage.json is absent OR stale (older than a scripts/** or
+        # tests/** source file, Refs #2075); reuses a fresh report otherwise.
         # ``heavy=True`` so it runs in the skip-cached heavy phase after all
         # cheap gates pass. CI equivalent: verify-agents.yml ``coverage`` job
         # (``Per-file coverage floor`` required status check).

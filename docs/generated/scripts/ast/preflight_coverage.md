@@ -19,31 +19,82 @@ flowchart TD
     N003 -->|"false"| N006
 ```
 
+## newest_source_mtime(...)
+
+```mermaid
+flowchart TD
+    N001["newest_source_mtime(...)"]
+    N002["newest = None"]
+    N003["for sub in ('<str>', '<str>'):     base = repo / sub     if not base.is_dir():         continue     for path in base.rglob('<str>'):         try:             mtime = path.stat().st_mtime         except OSError:             continue         if newest is None or mtime > newest:             newest = mtime"]
+    N004["return newest"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 --> N004
+```
+
+## coverage_is_stale(...)
+
+```mermaid
+flowchart TD
+    N001["coverage_is_stale(...)"]
+    N002["try"]
+    N003["cov_mtime = coverage_path.stat().st_mtime"]
+    N004["except OSError"]
+    N005["return True"]
+    N006["newest = newest_source_mtime(...)"]
+    N007["if newest is None"]
+    N008["return False"]
+    N009["return cov_mtime <= newest"]
+    N001 -->|"start"| N002
+    N002 -->|"try"| N003
+    N002 -->|"raises"| N004
+    N004 --> N005
+    N003 --> N006
+    N006 --> N007
+    N007 -->|"true"| N008
+    N007 -->|"false"| N009
+```
+
 ## ensure_coverage_json(...)
 
 ```mermaid
 flowchart TD
     N001["ensure_coverage_json(...)"]
     N002["coverage_path = repo / '<str>'"]
-    N003["if coverage_path.exists()"]
-    N004["return coverage_path"]
-    N005["uv = which(...)"]
-    N006["if uv is None"]
-    N007["raise RuntimeError('<str>')"]
-    N008["completed = run(...)"]
-    N009["if not coverage_path.exists()"]
-    N010["raise RuntimeError(f'<str>{completed.returncode}<str>')"]
-    N011["return coverage_path"]
+    N003["stale_mtime = None"]
+    N004["if coverage_path.exists()"]
+    N005["if not coverage_is_stale(coverage_path, repo)"]
+    N006["return coverage_path"]
+    N007["print(...)"]
+    N008["with contextlib.suppress(OSError):     stale_mtime = coverage_path.stat().st_mtime"]
+    N009["with contextlib.suppress(OSError):     coverage_path.unlink()"]
+    N010["uv = which(...)"]
+    N011["if uv is None"]
+    N012["raise RuntimeError('<str>')"]
+    N013["completed = run(...)"]
+    N014["if not coverage_path.exists()"]
+    N015["raise RuntimeError(f'<str>{completed.returncode}<str>')"]
+    N016["if stale_mtime is not None and coverage_path.stat().st_mtime == stale_mtime"]
+    N017["raise RuntimeError(f'<str>{completed.returncode}<str>')"]
+    N018["return coverage_path"]
     N001 -->|"start"| N002
     N002 --> N003
-    N003 -->|"true"| N004
-    N003 -->|"false"| N005
-    N005 --> N006
-    N006 -->|"true"| N007
-    N006 -->|"false"| N008
+    N003 --> N004
+    N004 -->|"true"| N005
+    N005 -->|"true"| N006
+    N005 -->|"false"| N007
+    N007 --> N008
     N008 --> N009
-    N009 -->|"true"| N010
-    N009 -->|"false"| N011
+    N009 --> N010
+    N004 -->|"false"| N010
+    N010 --> N011
+    N011 -->|"true"| N012
+    N011 -->|"false"| N013
+    N013 --> N014
+    N014 -->|"true"| N015
+    N014 -->|"false"| N016
+    N016 -->|"true"| N017
+    N016 -->|"false"| N018
 ```
 
 ## parse_coverage_json(...)

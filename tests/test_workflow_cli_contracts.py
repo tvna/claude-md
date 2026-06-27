@@ -33,6 +33,7 @@ from typing import Any, NamedTuple
 import analyze_ci_timings
 import attack_review_reminder
 import auto_retro
+import auto_tag_version
 import backup_archive
 import body_policy
 import bot_pr_automerge
@@ -72,6 +73,7 @@ import scan_allowlist_rationale
 import scan_apm_ascii
 import scan_apm_lock_drift
 import scan_apm_portability
+import scan_commit_type_label_drift
 import scan_compile_from_source
 import scan_design_philosophy_drift
 import scan_devcontainer_tool_drift
@@ -126,6 +128,7 @@ import verify_required_check_contexts
 import verify_ruleset_sync
 import verify_security_control_floor
 import verify_shard_coverage
+import verify_source_version_bump
 import verify_test_shard_markers
 import verify_text_delta_section
 import workflow_diagram
@@ -230,6 +233,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("scan_design_philosophy_drift.py", "verify-coupling"): "test_scan_design_philosophy_drift_verify_coupling_matches_workflow_args",
     ("scan_apm_lock_drift.py", "verify"): "test_scan_apm_lock_drift_verify_matches_workflow_args",
     ("scan_compile_from_source.py", "verify"): "test_scan_compile_from_source_verify_matches_workflow_args",
+    ("scan_commit_type_label_drift.py", "verify"): "test_scan_commit_type_label_drift_verify_matches_workflow_args",
     ("scan_devcontainer_tool_drift.py", "verify"): "test_scan_devcontainer_tool_drift_verify_matches_workflow_args",
     ("scan_doc_workflow_refs.py", "verify"): "test_scan_doc_workflow_refs_verify_matches_workflow_args",
     ("scan_docs_inventory.py", "verify"): "test_scan_docs_inventory_verify_matches_workflow_args",
@@ -283,6 +287,8 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("verify_readme_translation.py", "verify"): "test_verify_readme_translation_matches_workflow_args",
     ("verify_text_delta_section.py", "verify"): "test_verify_text_delta_section_matches_workflow_args",
     ("verify_instruction_text_growth.py", "verify"): "test_verify_instruction_text_growth_matches_workflow_args",
+    ("verify_source_version_bump.py", "verify"): "test_verify_source_version_bump_matches_workflow_args",
+    ("auto_tag_version.py", "run"): "test_auto_tag_version_run_matches_workflow_args",
     ("verify_required_check_contexts.py", "verify"): "test_verify_required_check_contexts_matches_workflow_args",
     ("verify_ruleset_sync.py", "verify"): "test_verify_ruleset_sync_matches_workflow_args",
     ("verify_security_control_floor.py", None): "test_verify_security_control_floor_matches_workflow_args",
@@ -1471,6 +1477,64 @@ def test_verify_instruction_text_growth_matches_workflow_args(
     ) == 0
 
 
+def test_verify_source_version_bump_matches_workflow_args(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Mirror the env+argv shape used by verify-pr.yml.
+
+    The workflow shells to
+    ``python3 scripts/verify_source_version_bump.py verify
+    --base-ref "$BASE_REF"`` with ``PR_LABELS`` in the step env. Stub the
+    changed-files lookup and the apm.yml version reads so the test stays
+    hermetic across CI checkout depths (a real ``git diff origin/main..HEAD``
+    would fail with exit 128 on a shallow checkout). A universal-text change,
+    a minor bump, and a matching ``semver:minor`` label must pass.
+    """
+    monkeypatch.setattr(
+        verify_source_version_bump,
+        "changed_files",
+        lambda base, head="HEAD", **kwargs: frozenset({"CLAUDE.md"}),
+    )
+    versions = iter([(1, 0, 0), (1, 1, 0)])
+    monkeypatch.setattr(
+        verify_source_version_bump,
+        "read_version_at",
+        lambda ref, **kwargs: next(versions),
+    )
+    monkeypatch.setenv("PR_LABELS", "semver:minor")
+    assert verify_source_version_bump.main(
+        ["verify", "--base-ref", "origin/main"]
+    ) == 0
+
+
+def test_auto_tag_version_run_matches_workflow_args(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Mirror the env+argv shape used by post-merge.yml.
+
+    The workflow shells to ``python3 scripts/auto_tag_version.py run`` with
+    ``MERGE_SHA`` in the step env. Stub the apm.yml version reads and the tag
+    git boundary so the test is hermetic. A version bump across the merge
+    commit and its first parent must create and push the v{version} tag.
+    """
+    monkeypatch.setenv("MERGE_SHA", "deadbeef")
+    versions = {"deadbeef": (1, 1, 0), "deadbeef^": (1, 0, 0)}
+    monkeypatch.setattr(
+        auto_tag_version,
+        "read_version_at",
+        lambda ref, **kwargs: versions[ref],
+    )
+    monkeypatch.setattr(auto_tag_version, "tag_exists", lambda *a, **k: False)
+    pushed: list[tuple[Any, ...]] = []
+    monkeypatch.setattr(
+        auto_tag_version,
+        "create_and_push_tag",
+        lambda *a, **k: pushed.append(a),
+    )
+    assert auto_tag_version.main(["run"]) == 0
+    assert pushed == [("v1.1.0", "deadbeef", "origin")]
+
+
 def test_scan_design_philosophy_drift_verify_matches_workflow_paths(
     tmp_path: Path,
 ) -> None:
@@ -1661,6 +1725,12 @@ def test_scan_compile_from_source_verify_matches_workflow_args() -> None:
     """Mirrors the ``Verify no tool is compiled from source on the CI
     surface`` step in ``.github/workflows/verify-agents.yml``."""
     assert scan_compile_from_source.main(["verify"]) == 0
+
+
+def test_scan_commit_type_label_drift_verify_matches_workflow_args() -> None:
+    """Mirrors the ``Verify type:* labels match title-policy commit types``
+    step in ``.github/workflows/verify-agents.yml`` (issue #2081)."""
+    assert scan_commit_type_label_drift.main(["verify"]) == 0
 
 
 def test_scan_devcontainer_tool_drift_verify_matches_workflow_args() -> None:
@@ -2151,7 +2221,7 @@ def test_publish_instruction_release_publish_matches_workflow_args(
         [
             "publish",
             "--tag",
-            "instructions-v1.0.0",
+            "v1.0.0",
             "--asset",
             "CLAUDE.md",
             "--asset",

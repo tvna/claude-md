@@ -70,6 +70,27 @@ def _stale_repo(tmp_path: Path) -> tuple[Path, str]:
     return repo, main_sha
 
 
+def _ffable_stale_repo(tmp_path: Path) -> tuple[Path, str]:
+    """Return (repo, main_sha) for a branch cut from an OLD main with NO local work.
+
+    HEAD is an ancestor of the advanced main tip, so the branch is a pure
+    fast-forward to main: the freshly-cut-branch-before-first-commit shape that
+    the session-start auto-update targets. ``main_sha`` is the advanced tip.
+    """
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git(repo, "init", "-b", "main")
+    _git(repo, "config", "user.email", "test@example.com")
+    _git(repo, "config", "user.name", "Test User")
+    _write_commit(repo, "base.txt", "base-1\n")
+    _git(repo, "switch", "-c", "feature")  # cut feature at the old base, no work
+    _git(repo, "switch", "main")
+    _write_commit(repo, "base2.txt", "base-2\n")  # main advances
+    main_sha = _rev(repo, "main")
+    _git(repo, "switch", "feature")
+    return repo, main_sha
+
+
 def _point_module_at(
     monkeypatch: pytest.MonkeyPatch, repo: Path, stamp: Path, *, remote: bool = True
 ) -> None:
@@ -337,3 +358,97 @@ class TestSessionStart:
         monkeypatch.setattr(pmf, "fetch_and_record", _boom)
         assert gate.main(["session-start"]) == 0
         assert capsys.readouterr().out == ""
+
+    def test_auto_updates_ffable_stale_base(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """Clean + fast-forwardable stale base is auto-updated, not just warned about."""
+        repo, main_sha = _ffable_stale_repo(tmp_path)
+        stamp = tmp_path / "STAMP"
+        _point_module_at(monkeypatch, repo, stamp)
+        pmf.write_stamp(main_sha, path=stamp)
+        # No live remote in the tiny repo: fetch_and_record just records the SHA.
+        monkeypatch.setattr(pmf, "fetch_and_record", lambda **k: pmf.write_stamp(main_sha, path=stamp))
+        assert gate.base_is_stale(repo=repo, stamp_path=stamp) is True  # precondition
+
+        assert gate.main(["session-start"]) == 0
+
+        out = capsys.readouterr().out
+        assert "AUTO-UPDATED" in out
+        # The branch now contains the recorded base -> no longer stale.
+        assert gate.base_is_stale(repo=repo, stamp_path=stamp) is False
+
+    def test_warns_when_not_ffable(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """A diverged (non-fast-forwardable) stale base falls back to the warning."""
+        repo, main_sha = _stale_repo(tmp_path)  # feature has its own commit -> diverged
+        stamp = tmp_path / "STAMP"
+        _point_module_at(monkeypatch, repo, stamp)
+        monkeypatch.setattr(pmf, "fetch_and_record", lambda **k: pmf.write_stamp(main_sha, path=stamp))
+
+        assert gate.main(["session-start"]) == 0
+
+        out = capsys.readouterr().out
+        assert "STALE BRANCH BASE" in out
+        assert "AUTO-UPDATED" not in out
+        # Base is untouched (still stale): the diverged branch was left for the operator.
+        assert gate.base_is_stale(repo=repo, stamp_path=stamp) is True
+
+
+    def test_no_auto_update_on_detached_head(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """A detached HEAD (no branch) must warn, not silently fast-forward HEAD."""
+        repo, main_sha = _ffable_stale_repo(tmp_path)
+        _git(repo, "checkout", "--detach")  # detach at the feature tip
+        before = _rev(repo, "HEAD")
+        stamp = tmp_path / "STAMP"
+        _point_module_at(monkeypatch, repo, stamp)
+        pmf.write_stamp(main_sha, path=stamp)
+        monkeypatch.setattr(pmf, "fetch_and_record", lambda **k: pmf.write_stamp(main_sha, path=stamp))
+
+        assert gate.main(["session-start"]) == 0
+
+        out = capsys.readouterr().out
+        assert "STALE BRANCH BASE" in out
+        assert "AUTO-UPDATED" not in out
+        assert _rev(repo, "HEAD") == before  # detached HEAD was not moved
+
+
+class TestTryAutoUpdateBase:
+    def test_updated_when_clean_and_ffable(self, tmp_path: Path) -> None:
+        repo, main_sha = _ffable_stale_repo(tmp_path)
+        assert gate._try_auto_update_base(main_sha, repo=repo) == "updated"
+        assert _rev(repo, "HEAD") == main_sha
+
+    def test_skipped_when_not_ffable(self, tmp_path: Path) -> None:
+        repo, main_sha = _stale_repo(tmp_path)  # diverged
+        before = _rev(repo, "HEAD")
+        assert gate._try_auto_update_base(main_sha, repo=repo) == "skipped"
+        assert _rev(repo, "HEAD") == before  # untouched
+
+    def test_skipped_when_tracked_change_present(self, tmp_path: Path) -> None:
+        # A tracked, uncommitted change makes the tree dirty -> skip, so the
+        # auto fast-forward never moves HEAD over local work. base.txt is
+        # tracked (committed before feature was cut). Refs #2093 item 2.
+        repo, main_sha = _ffable_stale_repo(tmp_path)
+        (repo / "base.txt").write_text("locally edited\n", encoding="utf-8")
+        before = _rev(repo, "HEAD")
+        assert gate._try_auto_update_base(main_sha, repo=repo) == "skipped"
+        assert _rev(repo, "HEAD") == before  # untouched
+
+    def test_updated_with_untracked_files_present(self, tmp_path: Path) -> None:
+        # Untracked files do not block the fast-forward: --ff-only never touches
+        # them, so a freshly-cut branch carrying stray untracked files still
+        # updates. The cleanliness check uses --untracked-files=no. Refs #2093.
+        repo, main_sha = _ffable_stale_repo(tmp_path)
+        (repo / "scratch.txt").write_text("untracked\n", encoding="utf-8")
+        assert gate._try_auto_update_base(main_sha, repo=repo) == "updated"
+        assert _rev(repo, "HEAD") == main_sha
+        assert (repo / "scratch.txt").read_text(encoding="utf-8") == "untracked\n"
+
+    def test_skipped_on_git_error(self, tmp_path: Path) -> None:
+        repo, _ = _ffable_stale_repo(tmp_path)
+        # A non-existent target SHA makes the is-ancestor check fail -> skip.
+        assert gate._try_auto_update_base("0" * 40, repo=repo) == "skipped"

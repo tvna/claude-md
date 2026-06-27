@@ -8,7 +8,7 @@ name: Validate document dependency graph
 #
 # Companion to: scripts/gate_doc_graph_pr.py (the gate script)
 #               docs/graph/doc-dependencies.toml (the graph declaration)
-#               docs/prd/doc-dependency-graph.md (the design rationale)
+#               docs/runbooks/doc-dependency-graph.md (the design rationale)
 #
 # NOT mirrored in preflight_all.STEPS: the gate is diff-based (requires a PR
 # base-ref) and has no local working-tree equivalent. Listed in

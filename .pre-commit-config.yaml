@@ -16,6 +16,15 @@ repos:
         language: python
         additional_dependencies: ["pre-commit-hooks==5.0.0"]
         types: [text]
+        # Refs #1824 (PR #1822 retro, R1): declare the pre-commit stage so a
+        # trailing-whitespace violation surfaces at `git commit` time (via the
+        # .githooks/pre-commit -> prek hook-impl path) instead of only at push /
+        # CI. pre-push is kept so the gate also fires wherever the pre-push hook
+        # type is installed. Both stages are scoped to this hygiene hook and do
+        # not collide with the dedicated pre-push entries below
+        # (preflight-branch-base, preflight-coverage), which keep their own
+        # `stages: [pre-push]`.
+        stages: [pre-commit, pre-push]
       - id: end-of-file-fixer
         name: fix end of files
         entry: end-of-file-fixer
@@ -184,6 +193,18 @@ repos:
         language: system
         pass_filenames: false
         always_run: true
+
+      - id: scan-install-curl-retry-drift
+        name: scan install curl retry drift (scripts/scan_install_curl_retry_drift.py verify)
+        # Refs #2038: every scripts/install-*.sh must fetch its pinned release
+        # through the shared retry_download helper (scripts/_retry.sh), never a
+        # bare curl. This gate fails loud at commit time if an installer
+        # reintroduces a bare curl download, keeping the retry/fail-loud
+        # invariant from drifting. CI runs the same prek config.
+        entry: uv run python scripts/scan_install_curl_retry_drift.py verify
+        language: system
+        pass_filenames: false
+        files: ^scripts/(install-.*\.sh|_retry\.sh|scan_install_curl_retry_drift\.py)$
 
       - id: uv-mypy
         name: mypy type gate (uv run mypy scripts tests)

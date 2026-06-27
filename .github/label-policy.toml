@@ -40,6 +40,11 @@ name = "ops"
 purpose = "Workflow, bot, or maintenance state outside normal triage taxonomy."
 cardinality = "unbounded_but_each_label_requires_writer_reader_lifecycle"
 
+[[families]]
+name = "semver"
+purpose = "Declared semantic-version severity of a universal-text change; read by the source version drift gate."
+cardinality = "exactly_one_for_universal_text_prs"
+
 [[labels]]
 name = "layer:p1-goal-plan"
 family = "layer"
@@ -117,6 +122,7 @@ color = "0075ca"
 name = "type:tracking"
 family = "type"
 status = "keep"
+commit_type = false
 description = "Umbrella issue coordinating scoped child issues."
 color = "e4e669"
 
@@ -147,6 +153,27 @@ family = "severity"
 status = "keep"
 description = "Non-ASCII content boundary signal for issue, PR, or comment text."
 color = "ff7619"
+
+[[labels]]
+name = "semver:major"
+family = "semver"
+status = "add"
+description = "Universal-text change breaks backward compatibility; bumps apm.yml MAJOR."
+color = "006b75"
+
+[[labels]]
+name = "semver:minor"
+family = "semver"
+status = "add"
+description = "Universal-text change is a backward-compatible addition or clarification; bumps apm.yml MINOR."
+color = "006b75"
+
+[[labels]]
+name = "semver:patch"
+family = "semver"
+status = "add"
+description = "Universal-text change is non-normative surface only; bumps apm.yml PATCH."
+color = "006b75"
 
 [[labels]]
 name = "area:agent-instructions"
@@ -314,6 +341,7 @@ paths = [
   ".apm/**", "apm.yml", "apm.lock.yaml",
   "scripts/gen_agent_hooks.py", "scripts/backup_archive.py",
   "scripts/publish_instruction_release.py",
+  "scripts/auto_tag_version.py",
   ".github/workflows/generate-agents.yml",
   ".github/workflows/publish-instructions-release.yml",
 ]
@@ -337,7 +365,7 @@ paths = [
   "scripts/validate_json_syntax.py", "scripts/validate_falco_rules.py",
   "scripts/plan_approval_gate.py", "scripts/plan_language_context.py",
   "scripts/prompt_context7_gate.py", "scripts/pr_body_close_keyword_gate.py",
-  "scripts/issue_link.py",
+  "scripts/issue_link.py", "scripts/session_set_origin_head.py",
   "docs/runbooks/preflight.md", "docs/runbooks/replacement-pr-preflight.md",
   ".github/workflows/verify-agents.yml", ".github/workflows/verify-pr.yml",
   ".github/workflows/verify-actionlint.yml",
@@ -416,7 +444,7 @@ paths = [
   "scripts/attack_review_reminder.py", "scripts/backup_non_ascii.py",
   "scripts/owasp_asi_mapping.py", "scripts/mint_github_app_token.py",
   "scripts/sanitize_history.py",
-  "docs/prd/security-control-inventory.md", "docs/prd/non-ascii-defense.md",
+  "docs/prd/security-control-inventory.md", "docs/runbooks/non-ascii-defense.md",
   "docs/runbooks/security-control-drift-report.md",
   "docs/runbooks/attack-coverage-review-cadence.md",
   "docs/runbooks/downstream-instruction-review-checklist.md",
@@ -448,6 +476,7 @@ paths = [
   "scripts/labels_apply.py", "tests/test_labels_apply.py",
   "scripts/issue_anchors.py",
   "scripts/scan_area_path_coverage.py", "scripts/scan_harness_doc_coverage.py",
+  "scripts/scan_commit_type_label_drift.py",
   ".github/workflows/apply-labels.yml",
 ]
 

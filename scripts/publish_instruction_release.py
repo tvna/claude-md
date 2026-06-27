@@ -9,7 +9,7 @@ landing the instructions as a committed real file (no submodule, no symlink).
 Usage::
 
     python3 scripts/publish_instruction_release.py publish \\
-        --tag instructions-vX.Y.Z \\
+        --tag vX.Y.Z \\
         --asset CLAUDE.md --asset AGENTS.md --asset SHA256SUMS
 
 Environment variables:
@@ -160,7 +160,7 @@ def main(argv: list[str] | None = None) -> int:
     sub = parser.add_subparsers(dest="cmd", required=True)
 
     publish_p = sub.add_parser("publish", help="Create a release and upload instruction assets")
-    publish_p.add_argument("--tag", required=True, help="Release tag, e.g. instructions-vX.Y.Z")
+    publish_p.add_argument("--tag", required=True, help="Release tag, e.g. vX.Y.Z")
     publish_p.add_argument(
         "--asset",
         action="append",

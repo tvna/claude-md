@@ -113,25 +113,41 @@
       "rationale": "Explicit-use binary for an effectiveness-measurement phase; the deterministic gate is the pure-python scan_secrets.py (needs no binary). Shared for uniform cross-agent provisioning of devcontainer-parity tools; wired into codex+devin and gate widened to CODEX_CODE_REMOTE in #1608."
     }
   },
+  "permissions": {
+    "_comment": "Platform-neutral permission intents (RFC #2022 A-2). gen_agent_hooks.py compiles each intent's 'claude' rule strings into the .claude/settings.json permissions block; gen_agent_hooks.py --check verifies every 'realized_by' hook is wired in .codex/hooks.json and .devin/hooks.v1.json. Codex/Devin have no committed native permission file (Codex permission scope lives in an uncommitted config.toml and Codex hooks reject allow/ask), so deny intents are realized by the equivalent gate hook and Claude-only UX is declared with 'claude_only'. Do NOT hand-edit the generated permissions block. See docs/standards/agent-hooks-generation.md.",
+    "allow": [
+      {
+        "intent": "auto-approve-plan-file-writes",
+        "claude": [
+          "Edit(/tmp/claude-plans/**)",
+          "Write(/tmp/claude-plans/**)",
+          "MultiEdit(/tmp/claude-plans/**)"
+        ],
+        "claude_only": true,
+        "rationale": "Claude no-prompt UX for plan files under /tmp/claude-plans. Codex hooks reject allow decisions and this repo commits no .codex/config.toml, so no portable codex/devin target exists.",
+        "issue": "https://github.com/tvna/claude-md/issues/2022"
+      }
+    ],
+    "deny": [
+      {
+        "intent": "block-commit-signing-bypass",
+        "claude": [
+          "Bash(git -c commit.gpgsign=false:*)",
+          "Bash(git -c commit.gpgsign=0:*)",
+          "Bash(git -c commit.gpgsign=no:*)",
+          "Bash(git -c commit.gpgsign=off:*)"
+        ],
+        "realized_by": "scripts/gate_unsigned_commit_bash.py",
+        "issue": "https://github.com/tvna/claude-md/issues/2022"
+      }
+    ]
+  },
   "targets": [
     {
       "agent": "claude",
       "path": ".claude/settings.json",
       "config": {
         "$schema": "https://json.schemastore.org/claude-code-settings.json",
-        "permissions": {
-          "allow": [
-            "Edit(/tmp/claude-plans/**)",
-            "Write(/tmp/claude-plans/**)",
-            "MultiEdit(/tmp/claude-plans/**)"
-          ],
-          "deny": [
-            "Bash(git -c commit.gpgsign=false:*)",
-            "Bash(git -c commit.gpgsign=0:*)",
-            "Bash(git -c commit.gpgsign=no:*)",
-            "Bash(git -c commit.gpgsign=off:*)"
-          ]
-        },
         "hooks": {
           "SessionStart": [
             {
@@ -258,6 +274,14 @@
                 {
                   "type": "command",
                   "command": "python3 scripts/check_session_branch.py"
+                }
+              ]
+            },
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "python3 scripts/session_set_origin_head.py"
                 }
               ]
             },
@@ -514,6 +538,24 @@
                 {
                   "type": "command",
                   "command": "python3 scripts/preflight_session_branch_authz.py"
+                }
+              ]
+            },
+            {
+              "matcher": "Edit|Write|MultiEdit|NotebookEdit",
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "python3 scripts/gate_agents_skills_edit.py"
+                }
+              ]
+            },
+            {
+              "matcher": "Bash",
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "python3 scripts/gate_agents_skills_edit.py"
                 }
               ]
             },
@@ -971,6 +1013,16 @@
               "hooks": [
                 {
                   "type": "command",
+                  "command": "python3 scripts/session_set_origin_head.py",
+                  "statusMessage": "Setting origin/HEAD for diff-range tooling"
+                }
+              ]
+            },
+            {
+              "matcher": "startup|resume|clear|compact",
+              "hooks": [
+                {
+                  "type": "command",
                   "command": "python3 scripts/preflight_session_base_freshness.py session-start",
                   "statusMessage": "Checking branch base freshness"
                 }
@@ -1242,6 +1294,16 @@
                   "type": "command",
                   "command": "python3 scripts/preflight_session_branch_authz.py",
                   "statusMessage": "Checking session branch authorization before switch"
+                }
+              ]
+            },
+            {
+              "matcher": "^Bash$",
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "python3 scripts/gate_agents_skills_edit.py",
+                  "statusMessage": "Blocking writes to APM-managed skill paths"
                 }
               ]
             },

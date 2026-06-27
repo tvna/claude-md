@@ -139,7 +139,11 @@ def _build_warning(sha: str, *, force_push_blocked: bool = False) -> str:
             f"That path needs no local commit, force-push, or GPG."
         )
     else:
-        remedy = "  git fetch origin main && git rebase origin/main"
+        remedy = (
+            "  git fetch origin main && git rebase origin/main\n"
+            "If the branch is already pushed and force-push is prohibited, use "
+            "`git merge origin/main` instead of rebase."
+        )
     return (
         f"STALE BRANCH BASE: this branch does not contain origin/main as "
         f"observed at session start (SHA={sha[:12]}). Update the base BEFORE "
@@ -165,7 +169,9 @@ def _build_deny_reason(sha: str, *, force_push_blocked: bool = False) -> str:
         remedy = (
             "Rebase before committing:\n"
             "  git fetch origin main && git rebase origin/main\n\n"
-            "After the rebase HEAD contains the base and commits proceed."
+            "After the rebase HEAD contains the base and commits proceed.\n"
+            "If the branch is already pushed and force-push is prohibited, use "
+            "`git merge origin/main` instead of rebase."
         )
     return (
         f"Blocked by scripts/preflight_session_base_freshness.py: this branch "
@@ -185,8 +191,65 @@ def _emit_context(message: str) -> None:
     print(json.dumps({"hookSpecificOutput": {"additionalContext": message}}))
 
 
+def _build_updated_notice(sha: str) -> str:
+    return (
+        f"BRANCH BASE AUTO-UPDATED: this branch was behind origin/main as "
+        f"observed at session start (SHA={sha[:12]}). The base was clean and "
+        f"fast-forwardable (no local commits yet), so it was fast-forwarded to "
+        f"origin/main automatically BEFORE the first commit. This removes the "
+        f"mid-session merge the PR #2046 retrospective (#2047, repair 3) "
+        f"recorded. No action needed; implement on the fresh base."
+    )
+
+
+def _try_auto_update_base(sha: str, *, repo: Path) -> str:
+    """Fast-forward the current branch to *sha* when it is safe; return the outcome.
+
+    Returns ``"updated"`` only when the working tree has no tracked changes AND
+    ``git merge --ff-only`` succeeds (a pure fast-forward: a freshly-cut branch
+    with no local commits yet). Returns ``"skipped"`` in every other case
+    (tracked-file changes, local commits, non-fast-forwardable, or any git
+    error). This is a LOCAL fast-forward only (no push, no merge commit, no
+    conflict resolution), so it is safe regardless of the force-push ruleset and
+    cannot lose work. Fail-open per CLAUDE.md Section 4: on any error it skips
+    and the loud warning / commit-deny gate remain the backstop. Refs #2076.
+
+    Cleanliness uses ``--untracked-files=no``: untracked files do not block the
+    update because ``git merge --ff-only`` never touches them, so the intended
+    freshly-cut-branch case still fires when a stray untracked file is present
+    (the all-files check made it a no-op as soon as one untracked file existed).
+    Refs #2093 item 2.
+
+    ``git merge --ff-only`` is the single authority for the fast-forward
+    decision: by definition it advances HEAD only when HEAD is an ancestor of
+    *sha* and aborts (non-zero, no merge commit) otherwise. The previous
+    hand-rolled ``merge-base --is-ancestor`` pre-check duplicated that guarantee,
+    so it is removed; ``preflight_branch_base.check_base_freshness`` answers the
+    opposite-direction question (does HEAD contain the base) and cannot stand in
+    for the fast-forwardable check, so the dedup defers to ``--ff-only`` itself.
+    Refs #2093 item 3.
+    """
+    try:
+        status = run_git(["status", "--porcelain", "--untracked-files=no"], cwd=repo)
+        if status.returncode != 0 or status.stdout.strip():
+            return "skipped"  # tracked-file changes (or git error) -> do not touch it
+        merged = run_git(["merge", "--ff-only", sha], cwd=repo)
+        if merged.returncode != 0:
+            return "skipped"  # local commits / not fast-forwardable -> leave for the operator
+    except Exception:
+        return "skipped"
+    return "updated"
+
+
 def cmd_session_start(args: argparse.Namespace) -> int:
-    """SessionStart hook: record origin/main and warn on a stale base."""
+    """SessionStart hook: record origin/main, auto-update a stale base, else warn.
+
+    When the base is stale and a safe local fast-forward is possible (clean tree,
+    no local commits yet), the branch is fast-forwarded to origin/main so the
+    mid-session merge repair (#2047 repair 3) never happens. When that is not
+    safe, the existing loud warning is emitted and the pre-commit deny gate
+    remains the backstop. Refs #1632, #2076.
+    """
     if not _is_remote():
         return 0
     try:
@@ -203,8 +266,15 @@ def cmd_session_start(args: argparse.Namespace) -> int:
     except Exception:
         return 0
     if result.status != "pass":
+        # Only auto-update a real, named branch. On a detached HEAD the
+        # fast-forward would silently move HEAD and the "this branch" notice
+        # would be false, so fall back to the warning (matching every other
+        # detached-HEAD path in this module, which fails open). Refs #2077 review.
         branch = _current_branch(REPO_ROOT)
-        _emit_context(_build_warning(stamp.sha, force_push_blocked=_force_push_blocked(branch)))
+        if branch is not None and _try_auto_update_base(stamp.sha, repo=REPO_ROOT) == "updated":
+            _emit_context(_build_updated_notice(stamp.sha))
+        else:
+            _emit_context(_build_warning(stamp.sha, force_push_blocked=_force_push_blocked(branch)))
     return 0
 
 
@@ -255,7 +325,9 @@ def cmd_check(_args: argparse.Namespace) -> int:
     else:
         print(
             "FAIL: branch base is stale (HEAD does not contain the session-start "
-            "origin/main). Rebase: git fetch origin main && git rebase origin/main",
+            "origin/main). Rebase: git fetch origin main && git rebase origin/main. "
+            "If the branch is already pushed and force-push is prohibited, use "
+            "`git merge origin/main` instead of rebase.",
             file=sys.stderr,
         )
     return 1

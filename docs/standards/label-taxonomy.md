@@ -53,6 +53,7 @@ Every final label belongs to exactly one declared family.
 | `severity:*` | Zero or one | Human safety or content sensitivity |
 | `area:*` | One or more for active implementation | File and directory ownership or conflict domain |
 | `ops:*` | As required by deterministic workflows | Workflow, bot, or maintenance state |
+| `semver:*` | Exactly one for universal-text PRs | Declared semantic-version severity of a universal-text change |
 
 Labels outside these families are retired unless the policy file adds an
 explicit grandfathered exception with a removal deadline.
@@ -90,6 +91,12 @@ parked.
 
 No-action routes are `state:rfc`, `state:parked`, and `type:tracking`.
 Tracking issues may carry broad areas, but agents act on children.
+
+Each `type:*` label's stem must match a commit type declared in
+`.github/title-policy.toml` `[title_policy].types`; set `commit_type = false`
+on any `type:*` label that is intentionally not a commit type (currently only
+`type:tracking`). This is enforced by `scripts/scan_commit_type_label_drift.py`
+(Refs #2081).
 
 Apply `type:tracking` only when both conditions hold:
 
@@ -161,6 +168,28 @@ live per-item assignments are swept by the owner-driven prune dispatch. Source
 outages do not prove safety. See
 [`docs/runbooks/issue-triage.md`](../runbooks/issue-triage.md#threat-retired)
 for the aggregation mechanism and the cleanup procedure.
+
+## Semver Labels
+
+Semver labels are the human-declared severity of a change to the universal
+text (`.apm/instructions/master.instructions.md` and the compiled `CLAUDE.md`
+/ `AGENTS.md`). Exactly one is required on a universal-text-touching PR, and
+it must match the `apm.yml: version` bump component. The classification rule
+is the R1 decision tree in
+[`docs/prd/semantic-versioning-universal-text.md`](../prd/semantic-versioning-universal-text.md);
+enforcement is the source version drift gate
+(`scripts/verify_source_version_bump.py`, wired into
+`.github/workflows/verify-pr.yml` and mirrored in
+`scripts/preflight_all.py`).
+
+| Label | R1 class | Meaning |
+|---|---|---|
+| `semver:major` | Breaks backward compatibility | Removes, reverses, or weakens an existing rule; tightens a constraint so prior-compliant behavior is non-compliant; or breaks a stable reference (P1-P6 numbering, a keyed anchor, a ubiquitous-language term, trust precedence) |
+| `semver:minor` | Backward-compatible addition | New rule, principle, section, example, or clarification that does not retroactively invalidate prior-compliant behavior |
+| `semver:patch` | Non-normative surface | Typo, whitespace, formatting, reflow, link fix, translation, or a meaning-preserving reword |
+
+A mixed-class PR takes the highest component (MAJOR > MINOR > PATCH). These
+labels apply only to universal-text PRs; non-universal-text PRs carry none.
 
 ## Area Labels
 

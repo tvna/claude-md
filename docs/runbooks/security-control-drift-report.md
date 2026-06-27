@@ -6,7 +6,7 @@ and [`scripts/security_drift_report.py`](../../scripts/security_drift_report.py)
 Tracks [#180](https://github.com/tvna/claude-md/issues/180) under parent
 [#178](https://github.com/tvna/claude-md/issues/178) (MITRE ATT&CK coverage).
 
-## Purpose
+## Scope
 
 One scheduled report that surfaces drift across the security-control families
 already enumerated in [`docs/prd/security-control-inventory.md`](../prd/security-control-inventory.md).
@@ -43,6 +43,27 @@ The aggregator itself never auto-remediates the underlying control (labels are
 still applied only via the manual `apply-labels.yml` dispatch); only the
 `file-family-issues` step manages the per-family issue lifecycle, and the
 rolling-comment path never opens an issue.
+
+## Why
+
+This single scheduled report exists so drift across several security-control
+families is visible in one place on a fixed cadence, instead of each family's
+drift being noticed only when someone happens to run its detector. It
+deliberately reuses the existing read-only detector entry points rather than
+duplicating them, so the report adds visibility without adding a second source
+of truth to maintain. The push trigger on control-family SoT paths shortens the
+detection window from up to a week to near-immediate.
+
+## Why not
+
+This report is a visibility aggregator, not an enforcement gate and not a
+remediator. Do not rely on it to block a bad change at PR time: each family
+keeps its own authoritative gate (the `ruleset-drift` job, the PR-time
+`lint-scripts-static` OWASP check, `verify-pr.yml`), and those are where a
+violation is actually stopped. Do not expect it to fix drift either; it only
+reconciles a rolling per-family issue and updates a comment. When you need to
+apply a control (for example apply labels), use that family's manual dispatch
+(`apply-labels.yml`), not this job.
 
 ## Trigger
 
@@ -84,7 +105,12 @@ JST Monday 05:00 trigger to reduce scheduled workflow sprawl.
   marker, and either `PATCH`es the existing comment in place or `POST`s a
   new one if absent. The aggregator never opens a new issue.
 
-## Dry-run preview
+## Procedure
+
+Two operator tasks run against this report: preview the assembled table before
+it publishes, and act on a row that shows drift.
+
+### Dry-run preview
 
 1. Go to **Actions -> Weekly maintenance -> Run workflow**.
 2. Select `task=security-control-drift` and leave `security_control_dry_run` as `true` (default).
@@ -93,7 +119,7 @@ JST Monday 05:00 trigger to reduce scheduled workflow sprawl.
 4. Confirm the table rows look as expected. No comment is posted on #178
    while `dry_run=true`.
 
-## Investigating a `drift` row
+### Investigating a `drift` row
 
 | Row | Where to act |
 |---|---|
@@ -109,9 +135,53 @@ transient API error, etc.); inspect the corresponding step log on the run
 page. The aggregator deliberately keeps reporting (`exit 0`) so a single
 detector failure does not hide the status of the remaining families.
 
+## Verification
+
+Confirm the report ran and reflects current state:
+
+- The rolling comment on #178 (marked `<!-- security-control-drift-report -->`)
+  carries a recent timestamp matching the latest scheduled or push-triggered
+  run.
+- A dry-run dispatch (`task=security-control-drift`,
+  `security_control_dry_run=true`) renders the family table in the run's
+  **Summary** tab with no unexpected `error` row.
+- For a family showing a clean (`covered`) status, no stale rolling issue
+  remains open for it; the `file-family-issues` step auto-closes covered
+  families.
+
+## Pause / Resume
+
+This is a recurring weekly (plus push-triggered) automation.
+
+- **Pause.** **Actions -> Weekly maintenance -> Disable workflow** stops both
+  the scheduled run and the push-triggered run. Before pausing, note the
+  timestamp of the current rolling comment on #178 so that on resume you can
+  tell whether any run was missed.
+- **Resume.** Re-enable the workflow. The next scheduled or push-triggered run
+  rebuilds the table from live detector output and `PATCH`es the same rolling
+  comment in place, so no backfill is needed; a missed week leaves no gap beyond
+  the delayed signal.
+
 ## Rollback
 
 The aggregator is read-only and idempotent; it only `GET`s detector
 outputs and `PATCH`es / `POST`s a single comment on a tracking issue. To
 roll back, disable the workflow via **Actions -> Weekly maintenance -> Disable
 workflow**; no repository state changes need reverting.
+
+## References
+
+- [`.github/workflows/weekly-maintenance.yml`](../../.github/workflows/weekly-maintenance.yml) --
+  the `security-control-drift` job this runbook drives.
+- [`scripts/security_drift_report.py`](../../scripts/security_drift_report.py) --
+  the read-only aggregator entry point.
+- [`docs/prd/security-control-inventory.md`](../prd/security-control-inventory.md) --
+  the control-family inventory the report rolls up.
+- [`docs/runbooks/attack-coverage-review-cadence.md`](attack-coverage-review-cadence.md) --
+  the monthly structured-review channel that sits alongside this weekly
+  live-signal channel.
+- [`docs/runbooks/rulesets.md`](rulesets.md); the `rulesets` family's own drift
+  job and runbook.
+- [#180](https://github.com/tvna/claude-md/issues/180) under parent
+  [#178](https://github.com/tvna/claude-md/issues/178); MITRE ATT&CK coverage
+  tracking issues.

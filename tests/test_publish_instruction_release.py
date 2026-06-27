@@ -46,7 +46,7 @@ def test_publish_creates_release_then_uploads_each_asset(tmp_path: Path) -> None
 
     url = pir.publish(
         repo="o/r",
-        tag="instructions-v1.0.0",
+        tag="v1.0.0",
         asset_paths=[str(claude), str(sums)],
         token="t",
         apply_call=_release_apply_call(release_calls),
@@ -54,7 +54,7 @@ def test_publish_creates_release_then_uploads_each_asset(tmp_path: Path) -> None
     )
 
     assert url == "https://x/r"
-    assert release_calls[0]["payload"]["tag_name"] == "instructions-v1.0.0"
+    assert release_calls[0]["payload"]["tag_name"] == "v1.0.0"
     assert [u["name"] for u in uploads] == ["CLAUDE.md", "SHA256SUMS"]
     assert uploads[0]["content_type"] == "text/markdown"
     assert uploads[0]["content"] == b"master\n"
@@ -136,7 +136,7 @@ def test_main_publish_happy_path(monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     monkeypatch.setattr(pir, "_github_apply_call", _release_apply_call([], html_url="https://x/rel"))
     monkeypatch.setattr(pir, "_github_upload_asset", _ok_upload([]))
 
-    rc = pir.main(["publish", "--tag", "instructions-v1.0.0", "--asset", str(asset)])
+    rc = pir.main(["publish", "--tag", "v1.0.0", "--asset", str(asset)])
     assert rc == 0
     assert "https://x/rel" in capsys.readouterr().out
 
