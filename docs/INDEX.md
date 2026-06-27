@@ -143,6 +143,7 @@ naming convention and the per-30-entries year-folder cutover.
 | [retrospective-pr-257.md](archive/retrospective-pr-257.md) | Retrospective for PR #257 (workflow permissions audit, repair-free). |
 | [retrospective-pr-337.md](archive/retrospective-pr-337.md) | Retrospective for PR #337 (no-override rule, repair-free). |
 | [retrospective-pr-349.md](archive/retrospective-pr-349.md) | Retrospective for PR #349 (GitHub Advisory Database direct query, repair-free). |
+| [retrospective-pr-1822.md](archive/retrospective-pr-1822.md) | Retrospective close-out for PR #1822 / retro #1824 (ADR-0001 prek hook manager selection); true-positive triage, durable fixes R1-R3 landed in #2100. |
 
 ## next-session/; session handoff prompt templates
 
