@@ -1216,7 +1216,7 @@ def test_coverage_failure_issue_run_matches_workflow_env(
     def fake_post_failure_comment(
         context: coverage_failure_issue.CoverageFailureContext,
         *,
-        runner=coverage_failure_issue.subprocess.run,
+        token: str | None = None,
     ) -> str:
         calls.append(context)
         return "commented"

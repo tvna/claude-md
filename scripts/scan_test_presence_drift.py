@@ -132,10 +132,12 @@ GITHUB_API_SCRIPTS: frozenset[str] = frozenset(
         "check_pr_mergeability",
         "ci_budget_issue",
         "ci_early_status_probe",
+        "coverage_failure_issue",
         "dependabot_automerge",
         "gate_pr_body_retro_issue_link",
         "github_api",
         "issue_closure_fast_path",
+        "issue_link",
         "labels_apply",
         "np_strategy_tracking",
         "post_issue_comment",
@@ -149,6 +151,7 @@ GITHUB_API_SCRIPTS: frozenset[str] = frozenset(
         "ruleset_drift",
         "sanitize_history",
         "security_drift_report",
+        "uv_pin",
         "verify_ruleset_sync",
     }
 )
