@@ -51,6 +51,11 @@ class TestMatchedPrefix:
             ("././.claude/skills/x.md", ".claude/skills/"),
             ("/home/user/claude-md/.agents/skills/x.md", ".agents/skills/"),
             ("'/repo/.claude/skills/x.md'", ".claude/skills/"),
+            # the directory root itself (no trailing slash) is a managed target,
+            # so a whole-tree rm/mv is caught, not just edits within it.
+            (".agents/skills", ".agents/skills/"),
+            (".claude/skills", ".claude/skills/"),
+            ("/home/user/claude-md/.agents/skills", ".agents/skills/"),
         ],
     )
     def test_managed_paths_match(self, path: str, expected: str) -> None:
@@ -140,6 +145,13 @@ class TestDecideBashDenied:
             # mutator hidden in a shell -c script (recursed into)
             "bash -c 'cp a .agents/skills/x.md'",
             "sh -c 'echo y > .claude/skills/x.md'",
+            # combined short-flag clusters ending in c (-lc, -euc) carry a script
+            "bash -lc 'cp a .agents/skills/x.md'",
+            "sh -euc 'rm .claude/skills/x.md'",
+            # whole-tree delete/rename targets the directory root (no trailing /)
+            "rm -rf .agents/skills",
+            "mv .claude/skills /tmp/skills",
+            "rm -rf /home/user/claude-md/.agents/skills",
         ],
     )
     def test_bash_write_to_managed_path_denied(self, command: str) -> None:
@@ -169,8 +181,14 @@ class TestDecideBashAllowed:
             # redirection (regression test for the raw-scan false positive)
             "echo 'edit > .agents/skills/x.md to regenerate'",
             'git commit -m "note: writes > .claude/skills/x.md on compile"',
-            # sibling directory
+            # quote-aware segment split: a separator inside a quoted string must
+            # not start a phantom mutator segment (Codex false-positive report)
+            "git commit -m 'note ; rm .agents/skills/x.md'",
+            "echo 'x | tee .claude/skills/y'",
+            "echo 'a && cp z .agents/skills/x.md'",
+            # sibling directory (root and within)
             "cp a .agents/skillset/x.md",
+            "rm -rf .agents/skillset",
             # empty
             "",
             "   ",

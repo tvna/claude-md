@@ -114,13 +114,13 @@ _WRITE_COMMANDS: frozenset[str] = frozenset(
 # defense-in-depth limitation; the Edit/Write matcher covers the primary path.
 _SHELL_COMMANDS: frozenset[str] = frozenset({"bash", "sh", "dash", "zsh"})
 
-# Shell separators that begin a new command position. A single ``|`` preceded by
-# ``>`` is NOT a separator: ``>|`` is the noclobber-override redirection operator,
-# not a pipe, so splitting there would tear the operator off its target.
-_SEGMENT_SPLIT = re.compile(r"&&|\|\||[;\n]|(?<!>)\|")
-
 # A leading ``NAME=value`` environment assignment to skip before the command.
 _ASSIGN_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
+
+# A short-flag cluster ending in ``c`` (``-c``, ``-lc``, ``-euc``): its following
+# argument is the inline ``-c`` script. ``c`` is the last letter so the next token
+# is the value; ``--check`` (double dash) does not match.
+_DASH_C_RE = re.compile(r"^-[a-zA-Z]*c$")
 
 # A redirection-operator token: optional file-descriptor digits, one or two
 # ``>``, an optional noclobber-override ``|`` (``>|``), then an optional target.
@@ -146,9 +146,23 @@ def _normalize(path: str) -> str:
 
 
 def _match_normalized(token: str) -> str | None:
-    """Return the managed prefix an ALREADY-normalized *token* falls under, or None."""
+    """Return the managed prefix an ALREADY-normalized *token* falls under, or None.
+
+    Matches a path INSIDE a managed tree (``.agents/skills/x``, absolute
+    ``/repo/.agents/skills/x``) AND the managed directory root itself with no
+    trailing slash (``.agents/skills``, ``/repo/.agents/skills``), so a
+    whole-tree ``rm -rf .agents/skills`` / ``mv .claude/skills ...`` is caught,
+    not just edits within it. The trailing-slash prefix still guards the
+    sibling case: ``.agents/skillset`` matches neither the root nor the prefix.
+    """
     for prefix in MANAGED_PREFIXES:
-        if token.startswith(prefix) or ("/" + prefix) in token:
+        root = prefix.rstrip("/")
+        if (
+            token == root
+            or token.endswith("/" + root)
+            or token.startswith(prefix)
+            or ("/" + prefix) in token
+        ):
             return prefix
     return None
 
@@ -200,8 +214,50 @@ def _leading_command(tokens: list[str]) -> tuple[str, list[str]]:
 
 
 def _segments(command: str) -> list[str]:
-    """Split *command* into non-empty shell segments at command-position boundaries."""
-    return [seg.strip() for seg in _SEGMENT_SPLIT.split(command) if seg.strip()]
+    """Split *command* into non-empty shell segments at command-position boundaries.
+
+    Quote-aware: a separator (``;`` ``&&`` ``&`` ``||`` ``|`` newline) inside a
+    single- or double-quoted string is NOT a boundary, so a quoted snippet such
+    as ``git commit -m 'note ; rm .agents/skills/x'`` stays one segment and is
+    not mis-split into a phantom ``rm`` command (the false positive Codex
+    flagged). ``>|`` is the noclobber-override redirection operator, not a pipe,
+    so a ``|`` immediately following ``>`` does not split. Backslash escapes are
+    not modeled (rare in agent commands); shlex tokenization downstream handles
+    the surviving quotes.
+    """
+    segments: list[str] = []
+    buf: list[str] = []
+    quote: str | None = None
+    i = 0
+    n = len(command)
+    while i < n:
+        ch = command[i]
+        if quote is not None:
+            buf.append(ch)
+            if ch == quote:
+                quote = None
+            i += 1
+        elif ch in ("'", '"'):
+            quote = ch
+            buf.append(ch)
+            i += 1
+        elif ch in (";", "\n"):
+            segments.append("".join(buf))
+            buf = []
+            i += 1
+        elif ch == "&":
+            segments.append("".join(buf))
+            buf = []
+            i += 2 if command[i : i + 2] == "&&" else 1
+        elif ch == "|" and not (buf and buf[-1] == ">"):
+            segments.append("".join(buf))
+            buf = []
+            i += 2 if command[i : i + 2] == "||" else 1
+        else:
+            buf.append(ch)
+            i += 1
+    segments.append("".join(buf))
+    return [seg.strip() for seg in segments if seg.strip()]
 
 
 def _redirect_targets(tokens: list[str]) -> list[str]:
@@ -248,9 +304,15 @@ def _mutator_targets(args: list[str]) -> list[str]:
 
 
 def _dash_c_script(args: list[str]) -> str | None:
-    """Return the script string following a ``-c`` flag in *args*, or None."""
+    """Return the script string following a ``-c`` flag in *args*, or None.
+
+    Recognizes the bare ``-c`` and a combined short-flag cluster that ENDS in
+    ``c`` (``-lc``, ``-euc``, ``-xc``): in each the next argument is the inline
+    script. ``c`` must be the cluster's last letter so the following token is its
+    value; ``--check`` and other long options do not match.
+    """
     for index, arg in enumerate(args):
-        if arg == "-c" and index + 1 < len(args):
+        if _DASH_C_RE.match(arg) and index + 1 < len(args):
             return args[index + 1]
     return None
 
