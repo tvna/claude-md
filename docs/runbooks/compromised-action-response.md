@@ -190,9 +190,11 @@ The incident is contained and recovered when all of these hold:
 
 - The disabled workflow shows **Disabled** in the Actions tab, or `git log`
   shows the revert of the bad pin on `main`.
-- No suspect package version remains public:
+- No suspect package version remains public for **either** agent image: the
+  publish workflow builds both the `claude` and `codex` matrix entries, so for
+  each quarantined tag confirm both
   `docker buildx imagetools inspect ghcr.io/tvna/claude-md-devcontainer-claude:<sha>`
-  fails for each quarantined tag (or the version is marked private).
+  and `...-devcontainer-codex:<sha>` fail (or the versions are marked private).
 - The re-pin resolves and the action-pin gate is green:
   `python3 scripts/scan_workflow_action_pins.py verify`.
 - A post-recovery `Publish devcontainer images` run (via `workflow_dispatch`)
