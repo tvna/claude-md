@@ -11,6 +11,17 @@ See the `adr/` section of [`../INDEX.md`](../INDEX.md) for the lane
 description, or [`0001-hook-manager-prek.md`](0001-hook-manager-prek.md) for a
 worked example.
 
+## Authoring checklist
+
+Before submitting a new ADR, confirm each item below:
+
+- For each claim about hook or toolchain wiring (e.g. "hook X activates
+  automatically"), verify the claim against `.pre-commit-config.yaml`, the
+  relevant runbook, and the tool's documented default behaviour before writing.
+  Do not infer activation from config presence alone. (Refs #1824, PR #1822 R3:
+  ADR-0001 rationale point 5 originally implied prek activates pre-push hooks
+  automatically, when `prek install --hook-type pre-push` is still required.)
+
 ---
 
 ## Template

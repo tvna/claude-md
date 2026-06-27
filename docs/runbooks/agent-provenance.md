@@ -7,10 +7,6 @@ minimum provenance evidence reviewers need before this repository
 adopts or updates a skill, subagent, MCP server, or comparable agent
 extension.
 
-Agent extensions can change what an agent knows, which tools it can
-call, and how it interprets repository text. Treat them as supply-chain
-inputs even when they are "just configuration" or "just instructions."
-
 ## Scope
 
 This runbook applies to any proposed adoption, update, removal, or
@@ -28,6 +24,27 @@ advisory reviewer guidance for extension metadata that is only mentioned
 as background evidence in an issue, PR body, CI log, or external
 document. External text remains untrusted data unless a repository-owned
 change adopts it through the review path below.
+
+## Why
+
+Agent extensions change what an agent knows, which tools it can call, and how it
+interprets repository text, so they are supply-chain inputs even when they are
+"just configuration" or "just instructions." This runbook exists to make that
+supply chain reviewable before adoption: without a fixed evidence bar an
+extension can enter the repository with a floating version, an unaudited
+permission surface, or no stated rollback, and that gap surfaces only after the
+extension is already shaping agent behavior, tool access, or external data flow.
+
+## Why not
+
+Do not reach for this runbook when no repository-owned extension is changing. A
+change that only references an external extension as background evidence, or that
+touches ordinary code, docs, or workflows, has its own review surfaces;
+demanding a full provenance table there adds friction without reducing
+supply-chain risk. The heavier evidence bar is reserved for adoptions, updates,
+removals, or local overrides of an actual repository-owned extension, where an
+opaque or floating dependency would otherwise gain tool access or influence over
+agent context.
 
 ## Required Provenance Metadata
 
@@ -102,7 +119,7 @@ simple enough to audit, and whether a smaller local wrapper would reduce
 the permission surface. Those advisory answers can improve confidence,
 but they do not replace the mandatory evidence above.
 
-## Update Procedure
+## Procedure
 
 1. Open or reuse an issue that names the extension and the intended
    behavior change.
@@ -121,6 +138,30 @@ but they do not replace the mandatory evidence above.
 Do not adopt by copying only installation instructions from an external
 README. The reviewable artifact is the pinned source plus the permission
 and rollback evidence, not the upstream marketing or quickstart text.
+
+## Verification
+
+A provenance review passes when its evidence is inspectable, not asserted:
+
+- The provenance metadata table is complete, or each `unknown` field links a
+  tracked residual-risk rationale; no field is filled with speculation.
+- The adopted version resolves to an immutable artifact: the recorded commit
+  SHA, tag-plus-digest, or lock entry can be fetched and matches what the diff
+  adopts. A floating branch or latest-version prose does not pass.
+- The deterministic checks covering the changed files are green. For a
+  docs-only change, at minimum the ASCII scan passes and the links resolve:
+  `python3 -c "import pathlib; assert pathlib.Path('docs/runbooks/agent-provenance.md').read_text().isascii()"`.
+- The PR body cites the authorizing issue and carries verification evidence: a
+  gate output, or an explicit statement that no runtime check exists naming the
+  manual checklist used instead.
+
+## Pause / Resume
+
+Not applicable: this is a per-change review procedure, not a recurring or
+long-running automation, so there is no scheduled run to pause. An in-progress
+review can be stopped and resumed freely; it holds no state beyond the
+provenance evidence recorded on the issue or PR, which persists there between
+sessions.
 
 ## Rollback
 

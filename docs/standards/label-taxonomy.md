@@ -92,6 +92,12 @@ parked.
 No-action routes are `state:rfc`, `state:parked`, and `type:tracking`.
 Tracking issues may carry broad areas, but agents act on children.
 
+Each `type:*` label's stem must match a commit type declared in
+`.github/title-policy.toml` `[title_policy].types`; set `commit_type = false`
+on any `type:*` label that is intentionally not a commit type (currently only
+`type:tracking`). This is enforced by `scripts/scan_commit_type_label_drift.py`
+(Refs #2081).
+
 Apply `type:tracking` only when both conditions hold:
 
 1. **Sub-issue umbrella**; the issue coordinates one or more child issues
