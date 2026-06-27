@@ -50,6 +50,7 @@ import json
 import subprocess
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -596,3 +597,18 @@ class TestVerifyMode:
         monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
         assert gase.main([]) == 0
         assert _is_deny(json.loads(capsys.readouterr().out))
+
+    def test_resolve_base_precedence(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("BASE_REF", raising=False)
+        monkeypatch.delenv("GITHUB_BASE_REF", raising=False)
+        assert gase._resolve_base() == "origin/main"
+        monkeypatch.setenv("GITHUB_BASE_REF", "release")
+        assert gase._resolve_base() == "origin/release"
+        monkeypatch.setenv("BASE_REF", "deadbeef")
+        assert gase._resolve_base() == "deadbeef"
+
+    def test_changed_files_parses_runner_output(self) -> None:
+        """_changed_files splits and strips the runner's stdout (no real git)."""
+        completed = SimpleNamespace(stdout=".agents/skills/a\n\n  scripts/b.py  \n")
+        changed = gase._changed_files("origin/main", runner=lambda *a, **k: completed)
+        assert changed == frozenset({".agents/skills/a", "scripts/b.py"})
