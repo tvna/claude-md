@@ -141,10 +141,15 @@ via `scripts/agent_hooks_source.json`) in two layers:
 - **SessionStart (warn).** In a remote session, if signing is required but a live
   test-sign comes back `unsigned`, it emits a loud `additionalContext` warning so
   a cold/broken signer is fixed *before* any commit.
-- **PreToolUse `git commit` (block).** It DENIES the commit only when a live
-  test-sign has just demonstrated an `unsigned` outcome, so the block is a proven
-  true positive, not a prediction. An explicit reviewed unsigned commit can still
-  proceed with a `# unsigned-ack` marker (the same opt-in
+- **PreToolUse commit-producing command (block).** It DENIES the command only
+  when a live test-sign has just demonstrated an `unsigned` outcome, so the
+  block is a proven true positive, not a prediction. The matcher covers every
+  subcommand that mints a commit object (`commit`, `merge`, `rebase`,
+  `cherry-pick`, `revert`, `am`, `pull`), not `git commit` alone: PR #2103's
+  unsigned objects were in-session `git merge origin/main` ancestors from the
+  no-rebase base-update path, which a `commit`-only matcher missed (retro #2114
+  / #2116). An explicit reviewed unsigned commit can still proceed with a
+  `# unsigned-ack` marker (the same opt-in
   `scripts/gate_unsigned_commit_bash.py` honors).
 
 **Why a live test-sign, not a key-file check (primary-source finding).** Retro
