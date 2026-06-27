@@ -150,6 +150,7 @@ GITHUB_API_SCRIPTS: frozenset[str] = frozenset(
         "publish_instruction_release",
         "ruleset_drift",
         "sanitize_history",
+        "scan_retro_followup_drift",
         "security_drift_report",
         "uv_pin",
         "verify_ruleset_sync",

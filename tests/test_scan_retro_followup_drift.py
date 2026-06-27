@@ -5,17 +5,17 @@ The ``scripts/`` directory is added to ``sys.path`` via the
 
 Mirrors the structure of ``tests/test_auto_retro.py`` and
 ``tests/test_scan_non_ascii.py``: pure functions get table-driven tests
-and the subprocess boundary (:func:`scan_retro_followup_drift.gh_api`) is
+and the REST boundary (:func:`scan_retro_followup_drift.gh_api`) is
 monkeypatched. Refs #558.
 """
 
 from __future__ import annotations
 
-import subprocess
 from typing import Any
 
 import pytest
 import scan_retro_followup_drift as srfd
+from _github_api import GitHubApiError
 from _retro_labels import (
     ALL_RETRO_LABELS,
     RETRO_FP,
@@ -319,25 +319,16 @@ class TestIsPrPayload:
 # ---------------------------------------------------------------------------
 
 
-def _called_process_error(stderr: str, stdout: str = "") -> subprocess.CalledProcessError:
-    exc = subprocess.CalledProcessError(returncode=1, cmd=["gh"])
-    exc.stderr = stderr
-    exc.stdout = stdout
-    return exc
+def _api_error(code: int) -> GitHubApiError:
+    return GitHubApiError(code, "GET", "/repos/x/y/issues/1", "body")
 
 
 class TestIs404Error:
-    def test_http_404_stderr(self) -> None:
-        assert srfd.is_404_error(_called_process_error("HTTP 404: Not Found")) is True
-
-    def test_404_not_found_stderr(self) -> None:
-        assert srfd.is_404_error(_called_process_error("404 Not Found")) is True
-
-    def test_case_insensitive(self) -> None:
-        assert srfd.is_404_error(_called_process_error("http 404: not found")) is True
+    def test_http_404(self) -> None:
+        assert srfd.is_404_error(_api_error(404)) is True
 
     def test_other_error_returns_false(self) -> None:
-        assert srfd.is_404_error(_called_process_error("HTTP 502 Bad Gateway")) is False
+        assert srfd.is_404_error(_api_error(502)) is False
 
 
 # ---------------------------------------------------------------------------
@@ -366,7 +357,7 @@ class _FakeApi:
 
     def fetch_issue_or_pr(self, repo: str, number: int) -> dict[str, Any] | None:
         if number in self.followup_errors:
-            raise _called_process_error("HTTP 500: Server Error")
+            raise _api_error(500)
         return self.followups.get(number)
 
     def fetch_pr_merged(self, repo: str, number: int) -> bool:
@@ -643,41 +634,42 @@ class TestDecideTargetLabelUnknownAggregate:
 
 
 # ---------------------------------------------------------------------------
-# gh_api(); mock subprocess.run (lines 272-293)
+# gh_api(); mock apply_call
 # ---------------------------------------------------------------------------
 
 
 class TestGhApi:
-    def test_get_request_without_body(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        import subprocess as _subprocess
+    def test_get_request_builds_full_url(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        calls: list[dict[str, Any]] = []
 
-        fake = _subprocess.CompletedProcess(
-            args=[], returncode=0, stdout='{"items":[]}', stderr=""
-        )
-        calls: list[Any] = []
+        def fake_apply(**kwargs: Any) -> tuple[int, str]:
+            calls.append(kwargs)
+            return 200, '{"items":[]}'
 
-        def fake_run(cmd: Any, **kwargs: Any) -> Any:
-            calls.append(cmd)
-            return fake
-
-        monkeypatch.setattr(_subprocess, "run", fake_run)
+        monkeypatch.setattr(srfd, "apply_call", fake_apply)
         result = srfd.gh_api("GET", "/repos/test/test/issues/1")
         assert result == '{"items":[]}'
-        assert "--input" not in calls[0]
+        assert calls[0]["url"] == "https://api.github.com/repos/test/test/issues/1"
+        assert calls[0]["method"] == "GET"
+        assert calls[0]["payload"] is None
 
-    def test_post_request_with_json_body(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        import subprocess as _subprocess
+    def test_post_request_passes_payload(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        calls: list[dict[str, Any]] = []
 
-        fake = _subprocess.CompletedProcess(
-            args=[], returncode=0, stdout='{}', stderr=""
-        )
+        def fake_apply(**kwargs: Any) -> tuple[int, str]:
+            calls.append(kwargs)
+            return 200, "{}"
 
-        def fake_run(cmd: Any, **kwargs: Any) -> Any:
-            return fake
-
-        monkeypatch.setattr(_subprocess, "run", fake_run)
+        monkeypatch.setattr(srfd, "apply_call", fake_apply)
         result = srfd.gh_api("POST", "/path", {"labels": ["x"]})
-        assert result == '{}'
+        assert result == "{}"
+        assert calls[0]["payload"] == {"labels": ["x"]}
+
+    def test_non_2xx_raises_github_api_error(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(srfd, "apply_call", lambda **kw: (404, "not found"))
+        with pytest.raises(GitHubApiError) as excinfo:
+            srfd.gh_api("GET", "/repos/x/y/issues/1")
+        assert excinfo.value.code == 404
 
 
 # ---------------------------------------------------------------------------
@@ -709,22 +701,18 @@ class TestBoundaryFunctions:
         assert result["number"] == 42
 
     def test_fetch_issue_or_pr_returns_none_on_404(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        exc = _called_process_error("HTTP 404: Not Found")
-
         def _raise(*a: Any, **kw: Any) -> Any:
-            raise exc
+            raise _api_error(404)
 
         monkeypatch.setattr(srfd, "gh_api", _raise)
         assert srfd.fetch_issue_or_pr("owner/repo", 999) is None
 
     def test_fetch_issue_or_pr_propagates_non_404(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        exc = _called_process_error("HTTP 500: Server Error")
-
         def _raise(*a: Any, **kw: Any) -> Any:
-            raise exc
+            raise _api_error(500)
 
         monkeypatch.setattr(srfd, "gh_api", _raise)
-        with pytest.raises(subprocess.CalledProcessError):
+        with pytest.raises(GitHubApiError):
             srfd.fetch_issue_or_pr("owner/repo", 1)
 
     def test_fetch_pr_merged_returns_bool(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -778,26 +766,22 @@ class TestCmdRunMissingRepo:
 
 
 # ---------------------------------------------------------------------------
-# main(); CalledProcessError handler (lines 525-533)
+# main(); GitHubApiError handler
 # ---------------------------------------------------------------------------
 
 
 class TestMainExceptionHandlers:
-    def test_main_catches_subprocess_error_from_run(
+    def test_main_catches_github_api_error_from_run(
         self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        exc = subprocess.CalledProcessError(1, ["gh"])
-        exc.stderr = "network error"
-        exc.stdout = ""
-
         def _raise(repo: str, **kw: Any) -> int:
-            raise exc
+            raise _api_error(503)
 
         monkeypatch.setattr(srfd, "run", _raise)
         rc = srfd.main(["run", "--repo", "owner/repo"])
         assert rc == 1
         err = capsys.readouterr().err
-        assert "gh api failed" in err
+        assert "GitHub API failed" in err
 
     def test_main_catches_value_error_from_run(
         self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
