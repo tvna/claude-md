@@ -80,6 +80,8 @@ Detection is string-match based:
 | `gate_pr_body_retro_issue_link.py` | agent-hook | `codex:PreToolUse` |
 | `gate_reserved_retro_scope.py` | agent-hook | `claude:PreToolUse` |
 | `gate_reserved_retro_scope.py` | agent-hook | `codex:PreToolUse` |
+| `gate_retro_close_keyword_commit.py` | agent-hook | `claude:PreToolUse` |
+| `gate_retro_close_keyword_commit.py` | agent-hook | `codex:PreToolUse` |
 | `gate_stop_pr_review_reply.py` | agent-hook | `claude:Stop` |
 | `gate_unsigned_commit_bash.py` | agent-hook | `claude:PreToolUse` |
 | `gate_unsigned_commit_bash.py` | agent-hook | `codex:PreToolUse` |

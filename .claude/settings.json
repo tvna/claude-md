@@ -380,8 +380,18 @@
         "hooks": [
           {
             "type": "command",
-            "if": "Bash(*git commit*)",
+            "if": "Bash(*git *)",
             "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/check_commit_signing_ready.py"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "if": "Bash(*git *)",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/gate_retro_close_keyword_commit.py"
           }
         ]
       },

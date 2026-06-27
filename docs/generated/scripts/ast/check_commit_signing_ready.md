@@ -2,29 +2,31 @@
 
 This file is generated from `scripts/check_commit_signing_ready.py` by `python3 scripts/script_ast_graph.py all-doc`. Do not edit it by hand: content under `docs/generated/scripts/` is owned by the post-merge automation (refs #1540); update the source script instead.
 
-## _command_runs_git_commit(...)
+## _command_produces_commit(...)
 
 ```mermaid
 flowchart TD
-    N001["_command_runs_git_commit(...)"]
-    N002["if _GIT_COMMIT_RE.search(command)"]
-    N003["return True"]
-    N004["try"]
-    N005["tokens = split(...)"]
-    N006["except ValueError"]
-    N007["return False"]
-    N008["i = 0"]
-    N009["while i < len(tokens):     if tokens[i] != '<str>' and (not tokens[i].endswith('<str>')):         i += 1         continue     j = i + 1     while j < len(tokens):         arg = tokens[j]         if arg.startswith('<str>'):             j += 2 if arg in _GIT_VALUE_OPTS else 1             continue         if arg.rstrip('<str>') == '<str>':             return True         break     i = j + 1"]
-    N010["return False"]
+    N001["_command_produces_commit(...)"]
+    N002["try"]
+    N003["tokens = split(...)"]
+    N004["except ValueError"]
+    N005["if _NON_CREATING_RE.search(command)"]
+    N006["return False"]
+    N007["return bool(_GIT_COMMIT_PRODUCING_RE.search(command))"]
+    N008["n = len(...)"]
+    N009["i = 0"]
+    N010["while i < n:     if tokens[i].lstrip(_GROUP_PREFIX) != '<str>' and (not tokens[i].endswith('<str>')):         i += 1         continue     j = i + 1     while j < n and tokens[j].startswith('<str>'):         j += 2 if tokens[j] in _GIT_VALUE_OPTS else 1     if j < n:         sub = tokens[j].rstrip(_GROUP_SUFFIX)         if sub == '<str>':             return True         if sub in _COMMIT_PRODUCING_SUBCOMMANDS:             k = j + 1             rest: set[str] = set()             while k < n and tokens[k] not in _SHELL_OPS:                 rest.add(tokens[k].rstrip(_GROUP_SUFFIX))                 k += 1             if not _NON_CREATING_FLAGS & rest:                 return True             i = k             continue     i = j + 1"]
+    N011["return False"]
     N001 -->|"start"| N002
-    N002 -->|"true"| N003
-    N002 -->|"false"| N004
-    N004 -->|"try"| N005
-    N004 -->|"raises"| N006
-    N006 --> N007
-    N005 --> N008
+    N002 -->|"try"| N003
+    N002 -->|"raises"| N004
+    N004 --> N005
+    N005 -->|"true"| N006
+    N005 -->|"false"| N007
+    N003 --> N008
     N008 --> N009
     N009 --> N010
+    N010 --> N011
 ```
 
 ## _is_remote(...)
@@ -200,7 +202,7 @@ flowchart TD
     N004["if event.get('tool_name') != 'Bash'"]
     N005["return None"]
     N006["command = str(...)"]
-    N007["if not _command_runs_git_commit(command)"]
+    N007["if not _command_produces_commit(command)"]
     N008["return None"]
     N009["if _ACK_MARKER in command"]
     N010["return None"]
