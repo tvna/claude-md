@@ -131,6 +131,7 @@ GITHUB_API_SCRIPTS: frozenset[str] = frozenset(
     {
         "auto_retro",
         "backup_non_ascii",
+        "branch_cleanup",
         "check_pr_mergeability",
         "ci_budget_issue",
         "ci_early_status_probe",
