@@ -1162,40 +1162,19 @@ class TestIssueLabels:
 # ---------------------------------------------------------------------------
 
 
-def _fake_apply_capture():
-    calls: list[dict[str, Any]] = []
-
-    def fake_apply(**kwargs):
-        calls.append(kwargs)
-        return 200, "OK"
-
-    return calls, fake_apply
-
-
 class TestGhApi:
-    def test_get_no_payload(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        calls, fake_apply = _fake_apply_capture()
-        monkeypatch.setattr(ar, "apply_call", fake_apply)
-        out = ar.gh_api("GET", "/repos/o/r/issues")
-        assert out == "OK"
-        assert calls[0]["url"] == "https://api.github.com/repos/o/r/issues"
-        assert calls[0]["method"] == "GET"
-        assert calls[0]["payload"] is None
+    def test_delegates_to_rest_text(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        calls: list[tuple[Any, ...]] = []
 
-    def test_post_with_body(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        calls, fake_apply = _fake_apply_capture()
-        monkeypatch.setattr(ar, "apply_call", fake_apply)
-        ar.gh_api("POST", "/repos/o/r/issues", {"title": "T"})
-        assert calls[0]["method"] == "POST"
-        assert calls[0]["payload"] == {"title": "T"}
+        def fake_rest_text(method, path, payload=None):
+            calls.append((method, path, payload))
+            return "OK"
 
-    def test_non_2xx_raises_loudly(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.setattr(ar, "apply_call", lambda **_kw: (500, "boom"))
-        with pytest.raises(GitHubApiError) as excinfo:
-            ar.gh_api("GET", "/x")
-        assert excinfo.value.code == 500
+        monkeypatch.setattr(ar, "rest_text", fake_rest_text)
+        assert ar.gh_api("GET", "/repos/o/r/issues") == "OK"
+        assert calls[0] == ("GET", "/repos/o/r/issues", None)
+        assert ar.gh_api("POST", "/repos/o/r/issues", {"title": "T"}) == "OK"
+        assert calls[1] == ("POST", "/repos/o/r/issues", {"title": "T"})
 
 
 # ---------------------------------------------------------------------------

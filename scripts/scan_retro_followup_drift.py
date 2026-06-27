@@ -56,7 +56,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
-from _github_api import API_ROOT, GitHubApiError, apply_call
+from _github_api import GitHubApiError, rest_text
 from _retro_labels import (
     RETRO_FP,
     RETRO_FP_CANDIDATE,
@@ -267,12 +267,7 @@ def gh_api(
     CLAUDE.md section 4). Authentication comes from the ``GH_TOKEN`` env var
     that the workflow sets to ``secrets.GITHUB_TOKEN``.
     """
-    token = os.environ.get("GH_TOKEN", "")
-    url = path if path.startswith("http") else f"{API_ROOT}{path}"
-    code, body = apply_call(method=method, url=url, payload=json_body, token=token)
-    if not (200 <= code < 300):
-        raise GitHubApiError(code, method, path, body)
-    return body
+    return rest_text(method, path, json_body)
 
 
 def is_404_error(exc: GitHubApiError) -> bool:

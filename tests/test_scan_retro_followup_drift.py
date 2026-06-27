@@ -639,37 +639,18 @@ class TestDecideTargetLabelUnknownAggregate:
 
 
 class TestGhApi:
-    def test_get_request_builds_full_url(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        calls: list[dict[str, Any]] = []
+    def test_delegates_to_rest_text(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        calls: list[tuple[Any, ...]] = []
 
-        def fake_apply(**kwargs: Any) -> tuple[int, str]:
-            calls.append(kwargs)
-            return 200, '{"items":[]}'
+        def fake_rest_text(method: str, path: str, payload: Any = None) -> str:
+            calls.append((method, path, payload))
+            return '{"items":[]}'
 
-        monkeypatch.setattr(srfd, "apply_call", fake_apply)
-        result = srfd.gh_api("GET", "/repos/test/test/issues/1")
-        assert result == '{"items":[]}'
-        assert calls[0]["url"] == "https://api.github.com/repos/test/test/issues/1"
-        assert calls[0]["method"] == "GET"
-        assert calls[0]["payload"] is None
-
-    def test_post_request_passes_payload(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        calls: list[dict[str, Any]] = []
-
-        def fake_apply(**kwargs: Any) -> tuple[int, str]:
-            calls.append(kwargs)
-            return 200, "{}"
-
-        monkeypatch.setattr(srfd, "apply_call", fake_apply)
-        result = srfd.gh_api("POST", "/path", {"labels": ["x"]})
-        assert result == "{}"
-        assert calls[0]["payload"] == {"labels": ["x"]}
-
-    def test_non_2xx_raises_github_api_error(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr(srfd, "apply_call", lambda **kw: (404, "not found"))
-        with pytest.raises(GitHubApiError) as excinfo:
-            srfd.gh_api("GET", "/repos/x/y/issues/1")
-        assert excinfo.value.code == 404
+        monkeypatch.setattr(srfd, "rest_text", fake_rest_text)
+        assert srfd.gh_api("GET", "/repos/test/test/issues/1") == '{"items":[]}'
+        assert calls[0] == ("GET", "/repos/test/test/issues/1", None)
+        assert srfd.gh_api("POST", "/path", {"labels": ["x"]}) == '{"items":[]}'
+        assert calls[1] == ("POST", "/path", {"labels": ["x"]})
 
 
 # ---------------------------------------------------------------------------

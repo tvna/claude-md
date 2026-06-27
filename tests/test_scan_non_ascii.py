@@ -455,43 +455,19 @@ class TestBuildSummary:
 # ---------------------------------------------------------------------------
 
 
-def _fake_apply_capture():
-    """Return (recorder, fake_apply). recorder collects apply_call kwargs."""
-    calls: list[dict[str, Any]] = []
-
-    def fake_apply(**kwargs):
-        calls.append(kwargs)
-        return 200, "OK"
-
-    return calls, fake_apply
-
-
 class TestGhApi:
-    def test_get_builds_full_url(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        calls, fake_apply = _fake_apply_capture()
-        monkeypatch.setattr(san, "apply_call", fake_apply)
-        out = san.gh_api("GET", "/repos/x/y/issues/1/comments")
-        assert out == "OK"
-        assert calls[0]["url"] == "https://api.github.com/repos/x/y/issues/1/comments"
-        assert calls[0]["method"] == "GET"
-        assert calls[0]["payload"] is None
+    def test_delegates_to_rest_text(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        calls: list[tuple[Any, ...]] = []
 
-    def test_post_passes_payload(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        calls, fake_apply = _fake_apply_capture()
-        monkeypatch.setattr(san, "apply_call", fake_apply)
-        san.gh_api("POST", "/repos/x/y/issues/1/labels", {"labels": ["L"]})
-        assert calls[0]["method"] == "POST"
-        assert calls[0]["payload"] == {"labels": ["L"]}
+        def fake_rest_text(method, path, payload=None):
+            calls.append((method, path, payload))
+            return "OK"
 
-    def test_non_2xx_raises_loudly(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.setattr(san, "apply_call", lambda **_kw: (500, "boom"))
-        with pytest.raises(GitHubApiError) as excinfo:
-            san.gh_api("GET", "/x")
-        assert excinfo.value.code == 500
+        monkeypatch.setattr(san, "rest_text", fake_rest_text)
+        assert san.gh_api("GET", "/repos/x/y/issues/1/comments") == "OK"
+        assert calls[0] == ("GET", "/repos/x/y/issues/1/comments", None)
+        assert san.gh_api("POST", "/repos/x/y/issues/1/labels", {"labels": ["L"]}) == "OK"
+        assert calls[1] == ("POST", "/repos/x/y/issues/1/labels", {"labels": ["L"]})
 
 
 # ---------------------------------------------------------------------------

@@ -101,8 +101,9 @@ def list_branches(repo: str) -> list[tuple[str, str]]:
 
 def get_last_commit_date(repo: str, sha: str) -> datetime:
     data = rest_json("GET", f"/repos/{repo}/commits/{sha}", token=_token())
-    date = (((data or {}).get("commit") or {}).get("committer") or {}).get("date")
-    return _parse_github_datetime(str(date or "").strip())
+    commit = (data or {}).get("commit") or {}
+    committer = commit.get("committer") or {}
+    return _parse_github_datetime(str(committer.get("date") or "").strip())
 
 
 def count_open_prs_for_head(repo: str, branch: str) -> int:

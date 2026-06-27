@@ -156,7 +156,7 @@ from _auto_retro_triage import (
     render_triage_report_markdown,
     should_skip_by_prior,
 )
-from _github_api import API_ROOT, GitHubApiError, apply_call
+from _github_api import GitHubApiError, rest_text
 from _retro_labels import (
     ALL_RETRO_LABELS,
     PRIOR_EPOCH_MIN_RETRO_NUMBER,
@@ -367,12 +367,7 @@ def gh_api(
     the orchestrator fails loudly (CLAUDE.md section 4). Authentication
     comes from the ``GH_TOKEN`` env var that the workflow sets.
     """
-    token = os.environ.get("GH_TOKEN", "")
-    url = path if path.startswith("http") else f"{API_ROOT}{path}"
-    code, body = apply_call(method=method, url=url, payload=json_body, token=token)
-    if not (200 <= code < 300):
-        raise GitHubApiError(code, method, path, body)
-    return body
+    return rest_text(method, path, json_body)
 
 
 def fetch_pr_commits(repo: str, pr_number: int) -> list[str]:

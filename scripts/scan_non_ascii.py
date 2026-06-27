@@ -38,7 +38,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from _github_api import API_ROOT, GitHubApiError, apply_call
+from _github_api import GitHubApiError, rest_text
 from _trusted_bots import _NON_ASCII_SKIP_LOGINS, _TRUSTED_BOT_LOGINS
 
 # Trust classification per author_association.
@@ -306,12 +306,7 @@ def gh_api(
     from the ``GH_TOKEN`` env var that the workflow sets to
     ``secrets.GITHUB_TOKEN``.
     """
-    token = os.environ.get("GH_TOKEN", "")
-    url = path if path.startswith("http") else f"{API_ROOT}{path}"
-    code, body = apply_call(method=method, url=url, payload=json_body, token=token)
-    if not (200 <= code < 300):
-        raise GitHubApiError(code, method, path, body)
-    return body
+    return rest_text(method, path, json_body)
 
 
 def find_existing_comment_id(

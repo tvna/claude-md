@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import time
 import urllib.error
 import urllib.parse
@@ -110,6 +111,38 @@ class GitHubApiError(RuntimeError):
         self.body = body
 
 
+def rest_text(
+    method: str,
+    path: str,
+    payload: dict[str, Any] | None = None,
+    *,
+    token: str | None = None,
+    opener: Callable[[urllib.request.Request], Any] = _default_opener,
+    sleeper: Callable[[float], None] | None = None,
+) -> str:
+    """Call the GitHub REST API and return the raw response body text.
+
+    The text-body sibling of :func:`rest_json`, for migrated scripts that
+    replaced a ``gh api`` call returning stdout and parse the body themselves.
+    ``path`` is either an API path beginning with ``/`` (prefixed with
+    :data:`API_ROOT`) or an already-built ``https://`` URL. ``token`` defaults
+    to the ambient ``GH_TOKEN`` (the credential the replaced ``gh`` CLI used),
+    so the per-script wrappers need not each re-read it. Retries and headers
+    come from :func:`apply_call`. Raises :class:`GitHubApiError` on any non-2xx
+    response so callers fail loud; a 404 is surfaced through the exception's
+    ``.code``.
+    """
+    if token is None:
+        token = os.environ.get("GH_TOKEN", "")
+    url = path if path.startswith("http") else f"{API_ROOT}{path}"
+    code, body = apply_call(
+        method=method, url=url, payload=payload, token=token, opener=opener, sleeper=sleeper
+    )
+    if not (200 <= code < 300):
+        raise GitHubApiError(code, method, path, body)
+    return body
+
+
 def rest_json(
     method: str,
     path: str,
@@ -121,21 +154,12 @@ def rest_json(
 ) -> Any:
     """Call the GitHub REST API and return the parsed JSON body.
 
-    ``path`` is either an API path beginning with ``/`` (e.g.
-    ``/repos/o/r/issues/1``), which is prefixed with :data:`API_ROOT`, or an
-    already-built ``https://`` URL. Retries and headers come from
-    :func:`apply_call`.
-
-    Raises :class:`GitHubApiError` on any non-2xx response so callers fail
-    loud; a 404 is surfaced through the exception's ``.code`` so callers can
-    treat it as "absent". Returns ``None`` for an empty body (e.g. HTTP 204).
+    Thin JSON wrapper over :func:`rest_text`: same path / retry / non-2xx
+    semantics (a 404 raises :class:`GitHubApiError` with ``.code == 404`` so
+    callers can treat it as "absent"), returning ``None`` for an empty body
+    (e.g. HTTP 204) and the parsed object otherwise.
     """
-    url = path if path.startswith("http") else f"{API_ROOT}{path}"
-    code, body = apply_call(
-        method=method, url=url, payload=payload, token=token, opener=opener, sleeper=sleeper
-    )
-    if not (200 <= code < 300):
-        raise GitHubApiError(code, method, path, body)
+    body = rest_text(method, path, payload, token=token, opener=opener, sleeper=sleeper)
     if not body.strip():
         return None
     return json.loads(body)

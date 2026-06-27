@@ -56,8 +56,6 @@ SCRIPTS_DIR = Path("scripts")
 
 _SUBPROCESS_FUNCS = frozenset({"run", "Popen", "call", "check_output", "check_call"})
 
-_FRAGMENT_LEN = 80
-
 
 class Violation(NamedTuple):
     script: str   # file basename
