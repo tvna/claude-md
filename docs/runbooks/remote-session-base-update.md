@@ -37,7 +37,7 @@ remote-tracking ref (`refs/remotes/origin/<branch>`), which a fresh remote
 session or CI checkout may not have fetched yet even though the branch exists
 on GitHub. A false "not pushed" from the local-only probe would route an
 already-published `claude/*` branch down the rebase path and the push would be
-rejected by `non_fast_forward` -- the exact failure this decision prevents.
+rejected by `non_fast_forward`; the exact failure this decision prevents.
 
 | Result | Meaning | Action |
 |---|---|---|
