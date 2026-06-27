@@ -20,6 +20,8 @@ Invariants, for every label:
   IS a commit type (guards against wrongly exempting a real type).
 - (c) Key placement: the ``commit_type`` key is only valid on ``type`` labels.
 - (d) Type check: when present, ``commit_type`` must be a boolean.
+- (e) Prefix: a ``family == "type"`` label name must start with ``type:`` so a
+  prefix-less name cannot pose as its own stem and slip past (a).
 
 Contract:
 - Inputs: the ``verify`` subcommand; ``--repo-root`` (defaults to the repo root
@@ -111,7 +113,21 @@ def verify_policy(label_policy: dict[str, Any], title_policy: dict[str, Any]) ->
             errors.append(_err(f"type label {name} commit_type must be a boolean, got {marker!r}"))
             continue
 
-        stem = name[len(_TYPE_PREFIX):] if name.startswith(_TYPE_PREFIX) else name
+        # (e) a type-family label must carry the type: prefix. Without this the
+        # else-branch below would treat a prefix-less name (e.g. "feat") as its
+        # own stem and silently pass, missing the taxonomy drift the gate exists
+        # to catch; issue triage and tracking helpers identify type labels by
+        # the prefix.
+        if not name.startswith(_TYPE_PREFIX):
+            errors.append(
+                _err(
+                    f"type-family label {name!r} must start with {_TYPE_PREFIX!r}; issue "
+                    "triage and tracking helpers identify type labels by that prefix"
+                )
+            )
+            continue
+
+        stem = name[len(_TYPE_PREFIX):]
 
         if marker is False:
             # (b) a declared non-commit type:* label must not name a real type.

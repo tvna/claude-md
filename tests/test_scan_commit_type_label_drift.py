@@ -85,6 +85,18 @@ def test_verify_policy_flags_non_boolean_marker() -> None:  # invariant (d)
     ]
 
 
+def test_verify_policy_flags_type_family_missing_prefix() -> None:  # invariant (e)
+    # A type-family label named "feat" (no "type:" prefix) must fail rather than
+    # treating "feat" as its own stem and silently passing invariant (a).
+    label = _label_policy([{"name": "feat", "family": "type"}])
+    title = _title_policy(["feat"])
+    errors = gate.verify_policy(label, title)
+    assert errors == [
+        "::error file=.github/label-policy.toml::type-family label 'feat' must start "
+        "with 'type:'; issue triage and tracking helpers identify type labels by that prefix"
+    ]
+
+
 def test_verify_reports_missing_label_policy(tmp_path: Path) -> None:
     errors = gate.verify(tmp_path)
     assert errors == [
