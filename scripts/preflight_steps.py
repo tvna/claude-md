@@ -525,6 +525,24 @@ STEPS: tuple[Step, ...] = (
         ),
     ),
     Step(
+        # Refs #2011/#1754. Doc-graph co-change gate promoted to pre-push: a
+        # change to a doc-dependencies.toml node with a blocking dependent
+        # (e.g. design_philosophy_prd -> ubiquitous_language) must co-change
+        # that dependent. PR_BODY is unset locally, the stricter default, so a
+        # doc-graph-waiver is absent and the co-change miss surfaces before
+        # push rather than only in validate-doc-graph.yml CI (the #1989
+        # first-head failure class). Base-ref shape mirrors the CI workflow;
+        # reads origin/main fetched by preflight_branch_base. Was previously
+        # CI-only via the scan_preflight_drift ALLOWLIST; promotion per #2011.
+        name="gate_doc_graph_pr",
+        argv=(
+            "python3",
+            "scripts/gate_doc_graph_pr.py",
+            "--base-ref",
+            "origin/main",
+        ),
+    ),
+    Step(
         # Refs #1670. Net-growth gate: a PR whose .apm/instructions/**
         # diff grows (added chars > removed chars) must carry a plain-text
         # text-growth-ack line in the PR body. PR_BODY is unset locally,
