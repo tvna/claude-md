@@ -135,15 +135,12 @@ flowchart TD
     N003["status = run_git(...)"]
     N004["if status.returncode != 0 or status.stdout.strip()"]
     N005["return '<str>'"]
-    N006["ancestor = run_git(...)"]
-    N007["if ancestor.returncode != 0"]
+    N006["merged = run_git(...)"]
+    N007["if merged.returncode != 0"]
     N008["return '<str>'"]
-    N009["merged = run_git(...)"]
-    N010["if merged.returncode != 0"]
+    N009["except Exception"]
+    N010["return '<str>'"]
     N011["return '<str>'"]
-    N012["except Exception"]
-    N013["return '<str>'"]
-    N014["return '<str>'"]
     N001 -->|"start"| N002
     N002 -->|"try"| N003
     N003 --> N004
@@ -151,12 +148,9 @@ flowchart TD
     N004 -->|"false"| N006
     N006 --> N007
     N007 -->|"true"| N008
-    N007 -->|"false"| N009
+    N002 -->|"raises"| N009
     N009 --> N010
-    N010 -->|"true"| N011
-    N002 -->|"raises"| N012
-    N012 --> N013
-    N010 -->|"false"| N014
+    N007 -->|"false"| N011
 ```
 
 ## cmd_session_start(...)
