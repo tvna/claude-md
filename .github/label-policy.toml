@@ -365,7 +365,7 @@ paths = [
   "scripts/validate_json_syntax.py", "scripts/validate_falco_rules.py",
   "scripts/plan_approval_gate.py", "scripts/plan_language_context.py",
   "scripts/prompt_context7_gate.py", "scripts/pr_body_close_keyword_gate.py",
-  "scripts/issue_link.py",
+  "scripts/issue_link.py", "scripts/session_set_origin_head.py",
   "docs/runbooks/preflight.md", "docs/runbooks/replacement-pr-preflight.md",
   ".github/workflows/verify-agents.yml", ".github/workflows/verify-pr.yml",
   ".github/workflows/verify-actionlint.yml",
