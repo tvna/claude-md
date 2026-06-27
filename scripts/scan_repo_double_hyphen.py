@@ -78,13 +78,17 @@ import subprocess
 import sys
 from pathlib import Path
 
+from _apm_managed_paths import MANAGED_PREFIXES
+
 # Defined by concatenation so this source file does not contain the literal
 # space-hyphen-hyphen-space sequence and does not flag itself.
 _DOUBLE_HYPHEN = " " + "--" + " "
 
+# The two APM-managed prefixes come from the single source of truth in
+# _apm_managed_paths.py (shared with gate_agents_skills_edit.py, Refs #2066);
+# docs/archive/ and docs/generated/ are this scanner's own additional skips.
 _SKIP_PREFIXES = (
-    ".agents/skills/",
-    ".claude/skills/",
+    *MANAGED_PREFIXES,
     "docs/archive/",
     "docs/generated/",
 )
