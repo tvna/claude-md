@@ -11,12 +11,12 @@ key under ``[tool.pytest.ini_options]`` in ``pyproject.toml``.
 from __future__ import annotations
 
 import json
-import subprocess
 from pathlib import Path
 from typing import Any
 
 import auto_retro as ar
 import pytest
+from _github_api import GitHubApiError
 
 pytestmark = pytest.mark.shard_ci_ops_auto_retro_rescan
 
@@ -122,9 +122,7 @@ def _rescan_recorder(
         decoded = unquote(path)
         if method == "GET" and path.startswith("/search/issues"):
             if search_error:
-                raise subprocess.CalledProcessError(
-                    1, "gh", stderr="search boom"
-                )
+                raise GitHubApiError(500, "GET", "/x", "search boom")
             if "type:pr" in decoded and "is:merged" in decoded:
                 if "merged:" in decoded and ".." in decoded:
                     return json.dumps({"items": fix_prs})
@@ -152,9 +150,7 @@ def _rescan_recorder(
         if method == "PATCH" and "/issues/" in path:
             number = _number_from_path(path)
             if number in patch_error_for:
-                raise subprocess.CalledProcessError(
-                    1, "gh", stderr="patch boom"
-                )
+                raise GitHubApiError(500, "GET", "/x", "patch boom")
             return "{}"
         return ""
 

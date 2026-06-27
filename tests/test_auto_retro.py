@@ -4,14 +4,13 @@ The ``scripts/`` directory is added to ``sys.path`` via the ``pythonpath``
 key under ``[tool.pytest.ini_options]`` in ``pyproject.toml``.
 
 Mirrors the structure of ``tests/test_scan_non_ascii.py``: pure functions
-get table-driven tests; the subprocess boundary (:func:`auto_retro.gh_api`)
+get table-driven tests; the REST boundary (:func:`auto_retro.gh_api`)
 is monkeypatched. Refs #234.
 """
 
 from __future__ import annotations
 
 import json
-import subprocess
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any, ClassVar
@@ -20,6 +19,7 @@ import _retro_labels as rl
 import auto_retro as ar
 import body_policy as bp
 import pytest
+from _github_api import GitHubApiError
 from hypothesis import given
 from hypothesis import strategies as st
 
@@ -1158,54 +1158,44 @@ class TestIssueLabels:
 
 
 # ---------------------------------------------------------------------------
-# gh_api (subprocess boundary)
+# gh_api (REST boundary)
 # ---------------------------------------------------------------------------
 
 
-def _fake_run_capture():
+def _fake_apply_capture():
     calls: list[dict[str, Any]] = []
 
-    class _Result:
-        def __init__(self, stdout: str = "", returncode: int = 0) -> None:
-            self.stdout = stdout
-            self.returncode = returncode
-            self.stderr = ""
+    def fake_apply(**kwargs):
+        calls.append(kwargs)
+        return 200, "OK"
 
-    def fake_run(cmd, **kwargs):
-        calls.append({"cmd": cmd, **kwargs})
-        return _Result(stdout="OK")
-
-    return calls, fake_run
+    return calls, fake_apply
 
 
 class TestGhApi:
-    def test_get_no_input(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        calls, fake_run = _fake_run_capture()
-        monkeypatch.setattr(subprocess, "run", fake_run)
+    def test_get_no_payload(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        calls, fake_apply = _fake_apply_capture()
+        monkeypatch.setattr(ar, "apply_call", fake_apply)
         out = ar.gh_api("GET", "/repos/o/r/issues")
         assert out == "OK"
-        assert calls[0]["cmd"] == [
-            "gh", "api", "--method", "GET", "/repos/o/r/issues"
-        ]
-        assert "input" not in calls[0]
+        assert calls[0]["url"] == "https://api.github.com/repos/o/r/issues"
+        assert calls[0]["method"] == "GET"
+        assert calls[0]["payload"] is None
 
     def test_post_with_body(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        calls, fake_run = _fake_run_capture()
-        monkeypatch.setattr(subprocess, "run", fake_run)
+        calls, fake_apply = _fake_apply_capture()
+        monkeypatch.setattr(ar, "apply_call", fake_apply)
         ar.gh_api("POST", "/repos/o/r/issues", {"title": "T"})
-        assert "--input" in calls[0]["cmd"]
-        assert calls[0]["cmd"][-1] == "-"
-        assert json.loads(calls[0]["input"]) == {"title": "T"}
+        assert calls[0]["method"] == "POST"
+        assert calls[0]["payload"] == {"title": "T"}
 
-    def test_nonzero_exit_raises_loudly(
+    def test_non_2xx_raises_loudly(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        def _raise(*_a, **_kw):
-            raise subprocess.CalledProcessError(1, "gh", stderr="boom")
-
-        monkeypatch.setattr(subprocess, "run", _raise)
-        with pytest.raises(subprocess.CalledProcessError):
+        monkeypatch.setattr(ar, "apply_call", lambda **_kw: (500, "boom"))
+        with pytest.raises(GitHubApiError) as excinfo:
             ar.gh_api("GET", "/x")
+        assert excinfo.value.code == 500
 
 
 # ---------------------------------------------------------------------------
@@ -1568,7 +1558,7 @@ class TestFetchCheckRunsAnnotationEnrichment:
         ``raw == ""`` / non-list branches of ``fetch_check_run_annotations``).
 
         ``raise_for_ids`` lists check_run ids that should make the
-        annotation lookup raise :class:`subprocess.CalledProcessError`.
+        annotation lookup raise :class:`_github_api.GitHubApiError`.
         """
         seen: list[tuple[str, str]] = []
 
@@ -1580,11 +1570,7 @@ class TestFetchCheckRunsAnnotationEnrichment:
                 id_str = rest.split("/annotations", 1)[0]
                 run_id = int(id_str)
                 if run_id in raise_for_ids:
-                    raise subprocess.CalledProcessError(
-                        returncode=22,
-                        cmd=["gh", "api", path],
-                        stderr="HTTP 502",
-                    )
+                    raise GitHubApiError(500, "GET", "/x", "HTTP 502")
                 payload = annotations_by_id.get(run_id, [])
                 if isinstance(payload, str):
                     return payload
@@ -2033,15 +2019,15 @@ class TestPostBackLinkComment:
     def test_loud_failure_on_post_error(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """gh_api raises CalledProcessError; post_back_link_comment must
+        """gh_api raises GitHubApiError; post_back_link_comment must
         propagate so the orchestrator can decide its fail-soft policy."""
         def fake_api(method, path, body=None, **_kw):
             if method == "GET":
                 return json.dumps([])
-            raise subprocess.CalledProcessError(1, "gh", stderr="boom")
+            raise GitHubApiError(500, "GET", "/x", "boom")
 
         monkeypatch.setattr(ar, "gh_api", fake_api)
-        with pytest.raises(subprocess.CalledProcessError):
+        with pytest.raises(GitHubApiError):
             ar.post_back_link_comment("o/r", 42, 99)
 
 
@@ -2073,13 +2059,13 @@ class TestApplyTerminalLabel:
     def test_loud_failure_on_post_error(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """gh_api raises CalledProcessError; apply_terminal_label must
+        """gh_api raises GitHubApiError; apply_terminal_label must
         propagate so the orchestrator can decide its fail-soft policy."""
         def fake_api(method, path, body=None, **_kw):
-            raise subprocess.CalledProcessError(1, "gh", stderr="boom")
+            raise GitHubApiError(500, "GET", "/x", "boom")
 
         monkeypatch.setattr(ar, "gh_api", fake_api)
-        with pytest.raises(subprocess.CalledProcessError):
+        with pytest.raises(GitHubApiError):
             ar.apply_terminal_label("o/r", 42)
 
 
@@ -2124,7 +2110,7 @@ def _orchestrator_recorder(
     happy-path tests still reach the issue-creation branch. New tests
     that exercise the zero-review-comments skip pass ``review_comments=[]``.
     Set ``comments_error=True`` to make the comments endpoint raise the
-    same ``CalledProcessError`` that gh_api raises in production; used
+    same ``GitHubApiError`` that gh_api raises in production; used
     to test the fail-safe fallback in run().
 
     ``pr_detail`` controls the response of ``GET /repos/{repo}/pulls/{n}``
@@ -2159,9 +2145,7 @@ def _orchestrator_recorder(
             return json.dumps({"items": existing})
         if method == "GET" and "/pulls/" in path and "/comments" in path:
             if comments_error:
-                raise subprocess.CalledProcessError(
-                    1, "gh", stderr="comments endpoint boom"
-                )
+                raise GitHubApiError(500, "GET", "/x", "comments endpoint boom")
             return json.dumps(review_comments)
         if method == "GET" and "/pulls/" in path and "/commits" in path:
             return json.dumps(commits)
@@ -2169,9 +2153,7 @@ def _orchestrator_recorder(
             return json.dumps({"check_runs": check_runs})
         if method == "GET" and "/pulls/" in path:
             if check_runs_error:
-                raise subprocess.CalledProcessError(
-                    1, "gh", stderr="pulls endpoint boom"
-                )
+                raise GitHubApiError(500, "GET", "/x", "pulls endpoint boom")
             if pr_detail_sequence is not None:
                 i = pr_detail_idx[0]
                 pr_detail_idx[0] = i + 1
@@ -2192,9 +2174,7 @@ def _orchestrator_recorder(
             and path.endswith("/comments")
         ):
             if back_link_post_error:
-                raise subprocess.CalledProcessError(
-                    1, "gh", stderr="back-link post boom"
-                )
+                raise GitHubApiError(500, "GET", "/x", "back-link post boom")
             return ""
         if (
             method == "POST"
@@ -2202,9 +2182,7 @@ def _orchestrator_recorder(
             and path.endswith("/labels")
         ):
             if terminal_label_post_error:
-                raise subprocess.CalledProcessError(
-                    1, "gh", stderr="terminal-label post boom"
-                )
+                raise GitHubApiError(500, "GET", "/x", "terminal-label post boom")
             return ""
         if method == "PATCH" and "/issues/comments/" in path:
             return ""
@@ -4173,7 +4151,7 @@ def _sentinel_recorder(
 
     Mirrors :func:`_orchestrator_recorder` for the run() flow. Each
     ``*_error_for`` set lists the retro issue numbers whose endpoints
-    should raise :class:`subprocess.CalledProcessError` so the fail-soft
+    should raise :class:`_github_api.GitHubApiError` so the fail-soft
     contract can be exercised per-retro.
     """
     open_retros = open_retros or []
@@ -4195,30 +4173,22 @@ def _sentinel_recorder(
         seen.append((method, path, body))
         if method == "GET" and path.startswith("/search/issues"):
             if search_error:
-                raise subprocess.CalledProcessError(
-                    1, "gh", stderr="search boom"
-                )
+                raise GitHubApiError(500, "GET", "/x", "search boom")
             return json.dumps({"items": open_retros})
         if method == "GET" and path.endswith("/comments?per_page=100"):
             number = _number_from_path(path)
             if number in comments_error_for:
-                raise subprocess.CalledProcessError(
-                    1, "gh", stderr="comments boom"
-                )
+                raise GitHubApiError(500, "GET", "/x", "comments boom")
             return json.dumps(comments_by_number.get(number, []))
         if method == "POST" and path.endswith("/comments"):
             number = _number_from_path(path)
             if number in post_error_for:
-                raise subprocess.CalledProcessError(
-                    1, "gh", stderr="post boom"
-                )
+                raise GitHubApiError(500, "GET", "/x", "post boom")
             return ""
         if method == "PATCH" and "/issues/" in path:
             number = _number_from_path(path)
             if number in patch_error_for:
-                raise subprocess.CalledProcessError(
-                    1, "gh", stderr="patch boom"
-                )
+                raise GitHubApiError(500, "GET", "/x", "patch boom")
             return ""
         return ""
 
@@ -4381,7 +4351,7 @@ class TestSentinelRun:
     def test_one_retro_failure_does_not_block_others(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Fail-soft: a CalledProcessError on retro #706 must NOT stop
+        """Fail-soft: a GitHubApiError on retro #706 must NOT stop
         the sentinel from processing #707 on the same tick."""
         seen = _sentinel_recorder(
             monkeypatch,
@@ -5206,7 +5176,7 @@ class TestFetchPastRetroLabels:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         def boom(*_a: Any, **_kw: Any) -> str:
-            raise subprocess.CalledProcessError(returncode=1, cmd=["gh"])
+            raise GitHubApiError(500, "GET", "/x", "boom")
 
         monkeypatch.setattr(ar, "gh_api", boom)
         # Soft-fail: the retro flow proceeds with empty prior.
