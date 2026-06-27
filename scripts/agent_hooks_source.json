@@ -517,6 +517,16 @@
               "hooks": [
                 {
                   "type": "command",
+                  "if": "Bash(*git commit*)",
+                  "command": "python3 scripts/gate_retro_close_keyword_commit.py"
+                }
+              ]
+            },
+            {
+              "matcher": "Bash",
+              "hooks": [
+                {
+                  "type": "command",
                   "if": "Bash(*git *)",
                   "command": "python3 scripts/preflight_session_branch_authz.py"
                 }
@@ -1264,6 +1274,16 @@
                   "type": "command",
                   "command": "python3 scripts/check_commit_signing_ready.py",
                   "statusMessage": "Checking commit signing readiness before commit"
+                }
+              ]
+            },
+            {
+              "matcher": "^Bash$",
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "python3 scripts/gate_retro_close_keyword_commit.py",
+                  "statusMessage": "Checking for retro-issue closing keyword in commit message"
                 }
               ]
             },

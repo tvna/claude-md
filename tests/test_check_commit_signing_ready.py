@@ -267,6 +267,34 @@ class TestDecide:
     @pytest.mark.parametrize(
         "command",
         [
+            "git merge origin/main",
+            "git merge --no-ff origin/main",
+            "git -C /x merge origin/main",
+            "git rebase origin/main",
+            "git cherry-pick abc123",
+            "git revert HEAD",
+            "git am < patch.mbox",
+            "git pull origin main",
+            "git fetch origin main && git merge origin/main",
+        ],
+    )
+    def test_deny_for_other_commit_producers(self, _remote: None, command: str) -> None:
+        # retro #2114 / #2116: a cold signer leaves merge/rebase/cherry-pick/
+        # revert/am/pull commits unsigned too, not only ``git commit``; the
+        # PR #2103 unsigned ancestors came from the no-rebase ``git merge``.
+        event = {"tool_name": "Bash", "tool_input": {"command": command}}
+        with (
+            patch("check_commit_signing_ready.signing_required", return_value=True),
+            patch("check_commit_signing_ready.probe_sign_status", return_value="unsigned"),
+        ):
+            assert subject.decide(event) is not None
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            "git commit-tree abc",
+            "git merge-base HEAD origin/main",
+            "git merge-file a b c",
             "git config commit.gpgsign true",
             "git -c x=y config commit.gpgsign true",
             "git -C /x status",

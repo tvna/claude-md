@@ -136,3 +136,41 @@ commit.gpgsign=true
 | GitHub shows `Unverified` | `user.email` in git config does not match a GitHub account with the Signing Key registered | `git config --global user.email your@email.com` (must match GitHub account email) |
 | `nix develop` shellHook does nothing on macOS | Shell started outside a git repository | `cd` to the repository root before running `nix develop` |
 | Signing key path changes after re-keying | `~/.gitconfig` retains the old key path | Re-run `prepare-signing-keys.sh` on the host then re-open the container, or set: `git config --global user.signingKey ~/.ssh/devcontainer-signing-keys/id_ed25519.pub` |
+
+## Recovery: an already-pushed unsigned commit on a protected branch
+
+A remote agent session can leave an unsigned commit on a `claude/*` session
+branch (a cold signer early in the session, or a `git merge origin/main`
+ancestor from the no-rebase base-update path). Because the `all-branches`
+ruleset blocks `non_fast_forward` and `deletion` with `bypass_actors: []`,
+that commit can be neither re-signed nor rewritten out in place. This is the
+PR #2103 condition (retro #2114 / signing defect #2116). Do **not** attempt to
+provision a signing key into the session and re-sign: a session committer
+identity (`noreply@anthropic.com`) is not a GitHub account with a registered
+signing key, so the result is still `Unverified` and does not satisfy
+`required_signatures`.
+
+The keyless invariant makes this recoverable without touching the ruleset.
+Pick the first option that applies (full detail in
+[`docs/standards/commit-signing.md`](../standards/commit-signing.md), "Web /
+remote agent sessions", unsigned-ancestor exception):
+
+1. **Squash-merge as normal.** When the only unsigned objects are the commits
+   being squashed, GitHub's squash commit on `main` is web-flow `Verified` and
+   satisfies `required_signatures`; the merge-box "Commits must have verified
+   signatures" warning does not block the squash-merge API. PR #2103 was
+   recovered this way.
+2. **Repo-admin `--admin` override** (only when an unsigned *ancestor* makes
+   the merge box block the squash): `gh pr merge <pr> --squash --admin`, after
+   independently confirming the PR is otherwise ready (checks green, threads
+   resolved, code-owner review, exact head SHA). `--admin` clears the signature
+   block only; GitHub still signs the squash commit web-flow.
+3. **Recreate the branch off current `main`** (no admin available): drop the
+   stale unsigned ancestor by re-creating the branch or opening a replacement
+   PR. The recreated feature commits follow the normal keyless path.
+
+The deterministic guards that surface this *before* the irreversible push are
+`scripts/check_commit_signing_ready.py` (SessionStart warning plus a PreToolUse
+block on every commit-producing command when a live test-sign comes back
+unsigned) and `scripts/gate_unsigned_commit_bash.py` (denies an inline
+signing-bypass flag).
