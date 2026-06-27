@@ -292,6 +292,36 @@ class TestDecide:
     @pytest.mark.parametrize(
         "command",
         [
+            'git commit -m "--abort"',
+            'git commit -m "fix --ff-only path"',
+            "(git commit -m x)",
+            "$(git commit -m x)",
+            "`git commit -m x`",
+            "{ git commit -m x; }",
+        ],
+    )
+    def test_deny_for_quoted_or_grouped_commit(self, _remote: None, command: str) -> None:
+        # A commit must be probed even when its message token equals a
+        # non-creating flag, or when it is wrapped in a subshell / backtick
+        # (Codex review and /code-review on #2120).
+        event = {"tool_name": "Bash", "tool_input": {"command": command}}
+        with (
+            patch("check_commit_signing_ready.signing_required", return_value=True),
+            patch("check_commit_signing_ready.probe_sign_status", return_value="unsigned"),
+        ):
+            assert subject.decide(event) is not None
+
+    def test_none_when_git_commit_is_quoted_argument(self, _remote: None) -> None:
+        # ``echo "git commit"`` is one quoted token, not a real commit; the
+        # probe must not run (no false positive).
+        event = {"tool_name": "Bash", "tool_input": {"command": 'echo "git commit"'}}
+        with patch("check_commit_signing_ready.probe_sign_status") as probe:
+            assert subject.decide(event) is None
+        probe.assert_not_called()
+
+    @pytest.mark.parametrize(
+        "command",
+        [
             "git commit-tree abc",
             "git merge-base HEAD origin/main",
             "git merge-file a b c",

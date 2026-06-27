@@ -77,16 +77,24 @@ _GIT_VALUE_OPTS = frozenset({"-c", "-C"})
 # Shell separators that end a single git invocation in a command line.
 _SHELL_OPS = frozenset({"&&", "||", "|", ";", "&"})
 
+# Shell grouping punctuation that can cling to a token when a commit is wrapped
+# in a subshell / command substitution: ``(git commit ...)``,
+# ``$(git commit ...)``, or a backtick form. Stripping it from the leading and
+# subcommand tokens lets them still be recognized.
+_GROUP_PREFIX = "$(`{"
+_GROUP_SUFFIX = ";&|)`}"
+
 # A ``-m`` / ``-am`` short flag, capturing any attached value: ``-m`` (empty
 # group, value is the next token) or ``-mmsg`` / ``-amsg`` (group is the value).
 _MSG_FLAG_RE = re.compile(r"-[A-Za-z]*m(.*)")
 
 # Auto-closing keyword followed by ``#N``, anywhere in the message (commit
 # messages carry no line-anchored ``Closes #N`` convention, unlike PR bodies).
-# Built from the single-source keyword set so it never drifts from the
-# PR-body / CI gates.
+# An optional colon is accepted because GitHub honors ``Closes: #N`` as well as
+# ``Closes #N``. Built from the single-source keyword set so the keyword list
+# never drifts from the PR-body / CI gates.
 _CLOSING_REF_RE = re.compile(
-    r"\b(?:" + "|".join(sorted(CLOSING_KEYWORDS)) + r")\s+#(\d+)\b",
+    r"\b(?:" + "|".join(sorted(CLOSING_KEYWORDS)) + r"):?\s+#(\d+)\b",
     re.IGNORECASE,
 )
 
@@ -115,13 +123,13 @@ def _commit_message_values(command: str) -> list[str]:
     out: list[str] = []
     i = 0
     while i < n:
-        if tokens[i] != "git" and not tokens[i].endswith("/git"):
+        if tokens[i].lstrip(_GROUP_PREFIX) != "git" and not tokens[i].endswith("/git"):
             i += 1
             continue
         j = i + 1
         while j < n and tokens[j].startswith("-"):
             j += 2 if tokens[j] in _GIT_VALUE_OPTS else 1
-        if j < n and tokens[j].rstrip(";&|") == "commit":
+        if j < n and tokens[j].rstrip(_GROUP_SUFFIX) == "commit":
             k = j + 1
             invocation: list[str] = []
             while k < n and tokens[k] not in _SHELL_OPS:

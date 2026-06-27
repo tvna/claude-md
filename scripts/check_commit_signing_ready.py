@@ -148,6 +148,15 @@ _NON_CREATING_RE = re.compile(r"--(?:abort|quit|skip|ff-only|no-commit)\b")
 # #1993 flagged that these legitimate commit invocations were being skipped.
 _GIT_VALUE_OPTS = frozenset({"-c", "-C"})
 
+# Shell grouping punctuation that can cling to a token when a git command is
+# wrapped in a subshell / command substitution: ``(git commit)``,
+# ``$(git commit)``, ``{ git commit; }``, or a backtick form. Stripping it from
+# the leading and subcommand tokens lets them still be recognized, without the
+# false positive a raw-string regex search would hit on ``echo "git commit"``
+# (there ``git commit`` is a single quoted token, never bare ``git``).
+_GROUP_PREFIX = "$(`{"
+_GROUP_SUFFIX = ";&|)`}"
+
 
 def _command_produces_commit(command: str) -> bool:
     """True when *command* invokes a commit-PRODUCING git subcommand.
@@ -178,7 +187,7 @@ def _command_produces_commit(command: str) -> bool:
     n = len(tokens)
     i = 0
     while i < n:
-        if tokens[i] != "git" and not tokens[i].endswith("/git"):
+        if tokens[i].lstrip(_GROUP_PREFIX) != "git" and not tokens[i].endswith("/git"):
             i += 1
             continue
         # Advance past git global options (``-c k=v``, ``-C path``,
@@ -186,17 +195,25 @@ def _command_produces_commit(command: str) -> bool:
         j = i + 1
         while j < n and tokens[j].startswith("-"):
             j += 2 if tokens[j] in _GIT_VALUE_OPTS else 1
-        if j < n and tokens[j].rstrip(";&|") in _COMMIT_PRODUCING_SUBCOMMANDS:
-            k = j + 1
-            rest: set[str] = set()
-            while k < n and tokens[k] not in _SHELL_OPS:
-                rest.add(tokens[k].rstrip(";&|"))
-                k += 1
-            if not (_NON_CREATING_FLAGS & rest):
+        if j < n:
+            sub = tokens[j].rstrip(_GROUP_SUFFIX)
+            # ``commit`` always mints a commit object; the non-creating modes
+            # apply to merge/rebase/... only. Returning early here keeps a
+            # commit MESSAGE token that happens to equal a flag
+            # (``-m "--abort"``) from suppressing the signing probe.
+            if sub == "commit":
                 return True
-            i = k
-        else:
-            i = j + 1
+            if sub in _COMMIT_PRODUCING_SUBCOMMANDS:
+                k = j + 1
+                rest: set[str] = set()
+                while k < n and tokens[k] not in _SHELL_OPS:
+                    rest.add(tokens[k].rstrip(_GROUP_SUFFIX))
+                    k += 1
+                if not (_NON_CREATING_FLAGS & rest):
+                    return True
+                i = k
+                continue
+        i = j + 1
     return False
 
 # Signing config copied verbatim into the throwaway probe repo. ``commit.gpgsign``
