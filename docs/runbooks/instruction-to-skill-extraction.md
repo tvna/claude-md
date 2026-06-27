@@ -93,8 +93,8 @@ from both trees in one step.
 
 - #1871 - the audit recorded here (migrate procedural CLAUDE.md sections to
   skills); sub-issue of #226.
-- [../prd/agent-rules-design-philosophy.md](../prd/agent-rules-design-philosophy.md)
-  - the four-lane ownership model and decision tree; Q1 routes tool-specific
+- [../prd/agent-rules-design-philosophy.md](../prd/agent-rules-design-philosophy.md):
+  the four-lane ownership model and decision tree; Q1 routes tool-specific
   procedure out of the universal text, section 5.2 records the
   technique-belongs-in-skills precedent, and the P5 boundary-risk row guards
   against restating skill-owned procedure.
