@@ -62,6 +62,16 @@ def commit_types(title_policy: dict[str, Any]) -> set[str]:
     return {item for item in types if isinstance(item, str) and item}
 
 
+def title_policy_diagnostic(title_policy: dict[str, Any]) -> str | None:
+    """Return a message if the title-policy structure is malformed, else None."""
+    policy = title_policy.get("title_policy")
+    if not isinstance(policy, dict):
+        return "title-policy.toml is missing the [title_policy] table or it is not a table"
+    if not isinstance(policy.get("types", []), list):
+        return "title-policy.toml [title_policy].types is not a list"
+    return None
+
+
 def _err(message: str) -> str:
     """Format a GitHub annotation scoped to the label policy file."""
     return f"::error file={LABEL_POLICY_PATH.as_posix()}::{message}"
@@ -69,6 +79,9 @@ def _err(message: str) -> str:
 
 def verify_policy(label_policy: dict[str, Any], title_policy: dict[str, Any]) -> list[str]:
     """Return drift diagnostics between type:* labels and commit types."""
+    malformed = title_policy_diagnostic(title_policy)
+    if malformed is not None:
+        return [_err(malformed)]
     errors: list[str] = []
     types = commit_types(title_policy)
     labels = [entry for entry in label_policy.get("labels", []) if isinstance(entry, dict)]

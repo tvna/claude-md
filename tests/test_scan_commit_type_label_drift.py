@@ -124,3 +124,31 @@ def test_main_rejects_unknown_command() -> None:
     with pytest.raises(SystemExit) as excinfo:
         gate.main(["bogus"])
     assert excinfo.value.code == 2
+
+
+def test_title_policy_diagnostic_none_when_well_formed() -> None:
+    assert gate.title_policy_diagnostic(_title_policy(["feat"])) is None
+
+
+def test_verify_policy_flags_missing_title_policy_table() -> None:
+    errors = gate.verify_policy(_label_policy([{"name": "type:feat", "family": "type"}]), {})
+    assert errors == [
+        "::error file=.github/label-policy.toml::title-policy.toml is missing the "
+        "[title_policy] table or it is not a table"
+    ]
+
+
+def test_verify_policy_flags_types_not_a_list() -> None:
+    label = _label_policy([{"name": "type:feat", "family": "type"}])
+    errors = gate.verify_policy(label, {"title_policy": {"types": "feat"}})
+    assert errors == [
+        "::error file=.github/label-policy.toml::title-policy.toml [title_policy].types "
+        "is not a list"
+    ]
+
+
+def test_main_verify_with_repo_root(tmp_path: Path) -> None:
+    # Covers the Path(args.repo_root) conversion; tmp_path has no policy files,
+    # so verify reports the missing label policy and main exits 1.
+    rc = gate.main(["verify", "--repo-root", str(tmp_path)])
+    assert rc == 1
