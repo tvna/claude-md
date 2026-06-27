@@ -19,6 +19,37 @@ Refs #1802, #1775, #1727, #1632, #745.
 
 ---
 
+## Decision: merge vs. rebase when updating the base
+
+Before running any base-update command, decide between `git merge` and
+`git rebase`. Rebase rewrites the branch's commit SHAs, so a branch that has
+already been pushed becomes non-fast-forward and the follow-up push is rejected
+when force-push is prohibited (the circular failure recorded in retro #1824, PR
+#1822 R2). Branch on whether the branch already exists on the remote:
+
+```sh
+git ls-remote --exit-code --heads origin "$(git branch --show-current)"
+```
+
+Use `git ls-remote`, which queries the remote directly, rather than
+`git rev-parse --verify origin/<branch>`: the latter only resolves the local
+remote-tracking ref (`refs/remotes/origin/<branch>`), which a fresh remote
+session or CI checkout may not have fetched yet even though the branch exists
+on GitHub. A false "not pushed" from the local-only probe would route an
+already-published `claude/*` branch down the rebase path and the push would be
+rejected by `non_fast_forward`; the exact failure this decision prevents.
+
+| Result | Meaning | Action |
+|---|---|---|
+| Exit 0 (prints a SHA) | The branch is already pushed; on a `claude/*` branch force-push is prohibited by `non_fast_forward` | Use `git merge origin/main` (the merge commit keeps the remote tip as an ancestor, so the push stays fast-forward). For a conflict-free update prefer the helper in the [Conflict-free path](#conflict-free-path), which performs exactly this merge. |
+| Exit 2 (no matching ref) | The branch has not been pushed yet | `git rebase origin/main` is safe; there is no remote ref to diverge from, so re-publishing the branch is a normal (non-force) push. |
+
+This decision is the local-command counterpart to the conditional guidance in
+the `scripts/preflight_session_base_freshness.py` error message: when the branch
+is already pushed and force-push is prohibited, merge rather than rebase.
+
+---
+
 ## Decision: conflict-free vs. generated-file conflict
 
 First probe whether the merge would conflict:
