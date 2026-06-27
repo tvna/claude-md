@@ -602,8 +602,9 @@ STEPS: tuple[Step, ...] = (
     ),
     Step(
         # Refs #952/#1800. Per-file 90 % coverage floor for changed
-        # scripts/*.py. Runs ``pytest --cov --cov-report=json`` only when
-        # coverage.json is absent; reuses a pre-existing report otherwise.
+        # scripts/*.py. Runs ``pytest --cov --cov-report=json`` when
+        # coverage.json is absent OR stale (older than a scripts/** or
+        # tests/** source file, Refs #2075); reuses a fresh report otherwise.
         # ``heavy=True`` so it runs in the skip-cached heavy phase after all
         # cheap gates pass. CI equivalent: verify-agents.yml ``coverage`` job
         # (``Per-file coverage floor`` required status check).
