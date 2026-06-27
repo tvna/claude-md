@@ -196,7 +196,7 @@ def _command_produces_commit(command: str) -> bool:
                 return True
             i = k
             continue
-        i = j + 1 if j > i else i + 1
+        i = j + 1
     return False
 
 # Signing config copied verbatim into the throwaway probe repo. ``commit.gpgsign``

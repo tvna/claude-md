@@ -77,6 +77,10 @@ _GIT_VALUE_OPTS = frozenset({"-c", "-C"})
 # Shell separators that end a single git invocation in a command line.
 _SHELL_OPS = frozenset({"&&", "||", "|", ";", "&"})
 
+# A ``-m`` / ``-am`` short flag, capturing any attached value: ``-m`` (empty
+# group, value is the next token) or ``-mmsg`` / ``-amsg`` (group is the value).
+_MSG_FLAG_RE = re.compile(r"-[A-Za-z]*m(.*)")
+
 # Auto-closing keyword followed by ``#N``, anywhere in the message (commit
 # messages carry no line-anchored ``Closes #N`` convention, unlike PR bodies).
 # Built from the single-source keyword set so it never drifts from the
@@ -126,7 +130,7 @@ def _commit_message_values(command: str) -> list[str]:
             out.extend(_message_values(invocation))
             i = k
             continue
-        i = j + 1 if j > i else i + 1
+        i = j + 1
     return out
 
 
@@ -151,15 +155,14 @@ def _message_values(tokens: list[str]) -> list[str]:
                 continue
         elif tok.startswith("--message="):
             values.append(tok[len("--message="):])
-        elif re.fullmatch(r"-[A-Za-z]*m", tok):
-            if i + 1 < n:
+        elif (match := _MSG_FLAG_RE.fullmatch(tok)) is not None:
+            attached = match.group(1)
+            if attached:
+                values.append(attached)
+            elif i + 1 < n:
                 values.append(tokens[i + 1])
                 i += 2
                 continue
-        else:
-            attached = re.fullmatch(r"-[A-Za-z]*m(.+)", tok)
-            if attached:
-                values.append(attached.group(1))
         i += 1
     return values
 
@@ -235,6 +238,8 @@ def decide(
         return None
     if _ACK_MARKER in command:
         return None
+    if not token_getter():
+        return None  # fail-open early: CI / PR-body gate path is the backstop
 
     refs = _closing_refs(command)
     if not refs:
@@ -246,9 +251,6 @@ def decide(
     owner, _, name = repo.partition("/")
     if not (owner and name):
         return None
-
-    if not token_getter():
-        return None  # fail-open: CI / PR-body gate path is the backstop
 
     retro_numbers: list[int] = []
     for number in refs:
