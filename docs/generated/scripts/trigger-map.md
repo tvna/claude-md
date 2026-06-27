@@ -55,6 +55,7 @@ Detection is string-match based:
 | `flake_pin_latest.py` | workflow | `weekly-maintenance.yml (flake-pin-refresh)` |
 | `gate_agents_skills_edit.py` | agent-hook | `claude:PreToolUse` |
 | `gate_agents_skills_edit.py` | agent-hook | `codex:PreToolUse` |
+| `gate_agents_skills_edit.py` | workflow | `verify-pr.yml (portable-pr-policy)` |
 | `gate_cache_regime_advisor.py` | agent-hook | `claude:Stop` |
 | `gate_decision_handoff_askuserquestion.py` | agent-hook | `claude:Stop` |
 | `gate_doc_graph_pr.py` | workflow | `validate-doc-graph.yml (validate)` |

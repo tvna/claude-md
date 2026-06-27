@@ -51,14 +51,18 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["_tokenize(...)"]
-    N002["try"]
-    N003["return shlex.split(segment)"]
-    N004["except ValueError"]
-    N005["return segment.split()"]
+    N002["lexer = shlex(...)"]
+    N003["lexer.whitespace_split = True"]
+    N004["try"]
+    N005["return (list(lexer), False)"]
+    N006["except ValueError"]
+    N007["return (segment.split(), True)"]
     N001 -->|"start"| N002
-    N002 -->|"try"| N003
-    N002 -->|"raises"| N004
-    N004 --> N005
+    N002 --> N003
+    N003 --> N004
+    N004 -->|"try"| N005
+    N004 -->|"raises"| N006
+    N006 --> N007
 ```
 
 ## _leading_command(...)
@@ -103,14 +107,36 @@ flowchart TD
     N008 --> N009
 ```
 
+## _is_redirect_op(...)
+
+```mermaid
+flowchart TD
+    N001["_is_redirect_op(...)"]
+    N002["return '<str>' in token and set(token) <= {'<str>', '<str>', '<str>'}"]
+    N001 -->|"start"| N002
+```
+
 ## _redirect_targets(...)
 
 ```mermaid
 flowchart TD
     N001["_redirect_targets(...)"]
     N002["targets = []"]
+    N003["for index, token in enumerate(tokens):     if _is_redirect_op(token) and index + 1 < len(tokens):         targets.append(tokens[index + 1])"]
+    N004["return targets"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 --> N004
+```
+
+## _fallback_redirect_targets(...)
+
+```mermaid
+flowchart TD
+    N001["_fallback_redirect_targets(...)"]
+    N002["targets = []"]
     N003["skip_next = False"]
-    N004["for index, token in enumerate(tokens):     if skip_next:         skip_next = False         continue     match = _REDIRECT_RE.match(token)     if match is None:         continue     attached = match.group(1)     if attached:         targets.append(attached)     elif index + 1 < len(tokens):         targets.append(tokens[index + 1])         skip_next = True"]
+    N004["for index, token in enumerate(tokens):     if skip_next:         skip_next = False         continue     match = _FALLBACK_REDIRECT_RE.match(token)     if match is None:         continue     attached = match.group(1)     if attached:         targets.append(attached)     elif index + 1 < len(tokens):         targets.append(tokens[index + 1])         skip_next = True"]
     N005["return targets"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -147,29 +173,31 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["_segment_write_targets(...)"]
-    N002["tokens = _tokenize(...)"]
-    N003["targets = [managed for raw in _redirect_targets(tokens) if (managed := _managed_target(raw)) is not None]"]
-    N004["(cmd, args) = _leading_command(...)"]
-    N005["if cmd in _SHELL_COMMANDS and depth < _MAX_RECURSION_DEPTH"]
-    N006["script = _dash_c_script(...)"]
-    N007["if script"]
-    N008["extend(...)"]
-    N009["if cmd in _WRITE_COMMANDS"]
-    N010["extend(...)"]
-    N011["return targets"]
+    N002["(tokens, used_fallback) = _tokenize(...)"]
+    N003["raw_targets = _fallback_redirect_targets(tokens) if used_fallback else _redirect_targets(tokens)"]
+    N004["targets = [managed for raw in raw_targets if (managed := _managed_target(raw)) is not None]"]
+    N005["(cmd, args) = _leading_command(...)"]
+    N006["if cmd in _SHELL_COMMANDS and depth < _MAX_RECURSION_DEPTH"]
+    N007["script = _dash_c_script(...)"]
+    N008["if script"]
+    N009["extend(...)"]
+    N010["if cmd in _WRITE_COMMANDS"]
+    N011["extend(...)"]
+    N012["return targets"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 --> N004
     N004 --> N005
-    N005 -->|"true"| N006
-    N006 --> N007
-    N007 -->|"true"| N008
-    N005 -->|"false"| N009
-    N009 -->|"true"| N010
-    N008 --> N011
-    N007 -->|"false"| N011
-    N010 --> N011
-    N009 -->|"false"| N011
+    N005 --> N006
+    N006 -->|"true"| N007
+    N007 --> N008
+    N008 -->|"true"| N009
+    N006 -->|"false"| N010
+    N010 -->|"true"| N011
+    N009 --> N012
+    N008 -->|"false"| N012
+    N011 --> N012
+    N010 -->|"false"| N012
 ```
 
 ## managed_write_targets(...)
@@ -271,13 +299,154 @@ flowchart TD
     N004 -->|"false"| N006
 ```
 
+## _resolve_base(...)
+
+```mermaid
+flowchart TD
+    N001["_resolve_base(...)"]
+    N002["explicit = get(...)"]
+    N003["if explicit"]
+    N004["return explicit"]
+    N005["actions_base = get(...)"]
+    N006["if actions_base"]
+    N007["return f'<str>{actions_base}'"]
+    N008["return '<str>'"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 -->|"true"| N004
+    N003 -->|"false"| N005
+    N005 --> N006
+    N006 -->|"true"| N007
+    N006 -->|"false"| N008
+```
+
+## _changed_files(...)
+
+```mermaid
+flowchart TD
+    N001["_changed_files(...)"]
+    N002["result = runner(...)"]
+    N003["return frozenset((line.strip() for line in result.stdout.splitlines() if line.strip()))"]
+    N001 -->|"start"| N002
+    N002 --> N003
+```
+
+## managed_changes(...)
+
+```mermaid
+flowchart TD
+    N001["managed_changes(...)"]
+    N002["return frozenset((path for path in changed if path.startswith(MANAGED_PREFIXES)))"]
+    N001 -->|"start"| N002
+```
+
+## _superpowers_pin(...)
+
+```mermaid
+flowchart TD
+    N001["_superpowers_pin(...)"]
+    N002["try"]
+    N003["result = runner(...)"]
+    N004["except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError)"]
+    N005["return None"]
+    N006["for line in result.stdout.splitlines():     if line.lstrip().startswith('<str>'):         continue     match = _SUPERPOWERS_PIN_RE.search(line)     if match:         return match.group(1)"]
+    N007["return None"]
+    N001 -->|"start"| N002
+    N002 -->|"try"| N003
+    N002 -->|"raises"| N004
+    N004 --> N005
+    N003 --> N006
+    N006 --> N007
+```
+
+## evaluate_pr(...)
+
+```mermaid
+flowchart TD
+    N001["evaluate_pr(...)"]
+    N002["if not managed or pin_changed"]
+    N003["return (0, [])"]
+    N004["pretty = join(...)"]
+    N005["return (1, [f'<str>{pretty}<str>{_PIN_FILE}<str>'])"]
+    N001 -->|"start"| N002
+    N002 -->|"true"| N003
+    N002 -->|"false"| N004
+    N004 --> N005
+```
+
+## _cmd_verify(...)
+
+```mermaid
+flowchart TD
+    N001["_cmd_verify(...)"]
+    N002["base = args.base_ref or _resolve_base()"]
+    N003["try"]
+    N004["changed = _changed_files(...)"]
+    N005["except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError)"]
+    N006["print(...)"]
+    N007["return 1"]
+    N008["managed = managed_changes(...)"]
+    N009["pin_changed = False"]
+    N010["if managed"]
+    N011["base_pin = _superpowers_pin(...)"]
+    N012["head_pin = _superpowers_pin(...)"]
+    N013["pin_changed = base_pin is not None and head_pin is not None and (base_pin != head_pin)"]
+    N014["(code, errors) = evaluate_pr(...)"]
+    N015["if code == 0"]
+    N016["if managed"]
+    N017["print(...)"]
+    N018["print(...)"]
+    N019["return 0"]
+    N020["for line in errors:     print(line, file=sys.stderr)"]
+    N021["return 1"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 -->|"try"| N004
+    N003 -->|"raises"| N005
+    N005 --> N006
+    N006 --> N007
+    N004 --> N008
+    N008 --> N009
+    N009 --> N010
+    N010 -->|"true"| N011
+    N011 --> N012
+    N012 --> N013
+    N013 --> N014
+    N010 -->|"false"| N014
+    N014 --> N015
+    N015 -->|"true"| N016
+    N016 -->|"true"| N017
+    N016 -->|"false"| N018
+    N017 --> N019
+    N018 --> N019
+    N015 -->|"false"| N020
+    N020 --> N021
+```
+
+## _parse_verify_args(...)
+
+```mermaid
+flowchart TD
+    N001["_parse_verify_args(...)"]
+    N002["parser = ArgumentParser(...)"]
+    N003["add_argument(...)"]
+    N004["return parser.parse_args(args)"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 --> N004
+```
+
 ## main(...)
 
 ```mermaid
 flowchart TD
     N001["main(...)"]
-    N002["del argv"]
-    N003["return run_tool_hook('<str>', decide, auditable=False)"]
+    N002["args = sys.argv[1:] if argv is None else argv"]
+    N003["if args and args[0] == 'verify'"]
+    N004["return _cmd_verify(_parse_verify_args(args[1:]))"]
+    N005["return run_tool_hook('<str>', decide, auditable=False)"]
     N001 -->|"start"| N002
     N002 --> N003
+    N003 -->|"true"| N004
+    N003 -->|"false"| N005
 ```
