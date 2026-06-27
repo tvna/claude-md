@@ -106,8 +106,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "cd \"$(git rev-parse --show-toplevel)\" && scripts/install-prek.sh",
-            "async": true
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && scripts/install-prek.sh"
           }
         ]
       },

@@ -520,26 +520,25 @@ class TestBashDetectionProperties:
 class TestVerifyMode:
     """CI ``verify`` mode: the post-merge-tree counterpart to the hook (#2098).
 
-    A PR may edit a managed tree only alongside a pin change (apm.yml /
-    apm.lock.yaml); a managed diff with no pin diff is a hand edit and fails.
+    A PR may edit a managed tree only when the obra/superpowers pin actually
+    moved; a managed diff with no pin change is a hand edit and fails.
     """
 
     @pytest.mark.parametrize(
-        "changed,expected_code",
+        "managed,pin_changed,expected_code",
         [
-            (frozenset(), 0),
-            (frozenset({"scripts/foo.py", "docs/x.md"}), 0),
-            (frozenset({".agents/skillset/x.md"}), 0),  # sibling, not managed
-            (frozenset({".agents/skills/b/SKILL.md"}), 1),  # hand edit
-            (frozenset({".claude/skills/b/SKILL.md"}), 1),  # hand edit
-            # managed change WITH a pin bump is a legitimate regeneration
-            (frozenset({".agents/skills/b/SKILL.md", "apm.yml"}), 0),
-            (frozenset({".claude/skills/b/SKILL.md", "apm.lock.yaml"}), 0),
-            (frozenset({".agents/skills/b", "apm.yml", "scripts/z.py"}), 0),
+            (frozenset(), False, 0),  # nothing managed -> pin irrelevant
+            (frozenset(), True, 0),
+            (frozenset({".agents/skills/b/SKILL.md"}), False, 1),  # hand edit
+            (frozenset({".claude/skills/b/SKILL.md"}), False, 1),  # hand edit
+            (frozenset({".agents/skills/b/SKILL.md"}), True, 0),  # pin moved
+            (frozenset({".claude/skills/b/SKILL.md"}), True, 0),  # pin moved
         ],
     )
-    def test_evaluate_pr(self, changed: frozenset[str], expected_code: int) -> None:
-        code, errors = gase.evaluate_pr(changed)
+    def test_evaluate_pr(
+        self, managed: frozenset[str], pin_changed: bool, expected_code: int
+    ) -> None:
+        code, errors = gase.evaluate_pr(managed, pin_changed)
         assert code == expected_code
         assert (errors == []) is (expected_code == 0)
 
@@ -551,6 +550,21 @@ class TestVerifyMode:
             {".agents/skills/a", ".claude/skills/b"}
         )
 
+    def test_superpowers_pin_extracts_ref(self) -> None:
+        apm_yml = "dependencies:\n  apm:\n  - obra/superpowers#abc123def\n"
+        completed = SimpleNamespace(stdout=apm_yml)
+        assert gase._superpowers_pin("HEAD", runner=lambda *a, **k: completed) == "abc123def"
+
+    def test_superpowers_pin_none_when_token_absent(self) -> None:
+        completed = SimpleNamespace(stdout="dependencies:\n  apm: []\n")
+        assert gase._superpowers_pin("HEAD", runner=lambda *a, **k: completed) is None
+
+    def test_superpowers_pin_none_on_git_error(self) -> None:
+        def _boom(*_a: Any, **_k: Any) -> Any:
+            raise subprocess.CalledProcessError(128, ["git", "show"])
+
+        assert gase._superpowers_pin("nope", runner=_boom) is None
+
     def test_verify_cli_passes_when_no_managed_change(
         self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
     ) -> None:
@@ -561,9 +575,11 @@ class TestVerifyMode:
     def test_verify_cli_fails_on_hand_edit(
         self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
     ) -> None:
+        # Managed tree changed but the pin is identical at base and head.
         monkeypatch.setattr(
             gase, "_changed_files", lambda *a, **k: frozenset({".agents/skills/x/SKILL.md"})
         )
+        monkeypatch.setattr(gase, "_superpowers_pin", lambda *a, **k: "samepin")
         assert gase.main(["verify", "--base-ref", "origin/main"]) == 1
         err = capsys.readouterr().err
         assert ".agents/skills/x/SKILL.md" in err
@@ -572,12 +588,30 @@ class TestVerifyMode:
     def test_verify_cli_passes_on_pin_bump(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        # Managed tree changed AND the resolved pin actually moved base -> head.
         monkeypatch.setattr(
             gase,
             "_changed_files",
             lambda *a, **k: frozenset({".claude/skills/x/SKILL.md", "apm.lock.yaml"}),
         )
+        monkeypatch.setattr(
+            gase, "_superpowers_pin", lambda ref, **k: "oldpin" if ref == "origin/main" else "newpin"
+        )
         assert gase.main(["verify", "--base-ref", "origin/main"]) == 0
+
+    def test_verify_cli_fails_when_apm_yml_touched_but_pin_unchanged(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        # Codex review on #2098: an incidental apm.yml edit (version / MCP config)
+        # with an unchanged superpowers pin must NOT excuse a managed-tree edit.
+        monkeypatch.setattr(
+            gase,
+            "_changed_files",
+            lambda *a, **k: frozenset({".agents/skills/x/SKILL.md", "apm.yml"}),
+        )
+        monkeypatch.setattr(gase, "_superpowers_pin", lambda *a, **k: "samepin")
+        assert gase.main(["verify", "--base-ref", "origin/main"]) == 1
+        assert "without an obra/superpowers pin change" in capsys.readouterr().err
 
     def test_verify_cli_fails_loud_on_git_error(
         self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]

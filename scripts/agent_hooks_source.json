@@ -120,7 +120,7 @@
         "devin"
       ],
       "functionally_required": true,
-      "rationale": "Provisions the prek (j178/prek) git-hook runner that .githooks/pre-commit execs (core.hooksPath=.githooks; ADR-0001). Without it the first commit in a fresh remote clone is blocked, so it is genuinely operative on every agent that commits. Gates on both CLAUDE_CODE_REMOTE and CODEX_CODE_REMOTE; unlike the release-binary installers it installs via 'uv tool install prek' (no curl/sha path). Refs #2098."
+      "rationale": "Provisions the prek (j178/prek) git-hook runner that .githooks/pre-commit execs (core.hooksPath=.githooks; ADR-0001). Without it the first commit in a fresh remote clone is blocked, so it is genuinely operative on every agent that commits. Runs SYNCHRONOUSLY (no async) so commit readiness is gated on the install completing, not raced by a background hook (Codex review on #2098). Gates on both CLAUDE_CODE_REMOTE and CODEX_CODE_REMOTE; unlike the release-binary installers it installs via 'uv tool install prek' (no curl/sha path). Refs #2098."
     }
   },
   "permissions": {
@@ -251,8 +251,7 @@
               "hooks": [
                 {
                   "type": "command",
-                  "command": "scripts/install-prek.sh",
-                  "async": true
+                  "command": "scripts/install-prek.sh"
                 }
               ]
             },
