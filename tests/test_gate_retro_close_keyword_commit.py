@@ -64,7 +64,7 @@ class TestClosingRefs:
             ('git -C /workspace/claude-md commit -m "Closes #2011"', [2011]),
             ('git -c user.name=x commit -m "Closes #2011"', [2011]),
             ('git --no-pager commit -m "Closes #2011"', [2011]),
-            # Colon form -- GitHub honors "Closes: #N" (/code-review on #2120).
+            # Colon form: GitHub honors "Closes: #N" (/code-review on #2120).
             ('git commit -m "Closes: #2011"', [2011]),
             # Subshell / backtick / brace-group wrapping (/code-review on #2120).
             ('(git commit -m "Closes #2011")', [2011]),
