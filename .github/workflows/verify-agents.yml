@@ -192,6 +192,13 @@ jobs:
         # which would re-create the duplication that refactor removed.
         run: uv run python scripts/scan_session_path_drift.py verify
 
+      - name: Verify type:* labels match title-policy commit types
+        # Refs #2081: fails when a type:* label in .github/label-policy.toml has
+        # a stem that is not a commit type in .github/title-policy.toml, so the
+        # two partial projections of the commit-type concept cannot drift.
+        # type:tracking is exempt via a declared commit_type = false marker.
+        run: uv run python scripts/scan_commit_type_label_drift.py verify
+
       - name: Verify test shard markers
         # Refs #545: each tests/test_*.py must declare exactly one
         # module-scope shard marker so the lint-scripts-pytest matrix
