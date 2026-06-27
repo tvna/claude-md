@@ -10,6 +10,12 @@ from typing import Any
 
 API_VERSION = "2022-11-28"
 
+# Single source of truth for the GitHub REST host. ``rest_json`` / ``paginate``
+# below prefix bare ``/repos/...`` paths with this root so migrated scripts
+# (issue #909) pass API paths, not hand-built URLs, keeping URL construction
+# in one tested place rather than duplicated across every caller.
+API_ROOT = "https://api.github.com"
+
 # GitHub serves release-asset uploads from a separate host (binary body,
 # not JSON), so the asset uploader below targets this fixed endpoint while
 # every other call stays on https://api.github.com. Keeping both on this
@@ -84,6 +90,86 @@ def apply_call(
             sleeper(attempt * 5)
 
     return last_code, last_body
+
+
+class GitHubApiError(RuntimeError):
+    """A GitHub REST call returned a non-2xx status.
+
+    Carries the HTTP status ``code`` so callers can branch on it -- in
+    particular treat 404 as "absent" rather than a hard failure, preserving
+    the behaviour migrated scripts previously derived from a ``gh api``
+    :class:`subprocess.CalledProcessError`. Any other non-2xx fails loud
+    (CLAUDE.md section 4) instead of being silently swallowed.
+    """
+
+    def __init__(self, code: int, method: str, path: str, body: str) -> None:
+        super().__init__(f"GitHub API {method} {path} failed: HTTP {_format_code(code)}: {body}")
+        self.code = code
+        self.method = method
+        self.path = path
+        self.body = body
+
+
+def rest_json(
+    method: str,
+    path: str,
+    payload: dict[str, Any] | None = None,
+    *,
+    token: str,
+    opener: Callable[[urllib.request.Request], Any] = _default_opener,
+    sleeper: Callable[[float], None] | None = None,
+) -> Any:
+    """Call the GitHub REST API and return the parsed JSON body.
+
+    ``path`` is either an API path beginning with ``/`` (e.g.
+    ``/repos/o/r/issues/1``) -- prefixed with :data:`API_ROOT` -- or an
+    already-built ``https://`` URL. Retries and headers come from
+    :func:`apply_call`.
+
+    Raises :class:`GitHubApiError` on any non-2xx response so callers fail
+    loud; a 404 is surfaced through the exception's ``.code`` so callers can
+    treat it as "absent". Returns ``None`` for an empty body (e.g. HTTP 204).
+    """
+    url = path if path.startswith("http") else f"{API_ROOT}{path}"
+    code, body = apply_call(
+        method=method, url=url, payload=payload, token=token, opener=opener, sleeper=sleeper
+    )
+    if not (200 <= code < 300):
+        raise GitHubApiError(code, method, path, body)
+    if not body.strip():
+        return None
+    return json.loads(body)
+
+
+def paginate(
+    path: str,
+    *,
+    token: str,
+    opener: Callable[[urllib.request.Request], Any] = _default_opener,
+    sleeper: Callable[[float], None] | None = None,
+    per_page: int = 100,
+) -> list[Any]:
+    """Return every item from a paginated GitHub REST array endpoint.
+
+    Walks ``?page=1,2,...`` (appending ``per_page``) until a short or empty
+    page is returned, so callers need not handle ``Link`` headers. ``path``
+    must address an array-returning endpoint and should NOT include its own
+    ``per_page`` / ``page`` query keys (this helper appends them). Raises
+    :class:`GitHubApiError` on any non-2xx page.
+    """
+    items: list[Any] = []
+    page = 1
+    sep = "&" if "?" in path else "?"
+    while True:
+        page_path = f"{path}{sep}per_page={per_page}&page={page}"
+        data = rest_json("GET", page_path, token=token, opener=opener, sleeper=sleeper)
+        if not isinstance(data, list) or not data:
+            break
+        items.extend(data)
+        if len(data) < per_page:
+            break
+        page += 1
+    return items
 
 
 def upload_release_asset(
