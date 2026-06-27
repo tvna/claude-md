@@ -111,6 +111,16 @@
       ],
       "functionally_required": false,
       "rationale": "Explicit-use binary for an effectiveness-measurement phase; the deterministic gate is the pure-python scan_secrets.py (needs no binary). Shared for uniform cross-agent provisioning of devcontainer-parity tools; wired into codex+devin and gate widened to CODEX_CODE_REMOTE in #1608."
+    },
+    "scripts/install-prek.sh": {
+      "scope": "shared",
+      "wired": [
+        "claude",
+        "codex",
+        "devin"
+      ],
+      "functionally_required": true,
+      "rationale": "Provisions the prek (j178/prek) git-hook runner that .githooks/pre-commit execs (core.hooksPath=.githooks; ADR-0001). Without it the first commit in a fresh remote clone is blocked, so it is genuinely operative on every agent that commits. Runs SYNCHRONOUSLY (no async) so commit readiness is gated on the install completing, not raced by a background hook (Codex review on #2098). Gates on both CLAUDE_CODE_REMOTE and CODEX_CODE_REMOTE; unlike the release-binary installers it installs via 'uv tool install prek' (no curl/sha path). Refs #2098."
     }
   },
   "permissions": {
@@ -234,6 +244,14 @@
                   "type": "command",
                   "command": "scripts/install-betterleaks.sh",
                   "async": true
+                }
+              ]
+            },
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "scripts/install-prek.sh"
                 }
               ]
             },
@@ -965,6 +983,16 @@
                   "type": "command",
                   "command": "scripts/install-betterleaks.sh",
                   "statusMessage": "Provisioning betterleaks binary"
+                }
+              ]
+            },
+            {
+              "matcher": "startup|resume|clear|compact",
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "scripts/install-prek.sh",
+                  "statusMessage": "Provisioning prek git-hook runner"
                 }
               ]
             },

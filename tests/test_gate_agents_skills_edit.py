@@ -12,17 +12,50 @@ Verifies that:
 - The deny reason names the blocked path and the `apm compile` change path.
 - The stdin -> stdout boundary works end-to-end, and malformed stdin fails
   open (exit 0, no decision emitted).
+
+Adversarial / property coverage (issue #2098)
+---------------------------------------------
+``TestAdversarialBashDetection`` and ``TestBashDetectionProperties`` add the
+deterministic gate the three Codex P2 findings on PR #2092 lacked: they exercise
+the Bash heuristic against every known bypass and false-positive class so a
+future edit to it cannot silently regress:
+
+- wrapper / cluster flags (``bash -lc`` / ``sh -euc`` / ``-xc``; ``sudo`` /
+  ``env`` / non-shell interpreters are pinned as documented limitations),
+- the managed-directory root with no trailing slash (``rm -rf .agents/skills``),
+- separators inside quotes (``git commit -m 'note ; rm .agents/skills/x'``),
+- redirection variants (``>`` ``>>`` ``2>`` ``>|`` and attached ``>file``), and
+- the quoted-redirect false positive (``echo '> .agents/skills/x'`` and the
+  no-space ``echo '>.agents/skills/x'``) the prior hand-rolled redirect regex
+  mismatched, now fixed by tokenizing with ``shlex.shlex(punctuation_chars=...)``.
+
+Tokenizer evaluation (issue #2098, "hand-rolled parse -> real tokenizer?")
+--------------------------------------------------------------------------
+The per-segment tokenizer was moved from ``shlex.split`` to ``shlex.shlex`` with
+``punctuation_chars`` so quoting is honored when classifying redirection
+operators; the root cause of the quoted-``>`` false positive. The quote-aware
+SEGMENT splitter (``gase._segments``) is intentionally retained: ``shlex`` does
+not treat a newline as a command separator, so a wholesale replacement would
+merge ``echo hi\ncp a .agents/skills/x`` into one token stream and MISS the
+write (a bypass, strictly worse than a false positive for a safety gate).
+Unifying segmentation onto a single real tokenizer is a larger, separable change
+tracked for a follow-up issue; these property tests are the regression guard for
+that future work.
 """
 
 from __future__ import annotations
 
 import io
 import json
+import subprocess
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
+from hypothesis import given
+from hypothesis import strategies as st
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 import gate_agents_skills_edit as gase
@@ -262,3 +295,407 @@ class TestMainBoundary:
     ) -> None:
         monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps({"foo": "bar"})))
         assert gase.main([]) == 0
+
+
+class TestQuotedRedirectFalsePositive:
+    """A ``>`` inside quotes is a mention, never a redirection (issue #2098).
+
+    The pre-#2098 gate tokenized with ``shlex.split``, which strips quotes before
+    the redirect regex runs, so a quoted token whose content begins with ``>``
+    (``echo '> .agents/skills/x'``, or the no-space ``echo '>.agents/skills/x'``)
+    was misread as a real redirection and denied; a false positive that wedges
+    ordinary Bash. Tokenizing with ``shlex.shlex(punctuation_chars=...)`` keeps
+    the quoted ``>`` inside its word token, so these now pass.
+    """
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            "echo '> .agents/skills/x.md'",
+            "echo '>.agents/skills/x.md'",
+            "echo '>> .claude/skills/x.md'",
+            "echo '>>.claude/skills/x.md'",
+            "printf '%s' '> .agents/skills/x.md now'",
+            'git commit -m "writes >.claude/skills/x.md on compile"',
+            "echo \"redirect 2> .agents/skills/x.md is the syntax\"",
+        ],
+    )
+    def test_quoted_redirect_mention_passes(self, command: str) -> None:
+        assert gase.decide("Bash", {"command": command}) is None
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            "echo x >.agents/skills/x.md",
+            "echo x > .agents/skills/x.md",
+            "echo x 2>.agents/skills/x.md",
+            "echo x 2> .agents/skills/x.md",
+            "echo x >>.claude/skills/x.md",
+            "echo x >| .agents/skills/x.md",
+            "echo x >|.agents/skills/x.md",
+            "echo x 1>> .agents/skills/x.md",
+        ],
+    )
+    def test_real_redirect_variants_still_denied(self, command: str) -> None:
+        """Regression guard: the fix must not blind the gate to real redirects."""
+        assert _is_deny(gase.decide("Bash", {"command": command}))
+
+
+class TestFallbackRedirectDetection:
+    """When shlex cannot tokenize (unbalanced quote), the gate falls back to a
+    plain split and must STILL catch an attached redirect to a managed path.
+
+    Regression guard for the /code-review #2123 finding: the shlex refactor
+    classified redirects only as standalone operator tokens, but on the
+    ``.split()`` fallback path the operator and its target are not separated, so
+    an attached form like ``>.agents/skills/x`` was missed (a write bypass the
+    pre-#2098 regex caught). The fallback matcher restores it.
+    """
+
+    # ``'unbalanced`` leaves an open quote, forcing the shlex ValueError fallback.
+    _UNBAL = " 'unbalanced"
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            "echo x >.agents/skills/x.md" + _UNBAL,
+            "echo x 2>.agents/skills/x.md" + _UNBAL,
+            "echo x >>.claude/skills/x.md" + _UNBAL,
+            "echo x >| .agents/skills/x.md" + _UNBAL,
+            "echo x 2> .agents/skills/x.md" + _UNBAL,
+        ],
+    )
+    def test_fallback_attached_redirect_denied(self, command: str) -> None:
+        assert _is_deny(gase.decide("Bash", {"command": command}))
+
+    def test_fallback_quoted_mention_still_passes(self) -> None:
+        # On the fallback path the token keeps its literal quote char, so a
+        # quoted mention does not match the fallback redirect regex.
+        command = "echo '>.agents/skills/x.md' 'unbalanced"
+        assert gase.decide("Bash", {"command": command}) is None
+
+
+class TestAdversarialBashDetection:
+    """Each known bypass / false-positive class from the PR #2092 Codex review.
+
+    Pinned so a future change to the Bash heuristic cannot silently reopen one.
+    """
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            # wrapper / cluster short-flag forms that carry an inline -c script
+            "bash -lc 'cp a .agents/skills/x.md'",
+            "sh -euc 'rm .claude/skills/x.md'",
+            "bash -xc 'rm .agents/skills/x.md'",
+            "zsh -c 'rm .claude/skills/x.md'",
+            "dash -c 'cp a .agents/skills/x.md'",
+            # nested shell recursion
+            'bash -c \'bash -c "rm .agents/skills/x.md"\'',
+        ],
+    )
+    def test_wrapper_cluster_flags_denied(self, command: str) -> None:
+        assert _is_deny(gase.decide("Bash", {"command": command}))
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            # Documented defense-in-depth limitations: a wrapper with its own
+            # option grammar (sudo/env) or a non-shell interpreter is not parsed.
+            # Pinned so the boundary is explicit, not an accidental silent gap;
+            # the Edit/Write matcher covers the primary edit path.
+            "sudo rm .agents/skills/x.md",
+            "env rm .claude/skills/x.md",
+            "env FOO=bar cp a .agents/skills/x.md",
+            "python3 -c \"open('.agents/skills/x.md','w')\"",
+        ],
+    )
+    def test_documented_limitations_not_detected(self, command: str) -> None:
+        assert gase.decide("Bash", {"command": command}) is None
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            # leading NAME=value assignments are skipped, so the real mutator is
+            # still classified (distinct from the env-wrapper limitation above)
+            "FOO=bar cp a .agents/skills/x.md",
+            "A=1 B=2 rm .claude/skills/x.md",
+        ],
+    )
+    def test_assignment_prefix_skipped_then_detected(self, command: str) -> None:
+        assert _is_deny(gase.decide("Bash", {"command": command}))
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            # managed-directory root with no trailing slash (whole-tree ops)
+            "rm -rf .agents/skills",
+            "rm -rf .claude/skills",
+            "mv .claude/skills /tmp/skills",
+            "rm -rf /home/user/claude-md/.agents/skills",
+        ],
+    )
+    def test_directory_root_denied(self, command: str) -> None:
+        assert _is_deny(gase.decide("Bash", {"command": command}))
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            # separators inside a single-quoted argument are not command
+            # boundaries, so the quoted 'rm'/'cp' is not a phantom mutator
+            "git commit -m 'note ; rm .agents/skills/x.md'",
+            "git commit -m 'a && cp z .claude/skills/x.md'",
+            "git commit -m 'a || rm .agents/skills/x.md'",
+            "git commit -m 'x | tee .claude/skills/y.md'",
+            "git commit -m 'bg & rm .agents/skills/x.md'",
+        ],
+    )
+    def test_quoted_separators_pass(self, command: str) -> None:
+        assert gase.decide("Bash", {"command": command}) is None
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            # a real separator DOES start a new command, so a later-segment write
+            # is still caught (the flip side of the quoted-separator guard)
+            "ls ; rm .agents/skills/x.md",
+            "ls && cp a .agents/skills/x.md",
+            "false || rm .claude/skills/x.md",
+            "cat tmpl | tee .agents/skills/x.md",
+        ],
+    )
+    def test_real_separators_still_split(self, command: str) -> None:
+        assert _is_deny(gase.decide("Bash", {"command": command}))
+
+
+# Strategy: a clean path component (no shell metacharacters, no spaces) so the
+# generated command's structure is exactly what the property asserts.
+_NAME = st.text(
+    alphabet="abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-",
+    min_size=1,
+    max_size=10,
+)
+_MANAGED_PREFIX = st.sampled_from(list(gase.MANAGED_PREFIXES))
+# A short safe phrase (letters/digits/spaces only) to sit inside a quoted arg.
+_PHRASE = st.text(alphabet="abcdefghijklmnopqrstuvwxyz ", min_size=0, max_size=20)
+
+
+@st.composite
+def _managed_path(draw: st.DrawFn) -> str:
+    """A path under a managed prefix, e.g. ``.agents/skills/foo/bar.md``."""
+    prefix = draw(_MANAGED_PREFIX)
+    parts = draw(st.lists(_NAME, min_size=1, max_size=3))
+    return prefix + "/".join(parts) + ".md"
+
+
+class TestBashDetectionProperties:
+    """Property tests over the Bash heuristic (issue #2098).
+
+    Each property names the invariant it pins so a failure points at the spec.
+    """
+
+    @given(
+        managed=_managed_path(),
+        mutator=st.sampled_from(sorted(gase._WRITE_COMMANDS)),
+    )
+    def test_mutator_writing_managed_path_is_denied(
+        self, managed: str, mutator: str
+    ) -> None:
+        # A mutating command carrying a managed path as a positional argument is
+        # always a detected write target.
+        assert gase.managed_write_targets(f"{mutator} src {managed}")
+
+    @given(
+        managed=_managed_path(),
+        op=st.sampled_from([">", ">>", "2>", ">|", "1>"]),
+        space=st.sampled_from(["", " "]),
+    )
+    def test_redirect_to_managed_path_is_denied(
+        self, managed: str, op: str, space: str
+    ) -> None:
+        # Every output-redirection variant, attached or spaced, is detected.
+        assert gase.managed_write_targets(f"echo x {op}{space}{managed}")
+
+    @given(managed=_managed_path(), phrase=_PHRASE, sep=st.sampled_from([";", "&&", "||", "|", "&", ">", ">>"]))
+    def test_quoted_mention_is_never_a_target(
+        self, managed: str, phrase: str, sep: str
+    ) -> None:
+        # A separator or redirect inside a single-quoted argument is data, not a
+        # command/redirection, so no managed write target is produced.
+        command = f"git commit -m '{phrase}{sep} rm {managed}'"
+        assert gase.managed_write_targets(command) == []
+
+    @given(
+        managed=_managed_path(),
+        shell=st.sampled_from(sorted(gase._SHELL_COMMANDS)),
+        cluster=st.sampled_from(["-c", "-lc", "-euc", "-xc"]),
+    )
+    def test_wrapper_cluster_flag_recurses(
+        self, managed: str, shell: str, cluster: str
+    ) -> None:
+        # A mutator hidden in a `<shell> <cluster> '<script>'` wrapper is seen.
+        assert gase.managed_write_targets(f"{shell} {cluster} 'rm {managed}'")
+
+    @given(reader=st.sampled_from(["cat", "grep", "ls", "head", "tail", "wc"]), managed=_managed_path())
+    def test_read_commands_are_allowed(self, reader: str, managed: str) -> None:
+        # Reading a managed path is never blocked; only writes are.
+        assert gase.managed_write_targets(f"{reader} {managed}") == []
+
+    @given(prefix=_MANAGED_PREFIX, parts=st.lists(_NAME, min_size=1, max_size=2))
+    def test_sibling_directory_never_matches(
+        self, prefix: str, parts: list[str]
+    ) -> None:
+        # `.agents/skillset/...` is a sibling of `.agents/skills/...`; a mutator
+        # targeting it must pass (the trailing-slash prefix guards the boundary).
+        sibling = prefix.rstrip("/") + "et/" + "/".join(parts) + ".md"
+        assert gase.managed_write_targets(f"rm -rf {sibling}") == []
+
+
+class TestVerifyMode:
+    """CI ``verify`` mode: the post-merge-tree counterpart to the hook (#2098).
+
+    A PR may edit a managed tree only when the obra/superpowers pin actually
+    moved; a managed diff with no pin change is a hand edit and fails.
+    """
+
+    @pytest.mark.parametrize(
+        "managed,pin_changed,expected_code",
+        [
+            (frozenset(), False, 0),  # nothing managed -> pin irrelevant
+            (frozenset(), True, 0),
+            (frozenset({".agents/skills/b/SKILL.md"}), False, 1),  # hand edit
+            (frozenset({".claude/skills/b/SKILL.md"}), False, 1),  # hand edit
+            (frozenset({".agents/skills/b/SKILL.md"}), True, 0),  # pin moved
+            (frozenset({".claude/skills/b/SKILL.md"}), True, 0),  # pin moved
+        ],
+    )
+    def test_evaluate_pr(
+        self, managed: frozenset[str], pin_changed: bool, expected_code: int
+    ) -> None:
+        code, errors = gase.evaluate_pr(managed, pin_changed)
+        assert code == expected_code
+        assert (errors == []) is (expected_code == 0)
+
+    def test_managed_changes_filters_to_prefixes(self) -> None:
+        changed = frozenset(
+            {".agents/skills/a", ".claude/skills/b", ".agents/skillset/c", "scripts/d.py"}
+        )
+        assert gase.managed_changes(changed) == frozenset(
+            {".agents/skills/a", ".claude/skills/b"}
+        )
+
+    def test_superpowers_pin_extracts_ref(self) -> None:
+        apm_yml = "dependencies:\n  apm:\n  - obra/superpowers#abc123def\n"
+        completed = SimpleNamespace(stdout=apm_yml)
+        assert gase._superpowers_pin("HEAD", runner=lambda *a, **k: completed) == "abc123def"
+
+    def test_superpowers_pin_none_when_token_absent(self) -> None:
+        completed = SimpleNamespace(stdout="dependencies:\n  apm: []\n")
+        assert gase._superpowers_pin("HEAD", runner=lambda *a, **k: completed) is None
+
+    def test_superpowers_pin_none_on_git_error(self) -> None:
+        def _boom(*_a: Any, **_k: Any) -> Any:
+            raise subprocess.CalledProcessError(128, ["git", "show"])
+
+        assert gase._superpowers_pin("nope", runner=_boom) is None
+
+    @pytest.mark.parametrize(
+        "apm_yml,expected",
+        [
+            # /code-review #2123: a YAML-quoted pin must not capture the trailing
+            # quote, or a quoting difference base vs head would falsely compare
+            # unequal and let a hand edit pass.
+            ('  - "obra/superpowers#abc123"\n', "abc123"),
+            ("  - obra/superpowers#abc123  # pinned\n", "abc123"),
+            # a commented-out dependency line must not shadow the active pin
+            # (else a legitimate regen would falsely compare unchanged and fail).
+            ("#  - obra/superpowers#OLDREF\n  - obra/superpowers#abc123\n", "abc123"),
+        ],
+    )
+    def test_superpowers_pin_ignores_quotes_and_comments(
+        self, apm_yml: str, expected: str
+    ) -> None:
+        completed = SimpleNamespace(stdout=apm_yml)
+        assert gase._superpowers_pin("HEAD", runner=lambda *a, **k: completed) == expected
+
+    def test_verify_cli_passes_when_no_managed_change(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        monkeypatch.setattr(gase, "_changed_files", lambda *a, **k: frozenset({"scripts/x.py"}))
+        assert gase.main(["verify", "--base-ref", "origin/main"]) == 0
+        assert "OK" in capsys.readouterr().out
+
+    def test_verify_cli_fails_on_hand_edit(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        # Managed tree changed but the pin is identical at base and head.
+        monkeypatch.setattr(
+            gase, "_changed_files", lambda *a, **k: frozenset({".agents/skills/x/SKILL.md"})
+        )
+        monkeypatch.setattr(gase, "_superpowers_pin", lambda *a, **k: "samepin")
+        assert gase.main(["verify", "--base-ref", "origin/main"]) == 1
+        err = capsys.readouterr().err
+        assert ".agents/skills/x/SKILL.md" in err
+        assert "apm compile" in err
+
+    def test_verify_cli_passes_on_pin_bump(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Managed tree changed AND the resolved pin actually moved base -> head.
+        monkeypatch.setattr(
+            gase,
+            "_changed_files",
+            lambda *a, **k: frozenset({".claude/skills/x/SKILL.md", "apm.lock.yaml"}),
+        )
+        monkeypatch.setattr(
+            gase, "_superpowers_pin", lambda ref, **k: "oldpin" if ref == "origin/main" else "newpin"
+        )
+        assert gase.main(["verify", "--base-ref", "origin/main"]) == 0
+
+    def test_verify_cli_fails_when_apm_yml_touched_but_pin_unchanged(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        # Codex review on #2098: an incidental apm.yml edit (version / MCP config)
+        # with an unchanged superpowers pin must NOT excuse a managed-tree edit.
+        monkeypatch.setattr(
+            gase,
+            "_changed_files",
+            lambda *a, **k: frozenset({".agents/skills/x/SKILL.md", "apm.yml"}),
+        )
+        monkeypatch.setattr(gase, "_superpowers_pin", lambda *a, **k: "samepin")
+        assert gase.main(["verify", "--base-ref", "origin/main"]) == 1
+        assert "without an obra/superpowers pin change" in capsys.readouterr().err
+
+    def test_verify_cli_fails_loud_on_git_error(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        def _boom(*_a: Any, **_k: Any) -> frozenset[str]:
+            raise subprocess.CalledProcessError(1, ["git", "diff"])
+
+        monkeypatch.setattr(gase, "_changed_files", _boom)
+        assert gase.main(["verify", "--base-ref", "origin/main"]) == 1
+        assert "git diff" in capsys.readouterr().err
+
+    def test_main_without_verify_arg_runs_hook(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """No leading ``verify`` -> the PreToolUse hook path (stdin), not the CLI."""
+        event = {"tool_name": "Write", "tool_input": {"file_path": ".agents/skills/x.md"}}
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+        assert gase.main([]) == 0
+        assert _is_deny(json.loads(capsys.readouterr().out))
+
+    def test_resolve_base_precedence(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("BASE_REF", raising=False)
+        monkeypatch.delenv("GITHUB_BASE_REF", raising=False)
+        assert gase._resolve_base() == "origin/main"
+        monkeypatch.setenv("GITHUB_BASE_REF", "release")
+        assert gase._resolve_base() == "origin/release"
+        monkeypatch.setenv("BASE_REF", "deadbeef")
+        assert gase._resolve_base() == "deadbeef"
+
+    def test_changed_files_parses_runner_output(self) -> None:
+        """_changed_files splits and strips the runner's stdout (no real git)."""
+        completed = SimpleNamespace(stdout=".agents/skills/a\n\n  scripts/b.py  \n")
+        changed = gase._changed_files("origin/main", runner=lambda *a, **k: completed)
+        assert changed == frozenset({".agents/skills/a", "scripts/b.py"})
