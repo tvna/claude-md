@@ -47,6 +47,7 @@ from __future__ import annotations
 
 import io
 import json
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any
@@ -513,3 +514,85 @@ class TestBashDetectionProperties:
         # targeting it must pass (the trailing-slash prefix guards the boundary).
         sibling = prefix.rstrip("/") + "et/" + "/".join(parts) + ".md"
         assert gase.managed_write_targets(f"rm -rf {sibling}") == []
+
+
+class TestVerifyMode:
+    """CI ``verify`` mode: the post-merge-tree counterpart to the hook (#2098).
+
+    A PR may edit a managed tree only alongside a pin change (apm.yml /
+    apm.lock.yaml); a managed diff with no pin diff is a hand edit and fails.
+    """
+
+    @pytest.mark.parametrize(
+        "changed,expected_code",
+        [
+            (frozenset(), 0),
+            (frozenset({"scripts/foo.py", "docs/x.md"}), 0),
+            (frozenset({".agents/skillset/x.md"}), 0),  # sibling, not managed
+            (frozenset({".agents/skills/b/SKILL.md"}), 1),  # hand edit
+            (frozenset({".claude/skills/b/SKILL.md"}), 1),  # hand edit
+            # managed change WITH a pin bump is a legitimate regeneration
+            (frozenset({".agents/skills/b/SKILL.md", "apm.yml"}), 0),
+            (frozenset({".claude/skills/b/SKILL.md", "apm.lock.yaml"}), 0),
+            (frozenset({".agents/skills/b", "apm.yml", "scripts/z.py"}), 0),
+        ],
+    )
+    def test_evaluate_pr(self, changed: frozenset[str], expected_code: int) -> None:
+        code, errors = gase.evaluate_pr(changed)
+        assert code == expected_code
+        assert (errors == []) is (expected_code == 0)
+
+    def test_managed_changes_filters_to_prefixes(self) -> None:
+        changed = frozenset(
+            {".agents/skills/a", ".claude/skills/b", ".agents/skillset/c", "scripts/d.py"}
+        )
+        assert gase.managed_changes(changed) == frozenset(
+            {".agents/skills/a", ".claude/skills/b"}
+        )
+
+    def test_verify_cli_passes_when_no_managed_change(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        monkeypatch.setattr(gase, "_changed_files", lambda *a, **k: frozenset({"scripts/x.py"}))
+        assert gase.main(["verify", "--base-ref", "origin/main"]) == 0
+        assert "OK" in capsys.readouterr().out
+
+    def test_verify_cli_fails_on_hand_edit(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        monkeypatch.setattr(
+            gase, "_changed_files", lambda *a, **k: frozenset({".agents/skills/x/SKILL.md"})
+        )
+        assert gase.main(["verify", "--base-ref", "origin/main"]) == 1
+        err = capsys.readouterr().err
+        assert ".agents/skills/x/SKILL.md" in err
+        assert "apm compile" in err
+
+    def test_verify_cli_passes_on_pin_bump(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            gase,
+            "_changed_files",
+            lambda *a, **k: frozenset({".claude/skills/x/SKILL.md", "apm.lock.yaml"}),
+        )
+        assert gase.main(["verify", "--base-ref", "origin/main"]) == 0
+
+    def test_verify_cli_fails_loud_on_git_error(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        def _boom(*_a: Any, **_k: Any) -> frozenset[str]:
+            raise subprocess.CalledProcessError(1, ["git", "diff"])
+
+        monkeypatch.setattr(gase, "_changed_files", _boom)
+        assert gase.main(["verify", "--base-ref", "origin/main"]) == 1
+        assert "git diff" in capsys.readouterr().err
+
+    def test_main_without_verify_arg_runs_hook(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """No leading ``verify`` -> the PreToolUse hook path (stdin), not the CLI."""
+        event = {"tool_name": "Write", "tool_input": {"file_path": ".agents/skills/x.md"}}
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+        assert gase.main([]) == 0
+        assert _is_deny(json.loads(capsys.readouterr().out))
