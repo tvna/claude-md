@@ -47,6 +47,7 @@ import devcontainer_pin_pr
 import doc_graph_viz
 import flake_pin
 import flake_pin_latest
+import gate_agents_skills_edit
 import gate_doc_graph_pr
 import gate_generated_scripts_manual_edit
 import github_paginate
@@ -185,6 +186,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("script_dependency_graph.py", "all-doc"): "test_script_dependency_graph_all_doc_matches_workflow_args",
     ("script_trigger_map.py", "all-doc"): "test_script_trigger_map_all_doc_matches_workflow_args",
     ("gate_generated_scripts_manual_edit.py", "verify"): "test_gate_generated_scripts_manual_edit_matches_workflow_args",
+    ("gate_agents_skills_edit.py", "verify"): "test_gate_agents_skills_edit_verify_matches_workflow_args",
     ("gate_doc_graph_pr.py", None): "test_gate_doc_graph_pr_matches_workflow_env",
     ("doc_graph_viz.py", "all-doc"): "test_doc_graph_viz_all_doc_matches_workflow_args",
     ("auto_retro.py", "triage-report"): "test_auto_retro_triage_report_matches_workflow_env",
@@ -667,6 +669,18 @@ def test_gate_generated_scripts_manual_edit_matches_workflow_args(
     )
 
     assert gate_generated_scripts_manual_edit.main(["verify", "--base-ref", "origin/main"]) == 0
+
+
+def test_gate_agents_skills_edit_verify_matches_workflow_args(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The verify subcommand passes when no managed skill tree changed."""
+    monkeypatch.setattr(
+        gate_agents_skills_edit,
+        "_changed_files",
+        lambda *_a, **_kw: frozenset({"scripts/x.py"}),
+    )
+    assert gate_agents_skills_edit.main(["verify", "--base-ref", "origin/main"]) == 0
 
 
 def test_auto_retro_triage_report_matches_workflow_env(
