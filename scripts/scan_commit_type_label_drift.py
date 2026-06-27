@@ -5,8 +5,8 @@ Refs #2081. The canonical commit-type list lives once in
 ``.github/title-policy.toml`` ``[title_policy].types``. ``.github/label-policy.toml``
 declares a ``type:*`` label family that is an intentional partial projection of
 that list (not every commit type gets a label). Nothing checked that a ``type:*``
-label whose stem is not a real commit type -- a typo, or a label kept after a
-commit type was removed or renamed -- could not ship.
+label whose stem is not a real commit type (a typo, or a label kept after a
+commit type was removed or renamed) could not ship.
 
 This gate fails loudly when the two disagree. The one intentional exception,
 ``type:tracking`` (a tracking-issue label with no commit-type counterpart), is
