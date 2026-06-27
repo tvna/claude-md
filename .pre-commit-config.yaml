@@ -16,6 +16,15 @@ repos:
         language: python
         additional_dependencies: ["pre-commit-hooks==5.0.0"]
         types: [text]
+        # Refs #1824 (PR #1822 retro, R1): declare the pre-commit stage so a
+        # trailing-whitespace violation surfaces at `git commit` time (via the
+        # .githooks/pre-commit -> prek hook-impl path) instead of only at push /
+        # CI. pre-push is kept so the gate also fires wherever the pre-push hook
+        # type is installed. Both stages are scoped to this hygiene hook and do
+        # not collide with the dedicated pre-push entries below
+        # (preflight-branch-base, preflight-coverage), which keep their own
+        # `stages: [pre-push]`.
+        stages: [pre-commit, pre-push]
       - id: end-of-file-fixer
         name: fix end of files
         entry: end-of-file-fixer

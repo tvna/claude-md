@@ -139,7 +139,11 @@ def _build_warning(sha: str, *, force_push_blocked: bool = False) -> str:
             f"That path needs no local commit, force-push, or GPG."
         )
     else:
-        remedy = "  git fetch origin main && git rebase origin/main"
+        remedy = (
+            "  git fetch origin main && git rebase origin/main\n"
+            "If the branch is already pushed and force-push is prohibited, use "
+            "`git merge origin/main` instead of rebase."
+        )
     return (
         f"STALE BRANCH BASE: this branch does not contain origin/main as "
         f"observed at session start (SHA={sha[:12]}). Update the base BEFORE "
@@ -165,7 +169,9 @@ def _build_deny_reason(sha: str, *, force_push_blocked: bool = False) -> str:
         remedy = (
             "Rebase before committing:\n"
             "  git fetch origin main && git rebase origin/main\n\n"
-            "After the rebase HEAD contains the base and commits proceed."
+            "After the rebase HEAD contains the base and commits proceed.\n"
+            "If the branch is already pushed and force-push is prohibited, use "
+            "`git merge origin/main` instead of rebase."
         )
     return (
         f"Blocked by scripts/preflight_session_base_freshness.py: this branch "
@@ -307,7 +313,9 @@ def cmd_check(_args: argparse.Namespace) -> int:
     else:
         print(
             "FAIL: branch base is stale (HEAD does not contain the session-start "
-            "origin/main). Rebase: git fetch origin main && git rebase origin/main",
+            "origin/main). Rebase: git fetch origin main && git rebase origin/main. "
+            "If the branch is already pushed and force-push is prohibited, use "
+            "`git merge origin/main` instead of rebase.",
             file=sys.stderr,
         )
     return 1
