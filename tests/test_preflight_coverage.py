@@ -306,6 +306,14 @@ class TestCoverageFreshness:
         cov_file, _ = self._setup(tmp_path, cov_mtime=2_000_000, src_mtime=1_000_000)
         assert cov.coverage_is_stale(cov_file, tmp_path) is False
 
+    def test_stale_when_same_second_as_source(self, tmp_path: Path) -> None:
+        # Equal mtime (the report written in the same wall-clock second as a
+        # source edit) is treated as stale, so a report produced in the same
+        # second as a later edit cannot drive a false-fresh verdict. The
+        # comparison is <= rather than < for this fail-safe reason. Refs #2093.
+        cov_file, _ = self._setup(tmp_path, cov_mtime=2_000_000, src_mtime=2_000_000)
+        assert cov.coverage_is_stale(cov_file, tmp_path) is True
+
     def test_fresh_when_no_source_dirs(self, tmp_path: Path) -> None:
         cov_file = tmp_path / "coverage.json"
         cov_file.write_text("{}")

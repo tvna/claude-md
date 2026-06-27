@@ -205,25 +205,37 @@ def _build_updated_notice(sha: str) -> str:
 def _try_auto_update_base(sha: str, *, repo: Path) -> str:
     """Fast-forward the current branch to *sha* when it is safe; return the outcome.
 
-    Returns ``"updated"`` only when the working tree is clean AND HEAD is an
-    ancestor of *sha* (a pure fast-forward: a freshly-cut branch with no local
-    work yet) AND ``git merge --ff-only`` succeeds. Returns ``"skipped"`` in
-    every other case (dirty tree, local commits, non-fast-forwardable, or any
-    git error). This is a LOCAL fast-forward only (no push, no merge commit, no
+    Returns ``"updated"`` only when the working tree has no tracked changes AND
+    ``git merge --ff-only`` succeeds (a pure fast-forward: a freshly-cut branch
+    with no local commits yet). Returns ``"skipped"`` in every other case
+    (tracked-file changes, local commits, non-fast-forwardable, or any git
+    error). This is a LOCAL fast-forward only (no push, no merge commit, no
     conflict resolution), so it is safe regardless of the force-push ruleset and
     cannot lose work. Fail-open per CLAUDE.md Section 4: on any error it skips
     and the loud warning / commit-deny gate remain the backstop. Refs #2076.
+
+    Cleanliness uses ``--untracked-files=no``: untracked files do not block the
+    update because ``git merge --ff-only`` never touches them, so the intended
+    freshly-cut-branch case still fires when a stray untracked file is present
+    (the all-files check made it a no-op as soon as one untracked file existed).
+    Refs #2093 item 2.
+
+    ``git merge --ff-only`` is the single authority for the fast-forward
+    decision: by definition it advances HEAD only when HEAD is an ancestor of
+    *sha* and aborts (non-zero, no merge commit) otherwise. The previous
+    hand-rolled ``merge-base --is-ancestor`` pre-check duplicated that guarantee,
+    so it is removed; ``preflight_branch_base.check_base_freshness`` answers the
+    opposite-direction question (does HEAD contain the base) and cannot stand in
+    for the fast-forwardable check, so the dedup defers to ``--ff-only`` itself.
+    Refs #2093 item 3.
     """
     try:
-        status = run_git(["status", "--porcelain"], cwd=repo)
+        status = run_git(["status", "--porcelain", "--untracked-files=no"], cwd=repo)
         if status.returncode != 0 or status.stdout.strip():
-            return "skipped"  # dirty tree (or git error) -> do not touch it
-        ancestor = run_git(["merge-base", "--is-ancestor", "HEAD", sha], cwd=repo)
-        if ancestor.returncode != 0:
-            return "skipped"  # local commits / not fast-forwardable -> leave for the operator
+            return "skipped"  # tracked-file changes (or git error) -> do not touch it
         merged = run_git(["merge", "--ff-only", sha], cwd=repo)
         if merged.returncode != 0:
-            return "skipped"
+            return "skipped"  # local commits / not fast-forwardable -> leave for the operator
     except Exception:
         return "skipped"
     return "updated"

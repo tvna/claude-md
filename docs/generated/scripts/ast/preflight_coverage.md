@@ -44,7 +44,7 @@ flowchart TD
     N006["newest = newest_source_mtime(...)"]
     N007["if newest is None"]
     N008["return False"]
-    N009["return cov_mtime < newest"]
+    N009["return cov_mtime <= newest"]
     N001 -->|"start"| N002
     N002 -->|"try"| N003
     N002 -->|"raises"| N004
