@@ -260,12 +260,9 @@ def gh_api(
     path: str,
     json_body: dict[str, Any] | None = None,
 ) -> str:
-    """Call the GitHub REST API. Returns the raw response body text.
+    """Thin wrapper over :func:`_github_api.rest_text` (ambient GH_TOKEN auth).
 
-    Raises :class:`_github_api.GitHubApiError` on any non-2xx response so
-    callers can distinguish 404 (drift signal) from other failures (loud per
-    CLAUDE.md section 4). Authentication comes from the ``GH_TOKEN`` env var
-    that the workflow sets to ``secrets.GITHUB_TOKEN``.
+    Raises GitHubApiError on non-2xx so callers can treat a 404 as a drift signal.
     """
     return rest_text(method, path, json_body)
 

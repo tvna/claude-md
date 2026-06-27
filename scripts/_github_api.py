@@ -157,7 +157,10 @@ def rest_json(
     Thin JSON wrapper over :func:`rest_text`: same path / retry / non-2xx
     semantics (a 404 raises :class:`GitHubApiError` with ``.code == 404`` so
     callers can treat it as "absent"), returning ``None`` for an empty body
-    (e.g. HTTP 204) and the parsed object otherwise.
+    (e.g. HTTP 204) and the parsed object otherwise. Unlike ``rest_text``,
+    ``token`` is required (no ambient default): general callers select the
+    credential deliberately, since some (e.g. ``ruleset_drift``) use a
+    distinct PAT (``GH_TOKEN_API``) rather than the workflow ``GH_TOKEN``.
     """
     body = rest_text(method, path, payload, token=token, opener=opener, sleeper=sleeper)
     if not body.strip():

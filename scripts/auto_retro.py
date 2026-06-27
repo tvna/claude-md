@@ -361,12 +361,7 @@ def gh_api(
     path: str,
     json_body: dict[str, Any] | None = None,
 ) -> str:
-    """Call the GitHub REST API. Returns the raw response body text.
-
-    Raises :class:`_github_api.GitHubApiError` on any non-2xx response so
-    the orchestrator fails loudly (CLAUDE.md section 4). Authentication
-    comes from the ``GH_TOKEN`` env var that the workflow sets.
-    """
+    """Thin wrapper over :func:`_github_api.rest_text` (ambient GH_TOKEN auth)."""
     return rest_text(method, path, json_body)
 
 
