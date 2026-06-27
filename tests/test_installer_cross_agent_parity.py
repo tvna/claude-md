@@ -56,6 +56,7 @@ EXPECTED_SHARED_INSTALLERS = {
     "install-zizmor",
     "install-lychee",
     "install-betterleaks",
+    "install-prek",
 }
 
 
