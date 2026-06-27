@@ -281,6 +281,14 @@
               "hooks": [
                 {
                   "type": "command",
+                  "command": "python3 scripts/session_set_origin_head.py"
+                }
+              ]
+            },
+            {
+              "hooks": [
+                {
+                  "type": "command",
                   "command": "python3 scripts/preflight_session_base_freshness.py session-start"
                 }
               ]
@@ -969,6 +977,16 @@
                   "type": "command",
                   "command": "python3 scripts/check_session_branch.py",
                   "statusMessage": "Checking session push target"
+                }
+              ]
+            },
+            {
+              "matcher": "startup|resume|clear|compact",
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "python3 scripts/session_set_origin_head.py",
+                  "statusMessage": "Setting origin/HEAD for diff-range tooling"
                 }
               ]
             },
