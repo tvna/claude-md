@@ -117,6 +117,48 @@ flowchart TD
     N002 --> N003
 ```
 
+## _build_updated_notice(...)
+
+```mermaid
+flowchart TD
+    N001["_build_updated_notice(...)"]
+    N002["return f'<str>{sha[:12]}<str>'"]
+    N001 -->|"start"| N002
+```
+
+## _try_auto_update_base(...)
+
+```mermaid
+flowchart TD
+    N001["_try_auto_update_base(...)"]
+    N002["try"]
+    N003["status = run_git(...)"]
+    N004["if status.returncode != 0 or status.stdout.strip()"]
+    N005["return '<str>'"]
+    N006["ancestor = run_git(...)"]
+    N007["if ancestor.returncode != 0"]
+    N008["return '<str>'"]
+    N009["merged = run_git(...)"]
+    N010["if merged.returncode != 0"]
+    N011["return '<str>'"]
+    N012["except Exception"]
+    N013["return '<str>'"]
+    N014["return '<str>'"]
+    N001 -->|"start"| N002
+    N002 -->|"try"| N003
+    N003 --> N004
+    N004 -->|"true"| N005
+    N004 -->|"false"| N006
+    N006 --> N007
+    N007 -->|"true"| N008
+    N007 -->|"false"| N009
+    N009 --> N010
+    N010 -->|"true"| N011
+    N002 -->|"raises"| N012
+    N012 --> N013
+    N010 -->|"false"| N014
+```
+
 ## cmd_session_start(...)
 
 ```mermaid
@@ -134,8 +176,10 @@ flowchart TD
     N011["return 0"]
     N012["if result.status != 'pass'"]
     N013["branch = _current_branch(...)"]
-    N014["_emit_context(...)"]
-    N015["return 0"]
+    N014["if branch is not None and _try_auto_update_base(stamp.sha, repo=REPO_ROOT) == 'updated'"]
+    N015["_emit_context(...)"]
+    N016["_emit_context(...)"]
+    N017["return 0"]
     N001 -->|"start"| N002
     N002 -->|"true"| N003
     N002 -->|"false"| N004
@@ -149,8 +193,11 @@ flowchart TD
     N009 --> N012
     N012 -->|"true"| N013
     N013 --> N014
-    N014 --> N015
-    N012 -->|"false"| N015
+    N014 -->|"true"| N015
+    N014 -->|"false"| N016
+    N015 --> N017
+    N016 --> N017
+    N012 -->|"false"| N017
 ```
 
 ## decide(...)
