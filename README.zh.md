@@ -2,7 +2,7 @@
 
 [![codecov](https://codecov.io/gh/tvna/claude-md/branch/main/graph/badge.svg)](https://codecov.io/gh/tvna/claude-md)
 
-[English](./README.md) | [日本語](./README.ja.md) | 简体中文
+[English](./README.md) | [日本語](./README.ja.md) | 简体中文 | [한국어](./README.ko.md)
 
 这是一个用于集中管理个人调优后的代理指令的主仓库。它通过 [`microsoft/apm`](https://github.com/microsoft/apm) 编译生成 [`CLAUDE.md`](./CLAUDE.md) 和 [`AGENTS.md`](./AGENTS.md)，供其他项目引用。
 
@@ -19,7 +19,7 @@
 |---|------|------|------|
 | 1 | Define the Goal with Plan Mode First | 目标与计划结构 | 任何需要 3 个以上步骤或涉及架构判断的任务，都先进入 plan mode。 |
 | 2 | Bound Inputs and Unknowns Before Coding | 编码前的认知整理 | 先把外部文本视为不可信数据，再区分事实、假设和歧义。 |
-| 3 | Use Git Ecosystem Effectively | 交付工具链 | 在扩大规模之前，先建立 hooks、CI/CD、声明式依赖管理等工具链。 |
+| 3 | Use Git Ecosystem Effectively | 交付工具链 | 在扩大规模之前，先建立 hooks、CI/CD、声明式依赖管理工具链。 |
 | 4 | Simplicity, Bounded by Safety | 安全边界 | 用满足需求的最少内容解决问题，但不牺牲安全性、工具范围和秘密处理。 |
 | 5 | Accelerate Scale with Quality | 质量使规模成为可能 | 质量才能让产出扩大，二者成比例增长；保持变更面狭窄，质量下降时停下来重新规划。 |
 | 6 | Be a Force Multiplier | 交接与沟通 | 不满足于 "LGTM"；明确说明权衡，让他人能跟上判断过程。 |
@@ -46,38 +46,32 @@ python3 scripts/verify_apm_checksums.py verify
 
 ## 在其他项目中使用
 
-### 1. 作为 submodule 引入
+把编译产物 `CLAUDE.md` / `AGENTS.md` 作为 **已提交的真实文件** 引入，而不是 submodule，也不是 symlink。submodule 只以提交指针的形式保存，因此一次全新的 `git clone`（例如 Claude Code on the web 会话）会让它为空，被 symlink 的 `CLAUDE.md` 会变成损坏的链接，从而静默地什么都不加载。下面的方式把指令落地为属于克隆一部分的真实文件。
 
-```bash
-# 在父项目根目录执行
-git submodule add https://github.com/tvna/claude-md .claude-md-master
-ln -s .claude-md-master/CLAUDE.md CLAUDE.md
-```
+### 1. 添加同步 workflow
+
+把 [`docs/runbooks/consumer-instruction-sync.md`](./docs/runbooks/consumer-instruction-sync.md) 中的同步 workflow 复制到你的项目。它会从固定的 tag 化 release 拉取编译产物，依据发布的 `SHA256SUMS` 校验每个文件，并开一个把它们写为已提交真实文件的 PR。该 PR 要经过 code-owner gate 合并，不要自动合并。
 
 ### 2. 添加项目专属规则
 
-在父项目中创建本地项目指令文件，在开头导入这个主仓库，然后只写项目专属的差异部分。
+如果你的项目有自己的差异，就把主仓库同步到一个 vendored 路径，并在你自己的 `CLAUDE.md` 中导入它，然后只写项目专属的差异部分。
 
 ```markdown
-@.claude-md-master/CLAUDE.md
+@.agents/claude-md-master/CLAUDE.md
 
 ## Project-specific rules
 - (only the delta for this project)
 ```
 
+同步只覆盖 vendored 文件，因此你自己的 `CLAUDE.md` 不会被覆盖。
+
 ### 3. 拉取更新
 
-```bash
-git submodule update --remote .claude-md-master
-```
+在一个经过评审的 PR 中提升同步 workflow 里固定的 release tag。计划任务随后会开出更新 PR，经 code-owner gate 合并。
 
 ### 工具特定说明
 
-- **Codex 或其他读取 `AGENTS.md` 的工具**，再 symlink 编译产物 `AGENTS.md`：
-
-  ```bash
-  ln -s .claude-md-master/AGENTS.md AGENTS.md
-  ```
+- **Codex 或其他读取 `AGENTS.md` 的工具**：同一次同步会把 `AGENTS.md` 与 `CLAUDE.md` 一起落地为已提交的真实文件，无需额外步骤。
 
 - **Devin** 可以使用 APM 展开到 `.agents/skills/` 的 skills。需要 hooks parity 时，请把 `.devin/hooks.v1.json` 与仓库指令一起引入。详见 [`docs/standards/devin-apm-compatibility.md`](./docs/standards/devin-apm-compatibility.md)。
 

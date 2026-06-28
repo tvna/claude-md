@@ -16,7 +16,7 @@ tracking issue or explicitly recorded as parked here.
   #1383. The eBook framing is captured in #178.
 - Method: the full control set (50+ scripts under `scripts/`, the workflows
   under `.github/workflows/`, and the runbooks under `docs/`) was swept and
-  mapped against the eBook framework -- three principles, the "impossible, not
+  mapped against the eBook framework; three principles, the "impossible, not
   tedious" design test, Least Agency and blast radius, three maturity tiers
   (Foundation, Enterprise, Advanced), and seven capability domains.
 - Evidence tags: `[fact]` is observed in-tree or in issue state; `[analysis]`
@@ -35,7 +35,24 @@ tracking issue or explicitly recorded as parked here.
   controls. Re-verification relied on "re-read whenever a workflow, script,
   ruleset, or runbook lands" (reviewer memory), with no deterministic gate.
   This is the "impossible, not tedious" failure and a deterministic-gate gap
-  (CLAUDE.md section 3). Tracked by #1387.
+  (CLAUDE.md section 3).
+- `[fact]` Resolved by #1387: the inventory was resynced (closed #181 / #182 /
+  #184 / #312 removed from the Gap columns; the landed privileged-workflow rows
+ ; `devcontainer-pin-refresh.yml`, `publish-devcontainer-images.yml`,
+  `post-merge.yml`, `monthly-maintenance.yml`, `tvna-bot-automerge.yml`; added)
+  and a deterministic gate now enforces currency:
+  `scripts/verify_control_inventory_currency.py` in the `lint-scripts-static`
+  job. Its scope model is an explicit manifest
+  (`.github/security-surface-inventory.toml`) plus a narrow, high-precision
+  auto-detector for surfaces that cross a secret/privilege boundary (a workflow
+  using a non-`GITHUB_TOKEN` secret or declaring an `environment:`, or a script
+  importing `_secret_patterns`). The broad `gate_*` / `preflight_*` /
+  `_github_api` globs were deliberately rejected as the signal: they match 40+
+  CI-process gates rather than ATT&CK controls, so listing them would create a
+  large exempt table that is itself a drift surface (CLAUDE.md section 4).
+- `[analysis]` Residual: the gate is tree-only (no network), so it cannot read
+  GitHub issue state; a *closed* tracking issue lingering in a Gap column is
+  still caught only by periodic resync and the weekly drift job, not this gate.
 
 ## Capability-domain gaps
 
@@ -57,7 +74,7 @@ tracking issue or explicitly recorded as parked here.
 - Enterprise: partial (audit trail and a permissions audit exist). Holes:
   residual PAT scope (#56), detection latency (#1390), mixed fail posture
   (#1389).
-- Advanced: largely unmet -- agent identity / short-lived credentials (#1381),
+- Advanced: largely unmet; agent identity / short-lived credentials (#1381),
   runtime behavioral anomaly detection and blast-radius caps (#1380), active
   defense, and recovery validation.
 

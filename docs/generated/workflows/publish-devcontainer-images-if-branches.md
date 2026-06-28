@@ -9,12 +9,14 @@ flowchart TD
     T_workflow_dispatch(["on: workflow_dispatch"])
 
     J_build["build"]
+    S_J_build_0(("Stage flake into nix-warm-claude feature"))
     J_scan["scan"]
     J_publish["publish"]
     J_update_pins["update-pins"]
 
     T_push --> J_build
     T_workflow_dispatch --> J_build
+    J_build -->|"matrix.agent == 'claude'"| S_J_build_0
     J_build --> J_scan
     J_build --> J_publish
     J_publish -->|"github.event_name == 'push'"| J_update_pins

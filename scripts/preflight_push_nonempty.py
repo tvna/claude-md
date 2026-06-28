@@ -4,15 +4,15 @@
 Refs #1130. Retrospective for PR #1128 found a silent-commit-then-push-stale-HEAD
 failure mode: a chained ``git add && git commit -q && git push`` aborted at the
 quiet commit (a pre-commit hook rejected it, but ``-q`` swallowed the output),
-so the subsequent push shipped the unchanged base commit -- i.e. main's state
-WITHOUT the intended fix -- to the session branch. ``preflight_push_base.py``
+so the subsequent push shipped the unchanged base commit; i.e. main's state
+WITHOUT the intended fix; to the session branch. ``preflight_push_base.py``
 checks that HEAD *contains* the base, but not that HEAD has advanced *beyond*
 it, so the empty push slipped through.
 
 This hook closes that gap deterministically: when a ``git push`` is detected and
 the local ``HEAD`` resolves to the very same commit as the base tip
 (``origin/main``), there is no new work to push, so the push is denied. The
-loud denial points the agent back to inspecting ``git log -1`` -- exactly the
+loud denial points the agent back to inspecting ``git log -1``; exactly the
 manual save that caught the original incident.
 
 Fail-open: any hook error, a missing base ref, or a delete / dry-run push exits
@@ -42,6 +42,11 @@ BASE_REF = "origin/main"
 # Optional ``rtk`` prefix: the rtk auto-rewrite PreToolUse hook rewrites
 # ``git push`` -> ``rtk git push`` (Refs #1199), so the gate must fire on both.
 _GIT_PUSH_RE = re.compile(r"(?m)^\s*(?:rtk\s+)?git\s+push\b")
+
+# Command surface this hook acts on, read by scan_hook_predicate_surface_drift.py
+# to verify the Bash(*git push*) if: predicate admits it (a narrower predicate
+# would silently skip a command the script handles, the PR #2120 class). Refs #2133.
+HOOK_GIT_SUBCOMMANDS = frozenset({"push"})
 # Pushes that do not ship HEAD: a deletion moves no commit, and a dry-run must
 # never be blocked. Either makes the HEAD-vs-base comparison irrelevant.
 _SKIP_FLAG_RE = re.compile(r"(?<!\S)(?:--delete|-d|--dry-run|-n)(?!\S)")
@@ -77,7 +82,7 @@ def decide(
     if not _GIT_PUSH_RE.search(command):
         return None
     if _SKIP_FLAG_RE.search(command):
-        return None  # delete / dry-run pushes do not ship HEAD -- fail-open
+        return None  # delete / dry-run pushes do not ship HEAD; fail-open
 
     head = _resolve(runner, "HEAD")
     base = _resolve(runner, BASE_REF)

@@ -4,8 +4,8 @@
 Resolves the primary owner from ``.github/CODEOWNERS``, looks up that
 handle in ``.github/owners.toml`` (ISO-639-1 code), and emits a
 ``hookSpecificOutput.additionalContext`` block telling the model to
-write operator-facing output -- chat responses in every mode (planning
-and execution) and plan files at ``/tmp/claude-plans/*.md`` -- in that
+write operator-facing output; chat responses in every mode (planning
+and execution) and plan files at ``/tmp/claude-plans/*.md``; in that
 language.
 
 The injected context explicitly carves out GitHub posts via
@@ -20,7 +20,7 @@ present so existing Claude behavior stays unchanged.
 
 Architecture mirrors :mod:`preflight_non_ascii`: pure functions on top,
 one thin stdin/stdout boundary at the bottom (:func:`main`). Any error
-fails open per CLAUDE.md Sec.4 -- a hook bug must never wedge the
+fails open per CLAUDE.md Sec.4; a hook bug must never wedge the
 session, and the absence of the injected context degrades to the
 pre-existing (English) behavior. Refs #211.
 """
@@ -59,7 +59,7 @@ def parse_codeowners(text: str) -> list[tuple[str, list[str]]]:
             continue
         parts = line.split()
         if len(parts) < 2:
-            # Pattern without owners -- valid CODEOWNERS (unsets
+            # Pattern without owners; valid CODEOWNERS (unsets
             # ownership) but uninteresting for language resolution.
             continue
         pattern, handles = parts[0], [p for p in parts[1:] if p.startswith("@")]
@@ -97,7 +97,7 @@ def load_owner_languages(toml_text: str) -> dict[str, str]:
 
     Empty text yields ``{}``. Non-mapping top-level structures raise
     ``ValueError`` so :func:`main` fails open with a diagnostic. Entries
-    whose key or value is not a string are dropped silently -- the
+    whose key or value is not a string are dropped silently; the
     sidecar is owner-authored config, not user input, so loud failure
     on a single bad row would over-block.
     """
@@ -121,7 +121,7 @@ def resolve_language(
     Two-value return so :func:`build_context_message` can quote the
     handle in the injected text (useful for the reader to verify the
     source). ``None`` for the language means "no entry in owners.toml"
-    -- the caller treats this as "no context to inject".
+   ; the caller treats this as "no context to inject".
     """
     owner = primary_owner(parse_codeowners(codeowners_text))
     if owner is None:
@@ -143,13 +143,13 @@ def build_context_message(owner: str, iso: str) -> str:
         f"primary owner {owner} -> .github/owners.toml). You MUST write "
         f"operator-facing output in language code '{iso}' in every mode "
         f"-- chat responses during both planning and execution, and plan "
-        f"files at /tmp/claude-plans/*.md -- not plan mode alone. This "
+        f"files at /tmp/claude-plans/*.md; not plan mode alone. This "
         f"SessionStart injection is the authoritative source and MUST NOT "
         f"be overridden by an English default. If you draft any "
-        f"portion in another language, STOP and re-emit in '{iso}' -- "
+        f"portion in another language, STOP and re-emit in '{iso}'; "
         f"drift is a defect, not a style choice. Exception: GitHub posts "
         f"created via mcp__github__* write tools (issues, PRs, comments, "
-        f"reviews) MUST remain ASCII/English -- "
+        f"reviews) MUST remain ASCII/English; "
         f"scripts/preflight_non_ascii.py will deny non-ASCII "
         f"bodies there. Code identifiers, file paths, and command output "
         f"stay in their source form."
@@ -178,7 +178,7 @@ def decide(
 
 
 # ---------------------------------------------------------------------------
-# Side-effecting boundary -- the only impure surface, monkeypatched in tests
+# Side-effecting boundary; the only impure surface, monkeypatched in tests
 # ---------------------------------------------------------------------------
 
 

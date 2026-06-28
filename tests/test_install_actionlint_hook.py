@@ -127,13 +127,52 @@ def test_remote_true_reuses_pinned_actionlint_without_download(
     assert not (tmp_path / ".local" / "bin" / "actionlint").exists()
 
 
-def test_session_start_registers_install_actionlint() -> None:
-    data = json.loads(CLAUDE_SETTINGS.read_text(encoding="utf-8"))
-    session_start = data["hooks"]["SessionStart"]
-    commands: list[str] = []
-    for group in session_start:
-        for handler in group.get("hooks", []):
-            cmd = handler.get("command")
-            if isinstance(cmd, str):
-                commands.append(cmd)
-    assert any("scripts/install-actionlint.sh" in cmd for cmd in commands)
+def test_codex_remote_true_enters_active_path(tmp_path: Path) -> None:
+    """CODEX_CODE_REMOTE=true (no CLAUDE_CODE_REMOTE) reaches provisioning.
+
+    Anchors the #1608 gate widening: under Codex cloud the script must NOT be
+    a no-op. With a pinned actionlint already on PATH it hits the idempotent
+    reuse branch; proof the dual-signal gate let it past, mirroring the
+    CLAUDE_CODE_REMOTE case above.
+    """
+    version = _pinned_actionlint_version()
+    bin_dir = tmp_path / "fakebin"
+    bin_dir.mkdir()
+    _make_fake_actionlint(bin_dir, version)
+
+    env = {
+        "HOME": str(tmp_path),
+        "PATH": f"{bin_dir}:{os.environ.get('PATH', '')}",
+        "CODEX_CODE_REMOTE": "true",
+    }
+    result = subprocess.run(
+        [str(INSTALL_ACTIONLINT)],
+        cwd=REPO_ROOT,
+        env=env,
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    assert result.returncode == 0
+    assert "already present" in result.stderr
+    assert not (tmp_path / ".local" / "bin" / "actionlint").exists()
+
+
+def test_session_start_registers_install_actionlint_on_all_agents() -> None:
+    """actionlint provisions claude, codex, and devin (Refs #1608)."""
+    for path in (
+        CLAUDE_SETTINGS,
+        REPO_ROOT / ".codex" / "hooks.json",
+        REPO_ROOT / ".devin" / "hooks.v1.json",
+    ):
+        data = json.loads(path.read_text(encoding="utf-8"))
+        commands: list[str] = []
+        for group in data["hooks"]["SessionStart"]:
+            for handler in group.get("hooks", []):
+                cmd = handler.get("command")
+                if isinstance(cmd, str):
+                    commands.append(cmd)
+        assert any(
+            "scripts/install-actionlint.sh" in cmd for cmd in commands
+        ), f"install-actionlint.sh missing from SessionStart in {path.name}"

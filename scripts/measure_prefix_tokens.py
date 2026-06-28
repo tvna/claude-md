@@ -4,25 +4,25 @@
 Cache-read is the dominant per-session cost in Claude Code web sessions
 (measured at ~60% of one Opus 4.8 session in PR #1421's
 ``## Resource Consumption`` section). Cache-read is billed at ~0.1x the
-base input rate -- $0.50 / 1M tokens for ``claude-opus-4-8`` -- but it is
+base input rate; $0.50 / 1M tokens for ``claude-opus-4-8``; but it is
 paid on *every* request, so the fixed prefix is a per-request multiplier.
 Shrinking the prefix is therefore the highest-leverage cache-read lever.
 
 This script establishes a **reproducible, token-accurate baseline** for the
 repo-resident slice of that prefix, so reduction work can be measured rather
 than guessed (measure-first). It counts tokens with the canonical Anthropic
-``count_tokens`` endpoint via the official SDK -- never a ``tiktoken``-style
+``count_tokens`` endpoint via the official SDK; never a ``tiktoken``-style
 approximation, which is wrong for Claude and undercounts code/non-English
 text. Token counts are model-specific, so the model id is passed through to
 the endpoint (default ``claude-opus-4-8``).
 
 What this script CAN measure (repo-resident, exact bytes available):
 
-* ``CLAUDE.md``               -- the Claude Code prefix injection (compiled).
-* ``AGENTS.md``               -- the Codex prefix injection (compiled).
-* ``.apm/instructions/master.instructions.md`` -- the editable APM source
+* ``CLAUDE.md``              ; the Claude Code prefix injection (compiled).
+* ``AGENTS.md``              ; the Codex prefix injection (compiled).
+* ``.apm/instructions/master.instructions.md``; the editable APM source
   that both compiled artifacts are generated from (``apm compile``).
-* Any extra file paths passed as positional arguments -- e.g. a bundled
+* Any extra file paths passed as positional arguments; e.g. a bundled
   skill body (``.../claude-api/SKILL.md``) whose exact bytes live outside
   the repo but are readable on the host running the measurement.
 
@@ -93,7 +93,7 @@ _REPO_TARGETS: tuple[tuple[str, str], ...] = (
 )
 
 # Prefix components that are injected by the harness and cannot be measured
-# from the repository -- surfaced in the output so the boundary is explicit.
+# from the repository; surfaced in the output so the boundary is explicit.
 _HARNESS_OWNED: tuple[str, ...] = (
     "Claude Code base system prompt",
     "Built-in tool schemas + mcp__github__* (ToolSearch-expanded) schemas",
@@ -159,7 +159,7 @@ def measure_target(target: Target, counter: Counter | None) -> Measurement:
         tokens = counter(text)
     except Exception as exc:
         # Surface any SDK/HTTP failure as this row's error rather than
-        # crashing the whole batch -- one bad count must not lose the rest.
+        # crashing the whole batch; one bad count must not lose the rest.
         return Measurement(
             target.label, target.path, byte_size, None, f"count failed: {exc}"
         )
@@ -248,8 +248,8 @@ def make_api_counter(model: str) -> Counter:
 
     Imports the official Anthropic SDK lazily so this module loads without
     the dependency (it is run with ``uv run --with anthropic``). Raises
-    ``RuntimeError`` -- with a remediation message that never echoes the
-    credential -- when the SDK is absent or no credential is set.
+    ``RuntimeError``; with a remediation message that never echoes the
+    credential; when the SDK is absent or no credential is set.
     """
     try:
         import anthropic  # type: ignore[import-not-found]  # optional, ephemeral dep (uv run --with anthropic)
@@ -280,7 +280,7 @@ def main(argv: list[str] | None = None) -> int:
 
     Returns 0 when token counts were obtained, 2 when no API access was
     available (byte sizes are still printed). A missing target file does not
-    fail the run -- it degrades that row only.
+    fail the run; it degrades that row only.
     """
     parser = argparse.ArgumentParser(
         description="Measure repo-resident fixed-prefix token cost via count_tokens.",

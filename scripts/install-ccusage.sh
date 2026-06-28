@@ -30,16 +30,21 @@
 
 set -euo pipefail
 
-# Only run in the Claude Code on the Web remote environment. Local dev and the
-# nix devcontainer provision ccusage themselves; the hook is a silent no-op there
-# (no stdout/stderr, exit 0) so aligned hosts pay nothing.
-if [ "${CLAUDE_CODE_REMOTE:-}" != "true" ]; then
+# Only run in a recognised remote agent environment -- Claude Code on the Web
+# (CLAUDE_CODE_REMOTE=true) or Codex cloud (CODEX_CODE_REMOTE=true, set by the
+# operator; mirrors install-uv.sh). Local dev and the nix devcontainer provision
+# ccusage themselves; the hook is a silent no-op there (no stdout/stderr, exit 0).
+# NOTE: ccusage reads Claude Code usage telemetry; under Codex it provisions the
+# binary but has no data source, an accepted no-op per the #1606 audit.
+if [ "${CLAUDE_CODE_REMOTE:-}" != "true" ] && [ "${CODEX_CODE_REMOTE:-}" != "true" ]; then
   exit 0
 fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=scripts/_session_path.sh
 . "${SCRIPT_DIR}/_session_path.sh"
+# shellcheck source=scripts/_retry.sh
+. "${SCRIPT_DIR}/_retry.sh"
 
 # Map this platform to the nix system double that flake.nix's ccusageNative block
 # enumerates. An unsupported arch is a non-fatal skip: the binary is an
@@ -91,7 +96,7 @@ tarball="${tmpdir}/${pkg}-${version}.tgz"
 url="https://registry.npmjs.org/@ccusage/${pkg}/-/${pkg}-${version}.tgz"
 
 echo "install-ccusage: downloading pinned @ccusage/${pkg} v${version} ..." >&2
-curl -fsSL "${url}" -o "${tarball}"
+retry_download "${url}" "${tarball}" "ccusage" "scripts/install-ccusage.sh" || exit 0
 echo "${sha}  ${tarball}" | sha256sum -c - >&2
 
 # The npm tarball unpacks to a `package/` root holding `bin/ccusage`.

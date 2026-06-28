@@ -21,7 +21,7 @@ Contract:
         stdout when aligned; a one-line fix-it message on stderr when
         mismatched. Exit 0 on match, 1 on mismatch, missing uv, or
         unreadable pin.
-    Failure policy: fails loud per CLAUDE.md section 4 -- a mismatch is
+    Failure policy: fails loud per CLAUDE.md section 4; a mismatch is
         the *intended* signal, never silently swallowed. A missing uv
         binary is treated as a mismatch (the gate's job is to guarantee
         the runtime can satisfy the pin, and a missing binary cannot).
@@ -60,7 +60,7 @@ class VersionResult:
 def parse_uv_version(output: str) -> str | None:
     """Return the version token from ``uv --version`` stdout, or None.
 
-    The expected shape is ``uv X.Y.Z (...)`` -- the second whitespace
+    The expected shape is ``uv X.Y.Z (...)``; the second whitespace
     token is the version. Any other shape returns None so the caller
     fails loudly rather than guessing.
     """

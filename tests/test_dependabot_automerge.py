@@ -133,12 +133,15 @@ def test_both_threat_labels_block_sorted() -> None:
     assert "threat-intel label present: threat:intel-needed, threat:response-needed" in result.reasons
 
 
-def test_threat_labels_match_triage_source_of_truth() -> None:
-    # The literals in dependabot_automerge mirror threat_intel_triage's labels;
-    # this asserts they cannot drift apart (the triage script applies them).
-    import threat_intel_triage as tit
-
-    assert set(da._THREAT_BLOCKING_LABELS) == {tit.RESPONSE_LABEL, tit.INTEL_LABEL}
+def test_threat_blocking_labels_are_inert_defense_in_depth() -> None:
+    # The threat:* labels were retired in #1647 (definitions removed) and the
+    # per-item label code path in threat_intel_triage was removed in #1651, so
+    # nothing applies these labels anymore. The guard is kept as inert
+    # defense-in-depth (CLAUDE.md s4): if a threat:* label is ever re-created
+    # and applied by hand, auto-merge must still block. The literals are now
+    # self-contained; there is no producer constant left to mirror, so this
+    # pins the expected set directly.
+    assert set(da._THREAT_BLOCKING_LABELS) == {"threat:response-needed", "threat:intel-needed"}
 
 
 def test_unexpected_path_blocks() -> None:
@@ -510,9 +513,9 @@ class TestEnableAutoMerge:
 
         return apply_call
 
-    def _make_graphql_call(self, http_status: int = 200, errors: list | None = None) -> Callable[..., tuple[int, dict[str, Any]]]:
-        def graphql_call(*, query: str, variables: dict, token: str) -> tuple[int, dict]:
-            body: dict = {"data": {"enablePullRequestAutoMerge": {"pullRequest": {"number": 42}}}}
+    def _make_graphql_call(self, http_status: int = 200, errors: list[dict[str, Any]] | None = None) -> Callable[..., tuple[int, dict[str, Any]]]:
+        def graphql_call(*, query: str, variables: dict[str, Any], token: str) -> tuple[int, dict[str, Any]]:
+            body: dict[str, Any] = {"data": {"enablePullRequestAutoMerge": {"pullRequest": {"number": 42}}}}
             if errors is not None:
                 body["errors"] = errors
             return http_status, body
@@ -520,9 +523,9 @@ class TestEnableAutoMerge:
         return graphql_call
 
     def test_calls_graphql_with_node_id(self) -> None:
-        captured_vars: list[dict] = []
+        captured_vars: list[dict[str, Any]] = []
 
-        def graphql_call(*, query: str, variables: dict, token: str) -> tuple[int, dict]:
+        def graphql_call(*, query: str, variables: dict[str, Any], token: str) -> tuple[int, dict[str, Any]]:
             captured_vars.append(variables)
             return 200, {"data": {}}
 
@@ -641,10 +644,10 @@ class TestDisableAutoMerge:
         return apply_call
 
     def _make_graphql_call(
-        self, http_status: int = 200, errors: list | None = None
+        self, http_status: int = 200, errors: list[dict[str, Any]] | None = None
     ) -> Callable[..., tuple[int, dict[str, Any]]]:
-        def graphql_call(*, query: str, variables: dict, token: str) -> tuple[int, dict]:
-            body: dict = {"data": {"disablePullRequestAutoMerge": {"pullRequest": {"number": 42}}}}
+        def graphql_call(*, query: str, variables: dict[str, Any], token: str) -> tuple[int, dict[str, Any]]:
+            body: dict[str, Any] = {"data": {"disablePullRequestAutoMerge": {"pullRequest": {"number": 42}}}}
             if errors is not None:
                 body["errors"] = errors
             return http_status, body
@@ -652,9 +655,9 @@ class TestDisableAutoMerge:
         return graphql_call
 
     def test_disables_when_enabled(self) -> None:
-        captured_vars: list[dict] = []
+        captured_vars: list[dict[str, Any]] = []
 
-        def graphql_call(*, query: str, variables: dict, token: str) -> tuple[int, dict]:
+        def graphql_call(*, query: str, variables: dict[str, Any], token: str) -> tuple[int, dict[str, Any]]:
             captured_vars.append(variables)
             assert "disablePullRequestAutoMerge" in query
             return 200, {"data": {}}
@@ -670,7 +673,7 @@ class TestDisableAutoMerge:
         assert captured_vars[0]["pullRequestId"] == "PR_node_xyz"
 
     def test_noop_when_not_enabled(self) -> None:
-        def graphql_call(*, query: str, variables: dict, token: str) -> tuple[int, dict]:
+        def graphql_call(*, query: str, variables: dict[str, Any], token: str) -> tuple[int, dict[str, Any]]:
             raise AssertionError("graphql must not be called when auto_merge is null")
 
         disabled = da._disable_auto_merge(

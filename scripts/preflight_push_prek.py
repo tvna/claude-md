@@ -4,7 +4,7 @@
 Refs #901. Closes the missing-deterministic-gate repair from the
 PR #898 retrospective:
 
-  Repair 1 -- trailing newline absent in ``translations.json``:
+  Repair 1; trailing newline absent in ``translations.json``:
     ``prek``/``end-of-file-fixer`` would have caught it; prek was not
     run locally before the first push.
 
@@ -45,7 +45,7 @@ def _run_prek(*, runner: _Runner = subprocess.run) -> dict[str, Any] | None:
     """Run ``uv tool run prek run --all-files``; return deny dict if it finds issues.
 
     Fail-open on ``OSError``/``SubprocessError`` (uv not installed, timeout,
-    etc.) so a missing toolchain never blocks a push -- CI is the backstop.
+    etc.) so a missing toolchain never blocks a push; CI is the backstop.
     """
     try:
         result = runner(

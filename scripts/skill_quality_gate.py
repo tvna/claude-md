@@ -19,7 +19,7 @@ decides the exit code per the policy fixed in issue #1099:
 The LLM-as-Judge path (``waza quality``) is intentionally NOT invoked: it
 routes full SKILL.md content through the embedded GitHub Copilot CLI to a
 judge model (external send, non-deterministic, requires auth). It stays a
-manual, opt-in tool -- never part of this automated gate. See #1099.
+manual, opt-in tool; never part of this automated gate. See #1099.
 
 Usage:
 
@@ -27,7 +27,7 @@ Usage:
 
 With no arguments, ``verify`` discovers every ``SKILL.md`` under
 ``.agents/skills/``. Paths (a SKILL.md file or its directory) may be passed
-to check a subset -- this is what the pre-commit hook does, passing only the
+to check a subset; this is what the pre-commit hook does, passing only the
 changed skills.
 
 Spec failures are emitted as ``::error file=<path>::`` and token warnings as
@@ -59,6 +59,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 
 SKILLS_SUBDIR = ".agents/skills"
 
@@ -110,11 +111,11 @@ def _normalize_target(repo_root: Path, raw: str) -> Path | None:
     return None
 
 
-def run_waza_check(waza: str, skill_dir: Path) -> dict:
+def run_waza_check(waza: str, skill_dir: Path) -> dict[str, Any]:
     """Run ``waza check --format json`` for one skill and parse the result.
 
     Raises RuntimeError (loudly) if waza cannot run or emits unparseable
-    output -- a broken gate must never be mistaken for a passing one.
+    output; a broken gate must never be mistaken for a passing one.
     """
     proc = subprocess.run(  # noqa: S603 -- argv built from the resolved waza path and skill dir, shell=False
         [waza, "check", "--format", "json", "--no-update-check", str(skill_dir)],
@@ -135,7 +136,7 @@ def run_waza_check(waza: str, skill_dir: Path) -> dict:
         ) from exc
 
 
-def evaluate_skill(entry: dict) -> tuple[list[str], list[str]]:
+def evaluate_skill(entry: dict[str, Any]) -> tuple[list[str], list[str]]:
     """Return (spec_failures, token_warnings) message lists for one skill."""
     spec_failures: list[str] = []
     token_warnings: list[str] = []

@@ -1,4 +1,4 @@
-schema_version = 1
+schema_version = 2
 status = "adopted-design"
 tracking_issue = 970
 migration_issue = 972
@@ -31,11 +31,6 @@ purpose = "Human safety or content sensitivity flag."
 cardinality = "zero_or_one"
 
 [[families]]
-name = "threat"
-purpose = "Threat-intelligence overlay state."
-cardinality = "zero_to_two"
-
-[[families]]
 name = "area"
 purpose = "File and directory ownership or conflict domain."
 cardinality = "one_or_more_for_active_implementation"
@@ -44,6 +39,11 @@ cardinality = "one_or_more_for_active_implementation"
 name = "ops"
 purpose = "Workflow, bot, or maintenance state outside normal triage taxonomy."
 cardinality = "unbounded_but_each_label_requires_writer_reader_lifecycle"
+
+[[families]]
+name = "semver"
+purpose = "Declared semantic-version severity of a universal-text change; read by the source version drift gate."
+cardinality = "exactly_one_for_universal_text_prs"
 
 [[labels]]
 name = "layer:p1-goal-plan"
@@ -122,6 +122,7 @@ color = "0075ca"
 name = "type:tracking"
 family = "type"
 status = "keep"
+commit_type = false
 description = "Umbrella issue coordinating scoped child issues."
 color = "e4e669"
 
@@ -154,18 +155,25 @@ description = "Non-ASCII content boundary signal for issue, PR, or comment text.
 color = "ff7619"
 
 [[labels]]
-name = "threat:intel-needed"
-family = "threat"
-status = "keep"
-description = "Threat intelligence collection is required before ordinary routing."
-color = "b4a7d6"
+name = "semver:major"
+family = "semver"
+status = "add"
+description = "Universal-text change breaks backward compatibility; bumps apm.yml MAJOR."
+color = "006b75"
 
 [[labels]]
-name = "threat:response-needed"
-family = "threat"
-status = "keep"
-description = "Security response planning is required before autonomous PR work."
-color = "cc0000"
+name = "semver:minor"
+family = "semver"
+status = "add"
+description = "Universal-text change is a backward-compatible addition or clarification; bumps apm.yml MINOR."
+color = "006b75"
+
+[[labels]]
+name = "semver:patch"
+family = "semver"
+status = "add"
+description = "Universal-text change is non-normative surface only; bumps apm.yml PATCH."
+color = "006b75"
 
 [[labels]]
 name = "area:agent-instructions"
@@ -252,6 +260,20 @@ description = "Label policy, area mapping, coverage rules, and taxonomy document
 color = "c5def5"
 
 [[labels]]
+name = "area:ci-ops"
+family = "area"
+status = "add"
+description = "CI automation scripts, issue/PR operation utilities, and maintenance workflows."
+color = "0e8a16"
+
+[[labels]]
+name = "area:governance"
+family = "area"
+status = "add"
+description = "Repo structure analysis, document dependency graph, and governance tooling."
+color = "5319e7"
+
+[[labels]]
 name = "ops:dependencies"
 family = "ops"
 status = "rename"
@@ -272,16 +294,6 @@ color = "0e8a16"
 writer = "auto-retro and post-merge retrospective automation"
 reader = "auto-retro sentinel, rescan, and duplicate-retro prevention"
 lifecycle = "Added after retrospective creation is confirmed; retained as durable PR audit state."
-
-[[labels]]
-name = "ops:coverage-failure"
-family = "ops"
-status = "add"
-description = "Post-merge coverage threshold failure has an open operational repair queue."
-color = "d73a4a"
-writer = ".github/workflows/post-merge.yml and scripts/coverage_failure_issue.py"
-reader = "coverage repair queues and post-merge operational triage"
-lifecycle = "Added when the coverage gate opens or updates a repair issue; closed or cleared after repair."
 
 [[retired_labels]]
 name = "layer:meta"
@@ -311,50 +323,190 @@ reason = "Noisy duplicate of type:fix."
 name = "governance"
 reason = "Recreates retired layer:meta ambiguity."
 
+[[retired_labels]]
+name = "threat:intel-needed"
+reason = "Per-item threat:* labelling retired in 1645; findings aggregate weekly onto the 178 security umbrella, not per item. Definition removed in 1647."
+
+[[retired_labels]]
+name = "threat:response-needed"
+reason = "Per-item threat:* labelling retired in 1645; findings aggregate weekly onto the 178 security umbrella, not per item. Definition removed in 1647."
+
 [[area_paths]]
 area = "area:agent-instructions"
 paths = ["CLAUDE.md", "AGENTS.md", ".agents/**"]
 
 [[area_paths]]
 area = "area:apm"
-paths = [".apm/**", "apm.yml", "apm.lock.yaml"]
+paths = [
+  ".apm/**", "apm.yml", "apm.lock.yaml",
+  "scripts/gen_agent_hooks.py", "scripts/backup_archive.py",
+  "scripts/publish_instruction_release.py",
+  "scripts/auto_tag_version.py",
+  ".github/workflows/generate-agents.yml",
+  ".github/workflows/publish-instructions-release.yml",
+]
 
 [[area_paths]]
 area = "area:hooks"
-paths = [".claude/settings.json", ".codex/hooks.json", ".devin/**", ".githooks/**", ".pre-commit-config.yaml", "docs/runbooks/prek.md"]
+paths = [
+  ".claude/settings.json", ".codex/hooks.json", ".devin/**", ".githooks/**",
+  ".pre-commit-config.yaml", "docs/runbooks/prek.md",
+  "scripts/block_sensitive_reads.py", "scripts/gen_mcp_json.py",
+  "scripts/skill_quality_gate.py", "scripts/stop_new_session_handoff_prompt.py",
+  ".github/workflows/skill-quality.yml",
+]
 
 [[area_paths]]
 area = "area:preflight"
-paths = ["scripts/preflight_*.py", "scripts/gate_*.py", "scripts/check_*.py", "docs/runbooks/preflight.md", "docs/runbooks/replacement-pr-preflight.md"]
+paths = [
+  "scripts/preflight_*.py", "scripts/gate_*.py", "scripts/check_*.py",
+  "scripts/scan_*.py", "scripts/verify_*.py",
+  "scripts/body_policy.py", "scripts/title_policy.py",
+  "scripts/validate_json_syntax.py", "scripts/validate_falco_rules.py",
+  "scripts/plan_approval_gate.py", "scripts/plan_language_context.py",
+  "scripts/prompt_context7_gate.py", "scripts/pr_body_close_keyword_gate.py",
+  "scripts/issue_link.py", "scripts/session_set_origin_head.py",
+  "docs/runbooks/preflight.md", "docs/runbooks/replacement-pr-preflight.md",
+  ".github/workflows/verify-agents.yml", ".github/workflows/verify-pr.yml",
+  ".github/workflows/verify-actionlint.yml",
+  ".github/workflows/verify-github-content.yml",
+  ".github/workflows/verify-falco-rules.yml",
+]
 
+# Broad catch-all: all .github/ files. Files specifically covered by
+# non-broad entries in other areas satisfy scan_harness_doc_coverage.py.
 [[area_paths]]
 area = "area:github-workflows"
-paths = [".github/**", "docs/runbooks/rulesets.md", "docs/runbooks/workflow-permissions-audit.md", "docs/generated/workflows/**"]
+paths = [".github/**"]
+broad = true
 
+# Specific GitHub-workflow files not claimed by a more focused area.
+[[area_paths]]
+area = "area:github-workflows"
+paths = [
+  "docs/runbooks/rulesets.md", "docs/runbooks/workflow-permissions-audit.md",
+  "docs/generated/workflows/**",
+  ".github/workflows/apply-rulesets.yml", ".github/workflows/issue-pr-triage.yml",
+  "scripts/ruleset_drift.py", "scripts/rulesets_apply.py",
+]
+
+# Broad catch-all: all scripts/ and tests/ files. Individual scripts are
+# specifically covered by non-broad entries in their functional area below.
 [[area_paths]]
 area = "area:scripts-tests"
 paths = ["scripts/**", "tests/**"]
+broad = true
 
+# Broad catch-all: all docs/ and README files.
 [[area_paths]]
 area = "area:docs"
 paths = ["README*.md", "docs/**"]
+broad = true
+
+# Specific docs-area workflow not claimed by a more focused area.
+[[area_paths]]
+area = "area:docs"
+paths = [".github/workflows/verify-mermaid.yml"]
 
 [[area_paths]]
 area = "area:toolchain"
-paths = ["pyproject.toml", "uv.lock", "flake.nix", "flake.lock", "scripts/install-uv.sh", "scripts/uv_pin.py", "docs/standards/remote-environment.md", "docs/standards/dependency-freshness.md"]
+paths = [
+  "pyproject.toml", "uv.lock", "flake.nix", "flake.lock",
+  "scripts/install-uv.sh", "scripts/uv_pin.py",
+  "scripts/flake_pin.py", "scripts/flake_pin_latest.py",
+  "scripts/python_pin.py", "scripts/nixpkgs_cooldown.py",
+  "scripts/uv_download_checksum.py", "scripts/ccusage_pin.py",
+  "scripts/waza_pin.py",
+  "docs/standards/remote-environment.md",
+  "docs/standards/dependency-freshness.md",
+  ".github/workflows/verify-flake.yml",
+]
 
 [[area_paths]]
 area = "area:devcontainer"
-paths = [".devcontainer/**", "docs/runbooks/devcontainers.md"]
+paths = [
+  ".devcontainer/**", "docs/runbooks/devcontainers.md",
+  "scripts/devcontainer_pin_pr.py",
+  "scripts/generate_devcontainer_arch_overlays.py",
+  "scripts/prune_codespaces.py",
+  "scripts/prune_devcontainer_images.py",
+  "scripts/update_devcontainer_image_pins.py",
+  ".github/workflows/devcontainer-pin-refresh.yml",
+  ".github/workflows/measure-devcontainer-startup.yml",
+  ".github/workflows/publish-devcontainer-images.yml",
+]
 
 [[area_paths]]
 area = "area:security-intel"
-paths = ["scripts/threat_intel_triage.py", "scripts/security_drift_report.py", "scripts/scan_non_ascii.py", "scripts/preflight_non_ascii.py", "docs/prd/security-control-inventory.md", "docs/prd/non-ascii-defense.md", "docs/runbooks/security-control-drift-report.md", "docs/runbooks/attack-coverage-review-cadence.md", "docs/runbooks/downstream-instruction-review-checklist.md"]
+paths = [
+  "scripts/threat_intel_triage.py", "scripts/security_drift_report.py",
+  "scripts/scan_non_ascii.py", "scripts/preflight_non_ascii.py",
+  "scripts/attack_review_reminder.py", "scripts/backup_non_ascii.py",
+  "scripts/owasp_asi_mapping.py", "scripts/mint_github_app_token.py",
+  "scripts/sanitize_history.py",
+  "docs/prd/security-control-inventory.md", "docs/runbooks/non-ascii-defense.md",
+  "docs/runbooks/security-control-drift-report.md",
+  "docs/runbooks/attack-coverage-review-cadence.md",
+  "docs/runbooks/downstream-instruction-review-checklist.md",
+  ".github/workflows/backup-non-ascii-originals.yml",
+  ".github/workflows/codeql.yml", ".github/workflows/scorecard.yml",
+]
 
 [[area_paths]]
 area = "area:metrics"
-paths = ["metrics/**", "docs/standards/performance-metrics.md", "docs/standards/maintainability-metrics.md", "docs/standards/host-unit-duckdb-metrics.md", "scripts/scan_maintainability_metrics.py"]
+paths = [
+  "metrics/**",
+  "docs/standards/performance-metrics.md",
+  "docs/standards/maintainability-metrics.md",
+  "docs/standards/host-unit-duckdb-metrics.md",
+  "scripts/scan_maintainability_metrics.py",
+  "scripts/codebase_maturity_summary.py",
+  "scripts/analyze_ci_timings.py", "scripts/compare_cache_regimes.py",
+  "scripts/session_cost_structure.py", "scripts/session_resource_report.py",
+  "scripts/measure_devcontainer_startup.py", "scripts/measure_prefix_tokens.py",
+  "scripts/measure_tool_overlap.py",
+  ".github/workflows/measure-tool-overlap.yml",
+]
 
 [[area_paths]]
 area = "area:area-policy"
-paths = [".github/label-policy.toml", ".github/labels.json", "docs/standards/label-taxonomy.md", "docs/runbooks/issue-triage.md", "scripts/labels_apply.py", "tests/test_labels_apply.py"]
+paths = [
+  ".github/label-policy.toml", ".github/labels.json",
+  "docs/standards/label-taxonomy.md", "docs/runbooks/issue-triage.md",
+  "scripts/labels_apply.py", "tests/test_labels_apply.py",
+  "scripts/issue_anchors.py",
+  "scripts/scan_area_path_coverage.py", "scripts/scan_harness_doc_coverage.py",
+  "scripts/scan_commit_type_label_drift.py",
+  ".github/workflows/apply-labels.yml",
+]
+
+[[area_paths]]
+area = "area:ci-ops"
+paths = [
+  "scripts/auto_retro.py", "scripts/bot_pr_automerge.py",
+  "scripts/branch_cleanup.py", "scripts/ci_budget_issue.py",
+  "scripts/ci_early_status_probe.py", "scripts/coverage_failure_issue.py",
+  "scripts/dependabot_automerge.py", "scripts/dependabot_labels.py",
+  "scripts/github_api.py", "scripts/github_paginate.py",
+  "scripts/issue_closure_fast_path.py", "scripts/np_strategy_tracking.py",
+  "scripts/post_issue_comment.py", "scripts/post_merge_new_session_prompt.py",
+  "scripts/post_merge_retro_append.py", "scripts/post_pr_create_body_fix.py",
+  "scripts/post_pr_create_ci_monitor.py", "scripts/pr_body_builder.py",
+  "scripts/pr_upsert.py", "scripts/refresh_pr_branch.py",
+  ".github/workflows/post-merge.yml",
+  ".github/workflows/daily-maintenance.yml",
+  ".github/workflows/weekly-maintenance.yml",
+  ".github/workflows/monthly-maintenance.yml",
+  ".github/workflows/dependabot-automerge.yml",
+  ".github/workflows/tvna-bot-automerge.yml",
+]
+
+[[area_paths]]
+area = "area:governance"
+paths = [
+  "scripts/doc_graph.py", "scripts/doc_graph_viz.py",
+  "scripts/script_ast_graph.py", "scripts/script_dependency_graph.py",
+  "scripts/script_trigger_map.py", "scripts/workflow_diagram.py",
+  "docs/graph/**",
+  ".github/workflows/validate-doc-graph.yml",
+]

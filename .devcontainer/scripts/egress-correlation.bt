@@ -1,16 +1,18 @@
 #!/usr/bin/env bpftrace
 /*
- * egress-correlation.bt -- best-effort process<->egress correlation monitor.
+ * egress-correlation.bt; best-effort process<->egress correlation monitor.
  *
  * Records, per event, ONLY:
  *   - the originating process (pid + comm),
  *   - for an outbound TCP connect: the destination IP:port,
- *   - for a file open: the path.
+ *   - for a file open: the path,
+ *   - for a process exec: the binary path (supply-chain detection),
+ *   - for a ptrace call: the request type and target pid (injection detection).
  *
  * It DELIBERATELY never reads syscall payload buffers: no write()/read()/send()
  * buffer contents are captured, so secrets in transit or on disk are not
  * recorded. Output is a local-only report (see _egress-ebpf.sh); nothing is
- * sent off-box -- this is a self-hosted monitor with no third-party telemetry.
+ * sent off-box; this is a self-hosted monitor with no third-party telemetry.
  *
  * Honest limitation: an agent holding NET_ADMIN/CAP_BPF can kill bpftrace or
  * detach these probes from within the container (CVE-2025-32955 class bypass).
@@ -47,12 +49,39 @@ kprobe:tcp_connect
 }
 
 /*
- * File opens. Record the path argument ONLY -- never the contents of any
+ * File opens. Record the path argument ONLY; never the contents of any
  * subsequent read()/write() against the returned fd.
  */
 tracepoint:syscalls:sys_enter_openat
 {
   printf("OPEN pid=%d comm=%s path=%s\n", pid, comm, str(args->filename));
+}
+
+/*
+ * Process execution. Records the binary being exec'd and its calling process.
+ * Supply-chain detection: malicious postinstall/build scripts typically exec
+ * a shell or download a dropper here. Filter by comm in downstream analysis
+ * to separate legitimate build tools from unexpected callers.
+ * Only the filename argument is read; never the argv payload.
+ */
+tracepoint:syscalls:sys_enter_execve
+{
+  printf("EXEC pid=%d comm=%s exe=%s\n", pid, comm, str(args->filename));
+}
+
+/*
+ * ptrace. Records any non-self ptrace call (request != PTRACE_TRACEME=0).
+ * Legitimate callers: gdb, dlv, lldb, strace. Unexpected callers such as
+ * node or python indicate process-injection attempts (T1055).
+ * Volume note: debugger-heavy sessions will produce many PTRACE lines;
+ * filter by comm in the report rather than suppressing the probe.
+ */
+tracepoint:syscalls:sys_enter_ptrace
+{
+  if (args->request != 0) {
+    printf("PTRACE pid=%d comm=%s request=%d target_pid=%d\n",
+           pid, comm, (int32)args->request, (int32)args->pid);
+  }
 }
 
 END

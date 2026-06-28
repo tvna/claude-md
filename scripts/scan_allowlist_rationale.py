@@ -4,7 +4,7 @@
 Issue #1170 (child of #696): the devcontainer egress posture is
 deny-by-default, and a new outbound destination is admitted by adding a
 hostname to ``.devcontainer/network/*.allowlist``. Nothing tied "a host is
-in the allowlist" to "the host was triaged" -- the observe / evaluate /
+in the allowlist" to "the host was triaged"; the observe / evaluate /
 decide procedure in ``docs/runbooks/devcontainer-tool-network-triage.md`` --
 so an unevaluated destination could land on reviewer memory alone.
 

@@ -57,11 +57,11 @@ fi
 if [[ "$agent" == "codex" ]]; then
   install_nix_binary bubblewrap bwrap
 fi
-# ccusage is provisioned for the claude agent only, matching its SessionStart
-# install-ccusage.sh registration (claude target) and the claude devShell.
-if [[ "$agent" == "claude" ]]; then
-  install_nix_binary ccusage-cli ccusage
-fi
+# ccusage is provisioned for both agents so per-session token/cost reporting
+# (the PR-body Resource Consumption section, scripts/session_resource_report.py)
+# can run from Claude and Codex, not Claude only. Both agent devShells include
+# ccusage-cli; symlink the pinned binary onto PATH here. Refs #1467.
+install_nix_binary ccusage-cli ccusage
 
 home_dir="$(getent passwd "$agent" | cut -d: -f6)"
 if [[ -z "$home_dir" ]]; then
@@ -86,5 +86,7 @@ esac
 
 "${sudo_command[@]}" cp "${config_dir}/profile.d/claude-md-nix-path.sh" /etc/profile.d/claude-md-nix-path.sh
 "${sudo_command[@]}" cp "${config_dir}/profile.d/claude-md-agent-prompt.sh" /etc/profile.d/claude-md-agent-prompt.sh
+
+bash "${script_dir}/configure-git-signing.sh" "$agent" "$home_dir"
 
 echo "configured devcontainer runtime for $agent"

@@ -37,13 +37,13 @@ The two body-side preflights are complementary:
 Failure modes (fail-open per CLAUDE.md section 4):
 
 * off-target tool name, ``body`` absent or non-string, malformed stdin
-  JSON, ``tool_input`` shape invalid -- exit 0 with no output. A hook
+  JSON, ``tool_input`` shape invalid; exit 0 with no output. A hook
   bug must never wedge unrelated tool calls; the server gate
   (``verify-body-policy.yml``) remains as backstop.
 
 The empty-string body (``"body": ""``) is treated as "all required
 sections missing" and produces a deny that lists every entry of
-``_PR_REQUIRED`` -- this matches the server gate, which would reject
+``_PR_REQUIRED``; this matches the server gate, which would reject
 the same empty body on opening the PR.
 
 The hook deliberately ignores ``BODY_POLICY_CUTOFF``: any new PR opened
@@ -100,7 +100,7 @@ def build_deny_reason(tool_name: str, missing: list[str]) -> str:
         f"`{tool_name}` body is missing required section(s): "
         f"{missing_csv}. The server-side gate scripts/body_policy.py "
         f"(verify-body-policy.yml) would reject this on `pull_request: "
-        f"opened` and again on every `edited` event until fixed -- "
+        f"opened` and again on every `edited` event until fixed; "
         f"adding the missing heading(s) before the API call avoids the "
         f"retrigger loop documented in retro #356.\n\n"
         f"Add an H2 (`## <name>`) or H3 (`### <name>`) heading for each "

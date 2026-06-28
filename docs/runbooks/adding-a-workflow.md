@@ -28,7 +28,7 @@ python3 scripts/workflow_diagram.py diagram-doc .github/workflows/<new>.yml
 Then add a row to the `generated/workflows/` table in `docs/INDEX.md`.
 Each row links the new `<stem>-if-branches.md` diagram (first column,
 relative to `docs/`) to the source `<new>.yml` workflow in backticks
-(second column). Match the shape of the existing rows there -- for a
+(second column). Match the shape of the existing rows there; for a
 worked example, see the `skill-quality-if-branches.md` entry PR #1100
 added. Keep the table in the same alphabetical order as the surrounding
 rows.
@@ -59,7 +59,7 @@ remove the entry if you delete the invocation.
 ## Token-cost disclosure
 
 Before running multi-step verification or LLM-backed tooling, state the
-expected token/compute footprint up front -- especially anything that
+expected token/compute footprint up front; especially anything that
 sends content to an external service. This is the primary driver of the
 PR #1100 retrospective: implementation and verification began without any
 upfront statement of the token cost, raising a token-waste concern.

@@ -5,7 +5,7 @@ Background (#1014, parent #273): the dedicated ``non_fast_forward`` ruleset on
 ``refs/heads/dependabot/*`` was removed so ``@dependabot rebase`` can force-push
 in place again instead of falling back to close-and-reopen. ``non_fast_forward``
 never gated *who* could create a ``dependabot/*`` branch, so removing it does not
-widen branch-creation scope -- but it also means the branch name alone is no
+widen branch-creation scope; but it also means the branch name alone is no
 longer behind any ruleset. Auto-merge trust was always anchored on the author
 login (``scripts/dependabot_automerge.py`` requires the author in
 ``_TRUSTED_BOT_LOGINS``), not the branch name. This gate makes that anchor
@@ -28,8 +28,8 @@ Contract:
   ``dependabot/*`` author exits non-zero).
 
 Exit codes:
-* ``0`` -- head ref is not ``dependabot/*``, or it is and the author is trusted.
-* ``1`` -- head ref is ``dependabot/*`` and the author login is not trusted.
+* ``0``; head ref is not ``dependabot/*``, or it is and the author is trusted.
+* ``1``; head ref is ``dependabot/*`` and the author login is not trusted.
 
 Invoked from ``.github/workflows/issue-pr-triage.yml``. Tested by
 ``tests/test_verify_dependabot_author.py``.
@@ -48,7 +48,7 @@ _DEPENDABOT_PREFIX = "dependabot/"
 def is_violation(head_ref: str, author: str) -> bool:
     """Return True when a ``dependabot/*`` head ref has an untrusted author.
 
-    A non-``dependabot/*`` head ref is never a violation (returns False) -- the
+    A non-``dependabot/*`` head ref is never a violation (returns False); the
     gate only governs branches that claim the Dependabot namespace.
     """
     if not head_ref.startswith(_DEPENDABOT_PREFIX):

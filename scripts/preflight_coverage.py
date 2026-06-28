@@ -6,19 +6,35 @@ per-file check so a new script with no tests cannot be hidden by the
 high-coverage of existing files.
 
 If ``coverage.json`` already exists (the developer ran pytest --cov
-locally), the script reuses it.  Otherwise it runs the full test suite
-via ``uv run pytest --cov --cov-report=json -q`` to generate it.
+locally) AND it is newer than every tracked ``scripts/**`` / ``tests/**``
+source file, the script reuses it.  Otherwise (absent, or stale relative
+to the source tree) it runs the full test suite via
+``uv run pytest --cov --cov-report=json -q`` to (re)generate it. The
+freshness check (Refs #2075) prevents a cached report produced before new
+tests were added from driving a false per-file verdict: in the PR #2046
+session a stale ``coverage.json`` read 88.1% from a report generated
+before the new tests existed and failed the gate without re-running
+pytest.
 
-Exit codes:
-* ``0`` -- every changed scripts/*.py file meets the per-file floor, or
-  no public scripts/*.py files changed relative to the base ref.
-* ``1`` -- at least one changed file is absent from the coverage report
-  or falls below the per-file floor.
+Contract:
+- Inputs: ``--base-ref`` (default ``origin/main``, the git ref to diff
+  against for changed scripts); ``--floor`` (default 90.0, per-file
+  coverage percentage); ``--coverage-json`` (default None, path to an
+  existing report; skips the pytest run when supplied).
+- Outputs: ``OK: <path> <pct>%`` lines on stdout for passing files;
+  ``::error file=<path>::per-file coverage: <reason>`` annotations on
+  stderr for each failing file; exit 0 when all changed files meet the
+  floor (or no public scripts/*.py changed), exit 1 otherwise.
+- Failure policy: fails loud per CLAUDE.md section 4 (it is both a CI
+  gate and a pre-push hook; a file below the floor always exits non-zero).
+
+Tested by ``tests/test_preflight_coverage.py``. Refs #952, #1800.
 """
 
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import shutil
 import subprocess
@@ -43,7 +59,9 @@ def changed_scripts(repo: Path, *, base_ref: str = "origin/main") -> list[str]:
     they are always exercised indirectly through their public callers and
     lack standalone CLI entry points.
     """
-    completed = run_git(["diff", "--name-only", base_ref, "--", "scripts/"], cwd=repo)
+    # --diff-filter=d excludes deleted paths so a script-removal PR is never
+    # penalised for a file that no longer exists in coverage.json.
+    completed = run_git(["diff", "--name-only", "--diff-filter=d", base_ref, "--", "scripts/"], cwd=repo)
     if completed.returncode != 0:
         detail = (completed.stderr or completed.stdout).strip()
         raise RuntimeError(f"git diff failed ({base_ref}): {detail}")
@@ -56,11 +74,94 @@ def changed_scripts(repo: Path, *, base_ref: str = "origin/main") -> list[str]:
     ]
 
 
+def newest_source_mtime(repo: Path) -> float | None:
+    """Return the newest mtime among ``scripts/**`` and ``tests/**`` ``*.py`` files.
+
+    Returns ``None`` when neither directory exists or holds a readable
+    ``*.py`` file, so a caller outside the source tree (a bare temp dir)
+    never triggers a regeneration. Unreadable files are skipped rather than
+    aborting the scan.
+    """
+    newest: float | None = None
+    for sub in ("scripts", "tests"):
+        base = repo / sub
+        if not base.is_dir():
+            continue
+        for path in base.rglob("*.py"):
+            try:
+                mtime = path.stat().st_mtime
+            except OSError:
+                continue
+            if newest is None or mtime > newest:
+                newest = mtime
+    return newest
+
+
+def coverage_is_stale(coverage_path: Path, repo: Path) -> bool:
+    """Return True when ``coverage_path`` does not strictly post-date every source file.
+
+    A cached report generated before new tests or scripts were added reports
+    stale per-file numbers (the PR #2046 session: an 88.1% reading from a
+    report built before the new tests existed). Comparing mtimes catches that
+    so the gate regenerates instead of trusting the cache. Fails safe: an
+    unstattable report is treated as stale (regenerate); no source files means
+    nothing to compare against, so the report is treated as fresh. Refs #2075.
+
+    The comparison is ``<=`` (not ``<``): a report whose mtime equals the newest
+    source mtime (both written in the same wall-clock second) is treated as
+    stale and regenerated. ``<`` would treat that report as fresh and could
+    reuse a cache produced in the same second as a later edit, reviving the
+    PR #2046 false-fresh verdict inside a one-second window; erring toward
+    regeneration is the fail-safe side. Refs #2093.
+
+    Known limit (documented, not gated): git does not preserve mtimes, so a
+    fresh clone/checkout or a branch switch stamps every file at checkout time.
+    That can make this heuristic both skip a needed run (report and sources
+    share a checkout second -> handled by the ``<=`` above, which regenerates)
+    and force an unnecessary full pytest after a no-op checkout. The per-file
+    floor and the absent-report fail-loud are the safety net; this mtime check
+    is only a cache-reuse optimization. Refs #2093 item 1.
+    """
+    try:
+        cov_mtime = coverage_path.stat().st_mtime
+    except OSError:
+        return True
+    newest = newest_source_mtime(repo)
+    if newest is None:
+        return False
+    return cov_mtime <= newest
+
+
 def ensure_coverage_json(repo: Path) -> Path:
-    """Return path to ``coverage.json``, running ``pytest --cov`` if absent."""
+    """Return path to ``coverage.json``, running ``pytest --cov`` if absent or stale.
+
+    Reuses an existing report only when it is newer than every tracked
+    ``scripts/**`` / ``tests/**`` source file; a stale report is regenerated
+    (Refs #2075) so a cache built before new tests were added cannot drive a
+    false per-file verdict. The stale report is deleted BEFORE regenerating, so
+    a regeneration that fails before overwriting it (uv/pytest startup crash,
+    collection error, interrupted run) cannot leave the stale file in place to
+    be reused; the absent-file check below then fails loud per CLAUDE.md
+    section 4 instead of silently passing on the report just declared invalid.
+    If the delete itself fails (read-only mount, foreign owner) the stale file
+    survives, so the regeneration is also required to change the file's mtime:
+    an unchanged mtime means pytest never rewrote it and the gate fails loud
+    rather than reusing the report just declared invalid (Refs #2077 review).
+    """
     coverage_path = repo / "coverage.json"
+    stale_mtime: float | None = None
     if coverage_path.exists():
-        return coverage_path
+        if not coverage_is_stale(coverage_path, repo):
+            return coverage_path
+        print(
+            "coverage.json is stale (older than a scripts/** or tests/** source "
+            "file); discarding it and regenerating instead of reusing it.",
+            file=sys.stderr,
+        )
+        with contextlib.suppress(OSError):
+            stale_mtime = coverage_path.stat().st_mtime
+        with contextlib.suppress(OSError):
+            coverage_path.unlink()
     uv = shutil.which("uv")
     if uv is None:
         raise RuntimeError(
@@ -76,6 +177,15 @@ def ensure_coverage_json(repo: Path) -> Path:
         raise RuntimeError(
             f"coverage.json not generated after pytest run (exit {completed.returncode}). "
             "Inspect the pytest output above for test failures."
+        )
+    # The delete above is best-effort; if it failed, a stale file can still be
+    # sitting here. Require the rerun to have rewritten it (mtime changed), else
+    # the stale report could not be regenerated and must not be reused.
+    if stale_mtime is not None and coverage_path.stat().st_mtime == stale_mtime:
+        raise RuntimeError(
+            f"stale coverage.json could not be regenerated (exit {completed.returncode}); "
+            "the cached report was not rewritten. Remove it manually and rerun: "
+            "rm coverage.json && uv run pytest --cov --cov-report=json -q"
         )
     return coverage_path
 

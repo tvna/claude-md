@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import json
-import subprocess
 from pathlib import Path
 
 import auto_retro as ar
 import pytest
+from _github_api import GitHubApiError
 from auto_retro_test_helpers import merged_event, orchestrator_recorder
 
 pytestmark = pytest.mark.shard_ci_ops_auto_retro_create_slow
@@ -104,7 +104,7 @@ class TestCLI:
         capsys: pytest.CaptureFixture[str],
     ) -> None:
         def _raise(*_a, **_kw):
-            raise subprocess.CalledProcessError(1, "gh", stderr="auth fail")
+            raise GitHubApiError(500, "GET", "/x", "auth fail")
 
         monkeypatch.setattr(ar, "gh_api", _raise)
         event_file = tmp_path / "event.json"
@@ -113,4 +113,4 @@ class TestCLI:
             ["run", "--event-file", str(event_file), "--repo", "o/r"]
         )
         assert exit_code == 1
-        assert "gh api failed" in capsys.readouterr().err
+        assert "GitHub API failed" in capsys.readouterr().err

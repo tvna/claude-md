@@ -11,8 +11,8 @@
 set -euo pipefail
 
 # Only run in a recognised remote environment.
-# CLAUDE_CODE_REMOTE=true  — Claude Code on the Web (set by the platform).
-# CODEX_CODE_REMOTE=true   — Codex cloud (set by the operator in the Codex
+# CLAUDE_CODE_REMOTE=true  -- Claude Code on the Web (set by the platform).
+# CODEX_CODE_REMOTE=true   -- Codex cloud (set by the operator in the Codex
 #                            cloud environment configuration; no built-in
 #                            platform signal exists as of 2026-05-30,
 #                            confirmed via openai/codex#13416).
@@ -28,6 +28,8 @@ fi
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=scripts/_session_path.sh
 . "${SCRIPT_DIR}/_session_path.sh"
+# shellcheck source=scripts/_retry.sh
+. "${SCRIPT_DIR}/_retry.sh"
 PYPROJECT="${CLAUDE_PROJECT_DIR:-$(cd "$SCRIPT_DIR/.." && pwd)}/pyproject.toml"
 UV_VERSION="$(python3 "$SCRIPT_DIR/uv_pin.py" read "$PYPROJECT")"
 INSTALL_DIR="$HOME/.local/bin"
@@ -42,8 +44,8 @@ if [ "${current}" != "${UV_VERSION}" ]; then
   echo "install-uv: installing uv ${UV_VERSION} (was: ${current:-none})" >&2
   tmpdir="$(mktemp -d)"
   trap 'rm -rf "$tmpdir"' EXIT
-  curl -fLsS "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/${ARCHIVE_NAME}.tar.gz" \
-    -o "$tmpdir/uv.tar.gz"
+  url="https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/${ARCHIVE_NAME}.tar.gz"
+  retry_download "$url" "$tmpdir/uv.tar.gz" "uv" "scripts/install-uv.sh" || exit 0
   tar -xzf "$tmpdir/uv.tar.gz" -C "$tmpdir"
   mkdir -p "${INSTALL_DIR}"
   install -m 0755 "$tmpdir/${ARCHIVE_NAME}/uv" "${INSTALL_DIR}/uv"

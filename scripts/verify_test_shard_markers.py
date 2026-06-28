@@ -16,8 +16,8 @@ can be a single mark (``pytest.mark.shard_foo``) or a list of marks
 accepted; exactly one shard marker must be present.
 
 Exit codes:
-* ``0`` -- every test file declares exactly one shard marker from the allowed set.
-* ``1`` -- at least one file is missing a shard marker, has more than one, or
+* ``0``; every test file declares exactly one shard marker from the allowed set.
+* ``1``; at least one file is missing a shard marker, has more than one, or
   references an unknown bucket.
 """
 

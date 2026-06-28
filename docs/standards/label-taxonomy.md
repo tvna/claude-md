@@ -51,9 +51,9 @@ Every final label belongs to exactly one declared family.
 | `type:*` | Exactly one for normal issues | Issue purpose or structural kind |
 | `state:*` | Zero or one | Lifecycle and actionability |
 | `severity:*` | Zero or one | Human safety or content sensitivity |
-| `threat:*` | Zero to two | Threat-intelligence overlay |
 | `area:*` | One or more for active implementation | File and directory ownership or conflict domain |
 | `ops:*` | As required by deterministic workflows | Workflow, bot, or maintenance state |
+| `semver:*` | Exactly one for universal-text PRs | Declared semantic-version severity of a universal-text change |
 
 Labels outside these families are retired unless the policy file adds an
 explicit grandfathered exception with a removal deadline.
@@ -92,12 +92,18 @@ parked.
 No-action routes are `state:rfc`, `state:parked`, and `type:tracking`.
 Tracking issues may carry broad areas, but agents act on children.
 
+Each `type:*` label's stem must match a commit type declared in
+`.github/title-policy.toml` `[title_policy].types`; set `commit_type = false`
+on any `type:*` label that is intentionally not a commit type (currently only
+`type:tracking`). This is enforced by `scripts/scan_commit_type_label_drift.py`
+(Refs #2081).
+
 Apply `type:tracking` only when both conditions hold:
 
-1. **Sub-issue umbrella** -- the issue coordinates one or more child issues
+1. **Sub-issue umbrella**; the issue coordinates one or more child issues
    and takes no direct implementation commit itself; it closes only when all
    children close.
-2. **1-issue/N-PR** -- multiple PRs reference it with non-closing `Refs #N`
+2. **1-issue/N-PR**; multiple PRs reference it with non-closing `Refs #N`
    and none of them closes it on its own. The label is the structural
    requirement that lets those Refs-only PRs pass `verify-issue-link.yml`
    (`scripts/issue_link.py`), which otherwise rejects a Refs-only body unless
@@ -140,21 +146,50 @@ removal, and the backfill of existing retros are migration work owned by #972
 (see Migration Boundary); this section records the design decision only.
 Refs #1060, #1050.
 
-## Severity And Threat Labels
-
-`threat:*` is retained as an overlay axis because it records security
-intelligence state, not repository ownership or issue purpose.
+## Severity Labels
 
 | Label | Writer | Routing effect |
 |---|---|---|
 | `severity:security` | Human or security workflow | Bias toward investigation |
 | `severity:non-ascii-content` | Non-ASCII content scan | Content-boundary signal |
-| `threat:intel-needed` | `issue-pr-triage.yml` / `scripts/threat_intel_triage.py` | Collect threat intelligence before ordinary routing |
-| `threat:response-needed` | `issue-pr-triage.yml` / `scripts/threat_intel_triage.py` | Block autonomous PRs until response planning occurs |
 
-Threat labels may be removed only when the finding is proven stale, false
-positive, or remediated in the linked evidence trail. Source outages do not
-prove safety.
+The `threat:*` overlay axis (`threat:intel-needed`, `threat:response-needed`)
+was **retired** in [#1647](https://github.com/tvna/claude-md/issues/1647),
+following the [#1645](https://github.com/tvna/claude-md/issues/1645) consolidation
+that stopped auto-applying the labels per issue/PR. Threat-intelligence findings
+are repository-global, so `scripts/threat_intel_triage.py` aggregates them into a
+single idempotent comment on the #178 security umbrella (posted weekly by the
+`dependency-threat-triage` job in `.github/workflows/weekly-maintenance.yml`)
+instead of stamping a label onto whichever item triggered a run. The
+`intel-needed` / `response-needed` *classifications* survive only as descriptors
+in that aggregated comment, not as live labels. The label definitions were
+removed from `.github/labels.json` and `.github/label-policy.toml`, and the
+live per-item assignments are swept by the owner-driven prune dispatch. Source
+outages do not prove safety. See
+[`docs/runbooks/issue-triage.md`](../runbooks/issue-triage.md#threat-retired)
+for the aggregation mechanism and the cleanup procedure.
+
+## Semver Labels
+
+Semver labels are the human-declared severity of a change to the universal
+text (`.apm/instructions/master.instructions.md` and the compiled `CLAUDE.md`
+/ `AGENTS.md`). Exactly one is required on a universal-text-touching PR, and
+it must match the `apm.yml: version` bump component. The classification rule
+is the R1 decision tree in
+[`docs/prd/semantic-versioning-universal-text.md`](../prd/semantic-versioning-universal-text.md);
+enforcement is the source version drift gate
+(`scripts/verify_source_version_bump.py`, wired into
+`.github/workflows/verify-pr.yml` and mirrored in
+`scripts/preflight_all.py`).
+
+| Label | R1 class | Meaning |
+|---|---|---|
+| `semver:major` | Breaks backward compatibility | Removes, reverses, or weakens an existing rule; tightens a constraint so prior-compliant behavior is non-compliant; or breaks a stable reference (P1-P6 numbering, a keyed anchor, a ubiquitous-language term, trust precedence) |
+| `semver:minor` | Backward-compatible addition | New rule, principle, section, example, or clarification that does not retroactively invalidate prior-compliant behavior |
+| `semver:patch` | Non-normative surface | Typo, whitespace, formatting, reflow, link fix, translation, or a meaning-preserving reword |
+
+A mixed-class PR takes the highest component (MAJOR > MINOR > PATCH). These
+labels apply only to universal-text PRs; non-universal-text PRs carry none.
 
 ## Area Labels
 
@@ -166,7 +201,7 @@ needs both responsibility and file ownership context.
 | `area:agent-instructions` | `CLAUDE.md`, `AGENTS.md`, `.agents/**` |
 | `area:apm` | `.apm/**`, `apm.yml`, `apm.lock.yaml` |
 | `area:hooks` | `.claude/settings.json`, `.codex/hooks.json`, `.githooks/**`, `.pre-commit-config.yaml`, `docs/runbooks/prek.md` |
-| `area:preflight` | `scripts/preflight_*.py`, `scripts/gate_*.py`, `scripts/check_*.py`, preflight runbooks |
+| `area:preflight` | `scripts/preflight_*.py`, `scripts/gate_*.py`, `scripts/check_*.py`, `scripts/scan_*.py`, `scripts/verify_*.py`, and individual policy gate scripts; preflight runbooks |
 | `area:github-workflows` | `.github/**`, ruleset and workflow runbooks, generated workflow diagrams |
 | `area:scripts-tests` | `scripts/**`, `tests/**` |
 | `area:docs` | `README*.md`, `docs/**` |
@@ -175,6 +210,8 @@ needs both responsibility and file ownership context.
 | `area:security-intel` | Threat triage, security drift, non-ASCII defense, and security runbooks |
 | `area:metrics` | `metrics/**`, performance, maintainability, and host-unit metric docs/scripts |
 | `area:area-policy` | Label policy, label catalog, issue triage, and label apply code |
+| `area:ci-ops` | CI automation scripts, issue/PR operation utilities, and maintenance workflows |
+| `area:governance` | Repo structure analysis, document dependency graph, and governance tooling |
 
 When a path matches more than one area, apply every relevant area. For
 example, `.github/workflows/post-merge.yml` with coverage-failure behavior is
@@ -198,7 +235,6 @@ lifecycle, human meaning, and failure behavior.
 |---|---|---|---|
 | `ops:dependencies` | rename from `dependencies` | Dependabot and dependency-maintenance workflows | dependency automerge, dependency freshness, operator queues |
 | `ops:retro-opened` | rename from `harness:retro-opened` | auto-retro and post-merge retrospective automation | auto-retro sentinel, rescan, duplicate-retro prevention |
-| `ops:coverage-failure` | add | `post-merge.yml` and `scripts/coverage_failure_issue.py` | coverage repair queues and post-merge operational triage |
 
 Do not add broad labels such as `ops:quality`. Lint, type, security,
 maintainability, and coverage checks are quality gates. They become `ops:*`

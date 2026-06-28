@@ -2,10 +2,10 @@
 
 These lock the two properties that make the action safe and single-sourced:
 
-* it is **permission-agnostic** -- it reads no GITHUB_TOKEN and no secrets, the
+* it is **permission-agnostic**; it reads no GITHUB_TOKEN and no secrets, the
   same invariant the setup-uv action documents (it runs inline under the union
   of caller permissions);
-* its CI self-test is **isolated** -- the dedicated job exercises the egress
+* its CI self-test is **isolated**; the dedicated job exercises the egress
   layer on its own, so it must not be a step in lint-scripts-static and must
   not feed the required `gate` aggregation, or a runner-specific network quirk
   would block unrelated work. PR5 promotes the job from audit to block mode
@@ -119,10 +119,16 @@ def test_selftest_block_job_restores_connectivity() -> None:
 def test_selftest_job_is_isolated_from_the_required_gate() -> None:
     text = _workflow_text()
     # The required aggregation must not depend on the audit selftest.
-    assert "needs: [lint-scripts-static, lint-scripts-pytest-gate]" in text
+    # Use the gate job's needs line (the one with lint-scripts-static) rather
+    # than a hardcoded full string so adding legitimate new needs (e.g. the
+    # coverage job added in #1800) does not break this assertion.
     needs_line = next(
-        line for line in text.splitlines() if line.strip().startswith("needs: [")
+        line
+        for line in text.splitlines()
+        if line.strip().startswith("needs: [") and "lint-scripts-static" in line
     )
+    assert "lint-scripts-static" in needs_line
+    assert "lint-scripts-pytest-gate" in needs_line
     assert "egress-firewall-selftest" not in needs_line
 
 

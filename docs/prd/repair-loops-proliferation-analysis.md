@@ -87,9 +87,9 @@ classes. Color codes mark proliferation hotspots.
 ```mermaid
 flowchart TD
     A[PR merged event] --> B{should_skip}
-    B -- trusted bot --> Z1[Skip: zero retro]
-    B -- retro PR title --> Z1
-    B -- otherwise --> C[compute_repair_signals]
+    B -->|trusted bot| Z1[Skip: zero retro]
+    B -->|retro PR title| Z1
+    B -->|otherwise| C[compute_repair_signals]
 
     C --> S1{inline_review_comments}
     C --> S2{body_cites_refs}
@@ -173,7 +173,7 @@ Reading notes:
 
 - `mdg`, `uai`, `ext` counts on positive-control rows reflect template-restated taxonomy headings, not classified repairs. The retro body explicitly states `n/a` next to each on those PRs.
 - PR #337 is the only positive-control entry where a row signal (`multi_commit_pr`) actually fired and the retro explains why: three operator self-revisions on the source branch, not reviewer-driven repairs.
-- The signal columns are all zero for PRs #235 through #349 by direct inspection of the retro `Repair history` tables, which all render `| -- | (none) | -- |`.
+- The signal columns are all zero for PRs #235 through #349 by direct inspection of the retro `Repair history` tables, which all render `|; | (none) |; |`.
 
 ## 6. Findings
 

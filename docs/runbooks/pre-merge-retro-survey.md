@@ -29,19 +29,19 @@ the survey, records completion, and ends its turn for the human to merge.
 ```mermaid
 flowchart TD
     A["Stop (handoff): session opened a PR"] --> B{"Stop gate:<br/>survey marker recorded for the PR?"}
-    B -- "recorded" --> Z["Allow stop (gate passes)"]
-    B -- "not recorded" --> D["block -> launch AskUserQuestion<br/>(present consecutively, no prose between)"]
+    B -->|recorded| Z["Allow stop (gate passes)"]
+    B -->|not recorded| D["block -> launch AskUserQuestion<br/>(present consecutively, no prose between)"]
 
-    D --> Q1["Q1 SATISFACTION first, single-select<br/>5 very / 4 satisfied / 3 neutral / 2 dissatisfied"]
+    D --> Q1["Q1 SATISFACTION first, anchored to the pre-merge handoff of PR #N<br/>state date + time + timezone (YYYY-MM-DD HH:MM TZ, e.g. JST and UTC)<br/>single-select: 5 very / 4 satisfied / 3 neutral / 2 dissatisfied"]
     Q1 --> SW{"branch on satisfaction"}
 
-    SW -- "high (4-5)" --> Q2a["Q2a any problem?<br/>rework / fix / surprise"]
+    SW -->|high 4-5| Q2a["Q2a any problem?<br/>rework / fix / surprise"]
     Q2a --> P1{"derive retro need from answer"}
-    P1 -- "repair-free" --> R1["no retro -> skip"]
-    P1 -- "minor" --> R2["short note only"]
-    P1 -- "problem" --> R3["open retro issue"]
+    P1 -->|repair-free| R1["no retro -> skip"]
+    P1 -->|minor| R2["short note only"]
+    P1 -->|problem| R3["open retro issue"]
 
-    SW -- "low (2-3)" --> Q2b["Q2b main pain points, multi-select<br/>rework / intent drift / unclear docs / time"]
+    SW -->|low 2-3| Q2b["Q2b main pain points, multi-select<br/>rework / intent drift / unclear docs / time"]
     Q2b --> R4["recommend retro -> open issue<br/>seed rows from answers"]
 
     R1 --> REC["record: --record &lt;pr&gt;"]
@@ -65,7 +65,11 @@ flowchart TD
 1. Open the PR as usual (`mcp__github__create_pull_request`) and let the turn end.
 2. The Stop gate blocks with a reason that spells out the satisfaction-first,
    scenario-branched flow for each unrecorded PR. Run `AskUserQuestion` accordingly:
-   - Ask satisfaction first (single-select).
+   - Ask satisfaction first (single-select), anchored to an explicit date +
+     time + timezone (`YYYY-MM-DD HH:MM TZ`, e.g. JST and UTC together) so the
+     score's reference moment is unambiguous when the marker is read back later
+    ; a date alone is ambiguous because a session can span hours and cross the
+     day boundary (refs #1565).
    - Emit the branched follow-up immediately after the answer, with no prose in
      between, so the survey reads as one continuous flow (plan-mode style).
    - High satisfaction (4-5): ask whether any problem occurred and derive retro
@@ -78,6 +82,13 @@ flowchart TD
    "Non-interactive fallback" below).
 4. End the turn. The human merges the PR through the GitHub UI; do NOT call
    `merge_pull_request`. A later stop in the same session passes for that PR.
+
+When the survey opens a retro in-session (R3 / R4 above), the
+`mcp__github__issue_write` create carries the reserved `auto-retro` scope, which
+`scripts/gate_reserved_retro_scope.py` denies by default. The one narrow
+allow-exception that lets this path through (and what it covers and excludes) is
+the design record in
+[`docs/standards/reserved-retro-scope-exception.md`](../standards/reserved-retro-scope-exception.md).
 
 ## Non-interactive fallback (AskUserQuestion confirm failure, #1081)
 
@@ -109,6 +120,24 @@ python3 scripts/gate_handoff_retro_survey_askuserquestion.py \
 loudly with no marker written, so the handoff is never marked done on bad data.
 `--problem` is free text. A bare `--record` stays valid because the gate only
 checks marker existence. The answers are persisted as JSON in the marker body.
+
+Every marker also stamps the lifecycle moment the score measures (refs #1192),
+so a satisfaction value is never ambiguous when read back later:
+
+```json
+{
+  "pr": 1234,
+  "phase": "pre-merge-handoff",
+  "recorded_at": "2026-06-08T12:34:56+00:00",
+  "satisfaction": 5,
+  "problem": "none"
+}
+```
+
+If the marker write itself fails (for example an unwritable marker directory),
+`--record` now exits non-zero and prints the failure instead of swallowing it
+(refs #1140): a silent failure would leave no marker and re-fire the survey for
+the same PR on the next Stop.
 
 ## Only successfully created PRs count (#1374)
 

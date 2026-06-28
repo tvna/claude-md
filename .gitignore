@@ -31,13 +31,18 @@ apm_modules/
 
 # Claude local state
 # .claude/ is broadly prohibited per docs/standards/repo-scope.md (#58).
-# .claude/settings.local.json is the documented developer-local carve-out —
+# .claude/settings.local.json is the documented developer-local carve-out --
 # it remains a contributor's local-only file, and the broader directory rule
 # below transitively keeps it out of commits.
 # .claude/settings.json is the narrow file-level carve-out from #109,
 # permitted only to host deterministic lifecycle hooks.
+# .claude/skills/ is the narrow directory carve-out from #1983: the APM-deployed,
+# pinned Superpowers skills, committed so Claude Code on the Web loads them from a
+# fresh clone at parity with Devin/Codex (.agents/skills/, #728). Source of truth
+# stays apm.yml / apm.lock.yaml.
 .claude/*
 !.claude/settings.json
+!.claude/skills/
 
 # Agent-tool-specific config (prohibited per docs/standards/repo-scope.md, #58)
 .cursor/
@@ -62,7 +67,24 @@ apm_modules/
 # Secrets / credentials. .env-style files hold tokens and API keys; they are
 # never committed. There is no .env.example carve-out because the repo ships
 # no example env file (add one with an explicit `!.env.example` line if that
-# changes). git is the canonical secret boundary, not .claudeignore
+# changes). git is the canonical secret boundary
 # (docs/standards/repo-scope.md).
 .env
 .env.*
+
+# Flake files staged into the nix-warm-claude Feature at image-build time by
+# .github/workflows/publish-devcontainer-images.yml (claude legs only). They are
+# copies of the repo-root flake the Feature realises into the baked closure;
+# they are generated per build and never committed so they cannot drift from the
+# source flake. See .devcontainer/images/features/nix-warm-claude/install.sh and
+# issue #1491.
+.devcontainer/images/features/nix-warm-claude/flake.nix
+.devcontainer/images/features/nix-warm-claude/flake.lock
+.devcontainer/images/features/nix-warm-claude/pyproject.toml
+
+# bun-managed node_modules for the Mermaid syntax validation gate
+# (scripts/scan_mermaid_syntax.py, issue #1597). The toolchain is pinned by
+# package.json + bun.lock and materialised by `bun install --frozen-lockfile`
+# (SessionStart scripts/install-bun.sh on the web, the verify-mermaid.yml nix
+# job in CI), so the resolved tree is never committed.
+/node_modules/

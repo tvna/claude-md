@@ -256,6 +256,33 @@ The fail-loud/open declaration is enforced by
 line of the `Contract:` block must name `loud` or `open`, so the posture
 is explicit and machine-checkable rather than inferred from the code.
 
+### M11. Per-file coverage floor (required CI gate)
+
+Every changed public `scripts/*.py` file must meet the 90 % per-file
+line-coverage floor enforced by `scripts/preflight_coverage.py`
+(`PER_FILE_FLOOR = 90.0`). This is a required CI status check registered
+as `Per-file coverage floor` in `.github/rulesets/main.json`, running as
+the `coverage` job in `.github/workflows/verify-agents.yml`. It blocks
+merge on every PR to `main`.
+
+The per-file gate is complementary to the aggregate post-merge threshold
+(O4 Gate 1): an aggregate threshold alone cannot catch a single new file
+with 0 % coverage hidden by the high coverage of existing files (the
+snapshot problem documented in O4). M11 is the pre-merge, per-file
+enforcement that closes this gap.
+
+The `pre-commit` `pre-push` stage hook (`preflight-coverage` in
+`.pre-commit-config.yaml`) provides the local equivalent before push.
+The hook reuses an existing `coverage.json` when the developer already
+ran `uv run pytest --cov` locally, so the extra cost is zero in that
+case. The threshold constant (`PER_FILE_FLOOR`) lives in
+`preflight_coverage.py` and is the single source of truth for both the
+CI gate and the local hook.
+
+Reference: `scripts/preflight_coverage.py`. Backed by
+`scripts/scan_test_presence_drift.py` (M2), which ensures a test module
+exists for every public `scripts/*.py`. Refs #952, #1800.
+
 ### M10. Standardised dependency and tool installation
 
 Workflow jobs that run Python tooling install dependencies through a
@@ -371,7 +398,7 @@ disk I/O inside strategies).
 **Adoption procedure.** Follow the M10 dependency procedure to add
 `hypothesis` (already declared in `[dependency-groups].dev`,
 introduced by #199). New property tests live next to the existing
-example-based tests for the same script -- they extend the test
+example-based tests for the same script; they extend the test
 module, never replace its parametrized cases.
 
 **Mutation testing is deferred (#199).** Tools such as `mutmut` and
@@ -425,7 +452,7 @@ The aggregate gate (`[tool.coverage.report].fail_under` in
 the source tree. When the tree is large, a newly added file with 0%
 coverage barely moves the aggregate. For example, with a 9 000-line
 tree at 92% coverage, a new 100-line file with no tests drops the
-aggregate to only 91.2% — well above a typical 90% floor. The new
+aggregate to only 91.2%; well above a typical 90% floor. The new
 file ships with zero coverage while all gates appear green.
 
 **Gate 1: aggregate post-merge threshold**
@@ -444,7 +471,7 @@ it fires after merge and opens a tracking issue via
 `PreToolUse` hook before `mcp__github__(create_pull_request|update_pull_request)`
 and as a `pre-push` pre-commit stage hook. It:
 
-1. Runs `git diff --name-only origin/main -- scripts/` to identify
+1. Runs `git diff --name-only origin/main; scripts/` to identify
    changed public `scripts/*.py` files (private helpers prefixed with
    `_` are skipped; they are tested indirectly through their callers).
 2. Reads or generates `coverage.json` (`pytest --cov --cov-report=json`).
@@ -459,6 +486,15 @@ The hook reuses an existing `coverage.json` when one is already
 present in the repository root (the developer already ran
 `uv run pytest --cov` locally), so the cost of the check is zero when
 the developer ran tests before triggering the hook.
+
+**Gate 3: required pre-merge CI job (landed #1800)**
+
+`scripts/preflight_coverage.py` now also runs as the `Per-file coverage
+floor` required status check in `.github/workflows/verify-agents.yml`,
+closing the client-side bypass gap. The CI gate is the deterministic
+server-side equivalent of the pre-push hook; together they enforce the
+90 % floor regardless of whether the developer has pre-commit installed.
+This gate is the must-have enforcement surface described in M11.
 
 Extension to non-`scripts/` Python packages is governed by the
 [Coverage graduation policy](#coverage-graduation-policy) below (#198).
@@ -726,6 +762,7 @@ silent regression on either side.
 | M8 lint/type/coverage | section 3 | Deterministic gates close the loop before merge |
 | M9 fail policy | section 4 | Loud failure on gates; explicit fail-open only where a wedged hook would be worse |
 | M10 install path | section 3, section 4 | Single uv-managed install primitive; supply-chain bounded by `pyproject.toml` + `uv.lock` and enforced by `scan_workflow_pip.py` |
+| M11 per-file coverage floor | section 3 | Required pre-merge CI gate closes the client-side bypass gap; aggregate post-merge floor (O4 Gate 1) remains as backstop |
 | G1-G4 coverage graduation | section 3, section 4 | Single coverage gate, additive `source` list, script floor cannot weaken when new packages graduate (#198) |
 
 ## References
@@ -747,6 +784,7 @@ silent regression on either side.
   - #194 test(scripts): add GitHub API boundary tests
   - #195 ci(scripts): standardize dependency and tool installation (promoted to must-have M10)
   - #198 test(quality): extend coverage gates beyond workflow scripts (carried by the Coverage graduation policy section above)
+  - #1800 ci(coverage): promote per-file coverage floor to required pre-merge CI gate (promoted to must-have M11)
 - Related runbooks: `docs/standards/issue-pr-body-standard.md`,
-  `docs/runbooks/issue-triage.md`, `docs/prd/non-ascii-defense.md`,
+  `docs/runbooks/issue-triage.md`, `docs/runbooks/non-ascii-defense.md`,
   `docs/runbooks/rulesets.md`.

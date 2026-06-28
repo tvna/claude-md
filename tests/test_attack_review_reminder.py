@@ -105,7 +105,7 @@ class TestBuildComment:
             runbook_path="docs/runbooks/attack-coverage-review-cadence.md",
             run_url="https://example/run/1",
         )
-        assert "## ATT&CK coverage review reminder -- 2026-06-02" in comment
+        assert "## ATT&CK coverage review reminder; 2026-06-02" in comment
         assert "https://github.com/tvna/claude-md/blob/main/docs/runbooks/attack-coverage-review-cadence.md" in comment
         assert "Workflow run: https://example/run/1." in comment
         assert "Refs #184." in comment
@@ -144,7 +144,7 @@ class TestCmdAssemble:
         )
         assert rc == 0
         comment = out.read_text(encoding="utf-8")
-        assert "ATT&CK coverage review reminder -- 2026-06-02" in comment
+        assert "ATT&CK coverage review reminder; 2026-06-02" in comment
         assert "### One" in comment
         summary_text = summary.read_text(encoding="utf-8")
         assert "Assembled review reminder comment" in summary_text
@@ -173,8 +173,8 @@ class TestCmdAssemble:
         assert rc == 0
         # Header date is YYYY-MM-DD shaped.
         first_line = out.read_text(encoding="utf-8").splitlines()[0]
-        assert first_line.startswith("## ATT&CK coverage review reminder -- ")
-        date_token = first_line.rsplit("-- ", 1)[1]
+        assert first_line.startswith("## ATT&CK coverage review reminder; ")
+        date_token = first_line.rsplit("; ", 1)[1]
         assert len(date_token) == 10 and date_token[4] == "-" and date_token[7] == "-"
 
     def test_exits_1_when_h3_count_mismatch(self, tmp_path: Path) -> None:

@@ -5,6 +5,12 @@
       "Edit(/tmp/claude-plans/**)",
       "Write(/tmp/claude-plans/**)",
       "MultiEdit(/tmp/claude-plans/**)"
+    ],
+    "deny": [
+      "Bash(git -c commit.gpgsign=false:*)",
+      "Bash(git -c commit.gpgsign=0:*)",
+      "Bash(git -c commit.gpgsign=no:*)",
+      "Bash(git -c commit.gpgsign=off:*)"
     ]
   },
   "hooks": {
@@ -21,7 +27,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "cd \"$(git rev-parse --show-toplevel)\" && scripts/install-rtk.sh"
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && scripts/install-rtk.sh",
+            "async": true
           }
         ]
       },
@@ -29,7 +36,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "cd \"$(git rev-parse --show-toplevel)\" && scripts/install-apm.sh"
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && scripts/install-apm.sh",
+            "async": true
           }
         ]
       },
@@ -45,7 +53,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "cd \"$(git rev-parse --show-toplevel)\" && scripts/install-waza.sh"
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && scripts/install-waza.sh",
+            "async": true
           }
         ]
       },
@@ -53,7 +62,51 @@
         "hooks": [
           {
             "type": "command",
-            "command": "cd \"$(git rev-parse --show-toplevel)\" && scripts/install-ccusage.sh"
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && scripts/install-ccusage.sh",
+            "async": true
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && scripts/install-bun.sh"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && scripts/install-zizmor.sh",
+            "async": true
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && scripts/install-lychee.sh",
+            "async": true
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && scripts/install-betterleaks.sh",
+            "async": true
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && scripts/install-prek.sh"
           }
         ]
       },
@@ -101,7 +154,31 @@
         "hooks": [
           {
             "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/session_set_origin_head.py"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/preflight_session_base_freshness.py session-start"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
             "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/check_pr_mergeability.py session-start"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/check_commit_signing_ready.py session-start"
           }
         ]
       },
@@ -143,6 +220,19 @@
           {
             "type": "command",
             "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/preflight_non_ascii.py"
+          },
+          {
+            "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/preflight_github_secrets.py"
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__github__(issue_write|add_issue_comment|create_pull_request|update_pull_request|add_reply_to_pull_request_comment|pull_request_review_write|add_comment_to_pending_review|sub_issue_write)",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/preflight_angle_token_drop.py"
           }
         ]
       },
@@ -183,11 +273,29 @@
         ]
       },
       {
+        "matcher": "mcp__github__issue_write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/preflight_issue_ci_staleness.py"
+          }
+        ]
+      },
+      {
         "matcher": "mcp__github__update_pull_request_branch",
         "hooks": [
           {
             "type": "command",
             "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/gate_update_pr_branch.py"
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__github__merge_pull_request",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/gate_merge_safety.py"
           }
         ]
       },
@@ -214,6 +322,15 @@
         "hooks": [
           {
             "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/gate_irreversible_bash.py"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
             "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/gate_gh_cli.py"
           }
         ]
@@ -223,6 +340,17 @@
         "hooks": [
           {
             "type": "command",
+            "if": "Bash(*git *)",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/gate_unsigned_commit_bash.py"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "if": "Bash(*git push*)",
             "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/preflight_push_base.py"
           }
         ]
@@ -232,6 +360,7 @@
         "hooks": [
           {
             "type": "command",
+            "if": "Bash(*git push*)",
             "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/preflight_push_session_branch.py"
           }
         ]
@@ -241,6 +370,7 @@
         "hooks": [
           {
             "type": "command",
+            "if": "Bash(*git commit*)",
             "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/preflight_commit_session_branch.py"
           }
         ]
@@ -250,6 +380,84 @@
         "hooks": [
           {
             "type": "command",
+            "if": "Bash(*git *)",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/check_commit_signing_ready.py"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "if": "Bash(*git *)",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/gate_retro_close_keyword_commit.py"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "if": "Bash(*git *)",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/preflight_session_branch_authz.py"
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/preflight_session_branch_authz.py"
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/gate_agents_skills_edit.py"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/gate_agents_skills_edit.py"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "if": "Bash(*git commit*)",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/preflight_session_base_freshness.py"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "if": "Bash(*git commit*)",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/gate_instruction_body_advisory.py"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "if": "Bash(*git push*)",
             "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/preflight_push_nonempty.py"
           }
         ]
@@ -264,6 +472,15 @@
           {
             "type": "command",
             "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/pr_body_close_keyword_gate.py"
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__github__(create_pull_request|update_pull_request)",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/gate_pr_body_retro_issue_link.py"
           }
         ]
       },
@@ -312,7 +529,19 @@
           },
           {
             "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/preflight_github_secrets.py"
+          },
+          {
+            "type": "command",
             "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/preflight_title_policy.py"
+          },
+          {
+            "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/preflight_angle_token_drop.py"
+          },
+          {
+            "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/preflight_issue_ci_staleness.py"
           }
         ]
       },
@@ -329,11 +558,24 @@
           },
           {
             "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/gate_pr_body_retro_issue_link.py"
+          },
+          {
+            "type": "command",
             "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/preflight_pr_body_required_sections.py"
           },
           {
             "type": "command",
             "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/preflight_pr_template_shape.py"
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__github__resolve_review_thread",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/preflight_resolve_review_thread.py"
           }
         ]
       },
@@ -407,6 +649,17 @@
         ]
       },
       {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "if": "Bash(*git push*)",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/check_pr_mergeability.py git-push",
+            "statusMessage": "Checking post-push PR mergeability"
+          }
+        ]
+      },
+      {
         "matcher": "mcp__github__merge_pull_request",
         "hooks": [
           {
@@ -459,6 +712,22 @@
           {
             "type": "command",
             "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/stop_new_session_handoff_prompt.py"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/gate_cache_regime_advisor.py"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/gate_stop_pr_review_reply.py"
           }
         ]
       }

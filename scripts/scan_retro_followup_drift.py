@@ -9,7 +9,7 @@ in ``tests/test_scan_retro_followup_drift.py``.
 This is PR1 of the TP/FP retrofit that addresses retro-issue
 non-convergence: ``scripts/auto_retro.py:compute_repair_signals`` uses
 only single-PR local features, with no mid-to-long-term context. The
-scanner closes the loop in the opposite direction -- it watches the
+scanner closes the loop in the opposite direction; it watches the
 follow-up issues/PRs the retro proposed and labels the retro when those
 follow-ups drift (stale, abandoned, missing). Operators upgrade
 ``retro:fp-candidate`` to ``retro:fp`` (or relabel ``retro:tp``) at
@@ -18,10 +18,10 @@ signal and classification layers.
 
 Follows the refactor pattern established by ``scripts/scan_non_ascii.py``
 and ``scripts/auto_retro.py``: pure functions on top, a thin
-:func:`gh_api` subprocess boundary at the bottom, monkeypatched in tests.
+:func:`gh_api` REST boundary at the bottom, monkeypatched in tests.
 
 Drift rules (deterministic, no body-text interpretation per
-CLAUDE.md section 2 -- state, label, link-structure only):
+CLAUDE.md section 2; state, label, link-structure only):
 
 * Follow-up issue closed with ``state_reason == "not_planned"`` -> ``fp_confirmed``.
 * Follow-up PR closed unmerged (``state == "closed"`` and ``merged is False``)
@@ -35,7 +35,7 @@ CLAUDE.md section 2 -- state, label, link-structure only):
 Idempotency:
 
 * Skip retros that already carry ``retro:tp`` or ``retro:fp``
-  (operator-confirmed -- the scanner must not overwrite operator state).
+  (operator-confirmed; the scanner must not overwrite operator state).
 * Skip relabelling when ``retro:fp-candidate`` is already present for a
   candidate-level drift result.
 * Upgrade ``retro:fp-candidate`` to ``retro:fp`` when the drift result
@@ -50,13 +50,13 @@ import argparse
 import json
 import os
 import re
-import subprocess
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
+from _github_api import GitHubApiError, rest_text
 from _retro_labels import (
     RETRO_FP,
     RETRO_FP_CANDIDATE,
@@ -199,7 +199,7 @@ def decide_target_label(
     Idempotency rules:
 
     * Operator-confirmed retros (``retro:tp`` or ``retro:fp`` already
-      present) are never modified -- the scanner must not overwrite
+      present) are never modified; the scanner must not overwrite
       operator state.
     * A candidate-level result is suppressed when the retro already
       carries ``retro:fp-candidate``.
@@ -251,7 +251,7 @@ def build_summary(
 
 
 # ---------------------------------------------------------------------------
-# Side-effecting boundary -- mocked in tests
+# Side-effecting boundary; mocked in tests
 # ---------------------------------------------------------------------------
 
 
@@ -259,49 +259,17 @@ def gh_api(
     method: str,
     path: str,
     json_body: dict[str, Any] | None = None,
-    *,
-    timeout: int = 30,
 ) -> str:
-    """Thin wrapper around ``gh api``. Returns stdout text.
+    """Thin wrapper over :func:`_github_api.rest_text` (ambient GH_TOKEN auth).
 
-    Raises :class:`subprocess.CalledProcessError` on any non-zero exit
-    so callers can distinguish 404 (drift signal) from other failures
-    (loud per CLAUDE.md section 4). Authentication comes from the
-    ``GH_TOKEN`` env var that the workflow sets to ``secrets.GITHUB_TOKEN``.
+    Raises GitHubApiError on non-2xx so callers can treat a 404 as a drift signal.
     """
-    cmd = ["gh", "api", "--method", method, path]
-    if json_body is not None:
-        # S603 justification: fixed argv (no shell, no user input in argv[0]);
-        # `gh` is provisioned by the workflow runner. `path` is built from
-        # int IDs narrowed upstream. Mirrors auto_retro.py / scan_non_ascii.py.
-        result = subprocess.run(  # noqa: S603 -- fixed argv, shell=False
-            [*cmd, "--input", "-"],
-            input=json.dumps(json_body),
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-            check=True,
-        )
-    else:
-        result = subprocess.run(  # noqa: S603 -- fixed argv, shell=False
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-            check=True,
-        )
-    return result.stdout
+    return rest_text(method, path, json_body)
 
 
-def is_404_error(exc: subprocess.CalledProcessError) -> bool:
-    """Detect a GitHub API 404 from a ``gh api`` CalledProcessError.
-
-    ``gh`` writes the HTTP status to stderr in the form
-    ``HTTP 404: Not Found``. Match case-insensitively so future changes
-    in ``gh``'s formatting do not silently break the detector.
-    """
-    text = ((exc.stderr or "") + (exc.stdout or "")).lower()
-    return "http 404" in text or "404 not found" in text
+def is_404_error(exc: GitHubApiError) -> bool:
+    """Detect a GitHub API 404 from a :class:`_github_api.GitHubApiError`."""
+    return exc.code == 404
 
 
 def search_retro_issues(repo: str) -> list[dict[str, Any]]:
@@ -329,7 +297,7 @@ def fetch_issue_or_pr(repo: str, number: int) -> dict[str, Any] | None:
     """
     try:
         raw = gh_api("GET", f"/repos/{repo}/issues/{number}")
-    except subprocess.CalledProcessError as exc:
+    except GitHubApiError as exc:
         if is_404_error(exc):
             return None
         raise
@@ -454,11 +422,11 @@ def run(
         for n in refs:
             try:
                 per_followup.append(_resolve_one_followup(repo, n, today_iso, stale_days))
-            except subprocess.CalledProcessError as exc:
+            except GitHubApiError as exc:
                 errors += 1
                 print(
                     f"::warning::followup #{n} fetch failed for retro "
-                    f"#{retro_number} (exit {exc.returncode}); skipping followup",
+                    f"#{retro_number} (HTTP {exc.code}); skipping followup",
                     file=sys.stderr,
                 )
 
@@ -525,9 +493,9 @@ def main(argv: list[str] | None = None) -> int:
     except ValueError as exc:
         print(f"::error::{exc}", file=sys.stderr)
         return 1
-    except subprocess.CalledProcessError as exc:
+    except GitHubApiError as exc:
         print(
-            f"::error::gh api failed (exit {exc.returncode}): {exc.stderr}",
+            f"::error::GitHub API failed (HTTP {exc.code}): {exc.body}",
             file=sys.stderr,
         )
         return 1

@@ -44,12 +44,13 @@ import argparse
 import json
 import sys
 from pathlib import Path
+from typing import Any
 
 AGENTS: tuple[str, ...] = ("claude", "codex")
 ARCHES: tuple[str, ...] = ("amd64", "arm64")
 
 _MARKER_TEMPLATE = (
-    "GENERATED FILE -- do not edit. Source: "
+    "GENERATED FILE; do not edit. Source: "
     ".devcontainer/{agent}/devcontainer.json. Regenerate: "
     "python3 scripts/generate_devcontainer_arch_overlays.py generate. This "
     "overlay pins --platform=linux/{arch} for explicit cross-arch selection; "
@@ -65,14 +66,14 @@ def overlay_path(repo_root: Path, agent: str, arch: str) -> Path:
     return repo_root / ".devcontainer" / f"{agent}-{arch}" / "devcontainer.json"
 
 
-def render_overlay(base: dict, agent: str, arch: str) -> dict:
+def render_overlay(base: dict[str, Any], agent: str, arch: str) -> dict[str, Any]:
     """Return the overlay config derived from *base* for *agent*/*arch*.
 
     The base image SHA and every other field are copied verbatim; only ``name``,
     ``runArgs``, and ``initializeCommand`` are specialised. The ``"//"`` marker
     is inserted first so the generated nature is obvious at the top of the file.
     """
-    overlay: dict = {"//": _MARKER_TEMPLATE.format(agent=agent, arch=arch)}
+    overlay: dict[str, Any] = {"//": _MARKER_TEMPLATE.format(agent=agent, arch=arch)}
     overlay.update(base)
 
     name = base.get("name")
@@ -99,11 +100,11 @@ def render_overlay(base: dict, agent: str, arch: str) -> dict:
     return overlay
 
 
-def render_overlay_text(base: dict, agent: str, arch: str) -> str:
+def render_overlay_text(base: dict[str, Any], agent: str, arch: str) -> str:
     return json.dumps(render_overlay(base, agent, arch), indent=2) + "\n"
 
 
-def _load_base(repo_root: Path, agent: str) -> dict:
+def _load_base(repo_root: Path, agent: str) -> dict[str, Any]:
     path = base_path(repo_root, agent)
     return json.loads(path.read_text(encoding="utf-8"))
 

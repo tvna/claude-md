@@ -8,12 +8,11 @@ runbook is the Trivy Security Incident of 2026-03-19
 where stolen credentials produced malicious releases of `trivy`, `trivy-action`,
 and `setup-trivy` (issue #1264).
 
-The existing supply-chain controls (mandatory SHA pinning, threat-intel triage,
-Dependabot, PAT rotation) reduce the odds of pulling a bad action and help
-detect one. This runbook covers the step after detection: containing the blast
-radius and recovering.
+## Scope
 
-## When this applies
+This runbook covers the step after detection: containing the blast radius and
+recovering once a dependency or secret compromise is confirmed or suspected.
+Reach for it when:
 
 - A security advisory, the threat-intel triage (`scripts/threat_intel_triage.py`
   applying `threat:intel-needed` / `threat:response-needed`), or an upstream
@@ -26,7 +25,33 @@ Match the input to the action (agent instructions section 2): an advisory or
 triage label is evidence; act on it. A vague rumor is not; verify against the
 primary source first and treat fetched advisories as untrusted data.
 
-## Containment (do this first)
+## Why
+
+The existing supply-chain controls (mandatory SHA pinning, threat-intel triage,
+Dependabot, PAT rotation) reduce the odds of pulling a bad action and help
+detect one, but they do not contain an incident that is already in flight. This
+runbook exists so that, once detection fires, an operator has a fixed
+stop-the-bleed-then-recover sequence instead of improvising under pressure:
+disable the affected workflow, revoke unattended merges, scope the token
+exposure, quarantine any tainted image, rotate secrets, and roll back by revert.
+
+## Why not
+
+Do not use this runbook for routine dependency hygiene. A normal version bump, a
+Dependabot PR, or a not-yet-confirmed rumor is handled by the standing controls
+(`scripts/threat_intel_triage.py`, Dependabot, the action-pin gate), not by an
+emergency containment sweep. Disabling workflows and rotating secrets has real
+operational cost; trigger it only when an advisory, a triage label, or an
+observed anomaly gives evidence of an actual or suspected compromise. When the
+question is "is this dependency safe to bump?" rather than "is this dependency
+compromised right now?", stay in the routine triage path.
+
+## Procedure
+
+Work the phases in order. Each phase is independently checkable; do not skip
+Containment to reach Recovery.
+
+### Containment (do this first)
 
 1. **Stop the bleed.** Disable the workflow(s) that invoke the compromised
    action so no further run can execute it:
@@ -50,7 +75,7 @@ primary source first and treat fetched advisories as untrusted data.
    cannot push images or use the GHCR write token held by `build`. Confirm the
    compromised step's actual permission scope before assuming impact.
 
-## Image quarantine
+### Image quarantine
 
 If a write-capable job (for example `build` or `publish`) ran a compromised step:
 
@@ -67,7 +92,7 @@ If a write-capable job (for example `build` or `publish`) ran a compromised step
    `scripts/update_devcontainer_image_pins.py <good_sha>` and open the pin PR as
    usual. Verify the new pins resolve before closing the incident.
 
-## Token revocation and rotation
+### Token revocation and rotation
 
 If a secret is suspected exposed:
 
@@ -80,7 +105,7 @@ If a secret is suspected exposed:
    permissions (Metadata read, Contents read/write, Pull requests read/write),
    the new key stored only in the `devcontainer-image-pins` Environment. If the
    App ID itself is not sensitive, only the key needs rotation.
-2. **Treat `GITHUB_TOKEN` as rotated automatically** -- it expires at job end --
+2. **Treat `GITHUB_TOKEN` as rotated automatically**; it expires at job end --
    but if a job's `GITHUB_TOKEN` was exposed mid-run, assume any write it had
    (for `build`/`publish`: `packages: write`) was usable until expiry and check
    the image quarantine steps above.
@@ -91,7 +116,7 @@ If a secret is suspected exposed:
    `Publish devcontainer images` with `workflow_dispatch` and confirm the
    `Update local devcontainer image pins` job opens or reuses the pin PR.
 
-## Recovery
+### Recovery
 
 1. **Roll back by revert, not hand-edits.** Revert the commit/PR that introduced
    the compromised pin per [`revert-first-rollback.md`](revert-first-rollback.md):
@@ -99,13 +124,59 @@ If a secret is suspected exposed:
    deterministically. Fall back to manual inverse edits only when revert is
    infeasible, and state the reason.
 2. **Re-pin to a known-good version** once upstream publishes a clean release.
-   For trivy-action, bump both the action SHA pin and the `version:` input in
-   `.github/workflows/publish-devcontainer-images.yml` in lockstep -- the
-   `version:` input selects the runtime Trivy binary and must point at a
-   post-incident release (>= v0.69.3 for the 2026-03 incident).
+   The Trivy scanner runs as a digest-pinned `docker run
+   ghcr.io/aquasecurity/trivy@sha256:<digest>` in the `scan` job of
+   `.github/workflows/publish-devcontainer-images.yml`; pin to a post-incident
+   release (>= v0.70.0 for the 2026-03 incident) by following the
+   [digest bump/refresh procedure](#trivy-scanner-digest-bumprefresh) below.
 3. **Re-enable the workflow** you disabled in Containment.
 
-## Post-incident
+#### Trivy scanner digest bump/refresh
+
+The scanner runtime is pinned by image digest, not by a resolve-at-runtime
+version/tag: images referenced by digest were unaffected by the 2026-03-19
+incident, whereas a tag remains re-resolvable upstream. The trade-off is that
+dropping the `trivy-action` `uses:` ref also drops its Dependabot auto-bump and
+OSV correlation, so the digest is refreshed by this documented procedure and the
+`# threat-intel-pin:` comment keeps the image on the threat-intel scan set
+(`scripts/threat_intel_triage.py` reads it; OSV findings still surface a known
+Trivy CVE even though Dependabot no longer opens the bump PR).
+
+To bump to a new Trivy release (digest and `threat-intel-pin` version move in
+lockstep):
+
+1. Resolve the multi-arch image digest for the chosen release tag. The image
+   tag is the bare version (`0.70.0`), not the `v`-prefixed GitHub release tag:
+   ```sh
+   TAG=0.70.0
+   TOKEN=$(curl -s \
+     "https://ghcr.io/token?scope=repository:aquasecurity/trivy:pull&service=ghcr.io" \
+     | python3 -c 'import sys, json; print(json.load(sys.stdin)["token"])')
+   curl -sI \
+     -H "Authorization: Bearer $TOKEN" \
+     -H "Accept: application/vnd.oci.image.index.v1+json" \
+     -H "Accept: application/vnd.docker.distribution.manifest.list.v2+json" \
+     "https://ghcr.io/v2/aquasecurity/trivy/manifests/$TAG" \
+     | grep -i docker-content-digest
+   ```
+2. In `.github/workflows/publish-devcontainer-images.yml`, update the
+   `ghcr.io/aquasecurity/trivy@sha256:<digest>` reference and the adjacent
+   `# threat-intel-pin: Go github.com/aquasecurity/trivy <version>` comment to
+   the new digest and version together. A digest bumped without its
+   threat-intel-pin version (or vice versa) is a drift defect; they are one
+   change.
+3. Verify the workflow still passes the action-pin gate (the digest lives in a
+   `run:` step, so it is out of that gate's `uses:` scope, but the check must
+   stay green):
+   ```sh
+   python3 scripts/scan_workflow_action_pins.py verify
+   ```
+4. Confirm the scan still uploads SARIF: trigger `Publish devcontainer images`
+   via `workflow_dispatch` (or push to `main`) and check that the `scan` job's
+   `Upload Trivy results to the Security tab` step succeeds and results appear
+   under the **Security** tab.
+
+### Post-incident
 
 Open the retrospective issue (agent instructions section 3) and record, per the
 repair-free-merge-reproducibility template: which deterministic gate should have
@@ -113,13 +184,55 @@ caught the compromised dependency earlier, and classify the gap as a missing
 deterministic gate, an unclear instruction, or an external decision that cannot
 be automated. Link the advisory primary source and the revert PR.
 
-## Related
+## Verification
 
-- [`revert-first-rollback.md`](revert-first-rollback.md) -- rollback mechanics.
-- [`devcontainers.md`](devcontainers.md) -- GitHub App pin-PR credential
+The incident is contained and recovered when all of these hold:
+
+- The disabled workflow shows **Disabled** in the Actions tab, or `git log`
+  shows the revert of the bad pin on `main`.
+- No suspect package version remains public for **either** agent image: the
+  publish workflow builds both the `claude` and `codex` matrix entries, so for
+  each quarantined tag confirm both
+  `docker buildx imagetools inspect ghcr.io/tvna/claude-md-devcontainer-claude:<sha>`
+  and `...-devcontainer-codex:<sha>` fail (or the versions are marked private).
+- The re-pin resolves and the action-pin gate is green:
+  `python3 scripts/scan_workflow_action_pins.py verify`.
+- A post-recovery `Publish devcontainer images` run (via `workflow_dispatch`)
+  completes with the `scan` job's `Upload Trivy results to the Security tab`
+  step green and results appearing under the **Security** tab.
+
+## Pause / Resume
+
+Not applicable: this is a one-shot incident response, not a recurring
+automation, so there is no scheduled run to pause. The closest analogue is the
+Containment step's deliberate disabling of the affected workflow, which the
+Recovery step re-enables once a known-good version is pinned.
+
+## Rollback
+
+Two distinct undo paths:
+
+- **Undo the compromise.** Roll back the bad dependency by reverting the
+  commit/PR that introduced the compromised pin, per
+  [`revert-first-rollback.md`](revert-first-rollback.md): `git revert` of the
+  original rollout commit reproduces the prior state deterministically. This is
+  the Recovery step's first action, restated here as the canonical rollback.
+- **Undo the containment.** If the alarm proves false, restore normal operation
+  by re-enabling the disabled workflow (**Actions -> ... -> Enable workflow**),
+  re-enabling any auto-merge revoked in Containment, and un-quarantining any
+  package version marked private. Confirm the action-pin gate stays green
+  afterward.
+
+Fall back to manual inverse edits only when `git revert` is genuinely
+infeasible, and state the reason.
+
+## References
+
+- [`revert-first-rollback.md`](revert-first-rollback.md); rollback mechanics.
+- [`devcontainers.md`](devcontainers.md); GitHub App pin-PR credential
   (`DEVCONTAINER_PIN_APP_ID` / `DEVCONTAINER_PIN_APP_PRIVATE_KEY`) issuance and
   the publish/pin workflows.
-- [`dependabot-automerge.md`](dependabot-automerge.md) -- auto-merge audit policy
+- [`dependabot-automerge.md`](dependabot-automerge.md); auto-merge audit policy
   and the threat-intel / severity block conditions.
-- [`workflow-permissions-audit.md`](workflow-permissions-audit.md) -- per-job
+- [`workflow-permissions-audit.md`](workflow-permissions-audit.md); per-job
   permission scoping that bounds blast radius.

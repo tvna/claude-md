@@ -21,7 +21,7 @@ Contract:
 
 Failure policy: fails LOUD per CLAUDE.md section 4 on malformed REQUIRED
 inputs (this is a gate). Per-family detector failures are recorded as a
-`status=error` row in the report and the aggregator still exits 0 -- drift
+`status=error` row in the report and the aggregator still exits 0; drift
 itself is reported, not gated; each per-family detector keeps its own
 gate semantics independently (e.g. `weekly-maintenance.yml` keeps filing its
 own per-family issues on the existing weekly cron).
@@ -31,85 +31,43 @@ Tested by `tests/test_security_drift_report.py`. Refs #180, parent #178.
 from __future__ import annotations
 
 import argparse
-import dataclasses
 import datetime as _dt
 import os
 import sys
 from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
+import issue_anchors
 from _github_api import apply_call as github_apply_call
 
+# Static per-family catalog and the shared FamilyRow shape split out to keep this
+# module within its size budget (#1488); re-imported so sdr.* names stay stable
+# for callers/tests.
+from _security_drift_families import (
+    FAMILY_ISSUE_SPEC,  # noqa: F401  re-exported for callers/tests
+    ISSUE_LABELS,  # noqa: F401  re-exported for callers/tests
+    STATUS_COVERED,
+    STATUS_DRIFT,
+    STATUS_ERROR,
+    STATUS_PENDING,
+    TARGET_FAMILIES,
+    FamilyRow,
+)
+
+# Rolling per-family drift-issue reconcile IO split out to keep this module within
+# its size budget (#1726); re-imported so sdr.* names stay stable for callers/tests.
+from _security_drift_issues import (  # noqa: F401  re-exported for callers/tests
+    is_family_issue_title,
+    reconcile_family_issues,
+    render_family_issue_body,
+    render_family_issue_title,
+)
+
 API_ROOT = "https://api.github.com"
-DEFAULT_TRACKING_ISSUE = 178
+# Anchor table (#1640): a renumbering is a one-file diff to the TOML.
+DEFAULT_TRACKING_ISSUE = issue_anchors.resolve("security-tracking")
 DEFAULT_MARKER = "<!-- security-control-drift-report -->"
-
-STATUS_COVERED = "covered"
-STATUS_DRIFT = "drift"
-STATUS_PENDING = "pending"
-STATUS_ERROR = "error"
-_VALID_STATUSES = frozenset({STATUS_COVERED, STATUS_DRIFT, STATUS_PENDING, STATUS_ERROR})
-
-# Labels applied to every auto-filed per-family drift issue (mirrors
-# scripts/ruleset_drift.py so the meta-fix lane stays uniform).
-ISSUE_LABELS: tuple[str, ...] = ("layer:meta", "type:fix")
-
-# Families this aggregator auto-files an issue for when they drift, raising them
-# to the `detect-and-file` floor (.github/security-control-floor.toml). The
-# `rulesets` family is deliberately excluded -- the dedicated ruleset-drift job
-# already files its own issues, so including it here would double-file. The
-# advisory `uv-pin-staleness` signal is excluded by design (warning-only).
-TARGET_FAMILIES: tuple[str, ...] = ("labels", "apm-instructions", "uv-pin-literal")
-
-# Per-family static issue text. Detector/evidence mirror the classify_* rows;
-# remediation is the actionable next step a responder runs.
-FAMILY_ISSUE_SPEC: dict[str, dict[str, str]] = {
-    "labels": {
-        "scope": "labels-drift",
-        "detector": "scripts/labels_apply.py plan",
-        "evidence": ".github/labels.json",
-        "remediation": (
-            "Review the labels plan in the run log, then dispatch apply-labels.yml "
-            "with dry_run=false after review (docs/runbooks/issue-triage.md)."
-        ),
-    },
-    "apm-instructions": {
-        "scope": "apm-drift",
-        "detector": "apm compile + git diff --exit-code -- CLAUDE.md AGENTS.md",
-        "evidence": ".apm/instructions/master.instructions.md",
-        "remediation": (
-            "Recompile with `uv run --with apm-cli==<pin> --exclude-newer \"14 days\" "
-            "apm compile` and commit the regenerated CLAUDE.md / AGENTS.md."
-        ),
-    },
-    "uv-pin-literal": {
-        "scope": "uv-pin-drift",
-        "detector": "scripts/uv_pin.py drift",
-        "evidence": "pyproject.toml [tool.uv].required-version",
-        "remediation": (
-            "Remove the offending pin literal or update pyproject.toml so the pin "
-            "lives only in [tool.uv].required-version "
-            "(docs/standards/remote-environment.md)."
-        ),
-    },
-}
-
-
-@dataclasses.dataclass(frozen=True)
-class FamilyRow:
-    family: str
-    detector: str
-    status: str
-    evidence: str
-    action: str
-
-    def __post_init__(self) -> None:
-        if self.status not in _VALID_STATUSES:
-            raise ValueError(
-                f"FamilyRow.status must be one of {sorted(_VALID_STATUSES)}; "
-                f"got {self.status!r}"
-            )
-
 
 # ---------------------------------------------------------------------------
 # Input parsers (pure)
@@ -188,7 +146,7 @@ def classify_rulesets(*, rc: int, detect_output: str) -> FamilyRow:
             detector="scripts/ruleset_drift.py detect",
             status=STATUS_COVERED,
             evidence=evidence,
-            action="no action -- live vs SoT in sync",
+            action="no action; live vs SoT in sync",
         )
     parts: list[str] = []
     if drift_count > 0:
@@ -201,7 +159,7 @@ def classify_rulesets(*, rc: int, detect_output: str) -> FamilyRow:
         status=STATUS_DRIFT,
         evidence=evidence,
         action=(
-            f"{'; '.join(parts)} -- see issues filed by weekly-maintenance.yml and "
+            f"{'; '.join(parts)}; see issues filed by weekly-maintenance.yml and "
             "docs/runbooks/rulesets.md for remediation"
         ),
     )
@@ -224,7 +182,7 @@ def classify_labels(*, rc: int, summary_text: str) -> FamilyRow:
             status=STATUS_DRIFT,
             evidence=evidence,
             action=(
-                "plan shows POST/PATCH/DELETE or report-only rows -- dispatch "
+                "plan shows POST/PATCH/DELETE or report-only rows; dispatch "
                 "apply-labels.yml with dry_run=false after review (docs/runbooks/issue-triage.md)"
             ),
         )
@@ -233,20 +191,20 @@ def classify_labels(*, rc: int, summary_text: str) -> FamilyRow:
         detector="scripts/labels_apply.py plan",
         status=STATUS_COVERED,
         evidence=evidence,
-        action="no action -- live labels match SoT",
+        action="no action; live labels match SoT",
     )
 
 
 def classify_apm(*, rc: int) -> FamilyRow:
     evidence = ".github/workflows/portable-pr-policy.yml"
-    detector = "apm compile + git diff --exit-code -- CLAUDE.md AGENTS.md"
+    detector = "apm compile + git diff --exit-code; CLAUDE.md AGENTS.md"
     if rc == 0:
         return FamilyRow(
             family="apm-instructions",
             detector=detector,
             status=STATUS_COVERED,
             evidence=evidence,
-            action="no action -- compiled outputs match APM source",
+            action="no action; compiled outputs match APM source",
         )
     if rc == 1:
         return FamilyRow(
@@ -277,7 +235,7 @@ def classify_uv_pin_literal(*, rc: int) -> FamilyRow:
             detector="scripts/uv_pin.py drift",
             status=STATUS_COVERED,
             evidence=evidence,
-            action="no action -- pin literal only in pyproject.toml",
+            action="no action; pin literal only in pyproject.toml",
         )
     if rc == 1:
         return FamilyRow(
@@ -286,7 +244,7 @@ def classify_uv_pin_literal(*, rc: int) -> FamilyRow:
             status=STATUS_DRIFT,
             evidence=evidence,
             action=(
-                "uv pin literal appears outside pyproject.toml -- remove the "
+                "uv pin literal appears outside pyproject.toml; remove the "
                 "offending literal or update pyproject.toml (docs/standards/remote-environment.md)"
             ),
         )
@@ -296,6 +254,57 @@ def classify_uv_pin_literal(*, rc: int) -> FamilyRow:
         status=STATUS_ERROR,
         evidence=evidence,
         action=f"detector exit rc={rc}; investigate the uv_pin drift step log",
+    )
+
+
+def classify_workflow_permissions(*, rc: int) -> FamilyRow:
+    evidence = ".github/actions-permissions/workflow.json"
+    detector = "scripts/rulesets_apply.py workflow-permissions --mode drift"
+    if rc == 0:
+        return FamilyRow(
+            family="workflow-permissions",
+            detector=detector,
+            status=STATUS_COVERED,
+            evidence=evidence,
+            action="no action; live default workflow permissions match SoT",
+        )
+    if rc == 1:
+        return FamilyRow(
+            family="workflow-permissions",
+            detector=detector,
+            status=STATUS_DRIFT,
+            evidence=evidence,
+            action=(
+                "live default workflow permissions diverge from SoT; dispatch "
+                "apply-rulesets.yml with enable_workflow_permissions=true and "
+                "dry_run=false after review (docs/runbooks/workflow-permissions.md)"
+            ),
+        )
+    return FamilyRow(
+        family="workflow-permissions",
+        detector=detector,
+        status=STATUS_ERROR,
+        evidence=evidence,
+        action=f"detector exit rc={rc}; investigate the workflow-permissions step log",
+    )
+
+
+def classify_owasp_asi(*, rc: int) -> FamilyRow:
+    if rc == 0:
+        status, action = STATUS_COVERED, "no action; every ASI01-ASI10 item carries a status row"
+    elif rc == 1:
+        status, action = STATUS_DRIFT, (
+            "an ASI item lost its status row; restore the ASI01-ASI10 mapping in "
+            "docs/prd/security-control-inventory.md (PR-time lint-scripts-static normally blocks this)"
+        )
+    else:
+        status, action = STATUS_ERROR, f"detector exit rc={rc}; investigate the owasp-asi-mapping step log"
+    return FamilyRow(
+        family="owasp-asi-mapping",
+        detector="scripts/owasp_asi_mapping.py verify",
+        status=status,
+        evidence="docs/prd/security-control-inventory.md (ASI01-ASI10 section)",
+        action=action,
     )
 
 
@@ -316,7 +325,7 @@ def classify_uv_pin_staleness(*, rc: int, stale_text: str) -> FamilyRow:
             status=STATUS_DRIFT,
             evidence=evidence,
             action=(
-                "uv pin trails upstream latest (informational) -- bump "
+                "uv pin trails upstream latest (informational); bump "
                 "[tool.uv].required-version in pyproject.toml when ready"
             ),
         )
@@ -325,7 +334,7 @@ def classify_uv_pin_staleness(*, rc: int, stale_text: str) -> FamilyRow:
         detector="scripts/uv_pin.py stale",
         status=STATUS_COVERED,
         evidence=evidence,
-        action="no action -- pin matches upstream latest",
+        action="no action; pin matches upstream latest",
     )
 
 
@@ -394,7 +403,7 @@ def build_report(
     families_with_error = sum(1 for row in families if row.status == STATUS_ERROR)
 
     summary = (
-        f"## Security control drift report -- {run_date}\n"
+        f"## Security control drift report; {run_date}\n"
         "\n"
         f"- Run: {run_url}\n"
         f"- Families with drift: {families_with_drift}\n"
@@ -403,21 +412,13 @@ def build_report(
         + _render_table(families)
     )
 
-    report_body = (
-        f"{marker}\n"
-        "\n"
-        f"## Security control drift report -- {run_date}\n"
-        "\n"
-        f"- Run: {run_url}\n"
-        f"- Families with drift: {families_with_drift}\n"
-        f"- Families with detector error: {families_with_error}\n"
-        "\n"
-        + _render_table(families)
-        + "\n"
+    # Body = marker + `summary` + note; built from `summary` so the two cannot diverge.
+    note = (
         "Detector workflows file their own per-family issues when drift is "
         "actionable (see `weekly-maintenance.yml`); this rolling comment is a "
         "single-glance status across all families for the parent #178 tracking issue.\n"
     )
+    report_body = f"{marker}\n\n{summary}\n{note}"
 
     return summary, report_body, families_with_drift
 
@@ -439,34 +440,23 @@ def target_families_with_drift(families: list[FamilyRow]) -> list[str]:
     ]
 
 
-def render_family_issue_title(family: str, run_date: str) -> str:
-    spec = FAMILY_ISSUE_SPEC[family]
-    return f"fix({spec['scope']}): scheduled drift detected ({run_date})"
+def target_families_covered(families: list[FamilyRow]) -> list[str]:
+    """Return the target families with an EXPLICIT clean (`covered`) status.
+
+    A detector that errored is :data:`STATUS_ERROR`, not covered, so it is
+    omitted here. The reconcile step closes a rolling issue only for families
+    in this list; never on a bare absence from the drift list; so a transient
+    detector failure cannot auto-close (and thereby hide) an active drift issue.
+    """
+    return [
+        row.family
+        for row in families
+        if row.family in TARGET_FAMILIES and row.status == STATUS_COVERED
+    ]
 
 
-def render_family_issue_body(family: str, *, run_url: str, run_date: str) -> str:
-    spec = FAMILY_ISSUE_SPEC[family]
-    return (
-        f"Parent: #{DEFAULT_TRACKING_ISSUE}\n"
-        "\n"
-        f"Scheduled drift detected for the `{family}` security control family by "
-        "the weekly `security-control-drift` job in "
-        "`.github/workflows/weekly-maintenance.yml`.\n"
-        "\n"
-        f"- Run: {run_url}\n"
-        f"- Detected at: {run_date}\n"
-        f"- Detector: `{spec['detector']}`\n"
-        f"- Evidence: `{spec['evidence']}`\n"
-        "\n"
-        "## Remediation\n"
-        "\n"
-        f"{spec['remediation']}\n"
-        "\n"
-        "Auto-filed to meet the `detect-and-file` floor "
-        "(`.github/security-control-floor.toml`, "
-        "`docs/prd/security-control-inventory.md`). The cross-family status is "
-        f"tracked in the rolling comment on #{DEFAULT_TRACKING_ISSUE}.\n"
-    )
+# render_family_issue_title / is_family_issue_title / render_family_issue_body now
+# live in _security_drift_issues (#1726) and are re-imported above.
 
 
 # ---------------------------------------------------------------------------
@@ -474,7 +464,7 @@ def render_family_issue_body(family: str, *, run_url: str, run_date: str) -> str
 # ---------------------------------------------------------------------------
 
 def find_existing_comment(
-    comments_json: list[dict], marker: str = DEFAULT_MARKER
+    comments_json: list[dict[str, Any]], marker: str = DEFAULT_MARKER
 ) -> int | None:
     """Return the id of the first comment whose body contains the marker."""
     for entry in comments_json:
@@ -530,10 +520,17 @@ def _assemble_families(args: argparse.Namespace) -> list[FamilyRow]:
         classify_uv_pin_literal(
             rc=parse_int_flag(args.uv_drift_rc, "--uv-drift-rc")
         ),
+        classify_workflow_permissions(
+            rc=parse_int_flag(
+                args.workflow_permissions_drift_rc,
+                "--workflow-permissions-drift-rc",
+            )
+        ),
         classify_uv_pin_staleness(
             rc=parse_int_flag(args.uv_stale_rc, "--uv-stale-rc"),
             stale_text=uv_stale_text,
         ),
+        classify_owasp_asi(rc=parse_int_flag(args.owasp_asi_verify_rc, "--owasp-asi-verify-rc")),
         pr_gate_only_row(
             family="title-policy",
             detector=".github/workflows/portable-pr-policy.yml",
@@ -553,7 +550,7 @@ def _assemble_families(args: argparse.Namespace) -> list[FamilyRow]:
             family="required-checks",
             detector="(tracked separately)",
             evidence=".github/rulesets/main.json",
-            message="tracked by #120 -- out of scope for this report path",
+            message="tracked by #120; out of scope for this report path",
         ),
     ]
 
@@ -566,6 +563,7 @@ def _cmd_aggregate(args: argparse.Namespace) -> int:
     )
 
     drift_families = target_families_with_drift(families)
+    covered_families = target_families_covered(families)
 
     _append_text(Path(args.summary_file), summary)
     _write_text(Path(args.report_file), report_body)
@@ -573,70 +571,46 @@ def _cmd_aggregate(args: argparse.Namespace) -> int:
         Path(args.github_output),
         f"families_with_drift={families_with_drift}\n"
         f"report_date={run_date}\n"
-        f"drift_families={','.join(drift_families)}\n",
+        f"drift_families={','.join(drift_families)}\n"
+        f"covered_families={','.join(covered_families)}\n",
     )
     return 0
 
 
 def _cmd_file_family_issues(args: argparse.Namespace) -> int:
-    """File one issue per drifting target family (idempotent per weekly run).
+    """Reconcile ONE rolling issue per target family (create / dedupe / close).
 
-    ``--families`` is the comma-separated list emitted as the
-    ``drift_families`` output of the ``aggregate`` subcommand. Each name must
-    be in :data:`TARGET_FAMILIES`; an unexpected name fails loud rather than
-    silently filing a mislabelled issue. Honours ``--dry-run``.
+    Despite the historical subcommand name, this no longer floods a fresh issue
+    per run (#1726): it delegates to
+    :func:`_security_drift_issues.reconcile_family_issues`. ``--families`` is the
+    comma-separated ``drift_families`` output of ``aggregate`` (families in drift),
+    and ``--resolved-families`` is the ``covered_families`` output (families with an
+    EXPLICIT clean status). Only a `covered` family is auto-closed; a family in
+    neither list; e.g. its detector errored; is left untouched so a transient
+    failure cannot hide an active drift issue. Each name must be in
+    :data:`TARGET_FAMILIES`; an unexpected name fails loud. Honours ``--dry-run``.
     """
     dry_run = parse_dry_run(args.dry_run)
     run_date = args.run_date or _utc_today()
-    families = [name.strip() for name in args.families.split(",") if name.strip()]
+    drifting = [name.strip() for name in args.families.split(",") if name.strip()]
+    resolved = [name.strip() for name in args.resolved_families.split(",") if name.strip()]
 
-    unknown = [name for name in families if name not in TARGET_FAMILIES]
+    unknown = [name for name in (*drifting, *resolved) if name not in TARGET_FAMILIES]
     if unknown:
         raise ValueError(
-            f"--families contains non-target families {unknown}; "
+            f"--families/--resolved-families contains non-target families {unknown}; "
             f"allowed: {sorted(TARGET_FAMILIES)}"
         )
-    if not families:
-        print("No drifting families passed; nothing to file.")
-        return 0
 
-    if dry_run:
-        for family in families:
-            print(
-                f"[dry-run] Would file issue for {family!r}: "
-                f"{render_family_issue_title(family, run_date)!r}"
-            )
-        return 0
-
-    token = os.environ.get("GH_TOKEN", "")
-    if not token:
-        print("::error::GH_TOKEN is not set.", file=sys.stderr)
-        return 1
-
-    apply = args.apply_call  # injected via tests; main() wires github_apply_call.
-    for family in families:
-        payload = {
-            "title": render_family_issue_title(family, run_date),
-            "body": render_family_issue_body(
-                family, run_url=args.run_url, run_date=run_date
-            ),
-            "labels": list(ISSUE_LABELS),
-        }
-        code, response = apply(
-            method="POST",
-            url=f"{API_ROOT}/repos/{args.repo}/issues",
-            payload=payload,
-            token=token,
-        )
-        if not 200 <= code < 300:
-            print(
-                f"::error::POST issue for {family} failed (HTTP {code}); "
-                f"body: {response[:200]}",
-                file=sys.stderr,
-            )
-            return 1
-        print(f"Filed drift issue for {family} on {args.repo}.")
-    return 0
+    return reconcile_family_issues(
+        apply=args.apply_call,  # injected via tests; main() wires github_apply_call.
+        repo=args.repo,
+        run_url=args.run_url,
+        run_date=run_date,
+        drifting=drifting,
+        resolved=resolved,
+        dry_run=dry_run,
+    )
 
 
 def _cmd_post_comment(args: argparse.Namespace) -> int:
@@ -738,8 +712,10 @@ def _build_parser(
     p_agg.add_argument("--labels-summary-file", required=True)
     p_agg.add_argument("--apm-diff-rc", required=True)
     p_agg.add_argument("--uv-drift-rc", required=True)
+    p_agg.add_argument("--workflow-permissions-drift-rc", required=True)
     p_agg.add_argument("--uv-stale-rc", required=True)
     p_agg.add_argument("--uv-stale-output", required=True)
+    p_agg.add_argument("--owasp-asi-verify-rc", required=True)
     p_agg.add_argument("--run-url", required=True)
     p_agg.add_argument("--run-date", default="")
     p_agg.add_argument(
@@ -766,7 +742,7 @@ def _build_parser(
 
     p_file = sub.add_parser(
         "file-family-issues",
-        help="File one issue per drifting target family (labels/apm/uv-pin-literal).",
+        help="Reconcile one rolling issue per target family (create / dedupe / close).",
     )
     p_file.add_argument("--repo", required=True)
     p_file.add_argument("--run-url", required=True)
@@ -775,6 +751,16 @@ def _build_parser(
         "--families",
         required=True,
         help="Comma-separated drift_families output from the aggregate subcommand.",
+    )
+    p_file.add_argument(
+        "--resolved-families",
+        default="",
+        help=(
+            "Comma-separated covered_families output from the aggregate subcommand "
+            "(families with an EXPLICIT clean status). Only these are auto-closed; "
+            "a family in neither list (e.g. a detector error) is left untouched. "
+            "Defaults to empty so a missing value never auto-closes."
+        ),
     )
     p_file.add_argument("--dry-run", default="true")
     p_file.set_defaults(func=_cmd_file_family_issues, apply_call=apply_call)

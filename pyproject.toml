@@ -1,7 +1,7 @@
 [project]
 name = "claude-md"
 version = "1.0.0"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 # pyyaml is retained because tests/test_superpowers_apm_install.py and
 # tests/test_workflow_cli_contracts.py import yaml directly at module level.
 # tomllib is stdlib in Python 3.11+; tomli backport no longer needed.
@@ -84,7 +84,7 @@ show_missing = true
 [tool.ruff]
 # Lint gate (#192). Scope is intentional: only the Python we ship and its
 # tests. target-version matches the project's requires-python lower bound.
-target-version = "py311"
+target-version = "py312"
 line-length = 120
 extend-exclude = [
     # Data file (#102 P3 snapshot of past issue/PR bodies), not Python source.
@@ -127,12 +127,12 @@ ignore = [
 # legitimately trigger B011/B017. The flake8-bandit (S) family flags
 # patterns that are intrinsic to a unit-test suite and are not
 # security defects when scoped to tests/:
-#   S101 — assert is the pytest assertion primitive.
-#   S105/S106 — fixture token strings are dummy literals, not secrets.
-#   S108 — /tmp paths appear in fixtures that verify workflow-supplied
+#   S101 -- assert is the pytest assertion primitive.
+#   S105/S106 -- fixture token strings are dummy literals, not secrets.
+#   S108 -- /tmp paths appear in fixtures that verify workflow-supplied
 #          absolute paths; tmp_path is preferred but a few legacy
 #          fixtures still string-construct under /tmp by design.
-#   S404/S603/S607 — tests import subprocess and monkeypatch runners to
+#   S404/S603/S607 -- tests import subprocess and monkeypatch runners to
 #          verify the production scripts' fixed-argv call shape.
 "tests/*" = [
     "B011", "B017",
@@ -170,11 +170,12 @@ ignore = [
 known-first-party = ["scripts"]
 
 [tool.mypy]
-# Type gate (#192) first-pass floor. `python_version` is pinned to 3.11
-# to match the stdlib surface actually used by scripts (`datetime.UTC`,
-# `tomllib`), not the project's `requires-python = ">=3.10"` floor.
-# Tightening the requires-python pin is tracked separately.
-python_version = "3.11"
+# Type gate (#192). `python_version` matches the project floor
+# (`requires-python = ">=3.12"`). The stdlib surface scripts rely on
+# (`datetime.UTC`, `tomllib`) is present from 3.11 onward, so 3.12 is a safe
+# floor; the bump also lets the nix devShell standardize on the nixpkgs-default
+# python312 with no duplicate interpreter in the baked image (#1491).
+python_version = "3.12"
 files = ["scripts", "tests"]
 # Intentionally minimal flag set. Issue #192 asks for a high-signal,
 # narrow gate without repo-wide churn. The two flags below catch real
@@ -185,6 +186,7 @@ files = ["scripts", "tests"]
 # own scoped PR rather than gating this one).
 warn_unused_ignores = true
 no_implicit_optional = true
+disallow_any_generics = true
 pretty = true
 show_error_codes = true
 

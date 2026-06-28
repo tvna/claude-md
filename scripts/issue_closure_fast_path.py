@@ -7,7 +7,7 @@ when the action is a close, searches GitHub for merged PRs that explicitly
 reference the issue number and emits ``additionalContext`` describing the
 evidence.
 
-**This hook is advisory only — it never emits ``permissionDecision: deny``.**
+**This hook is advisory only; it never emits ``permissionDecision: deny``.**
 Its purpose is to bound the investigation to direct merged-PR evidence
 *before* a wider parent/sibling-issue analysis is attempted (issue #187).
 
@@ -166,7 +166,7 @@ def _format_context(
     for pr in prs:
         url = pr.get("html_url") or f"PR#{pr.get('number')}"
         title = pr.get("title") or "(no title)"
-        lines.append(f"  - {url} — {title}")
+        lines.append(f"  - {url}; {title}")
     lines.append(
         "Cite the relevant PR URL(s) in the closing comment as closure evidence."
     )
@@ -188,7 +188,7 @@ def decide(
     owner, repo, issue_number = target
     prs = _search_merged_prs(owner, repo, issue_number, opener=opener, token=token)
     if prs is None:
-        # API failure — fail-open, emit no output
+        # API failure; fail-open, emit no output
         return None
 
     context = _format_context(owner, repo, issue_number, prs)

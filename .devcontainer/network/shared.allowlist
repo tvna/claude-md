@@ -38,3 +38,6 @@ cdn.prod.website-files.com  # Webflow CDN (Cloudflare-fronted) serving Anthropic
 api.openai.com  # OpenAI API endpoint used by the Codex CLI at runtime.
 platform.openai.com  # OpenAI API/model/pricing documentation fetched as a primary source during agent lookups (#1429); public read-only docs, no secrets sent.
 auth.openai.com  # ChatGPT-mediated OAuth token exchange during `codex login`.
+# Vendor-neutral security guidance fetched as a primary source during agent lookups.
+genai.owasp.org  # OWASP GenAI Security Project (OWASP Foundation): public read-only LLM/GenAI security guidance (Top 10 for LLM Applications, Agentic AI) fetched as a primary source during agent lookups (#1487); no secrets sent.
+mcp.context7.com  # Context7 MCP server endpoint for library/framework documentation lookups during agent sessions (#1840); read-only GET requests, no secrets sent, HTTPS/443 only.

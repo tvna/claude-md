@@ -66,5 +66,5 @@ pipeline ran end-to-end.
 
 ## References
 
-- [#387](https://github.com/tvna/claude-md/issues/387) -- original
+- [#387](https://github.com/tvna/claude-md/issues/387); original
   terminal-signal issue.

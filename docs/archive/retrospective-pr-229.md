@@ -1,12 +1,12 @@
-# Retrospective — PR #229 Layer Responsibility Boundary Repair Loops
+# Retrospective -- PR #229 Layer Responsibility Boundary Repair Loops
 
-This document is the retrospective for [#230](https://github.com/tvna/claude-md/issues/230) — the post-merge review of PR [#229](https://github.com/tvna/claude-md/pull/229), which closed issue [#227](https://github.com/tvna/claude-md/issues/227) ("docs(agent-rules): correct layer responsibility boundaries"). The retrospective framework lives in `.apm/instructions/master.instructions.md` §3: classify each pre-merge repair, identify the earliest deterministic gate that should have prevented it, and state the no-repair reproduction path for the next similar PR.
+This document is the retrospective for [#230](https://github.com/tvna/claude-md/issues/230) -- the post-merge review of PR [#229](https://github.com/tvna/claude-md/pull/229), which closed issue [#227](https://github.com/tvna/claude-md/issues/227) ("docs(agent-rules): correct layer responsibility boundaries"). The retrospective framework lives in `.apm/instructions/master.instructions.md` §3: classify each pre-merge repair, identify the earliest deterministic gate that should have prevented it, and state the no-repair reproduction path for the next similar PR.
 
 ## Scope
 
 - Target PR: [#229](https://github.com/tvna/claude-md/pull/229), merged as commit `6a403ad` on 2026-05-24.
-- Requested issue: [#227](https://github.com/tvna/claude-md/issues/227) — concrete responsibility-boundary corrections to `.apm/instructions/master.instructions.md` (compiled into `CLAUDE.md` / `AGENTS.md`).
-- Out of scope: the substance of the merged layer-responsibility changes themselves — those were accepted.
+- Requested issue: [#227](https://github.com/tvna/claude-md/issues/227) -- concrete responsibility-boundary corrections to `.apm/instructions/master.instructions.md` (compiled into `CLAUDE.md` / `AGENTS.md`).
+- Out of scope: the substance of the merged layer-responsibility changes themselves -- those were accepted.
 
 ## Repair history
 
@@ -50,8 +50,8 @@ For the next PR that follows the same shape as #229 (agent-rule responsibility-b
 | Gate | Introduced here | Reasoning |
 |---|---|---|
 | Portability scanner (`scan_apm_portability.py` + `verify-apm-portability.yml`) | yes | Repair B is purely structural; a deterministic literal-token scan with an ack-marker escape hatch closes it without semantic ambiguity. |
-| Issue Form "Non-goals" section | no — follow-up issue | Repair A's prevention point is a review/Plan-phase practice, not a check the harness can run. A template hint is a separate proposal. |
-| Near-duplicate-bullet check | no — follow-up issue | Repair C's automation requires false-positive control that has not been designed yet. |
+| Issue Form "Non-goals" section | no -- follow-up issue | Repair A's prevention point is a review/Plan-phase practice, not a check the harness can run. A template hint is a separate proposal. |
+| Near-duplicate-bullet check | no -- follow-up issue | Repair C's automation requires false-positive control that has not been designed yet. |
 
 ## References
 

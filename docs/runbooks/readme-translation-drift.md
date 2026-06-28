@@ -3,14 +3,15 @@
 > Issue #476 (`feat(harness): add README translation-drift gate ...`). Companion to `scripts/verify_readme_translation.py` and the `Validate README translation parity` step in `.github/workflows/verify-pr.yml`.
 
 This runbook documents the deterministic gate that prevents `README.md`
-from drifting away from `README.ja.md` and `README.zh.md` PR-by-PR, and
-the opt-out marker authors use when an English-only edit is legitimate.
+from drifting away from `README.ja.md`, `README.zh.md`, and
+`README.ko.md` PR-by-PR, and the opt-out marker authors use when an
+English-only edit is legitimate.
 
 ## Overview
 
 Before this gate landed, `README.md` had absorbed five substantive
-changes that never propagated to either translation. The translations
-diverged silently because no workflow asserted the trio moves together
+changes that never propagated to the translations. The translations
+diverged silently because no workflow asserted the set moves together
 and reviewers had no deterministic signal to catch the drift. Per
 [CLAUDE.md](../../CLAUDE.md) section 3, "build the harness first":
 translation parity must not depend on operator memory.
@@ -23,23 +24,23 @@ translation parity must not depend on operator memory.
 | `scripts/verify_readme_translation.py` | CI | Deterministic gate that compares `git diff --name-only base..HEAD` against the README allowlist |
 | `tests/test_verify_readme_translation.py` | local + CI | Unit tests for the pure functions and the CLI exit codes |
 | `.github/workflows/verify-pr.yml` | GitHub Actions | Hosts the `Validate README translation parity` step inside the `gate` job |
-| `README.md` / `README.ja.md` / `README.zh.md` | repo root | The three files whose modification sets the gate guards |
+| `README.md` / `README.ja.md` / `README.zh.md` / `README.ko.md` | repo root | The four files whose modification sets the gate guards |
 
 ## Gate behavior
 
 The gate runs on every `pull_request` event (opened, edited,
 synchronize, reopened, ready_for_review). It computes the changed-file
 set against the PR base ref, intersects it with
-`{README.md, README.ja.md, README.zh.md}`, and applies the rules
-below.
+`{README.md, README.ja.md, README.zh.md, README.ko.md}`, and applies the
+rules below.
 
-| `README.md` changed | Both translations changed | Skip marker | Exit | Outcome |
+| `README.md` changed | All translations changed | Skip marker | Exit | Outcome |
 |---|---|---|---|---|
 | no | - | - | 0 | OK (no README touched) |
-| yes | yes | - | 0 | OK (trio moved together) |
+| yes | yes | - | 0 | OK (set moved together) |
 | yes | no | yes | 0 | OK (opt-out recorded in PR body) |
 | yes | no | no | 1 | Drift detected, see `::error::` line |
-| no | yes (one or both) | - | 0 | OK (translation-only PR allowed) |
+| no | yes (any subset) | - | 0 | OK (translation-only PR allowed) |
 
 Translation-only edits are intentionally not blocked: the gate guards
 the English-only-edit failure mode (the historical drift cause), not
@@ -51,7 +52,7 @@ review.
 The step lives inside the `gate` job of
 `.github/workflows/verify-pr.yml`. The job's existing
 required-status-check context `Portable PR policy / gate` (pinned in
-`.github/rulesets/main.json`) covers this step too -- no ruleset
+`.github/rulesets/main.json`) covers this step too; no ruleset
 change was needed when the gate landed.
 
 The job already checks out with `fetch-depth: 0`, so
@@ -63,8 +64,8 @@ Example `::error::` line emitted on drift:
 
 ```
 ::error::README.md was modified without matching updates to
-README.ja.md, README.zh.md. Either edit the missing translation(s) in
-the same PR, or add the literal marker
+README.ja.md, README.ko.md, README.zh.md. Either edit the missing
+translation(s) in the same PR, or add the literal marker
 '<!-- readme-translation-ack -->' to the PR body with a rationale.
 See docs/runbooks/readme-translation-drift.md and Issue #476.
 ```
@@ -122,9 +123,9 @@ The default is "edit all three files in the same PR". The expected
 update flow:
 
 1. Edit `README.md` first.
-2. Add the equivalent content to `README.ja.md` and `README.zh.md` in
-   the same commit. The headings already mirror each other one-to-one,
-   so the position is usually obvious.
+2. Add the equivalent content to `README.ja.md`, `README.zh.md`, and
+   `README.ko.md` in the same commit. The headings already mirror each
+   other one-to-one, so the position is usually obvious.
 3. If a translation cannot be finished in this PR (e.g. specialised
    terminology requires a separate review), file a follow-up issue,
    add a placeholder bullet of the form

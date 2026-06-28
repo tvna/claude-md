@@ -29,7 +29,8 @@ _TOML_PATH = Path(__file__).resolve().parent.parent / ".github" / "trusted_bots.
 # Hardcoded fallback values (used only when the TOML file is missing/unreadable).
 _DEFAULT_GENERAL: frozenset[str] = frozenset({"dependabot[bot]"})
 _DEFAULT_NON_ASCII_SKIP: frozenset[str] = frozenset({
-    "codecov", "codecov[bot]", "devin-ai-integration[bot]", "devin[bot]"
+    "codecov", "codecov[bot]", "devin-ai-integration[bot]", "devin[bot]",
+    "chatgpt-codex-connector", "chatgpt-codex-connector[bot]",
 })
 
 

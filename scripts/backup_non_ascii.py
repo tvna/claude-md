@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Reproducible backup of issues/PRs/comments before non-ASCII rewriting.
 
-Operator-run companion to ``docs/prd/non-ascii-defense.md`` Layer 1. The release
+Operator-run companion to ``docs/runbooks/non-ascii-defense.md`` Layer 1. The release
 asset itself is produced by ``gh release create`` (manual step); this CLI
 normalises the API responses into a deterministic ``{schema_version,
 captured_at, repo, items}`` payload and emits its SHA-256 so that
@@ -9,8 +9,8 @@ captured_at, repo, items}`` payload and emits its SHA-256 so that
 stable anchor.
 
 Pattern mirrors ``scripts/scan_non_ascii.py`` per issue #123: pure
-functions on top, a single ``runner`` boundary at the bottom so tests
-monkeypatch the subprocess call.
+functions on top, a single :func:`gh_paginate` REST boundary at the
+bottom (delegating to ``_github_api.paginate``) so tests monkeypatch it.
 
 Refs #102.
 """
@@ -23,12 +23,12 @@ import hashlib
 import io
 import json
 import os
-import subprocess
 import sys
-from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+
+from _github_api import paginate
 
 SCHEMA_VERSION = 1
 
@@ -153,45 +153,26 @@ def _now_iso() -> str:
 
 
 # ---------------------------------------------------------------------------
-# Subprocess boundary -- monkeypatched in tests
+# Subprocess boundary; monkeypatched in tests
 # ---------------------------------------------------------------------------
 
 
 def gh_paginate(
     path: str,
     *,
-    runner: Callable[..., subprocess.CompletedProcess[str]] | None = None,
-    timeout: int = 300,
+    token: str | None = None,
 ) -> list[dict[str, Any]]:
-    """Return every item from a paginated ``gh api`` array endpoint.
+    """Return every item from a paginated GitHub REST array endpoint.
 
-    Uses ``--paginate`` + ``--jq '.[]'`` so the output is one JSON object
-    per line regardless of page count; that is easier to parse than the
-    concatenated ``[...][...]`` shape that ``--paginate`` produces by
-    default for array responses.
-
-    Auth via the ambient ``GH_TOKEN``. ``runner`` defaults to
-    ``subprocess.run`` resolved at call time so tests can monkeypatch
-    ``backup_non_ascii.subprocess.run``. Raises
-    :class:`subprocess.CalledProcessError` on any non-zero exit so callers
-    fail loudly (CLAUDE.md section 4).
+    Delegates to :func:`_github_api.paginate`, which walks ``?page=N`` until
+    a short or empty page is returned. ``path`` should NOT carry its own
+    ``per_page`` / ``page`` keys (the helper appends them). Auth via the
+    ambient ``GH_TOKEN``. Raises :class:`_github_api.GitHubApiError` on any
+    non-2xx page so callers fail loudly (CLAUDE.md section 4).
     """
-    if runner is None:
-        runner = subprocess.run
-    cmd = ["gh", "api", "--paginate", path, "--jq", ".[]"]
-    result = runner(
-        cmd,
-        capture_output=True,
-        text=True,
-        timeout=timeout,
-        check=True,
-    )
-    out: list[dict[str, Any]] = []
-    for line in result.stdout.splitlines():
-        if not line.strip():
-            continue
-        out.append(json.loads(line))
-    return out
+    if token is None:
+        token = os.environ.get("GH_TOKEN", "")
+    return paginate(path, token=token)
 
 
 # ---------------------------------------------------------------------------
@@ -209,9 +190,9 @@ def cmd_capture(args: argparse.Namespace) -> int:
         print("::error::GH_TOKEN env var is required", file=sys.stderr)
         return 2
 
-    issues_and_prs = gh_paginate(f"/repos/{repo}/issues?state=all&per_page=100")
-    issue_comments = gh_paginate(f"/repos/{repo}/issues/comments?per_page=100")
-    pr_review_comments = gh_paginate(f"/repos/{repo}/pulls/comments?per_page=100")
+    issues_and_prs = gh_paginate(f"/repos/{repo}/issues?state=all")
+    issue_comments = gh_paginate(f"/repos/{repo}/issues/comments")
+    pr_review_comments = gh_paginate(f"/repos/{repo}/pulls/comments")
 
     items = normalise_items(issues_and_prs, issue_comments, pr_review_comments)
     captured_at = os.environ.get("BACKUP_CAPTURED_AT") or _now_iso()

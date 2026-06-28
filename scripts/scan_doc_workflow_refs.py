@@ -11,7 +11,7 @@ Refs #1325. When #1319 consolidated CI workflows by trigger class
 deleted filenames lived on as inline-code references across PRD / standards /
 runbook docs. ``scan_markdown_links.py`` did not catch them because they are
 not Markdown links, and ``scan_docs_inventory.py`` only validates the docs
-index -- so the drift class was invisible to every deterministic gate.
+index; so the drift class was invisible to every deterministic gate.
 
 This gate closes that gap. It scans every tracked Markdown file (outside
 ``docs/archive/``, which is a historical record of past state) for the literal
@@ -69,8 +69,12 @@ WORKFLOWS_DIR = REPO_ROOT / ".github" / "workflows"
 
 # Markdown trees excluded from the scan. ``docs/archive/`` is a point-in-time
 # historical record; rewriting it to the current workflow set would falsify the
-# history it exists to preserve.
-EXCLUDED_DIRS: tuple[str, ...] = ("docs/archive/",)
+# history it exists to preserve. ``node_modules/`` is the gitignored bun
+# dependency tree for the Mermaid gate (#1597): it is never committed and its
+# vendored READMEs reference unrelated upstream workflow files, so scanning it
+# would raise false positives when it is materialised locally or by the
+# SessionStart bun installer.
+EXCLUDED_DIRS: tuple[str, ...] = ("docs/archive/", "node_modules/")
 
 # Lines carrying this marker bypass the scan. Mirrors scan_flake_pin_drift.py.
 ACK_MARKER = "workflow-ref-ack"

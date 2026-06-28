@@ -19,6 +19,22 @@ on:
   schedule:
     # 05:00 JST every Monday. GitHub Actions cron is evaluated in UTC.
     - cron: "0 20 * * 0"
+  # Event-driven drift detection (#1390): a change to a control-family source of
+  # truth on main runs the security-control-drift job immediately instead of
+  # waiting up to a week for the cron. Only that job opts in (its `if` includes
+  # `push`); every other job stays schedule/dispatch-only and is skipped on push.
+  # The weekly cron remains the backstop, and the per-family detector scripts are
+  # reused unchanged (no duplicated detector logic).
+  push:
+    branches: [main]
+    paths:
+      - ".github/rulesets/**"
+      - ".github/labels.json"
+      - ".apm/instructions/**"
+      - "pyproject.toml"
+      - "CLAUDE.md"
+      - "AGENTS.md"
+      - "docs/prd/security-control-inventory.md"
   workflow_dispatch:
     inputs:
       task:
@@ -36,6 +52,17 @@ on:
           - ruleset-drift
           - security-control-drift
           - flake-pin-refresh
+          - codespace-cleanup
+      codespace_cleanup_dry_run:
+        description: 'Codespace cleanup: preview only, do not delete codespaces.'
+        type: boolean
+        required: true
+        default: true
+      codespace_cleanup_min_age_days:
+        description: 'Codespace cleanup: minimum idle days (by last_used_at) for a Shutdown codespace to qualify.'
+        type: number
+        required: true
+        default: 30
       branch_cleanup_dry_run:
         description: 'Branch cleanup: plan only. The workflow currently has no delete code path.'
         type: boolean
@@ -91,7 +118,7 @@ jobs:
           exit 1
 
       - name: Checkout repository
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
 
@@ -150,7 +177,7 @@ jobs:
       contents: read
     steps:
       - name: Checkout repository
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
 
@@ -159,6 +186,9 @@ jobs:
 
       - name: Assert uv pin lives only in pyproject.toml
         run: uv run python scripts/uv_pin.py drift
+
+      - name: Assert python pin is exact and consistent
+        run: uv run python scripts/python_pin.py verify
 
       - name: Assert workflows install Python deps via uv only
         run: uv run python scripts/scan_workflow_pip.py verify
@@ -189,27 +219,32 @@ jobs:
             echo "Policy: \`docs/standards/dependency-freshness.md\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
-  # Scheduled re-triage (#1277). The PR/issue triage is event-driven and
-  # stateless, so a recurring advisory or an expired accepted-intel
-  # suppression would otherwise only resurface when the next PR happens to
-  # fire. This cadence re-evaluates the locked-dependency corpus against live
-  # threat intel and fails loud (--fail-on-intel) so the scheduled run turns
-  # red, re-surfacing the threat:intel-needed signal independent of PR traffic.
+  # Scheduled re-triage (#1277) and the single home of threat-intel findings
+  # since #1645. Threat findings are repository-global, so this cadence is the
+  # one place they are recorded: it re-evaluates the locked-dependency corpus
+  # against live threat intel, aggregates every finding into one idempotent
+  # marker-anchored comment on the #178 security umbrella (resolved via the
+  # issue-anchor table, not hardcoded), and still fails loud (--fail-on-intel)
+  # so a recurring advisory or an expired accepted-intel suppression turns the
+  # run red independent of PR traffic. Per-item threat:* labelling was retired.
   dependency-threat-triage:
     if: github.event_name == 'schedule' || inputs.task == 'all' || inputs.task == 'dependency-threat-triage'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: read
+      issues: write
     env:
       GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
 
       - name: Re-triage locked dependencies against live threat intel
+        id: scan
         run: |
           python3 scripts/threat_intel_triage.py scan \
             --repo-root . \
@@ -218,7 +253,37 @@ jobs:
             --malpkg-live \
             --epss-live \
             --summary-file "$GITHUB_STEP_SUMMARY" \
+            --github-output "$GITHUB_OUTPUT" \
+            --comment-file "$RUNNER_TEMP/threat-aggregate.md" \
             --fail-on-intel
+
+      # Aggregate the findings onto the #178 security umbrella. Runs even when
+      # the scan step failed loud on intel_needed (the evidence file is written
+      # before --fail-on-intel exits non-zero), so the umbrella always reflects
+      # the current state while the job conclusion stays red. The issue number
+      # is resolved from .github/tracking-issues.toml (Refs #1640), never
+      # hardcoded, so scan_issue_anchor_drift.py stays clean.
+      - name: Aggregate findings onto the security tracking issue
+        if: always()
+        run: |
+          set -euo pipefail
+          if [ ! -f "$RUNNER_TEMP/threat-aggregate.md" ]; then
+            echo "::warning::scan produced no aggregate evidence (it failed before writing it); leaving the umbrella unchanged. The scan step already failed loud."
+            exit 0
+          fi
+          TRACKING_ISSUE="$(python3 scripts/issue_anchors.py get security-tracking)"
+          if [ "${{ steps.scan.outputs.intel_needed }}" = "true" ]; then
+            python3 scripts/threat_intel_triage.py comment \
+              --body-file "$RUNNER_TEMP/threat-aggregate.md" \
+              --issue "${TRACKING_ISSUE}" \
+              --marker '<!-- threat-intel-aggregate v1 -->'
+          else
+            python3 scripts/threat_intel_triage.py comment \
+              --body-file "$RUNNER_TEMP/threat-aggregate.md" \
+              --issue "${TRACKING_ISSUE}" \
+              --marker '<!-- threat-intel-aggregate v1 -->' \
+              --update-only
+          fi
 
   generate-agents:
     if: github.event_name == 'schedule' || inputs.task == 'all' || inputs.task == 'generate-agents'
@@ -243,7 +308,7 @@ jobs:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
 
@@ -341,7 +406,7 @@ jobs:
           fi
 
       - name: Checkout repository
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
 
@@ -393,7 +458,7 @@ jobs:
           UNKNOWN_DETECTED: ${{ steps.diff.outputs.unknown_count != '0' }}
 
   security-control-drift:
-    if: github.event_name == 'schedule' || inputs.task == 'all' || inputs.task == 'security-control-drift'
+    if: github.event_name == 'schedule' || github.event_name == 'push' || inputs.task == 'all' || inputs.task == 'security-control-drift'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment: ruleset-verify
@@ -415,7 +480,7 @@ jobs:
           fi
 
       - name: Checkout repository
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
 
@@ -514,6 +579,32 @@ jobs:
             echo "rc=1" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Detect workflow-permissions drift (read-only)
+        id: wfperm
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.RULESETS_PAT }}
+        run: |
+          set -euo pipefail
+          python3 scripts/rulesets_apply.py workflow-permissions \
+            --repo "${REPO}" \
+            --sot-file .github/actions-permissions/workflow.json \
+            --mode drift \
+            --summary-file "${GITHUB_STEP_SUMMARY}"
+
+      - name: Record workflow-permissions drift exit code
+        id: wfperm_rc
+        if: always()
+        env:
+          OUTCOME: ${{ steps.wfperm.outcome }}
+        run: |
+          set -euo pipefail
+          if [ "${OUTCOME}" = "success" ]; then
+            echo "rc=0" >> "$GITHUB_OUTPUT"
+          else
+            echo "rc=1" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Warn if uv pin trails upstream (read-only)
         id: uv_stale
         continue-on-error: true
@@ -533,6 +624,24 @@ jobs:
             touch /tmp/uv-stale.out
           fi
 
+      - name: Verify OWASP ASI mapping completeness (read-only)
+        id: owasp
+        continue-on-error: true
+        run: python3 scripts/owasp_asi_mapping.py verify
+
+      - name: Record OWASP ASI verify exit code
+        id: owasp_rc
+        if: always()
+        env:
+          OUTCOME: ${{ steps.owasp.outcome }}
+        run: |
+          set -euo pipefail
+          if [ "${OUTCOME}" = "success" ]; then
+            echo "rc=0" >> "$GITHUB_OUTPUT"
+          else
+            echo "rc=1" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Aggregate drift report
         id: aggregate
         if: always()
@@ -547,30 +656,40 @@ jobs:
             --labels-summary-file /tmp/labels-summary.md \
             --apm-diff-rc "${{ steps.apm.outputs.rc }}" \
             --uv-drift-rc "${{ steps.uv_drift_rc.outputs.rc }}" \
+            --workflow-permissions-drift-rc "${{ steps.wfperm_rc.outputs.rc }}" \
             --uv-stale-rc "${{ steps.uv_stale_rc.outputs.rc }}" \
             --uv-stale-output /tmp/uv-stale.out \
+            --owasp-asi-verify-rc "${{ steps.owasp_rc.outputs.rc }}" \
             --run-url "${RUN_URL}" \
             --summary-file "${GITHUB_STEP_SUMMARY}" \
             --report-file /tmp/security-drift-report.md \
             --github-output "${GITHUB_OUTPUT}"
 
-      - name: Post or update rolling comment on #178
+      - name: Post or update rolling comment on the security tracking issue
         if: always()
         env:
-          DRY_RUN: ${{ github.event_name == 'schedule' && 'false' || inputs.security_control_dry_run }}
+          DRY_RUN: ${{ (github.event_name == 'schedule' || github.event_name == 'push') && 'false' || inputs.security_control_dry_run }}
         run: |
           set -euo pipefail
+          # Refs #1640: the rolling-comment target lives in
+          # .github/tracking-issues.toml, not in this file.
+          TRACKING_ISSUE="$(python3 scripts/issue_anchors.py get security-tracking)"
           python3 scripts/security_drift_report.py post-comment \
             --repo "${REPO}" \
-            --issue 178 \
+            --issue "${TRACKING_ISSUE}" \
             --report-file /tmp/security-drift-report.md \
             --dry-run "${DRY_RUN}"
 
-      - name: File per-family drift issues
-        if: always() && steps.aggregate.outputs.drift_families != ''
+      # Reconcile ONE rolling issue per target family: create on new drift, keep a
+      # single issue (closing legacy dated duplicates), and auto-close when a
+      # family stops drifting. Runs unconditionally (no drift_families gate) so a
+      # resolved family can close its open issue, mirroring the ruleset-drift
+      # reconcile steps. Refs #1726.
+      - name: Reconcile per-family drift issues
+        if: always() && steps.aggregate.outcome == 'success'
         env:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          DRY_RUN: ${{ github.event_name == 'schedule' && 'false' || inputs.security_control_dry_run }}
+          DRY_RUN: ${{ (github.event_name == 'schedule' || github.event_name == 'push') && 'false' || inputs.security_control_dry_run }}
         run: |
           set -euo pipefail
           python3 scripts/security_drift_report.py file-family-issues \
@@ -578,6 +697,7 @@ jobs:
             --run-url "${RUN_URL}" \
             --run-date "${{ steps.aggregate.outputs.report_date }}" \
             --families "${{ steps.aggregate.outputs.drift_families }}" \
+            --resolved-families "${{ steps.aggregate.outputs.covered_families }}" \
             --dry-run "${DRY_RUN}"
 
   # Merged from flake-pin-refresh.yml (#1319). flake.nix is the single source of
@@ -606,13 +726,15 @@ jobs:
         tool: [waza, apm, rtk]
     steps:
       - name: Checkout repository
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - name: Install nix
         uses: DeterminateSystems/nix-installer-action@ef8a148080ab6020fd15196c2084a2eea5ff2d25 # v22
 
       - name: Decide target version (cooldown-gated)
         id: decide
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           target="$(python3 scripts/flake_pin_latest.py check --tool '${{ matrix.tool }}')"
@@ -662,12 +784,57 @@ jobs:
           set -euo pipefail
           tool='${{ matrix.tool }}'
           target='${{ steps.decide.outputs.target }}'
+          # Refs #1640: the trailer's tracking issue lives in
+          # .github/tracking-issues.toml, not in this file.
+          TRACKING_ISSUE="$(python3 scripts/issue_anchors.py get flake-pin)"
           python3 scripts/devcontainer_pin_pr.py open \
             --github-sha "${tool}-${target}" \
             --branch-prefix "flake-pin-" \
             --base main \
             --title "chore(flake): bump ${tool} pin to ${target}" \
             --commit-subject "chore(flake): bump ${tool} pin to ${target}" \
-            --commit-trailer "Refs #1171" \
+            --commit-trailer "Refs #${TRACKING_ISSUE}" \
             --template .github/pr-body-templates/flake-pin.md \
             --file flake.nix
+
+  # Delete Shutdown Codespaces idle for longer than codespace_cleanup_min_age_days
+  # (default 30 days). Requires a PAT with admin:org scope stored as
+  # CODESPACES_CLEANUP_TOKEN in the codespace-cleanup environment; the built-in
+  # GITHUB_TOKEN cannot delete codespaces (API returns 403). Refs #1930.
+  codespace-cleanup:
+    if: github.event_name == 'schedule' || inputs.task == 'all' || inputs.task == 'codespace-cleanup'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: codespace-cleanup
+    permissions:
+      contents: read
+    concurrency:
+      group: codespace-cleanup
+      cancel-in-progress: false
+    env:
+      GH_TOKEN: ${{ secrets.CODESPACES_CLEANUP_TOKEN }}
+      ORG: ${{ github.repository_owner }}
+      DRY_RUN: ${{ github.event_name == 'schedule' && 'false' || inputs.codespace_cleanup_dry_run }}
+      MIN_AGE_DAYS: ${{ inputs.codespace_cleanup_min_age_days || 30 }}
+    steps:
+      - name: Guard CODESPACES_CLEANUP_TOKEN
+        run: |
+          if [ -z "${GH_TOKEN}" ]; then
+            echo "::error::CODESPACES_CLEANUP_TOKEN secret is not set. Provision a PAT with admin:org scope and store it in the codespace-cleanup environment."
+            exit 1
+          fi
+
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Prune inactive codespaces
+        run: |
+          set -euo pipefail
+          python3 scripts/prune_codespaces.py prune \
+            --org "${ORG}" \
+            --min-age-days "${MIN_AGE_DAYS}" \
+            --dry-run "${DRY_RUN}" \
+            --summary-file "${GITHUB_STEP_SUMMARY}"

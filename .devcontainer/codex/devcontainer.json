@@ -1,8 +1,8 @@
 {
   "name": "claude-md Codex",
-  "image": "ghcr.io/tvna/claude-md-devcontainer-codex:249a93a617d841cde47117bd447d01bbec931986",
+  "image": "ghcr.io/tvna/claude-md-devcontainer-codex:55fedc85f164038be6ae4c880e1ae1f94e2d47ea",
   "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
-  "initializeCommand": "bash .devcontainer/scripts/check-gh-config-permissions.sh ${HOME}/.config/gh && bash .devcontainer/scripts/ensure-agent-image.sh codex",
+  "initializeCommand": "bash .devcontainer/scripts/check-gh-config-permissions.sh ${HOME}/.config/gh && bash .devcontainer/scripts/ensure-agent-image.sh codex && bash .devcontainer/scripts/prepare-signing-keys.sh",
   "remoteUser": "codex",
   "updateRemoteUserUID": false,
   "runArgs": [
@@ -13,7 +13,8 @@
   ],
   "mounts": [
     "source=claude-md-codex-session,target=/home/codex/.codex,type=volume",
-    "source=${localEnv:HOME}/.config/gh,target=/home/codex/.config/gh,type=bind,consistency=cached"
+    "source=${localEnv:HOME}/.config/gh,target=/home/codex/.config/gh,type=bind,consistency=cached",
+    "source=${localEnv:HOME}/.ssh/devcontainer-signing-keys,target=/home/codex/.ssh/devcontainer-signing-keys,type=bind,consistency=cached,readonly"
   ],
   "remoteEnv": {
     "AGENT_CONTAINER": "codex"

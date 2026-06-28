@@ -254,7 +254,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 
 class TestVerifyRepoFiles:
     def test_repo_dependabot_labels_resolve_in_sot(self, capsys: pytest.CaptureFixture[str]) -> None:
-        """The actual files in this repo must not drift -- this is the gate.
+        """The actual files in this repo must not drift; this is the gate.
 
         If this test fails, either add the missing label to
         .github/labels.json or remove it from .github/dependabot.yml.

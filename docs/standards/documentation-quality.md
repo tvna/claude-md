@@ -57,6 +57,38 @@ prevents history-shaped files from accumulating at `docs/` root, while
 leaving each lane's README responsible for explaining where a document
 belongs.
 
+## D3. Docs Inventory Navigation Budget
+
+`scripts/scan_docs_inventory.py verify` also enforces a byte budget on
+`docs/INDEX.md` (`MAX_INDEX_BYTES`, 40 KiB). INDEX is read on demand
+whenever an agent navigates `docs/`; it is not part of the per-request
+prefix; so its byte weight is a per-navigation read cost. The budget
+blocks runaway growth rather than discovering it after the fact, and
+forces the split decision at a documented threshold instead of leaving it
+to agent memory.
+
+Bytes, not lines, are the signal: a few verbose `Territory`/`Companion`
+rows cost more to read than many terse ones, so the byte count is the
+faithful proxy for navigation cost.
+
+The remediation when the budget trips is a per-lane split, **not** a
+budget bump: keep a small top-level INDEX (lane descriptions plus the
+first row per lane) and move each lane's full table into its lane README.
+That split also requires teaching the inventory gate to follow links
+transitively (INDEX -> lane README -> leaf docs), because today
+`collect_index_entries` reads links from `docs/INDEX.md` directly only.
+
+The working-tree budget is not the only read cost that can trip: two
+independent docs PRs can each stay under budget while their additive merge
+result crosses it, so the overflow surfaces only at merge-time CI (the PR
+#2007 class). `scripts/preflight_merge_index_budget.py` closes that blind
+spot by measuring `docs/INDEX.md` in the test-merge of HEAD with the freshly
+fetched live base (`git merge-tree --write-tree`, no working-tree mutation)
+during branch preflight. It imports `MAX_INDEX_BYTES` from
+`scan_docs_inventory` so the budget stays single-sourced; the remediation it
+names is still the per-lane split, never a bump. The decision record is
+[`docs/adr/0002-index-merge-budget.md`](../adr/0002-index-merge-budget.md).
+
 ## Deferred Checks
 
 These checks were evaluated for issue #202 but are not blocking yet:

@@ -102,7 +102,7 @@ def render_summary_row(
     action: str,
     live_id: str | int | None,
 ) -> str:
-    result_id = "\u2014" if live_id in (None, "") else str(live_id)
+    result_id = "n/a" if live_id in (None, "") else str(live_id)
     return f"| {file} | {name} | {matches} | {action} | {result_id} |"
 
 
@@ -213,7 +213,7 @@ def render_dispatch_header(
 ) -> str:
     return "\n".join(
         [
-            "## Apply rulesets \u2014 dispatch summary",
+            "## Apply rulesets; dispatch summary",
             "",
             f"- ruleset: `{choice}`",
             f"- dry_run: `{str(dry_run).lower()}`",
@@ -384,6 +384,152 @@ def auto_delete(
     )
 
 
+WORKFLOW_PERMISSIONS_KEYS = (
+    "default_workflow_permissions",
+    "can_approve_pull_request_reviews",
+)
+
+
+def workflow_permissions_projection(data: dict[str, Any]) -> dict[str, Any]:
+    """Subset a workflow-permissions object to the two governed keys.
+
+    GET /actions/permissions/workflow may grow new fields; the SoT governs only
+    ``default_workflow_permissions`` and ``can_approve_pull_request_reviews``,
+    so the diff is taken over this projection (missing keys become None).
+    """
+    return {key: data.get(key) for key in WORKFLOW_PERMISSIONS_KEYS}
+
+
+def get_workflow_permissions(
+    repo: str,
+    token: str,
+    *,
+    opener=urllib.request.urlopen,
+) -> dict[str, Any]:
+    body = _request_json(
+        f"{API_ROOT}/repos/{repo}/actions/permissions/workflow",
+        token=token,
+        opener=opener,
+    )
+    if not isinstance(body, dict):
+        raise ValueError(
+            "GET /actions/permissions/workflow returned non-object JSON"
+        )
+    return body
+
+
+def set_workflow_permissions(
+    repo: str,
+    payload: dict[str, Any],
+    token: str,
+    *,
+    opener=urllib.request.urlopen,
+) -> None:
+    code, body = _request(
+        f"{API_ROOT}/repos/{repo}/actions/permissions/workflow",
+        token=token,
+        method="PUT",
+        data=json.dumps(payload).encode("utf-8"),
+        opener=opener,
+    )
+    if not 200 <= code < 300:
+        raise RuntimeError(
+            f"Failed to set workflow permissions (HTTP "
+            f"{_display_http_code(code)}): {body}"
+        )
+
+
+def workflow_permissions_diff(
+    *, sot: dict[str, Any], live: dict[str, Any]
+) -> str:
+    """Unified diff (live -> sot) of the canonical two-key projection; empty
+    when the live setting already matches the SoT."""
+    sot_text = _canonical_json_lines(workflow_permissions_projection(sot))
+    live_text = _canonical_json_lines(workflow_permissions_projection(live))
+    if sot_text == live_text:
+        return ""
+    return "".join(
+        difflib.unified_diff(live_text, sot_text, fromfile="live", tofile="sot")
+    )
+
+
+def apply_workflow_permissions(
+    *,
+    repo: str,
+    sot_path: Path,
+    mode: str,
+    summary_file: Path,
+    token: str,
+    opener=urllib.request.urlopen,
+) -> int:
+    """Plan / apply / drift-check the repository default workflow permissions.
+
+    ``plan`` renders the SoT-vs-live diff and exits 0. ``apply`` issues the PUT
+    only when the projections differ, then records the resulting state. ``drift``
+    is read-only and returns 1 when live diverges from SoT (so the weekly
+    detector classifies it as drift) else 0. Mirrors :func:`auto_delete` for the
+    /actions/permissions/workflow endpoint instead of the bare repo object.
+    """
+    if mode not in ("plan", "apply", "drift"):
+        raise ValueError(f"Unknown workflow-permissions mode: {mode}")
+    sot = _read_workflow_permissions_sot(sot_path)
+    live = get_workflow_permissions(repo, token, opener=opener)
+    diff = workflow_permissions_diff(sot=sot, live=live)
+    proj_sot = workflow_permissions_projection(sot)
+    proj_live = workflow_permissions_projection(live)
+
+    lines = [
+        "",
+        f"### Repository setting: workflow permissions ({mode})",
+        f"- SoT: `{sot_path}`",
+        f"- Status: `{'drift' if diff else 'in-sync'}`",
+    ]
+    for key in WORKFLOW_PERMISSIONS_KEYS:
+        lines.append(
+            f"- `{key}`: live=`{_json_scalar(proj_live[key])}` "
+            f"sot=`{_json_scalar(proj_sot[key])}`"
+        )
+    if diff:
+        lines.extend(["", "```diff", diff.rstrip("\n"), "```"])
+
+    if mode in ("plan", "drift"):
+        _append_summary(summary_file, lines)
+        return 1 if (mode == "drift" and diff) else 0
+
+    if not diff:
+        lines.append("- No change: live already matches SoT.")
+        _append_summary(summary_file, lines)
+        return 0
+
+    set_workflow_permissions(repo, proj_sot, token, opener=opener)
+    after = workflow_permissions_projection(
+        get_workflow_permissions(repo, token, opener=opener)
+    )
+    lines.extend(["", "Applied PUT. Resulting state:"])
+    for key in WORKFLOW_PERMISSIONS_KEYS:
+        lines.append(f"- `{key}`: `{_json_scalar(after[key])}`")
+    _append_summary(summary_file, lines)
+    return 0
+
+
+def _read_workflow_permissions_sot(path: Path) -> dict[str, Any]:
+    data = _read_json_file(path)
+    missing = [key for key in WORKFLOW_PERMISSIONS_KEYS if key not in data]
+    if missing:
+        raise ValueError(f"{path} is missing required keys: {missing}")
+    extra = [key for key in data if key not in WORKFLOW_PERMISSIONS_KEYS]
+    if extra:
+        raise ValueError(f"{path} has unexpected keys: {extra}")
+    perm = data["default_workflow_permissions"]
+    if perm not in ("read", "write"):
+        raise ValueError(
+            f"default_workflow_permissions must be 'read' or 'write'; got {perm!r}"
+        )
+    if not isinstance(data["can_approve_pull_request_reviews"], bool):
+        raise ValueError("can_approve_pull_request_reviews must be a boolean")
+    return data
+
+
 def _dispatch_header_for(
     choice: str,
     dry_run: bool,
@@ -495,7 +641,7 @@ def _request(
     # `url` is built from API_ROOT (https://api.github.com) + workflow-supplied
     # repo and ruleset_id values; opener is injectable for tests but defaults
     # to urllib.request.urlopen on the fixed https endpoint.
-    request = urllib.request.Request(  # noqa: S310 — fixed https endpoint
+    request = urllib.request.Request(  # noqa: S310 -- fixed https endpoint
         url,
         data=data,
         headers=headers,
@@ -578,6 +724,11 @@ def main(argv: list[str] | None = None) -> int:
     auto.add_argument("--dry-run", required=True, choices=("true", "false"))
     auto.set_defaults(func=_cmd_auto_delete)
 
+    wfperm = sub.add_parser("workflow-permissions", parents=[common])
+    wfperm.add_argument("--sot-file", required=True, type=Path)
+    wfperm.add_argument("--mode", required=True, choices=("plan", "apply", "drift"))
+    wfperm.set_defaults(func=_cmd_workflow_permissions)
+
     args = parser.parse_args(argv)
     try:
         args.func(args)
@@ -619,6 +770,18 @@ def _cmd_auto_delete(args: argparse.Namespace) -> None:
         summary_file=args.summary_file,
         token=_env_token(),
     )
+
+
+def _cmd_workflow_permissions(args: argparse.Namespace) -> None:
+    rc = apply_workflow_permissions(
+        repo=args.repo,
+        sot_path=args.sot_file,
+        mode=args.mode,
+        summary_file=args.summary_file,
+        token=_env_token(),
+    )
+    if rc != 0:
+        raise SystemExit(rc)
 
 
 if __name__ == "__main__":

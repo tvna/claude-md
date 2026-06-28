@@ -4,7 +4,7 @@
 Soft-observability companion to ``scripts/analyze_ci_timings.py
 --budget-seconds`` (#1156). The analyzer writes the breach set to a JSON file
 via ``--budget-output``; this script reads that file and, when there is at
-least one breach, opens -- or idempotently updates -- a single rolling
+least one breach, opens; or idempotently updates; a single rolling
 tracking issue. No breach is a no-op: the script never closes or reopens an
 issue, because median wall time is non-deterministic across runners and this
 is regression alerting, not a required status check.
@@ -32,7 +32,7 @@ Contract:
   tracking issue via ``scripts/_github_api.apply_call`` (POST issue / POST
   comment) and prints a status line. Empty breach set or dry-run is a no-op
   that still exits 0.
-- Failure policy: fails LOUD per CLAUDE.md section 4 -- a malformed breach
+- Failure policy: fails LOUD per CLAUDE.md section 4; a malformed breach
   file, a missing token, or a non-2xx API response exits 1 rather than
   silently treating it as "no breach".
 
@@ -50,6 +50,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
+import issue_anchors
 from _github_api import apply_call as github_apply_call
 
 API_ROOT = "https://api.github.com"
@@ -60,7 +61,9 @@ API_ROOT = "https://api.github.com"
 ISSUE_MARKER = "<!-- ci-budget-breach-issue -->"
 ISSUE_TITLE = "ci(timings): verify-agents job over soft wall-time budget"
 ISSUE_LABELS = ("type:tracking", "layer:p3-harness")
-PARENT_ISSUE = 1156
+# Resolved from the declarative anchor table so a renumbering stays a
+# one-file diff (#1640).
+PARENT_ISSUE = issue_anchors.resolve("ci-budget-parent")
 
 ApplyCall = Callable[..., tuple[int, str]]
 
@@ -79,7 +82,7 @@ def load_breaches(path: Path) -> tuple[float, list[dict[str, Any]]]:
     """Read the ``--budget-output`` JSON and return ``(budget_seconds, breaches)``.
 
     Fails loud (CLAUDE.md s4) on a missing file or a payload that does not
-    match the shape ``analyze_ci_timings.budget_breach_payload`` writes -- a
+    match the shape ``analyze_ci_timings.budget_breach_payload`` writes; a
     malformed breach set must not be silently treated as "no breach".
     """
     data = json.loads(path.read_text(encoding="utf-8"))

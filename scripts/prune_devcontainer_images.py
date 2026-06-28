@@ -9,7 +9,7 @@ bound. ``monthly-maintenance.yml`` invokes this script to delete the old ones
 on a monthly cadence (issue #1400, child of #696).
 
 Retention policy (count + age). For each package, a version is **protected**
--- never deleted -- when any of its tags is:
+-- never deleted; when any of its tags is:
 
 * ``main`` (the moving convenience alias),
 * a ``buildcache-*`` BuildKit cache tag, or
@@ -53,7 +53,7 @@ Contract:
 - Outputs: a per-package deletion plan/result to stdout and, when
   ``--summary-file`` is given, an appended Markdown report; exit 0 on success
   or 1 on any failure.
-- Failure policy: fails loud per CLAUDE.md section 4 -- a missing token, an
+- Failure policy: fails loud per CLAUDE.md section 4; a missing token, an
   API list error, or any failed delete exits non-zero; nothing is swallowed.
 
 Tested by ``tests/test_prune_devcontainer_images.py``. Refs #1400, #696.
@@ -106,7 +106,7 @@ def parse_pinned_shas(paths: list[str]) -> set[str]:
     Each ``.devcontainer/<agent>/devcontainer.json`` pins one image as
     ``ghcr.io/.../<package>:<sha>``. The SHA after the final ``:`` is the
     protected tag. A config whose image tag is not a 40-hex SHA (e.g. a stray
-    ``:main``) contributes nothing -- ``main`` is protected by name anyway.
+    ``:main``) contributes nothing; ``main`` is protected by name anyway.
     """
     shas: set[str] = set()
     for raw in paths:
@@ -150,7 +150,7 @@ def _parse_created_at(version: dict[str, Any]) -> datetime:
 
     GHCR stamps ``created_at`` as RFC 3339 with a trailing ``Z``. A version
     missing the field sorts as epoch (oldest) so it is never mistaken for a
-    recent keep -- but, lacking a tag, such a version is filtered out earlier.
+    recent keep; but, lacking a tag, such a version is filtered out earlier.
     """
     raw = version.get("created_at")
     if not isinstance(raw, str) or not raw:

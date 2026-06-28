@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from typing import Any
 
 import auto_retro as ar
 import pytest
@@ -26,8 +27,8 @@ class TestRunAppendBranch:
         *,
         retro_title: str,
         retro_body: str = "",
-    ) -> list[tuple]:
-        seen: list[tuple] = []
+    ) -> list[tuple[str, str, Any]]:
+        seen: list[tuple[str, str, Any]] = []
         retro_body = retro_body or self._RETRO_BODY
 
         def fake_api(method, path, body=None, **_kw):

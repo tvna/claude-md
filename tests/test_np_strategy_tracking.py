@@ -206,7 +206,7 @@ class TestRun:
             apply_call=api,
         )
         assert rc == 0
-        # Only the GET happened -- no PUT, no POST.
+        # Only the GET happened; no PUT, no POST.
         assert [c["method"] for c in api.calls] == ["GET"]
         out = capsys.readouterr().out
         assert "dry-run" in out

@@ -25,7 +25,7 @@ with::
 The script itself does not call the GitHub API and mutates no remote
 state. It writes outside stdout only when redirected or when
 ``--budget-output FILE`` is passed (a local JSON breach set consumed by
-``scripts/ci_budget_issue.py`` -- the only side channel that touches
+``scripts/ci_budget_issue.py``; the only side channel that touches
 GitHub, in a separate process). Single file addition under ``scripts/``
 plus its tests under ``tests/``. Revert is a single ``git revert``.
 
@@ -82,7 +82,7 @@ def _percentile(values: list[float], p: float) -> float:
     """Linear-interpolation percentile. ``p`` is a percentage 0..100.
 
     Mirrors ``numpy.percentile(values, p)`` for a single percentile but
-    without the dependency. Returns 0.0 for an empty list -- the caller
+    without the dependency. Returns 0.0 for an empty list; the caller
     is responsible for not aggregating empty buckets, this is a guard.
     """
     if not values:
@@ -139,7 +139,7 @@ def load_jobs(paths: Iterable[Path]) -> list[dict[str, object]]:
     """Load and flatten every ``jobs`` array from the supplied dumps.
 
     Each input file is expected to be the body of
-    ``GET /repos/{owner}/{repo}/actions/runs/{run_id}/jobs`` -- an
+    ``GET /repos/{owner}/{repo}/actions/runs/{run_id}/jobs``; an
     object with a ``jobs`` array. Files that do not match this shape
     contribute nothing (silent skip) so a stray ``runs.json`` dropped
     into the same directory does not crash the analyzer.
@@ -290,9 +290,9 @@ def partition_aggregates_by_cutoff(
 def _delta_p50_marker(pre_samples: list[float], post_samples: list[float]) -> str:
     """Render the ``delta p50`` cell for a compare row.
 
-    ``new`` -- no pre-cutoff sample; the row appeared after cutoff.
-    ``gone`` -- no post-cutoff sample; the row existed only before.
-    ``+/-X.Y%`` -- both windows present; signed percentage change.
+    ``new``; no pre-cutoff sample; the row appeared after cutoff.
+    ``gone``; no post-cutoff sample; the row existed only before.
+    ``+/-X.Y%``; both windows present; signed percentage change.
     Output is ASCII-only (the report is pasted into a GitHub comment
     behind ``scripts/preflight_non_ascii.py``).
     """
@@ -453,7 +453,7 @@ def _render_budget_section(
         return "\n".join(parts)
     parts.append(
         f"BUDGET BREACH: {len(breaches)} job(s) over the soft budget "
-        f"(observability, not a hard gate -- #1156):"
+        f"(observability, not a hard gate; #1156):"
     )
     parts.append("")
     parts.append("| job | p50 | budget |")

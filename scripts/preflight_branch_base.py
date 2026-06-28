@@ -90,7 +90,12 @@ def cmd_verify(args: argparse.Namespace) -> int:
     print("::error::This branch is out-of-date with the base branch.", file=sys.stderr)
     print(f"reason: {result.detail}", file=sys.stderr)
     print(f"repair: git fetch {args.remote} {args.base_branch}", file=sys.stderr)
-    print("repair: merge or rebase the fetched base into this branch, then rerun preflight.", file=sys.stderr)
+    print(
+        "repair: git merge FETCH_HEAD --no-edit  "
+        "# use merge, not rebase; rebase rewrites SHAs and conflicts with "
+        "force-push restrictions on already-published branches (Refs #1854)",
+        file=sys.stderr,
+    )
     return 1
 
 

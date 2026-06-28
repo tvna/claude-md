@@ -18,11 +18,11 @@ The contract is:
   outputs).
 * Each line is scanned for three violation classes:
 
-  - **Pattern A** -- forbidden literal substrings in
+  - **Pattern A**; forbidden literal substrings in
     :data:`FORBIDDEN_TOKENS` (case-sensitive). Concrete repo-local
     identifiers such as ``scripts/``, ``CODEOWNERS``, ``mcp__github__``.
     Introduced by #230 for PR #229.
-  - **Pattern B** -- assertive-existence phrasing matched by
+  - **Pattern B**; assertive-existence phrasing matched by
     :data:`FORBIDDEN_PHRASE_PATTERNS` (case-insensitive). Sentences that
     assert a specific downstream artifact (runbook, doc, checklist,
     script, file, guide, spec, note) exists, without naming a concrete
@@ -30,7 +30,7 @@ The contract is:
     Introduced by #535 after the #530 -> #533 regression where
     Chapter 3 was repaired twice for the same defect at different
     abstraction levels.
-  - **Pattern C** -- harness-specific tool names in
+  - **Pattern C**; harness-specific tool names in
     :data:`FORBIDDEN_HARNESS_TOOLS` (case-sensitive). Concrete
     Claude-only tool identifiers such as ``AskUserQuestion`` or
     ``ExitPlanMode`` that have no meaning to other harnesses (Codex /

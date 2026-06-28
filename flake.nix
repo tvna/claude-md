@@ -28,6 +28,20 @@
           rtkVersion = "0.42.1";
           actionlintVersion = "1.7.7";
           ccusageVersion = "20.0.6";
+          # zizmor / lychee / betterleaks are provisioned ONLY by the
+          # SessionStart installers (scripts/install-{zizmor,lychee,betterleaks}.sh)
+          # in Claude Code on the Web sessions; they are deliberately NOT wired
+          # into the nix devShell / sharedPackages. flake.nix stays the single
+          # pin source of truth (scripts/flake_pin.py reads these via the same
+          # contract as rtk/waza), but the let-bindings below are intentionally
+          # unused by any derivation; they exist so the pin lives in exactly
+          # one place and scan_flake_pin_drift.py can guard the checksum. They
+          # run alongside the existing scan_workflow_*/scan_markdown_links/
+          # scan_secrets gates during the effectiveness-measurement phase; no
+          # existing gate is removed. Refs #1610.
+          zizmorVersion = "1.25.2";
+          lycheeVersion = "0.24.2";
+          betterleaksVersion = "1.4.1";
           claudeCodeNative = {
             aarch64-linux = {
               package = "claude-code-linux-arm64";
@@ -129,6 +143,54 @@
             x86_64-linux = {
               pkg = "ccusage-linux-x64";
               hash = "sha256-Wl94vPpOZ4A74sG3AFDz64grUmUxPTF/PIWze7yO/xw=";
+            };
+          }.${system};
+          # zizmor (zizmorcore/zizmor) ships per-target release tarballs, each
+          # unpacking to a single bare ``zizmor`` binary. Only a gnu linux build
+          # is published per arch, so the asset carries no shared target suffix
+          # to template; the full filename is stored verbatim (rtk shape). The
+          # filename embeds no version, so a bump only rewrites version + hashes.
+          zizmorNative = {
+            aarch64-linux = {
+              asset = "zizmor-aarch64-unknown-linux-gnu.tar.gz";
+              hash = "sha256-S0uUkREsKgmzGBAcDTNJtzrxxPUy4JfdbQFk8qvadg0=";
+            };
+            x86_64-linux = {
+              asset = "zizmor-x86_64-unknown-linux-gnu.tar.gz";
+              hash = "sha256-qh+s0QXw2D/lxVsa3NnXQX3l2DqidHH5HcC2bPOANXc=";
+            };
+          }.${system};
+          # lychee (lycheeverse/lychee) publishes musl-static per-target tarballs
+          # that unpack to ``lychee-<target>/lychee`` (a nested dir, unlike rtk's
+          # bare layout; the installer locates the binary with ``find``). The
+          # release tag is ``lychee-v<version>`` (not ``v<version>``); the
+          # flake_pin.py url_template encodes that prefix. Asset embeds no
+          # version.
+          lycheeNative = {
+            aarch64-linux = {
+              asset = "lychee-aarch64-unknown-linux-musl.tar.gz";
+              hash = "sha256-XQsOOuqyQPQZIMYzpur5dZm+bu3aA0s26Fjt59ul5TU=";
+            };
+            x86_64-linux = {
+              asset = "lychee-x86_64-unknown-linux-musl.tar.gz";
+              hash = "sha256-c2V6ERgZowxHwINSiWeW8j1k5OsrPtObbTIUkkFWb8U=";
+            };
+          }.${system};
+          # betterleaks (betterleaks/betterleaks) ships per-arch Go-static
+          # tarballs holding a bare ``betterleaks`` binary (plus LICENSE/README).
+          # The asset filenames EMBED the version, so; like actionlintNative --
+          # they MUST stay STATIC strings (no ``${betterleaksVersion}``): the
+          # flake_pin.py _native_block regex is brace-naive and a ``}`` inside an
+          # interpolation would truncate the match. A version bump must rewrite
+          # the embedded filenames here alongside the version and hashes.
+          betterleaksNative = {
+            aarch64-linux = {
+              asset = "betterleaks_1.4.1_linux_arm64.tar.gz";
+              hash = "sha256-I+0FziF8IdOecjxtlwqf0Lnptobq4a6/nXePt6d6zJI=";
+            };
+            x86_64-linux = {
+              asset = "betterleaks_1.4.1_linux_x64.tar.gz";
+              hash = "sha256-JjX/mI2RlM0wcBVROFiQgaVKNDjXnKm4Mmit3S/YRMw=";
             };
           }.${system};
           pinned-uv = pkgs.stdenvNoCC.mkDerivation {
@@ -270,7 +332,7 @@ EOF
           };
           # actionlint (rhysd/actionlint) ships prebuilt release tarballs, each
           # holding a single bare ``actionlint`` binary (no enclosing dir), so
-          # point sourceRoot at the unpack dir itself -- mirrors rtk-cli. Pinned
+          # point sourceRoot at the unpack dir itself; mirrors rtk-cli. Pinned
           # by SHA256 for supply-chain hardening. Refs #1263.
           actionlint-cli = pkgs.stdenvNoCC.mkDerivation {
             pname = "actionlint";
@@ -317,7 +379,7 @@ EOF
           inherit claude-cli codex-cli pinned-uv apm-cli waza-cli rtk-cli actionlint-cli ccusage-cli;
           bubblewrap = pkgs.bubblewrap;
           gh-cli = pkgs.gh;
-          python-runtime = pkgs.python311;
+          python-runtime = pkgs.python312;
           # GitHub MCP server binary for the local-stdio launch path used by
           # scripts/mcp_github_launch.sh (#1063). In the devcontainer there is no
           # Docker daemon, so the wrapper execs this Nix-pinned binary instead of
@@ -338,8 +400,18 @@ EOF
             gh
             git
             jq
-            nodejs_22
-            python311
+            # bun, not nodejs_22 + npm/pnpm: this repo has no package.json and
+            # never invokes node/npm/npx; the agent CLIs (claude/codex/ccusage)
+            # are self-contained native binaries and the only MCP server is the
+            # native github-mcp-server, so a full Node toolchain (nodejs ~91 MB +
+            # its ~69 MB -dev output + npm/pnpm) was unused weight in the baked
+            # image (#1491). bun is a single ~90 MB binary that still gives the
+            # agents a JS runtime + `bunx` (npx-equivalent) for ad-hoc work, with
+            # no separate -dev output. If a workflow needs strict node/npm
+            # behavior, reintroduce nodejs_22 + the package manager and document
+            # the consumer.
+            bun
+            python312
             ripgrep
             shellcheck
             agentPackages.pinned-uv
@@ -348,8 +420,15 @@ EOF
             agentPackages.actionlint-cli
           ];
           pythonQualityPackages = with pkgs; [
+            # Bare `mypy` (= pkgs.mypy) is built against the nixpkgs-default
+            # interpreter, which in nixpkgs 25.05 is python312; the same
+            # interpreter the project now targets (pyproject requires-python
+            # >=3.12) and that sharedPackages provides. So mypy shares the one
+            # python in the closure; there is no duplicate interpreter to avoid,
+            # and no python312Packages override is needed for mypy. Keeps the
+            # baked claude image (#1491) to a single Python.
             mypy
-            python311Packages.pytest-xdist
+            python312Packages.pytest-xdist
             ruff
           ];
           networkPackages = with pkgs; [
@@ -360,8 +439,16 @@ EOF
             iproute2
             iptables
           ];
+          # mkShellNoCC, not mkShell: mkShell pulls the full stdenv C toolchain
+          # (gcc ~256 MB + binutils ~62 MB) into every agent devShell closure.
+          # This repo's `uv sync` installs only wheels (pyyaml/pytest/ruff/mypy/
+          # hypothesis/pytest-xdist all ship manylinux wheels), and the agents run
+          # no from-source C/native builds, so the compiler is dead weight in the
+          # closure; and in the baked claude image (#1491). Drop it with the
+          # NoCC stdenv. If a future dependency needs to compile from sdist,
+          # restore mkShell (or add a cc to packages) and document the need.
           mkAgentShell = name: extraPackages:
-            pkgs.mkShell {
+            pkgs.mkShellNoCC {
               packages = sharedPackages ++ pythonQualityPackages ++ extraPackages;
               shellHook = ''
                 export AGENT_CONTAINER="${name}"
@@ -373,20 +460,55 @@ EOF
           claude = mkAgentShell "claude" [
             agentPackages.claude-cli
             agentPackages.ccusage-cli
-            pkgs.nodePackages.npm
           ];
           codex = mkAgentShell "codex" [
             agentPackages.bubblewrap
             agentPackages.codex-cli
-            pkgs.nodePackages.pnpm
+            agentPackages.ccusage-cli
           ];
           network = pkgs.mkShell {
             packages = networkPackages;
           };
         };
+      darwinSystems = [
+        "aarch64-darwin"
+        "x86_64-darwin"
+      ];
+      # Minimal devShell for macOS developers using `nix develop`.
+      # Only git is needed; the shellHook configures SSH commit signing
+      # for the local repo when a public key is found in ~/.ssh.
+      # The linux agent tools (claude-cli, codex-cli, etc.) have no darwin
+      # prebuilt binaries and are intentionally omitted from this shell.
+      mkDarwinShell = system:
+        let
+          pkgs = import nixpkgs {
+            inherit system;
+          };
+        in
+        {
+          default = pkgs.mkShellNoCC {
+            packages = [ pkgs.git ];
+            shellHook = ''
+              if git rev-parse --git-dir >/dev/null 2>&1; then
+                _signing_key=""
+                for _k in "$HOME/.ssh/id_ed25519.pub" "$HOME/.ssh/id_rsa.pub" "$HOME/.ssh/id_ecdsa.pub"; do
+                  if [ -f "$_k" ]; then _signing_key="$_k"; break; fi
+                done
+                if [ -n "$_signing_key" ]; then
+                  git config --local gpg.format ssh
+                  git config --local user.signingKey "$_signing_key"
+                  git config --local commit.gpgsign true
+                  echo "git SSH signing configured: $_signing_key"
+                fi
+                unset _signing_key _k
+              fi
+            '';
+          };
+        };
+      forAllDarwinSystems = nixpkgs.lib.genAttrs darwinSystems;
     in
     {
       packages = forAllSystems mkPackages;
-      devShells = forAllSystems mkShells;
+      devShells = forAllSystems mkShells // forAllDarwinSystems mkDarwinShell;
     };
 }

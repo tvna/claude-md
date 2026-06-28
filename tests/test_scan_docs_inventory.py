@@ -6,8 +6,29 @@ from pathlib import Path
 
 import pytest
 import scan_docs_inventory
+import yaml
 
 pytestmark = pytest.mark.shard_ci_ops
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+
+
+def test_pre_commit_hook_is_registered() -> None:
+    """Refs #1632 (PR #1625 retro, Fact 4): docs inventory must gate at commit.
+
+    Mirroring the CI scanner into ``.pre-commit-config.yaml`` is the durable
+    gate that fails a new standards doc missing its docs/INDEX.md row at commit
+    time, not only in CI.
+    """
+    config = yaml.safe_load((REPO_ROOT / ".pre-commit-config.yaml").read_text(encoding="utf-8"))
+    entries = {
+        hook["id"]: hook["entry"]
+        for repo in config["repos"]
+        if repo.get("repo") == "local"
+        for hook in repo["hooks"]
+    }
+    assert "scan-docs-inventory" in entries
+    assert "scripts/scan_docs_inventory.py verify" in entries["scan-docs-inventory"]
 
 
 def _write_index(root: Path, body: str) -> None:
@@ -68,7 +89,7 @@ def test_repository_docs_inventory_is_current() -> None:
 
 
 # ---------------------------------------------------------------------------
-# rel() -- ValueError branch (path outside root)
+# rel(); ValueError branch (path outside root)
 # ---------------------------------------------------------------------------
 
 
@@ -79,7 +100,7 @@ def test_rel_returns_absolute_posix_when_outside_root(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# extract_target() -- angle-bracket and space formats
+# extract_target(); angle-bracket and space formats
 # ---------------------------------------------------------------------------
 
 
@@ -92,7 +113,7 @@ def test_extract_target_space_separated_title() -> None:
 
 
 # ---------------------------------------------------------------------------
-# iter_docs_markdown() -- no docs directory
+# iter_docs_markdown(); no docs directory
 # ---------------------------------------------------------------------------
 
 
@@ -101,7 +122,7 @@ def test_iter_docs_markdown_returns_empty_when_no_docs_dir(tmp_path: Path) -> No
 
 
 # ---------------------------------------------------------------------------
-# collect_index_entries() -- no INDEX.md; protocol-relative URL; empty path; absolute path
+# collect_index_entries(); no INDEX.md; protocol-relative URL; empty path; absolute path
 # ---------------------------------------------------------------------------
 
 
@@ -127,7 +148,137 @@ def test_collect_index_entries_handles_absolute_md_link(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# main() CLI -- error output path (monkeypatched verify)
+# collect_index_entries(); transitive lane-README following (Refs #2005)
+# ---------------------------------------------------------------------------
+
+
+def test_collect_index_entries_follows_lane_readme_hop(tmp_path: Path) -> None:
+    """A lane README's leaf rows count as listed when INDEX points at it."""
+    _write_index(tmp_path, "- [standards](standards/README.md)\n")
+    standards = tmp_path / "docs" / "standards"
+    standards.mkdir(parents=True)
+    (standards / "README.md").write_text(
+        "# Standards\n\n- [commit-signing.md](commit-signing.md)\n",
+        encoding="utf-8",
+    )
+
+    entries = scan_docs_inventory.collect_index_entries(tmp_path)
+
+    assert "docs/standards/README.md" in entries
+    assert "docs/standards/commit-signing.md" in entries
+
+
+def test_collect_index_entries_does_not_follow_non_readme_links(tmp_path: Path) -> None:
+    """Only ``/README.md`` targets are followed; other docs are leaves."""
+    _write_index(tmp_path, "- [page](standards/page.md)\n")
+    standards = tmp_path / "docs" / "standards"
+    standards.mkdir(parents=True)
+    (standards / "page.md").write_text(
+        "# Page\n\n- [hidden.md](hidden.md)\n",
+        encoding="utf-8",
+    )
+
+    entries = scan_docs_inventory.collect_index_entries(tmp_path)
+
+    assert "docs/standards/page.md" in entries
+    assert "docs/standards/hidden.md" not in entries
+
+
+def test_collect_index_entries_stops_after_one_readme_hop(tmp_path: Path) -> None:
+    """Recursion is fixed at two levels: a split-lane README linked from
+    another split-lane README is collected as a leaf but its own links are not
+    followed (only INDEX's direct split-lane links are hopped)."""
+    _write_index(tmp_path, "- [standards](standards/README.md)\n")
+    docs = tmp_path / "docs"
+    (docs / "standards").mkdir(parents=True)
+    (docs / "standards" / "README.md").write_text(
+        "# Standards\n\n- [prd](../prd/README.md)\n",
+        encoding="utf-8",
+    )
+    (docs / "prd").mkdir(parents=True)
+    (docs / "prd" / "README.md").write_text(
+        "# PRD\n\n- [deep.md](deep.md)\n",
+        encoding="utf-8",
+    )
+
+    entries = scan_docs_inventory.collect_index_entries(tmp_path)
+
+    assert "docs/prd/README.md" in entries
+    assert "docs/prd/deep.md" not in entries
+
+
+def test_collect_index_entries_does_not_follow_unsplit_lane_readme(tmp_path: Path) -> None:
+    """Refs #2005: only the declared split-lane READMEs are followed. A README
+    for a small lane (table stays inline in INDEX) is collected as a leaf but
+    its links are not, so a small-lane doc cannot be covered via its README."""
+    _write_index(tmp_path, "- [proposals](proposals/README.md)\n")
+    proposals = tmp_path / "docs" / "proposals"
+    proposals.mkdir(parents=True)
+    (proposals / "README.md").write_text(
+        "# Proposals\n\n- [foo.md](foo.md)\n",
+        encoding="utf-8",
+    )
+
+    entries = scan_docs_inventory.collect_index_entries(tmp_path)
+
+    assert "docs/proposals/README.md" in entries
+    assert "docs/proposals/foo.md" not in entries
+
+
+def test_verify_accepts_doc_listed_only_via_lane_readme(tmp_path: Path) -> None:
+    """A leaf doc absent from INDEX but present in its lane README passes."""
+    _write_index(tmp_path, "# docs/ index\n\n- [standards](standards/README.md)\n")
+    standards = tmp_path / "docs" / "standards"
+    standards.mkdir(parents=True)
+    (standards / "README.md").write_text(
+        "# Standards\n\n- [commit-signing.md](commit-signing.md)\n",
+        encoding="utf-8",
+    )
+    (standards / "commit-signing.md").write_text("# Commit signing\n", encoding="utf-8")
+
+    assert scan_docs_inventory.verify(tmp_path) == []
+
+
+def test_verify_reports_doc_hidden_behind_non_readme_link(tmp_path: Path) -> None:
+    """A leaf reachable only through a non-README link stays uncovered."""
+    _write_index(tmp_path, "# docs/ index\n\n- [page](standards/page.md)\n")
+    standards = tmp_path / "docs" / "standards"
+    standards.mkdir(parents=True)
+    (standards / "page.md").write_text(
+        "# Page\n\n- [hidden.md](hidden.md)\n",
+        encoding="utf-8",
+    )
+    (standards / "hidden.md").write_text("# Hidden\n", encoding="utf-8")
+
+    errors = scan_docs_inventory.verify(tmp_path)
+
+    assert errors == [
+        "::error file=docs/INDEX.md::docs/INDEX.md does not list docs/standards/hidden.md"
+    ]
+
+
+def test_verify_flags_small_lane_doc_listed_only_in_readme(tmp_path: Path) -> None:
+    """Refs #2005: a small-lane doc reachable only through its (unsplit) lane
+    README is still flagged, enforcing that small lanes keep their table inline
+    in INDEX rather than migrating listings into the README."""
+    _write_index(tmp_path, "# docs/ index\n\n- [proposals](proposals/README.md)\n")
+    proposals = tmp_path / "docs" / "proposals"
+    proposals.mkdir(parents=True)
+    (proposals / "README.md").write_text(
+        "# Proposals\n\n- [foo.md](foo.md)\n",
+        encoding="utf-8",
+    )
+    (proposals / "foo.md").write_text("# Foo\n", encoding="utf-8")
+
+    errors = scan_docs_inventory.verify(tmp_path)
+
+    assert errors == [
+        "::error file=docs/INDEX.md::docs/INDEX.md does not list docs/proposals/foo.md"
+    ]
+
+
+# ---------------------------------------------------------------------------
+# main() CLI; error output path (monkeypatched verify)
 # ---------------------------------------------------------------------------
 
 
@@ -161,3 +312,45 @@ def test_main_block_exits_via_runpy(monkeypatch: pytest.MonkeyPatch) -> None:
     with pytest.raises(SystemExit) as exc_info:
         runpy.run_module("scan_docs_inventory", run_name="__main__")
     assert exc_info.value.code == 0
+
+
+# ---------------------------------------------------------------------------
+# INDEX byte budget (Refs #1665)
+# ---------------------------------------------------------------------------
+
+
+def test_index_within_budget_passes(tmp_path: Path) -> None:
+    _write_index(tmp_path, "# docs/ index\n")
+    assert scan_docs_inventory.verify_index_budget(tmp_path) == []
+
+
+def test_index_over_budget_reports_error(tmp_path: Path) -> None:
+    oversize = "# docs/ index\n" + ("x" * (scan_docs_inventory.MAX_INDEX_BYTES + 1))
+    _write_index(tmp_path, oversize)
+
+    errors = scan_docs_inventory.verify_index_budget(tmp_path)
+
+    assert len(errors) == 1
+    assert "over the" in errors[0]
+    assert "navigation budget" in errors[0]
+    assert str(scan_docs_inventory.MAX_INDEX_BYTES) in errors[0]
+
+
+def test_missing_index_has_no_budget_error(tmp_path: Path) -> None:
+    (tmp_path / "docs").mkdir()
+    assert scan_docs_inventory.verify_index_budget(tmp_path) == []
+
+
+def test_verify_surfaces_budget_error(tmp_path: Path) -> None:
+    oversize = "# docs/ index\n" + ("y" * (scan_docs_inventory.MAX_INDEX_BYTES + 1))
+    _write_index(tmp_path, oversize)
+
+    errors = scan_docs_inventory.verify(tmp_path)
+
+    assert any("navigation budget" in error for error in errors)
+
+
+def test_real_index_is_within_budget() -> None:
+    """The committed docs/INDEX.md must stay under the navigation budget."""
+    index = REPO_ROOT / "docs" / "INDEX.md"
+    assert index.stat().st_size <= scan_docs_inventory.MAX_INDEX_BYTES

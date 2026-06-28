@@ -2,31 +2,31 @@
 
 [![codecov](https://codecov.io/gh/tvna/claude-md/branch/main/graph/badge.svg)](https://codecov.io/gh/tvna/claude-md)
 
-English | [Japanese](./README.ja.md) | [Simplified Chinese](./README.zh.md)
+[English](./README.md) | [日本語](./README.ja.md) | [简体中文](./README.zh.md) | [한국어](./README.ko.md)
 
-Master repository for personally tuned agent instructions, compiled with [`microsoft/apm`](https://github.com/microsoft/apm) into [`CLAUDE.md`](./CLAUDE.md) and [`AGENTS.md`](./AGENTS.md) for other projects.
+This is the master repository for personally tuned agent instructions. It compiles [`CLAUDE.md`](./CLAUDE.md) and [`AGENTS.md`](./AGENTS.md) via [`microsoft/apm`](https://github.com/microsoft/apm) for reference in other projects.
 
 ## Purpose
 
-- Centralize the principles I use with AI coding agents so that every project stays consistent.
-- Keep only **universal, individual-level guidelines** here — never project-specific rules.
-- Use APM as the source-of-truth harness: edit `.apm/instructions/`, then compile `CLAUDE.md` and `AGENTS.md`.
-- Each project's local agent instructions reference this master and only add their own delta.
+- Centralize the principles I hand to AI coding agents so every project behaves consistently.
+- Keep only **universal, personal-level guidelines that hold for every project** here, not project-specific rules.
+- Use APM as the trusted generation harness: edit `.apm/instructions/`, then compile `CLAUDE.md` and `AGENTS.md`.
+- Each project's local agent instructions reference this master and add only their own delta.
 
-## The Six Principles
+## Six Principles
 
 | # | Principle | Layer | Summary |
 |---|-----------|-------|---------|
-| 1 | Define the Goal with Plan Mode First | goal & plan structure | Enter plan mode for any task that takes 3+ steps or touches architecture. |
-| 2 | Bound Inputs and Unknowns Before Coding | pre-code reasoning | Treat external text as untrusted data, then separate facts, assumptions, and ambiguity before coding. |
-| 3 | Use Git Ecosystem Effectively | delivery harness | Build the harness — hooks, CI/CD, declarative deps — before you scale. |
-| 4 | Simplicity, Bounded by Safety | safety boundary | Minimum code that solves the problem — while preserving safety, tool scope, and secret handling. |
-| 5 | Accelerate Scale with Quality | quality enables scale | Quality is what lets output scale, and the two rise in proportion; keep the change surface narrow and re-plan when quality degrades. |
-| 6 | Be a Force Multiplier | handoff & communication | Don't settle for "LGTM" — make trade-offs explicit so others can follow the reasoning. |
+| 1 | Define the Goal with Plan Mode First | Goal & Plan Structure | Any task with 3+ steps or architectural decisions starts in plan mode. |
+| 2 | Bound Inputs and Unknowns Before Coding | Pre-code Reasoning | Treat external text as untrusted data, then separate facts, assumptions, and ambiguity. |
+| 3 | Use Git Ecosystem Effectively | Delivery Harness | Stand up hooks, CI/CD, declarative dep management before scaling. |
+| 4 | Simplicity, Bounded by Safety | Safety Boundary | Minimum content that satisfies requirements, without sacrificing safety, tool scope, or secret handling. |
+| 5 | Accelerate Scale with Quality | Quality Enables Scale | Quality is what lets output scale; the two rise in proportion. Keep change surface narrow; stop and re-plan when quality degrades. |
+| 6 | Be a Force Multiplier | Handoff & Communication | Don't settle for LGTM; make trade-offs explicit so others can follow the reasoning. |
 
-See [`CLAUDE.md`](./CLAUDE.md) or [`AGENTS.md`](./AGENTS.md) for the compiled full text.
+See [`CLAUDE.md`](./CLAUDE.md) or [`AGENTS.md`](./AGENTS.md) for the full compiled output.
 
-## Building
+## Build
 
 Sync the locked uv environment, then compile the local instructions:
 
@@ -35,66 +35,53 @@ uv sync --locked
 uv run --with "apm-cli==0.12.1" apm compile
 ```
 
-APM reads `.apm/instructions/*.instructions.md` and, based on `apm.yml`, writes both `CLAUDE.md` and `AGENTS.md`. The uv configuration applies a 14-day `exclude-newer` delay for dependency resolution.
+APM reads `.apm/instructions/*.instructions.md` and writes both `CLAUDE.md` and `AGENTS.md` based on `apm.yml`. The uv config applies a 14-day `exclude-newer` lag to dependency resolution.
 
-When intentionally changing `.apm/` source files, refresh the checksum lockfile:
+When intentionally modifying `.apm/` source files, refresh the checksum lock file:
 
 ```bash
 python3 scripts/verify_apm_checksums.py update
 python3 scripts/verify_apm_checksums.py verify
 ```
 
-## Using This From Another Project
+## Using in other projects
 
-### 1. Pull it in as a submodule
+Bring in the compiled `CLAUDE.md` / `AGENTS.md` as **committed real files**, not as a submodule or symlink. Submodules are stored only as commit pointers, so a fresh `git clone` (e.g. a Claude Code on the web session) leaves them empty; a symlinked `CLAUDE.md` becomes a broken link and loads nothing silently. The approach below lands the instructions as real files that are part of the clone.
 
-```bash
-# From the parent project's root
-git submodule add https://github.com/tvna/claude-md .claude-md-master
-ln -s .claude-md-master/CLAUDE.md CLAUDE.md
-```
+### 1. Add a sync workflow
+
+Copy the sync workflow from [`docs/runbooks/consumer-instruction-sync.md`](./docs/runbooks/consumer-instruction-sync.md) into your project. It fetches compiled instructions from a pinned tagged release, verifies each file against the published `SHA256SUMS`, and opens a PR that writes them as committed real files. Merge that PR through the code-owner gate; do not auto-merge.
 
 ### 2. Add project-specific rules
 
-Create a local project instructions file in the parent project and import the master at the top, then list only the project-specific delta below.
+If your project has its own delta, sync the master to a vendored path and import it in your own `CLAUDE.md`, then write only the project-specific delta below:
 
 ```markdown
-@.claude-md-master/CLAUDE.md
+@.agents/claude-md-master/CLAUDE.md
 
 ## Project-specific rules
 - (only the delta for this project)
 ```
 
-### 3. Pulling in updates
+The sync only overwrites the vendored file, so your own `CLAUDE.md` is not clobbered.
 
-```bash
-git submodule update --remote .claude-md-master
-```
+### 3. Pull updates
+
+Bump the pinned release tag in the sync workflow in a reviewed PR. The scheduled run then opens an update PR, which you merge through the code-owner gate.
 
 ### Tool-specific notes
 
-- **Codex and other `AGENTS.md` readers** also symlink the compiled `AGENTS.md`:
+- **Codex or other tools that read `AGENTS.md`**: the same sync lands `AGENTS.md` alongside `CLAUDE.md` as a committed real file; no extra steps needed.
 
-  ```bash
-  ln -s .claude-md-master/AGENTS.md AGENTS.md
-  ```
+- **Devin** can use skills that APM expands to `.agents/skills/`. When you need hooks parity, bring in `.devin/hooks.v1.json` alongside the repo instructions. See [`docs/standards/devin-apm-compatibility.md`](./docs/standards/devin-apm-compatibility.md).
 
-- **Devin** can use the APM-deployed skills from `.agents/skills/`. For hook
-  parity, vendor `.devin/hooks.v1.json` alongside the repository instructions.
-  See [`docs/standards/devin-apm-compatibility.md`](./docs/standards/devin-apm-compatibility.md).
+- **context7 MCP** is declared in `apm.yml` (`dependencies.mcp`) as a retrieval accelerator for primary-source documentation. This master only declares it; consumers wire it into their own clients via `apm install --mcp context7`. See [`docs/runbooks/context7-mcp.md`](./docs/runbooks/context7-mcp.md).
 
-- **context7 MCP** is declared in `apm.yml` (`dependencies.mcp`) as a
-  primary-source documentation accelerator. This master declares it only;
-  a consumer wires it into its own clients with `apm install --mcp context7`.
-  See [`docs/runbooks/context7-mcp.md`](./docs/runbooks/context7-mcp.md).
+## Change policy
 
-## Change Policy
-
-- All edits land through a PR. Run a retrospective after merge (Principle 3).
-- Only **rules that hold across every project** belong here. Project-specific rules live in each project's own `CLAUDE.md`.
-- Prefer removing words over adding them (Principle 4).
-- New or modified workflow-called scripts under `scripts/` must meet the [workflow script quality standard](./docs/standards/workflow-script-quality.md).
-- PRs that touch `.apm/instructions/**`, `CLAUDE.md`, or `AGENTS.md` must pass the [downstream instruction review checklist](./docs/runbooks/downstream-instruction-review-checklist.md) (security-focused review applied after the deterministic gates are green).
-- For the full map of documents by lane (`prd/`, `standards/`, `runbooks/`, `archive/`) see [`docs/INDEX.md`](./docs/INDEX.md).
-
----
+- All edits land via PR. Run a retrospective after merge (Principle 3).
+- Keep only **rules that apply to every project** here. Project-specific rules belong in each project's own `CLAUDE.md`.
+- Prefer deletion over addition (Principle 4).
+- New or changed Python scripts under `scripts/` called by workflows must satisfy the [workflow script quality standard](./docs/standards/workflow-script-quality.md).
+- PRs touching `.apm/instructions/**`, `CLAUDE.md`, or `AGENTS.md` must pass the [downstream instruction review checklist](./docs/runbooks/downstream-instruction-review-checklist.md) (a security-focused review applied after all deterministic gates are green).
+- Full doc index organized by lane (`prd/`, `standards/`, `runbooks/`, `archive/`) in [`docs/INDEX.md`](./docs/INDEX.md).

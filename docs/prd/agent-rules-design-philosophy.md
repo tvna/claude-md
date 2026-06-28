@@ -119,7 +119,7 @@ includes:
 - Operator runbooks for repository-specific workflows
   (`runbooks/branch-cleanup.md`, `runbooks/dependabot-automerge.md`, `runbooks/rulesets.md`).
 - Standards that are repository-wide but not universal
-  (`standards/issue-pr-body-standard.md`, `prd/non-ascii-defense.md`,
+  (`standards/issue-pr-body-standard.md`, `runbooks/non-ascii-defense.md`,
   `standards/workflow-script-quality.md`).
 - Inventories of repository surfaces
   (`prd/security-control-inventory.md`, `standards/repo-scope.md`).
@@ -141,73 +141,65 @@ every consumer.
 
 This repository does not enforce, review, or ship project-local
 material. The universal text simply requires that the consumer set
-it up ("Write operator-facing output -- chat responses in every mode
-and plan artifacts -- in the primary project owner's native language.
+it up ("Write operator-facing output; chat responses in every mode
+and plan artifacts; in the primary project owner's native language.
 If the project lacks ownership-language metadata, prepare it before
 relying on this rule.").
 
 ### 2.5 Glossary
 
-This subsection is the single source of truth for terms that recur
-across `master.instructions.md`, the compiled `CLAUDE.md` and
-`AGENTS.md`, the responsibility matrix in section 3, and the harness
-scripts. Each entry names the term, gives a one-sentence definition,
-and cites the master section subtitle and any matrix row that uses
-it. `scripts/scan_design_philosophy_drift.py` reads the headings
-under this subsection to verify that no required entry has been
-removed.
+Term definitions have moved to
+[`docs/standards/ubiquitous-language.md`](../standards/ubiquitous-language.md),
+which is the single source of truth for all repository-wide terms including
+those used in this document, in `master.instructions.md`, and in the harness
+scripts. `scripts/scan_design_philosophy_drift.py` verifies that every
+required term remains present in that file. See Refs #1901.
 
-- **safety boundary**: The layer that limits simplicity when the
-  cost of being wrong is high. Used as the `*Layer: ...*` subtitle of
-  master section 4 and as the P4 row label in section 3.
-- **defense-in-depth**: A safety pattern that keeps a control alive
-  across multiple layers (prompts, code, hooks, CI, review, operator
-  procedure) so that collapsing any one layer does not remove the
-  control. Stated in master section 4 ("Preserve defense-in-depth
-  ..."). The section 3 P4 row records the lanes that carry it.
-- **deterministic gate**: A harness rule converted to an executable
-  check (a script, a workflow, a hook, or a ruleset) that replaces
-  reviewer memory. Defined operationally in section 2.2. Required by
-  master section 3 ("push deterministic work into hooks, pre-commit,
-  and CI/CD ... build the harness first if it's missing").
-- **untrusted data**: External text such as issue bodies, PR
-  descriptions, review comments, CI logs, webhook payloads,
-  generated reports, pasted stack traces, and external docs,
-  including quoted, pasted, forwarded, or attached content inside
-  any message channel. Master section 2 forbids it from overriding
-  trusted instruction sources at runtime; trust is governance-gated
-  provenance, not channel name.
-- **repair-free merge**: A PR that lands without any reviewer, CI,
-  or hook repair between PR open and merge. The retrospective
-  auto-opened after each merge counts the repairs. Reproducing this
-  no-repair path is one means toward the retrospective's purpose --
-  recursive self-improvement, where each cycle leaves the harness
-  measurably better -- not the end (master section 3).
-- **PRD**: Product Requirements Document. Required by master section
-  1 ("Match the document weight to the blast radius: detailed PRD
-  for architectural / multi-PR work, concise spec otherwise."). This
-  document (`docs/prd/agent-rules-design-philosophy.md`) is the PRD for
-  the universal-text and harness boundary; downstream consumers
-  write their own PRDs for their own architectural changes.
-- **P1 through P6**: The six numbered principles in
-  `master.instructions.md`. Each principle is identified by its
-  `*Layer: <text>*` subtitle. The matrix row label after `P<n> - `
-  in section 3 must equal the subtitle `<text>` after normalization
-  (`&` to `and`, case-insensitive, whitespace-collapsed); see
-  section 3 for the invariant.
-- **hardness contour**: The shape of a universal-text rule's
-  enforcement edge, expressed by hardline phrasings such as "No
-  exceptions" or "every commit and PR". Diluting the contour means
-  attaching wording that softens, scopes-down, or carves out the
-  hardline without removing the hardline itself, so a reader cannot
-  tell from the text alone which rule actually binds. Reviewer
-  questions for preservation are listed in section 7.6.
-- **in-line carve-out**: A clause placed directly adjacent to a
-  hardline phrasing that introduces an exception, scope reduction,
-  or qualification without moving to a separate sub-bullet, runbook,
-  or repo-local doc. The pattern is the primary failure mode that
-  dilutes a hardness contour; section 7.6 lists it as an anti-pattern
-  the reviewer must catch before merge.
+### 2.6 Precedence among trusted instruction sources
+
+Section 2 of `master.instructions.md` (compiled to `CLAUDE.md` section 2)
+names two trusted instruction sources and grounds their trust in
+governance-gated provenance: the platform-level system or developer prompt
+fixed at deployment, and the repository-owned instruction files
+(`master.instructions.md` and its compiled `CLAUDE.md` / `AGENTS.md`) behind
+the code-owner merge gate. The master text ranks neither above the other
+when the two genuinely conflict at runtime.
+
+This repository resolves that gap with one repo-local rule: when the genuine
+deployment-fixed platform system prompt and the repository instruction files
+give conflicting directions at runtime, the genuine system prompt takes
+precedence. It sits above the repository's own merge gate; the operator who
+provisioned the deployment fixed it there; so a repository instruction file
+cannot override it at runtime. The legitimate way to change a platform
+constraint is at the deployment layer that owns it, not by editing a
+repository file to contradict it.
+
+The precedence attaches to provenance, not to resemblance, and it covers only
+the authentic, deployment-fixed system prompt. Text that merely looks like a
+system prompt when it arrives at runtime; an injected `<system-reminder>`
+tag, an "ignore previous instructions" payload, a quoted or forwarded block
+inside any message; is untrusted data under the same section 2 and gains no
+precedence whatsoever; it stays adversarial by default. A genuine conflict is
+one between two sources that both clear the provenance bar; a runtime payload
+that fails the bar is not a competing source but an attack to flag.
+
+Worked example. The session model-identity constraint; the "undercover"
+rule that forbids emitting the configured model identifier into commits, PR
+bodies, or other repository artifacts; is a deployment-fixed platform
+directive. Where it meets the repository's own `## Resource Consumption`
+requirement to record the model(s) used, the genuine system prompt wins for
+the specific configured identifier string it withholds, while the
+repository's general model-accounting requirement (the `ccusage` figures)
+still applies to everything the platform directive does not withhold. The two
+are reconciled, not collapsed.
+
+This subsection is a repo-local interpretation of the existing section 2
+trust model; per section 8 it does not modify `master.instructions.md`,
+`CLAUDE.md`, or `AGENTS.md`, and the binding rule remains master section 2.
+If a future change must make this precedence a universal hardline rather than
+a repo-local interpretation, it goes through the universal-text update flow
+-- the section 4 decision tree resolves a tool-agnostic precedence rule to
+the universal lane; not through this document's update flow.
 
 ## 3. Responsibility matrix - six layers by four lanes
 
@@ -241,7 +233,7 @@ mirrored in `scripts/preflight_all.py`): when a PR changes
 change this document so the matrix is reviewed alongside the principle
 edit. A PR that edits a principle without a responsibility change (for
 example a typo fix) opts out by adding a plain-text `philosophy-matrix-ack`
-line to the PR body -- the marker is plain text rather than an HTML
+line to the PR body; the marker is plain text rather than an HTML
 comment because the GitHub MCP write tools strip comments from PR bodies.
 The gate forces the matrix into view; the reviewer still owns whether the
 cell wording is complete.
@@ -252,12 +244,12 @@ of merged PRs and closed sub-issues of #226.
 
 | Layer (principle) | Universal text owns | Harness owns | Repo-local doc owns | Project-local owns | Boundary risk |
 |---|---|---|---|---|---|
-| P1 - goal and plan structure | Plan-mode trigger; document weight rule; verification design in the plan | `scripts/plan_language_context.py` (SessionStart hook); `tests/test_plan_language_context.py` | `docs/standards/issue-pr-body-standard.md` (body shape encodes the plan); `docs/standards/performance-metrics.md` (measurement is a verification artifact) | The consumer's plan-mode trigger discipline | Mixing plan-language responsibility with GitHub-post ASCII enforcement in one rule (corrected by [#227](https://github.com/tvna/claude-md/issues/227)) |
-| P2 - input and pre-code reasoning | Untrusted-data treatment of external text (including quoted/forwarded content in any channel); runtime no-override of trusted instruction sources anchored in governance-gated provenance; fact-vs-speculation tagging; assumption enumeration; primary-source grounding of claims about external tool/library/API/platform behavior and live state | `scripts/body_policy.py`, `scripts/title_policy.py`, `scripts/pr_body_close_keyword_gate.py` (structural shape of external-authored bodies); `scripts/scan_non_ascii.py` (advisory drift detector); `scripts/sanitize_history.py` (historical-text cleansing) | `docs/runbooks/downstream-instruction-review-checklist.md` (reviewer-facing untrusted-text checklist); `docs/prd/non-ascii-defense.md` (Layer 1-3 defense narrative; the client-side preflight section is the P2-owned policy rationale — why non-ASCII in write calls is an untrusted-input concern; the enforcement hook is owned by P3); `docs/standards/issue-pr-body-standard.md` (Facts / Assumptions sections); `docs/runbooks/issue-triage.md` (label-driven routing) | The consumer's own incoming-text and ambiguity policy | Treating external text as authority, or letting speculation slip into universal text disguised as a fact (PR #225) |
-| P3 - delivery harness around the code | Issue-first; ASCII discipline; declarative module management; auto-subscribe to PR activity; retrospective auto-open for recursive self-improvement; classify each repair | `scripts/issue_link.py`, `body_policy.py`, `title_policy.py`, `pr_body_close_keyword_gate.py`, `auto_retro.py`, `scan_non_ascii.py`, `preflight_non_ascii.py`, `branch_cleanup.py`, `rulesets_apply.py`, `ruleset_drift.py`, `labels_apply.py`, `dependabot_automerge.py`, `dependabot_labels.py`, `threat_intel_triage.py`, `uv_pin.py`, `scan_apm_portability.py`, `gate_mcp_github_uncovered.py`, `gate_gh_cli.py`, `github_api.py`; 16 paired workflows; 21 paired tests | `docs/standards/issue-pr-body-standard.md`, `docs/runbooks/issue-triage.md`, `docs/prd/non-ascii-defense.md`, `docs/runbooks/rulesets.md`, `docs/runbooks/branch-cleanup.md`, `docs/runbooks/dependabot-automerge.md`, `docs/standards/remote-environment.md`, `docs/standards/repo-scope.md`, `docs/prd/security-control-inventory.md`, `docs/archive/retrospective-pr-*.md` | The consumer's own CI provider, issue tracker, and dependency manager | Naming a specific tool (gh CLI, GitHub Actions, dependabot) inside universal text; embedding a specific PR number as an example |
-| P4 - safety boundary | Minimum code; simpler-path proposal; safety-bounded simplicity; defense-in-depth preservation; destructive-operation safeguards; tool-scope confinement; external-disclosure and secret-log prevention; full-lifecycle secret handling across the trust boundary (ingress reads and egress emission) with the safety enumerations treated as non-exhaustive instances; fail-loud over silent default; debug instrumentation as attack surface; minimalism scoped to the build surface, not safety-control coverage | `.github/CODEOWNERS` (repo-scope binding for MCP/agent tools); `.github/workflows/*.yml` `permissions:` declarations (least-privilege per workflow); `scripts/scan_apm_portability.py` (forbids naming repo-local tools in universal text); `(lint and type gates exist in workflow-script-quality.md M8; behavioral check is reviewer judgment)` | `docs/standards/workflow-script-quality.md` (M1 to M9 must-have checklist; O1 to O7 optional enhancements); `docs/standards/repo-scope.md` (allowed-repository policy and runbook); `docs/runbooks/workflow-permissions-audit.md` (per-workflow permission matrix); `docs/prd/security-control-inventory.md` (visualization of the harness coverage); `docs/prd/privileged-operation-runbooks.md` (escalation paths) | The consumer's own language ecosystem, code style, credential manager, external-endpoint policy, and per-agent tool inventory | Embedding a stack-specific example or a concrete tool endpoint inside universal text; widening a least-privilege workflow `permissions:` block for a one-off debug |
-| P5 - quality enables scale | The measurable proposition that quality stays proportional to the scope and scale of change, observed over time; narrow change surface; cleanup limited to artifacts made obsolete by the active change | `metrics/duckdb/schema/v1/schema.sql`, `metrics/duckdb/schema/v2/schema.sql`, `metrics/duckdb/init.sh` (the host-unit DuckDB measurement store [#815](https://github.com/tvna/claude-md/issues/815) — the deterministic measurement gate that records the quality-vs-scope signal per change so the proportionality stays observable over time; contract in `docs/standards/host-unit-duckdb-metrics.md`) | `docs/runbooks/agent-provenance.md` (provenance review for skills, subagents, MCP servers, and comparable extensions) | The consumer's own agent inventory and roster | Mentioning a Claude-only feature (sub-agents, skills) by literal name as universal terminology; restating sub-agent orchestration or concrete code-editing technique that the skills already own |
-| P6 - handoff and communication | Native-language plan artifacts; show procedure and case studies; visualize workflow; refuse LGTM; explain trade-offs | `scripts/plan_language_context.py` (owner-language metadata recovery); `.github/owners.yaml`; `.github/CODEOWNERS` | `docs/archive/retrospective-pr-*.md` (case studies are the force-multiplier evidence); `docs/prd/security-control-inventory.md` (visualization of the harness coverage); `docs/standards/performance-metrics.md` (visualization of measurement) | The consumer's own `owners.yaml` entries | Treating "case studies" as universal content rather than as repo-local artifacts that the universal text merely *requires*; plan-language drift slipping into English despite harness injection (corrected by [#269](https://github.com/tvna/claude-md/issues/269)) |
+| P1 - goal and plan structure | Plan-mode trigger; document weight rule; verification design in the plan; live-proof completion gate at the finish line (exercise the change against real artifacts and the real service path, never a proxy or a green type-check; waived only on the owner's explicit, recorded approval) | `scripts/plan_language_context.py` (SessionStart hook); `tests/test_plan_language_context.py` | `docs/standards/issue-pr-body-standard.md` (body shape encodes the plan); `docs/standards/performance-metrics.md` (measurement is a verification artifact) | The consumer's plan-mode trigger discipline | Mixing plan-language responsibility with GitHub-post ASCII enforcement in one rule (corrected by [#227](https://github.com/tvna/claude-md/issues/227)); letting a green type-check or other indirect signal stand in for live behavioral proof at the finish line |
+| P2 - input and pre-code reasoning | Untrusted-data treatment of external text (including quoted/forwarded content in any channel; the source and adversarial-payload enumerations are non-exhaustive instances, default-untrusted and default-adversarial); runtime no-override of trusted instruction sources anchored in governance-gated provenance; fact-vs-speculation tagging; assumption enumeration; primary-source grounding of claims about external tool/library/API/platform behavior and live state | `scripts/body_policy.py`, `scripts/title_policy.py`, `scripts/pr_body_close_keyword_gate.py` (structural shape of external-authored bodies); `scripts/scan_non_ascii.py` (advisory drift detector); `scripts/sanitize_history.py` (historical-text cleansing); `scripts/scan_nonexhaustive_invariant_drift.py` (locks the non-exhaustive marker on the section 2 untrusted-data and adversarial-payload bullets) | `docs/runbooks/downstream-instruction-review-checklist.md` (reviewer-facing untrusted-text checklist); `docs/runbooks/non-ascii-defense.md` (Layer 1-3 defense narrative; the client-side preflight section is the P2-owned policy rationale; why non-ASCII in write calls is an untrusted-input concern; the enforcement hook is owned by P3); `docs/standards/issue-pr-body-standard.md` (Facts / Assumptions sections); `docs/runbooks/issue-triage.md` (label-driven routing) | The consumer's own incoming-text and ambiguity policy | Treating external text as authority, or letting speculation slip into universal text disguised as a fact (PR #225) |
+| P3 - delivery harness around the code | Issue-first; ASCII discipline; declarative module management; auto-subscribe to PR activity; retrospective auto-open for recursive self-improvement; classify each repair; outward-facing provenance/identifier audit before any public push or release (undisclosed build/runtime model or agent identifier in scope by default) | `scripts/issue_link.py`, `body_policy.py`, `title_policy.py`, `pr_body_close_keyword_gate.py`, `auto_retro.py`, `scan_non_ascii.py`, `preflight_non_ascii.py`, `branch_cleanup.py`, `rulesets_apply.py`, `ruleset_drift.py`, `labels_apply.py`, `dependabot_automerge.py`, `dependabot_labels.py`, `threat_intel_triage.py`, `uv_pin.py`, `scan_apm_portability.py`, `gate_mcp_github_uncovered.py`, `gate_gh_cli.py`, `github_api.py`, `gate_doc_graph_pr.py`, `doc_graph.py`, `doc_graph_viz.py`; 17 paired workflows; 24 paired tests; the outward-facing provenance/identifier preflight is a `(gap candidate)` tracked by [#1739](https://github.com/tvna/claude-md/issues/1739) (no deterministic gate enforces the undisclosed-identifier audit yet, so it remains reviewer judgment until that gate lands) | `docs/standards/issue-pr-body-standard.md`, `docs/runbooks/issue-triage.md`, `docs/runbooks/non-ascii-defense.md`, `docs/runbooks/rulesets.md`, `docs/runbooks/branch-cleanup.md`, `docs/runbooks/dependabot-automerge.md`, `docs/standards/remote-environment.md`, `docs/standards/repo-scope.md`, `docs/prd/security-control-inventory.md`, `docs/archive/retrospective-pr-*.md`, `docs/runbooks/doc-dependency-graph.md`, `docs/graph/doc-dependencies.toml` | The consumer's own CI provider, issue tracker, and dependency manager | Naming a specific tool (gh CLI, GitHub Actions, dependabot) inside universal text; embedding a specific PR number as an example; an undisclosed build/runtime model or agent identifier leaking into a public artifact because the audit lived only in reviewer memory |
+| P4 - safety boundary | Minimum code; simpler-path proposal; safety-bounded simplicity; defense-in-depth preservation; destructive-operation safeguards generalized to a reversibility/outward-facing invariant; tool-scope confinement; external-disclosure and secret-log prevention; full-lifecycle secret handling across the trust boundary (ingress reads and egress emission) with the safety enumerations treated as non-exhaustive instances; fail-loud over silent default; debug instrumentation as attack surface; minimalism scoped to the build surface, not safety-control coverage | `.github/CODEOWNERS` (repo-scope binding for MCP/agent tools); `.github/workflows/*.yml` `permissions:` declarations (least-privilege per workflow); `scripts/scan_apm_portability.py` (forbids naming repo-local tools in universal text); `scripts/scan_nonexhaustive_invariant_drift.py` (locks the non-exhaustive marker on the section 4 destructive-operation and secret-lifecycle bullets); `(lint and type gates exist in workflow-script-quality.md M8; behavioral check is reviewer judgment)` | `docs/standards/workflow-script-quality.md` (M1 to M9 must-have checklist; O1 to O7 optional enhancements); `docs/standards/repo-scope.md` (allowed-repository policy and runbook); `docs/runbooks/workflow-permissions-audit.md` (per-workflow permission matrix); `docs/prd/security-control-inventory.md` (visualization of the harness coverage); `docs/runbooks/privileged-operation-runbooks.md` (escalation paths) | The consumer's own language ecosystem, code style, credential manager, external-endpoint policy, and per-agent tool inventory | Embedding a stack-specific example or a concrete tool endpoint inside universal text; widening a least-privilege workflow `permissions:` block for a one-off debug |
+| P5 - quality enables scale | The measurable proposition that quality stays proportional to the scope and scale of change, observed over time; narrow change surface; cleanup limited to artifacts made obsolete by the active change | `metrics/duckdb/schema/v1/schema.sql`, `metrics/duckdb/schema/v2/schema.sql`, `metrics/duckdb/init.sh` (the host-unit DuckDB measurement store [#815](https://github.com/tvna/claude-md/issues/815); the deterministic measurement gate that records the quality-vs-scope signal per change so the proportionality stays observable over time; contract in `docs/standards/host-unit-duckdb-metrics.md`) | `docs/runbooks/agent-provenance.md` (provenance review for skills, subagents, MCP servers, and comparable extensions) | The consumer's own agent inventory and roster | Mentioning a Claude-only feature (sub-agents, skills) by literal name as universal terminology; restating sub-agent orchestration or concrete code-editing technique that the skills already own |
+| P6 - handoff and communication | Native-language plan artifacts; show procedure and case studies; visualize workflow; decision-ready handoff (investigate, implement, test, and prove candidate outcomes so the human chooses among prepared, reversible options, never a raw problem); owner decision-brief carrying its own evidence (full canonical URLs, a plain-language explanation, the proof, the trade-offs, and a recommended option among concrete named choices); refuse LGTM; explain trade-offs | `scripts/plan_language_context.py` (owner-language metadata recovery); `.github/owners.yaml`; `.github/CODEOWNERS` | `docs/archive/retrospective-pr-*.md` (case studies are the force-multiplier evidence); `docs/prd/security-control-inventory.md` (visualization of the harness coverage); `docs/standards/performance-metrics.md` (visualization of measurement) | The consumer's own `owners.yaml` entries | Treating "case studies" as universal content rather than as repo-local artifacts that the universal text merely *requires*; plan-language drift slipping into English despite harness injection (corrected by [#269](https://github.com/tvna/claude-md/issues/269)); handing a human a raw, un-investigated decision instead of prepared reversible options, or a decision brief that cites bare repo-local numbers instead of full canonical URLs |
 
 Empty cells marked `(none ...)` are intentional: the layer's concern
 is not enforceable by a script today. Cells marked `(gap candidate)`
@@ -368,7 +360,7 @@ Replayed in [`docs/archive/decision-tree-replay.md`](../archive/decision-tree-re
 work is a single GitHub UI-only edit ... perform that edit directly
 instead of opening a sub-issue." directly under the section 3
 hardline "Open a GitHub issue before any branch, commit, or PR; cite
-its number in every commit and PR. No exceptions -- typos, docs,
+its number in every commit and PR. No exceptions; typos, docs,
 hotfixes included." The added clause is logically already covered by
 the existing rule's "any branch, commit, or PR" scope, but its
 in-line placement next to "No exceptions" softens the hardness
@@ -435,7 +427,7 @@ replacement framework is:
 
 **Decision tree trace.**
 
-- Q1: Tool-agnostic? No -- `gh` CLI and `mcp__github__` name vendor products.
+- Q1: Tool-agnostic? No; `gh` CLI and `mcp__github__` name vendor products.
 - **Lane: repo-local doc (demoted from universal text)**. The abstract form
   ("use platform-integrated tool calls with PreToolUse hooks; use the approved
   REST API wrapper for reads") lives in universal text. The concrete `gh`/MCP
@@ -568,6 +560,10 @@ no repo-specific implementation:
   executable contract, not a prose promise: a check that goes red on
   the recorded repair and green once the fix lands, born as a new
   `scripts/` gate or test (the primary lane the 6.4 table routes to).
+  When the gate protects an invariant a refactor establishes (a single
+  source of truth or "only here" rule), master section 3 obliges
+  shipping it in that same change, so the contract is born at build
+  time rather than rediscovered as a post-merge retro finding.
 - **Selection** - a new gate enters advisory (`continue-on-error`) and
   is promoted to a required status check (`.github/rulesets/`) only
   after it earns a low false-positive rate across successive merges,
@@ -707,7 +703,7 @@ catch reproducible.
 The section 4 decision tree is a necessary but not sufficient gate
 for the universal-text lane. A diff that resolves to universal text
 through Q1 to Q4 can still dilute the hardness contour of an
-existing rule -- the shape of its enforcement edge expressed by
+existing rule; the shape of its enforcement edge expressed by
 hardline phrasings such as "No exceptions" or "every commit and
 PR". Reviewers apply the three anti-pattern questions below in
 addition to (not in place of) the decision tree. If any one fires
@@ -797,7 +793,7 @@ boundary risk):
 2. Open a single PR that edits only this document and, if the
    addition requires it, the cross-link headers in
    `docs/standards/repo-scope.md`, `docs/prd/security-control-inventory.md`,
-   `docs/standards/issue-pr-body-standard.md`, `docs/prd/non-ascii-defense.md`,
+   `docs/standards/issue-pr-body-standard.md`, `docs/runbooks/non-ascii-defense.md`,
    and `docs/standards/workflow-script-quality.md`.
 3. Re-run the validation strategy in section 8. The replay table in
    `docs/archive/decision-tree-replay.md` must remain at 100 percent
@@ -848,7 +844,7 @@ flow, not this update flow.
   precedent; harness-lane coverage source.
 - `docs/standards/issue-pr-body-standard.md` - body shape standard; carries
   the Facts / Assumptions discipline from P2.
-- `docs/prd/non-ascii-defense.md` - the three-layer ASCII discipline
+- `docs/runbooks/non-ascii-defense.md` - the three-layer ASCII discipline
   enforced by the harness for P3 GitHub posts.
 - `docs/standards/workflow-script-quality.md` - the must-have checklist for
   harness scripts; the closest thing this repo has to a P4 quality

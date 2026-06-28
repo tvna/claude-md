@@ -2,31 +2,35 @@
 """Collect threat intelligence and classify repository response needs.
 
 The primary rule collects external intelligence from OSV.dev and CISA KEV,
-correlates it with this repository's locked dependencies, and decides
-whether to add:
+correlates it with this repository's locked dependencies, and classifies
+the repository-global response need:
 
-* ``threat:intel-needed`` -- collect threat intelligence before routing.
-* ``threat:response-needed`` -- security response is required; do not
-  create an autonomous fix without investigation.
+* ``intel_needed``; external intelligence matched a locked dependency.
+* ``response_needed``; confirmed exploitation (CISA KEV) or malware
+  evidence; do not create an autonomous fix without investigation.
 
-The older metadata classifier remains as a helper for issue/PR text, but the
-workflow uses ``scan`` so triage is driven by external sources.
+Findings are repository-global (``discover_dependencies`` walks the tree,
+not a single issue/PR), so they are recorded as one aggregated, idempotent
+comment on the security tracking issue rather than stamped onto whatever
+item triggered a run; the per-item ``threat:*`` labelling was retired in
+#1645 (consolidate into the #178 umbrella). The metadata classifier
+(``classify``) remains as a helper for issue/PR text.
 
 Contract:
 - Inputs: the ``scan`` subcommand (locked dependencies under
   ``--repo-root``, external OSV.dev and CISA KEV feeds, optional NVD/EPSS/
   GHSA enrichment via ``GH_TOKEN`` / ``GITHUB_TOKEN``, fixture overrides
-  ``--osv-file`` / ``--kev-file``, ``--summary-file``) and the ``classify``
-  subcommand (``--title`` / ``$TITLE``, ``--body`` / ``--body-file``,
-  ``--labels`` / ``$LABELS``); ``REPO`` and ``NUMBER`` for label writes.
-- Outputs: ``threat:*`` labels applied via the GitHub API, a Markdown
-  step summary, an idempotent marker-anchored triage evidence comment on
-  the issue/PR (the ``comment`` subcommand, so the correlation table is
-  co-located with the label per CLAUDE.md section 6), and ``::error::``
-  annotations on stderr; exit 0 on success, exit 1 on missing env or an
-  API failure.
+  ``--osv-file`` / ``--kev-file``, ``--summary-file`` / ``--comment-file``)
+  and the ``classify`` subcommand (``--title`` / ``$TITLE``, ``--body`` /
+  ``--body-file``, ``--labels`` / ``$LABELS``); ``REPO`` plus ``--issue``
+  (or ``$NUMBER``) and ``GH_TOKEN`` for the aggregated ``comment`` write.
+- Outputs: a Markdown step summary, GitHub Actions outputs, and; via the
+  ``comment`` subcommand; an idempotent marker-anchored aggregated
+  comment on the security tracking issue (the correlation table co-located
+  with the umbrella per CLAUDE.md section 6); ``::error::`` annotations on
+  stderr; exit 0 on success, exit 1 on missing env or an API failure.
 - Failure policy: fails loud per CLAUDE.md section 4 (gate: a missing
-  token/repo/number or an API error exits non-zero).
+  token/repo/issue number or an API error exits non-zero).
 """
 
 from __future__ import annotations
@@ -46,10 +50,7 @@ from datetime import date
 from pathlib import Path
 from typing import Any, NamedTuple
 
-INTEL_LABEL = "threat:intel-needed"
-RESPONSE_LABEL = "threat:response-needed"
 SECURITY_LABEL = "severity:security"
-THREAT_LABELS = {INTEL_LABEL, RESPONSE_LABEL}
 OSV_QUERYBATCH_URL = "https://api.osv.dev/v1/querybatch"
 OSV_QUERY_URL = "https://api.osv.dev/v1/query"
 OSV_VULN_URL = "https://api.osv.dev/v1/vulns/{id}"
@@ -78,10 +79,10 @@ SCRIPTS_SUBDIR = "scripts"
 # Checked-in accepted-intel suppression allowlist (#1277). Each entry is a
 # reviewed waiver keyed on (ecosystem, name, vuln_id) with a mandatory
 # reason and an ISO ``review_by`` expiry. An *unexpired* entry stops a
-# non-response finding from flipping ``threat:intel-needed``; an *expired*
-# entry re-surfaces the label (fail-loud per CLAUDE.md s4) instead of
+# non-response finding from flipping ``intel_needed`` true; an *expired*
+# entry re-surfaces it (fail-loud per CLAUDE.md s4) instead of
 # silently persisting. Suppressions never apply to known-exploited or
-# malware findings -- those always escalate. Resolved relative to
+# malware findings; those always escalate. Resolved relative to
 # ``--repo-root`` so the scan auto-loads it without a CLI flag, mirroring
 # ``verify_security_control_floor`` reading its committed TOML.
 SUPPRESSIONS_RELPATH = ".github/threat-intel-suppressions.json"
@@ -121,7 +122,7 @@ class NvdEnrichment(NamedTuple):
 
     NVD is consulted only for CVEs already surfaced by OSV/GHSA. Missing
     or malformed enrichment is silently ignored so the underlying finding
-    is never suppressed -- "no NVD data" is not evidence that the
+    is never suppressed; "no NVD data" is not evidence that the
     vulnerability is not relevant.
     """
 
@@ -148,7 +149,7 @@ class Finding(NamedTuple):
     # authoritative known-exploitation signal.
     epss_score: float | None = None
     epss_percentile: float | None = None
-    # NVD CVE enrichment (#174). Supplemental only -- empty tuple means
+    # NVD CVE enrichment (#174). Supplemental only; empty tuple means
     # "no NVD enrichment available", not "vulnerability not relevant".
     nvd_metadata: tuple[NvdEnrichment, ...] = ()
 
@@ -157,7 +158,7 @@ class Suppression(NamedTuple):
     """A reviewed accepted-intel waiver loaded from the checked-in allowlist (#1277).
 
     ``review_by`` is the expiry: on or after this date the waiver no longer
-    suppresses, so the finding re-surfaces ``threat:intel-needed``. ``reason``
+    suppresses, so the finding re-surfaces ``intel_needed`` true. ``reason``
     is mandatory so the record explains itself to a later reviewer.
     """
 
@@ -212,17 +213,21 @@ def discover_dependencies(repo_root: Path) -> list[Dependency]:
 
     Surfaces scanned (#176):
 
-    * ``uv.lock`` -- PyPI transitive lock.
-    * ``pyproject.toml`` -- exact PyPI pins from ``project.dependencies``
+    * ``uv.lock``; PyPI transitive lock.
+    * ``pyproject.toml``; exact PyPI pins from ``project.dependencies``
       and ``dependency-groups``.
-    * ``.github/workflows/**/*.{yml,yaml}`` -- GitHub Actions ``uses:``
+    * ``.github/workflows/**/*.{yml,yaml}``; GitHub Actions ``uses:``
       references. SHA-pinned actions take the tag from the trailing
       ``# <tag>`` comment so OSV correlates against the released version
       rather than the opaque commit SHA.
     * ``.github/workflows/**/*.{yml,yaml}`` and ``scripts/**/*.{sh,py}``
-      -- transient PyPI pins inside ``uv run --with pkg==version``
+     ; transient PyPI pins inside ``uv run --with pkg==version``
       invocations. Non-executable docs prose is intentionally excluded
       so README / runbook examples cannot create noisy findings.
+    * ``.github/workflows/**/*.{yml,yaml}``; digest-pinned container
+      images declared via ``# threat-intel-pin: <ecosystem> <name>
+      <version>`` comments (#1276). Keeps a ``run:``-step image (which
+      carries no ``uses:`` action ref) on the OSV correlation surface.
     """
     by_key: dict[tuple[str, str, str], Dependency] = {}
     for dep in parse_uv_lock(repo_root / "uv.lock"):
@@ -232,6 +237,8 @@ def discover_dependencies(repo_root: Path) -> list[Dependency]:
     for dep in parse_workflow_actions(repo_root):
         by_key.setdefault((dep.ecosystem, dep.name, dep.version), dep)
     for dep in parse_transient_uv_run(repo_root):
+        by_key.setdefault((dep.ecosystem, dep.name, dep.version), dep)
+    for dep in parse_workflow_pinned_images(repo_root):
         by_key.setdefault((dep.ecosystem, dep.name, dep.version), dep)
     return sorted(by_key.values(), key=lambda dep: (dep.ecosystem, dep.name, dep.version))
 
@@ -294,7 +301,7 @@ def parse_exact_python_requirement(requirement: str) -> tuple[str, str] | None:
 # whitespace, ``#``, or end-of-line) and optionally the trailing
 # ``# <tag>`` comment used by SHA-pinned references. Tolerates the YAML
 # list-dash prefix and arbitrary leading whitespace. Mirrors the parsing
-# contract enforced by ``scripts/scan_workflow_action_pins.py`` -- the
+# contract enforced by ``scripts/scan_workflow_action_pins.py``; the
 # two scripts intentionally diverge on intent (this one ingests refs
 # into the threat-intel pipeline; the other is a deterministic
 # SHA-pin gate).
@@ -341,7 +348,7 @@ def parse_workflow_actions(repo_root: Path) -> list[Dependency]:
       version from the trailing ``# <tag>`` comment when present so
       OSV correlates against the released version rather than the
       opaque commit SHA. When the comment is missing, the SHA itself
-      is used as a last-resort version string -- this keeps the
+      is used as a last-resort version string; this keeps the
       surface complete even when ``scan_workflow_action_pins`` has not
       yet been satisfied.
     """
@@ -383,6 +390,76 @@ def _extract_workflow_actions(path: Path) -> list[Dependency]:
     return deps
 
 
+# Structured threat-intel pin comment for a digest-pinned container image
+# referenced inside a ``run:`` step rather than a ``uses:`` action. The
+# action-pin scanners above never see such an image (it is not a ``uses:``
+# ref), and digest pinning for OCI images is deliberately out of the
+# SHA-pin gate's scope, so without this companion comment the image would
+# carry no OSV correlation surface at all. Format, on its own comment line
+# in a workflow file::
+#
+#     # threat-intel-pin: <ecosystem> <name> <version>
+#
+# e.g. ``# threat-intel-pin: Go github.com/aquasecurity/trivy 0.70.0``.
+# The image runtime is pinned by ``@sha256:<digest>`` for byte-exact
+# supply-chain integrity (#1276); this line re-attaches the OSV surface
+# the ``trivy-action`` ``uses:`` ref used to provide. The operator declares
+# the OSV coordinates explicitly so this module makes no guessed ecosystem
+# mapping (CLAUDE.md s2). Keep the version in lockstep with the digest on
+# every bump (see docs/runbooks/compromised-action-response.md).
+#
+# The leading ``^\s*`` anchors the match to the start of a line (#1511):
+# the parser scans each line with ``.search()``, so without the anchor a
+# *prose* mention of the token inside a backtick-quoted phrase elsewhere on
+# a comment line (e.g. "the ``# threat-intel-pin:`` line in ..." at
+# publish-devcontainer-images.yml) matched mid-line and produced a garbage
+# ``Dependency`` whose coordinates OSV querybatch rejected with HTTP 400.
+# Anchoring forces a line that *is* a pin comment, so only the real pin
+# declared on its own line is ingested.
+_THREAT_INTEL_PIN = re.compile(
+    r"^\s*#\s*threat-intel-pin:\s*"
+    r"(?P<ecosystem>\S+)\s+(?P<name>\S+)\s+(?P<version>\S+)\s*$"
+)
+
+
+def parse_workflow_pinned_images(repo_root: Path) -> list[Dependency]:
+    """Return container-image deps declared via ``# threat-intel-pin:`` comments.
+
+    Walks ``.github/workflows/**/*.{yml,yaml}`` under *repo_root* and turns
+    every ``# threat-intel-pin: <ecosystem> <name> <version>`` comment into a
+    :class:`Dependency` keyed on the operator-declared ecosystem. This is the
+    coverage-preserving counterpart to digest-pinning an image inside a
+    ``run:`` step (#1276): the digest gives byte-exact integrity while the
+    pin comment keeps the image on the OSV correlation surface, since
+    :func:`parse_workflow_actions` only matches ``uses:`` action refs.
+
+    Unlike the action parser, comment lines are *not* skipped here; the pin
+    intentionally lives in a comment so it never affects workflow execution.
+    """
+    workflow_dir = repo_root / WORKFLOW_SUBDIR
+    if not workflow_dir.is_dir():
+        return []
+    deps: list[Dependency] = []
+    for path in sorted(workflow_dir.rglob("*")):
+        if not path.is_file() or path.suffix not in (".yml", ".yaml"):
+            continue
+        text = path.read_text(encoding="utf-8", errors="ignore")
+        source = str(path)
+        for line in text.splitlines():
+            match = _THREAT_INTEL_PIN.search(line)
+            if match is None:
+                continue
+            deps.append(
+                Dependency(
+                    name=match.group("name"),
+                    version=match.group("version"),
+                    ecosystem=match.group("ecosystem"),
+                    source=source,
+                )
+            )
+    return deps
+
+
 def _parse_action_reference(
     ref: str, tag_comment: str | None
 ) -> tuple[str, str] | None:
@@ -404,7 +481,7 @@ def _parse_action_reference(
 def parse_transient_uv_run(repo_root: Path) -> list[Dependency]:
     """Return PyPI dependencies pinned through ``uv run --with pkg==ver``.
 
-    Scans executable inputs only -- ``.github/workflows/**/*.{yml,yaml}``
+    Scans executable inputs only; ``.github/workflows/**/*.{yml,yaml}``
     and ``scripts/**/*.{sh,py}``. Markdown prose under ``docs/`` (and
     elsewhere) is intentionally excluded so a README or runbook example
     cannot create noisy findings (per #176 completion check).
@@ -497,7 +574,27 @@ def fetch_external_findings(
     if not dependencies:
         return []
 
-    osv_batch = load_json(osv_file) if osv_file is not None else query_osv_batch(dependencies)
+    if osv_file is not None:
+        osv_batch = load_json(osv_file)
+    else:
+        # Defense in depth (#1519): validate coordinates offline before the
+        # network call so a parser false-match (#1511) fails loud naming the
+        # source file, instead of OSV rejecting the whole batch with HTTP 400
+        # and hiding every finding. The HTTP 400 handler in query_osv_batch
+        # remains the backstop for coordinates that pass this check yet OSV
+        # still refuses.
+        malformed = validate_osv_coordinates(dependencies)
+        if malformed:
+            coords = "; ".join(
+                f"{dep.ecosystem}:{dep.name}@{dep.version} (from {dep.source}); {reason}"
+                for dep, reason in malformed
+            )
+            raise ValueError(
+                "Refusing to submit malformed OSV coordinates to querybatch "
+                "(offline pre-check); fix the source so the parser yields a "
+                f"valid ecosystem/name/version. Malformed: {coords}"
+            )
+        osv_batch = query_osv_batch(dependencies)
     kev_catalog = load_json(kev_file) if kev_file is not None else fetch_cisa_kev()
     kev_cves = parse_kev_cves(kev_catalog)
 
@@ -556,6 +653,71 @@ def fetch_external_findings(
     return sorted(merged, key=lambda f: (f.dependency.name, f.vuln_id))
 
 
+# Authoritative OSV ecosystem identifiers; the canonical base name before
+# any colon-suffixed release (e.g. "Debian" from "Debian:11"); sourced from
+# the OSV schema "Defined Ecosystems" list (ossf/osv-schema docs/schema.md). A
+# discovered coordinate whose ecosystem falls outside this set cannot be a real
+# dependency: the parsers emit a fixed constant (``PyPI`` / ``GitHub Actions``)
+# or an operator-declared OSV ecosystem on a ``# threat-intel-pin:`` line, so a
+# junk value such as ``"`"`` produced by a parser false-match (#1511) is
+# malformed by definition. Treated as a checked-in mirror of the OSV contract,
+# not a live fetch: adding a new ecosystem to a pin is a deliberate one-line
+# review here, and the real-repo validation test (#1519) fails loud if a
+# legitimate ecosystem is ever missing.
+_KNOWN_OSV_ECOSYSTEMS = frozenset({
+    "AlmaLinux", "Alpaquita", "Alpine", "Android", "Azure Linux",
+    "BellSoft Hardened Containers", "Bioconductor", "Bitnami", "Chainguard",
+    "CleanStart", "ConanCenter", "CRAN", "crates.io", "Debian",
+    "Docker Hardened Images", "Echo", "FreeBSD", "GHC", "GitHub Actions",
+    "Go", "Hackage", "Hex", "Julia", "Kubernetes", "Linux", "Mageia",
+    "Maven", "MinimOS", "npm", "NuGet", "opam", "openEuler", "openSUSE",
+    "OSS-Fuzz", "Packagist", "Photon OS", "Pub", "PyPI", "Red Hat",
+    "Rocky Linux", "Root", "RubyGems", "SUSE", "SwiftURL", "TuxCare",
+    "Ubuntu", "VSCode", "Wolfi",
+})
+
+# A well-formed OSV ``name`` / ``version`` carries no whitespace, control, or
+# backtick characters. The #1511 prose false-match yielded exactly such junk
+# (name="line", version="in" alongside an ecosystem of "`").
+_COORD_FIELD_BAD_CHARS = re.compile(r"[\s`\x00-\x1f\x7f]")
+
+
+def _ecosystem_base(ecosystem: str) -> str:
+    """Return the ecosystem name without an OSV ``:<release>`` suffix."""
+    return ecosystem.split(":", 1)[0]
+
+
+def _coord_field_malformed(value: str) -> bool:
+    """Return True when an OSV name/version field is empty or carries junk."""
+    return value == "" or bool(_COORD_FIELD_BAD_CHARS.search(value))
+
+
+def validate_osv_coordinates(
+    dependencies: list[Dependency],
+) -> list[tuple[Dependency, str]]:
+    """Return ``(dependency, reason)`` for each malformed OSV coordinate.
+
+    Offline pre-check that mirrors OSV querybatch's input contract: it catches
+    the #1511 class (a parser false-match yielding e.g. ecosystem='`',
+    name='line', version='in') BEFORE any network call, naming ``dep.source``,
+    instead of relying on OSV to reject the whole batch with HTTP 400; which
+    fails the entire scan and hides every finding (CLAUDE.md s4: fail loud, and
+    do so as early and as precisely as possible). An empty list means every
+    coordinate is well-formed. Pure and offline so it is safe to run on PR-head
+    code in a ``pull_request`` gate; see
+    docs/prd/offline-prehead-validation-gates.md.
+    """
+    malformed: list[tuple[Dependency, str]] = []
+    for dep in dependencies:
+        if _ecosystem_base(dep.ecosystem) not in _KNOWN_OSV_ECOSYSTEMS:
+            malformed.append((dep, f"unknown OSV ecosystem {dep.ecosystem!r}"))
+        elif _coord_field_malformed(dep.name):
+            malformed.append((dep, f"malformed package name {dep.name!r}"))
+        elif _coord_field_malformed(dep.version):
+            malformed.append((dep, f"malformed version {dep.version!r}"))
+    return malformed
+
+
 def query_osv_batch(dependencies: list[Dependency]) -> dict[str, object]:
     queries = [
         {
@@ -564,7 +726,27 @@ def query_osv_batch(dependencies: list[Dependency]) -> dict[str, object]:
         }
         for dep in dependencies
     ]
-    return request_json(OSV_QUERYBATCH_URL, payload={"queries": queries})
+    try:
+        return request_json(OSV_QUERYBATCH_URL, payload={"queries": queries})
+    except urllib.error.HTTPError as exc:
+        if exc.code == 400:
+            # OSV rejects the whole batch when any submitted coordinate is
+            # malformed (e.g. an invalid ecosystem or version produced by a
+            # parser false-match, #1511). Surface the submitted coordinates
+            # so the offending dependency is identifiable, rather than soft-
+            # failing to an empty result; hiding findings would mask real
+            # vulnerabilities (CLAUDE.md s4: fail loudly). Non-400 errors
+            # (rate limits, 5xx outages) propagate unchanged.
+            coords = ", ".join(
+                f"{dep.ecosystem}:{dep.name}@{dep.version} (from {dep.source})"
+                for dep in dependencies
+            )
+            raise ValueError(
+                "OSV querybatch rejected the request (HTTP 400); a submitted "
+                "dependency likely declares an invalid ecosystem or version. "
+                f"Submitted coordinates: {coords}"
+            ) from exc
+        raise
 
 
 def fetch_cisa_kev() -> dict[str, object]:
@@ -649,7 +831,7 @@ def fetch_epss_scores(
 
     EPSS lookups soft-fail: any transport, JSON, or parse error returns
     an empty dict so the OSV / GHSA / KEV pipeline keeps working. EPSS
-    is advisory-only per #173 -- the absence of scores must not block
+    is advisory-only per #173; the absence of scores must not block
     routing on confirmed exploitation evidence (KEV / malware).
     """
     if not cves:
@@ -855,7 +1037,7 @@ def fetch_ossf_malicious_packages(
     ``"malicious_packages"`` array of OSV-shaped records (each carrying
     ``id``, optional ``aliases``, and ``affected[].package.{ecosystem,name}``).
     Live mode queries ``api.osv.dev/v1/query`` per dependency with the
-    version field omitted and keeps only IDs prefixed ``MAL-`` -- this
+    version field omitted and keeps only IDs prefixed ``MAL-``; this
     is the OSSF malicious-packages syndication channel on OSV.dev and
     is the documented stable access path for the corpus.
 
@@ -1013,7 +1195,7 @@ def fetch_nvd_metadata(
     request per CVE.
 
     Missing, malformed, or transport-failed entries are silently skipped
-    per #174 -- absence of NVD enrichment is not evidence that the
+    per #174; absence of NVD enrichment is not evidence that the
     underlying OSV/GHSA finding is not relevant.
     """
     if not cve_ids:
@@ -1201,7 +1383,7 @@ def attach_nvd_to_findings(
 def load_suppressions(path: Path) -> list[Suppression]:
     """Return reviewed accepted-intel waivers parsed from *path* (#1277).
 
-    Fails loud (``ValueError``) on a malformed envelope or entry -- a missing
+    Fails loud (``ValueError``) on a malformed envelope or entry; a missing
     required field or a non-ISO ``review_by`` date is a defect that must stop
     the run, never be silently dropped (CLAUDE.md s4). Expiry is *not* a load
     error: an expired entry parses successfully and is re-surfaced downstream
@@ -1304,17 +1486,9 @@ def classify_findings(
     intel_needed = bool(active)
     response_needed = any(_finding_is_response_class(finding) for finding in findings)
 
-    recommended_labels, remove_labels = classify_label_changes(
-        labels,
-        intel_needed=intel_needed,
-        response_needed=response_needed,
-    )
-
     return {
         "intel_needed": intel_needed,
         "response_needed": response_needed,
-        "recommended_labels": recommended_labels,
-        "remove_labels": remove_labels,
         "finding_count": len(findings),
         "active_finding_count": len(active),
         "suppressed_count": suppressed_count,
@@ -1370,37 +1544,13 @@ def classify(title: str, body: str, labels: set[str]) -> dict[str, object]:
     intel_needed = security_labeled or bool(intel_matches) or bool(response_matches)
     response_needed = security_labeled or bool(response_matches)
 
-    recommended_labels, remove_labels = classify_label_changes(
-        labels,
-        intel_needed=intel_needed,
-        response_needed=response_needed,
-    )
-
     return {
         "intel_needed": intel_needed,
         "response_needed": response_needed,
-        "recommended_labels": recommended_labels,
-        "remove_labels": remove_labels,
         "matched_intel_indicators": intel_matches,
         "matched_response_indicators": response_matches,
         "security_labeled": security_labeled,
     }
-
-
-def classify_label_changes(
-    labels: set[str], *, intel_needed: bool, response_needed: bool
-) -> tuple[list[str], list[str]]:
-    wanted_labels: list[str] = []
-    if intel_needed:
-        wanted_labels.append(INTEL_LABEL)
-    if response_needed:
-        wanted_labels.append(RESPONSE_LABEL)
-    existing_threat_labels = labels & THREAT_LABELS
-    recommended_labels = [
-        label for label in wanted_labels if label not in existing_threat_labels
-    ]
-    remove_labels = sorted(existing_threat_labels - set(wanted_labels))
-    return recommended_labels, remove_labels
 
 
 def _cmd_classify(args: argparse.Namespace) -> int:
@@ -1419,11 +1569,35 @@ def _cmd_classify(args: argparse.Namespace) -> int:
 
     print(f"intel_needed={_bool(result['intel_needed'])}")
     print(f"response_needed={_bool(result['response_needed'])}")
-    print(f"recommended_labels={','.join(result['recommended_labels'])}")
-    print(f"remove_labels={','.join(result['remove_labels'])}")
     print(f"matched_intel_indicators={','.join(result['matched_intel_indicators'])}")
     print(f"matched_response_indicators={','.join(result['matched_response_indicators'])}")
     return 0
+
+
+def _cmd_verify(args: argparse.Namespace) -> int:
+    """Offline gate: fail when discovered deps carry malformed OSV coordinates.
+
+    Mirrors the pre-network check in :func:`fetch_external_findings` on the
+    *PR head* so a PR that breaks the parser, or adds a workflow line that
+    mis-parses into a junk coordinate (the #1511 class), is caught offline
+   ; no network, no secrets; rather than only after merge, when the
+    ``pull_request_target`` triage job (which checks out base, not the PR
+    head) finally runs the new code against the new files. Wired through
+    pre-commit / ``prek run --all-files`` and ``preflight_all.py``; see
+    docs/prd/offline-prehead-validation-gates.md.
+    """
+    repo_root = Path(args.repo_root)
+    dependencies = discover_dependencies(repo_root)
+    malformed = validate_osv_coordinates(dependencies)
+    if not malformed:
+        return 0
+    for dep, reason in malformed:
+        print(
+            f"::error::malformed OSV coordinate "
+            f"{dep.ecosystem}:{dep.name}@{dep.version} (from {dep.source}): {reason}",
+            file=sys.stderr,
+        )
+    return 1
 
 
 def _cmd_scan(args: argparse.Namespace) -> int:
@@ -1483,8 +1657,6 @@ def _cmd_scan(args: argparse.Namespace) -> int:
     print(f"known_exploited={result['known_exploited_count']}")
     print(f"intel_needed={_bool(result['intel_needed'])}")
     print(f"response_needed={_bool(result['response_needed'])}")
-    print(f"recommended_labels={','.join(result['recommended_labels'])}")
-    print(f"remove_labels={','.join(result['remove_labels'])}")
     return exit_code
 
 
@@ -1559,7 +1731,7 @@ def _write_summary_body(
     handle.write(f"- Dependencies checked: {len(dependencies)}\n")
     handle.write(f"- Findings: {result['finding_count']}\n")
     handle.write(f"- Known exploited findings: {result['known_exploited_count']}\n")
-    handle.write(f"- Recommended labels: `{','.join(result['recommended_labels'])}`\n")
+    handle.write(f"- Classification: {_classification_descriptor(result)}\n")
     suppressed_count = int(result.get("suppressed_count", 0) or 0)
     if suppressed_count:
         handle.write(f"- Accepted-intel suppressions applied: {suppressed_count}\n")
@@ -1681,12 +1853,25 @@ def _write_github_output(path: Path, result: dict[str, object]) -> None:
     with path.open("a", encoding="utf-8") as handle:
         handle.write(f"intel_needed={_bool(result['intel_needed'])}\n")
         handle.write(f"response_needed={_bool(result['response_needed'])}\n")
-        handle.write(f"recommended_labels={','.join(result['recommended_labels'])}\n")
-        handle.write(f"remove_labels={','.join(result['remove_labels'])}\n")
 
 
 def _bool(value: object) -> str:
     return "true" if bool(value) else "false"
+
+
+def _classification_descriptor(result: dict[str, object]) -> str:
+    """Return the run's threat classification without naming retired labels.
+
+    Mirrors the ``intel_needed`` / ``response_needed`` run classification. The
+    per-item ``threat:*`` label code path was removed in #1651 (labels retired
+    in #1647), so the aggregated #178 comment reports the classification state
+    rather than a label recommendation and no longer names retired labels.
+    """
+    if result["response_needed"]:
+        return "response-needed"
+    if result["intel_needed"]:
+        return "intel-needed"
+    return "none"
 
 
 def _string_list(value: object) -> list[str]:
@@ -1749,71 +1934,20 @@ def request_json_any(
 _GITHUB_API_VERSION = "2022-11-28"
 
 
-def _apply_labels(
-    *,
-    add_labels: list[str],
-    remove_labels: list[str],
-    repo: str,
-    number: int,
-    token: str,
-    opener: Callable[[urllib.request.Request], Any] = urllib.request.urlopen,
-) -> int:
-    """Add and remove labels on a GitHub issue/PR via the REST API.
+def _resolve_issue_target(
+    explicit_number: int | None = None,
+) -> tuple[str, str, int] | None:
+    """Return ``(token, repo, number)`` for the aggregated comment write.
 
-    Returns 0 on success, 1 on API failure (not counting 404 on removes).
-    """
-    base_url = f"https://api.github.com/repos/{repo}/issues/{number}/labels"
-    auth_header = f"Bearer {token}"
-
-    if add_labels:
-        data = json.dumps({"labels": add_labels}, separators=(",", ":")).encode("utf-8")
-        req = urllib.request.Request(  # noqa: S310 -- fixed https://api.github.com endpoint
-            base_url, data=data, method="POST"
-        )
-        req.add_header("Authorization", auth_header)
-        req.add_header("Accept", "application/vnd.github+json")
-        req.add_header("X-GitHub-Api-Version", _GITHUB_API_VERSION)
-        req.add_header("Content-Type", "application/json")
-        try:
-            with opener(req) as resp:
-                code = int(resp.status)
-        except urllib.error.HTTPError as exc:
-            code = int(exc.code)
-        if not 200 <= code < 300:
-            print(f"::error::add-labels HTTP {code}", file=sys.stderr)
-            return 1
-
-    for label in remove_labels:
-        url = f"{base_url}/{urllib.parse.quote(label, safe='')}"
-        req = urllib.request.Request(url, method="DELETE")  # noqa: S310 -- fixed https://api.github.com endpoint
-        req.add_header("Authorization", auth_header)
-        req.add_header("Accept", "application/vnd.github+json")
-        req.add_header("X-GitHub-Api-Version", _GITHUB_API_VERSION)
-        try:
-            with opener(req) as resp:
-                code = int(resp.status)
-        except urllib.error.HTTPError as exc:
-            code = int(exc.code)
-        if code == 404:
-            continue  # label was already absent — not an error
-        if not 200 <= code < 300:
-            print(f"::error::remove-label {label!r} HTTP {code}", file=sys.stderr)
-            return 1
-
-    return 0
-
-
-def _resolve_issue_target() -> tuple[str, str, int] | None:
-    """Return ``(token, repo, number)`` from env, or None after a loud error.
-
-    Shared by ``apply-labels`` and ``comment``: both write to one issue/PR
-    identified by ``REPO`` / ``NUMBER`` and authenticated by ``GH_TOKEN``.
-    Returns None (never raises) so each caller maps it to exit 1 per the
-    fail-loud policy in CLAUDE.md section 4.
+    ``token`` and ``repo`` come from ``GH_TOKEN`` / ``REPO``. The issue
+    number is *explicit_number* when given; the workflow resolves the
+    security tracking issue via ``scripts/issue_anchors.py`` and passes it
+    as ``--issue`` so the number is never hardcoded; and otherwise falls
+    back to ``$NUMBER``. Returns None (never raises) so the caller maps it
+    to exit 1 per the fail-loud policy in CLAUDE.md section 4.
     """
     token = os.environ.get("GH_TOKEN", "")
     repo = os.environ.get("REPO", "")
-    number_str = os.environ.get("NUMBER", "")
 
     if not token:
         print("::error::GH_TOKEN is not set", file=sys.stderr)
@@ -1821,8 +1955,11 @@ def _resolve_issue_target() -> tuple[str, str, int] | None:
     if not repo:
         print("::error::REPO is not set", file=sys.stderr)
         return None
+    if explicit_number is not None:
+        return token, repo, explicit_number
+    number_str = os.environ.get("NUMBER", "")
     if not number_str:
-        print("::error::NUMBER is not set", file=sys.stderr)
+        print("::error::either --issue or NUMBER must be set", file=sys.stderr)
         return None
     try:
         number = int(number_str)
@@ -1832,24 +1969,7 @@ def _resolve_issue_target() -> tuple[str, str, int] | None:
     return token, repo, number
 
 
-def _cmd_apply_labels(args: argparse.Namespace) -> int:
-    target = _resolve_issue_target()
-    if target is None:
-        return 1
-    token, repo, number = target
-
-    add_labels = [lbl.strip() for lbl in (args.add_labels or "").split(",") if lbl.strip()]
-    remove_labels = [lbl.strip() for lbl in (args.remove_labels or "").split(",") if lbl.strip()]
-    return _apply_labels(
-        add_labels=add_labels,
-        remove_labels=remove_labels,
-        repo=repo,
-        number=number,
-        token=token,
-    )
-
-
-_TRIAGE_COMMENT_MARKER = "<!-- threat-intel-triage v1 -->"
+_TRIAGE_COMMENT_MARKER = "<!-- threat-intel-aggregate v1 -->"
 
 
 def _github_comment_request(
@@ -1940,7 +2060,7 @@ def _upsert_comment(
 
 
 def _cmd_comment(args: argparse.Namespace) -> int:
-    target = _resolve_issue_target()
+    target = _resolve_issue_target(args.issue)
     if target is None:
         return 1
     token, repo, number = target
@@ -2077,7 +2197,7 @@ def main(argv: list[str] | None = None) -> int:
         type=Path,
         help=(
             "Fixture file containing an NVD CVE-shaped response. "
-            "Supplemental enrichment per #174 -- missing data never "
+            "Supplemental enrichment per #174; missing data never "
             "suppresses an OSV/GHSA finding."
         ),
     )
@@ -2111,25 +2231,9 @@ def main(argv: list[str] | None = None) -> int:
     )
     p_scan.set_defaults(func=_cmd_scan)
 
-    p_apply = sub.add_parser(
-        "apply-labels",
-        help="Add/remove labels on a GitHub issue or PR via the REST API.",
-    )
-    p_apply.add_argument(
-        "--add-labels",
-        default="",
-        help="Comma-separated label names to add. Reads REPO, NUMBER, GH_TOKEN from env.",
-    )
-    p_apply.add_argument(
-        "--remove-labels",
-        default="",
-        help="Comma-separated label names to remove.",
-    )
-    p_apply.set_defaults(func=_cmd_apply_labels)
-
     p_comment = sub.add_parser(
         "comment",
-        help="Upsert the threat-intel triage evidence comment on an issue/PR.",
+        help="Upsert the aggregated threat-intel comment on the security tracking issue.",
     )
     p_comment.add_argument(
         "--body-file",
@@ -2137,12 +2241,24 @@ def main(argv: list[str] | None = None) -> int:
         help="Path to the rendered triage markdown (from `scan --comment-file`).",
     )
     p_comment.add_argument(
+        "--issue",
+        type=int,
+        default=None,
+        help=(
+            "Target issue number for the aggregated comment. The workflow "
+            "resolves the security tracking issue via "
+            "`scripts/issue_anchors.py get security-tracking` and passes it "
+            "here so the number is never hardcoded. Falls back to $NUMBER. "
+            "Reads REPO and GH_TOKEN from env."
+        ),
+    )
+    p_comment.add_argument(
         "--update-only",
         action="store_true",
         help=(
             "Only update an existing marked comment; do not create one when "
-            "absent. Use when no findings fired so a clean item gains no noise "
-            "comment. Reads REPO, NUMBER, GH_TOKEN from env."
+            "absent. Use when no findings fired so the tracking issue gains "
+            "no empty comment."
         ),
     )
     p_comment.add_argument(
@@ -2151,6 +2267,17 @@ def main(argv: list[str] | None = None) -> int:
         help="HTML marker anchoring the idempotent comment.",
     )
     p_comment.set_defaults(func=_cmd_comment)
+
+    p_verify = sub.add_parser(
+        "verify",
+        help="Offline gate: fail on malformed OSV coordinates in discovered deps.",
+    )
+    p_verify.add_argument(
+        "--repo-root",
+        default=".",
+        help="Repository root to discover dependencies under.",
+    )
+    p_verify.set_defaults(func=_cmd_verify)
 
     args = parser.parse_args(argv)
     try:

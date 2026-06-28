@@ -24,7 +24,7 @@ The contract is:
 * ``--master`` is the APM source file. Its top-level numbered sections
   are enumerated as ``^## (\\d+)\\. ``. The maximum section number N
   determines the expected principle count. Each section's subtitle
-  ``*Layer: <text> -- ...*`` (em-dash separator) yields the layer name
+  ``*Layer: <text>; ...*`` (semicolon separator) yields the layer name
   for label-parity checking.
 * ``--doc`` is the design-philosophy doc. Its Section 3 responsibility
   matrix is extracted (everything between the ``## 3. `` heading and
@@ -54,7 +54,7 @@ The ``verify-coupling`` subcommand adds a diff-aware gate (Refs #1190):
 when a PR changes ``.apm/instructions/master.instructions.md`` it must,
 in the same PR, also change ``docs/prd/agent-rules-design-philosophy.md``
 so the Section 3 responsibility matrix is reviewed alongside the
-principle edit -- or carry a plain-text ``philosophy-matrix-ack`` line in
+principle edit, or carry a plain-text ``philosophy-matrix-ack`` line in
 the PR body to consciously opt out (for example a typo-only edit that
 changes no responsibility). This catches the per-bullet matrix drift the
 structural ``verify`` check cannot see, deterministically rather than by
@@ -85,14 +85,12 @@ import sys
 from pathlib import Path
 
 MASTER_SECTION_RE = re.compile(r"^## (\d+)\. ")
-MASTER_SUBTITLE_RE = re.compile(r"^\*Layer:\s*([^—]+?)\s*—")
+MASTER_SUBTITLE_RE = re.compile(r"^\*Layer:\s*(.+?);\s")
 DOC_SECTION_3_HEADING_RE = re.compile(r"^## 3\. ")
 DOC_NEXT_SECTION_RE = re.compile(r"^## \d+\. ")
 DOC_MATRIX_ROW_RE = re.compile(r"^\|\s*P(\d+)\s*-")
 DOC_ROW_LABEL_RE = re.compile(r"^\|\s*P(\d+)\s*-\s*([^|]+?)\s*\|")
-DOC_GLOSSARY_HEADING_RE = re.compile(r"^### 2\.5 Glossary\s*$")
 DOC_GLOSSARY_ENTRY_RE = re.compile(r"^- \*\*(.+?)\*\*:")
-DOC_HEADING_RE = re.compile(r"^#{1,3} ")
 DOC_WORDING_RE = re.compile(
     r"\b(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|\d+)"
     r"\s+(principles|layers)\b",
@@ -116,15 +114,50 @@ WORD_TO_INT: dict[str, int] = {
 }
 
 REQUIRED_GLOSSARY_ENTRIES: tuple[str, ...] = (
+    # Master section 2: trust and input model
+    "untrusted data",
+    "trusted instruction source",
+    "governance-gated provenance",
+    "adversarial payload",
+    "non-exhaustive instance",
+    "primary source",
+    # Master section 3: delivery harness
+    "deterministic gate",
+    "drift gate",
+    "durable gate",
+    "harness",
+    "invariant",
+    "freshness precondition",
+    "TTL",
+    "repair",
+    "retrospective",
+    "repair-free merge",
+    "provenance marker",
+    "preflight",
+    "terminal state",
+    # Master section 4: safety boundary
     "safety boundary",
     "defense-in-depth",
-    "deterministic gate",
-    "untrusted data",
-    "repair-free merge",
+    "blast radius",
+    "trust boundary",
+    "attack surface",
+    "irreversible operation",
+    "dry-run",
+    # Master section 5: quality
+    "change surface",
+    # Master section 6: handoff and communication
+    "decision-ready",
+    "decision brief",
+    "evidence map",
+    # Design-philosophy meta terms
     "PRD",
     "P1 through P6",
     "hardness contour",
     "in-line carve-out",
+)
+
+GLOSSARY_PATH = str(
+    Path(__file__).resolve().parent.parent / "docs/standards/ubiquitous-language.md"
 )
 
 _GIT_TIMEOUT_SECONDS: int = 15
@@ -230,31 +263,17 @@ def parse_doc_row_labels(section_lines: list[str]) -> dict[int, str]:
     }
 
 
-def parse_glossary_entries(text: str) -> set[str]:
-    """Return bolded entry names under the ``### 2.5 Glossary`` heading.
+def parse_file_entries(text: str) -> set[str]:
+    """Return all bolded entry names from *text* regardless of heading context.
 
-    The slice begins at the heading (exclusive) and ends before the
-    next ``#``, ``##``, or ``###`` heading. Each entry line of the form
-    ``- **<term>**: ...`` contributes ``<term>`` to the result. Returns
-    an empty set when the glossary heading is absent.
+    Scans every line of the form ``- **name**: ...`` across the entire file.
+    Used for the standalone ``docs/standards/ubiquitous-language.md`` where
+    entries are spread across multiple categorised sections rather than
+    collected under a single ``### 2.5 Glossary`` heading.
     """
-    lines = text.splitlines()
-    start: int | None = None
-    end: int | None = None
-    for i, line in enumerate(lines):
-        if DOC_GLOSSARY_HEADING_RE.match(line):
-            start = i + 1
-            continue
-        if start is not None and DOC_HEADING_RE.match(line):
-            end = i
-            break
-    if start is None:
-        return set()
-    if end is None:
-        end = len(lines)
     return {
         match.group(1)
-        for line in lines[start:end]
+        for line in text.splitlines()
         if (match := DOC_GLOSSARY_ENTRY_RE.match(line)) is not None
     }
 
@@ -282,7 +301,11 @@ def _safe_int(token: str) -> int | None:
         return None
 
 
-def _verify(master_path: Path, doc_path: Path) -> int:
+def _verify(
+    master_path: Path,
+    doc_path: Path,
+    glossary_path: Path,
+) -> int:
     if not master_path.exists():
         print(
             f"::error::missing master file: {master_path}",
@@ -292,6 +315,12 @@ def _verify(master_path: Path, doc_path: Path) -> int:
     if not doc_path.exists():
         print(
             f"::error::missing doc file: {doc_path}",
+            file=sys.stderr,
+        )
+        return 1
+    if not glossary_path.exists():
+        print(
+            f"::error::missing glossary file: {glossary_path}",
             file=sys.stderr,
         )
         return 1
@@ -382,17 +411,19 @@ def _verify(master_path: Path, doc_path: Path) -> int:
             )
             failures += 1
 
-    glossary_entries = parse_glossary_entries(doc_text)
+    glossary_entries = parse_file_entries(
+        glossary_path.read_text(encoding="utf-8")
+    )
     missing_glossary = sorted(
         set(REQUIRED_GLOSSARY_ENTRIES) - glossary_entries
     )
     if missing_glossary:
         labels = ", ".join(missing_glossary)
         print(
-            f"::error file={doc_path}::section 2.5 glossary is missing "
-            f"required entries: {labels}. Add '- **<term>**: ...' lines "
-            f"under '### 2.5 Glossary' so terms used in master and in "
-            f"the section 3 invariant have a single source of truth.",
+            f"::error file={glossary_path}::glossary is missing required "
+            f"entries: {labels}. Add '- **name**: ...' lines in "
+            f"{glossary_path} so terms used in master and in the section 3 "
+            "invariant have a single source of truth.",
             file=sys.stderr,
         )
         failures += 1
@@ -418,7 +449,7 @@ def _cmd_verify(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
         return 2
-    return _verify(Path(args.master), Path(args.doc))
+    return _verify(Path(args.master), Path(args.doc), Path(args.glossary))
 
 
 def resolve_base() -> str:
@@ -526,7 +557,7 @@ def _cmd_verify_coupling(args: argparse.Namespace) -> int:
 
 
 def _run(cmd: list[str], *, runner=subprocess.run):
-    """Thin subprocess boundary -- the only impure surface for diffing.
+    """Thin subprocess boundary; the only impure surface for diffing.
 
     ``check=True`` raises ``CalledProcessError`` on non-zero exit; the
     caller in :func:`_cmd_verify_coupling` translates that into the
@@ -585,6 +616,18 @@ def main(argv: list[str] | None = None) -> int:
         "--doc",
         required=True,
         help="Path to docs/prd/agent-rules-design-philosophy.md.",
+    )
+    p_verify.add_argument(
+        "--glossary",
+        default=GLOSSARY_PATH,
+        help=(
+            "Path to the standalone ubiquitous-language doc. "
+            "Defaults to the repository-standard "
+            "docs/standards/ubiquitous-language.md (resolved relative to "
+            "this script, so it is independent of the current working "
+            "directory). The glossary check reads entries from this file; "
+            "pass an explicit path to override."
+        ),
     )
     p_verify.set_defaults(func=_cmd_verify)
 

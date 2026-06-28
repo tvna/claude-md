@@ -35,12 +35,14 @@ from pathlib import Path
 
 from _ref_classifier import classify_refs, strip_html_comments
 from body_policy import (
+    detect_placeholder_tokens,
     extract_headings,
     missing_sections,
     required_sections,
     verify_pr_agent_attribution_footer,
     verify_pr_checklist_subsections,
     verify_pr_verification_pairs,
+    verify_section_substantive_content,
 )
 from scan_non_ascii import detect_non_ascii, has_ack_marker
 
@@ -104,6 +106,12 @@ def evaluate(
             "GitHub posts must be ASCII-only (preflight_non_ascii.py). "
             "Either translate to English or append <!-- non-ascii-ack --> to the body."
         )
+
+    # 7. Unfilled angle-bracket placeholder tokens.
+    errors.extend(detect_placeholder_tokens(body))
+
+    # 8. Required sections must have substantive content.
+    errors.extend(verify_section_substantive_content(body))
 
     # 6. Issue reference (only when caller requests it).
     if issue is not None:

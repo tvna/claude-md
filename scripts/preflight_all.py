@@ -10,20 +10,20 @@ contract, and reports per-step pass / fail / skip.
 
 The set of steps lives in :data:`STEPS`. Each step declares:
 
-* ``name`` -- a short identifier used in annotations and the
+* ``name``; a short identifier used in annotations and the
   ``--list`` machine-readable manifest consumed by
   :mod:`scan_preflight_drift`.
-* ``argv`` -- the exact command line CI runs.
-* ``required_env`` -- environment variables that must be set for the
+* ``argv``; the exact command line CI runs.
+* ``required_env``; environment variables that must be set for the
   step to be meaningful (e.g. ``RULESETS_PAT`` for the live ruleset
   diff).
-* ``soft`` -- when true and ``required_env`` is missing, the step is
+* ``soft``; when true and ``required_env`` is missing, the step is
   reported as a warning skip rather than a failure. Hard-required gates
   are kept ``soft=False`` so contributors cannot accidentally silence
   them.
 
 Steps whose CI input is the PR / issue body (``title_policy``,
-``body_policy``, ``issue_link``) are intentionally absent here -- their
+``body_policy``, ``issue_link``) are intentionally absent here; their
 client-side equivalents are the MCP PreToolUse hooks
 ``scripts/preflight_title_policy.py`` /
 ``scripts/preflight_pr_body_required_sections.py`` /
@@ -33,8 +33,8 @@ write-tool boundary instead of the working tree. The drift gate
 silent CI-vs-local drift is still detected.
 
 Exit codes:
-* ``0`` -- every step passed (or was correctly soft-skipped).
-* ``1`` -- at least one step failed, or a hard-required step's
+* ``0``; every step passed (or was correctly soft-skipped).
+* ``1``; at least one step failed, or a hard-required step's
   ``required_env`` was missing.
 
 Tested by ``tests/test_preflight_all.py``. Refs #493.
@@ -51,411 +51,13 @@ import sys
 import time
 from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 import preflight_cache
+from preflight_steps import STEPS, Step
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-
-
-@dataclass(frozen=True)
-class Step:
-    """One verification gate runnable from preflight and CI alike."""
-
-    name: str
-    argv: tuple[str, ...]
-    required_env: tuple[str, ...] = ()
-    # When True, missing ``required_env`` or a missing executable on PATH
-    # downgrades the step from failure to warning. Reserve for gates whose
-    # local prerequisites legitimately differ from CI (network tokens,
-    # uv-managed toolchain on a contributor laptop).
-    soft: bool = False
-    # External executables that must resolve on PATH for the step to run.
-    # Treated the same as ``required_env`` for skip semantics.
-    required_bin: tuple[str, ...] = field(default_factory=tuple)
-    # When True, the step is expensive (the full pytest suite). Heavy steps run
-    # only after every cheap step has passed (fail-fast: a sub-second gate
-    # failure short-circuits the ~5-min suite, refs #985) and are gated by the
-    # content-addressed skip cache in ``scripts/preflight_cache.py`` so an
-    # unchanged working tree skips the re-run while keeping CI coverage parity.
-    heavy: bool = False
-
-
-# Order matches the order CI gates fire on a typical PR run: static
-# repository-shape checks first (cheap, no toolchain), then static
-# workflow / ruleset shape, then the uv-managed lint / type / test
-# triple, then prek. ``verify_ruleset_sync`` requires the privileged
-# RULESETS_PAT secret and is soft-skipped without it.
-STEPS: tuple[Step, ...] = (
-    Step(
-        name="scan_apm_portability",
-        argv=(
-            "python3",
-            "scripts/scan_apm_portability.py",
-            "verify",
-            "--path",
-            ".apm/instructions/master.instructions.md",
-            "--path",
-            "CLAUDE.md",
-            "--path",
-            "AGENTS.md",
-        ),
-    ),
-    Step(
-        name="verify_apm_checksums",
-        argv=("python3", "scripts/verify_apm_checksums.py", "verify"),
-    ),
-    Step(
-        name="scan_apm_lock_drift",
-        argv=("python3", "scripts/scan_apm_lock_drift.py", "verify"),
-    ),
-    Step(
-        name="uv_pin_drift",
-        argv=("python3", "scripts/uv_pin.py", "drift"),
-    ),
-    Step(
-        # Refs #1207. Runtime gate: fails when ``uv --version`` does not match
-        # ``[tool.uv].required-version``. Complements the static drift gate
-        # above -- that one catches literal-value drift across the source
-        # tree; this one catches the host-uv vs pin gap PR #1206 left open
-        # for Claude Code's process PATH. ``soft=True`` so a contributor
-        # laptop without uv warn-skips (the same posture as ruff/mypy below);
-        # CI provisions uv via setup-uv before this step runs, so the gate is
-        # hard there.
-        name="preflight_uv_version",
-        argv=("python3", "scripts/preflight_uv_version.py", "verify"),
-        required_bin=("uv",),
-        soft=True,
-    ),
-    Step(
-        name="nixpkgs_cooldown",
-        argv=("python3", "scripts/nixpkgs_cooldown.py", "verify"),
-    ),
-    Step(
-        name="scan_workflow_pip",
-        argv=("python3", "scripts/scan_workflow_pip.py", "verify"),
-    ),
-    Step(
-        name="scan_workflow_action_pins",
-        argv=("python3", "scripts/scan_workflow_action_pins.py", "verify"),
-    ),
-    Step(
-        name="scan_workflow_gh_calls",
-        argv=("python3", "scripts/scan_workflow_gh_calls.py", "verify"),
-    ),
-    Step(
-        name="scan_workflow_injection",
-        argv=("python3", "scripts/scan_workflow_injection.py", "verify"),
-    ),
-    Step(
-        # Refs #1256. Workflow correctness gate: actionlint validates
-        # workflow syntax, ${{ }} expressions, and -- with shellcheck on
-        # PATH -- the shell in every ``run:`` block. Complements the
-        # security-focused scan_workflow_* gates above (syntax/shell
-        # correctness is a different concern from pinning/injection). The
-        # binaries come from flake.nix (sharedPackages); soft so a
-        # contributor laptop without the nix shell warns-and-skips while CI,
-        # which provisions both via nix, enforces it. shellcheck is a
-        # required_bin because actionlint silently skips run-block linting
-        # when it is absent, so the gate is only meaningful with both.
-        name="actionlint",
-        argv=("actionlint",),
-        required_bin=("actionlint", "shellcheck"),
-        soft=True,
-    ),
-    Step(
-        name="scan_secret_runbooks",
-        argv=("python3", "scripts/scan_secret_runbooks.py", "verify"),
-    ),
-    Step(
-        name="scan_secrets",
-        argv=("python3", "scripts/scan_secrets.py", "verify"),
-    ),
-    Step(
-        name="scan_markdown_links",
-        argv=("python3", "scripts/scan_markdown_links.py", "verify"),
-    ),
-    Step(
-        name="scan_docs_inventory",
-        argv=("python3", "scripts/scan_docs_inventory.py", "verify"),
-    ),
-    Step(
-        # Refs #1325. Fails when a Markdown doc outside docs/archive/ cites a
-        # .github/workflows/<name>.yml path that no longer exists -- the drift
-        # class #1319's workflow consolidation left behind.
-        name="scan_doc_workflow_refs",
-        argv=("python3", "scripts/scan_doc_workflow_refs.py", "verify"),
-    ),
-    Step(
-        name="scan_maintainability_metrics",
-        argv=("python3", "scripts/scan_maintainability_metrics.py", "verify"),
-    ),
-    Step(
-        name="scan_design_philosophy_drift",
-        argv=(
-            "python3",
-            "scripts/scan_design_philosophy_drift.py",
-            "verify",
-            "--master",
-            ".apm/instructions/master.instructions.md",
-            "--doc",
-            "docs/prd/agent-rules-design-philosophy.md",
-        ),
-    ),
-    Step(
-        name="dependabot_labels",
-        argv=(
-            "python3",
-            "scripts/dependabot_labels.py",
-            "verify",
-            "--dependabot",
-            ".github/dependabot.yml",
-            "--labels",
-            ".github/labels.json",
-        ),
-    ),
-    Step(
-        name="verify_required_check_contexts",
-        argv=(
-            "python3",
-            "scripts/verify_required_check_contexts.py",
-            "verify",
-            "--sot-path",
-            ".github/rulesets/main.json",
-            "--workflows-dir",
-            ".github/workflows",
-        ),
-    ),
-    Step(
-        name="auto_retro_decision_tree_doc",
-        argv=("python3", "scripts/auto_retro.py", "decision-tree-doc"),
-    ),
-    Step(
-        name="workflow_diagram_doc",
-        argv=("python3", "scripts/workflow_diagram.py", "diagram-doc"),
-    ),
-    Step(
-        name="scan_preflight_drift",
-        argv=("python3", "scripts/scan_preflight_drift.py", "verify"),
-    ),
-    Step(
-        # Refs #1087. Static gate enforcing M4 (boundary validation) and M9
-        # (fail-loud/open) by requiring every workflow-called script to declare
-        # a Contract: docstring block. Baseline debt lives in the script's
-        # BASELINE_MISSING_CONTRACT and may only shrink.
-        name="scan_input_contract_drift",
-        argv=("python3", "scripts/scan_input_contract_drift.py", "verify"),
-    ),
-    Step(
-        # Refs #1089. Fails when the workflow-script-quality standard and its
-        # enforcement registry drift, or an `enforced`/`partial` must-have
-        # names a backing gate that does not resolve.
-        name="scan_quality_standard_drift",
-        argv=("python3", "scripts/scan_quality_standard_drift.py", "verify"),
-    ),
-    Step(
-        # Refs #1088. Fails when a scripts/*.py lacks its matching test module
-        # (M2), a new GitHub-API script is absent from the boundary registry
-        # (O6), or a workflow-invoked script has no CLI contract test (M3).
-        name="scan_test_presence_drift",
-        argv=("python3", "scripts/scan_test_presence_drift.py", "verify"),
-    ),
-    Step(
-        # Refs #615. Fails when a Claude hook script is absent from Codex
-        # coverage and is not in the explicit allowlist in the script.
-        name="scan_hook_coverage_drift",
-        argv=("python3", "scripts/scan_hook_coverage_drift.py", "verify"),
-    ),
-    Step(
-        # Refs #1103. Fails when a tool a gate needs at runtime (a Step
-        # required_bin) is not provisioned in flake.nix, so the devcontainer
-        # cannot silently lack a tool the gates depend on.
-        name="scan_devcontainer_tool_drift",
-        argv=("python3", "scripts/scan_devcontainer_tool_drift.py", "verify"),
-    ),
-    Step(
-        # Refs #1296. Fails when a .devcontainer/<agent>-<arch>/devcontainer.json
-        # overlay is missing or drifted from its base config, so the generated
-        # per-arch entrypoints cannot diverge from the single-source base pin.
-        name="generate_devcontainer_arch_overlays",
-        argv=("python3", "scripts/generate_devcontainer_arch_overlays.py", "verify"),
-    ),
-    Step(
-        # Refs #1170. Fails when a .devcontainer/network/*.allowlist host has
-        # no inline triage rationale, so a new egress destination cannot be
-        # admitted without the observe/evaluate/decide record in
-        # docs/runbooks/devcontainer-tool-network-triage.md.
-        name="scan_allowlist_rationale",
-        argv=("python3", "scripts/scan_allowlist_rationale.py", "verify"),
-    ),
-    Step(
-        # Refs #1257. Fails when the bash read_allowlist in
-        # .devcontainer/scripts/_egress-lib.sh and scripts/_allowlist.py
-        # resolve_hosts disagree on a *.allowlist file, so the single source
-        # of truth stays single across the container start path (bash) and the
-        # CI / rationale tooling (Python).
-        name="scan_allowlist_parser_parity",
-        argv=("python3", "scripts/scan_allowlist_parser_parity.py", "verify"),
-    ),
-    Step(
-        # Refs #1153. Fails when a pinned binary's flake.nix SHA256 is
-        # hardcoded under scripts/ or .github/workflows/, so flake.nix stays
-        # the single source of truth and a bump cannot leave a stale copy.
-        name="scan_flake_pin_drift",
-        argv=("python3", "scripts/scan_flake_pin_drift.py", "verify"),
-    ),
-    Step(
-        # Refs #1154. Fails when a tool is compiled from source (go/cargo
-        # install) on the CI surface instead of fetching a pinned prebuilt --
-        # the ~138s regression class from #1150. Ack a justified backstop.
-        name="scan_compile_from_source",
-        argv=("python3", "scripts/scan_compile_from_source.py", "verify"),
-    ),
-    Step(
-        # Refs #1155. Fails when a pre-commit hook that provisions a shared
-        # binary (entry runs install_*.sh) is not require_serial, so prek
-        # cannot race parallel copies on the shared path (the #1150
-        # PermissionError class).
-        name="scan_provisioning_hook_serial",
-        argv=("python3", "scripts/scan_provisioning_hook_serial.py", "verify"),
-    ),
-    Step(
-        # Refs #1230. Fails when a scripts/*.sh writes $CLAUDE_ENV_FILE
-        # directly instead of persisting PATH via persist_session_path from
-        # scripts/_session_path.sh -- the duplication that refactor removed.
-        name="scan_session_path_drift",
-        argv=("python3", "scripts/scan_session_path_drift.py", "verify"),
-    ),
-    Step(
-        # Refs #1099. Runs waza spec-compliance over every skill under
-        # .agents/skills. spec failure = fail, token budget = warning only.
-        # Needs the pinned waza binary (scripts/install_waza.sh); soft so a
-        # contributor laptop without waza/Go warns-and-skips while CI, which
-        # installs waza first, enforces it.
-        name="skill_quality_gate",
-        argv=("python3", "scripts/skill_quality_gate.py", "verify"),
-        required_bin=("waza",),
-        soft=True,
-    ),
-    Step(
-        # Refs #545. Static check that every tests/test_*.py declares
-        # exactly one module-scope shard marker so the lint-scripts-pytest
-        # matrix neither skips a file nor double-counts one. Runs before
-        # the pytest matrix in CI; mirrored here so contributors see the
-        # failure pre-push.
-        name="verify_test_shard_markers",
-        argv=("python3", "scripts/verify_test_shard_markers.py"),
-    ),
-    Step(
-        # Refs #178. Fails when a scheduled control family in
-        # .github/security-control-floor.toml sits below the detect-and-file
-        # floor without an exempt_reason, mirroring the verify-agents.yml
-        # lint-scripts-static gate so the floor is checked pre-push too.
-        name="verify_security_control_floor",
-        argv=("python3", "scripts/verify_security_control_floor.py"),
-    ),
-    Step(
-        # Refs #745. Fetches the live base branch and fails before push when
-        # HEAD does not contain it, matching GitHub's out-of-date branch gate.
-        name="preflight_branch_base",
-        argv=("python3", "scripts/preflight_branch_base.py", "verify"),
-    ),
-    Step(
-        # Refs #476. PR body is optional locally (PR_BODY env unset means
-        # the opt-out marker is absent, which is the stricter default --
-        # contributors who run preflight see drift before push). The
-        # base-ref shape mirrors CI's portable-pr-policy.yml step.
-        name="verify_readme_translation",
-        argv=(
-            "python3",
-            "scripts/verify_readme_translation.py",
-            "verify",
-            "--base-ref",
-            "origin/main",
-        ),
-    ),
-    Step(
-        # Refs #1178. PR body is optional locally (PR_BODY unset means no
-        # Text delta section, the stricter default so an instruction-text
-        # change without the section surfaces before push). The base-ref
-        # shape mirrors CI's portable-pr-policy.yml step; cutoff/created-at
-        # are omitted so the local run always enforces.
-        name="verify_text_delta_section",
-        argv=(
-            "python3",
-            "scripts/verify_text_delta_section.py",
-            "verify",
-            "--base-ref",
-            "origin/main",
-        ),
-    ),
-    Step(
-        # Refs #1190. Diff-coupling gate: a change to the principle source
-        # must touch the design-philosophy matrix (or carry a
-        # philosophy-matrix-ack line in the PR body). PR_BODY is unset
-        # locally, the stricter default, so a master edit without the
-        # matrix surfaces before push. Base-ref shape mirrors CI's
-        # portable-pr-policy.yml step.
-        name="scan_design_philosophy_drift_coupling",
-        argv=(
-            "python3",
-            "scripts/scan_design_philosophy_drift.py",
-            "verify-coupling",
-            "--base-ref",
-            "origin/main",
-        ),
-    ),
-    Step(
-        name="verify_ruleset_sync",
-        argv=(
-            "python3",
-            "scripts/verify_ruleset_sync.py",
-            "verify",
-            "--repo",
-            "tvna/claude-md",
-            "--base-ref",
-            "main",
-            "--sot-path",
-            ".github/rulesets/main.json",
-            "--ruleset-name",
-            "main-protection",
-        ),
-        required_env=("GH_TOKEN_API",),
-        soft=True,
-    ),
-    Step(
-        name="ruff",
-        argv=("uv", "run", "ruff", "check", "scripts", "tests"),
-        required_bin=("uv",),
-        soft=True,
-    ),
-    Step(
-        name="mypy",
-        argv=("uv", "run", "mypy", "scripts", "tests"),
-        required_bin=("uv",),
-        soft=True,
-    ),
-    Step(
-        # Refs #985. Parallelised across cores with pytest-xdist (``-n auto``)
-        # to cut the ~290s serial wall-clock without dropping a single test --
-        # the same full universe CI runs (sharded across matrix legs) runs here
-        # (sharded across local workers). xdist lives in the ``local`` uv group,
-        # so the run activates it explicitly. ``heavy=True`` routes this step
-        # through the fail-fast + skip-cache path in ``main``.
-        name="pytest",
-        argv=("uv", "run", "--group", "local", "python", "-m", "pytest", "-q", "-n", "auto"),
-        required_bin=("uv",),
-        soft=True,
-        heavy=True,
-    ),
-    Step(
-        name="prek",
-        argv=("uv", "tool", "run", "prek", "run", "--all-files", "--show-diff-on-failure"),
-        required_bin=("uv",),
-        soft=True,
-    ),
-)
 
 
 @dataclass(frozen=True)
@@ -529,7 +131,7 @@ def _heavy_fingerprint(heavy: Sequence[Step], cwd: Path) -> str | None:
 
     The fingerprint folds in every heavy step's argv so a command change (e.g.
     adding ``-n auto``) busts a cache recorded under the old command. Any git or
-    filesystem error degrades to ``None`` -- the caller then runs the full suite
+    filesystem error degrades to ``None``; the caller then runs the full suite
     rather than trusting a fingerprint it could not compute (fail-open to the
     *slower, safer* path, never to a skip).
     """
@@ -543,13 +145,12 @@ def _heavy_fingerprint(heavy: Sequence[Step], cwd: Path) -> str | None:
 # Cheap steps that mutate the working tree or take a git lock; they must not
 # run concurrently with the working-tree-reading static gates, so the parallel
 # tier runs them first, sequentially (refs #1245):
-#   * preflight_branch_base -- ``git fetch`` writes .git refs and takes a lock.
-#   * auto_retro_decision_tree_doc / workflow_diagram_doc -- write tracked docs
-#     into the working tree.
+#   * preflight_branch_base; ``git fetch`` writes .git refs and takes a lock.
+# No generated docs are regenerated here: docs/generated/scripts/ (#1540) and
+# docs/generated/workflows/ (#1771) are both owned by the post-merge automation,
+# so the pre-push lane writes nothing under docs/generated/.
 _SERIAL_CHEAP: frozenset[str] = frozenset({
     "preflight_branch_base",
-    "auto_retro_decision_tree_doc",
-    "workflow_diagram_doc",
 })
 
 
@@ -557,7 +158,7 @@ def _cheap_workers(n: int, environ: dict[str, str]) -> int:
     """Return the worker count for the parallel cheap tier.
 
     Honours ``PREFLIGHT_CHEAP_WORKERS`` (a positive int) as an override and
-    escape hatch -- ``=1`` restores the fully serial behaviour for bisecting a
+    escape hatch; ``=1`` restores the fully serial behaviour for bisecting a
     suspected ordering bug. Otherwise scales to ``2x`` cores (the steps are
     subprocess / I-O bound), capped at 16 to avoid a fork storm, and never
     exceeds *n*.
@@ -580,8 +181,8 @@ def _run_cheap(
 
     Steps named in :data:`_SERIAL_CHEAP` mutate the working tree or take a git
     lock, so they run first and sequentially, before any working-tree-reading
-    gate runs in parallel. The remaining steps -- pure static file reads and
-    read-only git -- run on a thread pool, where each step is a subprocess that
+    gate runs in parallel. The remaining steps; pure static file reads and
+    read-only git; run on a thread pool, where each step is a subprocess that
     releases the GIL while it waits. The returned list is rebuilt in *cheap*
     declaration order so ``emit_summary``, the manifest, and the drift gate are
     byte-for-byte unaffected by the concurrency.
@@ -619,7 +220,7 @@ def run_all(
 
     Cheap steps run first, in declaration order, and all of them run so a single
     invocation reports every cheap failure at once. Heavy steps (the ~5-min
-    pytest suite) then run only when **every** cheap step passed -- a sub-second
+    pytest suite) then run only when **every** cheap step passed; a sub-second
     gate failure (branch-base, ruff, mypy) short-circuits the
     suite instead of wasting it (refs #985, the PR #983 "5 minutes then rejected
     for an unrelated reason" failure mode).
@@ -711,6 +312,45 @@ def emit_annotations(results: list[StepResult], stream) -> None:
             print(f"::warning::step '{result.name}' skipped ({result.detail})", file=stream)
 
 
+def resolve_skips(cli_skip: Sequence[str] | None, environ: dict[str, str]) -> set[str]:
+    """Return the set of step names to skip, from ``--skip`` and the env.
+
+    Combines repeated ``--skip NAME`` CLI values with the comma-separated
+    ``PREFLIGHT_SKIP_STEPS`` environment variable. This is the narrowed
+    replacement for the all-or-nothing ``PREFLIGHT_SKIP`` bypass (issue #2133,
+    PR #2120 retro #2121): ``.githooks/pre-push`` translates a routine
+    ``PREFLIGHT_SKIP=1`` into ``PREFLIGHT_SKIP_STEPS=prek`` so the prek step (the
+    one binary that is genuinely unprovisionable in some remote sessions) can be
+    dropped while every cheap deterministic gate and ``preflight_coverage`` still
+    run.
+    """
+    names: set[str] = set(cli_skip or ())
+    env = environ.get("PREFLIGHT_SKIP_STEPS", "")
+    names |= {part.strip() for part in env.split(",") if part.strip()}
+    return names
+
+
+def partition_skips(
+    steps: Sequence[Step], skip: set[str]
+) -> tuple[list[Step], list[StepResult], list[str]]:
+    """Split *steps* into (to-run, skip-results, unknown-skip-names).
+
+    A skip name that matches no step is returned as *unknown* (it skips nothing,
+    the safe direction: the gate still runs) so a typo cannot silently drop a
+    different gate. Matched steps become ``skip`` results so the summary still
+    lists them, making the bypass observable rather than invisible.
+    """
+    known = {step.name for step in steps}
+    unknown = sorted(skip - known)
+    to_run = [step for step in steps if step.name not in skip]
+    skipped = [
+        StepResult(name=step.name, status="skip", detail="skipped via PREFLIGHT_SKIP_STEPS")
+        for step in steps
+        if step.name in skip
+    ]
+    return to_run, skipped, unknown
+
+
 def list_manifest() -> list[dict[str, object]]:
     """Return :data:`STEPS` as a JSON-serializable manifest.
 
@@ -739,6 +379,14 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Print the step manifest as JSON and exit (no commands run).",
     )
+    parser.add_argument(
+        "--skip",
+        action="append",
+        metavar="NAME",
+        help="Skip a named step (repeatable). Also reads PREFLIGHT_SKIP_STEPS "
+        "(comma-separated). The narrowed replacement for the all-or-nothing "
+        "PREFLIGHT_SKIP bypass; cheap gates and coverage still run.",
+    )
     args = parser.parse_args(argv)
 
     if args.list:
@@ -747,7 +395,15 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     environ = dict(os.environ)
-    results = run_all(STEPS, REPO_ROOT, environ)
+    skip = resolve_skips(args.skip, environ)
+    to_run, skipped, unknown = partition_skips(STEPS, skip)
+    for name in unknown:
+        print(
+            f"::warning::--skip/PREFLIGHT_SKIP_STEPS names unknown step '{name}'; "
+            "nothing skipped for it (the gate still runs).",
+            file=sys.stderr,
+        )
+    results = run_all(to_run, REPO_ROOT, environ) + skipped
     emit_summary(results, sys.stdout)
     emit_annotations(results, sys.stderr)
     fails = sum(1 for r in results if r.status == "fail")

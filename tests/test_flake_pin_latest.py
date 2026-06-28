@@ -1,4 +1,4 @@
-"""Tests for scripts/flake_pin_latest.py -- the auto-follow decision logic.
+"""Tests for scripts/flake_pin_latest.py; the auto-follow decision logic.
 
 The cooldown + version-comparison decision is exercised here with an injected
 fetcher and a fixed ``now``, so it never hits the GitHub API. This pins the two
@@ -12,6 +12,7 @@ import datetime as dt
 import importlib.util
 import sys
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -31,7 +32,7 @@ _NOW = dt.datetime(2026, 6, 3, tzinfo=dt.UTC)
 
 
 def _fetcher(tag: str, published: str):
-    def fetch(_repo: str) -> dict:
+    def fetch(_repo: str) -> dict[str, Any]:
         return {"tag_name": tag, "published_at": published}
 
     return fetch
@@ -109,3 +110,96 @@ def test_version_tuple_orders_numerically() -> None:
     vt = flake_pin_latest._version_tuple
     assert vt("0.9.0") < vt("0.10.0")  # numeric, not lexical
     assert vt("v1.2.3") == vt("1.2.3")
+
+
+# ---------------------------------------------------------------------------
+# github_latest_release() with mocked _github_api (lines 92-107)
+# ---------------------------------------------------------------------------
+
+
+def test_github_latest_release_success(monkeypatch: pytest.MonkeyPatch) -> None:
+    # HTTP 200 + valid dict -> lines 92-94 (call), 101-102 (json.loads),
+    # 105 (isinstance check False), 107 (return payload).
+    import json as _json
+
+    payload = {"tag_name": "v1.0.0", "published_at": "2026-01-01T00:00:00Z"}
+    monkeypatch.setattr(
+        flake_pin_latest._github_api,
+        "apply_call",
+        lambda **kw: (200, _json.dumps(payload)),
+    )
+    result = flake_pin_latest.github_latest_release("owner/repo")
+    assert result["tag_name"] == "v1.0.0"
+
+
+def test_github_latest_release_non_200_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Non-200 response -> lines 97-98 (LatestPinError raise).
+    monkeypatch.setattr(
+        flake_pin_latest._github_api,
+        "apply_call",
+        lambda **kw: (404, "not found"),
+    )
+    with pytest.raises(flake_pin_latest.LatestPinError, match="HTTP 404"):
+        flake_pin_latest.github_latest_release("owner/repo")
+
+
+def test_github_latest_release_non_json_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    # HTTP 200 but body is not JSON -> lines 103-104 (JSONDecodeError path).
+    monkeypatch.setattr(
+        flake_pin_latest._github_api,
+        "apply_call",
+        lambda **kw: (200, "not-json"),
+    )
+    with pytest.raises(flake_pin_latest.LatestPinError, match="non-JSON"):
+        flake_pin_latest.github_latest_release("owner/repo")
+
+
+def test_github_latest_release_non_dict_json_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    # HTTP 200, valid JSON but not a dict -> line 106 (LatestPinError).
+    import json as _json
+
+    monkeypatch.setattr(
+        flake_pin_latest._github_api,
+        "apply_call",
+        lambda **kw: (200, _json.dumps([1, 2, 3])),
+    )
+    with pytest.raises(flake_pin_latest.LatestPinError, match="non-object"):
+        flake_pin_latest.github_latest_release("owner/repo")
+
+
+# ---------------------------------------------------------------------------
+# _parse_release edge cases (lines 130-131, 135)
+# ---------------------------------------------------------------------------
+
+
+def test_parse_release_bad_published_at_raises() -> None:
+    # published_at cannot be parsed by fromisoformat -> lines 130-131.
+    with pytest.raises(flake_pin_latest.LatestPinError, match="bad published_at"):
+        flake_pin_latest._parse_release(
+            {"tag_name": "v1.0.0", "published_at": "not-a-date"}, "owner/repo"
+        )
+
+
+def test_parse_release_naive_datetime_gets_utc() -> None:
+    # published_at has no timezone info -> line 135 sets tzinfo to UTC.
+    tag, when = flake_pin_latest._parse_release(
+        {"tag_name": "v1.0.0", "published_at": "2026-01-01T00:00:00"}, "owner/repo"
+    )
+    assert when.tzinfo is not None
+
+
+# ---------------------------------------------------------------------------
+# decide() negative cooldown (line 156)
+# ---------------------------------------------------------------------------
+
+
+def test_decide_negative_cooldown_raises() -> None:
+    # cooldown_days < 0 -> line 156 LatestPinError before any API call.
+    with pytest.raises(flake_pin_latest.LatestPinError, match="cooldown_days"):
+        flake_pin_latest.decide(
+            "waza",
+            flake_text=_FLAKE,
+            fetcher=_fetcher("v0.34.0", "2026-05-14T00:00:00Z"),
+            cooldown_days=-1,
+            now=_NOW,
+        )

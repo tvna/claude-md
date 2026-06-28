@@ -16,6 +16,106 @@
         "hooks": [
           {
             "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && scripts/install-bun.sh",
+            "statusMessage": "Provisioning bun for the Mermaid gate"
+          }
+        ]
+      },
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && scripts/install-rtk.sh",
+            "statusMessage": "Provisioning rtk binary"
+          }
+        ]
+      },
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && scripts/install-apm.sh",
+            "statusMessage": "Provisioning apm binary"
+          }
+        ]
+      },
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && scripts/install-actionlint.sh",
+            "statusMessage": "Provisioning actionlint for the workflow-lint gate"
+          }
+        ]
+      },
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && scripts/install-waza.sh",
+            "statusMessage": "Provisioning waza binary"
+          }
+        ]
+      },
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && scripts/install-ccusage.sh",
+            "statusMessage": "Provisioning ccusage binary"
+          }
+        ]
+      },
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && scripts/install-zizmor.sh",
+            "statusMessage": "Provisioning zizmor binary"
+          }
+        ]
+      },
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && scripts/install-lychee.sh",
+            "statusMessage": "Provisioning lychee binary"
+          }
+        ]
+      },
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && scripts/install-betterleaks.sh",
+            "statusMessage": "Provisioning betterleaks binary"
+          }
+        ]
+      },
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && scripts/install-prek.sh",
+            "statusMessage": "Provisioning prek git-hook runner"
+          }
+        ]
+      },
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
             "command": "cd \"$(git rev-parse --show-toplevel)\" && scripts/session_uv_local_pin.sh",
             "statusMessage": "Aligning local uv with repo pin"
           }
@@ -56,8 +156,38 @@
         "hooks": [
           {
             "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/session_set_origin_head.py",
+            "statusMessage": "Setting origin/HEAD for diff-range tooling"
+          }
+        ]
+      },
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/preflight_session_base_freshness.py session-start",
+            "statusMessage": "Checking branch base freshness"
+          }
+        ]
+      },
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
             "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/check_pr_mergeability.py session-start",
             "statusMessage": "Checking open PR mergeability"
+          }
+        ]
+      },
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/check_commit_signing_ready.py session-start",
+            "statusMessage": "Checking commit signing readiness"
           }
         ]
       },
@@ -92,6 +222,21 @@
             "type": "command",
             "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/preflight_non_ascii.py",
             "statusMessage": "Checking GitHub text"
+          },
+          {
+            "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/preflight_github_secrets.py",
+            "statusMessage": "Checking GitHub text for secrets"
+          }
+        ]
+      },
+      {
+        "matcher": "^mcp__github__(issue_write|add_issue_comment|create_pull_request|update_pull_request|add_reply_to_pull_request_comment|pull_request_review_write|add_comment_to_pending_review|sub_issue_write)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/preflight_angle_token_drop.py",
+            "statusMessage": "Checking GitHub text for bare angle-bracket tokens"
           }
         ]
       },
@@ -136,6 +281,16 @@
         ]
       },
       {
+        "matcher": "^mcp__github__issue_write$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/preflight_issue_ci_staleness.py",
+            "statusMessage": "Checking CI-failure staleness before issue creation"
+          }
+        ]
+      },
+      {
         "matcher": "^mcp__github__(issue_write|add_issue_comment|create_pull_request|update_pull_request|add_reply_to_pull_request_comment|pull_request_review_write|add_comment_to_pending_review)$",
         "hooks": [
           {
@@ -152,6 +307,26 @@
             "type": "command",
             "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/gate_update_pr_branch.py",
             "statusMessage": "Blocking update_pull_request_branch -- use new-branch recovery path"
+          }
+        ]
+      },
+      {
+        "matcher": "^mcp__github__resolve_review_thread$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/preflight_resolve_review_thread.py",
+            "statusMessage": "Gate: resolve_review_thread"
+          }
+        ]
+      },
+      {
+        "matcher": "^mcp__github__merge_pull_request$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/gate_merge_safety.py",
+            "statusMessage": "Checking PR is safe to merge (mergeable_state=clean)"
           }
         ]
       },
@@ -180,8 +355,28 @@
         "hooks": [
           {
             "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/gate_irreversible_bash.py",
+            "statusMessage": "Guarding against irreversible bash operations"
+          }
+        ]
+      },
+      {
+        "matcher": "^Bash$",
+        "hooks": [
+          {
+            "type": "command",
             "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/gate_gh_cli.py",
             "statusMessage": "Checking for prohibited gh CLI usage"
+          }
+        ]
+      },
+      {
+        "matcher": "^Bash$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/gate_unsigned_commit_bash.py",
+            "statusMessage": "Checking for commit-signing bypass"
           }
         ]
       },
@@ -220,6 +415,66 @@
         "hooks": [
           {
             "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/check_commit_signing_ready.py",
+            "statusMessage": "Checking commit signing readiness before commit"
+          }
+        ]
+      },
+      {
+        "matcher": "^Bash$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/gate_retro_close_keyword_commit.py",
+            "statusMessage": "Checking for retro-issue closing keyword in commit message"
+          }
+        ]
+      },
+      {
+        "matcher": "^Bash$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/preflight_session_branch_authz.py",
+            "statusMessage": "Checking session branch authorization before switch"
+          }
+        ]
+      },
+      {
+        "matcher": "^Bash$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/gate_agents_skills_edit.py",
+            "statusMessage": "Blocking writes to APM-managed skill paths"
+          }
+        ]
+      },
+      {
+        "matcher": "^Bash$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/preflight_session_base_freshness.py",
+            "statusMessage": "Checking branch base before commit"
+          }
+        ]
+      },
+      {
+        "matcher": "^Bash$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/gate_instruction_body_advisory.py",
+            "statusMessage": "Reminding about instruction-text PR body sections"
+          }
+        ]
+      },
+      {
+        "matcher": "^Bash$",
+        "hooks": [
+          {
+            "type": "command",
             "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/preflight_push_nonempty.py",
             "statusMessage": "Checking push ships new work"
           }
@@ -247,6 +502,16 @@
             "type": "command",
             "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/pr_body_close_keyword_gate.py",
             "statusMessage": "Checking PR issue links"
+          }
+        ]
+      },
+      {
+        "matcher": "^mcp__github__(create_pull_request|update_pull_request)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/gate_pr_body_retro_issue_link.py",
+            "statusMessage": "Checking for retro issue links in PR body"
           }
         ]
       },
@@ -300,6 +565,11 @@
           },
           {
             "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/preflight_github_secrets.py",
+            "statusMessage": "Checking GitHub text for secrets"
+          },
+          {
+            "type": "command",
             "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/preflight_codex_github_footer.py",
             "statusMessage": "Checking Codex GitHub footer"
           },
@@ -307,6 +577,16 @@
             "type": "command",
             "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/preflight_title_policy.py",
             "statusMessage": "Checking GitHub title"
+          },
+          {
+            "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/preflight_angle_token_drop.py",
+            "statusMessage": "Checking GitHub text for bare angle-bracket tokens"
+          },
+          {
+            "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/preflight_issue_ci_staleness.py",
+            "statusMessage": "Checking CI-failure staleness before issue creation"
           }
         ]
       },
@@ -384,6 +664,17 @@
             "type": "command",
             "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/check_pr_mergeability.py",
             "statusMessage": "Checking PR mergeability"
+          }
+        ]
+      },
+      {
+        "matcher": "^Bash$",
+        "hooks": [
+          {
+            "type": "command",
+            "if": "Bash(*git push*)",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/check_pr_mergeability.py git-push",
+            "statusMessage": "Checking post-push PR mergeability"
           }
         ]
       },

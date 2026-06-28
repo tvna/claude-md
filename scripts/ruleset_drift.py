@@ -2,14 +2,14 @@
 """Ruleset drift detection helpers (invoked from .github/workflows/weekly-maintenance.yml).
 
 Pure functions classify SoT-vs-live rulesets and render the Markdown bodies that
-the workflow uses for `$GITHUB_STEP_SUMMARY` and `gh issue create --body-file`.
-Side-effect wrappers (HTTP GETs against the rulesets API, and `gh issue create`)
-take injectable boundaries so the CLI is fully unit-testable.
+the workflow uses for `$GITHUB_STEP_SUMMARY` and the issue body. Side-effect
+wrappers (HTTP GETs against the rulesets API, and REST issue create/comment/close
+via `_github_api`) take injectable boundaries so the CLI is fully unit-testable.
 
 See #126 (refactor) and #30 / #116 (origin) for context. #1004 added
 server-default parameter normalization and canonical rule-list ordering to the
 projection (superseding the #30 / #116 "preserve raw rule order" decision, which
-predated the evidence that GitHub re-orders rules on PUT — see #1036), and the
+predated the evidence that GitHub re-orders rules on PUT; see #1036), and the
 `reconcile` rolling-issue dedup / auto-close replacing the per-run flood
 (#998 / #1000 / #1002).
 """
@@ -22,14 +22,14 @@ import difflib
 import hashlib
 import json
 import os
-import subprocess
 import sys
 import urllib.request
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Literal
+from urllib.parse import quote
 
-from _github_api import API_VERSION
+from _github_api import API_VERSION, rest_json
 
 API_ROOT = "https://api.github.com"
 SOT_PROJECTION_KEYS = ("name", "target", "enforcement", "conditions", "bypass_actors", "rules")
@@ -273,7 +273,7 @@ def decide_issue_action(
 
 def render_summary_header(*, run_date: str, run_url: str) -> str:
     return (
-        f"## Ruleset drift detection — run {run_date}\n"
+        f"## Ruleset drift detection; run {run_date}\n"
         "\n"
         f"- Run: {run_url}\n"
         "\n"
@@ -363,7 +363,7 @@ def render_unknown_issue_remediation(*, repo: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Side-effect wrappers (HTTP + subprocess) with injectable boundaries
+# Side-effect wrappers (HTTP / REST) with injectable boundaries
 # ---------------------------------------------------------------------------
 
 def fetch_live_rulesets_list(
@@ -374,7 +374,7 @@ def fetch_live_rulesets_list(
 ) -> list[dict[str, Any]]:
     # API_ROOT is the constant https://api.github.com endpoint; `repo` is sourced
     # from workflow `github.repository`. opener is injectable for tests.
-    request = urllib.request.Request(f"{API_ROOT}/repos/{repo}/rulesets")  # noqa: S310 — fixed https endpoint
+    request = urllib.request.Request(f"{API_ROOT}/repos/{repo}/rulesets")  # noqa: S310 -- fixed https endpoint
     request.add_header("Authorization", f"Bearer {token}")
     request.add_header("Accept", "application/vnd.github+json")
     request.add_header("X-GitHub-Api-Version", API_VERSION)
@@ -391,7 +391,7 @@ def fetch_live_ruleset(
 ) -> dict[str, Any]:
     # API_ROOT is the constant https://api.github.com endpoint; `ruleset_id` is
     # an int narrowed upstream. opener is injectable for tests.
-    request = urllib.request.Request(f"{API_ROOT}/repos/{repo}/rulesets/{ruleset_id}")  # noqa: S310 — fixed https endpoint
+    request = urllib.request.Request(f"{API_ROOT}/repos/{repo}/rulesets/{ruleset_id}")  # noqa: S310 -- fixed https endpoint
     request.add_header("Authorization", f"Bearer {token}")
     request.add_header("Accept", "application/vnd.github+json")
     request.add_header("X-GitHub-Api-Version", API_VERSION)
@@ -399,9 +399,13 @@ def fetch_live_ruleset(
         return json.loads(response.read().decode("utf-8"))
 
 
-def _run_gh(cmd: list[str], *, runner: Callable[..., Any] = subprocess.run) -> Any:
-    """Run a `gh` CLI command with the shared capture/timeout/check policy."""
-    return runner(cmd, capture_output=True, text=True, timeout=30, check=True)
+def _issue_token() -> str:
+    """Token for issue write/read ops.
+
+    The workflow sets ``GH_TOKEN`` to ``GITHUB_TOKEN`` for these, separate
+    from ``GH_TOKEN_API`` (the elevated PAT) used for the ruleset reads.
+    """
+    return os.environ.get("GH_TOKEN", "")
 
 
 def file_issue(
@@ -409,77 +413,62 @@ def file_issue(
     title: str,
     body_file: Path,
     labels: tuple[str, ...] = ISSUE_LABELS,
-    *,
-    runner: Callable[..., Any] = subprocess.run,
 ) -> None:
-    cmd = ["gh", "issue", "create", "--repo", repo, "--title", title,
-           "--body-file", str(body_file)]
-    for label in labels:
-        cmd.extend(["--label", label])
-    _run_gh(cmd, runner=runner)
-
-
-def find_rolling_issue(
-    repo: str,
-    title: str,
-    *,
-    runner: Callable[..., Any] = subprocess.run,
-) -> dict[str, Any] | None:
-    """Return the open issue whose title exactly equals ``title`` (#1004); the
-    ``--search`` keyword match is filtered so a superstring title is not used."""
-    result = _run_gh(
-        ["gh", "issue", "list", "--repo", repo, "--state", "open",
-         "--search", f'"{title}" in:title', "--json", "number,title"],
-        runner=runner,
+    body = body_file.read_text(encoding="utf-8")
+    rest_json(
+        "POST",
+        f"/repos/{repo}/issues",
+        {"title": title, "body": body, "labels": list(labels)},
+        token=_issue_token(),
     )
-    for issue in json.loads(result.stdout or "[]"):
-        if issue.get("title") == title:
+
+
+def find_rolling_issue(repo: str, title: str) -> dict[str, Any] | None:
+    """Return the open issue whose title exactly equals ``title`` (#1004); the
+    search keyword match is filtered so a superstring title is not used."""
+    query = f'repo:{repo} is:issue is:open in:title "{title}"'
+    data = rest_json("GET", f"/search/issues?q={quote(query, safe='')}", token=_issue_token())
+    for issue in (data or {}).get("items") or []:
+        if isinstance(issue, dict) and issue.get("title") == title:
             return {"number": int(issue["number"]), "title": issue["title"]}
     return None
 
 
-def fetch_issue_body(
-    repo: str,
-    issue_number: int,
-    *,
-    runner: Callable[..., Any] = subprocess.run,
-) -> str:
+def fetch_issue_body(repo: str, issue_number: int) -> str:
     """Return an issue body (used to read its embedded drift hash) (#1004)."""
-    result = _run_gh(
-        ["gh", "issue", "view", str(issue_number), "--repo", repo,
-         "--json", "body", "--jq", ".body"],
-        runner=runner,
-    )
-    return str(result.stdout)
+    data = rest_json("GET", f"/repos/{repo}/issues/{issue_number}", token=_issue_token())
+    return str((data or {}).get("body") or "")
 
 
-def comment_on_issue(
-    repo: str,
-    issue_number: int,
-    body_file: Path,
-    *,
-    runner: Callable[..., Any] = subprocess.run,
-) -> None:
+def comment_on_issue(repo: str, issue_number: int, body_file: Path) -> None:
     """Append a comment (rolling update) to an existing issue (#1004)."""
-    _run_gh(
-        ["gh", "issue", "comment", str(issue_number), "--repo", repo,
-         "--body-file", str(body_file)],
-        runner=runner,
+    body = body_file.read_text(encoding="utf-8")
+    rest_json(
+        "POST",
+        f"/repos/{repo}/issues/{issue_number}/comments",
+        {"body": body},
+        token=_issue_token(),
     )
 
 
-def close_issue_with_comment(
-    repo: str,
-    issue_number: int,
-    comment: str,
-    *,
-    runner: Callable[..., Any] = subprocess.run,
-) -> None:
-    """Auto-close a rolling issue with a resolution comment (#1004)."""
-    _run_gh(
-        ["gh", "issue", "close", str(issue_number), "--repo", repo,
-         "--reason", "completed", "--comment", comment],
-        runner=runner,
+def close_issue_with_comment(repo: str, issue_number: int, comment: str) -> None:
+    """Auto-close a rolling issue with a resolution comment (#1004).
+
+    Posts the resolution comment then PATCHes the issue closed (replacing
+    ``gh issue close --reason completed --comment``).
+    """
+    token = _issue_token()
+    rest_json(
+        "POST",
+        f"/repos/{repo}/issues/{issue_number}/comments",
+        {"body": comment},
+        token=token,
+    )
+    rest_json(
+        "PATCH",
+        f"/repos/{repo}/issues/{issue_number}",
+        {"state": "closed", "state_reason": "completed"},
+        token=token,
     )
 
 
@@ -533,7 +522,7 @@ def detect(
 
         if decision["status"] == "ambiguous":
             ambiguous_row = render_status_row(
-                file=filename, name=name, live_id="—", status="ambiguous"
+                file=filename, name=name, live_id="--", status="ambiguous"
             )
             summary_chunks.append(ambiguous_row)
             _append(summary_file, "".join(summary_chunks))
@@ -544,7 +533,7 @@ def detect(
 
         if decision["status"] == "missing-on-live":
             row = render_status_row(
-                file=filename, name=name, live_id="—", status="missing-on-live"
+                file=filename, name=name, live_id="--", status="missing-on-live"
             )
             summary_chunks.append(row)
             sot_body_chunks.append(row)
@@ -561,7 +550,7 @@ def detect(
             # live_path is a label that appears only inside the diff header
             # rendered into the drift issue body; nothing is read from or
             # written to this path.
-            live_path=f"/tmp/live-{filename}",  # noqa: S108 — diff label only, no fs access
+            live_path=f"/tmp/live-{filename}",  # noqa: S108 -- diff label only, no fs access
         )
         if not diff_text:
             summary_chunks.append(
@@ -643,10 +632,10 @@ def reconcile(
     if action == "create":
         file_issue(repo, title, body_file, labels)
     elif action == "append":
-        assert existing is not None  # noqa: S101 — invariant from decide_issue_action
+        assert existing is not None  # noqa: S101 -- invariant from decide_issue_action
         comment_on_issue(repo, existing["number"], body_file)
     elif action == "close":
-        assert existing is not None  # noqa: S101 — invariant from decide_issue_action
+        assert existing is not None  # noqa: S101 -- invariant from decide_issue_action
         close_issue_with_comment(repo, existing["number"], close_comment)
     return action
 
@@ -745,12 +734,12 @@ def main(argv: list[str] | None = None) -> int:
         # CLI default for the detect subcommand. The workflow always passes an
         # explicit --sot-body-file under the runner home directory; this default
         # is for local one-shot debugging on a single-tenant runner.
-        default=Path("/tmp/drift-sot-issue.md"),  # noqa: S108 — workflow-supplied override expected in CI
+        default=Path("/tmp/drift-sot-issue.md"),  # noqa: S108 -- workflow-supplied override expected in CI
     )
     p_detect.add_argument(
         "--unknown-body-file",
         type=Path,
-        default=Path("/tmp/drift-unknown-issue.md"),  # noqa: S108 — workflow-supplied override expected in CI
+        default=Path("/tmp/drift-unknown-issue.md"),  # noqa: S108 -- workflow-supplied override expected in CI
     )
     p_detect.set_defaults(func=_cmd_detect)
 
@@ -774,8 +763,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         return args.func(args)
-    except (OSError, json.JSONDecodeError, RuntimeError, ValueError,
-            subprocess.CalledProcessError) as exc:
+    except (OSError, json.JSONDecodeError, RuntimeError, ValueError) as exc:
         print(f"::error::{exc}", file=sys.stderr)
         return 1
 

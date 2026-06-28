@@ -21,7 +21,7 @@ drift apart:
 - every `doc-only` row has an empty `backing` list, so a claim of
   enforcement always carries a resolvable gate.
 
-It does not prove the backing gate is *correct* -- only that a row marked
+It does not prove the backing gate is *correct*; only that a row marked
 enforced has a gate that exists. Tightening a row from doc-only/partial
 to enforced (and adding the gate it names) is the unit of follow-up work.
 

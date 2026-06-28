@@ -32,7 +32,7 @@ class TestParseLabels:
 
 
 class TestClassify:
-    def test_no_security_signal_returns_no_labels(self) -> None:
+    def test_no_security_signal_returns_no_classification(self) -> None:
         result = triage.classify(
             "feat: add threat intelligence triage rule",
             "Deterministic routing only.",
@@ -40,8 +40,6 @@ class TestClassify:
         )
         assert result["intel_needed"] is False
         assert result["response_needed"] is False
-        assert result["recommended_labels"] == []
-        assert result["remove_labels"] == []
 
     def test_security_label_forces_collection_and_response(self) -> None:
         result = triage.classify(
@@ -51,11 +49,6 @@ class TestClassify:
         )
         assert result["intel_needed"] is True
         assert result["response_needed"] is True
-        assert result["recommended_labels"] == [
-            triage.INTEL_LABEL,
-            triage.RESPONSE_LABEL,
-        ]
-        assert result["remove_labels"] == []
 
     def test_cve_requires_collection_only(self) -> None:
         result = triage.classify(
@@ -65,8 +58,6 @@ class TestClassify:
         )
         assert result["intel_needed"] is True
         assert result["response_needed"] is False
-        assert result["recommended_labels"] == [triage.INTEL_LABEL]
-        assert result["remove_labels"] == []
         assert result["matched_intel_indicators"] == ["cve"]
 
     def test_active_exploitation_requires_response(self) -> None:
@@ -77,9 +68,6 @@ class TestClassify:
         )
         assert result["intel_needed"] is True
         assert result["response_needed"] is True
-        assert triage.INTEL_LABEL in result["recommended_labels"]
-        assert triage.RESPONSE_LABEL in result["recommended_labels"]
-        assert result["remove_labels"] == []
         assert "active-exploitation" in result["matched_response_indicators"]
         assert "exploit-available" in result["matched_response_indicators"]
         assert "ghsa" in result["matched_intel_indicators"]
@@ -94,28 +82,6 @@ class TestClassify:
         assert result["response_needed"] is True
         assert "credential-action" in result["matched_response_indicators"]
         assert "secret-leak" in result["matched_response_indicators"]
-
-    def test_stale_automation_labels_are_removed(self) -> None:
-        result = triage.classify(
-            "docs: update runbook",
-            "No concrete security advisory.",
-            {triage.INTEL_LABEL, triage.RESPONSE_LABEL},
-        )
-        assert result["intel_needed"] is True
-        assert result["response_needed"] is False
-        assert result["recommended_labels"] == []
-        assert result["remove_labels"] == [triage.RESPONSE_LABEL]
-
-    def test_existing_needed_label_is_not_recommended_again(self) -> None:
-        result = triage.classify(
-            "fix: evaluate CVE-2026-12345",
-            "Need to determine whether this repo is affected.",
-            {triage.INTEL_LABEL},
-        )
-        assert result["intel_needed"] is True
-        assert result["response_needed"] is False
-        assert result["recommended_labels"] == []
-        assert result["remove_labels"] == []
 
 
 class TestDependencyDiscovery:
@@ -263,6 +229,111 @@ class TestDependencyDiscovery:
             ),
         ]
 
+    def test_parse_workflow_pinned_images_reads_threat_intel_pin(
+        self, tmp_path: Path
+    ) -> None:
+        workflow_dir = tmp_path / ".github" / "workflows"
+        workflow_dir.mkdir(parents=True)
+        workflow = workflow_dir / "scan.yml"
+        workflow.write_text(
+            "jobs:\n"
+            "  scan:\n"
+            "    steps:\n"
+            "      - run: |\n"
+            "          # threat-intel-pin: Go github.com/aquasecurity/trivy 0.70.0\n"
+            "          docker run --rm ghcr.io/aquasecurity/trivy@sha256:abc image\n",
+            encoding="utf-8",
+        )
+
+        deps = triage.parse_workflow_pinned_images(tmp_path)
+
+        assert deps == [
+            triage.Dependency(
+                "github.com/aquasecurity/trivy",
+                "0.70.0",
+                "Go",
+                str(workflow),
+            ),
+        ]
+
+    def test_parse_workflow_pinned_images_ignores_unmarked_comments(
+        self, tmp_path: Path
+    ) -> None:
+        workflow_dir = tmp_path / ".github" / "workflows"
+        workflow_dir.mkdir(parents=True)
+        workflow = workflow_dir / "scan.yml"
+        workflow.write_text(
+            "jobs:\n"
+            "  scan:\n"
+            "    steps:\n"
+            "      - run: |\n"
+            "          # just a normal comment, not a pin\n"
+            "          docker run ghcr.io/aquasecurity/trivy@sha256:abc image\n",
+            encoding="utf-8",
+        )
+
+        assert triage.parse_workflow_pinned_images(tmp_path) == []
+
+    def test_parse_workflow_pinned_images_empty_without_workflow_dir(
+        self, tmp_path: Path
+    ) -> None:
+        assert triage.parse_workflow_pinned_images(tmp_path) == []
+
+    def test_parse_workflow_pinned_images_ignores_prose_mention(
+        self, tmp_path: Path
+    ) -> None:
+        # A comment line that merely *mentions* the token inside a
+        # backtick-quoted phrase must not produce a Dependency (#1511): the
+        # mid-line match used to yield a garbage coordinate (ecosystem=`` ` ``)
+        # that OSV querybatch rejected with HTTP 400.
+        workflow_dir = tmp_path / ".github" / "workflows"
+        workflow_dir.mkdir(parents=True)
+        workflow = workflow_dir / "scan.yml"
+        workflow.write_text(
+            "jobs:\n"
+            "  scan:\n"
+            "    steps:\n"
+            "      - run: |\n"
+            # The mention ends the line, so the unanchored ``.search()`` used
+            # to match ecosystem=`` ` ``, name="line", version="in" up to
+            # ``$``; the exact false-match from publish-devcontainer-images.
+            "          # the `# threat-intel-pin:` line in\n"
+            "          docker run ghcr.io/aquasecurity/trivy@sha256:abc image\n",
+            encoding="utf-8",
+        )
+
+        assert triage.parse_workflow_pinned_images(tmp_path) == []
+
+    def test_parse_workflow_pinned_images_prose_and_real_pin_coexist(
+        self, tmp_path: Path
+    ) -> None:
+        # A prose mention preceding the real pin must not suppress the real
+        # pin: only the legitimate, line-anchored pin is ingested (#1511).
+        workflow_dir = tmp_path / ".github" / "workflows"
+        workflow_dir.mkdir(parents=True)
+        workflow = workflow_dir / "scan.yml"
+        workflow.write_text(
+            "jobs:\n"
+            "  scan:\n"
+            "    steps:\n"
+            "      - run: |\n"
+            # Prose mention that ends the line (the #1511 false-match), then
+            # the real pin on its own line below it.
+            "          # the `# threat-intel-pin:` line in\n"
+            "          # threat-intel-pin: Go github.com/aquasecurity/trivy 0.70.0\n"
+            "          docker run ghcr.io/aquasecurity/trivy@sha256:abc image\n",
+            encoding="utf-8",
+        )
+
+        assert triage.parse_workflow_pinned_images(tmp_path) == [
+            triage.Dependency(
+                "github.com/aquasecurity/trivy",
+                "0.70.0",
+                "Go",
+                str(workflow),
+            ),
+        ]
+
     def test_parse_transient_uv_run_captures_exact_pin(
         self, tmp_path: Path
     ) -> None:
@@ -355,7 +426,10 @@ class TestDependencyDiscovery:
             "    steps:\n"
             "      - uses: actions/checkout@"
             "abcdef0123456789abcdef0123456789abcdef01 # v4.2.0\n"
-            '      - run: uv run --with apm-cli==0.5.0 apm compile\n',
+            '      - run: uv run --with apm-cli==0.5.0 apm compile\n'
+            "      - run: |\n"
+            "          # threat-intel-pin: Go github.com/aquasecurity/trivy 0.70.0\n"
+            "          docker run ghcr.io/aquasecurity/trivy@sha256:abc image\n",
             encoding="utf-8",
         )
 
@@ -369,6 +443,9 @@ class TestDependencyDiscovery:
         ) in deps
         assert triage.Dependency(
             "apm-cli", "0.5.0", triage.ECOSYSTEM_PYPI, str(workflow)
+        ) in deps
+        assert triage.Dependency(
+            "github.com/aquasecurity/trivy", "0.70.0", "Go", str(workflow)
         ) in deps
         assert triage.Dependency(
             "pytest", "8.3.5", triage.ECOSYSTEM_PYPI, str(tmp_path / "uv.lock")
@@ -404,7 +481,6 @@ class TestExternalFindings:
 
         assert result["intel_needed"] is True
         assert result["response_needed"] is False
-        assert result["recommended_labels"] == [triage.INTEL_LABEL]
         assert result["finding_count"] == 1
 
     def test_cisa_kev_alias_requires_response(self, tmp_path: Path) -> None:
@@ -429,41 +505,11 @@ class TestExternalFindings:
             osv_file=osv,
             kev_file=kev,
         )
-        result = triage.classify_findings(findings, {triage.INTEL_LABEL})
+        result = triage.classify_findings(findings, set())
 
         assert findings[0].known_exploited is True
         assert result["intel_needed"] is True
         assert result["response_needed"] is True
-        assert result["recommended_labels"] == [triage.RESPONSE_LABEL]
-        assert result["remove_labels"] == []
-
-    def test_existing_finding_label_is_not_recommended_again(
-        self, tmp_path: Path
-    ) -> None:
-        osv = tmp_path / "osv.json"
-        kev = tmp_path / "kev.json"
-        osv.write_text(
-            json.dumps(
-                {
-                    "results": [{"vulns": [{"id": "GHSA-abcd-1234-wxyz"}]}],
-                    "details": {"GHSA-abcd-1234-wxyz": {"aliases": ["CVE-2026-1111"]}},
-                }
-            ),
-            encoding="utf-8",
-        )
-        kev.write_text(json.dumps({"vulnerabilities": []}), encoding="utf-8")
-
-        findings = triage.fetch_external_findings(
-            [triage.Dependency("demo", "1.0.0", "PyPI", "uv.lock")],
-            osv_file=osv,
-            kev_file=kev,
-        )
-        result = triage.classify_findings(findings, {triage.INTEL_LABEL})
-
-        assert result["intel_needed"] is True
-        assert result["response_needed"] is False
-        assert result["recommended_labels"] == []
-        assert result["remove_labels"] == []
 
     def test_ghsa_finding_matches_locked_dependency(self, tmp_path: Path) -> None:
         osv = tmp_path / "osv.json"
@@ -512,7 +558,6 @@ class TestExternalFindings:
         assert "CVE-2026-3333" in findings[0].aliases
         assert result["intel_needed"] is True
         assert result["response_needed"] is False
-        assert result["recommended_labels"] == [triage.INTEL_LABEL]
 
     def test_ghsa_malware_advisory_escalates_response(self, tmp_path: Path) -> None:
         osv = tmp_path / "osv.json"
@@ -558,10 +603,6 @@ class TestExternalFindings:
         assert findings[0].known_exploited is False
         assert result["intel_needed"] is True
         assert result["response_needed"] is True
-        assert result["recommended_labels"] == [
-            triage.INTEL_LABEL,
-            triage.RESPONSE_LABEL,
-        ]
 
     def test_ossf_malicious_package_match_escalates_response(self, tmp_path: Path) -> None:
         osv = tmp_path / "osv.json"
@@ -607,10 +648,6 @@ class TestExternalFindings:
         assert "GHSA-mali-cious-pkg0" in findings[0].aliases
         assert result["intel_needed"] is True
         assert result["response_needed"] is True
-        assert result["recommended_labels"] == [
-            triage.INTEL_LABEL,
-            triage.RESPONSE_LABEL,
-        ]
 
     def test_ossf_non_matching_entry_does_not_label(self, tmp_path: Path) -> None:
         osv = tmp_path / "osv.json"
@@ -648,8 +685,6 @@ class TestExternalFindings:
         assert findings == []
         assert result["intel_needed"] is False
         assert result["response_needed"] is False
-        assert result["recommended_labels"] == []
-        assert result["remove_labels"] == []
 
     def test_ossf_drops_records_without_mal_prefix(self, tmp_path: Path) -> None:
         osv = tmp_path / "osv.json"
@@ -859,7 +894,6 @@ class TestEpssEnrichment:
         # Advisory-only: high EPSS without KEV/malware does not escalate.
         assert result["intel_needed"] is True
         assert result["response_needed"] is False
-        assert result["recommended_labels"] == [triage.INTEL_LABEL]
         # finding_to_dict surfaces EPSS for downstream consumers.
         assert result["findings"][0]["epss_score"] == 0.4213
         assert result["findings"][0]["epss_percentile"] == 0.9521
@@ -892,7 +926,6 @@ class TestEpssEnrichment:
         assert findings[0].epss_score == 0.975
         assert findings[0].known_exploited is False
         assert result["response_needed"] is False
-        assert result["recommended_labels"] == [triage.INTEL_LABEL]
 
     def test_epss_supplements_kev_correlated_finding(self, tmp_path: Path) -> None:
         osv = tmp_path / "osv.json"
@@ -926,10 +959,6 @@ class TestEpssEnrichment:
         assert findings[0].epss_score == 0.88
         # KEV remains the authoritative response signal; EPSS rides along.
         assert result["response_needed"] is True
-        assert result["recommended_labels"] == [
-            triage.INTEL_LABEL,
-            triage.RESPONSE_LABEL,
-        ]
 
     def test_epss_missing_cve_leaves_finding_unchanged(self, tmp_path: Path) -> None:
         osv = tmp_path / "osv.json"
@@ -937,7 +966,7 @@ class TestEpssEnrichment:
         epss = tmp_path / "epss.json"
         self._write_osv_with_cve(osv, "GHSA-abcd-1234-wxyz", "CVE-2026-1111")
         self._write_empty_kev(kev)
-        # EPSS payload omits the relevant CVE -- FIRST returns no row when
+        # EPSS payload omits the relevant CVE; FIRST returns no row when
         # the score is not yet published.
         epss.write_text(json.dumps({"data": []}), encoding="utf-8")
 
@@ -973,7 +1002,7 @@ class TestEpssEnrichment:
 class TestNvdEnrichment:
     """NVD CVE metadata enrichment (#174).
 
-    NVD is a *supplemental* enrichment source -- it must never widen the
+    NVD is a *supplemental* enrichment source; it must never widen the
     finding set, never suppress findings on missing data, and never be
     treated as evidence-of-absence for response decisions.
     """
@@ -1279,8 +1308,6 @@ class TestCli:
         assert out.read_text(encoding="utf-8").splitlines() == [
             "intel_needed=true",
             "response_needed=true",
-            "recommended_labels=threat:intel-needed,threat:response-needed",
-            "remove_labels=",
         ]
 
     def test_scan_uses_external_fixtures(self, tmp_path: Path, capsys) -> None:
@@ -1331,8 +1358,6 @@ class TestCli:
         assert out.read_text(encoding="utf-8").splitlines() == [
             "intel_needed=true",
             "response_needed=true",
-            "recommended_labels=threat:intel-needed,threat:response-needed",
-            "remove_labels=",
         ]
         assert "Sources: OSV.dev, CISA KEV" in summary.read_text(encoding="utf-8")
 
@@ -1391,18 +1416,13 @@ class TestCli:
 
         assert rc == 0
         assert result["response_needed"] is True
-        assert result["recommended_labels"] == [
-            triage.INTEL_LABEL,
-            triage.RESPONSE_LABEL,
-        ]
         summary_text = summary.read_text(encoding="utf-8")
         assert triage.SOURCE_OSSF_MAL in summary_text
         assert "CISA KEV" in summary_text
+        assert "- Classification: response-needed" in summary_text
         assert out.read_text(encoding="utf-8").splitlines() == [
             "intel_needed=true",
             "response_needed=true",
-            "recommended_labels=threat:intel-needed,threat:response-needed",
-            "remove_labels=",
         ]
 
     def test_scan_includes_ghsa_source_in_summary(self, tmp_path: Path, capsys) -> None:
@@ -1523,7 +1543,7 @@ class TestCli:
 
 
 # ---------------------------------------------------------------------------
-# parse_uv_lock() -- non-list packages and non-dict package entries
+# parse_uv_lock(); non-list packages and non-dict package entries
 # ---------------------------------------------------------------------------
 
 
@@ -1575,7 +1595,7 @@ class TestParseUvLockEdgeCases:
 
 
 # ---------------------------------------------------------------------------
-# parse_workflow_actions() -- missing .github/workflows directory (line 307)
+# parse_workflow_actions(); missing .github/workflows directory (line 307)
 # ---------------------------------------------------------------------------
 
 
@@ -1586,7 +1606,7 @@ class TestParseWorkflowActionsNoDir:
 
 
 # ---------------------------------------------------------------------------
-# scan_dependencies() -- empty list returns [] immediately (line 438)
+# scan_dependencies(); empty list returns [] immediately (line 438)
 # ---------------------------------------------------------------------------
 
 
@@ -1597,7 +1617,7 @@ class TestFetchExternalFindingsEmpty:
 
 
 # ---------------------------------------------------------------------------
-# parse_osv_batch_results() -- defensive isinstance checks (lines 540, 545-546, 549-550)
+# parse_osv_batch_results(); defensive isinstance checks (lines 540, 545-546, 549-550)
 # ---------------------------------------------------------------------------
 
 
@@ -1619,7 +1639,7 @@ class TestParseOsvBatchResultsDefensiveChecks:
 
 
 # ---------------------------------------------------------------------------
-# parse_kev_cves() -- non-list vulnerabilities raises; non-dict entry skipped
+# parse_kev_cves(); non-list vulnerabilities raises; non-dict entry skipped
 # ---------------------------------------------------------------------------
 
 
@@ -1634,7 +1654,7 @@ class TestParseKevCvesEdgeCases:
 
 
 # ---------------------------------------------------------------------------
-# request_json_any() -- mock urlopen (lines 1471-1488)
+# request_json_any(); mock urlopen (lines 1471-1488)
 # ---------------------------------------------------------------------------
 
 
@@ -1708,7 +1728,7 @@ class TestRequestJsonAny:
 
 
 # ---------------------------------------------------------------------------
-# query_osv_batch() and fetch_cisa_kev() -- mock request_json (lines 499-510)
+# query_osv_batch() and fetch_cisa_kev(); mock request_json (lines 499-510)
 # ---------------------------------------------------------------------------
 
 
@@ -1721,6 +1741,44 @@ class TestNetworkBoundaryFunctions:
         dep = triage.Dependency("requests", "2.31.0", "PyPI", "uv.lock")
         result = triage.query_osv_batch([dep])
         assert result == payload
+
+    def test_query_osv_batch_400_raises_with_coordinates(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # urllib is a function-local import in this file (annotation-only at
+        # module scope under ``from __future__ import annotations``); keep it
+        # local so the existing annotation-only imports do not trip ruff F401.
+        import urllib.error
+
+        def raise_400(*_a: object, **_kw: object) -> dict[str, object]:
+            raise urllib.error.HTTPError(
+                triage.OSV_QUERYBATCH_URL, 400, "Bad Request", {}, None  # type: ignore[arg-type]
+            )
+
+        monkeypatch.setattr(triage, "request_json", raise_400)
+        dep = triage.Dependency("trivy", "0.70.0", "`", "scan.yml")
+        with pytest.raises(ValueError, match="HTTP 400") as excinfo:
+            triage.query_osv_batch([dep])
+        # The loud error names the submitted coordinates and their source so
+        # the offending dependency is identifiable (#1511, CLAUDE.md s4).
+        assert "`:trivy@0.70.0 (from scan.yml)" in str(excinfo.value)
+
+    def test_query_osv_batch_non_400_http_error_propagates(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import urllib.error
+
+        def raise_503(*_a: object, **_kw: object) -> dict[str, object]:
+            raise urllib.error.HTTPError(
+                triage.OSV_QUERYBATCH_URL, 503, "Service Unavailable", {}, None  # type: ignore[arg-type]
+            )
+
+        monkeypatch.setattr(triage, "request_json", raise_503)
+        dep = triage.Dependency("requests", "2.31.0", "PyPI", "uv.lock")
+        # A non-400 transport error is a transient outage, not a malformed
+        # query: it must propagate unchanged (no ValueError translation).
+        with pytest.raises(urllib.error.HTTPError):
+            triage.query_osv_batch([dep])
 
     def test_fetch_cisa_kev_returns_request_json_result(
         self, monkeypatch: pytest.MonkeyPatch
@@ -1741,7 +1799,7 @@ class TestNetworkBoundaryFunctions:
 
 
 # ---------------------------------------------------------------------------
-# parse_uv_lock() -- file not found (line 195)
+# parse_uv_lock(); file not found (line 195)
 # ---------------------------------------------------------------------------
 
 
@@ -1752,7 +1810,7 @@ class TestParseUvLockFileMissing:
 
 
 # ---------------------------------------------------------------------------
-# parse_workflow_actions() -- non-yml file triggers continue (line 307)
+# parse_workflow_actions(); non-yml file triggers continue (line 307)
 # ---------------------------------------------------------------------------
 
 
@@ -1766,7 +1824,7 @@ class TestParseWorkflowActionsNonYml:
 
 
 # ---------------------------------------------------------------------------
-# _parse_action_ref() -- missing @ (line 348) and malformed ref (line 351)
+# _parse_action_ref(); missing @ (line 348) and malformed ref (line 351)
 # ---------------------------------------------------------------------------
 
 
@@ -1779,7 +1837,7 @@ class TestParseActionRefEdgeCases:
 
 
 # ---------------------------------------------------------------------------
-# fetch_osv_details() -- file mode with non-dict details (line 523)
+# fetch_osv_details(); file mode with non-dict details (line 523)
 # ---------------------------------------------------------------------------
 
 
@@ -1793,7 +1851,7 @@ class TestFetchOsvDetailsNonDictDetails:
 
 
 # ---------------------------------------------------------------------------
-# fetch_epss_scores() -- empty CVEs (594), no live (601-602), live mode (603-608)
+# fetch_epss_scores(); empty CVEs (594), no live (601-602), live mode (603-608)
 # ---------------------------------------------------------------------------
 
 
@@ -1821,7 +1879,7 @@ class TestFetchEpssScoresEdgeCases:
 
 
 # ---------------------------------------------------------------------------
-# _parse_epss_payload() -- non-list rows (614), non-dict row (618)
+# _parse_epss_payload(); non-list rows (614), non-dict row (618)
 # ---------------------------------------------------------------------------
 
 
@@ -1836,7 +1894,7 @@ class TestParseEpssPayloadEdgeCases:
 
 
 # ---------------------------------------------------------------------------
-# _coerce_epss_float() -- string branch (629-635)
+# _coerce_epss_float(); string branch (629-635)
 # ---------------------------------------------------------------------------
 
 
@@ -1858,7 +1916,7 @@ class TestCoerceEpssFloat:
 
 
 # ---------------------------------------------------------------------------
-# _attach_epss() -- non-str candidate (654), no match found (659)
+# _attach_epss(); non-str candidate (654), no match found (659)
 # ---------------------------------------------------------------------------
 
 
@@ -1892,7 +1950,7 @@ class TestAttachEpssEdgeCases:
 
 
 # ---------------------------------------------------------------------------
-# fetch_ghsa_advisories() -- empty deps (679), live mode (686-699),
+# fetch_ghsa_advisories(); empty deps (679), live mode (686-699),
 # no vuln_id (705), dep not affected (712), load ValueError (731)
 # ---------------------------------------------------------------------------
 
@@ -1961,7 +2019,7 @@ class TestFetchGhsaAdvisories:
 
 
 # ---------------------------------------------------------------------------
-# _ghsa_aliases() -- identifier items (749, 752)
+# _ghsa_aliases(); identifier items (749, 752)
 # ---------------------------------------------------------------------------
 
 
@@ -1984,7 +2042,7 @@ class TestGhsaAliases:
 
 
 # ---------------------------------------------------------------------------
-# _ghsa_affects_dependency() -- all branch paths (764, 767, 770, 773, 775, 779)
+# _ghsa_affects_dependency(); all branch paths (764, 767, 770, 773, 775, 779)
 # ---------------------------------------------------------------------------
 
 
@@ -2025,7 +2083,7 @@ class TestGhsaAffectsDependency:
 
 
 # ---------------------------------------------------------------------------
-# fetch_ossf_malicious_packages() -- early returns (804, 806), live mode (813-815)
+# fetch_ossf_malicious_packages(); early returns (804, 806), live mode (813-815)
 # ---------------------------------------------------------------------------
 
 
@@ -2059,7 +2117,7 @@ class TestFetchOssfMaliciousPackages:
 
 
 # ---------------------------------------------------------------------------
-# query_osv_malicious_for_dependency() -- network call (855-862)
+# query_osv_malicious_for_dependency(); network call (855-862)
 # ---------------------------------------------------------------------------
 
 
@@ -2086,7 +2144,7 @@ class TestQueryOsvMaliciousForDependency:
 
 
 # ---------------------------------------------------------------------------
-# _ossf_affected_dependencies() -- all defensive branches (876, 880, 883, 887)
+# _ossf_affected_dependencies(); all defensive branches (876, 880, 883, 887)
 # ---------------------------------------------------------------------------
 
 
@@ -2113,7 +2171,7 @@ class TestOssfAffectedDependencies:
 
 
 # ---------------------------------------------------------------------------
-# merge_findings() -- new alias added (line 921)
+# merge_findings(); new alias added (line 921)
 # ---------------------------------------------------------------------------
 
 
@@ -2140,7 +2198,7 @@ class TestMergeFindingsNewAlias:
 
 
 # ---------------------------------------------------------------------------
-# fetch_nvd_metadata() -- file mode error branches (963-964, 967), live mode (980-998)
+# fetch_nvd_metadata(); file mode error branches (963-964, 967), live mode (980-998)
 # ---------------------------------------------------------------------------
 
 
@@ -2204,7 +2262,7 @@ class TestFetchNvdMetadata:
 
 
 # ---------------------------------------------------------------------------
-# _extract_nvd_cvss() -- branch paths (1051, 1054, 1064, 1066)
+# _extract_nvd_cvss(); branch paths (1051, 1054, 1064, 1066)
 # ---------------------------------------------------------------------------
 
 
@@ -2234,7 +2292,7 @@ class TestExtractNvdCvss:
 
 
 # ---------------------------------------------------------------------------
-# _extract_nvd_cwes() -- branch paths (1076, 1079, 1082)
+# _extract_nvd_cwes(); branch paths (1076, 1079, 1082)
 # ---------------------------------------------------------------------------
 
 
@@ -2253,7 +2311,7 @@ class TestExtractNvdCwes:
 
 
 # ---------------------------------------------------------------------------
-# _extract_nvd_references() -- branch paths (1096, 1101)
+# _extract_nvd_references(); branch paths (1096, 1101)
 # ---------------------------------------------------------------------------
 
 
@@ -2271,7 +2329,7 @@ class TestExtractNvdReferences:
 
 
 # ---------------------------------------------------------------------------
-# attach_nvd_to_findings() -- no matching NVD enrichment (line 1132)
+# attach_nvd_to_findings(); no matching NVD enrichment (line 1132)
 # ---------------------------------------------------------------------------
 
 
@@ -2301,7 +2359,7 @@ class TestAttachNvdToFindingsNoMatch:
 
 
 # ---------------------------------------------------------------------------
-# _nvd_cvss_cell() / _nvd_cwe_cell() -- empty metadata (1350, 1362)
+# _nvd_cvss_cell() / _nvd_cwe_cell(); empty metadata (1350, 1362)
 # ---------------------------------------------------------------------------
 
 
@@ -2324,7 +2382,7 @@ class TestNvdCellHelpers:
 
 
 # ---------------------------------------------------------------------------
-# _string_list() -- non-list input (line 1436)
+# _string_list(); non-list input (line 1436)
 # ---------------------------------------------------------------------------
 
 
@@ -2337,7 +2395,7 @@ class TestStringList:
 
 
 # ---------------------------------------------------------------------------
-# load_json() -- non-dict raises (line 1443)
+# load_json(); non-dict raises (line 1443)
 # ---------------------------------------------------------------------------
 
 
@@ -2350,7 +2408,7 @@ class TestLoadJsonNonDict:
 
 
 # ---------------------------------------------------------------------------
-# request_json() -- non-dict response raises (lines 1453-1456)
+# request_json(); non-dict response raises (lines 1453-1456)
 # ---------------------------------------------------------------------------
 
 
@@ -2370,7 +2428,7 @@ class TestRequestJsonNonDict:
 
 
 # ---------------------------------------------------------------------------
-# main() -- OSError/ValueError exception handler (lines 1620-1622)
+# main(); OSError/ValueError exception handler (lines 1620-1622)
 # ---------------------------------------------------------------------------
 
 
@@ -2397,7 +2455,7 @@ class TestThreatIntelMainExceptionHandler:
 
 
 # ---------------------------------------------------------------------------
-# _apply_labels() and _cmd_apply_labels() -- apply-labels subcommand
+# Shared fake HTTP response used by the comment-upsert tests below.
 # ---------------------------------------------------------------------------
 
 
@@ -2416,201 +2474,8 @@ class _FakeResponse:
         pass
 
 
-class TestApplyLabels:
-    def _make_opener(self, responses: list[int]) -> object:
-        """Return an opener that returns successive HTTP status codes."""
-        import urllib.error
-        import urllib.request
-
-        codes = iter(responses)
-
-        def opener(req: urllib.request.Request) -> _FakeResponse:
-            code = next(codes)
-            if 200 <= code < 300:
-                return _FakeResponse(status=code)
-            raise urllib.error.HTTPError(req.full_url, code, "error", {}, None)  # type: ignore[arg-type]
-
-        return opener
-
-    def test_add_labels_posts_to_github_api(self) -> None:
-        import urllib.request
-
-        captured: list[urllib.request.Request] = []
-
-        def opener(req: urllib.request.Request) -> _FakeResponse:
-            captured.append(req)
-            return _FakeResponse(status=200, body=b'[{"name":"threat:intel-needed"}]')
-
-        assert triage._apply_labels(
-            add_labels=["threat:intel-needed"],
-            remove_labels=[],
-            repo="owner/repo",
-            number=42,
-            token="tok",
-            opener=opener,
-        ) == 0
-
-        assert len(captured) == 1
-        req = captured[0]
-        assert "issues/42/labels" in req.full_url
-        assert req.method == "POST"
-
-    def test_remove_label_deletes_from_github_api(self) -> None:
-        import urllib.request
-
-        captured: list[urllib.request.Request] = []
-
-        def opener(req: urllib.request.Request) -> _FakeResponse:
-            captured.append(req)
-            return _FakeResponse(status=200, body=b'[]')
-
-        assert triage._apply_labels(
-            add_labels=[],
-            remove_labels=["threat:response-needed"],
-            repo="owner/repo",
-            number=7,
-            token="tok",
-            opener=opener,
-        ) == 0
-
-        assert len(captured) == 1
-        req = captured[0]
-        assert "issues/7/labels/threat%3Aresponse-needed" in req.full_url
-        assert req.method == "DELETE"
-
-    def test_remove_label_404_is_not_an_error(self) -> None:
-        import urllib.error
-        import urllib.request
-
-        def opener(req: urllib.request.Request) -> _FakeResponse:
-            raise urllib.error.HTTPError(req.full_url, 404, "not found", {}, None)  # type: ignore[arg-type]
-
-        assert triage._apply_labels(
-            add_labels=[],
-            remove_labels=["not-there"],
-            repo="owner/repo",
-            number=1,
-            token="tok",
-            opener=opener,
-        ) == 0
-
-    def test_add_labels_api_error_returns_1(self, capsys: pytest.CaptureFixture[str]) -> None:
-        opener = self._make_opener([422])
-        assert triage._apply_labels(
-            add_labels=["bad-label"],
-            remove_labels=[],
-            repo="owner/repo",
-            number=1,
-            token="tok",
-            opener=opener,
-        ) == 1
-        assert "422" in capsys.readouterr().err
-
-    def test_remove_label_api_error_returns_1(self, capsys: pytest.CaptureFixture[str]) -> None:
-        opener = self._make_opener([500])
-        assert triage._apply_labels(
-            add_labels=[],
-            remove_labels=["bad"],
-            repo="owner/repo",
-            number=1,
-            token="tok",
-            opener=opener,
-        ) == 1
-        assert "500" in capsys.readouterr().err
-
-    def test_empty_lists_do_nothing(self) -> None:
-        called = []
-
-        def opener(req: object) -> _FakeResponse:
-            called.append(req)
-            return _FakeResponse()
-
-        assert triage._apply_labels(
-            add_labels=[], remove_labels=[], repo="owner/repo", number=1, token="tok", opener=opener
-        ) == 0
-        assert called == []
-
-    def test_bearer_token_in_header(self) -> None:
-        import urllib.request
-
-        captured: list[urllib.request.Request] = []
-
-        def opener(req: urllib.request.Request) -> _FakeResponse:
-            captured.append(req)
-            return _FakeResponse()
-
-        triage._apply_labels(
-            add_labels=["x"], remove_labels=[], repo="r/r", number=1, token="secret", opener=opener
-        )
-        assert "Bearer secret" in captured[0].get_header("Authorization")
-
-
-class TestCmdApplyLabels:
-    def test_missing_gh_token_returns_1(
-        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-    ) -> None:
-        monkeypatch.delenv("GH_TOKEN", raising=False)
-        monkeypatch.setenv("REPO", "owner/repo")
-        monkeypatch.setenv("NUMBER", "1")
-        assert triage.main(["apply-labels", "--add-labels", "threat:intel-needed"]) == 1
-        assert "GH_TOKEN" in capsys.readouterr().err
-
-    def test_missing_repo_returns_1(
-        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-    ) -> None:
-        monkeypatch.setenv("GH_TOKEN", "tok")
-        monkeypatch.delenv("REPO", raising=False)
-        monkeypatch.setenv("NUMBER", "1")
-        assert triage.main(["apply-labels", "--add-labels", "threat:intel-needed"]) == 1
-        assert "REPO" in capsys.readouterr().err
-
-    def test_missing_number_returns_1(
-        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-    ) -> None:
-        monkeypatch.setenv("GH_TOKEN", "tok")
-        monkeypatch.setenv("REPO", "owner/repo")
-        monkeypatch.delenv("NUMBER", raising=False)
-        assert triage.main(["apply-labels", "--add-labels", "threat:intel-needed"]) == 1
-        assert "NUMBER" in capsys.readouterr().err
-
-    def test_non_integer_number_returns_1(
-        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-    ) -> None:
-        monkeypatch.setenv("GH_TOKEN", "tok")
-        monkeypatch.setenv("REPO", "owner/repo")
-        monkeypatch.setenv("NUMBER", "not-a-number")
-        assert triage.main(["apply-labels", "--add-labels", "threat:intel-needed"]) == 1
-        assert "NUMBER" in capsys.readouterr().err
-
-    def test_comma_separated_add_labels(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.setenv("GH_TOKEN", "tok")
-        monkeypatch.setenv("REPO", "owner/repo")
-        monkeypatch.setenv("NUMBER", "5")
-
-        captured_labels: list[list[str]] = []
-
-        def fake_apply(**kw: object) -> int:
-            captured_labels.append(kw["add_labels"])  # type: ignore[arg-type]
-            return 0
-
-        monkeypatch.setattr(triage, "_apply_labels", fake_apply)
-        assert triage.main(["apply-labels", "--add-labels", "threat:intel-needed,threat:response-needed"]) == 0
-        assert captured_labels == [["threat:intel-needed", "threat:response-needed"]]
-
-    def test_no_labels_args_is_valid(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.setenv("GH_TOKEN", "tok")
-        monkeypatch.setenv("REPO", "owner/repo")
-        monkeypatch.setenv("NUMBER", "5")
-        monkeypatch.setattr(triage, "_apply_labels", lambda **kw: 0)
-        assert triage.main(["apply-labels"]) == 0
-
-
 # ---------------------------------------------------------------------------
-# render_summary_markdown() -- the pure renderer shared by the step summary
+# render_summary_markdown(); the pure renderer shared by the step summary
 # and the idempotent issue/PR evidence comment (#1285).
 # ---------------------------------------------------------------------------
 
@@ -2634,8 +2499,11 @@ class TestRenderSummaryMarkdown:
         md = triage.render_summary_markdown([finding.dependency], [finding], result)
         assert "## Threat intelligence triage" in md
         assert "| `requests` | `2.31.0` | `CVE-2024-0001` |" in md
-        assert "threat:intel-needed" in md
-        assert "threat:response-needed" in md  # known_exploited escalates
+        # known_exploited escalates the run to response-needed; the comment
+        # reports the classification, not the retired threat:* labels (#1651).
+        assert "- Classification: response-needed" in md
+        assert "threat:intel-needed" not in md
+        assert "threat:response-needed" not in md
 
     def test_no_findings_states_the_clear_result(self) -> None:
         dep = triage.Dependency("requests", "2.31.0", "PyPI", "uv.lock")
@@ -2696,7 +2564,7 @@ class TestRenderSummaryMarkdown:
 
 
 # ---------------------------------------------------------------------------
-# Live-source outage accumulation -- silent soft-fail sources surface their
+# Live-source outage accumulation; silent soft-fail sources surface their
 # outage so confidence loss is visible (#1285).
 # ---------------------------------------------------------------------------
 
@@ -2741,7 +2609,7 @@ class TestLiveSourceOutages:
 
 
 # ---------------------------------------------------------------------------
-# _upsert_comment() -- marker-anchored idempotent comment (#1285).
+# _upsert_comment(); marker-anchored idempotent comment (#1285).
 # ---------------------------------------------------------------------------
 
 
@@ -2853,6 +2721,60 @@ class TestCmdComment:
         body_file.write_text("body", encoding="utf-8")
         assert triage.main(["comment", "--body-file", str(body_file)]) == 1
         assert "GH_TOKEN" in capsys.readouterr().err
+
+    def test_missing_repo_returns_1(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], tmp_path: Path
+    ) -> None:
+        monkeypatch.setenv("GH_TOKEN", "tok")
+        monkeypatch.delenv("REPO", raising=False)
+        monkeypatch.setenv("NUMBER", "5")
+        body_file = tmp_path / "c.md"
+        body_file.write_text("body", encoding="utf-8")
+        assert triage.main(["comment", "--body-file", str(body_file)]) == 1
+        assert "REPO" in capsys.readouterr().err
+
+    def test_missing_issue_and_number_returns_1(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], tmp_path: Path
+    ) -> None:
+        monkeypatch.setenv("GH_TOKEN", "tok")
+        monkeypatch.setenv("REPO", "owner/repo")
+        monkeypatch.delenv("NUMBER", raising=False)
+        body_file = tmp_path / "c.md"
+        body_file.write_text("body", encoding="utf-8")
+        # Neither --issue nor $NUMBER set; fail loud rather than guess a target.
+        assert triage.main(["comment", "--body-file", str(body_file)]) == 1
+        assert "--issue or NUMBER" in capsys.readouterr().err
+
+    def test_non_integer_number_returns_1(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], tmp_path: Path
+    ) -> None:
+        monkeypatch.setenv("GH_TOKEN", "tok")
+        monkeypatch.setenv("REPO", "owner/repo")
+        monkeypatch.setenv("NUMBER", "not-a-number")
+        body_file = tmp_path / "c.md"
+        body_file.write_text("body", encoding="utf-8")
+        assert triage.main(["comment", "--body-file", str(body_file)]) == 1
+        assert "NUMBER" in capsys.readouterr().err
+
+    def test_explicit_issue_overrides_number(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        # The weekly workflow resolves the tracking issue via issue_anchors.py
+        # and passes it as --issue; no $NUMBER is set in that job.
+        monkeypatch.setenv("GH_TOKEN", "tok")
+        monkeypatch.setenv("REPO", "owner/repo")
+        monkeypatch.delenv("NUMBER", raising=False)
+        body_file = tmp_path / "c.md"
+        body_file.write_text("RENDERED", encoding="utf-8")
+
+        captured: dict[str, object] = {}
+        monkeypatch.setattr(triage, "_upsert_comment", lambda **kw: captured.update(kw) or 0)
+        assert triage.main(
+            ["comment", "--body-file", str(body_file), "--issue", "178", "--marker", "<!-- m -->"]
+        ) == 0
+        assert captured["number"] == 178
+        assert captured["marker"] == "<!-- m -->"
+        assert str(captured["body"]).startswith("<!-- m -->")
 
     def test_prepends_marker_and_passes_create_flag(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
@@ -3029,7 +2951,6 @@ class TestClassifyFindingsSuppression:
         assert result["intel_needed"] is False
         assert result["suppressed_count"] == 1
         assert result["active_finding_count"] == 0
-        assert result["recommended_labels"] == []
         # The finding still appears in the evidence table.
         assert result["finding_count"] == 1
 
@@ -3040,7 +2961,7 @@ class TestClassifyFindingsSuppression:
         )
         assert result["intel_needed"] is False
 
-    def test_expired_suppression_resurfaces_label(self) -> None:
+    def test_expired_suppression_resurfaces_intel(self) -> None:
         finding = _intel_finding()
         today = date(2026, 6, 6)
         # review_by == today counts as expired (fail-safe).
@@ -3051,7 +2972,6 @@ class TestClassifyFindingsSuppression:
         assert result["suppressed_count"] == 0
         assert result["expired_suppressions"]
         assert "CVE-2026-2222" in result["expired_suppressions"][0]
-        assert triage.INTEL_LABEL in result["recommended_labels"]
 
     def test_response_class_finding_is_never_suppressed(self) -> None:
         finding = _intel_finding(known_exploited=True)
@@ -3234,3 +3154,109 @@ class TestScanSuppressionCli:
         assert out["rc"] == 1
         assert out["result"]["intel_needed"] is True
         assert out["result"]["expired_suppressions"]
+
+
+class TestValidateOsvCoordinates:
+    def test_flags_backtick_ecosystem(self) -> None:
+        # The exact #1511 garbage shape: a parser false-match yielding
+        # ecosystem='`', name='line', version='in'. The backtick ecosystem is
+        # outside the OSV "Defined Ecosystems" set, so it is flagged.
+        bad = triage.Dependency("line", "in", "`", "wf.yml")
+        result = triage.validate_osv_coordinates([bad])
+        assert len(result) == 1
+        dep, reason = result[0]
+        assert dep is bad
+        assert "ecosystem" in reason
+
+    def test_flags_unknown_ecosystem(self) -> None:
+        bad = triage.Dependency("foo/bar", "1.0.0", "NotAnEcosystem", "wf.yml")
+        assert triage.validate_osv_coordinates([bad]) == [
+            (bad, "unknown OSV ecosystem 'NotAnEcosystem'")
+        ]
+
+    def test_flags_whitespace_in_name(self) -> None:
+        bad = triage.Dependency("foo bar", "1.0.0", "PyPI", "uv.lock")
+        result = triage.validate_osv_coordinates([bad])
+        assert len(result) == 1
+        assert "name" in result[0][1]
+
+    def test_flags_empty_version(self) -> None:
+        bad = triage.Dependency("foo", "", "PyPI", "uv.lock")
+        result = triage.validate_osv_coordinates([bad])
+        assert len(result) == 1
+        assert "version" in result[0][1]
+
+    def test_passes_wellformed_across_ecosystems(self) -> None:
+        deps = [
+            triage.Dependency("pytest", "8.3.5", "PyPI", "uv.lock"),
+            triage.Dependency("actions/checkout", "v4", "GitHub Actions", "ci.yml"),
+            triage.Dependency(
+                "github.com/aquasecurity/trivy", "0.70.0", "Go", "ci.yml"
+            ),
+        ]
+        assert triage.validate_osv_coordinates(deps) == []
+
+    def test_release_suffixed_ecosystem_base_is_accepted(self) -> None:
+        # OSV distro ecosystems carry a ``:<release>`` suffix (e.g. Debian:11);
+        # validation matches on the base name before the colon.
+        dep = triage.Dependency("openssl", "3.0.0", "Debian:11", "image")
+        assert triage.validate_osv_coordinates([dep]) == []
+
+    def test_against_real_repo_has_no_malformed_coordinates(self) -> None:
+        # Regression guard (#1511 / #1519): run the PR-head parser over the
+        # PR-head repo tree and assert every discovered OSV coordinate is
+        # well-formed; the offline check the base-checkout pull_request_target
+        # triage job cannot perform on the PR. If a future workflow line
+        # mis-parses, or a legitimate ecosystem is missing from
+        # _KNOWN_OSV_ECOSYSTEMS, this fails here (before merge) naming the
+        # offending source, instead of only after merge via OSV HTTP 400.
+        repo_root = Path(__file__).resolve().parents[1]
+        deps = triage.discover_dependencies(repo_root)
+        assert deps, "expected the real repo to declare at least one dependency"
+        malformed = triage.validate_osv_coordinates(deps)
+        assert malformed == [], (
+            "malformed OSV coordinates discovered in the repo: "
+            + "; ".join(
+                f"{d.ecosystem}:{d.name}@{d.version} (from {d.source}); {r}"
+                for d, r in malformed
+            )
+        )
+
+
+class TestScanOfflineCoordinateGuard:
+    def test_fetch_external_findings_raises_before_network(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # The live path (osv_file is None) must validate offline and raise
+        # before any network call, so query_osv_batch is never reached.
+        called = {"osv": False}
+
+        def _boom(deps: list[triage.Dependency]) -> dict[str, object]:
+            called["osv"] = True
+            raise AssertionError("query_osv_batch must not be reached")
+
+        monkeypatch.setattr(triage, "query_osv_batch", _boom)
+        bad = triage.Dependency("line", "in", "`", "wf.yml")
+        with pytest.raises(ValueError, match="malformed OSV coordinates"):
+            triage.fetch_external_findings([bad])
+        assert called["osv"] is False
+
+
+class TestVerifyCommand:
+    def test_clean_repo_exits_zero(self, tmp_path: Path) -> None:
+        assert triage.main(["verify", "--repo-root", str(tmp_path)]) == 0
+
+    def test_malformed_pin_exits_nonzero(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        workflow_dir = tmp_path / ".github" / "workflows"
+        workflow_dir.mkdir(parents=True)
+        (workflow_dir / "pinned.yml").write_text(
+            "      # threat-intel-pin: NotAnEcosystem github.com/foo/bar 1.0.0\n",
+            encoding="utf-8",
+        )
+        rc = triage.main(["verify", "--repo-root", str(tmp_path)])
+        assert rc == 1
+        err = capsys.readouterr().err
+        assert "NotAnEcosystem" in err
+        assert "github.com/foo/bar" in err

@@ -64,9 +64,13 @@ class TestRunAggregateSignals:
             encoding="utf-8"
         )
 
-    def test_creates_retro_when_body_refs_have_failed_verification(
-        self, monkeypatch: pytest.MonkeyPatch
+    def test_skips_when_body_has_only_failed_verification(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
     ) -> None:
+        # Refs #1236: verification-prose failures are non-actionable
+        # policy-artifact anomaly hints. A PR whose only repair evidence is
+        # a failed `## Verification` row no longer opens a retro; the prose
+        # heuristic over untrusted body text was the dominant FP source.
         seen = orchestrator_recorder(monkeypatch, review_comments=[])
         event = merged_event(
             number=300,
@@ -78,9 +82,10 @@ class TestRunAggregateSignals:
             ),
         )
         assert ar.run(event, "o/r") == 0
-        assert any(
+        assert not any(
             m == "POST" and p == "/repos/o/r/issues" for m, p, _ in seen
         )
+        assert "no repair signal fired" in capsys.readouterr().out
 
     def test_skips_when_zero_comments_fix_typed_has_only_canonical_fix(
         self, monkeypatch: pytest.MonkeyPatch
@@ -215,7 +220,7 @@ class TestRunAggregateSignals:
         """Revert is subtracted without over-suppressing real multi-commit.
 
         With two real dev commits left after subtracting the revert,
-        ``multi_commit_pr`` stays True (the subtraction is precise) -- but a
+        ``multi_commit_pr`` stays True (the subtraction is precise); but a
         revert-bearing multi-commit PR whose rows are all policy-artifact and
         with no co-firing actionable signal (review / CI / verification) still
         skips. Per the user's design: multi-commit alone cannot determine an

@@ -4,19 +4,19 @@ The `scripts/` directory is added to ``sys.path`` via the ``pythonpath``
 key under ``[tool.pytest.ini_options]`` in ``pyproject.toml``.
 
 Mirrors the structure of ``tests/test_uv_pin.py`` per the strategy in
-issue #123: pure functions get table-driven tests; the subprocess
+issue #123: pure functions get table-driven tests; the REST
 boundary (:func:`scan_non_ascii.gh_api`) is monkeypatched.
 """
 
 from __future__ import annotations
 
 import json
-import subprocess
 from pathlib import Path
 from typing import Any
 
 import pytest
 import scan_non_ascii as san
+from _github_api import GitHubApiError
 
 pytestmark = pytest.mark.shard_policy
 # ---------------------------------------------------------------------------
@@ -265,6 +265,16 @@ class TestClassifyAction:
         """Devin is in _NON_ASCII_SKIP_LOGINS: fully exempt, no label/comment."""
         assert san.classify_action(True, False, "NONE", login) == "none"
 
+    @pytest.mark.parametrize(
+        "login", ["chatgpt-codex-connector", "chatgpt-codex-connector[bot]"]
+    )
+    def test_codex_connector_non_ascii_is_none_skip(self, login: str) -> None:
+        """Codex review bot is in _NON_ASCII_SKIP_LOGINS (#1731): fully exempt.
+
+        Both login forms are covered because GitHub delivers App logins as the
+        bare slug (GraphQL) and with the '[bot]' suffix (webhook/REST)."""
+        assert san.classify_action(True, False, "NONE", login) == "none"
+
     def test_trusted_bot_ascii_only_is_none(self) -> None:
         """No non-ASCII -> none regardless of login (cheap-exit guard)."""
         assert (
@@ -302,6 +312,12 @@ def test_non_ascii_skip_logins_contains_codecov_and_devin() -> None:
     assert "codecov" in san._NON_ASCII_SKIP_LOGINS
     assert "codecov[bot]" in san._NON_ASCII_SKIP_LOGINS
     assert any("devin" in login for login in san._NON_ASCII_SKIP_LOGINS)
+
+
+def test_non_ascii_skip_logins_contains_codex_connector() -> None:
+    """Regression guard for #1731: both codex-connector forms must be present."""
+    assert "chatgpt-codex-connector" in san._NON_ASCII_SKIP_LOGINS
+    assert "chatgpt-codex-connector[bot]" in san._NON_ASCII_SKIP_LOGINS
 
 
 def test_non_ascii_skip_logins_disjoint_from_trusted_bot_logins() -> None:
@@ -435,57 +451,23 @@ class TestBuildSummary:
 
 
 # ---------------------------------------------------------------------------
-# gh_api (subprocess boundary)
+# gh_api (REST boundary)
 # ---------------------------------------------------------------------------
 
 
-def _fake_run_capture():
-    """Return (recorder, fake_run). recorder collects call kwargs."""
-    calls: list[dict[str, Any]] = []
-
-    class _Result:
-        def __init__(self, stdout: str = "", returncode: int = 0) -> None:
-            self.stdout = stdout
-            self.returncode = returncode
-            self.stderr = ""
-
-    def fake_run(cmd, **kwargs):
-        calls.append({"cmd": cmd, **kwargs})
-        return _Result(stdout="OK")
-
-    return calls, fake_run
-
-
 class TestGhApi:
-    def test_get_uses_no_input(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        calls, fake_run = _fake_run_capture()
-        monkeypatch.setattr(subprocess, "run", fake_run)
-        out = san.gh_api("GET", "/repos/x/y/issues/1/comments")
-        assert out == "OK"
-        assert calls[0]["cmd"] == [
-            "gh", "api", "--method", "GET", "/repos/x/y/issues/1/comments"
-        ]
-        assert "input" not in calls[0]
+    def test_delegates_to_rest_text(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        calls: list[tuple[Any, ...]] = []
 
-    def test_post_passes_json_on_stdin(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        calls, fake_run = _fake_run_capture()
-        monkeypatch.setattr(subprocess, "run", fake_run)
-        san.gh_api("POST", "/repos/x/y/issues/1/labels", {"labels": ["L"]})
-        assert "--input" in calls[0]["cmd"]
-        assert calls[0]["cmd"][-1] == "-"
-        assert json.loads(calls[0]["input"]) == {"labels": ["L"]}
+        def fake_rest_text(method, path, payload=None):
+            calls.append((method, path, payload))
+            return "OK"
 
-    def test_nonzero_exit_raises_loudly(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        def _raise(*_a, **_kw):
-            raise subprocess.CalledProcessError(1, "gh", stderr="boom")
-
-        monkeypatch.setattr(subprocess, "run", _raise)
-        with pytest.raises(subprocess.CalledProcessError):
-            san.gh_api("GET", "/x")
+        monkeypatch.setattr(san, "rest_text", fake_rest_text)
+        assert san.gh_api("GET", "/repos/x/y/issues/1/comments") == "OK"
+        assert calls[0] == ("GET", "/repos/x/y/issues/1/comments", None)
+        assert san.gh_api("POST", "/repos/x/y/issues/1/labels", {"labels": ["L"]}) == "OK"
+        assert calls[1] == ("POST", "/repos/x/y/issues/1/labels", {"labels": ["L"]})
 
 
 # ---------------------------------------------------------------------------
@@ -522,7 +504,7 @@ class TestPostOrUpdateComment:
     def test_creates_when_none_exists(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        seen: list[tuple] = []
+        seen: list[tuple[str, str, Any]] = []
 
         def fake_api(method, path, body=None, **_kw):
             seen.append((method, path, body))
@@ -541,7 +523,7 @@ class TestPostOrUpdateComment:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         existing = [{"id": 77, "body": san.COMMENT_MARKER + "\n\nold"}]
-        seen: list[tuple] = []
+        seen: list[tuple[str, str, Any]] = []
 
         def fake_api(method, path, body=None, **_kw):
             seen.append((method, path, body))
@@ -557,7 +539,7 @@ class TestPostOrUpdateComment:
 
 class TestApplyLabel:
     def test_posts_label(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        seen: list[tuple] = []
+        seen: list[tuple[str, str, Any]] = []
         monkeypatch.setattr(
             san,
             "gh_api",
@@ -578,7 +560,7 @@ class TestBlockExternal:
     def test_pr_kinds_request_changes(
         self, monkeypatch: pytest.MonkeyPatch, kind: str
     ) -> None:
-        seen: list[tuple] = []
+        seen: list[tuple[str, str, Any]] = []
         monkeypatch.setattr(
             san,
             "gh_api",
@@ -596,7 +578,7 @@ class TestBlockExternal:
     def test_issue_kinds_close_not_planned(
         self, monkeypatch: pytest.MonkeyPatch, kind: str
     ) -> None:
-        seen: list[tuple] = []
+        seen: list[tuple[str, str, Any]] = []
         monkeypatch.setattr(
             san,
             "gh_api",
@@ -618,17 +600,48 @@ class TestBlockExternal:
             san.block_external("o/r", 1, "weird")
 
 
+class TestNoSelfClearingReview:
+    """Rule (#1736): the non-ASCII triage MUST NOT auto-dismiss or auto-approve
+    the ``REQUEST_CHANGES`` review it posts. Self-clearing a defensive block can
+    be coerced into self-unblocking and collapses the review layer (defense-in-
+    depth, CLAUDE.md section 4). The block is one-directional; lifting a stale or
+    false-positive review is a deliberate maintainer action in the GitHub UI, and
+    false positives are prevented at the source by the trusted-bot exemption
+    (#1732). See docs/runbooks/non-ascii-defense.md "Self-clearing prohibition"."""
+
+    def test_module_has_no_review_dismissal_or_approve(self) -> None:
+        source = Path(san.__file__).read_text(encoding="utf-8")
+        assert "/dismissals" not in source, (
+            "scan_non_ascii.py must not call the REST review-dismissal endpoint "
+            "(/reviews/{id}/dismissals): self-clearing the triage's own block is "
+            "prohibited. See docs/runbooks/non-ascii-defense.md (#1736)."
+        )
+        # GraphQL is a second dismissal surface: gh_api("POST", "graphql", ...)
+        # with a `dismissPullRequestReview` mutation carries neither token above,
+        # so guard the mutation name too (#1738 review).
+        assert "dismissPullRequestReview" not in source, (
+            "scan_non_ascii.py must not call the GraphQL dismissPullRequestReview "
+            "mutation: self-clearing the triage's own block is prohibited via any "
+            "API surface. See docs/runbooks/non-ascii-defense.md (#1736)."
+        )
+        assert "APPROVE" not in source, (
+            "scan_non_ascii.py must not submit an APPROVE review (REST or the "
+            "GraphQL addPullRequestReview event): self-clearing the triage's own "
+            "block is prohibited. See docs/runbooks/non-ascii-defense.md (#1736)."
+        )
+
+
 # ---------------------------------------------------------------------------
 # run (orchestrator)
 # ---------------------------------------------------------------------------
 
 
-def _capture_gh_api(monkeypatch: pytest.MonkeyPatch) -> list[tuple]:
+def _capture_gh_api(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, str, Any]]:
     """Replace san.gh_api with a recorder and return the calls list.
 
     The GET for find_existing_comment_id returns "[]" (no existing comment).
     """
-    seen: list[tuple] = []
+    seen: list[tuple[str, str, Any]] = []
 
     def fake_api(method, path, body=None, **_kw):
         seen.append((method, path, body))
@@ -642,7 +655,7 @@ def _capture_gh_api(monkeypatch: pytest.MonkeyPatch) -> list[tuple]:
 
 class TestRun:
     def test_action_none_does_no_api_calls(
-        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
     ) -> None:
         seen = _capture_gh_api(monkeypatch)
         event = {
@@ -823,7 +836,7 @@ class TestRun:
         self, monkeypatch: pytest.MonkeyPatch, login: str
     ) -> None:
         """Regression for #480/#504/#620: Codecov is now fully exempt (action=none).
-        No label, no advisory comment -- the post is silently passed through."""
+        No label, no advisory comment; the post is silently passed through."""
         seen = _capture_gh_api(monkeypatch)
         event = {
             "issue": {"number": 478, "pull_request": {"url": "..."}},
@@ -853,6 +866,26 @@ class TestRun:
         assert san.run(event, "issue_comment", "o/r") == 0
         assert seen == []
 
+    @pytest.mark.parametrize(
+        "login", ["chatgpt-codex-connector", "chatgpt-codex-connector[bot]"]
+    )
+    def test_codex_connector_review_comment_is_fully_skipped(
+        self, monkeypatch: pytest.MonkeyPatch, login: str
+    ) -> None:
+        """#1731: the Codex review bot's emoji-bearing comment is fully exempt
+        (action=none): no label, no advisory comment."""
+        seen = _capture_gh_api(monkeypatch)
+        event = {
+            "pull_request": {"number": 1727},
+            "comment": {
+                "body": "Useful? React with \U0001f44d / \U0001f44e.",
+                "author_association": "NONE",
+                "user": {"login": login},
+            },
+        }
+        assert san.run(event, "pull_request_review_comment", "o/r") == 0
+        assert seen == []
+
     def test_unknown_bot_pr_still_blocks(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -875,7 +908,7 @@ class TestRun:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Idempotency: a prior advisory is PATCHed, not duplicated."""
-        seen: list[tuple] = []
+        seen: list[tuple[str, str, Any]] = []
 
         def fake_api(method, path, body=None, **_kw):
             seen.append((method, path, body))
@@ -962,7 +995,7 @@ class TestCLI:
         assert san.main(["run"]) == 0
 
     def test_run_missing_event_path_errors(
-        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
     ) -> None:
         monkeypatch.delenv("GITHUB_EVENT_PATH", raising=False)
         monkeypatch.setenv("GITHUB_EVENT_NAME", "issues")
@@ -974,7 +1007,7 @@ class TestCLI:
         self,
         monkeypatch: pytest.MonkeyPatch,
         tmp_path: Path,
-        capsys: pytest.CaptureFixture,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
         event_file = tmp_path / "event.json"
         event_file.write_text("{}")
@@ -988,7 +1021,7 @@ class TestCLI:
         self,
         monkeypatch: pytest.MonkeyPatch,
         tmp_path: Path,
-        capsys: pytest.CaptureFixture,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
         event_file = tmp_path / "event.json"
         event_file.write_text("{}")
@@ -1003,7 +1036,7 @@ class TestCLI:
         self,
         monkeypatch: pytest.MonkeyPatch,
         tmp_path: Path,
-        capsys: pytest.CaptureFixture,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
         event_file = tmp_path / "event.json"
         event_file.write_text("{not json")
@@ -1022,7 +1055,7 @@ class TestCLI:
         self,
         monkeypatch: pytest.MonkeyPatch,
         tmp_path: Path,
-        capsys: pytest.CaptureFixture,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
         event_file = tmp_path / "event.json"
         event_file.write_text("{}")
@@ -1041,10 +1074,10 @@ class TestCLI:
         self,
         monkeypatch: pytest.MonkeyPatch,
         tmp_path: Path,
-        capsys: pytest.CaptureFixture,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
         def _raise(*_a, **_kw):
-            raise subprocess.CalledProcessError(1, "gh", stderr="auth fail")
+            raise GitHubApiError(401, "GET", "/repos/o/r/issues/1/comments", "auth fail")
 
         monkeypatch.setattr(san, "gh_api", _raise)
         event = {
@@ -1066,4 +1099,4 @@ class TestCLI:
             ]
         )
         assert exit_code == 1
-        assert "gh api failed" in capsys.readouterr().err
+        assert "GitHub API failed" in capsys.readouterr().err

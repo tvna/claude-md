@@ -242,7 +242,7 @@ class TestRunCreate:
     ) -> None:
         """Default (no AUTO_RETRO_PR_COMMENTS): the retro issue is created
         and the terminal label is applied, but no back-link comment is
-        POSTed to the source PR -- the dashboard is the surface now (#1386)."""
+        POSTed to the source PR; the dashboard is the surface now (#1386)."""
         monkeypatch.delenv("AUTO_RETRO_PR_COMMENTS", raising=False)
         seen = orchestrator_recorder(
             monkeypatch,

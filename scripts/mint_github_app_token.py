@@ -8,17 +8,18 @@ mint a fresh GitHub App *installation* token at launch time. Installation
 tokens expire after about an hour, so binding the mint to the launch keeps the
 credential current without any operator handoff (Refs #1063).
 
-Inputs come from the environment only -- nothing is read from a tracked file:
+Inputs come from the environment; nothing is read from a git-tracked file (the
+optional key file below is an untracked operator-provided sink):
 
-* ``GITHUB_APP_ID`` -- the numeric App id (the JWT ``iss`` claim).
-* ``GITHUB_APP_INSTALLATION_ID`` -- the installation to mint a token for.
-* ``GITHUB_APP_PRIVATE_KEY`` -- the App private key, PEM text. This is the only
+* ``GITHUB_APP_ID``; the numeric App id (the JWT ``iss`` claim).
+* ``GITHUB_APP_INSTALLATION_ID``; the installation to mint a token for.
+* ``GITHUB_APP_PRIVATE_KEY``; the App private key, PEM text. This is the only
   root secret; it is held in memory, written to a ``0600`` temp file only for
   the duration of the openssl signing call, and removed immediately after.
-* ``GITHUB_APP_PRIVATE_KEY_FILE`` -- optional path to a file holding the PEM
+* ``GITHUB_APP_PRIVATE_KEY_FILE``; optional path to a file holding the PEM
   (e.g. a Vault Agent template sink). Used only when ``GITHUB_APP_PRIVATE_KEY``
   is unset; the literal env var takes precedence.
-* ``GITHUB_API_URL`` -- optional API base (default ``https://api.github.com``)
+* ``GITHUB_API_URL``; optional API base (default ``https://api.github.com``)
   for GitHub Enterprise Server installs.
 
 The minted token is written to stdout and nowhere else. The JWT, the private
@@ -131,7 +132,7 @@ def request_installation_token(
     """Exchange an App JWT for an installation access token.
 
     Returns the token string. Raises :class:`MintError` on any HTTP, network,
-    or response-shape failure -- never returning an empty or partial token.
+    or response-shape failure; never returning an empty or partial token.
     """
     if not api_url.startswith("https://"):
         # Refuse to send the App JWT (a bearer credential) over cleartext. A
@@ -184,8 +185,8 @@ def _require_private_key() -> str:
 
     Precedence: ``GITHUB_APP_PRIVATE_KEY`` (literal) wins; otherwise
     ``GITHUB_APP_PRIVATE_KEY_FILE`` (a path, e.g. a Vault Agent template sink)
-    is read. Fails loudly naming the missing input. Only the path -- never the
-    file contents -- is named on error, so the key cannot leak into a log.
+    is read. Fails loudly naming the missing input. Only the path (never the
+    file contents) is named on error, so the key cannot leak into a log.
     """
     literal = os.environ.get("GITHUB_APP_PRIVATE_KEY", "")
     if literal.strip():

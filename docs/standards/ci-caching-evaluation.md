@@ -57,7 +57,7 @@ too low to justify the added surface today.
 ## Where the wall-time actually is (non-caching levers)
 
 The critical path is structural, not setup-bound. Two levers can affect it, but
-both touch `verify-agents`'s job graph -- which is a deliberate design
+both touch `verify-agents`'s job graph; which is a deliberate design
 (marker-bucketed shard matrix plus a completeness gate, #545) wired to required
 status-check contexts (`scripts/verify_required_check_contexts.py`,
 `.github/rulesets/main.json`). Treat either as its own measured, planned change,

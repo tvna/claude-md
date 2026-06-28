@@ -21,6 +21,21 @@ on:
           - claude
           - codex
         default: claude
+      split_nix_develop:
+        description: >-
+          Time a bare 'nix develop --command true' as a warmup phase before
+          postCreate, to split first-time devShell closure realisation from the
+          uv sync that the postCreate nix-develop segment otherwise conflates.
+        type: boolean
+        default: false
+      build_from_source:
+        description: >-
+          Build the image locally from .devcontainer/images/<agent> (running
+          the build-time Features, incl. nix-warm-claude) and measure that
+          instead of pulling the published pin. Use to verify a closure-bake
+          change on a branch before it is published to GHCR (#1491).
+        type: boolean
+        default: false
 
 permissions: {}
 
@@ -38,7 +53,7 @@ jobs:
       packages: read
     steps:
       - name: Checkout repository
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
 
@@ -51,12 +66,69 @@ jobs:
             --username "${{ github.actor }}" \
             --password-stdin
 
+      # Build the image locally from the prebuild definition so a branch's
+      # build-time Features (here nix-warm-claude, which bakes the .#claude
+      # devShell closure) can be measured before they are published to GHCR. The
+      # workspace is NOT mounted during Feature install, so stage the flake files
+      # the nix-warm-claude Feature realises into the Feature dir, exactly as the
+      # publish workflow does for the claude legs. Native platform only (no
+      # --platform / --push): we measure on the matching-arch runner. Refs #1491.
+      - name: Build image from source
+        if: inputs.build_from_source
+        env:
+          AGENT: ${{ inputs.agent }}
+          DEVCONTAINERS_CLI_VERSION: "0.86.1"
+          MEASURE_IMAGE: claude-md-measure:local
+        run: |
+          set -euo pipefail
+          if [ "${AGENT}" = "claude" ]; then
+            cp flake.nix flake.lock pyproject.toml \
+              .devcontainer/images/features/nix-warm-claude/
+          fi
+          npx --yes "@devcontainers/cli@${DEVCONTAINERS_CLI_VERSION}" build \
+            --workspace-folder . \
+            --config ".devcontainer/images/${AGENT}/devcontainer.json" \
+            --image-name "${MEASURE_IMAGE}"
+
       - name: Measure startup phases
         env:
           AGENT: ${{ inputs.agent }}
+          SPLIT_NIX_DEVELOP: ${{ inputs.split_nix_develop }}
+          BUILD_FROM_SOURCE: ${{ inputs.build_from_source }}
+          MEASURE_IMAGE: claude-md-measure:local
         run: |
           set -euo pipefail
           config=".devcontainer/${AGENT}/devcontainer.json"
+          # The published image aliases the agent user to uid 0 (agent-user
+          # feature) because production runs under rootless Podman: there the
+          # bind-mounted workspace maps to uid 0 inside the container, so nix's
+          # libgit2 flake fetch sees the repo as owned by the current user.
+          # Under docker on the runner there is no such mapping -- the checkout
+          # stays owned by the runner uid -- so libgit2 rejects the flake git
+          # input ("repository path ... is not owned by current user") and every
+          # nix-develop segment fails before doing any real work, leaving the
+          # postCreate cost unmeasured (#1471). Stage a root-owned copy of the
+          # repo and mount that, reproducing the production uid-0 ownership so
+          # the segments actually run. The original checkout is left untouched
+          # so the post-job git cleanup (runner uid) still works.
+          workspace_copy="${RUNNER_TEMP}/measure-workspace"
+          sudo rm -rf "$workspace_copy"
+          sudo cp -a "$GITHUB_WORKSPACE" "$workspace_copy"
+          sudo chown -R 0:0 "$workspace_copy"
+          # Opt-in: time a bare nix-develop as a warmup phase so the postCreate
+          # nix-develop segment measures uv sync against an already-warm closure,
+          # splitting first-time closure realisation from uv sync (#1471).
+          warmup_args=()
+          if [ "${SPLIT_NIX_DEVELOP}" = "true" ]; then
+            warmup_args+=(--warmup "nix develop .#${AGENT} --command true")
+          fi
+          # When the image was built from source above, measure that local image
+          # (immutable local tag) and skip the pull. Otherwise measure the
+          # published pin named in --config. Refs #1491.
+          image_args=()
+          if [ "${BUILD_FROM_SOURCE}" = "true" ]; then
+            image_args+=(--image "${MEASURE_IMAGE}" --no-pull)
+          fi
           # postStart applies the egress allowlist, which needs NET_ADMIN; the
           # eBPF caps are unavailable on the runner, so that segment is
           # best-effort and its (possibly non-zero) exit is recorded as data.
@@ -64,8 +136,11 @@ jobs:
             --config "$config" \
             --runtime docker \
             --user "$AGENT" \
+            --host-dir "$workspace_copy" \
             --cap NET_ADMIN \
             --probe-composition \
+            "${warmup_args[@]}" \
+            "${image_args[@]}" \
             --output "startup-${AGENT}.json" \
             2>> "$GITHUB_STEP_SUMMARY"
 

@@ -5,7 +5,7 @@ Issue #1030: a camelCase ``sessionStart`` key shipped in
 ``.claude/settings.json``, ``.codex/hooks.json``, and
 ``.devin/hooks.v1.json``. Claude Code and Codex match lifecycle hook
 events case-sensitively in PascalCase (``SessionStart``), so the key
-never fired -- it was a malformed duplicate of the superpowers
+never fired; it was a malformed duplicate of the superpowers
 ``session-start`` hook already present in the ``SessionStart`` array.
 
 This is the deterministic gate that shifts detection left to commit
@@ -55,7 +55,7 @@ PASCAL_CASE_RE = re.compile(r"^[A-Z][A-Za-z]+$")
 def offending_event_keys(hooks: object) -> list[str]:
     """Return the non-PascalCase keys in a ``hooks`` mapping, sorted.
 
-    A non-dict ``hooks`` value yields no keys -- the JSON-shape contract
+    A non-dict ``hooks`` value yields no keys; the JSON-shape contract
     is enforced by the per-config tests; this gate only judges casing.
     """
     if not isinstance(hooks, dict):

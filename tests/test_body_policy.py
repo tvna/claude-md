@@ -429,7 +429,7 @@ class TestGateWindow:
 
 
 # ---------------------------------------------------------------------------
-# _verify -- PR
+# _verify; PR
 # ---------------------------------------------------------------------------
 
 
@@ -474,7 +474,7 @@ class TestVerifyPRBody:
 
 
 # ---------------------------------------------------------------------------
-# _verify -- issue
+# _verify; issue
 # ---------------------------------------------------------------------------
 
 
@@ -535,7 +535,7 @@ class TestVerifyIssueBody:
 
 
 # ---------------------------------------------------------------------------
-# _verify -- bypass paths
+# _verify; bypass paths
 # ---------------------------------------------------------------------------
 
 
@@ -552,6 +552,39 @@ class TestTrustedBotBypass:
         assert (
             "skipped: trusted bot author (dependabot[bot])"
             in capsys.readouterr().out
+        )
+
+    def test_tvna_bot_passes_with_empty_body(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        # Regression guard for #1553: the App bot that authors generated bot
+        # PRs (createCommitOnBranch, #1437/#1539) must be exempt from the
+        # human-PR body-shape contract, like dependabot[bot]. When it was
+        # absent from .github/trusted_bots.toml, the regenerated triage-report
+        # PR (#1552) failed the Portable PR policy gate's body step.
+        assert (
+            body_policy._verify(
+                "pull_request", "", author="tvna-bot[bot]"
+            )
+            == 0
+        )
+        assert (
+            "skipped: trusted bot author (tvna-bot[bot])"
+            in capsys.readouterr().out
+        )
+
+    def test_triage_report_body_exempt_for_tvna_bot(self) -> None:
+        # The fixed auto-retro triage-report PR body does not carry the
+        # human-PR sections; it passes only because tvna-bot[bot] is trusted.
+        import auto_retro
+
+        assert (
+            body_policy._verify(
+                "pull_request",
+                auto_retro._TRIAGE_REPORT_PR_BODY,
+                author="tvna-bot[bot]",
+            )
+            == 0
         )
 
     def test_unknown_bot_not_bypassed(
@@ -778,7 +811,7 @@ Refs #205
 
 ## Rollback
 
-- git revert <sha>
+- git revert abc1234
 
 """ + _NEW_SHAPE_VERIFICATION_OK + "\n" + _NEW_SHAPE_CHECKLIST_OK
 _NEW_SHAPE_PR_BODY += "\n" + _NEW_SHAPE_RESOURCE_OK
@@ -1006,7 +1039,7 @@ class TestVerifyPrAgentAttributionFooter:
         assert errors
         assert "multiple" in errors[0]
 
-    # -- harness_appends_footer path (Claude web harness create, #1025) --
+    #; harness_appends_footer path (Claude web harness create, #1025) --
 
     def test_harness_mode_no_footer_passes(self) -> None:
         # Under the harness the agent submits no footer; the harness will
@@ -1336,3 +1369,98 @@ class TestDetectDroppedAngleTokens:
 
     def test_no_tokens_returns_empty(self) -> None:
         assert body_policy.detect_dropped_angle_tokens("plain text", "plain text") == []
+
+
+# ---------------------------------------------------------------------------
+# detect_placeholder_tokens
+# ---------------------------------------------------------------------------
+
+
+class TestDetectPlaceholderTokens:
+    def test_flags_angle_token_in_body(self) -> None:
+        body = "## Rollback\n\n- git revert <sha>\n"
+        errors = body_policy.detect_placeholder_tokens(body)
+        assert len(errors) == 1
+        assert "<sha>" in errors[0]
+        assert "::error::" in errors[0]
+
+    def test_passes_clean_body(self) -> None:
+        body = "## Rollback\n\n- git revert abc1234\n"
+        assert body_policy.detect_placeholder_tokens(body) == []
+
+    def test_ignores_token_inside_html_comment(self) -> None:
+        body = "<!-- <sha> is a placeholder -->\n## Rollback\n\n- git revert abc1234\n"
+        assert body_policy.detect_placeholder_tokens(body) == []
+
+    def test_dedupes_repeated_token(self) -> None:
+        body = "## Rollback\n\n- git revert <sha> and also <sha>\n"
+        errors = body_policy.detect_placeholder_tokens(body)
+        assert len(errors) == 1
+
+    def test_multiple_distinct_tokens_each_flagged(self) -> None:
+        body = "## Rollback\n\n- <cmd>\n## Verification\n\n- <result>\n"
+        errors = body_policy.detect_placeholder_tokens(body)
+        assert len(errors) == 2
+
+    def test_flags_verification_template_token(self) -> None:
+        body = "## Verification\n\n- command: `<inline-code>`\n  result: `<exit 0>`\n"
+        errors = body_policy.detect_placeholder_tokens(body)
+        assert any("<inline-code>" in e for e in errors)
+
+
+# ---------------------------------------------------------------------------
+# verify_section_substantive_content
+# ---------------------------------------------------------------------------
+
+
+class TestVerifySectionSubstantiveContent:
+    def test_passes_fully_populated_body(self) -> None:
+        assert body_policy.verify_section_substantive_content(_NEW_SHAPE_PR_BODY) == []
+
+    def test_flags_section_with_bare_dash(self) -> None:
+        body = _NEW_SHAPE_PR_BODY.replace(
+            "## Summary\n\n- one-liner\n", "## Summary\n\n-\n"
+        )
+        errors = body_policy.verify_section_substantive_content(body)
+        assert any("Summary" in e for e in errors)
+        assert any("::error::" in e for e in errors)
+
+    def test_flags_section_with_bare_dash_and_spaces(self) -> None:
+        body = _NEW_SHAPE_PR_BODY.replace(
+            "## Facts\n\n- one fact\n", "## Facts\n\n-  \n"
+        )
+        errors = body_policy.verify_section_substantive_content(body)
+        assert any("Facts" in e for e in errors)
+
+    def test_flags_section_with_only_blank_lines(self) -> None:
+        body = _NEW_SHAPE_PR_BODY.replace(
+            "## Assumptions\n\n- one assumption\n", "## Assumptions\n\n\n\n"
+        )
+        errors = body_policy.verify_section_substantive_content(body)
+        assert any("Assumptions" in e for e in errors)
+
+    def test_passes_section_with_real_content(self) -> None:
+        # A single non-dash line is sufficient to pass.
+        errors = body_policy.verify_section_substantive_content(
+            "## Summary\n\nAdds the placeholder gate.\n\n" + _NEW_SHAPE_PR_BODY
+        )
+        assert all("Summary" not in e for e in errors)
+
+    def test_html_comment_only_counts_as_empty(self) -> None:
+        body = _NEW_SHAPE_PR_BODY.replace(
+            "## Risk and blast radius\n\n- isolated\n",
+            "## Risk and blast radius\n\n<!-- fill this in -->\n",
+        )
+        errors = body_policy.verify_section_substantive_content(body)
+        assert any("Risk and blast radius" in e for e in errors)
+
+    def test_footer_in_last_section_does_not_count_as_content(self) -> None:
+        # A Related Issue section that has only blank lines plus the footer
+        # should be flagged; the footer is NOT substantive section content.
+        body = _NEW_SHAPE_PR_BODY.replace(
+            "## Related Issue\n\nRefs #205\n",
+            "## Related Issue\n\n"
+            "_Generated by [Claude Code](https://claude.ai/code)_\n",
+        )
+        errors = body_policy.verify_section_substantive_content(body)
+        assert any("Related Issue" in e for e in errors)

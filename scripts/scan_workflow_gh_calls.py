@@ -6,7 +6,7 @@ CLI, nor ``curl`` the GitHub REST API (``api.github.com`` /
 ``uploads.github.com``) directly, unless the (workflow, step) pair is
 documented in :data:`ALLOWLIST_ENTRIES` with an explicit migration rationale.
 Both shapes embed GitHub behaviour in YAML where it cannot be unit tested;
-the fix is the same -- move it behind a tested ``scripts/*.py`` helper.
+the fix is the same; move it behind a tested ``scripts/*.py`` helper.
 
 ALLOWLIST_ENTRIES is expected to shrink as each migration PR lands.  When
 the list is empty the gate is fully strict: any new ``gh`` call or direct
@@ -32,7 +32,7 @@ import re
 import sys
 from collections.abc import Iterator
 from pathlib import Path
-from typing import NamedTuple
+from typing import Any, NamedTuple
 
 import yaml
 
@@ -80,7 +80,7 @@ _ALLOWLIST_KEYS: frozenset[tuple[str, str]] = frozenset(
 )
 
 
-def _load_yaml(wf_path: Path) -> dict | None:
+def _load_yaml(wf_path: Path) -> dict[str, Any] | None:
     """Return parsed YAML dict, or None if the file is missing or not a dict."""
     try:
         data = yaml.safe_load(wf_path.read_text(encoding="utf-8"))

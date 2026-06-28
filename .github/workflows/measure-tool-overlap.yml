@@ -1,0 +1,98 @@
+# Measure new-tool vs existing-gate overlap on a schedule (Refs #1618, #1610).
+#
+# Follow-up to #1610: the three pinned binaries (zizmor / lychee / betterleaks)
+# run ALONGSIDE the bespoke gates they overlap. This workflow runs
+# scripts/measure_tool_overlap.py over the checkout, appends the Markdown
+# summary to the step summary, and uploads the JSON records + Markdown report so
+# the keep/replace/drop decision (docs/standards/tool-overlap-measurement.md)
+# rests on accumulated evidence. It is a diagnostic, not a gate: it never fails
+# the build on findings, and it removes nothing.
+#
+# The three tools are provisioned web-session-only by design (#1610), so this
+# job installs the SAME pinned binaries on the runner by invoking the existing
+# install-*.sh scripts with CLAUDE_CODE_REMOTE=true (flake.nix stays the single
+# pin source of truth) and putting ${HOME}/.local/bin on PATH for later steps.
+name: Measure tool overlap
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Weekly, Monday 06:00 UTC -- offset from weekly-maintenance (Sun 20:00) so
+    # the measurement series accumulates a data point per week (#1618 window).
+    - cron: "0 6 * * 1"
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  measure:
+    name: Measure tool overlap
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Set up uv and project environment
+        uses: ./.github/actions/setup-uv
+
+      - name: Install pinned measurement tools
+        # Reuse the web-session installers (single pin source of truth) on the
+        # runner, then expose ${HOME}/.local/bin to subsequent steps. The
+        # installers download from GitHub Releases and sha256-verify against
+        # flake.nix; the runner has that egress.
+        env:
+          CLAUDE_CODE_REMOTE: "true"
+        run: |
+          set -euo pipefail
+          scripts/install-zizmor.sh
+          scripts/install-lychee.sh
+          scripts/install-betterleaks.sh
+          echo "${HOME}/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Smoke-check tool argv (Refs #1632, Fact 1)
+        # Before measuring, assert each tool ACCEPTS its argv and emits
+        # parseable JSON. A rejected flag (betterleaks's `--no-git` on `dir`
+        # printed help to stderr and emitted no JSON) otherwise masquerades as a
+        # zero-finding result; this step fails the build loud instead. The
+        # binaries are installed in the prior step, so none are skipped here.
+        run: uv run python scripts/measure_tool_overlap.py --smoke
+
+      - name: Run overlap measurement
+        env:
+          # Ephemeral CI carries no persistent host identity; use a constant,
+          # non-identifying token for the anonymized host.id (Refs #88).
+          HOST_ID: ci-ephemeral
+          COMMIT_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          zizmor --version
+          lychee --version
+          betterleaks version
+          uv run python scripts/measure_tool_overlap.py \
+            --scope-root . \
+            --commit "$COMMIT_SHA" \
+            --host-id "$HOST_ID" \
+            --notes "scheduled measurement (${GITHUB_RUN_ID})" \
+            --output records.json \
+            --report report.md
+
+      - name: Append report to step summary
+        run: cat report.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload measurement artifacts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: tool-overlap-measurement
+          path: |
+            records.json
+            report.md
+          retention-days: 90
+          if-no-files-found: error

@@ -55,7 +55,7 @@ reaches the network at *runtime*, add the destination to
 2. If the tool reaches the network at runtime, add the host to the relevant
    `.devcontainer/network/*.allowlist`.
 3. Register the tool in `scan_devcontainer_tool_drift.TOOL_FLAKE_MARKERS`.
-4. Run `python3 scripts/scan_devcontainer_tool_drift.py verify` -- it must
+4. Run `python3 scripts/scan_devcontainer_tool_drift.py verify`; it must
    pass before the change merges.
 
 ## Network destination triage

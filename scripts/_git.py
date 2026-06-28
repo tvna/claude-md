@@ -10,7 +10,7 @@ wrappers (``preflight_branch_base.run_git`` and
 No git command logic moves here: which subcommands run, how their output is
 parsed, and how a non-zero exit is surfaced all stay in the callers. Only the
 "find the git binary and run it with captured output" plumbing moves in, so
-behaviour is unchanged -- each caller keeps deciding whether to pass
+behaviour is unchanged; each caller keeps deciding whether to pass
 ``check=True``, how to read ``stdout``/``stderr``, and how to react to failure.
 
 Refs #1005.

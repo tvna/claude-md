@@ -1,4 +1,4 @@
-# Retrospective noise and flooding visibility -- procedure
+# Retrospective noise and flooding visibility; procedure
 
 Operator-facing companion to the retrospective documents in
 [`docs/archive/retrospective-pr-*.md`](../archive/) and the auto-retro
@@ -25,11 +25,15 @@ non-bot, non-retro merge.
 - Replacing the auto-retro repair-history pre-fill. The
   `_build_repair_history_table` function in
   [`scripts/auto_retro.py`](../../scripts/auto_retro.py) already detects
-  five signal classes (CI failures, fix-up commits with the canonical
+  these row classes (CI failures, fix-up commits with the canonical
   `fix(...)` commit on a fix-typed PR split out as a separate
-  `Fix commit` row -- see #413, merge-from-main, multi-commit PR, and
-  failed Verification pairs) and writes them into the retro issue
-  body. This procedure layers human judgment on top of those signals;
+  `Fix commit` row; see #413, merge-from-main, multi-commit PR, and
+  prose Verification-fail rows) and writes them into the retro issue
+  body. As of #1236 the Verification-fail row is a non-actionable
+  policy-artifact anomaly hint (it never opens a retro on its own,
+  mirroring the Revert-commit row); the `verification_pairs_failed`
+  signal it fed was retired the same way #1227 retired `body_cites_refs`.
+  This procedure layers human judgment on top of those signals;
   it does not duplicate them.
 - Re-classifying the three repair-taxonomy categories. The taxonomy
   (missing deterministic gate / unclear agent instruction / external
@@ -45,7 +49,7 @@ Before splitting `scripts/auto_retro.py`, render the current
 orchestrator decision tree from the `run()` function's Python AST:
 
 ```bash
-python scripts/auto_retro.py decision-tree
+python scripts/script_ast_graph.py auto-retro-decision-tree
 ```
 
 The command writes Mermaid `flowchart TD` text to stdout. Paste the
@@ -66,9 +70,9 @@ or `git log` query.
 
 | # | Signal | Where to read it | What it means |
 |---|--------|------------------|---------------|
-| S1 | High commit count on a single PR | Auto-retro repair-history table `Multi-commit PR` row; or `git log --oneline <base>..<head> | wc -l` | The PR did not squash to a single intent. Either the author iterated in public (legitimate when each commit is a discrete step) or the branch absorbed unrelated work. Note: the `multi_commit_pr` gate that triggers auto-retro creation subtracts merge-from-main commits AND revert commits (Git-standard `Revert "..."` and Conventional `revert:`/`revert(scope):`) from the count, so neither rebase debt forced by the squash-only, linear-history policy nor a `git revert` (the default rollback path per CLAUDE.md section 3) fires the gate on its own; the repair-history table still records `Merge from main` and `Revert commit` rows for review visibility. A revert is an anomaly hint, not a standalone trigger -- a retro opens only when it co-fires with another signal (review comments, failed CI, failed verification). |
-| S2 | Low-information commit subjects | Auto-retro `Iteration commit` row (the canonical `fix(...)` commit on a fix-typed PR is rendered as `Fix commit` instead and is exempt from this count -- see #413); or scan commit subjects for `wip`, `fix`, `fixup!`, `squash!`, `update`, `more`, `tweak`, generic verbs with no scope | Subjects that do not state intent erase the audit trail. A reviewer cannot reconstruct what each commit changed without diffing it. |
-| S3 | Repeated repair commits | Auto-retro `Iteration commit` row with three or more entries (the canonical `fix(...)` commit on a fix-typed PR is exempt -- see #413); or `git log --grep='^fix' <base>..<head>` count | Repeated `fix(...)` commits on the same PR indicate the deterministic gates caught defects late. The pattern points at a missing earlier gate or an unclear agent instruction. |
+| S1 | High commit count on a single PR | Auto-retro repair-history table `Multi-commit PR` row; or `git log --oneline <base>..<head> | wc -l` | The PR did not squash to a single intent. Either the author iterated in public (legitimate when each commit is a discrete step) or the branch absorbed unrelated work. Note: the `multi_commit_pr` gate that triggers auto-retro creation subtracts merge-from-main commits AND revert commits (Git-standard `Revert "..."` and Conventional `revert:`/`revert(scope):`) from the count, so neither rebase debt forced by the squash-only, linear-history policy nor a `git revert` (the default rollback path per CLAUDE.md section 3) fires the gate on its own; the repair-history table still records `Merge from main` and `Revert commit` rows for review visibility. A revert is an anomaly hint, not a standalone trigger; a retro opens only when it co-fires with another signal (review comments, failed CI, failed verification). |
+| S2 | Low-information commit subjects | Auto-retro `Iteration commit` row (the canonical `fix(...)` commit on a fix-typed PR is rendered as `Fix commit` instead and is exempt from this count; see #413); or scan commit subjects for `wip`, `fix`, `fixup!`, `squash!`, `update`, `more`, `tweak`, generic verbs with no scope | Subjects that do not state intent erase the audit trail. A reviewer cannot reconstruct what each commit changed without diffing it. |
+| S3 | Repeated repair commits | Auto-retro `Iteration commit` row with three or more entries (the canonical `fix(...)` commit on a fix-typed PR is exempt; see #413); or `git log --grep='^fix' <base>..<head>` count | Repeated `fix(...)` commits on the same PR indicate the deterministic gates caught defects late. The pattern points at a missing earlier gate or an unclear agent instruction. |
 | S4 | Force-update churn | `git reflog show origin/<branch>` from the local checkout if available; or the PR `force-pushed` timeline events visible in the GitHub UI | Force pushes rewrite the audit log. A small number is normal (rebase onto main, fix-up squash before merge). A large number obscures which version a reviewer approved. |
 | S5 | Unrelated churn in the diff | `git diff --stat <base>..<head>` against the PR scope stated in the closing issue | Files outside the PR scope appearing in the diff (e.g. a docs PR that also touches `scripts/`, an APM-source PR that also rewrites `tests/`) widens blast radius beyond what the closing issue authorized. |
 
@@ -93,7 +97,7 @@ Refs issue #400.
 
 `Revert commit` rows also carry the `[policy-artifact]` marker but mean
 something different from `Merge from main`. A merge-from-main row is
-pure structural rebase debt; a revert is an *anomaly hint* -- recorded
+pure structural rebase debt; a revert is an *anomaly hint*; recorded
 for co-fire correlation, not because the rollback itself is a defect.
 A revert alone does not open a retro (it is subtracted from
 `multi_commit_pr`); the row exists so that when a retrospective opens
@@ -105,13 +109,19 @@ As of [#593](https://github.com/tvna/claude-md/issues/593), the
 auto-retro opener also applies this distinction at issue-creation
 time. A merged PR does not open a standalone retrospective when the
 only rendered rows are `[policy-artifact]` rows (`Merge from main`,
-`Revert commit`, `Fix commit`, `Multi-commit PR`), a
-`(no automated repair signals detected)` sentinel, or successful
-Verification evidence. The opener still creates a retrospective for
-inline review comments, failed CI check runs, failed Verification
-pairs such as local dependency/tool mismatch, or repeated explicit
-iteration commits. Policy-artifact rows remain visible when a
-retrospective opens for one of those actionable signals.
+`Revert commit`, `Fix commit`, `Multi-commit PR`, and; as of #1236,
+`Verification fail`), a `(no automated repair signals detected)`
+sentinel, or successful Verification evidence. The opener still creates
+a retrospective for inline review comments, failed CI check runs, or
+repeated explicit iteration commits. A prose Verification-fail row no
+longer opens a retro on its own (#1236): the free-form `## Verification`
+text it parsed is untrusted per CLAUDE.md section 2, and the heuristic
+both misread passing prose and could not tell an intended negative-test
+or before-state demo from a real repair. The row stays visible for
+co-fire correlation; a genuine local failure that matters still surfaces
+through the CI / review / iteration signals it travels with.
+Policy-artifact rows remain visible when a retrospective opens for one
+of those actionable signals.
 
 ### 2.1 Severity thresholds (rule of thumb)
 
@@ -161,7 +171,7 @@ The two examples below are drawn from the existing retrospective
 corpus and show what a non-noise PR and a candidate noise PR look
 like under this procedure.
 
-### 4.1 Worked example -- non-noise (PR #237)
+### 4.1 Worked example; non-noise (PR #237)
 
 `docs/archive/retrospective-pr-237.md` documents PR #237 as a
 single-commit, zero-repair merge. Running the section 2 checklist:
@@ -179,7 +189,7 @@ All signals green, so the retrospective does not need a separate
 noise-and-flooding section. The existing repair-history sentinel row
 ("no automated repair signals detected") is sufficient.
 
-### 4.2 Worked example -- candidate noise (hypothetical shape)
+### 4.2 Worked example; candidate noise (hypothetical shape)
 
 A hypothetical PR that lands a `docs/*.md` typo fix in 7 commits
 with subjects `fix`, `more`, `wip`, `update`, `fix2`, `tweak`,
@@ -224,7 +234,7 @@ Q1. Did the noise pattern repeat across two or more retrospectives?
     No  -> Guidance only. Record the signal in the retrospective
            and stop. A single occurrence is not enough evidence to
            justify a new gate (CLAUDE.md section 4: "no error
-           handling for impossible scenarios -- but 'impossible'
+           handling for impossible scenarios; but 'impossible'
            means physically impossible, not 'I cannot currently
            imagine it'"; the inverse also holds, a single
            occurrence is not yet a proven recurrence).
@@ -292,7 +302,7 @@ skip it because the marker comment is still present.
 Operator implication: when the retrospective writer (per
 [section 6](#6-cadence-and-ownership)) intentionally records a
 no-actionable-repair verdict, they should close the retro manually
-rather than wait for the sentinel -- the manual close preserves
+rather than wait for the sentinel; the manual close preserves
 the operator's reasoning in the close comment, while the sentinel
 close only records the inactivity timeout. The sentinel is the
 deterministic backstop for retros that fall off the operator's
@@ -311,24 +321,24 @@ its evidence base grows monotonically with each
 
 ## 7. References
 
-- [#315](https://github.com/tvna/claude-md/issues/315) -- the
+- [#315](https://github.com/tvna/claude-md/issues/315); the
   closing sub-issue for which this document is the deliverable.
-- [#63](https://github.com/tvna/claude-md/issues/63) -- parent
+- [#63](https://github.com/tvna/claude-md/issues/63); parent
   catalog for the transparency-paradox threat model; this document
   is the Phase 8(D-3) entry.
-- [`scripts/auto_retro.py`](../../scripts/auto_retro.py) -- auto-retro
+- [`scripts/auto_retro.py`](../../scripts/auto_retro.py); auto-retro
   harness; its `_build_repair_history_table` function pre-fills the
   signals consumed by [section 2](#2-signals-to-inspect) (S1, S2,
   S3).
 - [`docs/prd/agent-rules-design-philosophy.md`](../prd/agent-rules-design-philosophy.md)
-  section 6.4 -- the retrospective-classification-to-lane mapping
+  section 6.4; the retrospective-classification-to-lane mapping
   table consumed by [section 3](#3-classification-mapping).
-- [`docs/standards/issue-pr-body-standard.md`](../standards/issue-pr-body-standard.md) --
+- [`docs/standards/issue-pr-body-standard.md`](../standards/issue-pr-body-standard.md);
   body shape for the follow-up sub-issue produced by
   [section 5](#5-when-to-file-a-follow-up-gate).
-- [`docs/archive/retrospective-pr-237.md`](../archive/retrospective-pr-237.md)
-  -- the non-noise worked example in section 4.1.
-- CLAUDE.md section 3 -- the three-category repair taxonomy
+- [`docs/archive/retrospective-pr-237.md`](../archive/retrospective-pr-237.md);
+  the non-noise worked example in section 4.1.
+- CLAUDE.md section 3; the three-category repair taxonomy
   consumed by section 3.
-- CLAUDE.md section 5 -- the "touch only what you must" rule
+- CLAUDE.md section 5; the "touch only what you must" rule
   consumed by signal S5 classification.

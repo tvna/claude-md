@@ -49,7 +49,7 @@ class TestScanLine:
             "  Pipfile.lock",
             "  curl -fLsS https://example.com/install.sh",
             "",
-            "  # pip install pytest  -- documentation of the forbidden form",
+            "  # pip install pytest ; documentation of the forbidden form",
             "# python3 -m pip install foo  (this line is just a comment)",
             (
                 "  pip install foo  "

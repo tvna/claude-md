@@ -20,9 +20,11 @@ set -eu
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # Schema versions are applied in order. Each file is idempotent
 # (IF NOT EXISTS / CREATE OR REPLACE), so re-running is safe. v2 adds the
-# OTLP-logs extension (Refs #824) on top of v1's metrics tables (Refs #815).
+# OTLP-logs extension (Refs #824) on top of v1's metrics tables (Refs #815);
+# v3 adds the tool-overlap measurement table (Refs #1618).
 SCHEMA_V1="$SCRIPT_DIR/schema/v1/schema.sql"
 SCHEMA_V2="$SCRIPT_DIR/schema/v2/schema.sql"
+SCHEMA_V3="$SCRIPT_DIR/schema/v3/schema.sql"
 
 if [ -z "${CLAUDE_MD_METRICS_DB:-}" ]; then
     case "${AGENT_CONTAINER:-}" in
@@ -35,4 +37,5 @@ fi
 mkdir -p "$(dirname "$CLAUDE_MD_METRICS_DB")"
 duckdb "$CLAUDE_MD_METRICS_DB" < "$SCHEMA_V1"
 duckdb "$CLAUDE_MD_METRICS_DB" < "$SCHEMA_V2"
+duckdb "$CLAUDE_MD_METRICS_DB" < "$SCHEMA_V3"
 printf 'Initialized: %s\n' "$CLAUDE_MD_METRICS_DB"

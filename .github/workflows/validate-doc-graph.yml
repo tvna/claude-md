@@ -1,0 +1,52 @@
+name: Validate document dependency graph
+
+# Advisory gate (continue-on-error: true) per the selection mechanism in
+# docs/prd/agent-rules-design-philosophy.md section 6.4: new gates enter as
+# advisory and are promoted to required checks in .github/rulesets/main.json
+# only after establishing a low false-positive rate across successive merges.
+# Promotion criteria: two consecutive sprints at FP rate < 5%.
+#
+# Companion to: scripts/gate_doc_graph_pr.py (the gate script)
+#               docs/graph/doc-dependencies.toml (the graph declaration)
+#               docs/runbooks/doc-dependency-graph.md (the design rationale)
+#
+# Mirrored in preflight_all.STEPS (step `gate_doc_graph_pr`, --base-ref
+# origin/main, PR_BODY unset = stricter no-waiver default) so the co-change
+# miss is caught pre-push, not only here. Promotion per #2011 (the #1989
+# first-head failure class). Refs #1754, #2011.
+
+on:
+  pull_request:
+    branches: [main]
+    # Include `edited` so the gate reruns when the PR description is changed
+    # (e.g. a doc-graph-waiver line is added or removed). Without `edited`,
+    # GitHub's default pull_request types (opened/synchronize/reopened) do not
+    # cover body-only changes, leaving the waiver result stale until a commit
+    # is pushed. Refs #1754.
+    types: [opened, synchronize, reopened, edited]
+
+permissions: {}
+
+jobs:
+  validate:
+    name: Doc dependency graph / gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    continue-on-error: true
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+
+      - name: Set up uv and project environment
+        uses: ./.github/actions/setup-uv
+
+      - name: Validate document dependency co-changes
+        env:
+          BASE_REF: origin/${{ github.base_ref }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: uv run python scripts/gate_doc_graph_pr.py

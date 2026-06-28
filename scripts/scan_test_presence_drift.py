@@ -13,7 +13,7 @@ check instead of reviewer memory (CLAUDE.md section 3).
 
 The gate runs three static checks:
 
-* **M2 -- test-module presence.** Every ``scripts/<name>.py`` must have a
+* **M2; test-module presence.** Every ``scripts/<name>.py`` must have a
   matching ``tests/test_<name>.py`` (private ``_<name>.py`` helpers also
   satisfy the check with ``tests/test_<name>.py``, the established naming
   for ``_git`` -> ``test_git`` etc.). Private helpers that are tested only
@@ -22,7 +22,7 @@ The gate runs three static checks:
   a ratchet: an entry that gains a direct test module, or whose script is
   removed, is reported as stale so the exemption set can only shrink.
 
-* **O6 -- GitHub API boundary registry.** Every public script that imports
+* **O6; GitHub API boundary registry.** Every public script that imports
   the GitHub API boundary (``_github_api`` / ``github_api``) is enumerated
   in :data:`GITHUB_API_SCRIPTS`. The gate fails when AST detection and the
   registry disagree in either direction, so a new API-touching script
@@ -30,7 +30,7 @@ The gate runs three static checks:
   acknowledging the boundary-test expectation that #194 promoted from
   optional O6). The matching test module is guaranteed by the M2 check.
 
-* **M3 -- CLI contract registration.** Every public script invoked by a
+* **M3; CLI contract registration.** Every public script invoked by a
   workflow must appear in the ``CONTRACT_REGISTRY`` of
   ``tests/test_workflow_cli_contracts.py``. That test module is the
   authority for M3 (#189, #193); this check is its static, earlier mirror
@@ -88,10 +88,21 @@ _GITHUB_API_BOUNDARY = frozenset({"_github_api", "github_api"})
 # Private ``_<name>.py`` helpers that have no direct ``tests/test_<name>.py``
 # module because they are exercised indirectly through their callers' tests.
 # Each entry names where the coverage actually lives. This is the tested
-# allowlist required by #1088; it is a ratchet -- an entry that gains a direct
+# allowlist required by #1088; it is a ratchet; an entry that gains a direct
 # test module (or whose helper is deleted) is reported stale and must be
 # removed, so the exemption set can only shrink.
 ALLOW_NO_TEST_MODULE: dict[str, str] = {
+    "_auto_retro_parse": (
+        "Pure parser/signal layer extracted from auto_retro.py (refs #1725); "
+        "every moved symbol is re-exported by auto_retro and exercised "
+        "indirectly via tests/test_auto_retro.py and "
+        "tests/test_auto_retro_triage_report.py."
+    ),
+    "_auto_retro_render": (
+        "Pure renderer/body layer extracted from auto_retro.py (refs #1725); "
+        "every moved symbol is re-exported by auto_retro and exercised "
+        "indirectly via tests/test_auto_retro.py."
+    ),
     "_github_tool_names": (
         "Tool-name constant table; exercised indirectly via its caller in "
         "tests/test_preflight_codex_connector_tools.py."
@@ -104,6 +115,11 @@ ALLOW_NO_TEST_MODULE: dict[str, str] = {
         "Retrospective label constants; exercised indirectly via "
         "tests/test_auto_retro.py and tests/test_scan_retro_followup_drift.py."
     ),
+    "_secret_patterns": (
+        "Shared high-confidence secret-pattern detector; exercised indirectly "
+        "via tests/test_scan_secrets.py and tests/test_preflight_github_secrets.py, "
+        "which drive scan_line / scan_text through their callers."
+    ),
 }
 
 # Public scripts that import the GitHub API boundary (O6, #194). The gate
@@ -113,12 +129,18 @@ ALLOW_NO_TEST_MODULE: dict[str, str] = {
 # guaranteed by the M2 check above.
 GITHUB_API_SCRIPTS: frozenset[str] = frozenset(
     {
+        "auto_retro",
+        "backup_non_ascii",
+        "branch_cleanup",
         "check_pr_mergeability",
         "ci_budget_issue",
         "ci_early_status_probe",
+        "coverage_failure_issue",
         "dependabot_automerge",
+        "gate_pr_body_retro_issue_link",
         "github_api",
         "issue_closure_fast_path",
+        "issue_link",
         "labels_apply",
         "np_strategy_tracking",
         "post_issue_comment",
@@ -126,10 +148,16 @@ GITHUB_API_SCRIPTS: frozenset[str] = frozenset(
         "pr_body_close_keyword_gate",
         "pr_upsert",
         "preflight_replacement_pr",
+        "prune_codespaces",
         "prune_devcontainer_images",
+        "publish_instruction_release",
         "ruleset_drift",
         "sanitize_history",
+        "scan_non_ascii",
+        "scan_retro_followup_drift",
         "security_drift_report",
+        "uv_pin",
+        "verify_linked_issue_titles",
         "verify_ruleset_sync",
     }
 )
@@ -164,7 +192,7 @@ def module_imports(path: Path) -> set[str]:
 
     Walks the AST so both ``import x`` and ``from x import y`` (including
     imports nested inside functions) contribute ``x``. Returns an empty set
-    when the file cannot be parsed -- a syntax error is caught by the lint
+    when the file cannot be parsed; a syntax error is caught by the lint
     gate, not this presence gate.
     """
     try:
@@ -236,7 +264,7 @@ def find_missing_tests(
 
     ``missing`` lists script stems with neither a matching test module nor an
     allowlist entry. ``stale_allowlist`` lists allowlist entries that now have
-    a direct test module, or whose script no longer exists -- either way the
+    a direct test module, or whose script no longer exists; either way the
     exemption is dead and must be removed.
     """
     script_set = set(scripts)
@@ -299,8 +327,8 @@ def cmd_verify(args: argparse.Namespace) -> int:
     for stem in missing:
         print(
             f"::error file=scripts/{stem}.py::scripts/{stem}.py has no matching "
-            f"test module (M2). Add tests/test_{stem.lstrip('_')}.py, or -- only "
-            f"for a private _ helper tested through its callers -- add an entry "
+            f"test module (M2). Add tests/test_{stem.lstrip('_')}.py, or; only "
+            f"for a private _ helper tested through its callers; add an entry "
             f"to ALLOW_NO_TEST_MODULE in scripts/scan_test_presence_drift.py with "
             f"a rationale.",
             file=sys.stderr,

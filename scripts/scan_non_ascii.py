@@ -8,11 +8,11 @@ marshals env vars; all logic lives here and is unit-tested in
 
 This module follows the refactor pattern established by
 ``scripts/uv_pin.py`` per the strategy in issue #123 (mirrors #112):
-pure functions on top, a thin :func:`gh_api` subprocess boundary at
+pure functions on top, a thin :func:`gh_api` REST boundary at
 the bottom, monkeypatched in tests. Surface area mirrors the prior
 inline shell exactly so behaviour is preserved byte-for-byte.
 
-See also: issue #102 (umbrella) and ``docs/prd/non-ascii-defense.md``.
+See also: issue #102 (umbrella) and ``docs/runbooks/non-ascii-defense.md``.
 
 Contract:
 - Inputs: the ``run`` subcommand; the webhook event JSON from
@@ -34,11 +34,11 @@ import argparse
 import json
 import os
 import re
-import subprocess
 import sys
 from pathlib import Path
 from typing import Any
 
+from _github_api import GitHubApiError, rest_text
 from _trusted_bots import _NON_ASCII_SKIP_LOGINS, _TRUSTED_BOT_LOGINS
 
 # Trust classification per author_association.
@@ -152,7 +152,7 @@ def classify_action(
 ) -> str:
     """Decide the action: ``none`` / ``skip`` / ``advisory`` / ``block``.
 
-    Mirrors the truth table in ``docs/prd/non-ascii-defense.md`` (Layer 2):
+    Mirrors the truth table in ``docs/runbooks/non-ascii-defense.md`` (Layer 2):
 
     - no non-ASCII -> none
     - trusted + ack -> skip (operator-reviewed), unless the title violates
@@ -167,7 +167,7 @@ def classify_action(
 
     Exception 2 (issues #480, #504, #620): when *login* is in
     :data:`_NON_ASCII_SKIP_LOGINS` (e.g. ``codecov``, ``devin-ai-integration[bot]``),
-    the scan returns ``none`` immediately -- no label, no comment.
+    the scan returns ``none`` immediately; no label, no comment.
     These bots post generated content whose non-ASCII is not a security concern.
     """
     if not has_non_ascii:
@@ -243,7 +243,7 @@ def build_advisory_comment(
         "**Why this matters.** `subscribe_pr_activity` ingests this text "
         "into Claude sessions. Non-ASCII characters (Japanese, emoji, "
         "zero-width, RTL marks, fullwidth) are a known prompt-injection "
-        "carrier. See `docs/prd/non-ascii-defense.md` and `docs/runbooks/rulesets.md` "
+        "carrier. See `docs/runbooks/non-ascii-defense.md` and `docs/runbooks/rulesets.md` "
         "lines 48-51.\n"
         "\n"
         f"{verdict}\n"
@@ -290,7 +290,7 @@ def build_summary(
 
 
 # ---------------------------------------------------------------------------
-# Side-effecting boundary — mocked in tests
+# Side-effecting boundary; mocked in tests
 # ---------------------------------------------------------------------------
 
 
@@ -298,37 +298,9 @@ def gh_api(
     method: str,
     path: str,
     json_body: dict[str, Any] | None = None,
-    *,
-    timeout: int = 30,
 ) -> str:
-    """Thin wrapper around ``gh api``. Returns stdout text.
-
-    Raises :class:`subprocess.CalledProcessError` on any non-zero exit so
-    the orchestrator fails loudly (CLAUDE.md §4). Authentication comes
-    from the ``GH_TOKEN`` env var that the workflow sets to
-    ``secrets.GITHUB_TOKEN``.
-    """
-    cmd = ["gh", "api", "--method", method, path]
-    if json_body is not None:
-        # S603 justification: fixed argv (no shell); `gh` provisioned by the runner;
-        # `path` is built from int IDs narrowed upstream. Mirrors auto_retro.py.
-        result = subprocess.run(  # noqa: S603 — fixed argv, shell=False
-            [*cmd, "--input", "-"],
-            input=json.dumps(json_body),
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-            check=True,
-        )
-    else:
-        result = subprocess.run(  # noqa: S603 — fixed argv, shell=False
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-            check=True,
-        )
-    return result.stdout
+    """Thin wrapper over :func:`_github_api.rest_text` (ambient GH_TOKEN auth)."""
+    return rest_text(method, path, json_body)
 
 
 def find_existing_comment_id(
@@ -392,7 +364,7 @@ def block_external(repo: str, number: int, kind: str) -> str:
             {
                 "event": "REQUEST_CHANGES",
                 "body": (
-                    "Blocked by .github/workflows/issue-pr-triage.yml -- "
+                    "Blocked by .github/workflows/issue-pr-triage.yml; "
                     "non-ASCII content from external contributor. See the "
                     "advisory comment above; re-submit with ASCII-only content."
                 ),
@@ -532,9 +504,9 @@ def main(argv: list[str] | None = None) -> int:
     except ValueError as exc:
         print(f"::error::{exc}", file=sys.stderr)
         return 1
-    except subprocess.CalledProcessError as exc:
+    except GitHubApiError as exc:
         print(
-            f"::error::gh api failed (exit {exc.returncode}): {exc.stderr}",
+            f"::error::GitHub API failed (HTTP {exc.code}): {exc.body}",
             file=sys.stderr,
         )
         return 1

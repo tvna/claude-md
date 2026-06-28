@@ -186,6 +186,17 @@ def test_claude_post_tool_use_starts_ci_monitor_after_mcp_pr_create() -> None:
             ],
         },
         {
+            "matcher": "Bash",
+            "hooks": [
+                {
+                    "type": "command",
+                    "if": "Bash(*git push*)",
+                    "command": "python3 scripts/check_pr_mergeability.py git-push",
+                    "statusMessage": "Checking post-push PR mergeability",
+                },
+            ],
+        },
+        {
             "matcher": "mcp__github__merge_pull_request",
             "hooks": [
                 {
@@ -375,7 +386,7 @@ def test_claude_hook_commands_do_not_use_claude_project_dir() -> None:
 
     Refs #783. $CLAUDE_PROJECT_DIR is not set in the FleetView remote-execution
     environment. A command containing it expands to an invalid path and the hook
-    fails silently instead of denying the tool call -- the exact gap that allowed
+    fails silently instead of denying the tool call; the exact gap that allowed
     a behind-branch PR to be created despite the stale-base PreToolUse gate.
     """
     data = _load_settings()

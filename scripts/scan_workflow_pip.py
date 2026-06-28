@@ -52,7 +52,7 @@ ACK_MARKER = "<!-- pip-install-ack -->"
 #   python -m pip install ...
 #   python3 -m pip install ...
 #
-# The ``(?<!uv )`` negative lookbehind exempts ``uv pip install`` -- the
+# The ``(?<!uv )`` negative lookbehind exempts ``uv pip install``; the
 # supported uv-managed channel. ``\b`` anchors avoid false positives on
 # tokens like ``pipeline``, ``zipinstall``, or ``Pipfile``.
 _PIP_INSTALL = re.compile(

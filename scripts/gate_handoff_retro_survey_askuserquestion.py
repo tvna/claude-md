@@ -7,8 +7,20 @@ natural pre-merge moment is the *handoff*: it has opened a PR and is
 ending its turn, advancing the PR to "ready for human merge". This gate
 is the deterministic half of the retro contract: when the session's
 transcript shows it created a pull request and no survey marker has been
-recorded for that PR, it blocks the stop and hands the agent the exact
-branching survey to run through the ``AskUserQuestion`` tool.
+recorded for the session yet, it blocks the stop and hands the agent the
+exact branching survey to run through the ``AskUserQuestion`` tool.
+
+Once per session, not once per PR
+---------------------------------
+The survey is a session-handoff quality signal, so it fires once per
+*session*, aggregating every PR opened in the session; not once per PR.
+``created_pr_numbers`` reads the current session's transcript only (a new
+session uses a fresh transcript), so it already returns just this session's
+PRs; ``evaluate`` blocks only when NONE of them carries a marker yet.
+Recording any one PR's survey covers the whole session, so a session that
+opens N PRs in a burst fires the gate once, not N times (#1594); repeated
+per-PR surveys added friction without proportional signal (CLAUDE.md
+section 5).
 
 Why a Stop hook and not a merge-tool gate
 -----------------------------------------
@@ -16,13 +28,21 @@ The earlier design (issue #1052 / PR #1053) gated
 ``mcp__github__merge_pull_request``. That only fires when the agent
 itself merges through the tool; under the human-UI-merge UX the agent
 never calls it, so the survey never appeared (observed on PR #1062).
-The handoff -- the agent's ``Stop`` -- is the only in-session moment
+The handoff; the agent's ``Stop``; is the only in-session moment
 that matches a human UI merge. Issue #1073 moves the trigger here.
+
+This Stop trigger is a settled design decision, not an open question. Retro
+#1593 (R1) re-raised whether a bootstrap-recovery or explicit ``SessionEnd``
+trigger would be better, but the repository owner re-confirmed ``Stop`` is
+correct: under the human-UI-merge UX the agent never calls
+``mcp__github__merge_pull_request``, so the ``Stop`` handoff remains the only
+in-session moment that matches a human merge. The trigger stays here; do not
+re-derive this conflict (refs #1672 / #1593).
 
 Why a Claude-only gate
 ----------------------
 ``AskUserQuestion`` is a Claude Code harness tool with no Codex / Devin
-equivalent, so -- exactly like ``gate_decision_handoff_askuserquestion``
+equivalent, so; exactly like ``gate_decision_handoff_askuserquestion``
 -- this gate lives only in ``.claude/settings.json``. The ``Stop`` event
 is outside the ``scan_hook_coverage_drift`` parity scope (SessionStart /
 PreToolUse / PostToolUse), so it needs no allowlist entry.
@@ -44,25 +64,36 @@ the survey. The flow is satisfaction-first, then scenario-branched:
    end the turn; the human merges the PR through the GitHub UI. The
    marker lets a later stop in the same session pass.
 
+When the survey derives "open a retro" (problem at high satisfaction, or any
+low-satisfaction handoff), the Stop-hook path; not CI; owns opening it
+(Refs #1581 / responsibility-separation design D1). The agent first checks for
+an existing CI retro for the PR: it comments the local-specific repair detail
+(the process repairs CI cannot see) on that retro if one exists, otherwise it
+creates the canonical retro issue directly. Either way it records the issue
+number with ``--needs-retro --retro-issue <N>``; the recorder refuses to write
+the marker (so the Stop gate re-blocks) until that issue number is supplied.
+
 **Gate mode** (default): block the stop when a created PR has no marker.
 **Recorder mode** (``--record <pullNumber>``): write the marker. Optional
 ``--satisfaction <2..5>`` and ``--problem <text>`` persist the survey answers
-in the marker body -- the non-interactive fallback for when the interactive
+in the marker body; the non-interactive fallback for when the interactive
 ``AskUserQuestion`` confirmation cannot be submitted (issue #1081).
+``--needs-retro`` (with the required ``--retro-issue <N>``) records that the
+survey derived a retro and which issue captured it.
 
 Fail-open per CLAUDE.md section 4: any malformed event, unreadable
 transcript, or unexpected exception exits 0 with no output. A gate bug
-must never wedge the session -- the server-side post-merge retro
+must never wedge the session; the server-side post-merge retro
 (``.github/workflows/post-merge.yml``) remains the backstop.
 """
 
 from __future__ import annotations
 
 import argparse
-import contextlib
 import json
 import re
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -75,29 +106,76 @@ _MARKER_DIR = Path("/tmp/claude-pre-merge-retro-survey")  # noqa: S108
 _PULL_URL_RE = re.compile(r"/pull/(\d+)")
 _MIN_SATISFACTION = 2
 _MAX_SATISFACTION = 5
+# Lifecycle phase stamped into every survey marker (refs #1192) so a later
+# reader knows which moment the satisfaction score measures.
+_SURVEY_PHASE = "pre-merge-handoff"
 
 _BLOCK_REASON = (
-    "GATE BLOCK: this session opened PR #{pr} and is handing it off for a "
-    "human GitHub-UI merge, but no pre-merge retro survey is recorded. "
-    "Before ending your turn, run the AskUserQuestion tool with a "
-    "satisfaction-first, scenario-branched flow. Present the questions "
-    "CONSECUTIVELY, plan-mode style: emit the branched follow-up "
-    "AskUserQuestion immediately after the satisfaction answer with no "
-    "intervening prose, so the survey reads as one continuous flow.\n"
-    "  1. Ask SATISFACTION first (single-select: 5 very satisfied / 4 "
-    "satisfied / 3 neutral / 2 somewhat dissatisfied).\n"
+    "GATE BLOCK: this session opened {pr_list} and is handing the work off "
+    "for a human GitHub-UI merge, but no pre-merge retro survey is recorded "
+    "for this session yet. Run the survey ONCE for the whole session handoff "
+    "-- it covers every PR opened this session ({pr_list}), not one survey "
+    "per PR (#1594). Use the AskUserQuestion tool with a satisfaction-first, "
+    "scenario-branched flow. Present the questions CONSECUTIVELY, plan-mode "
+    "style: emit the branched follow-up AskUserQuestion immediately after the "
+    "satisfaction answer with no intervening prose, so the survey reads as "
+    "one continuous flow.\n"
+    "  1. Ask SATISFACTION first, anchored to an EXPLICIT timepoint: frame "
+    "the question as 'satisfaction with the work as of the pre-merge handoff "
+    "of this session (covering {pr_list}), stating today's date, time, and "
+    "timezone as YYYY-MM-DD HH:MM TZ; e.g. JST and UTC together)' so the "
+    "score's reference moment is unambiguous when the marker is read back "
+    "later; a date alone is ambiguous because a session can span hours and "
+    "cross the day boundary (single-select: 5 very satisfied / 4 satisfied / "
+    "3 neutral / 2 somewhat dissatisfied).\n"
     "  2. Branch on that answer (emit the next question right away):\n"
     "     - high (4-5): ask whether any problem (rework / fix / surprise) "
-    "occurred, and DERIVE retro necessity from it -- repair-free means "
+    "occurred, and DERIVE retro necessity from it; repair-free means "
     "skip the retro, minor means a short note only, problem means open a "
     "retro issue.\n"
     "     - low (2-3): ask the main pain points (multi-select) and "
     "recommend opening a retro, carrying the answers into its seed rows.\n"
-    "  3. After the survey, record it with "
-    "'python3 scripts/gate_handoff_retro_survey_askuserquestion.py "
-    "--record {pr}', then end your turn. Do NOT call merge_pull_request -- "
-    "the human merges PR #{pr} through the GitHub UI."
+    "  3. If the survey derived 'open a retro' (a problem at high "
+    "satisfaction, or any low-satisfaction handoff), open it IN-SESSION now "
+    "-- this path, not CI, owns it, because process repairs (e.g. a "
+    "wrong-branch re-placement, a discarded-drift cleanup) leave no PR-diff / "
+    "CI / review trace for the post-merge detector to see. First search for "
+    "an existing retro issue for PR #{primary} (title "
+    "'chore(auto-retro): review PR #{primary} repair loops'):\n"
+    "     - if one EXISTS: add a comment capturing the local-specific repair "
+    "detail (the pain points / process repairs from the survey).\n"
+    "     - if NONE exists: create it via mcp__github__issue_write with that "
+    "EXACT title and an issue body carrying the H2 sections '## Scope', "
+    "'## Facts', '## Proposed work', '## Verification', '## Acceptance "
+    "criteria' (seed Facts with the survey pain points).\n"
+    "  4. Before recording the handoff, call "
+    "``mcp__github__pull_request_read`` (method: ``get``) for each PR "
+    "number in ``created_pr_numbers``, read the ``mergeable`` and "
+    "``mergeable_state`` fields, and include the result in the handoff "
+    "message. If ``mergeable_state`` is not ``clean``, state the reason "
+    "explicitly (e.g. 'PR #N: blocked; required reviews pending') so "
+    "the operator is never handed a silently blocked PR.\n"
+    "  5. Record the handoff ONCE for the session. For a repair-free / minor "
+    "outcome run 'python3 scripts/gate_handoff_retro_survey_askuserquestion.py "
+    "--record {primary}'. For a retro outcome run it with "
+    "'--record {primary} --needs-retro --retro-issue <N>' where <N> is the "
+    "issue you created or commented on; the recorder refuses the marker "
+    "(the Stop gate re-blocks) until that number is supplied. Recording any "
+    "one of this session's PRs satisfies the gate for all of them. Then end "
+    "your turn. Do NOT call merge_pull_request; the human merges {pr_list} "
+    "through the GitHub UI."
 )
+
+
+def _build_block_reason(created: list[int]) -> str:
+    """Render the block reason for the session's created PRs.
+
+    *created* is oldest-first (``created_pr_numbers``). The whole list is
+    enumerated so the single survey is understood to cover the session's batch
+    of PRs, and the oldest PR is the stable ``--record`` / retro-title target.
+    """
+    pr_list = ", ".join(f"#{number}" for number in created)
+    return _BLOCK_REASON.format(pr_list=pr_list, primary=created[0])
 
 
 def _marker_path(pr_number: int) -> Path:
@@ -176,8 +254,8 @@ def created_pr_numbers(entries: list[Any]) -> list[int]:
     error and whose body carries a ``/pull/<n>`` URL.
 
     A failed ``create_pull_request`` call is marked ``is_error: true`` by
-    the harness regardless of its body, and a common failure -- "A pull
-    request already exists for owner:branch .../pull/<n>" -- carries a
+    the harness regardless of its body, and a common failure; "A pull
+    request already exists for owner:branch .../pull/<n>"; carries a
     ``/pull/<n>`` URL pointing at the *existing* PR. Counting that as a
     creation would fire the handoff survey for a PR this session never
     opened (#1374), so error results are skipped.
@@ -211,19 +289,36 @@ def created_pr_numbers(entries: list[Any]) -> list[int]:
     return numbers
 
 
+def session_surveyed(created: list[int]) -> bool:
+    """Return True when any PR created this session already carries a marker.
+
+    The marker dir is the gate's per-session memory: ``created_pr_numbers``
+    only ever returns PRs opened in the current session (a fresh session uses a
+    fresh transcript), so a single existing marker means the session's handoff
+    survey is already done. The gate must then NOT re-fire for the sibling PRs
+    opened in the same multi-PR burst; that double/triple-firing is #1594.
+    """
+    return any(_marker_path(pr_number).exists() for pr_number in created)
+
+
 def evaluate(event: dict[str, Any], entries: list[Any]) -> dict[str, Any] | None:
-    """Return a Stop block decision, or None to let the stop proceed."""
+    """Return a Stop block decision, or None to let the stop proceed.
+
+    Survey ONCE per session: block only when the session opened PRs and none of
+    them carries a survey marker yet. Recording any one PR's survey then covers
+    the whole session, so a session that opens N PRs fires the gate once, not N
+    times (#1594).
+    """
     if event.get("hook_event_name") not in (None, "Stop"):
         return None
     if event.get("stop_hook_active"):
         return None
-    for pr_number in created_pr_numbers(entries):
-        if not _marker_path(pr_number).exists():
-            return {
-                "decision": "block",
-                "reason": _BLOCK_REASON.format(pr=pr_number),
-            }
-    return None
+    created = created_pr_numbers(entries)
+    if not created:
+        return None
+    if session_surveyed(created):
+        return None
+    return {"decision": "block", "reason": _build_block_reason(created)}
 
 
 def load_transcript(path_value: object) -> list[Any]:
@@ -252,21 +347,47 @@ def record(
     *,
     satisfaction: int | None = None,
     problem: str | None = None,
+    needs_retro: bool = False,
+    retro_issue: int | None = None,
 ) -> bool:
     """Write the survey marker for *pr_number*; return ``True`` on success.
 
     The marker's *existence* is all the gate checks, so a bare ``--record``
     stays valid. When ``satisfaction`` and/or ``problem`` answers are given
     (the non-interactive fallback for when ``AskUserQuestion`` cannot be
-    confirmed -- issue #1081), they are persisted as JSON in the marker body
+    confirmed; issue #1081), they are persisted as JSON in the marker body
     so a real signal is captured instead of an empty file.
+
+    When the survey derives that a retrospective is needed (a problem at high
+    satisfaction, or any low-satisfaction handoff), the responsibility for
+    opening it is the in-session Stop-hook path's, not CI's: process repairs
+    such as a wrong-branch re-placement or a discarded-drift cleanup leave no
+    PR-diff / CI / review trace, so the deterministic post-merge detector
+    (``scripts/auto_retro.py``) structurally cannot see them (Refs #1581 / D1).
+    ``needs_retro`` records that derivation and ``retro_issue`` records the
+    issue number the agent created OR commented on (append-or-create against an
+    existing CI retro), so the marker carries durable proof the human-observed
+    retro landed.
+
+    Every marker also records *when* and *at what lifecycle phase* the score
+    was taken (refs #1192): ``recorded_at`` (ISO-8601 UTC) and ``phase``
+    (``pre-merge-handoff``). Without them a later reader cannot tell which
+    moment a satisfaction score measures.
     """
     _MARKER_DIR.mkdir(parents=True, exist_ok=True)
-    payload: dict[str, Any] = {"pr": pr_number}
+    payload: dict[str, Any] = {
+        "pr": pr_number,
+        "phase": _SURVEY_PHASE,
+        "recorded_at": datetime.now(UTC).isoformat(),
+    }
     if satisfaction is not None:
         payload["satisfaction"] = satisfaction
     if problem is not None:
         payload["problem"] = problem
+    if needs_retro:
+        payload["needs_retro"] = True
+    if retro_issue is not None:
+        payload["retro_issue"] = retro_issue
     _marker_path(pr_number).write_text(
         json.dumps(payload, sort_keys=True), encoding="utf-8"
     )
@@ -293,6 +414,8 @@ def run_record(
     raw_pr: str | None,
     raw_satisfaction: str | None = None,
     raw_problem: str | None = None,
+    raw_needs_retro: bool = False,
+    raw_retro_issue: str | None = None,
 ) -> int:
     pr_number = _coerce_pr_number(raw_pr)
     if pr_number is None:
@@ -313,8 +436,57 @@ def run_record(
                 file=sys.stderr,
             )
             return 0
-    with contextlib.suppress(OSError):
-        record(pr_number, satisfaction=satisfaction, problem=raw_problem)
+    retro_issue: int | None = None
+    if raw_retro_issue is not None:
+        retro_issue = _coerce_pr_number(raw_retro_issue)
+        if retro_issue is None:
+            # A malformed issue number is bad data: refuse loudly and leave
+            # the marker unwritten so the gate stays blocked (#1140 semantics).
+            print(
+                f"::error::{_SCRIPT_NAME}: --retro-issue must be a positive "
+                "issue number",
+                file=sys.stderr,
+            )
+            return 1
+    if raw_needs_retro and retro_issue is None:
+        # The survey derived "open a retro" but no retro issue was supplied.
+        # The Stop-hook path owns the human-observed retro (Refs #1581 / D1),
+        # so refuse to record the handoff as done and exit non-zero: with no
+        # marker the Stop gate re-blocks until the agent opens (or comments on)
+        # the retro and re-records with --retro-issue.
+        print(
+            f"::error::{_SCRIPT_NAME}: --needs-retro requires --retro-issue "
+            "<N>. The pre-merge survey found a problem, so a retro must be "
+            "opened in-session (comment on an existing CI retro for the PR, "
+            "or create one titled 'chore(auto-retro): review PR #<PR> repair "
+            "loops') before recording. The handoff is NOT recorded and the "
+            "Stop gate will re-block.",
+            file=sys.stderr,
+        )
+        return 1
+    try:
+        record(
+            pr_number,
+            satisfaction=satisfaction,
+            problem=raw_problem,
+            needs_retro=raw_needs_retro,
+            retro_issue=retro_issue,
+        )
+    except OSError as exc:
+        # Refs #1140: a swallowed marker-write failure used to exit 0 as if the
+        # survey were recorded, but with no marker the next Stop re-blocks and
+        # the survey double-fires for the same PR. Surface the failure loudly
+        # (CLAUDE.md section 4: never a silent default) and exit non-zero so the
+        # caller knows the handoff is NOT recorded and can fix the marker dir
+        # and retry, instead of looping on a phantom success.
+        print(
+            f"::error::{_SCRIPT_NAME}: failed to write survey marker for "
+            f"PR #{pr_number}: {exc}. The handoff survey is NOT recorded and "
+            "the Stop gate will re-block; fix the marker directory and rerun "
+            "--record.",
+            file=sys.stderr,
+        )
+        return 1
     return 0
 
 
@@ -344,9 +516,33 @@ def main(argv: list[str] | None = None) -> int:
             "persisted with --record."
         ),
     )
+    parser.add_argument(
+        "--needs-retro",
+        action="store_true",
+        help=(
+            "Declare that the survey derived 'open a retro'. Requires "
+            "--retro-issue: the recorder refuses to write the marker (the "
+            "Stop gate stays blocked) until a retro issue is recorded."
+        ),
+    )
+    parser.add_argument(
+        "--retro-issue",
+        metavar="ISSUE_NUMBER",
+        help=(
+            "The retro issue number the agent created OR commented on at the "
+            "handoff (append-or-create against an existing CI retro), "
+            "persisted with --record."
+        ),
+    )
     args = parser.parse_args(argv)
     if args.record is not None:
-        return run_record(args.record, args.satisfaction, args.problem)
+        return run_record(
+            args.record,
+            args.satisfaction,
+            args.problem,
+            args.needs_retro,
+            args.retro_issue,
+        )
     return run_gate()
 
 

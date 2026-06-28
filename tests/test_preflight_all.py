@@ -44,7 +44,7 @@ class TestStepsManifest:
                     )
 
     def test_soft_flag_requires_prereq_declaration(self) -> None:
-        # Soft steps must declare at least one prereq -- otherwise
+        # Soft steps must declare at least one prereq; otherwise
         # ``soft=True`` would silently swallow a real failure.
         for step in pa.STEPS:
             if step.soft:
@@ -226,7 +226,7 @@ class TestMainCli:
 
 
 # ---------------------------------------------------------------------------
-# run_all -- fail-fast cheap tier + heavy-tier skip cache (refs #985)
+# run_all; fail-fast cheap tier + heavy-tier skip cache (refs #985)
 # ---------------------------------------------------------------------------
 
 
@@ -372,27 +372,22 @@ class TestRunCheap:
             return pa.StepResult(name=step.name, status="pass")
 
         monkeypatch.setattr(pa, "run_step", recording)
-        # Interleave the working-tree-mutating serial steps among parallel ones.
+        # Interleave the working-tree-mutating serial step among parallel ones.
         names = [
             "a",
-            "workflow_diagram_doc",
             "b",
             "preflight_branch_base",
             "c",
-            "auto_retro_decision_tree_doc",
             "d",
+            "e",
         ]
         steps = [pa.Step(name=n, argv=("true",)) for n in names]
         # Force the parallel tier serial so the call order is deterministic.
         pa._run_cheap(steps, pa.REPO_ROOT, {"PREFLIGHT_CHEAP_WORKERS": "1"})
-        # The three serial steps run first, in their declaration order.
-        assert calls[:3] == [
-            "workflow_diagram_doc",
-            "preflight_branch_base",
-            "auto_retro_decision_tree_doc",
-        ]
+        # The serial step runs first, ahead of the parallel ones.
+        assert calls[:1] == ["preflight_branch_base"]
         # The parallel steps follow, in declaration order under WORKERS=1.
-        assert calls[3:] == ["a", "b", "c", "d"]
+        assert calls[1:] == ["a", "b", "c", "d", "e"]
 
     def test_workers_one_preserves_serial_order(
         self, monkeypatch: pytest.MonkeyPatch
@@ -419,3 +414,65 @@ class TestRunCheap:
         by_name = {r.name: r for r in results}
         assert by_name["p2"].status == "fail"
         assert [r.name for r in results] == [f"p{i}" for i in range(5)]
+
+
+# ---------------------------------------------------------------------------
+# step skipping; the narrowed PREFLIGHT_SKIP replacement (refs #2133)
+# ---------------------------------------------------------------------------
+class TestResolveSkips:
+    def test_cli_and_env_combine(self) -> None:
+        names = pa.resolve_skips(["prek"], {"PREFLIGHT_SKIP_STEPS": "ruff, mypy"})
+        assert names == {"prek", "ruff", "mypy"}
+
+    def test_empty_sources_yield_empty(self) -> None:
+        assert pa.resolve_skips(None, {}) == set()
+        assert pa.resolve_skips([], {"PREFLIGHT_SKIP_STEPS": " , "}) == set()
+
+
+class TestPartitionSkips:
+    def _steps(self) -> tuple[pa.Step, ...]:
+        return (
+            pa.Step(name="cheap", argv=("true",)),
+            pa.Step(name="prek", argv=("true",)),
+        )
+
+    def test_named_step_is_partitioned_out_and_reported(self) -> None:
+        to_run, skipped, unknown = pa.partition_skips(self._steps(), {"prek"})
+        assert [s.name for s in to_run] == ["cheap"]
+        assert [r.name for r in skipped] == ["prek"]
+        assert skipped[0].status == "skip"
+        assert "PREFLIGHT_SKIP_STEPS" in skipped[0].detail
+        assert unknown == []
+
+    def test_unknown_name_skips_nothing(self) -> None:
+        to_run, skipped, unknown = pa.partition_skips(self._steps(), {"typo"})
+        assert [s.name for s in to_run] == ["cheap", "prek"]
+        assert skipped == []
+        assert unknown == ["typo"]
+
+
+class TestMainSkip:
+    def test_skip_prek_still_runs_other_steps(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        ran: list[str] = []
+
+        def fake_run_all(
+            steps: tuple[pa.Step, ...], _cwd: Path, _env: dict[str, str]
+        ) -> list[pa.StepResult]:
+            ran.extend(s.name for s in steps)
+            return [pa.StepResult(name=s.name, status="pass") for s in steps]
+
+        steps = (
+            pa.Step(name="scan_repo_double_hyphen", argv=("true",)),
+            pa.Step(name="preflight_coverage", argv=("true",), heavy=True),
+            pa.Step(name="prek", argv=("true",)),
+        )
+        monkeypatch.setattr(pa, "STEPS", steps)
+        monkeypatch.setattr(pa, "run_all", fake_run_all)
+        monkeypatch.setattr(pa.os, "environ", {"PREFLIGHT_SKIP_STEPS": "prek"})
+
+        rc = pa.main([])
+        assert rc == 0
+        # prek dropped; the cheap dash gate and coverage still ran.
+        assert "prek" not in ran
+        assert "scan_repo_double_hyphen" in ran
+        assert "preflight_coverage" in ran

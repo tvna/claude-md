@@ -23,16 +23,19 @@
 
 set -euo pipefail
 
-# Only run in the Claude Code on the Web remote environment. Local dev and the
-# nix devcontainer provision actionlint themselves; the hook is a silent no-op
-# there (no stdout/stderr, exit 0) so aligned hosts pay nothing.
-if [ "${CLAUDE_CODE_REMOTE:-}" != "true" ]; then
+# Only run in a recognised remote agent environment -- Claude Code on the Web
+# (CLAUDE_CODE_REMOTE=true) or Codex cloud (CODEX_CODE_REMOTE=true, set by the
+# operator; mirrors install-uv.sh). Local dev and the nix devcontainer provision
+# actionlint themselves; the hook is a silent no-op there (no stdout/stderr, exit 0).
+if [ "${CLAUDE_CODE_REMOTE:-}" != "true" ] && [ "${CODEX_CODE_REMOTE:-}" != "true" ]; then
   exit 0
 fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=scripts/_session_path.sh
 . "${SCRIPT_DIR}/_session_path.sh"
+# shellcheck source=scripts/_retry.sh
+. "${SCRIPT_DIR}/_retry.sh"
 
 # Map this platform to the nix system double that flake.nix's actionlintNative
 # block enumerates. An unsupported arch is a non-fatal skip: the binary is an
@@ -84,7 +87,7 @@ tarball="${tmpdir}/${asset}"
 url="https://github.com/rhysd/actionlint/releases/download/v${version}/${asset}"
 
 echo "install-actionlint: downloading pinned ${asset} v${version} ..." >&2
-curl -fsSL "${url}" -o "${tarball}"
+retry_download "${url}" "${tarball}" "actionlint" "scripts/install-actionlint.sh" || exit 0
 echo "${sha}  ${tarball}" | sha256sum -c - >&2
 
 # The actionlint tarball unpacks to a bare `actionlint` binary (plus docs) with

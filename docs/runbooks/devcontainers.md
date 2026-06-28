@@ -302,13 +302,33 @@ opening VS Code, run:
 
 The prebuild definitions live under `.devcontainer/images/<agent>/`.
 Those files are CI inputs only; local users should open the agent
-entrypoints listed above. The prebuild bakes only the base image plus the
-`common-utils`, `nix`, and `agent-user` Features. `devcontainer build` does
-not run `postCreateCommand`, so the agent CLI symlink and the Nix/uv
-closures are NOT baked into the GHCR image -- `install-agent-cli.sh` and
-`uv sync` run at container start as `postCreateCommand` steps. This is why
-the startup probe (Refs #1322, #1332) measures them as a post-pull startup
-phase rather than image content.
+entrypoints listed above. The prebuild bakes the base image plus the
+`common-utils`, `nix`, and `agent-user` Features, and; for `claude` only --
+the `nix-warm-claude` Feature. `devcontainer build` does not run
+`postCreateCommand`, so the agent CLI symlink and the `uv sync` venv are NOT
+baked into the GHCR image; `install-agent-cli.sh` and `uv sync` run at
+container start as `postCreateCommand` steps.
+
+The `.#claude` devShell closure IS baked, by the `nix-warm-claude` Feature
+(`.devcontainer/images/features/nix-warm-claude/`, Refs #1491). Lifecycle
+hooks cannot pre-warm it because `devcontainer build` skips them, so the
+Feature; which runs as root during the build; copies the flake into a
+non-git `/opt` dir and runs `nix develop "path:...#claude" --command true`,
+leaving the realised closure in `/nix/store`. The split measurement (#1471)
+showed this first-time closure realisation was ~23.4s of container-create,
+dwarfing the ~2.8s `uv sync`; baking it trades image size (~+250-400 MB
+compressed) for that startup time, a net win because the image is cached and
+reused locally across sessions. The `path:` ref forces Nix's non-git
+evaluator, sidestepping the libgit2 dubious-ownership error the runtime
+git+file fetch hits. The publish workflow stages `flake.nix`, `flake.lock`,
+and `pyproject.toml` into the Feature dir for the claude legs only (the
+workspace is not mounted during Feature install); those copies are
+git-ignored so they cannot drift from the source flake. Codex is out of
+scope and does not bake its closure. The retained `postCreateCommand`
+`nix develop .#claude --command true` is a ~0s no-op against the warm store
+and a fallback if the bake ever fails. The startup probe (Refs #1322, #1332)
+measures the now-baked warmup segment as near-zero with
+`split_nix_develop=true`.
 
 The prebuild base is `ubuntu:24.04` plus the `common-utils` feature (with
 zsh / oh-my-zsh disabled) for `git`, `sudo`, and CA certificates, then the
@@ -323,12 +343,12 @@ actionlint) continue to come from the Nix devShell, not the base.
 ## Prebuilt images
 
 Local devcontainers use immutable commit-SHA image tags. The currently
-pinned images were published from `249a93a617d841cde47117bd447d01bbec931986`:
+pinned images were published from `55fedc85f164038be6ae4c880e1ae1f94e2d47ea`:
 
 | Agent | Image |
 |---|---|
-| Claude | `ghcr.io/tvna/claude-md-devcontainer-claude:249a93a617d841cde47117bd447d01bbec931986` |
-| Codex | `ghcr.io/tvna/claude-md-devcontainer-codex:249a93a617d841cde47117bd447d01bbec931986` |
+| Claude | `ghcr.io/tvna/claude-md-devcontainer-claude:55fedc85f164038be6ae4c880e1ae1f94e2d47ea` |
+| Codex | `ghcr.io/tvna/claude-md-devcontainer-codex:55fedc85f164038be6ae4c880e1ae1f94e2d47ea` |
 
 The `Publish devcontainer images` workflow builds both images with the
 Dev Containers CLI and pushes them to GHCR on `main` changes to
@@ -384,8 +404,8 @@ created by a dedicated **GitHub App** rather than the default
 trigger the downstream `pull_request` checks the auto-merge keeper waits
 on (GitHub recursion prevention). The workflows mint a short-lived App
 installation token at runtime with `actions/create-github-app-token`, so
-the generated PR's author is the App bot (`<app-slug>[bot]`) -- a natural,
-recognizable bot identity -- while still triggering downstream workflows.
+the generated PR's author is the App bot (`<app-slug>[bot]`); a natural,
+recognizable bot identity; while still triggering downstream workflows.
 The pin commit is authored under the same App bot identity, resolved from
 the App slug and the bot's numeric user id. Refs #1401.
 
@@ -395,11 +415,11 @@ Pull requests read and write. Store the App's credentials only in the
 `devcontainer-image-pins` Environment, not as repository-wide secrets:
 `DEVCONTAINER_PIN_APP_ID` (the App ID) and `DEVCONTAINER_PIN_APP_PRIVATE_KEY`
 (a generated private key). Installation tokens expire in <= 1 hour, so they
-are never stored -- only the private key is, and it must be rotated on a fixed
+are never stored; only the private key is, and it must be rotated on a fixed
 cadence (regenerate the key, update the Environment secret, then delete the old
 key). Verify the handoff by triggering `Publish devcontainer images` with
 `workflow_dispatch` and confirming the `Update local devcontainer image pins`
-job opens or reuses the generated image-pin PR -- authored by the App bot --
+job opens or reuses the generated image-pin PR; authored by the App bot --
 without exposing the key value in logs. Record the next rotation date with the
 Environment secret owner. If the private key is suspected leaked rather than
 rotated on schedule, follow the emergency revoke-then-reissue steps in
@@ -409,38 +429,42 @@ The `Update local devcontainer image pins` job creates (or reuses) the
 generated PR but does **not** request GitHub native auto-merge. The
 repository-level "Allow auto-merge" toggle is intentionally OFF so that
 agents cannot enable native auto-merge on arbitrary PRs, and native
-auto-merge is repo-wide -- it cannot be scoped to a single PR. Completing
+auto-merge is repo-wide; it cannot be scoped to a single PR. Completing
 the pin PR is therefore delegated to the dedicated keeper below.
 
-### Merging the pin PR when green (`Auto-merge devcontainer pin PR`)
+### Merging the pin PR when green (`Auto-merge tvna-bot PRs`)
 
-Because repo-wide auto-merge is off by design, the
-`Auto-merge devcontainer pin PR` workflow (`devcontainer-pin-automerge.yml`)
-merges the generated pin PR on its behalf -- scoped strictly to the pin
-branch prefix `devcontainer/image-pins-`. It runs
-`python3 scripts/devcontainer_pin_pr.py merge`: it finds the open pin PR, and
-once GitHub reports `mergeable_state == clean` (all required checks green and
-the branch up to date) it squash-merges the PR via the REST merge API and
-deletes the branch. A PR that is not yet `clean`, or that loses the head-SHA
-race, is left untouched for the next trigger.
+Because repo-wide auto-merge is off by design, the unified
+`Auto-merge tvna-bot PRs` workflow (`tvna-bot-automerge.yml`) merges the
+generated pin PR on its behalf. This single keeper (consolidated from the
+former pin-only `devcontainer-pin-automerge.yml` in #1539) merges *every* open
+PR authored by the App bot (`tvna-bot[bot]`), not just the pin branch prefix.
+It runs `python3 scripts/bot_pr_automerge.py merge`: it lists the open
+`tvna-bot[bot]` PRs and, for each one GitHub reports `mergeable_state == clean`
+(all required checks green and the branch up to date), squash-merges it via the
+REST merge API and deletes the branch. A PR that is not yet `clean`, or that
+loses the head-SHA race, is left untouched for the next trigger. Squash is fixed
+so the keyless signing invariant on `main` (see
+[`commit-signing.md`](../standards/commit-signing.md)) is preserved.
 
 The keeper originally triggered on `check_suite: completed`, but that event
 never fired: GitHub suppresses `check_suite` events for suites created by
-GitHub Actions (recursion prevention), and every pin-PR check is
-Actions-created, so the keeper never ran and clean pin PRs stalled (#1363). It
+GitHub Actions (recursion prevention), and every bot-PR check is
+Actions-created, so the keeper never ran and clean PRs stalled (#1363). It
 is now driven by `workflow_run` on the two workflows that own the required
-status checks (`Verify PR`, `Verify repository scripts`) completing -- gated by
-an `if` on `workflow_run.head_branch` and `conclusion == 'success'` so it only
-runs for a green pin-PR CI -- with a `schedule` cron (every 15 min) as a safety
-net so a missed event still converges, and `workflow_dispatch` for manual
-recovery. Because `workflow_run` and `schedule` only run from the default
-branch, the trigger fix takes effect once merged to `main`.
+status checks (`Verify PR`, `Verify repository scripts`) completing; gated by
+an `if` on `conclusion == 'success'` (the merge subcommand itself filters to
+`tvna-bot[bot]` authors and clean PRs, so it is no longer branch-prefix-gated)
+-- with a `schedule` cron (every 15 min) as a safety net so a missed event
+still converges, and `workflow_dispatch` for manual recovery. Because
+`workflow_run` and `schedule` only run from the default branch, the trigger
+takes effect once merged to `main`.
 
 Branch protection (`main-protection`) still gates the merge; the keeper never
 bypasses required checks or rulesets. The merge uses the GitHub App installation
 token (not `GITHUB_TOKEN`) so the resulting push to `main` still triggers the
 downstream push workflows (publish / refresh / post-merge). To merge a stuck
-pin PR on demand, dispatch this workflow manually. Refs #1352, #1363, #1401.
+bot PR on demand, dispatch this workflow manually. Refs #1539, #1352, #1363, #1401.
 
 ### Keeping the pin PR mergeable (`Refresh devcontainer pin PR`)
 
@@ -494,9 +518,9 @@ copies. Refs #1171.
 4. Generate a private key for the App and add it as the
    `DEVCONTAINER_PIN_APP_PRIVATE_KEY` Environment secret (next section).
 5. Confirm the repository rulesets allow the generated branches
-   (`devcontainer/image-pins-<sha>`, `flake-pin-<...>`) to be pushed -- the
+   (`devcontainer/image-pins-<sha>`, `flake-pin-<...>`) to be pushed; the
    branch push still uses the persisted-checkout `github-actions[bot]`
-   identity -- and allow the App bot to merge the pin PR through required
+   identity; and allow the App bot to merge the pin PR through required
    checks.
 6. Trigger `Publish devcontainer images` with `workflow_dispatch`, or
    wait for the next `main` publish, and confirm the
@@ -513,7 +537,7 @@ This Environment secret is created together with `DEVCONTAINER_PIN_APP_ID`
 in the steps above: generate a private key from the GitHub App and store the
 downloaded PEM as the `DEVCONTAINER_PIN_APP_PRIVATE_KEY` Environment secret in
 `devcontainer-image-pins` (never a repository-wide secret). The same minimum
-permissions, rotation cadence, and verification step apply -- rotate the key by
+permissions, rotation cadence, and verification step apply; rotate the key by
 generating a new one, updating the secret, and confirming the next pin run still
 opens the App-bot PR before deleting the old key.
 
@@ -548,7 +572,7 @@ packages grow without bound. The `prune-devcontainer-images` job in
 (`scripts/prune_devcontainer_images.py`, [#1400](https://github.com/tvna/claude-md/issues/1400)).
 
 Retention policy (count + age). For each package a version is **protected** --
-never deleted -- when any of its tags is:
+never deleted; when any of its tags is:
 
 - `main` (the moving convenience alias),
 - a `buildcache-*` BuildKit cache tag, or
@@ -585,6 +609,31 @@ personal access token.
    error and without deleting anything. The `Guard GHCR_CLEANUP_TOKEN` step
    fails loud if the secret is unset, so nothing is deleted until the handoff
    is complete. Never print the token value in logs.
+
+If this token is suspected leaked rather than rotated on schedule, follow the
+emergency revoke-then-reissue steps in
+[`compromised-action-response.md`](compromised-action-response.md).
+
+### One-time setup for `CODESPACES_CLEANUP_TOKEN`
+
+Deleting an organisation Codespace is **not** possible with the Actions
+`GITHUB_TOKEN`: the API returns `403`. The `codespace-cleanup` job authenticates
+with a dedicated personal access token.
+
+1. Create a **classic** PAT at `github.com/settings/tokens` with minimum
+   permissions `admin:org` (the `manage codespaces` sub-permission is sufficient
+   if your PAT UI shows it separately). Do not grant `repo`, `write:packages`,
+   or any broader scope than needed.
+2. Store it as the `CODESPACES_CLEANUP_TOKEN` Environment secret in a dedicated
+   `codespace-cleanup` GitHub Environment (Settings → Environments). Keeping it
+   in its own environment isolates the delete-capable token from other secrets.
+3. Set an expiry of 90 days or less. Record the next rotation date with the
+   Environment secret owner and rotate the token before expiry.
+4. Verify the handoff: dispatch `Weekly maintenance` selecting the
+   `codespace-cleanup` task and confirming `codespace_cleanup_dry_run` is `true`
+   (the default). The `Guard CODESPACES_CLEANUP_TOKEN` step fails loud if the
+   secret is unset, so nothing is deleted until the handoff is complete. Never
+   print the token value in logs.
 
 If this token is suspected leaked rather than rotated on schedule, follow the
 emergency revoke-then-reissue steps in
@@ -672,6 +721,92 @@ Do not depend on Docker Desktop for this repository's devcontainer
 workflow. If VS Code reports Docker-oriented wording, treat it as Dev
 Containers compatibility terminology, not a Docker runtime requirement.
 
+## Debug log capture (macOS)
+
+The connectivity and stale-container triage above tells you *what* failed.
+This section is the companion for *capturing the logs* that explain why,
+focused on the macOS + rootless-Podman path where several log sources behave
+differently from a native Linux container (Issue #1460).
+
+### VS Code Dev Containers log (the primary startup log)
+
+When "Reopen in Container" fails before or during `postCreateCommand`, the
+authoritative log is the Dev Containers extension's own output, not the
+terminal. Capture it before rebuilding (a rebuild rolls the log window):
+
+1. Command Palette -> **Dev Containers: Show Container Log** for the active
+   attempt, or **Developer: Show Logs... -> Window** and switch the Output
+   panel to the **Dev Containers** channel.
+2. The same content is persisted on disk under the per-window logs tree:
+
+   ```sh
+   ls -dt "$HOME/Library/Application Support/Code/logs"/*/window*/exthost/ms-vscode-remote.remote-containers
+   ```
+
+   (On a Linux host the base path is `~/.config/Code/logs`.) Copy the newest
+   matching directory; it holds the create/start command output.
+
+### Podman machine (VM) logs when the VS Code log is truncated
+
+A `postCreateCommand` / `postStartCommand` failure is often truncated in the
+VS Code log. On macOS the container runs inside the podman-machine VM, so the
+fuller record lives there. Capture it from the host:
+
+```sh
+/opt/podman/bin/podman machine list
+/opt/podman/bin/podman machine inspect
+/opt/podman/bin/podman machine ssh; journalctl -n 500 --no-pager
+```
+
+Do not paste tokens or `~/.config/gh` contents into issues; record only the
+failing units and messages (mirrors the redaction discipline above).
+
+### eBPF correlation log is usually unavailable on macOS Podman
+
+The eBPF correlation monitor's `/tmp/egress-correlation.log` is **best-effort
+and typically absent on macOS**. Its `check` seam requires a readable
+`/sys/kernel/btf/vmlinux`, a mounted tracefs, and `CAP_BPF`/`CAP_PERFMON`,
+all host-dependent inside the podman-machine VM, so `start` skips gracefully
+there. Confirm before relying on it:
+
+```sh
+.devcontainer/scripts/_egress-ebpf.sh check   # expect: skip on most macOS hosts
+```
+
+If it reports `skip`, use the egress *audit* log instead of the eBPF log.
+
+### dmesg_restrict caveat for the egress audit log
+
+`dmesg | grep EGRESS-AUDIT` (see the Egress allowlist section) can return
+nothing under rootless Podman even when audit mode is active: the host may set
+`kernel.dmesg_restrict=1`, and the VM kernel ring buffer is shared across
+containers. If the grep is empty, check the restriction and read the buffer
+with privilege rather than assuming audit produced no output:
+
+```sh
+sysctl kernel.dmesg_restrict        # 1 means non-root dmesg is blocked
+sudo dmesg | grep EGRESS-AUDIT
+```
+
+### One-shot collector
+
+`.devcontainer/scripts/collect-devcontainer-debug.sh` gathers the host-side
+sources above (podman machine/info/connection/ps, best-effort VM `journalctl`,
+and the newest VS Code remote-containers log dir) into a single local bundle:
+
+```sh
+.devcontainer/scripts/collect-devcontainer-debug.sh plan     # list sources, write nothing
+.devcontainer/scripts/collect-devcontainer-debug.sh collect  # write the bundle
+```
+
+The bundle is **local-only** and **best-effort redacted** (common token
+formats are masked). Redaction is not a guarantee; review every file before
+sharing. The collector deliberately never reads `~/.config/gh`, the agent
+session volumes, or a full environment dump, because those are token-bearing.
+The end-to-end `collect` path needs a real macOS host with a running
+podman-machine VM and cannot be exercised in CI; CI verifies only the pure
+`plan` and `redact` seams plus `bash -n` (`tests/test_collect_devcontainer_debug.py`).
+
 ## Nix version management
 
 `flake.nix` is the source of truth for container-visible tools. Shared
@@ -702,7 +837,7 @@ devcontainer:
 ```sh
 bwrap --dev /dev --proc /proc --tmpfs /tmp \
   --ro-bind /usr /usr --ro-bind /etc /etc \
-  --unshare-all -- echo ok
+  --unshare-all; echo ok
 ```
 
 Exit code 0 confirms devpts mounting succeeds without interactive fixes.
@@ -770,18 +905,18 @@ validation can fail before the allowlist is applied.
 `apply-egress-allowlist.sh` is a thin dispatcher; the reusable parsing and
 rule-building helpers live in `.devcontainer/scripts/_egress-lib.sh`, which
 is also sourced by the CI parser-parity gate. Sourcing the library has no
-side effects (no privilege check, no firewall mutation) -- the dispatcher
+side effects (no privilege check, no firewall mutation); the dispatcher
 decides when to apply rules.
 
 ### block vs audit mode
 
 The dispatcher reads `EGRESS_MODE` (default `block`):
 
-- `block` -- deny-by-default. Only allowlisted egress is permitted; everything
+- `block`; deny-by-default. Only allowlisted egress is permitted; everything
   else is dropped by the `OUTPUT DROP` policy. This is the production posture.
-- `audit` -- discovery mode. The same ACCEPT rules are installed, but instead
+- `audit`; discovery mode. The same ACCEPT rules are installed, but instead
   of dropping non-allowlisted egress the dispatcher logs it (rate-limited,
-  destination IP:port header only -- no payload) and leaves the policy at
+  destination IP:port header only; no payload) and leaves the policy at
   `ACCEPT`, so connectivity is unbroken. Use it to learn what a new workload
   actually contacts before promoting the file to `block`:
 
@@ -817,7 +952,7 @@ observe / evaluate / decide / verify procedure in
 Each host entry must carry an inline triage rationale comment; the
 `scripts/scan_allowlist_rationale.py` gate fails CI when one is missing.
 
-The allowlist is parsed by two implementations -- the bash `read_allowlist`
+The allowlist is parsed by two implementations; the bash `read_allowlist`
 in `_egress-lib.sh` (container start path) and `scripts/_allowlist.py`
 `resolve_hosts` (CI, tests, rationale gate). The
 `scripts/scan_allowlist_parser_parity.py` gate fails CI if the two resolve
@@ -850,7 +985,7 @@ The config emits, per allowlisted host, one `server=/<host>/<upstream>`
 rewritten `/etc/resolv.conf` (now `127.0.0.1`, i.e. itself) and looping.
 
 `start` backs up the original `/etc/resolv.conf` to
-`/etc/resolv.conf.egress-backup` **once per cycle** -- if the backup already
+`/etc/resolv.conf.egress-backup` **once per cycle**; if the backup already
 exists it is the genuine original and is never clobbered by the rewritten file
 -- and derives the upstream nameservers from that backup, not the live file.
 `stop` restores from the backup and removes it, so a later `start` re-captures a
@@ -882,7 +1017,7 @@ cat /etc/resolv.conf                   # restored to the original
 `.devcontainer/scripts/egress-correlation.bt`, which correlates each outbound
 TCP connect and each file open with the originating process (`pid` + `comm`).
 It records **only** the destination `IP:port` (for connect) or the file path
-(for openat) -- it **never reads syscall payload buffers**, so secrets in
+(for openat); it **never reads syscall payload buffers**, so secrets in
 transit or on disk are not captured. The report is a **local-only** sink
 (`/tmp/egress-correlation.log` by default); nothing is sent off-box, matching
 the self-hosted, no-telemetry design of the allowlist and DNS proxy.
@@ -922,8 +1057,8 @@ EGRESS_EBPF=1 .devcontainer/scripts/_egress-ebpf.sh stop
 The same allowlist guards the CI surface through the custom composite action
 `.github/actions/egress-firewall`. It is **permission-agnostic** (reads no
 `GITHUB_TOKEN`, no secrets, like `setup-uv`) and applies the allowlist by
-calling the very same `apply-egress-allowlist.sh` dispatcher -- which sources
-`_egress-lib.sh` -- so CI and the container start path share one parser
+calling the very same `apply-egress-allowlist.sh` dispatcher; which sources
+`_egress-lib.sh`; so CI and the container start path share one parser
 (parity-gated). `.github/workflows/verify-agents.yml` runs it in an isolated
 `egress-firewall-selftest` job.
 
@@ -940,8 +1075,8 @@ and proves both directions:
 - it asserts the `OUTPUT` policy is `DROP`, that allowlisted `github.com` still
   reaches `:443`, and that non-allowlisted `example.com` is dropped;
 - an always-run teardown restores `OUTPUT` to `ACCEPT` and flushes the chain,
-  because block sets `DROP` for **every** process on the runner -- including the
-  Actions runner agent -- so the self-test must not strand the agent's own
+  because block sets `DROP` for **every** process on the runner; including the
+  Actions runner agent; so the self-test must not strand the agent's own
   completion/telemetry egress or later steps.
 
 The job is deliberately not part of the required `gate` aggregation, so a
@@ -1002,7 +1137,9 @@ bash -n .devcontainer/scripts/install-agent-cli.sh
 bash -n .devcontainer/scripts/prepare-agent-workspace.sh
 bash -n .devcontainer/scripts/check-stale-agent-container.sh
 bash -n .devcontainer/scripts/ensure-agent-image.sh
+bash -n .devcontainer/scripts/collect-devcontainer-debug.sh
 sh -n .devcontainer/images/features/agent-user/install.sh
+sh -n .devcontainer/images/features/nix-warm-claude/install.sh
 nix build .#claude-cli
 nix build .#codex-cli
 ```

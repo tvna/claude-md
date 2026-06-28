@@ -17,12 +17,12 @@ otherwise from the file named by `GITHUB_APP_PRIVATE_KEY_FILE`. `mcp_github_laun
 accepts either before launch. Vault Agent owns the file: it auto-auths to HCP
 Vault, renders the PEM through a `template` stanza, and refreshes it on lease
 renewal. The only on-host credential is the Agent's AppRole identity
-(`role_id` / `secret_id` files, `0600`) -- not the PEM, and not a long-lived
+(`role_id` / `secret_id` files, `0600`), not the PEM, and not a long-lived
 env secret.
 
 ## 0. Provision the HCP account and Vault cluster (first time only)
 
-Skip this section if you already have an HCP Vault Dedicated cluster -- merging
+Skip this section if you already have an HCP Vault Dedicated cluster; merging
 this change does not require an HCP account, and the existing
 `GITHUB_APP_PRIVATE_KEY` env path is unaffected. Do this only to exercise the
 file-source path on a new local host. Verified against HashiCorp's primary docs
@@ -43,7 +43,7 @@ file-source path on a new local host. Verified against HashiCorp's primary docs
    for the HVN; under **Basics** the default Cluster ID is `vault-cluster`. Click
    **Create cluster** and wait for provisioning to finish.
 4. **Read the address, namespace, and admin token.** On the cluster page use the
-   **Cluster URLs** links to copy the **public** address -- this is the
+   **Cluster URLs** links to copy the **public** address; this is the
    `VAULT_ADDR` in step 1 (`https://<cluster>.vault.<region>.hashicorp.cloud:8200`).
    HCP Vault Dedicated clusters operate from the `admin` namespace
    (`VAULT_NAMESPACE="admin"`). Use the **Generate token** link to mint the admin
@@ -122,7 +122,7 @@ PEM to the `0600` destination and re-renders it on renewal.
 export GITHUB_APP_ID=123456
 export GITHUB_APP_INSTALLATION_ID=7891011
 export GITHUB_APP_PRIVATE_KEY_FILE="$HOME/.config/github-app/private-key.pem"
-# Do NOT set GITHUB_APP_PRIVATE_KEY -- the file source is used when it is unset.
+# Do NOT set GITHUB_APP_PRIVATE_KEY; the file source is used when it is unset.
 ```
 
 ## 5. Verify without exposing the value
@@ -141,7 +141,7 @@ A `200` confirms the sink file, App ID, and Installation ID are wired correctly.
 ## Networking
 
 The local host must reach the HCP Vault cluster address and `api.github.com`.
-No repository egress allowlist change is needed -- the allowlist files under
+No repository egress allowlist change is needed; the allowlist files under
 `.devcontainer/network/` govern the devcontainer, not a local host.
 
 ## Rotation

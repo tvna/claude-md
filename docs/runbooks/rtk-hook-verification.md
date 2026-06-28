@@ -3,7 +3,7 @@
 > Operator procedure for deciding whether to enable the `rtk` (rtk-ai/rtk)
 > auto-rewrite PreToolUse hook in the Claude agent devcontainer. The `rtk`
 > binary itself is already provisioned by `flake.nix` (Refs #1193 / PR #1195);
-> this runbook governs the *next* step -- the transparent command rewrite -- and
+> this runbook governs the *next* step; the transparent command rewrite; and
 > exists because that step's effectiveness is unverifiable in the Claude Code on
 > the Web environment and must be confirmed in a live session before any hook is
 > shipped. Refs #1199.
@@ -13,7 +13,7 @@
 > hook `scripts/install-rtk.sh` (gated on `CLAUDE_CODE_REMOTE`), which resolves
 > the flake-pinned coordinates via `scripts/flake_pin.py resolve --tool rtk`,
 > downloads the release, and verifies its SHA256 before installing into
-> `~/.local/bin`. That hook ships the **binary only** -- it does not enable the
+> `~/.local/bin`. That hook ships the **binary only**; it does not enable the
 > auto-rewrite hook this runbook governs, which remains unshipped pending the
 > live verification below.
 
@@ -55,7 +55,7 @@ repository**:
 - Claude Code issue
   [#15897](https://github.com/anthropics/claude-code/issues/15897)
   (Closed as not planned; reported on v2.0.76) describes `updatedInput` being
-  ignored -- the original command runs instead -- when a PreToolUse hook
+  ignored; the original command runs instead; when a PreToolUse hook
   returns the rewrite (the report ties it to `permissionDecision: "allow"`
   and/or to multiple PreToolUse hooks executing).
 - This repository already ships **four** Bash-matched `PreToolUse` gates in the
@@ -78,7 +78,7 @@ shipping the hook.
 Enabling the hook does **not** create a push-safety hole, regardless of whether
 the rewrite works:
 
-- If the rewrite is a no-op, every gate sees the original command -- unchanged
+- If the rewrite is a no-op, every gate sees the original command; unchanged
   behavior.
 - If the rewrite works, `git push` becomes `rtk git push`. The push gates detect
   pushes with `_GIT_PUSH_RE = re.compile(r"(?m)^\s*(?:rtk\s+)?git\s+push\b")`
@@ -89,7 +89,7 @@ the rewrite works:
   missed `rtk git push`. Push safety is additionally defended in depth by the
   git `pre-push` hook (`preflight_all.py`) and CI, which run regardless.
 - `gate_gh_cli` matches `gh <subcommand>` mid-string, so `rtk gh ...` still
-  triggers it -- no bypass there.
+  triggers it; no bypass there.
 
 `rtk hook claude` performs only local string rewriting (reads stdin, writes
 stdout); it needs no network at runtime, so no `.devcontainer/network/*.allowlist`
@@ -115,7 +115,7 @@ Run inside a real Claude Code 2.1.154 session in the claude devcontainer.
    - **PASS**: `rtk gain --history` shows a new entry for the command (it was
      executed as `rtk git status`), and/or the output is rtk's compacted form.
    - **FAIL (no-op)**: no new `rtk` history entry and native (non-compacted)
-     output -- the original command ran, confirming #15897 applies at 2.1.154
+     output; the original command ran, confirming #15897 applies at 2.1.154
      in the multiple-hook configuration.
 7. (Optional, to localize the cause) Repeat step 5 with the project
    `.claude/settings.json` Bash gates temporarily removed so the rtk hook is the
@@ -176,10 +176,10 @@ Changes applied by the enablement PR:
 ## See also
 
 - [`docs/standards/devcontainer-tooling.md`](../standards/devcontainer-tooling.md)
-  -- the devcontainer tool provisioning standard (and the `nix build` web-env
+ ; the devcontainer tool provisioning standard (and the `nix build` web-env
   limitation).
 - [`.devcontainer/scripts/configure-agent-runtime.sh`](../../.devcontainer/scripts/configure-agent-runtime.sh)
-  -- where `~/.claude/settings.json` is provisioned and tools are symlinked.
-- [`scripts/install-rtk.sh`](../../scripts/install-rtk.sh) -- the SessionStart
+ ; where `~/.claude/settings.json` is provisioned and tools are symlinked.
+- [`scripts/install-rtk.sh`](../../scripts/install-rtk.sh); the SessionStart
   binary provisioner for the Claude Code on the Web environment (Refs #1218).
-- [`flake.nix`](../../flake.nix) -- the pinned `rtk-cli` derivation.
+- [`flake.nix`](../../flake.nix); the pinned `rtk-cli` derivation.

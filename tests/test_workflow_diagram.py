@@ -473,20 +473,46 @@ class TestCLIDiagramDoc:
         assert rc == 0
         assert "no workflow files found" in capsys.readouterr().err
 
-    def test_checked_in_diagrams_are_current(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Mirror what generate-docs.yml verifies: no drift in docs/generated/workflows/."""
-        import tempfile
+    def test_full_regen_prunes_orphaned_diagrams(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """A full regeneration deletes diagrams whose source workflow is gone.
 
-        with tempfile.TemporaryDirectory() as tmp:
-            out_dir = Path(tmp)
-            rc = wd.main(["diagram-doc", "--output-dir", str(out_dir)])
-            assert rc == 0
+        docs/generated/workflows/ is owned by the post-merge automation (#1545);
+        the generator must mirror the current workflow set so deletions are
+        published too, not just additions.
+        """
+        monkeypatch.chdir(tmp_path)
+        wf_dir = tmp_path / ".github/workflows"
+        wf_dir.mkdir(parents=True)
+        (wf_dir / "live.yml").write_text(
+            "name: Live\non: push\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps: []\n",
+            encoding="utf-8",
+        )
+        out_dir = tmp_path / "out"
+        out_dir.mkdir()
+        orphan = out_dir / "removed-workflow-if-branches.md"
+        orphan.write_text("stale\n", encoding="utf-8")
 
-            checked_in = Path("docs/generated/workflows")
-            for generated in out_dir.glob("*.md"):
-                committed = checked_in / generated.name
-                assert committed.exists(), f"missing committed file: {committed}"
-                assert generated.read_text() == committed.read_text(), (
-                    f"{committed} is out of date. "
-                    "Run 'python3 scripts/workflow_diagram.py diagram-doc' and commit."
-                )
+        rc = wd.main(["diagram-doc", "--output-dir", str(out_dir)])
+        assert rc == 0
+        assert (out_dir / "live-if-branches.md").exists()  # current workflow rendered
+        assert not orphan.exists()  # orphan pruned
+        assert "pruned orphaned diagram" in capsys.readouterr().out
+
+    def test_scoped_run_does_not_prune(self, tmp_path: Path) -> None:
+        """An explicit workflow list never prunes unrelated diagrams."""
+        wf = _write_workflow(
+            tmp_path,
+            "name: X\non: push\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps: []\n",
+        )
+        out_dir = tmp_path / "out"
+        out_dir.mkdir()
+        keep = out_dir / "other-if-branches.md"
+        keep.write_text("keep\n", encoding="utf-8")
+        rc = wd.main(["diagram-doc", str(wf), "--output-dir", str(out_dir)])
+        assert rc == 0
+        assert keep.exists()

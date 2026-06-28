@@ -9,7 +9,7 @@ Claude to either translate to English or append ``<!-- non-ascii-ack -->``
 to the body before retrying.
 
 Complements the server-side Layer 2 workflow (``issue-pr-triage.yml`` /
-``scripts/scan_non_ascii.py``); see ``docs/prd/non-ascii-defense.md``
+``scripts/scan_non_ascii.py``); see ``docs/runbooks/non-ascii-defense.md``
 client-side preflight section. Refs #146, umbrella #102.
 
 Architecture mirrors :mod:`scan_non_ascii`: pure functions on top, one
@@ -86,7 +86,7 @@ def build_deny_reason(
 
     Lists which fields contained non-ASCII, shows the escaped form so the
     model treats it as data, and offers the two remediation options in
-    the order documented in ``docs/prd/non-ascii-defense.md``
+    the order documented in ``docs/runbooks/non-ascii-defense.md``
     client-side preflight section.
     """
     where = " and ".join(fields) if fields else "input"
@@ -96,7 +96,7 @@ def build_deny_reason(
         f"trigger the server-side issue-pr-triage.yml workflow on every "
         f"post. Pick one and retry:\n"
         f"  1. Translate the {where} to English.\n"
-        f"  2. Append `\\n\\n{ack_marker}` to the body (OWNER opt-out -- "
+        f"  2. Append `\\n\\n{ack_marker}` to the body (OWNER opt-out; "
         f"keeps non-ASCII intact, suppresses the Layer 2 advisory by "
         f"making classify_action return `skip`).\n"
         f"\n"
@@ -128,7 +128,7 @@ def decide(tool_name: str, tool_input: dict[str, Any]) -> dict[str, Any] | None:
 
 
 # ---------------------------------------------------------------------------
-# Side-effecting boundary -- the only impure surface, monkeypatched in tests
+# Side-effecting boundary; the only impure surface, monkeypatched in tests
 # ---------------------------------------------------------------------------
 
 

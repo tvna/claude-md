@@ -11,14 +11,16 @@ paired PreToolUse hook before using a new write tool.
 
 Rationale: dedicated hooks gate and audit the write tools listed in
 :data:`HOOK_COVERED_TOOLS`. Any tool NOT in that set has no preflight at
-all. Read operations should use ``scripts/github_api.py`` for lower token
-consumption. Write operations require a hook before they can be unblocked.
+all. Read-only operations (list, get, search) are safe to pass through
+directly; they carry no write risk; and are enumerated in
+:data:`READ_ONLY_TOOLS`. Write operations require a hook before they can
+be unblocked.
 See #887 for the MCP-vs-GitHub-API design decision.
 
 Fails open per CLAUDE.md section 4: parse errors log to stderr and exit 0
 so a hook bug never wedges the session.
 
-Refs #870, #887.
+Refs #870, #887, #1869.
 """
 
 from __future__ import annotations
@@ -31,7 +33,7 @@ from _hook_runtime import emit_decision, read_event
 # Tools that already have dedicated PreToolUse hooks in
 # .claude/settings.json. Calls to these tools are allowed through;
 # their own hooks handle the gating. Keep in sync with the matcher
-# groups in settings.json PreToolUse -- drift is caught by
+# groups in settings.json PreToolUse; drift is caught by
 # test_gate_mcp_github_uncovered.py::test_covered_set_matches_settings.
 HOOK_COVERED_TOOLS: frozenset[str] = frozenset(
     {
@@ -46,6 +48,61 @@ HOOK_COVERED_TOOLS: frozenset[str] = frozenset(
         "mcp__github__create_branch",
         "mcp__github__merge_pull_request",
         "mcp__github__update_pull_request_branch",
+        "mcp__github__resolve_review_thread",
+    }
+)
+
+# Known read-only MCP tools. These carry no write risk and are allowed
+# through without a dedicated hook. Not added to HOOK_COVERED_TOOLS --
+# that set is reserved for write tools that have their own paired hooks.
+#
+# Includes both the consolidated names used by the current deployment
+# (issue_read, pull_request_read) and the pre-consolidation names used
+# by the Nix-pinned github-mcp-server v0.3.0 in the devcontainer
+# (get_issue, get_pull_request, etc.; see pkg/github/tools.go@v0.3.0).
+# Refs #1869.
+READ_ONLY_TOOLS: frozenset[str] = frozenset(
+    {
+        "mcp__github__actions_get",
+        "mcp__github__actions_list",
+        "mcp__github__get_code_scanning_alert",
+        "mcp__github__get_commit",
+        "mcp__github__get_file_contents",
+        "mcp__github__get_issue",
+        "mcp__github__get_issue_comments",
+        "mcp__github__get_job_logs",
+        "mcp__github__get_label",
+        "mcp__github__get_latest_release",
+        "mcp__github__get_me",
+        "mcp__github__get_pull_request",
+        "mcp__github__get_pull_request_comments",
+        "mcp__github__get_pull_request_files",
+        "mcp__github__get_pull_request_reviews",
+        "mcp__github__get_pull_request_status",
+        "mcp__github__get_release_by_tag",
+        "mcp__github__get_secret_scanning_alert",
+        "mcp__github__get_tag",
+        "mcp__github__get_team_members",
+        "mcp__github__get_teams",
+        "mcp__github__issue_read",
+        "mcp__github__list_branches",
+        "mcp__github__list_code_scanning_alerts",
+        "mcp__github__list_commits",
+        "mcp__github__list_issue_fields",
+        "mcp__github__list_issue_types",
+        "mcp__github__list_issues",
+        "mcp__github__list_pull_requests",
+        "mcp__github__list_releases",
+        "mcp__github__list_repository_collaborators",
+        "mcp__github__list_secret_scanning_alerts",
+        "mcp__github__list_tags",
+        "mcp__github__pull_request_read",
+        "mcp__github__search_code",
+        "mcp__github__search_commits",
+        "mcp__github__search_issues",
+        "mcp__github__search_pull_requests",
+        "mcp__github__search_repositories",
+        "mcp__github__search_users",
     }
 )
 
@@ -58,6 +115,7 @@ def decide(tool_name: str) -> dict[str, Any] | None:
     Returns None for:
     - tools not in the ``mcp__github__`` namespace (not our concern)
     - tools in :data:`HOOK_COVERED_TOOLS` (already gated elsewhere)
+    - tools in :data:`READ_ONLY_TOOLS` (no write risk; early pass)
 
     Returns a ``permissionDecision: "deny"`` dict for any other
     ``mcp__github__*`` tool.
@@ -66,15 +124,12 @@ def decide(tool_name: str) -> dict[str, Any] | None:
         return None
     if tool_name in HOOK_COVERED_TOOLS:
         return None
-    short = tool_name[len(_MCP_GITHUB_PREFIX) :]
+    if tool_name in READ_ONLY_TOOLS:
+        return None
     return {
         "permissionDecision": "deny",
         "decisionReason": (
             f"`{tool_name}` has no dedicated PreToolUse hook gate. "
-            f"For read operations (list, search, get), use the approved wrapper:\n"
-            f"  python3 scripts/github_api.py GET "
-            f"https://api.github.com/repos/{{owner}}/{{repo}}/{short.replace('_', '/')} "
-            f"[--fields f1,f2]\n"
             f"For write operations, a paired PreToolUse hook must be added to "
             f".claude/settings.json before this tool can be used. "
             f"See #887 for the MCP-vs-GitHub-API design decision."

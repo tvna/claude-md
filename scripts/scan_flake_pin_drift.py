@@ -20,7 +20,7 @@ Scope is deliberately narrow:
 * Only SHA256 hashes (high-entropy, unambiguous). Version strings are short and
   appear legitimately in many places, so they are out of scope; the
   supply-chain risk lives in the checksum.
-* Only ``scripts/`` and ``.github/workflows/`` -- the provisioning surface.
+* Only ``scripts/`` and ``.github/workflows/``; the provisioning surface.
   ``flake.nix`` (the SoT) lives at the repo root and is not scanned. ``tests/``
   is not scanned: a test asserting a known digest is a legitimate regression
   guard, not provisioning drift.
@@ -122,7 +122,7 @@ def find_drift(repo_root: Path, forbidden: set[str]) -> list[str]:
                     rel = path.relative_to(repo_root)
                     errors.append(
                         f"::error file={rel},line={lineno}::hardcoded flake.nix "
-                        f"hash '{literal}' -- flake.nix is the single source of "
+                        f"hash '{literal}'; flake.nix is the single source of "
                         f"truth; read it at runtime (see scripts/waza_pin.py) "
                         f"instead of copying the digest (#1153)."
                     )

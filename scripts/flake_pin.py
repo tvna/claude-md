@@ -41,7 +41,7 @@ CLI::
         # -> rewrites flake.nix in place (version + both per-system hashes)
 
 Fails loud (exit != 0) when the flake is missing, a field cannot be parsed, or
-a bump would not land exactly one substitution -- never a partial or guessed
+a bump would not land exactly one substitution; never a partial or guessed
 write (CLAUDE.md section 4).
 
 Tested by ``tests/test_flake_pin.py``. Refs #1171, #1150, #1153.
@@ -54,7 +54,7 @@ Contract:
     Outputs: ``version`` / ``repo`` / ``asset-url`` print one line to stdout;
         ``bump`` rewrites ``flake.nix`` in place and prints a one-line summary.
         Exit 0 on success.
-    Failure policy: fails loud per CLAUDE.md section 4 -- a missing flake, an
+    Failure policy: fails loud per CLAUDE.md section 4; a missing flake, an
         unparseable field, a non-SRI hash, a system-set mismatch, or a
         substitution that would not land exactly once exits non-zero rather
         than writing a partial or guessed result.
@@ -116,7 +116,7 @@ TOOLS: dict[str, ToolSpec] = {
     ),
     # rtk's per-system asset names differ in target (musl vs gnu), so the
     # ``asset`` field stores the full ``.tar.gz`` filename and the template
-    # appends no extension -- mirroring the waza shape, not apm's.
+    # appends no extension; mirroring the waza shape, not apm's.
     "rtk": ToolSpec(
         version_var="rtkVersion",
         native_var="rtkNative",
@@ -128,7 +128,7 @@ TOOLS: dict[str, ToolSpec] = {
     ),
     # actionlint's release assets embed the version in the filename
     # (actionlint_<ver>_linux_<arch>.tar.gz), so the ``asset`` field stores the
-    # full ``.tar.gz`` filename and the template appends no extension -- the
+    # full ``.tar.gz`` filename and the template appends no extension; the
     # waza/rtk shape. NOTE: flake.nix keeps those filenames as static strings
     # (no ``${actionlintVersion}`` interpolation) because _native_block parses
     # with a brace-naive regex; a ``}`` inside an interpolation truncates the
@@ -141,6 +141,46 @@ TOOLS: dict[str, ToolSpec] = {
         asset_field="asset",
         url_template=(
             "https://github.com/rhysd/actionlint/releases/download/"
+            "v{version}/{asset}"
+        ),
+    ),
+    # zizmor (zizmorcore/zizmor): tag is ``v{version}``; asset embeds no
+    # version, so the rtk/waza shape (full filename in ``asset``). Consumed only
+    # by scripts/install-zizmor.sh; web-only provisioning, not wired into nix.
+    "zizmor": ToolSpec(
+        version_var="zizmorVersion",
+        native_var="zizmorNative",
+        github_repo="zizmorcore/zizmor",
+        asset_field="asset",
+        url_template=(
+            "https://github.com/zizmorcore/zizmor/releases/download/"
+            "v{version}/{asset}"
+        ),
+    ),
+    # lychee (lycheeverse/lychee): the release tag is ``lychee-v{version}`` (NOT
+    # ``v{version}``), so the template carries that prefix. Asset embeds no
+    # version. Consumed only by scripts/install-lychee.sh.
+    "lychee": ToolSpec(
+        version_var="lycheeVersion",
+        native_var="lycheeNative",
+        github_repo="lycheeverse/lychee",
+        asset_field="asset",
+        url_template=(
+            "https://github.com/lycheeverse/lychee/releases/download/"
+            "lychee-v{version}/{asset}"
+        ),
+    ),
+    # betterleaks (betterleaks/betterleaks): tag is ``v{version}``; asset
+    # filenames EMBED the version and are kept STATIC in flake.nix (actionlint
+    # precedent; see flake.nix betterleaksNative). Consumed only by
+    # scripts/install-betterleaks.sh.
+    "betterleaks": ToolSpec(
+        version_var="betterleaksVersion",
+        native_var="betterleaksNative",
+        github_repo="betterleaks/betterleaks",
+        asset_field="asset",
+        url_template=(
+            "https://github.com/betterleaks/betterleaks/releases/download/"
             "v{version}/{asset}"
         ),
     ),

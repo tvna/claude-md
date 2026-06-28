@@ -21,10 +21,15 @@ Scans open PRs authored by the session user for ``mergeable_state`` of
 ``dirty`` or ``behind`` and emits a banner if any are found, so a resumed
 session catches stale branches immediately.
 
+**GitPush** (CLI: ``python3 scripts/check_pr_mergeability.py git-push``):
+After a ``git push``, detects the open PR for the current branch and polls
+``mergeable_state``. Surfaces the same clean/dirty/behind/blocked messages
+as PostToolUse mode. Triggered by a PostToolUse Bash hook. Refs #1946.
+
 ## Failure mode
 
-Both modes are fail-open (exit 0). Mergeability detection is advisory;
-a failure here must never block PR creation or session startup.
+All modes are fail-open (exit 0). Mergeability detection is advisory;
+a failure here must never block PR creation, session startup, or git push.
 """
 
 from __future__ import annotations
@@ -115,7 +120,7 @@ def _detect_repo() -> str | None:
     if repo and _OWNER_REPO_RE.match(repo):
         return repo
     try:
-        result = subprocess.run(  # noqa: S603 — fixed args, not user input
+        result = subprocess.run(  # noqa: S603 -- fixed args, not user input
             ["git", "remote", "get-url", "origin"],  # noqa: S607
             capture_output=True, text=True, timeout=5, check=False,
         )
@@ -183,12 +188,18 @@ def _poll_mergeability(
     opener: _Opener = urllib.request.urlopen,
     token: str = "",
     sleeper: Callable[[float], None] = time.sleep,
+    max_polls: int | None = None,
 ) -> dict[str, Any] | None:
-    """Poll until ``mergeable`` is non-null; return the PR data or None."""
+    """Poll until ``mergeable`` is non-null; return the PR data or None.
+
+    max_polls overrides _MAX_POLLS when provided; pass 1 for a single
+    non-blocking probe (e.g. git-push path where latency must stay low).
+    """
     actual_token = token or _get_token()
     path = f"repos/{owner}/{repo}/pulls/{pr_number}"
+    polls = _MAX_POLLS if max_polls is None else max_polls
     data: dict[str, Any] | None = None
-    for attempt in range(_MAX_POLLS):
+    for attempt in range(polls):
         if attempt > 0:
             sleeper(_POLL_INTERVAL_SECONDS)
         data = _rest_get(path, token=actual_token, opener=opener)
@@ -268,7 +279,7 @@ def decide_post_tool_use(
     if state == "behind":
         return _build_context(
             f"OUT OF DATE: {pr_label} has mergeable_state=behind (no conflict). "
-            "Bring it up to date deterministically -- do NOT force-push or call "
+            "Bring it up to date deterministically; do NOT force-push or call "
             "update_pull_request_branch (both are blocked): run "
             "`python3 scripts/refresh_pr_branch.py --push` from the PR branch. "
             "See docs/runbooks/refresh-behind-pr.md."
@@ -277,7 +288,7 @@ def decide_post_tool_use(
     if state == "clean":
         return _build_context(f"Mergeability OK: {pr_label} has mergeable_state=clean. No conflicts detected.")
 
-    # blocked / unknown / draft / etc — advisory
+    # blocked / unknown / draft / etc; advisory
     return _build_context(
         f"Mergeability advisory for {pr_label}: mergeable_state={state}. "
         "This may indicate required status checks are pending (blocked) or "
@@ -392,11 +403,114 @@ def run_session_start(
         for url in behind:
             lines.append(f"  - {url}")
         lines.append(
-            "Update each (no conflict) deterministically -- do NOT force-push: from the PR "
+            "Update each (no conflict) deterministically; do NOT force-push: from the PR "
             "branch run `python3 scripts/refresh_pr_branch.py --push`. "
             "See docs/runbooks/refresh-behind-pr.md."
         )
         print("\n".join(lines))
+
+
+# ---------------------------------------------------------------------------
+# GitPush mode
+# ---------------------------------------------------------------------------
+
+
+def _get_current_branch() -> str | None:
+    """Return the current git branch name, or None on failure."""
+    try:
+        result = subprocess.run(  # noqa: S603 -- fixed args, not user input
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"],  # noqa: S607
+            capture_output=True, text=True, timeout=5, check=False,
+        )
+        if result.returncode == 0:
+            branch = result.stdout.strip()
+            return branch if branch else None
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return None
+
+
+def run_git_push(
+    *,
+    opener: _Opener = urllib.request.urlopen,
+    token: str = "",
+    sleeper: Callable[[float], None] = time.sleep,
+) -> dict[str, Any] | None:
+    """Return hook context after a git push, or None (fail-open)."""
+    repo_str = _detect_repo()
+    if not repo_str:
+        return None
+
+    branch = _get_current_branch()
+    if not branch:
+        return None
+
+    owner, _, repo = repo_str.partition("/")
+    if not owner or not repo:
+        return None
+
+    actual_token = token or _get_token()
+    prs = _rest_get_list(
+        f"repos/{owner}/{repo}/pulls?head={owner}:{branch}&state=open&per_page=1",
+        token=actual_token,
+        opener=opener,
+    )
+    if not prs:
+        return None
+
+    pr = prs[0]
+    if not isinstance(pr, dict):
+        return None
+
+    pr_number = pr.get("number")
+    if not isinstance(pr_number, int) or pr_number <= 0:
+        return None
+
+    pr_label = f"{owner}/{repo}#{pr_number}"
+
+    pr_data = _poll_mergeability(
+        owner, repo, str(pr_number),
+        opener=opener, token=actual_token, sleeper=sleeper, max_polls=1,
+    )
+    if pr_data is None:
+        return None
+
+    mergeable = pr_data.get("mergeable")
+    state = str(pr_data.get("mergeable_state") or "unknown").lower()
+
+    if mergeable is None:
+        return _build_context(
+            f"Mergeability check timed out for {pr_label}: GitHub has not yet computed "
+            "mergeability on the first probe. Re-check the PR mergeable_state "
+            "shortly via the GitHub REST API or UI."
+        )
+
+    if state == "clean":
+        return _build_context(f"Mergeability OK: {pr_label} has mergeable_state=clean. No conflicts detected.")
+
+    if state == "dirty":
+        return _build_context(
+            f"MERGE CONFLICT DETECTED: {pr_label} has mergeable_state=dirty. "
+            "The branch conflicts with the base branch. force-push is blocked by the "
+            "non_fast_forward ruleset and update_pull_request_branch is gated, so use "
+            "the replacement-branch path: docs/runbooks/update-pr-branch-recovery.md."
+        )
+
+    if state == "behind":
+        return _build_context(
+            f"OUT OF DATE: {pr_label} has mergeable_state=behind (no conflict). "
+            "Bring it up to date deterministically; do NOT force-push or call "
+            "update_pull_request_branch (both are blocked): run "
+            "`python3 scripts/refresh_pr_branch.py --push` from the PR branch. "
+            "See docs/runbooks/refresh-behind-pr.md."
+        )
+
+    return _build_context(
+        f"Mergeability advisory for {pr_label}: mergeable_state={state}. "
+        "This may indicate required status checks are pending (blocked) or "
+        "that mergeability is still being computed (unknown). "
+        "Re-check the PR mergeable_state once CI settles."
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -409,6 +523,10 @@ def main(argv: list[str] | None = None) -> int:
 
     if args and args[0] == "session-start":
         run_session_start()
+        return 0
+
+    if args and args[0] == "git-push":
+        emit_decision(run_git_push())
         return 0
 
     event = read_event("check_pr_mergeability")

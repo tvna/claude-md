@@ -55,12 +55,6 @@ class Response:
         return self.payload
 
 
-class _RunResult:
-    def __init__(self, stdout: str = "", returncode: int = 0) -> None:
-        self.stdout = stdout
-        self.returncode = returncode
-
-
 # ---------------------------------------------------------------------------
 
 class TestCanonicalProjection:
@@ -407,37 +401,33 @@ class TestFetchLiveRuleset:
 
 
 class TestFileIssue:
-    def test_runner_invocation_matches_legacy_shell(self) -> None:
-        calls: list[list[str]] = []
+    def test_posts_issue_via_rest(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        calls: list[dict[str, Any]] = []
 
-        def runner(cmd: list[str], **_kwargs: Any) -> _RunResult:
-            calls.append(cmd)
-            return _RunResult()
+        def fake_rest(method: str, path: str, payload: Any = None, *, token: str) -> Any:
+            calls.append({"method": method, "path": path, "payload": payload})
+            return {"number": 1}
+
+        monkeypatch.setattr(ruleset_drift, "rest_json", fake_rest)
+        body_file = tmp_path / "x.md"
+        body_file.write_text("drift body", encoding="utf-8")
 
         ruleset_drift.file_issue(
             "owner/repo",
             "fix(ruleset-drift): SoT vs live drift detected (2026-05-22)",
-            Path("/tmp/x.md"),
-            runner=runner,
+            body_file,
         )
 
-        assert calls == [
-            [
-                "gh",
-                "issue",
-                "create",
-                "--repo",
-                "owner/repo",
-                "--title",
-                "fix(ruleset-drift): SoT vs live drift detected (2026-05-22)",
-                "--body-file",
-                "/tmp/x.md",
-                "--label",
-                "layer:meta",
-                "--label",
-                "type:fix",
-            ]
-        ]
+        assert len(calls) == 1
+        assert calls[0]["method"] == "POST"
+        assert calls[0]["path"] == "/repos/owner/repo/issues"
+        assert calls[0]["payload"] == {
+            "title": "fix(ruleset-drift): SoT vs live drift detected (2026-05-22)",
+            "body": "drift body",
+            "labels": ["layer:meta", "type:fix"],
+        }
 
 
 # ---------------------------------------------------------------------------
@@ -644,7 +634,7 @@ class TestDetect:
 
 class TestCli:
     def test_detect_prints_counts(
-        self, tmp_path: Path, capsys: pytest.CaptureFixture, monkeypatch: pytest.MonkeyPatch
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
     ) -> None:
         sot_dir = _write_sot(tmp_path, {"main.json": SOT_MAIN})
         summary = tmp_path / "summary.md"
@@ -718,7 +708,7 @@ class TestCli:
         assert rc == 1
 
     def test_reconcile_maps_kind_and_parses_detected(
-        self, tmp_path: Path, capsys: pytest.CaptureFixture, monkeypatch: pytest.MonkeyPatch
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
     ) -> None:
         body = tmp_path / "sot.md"
         body.write_text("Parent: #30\n", encoding="utf-8")

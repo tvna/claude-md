@@ -39,7 +39,7 @@ def _build_body(*, drop: tuple[str, ...] = ()) -> str:
 
     Sections in *drop* are omitted entirely. Section bodies stay minimal
     (a single ``-`` bullet) since this module only checks heading
-    existence -- shape is enforced by ``preflight_pr_template_shape``.
+    existence; shape is enforced by ``preflight_pr_template_shape``.
     """
     lines: list[str] = []
     for name in body_policy._PR_REQUIRED:
@@ -128,7 +128,7 @@ class TestBuildDenyReason:
         assert "PULL_REQUEST_TEMPLATE.md" in reason
 
     def test_mentions_retrigger_loop_rationale(self) -> None:
-        # The whole reason this hook exists -- retro #356 row 1 / PR #355
+        # The whole reason this hook exists; retro #356 row 1 / PR #355
         # ran three trigger waves on a single head SHA.
         reason = preflight.build_deny_reason(
             "mcp__github__create_pull_request", ["Facts"]

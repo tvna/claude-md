@@ -2,7 +2,7 @@
 
 ``apm.yml`` is the single source of truth: it declares the `github` stdio server
 (under ``dependencies.mcp``) pointing at the launch wrapper. The generated
-``.mcp.json`` mirror -- rendered by ``scripts/gen_mcp_json.py`` -- is prohibited
+``.mcp.json`` mirror; rendered by ``scripts/gen_mcp_json.py``; is prohibited
 from being committed (repo-scope #58/#1067); it must stay gitignored so the
 render cannot accidentally check it in.
 """

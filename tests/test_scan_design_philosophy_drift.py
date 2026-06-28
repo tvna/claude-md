@@ -23,8 +23,8 @@ def _write(path: Path, text: str) -> None:
 def _master(n: int, *, subtitles: dict[int, str] | None = None) -> str:
     """Return a minimal master.instructions.md body with N sections.
 
-    Each section emits a ``*Layer: <text> -- desc.*`` subtitle by
-    default (em-dash separator) so the post-#329 label-parity check
+    Each section emits a ``*Layer: <text>; desc.*`` subtitle by
+    default (semicolon separator) so the post-#329 label-parity check
     has a subtitle to read. Pass ``subtitles={n: "..."}`` to override
     individual section subtitles; pass ``subtitles={}`` to drop them
     entirely.
@@ -40,7 +40,7 @@ def _master(n: int, *, subtitles: dict[int, str] | None = None) -> str:
         sections.append("")
         sub = pick.get(i)
         if sub is not None:
-            sections.append(f"*Layer: {sub} — desc {i}.*")
+            sections.append(f"*Layer: {sub}; desc {i}.*")
             sections.append("")
         sections.append(f"body for section {i}.")
         sections.append("")
@@ -416,10 +416,10 @@ class TestParseMasterSubtitles:
         result = sdpd.parse_master_subtitles(text)
         assert result == {1: "first", 3: "third"}
 
-    def test_captures_only_text_before_em_dash(self) -> None:
+    def test_captures_only_text_before_separator(self) -> None:
         text = (
             "## 1. Heading\n"
-            "*Layer: layer name — description with em-dash.*\n"
+            "*Layer: layer name; description with separator.*\n"
         )
         assert sdpd.parse_master_subtitles(text) == {1: "layer name"}
 
@@ -458,30 +458,6 @@ class TestParseDocRowLabels:
             "| P1 - foo | bar |",
         ]
         assert sdpd.parse_doc_row_labels(section) == {1: "foo"}
-
-
-# ---------------------------------------------------------------------------
-# parse_glossary_entries
-# ---------------------------------------------------------------------------
-
-
-class TestParseGlossaryEntries:
-    def test_extracts_bolded_terms(self) -> None:
-        doc = _doc(matrix_rows=1, wording_count=1, glossary=["alpha", "beta"])
-        assert sdpd.parse_glossary_entries(doc) == {"alpha", "beta"}
-
-    def test_returns_empty_when_section_missing(self) -> None:
-        doc = _doc(matrix_rows=1, wording_count=1, glossary=[])
-        assert sdpd.parse_glossary_entries(doc) == set()
-
-    def test_stops_at_next_heading(self) -> None:
-        doc = (
-            "### 2.5 Glossary\n"
-            "- **alpha**: first.\n"
-            "## 3. Matrix\n"
-            "- **beta**: should not be counted.\n"
-        )
-        assert sdpd.parse_glossary_entries(doc) == {"alpha"}
 
 
 # ---------------------------------------------------------------------------
@@ -589,32 +565,158 @@ class TestVerifyGlossary:
     ) -> None:
         master = tmp_path / "master.md"
         doc = tmp_path / "doc.md"
+        glossary = tmp_path / "ubiquitous-language.md"
         _write(master, _master(6))
+        _write(doc, _doc(matrix_rows=6, wording_count=6, glossary=[]))
         partial = [
             e for e in sdpd.REQUIRED_GLOSSARY_ENTRIES if e != "defense-in-depth"
         ]
         _write(
-            doc,
-            _doc(matrix_rows=6, wording_count=6, glossary=partial),
+            glossary,
+            "# Glossary\n\n"
+            + "\n".join(f"- **{t}**: definition." for t in partial)
+            + "\n",
         )
-        rc = sdpd.main(["verify", "--master", str(master), "--doc", str(doc)])
+        rc = sdpd.main(
+            ["verify", "--master", str(master), "--doc", str(doc), "--glossary", str(glossary)]
+        )
         assert rc == 1
         err = capsys.readouterr().err
         assert "defense-in-depth" in err
-        assert "section 2.5 glossary is missing required entries" in err
+        assert "glossary is missing required entries" in err
 
     def test_glossary_heading_absent_fails(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
         master = tmp_path / "master.md"
         doc = tmp_path / "doc.md"
+        glossary = tmp_path / "ubiquitous-language.md"
         _write(master, _master(6))
         _write(doc, _doc(matrix_rows=6, wording_count=6, glossary=[]))
-        rc = sdpd.main(["verify", "--master", str(master), "--doc", str(doc)])
+        _write(glossary, "# Glossary\n\nNo entries here.\n")
+        rc = sdpd.main(
+            ["verify", "--master", str(master), "--doc", str(doc), "--glossary", str(glossary)]
+        )
         assert rc == 1
         err = capsys.readouterr().err
         for term in sdpd.REQUIRED_GLOSSARY_ENTRIES:
             assert term in err
+
+    def test_default_glossary_resolves_regardless_of_cwd(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        # The default --glossary is anchored to the script location, so a
+        # verify run from any working directory finds the real repo glossary
+        # (which carries every required entry) rather than resolving the path
+        # against the caller's CWD.
+        master = tmp_path / "master.md"
+        doc = tmp_path / "doc.md"
+        _write(master, _master(6))
+        _write(doc, _doc(matrix_rows=6, wording_count=6))
+        monkeypatch.chdir(tmp_path)
+        rc = sdpd.main(
+            ["verify", "--master", str(master), "--doc", str(doc)]
+        )
+        assert rc == 0
+
+
+# ---------------------------------------------------------------------------
+# parse_file_entries
+# ---------------------------------------------------------------------------
+
+
+class TestParseFileEntries:
+    def test_extracts_terms_across_sections(self) -> None:
+        text = (
+            "## Section A\n"
+            "- **alpha**: first.\n"
+            "## Section B\n"
+            "- **beta**: second.\n"
+            "- **gamma**: third.\n"
+        )
+        assert sdpd.parse_file_entries(text) == {"alpha", "beta", "gamma"}
+
+    def test_skips_non_bold_lines(self) -> None:
+        text = "- plain item\n- **bold**: yes.\n"
+        assert sdpd.parse_file_entries(text) == {"bold"}
+
+    def test_empty_file_returns_empty_set(self) -> None:
+        assert sdpd.parse_file_entries("") == set()
+
+
+# ---------------------------------------------------------------------------
+# verify: --glossary flag
+# ---------------------------------------------------------------------------
+
+
+class TestVerifyGlossaryFlag:
+    def test_glossary_file_used_when_passed(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        master = tmp_path / "master.md"
+        doc = tmp_path / "doc.md"
+        glossary = tmp_path / "ubiquitous-language.md"
+        _write(master, _master(6))
+        _write(doc, _doc(matrix_rows=6, wording_count=6, glossary=[]))
+        entries = "\n".join(
+            f"- **{t}**: definition."
+            for t in sdpd.REQUIRED_GLOSSARY_ENTRIES
+        )
+        _write(glossary, f"# Glossary\n\n{entries}\n")
+        rc = sdpd.main(
+            [
+                "verify",
+                "--master", str(master),
+                "--doc", str(doc),
+                "--glossary", str(glossary),
+            ]
+        )
+        assert rc == 0
+
+    def test_glossary_file_missing_entry_fails(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        master = tmp_path / "master.md"
+        doc = tmp_path / "doc.md"
+        glossary = tmp_path / "ubiquitous-language.md"
+        _write(master, _master(6))
+        _write(doc, _doc(matrix_rows=6, wording_count=6, glossary=[]))
+        partial = [
+            t for t in sdpd.REQUIRED_GLOSSARY_ENTRIES if t != "defense-in-depth"
+        ]
+        entries = "\n".join(f"- **{t}**: definition." for t in partial)
+        _write(glossary, f"# Glossary\n\n{entries}\n")
+        rc = sdpd.main(
+            [
+                "verify",
+                "--master", str(master),
+                "--doc", str(doc),
+                "--glossary", str(glossary),
+            ]
+        )
+        assert rc == 1
+        err = capsys.readouterr().err
+        assert "defense-in-depth" in err
+
+    def test_glossary_file_not_found_fails(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        master = tmp_path / "master.md"
+        doc = tmp_path / "doc.md"
+        _write(master, _master(6))
+        _write(doc, _doc(matrix_rows=6, wording_count=6))
+        rc = sdpd.main(
+            [
+                "verify",
+                "--master", str(master),
+                "--doc", str(doc),
+                "--glossary", str(tmp_path / "no-such-file.md"),
+            ]
+        )
+        assert rc == 1
+        assert "missing glossary file" in capsys.readouterr().err
 
 
 # ---------------------------------------------------------------------------
@@ -626,9 +728,18 @@ class TestRepositorySelfCheck:
     def test_repository_state_is_clean(self) -> None:
         master = REPO_ROOT / ".apm" / "instructions" / "master.instructions.md"
         doc = REPO_ROOT / "docs" / "prd" / "agent-rules-design-philosophy.md"
+        glossary = REPO_ROOT / "docs" / "standards" / "ubiquitous-language.md"
         assert master.exists()
         assert doc.exists()
-        rc = sdpd.main(["verify", "--master", str(master), "--doc", str(doc)])
+        assert glossary.exists()
+        rc = sdpd.main(
+            [
+                "verify",
+                "--master", str(master),
+                "--doc", str(doc),
+                "--glossary", str(glossary),
+            ]
+        )
         assert rc == 0
 
 

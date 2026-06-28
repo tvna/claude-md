@@ -182,7 +182,11 @@ def test_missing_pr_target_skips_without_sleeping_or_running() -> None:
     assert checked is False
 
 
-def test_no_token_fails_open(capsys: pytest.CaptureFixture[str]) -> None:
+def test_no_token_fails_open(
+    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("GH_TOKEN", raising=False)
+    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
     sha = "sha123"
     url_map = {
         "/pulls/42": _pr_data(sha),

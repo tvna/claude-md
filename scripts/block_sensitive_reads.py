@@ -3,7 +3,7 @@
 
 Registered as a ``PreToolUse`` hook for the ``Read`` and ``Bash`` matchers in
 ``.claude/settings.json``. It denies any attempt to read credential-bearing
-local files at session runtime -- the gap a gap analysis against the community
+local files at session runtime; the gap a gap analysis against the community
 "Claude Code Hardening Cheat Sheet" surfaced as the highest-priority missing
 control (issue #1222, parent #178 "Credential Access" row).
 
@@ -26,12 +26,12 @@ What counts as sensitive (basename globs + credential directories):
 Design (CLAUDE.md section 4: minimal, fail loud on a match, never widen
 exposure):
 
-- The deny reason names the matched **path** only -- never the file's
+- The deny reason names the matched **path** only; never the file's
   **content**. The hook never opens the file, so no secret value can leak into
   the gate output, CI logs, or the transcript.
 - Parse-error fail-open is intentional and narrow: a malformed stdin event
   logs to stderr and exits 0 so a hook bug never wedges the session. A path
-  that matches a sensitive pattern is always denied -- the fail-open applies
+  that matches a sensitive pattern is always denied; the fail-open applies
   only to the I/O boundary, not to the decision.
 
 Escape hatch: add a tracked path to :data:`ALLOWLIST_PATHS` with a rationale
@@ -80,7 +80,7 @@ _READ_COMMANDS: frozenset[str] = frozenset(
 )
 
 # Reviewed non-secret paths that match a pattern above. Ratchet: may only
-# shrink. Empty today -- the repo ships no such fixture.
+# shrink. Empty today; the repo ships no such fixture.
 ALLOWLIST_PATHS: frozenset[str] = frozenset()
 
 _DENY_RULE = "credential-read-guard"
@@ -152,7 +152,7 @@ def _deny(path: str) -> dict[str, Any]:
             f"{path!r}.\n\n"
             "This guard prevents local secrets (.env, *.pem, *.key, SSH/cloud "
             "credential files) from reaching the agent and any output sink "
-            "(logs, PR bodies, comments, external APIs) -- CLAUDE.md section 4.\n"
+            "(logs, PR bodies, comments, external APIs); CLAUDE.md section 4.\n"
             "If this path is a reviewed non-secret, add it to ALLOWLIST_PATHS "
             "in scripts/block_sensitive_reads.py with a rationale."
         ),

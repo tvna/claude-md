@@ -120,8 +120,8 @@ class TestDecidePruneAction:
 
 
 def test_render_action_row_escapes_pipes() -> None:
-    assert labels_apply.render_action_row("a|b", "plan-only (POST)", "—", "—", "dry-run") == (
-        "| `a\\|b` | plan-only (POST) | — | — | dry-run |"
+    assert labels_apply.render_action_row("a|b", "plan-only (POST)", "n/a", "n/a", "dry-run") == (
+        "| `a\\|b` | plan-only (POST) | n/a | n/a | dry-run |"
     )
 
 
@@ -192,10 +192,10 @@ class TestCli:
 
         text = summary.read_text(encoding="utf-8")
         assert result == 0
-        assert "| `new` | plan-only (POST) | — | — | dry-run |" in text
+        assert "| `new` | plan-only (POST) | n/a | n/a | dry-run |" in text
         assert "| `changed` | plan-only (PATCH) | yes | no | dry-run |" in text
         assert "| `same` | no-op | no | no | unchanged |" in text
-        assert "| `old` | report-only (not in SoT) | — | — | kept (prune=false) |" in text
+        assert "| `old` | report-only (not in SoT) | n/a | n/a | kept (prune=false) |" in text
 
     def test_apply_posts_patches_and_aborts_on_failure(self, tmp_path: Path) -> None:
         sot = write_sot(

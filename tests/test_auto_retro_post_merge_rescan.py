@@ -11,12 +11,12 @@ key under ``[tool.pytest.ini_options]`` in ``pyproject.toml``.
 from __future__ import annotations
 
 import json
-import subprocess
 from pathlib import Path
 from typing import Any
 
 import auto_retro as ar
 import pytest
+from _github_api import GitHubApiError
 
 pytestmark = pytest.mark.shard_ci_ops_auto_retro_rescan
 
@@ -122,9 +122,7 @@ def _rescan_recorder(
         decoded = unquote(path)
         if method == "GET" and path.startswith("/search/issues"):
             if search_error:
-                raise subprocess.CalledProcessError(
-                    1, "gh", stderr="search boom"
-                )
+                raise GitHubApiError(500, "GET", "/x", "search boom")
             if "type:pr" in decoded and "is:merged" in decoded:
                 if "merged:" in decoded and ".." in decoded:
                     return json.dumps({"items": fix_prs})
@@ -152,9 +150,7 @@ def _rescan_recorder(
         if method == "PATCH" and "/issues/" in path:
             number = _number_from_path(path)
             if number in patch_error_for:
-                raise subprocess.CalledProcessError(
-                    1, "gh", stderr="patch boom"
-                )
+                raise GitHubApiError(500, "GET", "/x", "patch boom")
             return "{}"
         return ""
 
@@ -528,6 +524,39 @@ class TestBuildRescanSummary:
         assert "retro #200" in text
         assert "PR #43" in text
         assert "too recent" in text
+
+    def test_reports_counts(self) -> None:
+        text = ar._build_rescan_summary(
+            [(42, 200), (44, 201)],
+            [(43, "too recent")],
+            48,
+        )
+        assert "Appended: 2" in text
+        assert "Skipped: 1" in text
+
+    def test_long_list_is_capped_with_overflow(self) -> None:
+        appended = [(pr, 900 + pr) for pr in range(1, 9)]
+        text = ar._build_rescan_summary(appended, [], 48)
+        # Count is exact; only the first _SUMMARY_LIST_CAP items are listed
+        # inline, the rest collapse to a (+N more) marker.
+        assert "Appended: 8" in text
+        assert "PR #1 to retro #901" in text
+        assert "PR #5 to retro #905" in text
+        assert "PR #6 to retro #906" not in text
+        assert "(+3 more)" in text
+
+
+class TestCompactJoin:
+    def test_empty_is_none(self) -> None:
+        assert ar._compact_join([]) == "(none)"
+
+    def test_under_cap_lists_all(self) -> None:
+        assert ar._compact_join(["a", "b", "c"]) == "a, b, c"
+
+    def test_over_cap_appends_overflow_count(self) -> None:
+        items = [str(i) for i in range(7)]
+        out = ar._compact_join(items, cap=5)
+        assert out == "0, 1, 2, 3, 4 (+2 more)"
 
 
 # ---------------------------------------------------------------------------

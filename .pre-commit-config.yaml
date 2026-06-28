@@ -1,16 +1,52 @@
 repos:
-  - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v5.0.0
-    hooks:
-      - id: trailing-whitespace
-      - id: end-of-file-fixer
-      - id: check-yaml
-        args: [--unsafe]
-        exclude: ^\.github/workflows/
-      - id: check-merge-conflict
-
   - repo: local
     hooks:
+      # Generic hygiene hooks from pre-commit/pre-commit-hooks v5.0.0, sourced
+      # from PyPI (pinned) rather than the upstream git repo. Refs #1967: the
+      # remote Claude (web) session git proxy returns 403 for any github.com
+      # clone outside the session repo scope, so `repo: https://github.com/...`
+      # could not init and forced --no-verify / PREFLIGHT_SKIP=1. PyPI installs
+      # (pypi.org) bypass that proxy, so `language: python` +
+      # additional_dependencies restores the gate in every environment with the
+      # exact upstream code (no behaviour drift). The entry points and default
+      # `types` mirror pre-commit-hooks' own .pre-commit-hooks.yaml at v5.0.0.
+      - id: trailing-whitespace
+        name: trim trailing whitespace
+        entry: trailing-whitespace-fixer
+        language: python
+        additional_dependencies: ["pre-commit-hooks==5.0.0"]
+        types: [text]
+        # Refs #1824 (PR #1822 retro, R1): declare the pre-commit stage so a
+        # trailing-whitespace violation surfaces at `git commit` time (via the
+        # .githooks/pre-commit -> prek hook-impl path) instead of only at push /
+        # CI. pre-push is kept so the gate also fires wherever the pre-push hook
+        # type is installed. Both stages are scoped to this hygiene hook and do
+        # not collide with the dedicated pre-push entries below
+        # (preflight-branch-base, preflight-coverage), which keep their own
+        # `stages: [pre-push]`.
+        stages: [pre-commit, pre-push]
+      - id: end-of-file-fixer
+        name: fix end of files
+        entry: end-of-file-fixer
+        language: python
+        additional_dependencies: ["pre-commit-hooks==5.0.0"]
+        types: [text]
+      - id: check-yaml
+        name: check yaml
+        entry: check-yaml
+        args: [--unsafe]
+        language: python
+        additional_dependencies: ["pre-commit-hooks==5.0.0"]
+        types: [yaml]
+        exclude: ^\.github/workflows/
+      - id: check-merge-conflict
+        name: check for merge conflicts
+        entry: check-merge-conflict
+        language: python
+        additional_dependencies: ["pre-commit-hooks==5.0.0"]
+        types: [text]
+
+
       - id: uv-pin-drift
         name: uv pin drift (scripts/uv_pin.py drift)
         entry: uv run python scripts/uv_pin.py drift
@@ -29,6 +65,27 @@ repos:
         language: system
         pass_filenames: false
         files: ^\.github/workflows/.*\.ya?ml$
+      - id: scan-workflow-unsigned-commit
+        name: scan workflow unsigned commit (scripts/scan_workflow_unsigned_commit.py verify)
+        # Refs #1437/#1466: a `git push` in a workflow run block authors an
+        # unsigned commit as github-actions[bot]. The signed App-bot path
+        # (pr_upsert.py upsert-files via createCommitOnBranch) is the required
+        # replacement; this gate keeps a workflow from reintroducing git push.
+        entry: uv run python scripts/scan_workflow_unsigned_commit.py verify
+        language: system
+        pass_filenames: false
+        files: ^\.github/workflows/.*\.ya?ml$
+      - id: threat-intel-coords
+        name: threat-intel OSV coordinate validation (scripts/threat_intel_triage.py verify)
+        # Offline PR-head mirror of the pull_request_target triage scan (#1519):
+        # fails loud here when the parser yields a malformed OSV coordinate
+        # (the #1511 class), which the base-checkout triage job cannot catch on
+        # the PR. Mirrored onto the PR head by `prek run --all-files` in
+        # verify-pr.yml. No network, no secrets. Refs #1511.
+        entry: uv run python scripts/threat_intel_triage.py verify
+        language: system
+        pass_filenames: false
+        files: ^(\.github/workflows/.*\.ya?ml|pyproject\.toml|uv\.lock)$
       - id: actionlint
         name: actionlint (workflow syntax + shellcheck)
         # System binary from flake.nix (sharedPackages). With no file args it
@@ -44,6 +101,14 @@ repos:
         language: system
         pass_filenames: false
         files: ^\.github/workflows/.*\.ya?ml$
+      - id: scan-harness-doc-coverage
+        name: scan harness doc coverage (scripts/scan_harness_doc_coverage.py verify)
+        # Refs #1761: fails when a public scripts/*.py or .github/workflows/*.ya?ml
+        # has no specific area_paths entry in .github/label-policy.toml.
+        entry: uv run python scripts/scan_harness_doc_coverage.py verify
+        language: system
+        pass_filenames: false
+        files: ^(scripts/.*\.py|\.github/workflows/.*\.ya?ml|\.github/label-policy\.toml)$
       - id: scan-secrets
         name: scan secrets (scripts/scan_secrets.py verify)
         entry: uv run python scripts/scan_secrets.py verify
@@ -77,6 +142,107 @@ repos:
         # entry provisions the shared waza binary via scripts/install_waza.sh,
         # and parallel copies otherwise race + redundantly download it (#1150).
         require_serial: true
+
+      - id: scan-mermaid-syntax
+        name: scan mermaid syntax (scripts/scan_mermaid_syntax.py verify)
+        # Parses every ```mermaid block under docs/ with the official Mermaid
+        # parser via bun (scripts/mermaid_parse.mjs) so a render error like the
+        # #1595 ';'-in-a-message regression is caught before merge. Soft-skips
+        # when bun or the pinned node_modules tree (mermaid + jsdom) is absent --
+        # a bare contributor laptop or the uv-only prek job has neither -- which
+        # mirrors the actionlint soft-skip. The unconditional hard gate is the
+        # nix-based verify-mermaid.yml, so enforcement is not lost. Refs #1597.
+        entry: bash -c 'command -v bun >/dev/null 2>&1 && [ -d node_modules/mermaid ] || { echo "bun or node_modules/mermaid absent; skipping mermaid syntax gate (enforced by verify-mermaid.yml); run bun install --frozen-lockfile to enable it" >&2; exit 0; }; exec uv run python scripts/scan_mermaid_syntax.py verify'
+        language: system
+        pass_filenames: false
+        files: ^docs/.*\.md$
+
+      - id: scan-scripts-gh-calls
+        name: scan scripts gh calls (scripts/scan_scripts_gh_calls.py verify)
+        # Refs #909: production scripts/*.py must reach GitHub through the REST
+        # wrapper (_github_api) or covered mcp__github__* paths, never the gh
+        # CLI (absent in some remote execution environments). This mirrors the
+        # verify-agents.yml CI gate at commit time so a reintroduced direct gh
+        # call fails before push.
+        entry: uv run python scripts/scan_scripts_gh_calls.py verify
+        language: system
+        pass_filenames: false
+        files: ^scripts/.*\.py$
+      - id: scan-test-presence-drift
+        name: scan test presence drift (scripts/scan_test_presence_drift.py verify)
+        # Refs #1632 (PR #1625 retro, Fact 4): this scanner already runs in
+        # verify-agents.yml and preflight_all.py, but only at CI / push time, so
+        # a new workflow-invoked script without its M3 CLI contract test (the
+        # #1625 first-attempt gap) did not surface until late. Mirroring it here
+        # fails at commit time. One pass covers M2 (test-module presence), O6
+        # (GitHub-API boundary registry), and M3 (workflow-CLI-contract
+        # presence); it runs whenever a script, test, or workflow changes.
+        entry: uv run python scripts/scan_test_presence_drift.py verify
+        language: system
+        pass_filenames: false
+        files: ^(scripts/.*\.py|tests/.*\.py|\.github/workflows/.*\.ya?ml)$
+      - id: scan-docs-inventory
+        name: scan docs inventory (scripts/scan_docs_inventory.py verify)
+        # Refs #1632 (PR #1625 retro, Fact 4): a new standards doc not linked
+        # from docs/INDEX.md was only caught in CI. Mirroring the CI scanner
+        # here fails the missing index row at commit time.
+        entry: uv run python scripts/scan_docs_inventory.py verify
+        language: system
+        pass_filenames: false
+        files: ^docs/.*\.md$
+
+      - id: scan-doc-graph-registration
+        name: scan doc graph registration (scripts/scan_doc_graph_registration.py verify)
+        # Refs #1793: gate_doc_graph_pr.py only enforces co-changes for files
+        # already registered in doc-dependencies.toml; new files are invisible
+        # until registered. This hook fails loud for new blocking-path files
+        # (docs/standards/**, docs/prd/**) that are not yet in the graph, and
+        # emits advisory warnings for docs/runbooks/**, scripts/*.py, and
+        # .github/workflows/*.yml. Waivers via PR body are supported in workflow
+        # context (PR_BODY env); locally the hook requires registration.
+        entry: uv run python scripts/scan_doc_graph_registration.py verify
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      - id: scan-install-curl-retry-drift
+        name: scan install curl retry drift (scripts/scan_install_curl_retry_drift.py verify)
+        # Refs #2038: every scripts/install-*.sh must fetch its pinned release
+        # through the shared retry_download helper (scripts/_retry.sh), never a
+        # bare curl. This gate fails loud at commit time if an installer
+        # reintroduces a bare curl download, keeping the retry/fail-loud
+        # invariant from drifting. CI runs the same prek config.
+        entry: uv run python scripts/scan_install_curl_retry_drift.py verify
+        language: system
+        pass_filenames: false
+        files: ^scripts/(install-.*\.sh|_retry\.sh|scan_install_curl_retry_drift\.py)$
+
+      - id: uv-mypy
+        name: mypy type gate (uv run mypy scripts tests)
+        # Mirrors the mypy step in verify-agents.yml so TypedDict key errors,
+        # unused type: ignore suppressions, and missing imports surface at
+        # commit time rather than CI. Refs #1756 (PR #1746 retro repair #2-4,#7).
+        # pyproject.toml and uv.lock are included so mypy config changes or
+        # stub upgrades/removals also trigger the gate (Codex review P2).
+        entry: uv run mypy scripts tests
+        language: system
+        pass_filenames: false
+        files: ^(scripts/.*\.py|tests/.*\.py|pyproject\.toml|uv\.lock)$
+
+      - id: module-size
+        name: module size budget (scripts/scan_maintainability_metrics.py verify)
+        # Mirrors the module-size step in verify-agents.yml so a scripts/*.py
+        # module crossing the 800-line budget surfaces at commit time instead
+        # of the pre-push gate (preflight_all.py), avoiding the
+        # trim-and-regen round trip. Refs #1999 (PR #1998 retro row 2). Reuses
+        # the same verify (honors DEFERRED_OVERSIZE_MODULES and the warning
+        # band) so there is no divergence from the server-side gate; the
+        # scripts/*.py trigger scopes it to touched modules while the scan
+        # itself stays whole-tree, identical to CI.
+        entry: uv run python scripts/scan_maintainability_metrics.py verify
+        language: system
+        pass_filenames: false
+        files: ^scripts/.*\.py$
 
       - id: preflight-branch-base
         name: preflight branch base (scripts/preflight_branch_base.py verify)

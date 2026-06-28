@@ -20,15 +20,17 @@ runs on `pull_request:`. Its `pytest` step executed the entire suite serially
    branch); ~14.5 minutes of pytest burned, none of it exercising a source
    change after the first green run.
 
-A 5-minute, all-or-nothing gate pushes contributors toward `PREFLIGHT_SKIP=1`,
-which bypasses *every* gate at once -- a strictly worse safety posture than a
-fast gate that always runs.
+A 5-minute, all-or-nothing gate pushes contributors toward the full
+`PREFLIGHT_SKIP_ALL=1` bypass, which skips *every* gate at once; a strictly
+worse safety posture than a fast gate that always runs. (Narrowing the routine
+`PREFLIGHT_SKIP=1` lever to skip only `prek`, issue #2133, keeps the cheap gates
+running, but a fast suite is what removes the pull toward the full bypass.)
 
 ## Root cause: real `time.sleep` backoff in tests, not CPU
 
 Profiling (#985) showed the dominant cost was **idle wall-clock**, not work.
-Roughly 29 tests that drive high-level entry points -- `auto_retro.run` via
-`fetch_check_runs`, and the `_github_api.apply_call` retry path -- pay the real
+Roughly 29 tests that drive high-level entry points; `auto_retro.run` via
+`fetch_check_runs`, and the `_github_api.apply_call` retry path; pay the real
 `(2, 4, 8)`s / `(5, 10)`s retry backoff because they do not inject the
 `sleeper` seam. Each such test waited ~14s. That is ~400s of pure sleeping,
 which `pytest-xdist` cannot parallelise away (idle time, not work): `-n auto`
@@ -86,7 +88,7 @@ if the fingerprint is byte-identical the heavy step is reported `pass (cached)`
 and not re-executed.
 
 This is the durable fix for the #983 multiplier: re-pushes of an unchanged tree
-cost ~0s. It does not weaken the gate -- the cached pass *was* produced by the
+cost ~0s. It does not weaken the gate; the cached pass *was* produced by the
 full suite at that exact tree, and any edit, dependency bump, or command change
 busts the fingerprint and forces a full run. `PREFLIGHT_NO_CACHE=1` forces a
 full run and refreshes the fingerprint.
@@ -96,7 +98,7 @@ full run and refreshes the fingerprint.
 `preflight_all.run_all` runs all cheap, sub-second gates first (branch-base,
 ruff, mypy, static scans). Heavy steps (`heavy=True`, i.e. pytest)
 run **only** when every cheap step passed. A branch-base
-failure now short-circuits in under a second instead of after the suite -- the
+failure now short-circuits in under a second instead of after the suite; the
 PR #983 "5 minutes then rejected for an unrelated reason" failure mode.
 
 ### 5. Observability and de-duplication

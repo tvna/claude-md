@@ -13,7 +13,9 @@ Covers:
   ignores unmatched results, skips ``is_error`` results (failed creation,
   #1374), and de-duplicates oldest-first.
 - ``evaluate``: blocks an unrecorded created PR; no-op with a marker,
-  with ``stop_hook_active``, off-target event, or no created PR.
+  with ``stop_hook_active``, off-target event, or no created PR. Surveys
+  ONCE per session; a session opening N PRs fires the gate once, not N
+  times, and recording any one PR covers the whole session (#1594).
 - ``load_transcript``: missing / unreadable / bad-line tolerance.
 - ``record`` / ``run_record``: marker write and invalid-PR fail-open.
 - ``run_gate``: malformed stdin, no transcript, and block-on-stdout.
@@ -61,6 +63,16 @@ def _pr_transcript(tool_id: str = "t1", number: int = 42) -> list[Any]:
         _msg("assistant", _create_pr_use(tool_id)),
         _msg("user", _result(tool_id, f"Created https://github.com/o/r/pull/{number}")),
     ]
+
+
+def _multi_pr_transcript(*numbers: int) -> list[Any]:
+    """A transcript that opens several PRs in one session, oldest first."""
+    entries: list[Any] = []
+    for idx, number in enumerate(numbers):
+        tool_id = f"t{idx}"
+        entries.append(_msg("assistant", _create_pr_use(tool_id)))
+        entries.append(_msg("user", _result(tool_id, f"opened /pull/{number}")))
+    return entries
 
 
 # ---------------------------------------------------------------------------
@@ -203,6 +215,21 @@ class TestEvaluate:
         assert "SATISFACTION first" in decision["reason"]
         assert "--record 99" in decision["reason"]
 
+    def test_satisfaction_anchor_requires_date_time_timezone(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        # Refs #1565: the satisfaction anchor must demand date + time + timezone,
+        # not the date alone. A date-only anchor is ambiguous on read-back (a
+        # session can span hours and cross the day boundary), so this guards the
+        # wording from silently regressing to "today's date" only.
+        monkeypatch.setattr(gate, "_MARKER_DIR", tmp_path / "empty")
+        decision = gate.evaluate({}, _pr_transcript("t1", 7))
+        assert decision is not None
+        reason = decision["reason"]
+        assert "date, time, and timezone" in reason
+        assert "timezone" in reason
+        assert "YYYY-MM-DD HH:MM TZ" in reason
+
     def test_recorded_pr_is_noop(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         monkeypatch.setattr(gate, "_MARKER_DIR", tmp_path)
         (tmp_path / "42").touch()
@@ -219,6 +246,37 @@ class TestEvaluate:
     def test_no_created_pr_is_noop(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         monkeypatch.setattr(gate, "_MARKER_DIR", tmp_path / "empty")
         assert gate.evaluate({}, [_msg("assistant", {"type": "text", "text": "done"})]) is None
+
+    def test_multi_pr_session_blocks_once_then_passes(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        # Refs #1594: a session opening N PRs must fire the survey gate once
+        # (not N times). The single block enumerates every PR and targets the
+        # oldest for --record; once any one PR is recorded, the gate passes for
+        # the whole session rather than re-firing per sibling PR.
+        monkeypatch.setattr(gate, "_MARKER_DIR", tmp_path)
+        transcript = _multi_pr_transcript(1582, 1584, 1589)
+
+        decision = gate.evaluate({}, transcript)
+        assert decision is not None
+        reason = decision["reason"]
+        # The single survey is framed as covering every PR opened this session.
+        assert "#1582" in reason and "#1584" in reason and "#1589" in reason
+        # The oldest PR is the stable --record / retro target.
+        assert "--record 1582" in reason
+
+        # Recording any one of the session's PRs covers the whole session.
+        (tmp_path / "1582").touch()
+        assert gate.evaluate({}, transcript) is None
+
+    def test_any_session_marker_covers_later_pr(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        # A marker on an earlier PR means the session was already surveyed, so a
+        # later PR opened in the same session does not re-trigger the gate.
+        monkeypatch.setattr(gate, "_MARKER_DIR", tmp_path)
+        (tmp_path / "1582").touch()
+        assert gate.evaluate({}, _multi_pr_transcript(1582, 1599)) is None
 
 
 # ---------------------------------------------------------------------------
@@ -268,21 +326,31 @@ class TestRecord:
         monkeypatch.setattr(gate, "_MARKER_DIR", tmp_path)
         assert gate.record(7, satisfaction=4, problem="flaky CI") is True
         payload = json.loads((tmp_path / "7").read_text())
-        assert payload == {"pr": 7, "satisfaction": 4, "problem": "flaky CI"}
+        assert payload["pr"] == 7
+        assert payload["satisfaction"] == 4
+        assert payload["problem"] == "flaky CI"
+        # Refs #1192: every marker stamps the lifecycle phase and timepoint.
+        assert payload["phase"] == "pre-merge-handoff"
+        assert payload["recorded_at"].endswith("+00:00")
 
-    def test_record_without_answers_writes_pr_only(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    def test_record_without_answers_writes_pr_and_timepoint(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         monkeypatch.setattr(gate, "_MARKER_DIR", tmp_path)
         assert gate.record(9) is True
-        assert json.loads((tmp_path / "9").read_text()) == {"pr": 9}
+        payload = json.loads((tmp_path / "9").read_text())
+        assert payload["pr"] == 9
+        assert "satisfaction" not in payload
+        assert payload["phase"] == "pre-merge-handoff"
+        assert payload["recorded_at"]  # ISO-8601 UTC timestamp present (#1192)
 
     def test_run_record_passes_answers(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         monkeypatch.setattr(gate, "_MARKER_DIR", tmp_path)
         assert gate.run_record("12", "5", "none") == 0
-        assert json.loads((tmp_path / "12").read_text()) == {
-            "pr": 12,
-            "satisfaction": 5,
-            "problem": "none",
-        }
+        payload = json.loads((tmp_path / "12").read_text())
+        assert payload["pr"] == 12
+        assert payload["satisfaction"] == 5
+        assert payload["problem"] == "none"
+        assert payload["phase"] == "pre-merge-handoff"
+        assert payload["recorded_at"]
 
     def test_run_record_invalid_satisfaction_writes_no_marker(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
@@ -292,6 +360,71 @@ class TestRecord:
         assert gate.run_record("12", "9", "x") == 0
         assert not (marker_dir / "12").exists()
         assert "--satisfaction" in capsys.readouterr().err
+
+    def test_record_persists_retro_fields(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        # Refs #1581: a problem-found handoff records the retro it opened.
+        monkeypatch.setattr(gate, "_MARKER_DIR", tmp_path)
+        assert (
+            gate.record(8, satisfaction=3, problem="wrong branch", needs_retro=True, retro_issue=77)
+            is True
+        )
+        payload = json.loads((tmp_path / "8").read_text())
+        assert payload["needs_retro"] is True
+        assert payload["retro_issue"] == 77
+
+    def test_record_omits_retro_fields_when_absent(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        # A repair-free / minor handoff records no retro fields.
+        monkeypatch.setattr(gate, "_MARKER_DIR", tmp_path)
+        assert gate.record(8, satisfaction=5) is True
+        payload = json.loads((tmp_path / "8").read_text())
+        assert "needs_retro" not in payload
+        assert "retro_issue" not in payload
+
+    def test_run_record_needs_retro_with_issue_writes_marker(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.setattr(gate, "_MARKER_DIR", tmp_path)
+        assert gate.run_record("12", "3", "rework", True, "77") == 0
+        payload = json.loads((tmp_path / "12").read_text())
+        assert payload["needs_retro"] is True
+        assert payload["retro_issue"] == 77
+
+    def test_run_record_needs_retro_without_issue_is_loud_and_blocks(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        # Refs #1581 / D1: --needs-retro without --retro-issue must NOT write a
+        # marker (so the Stop gate re-blocks) and must surface loudly + exit 1.
+        marker_dir = tmp_path / "survey"
+        monkeypatch.setattr(gate, "_MARKER_DIR", marker_dir)
+        assert gate.run_record("12", None, None, True, None) == 1
+        assert not (marker_dir / "12").exists()
+        assert "--needs-retro requires --retro-issue" in capsys.readouterr().err
+
+    def test_run_record_invalid_retro_issue_is_loud_and_blocks(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        marker_dir = tmp_path / "survey"
+        monkeypatch.setattr(gate, "_MARKER_DIR", marker_dir)
+        assert gate.run_record("12", None, None, True, "nope") == 1
+        assert not (marker_dir / "12").exists()
+        assert "--retro-issue must be a positive issue number" in capsys.readouterr().err
+
+    def test_run_record_marker_write_failure_is_loud(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        # Refs #1140: a marker-write failure must NOT exit 0 as a phantom
+        # success (which double-fires the survey); it surfaces loudly and
+        # exits non-zero so the caller knows the handoff is unrecorded.
+        def _boom(*_args: object, **_kwargs: object) -> bool:
+            raise OSError("read-only marker dir")
+
+        monkeypatch.setattr(gate, "record", _boom)
+        assert gate.run_record("13") == 1
+        assert "NOT recorded" in capsys.readouterr().err
 
 
 # ---------------------------------------------------------------------------
@@ -372,4 +505,18 @@ class TestMain:
 
         monkeypatch.setattr(gate, "run_record", _record)
         assert gate.main(["--record", "12", "--satisfaction", "5", "--problem", "none"]) == 0
-        assert seen == [("12", "5", "none")]
+        # needs_retro defaults False / retro_issue None when the flags are absent.
+        assert seen == [("12", "5", "none", False, None)]
+
+    def test_retro_flags_forwarded_to_recorder(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        seen: list[tuple[object, ...]] = []
+
+        def _record(*args: object) -> int:
+            seen.append(args)
+            return 0
+
+        monkeypatch.setattr(gate, "run_record", _record)
+        assert (
+            gate.main(["--record", "12", "--needs-retro", "--retro-issue", "77"]) == 0
+        )
+        assert seen == [("12", None, None, True, "77")]

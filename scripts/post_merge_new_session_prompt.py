@@ -2,7 +2,7 @@
 """PostToolUse hook: surface a paste-ready new-session prompt after a merge.
 
 Some changes only take effect in a *fresh* Claude Code session or a rebuilt
-DevContainer -- never mid-session:
+DevContainer; never mid-session:
 
 - Hook configuration (``.claude/settings.json``, ``.claude/settings.local.json``,
   ``.codex/hooks.json``). Claude Code loads hook config once at session start,
@@ -11,11 +11,11 @@ DevContainer -- never mid-session:
   ``scripts/session_uv_local_pin.sh`` and the helpers they source, e.g.
   ``scripts/_session_path.sh``). These run during SessionStart to set up PATH
   and tools; an edit only takes effect next session.
-- Anything under ``.devcontainer/`` -- the container must be rebuilt.
+- Anything under ``.devcontainer/``; the container must be rebuilt.
 
 When the agent merges a PR via ``mcp__github__merge_pull_request`` this hook
 fetches the merged PR's changed files, classifies them against those three
-categories, and -- if any match -- emits ``additionalContext`` telling the
+categories, and; if any match; emits ``additionalContext`` telling the
 agent to display a verbatim, paste-ready prompt (in the project owner's
 language) so the operator can drop it into a new session and continue the
 follow-up work where the changes are actually live.

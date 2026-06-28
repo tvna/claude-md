@@ -16,7 +16,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Checkout repository
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
 
@@ -31,6 +31,14 @@ jobs:
 
       - name: Assert uv pin lives only in pyproject.toml
         run: uv run python scripts/uv_pin.py drift
+
+      - name: Assert python pin is exact and consistent
+        # Refs #1680. `.python-version` pins the exact patch `uv run python`
+        # resolves to, so ast.unparse doc generation is byte-identical across
+        # the post-merge committer, verify-docs-drift, and local pre-push.
+        # This gate keeps that pin from silently drifting from requires-python,
+        # ruff, mypy, and flake.nix.
+        run: uv run python scripts/python_pin.py verify
 
       - name: Assert running uv matches the pin
         # Refs #1207. PR #1206 closed the *static* drift gap but left a runtime
@@ -50,11 +58,21 @@ jobs:
       - name: Assert no unallowlisted gh CLI calls in workflows
         run: uv run python scripts/scan_workflow_gh_calls.py verify
 
+      - name: Assert no direct gh CLI calls in scripts
+        run: uv run python scripts/scan_scripts_gh_calls.py verify
+
       - name: Assert no untrusted context in workflow run blocks
         # Refs #1129: untrusted GitHub contexts (github.event.*,
         # github.head_ref, github.head_commit) must not be interpolated
         # directly into run: shell bodies; route them through env: instead.
         run: uv run python scripts/scan_workflow_injection.py verify
+
+      - name: Assert no git push (unsigned authoring) in workflow run blocks
+        # Refs #1437/#1466: a `git push` in a workflow run block authors an
+        # unsigned commit as github-actions[bot]. Bot-generated PR commits must
+        # use the signed App-bot createCommitOnBranch path (pr_upsert.py
+        # upsert-files); this gate is the regression guard against git push.
+        run: uv run python scripts/scan_workflow_unsigned_commit.py verify
 
       - name: Assert workflow secrets have concrete runbooks
         run: uv run python scripts/scan_secret_runbooks.py verify
@@ -100,6 +118,20 @@ jobs:
         # and every `enforced`/`partial` row resolves its backing gate.
         run: uv run python scripts/scan_quality_standard_drift.py verify
 
+      - name: Verify PR body content-quality enforcement map
+        # Refs #1828: every enforced/partial row in
+        # docs/standards/pr-body-quality.enforcement.toml resolves its
+        # backing gate, and no orphaned defect class exists.
+        run: uv run python scripts/scan_pr_body_quality_drift.py verify
+
+      - name: Verify section 2/4 safety enumerations stay non-exhaustive
+        # Refs #1241/#1242/#1243 (and #1239, #178 criterion b): the
+        # destructive-operation, untrusted-data, and adversarial-payload
+        # enumerations in master.instructions.md must keep their
+        # non-exhaustive marker so a later edit cannot quietly re-close the
+        # list and reintroduce the enumeration-gap class.
+        run: uv run python scripts/scan_nonexhaustive_invariant_drift.py verify
+
       - name: Verify scripts ship required tests
         # Refs #1088: fails when a scripts/*.py lacks its matching test module
         # (M2), when a new GitHub-API script is absent from the boundary
@@ -107,10 +139,24 @@ jobs:
         # contract test (M3, #189). Sustains #189/#194 as a continuous gate.
         run: uv run python scripts/scan_test_presence_drift.py verify
 
+      - name: Verify tracking-issue anchors stay declarative
+        # Refs #1640: fails when a workflow, PR-body template, or script
+        # constant hardcodes a tracking-issue number instead of resolving it
+        # through .github/tracking-issues.toml via the issue_anchors resolver,
+        # so an umbrella-issue renumbering stays a one-file diff.
+        run: uv run python scripts/scan_issue_anchor_drift.py verify
+
       - name: Verify Claude/Codex hook coverage parity
         # Refs #615: fails when a Claude hook script is absent from Codex
         # coverage and is not in the explicit allowlist.
         run: uv run python scripts/scan_hook_coverage_drift.py verify
+
+      - name: Verify git hook predicate covers its command surface
+        # Refs #2133 (PR #2120 retro #2121, P1): fails when a git PreToolUse
+        # hook's if: predicate is narrower than the script's declared
+        # HOOK_GIT_SUBCOMMANDS surface, so a widened matcher cannot silently
+        # go untriggered (the PR #2120 inert-signing-matcher class).
+        run: uv run python scripts/scan_hook_predicate_surface_drift.py verify
 
       - name: Verify devcontainer provisions gate-required tools
         # Refs #1103: fails when a tool a gate needs at runtime (a
@@ -156,6 +202,13 @@ jobs:
         # which would re-create the duplication that refactor removed.
         run: uv run python scripts/scan_session_path_drift.py verify
 
+      - name: Verify type:* labels match title-policy commit types
+        # Refs #2081: fails when a type:* label in .github/label-policy.toml has
+        # a stem that is not a commit type in .github/title-policy.toml, so the
+        # two partial projections of the commit-type concept cannot drift.
+        # type:tracking is exempt via a declared commit_type = false marker.
+        run: uv run python scripts/scan_commit_type_label_drift.py verify
+
       - name: Verify test shard markers
         # Refs #545: each tests/test_*.py must declare exactly one
         # module-scope shard marker so the lint-scripts-pytest matrix
@@ -171,6 +224,32 @@ jobs:
         # explicit exempt_reason, so a new family cannot land below the floor
         # on reviewer memory alone.
         run: uv run python scripts/verify_security_control_floor.py
+
+      - name: Verify security-control inventory is current with the tree
+        # Refs #1387: the inventory (docs/prd/security-control-inventory.md)
+        # must stay current. A surface that crosses a secret/privilege boundary
+        # (a workflow using a non-GITHUB_TOKEN secret or declaring an
+        # environment, or a script importing _secret_patterns) must be declared
+        # in .github/security-surface-inventory.toml, and the document must not
+        # cite a scripts/ path that no longer exists, so a new privileged
+        # surface cannot land on reviewer memory alone.
+        run: uv run python scripts/verify_control_inventory_currency.py verify
+
+      - name: Verify OWASP Agentic Top 10 (ASI01-ASI10) mapping is complete
+        # Refs #1378: the inventory (docs/prd/security-control-inventory.md)
+        # carries a peer-axis mapping onto the OWASP Top 10 for Agentic
+        # Applications 2026. Every one of ASI01..ASI10 must keep a status row
+        # with a rationale, so an agent-class risk cannot silently lose its
+        # mapping on reviewer memory alone. The same tree-only check re-runs in
+        # the weekly security-control-drift job as a redundant visibility signal.
+        run: uv run python scripts/owasp_asi_mapping.py verify
+
+      - name: Verify harness file documentation coverage
+        # Refs #1761: fails when a public scripts/*.py or .github/workflows/*.yml
+        # has no specific area_paths entry in .github/label-policy.toml --
+        # only the broad catch-all (scripts/**, .github/**). Closes the gap
+        # where new scripts land without a functional area label.
+        run: uv run python scripts/scan_harness_doc_coverage.py verify
 
       - name: Warn if uv pin trails upstream
         env:
@@ -206,7 +285,7 @@ jobs:
         ]
     steps:
       - name: Checkout repository
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
 
@@ -254,7 +333,7 @@ jobs:
       id-token: write  # required for codecov/test-results-action OIDC (tokenless, public repo); see #469
     steps:
       - name: Checkout repository
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
 
@@ -328,7 +407,7 @@ jobs:
       contents: read
     steps:
       - name: Checkout repository
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
 
@@ -414,13 +493,45 @@ jobs:
           sudo iptables -P OUTPUT ACCEPT || true
           sudo iptables -F OUTPUT || true
 
+  coverage:
+    name: Per-file coverage floor
+    # Refs #1800. Runs pytest --cov to generate coverage.json, then checks
+    # each changed scripts/*.py file individually against the 90 % per-file
+    # floor (scripts/preflight_coverage.py PER_FILE_FLOOR = 90.0). Separate
+    # from lint-scripts-pytest because the shard matrix runs without --cov
+    # (to stay fast) while this job needs the full coverage report.
+    # fetch-depth: 0 is required so `git diff origin/<base_ref>` can
+    # identify which scripts changed on the PR head.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Set up uv and project environment
+        uses: ./.github/actions/setup-uv
+
+      - name: Run per-file coverage gate
+        env:
+          BASE_REF: origin/${{ github.base_ref }}
+        run: |
+          uv run pytest --cov --cov-report=json -q
+          uv run python scripts/preflight_coverage.py --base-ref "$BASE_REF"
+
   gate:
     name: "Verify repository scripts / gate"
     # Refs #545: depends on `lint-scripts-pytest-gate` (the marker-matrix
     # completeness gate) rather than the matrix job directly so the
     # aggregate result reflects both "every shard passed" and "the union
     # of executed tests covered the collected universe".
-    needs: [lint-scripts-static, lint-scripts-pytest-gate]
+    # Refs #1800: also depends on `coverage` so the per-file 90 % floor
+    # is a blocking component of this required status check.
+    needs: [lint-scripts-static, lint-scripts-pytest-gate, coverage]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -429,6 +540,7 @@ jobs:
         env:
           LINT_STATIC_RESULT: ${{ needs.lint-scripts-static.result }}
           LINT_PYTEST_RESULT: ${{ needs.lint-scripts-pytest-gate.result }}
+          COVERAGE_RESULT: ${{ needs.coverage.result }}
         run: |
           if [ "$LINT_STATIC_RESULT" != 'success' ]; then
             echo "::error::script lint static gate result=${LINT_STATIC_RESULT} (expected 'success')."
@@ -438,7 +550,11 @@ jobs:
             echo "::error::script lint pytest gate result=${LINT_PYTEST_RESULT} (expected 'success')."
             exit 1
           fi
-          echo "Script lint static + pytest gates passed."
+          if [ "$COVERAGE_RESULT" != 'success' ]; then
+            echo "::error::per-file coverage gate result=${COVERAGE_RESULT} (expected 'success')."
+            exit 1
+          fi
+          echo "Script lint static + pytest + coverage gates passed."
 
   legacy-agent-instructions-context:
     name: "Verify agent instructions / gate"

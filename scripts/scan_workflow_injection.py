@@ -10,16 +10,16 @@ route the value through an ``env:`` variable and reference ``"$VAR"`` in
 the script, so the value reaches the shell as data, never as script text.
 
 This gate is the deterministic sibling of ``scan_workflow_pip.py`` and
-``scan_workflow_gh_calls.py``. The repository is currently clean -- every
-untrusted context is already routed through ``env:`` -- so this gate is a
+``scan_workflow_gh_calls.py``. The repository is currently clean; every
+untrusted context is already routed through ``env:``; so this gate is a
 regression guard that keeps that discipline from drifting, not a fix for
 an existing hole.
 
 Untrusted contexts flagged (only inside ``run:`` values):
 
-* ``github.event.*`` -- issue / PR / comment / review / commit payload
-* ``github.head_ref`` -- the PR source branch name (attacker-named)
-* ``github.head_commit`` -- head commit message / author fields
+* ``github.event.*``; issue / PR / comment / review / commit payload
+* ``github.head_ref``; the PR source branch name (attacker-named)
+* ``github.head_commit``; head commit message / author fields
 
 These are the contexts any *external* user can populate (open an issue,
 a PR, a comment) without repository access, so they are the realistic
@@ -56,7 +56,7 @@ Contract:
     Inputs: the ``.github/workflows/*.yml`` tree (no stdin, no env input).
     Outputs: ``::error file=...::`` annotations on stderr and a one-line
         summary; exit code as documented above.
-    Failure policy: loud -- a workflow that cannot be parsed as YAML is
+    Failure policy: loud; a workflow that cannot be parsed as YAML is
         skipped, but any detected untrusted interpolation fails the gate
         with a non-zero exit rather than passing silently.
 """
@@ -68,7 +68,7 @@ import re
 import sys
 from collections.abc import Iterator
 from pathlib import Path
-from typing import NamedTuple
+from typing import Any, NamedTuple
 
 import yaml
 
@@ -104,7 +104,7 @@ class Violation(NamedTuple):
     fragment: str  # trimmed fragment starting at the match
 
 
-def _load_yaml(wf_path: Path) -> dict | None:
+def _load_yaml(wf_path: Path) -> dict[str, Any] | None:
     """Return parsed YAML dict, or None if the file is missing or not a dict."""
     try:
         data = yaml.safe_load(wf_path.read_text(encoding="utf-8"))

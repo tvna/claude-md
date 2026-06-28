@@ -6,14 +6,14 @@ naming shape, ``mcp__codex_apps__github._<tool>`` (note the ``codex_apps``
 segment, the ``github.`` dot separator, and the leading underscore on the
 verb). The client-side preflight hooks classify a call by its Claude-style
 tool name, so connector names must be folded back onto that form before
-the ``_TARGET_TOOLS`` membership checks run -- otherwise a Codex-shaped
+the ``_TARGET_TOOLS`` membership checks run; otherwise a Codex-shaped
 PR/issue write slips past the preflight and is only caught after it has
 already reached GitHub. Refs #740.
 
 The mapping is intentionally explicit (no pattern rewriting): only the
 connector tools whose Claude equivalent a preflight already gates are
 listed, and any unknown name passes through unchanged so the hooks keep
-their fail-open behavior (CLAUDE.md section 4) -- a name we do not
+their fail-open behavior (CLAUDE.md section 4); a name we do not
 recognize is left alone for the server-side gate to handle.
 """
 

@@ -35,22 +35,17 @@ path for the generated pin PR. Refs #1137.
         --template .github/pr-body-templates/devcontainer-image-pins.md \\
         --file PATH [--file PATH ...]
 
-The ``merge`` subcommand completes the pin PR. The repository-level "Allow
-auto-merge" toggle is intentionally OFF (so agents cannot enable native
-auto-merge on arbitrary PRs), and native auto-merge cannot be scoped to a
-single PR. Instead, ``merge`` finds the open pin PR by branch prefix and, when
-it has reached ``mergeable_state == clean`` (all required checks green and the
-branch up to date), squash-merges it via the REST merge API and deletes the
-branch. Branch protection still gates the merge: a non-clean PR is left for the
-next trigger. Driven by ``.github/workflows/devcontainer-pin-automerge.yml`` on
-``check_suite: completed``. Refs #1352.
-
-    python3 scripts/devcontainer_pin_pr.py merge
+Completing the pin PR (the squash-merge once it is ``mergeable_state == clean``)
+is handled by the unified ``scripts/bot_pr_automerge.py merge`` keeper
+(``.github/workflows/tvna-bot-automerge.yml``), which merges every open PR
+authored by the App bot (``tvna-bot[bot]``). The ``refresh`` subcommand here
+still attempts a direct merge when the open PR is already up to date, via the
+shared ``pr_upsert._merge_pr_if_clean`` helper. Refs #1352, #1539.
 
 The pin commit is created through the GitHub API (GraphQL
 ``createCommitOnBranch``), not a local ``git commit``: API commits are signed by
 GitHub and shown as Verified, with the App-bot token as author. A local runner
-commit is always unsigned -- and an App bot cannot hold a GPG/SSH signing key --
+commit is always unsigned; and an App bot cannot hold a GPG/SSH signing key --
 so the ``required_signatures`` rule on ``main`` would block it. Refs #1437.
 
 Environment variables:
@@ -67,7 +62,7 @@ Exit codes:
     1  Missing env var, git failure, or GitHub API error.
     2  Usage error.
 
-Refs #696, #911, #1137, #1352.
+Refs #696, #911, #1137, #1352, #1539.
 """
 
 from __future__ import annotations
@@ -77,25 +72,22 @@ import base64
 import os
 import re
 import sys
-import time
-from collections.abc import Callable
 from pathlib import Path
-from typing import Any
 
+import issue_anchors
 import update_devcontainer_image_pins
 from _git import run_git
+from _pr_commit_batch import _create_commit_on_branch
+from _pr_merge import _merge_pr_if_clean
 from pr_upsert import (
     _close_pr,
     _comment_pr,
     _compare_behind,
     _create_branch_ref,
-    _create_commit_on_branch,
     _delete_branch,
-    _get_pr,
     _get_ref_sha,
     _list_open_prs,
     _list_open_prs_by_prefix,
-    _merge_pr,
     _upsert_pr,
 )
 
@@ -122,8 +114,9 @@ def _regenerate_pins(published_sha: str) -> int:
 
 
 def render_pr_body(template_text: str, github_sha: str) -> str:
-    """Substitute the ``__GITHUB_SHA__`` placeholder (replaces the workflow ``sed``)."""
-    return template_text.replace("__GITHUB_SHA__", github_sha)
+    """Substitute the ``__GITHUB_SHA__`` placeholder (replaces the workflow ``sed``)
+    and ``__ISSUE_ANCHOR:<key>__`` tokens (.github/tracking-issues.toml, #1640)."""
+    return issue_anchors.substitute(template_text.replace("__GITHUB_SHA__", github_sha))
 
 
 def _has_pin_changes() -> bool:
@@ -143,7 +136,7 @@ def _create_pin_branch(
 
     The commit is authored through GraphQL ``createCommitOnBranch`` rather than a
     local ``git commit``/``git push`` so GitHub signs it (Verified) with the App
-    bot as author -- the only way to satisfy the ``required_signatures`` rule on
+    bot as author; the only way to satisfy the ``required_signatures`` rule on
     ``main`` for an App-bot author, which cannot hold a signing key. The pin
     files are read from the working tree (already rewritten by the caller) and
     sent as base64 additions. Raises :class:`RuntimeError` on any API failure.
@@ -164,57 +157,6 @@ def _create_pin_branch(
         token=token,
     )
 
-
-# Mergeability is computed asynchronously by GitHub, so the ``mergeable`` field
-# is null for a short window after a push or check completes. Poll a bounded
-# number of times before giving up and leaving the merge for the next trigger.
-_MERGE_POLL_ATTEMPTS = 6
-_MERGE_POLL_INTERVAL_SECONDS = 5.0
-
-
-def _poll_pr_mergeability(
-    *,
-    repo: str,
-    number: int,
-    token: str,
-    sleeper: Callable[[float], None] = time.sleep,
-) -> dict[str, Any]:
-    """Return the PR object once GitHub has computed ``mergeable`` (or the last poll)."""
-    pr: dict[str, Any] = {}
-    for attempt in range(_MERGE_POLL_ATTEMPTS):
-        if attempt:
-            sleeper(_MERGE_POLL_INTERVAL_SECONDS)
-        pr = _get_pr(repo=repo, number=number, token=token)
-        if pr.get("mergeable") is not None:
-            break
-    return pr
-
-
-def _merge_pin_pr_if_clean(*, repo: str, number: int, head_ref: str, token: str) -> bool:
-    """Squash-merge pin PR *number* iff it is ``mergeable_state == clean``.
-
-    Returns True when the PR was merged. A PR that is not yet clean (required
-    checks pending, branch behind, conflicts) or that loses the merge race is a
-    no-op left for the next trigger; only an API error raises.
-    """
-    pr = _poll_pr_mergeability(repo=repo, number=number, token=token)
-    state = str(pr.get("mergeable_state") or "unknown").lower()
-    if state != "clean":
-        print(f"pin PR #{number} not mergeable yet (mergeable_state={state}); leaving for the next trigger")
-        return False
-    head_sha = pr.get("head", {}).get("sha", "") if isinstance(pr.get("head"), dict) else ""
-    if not head_sha:
-        raise RuntimeError(f"pin PR #{number} is clean but has no head sha")
-    if not _merge_pr(repo=repo, number=number, sha=head_sha, merge_method="squash", token=token):
-        print(f"pin PR #{number} was not mergeable at merge time; leaving for the next trigger")
-        return False
-    print(f"merged pin PR #{number}")
-    if head_ref:
-        try:
-            _delete_branch(repo=repo, branch=head_ref, token=token)
-        except RuntimeError as exc:
-            print(f"::warning::merged PR #{number} but branch cleanup failed: {exc}", file=sys.stderr)
-    return True
 
 
 def _cmd_open(args: argparse.Namespace) -> int:
@@ -316,7 +258,7 @@ def _cmd_refresh(args: argparse.Namespace) -> int:
     if behind <= 0:
         print(f"pin PR #{old_number} is up to date with {args.base}; attempting merge")
         try:
-            _merge_pin_pr_if_clean(repo=repo, number=old_number, head_ref=head_ref, token=token)
+            _merge_pr_if_clean(repo=repo, number=old_number, head_ref=head_ref, token=token)
         except RuntimeError as exc:
             print(f"::error::{exc}", file=sys.stderr)
             return 1
@@ -327,7 +269,7 @@ def _cmd_refresh(args: argparse.Namespace) -> int:
     if new_branch == head_ref:
         print(f"pin PR #{old_number} already refreshed onto {target_short}; attempting merge")
         try:
-            _merge_pin_pr_if_clean(repo=repo, number=old_number, head_ref=head_ref, token=token)
+            _merge_pr_if_clean(repo=repo, number=old_number, head_ref=head_ref, token=token)
         except RuntimeError as exc:
             print(f"::error::{exc}", file=sys.stderr)
             return 1
@@ -409,39 +351,6 @@ def _cmd_refresh(args: argparse.Namespace) -> int:
     return 0
 
 
-def _cmd_merge(args: argparse.Namespace) -> int:
-    token = os.environ.get("GH_TOKEN", "")
-    if not token:
-        print("::error::GH_TOKEN (GitHub App installation token) is required", file=sys.stderr)
-        return 1
-    repo = os.environ.get("REPO", "")
-    if not repo:
-        print("::error::REPO is not set", file=sys.stderr)
-        return 1
-
-    prefix = args.branch_prefix
-    try:
-        open_prs = _list_open_prs_by_prefix(repo=repo, prefix=prefix, token=token)
-    except RuntimeError as exc:
-        print(f"::error::{exc}", file=sys.stderr)
-        return 1
-    if not open_prs:
-        print("no open devcontainer pin PR; nothing to merge")
-        return 0
-
-    # At most one pin PR is expected; if several exist, merge the newest and let
-    # the refresh keeper supersede the rest.
-    pr = max(open_prs, key=lambda p: int(p["number"]))
-    number = int(pr["number"])
-    head_ref = pr.get("head", {}).get("ref", "") if isinstance(pr.get("head"), dict) else ""
-    try:
-        _merge_pin_pr_if_clean(repo=repo, number=number, head_ref=head_ref, token=token)
-    except RuntimeError as exc:
-        print(f"::error::{exc}", file=sys.stderr)
-        return 1
-    return 0
-
-
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Open or update the devcontainer image-pin pull request.")
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -484,25 +393,12 @@ def main(argv: list[str] | None = None) -> int:
     )
     refresh_p.add_argument("--file", action="append", default=[], required=True, help="File to commit (repeatable)")
 
-    merge_p = sub.add_parser(
-        "merge",
-        help="Squash-merge the open pin PR once it has reached mergeable_state=clean",
-    )
-    merge_p.add_argument(
-        "--branch-prefix",
-        default=_DEFAULT_BRANCH_PREFIX,
-        dest="branch_prefix",
-        help="Branch name prefix shared with the open command",
-    )
-
     args = parser.parse_args(argv)
 
     if args.cmd == "open":
         return _cmd_open(args)
     if args.cmd == "refresh":
         return _cmd_refresh(args)
-    if args.cmd == "merge":
-        return _cmd_merge(args)
 
     return 0
 

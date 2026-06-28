@@ -6,7 +6,7 @@ is the writer; the refresh workflow recomputes hashes). For a given tool it:
 
 1. reads the currently pinned version from ``flake.nix`` (via ``flake_pin``);
 2. fetches the latest GitHub Release tag for the tool's repo;
-3. enforces a cooldown window -- the release's ``published_at`` must be at
+3. enforces a cooldown window; the release's ``published_at`` must be at
    least ``[tool.uv].exclude-newer`` days old (the same freshness budget the
    repository already applies to Python packages and the locked nixpkgs, reused
    here as the single source of truth, mirroring ``nixpkgs_cooldown.py``).
@@ -35,7 +35,7 @@ Contract:
     Outputs: prints the adoptable target version to stdout when a newer release
         is past the cooldown window, otherwise prints nothing; exit 0 in both
         the adopt and hold cases so the workflow branches on stdout.
-    Failure policy: fails loud per CLAUDE.md section 4 -- a non-2xx API status,
+    Failure policy: fails loud per CLAUDE.md section 4; a non-2xx API status,
         a non-JSON / non-object body, a missing ``tag_name`` / ``published_at``,
         or an unparseable version exits non-zero rather than silently holding.
 """
@@ -51,12 +51,23 @@ import sys
 import types
 from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 PYPROJECT_PATH = REPO_ROOT / "pyproject.toml"
 
 
 def _load(module_name: str) -> types.ModuleType:
+    # Reuse an already-imported module instead of executing a fresh copy and
+    # clobbering ``sys.modules``. Under pytest the canonical ``_github_api`` is
+    # already loaded; replacing it would create a second module object with a
+    # second ``GitHubApiError`` class, breaking ``except GitHubApiError`` in
+    # sibling scripts that imported the canonical one (cross-test pollution,
+    # #909). When run as a standalone script with ``scripts/`` off ``sys.path``
+    # the module is absent here and is loaded fresh by file path as before.
+    existing = sys.modules.get(module_name)
+    if existing is not None:
+        return existing
     spec = importlib.util.spec_from_file_location(
         module_name, REPO_ROOT / "scripts" / f"{module_name}.py"
     )
@@ -78,10 +89,10 @@ class LatestPinError(RuntimeError):
 
 
 # A fetcher takes "owner/name" and returns the parsed /releases/latest JSON.
-Fetcher = Callable[[str], dict]
+Fetcher = Callable[[str], dict[str, Any]]
 
 
-def github_latest_release(repo: str) -> dict:
+def github_latest_release(repo: str) -> dict[str, Any]:
     """Fetch ``/repos/<repo>/releases/latest`` via the approved API wrapper.
 
     Uses ``scripts/_github_api.apply_call`` (CLAUDE.md section 3: read through
@@ -116,7 +127,7 @@ def _version_tuple(version: str) -> tuple[int, ...]:
         raise LatestPinError(f"unparseable version: {version!r}") from exc
 
 
-def _parse_release(payload: dict, repo: str) -> tuple[str, dt.datetime]:
+def _parse_release(payload: dict[str, Any], repo: str) -> tuple[str, dt.datetime]:
     """Extract ``(bare_version, published_at)`` from a release payload."""
     tag = payload.get("tag_name")
     if not isinstance(tag, str) or not tag:
@@ -147,7 +158,7 @@ def decide(
 
     Holds (returns ``None``) when the latest release is not newer than the pin
     or has not yet aged past the cooldown window. Raises ``LatestPinError`` on
-    any malformed input -- never silently treats an error as "hold".
+    any malformed input; never silently treats an error as "hold".
     """
     if now is None:
         now = dt.datetime.now(dt.UTC)

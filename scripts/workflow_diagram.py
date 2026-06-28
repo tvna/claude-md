@@ -5,7 +5,7 @@ Each output file is named ``<workflow-stem>-if-branches.md`` and placed in
 
 CLI
 ---
-  # Write Markdown diagrams -- omit paths to process all .github/workflows/*.yml
+  # Write Markdown diagrams; omit paths to process all .github/workflows/*.yml
   python3 scripts/workflow_diagram.py diagram-doc \\
       [<workflow.yml> ...] [--output-dir docs/generated/workflows]
 
@@ -273,6 +273,7 @@ def _cmd_diagram_doc(args: argparse.Namespace) -> int:
         return 0
 
     errors = 0
+    written: set[Path] = set()
     for wf_path in workflow_paths:
         if not wf_path.exists():
             print(f"::error::file not found: {wf_path}", file=sys.stderr)
@@ -282,6 +283,18 @@ def _cmd_diagram_doc(args: argparse.Namespace) -> int:
         out = output_path_for(wf_path, output_dir)
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text(render_markdown(diagram), encoding="utf-8")
+        written.add(out.resolve())
+
+    # On a full regeneration (no explicit workflow list), prune orphaned
+    # diagrams: ``*-if-branches.md`` files whose source workflow no longer
+    # exists. This keeps docs/generated/workflows/ a faithful mirror of the
+    # current workflow set so the post-merge automation owns deletions too, not
+    # just additions. A scoped run (explicit workflows) never prunes.
+    if not args.workflows and output_dir.exists():
+        for stale in sorted(output_dir.glob("*-if-branches.md")):
+            if stale.resolve() not in written:
+                stale.unlink()
+                print(f"pruned orphaned diagram: {stale}")
 
     return 1 if errors else 0
 

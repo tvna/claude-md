@@ -73,7 +73,7 @@ review. The operator's job is to either:
 
 - Investigate, conclude the retro is genuinely a false positive, and
   relabel `retro:fp` (the candidate label may be left in place or
-  stripped manually -- the scanner does not strip it).
+  stripped manually; the scanner does not strip it).
 - Investigate, conclude the retro is a true positive whose follow-up
   is merely slow, and relabel `retro:tp`. The operator may also
   bump the follow-up `updated_at` (a comment is sufficient) to take
@@ -87,14 +87,14 @@ call.
 
 **Auto-opened with low prior confidence**: applied by
 `scripts/auto_retro.py:run` (PR2, refs #582) when the label-derived
-prior places the retro in the uncertain band -- the active signal's
+prior places the retro in the uncertain band; the active signal's
 historical false-positive rate is in
 `[PRIOR_TENTATIVE_THRESHOLD, PRIOR_SKIP_THRESHOLD)`. The retro is
 opened (audit trail preserved) but flagged for the operator to make
 the final call.
 
 Applied by: scanner only (`auto_retro.run`). Operators do not apply
-this label by hand -- the band is computed automatically.
+this label by hand; the band is computed automatically.
 
 When to relabel: at retro close time, the operator applies
 `retro:tp` or `retro:fp` per the close-time convention below. The
@@ -118,7 +118,7 @@ When closing a retro issue, apply exactly one of `retro:tp` or
 
 The labels are read-only after close. If a later observation changes
 the picture, open a new retro that refs the old one rather than
-re-labelling history -- the prior calculator treats the historical
+re-labelling history; the prior calculator treats the historical
 record as a snapshot in time.
 
 ## Scanner behaviour summary
@@ -184,7 +184,7 @@ The sample-size floor is the empty-prior safety net: when the
 historical population of a signal is too thin to estimate, the gate
 degrades toward "open normally" rather than confidently skipping. The
 floor is self-clearing as operators + the scanner populate
-`retro:fp` labels organically -- no operator action needed at the
+`retro:fp` labels organically; no operator action needed at the
 bootstrap boundary.
 
 The "max active signal" rule means the WORST signal wins: if a PR
@@ -200,7 +200,7 @@ section. The line is emitted deterministically by
 `scripts/auto_retro.py:build_retro_body` so the prior consumer is
 not parsing prose (per CLAUDE.md section 2). Pre-#582 retros (those
 without the line) parse to an empty signal set and contribute zero
-observations to the prior -- safe degradation.
+observations to the prior; safe degradation.
 
 ## Why these particular signals
 
@@ -237,7 +237,7 @@ The report has three parts:
 
 - **Anomalies** (top): every signal whose prior FP rate is at or above
   `PRIOR_SKIP_THRESHOLD` with at least `PRIOR_MIN_SAMPLE_SIZE`
-  observations -- i.e. the signals that `should_skip_by_prior` now
+  observations; i.e. the signals that `should_skip_by_prior` now
   suppresses. This is the headline an operator should act on.
 - **Triage status**: a Mermaid pie of the `retro:tp` / `retro:fp` /
   `retro:fp-candidate` / `retro:tentative` / unlabelled mix. Label
@@ -250,8 +250,8 @@ The numbers come verbatim from `compute_prior_from_labels`, so the
 report can never disagree with the live skip decision.
 
 Unlike the decision-tree doc, this report depends on live GitHub label
-state, so it is **non-deterministic** and is NOT part of the
-`generate-docs.yml` drift gate. It is refreshed weekly by
+state, so it is **non-deterministic** and is NOT part of the deterministic
+generated-docs flow owned by the post-merge automation. It is refreshed weekly by
 `.github/workflows/weekly-maintenance.yml`, which opens a pull
 request when the snapshot drifts. The git history of the committed
 snapshot is the time series.
@@ -277,10 +277,10 @@ uv run pytest tests/test_scan_retro_followup_drift.py -v
 
 ## References
 
-- [`scripts/_retro_labels.py`](../../scripts/_retro_labels.py) -- label SoT.
-- [`scripts/scan_retro_followup_drift.py`](../../scripts/scan_retro_followup_drift.py) -- scanner.
-- [`.github/workflows/daily-maintenance.yml`](../../.github/workflows/daily-maintenance.yml) -- cron driver (`scan` job).
-- [`scripts/auto_retro.py`](../../scripts/auto_retro.py) -- the retro generator the labels feed back into.
-- [CLAUDE.md](../../CLAUDE.md) section 3 -- retro framework rationale.
-- [#558](https://github.com/tvna/claude-md/issues/558) -- PR1 issue.
-- [#582](https://github.com/tvna/claude-md/issues/582) -- label-derived prior issue.
+- [`scripts/_retro_labels.py`](../../scripts/_retro_labels.py); label SoT.
+- [`scripts/scan_retro_followup_drift.py`](../../scripts/scan_retro_followup_drift.py); scanner.
+- [`.github/workflows/daily-maintenance.yml`](../../.github/workflows/daily-maintenance.yml); cron driver (`scan` job).
+- [`scripts/auto_retro.py`](../../scripts/auto_retro.py); the retro generator the labels feed back into.
+- [CLAUDE.md](../../CLAUDE.md) section 3; retro framework rationale.
+- [#558](https://github.com/tvna/claude-md/issues/558); PR1 issue.
+- [#582](https://github.com/tvna/claude-md/issues/582); label-derived prior issue.

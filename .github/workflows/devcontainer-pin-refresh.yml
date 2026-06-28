@@ -37,7 +37,7 @@ jobs:
         # created via the GitHub API (createCommitOnBranch) using the App token,
         # not `git push`, so it is signed/Verified. `persist-credentials: false`
         # here would strip the ls-remote credential. Refs #696, #1137, #1437.
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       # Mint a short-lived GitHub App installation token so the superseding pin
       # PR is authored by the App bot (not a human PAT owner), its push to main
@@ -56,12 +56,15 @@ jobs:
           REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
+          # Refs #1640: the trailer's tracking issue lives in
+          # .github/tracking-issues.toml, not in this file.
+          TRACKING_ISSUE="$(python3 scripts/issue_anchors.py get devcontainer-pins)"
           python3 scripts/devcontainer_pin_pr.py refresh \
             --base main \
             --target-sha "$GITHUB_SHA" \
             --title "fix(devcontainer): pin published agent images" \
             --commit-subject "fix(devcontainer): pin published agent images" \
-            --commit-trailer "Refs #696" \
+            --commit-trailer "Refs #${TRACKING_ISSUE}" \
             --template .github/pr-body-templates/devcontainer-image-pins.md \
             --file .devcontainer/claude/devcontainer.json \
             --file .devcontainer/codex/devcontainer.json \

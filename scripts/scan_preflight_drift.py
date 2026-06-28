@@ -9,24 +9,24 @@ workflow without a matching entry in :data:`preflight_all.STEPS`.
 
 The detector is intentionally narrow:
 
-* Source set -- ``.github/workflows/*.yml`` files whose ``on:`` block
+* Source set; ``.github/workflows/*.yml`` files whose ``on:`` block
   includes a ``pull_request:`` trigger. ``pull_request_target:``
   workflows are excluded because their input is webhook payload
   (issue / PR body), not the working tree, so they have no local
   equivalent. ``schedule:`` / ``workflow_dispatch:`` workflows are
   excluded for the same reason.
-* Reference set -- ``preflight_all.STEPS``, retrieved via the
+* Reference set; ``preflight_all.STEPS``, retrieved via the
   ``--list`` JSON manifest so this module stays decoupled from
   :data:`preflight_all.STEPS`'s in-memory shape.
-* Allowlist -- scripts that gate webhook-only input (PR / issue
+* Allowlist; scripts that gate webhook-only input (PR / issue
   bodies, titles) or that are output-only helpers (``uv_pin read``).
   Each entry carries an inline rationale so future contributors can
   audit the exclusion.
 
 Exit codes:
-* ``0`` -- preflight and CI cover the same script set (modulo the
+* ``0``; preflight and CI cover the same script set (modulo the
   allowlist). Extra preflight-only scripts produce a warning.
-* ``1`` -- at least one ``pull_request:`` workflow invokes a script
+* ``1``; at least one ``pull_request:`` workflow invokes a script
   that ``preflight_all`` does not.
 
 Tested by ``tests/test_scan_preflight_drift.py``.
@@ -170,7 +170,7 @@ def load_preflight_manifest(preflight_path: Path) -> set[str]:
     The names are derived from each step's argv: a token matching
     ``scripts/<name>.py`` contributes ``<name>`` to the set. Steps whose
     argv contains no such token (e.g. ``ruff``, ``mypy``, ``pytest``)
-    contribute nothing -- the drift gate only cares about script-name
+    contribute nothing; the drift gate only cares about script-name
     coverage, not toolchain-binary coverage.
     """
     completed = subprocess.run(  # noqa: S603 -- argv is hard-coded
@@ -199,7 +199,7 @@ def diff(
     ``missing_in_preflight`` lists CI references whose script is not
     declared locally and is not in *allowlist*. ``extra_in_preflight``
     lists scripts declared locally that no ``pull_request:`` workflow
-    invokes -- a warning condition, since the local set may legitimately
+    invokes; a warning condition, since the local set may legitimately
     pre-empt a future CI gate.
     """
     ci_scripts = {ref.script for ref in workflow_refs}

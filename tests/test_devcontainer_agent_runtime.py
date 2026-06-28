@@ -112,7 +112,7 @@ def test_runtime_script_links_python3_for_hook_subprocesses() -> None:
     flake = (REPO_ROOT / "flake.nix").read_text(encoding="utf-8")
     script = (REPO_ROOT / ".devcontainer/scripts/configure-agent-runtime.sh").read_text(encoding="utf-8")
 
-    assert "python-runtime = pkgs.python311;" in flake
+    assert "python-runtime = pkgs.python312;" in flake
     assert "install_nix_binary python-runtime python3" in script
 
 
@@ -123,6 +123,34 @@ def test_codex_runtime_installs_bubblewrap_for_sandbox() -> None:
     assert "bubblewrap = pkgs.bubblewrap;" in flake
     assert "agentPackages.bubblewrap" in flake
     assert "install_nix_binary bubblewrap bwrap" in script
+
+
+def test_runtime_provisions_ccusage_for_both_agents() -> None:
+    """ccusage must be on PATH for both agents, not Claude only.
+
+    The PR-body Resource Consumption section
+    (scripts/session_resource_report.py) shells out to ``ccusage`` to report
+    per-session token/cost. It previously installed only for the claude agent
+    (``if [[ "$agent" == "claude" ]]``) and the codex devShell omitted it, so
+    Codex sessions had no ccusage and the section could not be generated there.
+    This guards the both-agents provisioning from regressing. Refs #1467.
+    """
+    flake = (REPO_ROOT / "flake.nix").read_text(encoding="utf-8")
+    script = (REPO_ROOT / ".devcontainer/scripts/configure-agent-runtime.sh").read_text(encoding="utf-8")
+
+    # The pinned ccusage derivation exists and the symlink runs at runtime.
+    assert "ccusage-cli = pkgs.stdenvNoCC.mkDerivation" in flake
+    assert "install_nix_binary ccusage-cli ccusage" in script
+
+    # The install must not be gated to the claude agent any more.
+    assert 'if [[ "$agent" == "claude" ]]; then\n  install_nix_binary ccusage-cli ccusage' not in script
+
+    # Both agent devShells expose ccusage-cli so `nix develop` has it too.
+    for shell_name in ("claude", "codex"):
+        block = flake.split(f'{shell_name} = mkAgentShell "{shell_name}"', 1)[1].split("];", 1)[0]
+        assert "agentPackages.ccusage-cli" in block, (
+            f"{shell_name} devShell is missing agentPackages.ccusage-cli"
+        )
 
 
 def test_codex_devcontainer_permits_seccomp_for_bwrap() -> None:
@@ -190,23 +218,78 @@ def test_runbook_documents_gh_bind_mount_security() -> None:
     assert "read-write" in runbook
 
 
-def test_prebuild_strips_nix_store_links_hardlink_farm() -> None:
+def test_trivy_scan_skips_nix_store_links_hardlink_farm() -> None:
     # The published images are Trivy-scanned in publish-devcontainer-images.yml;
-    # its secret scanner walks /nix/store/.links (the store optimisation hardlink
-    # farm) as a duplicate path to every store file, producing redundant Code
-    # scanning alerts. The agent-user Feature deletes the farm at build time so
-    # the published image carries no .links. Refs #1348.
+    # its secret scanner walks /nix/store/.links (the Nix store optimisation
+    # hardlink farm) and reports findings (e.g. a HIGH "Asymmetric Private Key")
+    # against the .links/<hash> path. The scan-side skip prunes that subtree
+    # deterministically; building-time removal proved ineffective in the
+    # published image (the rm did not persist). Refs #1473, #1348.
+    workflow = (REPO_ROOT / ".github/workflows/publish-devcontainer-images.yml").read_text(encoding="utf-8")
+    # The scanner now runs as a digest-pinned `docker run` (#1276), so the skip
+    # is the Trivy CLI flag form rather than the trivy-action `skip-dirs:` input.
+    assert "--skip-dirs nix/store/.links" in workflow
+
+    # Guard against the reverted build-time approach silently coming back: the
+    # farm must not be deleted in the Feature install (it shares inodes with the
+    # real store paths and removing it would surface the secret at its real path).
     install = (REPO_ROOT / ".devcontainer/images/features/agent-user/install.sh").read_text(encoding="utf-8")
-    assert "rm -rf /nix/store/.links" in install
+    assert "rm -rf /nix/store/.links" not in install
 
 
-def test_prebuild_runs_agent_user_feature_last() -> None:
-    # The .links removal above is only correct if the agent-user Feature is the
-    # last build-time step: it must run after the nix Feature populates the
-    # store, and `devcontainer build` runs no postCreateCommand afterwards. Guard
-    # that ordering invariant for both prebuild configs. Refs #1348.
+def test_prebuild_runs_agent_user_feature_after_base_features() -> None:
+    # The agent-user Feature finalizes the agent user/group/sudoers to uid 0, so
+    # it must run after common-utils and the nix Feature have populated users and
+    # the store. For codex it is the last Feature. For claude the nix-warm-claude
+    # Feature follows it to realise the .#claude devShell closure (#1491): that
+    # only writes /nix/store as root and never touches the agent user, /home, or
+    # sudoers, so running it after agent-user leaves the user finalization intact
+    # while still landing after the nix store is set up. Guard the ordering
+    # invariant for both prebuild configs. Refs #1348, #1491.
+    expected_last = {
+        "claude": "../features/nix-warm-claude",
+        "codex": "../features/agent-user",
+    }
     for agent in AGENTS:
         config = load_json(REPO_ROOT / ".devcontainer" / "images" / agent / "devcontainer.json")
         order = config.get("overrideFeatureInstallOrder")
         assert isinstance(order, list)
-        assert order[-1] == "../features/agent-user"
+        assert order[-1] == expected_last[agent]
+        # agent-user must always land after both base Features regardless of agent.
+        assert order.index("../features/agent-user") > order.index("ghcr.io/devcontainers/features/nix")
+        assert order.index("../features/agent-user") > order.index("ghcr.io/devcontainers/features/common-utils")
+
+
+def test_claude_prebuild_bakes_devshell_closure() -> None:
+    # The nix-warm-claude Feature realises the .#claude devShell closure into the
+    # image at build time so runtime container-create skips the ~23s first-time
+    # closure realisation (#1491, measured in #1471). Guard the wiring: the
+    # Feature is referenced by the claude config, runs last (after the nix store
+    # exists), and the publish workflow stages the flake files it realises into
+    # the Feature dir for the claude legs only. Codex is out of scope and must
+    # not gain the Feature.
+    claude = load_json(REPO_ROOT / ".devcontainer" / "images" / "claude" / "devcontainer.json")
+    features = claude.get("features")
+    assert isinstance(features, dict)
+    assert "../features/nix-warm-claude" in features
+
+    feature_dir = REPO_ROOT / ".devcontainer/images/features/nix-warm-claude"
+    meta = load_json(feature_dir / "devcontainer-feature.json")
+    assert meta["id"] == "nix-warm-claude"
+    installs_after = meta.get("installsAfter")
+    assert isinstance(installs_after, list)
+    assert "ghcr.io/devcontainers/features/nix" in installs_after
+
+    install = (feature_dir / "install.sh").read_text(encoding="utf-8")
+    # Uses the path: flake ref to force the non-git evaluator (avoids the libgit2
+    # dubious-ownership error the runtime git+file fetch hits, #1471).
+    assert 'path:${work}#claude' in install
+
+    workflow = (REPO_ROOT / ".github/workflows/publish-devcontainer-images.yml").read_text(encoding="utf-8")
+    assert "Stage flake into nix-warm-claude feature" in workflow
+    assert "if: matrix.agent == 'claude'" in workflow
+
+    codex = load_json(REPO_ROOT / ".devcontainer" / "images" / "codex" / "devcontainer.json")
+    codex_features = codex.get("features")
+    assert isinstance(codex_features, dict)
+    assert "../features/nix-warm-claude" not in codex_features

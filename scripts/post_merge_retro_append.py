@@ -138,7 +138,7 @@ def decide(event: dict[str, Any]) -> dict[str, Any] | None:
         f"(docs/generated/scripts/auto-retro-triage-report.md) is the review "
         f"surface, so an appended comment is redundant noise.\n"
         f"Fallback only: if no auto-retro appears after CI has had time to run "
-        f"(post-merge.yml was skipped or failed), create a new retro issue — but "
+        f"(post-merge.yml was skipped or failed), create a new retro issue; but "
         f"only after confirming no existing retro covers PR #{pr_number}.\n"
         f"Forbidden: opening a second retro issue when an auto-retro already exists "
         f"or is pending from CI."

@@ -8,13 +8,13 @@ evidence (CLAUDE.md section 2), not intuition.
 
 What it measures, reading the lifecycle straight from a devcontainer config:
 
-* ``pull``           -- time to pull the prebuilt image, plus the image size.
-* ``postCreate``     -- time of each ``&&``-split segment of
+* ``pull``          ; time to pull the prebuilt image, plus the image size.
+* ``postCreate``    ; time of each ``&&``-split segment of
   ``postCreateCommand`` (``nix develop ... uv sync``, ``install-agent-cli``,
   ``configure-agent-runtime`` ...), run sequentially in one container so each
   segment builds on the previous one exactly as a real start does.
-* ``postStart``      -- time of each segment of ``postStartCommand``.
-* ``composition``    -- (opt-in ``--probe-composition``) on-disk byte split of
+* ``postStart``     ; time of each segment of ``postStartCommand``.
+* ``composition``   ; (opt-in ``--probe-composition``) on-disk byte split of
   the pulled image: total ``/nix/store`` bytes vs the base-distro dirs, plus
   the largest store entries. Measured with ``du`` (coreutils, always present)
   so it works even where ``nix develop`` does not in the CI exec context. This
@@ -27,7 +27,7 @@ What it measures, reading the lifecycle straight from a devcontainer config:
   dir instead, so the top entries name the dominant derivations (Refs #1332).
 
 The web remote session cannot run a container runtime, so this is driven from
-CI (``.github/workflows/measure-devcontainer-startup.yml``) -- mirroring the
+CI (``.github/workflows/measure-devcontainer-startup.yml``); mirroring the
 reproducible-in-CI measurement posture of #1173. ``initializeCommand`` is a
 host-side podman call and is intentionally NOT replayed here; the
 container-side costs above are the portable, environment-independent signal.
@@ -40,14 +40,17 @@ Contract:
 - Inputs: ``--config`` (required, path to a devcontainer.json); ``--runtime``
   (default ``docker``), ``--workspace``, ``--user``, ``--host-dir``, ``--cap``
   (repeatable), ``--no-pull``, ``--probe-composition``, ``--top-n`` (default
-  30), ``--output``. No env-var fallbacks.
+  30), ``--warmup`` (repeatable: timed pre-postCreate segments), ``--output``.
+  No env-var fallbacks.
 - Outputs: the JSON report on stdout (and to ``--output`` when given), an ASCII
   markdown summary on stderr (for ``$GITHUB_STEP_SUMMARY``); exit 0 on success.
   With ``--probe-composition`` the report gains a ``composition`` block.
-- Failure policy: fails loud per CLAUDE.md section 4 -- a missing runtime,
+- Failure policy: fails loud per CLAUDE.md section 4; a missing runtime,
   unreadable/malformed config, mutable image tag, or failed pull/start/inspect
   raises and exits non-zero. A per-segment non-zero exit is recorded as data
-  (the postStart egress step is best-effort off the real host), not swallowed.
+  (the postStart egress step is best-effort off the real host), not swallowed;
+  a failed segment also records ``stderr_tail`` (a bounded ASCII tail of its
+  stderr) so the cause is diagnosable rather than lost.
 
 Tested by ``tests/test_measure_devcontainer_startup.py``.
 """
@@ -80,6 +83,9 @@ class RunResult:
     returncode: int
     stdout: str
     seconds: float
+    # stderr is the actionable channel when a segment fails; default empty so
+    # the field is additive and existing positional construction is unaffected.
+    stderr: str = ""
 
 
 def _run(
@@ -96,7 +102,14 @@ def _run(
     start = clock()
     proc = runner(cmd, capture_output=True, text=True, check=False)
     elapsed = clock() - start
-    return RunResult(returncode=proc.returncode, stdout=proc.stdout, seconds=elapsed)
+    # getattr keeps a fake runner that only models stdout working; a real
+    # capture_output run always carries stderr.
+    return RunResult(
+        returncode=proc.returncode,
+        stdout=proc.stdout,
+        seconds=elapsed,
+        stderr=getattr(proc, "stderr", "") or "",
+    )
 
 
 def resolve_runtime(name: str, *, which: Callable[[str], str | None] = shutil.which) -> str:
@@ -127,14 +140,23 @@ def load_config(path: Path) -> dict[str, Any]:
     return data
 
 
+def reject_mutable_tag(image: str) -> str:
+    """Return *image* unchanged, rejecting mutable tags (``:main``/``:latest``).
+
+    A measurement must name an immutable reference so the number is reproducible
+    and attributable to a known image; a moving tag would silently re-point.
+    """
+    if image.endswith((":main", ":latest")):
+        raise ValueError(f"refusing to measure a mutable image tag: {image}")
+    return image
+
+
 def get_image(config: dict[str, Any]) -> str:
     """Return the ``image`` reference, rejecting mutable tags."""
     image = config.get("image")
     if not isinstance(image, str) or not image:
         raise ValueError("devcontainer config has no string 'image'")
-    if image.endswith((":main", ":latest")):
-        raise ValueError(f"refusing to measure a mutable image tag: {image}")
-    return image
+    return reject_mutable_tag(image)
 
 
 def split_segments(command: str | None) -> list[str]:
@@ -150,7 +172,7 @@ def split_segments(command: str | None) -> list[str]:
 
 # Base-distro directories whose byte total is reported separately from the nix
 # closure, so the summary splits "image bloat from the base" from "image bloat
-# from the nix store" -- the two have different cut levers.
+# from the nix store"; the two have different cut levers.
 _COMPOSITION_BASE_DIRS = ("/usr", "/opt", "/var", "/home", "/etc", "/root", "/bin", "/lib")
 # ``du -d1`` lists each immediate child of /nix/store plus the store total on
 # its own line, so no shell glob expansion (which would blow past ARG_MAX on a
@@ -159,7 +181,7 @@ _COMPOSITION_BASE_DIRS = ("/usr", "/opt", "/var", "/home", "/etc", "/root", "/bi
 # store optimisation every store file is hardlinked into .links, and because
 # du counts each inode once at first encounter and .links sorts first, an
 # un-excluded walk piles the whole closure onto the .links line and reports
-# the real package dirs as ~0 bytes -- hiding the per-derivation cut target.
+# the real package dirs as ~0 bytes; hiding the per-derivation cut target.
 # Excluding .links makes du meet each inode first in its own package dir, so
 # the depth-1 lines name the dominant derivations while the /nix/store total
 # stays the true (deduplicated) closure size. ``|| true`` keeps a transient
@@ -196,7 +218,7 @@ def probe_composition(session: Session, *, top_n: int = 30) -> dict[str, Any]:
     """Probe the on-disk byte composition of the started container image.
 
     Returns the ``/nix/store`` total, the ``top_n`` largest store entries, and
-    the base-distro dir sizes -- the evidence that names the image's dominant
+    the base-distro dir sizes; the evidence that names the image's dominant
     cost so Phase 1 (#1332) cuts the right thing instead of guessing. The store
     walk excludes ``/nix/store/.links`` (see ``_STORE_DU_CMD``) so the per-entry
     sizes resolve real derivations instead of collapsing into the hardlink farm.
@@ -275,23 +297,52 @@ class DockerSession:
             self.container_id = None
 
 
+# Bound on the failure diagnostic kept per segment. A non-zero lifecycle
+# segment is the measurement's signal, but its cause lives in stderr; which
+# the orchestrator was discarding, leaving a failed measurement undiagnosable
+# (CLAUDE.md section 4: a check that fires must say what went wrong). Keep the
+# tail (the actionable error is the last thing written), ASCII-sanitised so it
+# survives the GitHub posting boundary, and length-capped so a runaway log
+# cannot bloat the report. Diagnostic only; never an env or secret dump.
+_STDERR_TAIL_LINES = 20
+_STDERR_TAIL_CHARS = 2000
+
+
+def _stderr_tail(text: str) -> str:
+    """Return a bounded, ASCII-only tail of ``text`` for a failed segment."""
+    tail = "\n".join(text.splitlines()[-_STDERR_TAIL_LINES:])
+    if len(tail) > _STDERR_TAIL_CHARS:
+        tail = tail[-_STDERR_TAIL_CHARS:]
+    return tail.encode("ascii", "replace").decode("ascii")
+
+
 def measure(
     session: Session,
     *,
     post_create: list[str],
     post_start: list[str],
+    warmup: list[str] | None = None,
     do_pull: bool = True,
     probe: bool = False,
     top_n: int = 30,
 ) -> dict[str, Any]:
     """Run the measurement against ``session`` and return a JSON-able report.
 
-    A non-zero segment exit is recorded (returncode + time-to-failure), not
-    swallowed: in a measurement a failure is data, and the postStart egress
-    step is expected to be only best-effort outside the real host (no eBPF).
+    A non-zero segment exit is recorded (returncode + time-to-failure + a
+    bounded ``stderr_tail``), not swallowed: in a measurement a failure is
+    data, and the postStart egress step is expected to be only best-effort
+    outside the real host (no eBPF). The stderr tail is what makes a failed
+    measurement diagnosable instead of an opaque non-zero exit.
     With ``probe`` the report also carries an image ``composition`` block
     (gathered while the container is still up). The container is always cleaned
     up.
+
+    ``warmup`` segments run in a ``warmup`` phase before postCreate. Their
+    purpose is attribution: a real container-create conflates the first
+    ``nix develop`` (which realises the devShell closure) with the work that
+    command runs. Timing a bare ``nix develop ... --command true`` as a warmup
+    isolates the closure-realisation cost, so the subsequent postCreate segment
+    measures only its own work against an already-warm closure.
     """
     report: dict[str, Any] = {"image": session.image, "phases": []}
 
@@ -304,17 +355,22 @@ def measure(
 
     session.start()
     try:
-        for phase, segments in (("postCreate", post_create), ("postStart", post_start)):
+        phases = (("warmup", warmup or []), ("postCreate", post_create), ("postStart", post_start))
+        for phase, segments in phases:
             for segment in segments:
                 result = session.exec(segment)
-                report["phases"].append(
-                    {
-                        "phase": phase,
-                        "command": segment,
-                        "seconds": round(result.seconds, 3),
-                        "returncode": result.returncode,
-                    }
-                )
+                entry: dict[str, Any] = {
+                    "phase": phase,
+                    "command": segment,
+                    "seconds": round(result.seconds, 3),
+                    "returncode": result.returncode,
+                }
+                # Attach the diagnostic only on a real failure with content:
+                # a clean exit needs no explanation, and an empty stderr has
+                # nothing to show, so the report stays lean on the happy path.
+                if result.returncode != 0 and result.stderr.strip():
+                    entry["stderr_tail"] = _stderr_tail(result.stderr)
+                report["phases"].append(entry)
         if probe:
             report["composition"] = probe_composition(session, top_n=top_n)
     finally:
@@ -338,8 +394,7 @@ def format_summary(report: dict[str, Any]) -> str:
         "# Devcontainer startup measurement",
         "",
         f"- image: `{report['image']}`",
-        f"- image size: {_human_size(report['image_size_bytes'])} "
-        f"({report['image_size_bytes']} bytes)",
+        f"- image size: {_human_size(report['image_size_bytes'])} " f"({report['image_size_bytes']} bytes)",
     ]
     if "pull_seconds" in report:
         flag = "" if report["pull_returncode"] == 0 else " (FAILED)"
@@ -355,14 +410,25 @@ def format_summary(report: dict[str, Any]) -> str:
         if len(command) > 70:
             command = command[:67] + "..."
         lines.append(f"| {entry['phase']} | {entry['seconds']:.3f} | {entry['returncode']} | {command} |")
+    failures = [entry for entry in report["phases"] if entry.get("stderr_tail")]
+    if failures:
+        lines += ["", "## Segment failures", ""]
+        for entry in failures:
+            lines += [
+                f"- {entry['phase']} (exit {entry['returncode']}): `{entry['command']}`",
+                "",
+                "```",
+                entry["stderr_tail"],
+                "```",
+                "",
+            ]
     composition = report.get("composition")
     if composition:
         lines += [
             "",
             "## Image composition",
             "",
-            f"- /nix/store: {_human_size(composition['nix_store_bytes'])} "
-            f"({composition['nix_store_bytes']} bytes)",
+            f"- /nix/store: {_human_size(composition['nix_store_bytes'])} " f"({composition['nix_store_bytes']} bytes)",
             "",
             "| base dir | size |",
             "| --- | ---: |",
@@ -398,11 +464,31 @@ def run(
         help="Also probe the image's on-disk byte composition (nix store vs base, top entries).",
     )
     parser.add_argument("--top-n", type=int, default=30, help="How many largest store entries to report.")
+    parser.add_argument(
+        "--warmup",
+        action="append",
+        default=[],
+        help=(
+            "Command to run and time in a 'warmup' phase before postCreate "
+            "(repeatable). Use to isolate first-time nix-develop closure "
+            "realisation from the postCreate work that follows."
+        ),
+    )
+    parser.add_argument(
+        "--image",
+        default="",
+        help=(
+            "Override the image reference taken from --config (e.g. an image "
+            "built locally from .devcontainer/images/<agent>). Pair with "
+            "--no-pull. Mutable tags (:main/:latest) are rejected. The "
+            "lifecycle segments still come from --config."
+        ),
+    )
     parser.add_argument("--output", type=Path, help="Write the JSON report to this path.")
     args = parser.parse_args(argv)
 
     config = load_config(args.config)
-    image = get_image(config)
+    image = reject_mutable_tag(args.image) if args.image else get_image(config)
     post_create = split_segments(config.get("postCreateCommand"))
     post_start = split_segments(config.get("postStartCommand"))
 
@@ -420,6 +506,7 @@ def run(
         session,
         post_create=post_create,
         post_start=post_start,
+        warmup=list(args.warmup),
         do_pull=not args.no_pull,
         probe=args.probe_composition,
         top_n=args.top_n,

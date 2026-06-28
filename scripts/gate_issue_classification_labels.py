@@ -22,7 +22,7 @@ boundary at the bottom (:func:`main` via :func:`_hook_runtime.run_tool_hook`).
 
 Failure modes (fail-open per CLAUDE.md section 4): off-target tool name, a
 non-``create`` method, malformed stdin JSON, an unreadable or malformed
-``.github/labels.json``, or an axis with no valid labels defined -- all exit 0
+``.github/labels.json``, or an axis with no valid labels defined; all exit 0
 with no decision so a hook bug or a missing SoT never wedges the session. The
 server-side triage workflow and review remain as backstops.
 

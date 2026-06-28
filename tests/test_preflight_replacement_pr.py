@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 import preflight_replacement_pr as gate
 import pytest
@@ -134,7 +135,7 @@ class TestFetchCandidates:
     def test_fetch_candidates_reads_pr_detail_for_merged_at(self, monkeypatch: pytest.MonkeyPatch) -> None:
         calls: list[str] = []
 
-        def fake_apply_call(*, method: str, url: str, payload: dict | None, token: str):
+        def fake_apply_call(*, method: str, url: str, payload: dict[str, Any] | None, token: str):
             del method, payload, token
             calls.append(url)
             if url.startswith("https://api.github.com/search/issues"):

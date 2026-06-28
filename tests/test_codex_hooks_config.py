@@ -378,5 +378,10 @@ def test_codex_permission_request_policy_plan_is_documented() -> None:
     for phrase in required_phrases:
         assert phrase in body
 
+    # Refs #2005: the prd/ table moved from docs/INDEX.md into its lane
+    # README, with INDEX keeping a pointer to that README. The plan doc must
+    # be listed in the lane README, reachable from INDEX via the lane link.
     index = DOCS_INDEX.read_text(encoding="utf-8")
-    assert "codex-permission-request-policy-gate.md" in index
+    assert "prd/README.md" in index
+    prd_readme = (ROOT / "docs" / "prd" / "README.md").read_text(encoding="utf-8")
+    assert "codex-permission-request-policy-gate.md" in prd_readme

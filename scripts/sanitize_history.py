@@ -9,7 +9,7 @@ Operator-run companion to ``scripts/backup_non_ascii.py`` (P1) and
    ``mapping.translated``.
 3. If ``sha256(live) == sha256(mapping.translated)``, skip (already
    applied, idempotent).
-4. Otherwise emit ``::error::Drift detected ...`` and abort -- the live
+4. Otherwise emit ``::error::Drift detected ...`` and abort; the live
    body diverged from both the mapping's source and target, so
    overwriting it would silently destroy work.
 
@@ -160,7 +160,7 @@ def fetch_live_field(
 ) -> str:
     """GET *url* via :func:`apply_call`; return the requested field as a string.
 
-    *field* is ``"title"`` or ``"body"`` -- the two columns this script
+    *field* is ``"title"`` or ``"body"``; the two columns this script
     rewrites. Coerces missing/null to empty string so drift comparison is
     over deterministic strings.
     """
@@ -265,7 +265,7 @@ def run_apply(
             raise SystemExit(1)
         if verdict == "skip":
             counts["skipped"] += 1
-            print(f"skip {item['type']}#{item.get('number')}({field}) -- already applied")
+            print(f"skip {item['type']}#{item.get('number')}({field}); already applied")
             continue
         # verdict == "patch"
         if dry_run:

@@ -54,7 +54,7 @@ ACK_MARKER = "<!-- action-pin-ack -->"
 # and arbitrary leading whitespace.
 _USES_LINE = re.compile(r"^\s*-?\s*uses:\s*(?P<ref>\S+)")
 
-# A 40-character lowercase hex string -- a full git commit SHA.
+# A 40-character lowercase hex string; a full git commit SHA.
 _FULL_SHA = re.compile(r"^[0-9a-f]{40}$")
 
 # Captures the trailing ``# <tag>`` comment after the reference. The tag

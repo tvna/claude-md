@@ -4,14 +4,13 @@ The ``scripts/`` directory is added to ``sys.path`` via the ``pythonpath``
 key under ``[tool.pytest.ini_options]`` in ``pyproject.toml``.
 
 Mirrors the structure of ``tests/test_scan_non_ascii.py``: pure functions
-get table-driven tests; the subprocess boundary (:func:`auto_retro.gh_api`)
+get table-driven tests; the REST boundary (:func:`auto_retro.gh_api`)
 is monkeypatched. Refs #234.
 """
 
 from __future__ import annotations
 
 import json
-import subprocess
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any, ClassVar
@@ -20,6 +19,9 @@ import _retro_labels as rl
 import auto_retro as ar
 import body_policy as bp
 import pytest
+from _github_api import GitHubApiError
+from hypothesis import given
+from hypothesis import strategies as st
 
 pytestmark = pytest.mark.shard_ci_ops_2
 # ---------------------------------------------------------------------------
@@ -147,7 +149,7 @@ class TestIsRetroPr:
     @pytest.mark.parametrize(
         "title",
         [
-            # (auto-retro) scope -- covers the auto-opened retro shape and
+            # (auto-retro) scope; covers the auto-opened retro shape and
             # retro-closing PRs that title policy forces to use an allowed
             # Conventional Commit type with the auto-retro scope.
             "fix(auto-retro): review PR #234 repair loops",
@@ -284,7 +286,7 @@ class TestBuildRetroTitle:
     )
     def test_emits_single_paren_group(self, source_title: str) -> None:
         """For any source title shape, the generated retro title contains
-        exactly one (...) group -- never nested."""
+        exactly one (...) group; never nested."""
         pr = _make_pr(number=1, title=source_title)
         title = ar.build_retro_title(pr)
         assert "((" not in title
@@ -383,7 +385,7 @@ class TestBuildRetroBody:
         # The canonical subject must not also appear with the
         # iteration-commit narration.
         assert (
-            "`fix(ci): close verify skip bypass (#366)` -- signals"
+            "`fix(ci): close verify skip bypass (#366)`; signals"
             not in body
         )
 
@@ -624,7 +626,7 @@ class TestRepairHistoryTable:
     ) -> None:
         """Footnote fires even when only synthetic rows (no Merge from
         main) are present. Refs #453."""
-        # Iteration commit alone with single PR commit -- no merge row,
+        # Iteration commit alone with single PR commit; no merge row,
         # no multi-commit row, but the synthetic Iteration row exists.
         table = ar._build_repair_history_table(None, ["fixup! prior"], 1)
         assert "Iteration commit" in table
@@ -645,7 +647,7 @@ class TestRepairHistoryTable:
         assert "(no automated repair signals detected)" in table
         assert "positive-control" in table
         assert "repair taxonomy classification requested" in table
-        # No numbered rows: only the "| -- |" sentinel.
+        # No numbered rows: only the "|; |" sentinel.
         assert "| 1 |" not in table
 
     def test_sentinel_absent_when_any_signal_fires(self) -> None:
@@ -728,7 +730,7 @@ class TestRepairHistoryTableCheckRunContext:
 
     def test_omits_annotation_section_when_summary_is_none(self) -> None:
         """Acceptance criterion 3: annotation-less rows still emit the base
-        conclusion / completed_at signal -- no `annotation:` token."""
+        conclusion / completed_at signal; no `annotation:` token."""
         check_runs = [
             {
                 "name": "gate",
@@ -955,7 +957,7 @@ class TestFindExistingRetro:
         assert ar.find_existing_retro(items, 249) is None
 
     def test_matches_case_insensitive_prefix(self) -> None:
-        """``Fix(Auto-Retro):`` (mixed case) must still match -- prefix is lowered."""
+        """``Fix(Auto-Retro):`` (mixed case) must still match; prefix is lowered."""
         items = [
             {"number": 12, "title": "Fix(Auto-Retro): review PR #42 repair loops"}
         ]
@@ -967,6 +969,51 @@ class TestFindExistingRetro:
             {"number": 13, "title": "chore(auto-retro): review PR #42 repair loops"}
         ]
         assert ar.find_existing_retro(items, 42) == 13
+
+    def test_matches_hand_authored_chore_retro_scope(self) -> None:
+        """A hand-authored ``chore(retro): ... PR #N`` retro must dedup against
+        the auto path so the post-merge run does not open a second retro for the
+        same PR. Regression for the confirmed #1939/#1941 duplicate (PR #1933).
+        Refs #1995."""
+        items = [
+            {
+                "number": 1941,
+                "title": "chore(retro): post-merge retrospective for PR #1933",
+            }
+        ]
+        assert ar.find_existing_retro(items, 1933) == 1941
+
+    def test_matches_hand_authored_retro_scope_any_type(self) -> None:
+        """The scope, not the type, marks the retro family: ``docs(retro)`` and
+        ``fix(retro)`` per-PR retros also dedup. Refs #1995."""
+        items = [
+            {"number": 21, "title": "docs(retro): repairs for PR #42"},
+            {"number": 22, "title": "fix(retro): follow-ups from PR #43 merge"},
+        ]
+        assert ar.find_existing_retro(items, 42) == 21
+        assert ar.find_existing_retro(items, 43) == 22
+
+    def test_ignores_retro_suffixed_non_retro_scopes(self) -> None:
+        """``retro-visibility`` (gate escape hatch) and ``retro-dedup`` (issue
+        #1995's own scope) are NON-retro tracking issues; they must NOT be
+        treated as a per-PR retro or dedup would suppress a legitimate issue.
+        Refs #1995."""
+        items = [
+            {"number": 31, "title": "chore(retro-visibility): tracking for PR #42"},
+            {"number": 32, "title": "fix(retro-dedup): unify dedup for PR #42"},
+        ]
+        assert ar.find_existing_retro(items, 42) is None
+
+    def test_ignores_noncanonical_auto_retro_scopes(self) -> None:
+        """``feat(auto-retro)`` / ``docs(auto-retro)`` are NOT retro issues
+        (is_retro_issue_title rejects them by design). The per-PR dedup
+        predicate must not widen all ``(auto-retro)`` scopes, or dedup would
+        skip opening the real retro. Regression for the Codex P2 on PR #1998."""
+        items = [
+            {"number": 41, "title": "feat(auto-retro): something for PR #42"},
+            {"number": 42, "title": "docs(auto-retro): record outcome PR #42"},
+        ]
+        assert ar.find_existing_retro(items, 42) is None
 
 
 class TestIsRetroIssueTitle:
@@ -1000,6 +1047,99 @@ class TestIsRetroIssueTitle:
         assert ar.is_retro_issue_title(title) is False
 
 
+class TestIsPerPrRetroTitle:
+    """The dedup-only retro-family predicate (Refs #1995)."""
+
+    @pytest.mark.parametrize(
+        "title",
+        [
+            "chore(retro): post-merge retrospective for PR #1933",
+            "docs(retro): repairs for PR #42",
+            "Chore(Retro): mixed case PR #42",
+            "  chore(retro): leading whitespace PR #42",
+        ],
+    )
+    def test_matches_retro_scope_only(self, title: str) -> None:
+        assert ar.is_per_pr_retro_title(title) is True
+
+    @pytest.mark.parametrize(
+        "title",
+        [
+            # auto-retro scopes are covered by is_retro_issue_title, NOT here;
+            # widening to all (auto-retro) would dedup non-retro feat/docs
+            # (auto-retro) issues. Refs #1998 (Codex P2).
+            "chore(auto-retro): review PR #42 repair loops",
+            "fix(auto-retro): close retro #42",
+            "feat(auto-retro): not a retro issue shape",
+            "docs(auto-retro): record repair-free merge",
+            # suffixed scopes are NON-retro tracking issues
+            "chore(retro-visibility): tracking issue",
+            "fix(retro-dedup): unify dedup",
+            # legacy no-type / type-as-retro shapes stay excluded
+            "retro: review PR #42 repair loops",
+            "retro(fix): review PR #42 repair loops",
+            # unrelated, and the no-scope / empty cases
+            "feat: unrelated",
+            "chore: no scope at all",
+            "",
+        ],
+    )
+    def test_rejects_non_retro_scope(self, title: str) -> None:
+        assert ar.is_per_pr_retro_title(title) is False
+
+    def test_does_not_widen_is_retro_issue_title(self) -> None:
+        """The new predicate must not leak into is_retro_issue_title, which
+        stays auto-retro-only for the no-direct-PR gate / sentinel / label
+        prior. A chore(retro) title is a per-PR retro for dedup but NOT a
+        reserved auto-retro issue title."""
+        title = "chore(retro): post-merge retrospective for PR #1933"
+        assert ar.is_per_pr_retro_title(title) is True
+        assert ar.is_retro_issue_title(title) is False
+
+
+class TestRetroDedupAutoRetroInvariant:
+    """Property guard (Refs #1999 row 1): no predicate ORed into
+    ``find_existing_retro`` may dedup an ``(auto-retro)``-scoped title that
+    ``is_retro_issue_title`` rejects.
+
+    The Codex P2 on PR #1998 had ``is_per_pr_retro_title`` match every
+    ``(auto-retro)`` scope (``endswith("(auto-retro)")``), so a non-retro
+    ``feat/docs(auto-retro)`` issue would dedup and suppress opening the real
+    retro. The example regression is ``test_ignores_noncanonical_auto_retro_scopes``;
+    these properties generalize it across the whole Conventional-Commit type
+    space so any future predicate that re-widens the auto-retro family is
+    caught, not just the two shapes the example pins.
+    """
+
+    # A Conventional-Commit type token: lowercase, may carry hyphens, bounded
+    # length. Covers chore/fix (the canonical retro types) and every other
+    # type (feat/docs/perf/build/...) that must NOT dedup under an auto-retro
+    # scope.
+    _CC_TYPE = st.from_regex(r"[a-z][a-z0-9-]{0,12}", fullmatch=True)
+
+    @given(cc_type=_CC_TYPE)
+    def test_auto_retro_scope_deduped_iff_is_retro_issue_title(
+        self, cc_type: str
+    ) -> None:
+        """find_existing_retro dedups an ``<type>(auto-retro): ... PR #N`` title
+        if and only if ``is_retro_issue_title`` accepts it. The ORed per-PR
+        predicate must add nothing for the auto-retro scope family."""
+        title = f"{cc_type}(auto-retro): review PR #42 repair loops"
+        items = [{"number": 7, "title": title}]
+        deduped = ar.find_existing_retro(items, 42) is not None
+        assert deduped is ar.is_retro_issue_title(title)
+
+    @given(cc_type=_CC_TYPE)
+    def test_per_pr_predicate_never_accepts_auto_retro_scope(
+        self, cc_type: str
+    ) -> None:
+        """The dedup-only predicate must never accept an ``(auto-retro)`` scope;
+        those titles are governed by ``is_retro_issue_title`` (type-filtered to
+        chore/fix), not by the per-PR predicate."""
+        title = f"{cc_type}(auto-retro): review PR #42"
+        assert ar.is_per_pr_retro_title(title) is False
+
+
 class TestIssueLabels:
     def test_no_inherited_labels(self) -> None:
         assert ar.issue_labels(()) == ["type:docs", "layer:meta"]
@@ -1018,54 +1158,23 @@ class TestIssueLabels:
 
 
 # ---------------------------------------------------------------------------
-# gh_api (subprocess boundary)
+# gh_api (REST boundary)
 # ---------------------------------------------------------------------------
 
 
-def _fake_run_capture():
-    calls: list[dict[str, Any]] = []
-
-    class _Result:
-        def __init__(self, stdout: str = "", returncode: int = 0) -> None:
-            self.stdout = stdout
-            self.returncode = returncode
-            self.stderr = ""
-
-    def fake_run(cmd, **kwargs):
-        calls.append({"cmd": cmd, **kwargs})
-        return _Result(stdout="OK")
-
-    return calls, fake_run
-
-
 class TestGhApi:
-    def test_get_no_input(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        calls, fake_run = _fake_run_capture()
-        monkeypatch.setattr(subprocess, "run", fake_run)
-        out = ar.gh_api("GET", "/repos/o/r/issues")
-        assert out == "OK"
-        assert calls[0]["cmd"] == [
-            "gh", "api", "--method", "GET", "/repos/o/r/issues"
-        ]
-        assert "input" not in calls[0]
+    def test_delegates_to_rest_text(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        calls: list[tuple[Any, ...]] = []
 
-    def test_post_with_body(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        calls, fake_run = _fake_run_capture()
-        monkeypatch.setattr(subprocess, "run", fake_run)
-        ar.gh_api("POST", "/repos/o/r/issues", {"title": "T"})
-        assert "--input" in calls[0]["cmd"]
-        assert calls[0]["cmd"][-1] == "-"
-        assert json.loads(calls[0]["input"]) == {"title": "T"}
+        def fake_rest_text(method, path, payload=None):
+            calls.append((method, path, payload))
+            return "OK"
 
-    def test_nonzero_exit_raises_loudly(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        def _raise(*_a, **_kw):
-            raise subprocess.CalledProcessError(1, "gh", stderr="boom")
-
-        monkeypatch.setattr(subprocess, "run", _raise)
-        with pytest.raises(subprocess.CalledProcessError):
-            ar.gh_api("GET", "/x")
+        monkeypatch.setattr(ar, "rest_text", fake_rest_text)
+        assert ar.gh_api("GET", "/repos/o/r/issues") == "OK"
+        assert calls[0] == ("GET", "/repos/o/r/issues", None)
+        assert ar.gh_api("POST", "/repos/o/r/issues", {"title": "T"}) == "OK"
+        assert calls[1] == ("POST", "/repos/o/r/issues", {"title": "T"})
 
 
 # ---------------------------------------------------------------------------
@@ -1078,7 +1187,7 @@ class TestSearchRetroIssues:
     def test_passes_url_encoded_query(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        seen: list[tuple] = []
+        seen: list[tuple[str, str, Any]] = []
 
         def fake_api(method, path, body=None, **_kw):
             seen.append((method, path, body))
@@ -1141,7 +1250,7 @@ class TestHasReviewComments:
     def test_calls_correct_endpoint(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        seen: list[tuple] = []
+        seen: list[tuple[str, str, Any]] = []
 
         def fake_api(method, path, body=None, **_kw):
             seen.append((method, path, body))
@@ -1196,7 +1305,7 @@ class TestFetchCheckRuns:
     ) -> list[tuple[str, str]]:
         seen: list[tuple[str, str]] = []
         # Index lives in a single-element list so the closure can mutate
-        # it without needing nonlocal -- matches the in-tree pattern for
+        # it without needing nonlocal; matches the in-tree pattern for
         # hand-rolled counters in _orchestrator_recorder.
         idx = [0]
 
@@ -1428,7 +1537,7 @@ class TestFetchCheckRunsAnnotationEnrichment:
         ``raw == ""`` / non-list branches of ``fetch_check_run_annotations``).
 
         ``raise_for_ids`` lists check_run ids that should make the
-        annotation lookup raise :class:`subprocess.CalledProcessError`.
+        annotation lookup raise :class:`_github_api.GitHubApiError`.
         """
         seen: list[tuple[str, str]] = []
 
@@ -1440,11 +1549,7 @@ class TestFetchCheckRunsAnnotationEnrichment:
                 id_str = rest.split("/annotations", 1)[0]
                 run_id = int(id_str)
                 if run_id in raise_for_ids:
-                    raise subprocess.CalledProcessError(
-                        returncode=22,
-                        cmd=["gh", "api", path],
-                        stderr="HTTP 502",
-                    )
+                    raise GitHubApiError(500, "GET", "/x", "HTTP 502")
                 payload = annotations_by_id.get(run_id, [])
                 if isinstance(payload, str):
                     return payload
@@ -1531,7 +1636,7 @@ class TestFetchCheckRunsAnnotationEnrichment:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Acceptance criterion 3 of issue #381: a transient annotation API
-        error must not break the retro -- the row falls back to
+        error must not break the retro; the row falls back to
         summary-less and other runs still get their summaries."""
         check_runs = [
             {
@@ -1766,7 +1871,7 @@ class TestCreateIssue:
     def test_posts_title_body_labels(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        seen: list[tuple] = []
+        seen: list[tuple[str, str, Any]] = []
 
         def fake_api(method, path, body=None, **_kw):
             seen.append((method, path, body))
@@ -1829,7 +1934,7 @@ class TestFindExistingBackLink:
     def test_calls_correct_endpoint(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        seen: list[tuple] = []
+        seen: list[tuple[str, str, Any]] = []
 
         def fake_api(method, path, body=None, **_kw):
             seen.append((method, path))
@@ -1846,7 +1951,7 @@ class TestPostBackLinkComment:
     def test_creates_when_no_existing_marker(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        seen: list[tuple] = []
+        seen: list[tuple[str, str, Any]] = []
 
         def fake_api(method, path, body=None, **_kw):
             seen.append((method, path, body))
@@ -1866,7 +1971,7 @@ class TestPostBackLinkComment:
     def test_patches_when_marker_present(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        seen: list[tuple] = []
+        seen: list[tuple[str, str, Any]] = []
 
         def fake_api(method, path, body=None, **_kw):
             seen.append((method, path, body))
@@ -1893,15 +1998,15 @@ class TestPostBackLinkComment:
     def test_loud_failure_on_post_error(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """gh_api raises CalledProcessError; post_back_link_comment must
+        """gh_api raises GitHubApiError; post_back_link_comment must
         propagate so the orchestrator can decide its fail-soft policy."""
         def fake_api(method, path, body=None, **_kw):
             if method == "GET":
                 return json.dumps([])
-            raise subprocess.CalledProcessError(1, "gh", stderr="boom")
+            raise GitHubApiError(500, "GET", "/x", "boom")
 
         monkeypatch.setattr(ar, "gh_api", fake_api)
-        with pytest.raises(subprocess.CalledProcessError):
+        with pytest.raises(GitHubApiError):
             ar.post_back_link_comment("o/r", 42, 99)
 
 
@@ -1914,7 +2019,7 @@ class TestApplyTerminalLabel:
     def test_posts_terminal_label(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        seen: list[tuple] = []
+        seen: list[tuple[str, str, Any]] = []
 
         def fake_api(method, path, body=None, **_kw):
             seen.append((method, path, body))
@@ -1933,13 +2038,13 @@ class TestApplyTerminalLabel:
     def test_loud_failure_on_post_error(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """gh_api raises CalledProcessError; apply_terminal_label must
+        """gh_api raises GitHubApiError; apply_terminal_label must
         propagate so the orchestrator can decide its fail-soft policy."""
         def fake_api(method, path, body=None, **_kw):
-            raise subprocess.CalledProcessError(1, "gh", stderr="boom")
+            raise GitHubApiError(500, "GET", "/x", "boom")
 
         monkeypatch.setattr(ar, "gh_api", fake_api)
-        with pytest.raises(subprocess.CalledProcessError):
+        with pytest.raises(GitHubApiError):
             ar.apply_terminal_label("o/r", 42)
 
 
@@ -1977,14 +2082,14 @@ def _orchestrator_recorder(
     back_link_comments: list[dict[str, Any]] | None = None,
     back_link_post_error: bool = False,
     terminal_label_post_error: bool = False,
-) -> list[tuple]:
+) -> list[tuple[str, str, Any]]:
     """Replace ar.gh_api with a recorder that returns canned data per path.
 
     Defaults ``review_comments`` to a single non-empty entry so existing
     happy-path tests still reach the issue-creation branch. New tests
     that exercise the zero-review-comments skip pass ``review_comments=[]``.
     Set ``comments_error=True`` to make the comments endpoint raise the
-    same ``CalledProcessError`` that gh_api raises in production -- used
+    same ``GitHubApiError`` that gh_api raises in production; used
     to test the fail-safe fallback in run().
 
     ``pr_detail`` controls the response of ``GET /repos/{repo}/pulls/{n}``
@@ -1994,7 +2099,7 @@ def _orchestrator_recorder(
     ``check_runs`` controls the second-call response; ``check_runs_error``
     makes the PR-detail call raise to exercise the fail-soft path.
     """
-    seen: list[tuple] = []
+    seen: list[tuple[str, str, Any]] = []
     existing = existing or []
     commits = commits or []
     if review_comments is None:
@@ -2019,9 +2124,7 @@ def _orchestrator_recorder(
             return json.dumps({"items": existing})
         if method == "GET" and "/pulls/" in path and "/comments" in path:
             if comments_error:
-                raise subprocess.CalledProcessError(
-                    1, "gh", stderr="comments endpoint boom"
-                )
+                raise GitHubApiError(500, "GET", "/x", "comments endpoint boom")
             return json.dumps(review_comments)
         if method == "GET" and "/pulls/" in path and "/commits" in path:
             return json.dumps(commits)
@@ -2029,9 +2132,7 @@ def _orchestrator_recorder(
             return json.dumps({"check_runs": check_runs})
         if method == "GET" and "/pulls/" in path:
             if check_runs_error:
-                raise subprocess.CalledProcessError(
-                    1, "gh", stderr="pulls endpoint boom"
-                )
+                raise GitHubApiError(500, "GET", "/x", "pulls endpoint boom")
             if pr_detail_sequence is not None:
                 i = pr_detail_idx[0]
                 pr_detail_idx[0] = i + 1
@@ -2052,9 +2153,7 @@ def _orchestrator_recorder(
             and path.endswith("/comments")
         ):
             if back_link_post_error:
-                raise subprocess.CalledProcessError(
-                    1, "gh", stderr="back-link post boom"
-                )
+                raise GitHubApiError(500, "GET", "/x", "back-link post boom")
             return ""
         if (
             method == "POST"
@@ -2062,9 +2161,7 @@ def _orchestrator_recorder(
             and path.endswith("/labels")
         ):
             if terminal_label_post_error:
-                raise subprocess.CalledProcessError(
-                    1, "gh", stderr="terminal-label post boom"
-                )
+                raise GitHubApiError(500, "GET", "/x", "terminal-label post boom")
             return ""
         if method == "PATCH" and "/issues/comments/" in path:
             return ""
@@ -2104,7 +2201,6 @@ class TestComputeRepairSignals:
             "inline_review_comments": True,
             "fix_typed_title": False,
             "multi_commit_pr": False,
-            "verification_pairs_failed": False,
         }
 
     def test_body_cites_refs_signal_is_retired(self) -> None:
@@ -2634,7 +2730,7 @@ class TestExtractVerificationPairs:
             "pytest 1828 passed in 203.91s; ruff / mypy / prek pass;",
             "one commit on the branch",
             "`::error file=/tmp/synthetic.md,line=2::assertive-existence "
-            "phrase` and exit 1 -- gate trips as designed",
+            "phrase` and exit 1; gate trips as designed",
         ],
     )
     def test_issue_596_g3_success_observations_are_passing(
@@ -2695,7 +2791,7 @@ class TestExtractVerificationPairs:
             "`sha256-oLiW6MvdEEQRJemJqhm+FakeTestHashValue=`",
             # #810 corpus: grep output with "guard block present" observation.
             (
-                'guard block present -- `if [[ ! -x "/usr/local/bin/apm" ]];'
+                'guard block present; `if [[ ! -x "/usr/local/bin/apm" ]];'
                 " then install_nix_binary apm-cli apm;"
                 " else echo apm already present; fi`"
             ),
@@ -2872,7 +2968,7 @@ class TestRepairHistoryTableNewRows:
         table = ar._build_repair_history_table(None, [], 1, pairs)
         # Failing pair retains the Verification fail: prefix.
         assert "Verification fail: `ruff check .`" in table
-        # Passing pair leaves no row -- in particular not a fail row.
+        # Passing pair leaves no row; in particular not a fail row.
         assert "Verification fail: `uv run pytest -v`" not in table
         assert "246 passed in 198.59s" not in table
 
@@ -2891,7 +2987,7 @@ class TestRepairHistoryTableNewRows:
             "  result: no matches; both files are ASCII-clean\n"
             "- command: `negative fixture`\n"
             "  result: `::error file=/tmp/synthetic.md,line=2::"
-            "assertive-existence phrase` and exit 1 -- gate trips as designed\n"
+            "assertive-existence phrase` and exit 1; gate trips as designed\n"
             "- command: `ruff check .`\n"
             "  result: `exit 1`\n"
         )
@@ -2913,7 +3009,6 @@ class TestIssue592Corpus:
         "body_cites_refs": False,
         "fix_typed_title": False,
         "multi_commit_pr": False,
-        "verification_pairs_failed": False,
     }
 
     @staticmethod
@@ -2948,8 +3043,13 @@ class TestIssue592Corpus:
             (553, "G3", {}, ["docs: x"], ["all checks have passed"], "", False),
             (557, "G3", {}, ["ci: x", "Merge branch 'main' into f"], ["`OK: no direct pip install.` exit 0"], "", False),
             (561, "G3", {}, ["ci: x"], ["pytest 1828 passed in 203.91s"], "", False),
-            (567, "G4", {"verification_pairs_failed": True}, ["ci: x"], ["`not run; local uv 0.11.16 does not match repository required-version ==0.11.11`"], "", True),
-            (570, "G4", {"verification_pairs_failed": True}, ["feat: x"], ["`blocked: ModuleNotFoundError: No module named 'hypothesis'`"], "", True),
+            # G4 (#1236): verification-prose failures are now non-actionable
+            # policy-artifact anomaly hints, so a verification-only PR skips.
+            # The genuine local failures these encode would still open a retro
+            # when a CI failure / iteration commit co-fires; prose alone no
+            # longer does.
+            (567, "G4", {}, ["ci: x"], ["`not run; local uv 0.11.16 does not match repository required-version ==0.11.11`"], "", False),
+            (570, "G4", {}, ["feat: x"], ["`blocked: ModuleNotFoundError: No module named 'hypothesis'`"], "", False),
             (543, "G5", {"fix_typed_title": True}, ["fix(harness): remove gate"], ["`378 passed in 200.38s`"], "fix", False),
         ],
     )
@@ -2963,12 +3063,10 @@ class TestIssue592Corpus:
         pr_type: str,
         expected: bool,
     ) -> None:
-        merged_signals = dict(self._BASE_SIGNALS)
-        merged_signals.update(signals)
+        # `signals` is retained for corpus documentation of what fired on
+        # the historical retro; the live disposition is now derived purely
+        # from the rendered rows (verification_pairs_failed retired in #1236).
         pairs = [self._pair(result) for result in results]
-        assert merged_signals["verification_pairs_failed"] is any(
-            not pair.passed for pair in pairs
-        )
         rows = ar._repair_history_rows([], commits, len(commits), pairs, pr_type)
         standalone = bool(rows) and not ar._has_only_exempt_policy_artifact_rows(
             rows
@@ -2999,7 +3097,6 @@ class TestIssue927Corpus:
         "body_cites_refs": False,
         "fix_typed_title": False,
         "multi_commit_pr": False,
-        "verification_pairs_failed": False,
     }
 
     @staticmethod
@@ -3081,7 +3178,7 @@ class TestIssue927Corpus:
                 {"body_cites_refs": True},
                 ["build(devcontainer): skip apm install when already baked into image (#805)"],
                 [
-                    'guard block present -- `if [[ ! -x "/usr/local/bin/apm" ]];'
+                    'guard block present; `if [[ ! -x "/usr/local/bin/apm" ]];'
                     " then install_nix_binary apm-cli apm;"
                     " else echo apm already present; fi`"
                 ],
@@ -3131,12 +3228,10 @@ class TestIssue927Corpus:
         pr_type: str,
         expected: bool,
     ) -> None:
-        merged_signals = dict(self._BASE_SIGNALS)
-        merged_signals.update(signals)
+        # `signals` is retained for corpus documentation of what fired on
+        # the historical retro; the live disposition is now derived purely
+        # from the rendered rows (verification_pairs_failed retired in #1236).
         pairs = [self._pair(result) for result in results]
-        assert merged_signals["verification_pairs_failed"] is any(
-            not pair.passed for pair in pairs
-        )
         rows = ar._repair_history_rows([], commits, len(commits), pairs, pr_type)
         standalone = bool(rows) and not ar._has_only_exempt_policy_artifact_rows(
             rows
@@ -3259,7 +3354,10 @@ class TestRepairHistoryFourColumnSchema:
         )
         assert ar._REPAIR_NEXT_ACTION_FILL in row_line
 
-    def test_verification_fail_row_carries_next_action_sentinel(self) -> None:
+    def test_verification_fail_row_is_exempt_policy_artifact(self) -> None:
+        # Refs #1236: prose Verification rows are non-actionable anomaly
+        # hints, marked policy-artifact with a dash next-action like the
+        # Revert / Multi-commit rows, so a verification-only PR skips.
         pairs = [
             ar.VerificationPair(command="pytest", result="1 failed", passed=False)
         ]
@@ -3271,7 +3369,9 @@ class TestRepairHistoryFourColumnSchema:
             for line in table.splitlines()
             if "Verification fail: pytest" in line
         )
-        assert ar._REPAIR_NEXT_ACTION_FILL in row_line
+        assert ar._POLICY_ARTIFACT_MARKER in row_line
+        cells = [c.strip() for c in row_line.strip()[1:-1].split("|")]
+        assert cells[3] == "--"
 
     def test_artifact_row_next_action_is_dash(self) -> None:
         # Multi-commit PR is a policy-artifact row.
@@ -3291,8 +3391,8 @@ class TestRepairHistoryFourColumnSchema:
         )
         cells = [c.strip() for c in row_line.strip()[1:-1].split("|")]
         assert len(cells) == 4
-        assert cells[0] == "--"
-        assert cells[3] == "--"
+        assert cells[0] == "n/a"
+        assert cells[3] == "n/a"
 
     def test_render_appended_row_returns_three_cells(self) -> None:
         pr = _make_pr(number=88, title="fix(x): y", merged_at="2026-06-01T00:00:00Z")
@@ -3342,15 +3442,15 @@ class TestVerifyRetroRepairCompleteness:
     def test_artifact_only_passes(self) -> None:
         body = self._wrap(
             f"| 1 | Multi-commit PR | {ar._POLICY_ARTIFACT_MARKER} 3 commits "
-            f"| -- |\n"
+            f"|; |\n"
         )
         assert ar.verify_retro_repair_completeness(body) == []
 
     def test_positive_control_passes(self) -> None:
         body = self._wrap(
-            "| -- | (no automated repair signals detected) | "
+            "|; | (no automated repair signals detected) | "
             "positive-control: no repair taxonomy classification requested "
-            "| -- |\n"
+            "|; |\n"
         )
         assert ar.verify_retro_repair_completeness(body) == []
 
@@ -3794,7 +3894,7 @@ class TestAppendRepairHistoryRowIntegration:
     def test_patches_retro_body_when_marker_present(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        seen: list[tuple] = []
+        seen: list[tuple[str, str, Any]] = []
 
         def fake_api(method, path, body=None, **_kw):
             seen.append((method, path, body))
@@ -3816,7 +3916,7 @@ class TestAppendRepairHistoryRowIntegration:
     def test_no_patch_when_markers_missing(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        seen: list[tuple] = []
+        seen: list[tuple[str, str, Any]] = []
 
         def fake_api(method, path, body=None, **_kw):
             seen.append((method, path, body))
@@ -3864,7 +3964,7 @@ def _retro_body(checked: int = 0) -> str:
     Mirrors the literal section emitted by :func:`auto_retro.build_retro_body`
     so the slicer reads it the same way it would read a real auto-opened
     retro. Keeping the section text byte-aligned with the production
-    body protects against drift -- a future template change that breaks
+    body protects against drift; a future template change that breaks
     the slice would also break these fixtures, surfacing the regression.
     """
     boxes = ["[ ]"] * 5
@@ -4025,12 +4125,12 @@ def _sentinel_recorder(
     comments_error_for: set[int] | None = None,
     post_error_for: set[int] | None = None,
     patch_error_for: set[int] | None = None,
-) -> list[tuple]:
+) -> list[tuple[str, str, Any]]:
     """Record gh_api calls for sentinel_run tests.
 
     Mirrors :func:`_orchestrator_recorder` for the run() flow. Each
     ``*_error_for`` set lists the retro issue numbers whose endpoints
-    should raise :class:`subprocess.CalledProcessError` so the fail-soft
+    should raise :class:`_github_api.GitHubApiError` so the fail-soft
     contract can be exercised per-retro.
     """
     open_retros = open_retros or []
@@ -4038,11 +4138,11 @@ def _sentinel_recorder(
     comments_error_for = comments_error_for or set()
     post_error_for = post_error_for or set()
     patch_error_for = patch_error_for or set()
-    seen: list[tuple] = []
+    seen: list[tuple[str, str, Any]] = []
 
     def _number_from_path(path: str) -> int:
         # Paths look like /repos/o/r/issues/123/comments or
-        # /repos/o/r/issues/123 -- split and grab the integer segment.
+        # /repos/o/r/issues/123; split and grab the integer segment.
         for part in path.split("?", 1)[0].split("/"):
             if part.isdigit():
                 return int(part)
@@ -4052,30 +4152,22 @@ def _sentinel_recorder(
         seen.append((method, path, body))
         if method == "GET" and path.startswith("/search/issues"):
             if search_error:
-                raise subprocess.CalledProcessError(
-                    1, "gh", stderr="search boom"
-                )
+                raise GitHubApiError(500, "GET", "/x", "search boom")
             return json.dumps({"items": open_retros})
         if method == "GET" and path.endswith("/comments?per_page=100"):
             number = _number_from_path(path)
             if number in comments_error_for:
-                raise subprocess.CalledProcessError(
-                    1, "gh", stderr="comments boom"
-                )
+                raise GitHubApiError(500, "GET", "/x", "comments boom")
             return json.dumps(comments_by_number.get(number, []))
         if method == "POST" and path.endswith("/comments"):
             number = _number_from_path(path)
             if number in post_error_for:
-                raise subprocess.CalledProcessError(
-                    1, "gh", stderr="post boom"
-                )
+                raise GitHubApiError(500, "GET", "/x", "post boom")
             return ""
         if method == "PATCH" and "/issues/" in path:
             number = _number_from_path(path)
             if number in patch_error_for:
-                raise subprocess.CalledProcessError(
-                    1, "gh", stderr="patch boom"
-                )
+                raise GitHubApiError(500, "GET", "/x", "patch boom")
             return ""
         return ""
 
@@ -4238,7 +4330,7 @@ class TestSentinelRun:
     def test_one_retro_failure_does_not_block_others(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Fail-soft: a CalledProcessError on retro #706 must NOT stop
+        """Fail-soft: a GitHubApiError on retro #706 must NOT stop
         the sentinel from processing #707 on the same tick."""
         seen = _sentinel_recorder(
             monkeypatch,
@@ -4379,6 +4471,24 @@ class TestSentinelRun:
         assert "#713" in text
         assert "#714" in text
         assert "inside inactivity window" in text
+
+
+class TestBuildSentinelSummary:
+    def test_reports_counts(self) -> None:
+        text = ar._build_sentinel_summary(
+            [11, 12], [(13, "inside inactivity window")], 14
+        )
+        assert "Closed: 2" in text
+        assert "Skipped: 1" in text
+        assert "#11" in text
+        assert "#13 (inside inactivity window)" in text
+
+    def test_long_closed_list_is_capped_with_overflow(self) -> None:
+        text = ar._build_sentinel_summary(list(range(1, 9)), [], 14)
+        assert "Closed: 8" in text
+        assert "#5" in text
+        assert "#6" not in text
+        assert "(+3 more)" in text
 
 
 class TestSentinelCli:
@@ -4579,7 +4689,7 @@ class TestParseSignalsFromRetroBody:
 
     def test_body_without_signals_line_returns_empty(self) -> None:
         # Pre-#582 legacy retros must contribute zero observations.
-        body = "## Facts\n\n- Source PR: #1 -- feat(x): hi\n"
+        body = "## Facts\n\n- Source PR: #1; feat(x): hi\n"
         assert ar.parse_signals_from_retro_body(body) == frozenset()
 
     def test_none_sentinel_returns_empty(self) -> None:
@@ -4615,7 +4725,7 @@ class TestParseSignalsFromRetroBody:
 
     def test_html_comment_signals_line_is_ignored(self) -> None:
         # An HTML-commented heading must NOT leak into the parser
-        # output -- the strip_html_comments boundary is exercised.
+        # output; the strip_html_comments boundary is exercised.
         body = (
             "## Facts\n\n<!-- - Signals fired: multi_commit_pr -->\n"
             "- Signals fired: fix_typed_title\n"
@@ -4698,7 +4808,7 @@ class TestComputePriorFromLabels:
 
     def test_unlabelled_retros_count_toward_denominator_only(self) -> None:
         # A past retro with no retro:tp/fp label still observes the
-        # signal -- it just doesn't move the numerator. This is the
+        # signal; it just doesn't move the numerator. This is the
         # "operator hasn't closed yet" case.
         past = [
             ar.PastRetro(
@@ -4716,29 +4826,29 @@ class TestComputePriorFromLabels:
         assert prior["multi_commit_pr"] == (0.5, 2)
 
     def test_epoch_cutoff_excludes_pre_epoch_retros(self) -> None:
-        # Refs #1227: retros below the epoch boundary measured the old
+        # Refs #1227, #1236: retros below the epoch boundary measured the old
         # signal semantics and must not drive the prior. With the cutoff,
         # only the post-epoch retro contributes; the pre-epoch fp retro
         # is dropped, so the signal degrades to the empty-prior net.
         past = [
             ar.PastRetro(
                 number=900,
-                signals=frozenset({"verification_pairs_failed"}),
+                signals=frozenset({"multi_commit_pr"}),
                 labels=frozenset({rl.RETRO_FP}),
             ),
             ar.PastRetro(
                 number=1300,
-                signals=frozenset({"verification_pairs_failed"}),
+                signals=frozenset({"multi_commit_pr"}),
                 labels=frozenset({rl.RETRO_TP}),
             ),
         ]
         # Pure tally (default epoch) sees both -> 1 fp of 2.
         assert ar.compute_prior_from_labels(past)[
-            "verification_pairs_failed"
+            "multi_commit_pr"
         ] == (0.5, 2)
         # With the epoch boundary the pre-epoch fp retro is excluded.
         gated = ar.compute_prior_from_labels(past, epoch_min_number=1228)
-        assert gated["verification_pairs_failed"] == (0.0, 1)
+        assert gated["multi_commit_pr"] == (0.0, 1)
 
 
 class TestShouldSkipByPrior:
@@ -4756,7 +4866,7 @@ class TestShouldSkipByPrior:
 
     def test_inactive_signal_with_high_fp_rate_does_not_skip(self) -> None:
         # multi_commit_pr is the high-FP signal, but it did NOT fire on
-        # the current PR -- the prior should not block.
+        # the current PR; the prior should not block.
         prior = {"multi_commit_pr": (0.9, 10)}
         skip, _reason = ar.should_skip_by_prior(
             self._signals_with("inline_review_comments"), prior
@@ -5045,7 +5155,7 @@ class TestFetchPastRetroLabels:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         def boom(*_a: Any, **_kw: Any) -> str:
-            raise subprocess.CalledProcessError(returncode=1, cmd=["gh"])
+            raise GitHubApiError(500, "GET", "/x", "boom")
 
         monkeypatch.setattr(ar, "gh_api", boom)
         # Soft-fail: the retro flow proceeds with empty prior.
@@ -5081,3 +5191,59 @@ class TestFetchPastRetroLabels:
         past = ar.fetch_past_retro_labels("o/r")
         assert past[0].signals == frozenset()
         assert rl.RETRO_FP in past[0].labels
+
+
+class TestCompatibilityReexports:
+    """The pure-layer split (#1725) must preserve auto_retro's public
+    attribute surface. Callers and downstream repos use the documented
+    ``import auto_retro as ar; ar.<name>`` shape, so a future re-split that
+    drops a re-export would raise AttributeError for them. This locks the
+    set of names that were auto_retro attributes before the split. Refs the
+    PR #1727 review (re-export omission).
+    """
+
+    # Names that resolved on auto_retro before the split (label constants
+    # originally imported from _retro_labels, the trusted-bot set, and the
+    # parser result-classification constants moved to _auto_retro_parse).
+    _COMPAT_NAMES: ClassVar[tuple[str, ...]] = (
+        "ALL_RETRO_LABELS",
+        "RETRO_FP",
+        "RETRO_FP_CANDIDATE",
+        "RETRO_TENTATIVE",
+        "RETRO_TP",
+        "PRIOR_MIN_SAMPLE_SIZE",
+        "PRIOR_SKIP_THRESHOLD",
+        "PRIOR_TENTATIVE_THRESHOLD",
+        "_TRUSTED_BOT_LOGINS",
+        "_TYPE_SCOPE_RE",
+        "_SIGNALS_FIRED_LINE_RE",
+        "_RESULT_PASSING_PREFIXES",
+        "_RESULT_PASSING_OBSERVATION_PHRASES",
+        "_RESULT_PASSING_NUMERIC_RE",
+        "_RESULT_PASSING_ALL_UNIT_RE",
+        "_RESULT_PASSING_COUNT_RE",
+        "_RESULT_PASSING_TRAILING_OK_RE",
+        "_RESULT_PASSING_NON_ASCII_ZERO_RE",
+        "_RESULT_PASSING_NIX_QUOTED_RE",
+        "_RESULT_PASSING_GREP_N_RE",
+        "_RESULT_PASSING_SHASUM_RE",
+        "_RESULT_PASSING_HEX_HASH_RE",
+        "_RESULT_PASSING_PKG_VERSION_RE",
+        "_RESULT_PASSING_NIX_TOOL_RE",
+        "_RESULT_PASSING_EXIT_ZERO_RE",
+        "_RESULT_FAILING_COUNT_RE",
+    )
+
+    @pytest.mark.parametrize("name", _COMPAT_NAMES)
+    def test_compat_name_resolves_on_auto_retro(self, name: str) -> None:
+        assert hasattr(ar, name), (
+            f"auto_retro.{name} was dropped from the re-export facade; "
+            "downstream 'import auto_retro as ar; ar.<name>' callers break"
+        )
+        assert name in ar.__all__, f"{name} re-exported but missing from __all__"
+
+    def test_reexported_label_constant_is_canonical(self) -> None:
+        # The re-export must be the same object as its _retro_labels source,
+        # not a divergent copy.
+        assert ar.RETRO_FP is rl.RETRO_FP
+        assert ar.ALL_RETRO_LABELS is rl.ALL_RETRO_LABELS
