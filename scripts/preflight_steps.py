@@ -94,6 +94,8 @@ STEPS: tuple[Step, ...] = (
         # space-hyphen-hyphen-space prose separator. Skips noqa lines,
         # Markdown table rows, and structured-data extensions (.yml, .yaml,
         # .sh, .json, .toml, .lock, .sql). Complements scan_repo_em_dash.py.
+        # Refs #2069: this pre-push hook only fires before an agent push; the
+        # CI scan-double-hyphen job re-runs the scan to cover post-merge commits.
         name="scan_repo_double_hyphen",
         argv=(
             "python3",
