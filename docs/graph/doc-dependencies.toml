@@ -191,6 +191,18 @@ path = "scripts/scan_runbook_template_drift.py"
 type = "harness_script"
 description = "CI gate: requires new/changed docs/runbooks/*.md to follow TEMPLATE.md section skeleton (diff-scoped, blocking, PR-body waiver). Refs #2065."
 
+[[nodes]]
+id = "preflight_runbook"
+path = "docs/runbooks/preflight.md"
+type = "runbook"
+description = "Preflight verification runbook; its 'Emergency bypass' section documents the PREFLIGHT_SKIP* lever surface exposed by .githooks/pre-push. Refs #2152."
+
+[[nodes]]
+id = "scan_bypass_lever_doc_drift"
+path = "scripts/scan_bypass_lever_doc_drift.py"
+type = "harness_script"
+description = "CI/preflight gate: requires PREFLIGHT_SKIP* bypass-lever name-set parity between .githooks/pre-push and docs/runbooks/preflight.md, so a changed escape hatch co-updates its runbook. Refs #2152."
+
 # ---------------------------------------------------------------------------
 # Edges
 # ---------------------------------------------------------------------------
@@ -351,3 +363,14 @@ to = "scan_runbook_template_drift"
 type = "enforced_by"
 severity = "advisory"
 note = "scan_runbook_template_drift enforces the TEMPLATE.md section skeleton (REQUIRED_SECTIONS)."
+
+# preflight_runbook documents the .githooks/pre-push bypass-lever surface; the
+# bypass-lever drift gate enforces name-set parity between them. Advisory, not
+# blocking: a precise name-set gate already requires the co-change, so a
+# blocking edge would over-fire on every hook edit that does not touch a lever.
+[[edges]]
+from = "preflight_runbook"
+to = "scan_bypass_lever_doc_drift"
+type = "enforced_by"
+severity = "advisory"
+note = "scan_bypass_lever_doc_drift enforces PREFLIGHT_SKIP* lever parity between the runbook and .githooks/pre-push."
