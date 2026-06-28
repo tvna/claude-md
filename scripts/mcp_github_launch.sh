@@ -35,9 +35,25 @@ require_env() {
   fi
 }
 
+# The private key may be provided literally (GITHUB_APP_PRIVATE_KEY) or as a
+# readable file (GITHUB_APP_PRIVATE_KEY_FILE, e.g. a Vault Agent template sink).
+# The minter reads whichever is set; the wrapper only checks one is present so a
+# missing key fails loudly here instead of as an opaque MCP startup failure.
+require_app_private_key() {
+  if [ -n "${GITHUB_APP_PRIVATE_KEY:-}" ]; then
+    return 0
+  fi
+  if [ -n "${GITHUB_APP_PRIVATE_KEY_FILE:-}" ] && [ -r "${GITHUB_APP_PRIVATE_KEY_FILE}" ]; then
+    return 0
+  fi
+  echo "mcp_github_launch: set GITHUB_APP_PRIVATE_KEY (PEM literal) or GITHUB_APP_PRIVATE_KEY_FILE (a readable PEM file, e.g. a Vault Agent sink)." >&2
+  echo "See docs/standards/github-mcp-app-auth.md for the App credential setup." >&2
+  exit 1
+}
+
 require_env GITHUB_APP_ID
 require_env GITHUB_APP_INSTALLATION_ID
-require_env GITHUB_APP_PRIVATE_KEY
+require_app_private_key
 
 # Mint the short-lived installation token. The token is captured into a
 # variable (never written to a file or a log) and exported so the chosen backend
