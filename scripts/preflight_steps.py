@@ -527,6 +527,18 @@ STEPS: tuple[Step, ...] = (
         argv=("python3", "scripts/preflight_branch_base.py", "verify"),
     ),
     Step(
+        # Refs #1959. Rejects a push whose origin/main..HEAD range carries an
+        # unsigned commit (the Codex Desktop/GUI push that never passes through
+        # the agent Bash tool, so scripts/preflight_push_unsigned_commits.py
+        # (#2138) cannot see it). Both gates share _commit_signing.is_unsigned
+        # (the gpgsig-header model). Runs AFTER preflight_branch_base, which
+        # fetches the live base so origin/main is current. preflight-only (no
+        # pull_request: workflow invokes it; same posture as preflight_branch_base
+        # / preflight_merge_index_budget).
+        name="preflight_signed_commits",
+        argv=("python3", "scripts/preflight_signed_commits.py", "verify"),
+    ),
+    Step(
         # Refs #2012. Measures docs/INDEX.md in the test-merge of HEAD with the
         # freshly fetched live base (git merge-tree --write-tree, no working-tree
         # mutation), catching additive merge-time budget overflow (the #2007
