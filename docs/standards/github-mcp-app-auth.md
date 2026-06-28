@@ -73,10 +73,13 @@ secret mechanism, or your shell). Only `GITHUB_APP_PRIVATE_KEY` is secret.
 | `GITHUB_APP_ID` | no | numeric App ID |
 | `GITHUB_APP_INSTALLATION_ID` | no | numeric Installation ID |
 | `GITHUB_APP_PRIVATE_KEY` | **yes** | full PEM text of the App private key |
+| `GITHUB_APP_PRIVATE_KEY_FILE` | yes (path) | optional; path to a file holding the PEM (e.g. a Vault Agent template sink). Used only when `GITHUB_APP_PRIVATE_KEY` is unset; the literal env var takes precedence. See [`github-app-key-vault-agent.md`](../runbooks/github-app-key-vault-agent.md). |
 | `GITHUB_API_URL` | no | optional; GitHub Enterprise Server API base (default `https://api.github.com`) |
 
 The private key value MUST NOT be pasted into chat, issues, PRs, commits, logs,
-or screenshots. Store it only in the secret mechanism.
+or screenshots. Store it only in the secret mechanism. When the key is delivered
+as a file via `GITHUB_APP_PRIVATE_KEY_FILE`, keep that file `0600` and outside
+the repository tree.
 
 ## Rotation
 

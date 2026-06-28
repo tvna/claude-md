@@ -160,6 +160,8 @@ Detection is string-match based:
 | `preflight_push_nonempty.py` | agent-hook | `codex:PreToolUse` |
 | `preflight_push_session_branch.py` | agent-hook | `claude:PreToolUse` |
 | `preflight_push_session_branch.py` | agent-hook | `codex:PreToolUse` |
+| `preflight_push_unsigned_commits.py` | agent-hook | `claude:PreToolUse` |
+| `preflight_push_unsigned_commits.py` | agent-hook | `codex:PreToolUse` |
 | `preflight_resolve_review_thread.py` | agent-hook | `claude:PreToolUse` |
 | `preflight_resolve_review_thread.py` | agent-hook | `codex:PreToolUse` |
 | `preflight_session_base_freshness.py` | agent-hook | `claude:PreToolUse` |
@@ -187,6 +189,7 @@ Detection is string-match based:
 | `scan_apm_ascii.py` | workflow | `verify-pr.yml (portable-pr-policy)` |
 | `scan_apm_lock_drift.py` | workflow | `verify-pr.yml (portable-pr-policy)` |
 | `scan_apm_portability.py` | workflow | `verify-pr.yml (portable-pr-policy)` |
+| `scan_bypass_lever_doc_drift.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
 | `scan_commit_type_label_drift.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
 | `scan_compile_from_source.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
 | `scan_design_philosophy_drift.py` | workflow | `verify-pr.yml (portable-pr-policy)` |
