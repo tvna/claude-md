@@ -74,6 +74,7 @@ import scan_allowlist_rationale
 import scan_apm_ascii
 import scan_apm_lock_drift
 import scan_apm_portability
+import scan_bypass_lever_doc_drift
 import scan_commit_type_label_drift
 import scan_compile_from_source
 import scan_design_philosophy_drift
@@ -257,6 +258,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("scan_nonexhaustive_invariant_drift.py", "verify"): "test_scan_nonexhaustive_invariant_drift_verify_matches_workflow_args",
     ("scan_hook_coverage_drift.py", "verify"): "test_scan_hook_coverage_drift_verify_matches_workflow_args",
     ("scan_hook_predicate_surface_drift.py", "verify"): "test_scan_hook_predicate_surface_drift_verify_matches_workflow_args",
+    ("scan_bypass_lever_doc_drift.py", "verify"): "test_scan_bypass_lever_doc_drift_verify_matches_workflow_args",
     ("scan_input_contract_drift.py", "verify"): "test_scan_input_contract_drift_verify_matches_workflow_args",
     ("scan_issue_anchor_drift.py", "verify"): "test_scan_issue_anchor_drift_verify_matches_workflow_args",
     ("scan_preflight_drift.py", "verify"): "test_scan_preflight_drift_verify_matches_workflow_args",
@@ -1740,6 +1742,12 @@ def test_scan_input_contract_drift_verify_matches_workflow_args() -> None:
     """Mirrors the ``Verify workflow-script input contracts`` step in
     ``.github/workflows/verify-agents.yml``. Refs #1087."""
     assert scan_input_contract_drift.main(["verify"]) == 0
+
+
+def test_scan_bypass_lever_doc_drift_verify_matches_workflow_args() -> None:
+    """Mirrors the ``Verify pre-push bypass levers stay documented in the
+    runbook`` step in ``.github/workflows/verify-agents.yml``. Refs #2152."""
+    assert scan_bypass_lever_doc_drift.main(["verify"]) == 0
 
 
 def test_scan_pr_body_quality_drift_verify_matches_workflow_args() -> None:
