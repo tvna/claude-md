@@ -43,6 +43,26 @@ def test_scan_text_returns_line_numbers() -> None:
     assert gate.scan_text(text) == [2, 4]
 
 
+def test_scan_text_flattens_shell_continuation() -> None:
+    # A `ruff format` split across a shell `\` continuation must still be
+    # caught, reported at the first physical line of the command (Codex review).
+    text = "noop\nuv run ruff \\\n  format scripts\ndone\n"
+    assert gate.scan_text(text) == [2]
+
+
+def test_scan_text_continuation_does_not_false_positive_on_ruff_check() -> None:
+    # `ruff \` then `check` must NOT match: only `ruff format` is banned.
+    text = "uv run ruff \\\n  check scripts tests\n"
+    assert gate.scan_text(text) == []
+
+
+def test_find_text_violations_flags_continued_invocation(tmp_path: Path) -> None:
+    repo = _make_repo(tmp_path)
+    (repo / ".githooks" / "pre-push").write_text("uv run ruff \\\n  format tests\n", encoding="utf-8")
+    rels = {str(rel) for rel, _ in gate.find_text_violations(repo)}
+    assert ".githooks/pre-push" in rels
+
+
 # ---------------------------------------------------------------------------
 # find_text_violations (filesystem boundary)
 # ---------------------------------------------------------------------------
