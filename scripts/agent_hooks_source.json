@@ -496,6 +496,16 @@
                 {
                   "type": "command",
                   "if": "Bash(*git push*)",
+                  "command": "python3 scripts/preflight_push_unsigned_commits.py"
+                }
+              ]
+            },
+            {
+              "matcher": "Bash",
+              "hooks": [
+                {
+                  "type": "command",
+                  "if": "Bash(*git push*)",
                   "command": "python3 scripts/preflight_push_base.py"
                 }
               ]
@@ -1262,6 +1272,16 @@
                   "type": "command",
                   "command": "python3 scripts/gate_unsigned_commit_bash.py",
                   "statusMessage": "Checking for commit-signing bypass"
+                }
+              ]
+            },
+            {
+              "matcher": "^Bash$",
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "python3 scripts/preflight_push_unsigned_commits.py",
+                  "statusMessage": "Checking pushed commits are signed"
                 }
               ]
             },

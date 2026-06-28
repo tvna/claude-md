@@ -371,6 +371,14 @@ STEPS: tuple[Step, ...] = (
         argv=("python3", "scripts/scan_hook_predicate_surface_drift.py", "verify"),
     ),
     Step(
+        # Refs #2152 (retro for PR #2134 / #2133). Fails when the set of
+        # PREFLIGHT_SKIP* emergency-bypass levers in .githooks/pre-push drifts
+        # from the set documented in docs/runbooks/preflight.md, so changing a
+        # documented escape hatch forces a co-update of its runbook.
+        name="scan_bypass_lever_doc_drift",
+        argv=("python3", "scripts/scan_bypass_lever_doc_drift.py", "verify"),
+    ),
+    Step(
         # Refs #1103. Fails when a tool a gate needs at runtime (a Step
         # required_bin) is not provisioned in flake.nix, so the devcontainer
         # cannot silently lack a tool the gates depend on.

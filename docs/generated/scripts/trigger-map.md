@@ -160,6 +160,8 @@ Detection is string-match based:
 | `preflight_push_nonempty.py` | agent-hook | `codex:PreToolUse` |
 | `preflight_push_session_branch.py` | agent-hook | `claude:PreToolUse` |
 | `preflight_push_session_branch.py` | agent-hook | `codex:PreToolUse` |
+| `preflight_push_unsigned_commits.py` | agent-hook | `claude:PreToolUse` |
+| `preflight_push_unsigned_commits.py` | agent-hook | `codex:PreToolUse` |
 | `preflight_resolve_review_thread.py` | agent-hook | `claude:PreToolUse` |
 | `preflight_resolve_review_thread.py` | agent-hook | `codex:PreToolUse` |
 | `preflight_session_base_freshness.py` | agent-hook | `claude:PreToolUse` |
@@ -218,6 +220,7 @@ Detection is string-match based:
 | `scan_provisioning_hook_serial.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
 | `scan_quality_standard_drift.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
 | `scan_repo_double_hyphen.py` | workflow | `verify-pr.yml (portable-pr-policy)` |
+| `scan_repo_double_hyphen.py` | workflow | `verify-pr.yml (scan-double-hyphen)` |
 | `scan_repo_em_dash.py` | workflow | `verify-pr.yml (portable-pr-policy)` |
 | `scan_retro_followup_drift.py` | workflow | `daily-maintenance.yml (scan)` |
 | `scan_runbook_template_drift.py` | workflow | `verify-pr.yml (portable-pr-policy)` |

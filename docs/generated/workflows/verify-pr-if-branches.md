@@ -8,11 +8,13 @@ flowchart TD
     T_pull_request(["on: pull_request\ntypes: ['opened', 'edited', 'synchronize', '..."])
 
     J_portable_pr_policy["portable-pr-policy"]
+    J_scan_double_hyphen["scan-double-hyphen"]
     J_verify_design_philosophy["verify-design-philosophy"]
     J_verify_dependabot_labels["verify-dependabot-labels"]
     J_verify_ruleset_sync["verify-ruleset-sync"]
 
     T_pull_request --> J_portable_pr_policy
+    T_pull_request --> J_scan_double_hyphen
     T_pull_request --> J_verify_design_philosophy
     T_pull_request --> J_verify_dependabot_labels
     T_pull_request --> J_verify_ruleset_sync
