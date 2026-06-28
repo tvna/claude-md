@@ -271,8 +271,8 @@ def _iter_push_specs(command: str) -> list[tuple[str, str, str]]:
     specs: list[tuple[str, str, str]] = []
     for segment in _SEGMENT_SPLIT.split(command):
         segment = segment.strip()
-        if not segment:
-            continue
+        if "push" not in segment:
+            continue  # skip the shlex tokenization for a non-push segment
         push_args = _push_args_in_segment(segment)
         if push_args is None:
             continue
@@ -288,8 +288,7 @@ def _rev_parse(runner: _Runner, ref: str) -> str | None:
         return None
     if result.returncode != 0:
         return None
-    sha = result.stdout.strip()
-    return sha or None
+    return result.stdout.strip() or None
 
 
 def _commits_for_spec(
@@ -349,8 +348,8 @@ def _is_unsigned(runner: _Runner, sha: str) -> bool:
     if result.returncode != 0:
         return False
     for line in result.stdout.splitlines():
-        if not line.strip():
-            break  # end of header section; the message follows
+        if not line:
+            break  # the empty line ends the header section; the message follows
         if line.startswith("gpgsig"):
             return False  # a signature header is present
     return True

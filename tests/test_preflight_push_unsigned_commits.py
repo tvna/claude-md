@@ -435,8 +435,12 @@ class TestIterPushSpecs:
     def test_malformed_quote_segment_skipped(self) -> None:
         assert subject._iter_push_specs('git push origin "feat/x') == []
 
-    def test_git_subcommand_not_push(self) -> None:
-        assert subject._iter_push_specs("git -c k=v status") == []
+    def test_git_non_push_subcommand_mentioning_push(self) -> None:
+        # A git command whose path/args mention "push" but whose subcommand is
+        # not push (passes the cheap "push" substring guard, rejected by the
+        # tokenizing parser).
+        assert subject._iter_push_specs("git add pushlog.txt") == []
+        assert subject._iter_push_specs("git -c k=v log --grep=push") == []
 
 
 # ---------------------------------------------------------------------------

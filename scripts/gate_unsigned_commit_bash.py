@@ -17,8 +17,10 @@ one category covered end to end):
   invocation. It is necessary but not sufficient: it cannot see a commit that
   lands unsigned for a reason other than an explicit bypass flag.
 - ``preflight_push_unsigned_commits.py`` closes that remaining hole at the push
-  boundary by running ``git verify-commit`` on each commit a Bash ``git push``
-  would ship and denying the push when any is unsigned. This catches the Codex
+  boundary by inspecting each commit a Bash ``git push`` would ship for a raw
+  ``gpgsig`` header (via ``git cat-file commit``, not ``git verify-commit``,
+  which false-positives where ``gpg.ssh.allowedSignersFile`` is unconfigured)
+  and denying the push when any commit carries none. This catches the Codex
   Desktop case where the worktree carries no signing key, so a plain
   ``git commit`` produces an unsigned commit even with ``commit.gpgsign=true``
   (Issue #2138). That is the agent-Bash-*push* sibling, where this gate is the
