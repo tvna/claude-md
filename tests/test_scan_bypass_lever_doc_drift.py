@@ -39,6 +39,24 @@ def test_extract_levers_empty_when_absent() -> None:
     assert g.extract_levers("no levers here") == frozenset()
 
 
+def test_extract_levers_captures_digit_suffixed_token() -> None:
+    # Regression for the Codex P2 review on #2155: a future digit-suffixed lever
+    # must be captured as its own token, not collapsed onto the bare prefix the
+    # runbook already documents (which would report false parity).
+    assert g.extract_levers("PREFLIGHT_SKIP2") == frozenset({"PREFLIGHT_SKIP2"})
+    assert g.extract_levers("PREFLIGHT_SKIP_STEPS2") == frozenset({"PREFLIGHT_SKIP_STEPS2"})
+
+
+def test_digit_suffixed_lever_in_hook_is_drift_against_prefix_only_runbook() -> None:
+    # The hook gains PREFLIGHT_SKIP2; the runbook documents only PREFLIGHT_SKIP.
+    # Parity must NOT hold.
+    hook = g.extract_levers("PREFLIGHT_SKIP\nPREFLIGHT_SKIP2\n")
+    doc = g.extract_levers("`PREFLIGHT_SKIP`\n")
+    problems = g.find_drift(hook, doc)
+    assert len(problems) == 1
+    assert "PREFLIGHT_SKIP2" in problems[0]
+
+
 # ---------------------------------------------------------------------------
 # drift detection
 # ---------------------------------------------------------------------------

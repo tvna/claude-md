@@ -69,10 +69,14 @@ RUNBOOK_PATH = REPO_ROOT / "docs" / "runbooks" / "preflight.md"
 
 _SCRIPT = "scan_bypass_lever_doc_drift"
 
-# The bypass-lever environment-variable family. The trailing ``[A-Z_]*`` lets
-# the longest token win (``PREFLIGHT_SKIP_ALL`` over a bare ``PREFLIGHT_SKIP``),
-# and the closing ``\b`` stops a partial match inside an even longer token.
-_LEVER_RE = re.compile(r"\bPREFLIGHT_SKIP[A-Z_]*")
+# The bypass-lever environment-variable family. The trailing ``[A-Z0-9_]*`` lets
+# the longest token win (``PREFLIGHT_SKIP_ALL`` over a bare ``PREFLIGHT_SKIP``)
+# and includes digits so a future digit-suffixed lever such as
+# ``PREFLIGHT_SKIP2`` or ``PREFLIGHT_SKIP_STEPS2`` is captured as its own token
+# instead of collapsing onto the bare prefix already in the runbook (which would
+# report false parity and defeat the added-lever check). The closing ``\b`` pins
+# the match to a full shell-identifier token.
+_LEVER_RE = re.compile(r"\bPREFLIGHT_SKIP[A-Z0-9_]*\b")
 
 
 def extract_levers(text: str) -> frozenset[str]:
