@@ -55,6 +55,11 @@ _REMOTE_ENV_VAR = "CLAUDE_CODE_REMOTE"
 # lookahead keeps ``git commit-tree`` and similar plumbing out.
 _GIT_COMMIT_RE = re.compile(r"\bgit\s+commit(?![\w-])")
 
+# Command surface this hook acts on, read by scan_hook_predicate_surface_drift.py
+# to verify the Bash(*git commit*) if: predicate admits it (a narrower predicate
+# would silently skip a command the script handles, the PR #2120 class). Refs #2133.
+HOOK_GIT_SUBCOMMANDS = frozenset({"commit"})
+
 _HEAD_REF_PREFIX = "ref: refs/heads/"
 
 
