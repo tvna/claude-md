@@ -19,10 +19,12 @@ firing and forcing the decision to be made deliberately.
 
 Two complementary surfaces are scanned:
 
-* Text surfaces (workflow YAML, the ``.githooks`` hooks, and
-  ``.pre-commit-config.yaml``): a regex over non-comment lines flags any
-  ``ruff format`` invocation. A line carrying :data:`ACK_MARKER` is exempt for
-  a deliberate, reviewed future adoption (mirrors ``scan_workflow_pip.py``).
+* Text surfaces (workflow YAML, composite-action ``action.yml`` under
+  ``.github/actions`` whose ``run:`` shell executes inline in CI, the
+  ``.githooks`` hooks, and ``.pre-commit-config.yaml``): a regex over
+  non-comment lines flags any ``ruff format`` invocation. A line carrying
+  :data:`ACK_MARKER` is exempt for a deliberate, reviewed future adoption
+  (mirrors ``scan_workflow_pip.py``).
 * The preflight manifest (``scripts/preflight_steps.STEPS``): each step's
   ``argv`` is a tuple, so a text regex cannot see ``ruff format`` split across
   ``("ruff", "format")``; the argv tuples are inspected directly for that
@@ -63,7 +65,13 @@ _HOOK_AND_CONFIG_FILES = (
     ".githooks/pre-push",
     ".pre-commit-config.yaml",
 )
-_WORKFLOW_SUBDIR = ".github/workflows"
+# Directories whose YAML defines steps that execute in CI: workflow files under
+# ``.github/workflows`` and composite-action definitions under
+# ``.github/actions/<name>/action.yml``. A composite action runs its ``run:``
+# shell inline in the calling job, so it is as much a gate surface as a workflow
+# and must be scanned too (a ``ruff format`` step there would otherwise slip
+# through). Both are globbed for ``*.yml`` / ``*.yaml``.
+_YAML_SURFACE_SUBDIRS = (".github/workflows", ".github/actions")
 
 # Matches a ``ruff format`` invocation in shell / YAML text. ``\bruff\s+format\b``
 # tolerates ``uv run ruff format`` and extra spacing; ``ruff check`` and tokens
@@ -139,13 +147,15 @@ def scan_text(text: str) -> list[int]:
 def _iter_text_surfaces(repo_root: Path) -> list[Path]:
     """Return existing gate-surface text files under *repo_root*, sorted.
 
-    Workflow YAML under ``.github/workflows`` plus the named hook and
-    pre-commit config files. Absent files are skipped.
+    YAML under ``.github/workflows`` and ``.github/actions`` (composite actions,
+    whose ``run:`` shell executes inline in CI jobs) plus the named hook and
+    pre-commit config files. Absent files and directories are skipped.
     """
     paths: list[Path] = []
-    workflow_dir = repo_root / _WORKFLOW_SUBDIR
-    if workflow_dir.exists():
-        paths.extend(p for p in sorted(workflow_dir.rglob("*")) if p.is_file() and p.suffix in (".yml", ".yaml"))
+    for subdir in _YAML_SURFACE_SUBDIRS:
+        directory = repo_root / subdir
+        if directory.exists():
+            paths.extend(p for p in sorted(directory.rglob("*")) if p.is_file() and p.suffix in (".yml", ".yaml"))
     for rel in _HOOK_AND_CONFIG_FILES:
         candidate = repo_root / rel
         if candidate.is_file():

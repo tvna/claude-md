@@ -74,6 +74,20 @@ def _make_repo(tmp_path: Path) -> Path:
     return tmp_path
 
 
+def test_find_text_violations_flags_composite_action(tmp_path: Path) -> None:
+    # A composite action's run: shell executes inline in CI, so it is a gate
+    # surface: a `ruff format` there must be caught (code-review follow-up).
+    repo = _make_repo(tmp_path)
+    action_dir = repo / ".github" / "actions" / "fmt"
+    action_dir.mkdir(parents=True)
+    (action_dir / "action.yml").write_text(
+        "runs:\n  using: composite\n  steps:\n    - run: uv run ruff format scripts\n      shell: bash\n",
+        encoding="utf-8",
+    )
+    rels = {str(rel) for rel, _ in gate.find_text_violations(repo)}
+    assert ".github/actions/fmt/action.yml" in rels
+
+
 def test_find_text_violations_clean_repo(tmp_path: Path) -> None:
     repo = _make_repo(tmp_path)
     (repo / ".github" / "workflows" / "verify.yml").write_text("run: uv run ruff check scripts tests\n", encoding="utf-8")
