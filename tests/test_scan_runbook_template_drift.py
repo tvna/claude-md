@@ -73,6 +73,24 @@ def test_extract_h2_headings_ignores_fenced_canonical_sections_reversed() -> Non
     assert gate.extract_h2_headings(fenced) == []
 
 
+def test_extract_h2_headings_longer_outer_fence_not_closed_by_shorter_inner() -> None:
+    # A 4-backtick outer fence wraps a 3-backtick inner sample (CommonMark: the
+    # closing fence must be at least as long as the opener). The inner ``` must
+    # NOT terminate the outer block, so '## Why' stays a code sample and is not
+    # counted; only the real '## Scope' and '## References' headings remain.
+    text = "# Title\n\n## Scope\n\n" "````\n" "```\n" "## Why\n" "```\n" "````\n\n" "## References\n"
+    assert gate.extract_h2_headings(text) == ["Scope", "References"]
+
+
+def test_extract_h2_headings_full_skeleton_inside_longer_outer_fence() -> None:
+    # The whole canonical skeleton wrapped in a 4-tilde fence (with an inner
+    # 3-tilde sample) counts as zero headings: a runbook that only illustrates
+    # the sections inside a longer fence must not pass the gate.
+    inner = "~~~\n" + "".join(f"## {s}\n" for s in gate.REQUIRED_SECTIONS) + "~~~\n"
+    fenced = "~~~~\n" + inner + "~~~~\n"
+    assert gate.extract_h2_headings(fenced) == []
+
+
 # ---------------------------------------------------------------------------
 # check_conformance
 # ---------------------------------------------------------------------------

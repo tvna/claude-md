@@ -78,31 +78,62 @@ _WAIVER_RE = re.compile(
 )
 
 
+def _fence_at(line: str) -> tuple[str, int, str] | None:
+    """Return ``(fence_char, run_length, info_string)`` if *line* is a code fence.
+
+    A fence is a run of at least three backticks or tildes, indented at most
+    three spaces (CommonMark 0.30 section 4.5). Returns ``None`` for any line
+    that is not a fence.
+    """
+    indent = len(line) - len(line.lstrip(" "))
+    if indent > 3:
+        return None
+    s = line[indent:]
+    if not s or s[0] not in ("`", "~"):
+        return None
+    char = s[0]
+    run = len(s) - len(s.lstrip(char))
+    if run < 3:
+        return None
+    return char, run, s[run:]
+
+
 def _strip_fenced_code_blocks(text: str) -> str:
     """Blank out fenced code blocks so their contents are not scanned for headings.
 
     A Markdown code fence opens and closes with a run of at least three
-    backticks (```) or tildes (~~~); a closing fence must use the same
-    character that opened the block. Lines such as ``## Procedure`` inside a
-    fence are code samples, not document structure, so a runbook that only
-    illustrates the section skeleton inside a code block must not be counted as
-    conforming. This tracks the open fence character and toggles on a matching
-    marker, replacing fenced lines (and the fence lines themselves) with blanks
-    so line/heading offsets elsewhere are unaffected.
+    backticks (```) or tildes (~~~). Per CommonMark, the closing fence must use
+    the same character AND be at least as long as the opener, and it carries no
+    info string; a shorter inner fence therefore does NOT close a longer outer
+    block. Tracking the fence character alone would let a sample wrapped in a
+    longer fence terminate early on its inner fence, exposing ``## ...`` sample
+    lines as if they were real headings (review #2135). So the open fence's
+    character and length are both tracked. Fenced lines (and the fence lines
+    themselves) are replaced with blanks so heading offsets elsewhere are
+    unaffected.
     """
     out: list[str] = []
-    fence: str | None = None  # open fence character ('`' or '~'), or None when outside
+    open_char: str | None = None
+    open_len = 0
     for line in text.splitlines():
-        stripped = line.lstrip()
-        if stripped[:3] in ("```", "~~~"):
-            marker = stripped[0]
-            if fence is None:
-                fence = marker
-            elif fence == marker:
-                fence = None
-            out.append("")  # drop the fence line itself
-            continue
-        out.append("" if fence is not None else line)
+        fence = _fence_at(line)
+        if open_char is None:
+            if fence is not None:
+                char, run, info = fence
+                # A backtick opening fence's info string may not contain a
+                # backtick (CommonMark); such a line is not a fence opener.
+                if not (char == "`" and "`" in info):
+                    open_char, open_len = char, run
+                    out.append("")
+                    continue
+            out.append(line)
+        else:
+            if fence is not None:
+                char, run, info = fence
+                # Close only on the same char, length >= opener, and no info string.
+                if char == open_char and run >= open_len and not info.strip():
+                    open_char, open_len = None, 0
+            out.append("")
     return "\n".join(out)
 
 
