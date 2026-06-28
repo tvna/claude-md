@@ -8,6 +8,15 @@ apply, and replace it with a one-line reason rather than leaving it blank.
 
 See [`README.md`](README.md) for which documents belong in this lane.
 
+A new or changed runbook must carry the canonical sections below, in this
+order. `scripts/scan_runbook_template_drift.py` (wired into `verify-pr.yml`)
+enforces this on every PR for the runbooks it touches, so the back-catalog is
+brought into conformance as it is edited. If a section genuinely does not
+apply, keep its heading and write a one-line reason underneath; the gate
+checks heading presence and order, not prose. A genuine exception can be
+waived with a `runbook-template-waiver: docs/runbooks/NAME.md; reason` line in
+the PR body.
+
 ---
 
 ## Template

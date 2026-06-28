@@ -104,6 +104,21 @@ STEPS: tuple[Step, ...] = (
             "--git-tracked",
         ),
     ),
+    Step(
+        # Refs #2065. Diff-scoped gate: a new or changed docs/runbooks/*.md
+        # must follow TEMPLATE.md's canonical section skeleton. PR_BODY is
+        # unset locally and --body-file is omitted, the stricter default, so
+        # a non-conforming runbook surfaces before push without honouring a
+        # waiver. Base-ref shape mirrors CI's verify-pr.yml step.
+        name="scan_runbook_template_drift",
+        argv=(
+            "python3",
+            "scripts/scan_runbook_template_drift.py",
+            "verify",
+            "--base-ref",
+            "origin/main",
+        ),
+    ),
     Step(name="verify_apm_checksums", argv=("python3", "scripts/verify_apm_checksums.py", "verify")),
     Step(name="scan_apm_lock_drift", argv=("python3", "scripts/scan_apm_lock_drift.py", "verify")),
     Step(
@@ -346,6 +361,14 @@ STEPS: tuple[Step, ...] = (
         # coverage and is not in the explicit allowlist in the script.
         name="scan_hook_coverage_drift",
         argv=("python3", "scripts/scan_hook_coverage_drift.py", "verify"),
+    ),
+    Step(
+        # Refs #2133 (PR #2120 retro #2121, P1). Fails when a git PreToolUse
+        # hook's if: predicate (Bash(*git commit*) etc.) is narrower than the
+        # command surface the script declares in HOOK_GIT_SUBCOMMANDS, so a
+        # widened matcher cannot silently go untriggered.
+        name="scan_hook_predicate_surface_drift",
+        argv=("python3", "scripts/scan_hook_predicate_surface_drift.py", "verify"),
     ),
     Step(
         # Refs #1103. Fails when a tool a gate needs at runtime (a Step
