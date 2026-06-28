@@ -99,6 +99,90 @@ class TestDecideLabelAction:
         assert decision["action"] == "NOOP"
         assert decision["payload"] is None
 
+    def test_rename_when_old_present_new_absent(self) -> None:
+        decision = labels_apply.decide_label_action(
+            sot_entry={"name": "layer:p2-input-boundary", "color": "5319e7", "description": "New"},
+            live_entry=None,
+            rename_from="layer:p2-precode",
+            live_old_entry={"name": "layer:p2-precode", "color": "5319e7", "description": "Old"},
+        )
+
+        assert decision["action"] == "RENAME"
+        assert decision["method"] == "PATCH"
+        # PATCH targets the OLD name; new_name carries the rename in place.
+        assert decision["url_suffix"] == "/labels/layer%3Ap2-precode"
+        assert decision["payload"] == {
+            "new_name": "layer:p2-input-boundary",
+            "color": "5319e7",
+            "description": "New",
+        }
+        assert decision["color_changed"] is False
+        assert decision["desc_changed"] is True
+
+    def test_conflict_when_old_and_new_both_present(self) -> None:
+        new = {"name": "layer:p2-input-boundary", "color": "5319e7", "description": "New"}
+        decision = labels_apply.decide_label_action(
+            sot_entry=new,
+            live_entry=new,
+            rename_from="layer:p2-precode",
+            live_old_entry={"name": "layer:p2-precode", "color": "5319e7", "description": "Old"},
+        )
+
+        assert decision["action"] == "CONFLICT"
+        assert decision["payload"] is None
+
+    def test_rename_already_done_is_noop(self) -> None:
+        # Old gone, new present and matching: an idempotent rerun must not act.
+        new = {"name": "layer:p2-input-boundary", "color": "5319e7", "description": "New"}
+        decision = labels_apply.decide_label_action(
+            sot_entry=new,
+            live_entry=new,
+            rename_from="layer:p2-precode",
+            live_old_entry=None,
+        )
+
+        assert decision["action"] == "NOOP"
+
+    def test_rename_source_absent_creates_new(self) -> None:
+        # Neither old nor new exists: fall through to a plain POST.
+        decision = labels_apply.decide_label_action(
+            sot_entry={"name": "layer:p2-input-boundary", "color": "5319e7", "description": "New"},
+            live_entry=None,
+            rename_from="layer:p2-precode",
+            live_old_entry=None,
+        )
+
+        assert decision["action"] == "POST"
+
+
+class TestLoadRenameMap:
+    def test_collects_rename_entries_only(self, tmp_path: Path) -> None:
+        policy = tmp_path / "label-policy.toml"
+        policy.write_text(
+            "\n".join(
+                [
+                    "[[labels]]",
+                    'name = "layer:p2-input-boundary"',
+                    'status = "rename"',
+                    'rename_from = "layer:p2-precode"',
+                    "",
+                    "[[labels]]",
+                    'name = "type:fix"',
+                    'status = "keep"',
+                    "",
+                    "[[labels]]",
+                    'name = "ops:dependencies"',
+                    'rename_from = "dependencies"',
+                ]
+            ),
+            encoding="utf-8",
+        )
+
+        assert labels_apply.load_rename_map(policy) == {
+            "layer:p2-input-boundary": "layer:p2-precode",
+            "ops:dependencies": "dependencies",
+        }
+
 
 class TestDecidePruneAction:
     @pytest.mark.parametrize(
@@ -285,3 +369,92 @@ class TestCli:
                 "token": "token",
             }
         ]
+
+    def test_plan_renames_in_place_and_protects_old_from_prune(self, tmp_path: Path) -> None:
+        sot = write_sot(
+            tmp_path,
+            [{"name": "layer:p2-input-boundary", "color": "5319e7", "description": "New"}],
+        )
+        summary = tmp_path / "summary.md"
+
+        result = labels_apply.run(
+            mode="plan",
+            repo="owner/repo",
+            sot_path=sot,
+            prune=True,
+            dry_run=True,
+            summary_file=summary,
+            token="token",
+            live_labels=[{"name": "layer:p2-precode", "color": "5319e7", "description": "Old"}],
+            rename_map={"layer:p2-input-boundary": "layer:p2-precode"},
+        )
+
+        text = summary.read_text(encoding="utf-8")
+        assert result == 0
+        assert "| `layer:p2-input-boundary` | plan-only (RENAME) |" in text
+        # The old name is a rename source; prune must not target it (no data loss).
+        assert "plan-only (DELETE)" not in text
+
+    def test_apply_renames_via_new_name_patch(self, tmp_path: Path) -> None:
+        sot = write_sot(
+            tmp_path,
+            [{"name": "ops:dependencies", "color": "0366d6", "description": "Deps"}],
+        )
+        calls: list[dict[str, object]] = []
+
+        def apply_call(**kwargs: object) -> tuple[int, str]:
+            calls.append(kwargs)
+            return 200, "{}"
+
+        result = labels_apply.run(
+            mode="apply",
+            repo="owner/repo",
+            sot_path=sot,
+            prune=True,
+            dry_run=False,
+            summary_file=tmp_path / "summary.md",
+            token="token",
+            live_labels=[{"name": "dependencies", "color": "0366d6", "description": "Deps"}],
+            rename_map={"ops:dependencies": "dependencies"},
+            apply_call=apply_call,
+        )
+
+        assert result == 0
+        assert calls == [
+            {
+                "method": "PATCH",
+                "url": "https://api.github.com/repos/owner/repo/labels/dependencies",
+                "payload": {"new_name": "ops:dependencies", "color": "0366d6", "description": "Deps"},
+                "token": "token",
+            }
+        ]
+
+    def test_apply_conflict_aborts_when_both_names_live(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        sot = write_sot(
+            tmp_path,
+            [{"name": "ops:dependencies", "color": "0366d6", "description": "Deps"}],
+        )
+
+        def apply_call(**kwargs: object) -> tuple[int, str]:
+            raise AssertionError("must not touch the API on a rename conflict")
+
+        result = labels_apply.run(
+            mode="apply",
+            repo="owner/repo",
+            sot_path=sot,
+            prune=False,
+            dry_run=False,
+            summary_file=tmp_path / "summary.md",
+            token="token",
+            live_labels=[
+                {"name": "ops:dependencies", "color": "0366d6", "description": "Deps"},
+                {"name": "dependencies", "color": "0366d6", "description": "Deps"},
+            ],
+            rename_map={"ops:dependencies": "dependencies"},
+            apply_call=apply_call,
+        )
+
+        assert result == 1
+        assert "Cannot rename 'dependencies' to 'ops:dependencies'" in capsys.readouterr().out

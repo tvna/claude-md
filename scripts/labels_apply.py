@@ -5,6 +5,7 @@ import json
 import os
 import re
 import sys
+import tomllib
 import urllib.parse
 import urllib.request
 from collections.abc import Callable
@@ -40,10 +41,39 @@ def decide_label_action(
     *,
     sot_entry: dict[str, Any],
     live_entry: dict[str, Any] | None,
+    rename_from: str | None = None,
+    live_old_entry: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     name = str(sot_entry["name"])
     color = str(sot_entry["color"])
     description = str(sot_entry["description"])
+
+    if rename_from and live_old_entry is not None:
+        if live_entry is None:
+            # Association-preserving rename: GitHub renames the label in place
+            # via new_name, carrying every issue/PR assignment with it. Without
+            # this, the SoT swap would POST a fresh label and prune-DELETE the
+            # old one, stripping it off existing items (data loss).
+            return {
+                "action": "RENAME",
+                "method": "PATCH",
+                "url_suffix": f"/labels/{urllib.parse.quote(rename_from, safe='')}",
+                "payload": {"new_name": name, "color": color, "description": description},
+                "color_changed": live_old_entry.get("color") != color,
+                "desc_changed": (live_old_entry.get("description") or "") != description,
+            }
+        # Both old and new exist live: an in-place rename would 422 on the name
+        # conflict. Fail loud (CLAUDE.md s4) so an operator resolves which label
+        # survives instead of silently dropping assignments.
+        return {
+            "action": "CONFLICT",
+            "method": "",
+            "url_suffix": "",
+            "payload": None,
+            "color_changed": False,
+            "desc_changed": False,
+        }
+
     if live_entry is None:
         return {
             "action": "POST",
@@ -130,6 +160,28 @@ def load_sot(path: Path) -> list[dict[str, Any]]:
     return sot
 
 
+def load_rename_map(policy_path: Path) -> dict[str, str]:
+    """Return ``{final_name: rename_from}`` for every renamed label in policy.
+
+    The live catalog (labels.json) keeps a strict ``{name,color,description}``
+    schema (``scripts/dependabot_labels.py`` rejects extra keys), so the
+    old->new rename intent lives only in ``.github/label-policy.toml`` (the
+    adopted design contract). ``run`` consults this map to rename a label in
+    place instead of dropping and recreating it.
+    """
+    with policy_path.open("rb") as handle:
+        policy = tomllib.load(handle)
+    rename_map: dict[str, str] = {}
+    for entry in policy.get("labels", []):
+        if not isinstance(entry, dict):
+            continue
+        old = entry.get("rename_from")
+        new = entry.get("name")
+        if isinstance(old, str) and old and isinstance(new, str) and new:
+            rename_map[new] = old
+    return rename_map
+
+
 def run(
     *,
     mode: Literal["plan", "apply"],
@@ -140,26 +192,46 @@ def run(
     summary_file: Path,
     token: str,
     live_labels: list[dict[str, Any]] | None = None,
+    rename_map: dict[str, str] | None = None,
     apply_call: Callable[..., tuple[int, str]] = github_apply_call,
 ) -> int:
     sot = load_sot(sot_path)
     live = live_labels if live_labels is not None else fetch_live_labels(repo, token)
     live_by_name = {str(entry.get("name")): entry for entry in live}
     sot_names = {str(entry["name"]) for entry in sot}
+    rename_map = rename_map or {}
+    rename_sources = set(rename_map.values())
     rows: list[str] = []
 
     _write_summary_header(summary_file, dry_run=dry_run, prune=prune, sot_count=len(sot), live_count=len(live))
 
     for entry in sot:
         name = str(entry["name"])
-        decision = decide_label_action(sot_entry=entry, live_entry=live_by_name.get(name))
+        rename_from = rename_map.get(name)
+        decision = decide_label_action(
+            sot_entry=entry,
+            live_entry=live_by_name.get(name),
+            rename_from=rename_from,
+            live_old_entry=live_by_name.get(rename_from) if rename_from else None,
+        )
         action = str(decision["action"])
         if action == "NOOP":
             rows.append(render_action_row(name, "no-op", "no", "no", "unchanged"))
             continue
+        if action == "CONFLICT":
+            _append_rows(summary_file, rows)
+            _append_error(
+                summary_file,
+                f"Error renaming `{rename_from}` -> `{name}`:",
+                "both the old and new label exist live; the rename would conflict. "
+                "Resolve manually (merge or delete one) before re-running apply.",
+            )
+            print(f"::error::Cannot rename '{rename_from}' to '{name}': both labels exist live.")
+            return 1
 
-        color_changed = _changed_cell(decision["color_changed"], is_post=action == "POST")
-        desc_changed = _changed_cell(decision["desc_changed"], is_post=action == "POST")
+        is_post = action == "POST"
+        color_changed = _changed_cell(decision["color_changed"], is_post=is_post)
+        desc_changed = _changed_cell(decision["desc_changed"], is_post=is_post)
         if mode == "plan" or dry_run:
             rows.append(render_action_row(name, f"plan-only ({action})", color_changed, desc_changed, "dry-run"))
             continue
@@ -185,7 +257,7 @@ def run(
         live_name = str(live_entry.get("name"))
         prune_action = decide_prune_action(
             live_name=live_name,
-            in_sot=live_name in sot_names,
+            in_sot=live_name in sot_names or live_name in rename_sources,
             prune=prune,
             dry_run=(mode == "plan" or dry_run),
         )
@@ -239,6 +311,7 @@ def main(argv: list[str] | None = None) -> int:
             dry_run=_parse_bool(args.dry_run),
             summary_file=args.summary_file,
             token=token,
+            rename_map=load_rename_map(args.policy),
         )
     except (OSError, json.JSONDecodeError, RuntimeError, ValueError) as error:
         print(f"::error::{error}")
@@ -248,6 +321,7 @@ def main(argv: list[str] | None = None) -> int:
 def _add_common_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--repo", default=os.environ.get("REPO", ""))
     parser.add_argument("--sot", type=Path, default=Path(".github/labels.json"))
+    parser.add_argument("--policy", type=Path, default=Path(".github/label-policy.toml"))
     parser.add_argument("--prune", default="false")
     parser.add_argument("--dry-run", default="true")
     parser.add_argument("--summary-file", type=Path, default=Path(os.environ.get("GITHUB_STEP_SUMMARY", "/dev/null")))

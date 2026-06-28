@@ -1153,8 +1153,8 @@ class TestIssueLabels:
         assert out == ["type:docs", "layer:meta", "layer:p3-harness"]
 
     def test_filters_empty_names(self) -> None:
-        out = ar.issue_labels(("", "layer:p4-artifact"))
-        assert out == ["type:docs", "layer:meta", "layer:p4-artifact"]
+        out = ar.issue_labels(("", "layer:p4-safety-boundary"))
+        assert out == ["type:docs", "layer:meta", "layer:p4-safety-boundary"]
 
 
 # ---------------------------------------------------------------------------
@@ -4411,7 +4411,7 @@ class TestSentinelRun:
     def test_does_not_touch_source_pr_label(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Acceptance #414 #5: harness:retro-opened label gate preserved.
+        """Acceptance #414 #5: ops:retro-opened label gate preserved.
 
         The sentinel must never PATCH/POST/DELETE source-PR labels --
         the label was applied at retro-create time and survives the

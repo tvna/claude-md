@@ -751,7 +751,11 @@ _SKIP_COMMENT_MARKER = "<!-- auto-retro:skip -->"
 # is required. Consumption (e.g. unsubscribe_pr_activity) is platform
 # / session policy and out of scope here. SoT entry lives in
 # .github/labels.json; tests/test_auto_retro.py guards the drift.
-_TERMINAL_LABEL = "harness:retro-opened"
+# Renamed from "harness:retro-opened" to the ops:* family (#972 renames
+# batch). This value is write-only here (no read-match site), so the live
+# label rename via apply-labels.yml should land with this change; until it
+# does, apply_terminal_label degrades to a non-fatal warning (see below).
+_TERMINAL_LABEL = "ops:retro-opened"
 
 # Sentinel marker for the auto-close comment posted by the retro sentinel
 # workflow (issue #414). Idempotency anchor: a retro carrying this

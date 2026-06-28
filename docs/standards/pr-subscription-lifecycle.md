@@ -27,7 +27,7 @@ human operators have a single deterministic mark to read.
 
 ## Signal
 
-The label `harness:retro-opened` is added to the source PR by
+The label `ops:retro-opened` is added to the source PR by
 `scripts/auto_retro.py::apply_terminal_label` immediately after
 `post_back_link_comment` returns successfully. The SoT entry lives in
 [`.github/labels.json`](../../.github/labels.json) and is reconciled onto

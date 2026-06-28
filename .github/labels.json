@@ -5,8 +5,8 @@
     "color": "1d76db"
   },
   {
-    "name": "layer:p2-precode",
-    "description": "CLAUDE.md §2 -- Input and pre-code reasoning (untrusted text, facts, assumptions).",
+    "name": "layer:p2-input-boundary",
+    "description": "CLAUDE.md §2 -- Trusted inputs, unknowns, facts, assumptions, and ambiguity.",
     "color": "5319e7"
   },
   {
@@ -15,13 +15,13 @@
     "color": "0e8a16"
   },
   {
-    "name": "layer:p4-artifact",
-    "description": "CLAUDE.md §4 -- Safety boundary (simplicity, tool scope, secret exposure).",
+    "name": "layer:p4-safety-boundary",
+    "description": "CLAUDE.md §4 -- Simplicity bounded by safety, tool scope, and secret exposure.",
     "color": "fbca04"
   },
   {
-    "name": "layer:p5-scope-split",
-    "description": "CLAUDE.md §5 -- Change scope & agent split.",
+    "name": "layer:p5-scale-quality",
+    "description": "CLAUDE.md §5 -- Change scope, agent split, and quality proportional to scale.",
     "color": "d93f0b"
   },
   {
@@ -95,13 +95,13 @@
     "color": "006b75"
   },
   {
-    "name": "dependencies",
-    "description": "Dependency bump (Dependabot or manual).",
+    "name": "ops:dependencies",
+    "description": "Dependency update workflow state from Dependabot or equivalent automation.",
     "color": "0366d6"
   },
   {
-    "name": "harness:retro-opened",
-    "description": "auto-retro harness opened a retrospective issue; PR is at terminal state.",
+    "name": "ops:retro-opened",
+    "description": "auto-retro opened or reused the retrospective for a terminal PR.",
     "color": "0e8a16"
   },
   {
