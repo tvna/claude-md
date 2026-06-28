@@ -125,21 +125,13 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["gh_paginate(...)"]
-    N002["if runner is None"]
-    N003["runner = subprocess.run"]
-    N004["cmd = ['<str>', '<str>', '<str>', path, '<str>', '<str>']"]
-    N005["result = runner(...)"]
-    N006["out = []"]
-    N007["for line in result.stdout.splitlines():     if not line.strip():         continue     out.append(json.loads(line))"]
-    N008["return out"]
+    N002["if token is None"]
+    N003["token = get(...)"]
+    N004["return paginate(path, token=token)"]
     N001 -->|"start"| N002
     N002 -->|"true"| N003
     N003 --> N004
     N002 -->|"false"| N004
-    N004 --> N005
-    N005 --> N006
-    N006 --> N007
-    N007 --> N008
 ```
 
 ## cmd_capture(...)

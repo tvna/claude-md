@@ -47,6 +47,7 @@ import devcontainer_pin_pr
 import doc_graph_viz
 import flake_pin
 import flake_pin_latest
+import gate_agents_skills_edit
 import gate_doc_graph_pr
 import gate_generated_scripts_manual_edit
 import github_paginate
@@ -73,6 +74,7 @@ import scan_allowlist_rationale
 import scan_apm_ascii
 import scan_apm_lock_drift
 import scan_apm_portability
+import scan_bypass_lever_doc_drift
 import scan_commit_type_label_drift
 import scan_compile_from_source
 import scan_design_philosophy_drift
@@ -82,6 +84,7 @@ import scan_docs_inventory
 import scan_flake_pin_drift
 import scan_harness_doc_coverage
 import scan_hook_coverage_drift
+import scan_hook_predicate_surface_drift
 import scan_input_contract_drift
 import scan_issue_anchor_drift
 import scan_maintainability_metrics
@@ -97,6 +100,8 @@ import scan_quality_standard_drift
 import scan_repo_double_hyphen
 import scan_repo_em_dash
 import scan_retro_followup_drift
+import scan_runbook_template_drift
+import scan_scripts_gh_calls
 import scan_secret_runbooks
 import scan_secrets
 import scan_session_path_drift
@@ -185,6 +190,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("script_dependency_graph.py", "all-doc"): "test_script_dependency_graph_all_doc_matches_workflow_args",
     ("script_trigger_map.py", "all-doc"): "test_script_trigger_map_all_doc_matches_workflow_args",
     ("gate_generated_scripts_manual_edit.py", "verify"): "test_gate_generated_scripts_manual_edit_matches_workflow_args",
+    ("gate_agents_skills_edit.py", "verify"): "test_gate_agents_skills_edit_verify_matches_workflow_args",
     ("gate_doc_graph_pr.py", None): "test_gate_doc_graph_pr_matches_workflow_env",
     ("doc_graph_viz.py", "all-doc"): "test_doc_graph_viz_all_doc_matches_workflow_args",
     ("auto_retro.py", "triage-report"): "test_auto_retro_triage_report_matches_workflow_env",
@@ -229,6 +235,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("scan_apm_portability.py", "verify"): "test_scan_apm_portability_verify_matches_workflow_paths",
     ("scan_repo_em_dash.py", "verify"): "test_scan_repo_em_dash_verify_matches_workflow_args",
     ("scan_repo_double_hyphen.py", "verify"): "test_scan_repo_double_hyphen_verify_matches_workflow_args",
+    ("scan_runbook_template_drift.py", "verify"): "test_scan_runbook_template_drift_verify_matches_workflow_args",
     ("scan_design_philosophy_drift.py", "verify"): "test_scan_design_philosophy_drift_verify_matches_workflow_paths",
     ("scan_design_philosophy_drift.py", "verify-coupling"): "test_scan_design_philosophy_drift_verify_coupling_matches_workflow_args",
     ("scan_apm_lock_drift.py", "verify"): "test_scan_apm_lock_drift_verify_matches_workflow_args",
@@ -250,6 +257,8 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("scan_non_ascii.py", "run"): "test_scan_non_ascii_run_matches_workflow_env",
     ("scan_nonexhaustive_invariant_drift.py", "verify"): "test_scan_nonexhaustive_invariant_drift_verify_matches_workflow_args",
     ("scan_hook_coverage_drift.py", "verify"): "test_scan_hook_coverage_drift_verify_matches_workflow_args",
+    ("scan_hook_predicate_surface_drift.py", "verify"): "test_scan_hook_predicate_surface_drift_verify_matches_workflow_args",
+    ("scan_bypass_lever_doc_drift.py", "verify"): "test_scan_bypass_lever_doc_drift_verify_matches_workflow_args",
     ("scan_input_contract_drift.py", "verify"): "test_scan_input_contract_drift_verify_matches_workflow_args",
     ("scan_issue_anchor_drift.py", "verify"): "test_scan_issue_anchor_drift_verify_matches_workflow_args",
     ("scan_preflight_drift.py", "verify"): "test_scan_preflight_drift_verify_matches_workflow_args",
@@ -259,6 +268,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("scan_retro_followup_drift.py", "run"): "test_scan_retro_followup_drift_run_matches_workflow_env",
     ("scan_secret_runbooks.py", "verify"): "test_scan_secret_runbooks_verify_matches_workflow_args",
     ("scan_secrets.py", "verify"): "test_scan_secrets_verify_matches_workflow_args",
+    ("scan_scripts_gh_calls.py", "verify"): "test_scan_scripts_gh_calls_verify_matches_workflow_args",
     ("scan_session_path_drift.py", "verify"): "test_scan_session_path_drift_verify_matches_workflow_args",
     ("scan_test_presence_drift.py", "verify"): "test_scan_test_presence_drift_verify_matches_workflow_args",
     ("scan_workflow_action_pins.py", "verify"): "test_scan_workflow_action_pins_verify_matches_workflow_args",
@@ -667,6 +677,18 @@ def test_gate_generated_scripts_manual_edit_matches_workflow_args(
     )
 
     assert gate_generated_scripts_manual_edit.main(["verify", "--base-ref", "origin/main"]) == 0
+
+
+def test_gate_agents_skills_edit_verify_matches_workflow_args(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The verify subcommand passes when no managed skill tree changed."""
+    monkeypatch.setattr(
+        gate_agents_skills_edit,
+        "_changed_files",
+        lambda *_a, **_kw: frozenset({"scripts/x.py"}),
+    )
+    assert gate_agents_skills_edit.main(["verify", "--base-ref", "origin/main"]) == 0
 
 
 def test_auto_retro_triage_report_matches_workflow_env(
@@ -1218,7 +1240,7 @@ def test_coverage_failure_issue_run_matches_workflow_env(
     def fake_post_failure_comment(
         context: coverage_failure_issue.CoverageFailureContext,
         *,
-        runner=coverage_failure_issue.subprocess.run,
+        token: str | None = None,
     ) -> str:
         calls.append(context)
         return "commented"
@@ -1277,6 +1299,39 @@ def test_scan_repo_double_hyphen_verify_matches_workflow_args(tmp_path: Path) ->
     mock_result.stdout = ""
     with patch("subprocess.run", return_value=mock_result):
         assert scan_repo_double_hyphen.main(["verify", "--git-tracked"]) == 0
+
+
+def test_scan_runbook_template_drift_verify_matches_workflow_args(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Mirrors the ``Verify runbook template conformance`` step in
+    ``.github/workflows/verify-pr.yml`` (issue #2065).
+
+    The workflow shells to ``python3 scripts/scan_runbook_template_drift.py
+    verify --base-ref "$BASE_REF" --body-file "$body_file"``. Stub the
+    changed-runbook lookup so the test stays hermetic across CI checkout
+    depths (a real ``git diff origin/main...HEAD`` would fail on a shallow
+    checkout).
+    """
+    monkeypatch.setattr(
+        scan_runbook_template_drift,
+        "get_changed_runbooks",
+        lambda base_ref: [],
+    )
+    body_file = tmp_path / "body.md"
+    body_file.write_text("no waiver needed\n", encoding="utf-8")
+    assert (
+        scan_runbook_template_drift.main(
+            [
+                "verify",
+                "--base-ref",
+                "origin/main",
+                "--body-file",
+                str(body_file),
+            ]
+        )
+        == 0
+    )
 
 
 def test_scan_apm_portability_verify_matches_workflow_paths(tmp_path: Path) -> None:
@@ -1647,6 +1702,13 @@ def test_scan_workflow_gh_calls_verify_matches_workflow_args() -> None:
     assert scan_workflow_gh_calls.main(["verify"]) == 0
 
 
+def test_scan_scripts_gh_calls_verify_matches_workflow_args() -> None:
+    """Mirrors the ``Assert no direct gh CLI calls in scripts`` step in
+    ``.github/workflows/verify-agents.yml``. Refs #909.
+    """
+    assert scan_scripts_gh_calls.main(["verify"]) == 0
+
+
 def test_scan_workflow_injection_verify_matches_workflow_args() -> None:
     """Mirrors the ``Assert no untrusted context in workflow run blocks`` step
     in ``.github/workflows/verify-agents.yml``. Refs #1129."""
@@ -1670,10 +1732,22 @@ def test_scan_secret_runbooks_verify_matches_workflow_args() -> None:
     assert scan_secret_runbooks.main(["verify"]) == 0
 
 
+def test_scan_hook_predicate_surface_drift_verify_matches_workflow_args() -> None:
+    """Mirrors the ``Verify git hook predicate covers its command surface`` step
+    in ``.github/workflows/verify-agents.yml``. Refs #2133."""
+    assert scan_hook_predicate_surface_drift.main(["verify"]) == 0
+
+
 def test_scan_input_contract_drift_verify_matches_workflow_args() -> None:
     """Mirrors the ``Verify workflow-script input contracts`` step in
     ``.github/workflows/verify-agents.yml``. Refs #1087."""
     assert scan_input_contract_drift.main(["verify"]) == 0
+
+
+def test_scan_bypass_lever_doc_drift_verify_matches_workflow_args() -> None:
+    """Mirrors the ``Verify pre-push bypass levers stay documented in the
+    runbook`` step in ``.github/workflows/verify-agents.yml``. Refs #2152."""
+    assert scan_bypass_lever_doc_drift.main(["verify"]) == 0
 
 
 def test_scan_pr_body_quality_drift_verify_matches_workflow_args() -> None:

@@ -90,13 +90,6 @@ ALLOWLIST: dict[str, str] = {
         "static counterpart `verify_test_shard_markers` IS mirrored as a "
         "preflight step. Refs #545."
     ),
-    "gate_doc_graph_pr": (
-        "Diff-based gate: requires `git diff <base-ref>...HEAD` so it only "
-        "has meaning in a PR context where the base-ref is well-defined. "
-        "A local pre-push run has no equivalent base-ref against which to "
-        "compute the co-change set. Runs in validate-doc-graph.yml on "
-        "pull_request: triggers. Refs #1754."
-    ),
 }
 
 

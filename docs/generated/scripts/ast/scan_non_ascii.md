@@ -167,17 +167,8 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["gh_api(...)"]
-    N002["cmd = ['<str>', '<str>', '<str>', method, path]"]
-    N003["if json_body is not None"]
-    N004["result = run(...)"]
-    N005["result = run(...)"]
-    N006["return result.stdout"]
+    N002["return rest_text(method, path, json_body)"]
     N001 -->|"start"| N002
-    N002 --> N003
-    N003 -->|"true"| N004
-    N003 -->|"false"| N005
-    N004 --> N006
-    N005 --> N006
 ```
 
 ## find_existing_comment_id(...)
@@ -386,7 +377,7 @@ flowchart TD
     N012["except ValueError"]
     N013["print(...)"]
     N014["return 1"]
-    N015["except subprocess.CalledProcessError"]
+    N015["except GitHubApiError"]
     N016["print(...)"]
     N017["return 1"]
     N001 -->|"start"| N002

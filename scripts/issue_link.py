@@ -9,7 +9,7 @@ this module. The contract is:
 * Strip HTML comments before parsing, so ``<!-- Refs #1 -->`` is ignored.
 * Extract case-insensitive line-anchored references of the form
   ``(Refs|Closes|Fixes|Resolves) #N``.
-* Verify each ``#N`` resolves via ``gh api /repos/<repo>/issues/N``.
+* Verify each ``#N`` resolves via ``GET /repos/<repo>/issues/N`` (REST).
 * Exit 0 only when at least one reference is present AND every reference
   resolves; exit 1 otherwise. ``::error::`` annotations surface failures
   in the GitHub Actions UI.
@@ -23,11 +23,11 @@ from __future__ import annotations
 import argparse
 import os
 import re
-import subprocess
 import sys
-from collections.abc import Callable
+import urllib.error
 from pathlib import Path
 
+from _github_api import GitHubApiError, rest_json
 from _ref_classifier import (
     CLOSING_KEYWORDS as _CLOSING_KEYWORDS,
 )
@@ -113,30 +113,20 @@ def verify_ref_exists(
     repo: str,
     number: int,
     *,
-    runner: Callable[..., object] | None = None,
+    token: str | None = None,
 ) -> bool:
-    """Return True iff ``gh api /repos/<repo>/issues/<number>`` succeeds.
+    """Return True iff ``GET /repos/<repo>/issues/<number>`` returns 2xx.
 
-    Returns False on any subprocess failure (missing ``gh``, auth error,
-    HTTP 404, timeout). Callers that need to distinguish causes should
-    use ``subprocess.run`` directly; this function collapses "exists"
-    into a single bool to match the workflow's behaviour.
+    Returns False on any failure (no token, network error, HTTP 404,
+    malformed body). Callers that need to distinguish causes should call
+    :func:`_github_api.rest_json` directly; this function collapses
+    "exists" into a single bool to match the workflow's behaviour.
     """
-    if runner is None:
-        runner = subprocess.run
-
+    if token is None:
+        token = os.environ.get("GH_TOKEN", "")
     try:
-        runner(
-            [
-                "gh", "api",
-                f"/repos/{repo}/issues/{number}",
-                "--silent",
-            ],
-            capture_output=True,
-            timeout=30,
-            check=True,
-        )
-    except (subprocess.SubprocessError, FileNotFoundError, OSError):
+        rest_json("GET", f"/repos/{repo}/issues/{number}", token=token)
+    except (GitHubApiError, urllib.error.URLError, OSError, ValueError):
         return False
     return True
 
@@ -150,36 +140,30 @@ def get_issue_labels(
     repo: str,
     number: int,
     *,
-    runner: Callable[..., object] | None = None,
+    token: str | None = None,
 ) -> list[str] | None:
     """Return label names on issue/PR <number>, or ``None`` on failure.
 
-    Uses ``gh api ... --jq '.labels[].name'`` so the output is one label
-    per line and no JSON parsing is needed. ``None`` means "could not
-    determine"; callers should fail-safe (treat as not tracking) so
+    Reads ``GET /repos/<repo>/issues/<number>`` and extracts ``.labels[].name``.
+    ``None`` means "could not determine" (no token, network error, non-2xx,
+    malformed body); callers should fail-safe (treat as not tracking) so
     flaky API calls cannot silently unlock the closing-keyword gate.
     """
-    if runner is None:
-        runner = subprocess.run
-
+    if token is None:
+        token = os.environ.get("GH_TOKEN", "")
     try:
-        result = runner(
-            [
-                "gh", "api",
-                f"/repos/{repo}/issues/{number}",
-                "--jq", ".labels[].name",
-            ],
-            capture_output=True,
-            timeout=30,
-            check=True,
-        )
-    except (subprocess.SubprocessError, FileNotFoundError, OSError):
+        data = rest_json("GET", f"/repos/{repo}/issues/{number}", token=token)
+    except (GitHubApiError, urllib.error.URLError, OSError, ValueError):
         return None
-
-    raw = getattr(result, "stdout", b"") or b""
-    if isinstance(raw, bytes):
-        raw = raw.decode("utf-8", errors="replace")
-    return [line.strip() for line in raw.splitlines() if line.strip()]
+    if not isinstance(data, dict):
+        return None
+    names: list[str] = []
+    for label in data.get("labels") or []:
+        if isinstance(label, dict):
+            name = label.get("name")
+            if isinstance(name, str) and name.strip():
+                names.append(name.strip())
+    return names
 
 
 def _format_no_closing_keyword_msg(numbers: list[int]) -> str:

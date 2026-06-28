@@ -106,6 +106,14 @@
         "hooks": [
           {
             "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && scripts/install-prek.sh"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
             "command": "cd \"$(git rev-parse --show-toplevel)\" && scripts/session_uv_local_pin.sh"
           }
         ]
@@ -343,6 +351,16 @@
           {
             "type": "command",
             "if": "Bash(*git push*)",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/preflight_push_unsigned_commits.py"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "if": "Bash(*git push*)",
             "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/preflight_push_base.py"
           }
         ]
@@ -382,8 +400,18 @@
         "hooks": [
           {
             "type": "command",
-            "if": "Bash(*git commit*)",
+            "if": "Bash(*git *)",
             "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/check_commit_signing_ready.py"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "if": "Bash(*git *)",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/gate_retro_close_keyword_commit.py"
           }
         ]
       },

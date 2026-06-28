@@ -13,10 +13,11 @@ for the operator-facing rationale (#112).
 from __future__ import annotations
 
 import argparse
+import os
 import re
-import subprocess
 import sys
 import tomllib
+import urllib.error
 from collections.abc import Iterable, Iterator
 from pathlib import Path
 
@@ -128,29 +129,24 @@ def find_drift(repo_root: Path, pin: str) -> list[str]:
 def fetch_latest_uv_release() -> str | None:
     """Return the latest ``astral-sh/uv`` release tag, or None if unavailable.
 
-    Uses ``gh release view``. Returns None on any subprocess failure (missing
-    gh, network error, auth failure, empty output); callers should treat
-    None as "skip the check" rather than as drift.
+    Reads ``GET /repos/astral-sh/uv/releases/latest`` via the shared REST
+    helper. Returns None on any failure (no token, network error, non-2xx,
+    empty/malformed body); callers should treat None as "skip the check"
+    rather than as drift.
     """
+    # Imported lazily so the SessionStart hot path (``read`` / ``drift``,
+    # which never reach this function) does not require ``_github_api`` to be
+    # importable; only the ``stale`` upstream check needs the REST boundary.
+    from _github_api import GitHubApiError, rest_json
+
+    token = os.environ.get("GH_TOKEN", "")
     try:
-        # S603/S607 justification: fixed argv (no shell, no caller-supplied input);
-        # `gh` is provisioned on the GitHub Actions runner via setup-gh.
-        # FileNotFoundError below covers the local-dev case where gh is absent.
-        result = subprocess.run(  # noqa: S603 -- fixed argv, shell=False
-            [  # noqa: S607 -- `gh` resolved via runner PATH; FileNotFoundError handled below
-                "gh", "release", "view",
-                "--repo", "astral-sh/uv",
-                "--json", "tagName",
-                "--jq", ".tagName",
-            ],
-            capture_output=True,
-            text=True,
-            timeout=30,
-            check=True,
-        )
-    except (subprocess.SubprocessError, FileNotFoundError, OSError):
+        data = rest_json("GET", "/repos/astral-sh/uv/releases/latest", token=token)
+    except (GitHubApiError, urllib.error.URLError, OSError, ValueError):
         return None
-    tag = result.stdout.strip()
+    if not isinstance(data, dict):
+        return None
+    tag = str(data.get("tag_name") or "").strip()
     return tag or None
 
 

@@ -49,11 +49,15 @@ CLAUDE.md section 4; surface early AND block at the commit boundary):
   ``additionalContext`` warning so the cold/broken signer is fixed BEFORE any
   commit. Always exits 0; never wedges a session.
 * hook mode (no subcommand, event JSON on stdin): a PreToolUse ``Bash`` hook.
-  It DENIES a ``git commit`` only when the probe has just demonstrated an
-  ``unsigned`` outcome, so the block is a proven true positive rather than a
-  prediction; near-zero false-positive blast radius. An explicit, reviewed
-  unsigned commit can still proceed by appending the ``# unsigned-ack`` marker
-  (the same opt-in ``gate_unsigned_commit_bash.py`` honors).
+  It DENIES a commit-producing git command (``commit``, ``merge``, ``rebase``,
+  ``cherry-pick``, ``revert``, ``am``, ``pull``) only when the probe has just
+  demonstrated an ``unsigned`` outcome, so the block is a proven true positive
+  rather than a prediction; near-zero false-positive blast radius. Covering
+  ``merge`` and the other producers (not ``commit`` alone) closes the gap that
+  left PR #2103's in-session merge ancestors unsigned (retro #2114 / #2116). An
+  explicit, reviewed unsigned commit can still proceed by appending the
+  ``# unsigned-ack`` marker (the same opt-in ``gate_unsigned_commit_bash.py``
+  honors).
 * ``check``: print the verdict and exit 0 (signed / not required / unknown) or
   1 (unsigned). Lets the #1985 condition be reproduced deterministically.
 
@@ -105,12 +109,43 @@ _REMOTE_ENV_VARS = ("CLAUDE_CODE_REMOTE", "CODEX_CODE_REMOTE")
 # category (CLAUDE.md section 4: one category, one control).
 _ACK_MARKER = "# unsigned-ack"
 
-# Match a literal ``git commit`` anywhere in the command (commits chain, e.g.
-# ``git add -A && git commit``; trailing punctuation like ``git commit;``) but
-# keep plumbing like ``git commit-tree`` out. This pattern is intentionally
-# simple and linear (no nested quantifiers), so no catastrophic backtracking
-# (CodeQL ReDoS). The global-option case is handled by tokenization instead.
-_GIT_COMMIT_RE = re.compile(r"\bgit\s+commit(?![\w-])")
+# Match a commit-PRODUCING git subcommand anywhere in the command (commands
+# chain, e.g. ``git add -A && git commit``; trailing punctuation like
+# ``git commit;``) but keep plumbing like ``git commit-tree`` / ``git
+# merge-base`` out via the ``(?![\w-])`` boundary. ``commit`` is not the only
+# path that mints a commit object a cold signer can leave silently unsigned:
+# ``merge`` (the no-rebase base-update path that left PR #2103's unsigned
+# in-session ancestors), ``rebase``, ``cherry-pick``, ``revert``, ``am``, and
+# ``pull`` all do too. The original #1985 ``git commit``-only matcher missed
+# the merge path, which is the gap retro #2114 / #2116 surfaced. The pattern
+# stays simple and linear (no nested quantifiers), so no catastrophic
+# backtracking (CodeQL ReDoS). The global-option case is handled by
+# tokenization instead.
+_COMMIT_PRODUCING_SUBCOMMANDS = frozenset(
+    {"commit", "merge", "rebase", "cherry-pick", "revert", "am", "pull"}
+)
+# Command surface this hook acts on, exposed for scan_hook_predicate_surface_drift.py.
+# The Bash(*git *) if: predicate is broad enough to admit all of these, so the
+# declaration is not required today; it is kept so that re-narrowing the predicate
+# (the exact PR #2120 regression) is caught by the drift gate. Refs #2133, #2120.
+HOOK_GIT_SUBCOMMANDS = _COMMIT_PRODUCING_SUBCOMMANDS
+_GIT_COMMIT_PRODUCING_RE = re.compile(
+    r"\bgit\s+(?:commit|merge|rebase|cherry-pick|revert|am|pull)(?![\w-])"
+)
+
+# Shell separators that end a single git invocation in a command line.
+_SHELL_OPS = frozenset({"&&", "||", "|", ";", "&"})
+
+# Flags that turn a producer subcommand into a NON-creating mode: it advances,
+# aborts, or stages without minting a commit object, so a cold signer cannot
+# leave an unsigned commit behind. Denying these would block safe recovery such
+# as ``git merge --abort`` or a fast-forward-only update (Codex review on
+# #2120). ``--continue`` is intentionally absent: it completes a merge/rebase
+# and DOES create a commit, so it stays guarded.
+_NON_CREATING_FLAGS = frozenset(
+    {"--abort", "--quit", "--skip", "--ff-only", "--no-commit"}
+)
+_NON_CREATING_RE = re.compile(r"--(?:abort|quit|skip|ff-only|no-commit)\b")
 
 # Git global options whose value is a SEPARATE following token, so the token
 # after them is the option value rather than the subcommand
@@ -118,42 +153,71 @@ _GIT_COMMIT_RE = re.compile(r"\bgit\s+commit(?![\w-])")
 # #1993 flagged that these legitimate commit invocations were being skipped.
 _GIT_VALUE_OPTS = frozenset({"-c", "-C"})
 
+# Shell grouping punctuation that can cling to a token when a git command is
+# wrapped in a subshell / command substitution: ``(git commit)``,
+# ``$(git commit)``, ``{ git commit; }``, or a backtick form. Stripping it from
+# the leading and subcommand tokens lets them still be recognized, without the
+# false positive a raw-string regex search would hit on ``echo "git commit"``
+# (there ``git commit`` is a single quoted token, never bare ``git``).
+_GROUP_PREFIX = "$(`{"
+_GROUP_SUFFIX = ";&|)`}"
 
-def _command_runs_git_commit(command: str) -> bool:
-    """True when *command* invokes ``git commit``.
 
-    Two complementary linear-time checks (no regex backtracking, hence no
-    ReDoS):
+def _command_produces_commit(command: str) -> bool:
+    """True when *command* invokes a commit-PRODUCING git subcommand.
 
-    * :data:`_GIT_COMMIT_RE` catches the literal ``git commit`` sequence,
-      covering chains (``git add -A && git commit``) and trailing punctuation;
-    * a :func:`shlex.split` tokenization recognizes ``commit`` as the
-      subcommand even behind git global options (``git -C <path> commit``,
-      ``git -c user.name=x commit``). ``-c``/``-C`` consume the next token as
-      their value; any other ``-x``/``--long`` token is self-contained. The
-      first non-option token is the subcommand, so ``config`` in
-      ``git config commit.gpgsign`` does not match.
+    Covers ``commit`` plus the other subcommands that mint a commit object a
+    cold signer can leave unsigned (``merge``, ``rebase``, ``cherry-pick``,
+    ``revert``, ``am``, ``pull``; see :data:`_COMMIT_PRODUCING_SUBCOMMANDS`),
+    while EXCLUDING non-creating modes of those subcommands
+    (:data:`_NON_CREATING_FLAGS`, e.g. ``git merge --abort`` / ``--ff-only``)
+    so safe recovery is never blocked.
+
+    A single linear-time :func:`shlex.split` tokenization (no regex
+    backtracking, hence no ReDoS) recognizes the subcommand even behind git
+    global options (``git -C <path> merge``, ``git -c user.name=x commit``):
+    ``-c``/``-C`` consume the next token as their value; any other ``-x`` /
+    ``--long`` global option is self-contained. The first non-option token is
+    the subcommand, so ``config`` in ``git config commit.gpgsign`` and plumbing
+    such as ``git commit-tree`` / ``git merge-base`` do not match. When the
+    command cannot be tokenized (an unbalanced quote), a textual fallback still
+    honors the non-creating flags so a malformed quote cannot force a deny.
     """
-    if _GIT_COMMIT_RE.search(command):
-        return True
     try:
         tokens = shlex.split(command, comments=False, posix=True)
     except ValueError:
-        return False
+        if _NON_CREATING_RE.search(command):
+            return False
+        return bool(_GIT_COMMIT_PRODUCING_RE.search(command))
+    n = len(tokens)
     i = 0
-    while i < len(tokens):
-        if tokens[i] != "git" and not tokens[i].endswith("/git"):
+    while i < n:
+        if tokens[i].lstrip(_GROUP_PREFIX) != "git" and not tokens[i].endswith("/git"):
             i += 1
             continue
+        # Advance past git global options (``-c k=v``, ``-C path``,
+        # ``--no-pager``, ``--git-dir=...``) to the subcommand token.
         j = i + 1
-        while j < len(tokens):
-            arg = tokens[j]
-            if arg.startswith("-"):
-                j += 2 if arg in _GIT_VALUE_OPTS else 1
-                continue
-            if arg.rstrip(";&|") == "commit":
+        while j < n and tokens[j].startswith("-"):
+            j += 2 if tokens[j] in _GIT_VALUE_OPTS else 1
+        if j < n:
+            sub = tokens[j].rstrip(_GROUP_SUFFIX)
+            # ``commit`` always mints a commit object; the non-creating modes
+            # apply to merge/rebase/... only. Returning early here keeps a
+            # commit MESSAGE token that happens to equal a flag
+            # (``-m "--abort"``) from suppressing the signing probe.
+            if sub == "commit":
                 return True
-            break  # some other git subcommand; resume scanning for more git
+            if sub in _COMMIT_PRODUCING_SUBCOMMANDS:
+                k = j + 1
+                rest: set[str] = set()
+                while k < n and tokens[k] not in _SHELL_OPS:
+                    rest.add(tokens[k].rstrip(_GROUP_SUFFIX))
+                    k += 1
+                if not (_NON_CREATING_FLAGS & rest):
+                    return True
+                i = k
+                continue
         i = j + 1
     return False
 
@@ -316,7 +380,7 @@ def decide(event: dict[str, Any]) -> dict[str, Any] | None:
     if event.get("tool_name") != "Bash":
         return None
     command = str((event.get("tool_input") or {}).get("command") or "")
-    if not _command_runs_git_commit(command):
+    if not _command_produces_commit(command):
         return None
     if _ACK_MARKER in command:
         return None

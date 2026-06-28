@@ -58,6 +58,16 @@ PYPROJECT_PATH = REPO_ROOT / "pyproject.toml"
 
 
 def _load(module_name: str) -> types.ModuleType:
+    # Reuse an already-imported module instead of executing a fresh copy and
+    # clobbering ``sys.modules``. Under pytest the canonical ``_github_api`` is
+    # already loaded; replacing it would create a second module object with a
+    # second ``GitHubApiError`` class, breaking ``except GitHubApiError`` in
+    # sibling scripts that imported the canonical one (cross-test pollution,
+    # #909). When run as a standalone script with ``scripts/`` off ``sys.path``
+    # the module is absent here and is loaded fresh by file path as before.
+    existing = sys.modules.get(module_name)
+    if existing is not None:
+        return existing
     spec = importlib.util.spec_from_file_location(
         module_name, REPO_ROOT / "scripts" / f"{module_name}.py"
     )

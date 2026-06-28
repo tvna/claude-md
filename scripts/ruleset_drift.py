@@ -2,9 +2,9 @@
 """Ruleset drift detection helpers (invoked from .github/workflows/weekly-maintenance.yml).
 
 Pure functions classify SoT-vs-live rulesets and render the Markdown bodies that
-the workflow uses for `$GITHUB_STEP_SUMMARY` and `gh issue create --body-file`.
-Side-effect wrappers (HTTP GETs against the rulesets API, and `gh issue create`)
-take injectable boundaries so the CLI is fully unit-testable.
+the workflow uses for `$GITHUB_STEP_SUMMARY` and the issue body. Side-effect
+wrappers (HTTP GETs against the rulesets API, and REST issue create/comment/close
+via `_github_api`) take injectable boundaries so the CLI is fully unit-testable.
 
 See #126 (refactor) and #30 / #116 (origin) for context. #1004 added
 server-default parameter normalization and canonical rule-list ordering to the
@@ -22,14 +22,14 @@ import difflib
 import hashlib
 import json
 import os
-import subprocess
 import sys
 import urllib.request
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Literal
+from urllib.parse import quote
 
-from _github_api import API_VERSION
+from _github_api import API_VERSION, rest_json
 
 API_ROOT = "https://api.github.com"
 SOT_PROJECTION_KEYS = ("name", "target", "enforcement", "conditions", "bypass_actors", "rules")
@@ -363,7 +363,7 @@ def render_unknown_issue_remediation(*, repo: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Side-effect wrappers (HTTP + subprocess) with injectable boundaries
+# Side-effect wrappers (HTTP / REST) with injectable boundaries
 # ---------------------------------------------------------------------------
 
 def fetch_live_rulesets_list(
@@ -399,9 +399,13 @@ def fetch_live_ruleset(
         return json.loads(response.read().decode("utf-8"))
 
 
-def _run_gh(cmd: list[str], *, runner: Callable[..., Any] = subprocess.run) -> Any:
-    """Run a `gh` CLI command with the shared capture/timeout/check policy."""
-    return runner(cmd, capture_output=True, text=True, timeout=30, check=True)
+def _issue_token() -> str:
+    """Token for issue write/read ops.
+
+    The workflow sets ``GH_TOKEN`` to ``GITHUB_TOKEN`` for these, separate
+    from ``GH_TOKEN_API`` (the elevated PAT) used for the ruleset reads.
+    """
+    return os.environ.get("GH_TOKEN", "")
 
 
 def file_issue(
@@ -409,77 +413,62 @@ def file_issue(
     title: str,
     body_file: Path,
     labels: tuple[str, ...] = ISSUE_LABELS,
-    *,
-    runner: Callable[..., Any] = subprocess.run,
 ) -> None:
-    cmd = ["gh", "issue", "create", "--repo", repo, "--title", title,
-           "--body-file", str(body_file)]
-    for label in labels:
-        cmd.extend(["--label", label])
-    _run_gh(cmd, runner=runner)
-
-
-def find_rolling_issue(
-    repo: str,
-    title: str,
-    *,
-    runner: Callable[..., Any] = subprocess.run,
-) -> dict[str, Any] | None:
-    """Return the open issue whose title exactly equals ``title`` (#1004); the
-    ``--search`` keyword match is filtered so a superstring title is not used."""
-    result = _run_gh(
-        ["gh", "issue", "list", "--repo", repo, "--state", "open",
-         "--search", f'"{title}" in:title', "--json", "number,title"],
-        runner=runner,
+    body = body_file.read_text(encoding="utf-8")
+    rest_json(
+        "POST",
+        f"/repos/{repo}/issues",
+        {"title": title, "body": body, "labels": list(labels)},
+        token=_issue_token(),
     )
-    for issue in json.loads(result.stdout or "[]"):
-        if issue.get("title") == title:
+
+
+def find_rolling_issue(repo: str, title: str) -> dict[str, Any] | None:
+    """Return the open issue whose title exactly equals ``title`` (#1004); the
+    search keyword match is filtered so a superstring title is not used."""
+    query = f'repo:{repo} is:issue is:open in:title "{title}"'
+    data = rest_json("GET", f"/search/issues?q={quote(query, safe='')}", token=_issue_token())
+    for issue in (data or {}).get("items") or []:
+        if isinstance(issue, dict) and issue.get("title") == title:
             return {"number": int(issue["number"]), "title": issue["title"]}
     return None
 
 
-def fetch_issue_body(
-    repo: str,
-    issue_number: int,
-    *,
-    runner: Callable[..., Any] = subprocess.run,
-) -> str:
+def fetch_issue_body(repo: str, issue_number: int) -> str:
     """Return an issue body (used to read its embedded drift hash) (#1004)."""
-    result = _run_gh(
-        ["gh", "issue", "view", str(issue_number), "--repo", repo,
-         "--json", "body", "--jq", ".body"],
-        runner=runner,
-    )
-    return str(result.stdout)
+    data = rest_json("GET", f"/repos/{repo}/issues/{issue_number}", token=_issue_token())
+    return str((data or {}).get("body") or "")
 
 
-def comment_on_issue(
-    repo: str,
-    issue_number: int,
-    body_file: Path,
-    *,
-    runner: Callable[..., Any] = subprocess.run,
-) -> None:
+def comment_on_issue(repo: str, issue_number: int, body_file: Path) -> None:
     """Append a comment (rolling update) to an existing issue (#1004)."""
-    _run_gh(
-        ["gh", "issue", "comment", str(issue_number), "--repo", repo,
-         "--body-file", str(body_file)],
-        runner=runner,
+    body = body_file.read_text(encoding="utf-8")
+    rest_json(
+        "POST",
+        f"/repos/{repo}/issues/{issue_number}/comments",
+        {"body": body},
+        token=_issue_token(),
     )
 
 
-def close_issue_with_comment(
-    repo: str,
-    issue_number: int,
-    comment: str,
-    *,
-    runner: Callable[..., Any] = subprocess.run,
-) -> None:
-    """Auto-close a rolling issue with a resolution comment (#1004)."""
-    _run_gh(
-        ["gh", "issue", "close", str(issue_number), "--repo", repo,
-         "--reason", "completed", "--comment", comment],
-        runner=runner,
+def close_issue_with_comment(repo: str, issue_number: int, comment: str) -> None:
+    """Auto-close a rolling issue with a resolution comment (#1004).
+
+    Posts the resolution comment then PATCHes the issue closed (replacing
+    ``gh issue close --reason completed --comment``).
+    """
+    token = _issue_token()
+    rest_json(
+        "POST",
+        f"/repos/{repo}/issues/{issue_number}/comments",
+        {"body": comment},
+        token=token,
+    )
+    rest_json(
+        "PATCH",
+        f"/repos/{repo}/issues/{issue_number}",
+        {"state": "closed", "state_reason": "completed"},
+        token=token,
     )
 
 
@@ -774,8 +763,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         return args.func(args)
-    except (OSError, json.JSONDecodeError, RuntimeError, ValueError,
-            subprocess.CalledProcessError) as exc:
+    except (OSError, json.JSONDecodeError, RuntimeError, ValueError) as exc:
         print(f"::error::{exc}", file=sys.stderr)
         return 1
 

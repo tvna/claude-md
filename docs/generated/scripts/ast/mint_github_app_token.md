@@ -121,6 +121,39 @@ flowchart TD
     N003 -->|"false"| N005
 ```
 
+## _require_private_key(...)
+
+```mermaid
+flowchart TD
+    N001["_require_private_key(...)"]
+    N002["literal = get(...)"]
+    N003["if literal.strip()"]
+    N004["return literal"]
+    N005["path = get(...)"]
+    N006["if path.strip()"]
+    N007["try"]
+    N008["pem = read_text(...)"]
+    N009["except OSError"]
+    N010["raise MintError(f'<str>{path}<str>{exc.__class__.__name__}')"]
+    N011["if not pem.strip()"]
+    N012["raise MintError(f'<str>{path}<str>')"]
+    N013["return pem"]
+    N014["raise MintError('<str>')"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 -->|"true"| N004
+    N003 -->|"false"| N005
+    N005 --> N006
+    N006 -->|"true"| N007
+    N007 -->|"try"| N008
+    N007 -->|"raises"| N009
+    N009 --> N010
+    N008 --> N011
+    N011 -->|"true"| N012
+    N011 -->|"false"| N013
+    N006 -->|"false"| N014
+```
+
 ## mint_from_env(...)
 
 ```mermaid
@@ -128,7 +161,7 @@ flowchart TD
     N001["mint_from_env(...)"]
     N002["app_id = _require_env(...)"]
     N003["installation_id = _require_env(...)"]
-    N004["private_key_pem = _require_env(...)"]
+    N004["private_key_pem = _require_private_key(...)"]
     N005["api_url = get(...)"]
     N006["jwt_token = build_jwt(...)"]
     N007["return request_installation_token(jwt_token, installation_id, api_url=api_url)"]

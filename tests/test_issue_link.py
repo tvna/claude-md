@@ -7,11 +7,12 @@ The ``scripts/`` directory is added to ``sys.path`` via the
 
 from __future__ import annotations
 
-import subprocess
+import urllib.error
 from typing import Any
 
 import issue_link
 import pytest
+from _github_api import GitHubApiError
 
 pytestmark = pytest.mark.shard_ci_ops_2
 # ---------------------------------------------------------------------------
@@ -137,86 +138,71 @@ class TestExtractRefs:
 
 
 class TestIssueExists:
-    def test_gh_success_returns_true(
+    def test_success_returns_true(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        class _Result:
-            stdout = b""
-            stderr = b""
-            returncode = 0
-
         captured: dict[str, Any] = {}
 
-        def _run(cmd, **kwargs):
-            captured["cmd"] = cmd
-            captured["kwargs"] = kwargs
-            return _Result()
+        def _rest(method, path, *_a, **kwargs):
+            captured["method"] = method
+            captured["path"] = path
+            captured["token"] = kwargs.get("token")
+            return {"number": 42}
 
-        monkeypatch.setattr(subprocess, "run", _run)
+        monkeypatch.setattr(issue_link, "rest_json", _rest)
         assert issue_link.issue_exists("owner/repo", 42) is True
-        # Argv contract: gh api /repos/owner/repo/issues/42 --silent
-        assert captured["cmd"] == [
-            "gh", "api", "/repos/owner/repo/issues/42", "--silent",
-        ]
-        assert captured["kwargs"].get("check") is True
-        assert captured["kwargs"].get("timeout") == 30
+        # REST contract: GET /repos/owner/repo/issues/42
+        assert captured["method"] == "GET"
+        assert captured["path"] == "/repos/owner/repo/issues/42"
 
-    def test_gh_missing_returns_false(
+    def test_network_error_returns_false(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         def _raise(*_a, **_k):
-            raise FileNotFoundError("gh: command not found")
+            raise urllib.error.URLError("connection refused")
 
-        monkeypatch.setattr(subprocess, "run", _raise)
+        monkeypatch.setattr(issue_link, "rest_json", _raise)
         assert issue_link.issue_exists("owner/repo", 42) is False
 
 
 class TestVerifyRefExists:
-    def test_runner_success_returns_true(self) -> None:
+    def test_token_passed_through_returns_true(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         captured: dict[str, Any] = {}
 
-        def _run(cmd, **kwargs):
-            captured["cmd"] = cmd
-            captured["kwargs"] = kwargs
+        def _rest(method, path, *_a, **kwargs):
+            captured["method"] = method
+            captured["path"] = path
+            captured["token"] = kwargs.get("token")
+            return {"number": 42}
 
+        monkeypatch.setattr(issue_link, "rest_json", _rest)
         assert (
-            issue_link.verify_ref_exists("owner/repo", 42, runner=_run)
+            issue_link.verify_ref_exists("owner/repo", 42, token="tok")
             is True
         )
-        assert captured["cmd"] == [
-            "gh", "api", "/repos/owner/repo/issues/42", "--silent",
-        ]
-        assert captured["kwargs"].get("check") is True
-        assert captured["kwargs"].get("timeout") == 30
+        assert captured["method"] == "GET"
+        assert captured["path"] == "/repos/owner/repo/issues/42"
+        assert captured["token"] == "tok"
 
-    def test_runner_failure_returns_false(self) -> None:
-        def _run(*_a, **_k):
-            raise subprocess.CalledProcessError(1, "gh")
+    def test_failure_returns_false(self) -> None:
+        def _rest(*_a, **_k):
+            raise GitHubApiError(500, "GET", "/repos/owner/repo/issues/42", "boom")
 
         assert (
-            issue_link.verify_ref_exists("owner/repo", 42, runner=_run)
+            issue_link.verify_ref_exists("owner/repo", 42, token="tok")
             is False
         )
 
-    def test_gh_nonzero_exit_returns_false(
+    def test_404_returns_false(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         def _raise(*_a, **_k):
-            raise subprocess.CalledProcessError(
-                1, "gh", stderr=b"HTTP 404: Not Found"
-            )
+            raise GitHubApiError(404, "GET", "/repos/owner/repo/issues/x", "not found")
 
-        monkeypatch.setattr(subprocess, "run", _raise)
+        monkeypatch.setattr(issue_link, "rest_json", _raise)
         assert issue_link.issue_exists("owner/repo", 999_999_999) is False
-
-    def test_gh_timeout_returns_false(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        def _raise(*_a, **_k):
-            raise subprocess.TimeoutExpired(cmd="gh", timeout=30)
-
-        monkeypatch.setattr(subprocess, "run", _raise)
-        assert issue_link.issue_exists("owner/repo", 42) is False
 
     def test_oserror_returns_false(
         self, monkeypatch: pytest.MonkeyPatch
@@ -224,7 +210,7 @@ class TestVerifyRefExists:
         def _raise(*_a, **_k):
             raise OSError("disk full or similar")
 
-        monkeypatch.setattr(subprocess, "run", _raise)
+        monkeypatch.setattr(issue_link, "rest_json", _raise)
         assert issue_link.issue_exists("owner/repo", 42) is False
 
 
@@ -603,69 +589,69 @@ class TestBodyHasPartialMarker:
 
 
 class TestGetIssueLabels:
-    def test_returns_label_list_on_success(self) -> None:
+    def test_returns_label_list_on_success(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         captured: dict[str, Any] = {}
 
-        class _Result:
-            stdout = b"type:tracking\nlayer:meta\n"
-            returncode = 0
+        def _rest(method, path, *_a, **_k):
+            captured["method"] = method
+            captured["path"] = path
+            return {"labels": [{"name": "type:tracking"}, {"name": "layer:meta"}]}
 
-        def _run(cmd, **kwargs):
-            captured["cmd"] = cmd
-            return _Result()
-
+        monkeypatch.setattr(issue_link, "rest_json", _rest)
         assert issue_link.get_issue_labels(
-            "owner/repo", 42, runner=_run
+            "owner/repo", 42, token="tok"
         ) == ["type:tracking", "layer:meta"]
-        assert captured["cmd"] == [
-            "gh", "api",
-            "/repos/owner/repo/issues/42",
-            "--jq", ".labels[].name",
+        assert captured["method"] == "GET"
+        assert captured["path"] == "/repos/owner/repo/issues/42"
+
+    def test_empty_label_list(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(issue_link, "rest_json", lambda *_a, **_k: {"labels": []})
+        assert issue_link.get_issue_labels("owner/repo", 42) == []
+
+    def test_strips_blank_and_non_string_names(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            issue_link,
+            "rest_json",
+            lambda *_a, **_k: {
+                "labels": [
+                    {"name": "  type:fix  "},
+                    {"name": "   "},
+                    {"name": None},
+                    {"name": "layer:p3-harness"},
+                ]
+            },
+        )
+        assert issue_link.get_issue_labels("owner/repo", 42) == [
+            "type:fix",
+            "layer:p3-harness",
         ]
 
-    def test_empty_label_list(self) -> None:
-        class _Result:
-            stdout = b""
-            returncode = 0
-
-        assert issue_link.get_issue_labels(
-            "owner/repo", 42, runner=lambda *_a, **_k: _Result()
-        ) == []
-
-    def test_strips_blank_lines(self) -> None:
-        class _Result:
-            stdout = b"  type:fix  \n\n  layer:p3-harness  \n"
-            returncode = 0
-
-        assert issue_link.get_issue_labels(
-            "owner/repo", 42, runner=lambda *_a, **_k: _Result()
-        ) == ["type:fix", "layer:p3-harness"]
-
-    def test_returns_none_on_subprocess_error(self) -> None:
-        def _raise(*_a, **_k):
-            raise subprocess.CalledProcessError(1, "gh")
-
-        assert (
-            issue_link.get_issue_labels("owner/repo", 42, runner=_raise)
-            is None
-        )
-
-    def test_returns_none_on_missing_gh(
+    def test_returns_none_on_api_error(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         def _raise(*_a, **_k):
-            raise FileNotFoundError("gh not found")
+            raise GitHubApiError(500, "GET", "/repos/owner/repo/issues/42", "boom")
 
-        monkeypatch.setattr(subprocess, "run", _raise)
+        monkeypatch.setattr(issue_link, "rest_json", _raise)
+        assert issue_link.get_issue_labels("owner/repo", 42, token="t") is None
+
+    def test_returns_none_on_network_error(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        def _raise(*_a, **_k):
+            raise urllib.error.URLError("connection refused")
+
+        monkeypatch.setattr(issue_link, "rest_json", _raise)
         assert issue_link.get_issue_labels("owner/repo", 42) is None
 
-    def test_returns_none_on_timeout(
+    def test_returns_none_on_malformed_body(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        def _raise(*_a, **_k):
-            raise subprocess.TimeoutExpired(cmd="gh", timeout=30)
-
-        monkeypatch.setattr(subprocess, "run", _raise)
+        monkeypatch.setattr(issue_link, "rest_json", lambda *_a, **_k: ["not", "a", "dict"])
         assert issue_link.get_issue_labels("owner/repo", 42) is None
 
 

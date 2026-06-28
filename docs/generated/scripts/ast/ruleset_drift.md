@@ -302,12 +302,12 @@ flowchart TD
     N006 --> N007
 ```
 
-## _run_gh(...)
+## _issue_token(...)
 
 ```mermaid
 flowchart TD
-    N001["_run_gh(...)"]
-    N002["return runner(cmd, capture_output=True, text=True, timeout=30, check=True)"]
+    N001["_issue_token(...)"]
+    N002["return os.environ.get('<str>', '<str>')"]
     N001 -->|"start"| N002
 ```
 
@@ -316,14 +316,12 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["file_issue(...)"]
-    N002["cmd = ['<str>', '<str>', '<str>', '<str>', repo, '<str>', title, '<str>', str(body_file)]"]
-    N003["for label in labels:     cmd.extend(['<str>', label])"]
-    N004["_run_gh(...)"]
-    N005["end"]
+    N002["body = read_text(...)"]
+    N003["rest_json(...)"]
+    N004["end"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 --> N004
-    N004 --> N005
 ```
 
 ## find_rolling_issue(...)
@@ -331,12 +329,14 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["find_rolling_issue(...)"]
-    N002["result = _run_gh(...)"]
-    N003["for issue in json.loads(result.stdout or '<str>'):     if issue.get('<str>') == title:         return {'<str>': int(issue['<str>']), '<str>': issue['<str>']}"]
-    N004["return None"]
+    N002["query = f'<str>{repo}<str>{title}<str>'"]
+    N003["data = rest_json(...)"]
+    N004["for issue in (data or {}).get('<str>') or []:     if isinstance(issue, dict) and issue.get('<str>') == title:         return {'<str>': int(issue['<str>']), '<str>': issue['<str>']}"]
+    N005["return None"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 --> N004
+    N004 --> N005
 ```
 
 ## fetch_issue_body(...)
@@ -344,8 +344,8 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["fetch_issue_body(...)"]
-    N002["result = _run_gh(...)"]
-    N003["return str(result.stdout)"]
+    N002["data = rest_json(...)"]
+    N003["return str((data or {}).get('<str>') or '<str>')"]
     N001 -->|"start"| N002
     N002 --> N003
 ```
@@ -355,10 +355,12 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["comment_on_issue(...)"]
-    N002["_run_gh(...)"]
-    N003["end"]
+    N002["body = read_text(...)"]
+    N003["rest_json(...)"]
+    N004["end"]
     N001 -->|"start"| N002
     N002 --> N003
+    N003 --> N004
 ```
 
 ## close_issue_with_comment(...)
@@ -366,10 +368,14 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["close_issue_with_comment(...)"]
-    N002["_run_gh(...)"]
-    N003["end"]
+    N002["token = _issue_token(...)"]
+    N003["rest_json(...)"]
+    N004["rest_json(...)"]
+    N005["end"]
     N001 -->|"start"| N002
     N002 --> N003
+    N003 --> N004
+    N004 --> N005
 ```
 
 ## detect(...)
@@ -579,7 +585,7 @@ flowchart TD
     N020["args = parse_args(...)"]
     N021["try"]
     N022["return args.func(args)"]
-    N023["except (OSError, json.JSONDecodeError, RuntimeError, ValueError, subprocess.CalledProcessError)"]
+    N023["except (OSError, json.JSONDecodeError, RuntimeError, ValueError)"]
     N024["print(...)"]
     N025["return 1"]
     N001 -->|"start"| N002

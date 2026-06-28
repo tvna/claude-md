@@ -106,6 +106,16 @@
         "hooks": [
           {
             "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && scripts/install-prek.sh",
+            "statusMessage": "Provisioning prek git-hook runner"
+          }
+        ]
+      },
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
             "command": "cd \"$(git rev-parse --show-toplevel)\" && scripts/session_uv_local_pin.sh",
             "statusMessage": "Aligning local uv with repo pin"
           }
@@ -375,6 +385,16 @@
         "hooks": [
           {
             "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/preflight_push_unsigned_commits.py",
+            "statusMessage": "Checking pushed commits are signed"
+          }
+        ]
+      },
+      {
+        "matcher": "^Bash$",
+        "hooks": [
+          {
+            "type": "command",
             "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/preflight_push_base.py",
             "statusMessage": "Checking branch base before push"
           }
@@ -417,6 +437,16 @@
             "type": "command",
             "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/check_commit_signing_ready.py",
             "statusMessage": "Checking commit signing readiness before commit"
+          }
+        ]
+      },
+      {
+        "matcher": "^Bash$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/gate_retro_close_keyword_commit.py",
+            "statusMessage": "Checking for retro-issue closing keyword in commit message"
           }
         ]
       },

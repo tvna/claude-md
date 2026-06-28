@@ -45,11 +45,11 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["verify_ref_exists(...)"]
-    N002["if runner is None"]
-    N003["runner = subprocess.run"]
+    N002["if token is None"]
+    N003["token = get(...)"]
     N004["try"]
-    N005["runner(...)"]
-    N006["except (subprocess.SubprocessError, FileNotFoundError, OSError)"]
+    N005["rest_json(...)"]
+    N006["except (GitHubApiError, urllib.error.URLError, OSError, ValueError)"]
     N007["return False"]
     N008["return True"]
     N001 -->|"start"| N002
@@ -76,16 +76,17 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["get_issue_labels(...)"]
-    N002["if runner is None"]
-    N003["runner = subprocess.run"]
+    N002["if token is None"]
+    N003["token = get(...)"]
     N004["try"]
-    N005["result = runner(...)"]
-    N006["except (subprocess.SubprocessError, FileNotFoundError, OSError)"]
+    N005["data = rest_json(...)"]
+    N006["except (GitHubApiError, urllib.error.URLError, OSError, ValueError)"]
     N007["return None"]
-    N008["raw = getattr(result, '<str>', b'') or b''"]
-    N009["if isinstance(raw, bytes)"]
-    N010["raw = decode(...)"]
-    N011["return [line.strip() for line in raw.splitlines() if line.strip()]"]
+    N008["if not isinstance(data, dict)"]
+    N009["return None"]
+    N010["names = []"]
+    N011["for label in data.get('<str>') or []:     if isinstance(label, dict):         name = label.get('<str>')         if isinstance(name, str) and name.strip():             names.append(name.strip())"]
+    N012["return names"]
     N001 -->|"start"| N002
     N002 -->|"true"| N003
     N003 --> N004
@@ -94,10 +95,10 @@ flowchart TD
     N004 -->|"raises"| N006
     N006 --> N007
     N005 --> N008
-    N008 --> N009
-    N009 -->|"true"| N010
+    N008 -->|"true"| N009
+    N008 -->|"false"| N010
     N010 --> N011
-    N009 -->|"false"| N011
+    N011 --> N012
 ```
 
 ## _format_no_closing_keyword_msg(...)

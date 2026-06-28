@@ -28,6 +28,60 @@ flowchart TD
     N005 --> N006
 ```
 
+## rest_text(...)
+
+```mermaid
+flowchart TD
+    N001["rest_text(...)"]
+    N002["if token is None"]
+    N003["token = get(...)"]
+    N004["url = path if path.startswith('<str>') else f'{API_ROOT}{path}'"]
+    N005["(code, body) = apply_call(...)"]
+    N006["if not 200 <= code < 300"]
+    N007["raise GitHubApiError(code, method, path, body)"]
+    N008["return body"]
+    N001 -->|"start"| N002
+    N002 -->|"true"| N003
+    N003 --> N004
+    N002 -->|"false"| N004
+    N004 --> N005
+    N005 --> N006
+    N006 -->|"true"| N007
+    N006 -->|"false"| N008
+```
+
+## rest_json(...)
+
+```mermaid
+flowchart TD
+    N001["rest_json(...)"]
+    N002["body = rest_text(...)"]
+    N003["if not body.strip()"]
+    N004["return None"]
+    N005["return json.loads(body)"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 -->|"true"| N004
+    N003 -->|"false"| N005
+```
+
+## paginate(...)
+
+```mermaid
+flowchart TD
+    N001["paginate(...)"]
+    N002["items = []"]
+    N003["page = 1"]
+    N004["sep = '<str>' if '<str>' in path else '<str>'"]
+    N005["while True:     page_path = f'{path}{sep}<str>{per_page}<str>{page}'     data = rest_json('<str>', page_path, token=token, opener=opener, sleeper=sleeper)     if not isinstance(data, list) or not data:         break     items.extend(data)     if len(data) < per_page:         break     page += 1"]
+    N006["return items"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 --> N004
+    N004 --> N005
+    N005 --> N006
+```
+
 ## upload_release_asset(...)
 
 ```mermaid

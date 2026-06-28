@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import json
-import subprocess
 from typing import Any
 
 import auto_retro as ar
 import pytest
+from _github_api import GitHubApiError
 
 
 def merged_event(**overrides: Any) -> dict[str, Any]:
@@ -67,9 +67,7 @@ def orchestrator_recorder(
             return json.dumps({"items": existing})
         if method == "GET" and "/pulls/" in path and "/comments" in path:
             if comments_error:
-                raise subprocess.CalledProcessError(
-                    1, "gh", stderr="comments endpoint boom"
-                )
+                raise GitHubApiError(500, "GET", path, "comments endpoint boom")
             return json.dumps(review_comments)
         if method == "GET" and "/pulls/" in path and "/commits" in path:
             return json.dumps(commits)
@@ -77,9 +75,7 @@ def orchestrator_recorder(
             return json.dumps({"check_runs": check_runs})
         if method == "GET" and "/pulls/" in path:
             if check_runs_error:
-                raise subprocess.CalledProcessError(
-                    1, "gh", stderr="pulls endpoint boom"
-                )
+                raise GitHubApiError(500, "GET", path, "pulls endpoint boom")
             if pr_detail_sequence is not None:
                 i = pr_detail_idx[0]
                 pr_detail_idx[0] = i + 1
@@ -99,9 +95,7 @@ def orchestrator_recorder(
             and path.endswith("/comments")
         ):
             if back_link_post_error:
-                raise subprocess.CalledProcessError(
-                    1, "gh", stderr="back-link post boom"
-                )
+                raise GitHubApiError(500, "POST", path, "back-link post boom")
             return ""
         if (
             method == "POST"
@@ -109,9 +103,7 @@ def orchestrator_recorder(
             and path.endswith("/labels")
         ):
             if terminal_label_post_error:
-                raise subprocess.CalledProcessError(
-                    1, "gh", stderr="terminal-label post boom"
-                )
+                raise GitHubApiError(500, "POST", path, "terminal-label post boom")
             return ""
         if method == "PATCH" and "/issues/comments/" in path:
             return ""

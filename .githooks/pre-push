@@ -8,14 +8,24 @@
 #
 #     git config core.hooksPath .githooks
 #
-# Escape hatch; when a push is genuinely urgent (e.g. a security rollback)
-# the preflight loop can be bypassed by exporting PREFLIGHT_SKIP=1. This is an
-# explicit, observable bypass so the next retro can see it in shell history.
+# Escape hatches. Two tiers, narrowed in issue #2133 (PR #2120 retro #2121)
+# because the old all-or-nothing PREFLIGHT_SKIP=1 also dropped the cheap
+# deterministic gates (scan_repo_double_hyphen, scan_repo_em_dash,
+# scan_non_ascii) and preflight_coverage. In remote sessions lacking the prek
+# binary that blanket bypass was routine, so locally-catchable defects leaked to
+# CI (the double-hyphen and per-file-coverage failures #2120 hit):
+#
+#   * PREFLIGHT_SKIP=1      -> skip ONLY the prek step. Every cheap gate AND
+#                             preflight_coverage still run. This is the routine
+#                             "prek is not provisioned here" lever.
+#   * PREFLIGHT_SKIP_ALL=1  -> skip the whole preflight_all.py run. Reserve for a
+#                             genuinely urgent push (e.g. a security rollback);
+#                             it is loud and observable in shell history.
 
 set -euo pipefail
 
-if [ "${PREFLIGHT_SKIP:-0}" = "1" ]; then
-    echo "pre-push: PREFLIGHT_SKIP=1 set, skipping scripts/preflight_all.py." >&2
+if [ "${PREFLIGHT_SKIP_ALL:-0}" = "1" ]; then
+    echo "pre-push: PREFLIGHT_SKIP_ALL=1 set, skipping ALL of scripts/preflight_all.py (emergency bypass)." >&2
     exit 0
 fi
 
@@ -25,6 +35,11 @@ preflight="${repo_root}/scripts/preflight_all.py"
 if [ ! -f "${preflight}" ]; then
     echo "pre-push: ${preflight} not found, skipping." >&2
     exit 0
+fi
+
+if [ "${PREFLIGHT_SKIP:-0}" = "1" ]; then
+    echo "pre-push: PREFLIGHT_SKIP=1 set, skipping ONLY the prek step; cheap gates and preflight_coverage still run." >&2
+    export PREFLIGHT_SKIP_STEPS="${PREFLIGHT_SKIP_STEPS:+${PREFLIGHT_SKIP_STEPS},}prek"
 fi
 
 # preflight_branch_base.py is intentionally NOT invoked directly here: it is a

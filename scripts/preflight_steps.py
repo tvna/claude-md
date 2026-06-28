@@ -94,12 +94,29 @@ STEPS: tuple[Step, ...] = (
         # space-hyphen-hyphen-space prose separator. Skips noqa lines,
         # Markdown table rows, and structured-data extensions (.yml, .yaml,
         # .sh, .json, .toml, .lock, .sql). Complements scan_repo_em_dash.py.
+        # Refs #2069: this pre-push hook only fires before an agent push; the
+        # CI scan-double-hyphen job re-runs the scan to cover post-merge commits.
         name="scan_repo_double_hyphen",
         argv=(
             "python3",
             "scripts/scan_repo_double_hyphen.py",
             "verify",
             "--git-tracked",
+        ),
+    ),
+    Step(
+        # Refs #2065. Diff-scoped gate: a new or changed docs/runbooks/*.md
+        # must follow TEMPLATE.md's canonical section skeleton. PR_BODY is
+        # unset locally and --body-file is omitted, the stricter default, so
+        # a non-conforming runbook surfaces before push without honouring a
+        # waiver. Base-ref shape mirrors CI's verify-pr.yml step.
+        name="scan_runbook_template_drift",
+        argv=(
+            "python3",
+            "scripts/scan_runbook_template_drift.py",
+            "verify",
+            "--base-ref",
+            "origin/main",
         ),
     ),
     Step(name="verify_apm_checksums", argv=("python3", "scripts/verify_apm_checksums.py", "verify")),
@@ -145,6 +162,10 @@ STEPS: tuple[Step, ...] = (
     Step(
         name="scan_workflow_gh_calls",
         argv=("python3", "scripts/scan_workflow_gh_calls.py", "verify"),
+    ),
+    Step(
+        name="scan_scripts_gh_calls",
+        argv=("python3", "scripts/scan_scripts_gh_calls.py", "verify"),
     ),
     Step(
         name="scan_workflow_injection",
@@ -270,6 +291,18 @@ STEPS: tuple[Step, ...] = (
         argv=("python3", "scripts/gate_generated_scripts_manual_edit.py", "verify"),
     ),
     Step(
+        # Refs #2098 (Gap B). .agents/skills/ and .claude/skills/ are generated
+        # by `apm compile` from the obra/superpowers pin; the PreToolUse gate
+        # (gate_agents_skills_edit.py) blocks edits in an agent session, and this
+        # is its post-merge-tree counterpart; it fails a branch that diffs a
+        # managed tree without a matching apm.yml / apm.lock.yaml pin change.
+        # Runs after preflight_branch_base fetches origin/<base>; mirrors the
+        # verify-pr.yml step of the same name so the gate fires pre-push, not
+        # only in CI.
+        name="gate_agents_skills_edit",
+        argv=("python3", "scripts/gate_agents_skills_edit.py", "verify"),
+    ),
+    Step(
         # Refs #1771. docs/generated/workflows/ is owned by the post-merge
         # automation, same single-producer model as docs/generated/scripts/
         # (#1540/#1543/#1546). The pre-push gate no longer regenerates the
@@ -328,6 +361,22 @@ STEPS: tuple[Step, ...] = (
         # coverage and is not in the explicit allowlist in the script.
         name="scan_hook_coverage_drift",
         argv=("python3", "scripts/scan_hook_coverage_drift.py", "verify"),
+    ),
+    Step(
+        # Refs #2133 (PR #2120 retro #2121, P1). Fails when a git PreToolUse
+        # hook's if: predicate (Bash(*git commit*) etc.) is narrower than the
+        # command surface the script declares in HOOK_GIT_SUBCOMMANDS, so a
+        # widened matcher cannot silently go untriggered.
+        name="scan_hook_predicate_surface_drift",
+        argv=("python3", "scripts/scan_hook_predicate_surface_drift.py", "verify"),
+    ),
+    Step(
+        # Refs #2152 (retro for PR #2134 / #2133). Fails when the set of
+        # PREFLIGHT_SKIP* emergency-bypass levers in .githooks/pre-push drifts
+        # from the set documented in docs/runbooks/preflight.md, so changing a
+        # documented escape hatch forces a co-update of its runbook.
+        name="scan_bypass_lever_doc_drift",
+        argv=("python3", "scripts/scan_bypass_lever_doc_drift.py", "verify"),
     ),
     Step(
         # Refs #1103. Fails when a tool a gate needs at runtime (a Step
@@ -530,6 +579,24 @@ STEPS: tuple[Step, ...] = (
             "python3",
             "scripts/scan_design_philosophy_drift.py",
             "verify-coupling",
+            "--base-ref",
+            "origin/main",
+        ),
+    ),
+    Step(
+        # Refs #2011/#1754. Doc-graph co-change gate promoted to pre-push: a
+        # change to a doc-dependencies.toml node with a blocking dependent
+        # (e.g. design_philosophy_prd -> ubiquitous_language) must co-change
+        # that dependent. PR_BODY is unset locally, the stricter default, so a
+        # doc-graph-waiver is absent and the co-change miss surfaces before
+        # push rather than only in validate-doc-graph.yml CI (the #1989
+        # first-head failure class). Base-ref shape mirrors the CI workflow;
+        # reads origin/main fetched by preflight_branch_base. Was previously
+        # CI-only via the scan_preflight_drift ALLOWLIST; promotion per #2011.
+        name="gate_doc_graph_pr",
+        argv=(
+            "python3",
+            "scripts/gate_doc_graph_pr.py",
             "--base-ref",
             "origin/main",
         ),

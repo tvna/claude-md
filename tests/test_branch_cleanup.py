@@ -11,10 +11,6 @@ import pytest
 
 pytestmark = pytest.mark.shard_ci_ops
 
-class _Result:
-    def __init__(self, stdout: str = "") -> None:
-        self.stdout = stdout
-
 
 class TestParseDryRun:
     def test_true(self) -> None:
@@ -98,70 +94,157 @@ class TestDecideIssueAction:
 
 
 class TestSideEffectWrappers:
-    def test_list_branches_parses_rows(self) -> None:
-        assert branch_cleanup.list_branches("o/r", runner=_runner(["a\tsha1\nb\tsha2\n"])) == [
-            ("a", "sha1"),
-            ("b", "sha2"),
-        ]
+    def test_list_branches_parses_rows(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(
+            branch_cleanup,
+            "paginate",
+            lambda *_a, **_k: [
+                {"name": "a", "commit": {"sha": "sha1"}},
+                {"name": "b", "commit": {"sha": "sha2"}},
+            ],
+        )
+        assert branch_cleanup.list_branches("o/r") == [("a", "sha1"), ("b", "sha2")]
 
-    def test_list_branches_empty_repo(self) -> None:
-        assert branch_cleanup.list_branches("o/r", runner=_runner([""])) == []
+    def test_list_branches_empty_repo(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(branch_cleanup, "paginate", lambda *_a, **_k: [])
+        assert branch_cleanup.list_branches("o/r") == []
 
-    def test_list_branches_rejects_malformed_row(self) -> None:
+    def test_list_branches_rejects_malformed_row(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            branch_cleanup, "paginate", lambda *_a, **_k: [{"name": "a", "commit": {}}]
+        )
         with pytest.raises(ValueError, match="malformed branch row"):
-            branch_cleanup.list_branches("o/r", runner=_runner(["not-tabbed\n"]))
+            branch_cleanup.list_branches("o/r")
 
     @pytest.mark.parametrize(
         ("raw", "expected"),
         [
-            ("2026-01-02T03:04:05Z\n", datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC)),
+            ("2026-01-02T03:04:05Z", datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC)),
             (
-                "2026-01-02T03:04:05+00:00\n",
+                "2026-01-02T03:04:05+00:00",
                 datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC),
             ),
         ],
     )
-    def test_get_last_commit_date(self, raw: str, expected: datetime) -> None:
-        assert branch_cleanup.get_last_commit_date("o/r", "sha", runner=_runner([raw])) == expected
+    def test_get_last_commit_date(
+        self, raw: str, expected: datetime, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            branch_cleanup,
+            "rest_json",
+            lambda *_a, **_k: {"commit": {"committer": {"date": raw}}},
+        )
+        assert branch_cleanup.get_last_commit_date("o/r", "sha") == expected
 
-    def test_get_last_commit_date_rejects_malformed_date(self) -> None:
+    def test_get_last_commit_date_rejects_malformed_date(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            branch_cleanup,
+            "rest_json",
+            lambda *_a, **_k: {"commit": {"committer": {"date": "nope"}}},
+        )
         with pytest.raises(ValueError, match="malformed GitHub datetime"):
-            branch_cleanup.get_last_commit_date("o/r", "sha", runner=_runner(["nope\n"]))
+            branch_cleanup.get_last_commit_date("o/r", "sha")
 
-    @pytest.mark.parametrize(("raw", "expected"), [("0\n", 0), ("1\n", 1), ("3\n", 3)])
-    def test_count_open_prs_for_head(self, raw: str, expected: int) -> None:
-        assert branch_cleanup.count_open_prs_for_head("o/r", "b", runner=_runner([raw])) == expected
+    @pytest.mark.parametrize("count", [0, 1, 3])
+    def test_count_open_prs_for_head(
+        self, count: int, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            branch_cleanup, "paginate", lambda *_a, **_k: [{"number": i} for i in range(count)]
+        )
+        assert branch_cleanup.count_open_prs_for_head("o/r", "b") == count
 
-    def test_find_rolling_issue_exact_title(self) -> None:
-        payload = '[{"number": 1, "title": "other"}, {"number": 2, "title": "target", "createdAt": "2026-01-01T00:00:00Z"}]'
-        assert branch_cleanup.find_rolling_issue("o/r", "target", runner=_runner([payload])) == {
+    def test_count_open_prs_encodes_reserved_branch_chars(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # A branch name with `#` / `&` must be percent-encoded so it is not
+        # parsed as a URL fragment / extra query param (Codex review on #2122).
+        seen: dict[str, str] = {}
+
+        def _fake(path: str, *, token: str, **_kw: object) -> list[dict[str, object]]:
+            seen["path"] = path
+            return []
+
+        monkeypatch.setattr(branch_cleanup, "paginate", _fake)
+        branch_cleanup.count_open_prs_for_head("owner/repo", "fix/a#b&c")
+        # `:` and `/` stay literal; `#` and `&` are encoded.
+        assert "head=owner:fix/a%23b%26c" in seen["path"]
+        assert "#" not in seen["path"]
+
+    def test_find_rolling_issue_exact_title(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            branch_cleanup,
+            "rest_json",
+            lambda *_a, **_k: {
+                "items": [
+                    {"number": 1, "title": "other"},
+                    {"number": 2, "title": "target", "created_at": "2026-01-01T00:00:00Z"},
+                ]
+            },
+        )
+        assert branch_cleanup.find_rolling_issue("o/r", "target") == {
             "number": 2,
             "title": "target",
             "created_at": "2026-01-01T00:00:00Z",
         }
 
-    def test_fetch_issue_last_activity_uses_last_comment(self) -> None:
-        assert branch_cleanup.fetch_issue_last_activity(
-            "o/r",
-            7,
-            runner=_runner(
-                [
-                    "2026-01-01T00:00:00Z\n",
-                    "2026-01-02T00:00:00Z\n2026-01-03T00:00:00Z\n",
-                ]
-            ),
-        ) == datetime(2026, 1, 3, tzinfo=UTC)
+    def test_fetch_issue_last_activity_uses_last_comment(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            branch_cleanup,
+            "rest_json",
+            lambda *_a, **_k: {"created_at": "2026-01-01T00:00:00Z"},
+        )
+        monkeypatch.setattr(
+            branch_cleanup,
+            "paginate",
+            lambda *_a, **_k: [
+                {"created_at": "2026-01-02T00:00:00Z"},
+                {"created_at": "2026-01-03T00:00:00Z"},
+            ],
+        )
+        assert branch_cleanup.fetch_issue_last_activity("o/r", 7) == datetime(
+            2026, 1, 3, tzinfo=UTC
+        )
 
-    def test_fetch_issue_last_activity_falls_back_to_created_at(self) -> None:
-        assert branch_cleanup.fetch_issue_last_activity(
-            "o/r",
-            7,
-            runner=_runner(["2026-01-01T00:00:00Z\n", ""]),
-        ) == datetime(2026, 1, 1, tzinfo=UTC)
+    def test_fetch_issue_last_activity_falls_back_to_created_at(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            branch_cleanup,
+            "rest_json",
+            lambda *_a, **_k: {"created_at": "2026-01-01T00:00:00Z"},
+        )
+        monkeypatch.setattr(branch_cleanup, "paginate", lambda *_a, **_k: [])
+        assert branch_cleanup.fetch_issue_last_activity("o/r", 7) == datetime(
+            2026, 1, 1, tzinfo=UTC
+        )
+
+
+def _stub_survey_io(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    branches: list[tuple[str, str]],
+    commit_date: datetime = datetime(2026, 1, 1, tzinfo=UTC),
+    open_prs: int = 0,
+) -> None:
+    monkeypatch.setattr(branch_cleanup, "list_branches", lambda *_a, **_k: branches)
+    monkeypatch.setattr(branch_cleanup, "get_last_commit_date", lambda *_a, **_k: commit_date)
+    monkeypatch.setattr(branch_cleanup, "count_open_prs_for_head", lambda *_a, **_k: open_prs)
 
 
 class TestRenderSurvey:
-    def test_empty_repo_prints_none_and_zero_count(self) -> None:
+    def test_empty_repo_prints_none_and_zero_count(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _stub_survey_io(monkeypatch, branches=[])
         summary, comment, count = branch_cleanup.render_survey(
             repo="o/r",
             dry_run_raw="true",
@@ -170,14 +253,21 @@ class TestRenderSurvey:
             event_name="workflow_dispatch",
             run_url="https://example.test/run",
             now_utc=_dt(2026, 1, 31),
-            runner=_runner([""]),
         )
         assert "Total branches: `0`" in summary
         assert "| _(none)_ | - | - | - |" in summary
         assert comment is None
         assert count == 0
 
-    def test_single_old_orphan_is_listed(self) -> None:
+    def test_single_old_orphan_is_listed(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _stub_survey_io(
+            monkeypatch,
+            branches=[("old", "abcdef123456")],
+            commit_date=_dt(2026, 1, 1),
+            open_prs=0,
+        )
         summary, comment, count = branch_cleanup.render_survey(
             repo="o/r",
             dry_run_raw="true",
@@ -186,20 +276,21 @@ class TestRenderSurvey:
             event_name="schedule",
             run_url="https://example.test/run",
             now_utc=_dt(2026, 3, 10),
-            runner=_runner(
-                [
-                    "old\tabcdef123456\n",
-                    "2026-01-01T00:00:00Z\n",
-                    "0\n",
-                ]
-            ),
         )
         assert "| `old` | 2026-01-01T00:00:00Z | 68 | `abcdef1` |" in summary
         assert comment is not None
         assert "## Run 2026-03-10T00:00:00Z" in comment
         assert count == 1
 
-    def test_old_branch_with_open_pr_is_excluded(self) -> None:
+    def test_old_branch_with_open_pr_is_excluded(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _stub_survey_io(
+            monkeypatch,
+            branches=[("old", "abcdef123456")],
+            commit_date=_dt(2026, 1, 1),
+            open_prs=1,
+        )
         summary, comment, count = branch_cleanup.render_survey(
             repo="o/r",
             dry_run_raw="true",
@@ -208,13 +299,6 @@ class TestRenderSurvey:
             event_name="schedule",
             run_url="https://example.test/run",
             now_utc=_dt(2026, 3, 10),
-            runner=_runner(
-                [
-                    "old\tabcdef123456\n",
-                    "2026-01-01T00:00:00Z\n",
-                    "1\n",
-                ]
-            ),
         )
         assert "| `old` |" not in summary
         assert comment is None
@@ -338,21 +422,6 @@ def _action(
         idle_seconds=idle_days * branch_cleanup.SECONDS_PER_DAY,
         idle_threshold_seconds=28 * branch_cleanup.SECONDS_PER_DAY,
     )
-
-
-def _runner(outputs: list[str]):
-    queue = list(outputs)
-
-    def run(cmd, **kwargs):
-        assert kwargs["capture_output"] is True
-        assert kwargs["text"] is True
-        assert kwargs["check"] is True
-        assert kwargs["timeout"] == 30
-        if not queue:
-            raise AssertionError(f"unexpected command: {cmd}")
-        return _Result(queue.pop(0))
-
-    return run
 
 
 def _run_reconcile(tmp_path: Path, *, candidate_count: int) -> int:

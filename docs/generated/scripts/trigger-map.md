@@ -55,6 +55,7 @@ Detection is string-match based:
 | `flake_pin_latest.py` | workflow | `weekly-maintenance.yml (flake-pin-refresh)` |
 | `gate_agents_skills_edit.py` | agent-hook | `claude:PreToolUse` |
 | `gate_agents_skills_edit.py` | agent-hook | `codex:PreToolUse` |
+| `gate_agents_skills_edit.py` | workflow | `verify-pr.yml (portable-pr-policy)` |
 | `gate_cache_regime_advisor.py` | agent-hook | `claude:Stop` |
 | `gate_decision_handoff_askuserquestion.py` | agent-hook | `claude:Stop` |
 | `gate_doc_graph_pr.py` | workflow | `validate-doc-graph.yml (validate)` |
@@ -80,6 +81,8 @@ Detection is string-match based:
 | `gate_pr_body_retro_issue_link.py` | agent-hook | `codex:PreToolUse` |
 | `gate_reserved_retro_scope.py` | agent-hook | `claude:PreToolUse` |
 | `gate_reserved_retro_scope.py` | agent-hook | `codex:PreToolUse` |
+| `gate_retro_close_keyword_commit.py` | agent-hook | `claude:PreToolUse` |
+| `gate_retro_close_keyword_commit.py` | agent-hook | `codex:PreToolUse` |
 | `gate_stop_pr_review_reply.py` | agent-hook | `claude:Stop` |
 | `gate_unsigned_commit_bash.py` | agent-hook | `claude:PreToolUse` |
 | `gate_unsigned_commit_bash.py` | agent-hook | `codex:PreToolUse` |
@@ -157,6 +160,8 @@ Detection is string-match based:
 | `preflight_push_nonempty.py` | agent-hook | `codex:PreToolUse` |
 | `preflight_push_session_branch.py` | agent-hook | `claude:PreToolUse` |
 | `preflight_push_session_branch.py` | agent-hook | `codex:PreToolUse` |
+| `preflight_push_unsigned_commits.py` | agent-hook | `claude:PreToolUse` |
+| `preflight_push_unsigned_commits.py` | agent-hook | `codex:PreToolUse` |
 | `preflight_resolve_review_thread.py` | agent-hook | `claude:PreToolUse` |
 | `preflight_resolve_review_thread.py` | agent-hook | `codex:PreToolUse` |
 | `preflight_session_base_freshness.py` | agent-hook | `claude:PreToolUse` |
@@ -184,6 +189,7 @@ Detection is string-match based:
 | `scan_apm_ascii.py` | workflow | `verify-pr.yml (portable-pr-policy)` |
 | `scan_apm_lock_drift.py` | workflow | `verify-pr.yml (portable-pr-policy)` |
 | `scan_apm_portability.py` | workflow | `verify-pr.yml (portable-pr-policy)` |
+| `scan_bypass_lever_doc_drift.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
 | `scan_commit_type_label_drift.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
 | `scan_compile_from_source.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
 | `scan_design_philosophy_drift.py` | workflow | `verify-pr.yml (portable-pr-policy)` |
@@ -197,6 +203,7 @@ Detection is string-match based:
 | `scan_harness_doc_coverage.py` | pre-commit | `scan-harness-doc-coverage` |
 | `scan_harness_doc_coverage.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
 | `scan_hook_coverage_drift.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
+| `scan_hook_predicate_surface_drift.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
 | `scan_input_contract_drift.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
 | `scan_install_curl_retry_drift.py` | pre-commit | `scan-install-curl-retry-drift` |
 | `scan_issue_anchor_drift.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
@@ -214,8 +221,12 @@ Detection is string-match based:
 | `scan_provisioning_hook_serial.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
 | `scan_quality_standard_drift.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
 | `scan_repo_double_hyphen.py` | workflow | `verify-pr.yml (portable-pr-policy)` |
+| `scan_repo_double_hyphen.py` | workflow | `verify-pr.yml (scan-double-hyphen)` |
 | `scan_repo_em_dash.py` | workflow | `verify-pr.yml (portable-pr-policy)` |
 | `scan_retro_followup_drift.py` | workflow | `daily-maintenance.yml (scan)` |
+| `scan_runbook_template_drift.py` | workflow | `verify-pr.yml (portable-pr-policy)` |
+| `scan_scripts_gh_calls.py` | pre-commit | `scan-scripts-gh-calls` |
+| `scan_scripts_gh_calls.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
 | `scan_secret_runbooks.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
 | `scan_secrets.py` | pre-commit | `scan-secrets` |
 | `scan_secrets.py` | workflow | `verify-agents.yml (lint-scripts-static)` |

@@ -32,9 +32,12 @@ Covered tools:
   positional or ``key=value`` (``dd of=...``) argument; or such a write hidden
   inside ``bash -c '<script>'`` (recursed into). A read (``cat``/``grep``/``ls``
   on a managed path) is never blocked. Known defense-in-depth limitations: a
-  write through a non-shell interpreter (``python3 -c "open(...)"``) or behind a
-  wrapper with its own option grammar (``sudo``/``env``) is not parsed; the
-  Edit/Write matcher covers the primary edit path.
+  write through a non-shell interpreter (``python3 -c "open(...)"``), behind a
+  wrapper with its own option grammar (``sudo``/``env``), inside a command
+  substitution (``$(...)`` / backticks), or via the ``&``-joined fd-dup redirect
+  (``cmd >& file``, split on ``&`` before tokenization) is not parsed; the
+  Edit/Write matcher covers the primary edit path and the CI verify gate is the
+  post-merge-tree backstop.
 
 Design (CLAUDE.md section 4: make wrong actions hard, right actions easy):
 
@@ -46,7 +49,12 @@ Design (CLAUDE.md section 4: make wrong actions hard, right actions easy):
   tokenized and only its leading command is classified, redirections are read as
   operator tokens) so a managed path mentioned inside a quoted string; e.g.
   ``echo 'edit > .agents/skills/x'`` or a commit message; is not a false
-  positive: the ``>`` is part of one quoted token, not a redirection.
+  positive: the ``>`` is part of one quoted token, not a redirection. Segment
+  tokenization uses ``shlex.shlex`` with ``punctuation_chars`` so an unquoted
+  redirection operator is emitted as its own token while a ``>`` inside quotes
+  stays part of the surrounding word, even when no space follows it
+  (``echo '>.agents/skills/x'``); the false-positive class the prior
+  hand-rolled redirect regex still mismatched (issue #2098).
 - Fail-open is narrow and intentional: a malformed stdin event logs to stderr
   and exits 0 (per CLAUDE.md section 4, a hook bug never wedges the session).
   A matched edit/write is always denied.
@@ -60,13 +68,22 @@ Contract:
 - Failure policy: fails open at the stdin boundary and fails loud-by-deny on a
   matched managed-path write.
 
-Tested by ``tests/test_gate_agents_skills_edit.py``. Refs #2066, #1892, #1891.
+This module has a second entry point, the CI ``verify`` mode (``main(["verify",
+--base-ref ...])``), the post-merge-tree counterpart to the hook: it fails a PR
+that diffs a managed prefix without a matching pin change (issue #2098, Gap B).
+See the "CI ``verify`` mode" section below ``decide`` for the legitimacy test.
+
+Tested by ``tests/test_gate_agents_skills_edit.py``. Refs #2098, #2066, #1892, #1891.
 """
 
 from __future__ import annotations
 
+import argparse
+import os
 import re
 import shlex
+import subprocess
+import sys
 from pathlib import PurePosixPath
 from typing import Any
 
@@ -121,15 +138,6 @@ _ASSIGN_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
 # argument is the inline ``-c`` script. ``c`` is the last letter so the next token
 # is the value; ``--check`` (double dash) does not match.
 _DASH_C_RE = re.compile(r"^-[a-zA-Z]*c$")
-
-# A redirection-operator token: optional file-descriptor digits, one or two
-# ``>``, an optional noclobber-override ``|`` (``>|``), then an optional target.
-# Group 1 is the target when it shares the token (``>foo``, ``2>foo``, ``>|foo``)
-# and EMPTY for a standalone operator (``>``, ``>>``, ``>|``) whose target is the
-# NEXT token. Matching on the tokenized command (not the raw string) means a
-# ``>`` inside a quoted argument is part of one token and never read as a
-# redirection, so ``echo 'see > .agents/skills/x'`` is not a false positive.
-_REDIRECT_RE = re.compile(r"^\d*>>?\|?(.*)$")
 
 # Bound the ``bash -c`` recursion so a pathological ``bash -c 'bash -c ...'``
 # nest cannot loop; each level consumes the ``-c`` argument so real commands
@@ -191,12 +199,29 @@ def _managed_target(token: str) -> str | None:
     return normalized if _match_normalized(normalized) is not None else None
 
 
-def _tokenize(segment: str) -> list[str]:
-    """Best-effort shell tokenization; fall back to whitespace split."""
+def _tokenize(segment: str) -> tuple[list[str], bool]:
+    """Tokenize one shell *segment*; return ``(tokens, used_fallback)``.
+
+    Uses ``shlex.shlex`` with ``punctuation_chars`` so an unquoted redirection
+    operator (``>`` / ``>>`` / ``>|``; a file-descriptor prefix like ``2>`` lexes
+    as a separate ``2`` word then a ``>`` operator) is emitted as its own token,
+    while a ``>`` that appears INSIDE quotes stays part of the surrounding word
+    token. That distinction is exactly what ``shlex.split`` discards: it strips
+    quotes first, so a quoted ``'> .agents/skills/x'`` (or the no-space
+    ``'>.agents/skills/x'``) became a token that the old redirect regex matched
+    as a real redirection to a managed path; the false positive issue #2098
+    fixes. Falls back to a plain whitespace split on a malformed command
+    (unbalanced quote) so a hook bug never wedges the session (CLAUDE.md s4);
+    the ``used_fallback`` flag tells the caller to switch to the attached-form
+    redirect matcher, since on the split path the operator and its target are not
+    separated (review on #2123).
+    """
+    lexer = shlex.shlex(segment, posix=True, punctuation_chars=True)
+    lexer.whitespace_split = True
     try:
-        return shlex.split(segment)
+        return list(lexer), False
     except ValueError:
-        return segment.split()
+        return segment.split(), True
 
 
 def _leading_command(tokens: list[str]) -> tuple[str, list[str]]:
@@ -260,22 +285,58 @@ def _segments(command: str) -> list[str]:
     return [seg.strip() for seg in segments if seg.strip()]
 
 
+def _is_redirect_op(token: str) -> bool:
+    """Return True when *token* is an output-redirection operator token.
+
+    ``punctuation_chars`` tokenization emits these as standalone tokens
+    (``>``, ``>>``, ``>|``) with any file-descriptor digits in a SEPARATE
+    preceding word token, so the operator and its target are distinct tokens. The
+    test is "contains ``>`` and is made up only of redirection punctuation",
+    which admits every ``>``-led write-redirect form and rejects ordinary words
+    and the ``<`` input redirect. Note: the ``&``-joined fd-dup form ``cmd >& f``
+    is a documented limitation (``_segments`` splits on ``&`` before
+    tokenization, so ``>&`` never reaches here intact); the Edit/Write matcher and
+    the CI verify gate cover that residual path.
+    """
+    return ">" in token and set(token) <= {">", "|", "&"}
+
+
 def _redirect_targets(tokens: list[str]) -> list[str]:
     """Return every redirection target token in *tokens*.
 
-    A target comes from either an attached operator token that carries it
-    (``>foo``) or a standalone operator token (``>`` / ``>>`` / ``2>`` / ``>|``)
-    whose target is the next token. Because this reads the *tokenized* command, a
-    ``>`` inside a quoted argument is part of one token and is never read as a
-    redirection.
+    A redirection operator token (:func:`_is_redirect_op`) takes the NEXT token
+    as its target. Because the tokens come from ``shlex.shlex`` with
+    ``punctuation_chars``, a ``>`` inside a quoted argument is part of one word
+    token and is never seen here as an operator, so a quoted mention such as
+    ``echo '> .agents/skills/x'`` yields no redirection target.
     """
+    targets: list[str] = []
+    for index, token in enumerate(tokens):
+        if _is_redirect_op(token) and index + 1 < len(tokens):
+            targets.append(tokens[index + 1])
+    return targets
+
+
+# Fallback-only redirect matcher. On the ``.split()`` fallback path (a command
+# shlex cannot tokenize, e.g. an unbalanced quote) the operator and its target
+# are NOT separated, so the operator-token test above never fires. This regex
+# restores the pre-#2098 behavior on that path: an optional fd prefix, one or two
+# ``>``, an optional noclobber ``|``, then an attached target (group 1) or, when
+# empty, the next token. The quoted-``>`` false positive does not recur here:
+# ``.split()`` keeps quote characters in the token, so a quoted mention like
+# ``'>.agents/skills/x'`` starts with ``'`` and does not match. Refs #2123.
+_FALLBACK_REDIRECT_RE = re.compile(r"^\d*>>?\|?(.*)$")
+
+
+def _fallback_redirect_targets(tokens: list[str]) -> list[str]:
+    """Redirect targets for the ``.split()`` fallback path (attached + standalone)."""
     targets: list[str] = []
     skip_next = False
     for index, token in enumerate(tokens):
         if skip_next:
             skip_next = False
             continue
-        match = _REDIRECT_RE.match(token)
+        match = _FALLBACK_REDIRECT_RE.match(token)
         if match is None:
             continue
         attached = match.group(1)
@@ -319,11 +380,12 @@ def _dash_c_script(args: list[str]) -> str | None:
 
 def _segment_write_targets(segment: str, depth: int) -> list[str]:
     """Return managed paths *segment* would write to (redirects + mutators)."""
-    tokens = _tokenize(segment)
+    tokens, used_fallback = _tokenize(segment)
+    raw_targets = (
+        _fallback_redirect_targets(tokens) if used_fallback else _redirect_targets(tokens)
+    )
     targets: list[str] = [
-        managed
-        for raw in _redirect_targets(tokens)
-        if (managed := _managed_target(raw)) is not None
+        managed for raw in raw_targets if (managed := _managed_target(raw)) is not None
     ]
     cmd, args = _leading_command(tokens)
     if cmd in _SHELL_COMMANDS and depth < _MAX_RECURSION_DEPTH:
@@ -410,9 +472,194 @@ def decide(tool_name: str, tool_input: dict[str, Any]) -> dict[str, Any] | None:
     return None
 
 
+# ---------------------------------------------------------------------------
+# CI ``verify`` mode: the post-merge-tree counterpart to the PreToolUse hook.
+#
+# The PreToolUse hook stops an edit at tool-call time, but it only runs inside an
+# agent session; a commit authored outside one (a merge-conflict resolution, a
+# raw ``git`` edit, a non-agent contributor) can still land a hand edit under a
+# managed prefix. ``verify`` is the deterministic CI gate that closes that gap
+# (issue #2098, Gap B), completing the PreToolUse + CI defense in depth.
+#
+# Legitimacy test (pin coupling). The managed trees are the expansion of the
+# ``obra/superpowers`` pin, a content-addressed commit ref in apm.yml. A managed
+# tree changes only when that pin changes, so the gate compares the RESOLVED pin
+# at base vs head and passes only when it actually moved. Comparing the resolved
+# pin (not mere presence of apm.yml in the diff) is deliberate: apm.yml also
+# carries unrelated fields (version, MCP config), so a managed-tree hand edit
+# bundled with an incidental apm.yml edit must still fail (Codex review on
+# #2098). A pin bump + ``apm compile`` (the documented change path in
+# docs/standards/apm-managed-paths.md) moves the pin and passes. This is the
+# precise, branch-agnostic form of the issue's "fail a non-bot diff":
+# generate-agents.yml regenerates only CLAUDE.md / AGENTS.md, never the skills
+# trees, so no bot legitimately diffs them without a pin change. A deeper
+# ``apm compile`` drift check (managed tree == compile output) is the natural
+# next layer and is left for a follow-up.
+# ---------------------------------------------------------------------------
+
+# apm.yml holds the pin as ``obra/superpowers#<ref>`` (the canonical source;
+# apm.lock.yaml's resolved_commit is derived from it). The capture stops at the
+# first whitespace, quote, or comma so a YAML-quoted (``"obra/superpowers#x"``)
+# or trailing-comment form yields the bare ref, not ``x"``; otherwise a quoting
+# difference between base and head would make two identical pins compare unequal
+# (review on #2123).
+_PIN_FILE = "apm.yml"
+_SUPERPOWERS_PIN_RE = re.compile(r"obra/superpowers#([^\s\"',]+)")
+
+
+def _resolve_base() -> str:
+    """Return the base ref the gate diffs HEAD against.
+
+    Resolution order mirrors gate_generated_scripts_manual_edit.py: ``BASE_REF``
+    -> ``origin/$GITHUB_BASE_REF`` -> ``origin/main``. Empty env values are
+    treated as unset so a blank ``GITHUB_BASE_REF`` does not silently win.
+    """
+    explicit = os.environ.get("BASE_REF")
+    if explicit:
+        return explicit
+    actions_base = os.environ.get("GITHUB_BASE_REF")
+    if actions_base:
+        return f"origin/{actions_base}"
+    return "origin/main"
+
+
+def _changed_files(
+    base_ref: str, head: str = "HEAD", *, runner=subprocess.run
+) -> frozenset[str]:
+    """Return the paths the branch changed relative to the merge-base.
+
+    Uses the three-dot ``{base}...{head}`` form so only what the branch
+    introduced is reported, not churn the base accumulated after the branch was
+    cut (the false-positive class gate_generated_scripts_manual_edit.py records
+    from retro #1703). ``--name-only`` so renames and deletes also surface. The
+    ``runner`` indirection mirrors gate_generated_scripts_manual_edit.py: a fixed
+    ``git`` argv through an injectable runner, the single impure surface here.
+    """
+    result = runner(
+        ["git", "diff", "--name-only", f"{base_ref}...{head}"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return frozenset(line.strip() for line in result.stdout.splitlines() if line.strip())
+
+
+def managed_changes(changed: frozenset[str]) -> frozenset[str]:
+    """Return the changed paths that fall under a managed prefix.
+
+    Diff paths are always repo-relative, so a plain prefix ``startswith`` is
+    enough here; the hook path uses the richer ``_match_normalized`` because it
+    also sees absolute / ``./``-prefixed tokens. ``MANAGED_PREFIXES`` is already
+    a tuple, so it is passed straight to ``str.startswith``.
+    """
+    return frozenset(path for path in changed if path.startswith(MANAGED_PREFIXES))
+
+
+def _superpowers_pin(ref: str, *, runner=subprocess.run) -> str | None:
+    """Return the obra/superpowers ref pinned in apm.yml at *ref*, or None.
+
+    Reads apm.yml as it stood at *ref* (``git show {ref}:apm.yml``) and extracts
+    the ``obra/superpowers#<ref>`` dependency token from the first NON-COMMENT
+    line that carries it, so a commented-out ``# - obra/superpowers#old`` line
+    does not shadow the active pin (review on #2123). Returns None when the file
+    or token is absent (a malformed or removed pin); the caller treats None as
+    "pin not confirmably changed" so a managed-tree edit still fails closed.
+    """
+    try:
+        result = runner(
+            ["git", "show", f"{ref}:{_PIN_FILE}"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError):
+        return None
+    for line in result.stdout.splitlines():
+        if line.lstrip().startswith("#"):
+            continue
+        match = _SUPERPOWERS_PIN_RE.search(line)
+        if match:
+            return match.group(1)
+    return None
+
+
+def evaluate_pr(managed: frozenset[str], pin_changed: bool) -> tuple[int, list[str]]:
+    """Return ``(exit_code, error_lines)`` for the CI verify decision.
+
+    Pass when no managed prefix changed, or when the obra/superpowers pin
+    actually moved alongside it (a legitimate ``apm compile`` regeneration).
+    Fail when a managed prefix changed with no pin change (a hand edit).
+    """
+    if not managed or pin_changed:
+        return 0, []
+    pretty = ", ".join(sorted(managed))
+    return 1, [
+        "::error::APM-managed skill trees (.agents/skills/, .claude/skills/) were "
+        f"edited without an obra/superpowers pin change. Changed managed paths: {pretty}. "
+        f"These files are generated by `apm compile` from the obra/superpowers pin in "
+        f"{_PIN_FILE}, so a change here with no change to that pin is a hand edit the next "
+        "compile silently overwrites. Revert these paths; to change skill content, bump the "
+        "pin and run `apm compile` (see docs/standards/apm-managed-paths.md). "
+        "Refs #2098, #2066, #1892."
+    ]
+
+
+def _cmd_verify(args: argparse.Namespace) -> int:
+    base = args.base_ref or _resolve_base()
+    try:
+        changed = _changed_files(base)
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError) as exc:
+        print(
+            f"::error::gate_agents_skills_edit: git diff against base {base!r} failed: {exc}",
+            file=sys.stderr,
+        )
+        return 1
+    managed = managed_changes(changed)
+    # Only resolve the pin when a managed tree changed; the pin is irrelevant
+    # otherwise and skipping the two git shows keeps the common case cheap.
+    pin_changed = False
+    if managed:
+        base_pin = _superpowers_pin(base)
+        head_pin = _superpowers_pin("HEAD")
+        pin_changed = base_pin is not None and head_pin is not None and base_pin != head_pin
+    code, errors = evaluate_pr(managed, pin_changed)
+    if code == 0:
+        if managed:
+            print(
+                "OK: managed trees changed with an obra/superpowers pin bump "
+                f"({', '.join(sorted(managed))})."
+            )
+        else:
+            print("OK: no APM-managed skill trees modified.")
+        return 0
+    for line in errors:
+        print(line, file=sys.stderr)
+    return 1
+
+
+def _parse_verify_args(args: list[str]) -> argparse.Namespace:
+    """Parse the ``verify`` subcommand's flags (just ``--base-ref``)."""
+    parser = argparse.ArgumentParser(
+        prog="gate_agents_skills_edit.py verify",
+        description="Fail a PR that edits .agents/skills/ or .claude/skills/ without a pin change.",
+    )
+    parser.add_argument(
+        "--base-ref",
+        help="Base ref to diff HEAD against. Falls back to BASE_REF, then origin/$GITHUB_BASE_REF, then origin/main.",
+    )
+    return parser.parse_args(args)
+
+
 def main(argv: list[str] | None = None) -> int:
-    """Read PreToolUse JSON from stdin, write a deny decision when warranted."""
-    del argv
+    """Dispatch the CI ``verify`` CLI, or run the PreToolUse hook on stdin.
+
+    With a leading ``verify`` argument this is the CI diff gate; with no args
+    (how the harness invokes the hook) it reads a PreToolUse event from stdin and
+    writes a deny decision when warranted.
+    """
+    args = sys.argv[1:] if argv is None else argv
+    if args and args[0] == "verify":
+        return _cmd_verify(_parse_verify_args(args[1:]))
     # auditable=False: a governance boundary protecting a single-producer
     # surface, in the same class as gate_irreversible_bash and
     # preflight_session_branch_authz; CLAUDE_GATE_MODE=audit must not disable it.
