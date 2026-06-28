@@ -81,17 +81,17 @@
   },
   {
     "name": "semver:major",
-    "description": "Universal-text change breaks backward compatibility (removes/weakens a rule, tightens a constraint, or breaks a stable reference); bumps apm.yml MAJOR. See docs/prd/semantic-versioning-universal-text.md R1.",
+    "description": "Universal-text change breaks backward compatibility; bumps apm.yml MAJOR.",
     "color": "006b75"
   },
   {
     "name": "semver:minor",
-    "description": "Universal-text change is a backward-compatible addition or clarification; bumps apm.yml MINOR. See docs/prd/semantic-versioning-universal-text.md R1.",
+    "description": "Universal-text change is a backward-compatible addition or clarification; bumps apm.yml MINOR.",
     "color": "006b75"
   },
   {
     "name": "semver:patch",
-    "description": "Universal-text change is non-normative surface only (typo, whitespace, formatting, link fix, meaning-preserving reword); bumps apm.yml PATCH. See docs/prd/semantic-versioning-universal-text.md R1.",
+    "description": "Universal-text change is non-normative surface only; bumps apm.yml PATCH.",
     "color": "006b75"
   },
   {
