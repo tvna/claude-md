@@ -3,7 +3,7 @@
 Auto-generated from `docs/graph/doc-dependencies.toml`. Do not edit manually.
 Source: `python3 scripts/doc_graph_viz.py all-doc`.
 
-Nodes: 27 | Edges: 20 (10 blocking, 10 advisory)
+Nodes: 29 | Edges: 21 (10 blocking, 11 advisory)
 
 ```mermaid
 flowchart LR
@@ -34,6 +34,8 @@ flowchart LR
     standard_template["standard template"]
     runbook_template["runbook template"]
     scan_runbook_template_drift>"scan runbook template drift"]
+    preflight_runbook["preflight runbook"]
+    scan_bypass_lever_doc_drift>"scan bypass lever doc drift"]
     master_instructions ==>|compiled to| claude_md
     master_instructions ==>|compiled to| agents_md
     master_instructions -->|governs| design_philosophy_prd
@@ -54,6 +56,7 @@ flowchart LR
     gate_doc_graph_pr -.->|references| doc_graph_lib
     semver_universal_text_prd -.->|references| master_instructions
     runbook_template -.->|enforced by| scan_runbook_template_drift
+    preflight_runbook -.->|enforced by| scan_bypass_lever_doc_drift
 ```
 
 ## Legend
