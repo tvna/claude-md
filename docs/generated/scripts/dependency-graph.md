@@ -28,6 +28,7 @@ This file is generated from `scripts/*.py` import statements by `python3 scripts
 | `_pr_merge` | 2 | `bot_pr_automerge`, `devcontainer_pin_pr` |
 | `_secret_patterns` | 2 | `preflight_github_secrets`, `scan_secrets` |
 | `_security_drift_families` | 2 | `_security_drift_issues`, `security_drift_report` |
+| `preflight_steps` | 2 | `preflight_all`, `scan_ruff_format` |
 | `scan_maintainability_metrics` | 2 | `codebase_maturity_summary`, `scan_module_size_distribution` |
 | `scan_non_ascii` | 2 | `preflight_non_ascii`, `preflight_pr_body` |
 | `title_policy` | 2 | `preflight_title_policy`, `verify_linked_issue_titles` |
@@ -41,7 +42,6 @@ This file is generated from `scripts/*.py` import statements by `python3 scripts
 | `preflight_branch_base` | 1 | `preflight_session_base_freshness` |
 | `preflight_cache` | 1 | `preflight_all` |
 | `preflight_main_freshness` | 1 | `preflight_session_base_freshness` |
-| `preflight_steps` | 1 | `preflight_all` |
 | `scan_docs_inventory` | 1 | `preflight_merge_index_budget` |
 | `scan_markdown_links` | 1 | `measure_tool_overlap` |
 | `scan_preflight_drift` | 1 | `scan_input_contract_drift` |
@@ -257,6 +257,7 @@ flowchart TD
     scan_retro_followup_drift --> _github_api
     scan_retro_followup_drift --> _retro_labels
     scan_retro_followup_drift --> issue_link
+    scan_ruff_format --> preflight_steps
     scan_secrets --> _git
     scan_secrets --> _secret_patterns
     security_drift_report --> _github_api
