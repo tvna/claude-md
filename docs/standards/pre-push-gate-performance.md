@@ -20,9 +20,11 @@ runs on `pull_request:`. Its `pytest` step executed the entire suite serially
    branch); ~14.5 minutes of pytest burned, none of it exercising a source
    change after the first green run.
 
-A 5-minute, all-or-nothing gate pushes contributors toward `PREFLIGHT_SKIP=1`,
-which bypasses *every* gate at once; a strictly worse safety posture than a
-fast gate that always runs.
+A 5-minute, all-or-nothing gate pushes contributors toward the full
+`PREFLIGHT_SKIP_ALL=1` bypass, which skips *every* gate at once; a strictly
+worse safety posture than a fast gate that always runs. (Narrowing the routine
+`PREFLIGHT_SKIP=1` lever to skip only `prek`, issue #2133, keeps the cheap gates
+running, but a fast suite is what removes the pull toward the full bypass.)
 
 ## Root cause: real `time.sleep` backoff in tests, not CPU
 

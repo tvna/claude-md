@@ -312,6 +312,45 @@ def emit_annotations(results: list[StepResult], stream) -> None:
             print(f"::warning::step '{result.name}' skipped ({result.detail})", file=stream)
 
 
+def resolve_skips(cli_skip: Sequence[str] | None, environ: dict[str, str]) -> set[str]:
+    """Return the set of step names to skip, from ``--skip`` and the env.
+
+    Combines repeated ``--skip NAME`` CLI values with the comma-separated
+    ``PREFLIGHT_SKIP_STEPS`` environment variable. This is the narrowed
+    replacement for the all-or-nothing ``PREFLIGHT_SKIP`` bypass (issue #2133,
+    PR #2120 retro #2121): ``.githooks/pre-push`` translates a routine
+    ``PREFLIGHT_SKIP=1`` into ``PREFLIGHT_SKIP_STEPS=prek`` so the prek step (the
+    one binary that is genuinely unprovisionable in some remote sessions) can be
+    dropped while every cheap deterministic gate and ``preflight_coverage`` still
+    run.
+    """
+    names: set[str] = set(cli_skip or ())
+    env = environ.get("PREFLIGHT_SKIP_STEPS", "")
+    names |= {part.strip() for part in env.split(",") if part.strip()}
+    return names
+
+
+def partition_skips(
+    steps: Sequence[Step], skip: set[str]
+) -> tuple[list[Step], list[StepResult], list[str]]:
+    """Split *steps* into (to-run, skip-results, unknown-skip-names).
+
+    A skip name that matches no step is returned as *unknown* (it skips nothing,
+    the safe direction: the gate still runs) so a typo cannot silently drop a
+    different gate. Matched steps become ``skip`` results so the summary still
+    lists them, making the bypass observable rather than invisible.
+    """
+    known = {step.name for step in steps}
+    unknown = sorted(skip - known)
+    to_run = [step for step in steps if step.name not in skip]
+    skipped = [
+        StepResult(name=step.name, status="skip", detail="skipped via PREFLIGHT_SKIP_STEPS")
+        for step in steps
+        if step.name in skip
+    ]
+    return to_run, skipped, unknown
+
+
 def list_manifest() -> list[dict[str, object]]:
     """Return :data:`STEPS` as a JSON-serializable manifest.
 
@@ -340,6 +379,14 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Print the step manifest as JSON and exit (no commands run).",
     )
+    parser.add_argument(
+        "--skip",
+        action="append",
+        metavar="NAME",
+        help="Skip a named step (repeatable). Also reads PREFLIGHT_SKIP_STEPS "
+        "(comma-separated). The narrowed replacement for the all-or-nothing "
+        "PREFLIGHT_SKIP bypass; cheap gates and coverage still run.",
+    )
     args = parser.parse_args(argv)
 
     if args.list:
@@ -348,7 +395,15 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     environ = dict(os.environ)
-    results = run_all(STEPS, REPO_ROOT, environ)
+    skip = resolve_skips(args.skip, environ)
+    to_run, skipped, unknown = partition_skips(STEPS, skip)
+    for name in unknown:
+        print(
+            f"::warning::--skip/PREFLIGHT_SKIP_STEPS names unknown step '{name}'; "
+            "nothing skipped for it (the gate still runs).",
+            file=sys.stderr,
+        )
+    results = run_all(to_run, REPO_ROOT, environ) + skipped
     emit_summary(results, sys.stdout)
     emit_annotations(results, sys.stderr)
     fails = sum(1 for r in results if r.status == "fail")
