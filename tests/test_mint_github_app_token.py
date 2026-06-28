@@ -184,39 +184,43 @@ class TestRequireEnvAndMint:
             mint.mint_from_env()
         assert missing in str(excinfo.value)
 
+    @pytest.fixture
+    def base_app_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Set the non-secret App IDs and clear both private-key inputs.
+
+        Each key-source test then sets only the one input it varies, so the
+        required env contract lives in one place.
+        """
+        monkeypatch.setenv("GITHUB_APP_ID", "1")
+        monkeypatch.setenv("GITHUB_APP_INSTALLATION_ID", "2")
+        monkeypatch.delenv("GITHUB_APP_PRIVATE_KEY", raising=False)
+        monkeypatch.delenv("GITHUB_APP_PRIVATE_KEY_FILE", raising=False)
+
     def test_mint_reads_key_from_file_when_literal_unset(
-        self, monkeypatch: pytest.MonkeyPatch, rsa_keypair: tuple[str, Path], tmp_path: Path
+        self, base_app_env: None, monkeypatch: pytest.MonkeyPatch, rsa_keypair: tuple[str, Path], tmp_path: Path
     ) -> None:
         pem, _ = rsa_keypair
         key_file = tmp_path / "sink.pem"
         key_file.write_text(pem)
-        monkeypatch.setenv("GITHUB_APP_ID", "555")
-        monkeypatch.setenv("GITHUB_APP_INSTALLATION_ID", "777")
-        monkeypatch.delenv("GITHUB_APP_PRIVATE_KEY", raising=False)
         monkeypatch.setenv("GITHUB_APP_PRIVATE_KEY_FILE", str(key_file))
         monkeypatch.setattr(mint, "request_installation_token", lambda *a, **k: "ghs_from_file")
         assert mint.mint_from_env() == "ghs_from_file"
 
     def test_literal_key_takes_precedence_over_file(
-        self, monkeypatch: pytest.MonkeyPatch, rsa_keypair: tuple[str, Path], tmp_path: Path
+        self, base_app_env: None, monkeypatch: pytest.MonkeyPatch, rsa_keypair: tuple[str, Path], tmp_path: Path
     ) -> None:
         pem, _ = rsa_keypair
         bad = tmp_path / "bad.pem"
         bad.write_text("not a pem")  # would fail signing if it were used
-        monkeypatch.setenv("GITHUB_APP_ID", "1")
-        monkeypatch.setenv("GITHUB_APP_INSTALLATION_ID", "2")
         monkeypatch.setenv("GITHUB_APP_PRIVATE_KEY", pem)
         monkeypatch.setenv("GITHUB_APP_PRIVATE_KEY_FILE", str(bad))
         monkeypatch.setattr(mint, "request_installation_token", lambda *a, **k: "ghs_literal")
         assert mint.mint_from_env() == "ghs_literal"
 
     def test_missing_key_file_fails_loudly_without_leaking(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+        self, base_app_env: None, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
         missing = tmp_path / "nope.pem"
-        monkeypatch.setenv("GITHUB_APP_ID", "1")
-        monkeypatch.setenv("GITHUB_APP_INSTALLATION_ID", "2")
-        monkeypatch.delenv("GITHUB_APP_PRIVATE_KEY", raising=False)
         monkeypatch.setenv("GITHUB_APP_PRIVATE_KEY_FILE", str(missing))
         with pytest.raises(mint.MintError) as excinfo:
             mint.mint_from_env()
@@ -224,13 +228,10 @@ class TestRequireEnvAndMint:
         assert "PRIVATE KEY" not in str(excinfo.value)
 
     def test_empty_key_file_fails_loudly(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+        self, base_app_env: None, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
         empty = tmp_path / "empty.pem"
         empty.write_text("")
-        monkeypatch.setenv("GITHUB_APP_ID", "1")
-        monkeypatch.setenv("GITHUB_APP_INSTALLATION_ID", "2")
-        monkeypatch.delenv("GITHUB_APP_PRIVATE_KEY", raising=False)
         monkeypatch.setenv("GITHUB_APP_PRIVATE_KEY_FILE", str(empty))
         with pytest.raises(mint.MintError):
             mint.mint_from_env()
