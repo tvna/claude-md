@@ -131,3 +131,53 @@ class TestRevList:
     def test_subprocess_error_returns_none(self) -> None:
         runner = self._runner(OSError("boom"), [])
         assert _git.rev_list(runner, ["base..HEAD"]) is None
+
+
+class TestIsAllZeros:
+    def test_sha1_all_zeros(self) -> None:
+        assert _git.is_all_zeros("0" * 40) is True
+
+    def test_sha256_all_zeros(self) -> None:
+        assert _git.is_all_zeros("0" * 64) is True
+
+    def test_real_sha_is_not_all_zeros(self) -> None:
+        assert _git.is_all_zeros("a" * 40) is False
+
+    def test_partial_zeros_is_not_all_zeros(self) -> None:
+        assert _git.is_all_zeros("0" * 39 + "1") is False
+
+
+class TestCommitsToPush:
+    @staticmethod
+    def _runner(out: list[str], calls: list[list[str]]) -> _git.Runner:
+        def run(args: list[str]) -> subprocess.CompletedProcess[str]:
+            calls.append(args)
+            return subprocess.CompletedProcess(["git"], 0, stdout="\n".join(out) + "\n", stderr="")
+
+        return run
+
+    def test_existing_branch_uses_range(self) -> None:
+        calls: list[list[str]] = []
+        runner = self._runner(["c1"], calls)
+        result = _git.commits_to_push(runner, local_sha="L", remote_sha="R", remote="origin")
+        assert result == ["c1"]
+        assert calls == [["rev-list", "R..L"]]
+
+    def test_new_branch_scopes_to_remote(self) -> None:
+        calls: list[list[str]] = []
+        runner = self._runner(["c1", "c2"], calls)
+        result = _git.commits_to_push(runner, local_sha="L", remote_sha=None, remote="origin")
+        assert result == ["c1", "c2"]
+        assert calls == [["rev-list", "L", "--not", "--remotes=origin"]]
+
+    def test_all_zeros_remote_treated_as_new_branch(self) -> None:
+        calls: list[list[str]] = []
+        runner = self._runner(["c1"], calls)
+        _git.commits_to_push(runner, local_sha="L", remote_sha="0" * 40, remote="origin")
+        assert calls == [["rev-list", "L", "--not", "--remotes=origin"]]
+
+    def test_undeterminable_propagates_none(self) -> None:
+        def run(args: list[str]) -> subprocess.CompletedProcess[str]:
+            return subprocess.CompletedProcess(["git"], 128, stdout="", stderr="boom")
+
+        assert _git.commits_to_push(run, local_sha="L", remote_sha="R", remote="origin") is None

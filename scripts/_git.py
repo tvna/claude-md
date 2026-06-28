@@ -18,10 +18,18 @@ Refs #1005.
 
 from __future__ import annotations
 
+import re
 import shutil
 import subprocess
 from collections.abc import Callable
 from pathlib import Path
+
+# A git object name is the all-zeros sentinel in two places this matters: git's
+# pre-push protocol reports it for the remote side of a new branch (and the local
+# side of a deletion), and a remote-tracking ref that does not resolve is treated
+# the same way by the unsigned-commit gates. Either 40-hex (sha-1) or 64-hex
+# (sha-256) all-zeros. Refs #2138, #2162.
+ALL_ZEROS_RE = re.compile(r"^0{40}(?:0{24})?$")
 
 # A runner takes a git argv (WITHOUT the leading ``git``) and returns the
 # completed process, mirroring :func:`run_git`'s signature. Gates that shell out
@@ -90,3 +98,38 @@ def rev_list(runner: Runner, args: list[str]) -> list[str] | None:
     if result.returncode != 0:
         return None
     return [line.strip() for line in result.stdout.splitlines() if line.strip()]
+
+
+def is_all_zeros(oid: str) -> bool:
+    """Return True when *oid* is git's all-zeros object-name sentinel.
+
+    Matches both the sha-1 (40-hex) and sha-256 (64-hex) spellings, so a new
+    branch's remote side or a deletion's local side is recognised regardless of
+    the repository's object format.
+    """
+    return ALL_ZEROS_RE.match(oid) is not None
+
+
+def commits_to_push(
+    runner: Runner, *, local_sha: str, remote_sha: str | None, remote: str
+) -> list[str] | None:
+    """Return the shas a push of *local_sha* would ship, or None when undeterminable.
+
+    When *remote_sha* resolves to a real commit (the target ref already exists on
+    the remote) the range is ``<remote_sha>..<local_sha>``. When *remote_sha* is
+    None or git's all-zeros sentinel (a new branch) the range is every commit
+    reachable from *local_sha* but not from *remote*'s refs
+    (``<local_sha> --not --remotes=<remote>``); scoping to the TARGET remote, not
+    the bare ``--remotes``, keeps a commit that exists on a different remote but
+    is new to this push from being silently skipped. None propagates
+    :func:`rev_list`'s undeterminable signal so a caller can fail open. Shared by
+    the unsigned-commit gates (#2138 Bash hook, #2162 pre-push step) so both
+    compute a new-or-existing-branch push range identically. Refs #2138, #2162.
+    """
+    if remote_sha is not None and is_all_zeros(remote_sha):
+        remote_sha = None
+    if remote_sha is not None:
+        rev_args = [f"{remote_sha}..{local_sha}"]
+    else:
+        rev_args = [local_sha, "--not", f"--remotes={remote}"]
+    return rev_list(runner, rev_args)

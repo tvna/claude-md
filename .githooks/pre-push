@@ -42,6 +42,18 @@ if [ "${PREFLIGHT_SKIP:-0}" = "1" ]; then
     export PREFLIGHT_SKIP_STEPS="${PREFLIGHT_SKIP_STEPS:+${PREFLIGHT_SKIP_STEPS},}prek"
 fi
 
+# Bridge git's pre-push input to scripts/preflight_signed_commits.py (issue
+# #2162). Git feeds this hook the refs being updated on stdin, one line per ref
+# as "<local-ref> <local-oid> <remote-ref> <remote-oid>", and passes the remote
+# name as the first argument. preflight_all.py runs each step with a fixed argv
+# and does not route stdin to individual steps, so the refs travel through the
+# environment (the same surface the gate's # unsigned-ack opt-in already uses).
+# The signed-commit gate then inspects the commits actually being pushed instead
+# of a fixed origin/main..HEAD range; with no payload it falls back to that range.
+PREFLIGHT_PUSH_REFS="$(cat)"
+export PREFLIGHT_PUSH_REFS
+export PREFLIGHT_PUSH_REMOTE="${1:-}"
+
 # preflight_branch_base.py is intentionally NOT invoked directly here: it is a
 # cheap step inside preflight_all.py, which now runs the whole cheap tier
 # (single-commit, branch-base, ruff, mypy, ...) before the heavy pytest suite

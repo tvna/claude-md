@@ -23,12 +23,28 @@ gates run in, because those worktrees do not configure
 ``gpg.ssh.allowedSignersFile``; see ``_commit_signing`` for the full rationale.
 The same shared helper backs #2138, so the signature rule has one definition.
 
-Range. The commits inspected are ``origin/main..HEAD`` (``--base-ref`` overrides
-the base, default ``origin/main``). This step runs AFTER ``preflight_branch_base``
-in ``STEPS``, which fetches the live base, so the remote-tracking ref is already
-current; a base ref that does not resolve is reported as a skip (that gate owns
-base availability, and the server ruleset is the backstop) rather than failing
-this gate on a condition another gate already covers.
+Range. The commits inspected are the ones the push actually ships. When the
+``.githooks/pre-push`` hook bridges git's pre-push stdin into the environment
+(``PREFLIGHT_PUSH_REFS``, plus the remote name in ``PREFLIGHT_PUSH_REMOTE``),
+each updated ref is inspected over its own ``remote-oid..local-oid`` range, with
+new-branch (all-zeros remote oid) and delete (all-zeros local oid) handling
+shared with ``preflight_push_unsigned_commits.py`` (#2138) through
+``_git.commits_to_push``. This closes the #2162 gaps the fixed range left: a
+``git push origin other-branch`` while ``HEAD`` is on a signed branch is now
+inspected, and a tag or non-HEAD push is no longer falsely blocked by unsigned
+commits reachable only from ``HEAD``. Why the environment and not stdin: a
+preflight ``verify`` step is dispatched by ``preflight_all.py`` with a fixed
+argv and no stdin routed to it (the same reason the opt-in below is an env var),
+so the hook is the only place that can read git's stdin, and it forwards it.
+
+Fallback. With no ``PREFLIGHT_PUSH_REFS`` payload (a direct CLI ``verify`` run,
+not via the hook) the commits inspected are ``origin/main..HEAD`` (``--base-ref``
+overrides the base, default ``origin/main``). This step runs AFTER
+``preflight_branch_base`` in ``STEPS``, which fetches the live base, so the
+remote-tracking ref is already current; a base ref that does not resolve is
+reported as a skip (that gate owns base availability, and the server ruleset is
+the backstop) rather than failing this gate on a condition another gate already
+covers.
 
 Opt-in. A preflight ``verify`` step sees no Bash command line (unlike the
 PreToolUse Bash gate #2138, which scans the command text for a ``# unsigned-ack``
@@ -43,11 +59,15 @@ opt out). Because an exported env var persists across a session (wider than a
 per-command marker), the opt-in is consulted ONLY when an unsigned commit is
 actually found, and each bypass is logged as a loud ``::warning::`` so the wide
 scope can never suppress a block silently (CLAUDE.md section 4: escape hatches
-are loud). Per-push opt-in scope is tracked with the stdin-ref work in #2162.
+are loud). The opt-in stays session-scoped (an env var) even with the per-push
+ref inspection added in #2162, since the surface is still an env var, not the
+command text.
 
 Contract:
-- Inputs: no stdin. ``verify`` subcommand with optional ``--repo-root`` and
-  ``--base-ref``. Reads ``PREFLIGHT_SIGNED_COMMITS_ACK`` for the opt-in.
+- Inputs: ``verify`` subcommand with optional ``--repo-root`` and ``--base-ref``.
+  Reads ``PREFLIGHT_PUSH_REFS`` / ``PREFLIGHT_PUSH_REMOTE`` (the pushed refs the
+  pre-push hook bridged from stdin; absent for a direct CLI run) and
+  ``PREFLIGHT_SIGNED_COMMITS_ACK`` for the opt-in. No stdin is read directly.
 - Outputs: exit 0 when every commit in range is signed, when the range is
   undeterminable (skip), or when an unsigned commit is present but the opt-in
   bypasses it (logged loudly); exit 1 listing the unsigned commits otherwise.
@@ -56,7 +76,7 @@ Contract:
   error never wedges a push when ``preflight_branch_base`` and the ruleset still
   guard the base.
 
-Tested by ``tests/test_preflight_signed_commits.py``. Refs #1959, #2138.
+Tested by ``tests/test_preflight_signed_commits.py``. Refs #1959, #2138, #2162.
 """
 
 from __future__ import annotations
@@ -70,7 +90,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from _commit_signing import is_unsigned
-from _git import Runner, make_runner, rev_list
+from _git import Runner, commits_to_push, is_all_zeros, make_runner, rev_list
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -82,6 +102,16 @@ _GIT_TIMEOUT_SECONDS = 30
 # text (a sibling control for the same category; see the module docstring).
 _ACK_ENV_VAR = "PREFLIGHT_SIGNED_COMMITS_ACK"
 _ACK_MARKER_RE = re.compile(r"(?m)^# unsigned-ack\r?$")
+
+# The pre-push ref lines and remote name, bridged from the hook through the
+# environment (see the module docstring's Range section for why env, not stdin).
+# ``PREFLIGHT_PUSH_REFS`` carries git's pre-push stdin verbatim (one line per
+# updated ref: ``<local-ref> <local-oid> <remote-ref> <remote-oid>``);
+# ``PREFLIGHT_PUSH_REMOTE`` carries the remote name git passes the hook as its
+# first argument, needed to scope a new-branch range to that remote. Refs #2162.
+_PUSH_REFS_ENV_VAR = "PREFLIGHT_PUSH_REFS"
+_PUSH_REMOTE_ENV_VAR = "PREFLIGHT_PUSH_REMOTE"
+_DEFAULT_REMOTE = "origin"
 
 
 @dataclass(frozen=True)
@@ -136,6 +166,102 @@ def check_signed_commits(*, runner: Runner, base_ref: str) -> SignedCommitsResul
     )
 
 
+@dataclass(frozen=True)
+class PushRef:
+    """One updated ref from git's pre-push stdin (four space-separated fields)."""
+
+    local_ref: str
+    local_oid: str
+    remote_ref: str
+    remote_oid: str
+
+
+def parse_push_refs(value: str) -> list[PushRef]:
+    """Return the :class:`PushRef` rows parsed from a pre-push stdin payload.
+
+    Git feeds the pre-push hook one line per updated ref, each ``<local-ref>
+    <local-oid> <remote-ref> <remote-oid>``. A blank line or any line that does
+    not split into exactly four fields is skipped (it cannot be a ref update), so
+    a malformed or empty payload yields an empty list and the caller falls back
+    to the ``origin/main..HEAD`` range.
+    """
+    refs: list[PushRef] = []
+    for line in value.splitlines():
+        fields = line.split()
+        if len(fields) != 4:
+            continue
+        refs.append(PushRef(*fields))
+    return refs
+
+
+def read_push_refs(
+    env: Mapping[str, str] | None = None,
+) -> tuple[list[PushRef], str]:
+    """Return the parsed pushed refs and the remote name from the environment.
+
+    Reads ``PREFLIGHT_PUSH_REFS`` / ``PREFLIGHT_PUSH_REMOTE`` (set by
+    ``.githooks/pre-push``). The remote defaults to ``origin`` when unset, so a
+    new-branch range can still be scoped. An empty/absent refs payload yields an
+    empty list, the signal for the ``origin/main..HEAD`` fallback.
+    """
+    source = os.environ if env is None else env
+    refs = parse_push_refs(source.get(_PUSH_REFS_ENV_VAR, ""))
+    remote = source.get(_PUSH_REMOTE_ENV_VAR, "") or _DEFAULT_REMOTE
+    return refs, remote
+
+
+def check_pushed_refs(
+    *, runner: Runner, refs: list[PushRef], remote: str
+) -> SignedCommitsResult:
+    """Inspect the commits each pushed ref ships and report unsigned ones.
+
+    For every ref the range is the commits the update would actually ship,
+    computed by the shared :func:`_git.commits_to_push`: ``remote-oid..local-oid``
+    for an existing branch, or the new-branch scan when ``remote-oid`` is the
+    all-zeros sentinel. A delete refspec (``local-oid`` all-zeros) ships nothing
+    and is skipped. Commits shared across refs are inspected once. A ref whose
+    range cannot be resolved is skipped (fail-open for that ref) rather than
+    failing the whole push, matching the #2138 union model; if NO ref range could
+    be resolved the result is a skip so a transient git error defers to the
+    server-side ruleset instead of wedging the push.
+    """
+    seen: set[str] = set()
+    unsigned: list[str] = []
+    inspected = 0
+    undeterminable = False
+    for ref in refs:
+        if is_all_zeros(ref.local_oid):
+            continue  # deletion: ships no commit
+        remote_oid = None if is_all_zeros(ref.remote_oid) else ref.remote_oid
+        commits = commits_to_push(
+            runner, local_sha=ref.local_oid, remote_sha=remote_oid, remote=remote
+        )
+        if commits is None:
+            undeterminable = True
+            continue
+        for sha in commits:
+            if sha in seen:
+                continue
+            seen.add(sha)
+            inspected += 1
+            if is_unsigned(runner, sha):
+                unsigned.append(sha)
+
+    scope = f"{inspected} pushed commit(s) across {len(refs)} ref(s)"
+    if unsigned:
+        return SignedCommitsResult(
+            status="fail",
+            detail=f"{len(unsigned)} of {scope} are unsigned",
+            unsigned=tuple(unsigned),
+        )
+    if inspected == 0 and undeterminable:
+        return SignedCommitsResult(
+            status="skip",
+            detail=f"no pushed ref range across {len(refs)} ref(s) could be resolved",
+        )
+    return SignedCommitsResult(status="pass", detail=f"all {scope} are signed")
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -148,7 +274,18 @@ def _build_parser() -> argparse.ArgumentParser:
 def cmd_verify(args: argparse.Namespace, *, runner: Runner | None = None) -> int:
     if runner is None:
         runner = make_runner(cwd=Path(args.repo_root), timeout=_GIT_TIMEOUT_SECONDS)
-    result = check_signed_commits(runner=runner, base_ref=args.base_ref)
+
+    # When the pre-push hook bridged the actual to-be-updated refs through the
+    # environment, inspect exactly those refs (issue #2162: a non-HEAD branch
+    # push must be checked, and a tag/non-HEAD push must not be blocked by
+    # HEAD-only unsigned commits). With no such payload (a direct CLI ``verify``,
+    # not invoked via the hook) fall back to the origin/main..HEAD range so the
+    # manual invocation and the existing tests keep working.
+    refs, remote = read_push_refs()
+    if refs:
+        result = check_pushed_refs(runner=runner, refs=refs, remote=remote)
+    else:
+        result = check_signed_commits(runner=runner, base_ref=args.base_ref)
 
     if result.status == "pass":
         print(f"OK: {result.detail}")
