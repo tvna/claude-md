@@ -361,6 +361,14 @@ STEPS: tuple[Step, ...] = (
         argv=("python3", "scripts/scan_hook_coverage_drift.py", "verify"),
     ),
     Step(
+        # Refs #2133 (PR #2120 retro #2121, P1). Fails when a git PreToolUse
+        # hook's if: predicate (Bash(*git commit*) etc.) is narrower than the
+        # command surface the script declares in HOOK_GIT_SUBCOMMANDS, so a
+        # widened matcher cannot silently go untriggered.
+        name="scan_hook_predicate_surface_drift",
+        argv=("python3", "scripts/scan_hook_predicate_surface_drift.py", "verify"),
+    ),
+    Step(
         # Refs #1103. Fails when a tool a gate needs at runtime (a Step
         # required_bin) is not provisioned in flake.nix, so the devcontainer
         # cannot silently lack a tool the gates depend on.

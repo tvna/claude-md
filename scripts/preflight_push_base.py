@@ -28,6 +28,11 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 # auto-rewrite PreToolUse hook has rewritten ``git push`` -> ``rtk git push``
 # (Refs #1199). Keeping the prefix optional means the gate fires on both forms.
 _GIT_PUSH_RE = re.compile(r"(?m)^\s*(?:rtk\s+)?git\s+push\b")
+
+# Command surface this hook acts on, read by scan_hook_predicate_surface_drift.py
+# to verify the Bash(*git push*) if: predicate admits it (a narrower predicate
+# would silently skip a command the script handles, the PR #2120 class). Refs #2133.
+HOOK_GIT_SUBCOMMANDS = frozenset({"push"})
 _Runner = Callable[..., subprocess.CompletedProcess[str]]
 
 

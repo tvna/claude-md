@@ -200,6 +200,7 @@ Detection is string-match based:
 | `scan_harness_doc_coverage.py` | pre-commit | `scan-harness-doc-coverage` |
 | `scan_harness_doc_coverage.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
 | `scan_hook_coverage_drift.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
+| `scan_hook_predicate_surface_drift.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
 | `scan_input_contract_drift.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
 | `scan_install_curl_retry_drift.py` | pre-commit | `scan-install-curl-retry-drift` |
 | `scan_issue_anchor_drift.py` | workflow | `verify-agents.yml (lint-scripts-static)` |

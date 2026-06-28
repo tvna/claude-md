@@ -195,6 +195,38 @@ flowchart TD
     N002 --> N003
 ```
 
+## resolve_skips(...)
+
+```mermaid
+flowchart TD
+    N001["resolve_skips(...)"]
+    N002["names = set(...)"]
+    N003["env = get(...)"]
+    N004["names |= {part.strip() for part in env.split('<str>') if part.strip()}"]
+    N005["return names"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 --> N004
+    N004 --> N005
+```
+
+## partition_skips(...)
+
+```mermaid
+flowchart TD
+    N001["partition_skips(...)"]
+    N002["known = {step.name for step in steps}"]
+    N003["unknown = sorted(...)"]
+    N004["to_run = [step for step in steps if step.name not in skip]"]
+    N005["skipped = [StepResult(name=step.name, status='<str>', detail='<str>') for step in steps if step.name in skip]"]
+    N006["return (to_run, skipped, unknown)"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 --> N004
+    N004 --> N005
+    N005 --> N006
+```
+
 ## list_manifest(...)
 
 ```mermaid
@@ -211,28 +243,36 @@ flowchart TD
     N001["main(...)"]
     N002["parser = ArgumentParser(...)"]
     N003["add_argument(...)"]
-    N004["args = parse_args(...)"]
-    N005["if args.list"]
-    N006["dump(...)"]
-    N007["write(...)"]
-    N008["return 0"]
-    N009["environ = dict(...)"]
-    N010["results = run_all(...)"]
-    N011["emit_summary(...)"]
-    N012["emit_annotations(...)"]
-    N013["fails = sum(...)"]
-    N014["return 0 if fails == 0 else 1"]
+    N004["add_argument(...)"]
+    N005["args = parse_args(...)"]
+    N006["if args.list"]
+    N007["dump(...)"]
+    N008["write(...)"]
+    N009["return 0"]
+    N010["environ = dict(...)"]
+    N011["skip = resolve_skips(...)"]
+    N012["(to_run, skipped, unknown) = partition_skips(...)"]
+    N013["for name in unknown:     print(f'<str>{name}<str>', file=sys.stderr)"]
+    N014["results = run_all(to_run, REPO_ROOT, environ) + skipped"]
+    N015["emit_summary(...)"]
+    N016["emit_annotations(...)"]
+    N017["fails = sum(...)"]
+    N018["return 0 if fails == 0 else 1"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 --> N004
     N004 --> N005
-    N005 -->|"true"| N006
-    N006 --> N007
+    N005 --> N006
+    N006 -->|"true"| N007
     N007 --> N008
-    N005 -->|"false"| N009
-    N009 --> N010
+    N008 --> N009
+    N006 -->|"false"| N010
     N010 --> N011
     N011 --> N012
     N012 --> N013
     N013 --> N014
+    N014 --> N015
+    N015 --> N016
+    N016 --> N017
+    N017 --> N018
 ```

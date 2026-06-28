@@ -124,6 +124,11 @@ _ACK_MARKER = "# unsigned-ack"
 _COMMIT_PRODUCING_SUBCOMMANDS = frozenset(
     {"commit", "merge", "rebase", "cherry-pick", "revert", "am", "pull"}
 )
+# Command surface this hook acts on, exposed for scan_hook_predicate_surface_drift.py.
+# The Bash(*git *) if: predicate is broad enough to admit all of these, so the
+# declaration is not required today; it is kept so that re-narrowing the predicate
+# (the exact PR #2120 regression) is caught by the drift gate. Refs #2133, #2120.
+HOOK_GIT_SUBCOMMANDS = _COMMIT_PRODUCING_SUBCOMMANDS
 _GIT_COMMIT_PRODUCING_RE = re.compile(
     r"\bgit\s+(?:commit|merge|rebase|cherry-pick|revert|am|pull)(?![\w-])"
 )

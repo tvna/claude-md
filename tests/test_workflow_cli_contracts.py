@@ -83,6 +83,7 @@ import scan_docs_inventory
 import scan_flake_pin_drift
 import scan_harness_doc_coverage
 import scan_hook_coverage_drift
+import scan_hook_predicate_surface_drift
 import scan_input_contract_drift
 import scan_issue_anchor_drift
 import scan_maintainability_metrics
@@ -255,6 +256,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("scan_non_ascii.py", "run"): "test_scan_non_ascii_run_matches_workflow_env",
     ("scan_nonexhaustive_invariant_drift.py", "verify"): "test_scan_nonexhaustive_invariant_drift_verify_matches_workflow_args",
     ("scan_hook_coverage_drift.py", "verify"): "test_scan_hook_coverage_drift_verify_matches_workflow_args",
+    ("scan_hook_predicate_surface_drift.py", "verify"): "test_scan_hook_predicate_surface_drift_verify_matches_workflow_args",
     ("scan_input_contract_drift.py", "verify"): "test_scan_input_contract_drift_verify_matches_workflow_args",
     ("scan_issue_anchor_drift.py", "verify"): "test_scan_issue_anchor_drift_verify_matches_workflow_args",
     ("scan_preflight_drift.py", "verify"): "test_scan_preflight_drift_verify_matches_workflow_args",
@@ -1726,6 +1728,12 @@ def test_scan_secrets_verify_matches_workflow_args() -> None:
 def test_scan_secret_runbooks_verify_matches_workflow_args() -> None:
     """Mirrors the ``Assert workflow secrets have concrete runbooks`` step."""
     assert scan_secret_runbooks.main(["verify"]) == 0
+
+
+def test_scan_hook_predicate_surface_drift_verify_matches_workflow_args() -> None:
+    """Mirrors the ``Verify git hook predicate covers its command surface`` step
+    in ``.github/workflows/verify-agents.yml``. Refs #2133."""
+    assert scan_hook_predicate_surface_drift.main(["verify"]) == 0
 
 
 def test_scan_input_contract_drift_verify_matches_workflow_args() -> None:
