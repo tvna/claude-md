@@ -59,6 +59,7 @@ class _FakeGit:
         rev_list_map: dict[str, list[str]] | None = None,
         rev_list_rc: int = 0,
         unsigned: set[str] | None = None,
+        remotes: dict[str, str] | None = None,
         raise_on: str | None = None,
     ) -> None:
         self.rev_parse = rev_parse or {}
@@ -66,6 +67,10 @@ class _FakeGit:
         self.rev_list_map = rev_list_map or {}
         self.rev_list_rc = rev_list_rc
         self.unsigned = unsigned or set()
+        # Configured remotes (name -> url) for `git remote -v`, used by
+        # _git.resolve_remote_name on the new-branch path. Defaults to origin so
+        # the existing --remotes=origin expectations hold (#2162).
+        self.remotes = remotes if remotes is not None else {"origin": "https://example.test/repo.git"}
         self.raise_on = raise_on
         self.calls: list[list[str]] = []
 
@@ -74,6 +79,9 @@ class _FakeGit:
         sub = args[0]
         if self.raise_on is not None and sub == self.raise_on:
             raise OSError("boom")
+        if sub == "remote":
+            lines = [f"{name}\t{url} (fetch)\n{name}\t{url} (push)" for name, url in self.remotes.items()]
+            return _cp(stdout="\n".join(lines) + "\n")
         if sub == "rev-parse":
             ref = args[-1]
             sha = self.rev_parse.get(ref)

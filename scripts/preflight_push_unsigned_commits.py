@@ -93,7 +93,7 @@ from pathlib import PurePosixPath
 from typing import Any
 
 from _commit_signing import is_unsigned as _is_unsigned
-from _git import Runner, make_runner, rev_list
+from _git import Runner, commits_to_push, make_runner
 from _hook_runtime import build_deny, run_event_hook
 
 # Both remote signals, mirroring check_commit_signing_ready.py so the gate is
@@ -123,11 +123,6 @@ _ASSIGN_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
 # Git global options taking a separate value token (``git -c k=v push``,
 # ``git -C path push``); the token after them is the value, not the subcommand.
 _GIT_VALUE_OPTS: frozenset[str] = frozenset({"-c", "-C"})
-
-# A new-branch push reports an all-zero remote sha in git's pre-push protocol;
-# the same sentinel is produced here when the remote-tracking ref does not
-# resolve. Either 40-hex (sha-1) or 64-hex (sha-256) all-zeros.
-_ALL_ZEROS_RE = re.compile(r"^0{40}(?:0{24})?$")
 
 # Command surface this hook acts on, read by scan_hook_predicate_surface_drift.py
 # to verify the Bash(*git push*) if: predicate admits it (a narrower predicate
@@ -292,10 +287,10 @@ def _commits_for_spec(
 ) -> list[str] | None:
     """Return the shas one refspec would ship, or None when undeterminable.
 
-    Resolves the local SOURCE sha and the remote-tracking sha. When the
-    remote-tracking ref resolves, the range is ``<remote>..<local>``; when it
-    does not (a new branch, all-zeros remote sha) the range is the commits
-    reachable from the local tip but not from the target remote's refs. None signals
+    Resolves the local SOURCE sha and the remote-tracking sha, then delegates the
+    new-or-existing-branch range computation to the shared
+    :func:`_git.commits_to_push` (the same helper the #2162 pre-push step uses, so
+    both gates resolve the all-zeros / new-branch case identically). None signals
     "could not determine" (the caller skips this spec, fail-open); an empty list
     means "nothing new to ship".
     """
@@ -304,21 +299,7 @@ def _commits_for_spec(
         return None
 
     remote_sha = _rev_parse(runner, f"refs/remotes/{remote}/{remote_ref}")
-    if remote_sha is not None and _ALL_ZEROS_RE.match(remote_sha):
-        remote_sha = None
-
-    if remote_sha is not None:
-        rev_args = [f"{remote_sha}..{local_sha}"]
-    else:
-        # New branch: every commit reachable from the local tip that is not
-        # already on the TARGET remote's refs. Scoping to ``--remotes=<remote>``
-        # (not the bare ``--remotes``, which excludes commits on ANY remote)
-        # keeps an unsigned commit that exists on a different remote but is new
-        # to this push's target from being silently skipped, and matches the
-        # target-remote scope of the existing-branch range above.
-        rev_args = [local_sha, "--not", f"--remotes={remote}"]
-
-    return rev_list(runner, rev_args)
+    return commits_to_push(runner, local_sha=local_sha, remote_sha=remote_sha, remote=remote)
 
 
 def _deny(unsigned: list[str]) -> dict[str, Any]:
