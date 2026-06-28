@@ -220,6 +220,7 @@ Detection is string-match based:
 | `scan_repo_double_hyphen.py` | workflow | `verify-pr.yml (portable-pr-policy)` |
 | `scan_repo_em_dash.py` | workflow | `verify-pr.yml (portable-pr-policy)` |
 | `scan_retro_followup_drift.py` | workflow | `daily-maintenance.yml (scan)` |
+| `scan_runbook_template_drift.py` | workflow | `verify-pr.yml (portable-pr-policy)` |
 | `scan_scripts_gh_calls.py` | pre-commit | `scan-scripts-gh-calls` |
 | `scan_scripts_gh_calls.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
 | `scan_secret_runbooks.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
