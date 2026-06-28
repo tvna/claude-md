@@ -299,7 +299,7 @@ def _commits_for_spec(
     Resolves the local SOURCE sha and the remote-tracking sha. When the
     remote-tracking ref resolves, the range is ``<remote>..<local>``; when it
     does not (a new branch, all-zeros remote sha) the range is the commits
-    reachable from the local tip but not from any remote ref. None signals
+    reachable from the local tip but not from the target remote's refs. None signals
     "could not determine" (the caller skips this spec, fail-open); an empty list
     means "nothing new to ship".
     """
@@ -315,9 +315,12 @@ def _commits_for_spec(
         rev_args = ["rev-list", f"{remote_sha}..{local_sha}"]
     else:
         # New branch: every commit reachable from the local tip that is not
-        # already on a remote ref. This bounds the scan to the new work rather
-        # than re-verifying the whole history.
-        rev_args = ["rev-list", local_sha, "--not", "--remotes"]
+        # already on the TARGET remote's refs. Scoping to ``--remotes=<remote>``
+        # (not the bare ``--remotes``, which excludes commits on ANY remote)
+        # keeps an unsigned commit that exists on a different remote but is new
+        # to this push's target from being silently skipped, and matches the
+        # target-remote scope of the existing-branch range above.
+        rev_args = ["rev-list", local_sha, "--not", f"--remotes={remote}"]
 
     try:
         result = runner(rev_args)

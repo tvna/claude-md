@@ -268,7 +268,7 @@ def test_new_branch_scans_all_commits_not_on_remote(remote: None) -> None:
     assert result is not None
     assert result["hookSpecificOutput"]["permissionDecision"] == "deny"
     rev_list_calls = [c for c in git.calls if c[0] == "rev-list"]
-    assert rev_list_calls == [["rev-list", _LOCAL_SHA, "--not", "--remotes"]]
+    assert rev_list_calls == [["rev-list", _LOCAL_SHA, "--not", "--remotes=origin"]]
 
 
 def test_existing_branch_uses_range(remote: None) -> None:
@@ -286,7 +286,7 @@ def test_all_zeros_remote_sha_treated_as_new_branch(remote: None) -> None:
     )
     subject.decide(_bash_event("git push origin feat/x"), runner=git)
     rev_list_calls = [c for c in git.calls if c[0] == "rev-list"]
-    assert rev_list_calls == [["rev-list", _LOCAL_SHA, "--not", "--remotes"]]
+    assert rev_list_calls == [["rev-list", _LOCAL_SHA, "--not", "--remotes=origin"]]
 
 
 # ---------------------------------------------------------------------------
