@@ -33,6 +33,11 @@ class Response:
 
 VALID_SOT: list[dict[str, object]] = [{"name": "type:fix", "color": "d73a4a", "description": "Bug fix"}]
 
+# Shared fixtures for the rename decide_label_action cases.
+_RENAME_FROM = "layer:p2-precode"
+_RENAME_NEW: dict[str, object] = {"name": "layer:p2-input-boundary", "color": "5319e7", "description": "New"}
+_RENAME_OLD: dict[str, object] = {"name": _RENAME_FROM, "color": "5319e7", "description": "Old"}
+
 
 def write_sot(tmp_path: Path, entries: list[dict[str, object]]) -> Path:
     path = tmp_path / "labels.json"
@@ -101,10 +106,10 @@ class TestDecideLabelAction:
 
     def test_rename_when_old_present_new_absent(self) -> None:
         decision = labels_apply.decide_label_action(
-            sot_entry={"name": "layer:p2-input-boundary", "color": "5319e7", "description": "New"},
+            sot_entry=_RENAME_NEW,
             live_entry=None,
-            rename_from="layer:p2-precode",
-            live_old_entry={"name": "layer:p2-precode", "color": "5319e7", "description": "Old"},
+            rename_from=_RENAME_FROM,
+            live_old_entry=_RENAME_OLD,
         )
 
         assert decision["action"] == "RENAME"
@@ -120,12 +125,11 @@ class TestDecideLabelAction:
         assert decision["desc_changed"] is True
 
     def test_conflict_when_old_and_new_both_present(self) -> None:
-        new = {"name": "layer:p2-input-boundary", "color": "5319e7", "description": "New"}
         decision = labels_apply.decide_label_action(
-            sot_entry=new,
-            live_entry=new,
-            rename_from="layer:p2-precode",
-            live_old_entry={"name": "layer:p2-precode", "color": "5319e7", "description": "Old"},
+            sot_entry=_RENAME_NEW,
+            live_entry=_RENAME_NEW,
+            rename_from=_RENAME_FROM,
+            live_old_entry=_RENAME_OLD,
         )
 
         assert decision["action"] == "CONFLICT"
@@ -133,11 +137,10 @@ class TestDecideLabelAction:
 
     def test_rename_already_done_is_noop(self) -> None:
         # Old gone, new present and matching: an idempotent rerun must not act.
-        new = {"name": "layer:p2-input-boundary", "color": "5319e7", "description": "New"}
         decision = labels_apply.decide_label_action(
-            sot_entry=new,
-            live_entry=new,
-            rename_from="layer:p2-precode",
+            sot_entry=_RENAME_NEW,
+            live_entry=_RENAME_NEW,
+            rename_from=_RENAME_FROM,
             live_old_entry=None,
         )
 
@@ -146,9 +149,9 @@ class TestDecideLabelAction:
     def test_rename_source_absent_creates_new(self) -> None:
         # Neither old nor new exists: fall through to a plain POST.
         decision = labels_apply.decide_label_action(
-            sot_entry={"name": "layer:p2-input-boundary", "color": "5319e7", "description": "New"},
+            sot_entry=_RENAME_NEW,
             live_entry=None,
-            rename_from="layer:p2-precode",
+            rename_from=_RENAME_FROM,
             live_old_entry=None,
         )
 

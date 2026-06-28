@@ -255,6 +255,9 @@ def run(
 
     for live_entry in live:
         live_name = str(live_entry.get("name"))
+        # A rename source (old name) is a live label mid-migration, not an
+        # orphan: treat it as in-SoT so it is neither pruned nor reported as
+        # missing while its RENAME to the new name is pending.
         prune_action = decide_prune_action(
             live_name=live_name,
             in_sot=live_name in sot_names or live_name in rename_sources,
