@@ -61,6 +61,11 @@ from _hook_runtime import build_deny, run_tool_hook
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
+# Refs #2133. This hook's PreToolUse predicate ``Bash(*git push*)`` gates it to
+# a single git subcommand; scan_hook_predicate_surface_drift.py reads this
+# declared surface and verifies the predicate admits it.
+HOOK_GIT_SUBCOMMANDS = frozenset({"push"})
+
 # Optional ``rtk`` prefix: the rtk auto-rewrite hook rewrites ``git push`` ->
 # ``rtk git push`` (Refs #1199), so match both. Mirrors the sibling push gates.
 _GIT_PUSH_RE = re.compile(r"(?m)^\s*(?:rtk\s+)?git\s+push\b")
