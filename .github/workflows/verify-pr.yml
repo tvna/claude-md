@@ -222,6 +222,34 @@ jobs:
       - name: Run prek (j178/prek) against all files
         run: uv tool run prek run --all-files --show-diff-on-failure
 
+  scan-double-hyphen:
+    # Refs #2069 (retro Gap B). Standalone required-check counterpart to the
+    # portable-pr-policy step of the same scan. The pre-push hook
+    # (scan_repo_double_hyphen in preflight_steps.py) only runs before an agent
+    # push; a post-merge conflict resolution or `apm compile` that regenerates a
+    # tracked file can reintroduce the prose double-hyphen separator after the
+    # gate already passed, and that merge commit has no further inspection. This
+    # job re-runs the repo-wide scan in CI so the post-merge tree is covered.
+    name: "Scan double-hyphen / verify"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    concurrency:
+      group: scan-double-hyphen-${{ github.ref }}
+      cancel-in-progress: true
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          # fetch-depth: 0 mirrors the portable-pr-policy checkout so the full
+          # tracked tree is present for git ls-files enumeration.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Scan all tracked files for prose double-hyphen separator
+        run: python3 scripts/scan_repo_double_hyphen.py verify --git-tracked
+
   verify-design-philosophy:
     name: "Verify design philosophy doc / verify"
     runs-on: ubuntu-latest
