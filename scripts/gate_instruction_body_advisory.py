@@ -52,6 +52,11 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 # git commit``), but keep plumbing like ``git commit-tree`` out.
 _GIT_COMMIT_RE = re.compile(r"\bgit\s+commit(?![\w-])")
 
+# Command surface this hook acts on, read by scan_hook_predicate_surface_drift.py
+# to verify the Bash(*git commit*) if: predicate admits it (a narrower predicate
+# would silently skip a command the script handles, the PR #2120 class). Refs #2133.
+HOOK_GIT_SUBCOMMANDS = frozenset({"commit"})
+
 # The universal instruction set, byte-aligned with verify_text_delta_section
 # and verify_instruction_text_growth so the advisory tracks the gates it warns
 # about. Exact-match mirrors plus the source directory prefix.

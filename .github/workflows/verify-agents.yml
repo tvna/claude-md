@@ -151,6 +151,13 @@ jobs:
         # coverage and is not in the explicit allowlist.
         run: uv run python scripts/scan_hook_coverage_drift.py verify
 
+      - name: Verify git hook predicate covers its command surface
+        # Refs #2133 (PR #2120 retro #2121, P1): fails when a git PreToolUse
+        # hook's if: predicate is narrower than the script's declared
+        # HOOK_GIT_SUBCOMMANDS surface, so a widened matcher cannot silently
+        # go untriggered (the PR #2120 inert-signing-matcher class).
+        run: uv run python scripts/scan_hook_predicate_surface_drift.py verify
+
       - name: Verify devcontainer provisions gate-required tools
         # Refs #1103: fails when a tool a gate needs at runtime (a
         # preflight_all.py Step required_bin) is not provisioned in flake.nix,
