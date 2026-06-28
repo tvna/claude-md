@@ -192,6 +192,25 @@ def find_manifest_violations() -> list[str]:
     ]
 
 
+def _escape_annotation_property(value: str) -> str:
+    """Escape a GitHub Actions annotation property value (the ``file=`` field).
+
+    Per the workflow-command spec a property value escapes ``%``, CR, LF, ``:``
+    and ``,`` (``%`` first, so the other replacements are not re-escaped). This
+    keeps a crafted path (e.g. a PR-authored ``.github/actions`` file whose name
+    contains ``::`` or a comma) from breaking out of the ``file=`` property and
+    mangling the ``::error file=<path>,line=<n>::`` annotation.
+    Defence-in-depth, mirrors GitHub's toolkit escaping. Refs #2143.
+    """
+    return (
+        value.replace("%", "%25")
+        .replace("\r", "%0D")
+        .replace("\n", "%0A")
+        .replace(":", "%3A")
+        .replace(",", "%2C")
+    )
+
+
 def _cmd_verify(args: argparse.Namespace) -> int:
     repo_root = Path(args.repo_root).resolve()
     text_violations = find_text_violations(repo_root)
@@ -199,7 +218,7 @@ def _cmd_verify(args: argparse.Namespace) -> int:
 
     for rel, lineno in text_violations:
         print(
-            f"::error file={rel},line={lineno}::"
+            f"::error file={_escape_annotation_property(str(rel))},line={lineno}::"
             f"'ruff format' invoked on a gate surface; CI enforces 'ruff check' "
             f"only and 'ruff format' is intentionally not a gate (running it just "
             f"widens the diff, CLAUDE.md section 5). Append '{ACK_MARKER}' to this "

@@ -146,3 +146,32 @@ def test_verify_fails_on_dirty_repo(tmp_path: Path, capsys: pytest.CaptureFixtur
     err = capsys.readouterr().err
     assert "ruff format" in err
     assert "FAIL:" in err
+
+
+# ---------------------------------------------------------------------------
+# annotation escaping (defence-in-depth)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("raw", "escaped"),
+    [
+        ("a:b,c%d", "a%3Ab%2Cc%25d"),  # % escaped first, then : and ,
+        (".github/actions/x::y/action.yml", ".github/actions/x%3A%3Ay/action.yml"),
+        ("plain/path.yml", "plain/path.yml"),  # nothing to escape
+    ],
+)
+def test_escape_annotation_property(raw: str, escaped: str) -> None:
+    assert gate._escape_annotation_property(raw) == escaped
+
+
+def test_verify_escapes_crafted_path_in_annotation(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    # A PR-authored path containing '::' must not break out of the file=
+    # property of the ::error annotation; it is percent-escaped instead.
+    crafted = Path(".github/actions/x::y/action.yml")
+    monkeypatch.setattr(gate, "find_text_violations", lambda _root: [(crafted, 1)])
+    monkeypatch.setattr(gate, "find_manifest_violations", lambda: [])
+    assert gate.main(["verify"]) == 1
+    err = capsys.readouterr().err
+    assert "x%3A%3Ay" in err
+    assert "::error file=.github/actions/x::y" not in err  # raw '::' did not leak
