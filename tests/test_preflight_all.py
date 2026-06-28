@@ -414,3 +414,65 @@ class TestRunCheap:
         by_name = {r.name: r for r in results}
         assert by_name["p2"].status == "fail"
         assert [r.name for r in results] == [f"p{i}" for i in range(5)]
+
+
+# ---------------------------------------------------------------------------
+# step skipping; the narrowed PREFLIGHT_SKIP replacement (refs #2133)
+# ---------------------------------------------------------------------------
+class TestResolveSkips:
+    def test_cli_and_env_combine(self) -> None:
+        names = pa.resolve_skips(["prek"], {"PREFLIGHT_SKIP_STEPS": "ruff, mypy"})
+        assert names == {"prek", "ruff", "mypy"}
+
+    def test_empty_sources_yield_empty(self) -> None:
+        assert pa.resolve_skips(None, {}) == set()
+        assert pa.resolve_skips([], {"PREFLIGHT_SKIP_STEPS": " , "}) == set()
+
+
+class TestPartitionSkips:
+    def _steps(self) -> tuple[pa.Step, ...]:
+        return (
+            pa.Step(name="cheap", argv=("true",)),
+            pa.Step(name="prek", argv=("true",)),
+        )
+
+    def test_named_step_is_partitioned_out_and_reported(self) -> None:
+        to_run, skipped, unknown = pa.partition_skips(self._steps(), {"prek"})
+        assert [s.name for s in to_run] == ["cheap"]
+        assert [r.name for r in skipped] == ["prek"]
+        assert skipped[0].status == "skip"
+        assert "PREFLIGHT_SKIP_STEPS" in skipped[0].detail
+        assert unknown == []
+
+    def test_unknown_name_skips_nothing(self) -> None:
+        to_run, skipped, unknown = pa.partition_skips(self._steps(), {"typo"})
+        assert [s.name for s in to_run] == ["cheap", "prek"]
+        assert skipped == []
+        assert unknown == ["typo"]
+
+
+class TestMainSkip:
+    def test_skip_prek_still_runs_other_steps(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        ran: list[str] = []
+
+        def fake_run_all(
+            steps: tuple[pa.Step, ...], _cwd: Path, _env: dict[str, str]
+        ) -> list[pa.StepResult]:
+            ran.extend(s.name for s in steps)
+            return [pa.StepResult(name=s.name, status="pass") for s in steps]
+
+        steps = (
+            pa.Step(name="scan_repo_double_hyphen", argv=("true",)),
+            pa.Step(name="preflight_coverage", argv=("true",), heavy=True),
+            pa.Step(name="prek", argv=("true",)),
+        )
+        monkeypatch.setattr(pa, "STEPS", steps)
+        monkeypatch.setattr(pa, "run_all", fake_run_all)
+        monkeypatch.setattr(pa.os, "environ", {"PREFLIGHT_SKIP_STEPS": "prek"})
+
+        rc = pa.main([])
+        assert rc == 0
+        # prek dropped; the cheap dash gate and coverage still ran.
+        assert "prek" not in ran
+        assert "scan_repo_double_hyphen" in ran
+        assert "preflight_coverage" in ran

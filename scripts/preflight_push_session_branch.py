@@ -38,6 +38,11 @@ _SESSION_BRANCH_FILE = REPO_ROOT / ".git" / "CLAUDE_SESSION_BRANCH"
 # Optional ``rtk`` prefix: the rtk auto-rewrite PreToolUse hook rewrites
 # ``git push`` -> ``rtk git push`` (Refs #1199), so the gate must fire on both.
 _GIT_PUSH_RE = re.compile(r"(?m)^\s*(?:rtk\s+)?git\s+push\b")
+
+# Command surface this hook acts on, read by scan_hook_predicate_surface_drift.py
+# to verify the Bash(*git push*) if: predicate admits it (a narrower predicate
+# would silently skip a command the script handles, the PR #2120 class). Refs #2133.
+HOOK_GIT_SUBCOMMANDS = frozenset({"push"})
 _REMOTE_ENV_VAR = "CLAUDE_CODE_REMOTE"
 
 # Flags that consume no additional token.

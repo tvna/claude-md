@@ -100,16 +100,29 @@ git config core.hooksPath .githooks
 
 ### Emergency bypass
 
-When a push is genuinely urgent (e.g. a security rollback) and the
-preflight blocks legitimately for an unrelated reason, set
-`PREFLIGHT_SKIP=1` for the single push:
+Two tiers (narrowed in issue #2133 so the routine bypass stops dropping the
+cheap deterministic gates and `preflight_coverage`):
 
-```sh
-PREFLIGHT_SKIP=1 git push
-```
+* **`PREFLIGHT_SKIP=1`**; skips ONLY the `prek` step. Every cheap gate AND
+  `preflight_coverage` still run. This is the routine "prek is not provisioned
+  in this session" lever, not a full bypass.
 
-The bypass is explicit, observable in shell history, and noted in
-retrospectives. Do not configure it permanently in your shell rc.
+  ```sh
+  PREFLIGHT_SKIP=1 git push
+  ```
+
+* **`PREFLIGHT_SKIP_ALL=1`**; skips the whole `scripts/preflight_all.py` run.
+  Reserve this for a genuinely urgent push (e.g. a security rollback) that the
+  preflight blocks for an unrelated reason.
+
+  ```sh
+  PREFLIGHT_SKIP_ALL=1 git push
+  ```
+
+You can also skip a single named step with `PREFLIGHT_SKIP_STEPS=<name>` (the
+mechanism `PREFLIGHT_SKIP=1` uses for `prek`). Both bypasses are explicit,
+observable in shell history, and noted in retrospectives. Do not configure
+either permanently in your shell rc.
 
 ## Wiring summary
 
