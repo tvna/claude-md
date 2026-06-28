@@ -53,12 +53,17 @@ class _FakeGit:
         rev_list_map: dict[str, list[str]] | None = None,
         rev_list_rc: int = 0,
         unsigned: set[str] | None = None,
+        remotes: dict[str, str] | None = None,
         raise_on: str | None = None,
     ) -> None:
         self.rev_list = rev_list if rev_list is not None else []
         self.rev_list_map = rev_list_map or {}
         self.rev_list_rc = rev_list_rc
         self.unsigned = unsigned or set()
+        # Configured remotes (name -> url) for `git remote -v`, consulted by
+        # _git.resolve_remote_name on the new-branch path. Defaults to origin so
+        # the --remotes=origin expectations hold (#2162).
+        self.remotes = remotes if remotes is not None else {"origin": "https://example.test/repo.git"}
         self.raise_on = raise_on
         self.calls: list[list[str]] = []
 
@@ -67,6 +72,9 @@ class _FakeGit:
         sub = args[0]
         if self.raise_on is not None and sub == self.raise_on:
             raise OSError("boom")
+        if sub == "remote":
+            lines = [f"{name}\t{url} (fetch)\n{name}\t{url} (push)" for name, url in self.remotes.items()]
+            return _cp(stdout="\n".join(lines) + "\n")
         if sub == "rev-list":
             if self.rev_list_rc != 0:
                 return _cp(returncode=self.rev_list_rc)
@@ -308,6 +316,37 @@ def test_pushed_new_branch_scopes_to_remote() -> None:
     assert result.status == "fail"
     rev_list_calls = [c for c in git.calls if c[0] == "rev-list"]
     assert rev_list_calls == [["rev-list", _OTHER_TIP, "--not", "--remotes=origin"]]
+
+
+def test_pushed_new_branch_url_remote_maps_to_name() -> None:
+    # A direct-URL push passes the URL as the remote; it must map back to the
+    # configured remote name, not scope --remotes to the URL (#2162).
+    git = _FakeGit(
+        rev_list_map={_OTHER_TIP: [_UNSIGNED]},
+        unsigned={_UNSIGNED},
+        remotes={"origin": "https://example.test/repo.git"},
+    )
+    result = subject.check_pushed_refs(
+        runner=git, refs=[_ref(_OTHER_TIP, _ZEROS)], remote="https://example.test/repo.git"
+    )
+    assert result.status == "fail"
+    rev_list_calls = [c for c in git.calls if c[0] == "rev-list"]
+    assert rev_list_calls == [["rev-list", _OTHER_TIP, "--not", "--remotes=origin"]]
+
+
+def test_pushed_new_branch_unknown_url_scopes_to_all_remotes() -> None:
+    # A URL matching no configured remote falls back to all remote-tracking refs,
+    # never a bogus --remotes=<url> that would scan the whole history (#2162).
+    git = _FakeGit(
+        rev_list_map={_OTHER_TIP: [_SIGNED]},
+        unsigned=set(),
+        remotes={"origin": "https://example.test/repo.git"},
+    )
+    subject.check_pushed_refs(
+        runner=git, refs=[_ref(_OTHER_TIP, _ZEROS)], remote="https://unconfigured/x.git"
+    )
+    rev_list_calls = [c for c in git.calls if c[0] == "rev-list"]
+    assert rev_list_calls == [["rev-list", _OTHER_TIP, "--not", "--remotes"]]
 
 
 def test_pushed_delete_refspec_ships_nothing() -> None:
