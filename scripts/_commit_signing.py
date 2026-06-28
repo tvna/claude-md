@@ -38,11 +38,8 @@ Tested by ``tests/test_commit_signing.py``.
 from __future__ import annotations
 
 import subprocess
-from collections.abc import Callable
 
-# A runner takes a git argv (without the leading ``git``) and returns the
-# completed process, mirroring _git.run_git's signature so it is interchangeable.
-Runner = Callable[[list[str]], "subprocess.CompletedProcess[str]"]
+from _git import Runner
 
 
 def is_unsigned(runner: Runner, sha: str) -> bool:

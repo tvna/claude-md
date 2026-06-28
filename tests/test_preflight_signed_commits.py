@@ -149,6 +149,13 @@ def test_ack_substring_does_not_opt_out() -> None:
     assert subject.ack_present({subject._ACK_ENV_VAR: "# unsigned-ack-not-really"}) is False
 
 
+def test_ack_present_tolerates_trailing_cr() -> None:
+    # A CRLF-tainted env value must still opt out (the marker line is
+    # "# unsigned-ack\r"); the anchored regex tolerates the trailing CR.
+    assert subject.ack_present({subject._ACK_ENV_VAR: "# unsigned-ack\r\nrest"}) is True
+    assert subject.ack_present({subject._ACK_ENV_VAR: "# unsigned-ack\r"}) is True
+
+
 # ---------------------------------------------------------------------------
 # cmd_verify(): exit codes
 # ---------------------------------------------------------------------------
@@ -173,12 +180,28 @@ def test_cmd_verify_skip_returns_zero(capsys: pytest.CaptureFixture[str]) -> Non
     assert "SKIP" in capsys.readouterr().err
 
 
-def test_cmd_verify_ack_opts_out(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_cmd_verify_ack_bypasses_unsigned_loudly(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
     monkeypatch.setenv(subject._ACK_ENV_VAR, "# unsigned-ack")
     git = _FakeGit(rev_list=[_UNSIGNED], unsigned={_UNSIGNED})
-    # Even with an unsigned commit, the anchored opt-in passes and never queries git.
+    # The opt-in is consulted only after a real unsigned commit is found (so git
+    # IS queried), and the bypass is logged as a loud ::warning:: naming the sha.
     assert subject.cmd_verify(_args(), runner=git) == 0
-    assert git.calls == []
+    assert git.calls  # the range was actually resolved before the opt-in applied
+    err = capsys.readouterr().err
+    assert "::warning::" in err
+    assert _UNSIGNED in err
+
+
+def test_cmd_verify_ack_does_not_bypass_a_clean_range(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # With no unsigned commit, the opt-in is irrelevant: a normal pass, no warning.
+    monkeypatch.setenv(subject._ACK_ENV_VAR, "# unsigned-ack")
+    git = _FakeGit(rev_list=[_SIGNED], unsigned=set())
+    assert subject.cmd_verify(_args(), runner=git) == 0
+    assert "::warning::" not in capsys.readouterr().err
 
 
 # ---------------------------------------------------------------------------

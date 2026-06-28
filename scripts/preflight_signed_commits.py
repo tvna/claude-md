@@ -30,22 +30,31 @@ current; a base ref that does not resolve is reported as a skip (that gate owns
 base availability, and the server ruleset is the backstop) rather than failing
 this gate on a condition another gate already covers.
 
-Opt-in. An intentional, reviewed unsigned push opts out by setting
-``PREFLIGHT_SIGNED_COMMITS_ACK`` to a value containing the marker ``# unsigned-ack``
-on a line of its own. The match is anchored to a full line (never an unanchored
-substring; the #1962 ACK bug, where a marker matched as a substring let an
-unrelated string opt out) and reuses the ``# unsigned-ack`` convention #2138
-established for the same unsigned-commit category (CLAUDE.md section 4: one
-category, one control).
+Opt-in. A preflight ``verify`` step sees no Bash command line (unlike the
+PreToolUse Bash gate #2138, which scans the command text for a ``# unsigned-ack``
+comment), so an intentional, reviewed unsigned push opts out here through the
+environment instead: set ``PREFLIGHT_SIGNED_COMMITS_ACK`` to a value carrying a
+``# unsigned-ack`` line. The marker STRING matches #2138's, but the SURFACE
+differs (an env var, not command text), so this is a sibling control for the
+same unsigned-commit category, not literally the same control. The match is
+anchored to a full line (tolerating a trailing CR), never an unanchored
+substring (the #1962 ACK bug, where a substring match let an unrelated string
+opt out). Because an exported env var persists across a session (wider than a
+per-command marker), the opt-in is consulted ONLY when an unsigned commit is
+actually found, and each bypass is logged as a loud ``::warning::`` so the wide
+scope can never suppress a block silently (CLAUDE.md section 4: escape hatches
+are loud). Per-push opt-in scope is tracked with the stdin-ref work in #2162.
 
 Contract:
 - Inputs: no stdin. ``verify`` subcommand with optional ``--repo-root`` and
   ``--base-ref``. Reads ``PREFLIGHT_SIGNED_COMMITS_ACK`` for the opt-in.
-- Outputs: exit 0 when every commit in range is signed (or the opt-in is set,
-  or the range is undeterminable); exit 1 listing the unsigned commits.
-- Failure policy: fail loud (exit 1) only on a positively-shown unsigned commit;
-  an unresolvable range fails open (skip) so a transient git error never wedges
-  a push when ``preflight_branch_base`` and the ruleset still guard the base.
+- Outputs: exit 0 when every commit in range is signed, when the range is
+  undeterminable (skip), or when an unsigned commit is present but the opt-in
+  bypasses it (logged loudly); exit 1 listing the unsigned commits otherwise.
+- Failure policy: fail loud (exit 1) only on a positively-shown unsigned commit
+  with no opt-in; an unresolvable range fails open (skip) so a transient git
+  error never wedges a push when ``preflight_branch_base`` and the ruleset still
+  guard the base.
 
 Tested by ``tests/test_preflight_signed_commits.py``. Refs #1959, #2138.
 """
@@ -55,28 +64,24 @@ from __future__ import annotations
 import argparse
 import os
 import re
-import subprocess
 import sys
-from collections.abc import Callable, Mapping
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
 from _commit_signing import is_unsigned
-from _git import run_git
+from _git import Runner, make_runner, rev_list
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 _GIT_TIMEOUT_SECONDS = 30
 
 # Opt-in marker for a reviewed, intentional unsigned push, anchored to a full
-# line so a substring can never opt out (the #1962 ACK bug). Reuses the
-# ``# unsigned-ack`` marker #2138 established for the same category.
+# line (a trailing CR tolerated) so a substring can never opt out (the #1962 ACK
+# bug). Same marker STRING as #2138, but matched against an env var, not command
+# text (a sibling control for the same category; see the module docstring).
 _ACK_ENV_VAR = "PREFLIGHT_SIGNED_COMMITS_ACK"
-_ACK_MARKER_RE = re.compile(r"(?m)^# unsigned-ack$")
-
-# A runner takes a git argv (without the leading ``git``) and returns the
-# completed process, mirroring _git.run_git's signature so it is the default.
-_Runner = Callable[[list[str]], "subprocess.CompletedProcess[str]"]
+_ACK_MARKER_RE = re.compile(r"(?m)^# unsigned-ack\r?$")
 
 
 @dataclass(frozen=True)
@@ -88,43 +93,29 @@ class SignedCommitsResult:
     unsigned: tuple[str, ...] = ()
 
 
-def _make_runner(repo_root: Path) -> _Runner:
-    """Return a git runner bound to *repo_root* with a bounded timeout."""
-
-    def runner(git_args: list[str]) -> subprocess.CompletedProcess[str]:
-        return run_git(git_args, cwd=repo_root, timeout=_GIT_TIMEOUT_SECONDS)
-
-    return runner
-
-
 def ack_present(env: Mapping[str, str] | None = None) -> bool:
     """Return True when the anchored ``# unsigned-ack`` opt-in marker is set.
 
-    The marker must appear as a full line in ``PREFLIGHT_SIGNED_COMMITS_ACK``;
-    an unanchored substring match (the #1962 bug) is deliberately not accepted.
+    The marker must appear as a full line (a trailing CR tolerated) in
+    ``PREFLIGHT_SIGNED_COMMITS_ACK``; an unanchored substring match (the #1962
+    bug) is deliberately not accepted.
     """
     value = (os.environ if env is None else env).get(_ACK_ENV_VAR, "")
     return _ACK_MARKER_RE.search(value) is not None
 
 
-def commits_in_range(runner: _Runner, base_ref: str) -> list[str] | None:
+def commits_in_range(runner: Runner, base_ref: str) -> list[str] | None:
     """Return the shas in ``<base_ref>..HEAD``, or None when undeterminable.
 
-    None signals that the range could not be resolved (the base ref is missing,
-    or a git error occurred); the caller treats it as a skip. An empty list
-    means the range resolved with nothing to inspect (HEAD already contains the
-    base), which is a pass.
+    Delegates to the shared :func:`_git.rev_list`: None signals the range could
+    not be resolved (the base ref is missing, or a git error occurred) and the
+    caller treats it as a skip; an empty list means the range resolved with
+    nothing to inspect (HEAD already contains the base), which is a pass.
     """
-    try:
-        result = runner(["rev-list", f"{base_ref}..HEAD"])
-    except (RuntimeError, OSError, subprocess.SubprocessError):
-        return None
-    if result.returncode != 0:
-        return None
-    return [line.strip() for line in result.stdout.splitlines() if line.strip()]
+    return rev_list(runner, [f"{base_ref}..HEAD"])
 
 
-def check_signed_commits(*, runner: _Runner, base_ref: str) -> SignedCommitsResult:
+def check_signed_commits(*, runner: Runner, base_ref: str) -> SignedCommitsResult:
     """Inspect ``<base_ref>..HEAD`` and report whether every commit is signed."""
     commits = commits_in_range(runner, base_ref)
     if commits is None:
@@ -154,13 +145,9 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def cmd_verify(args: argparse.Namespace, *, runner: _Runner | None = None) -> int:
-    if ack_present():
-        print(f"OK: signed-commit check opted out via {_ACK_ENV_VAR} (# unsigned-ack).")
-        return 0
-
+def cmd_verify(args: argparse.Namespace, *, runner: Runner | None = None) -> int:
     if runner is None:
-        runner = _make_runner(Path(args.repo_root))
+        runner = make_runner(cwd=Path(args.repo_root), timeout=_GIT_TIMEOUT_SECONDS)
     result = check_signed_commits(runner=runner, base_ref=args.base_ref)
 
     if result.status == "pass":
@@ -170,6 +157,18 @@ def cmd_verify(args: argparse.Namespace, *, runner: _Runner | None = None) -> in
         print(
             f"SKIP: {result.detail}; deferring to preflight_branch_base and the "
             "server-side required_signatures ruleset.",
+            file=sys.stderr,
+        )
+        return 0
+
+    # result.status == "fail": unsigned commits are present. The env-var opt-in is
+    # consulted only here (not before the range is resolved) so it can suppress a
+    # block ONLY when there is a real one, and every bypass is logged loudly so
+    # the env var's session-wide scope cannot silently pass an unsigned push.
+    if ack_present():
+        print(
+            f"::warning::{_ACK_ENV_VAR} opt-in bypassed {len(result.unsigned)} "
+            f"UNSIGNED commit(s): {', '.join(result.unsigned)}",
             file=sys.stderr,
         )
         return 0

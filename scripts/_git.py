@@ -20,7 +20,14 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+from collections.abc import Callable
 from pathlib import Path
+
+# A runner takes a git argv (WITHOUT the leading ``git``) and returns the
+# completed process, mirroring :func:`run_git`'s signature. Gates that shell out
+# to git through an injectable seam (so tests can supply a canned git) type that
+# seam as ``Runner``; :func:`make_runner` builds the production one.
+Runner = Callable[[list[str]], "subprocess.CompletedProcess[str]"]
 
 
 def run_git(
@@ -51,3 +58,35 @@ def run_git(
         text=True,
         timeout=timeout,
     )
+
+
+def make_runner(*, cwd: Path | str | None = None, timeout: float | None = None) -> Runner:
+    """Return a :data:`Runner` that runs ``git <args>`` under *cwd* with *timeout*.
+
+    The production runner several gates build by hand (a closure binding
+    :func:`run_git`'s ``cwd``/``timeout``); centralised here so the timeout/cwd
+    policy lives in one place instead of one private copy per gate.
+    """
+
+    def runner(args: list[str]) -> subprocess.CompletedProcess[str]:
+        return run_git(args, cwd=cwd, timeout=timeout)
+
+    return runner
+
+
+def rev_list(runner: Runner, args: list[str]) -> list[str] | None:
+    """Return the shas ``git rev-list <args>`` prints, or None when undeterminable.
+
+    Runs ``rev-list`` through *runner*, strips and drops blank lines, and returns
+    the resulting shas. None signals "could not determine" (a subprocess error or
+    a non-zero exit, e.g. an unresolvable ref) so a caller can fail open; an empty
+    list means the range resolved with nothing to ship. Shared by the unsigned-
+    commit gates so both compute a push range the same way.
+    """
+    try:
+        result = runner(["rev-list", *args])
+    except (RuntimeError, OSError, subprocess.SubprocessError):
+        return None
+    if result.returncode != 0:
+        return None
+    return [line.strip() for line in result.stdout.splitlines() if line.strip()]
