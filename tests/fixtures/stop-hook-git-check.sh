@@ -74,14 +74,22 @@ if [[ -n "$current_branch" ]]; then
       fi
     fi
 
-    # Check for unpushed commits. When the branch has a remote tracking ref,
-    # count commits not yet on it (the remote branch to HEAD) so genuinely
-    # unpushed work is reported even when those commits are also reachable from
-    # the default branch. When the branch was never pushed, scope to
-    # default_ref..HEAD so a branch that merely sits on the default branch (no
-    # commits of its own) stays silent instead of being told to push upstream
-    # history that is not its own.
-    if git rev-parse --verify --quiet "origin/$current_branch" >/dev/null 2>&1; then
+    # Check for unpushed commits. Determine the ref the branch's commits should
+    # already be on, in priority order so genuinely unpushed work is reported
+    # without false positives:
+    #   1. the branch's configured upstream, so a branch that tracks a
+    #      differently-named remote ref (e.g. localwork tracking
+    #      origin/remote-name) is compared against its real upstream rather than
+    #      a non-existent same-named ref;
+    #   2. a same-named origin/$current_branch, for a branch pushed without an
+    #      upstream configured;
+    #   3. the default branch, for a never-pushed branch, so a branch that
+    #      merely sits on the default branch (no commits of its own) stays silent
+    #      instead of being told to push upstream history that is not its own.
+    if upstream_ref=$(git rev-parse --abbrev-ref --symbolic-full-name "@{upstream}" 2>/dev/null); then
+      unpushed=$(git rev-list "$upstream_ref..HEAD" --count 2>/dev/null) || unpushed=0
+      remote_branch_exists=1
+    elif git rev-parse --verify --quiet "origin/$current_branch" >/dev/null 2>&1; then
       unpushed=$(git rev-list "origin/$current_branch..HEAD" --count 2>/dev/null) || unpushed=0
       remote_branch_exists=1
     else

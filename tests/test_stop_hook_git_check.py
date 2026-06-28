@@ -70,21 +70,27 @@ def _env(author=OWNER, committer=OWNER) -> dict[str, str]:
 
 
 def _git(cwd: Path, *args: str) -> str:
-    out = subprocess.run(
-        ["git", *args], cwd=cwd, env=_env(), check=True, capture_output=True, text=True
-    )
+    out = subprocess.run(["git", *args], cwd=cwd, env=_env(), check=True, capture_output=True, text=True)
     return out.stdout.strip()
 
 
 def _commit(repo: Path, fname: str, msg: str, *, author=OWNER, committer=OWNER) -> str:
     (repo / fname).write_text(msg + "\n", encoding="utf-8")
     subprocess.run(
-        ["git", "add", fname], cwd=repo, env=_env(author, committer), check=True,
-        capture_output=True, text=True,
+        ["git", "add", fname],
+        cwd=repo,
+        env=_env(author, committer),
+        check=True,
+        capture_output=True,
+        text=True,
     )
     subprocess.run(
         ["git", "commit", "--no-gpg-sign", "-m", msg],
-        cwd=repo, env=_env(author, committer), check=True, capture_output=True, text=True,
+        cwd=repo,
+        env=_env(author, committer),
+        check=True,
+        capture_output=True,
+        text=True,
     )
     return _git(repo, "rev-parse", "--short", "HEAD")
 
@@ -94,8 +100,12 @@ def _run_hook(repo: Path, *, gpgsign: bool = True) -> subprocess.CompletedProces
         _git(repo, "config", "commit.gpgsign", "true")
     env = {**os.environ, "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_SYSTEM": os.devnull}
     return subprocess.run(
-        ["bash", str(HOOK)], cwd=repo, env=env,
-        input='{"stop_hook_active": false}', capture_output=True, text=True,
+        ["bash", str(HOOK)],
+        cwd=repo,
+        env=env,
+        input='{"stop_hook_active": false}',
+        capture_output=True,
+        text=True,
     )
 
 
@@ -228,3 +238,33 @@ def test_reports_unpushed_commit_reachable_from_default_branch(tmp_path: Path) -
     result = _run_hook(work, gpgsign=False)
     assert result.returncode == 2
     assert "unpushed commit" in result.stderr
+
+
+def test_uses_configured_upstream_for_differently_named_branch(tmp_path: Path) -> None:
+    """The unpushed check honours a configured upstream whose name differs from
+    the local branch (localwork tracking origin/remote-name), instead of
+    assuming origin/<branch> and falsely reporting 'no remote branch'.
+
+    Signing is left disabled so only the unpushed path is exercised.
+    """
+    origin = _bare_origin(tmp_path)
+    seed = _clone(origin, tmp_path / "seed")
+    _commit(seed, "base.txt", "C0 base commit")
+    _git(seed, "push", "origin", "main")
+    _git(seed, "checkout", "-b", "remote-name")
+    _commit(seed, "f.txt", "feature work", committer=ANTHROPIC)
+    _git(seed, "push", "origin", "remote-name")  # origin/remote-name = C0 + feature
+
+    work = _clone(origin, tmp_path / "work")
+    # localwork tracks origin/remote-name (a differently-named upstream), in sync.
+    _git(work, "checkout", "-b", "localwork", "origin/remote-name")
+    assert _git(work, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}") == ("origin/remote-name")
+    assert _git(work, "rev-list", "origin/remote-name..HEAD", "--count") == "0"
+    # The commit is beyond origin/main, so the same-name logic would have
+    # reported it as unpushed with no remote branch.
+    assert _git(work, "rev-list", "origin/main..HEAD", "--count") == "1"
+
+    result = _run_hook(work, gpgsign=False)
+    assert result.returncode == 0, result.stderr
+    assert "no remote branch" not in result.stderr
+    assert "unpushed commit" not in result.stderr
