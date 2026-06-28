@@ -130,24 +130,12 @@ flowchart TD
     N003["if local_sha is None"]
     N004["return None"]
     N005["remote_sha = _rev_parse(...)"]
-    N006["if remote_sha is not None and _ALL_ZEROS_RE.match(remote_sha)"]
-    N007["remote_sha = None"]
-    N008["if remote_sha is not None"]
-    N009["rev_args = [f'{remote_sha}<str>{local_sha}']"]
-    N010["rev_args = [local_sha, '<str>', f'<str>{remote}']"]
-    N011["return rev_list(runner, rev_args)"]
+    N006["return commits_to_push(runner, local_sha=local_sha, remote_sha=remote_sha, remote=remote)"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 -->|"true"| N004
     N003 -->|"false"| N005
     N005 --> N006
-    N006 -->|"true"| N007
-    N007 --> N008
-    N006 -->|"false"| N008
-    N008 -->|"true"| N009
-    N008 -->|"false"| N010
-    N009 --> N011
-    N010 --> N011
 ```
 
 ## _deny(...)
