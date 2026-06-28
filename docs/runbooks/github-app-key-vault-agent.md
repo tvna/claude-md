@@ -1,32 +1,41 @@
 # Source the GitHub App key from a Vault Agent sink (local host)
 
-Operator procedure for keeping the GitHub App private key off the environment on
-a developer local host by letting a HashiCorp **Vault Agent** render it to a
-`0600` sink file that the MCP launcher reads via `GITHUB_APP_PRIVATE_KEY_FILE`
-(Refs #1428). The App ID and Installation ID are not secret and stay in `env`.
+## Scope
 
-This targets a local host with **HCP Vault** and Vault Agent **auto-auth**
-(AppRole). The remote execution environment and the devcontainer keep the
-existing `GITHUB_APP_PRIVATE_KEY` environment-variable injection documented in
-[`../standards/github-mcp-app-auth.md`](../standards/github-mcp-app-auth.md).
+Keep the GitHub App private key off the environment on a developer local host by
+letting a HashiCorp **Vault Agent** render it to a `0600` sink file that the MCP
+launcher reads via `GITHUB_APP_PRIVATE_KEY_FILE` (Refs #1428). Reach for this on
+a local host running **HCP Vault** with Vault Agent **auto-auth** (AppRole). The
+App ID and Installation ID are not secret and stay in `env`.
 
-## How it fits together
+## Why
 
 `mint_github_app_token.py` reads the PEM from `GITHUB_APP_PRIVATE_KEY` when set,
-otherwise from the file named by `GITHUB_APP_PRIVATE_KEY_FILE`. `mcp_github_launch.sh`
+otherwise from the file named by `GITHUB_APP_PRIVATE_KEY_FILE`; `mcp_github_launch.sh`
 accepts either before launch. Vault Agent owns the file: it auto-auths to HCP
 Vault, renders the PEM through a `template` stanza, and refreshes it on lease
 renewal. The only on-host credential is the Agent's AppRole identity
-(`role_id` / `secret_id` files, `0600`), not the PEM, and not a long-lived
-env secret.
+(`role_id` / `secret_id` files, `0600`), not the PEM, and not a long-lived env
+secret.
 
-## 0. Provision the HCP account and Vault cluster (first time only)
+## Why not
 
-Skip this section if you already have an HCP Vault Dedicated cluster; merging
-this change does not require an HCP account, and the existing
-`GITHUB_APP_PRIVATE_KEY` env path is unaffected. Do this only to exercise the
-file-source path on a new local host. Verified against HashiCorp's primary docs
-(see References); confirm the portal labels against the live UI, which can drift.
+Do not use this on the remote execution environment or the devcontainer: both
+keep the existing `GITHUB_APP_PRIVATE_KEY` environment-variable injection
+documented in [`../standards/github-mcp-app-auth.md`](../standards/github-mcp-app-auth.md),
+and that literal still wins when set. The file source is for a local host that
+wants the PEM off the environment; if the env-var path already meets your threat
+model, stay on it rather than standing up Vault.
+
+## Procedure
+
+### 0. Provision the HCP account and Vault cluster (first time only)
+
+Skip this step if you already have an HCP Vault Dedicated cluster; merging this
+change does not require an HCP account, and the existing `GITHUB_APP_PRIVATE_KEY`
+env path is unaffected. Do this only to exercise the file-source path on a new
+local host. Verified against HashiCorp's primary docs (see References); confirm
+the portal labels against the live UI, which can drift.
 
 1. **Sign up / open the portal.** Go to the HCP Portal
    (`https://portal.cloud.hashicorp.com`). HCP provisions your account with one
@@ -52,7 +61,7 @@ file-source path on a new local host. Verified against HashiCorp's primary docs
 > Development tier is not for production workloads, and dev-tier clusters are
 > publicly accessible by default. Restrict access before storing a real key.
 
-## 1. Store the key in HCP Vault
+### 1. Store the key in HCP Vault
 
 ```sh
 export VAULT_ADDR="https://<cluster>.vault.<region>.hashicorp.cloud:8200"
@@ -61,7 +70,7 @@ vault login                              # HCP admin token, one-time setup
 vault kv put secret/github-app private_key=@app-private-key.pem
 ```
 
-## 2. Read policy and AppRole (the Agent identity)
+### 2. Read policy and AppRole (the Agent identity)
 
 `github-app-read.hcl`:
 
@@ -81,7 +90,7 @@ vault write -f -field=secret_id auth/approle/role/github-app/secret-id > /etc/gi
 chmod 0600 /etc/github-app/role_id /etc/github-app/secret_id
 ```
 
-## 3. Vault Agent config
+### 3. Vault Agent config
 
 `agent.hcl`:
 
@@ -116,7 +125,7 @@ vault agent -config=agent.hcl    # run as a daemon, e.g. systemd --user
 The `sink` holds the Agent's own token, not the PEM. The `template` renders the
 PEM to the `0600` destination and re-renders it on renewal.
 
-## 4. Point the launcher at the sink
+### 4. Point the launcher at the sink
 
 ```sh
 export GITHUB_APP_ID=123456
@@ -125,7 +134,11 @@ export GITHUB_APP_PRIVATE_KEY_FILE="$HOME/.config/github-app/private-key.pem"
 # Do NOT set GITHUB_APP_PRIVATE_KEY; the file source is used when it is unset.
 ```
 
-## 5. Verify without exposing the value
+**Networking.** The local host must reach the HCP Vault cluster address and
+`api.github.com`. No repository egress allowlist change is needed; the allowlist
+files under `.devcontainer/network/` govern the devcontainer, not a local host.
+
+## Verification
 
 ```sh
 tok="$(python3 scripts/mint_github_app_token.py)" || echo "mint failed"
@@ -138,18 +151,25 @@ unset tok
 
 A `200` confirms the sink file, App ID, and Installation ID are wired correctly.
 
-## Networking
+## Pause / Resume
 
-The local host must reach the HCP Vault cluster address and `api.github.com`.
-No repository egress allowlist change is needed; the allowlist files under
-`.devcontainer/network/` govern the devcontainer, not a local host.
-
-## Rotation
+Vault Agent runs as a long-running daemon (e.g. `systemd --user`). To pause, stop
+the agent service; the last-rendered `0600` PEM stays on disk, so the launcher
+keeps working until the file is removed. To resume, restart the agent so it
+re-auths and re-renders on the next lease renewal. Rotation while running:
 
 - The PEM rotates at the App (see the standard doc); Vault Agent re-renders the
   sink on the next lease renewal once the new value is stored with `vault kv put`.
 - The AppRole `secret_id` is short-lived (`secret_id_ttl`); reissue it and update
   `/etc/github-app/secret_id` on its cadence.
+
+## Rollback
+
+The change is additive and reversible. To revert one host, unset
+`GITHUB_APP_PRIVATE_KEY_FILE` and set `GITHUB_APP_PRIVATE_KEY` back to the PEM
+literal (the launcher prefers the literal), then stop the Vault Agent daemon and
+remove the sink file. To revert the repository feature, `git revert` the
+implementing commit; there is no data migration or external state to undo.
 
 ## References
 
@@ -159,3 +179,5 @@ No repository egress allowlist change is needed; the allowlist files under
   https://developer.hashicorp.com/hcp/docs/vault/get-started/access-cluster
 - Generate an admin token:
   https://developer.hashicorp.com/hcp/docs/vault/get-started/generate-admin-token
+- GitHub MCP App auth standard:
+  [`../standards/github-mcp-app-auth.md`](../standards/github-mcp-app-auth.md)
