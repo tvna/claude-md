@@ -105,6 +105,17 @@ class TestScanText:
         )
         assert scan_workflow_pip.scan_text(text) == [1, 3]
 
+    def test_flattens_shell_continuation(self) -> None:
+        # A `pip install` split across a `\` continuation must still be caught,
+        # reported at the first physical line of the command (issue #2164).
+        text = "noop\n  pip \\\n    install requests\ndone\n"
+        assert scan_workflow_pip.scan_text(text) == [2]
+
+    def test_continuation_does_not_false_positive_on_uv_pip(self) -> None:
+        # `uv pip \` then `install` is the supported uv channel and must NOT trip.
+        text = "uv pip \\\n  install requests\n"
+        assert scan_workflow_pip.scan_text(text) == []
+
 
 # ---------------------------------------------------------------------------
 # find_violations
