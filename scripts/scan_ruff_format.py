@@ -137,14 +137,11 @@ def find_manifest_violations() -> list[str]:
         from preflight_steps import STEPS
     except ImportError:
         return []
-    offenders: list[str] = []
-    for step in STEPS:
-        argv = tuple(step.argv)
-        for i in range(len(argv) - 1):
-            if argv[i] == "ruff" and argv[i + 1] == "format":
-                offenders.append(step.name)
-                break
-    return offenders
+    return [
+        step.name
+        for step in STEPS
+        if any(a == "ruff" and b == "format" for a, b in zip(step.argv, step.argv[1:], strict=False))
+    ]
 
 
 def _cmd_verify(args: argparse.Namespace) -> int:
