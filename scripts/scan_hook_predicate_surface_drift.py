@@ -90,7 +90,6 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 CLAUDE_SETTINGS = REPO_ROOT / ".claude" / "settings.json"
-SCRIPTS_DIR = REPO_ROOT / "scripts"
 
 # The constant each git-hook script exposes to declare its command surface.
 SURFACE_ATTR = "HOOK_GIT_SUBCOMMANDS"
@@ -191,11 +190,11 @@ def _admits(inner: str, subcommand: str) -> bool:
     """True when predicate inner-glob *inner* admits ``git <subcommand>``.
 
     Uses the same shell-glob semantics (:func:`fnmatch.fnmatchcase`) the agent
-    harness applies to ``Bash(...)`` ``if:`` predicates, probed with a
-    representative invocation so a trailing argument cannot change the verdict.
+    harness applies to ``Bash(...)`` ``if:`` predicates, probing the bare
+    ``git <subcommand>`` form (the predicates in play all end in ``*``, so any
+    trailing argument is irrelevant to the verdict).
     """
-    probe = f"git {subcommand} -m x"
-    return fnmatch.fnmatchcase(probe, inner)
+    return fnmatch.fnmatchcase(f"git {subcommand}", inner)
 
 
 def check_hook(hook: GitHook, surface: object) -> list[str]:
@@ -273,12 +272,10 @@ def find_drift(source: dict[str, object]) -> list[str]:
 
 def cmd_verify(args: argparse.Namespace) -> int:
     settings = json.loads(Path(args.settings).read_text(encoding="utf-8"))
-    # Ensure scripts/ is importable so the hook modules resolve both when run as
-    # ``python scripts/x.py`` (sys.path[0] is already scripts/) and under pytest.
-    scripts_dir = str(SCRIPTS_DIR)
-    if scripts_dir not in sys.path:
-        sys.path.insert(0, scripts_dir)
-
+    # scripts/ is already importable in both invocation paths (sys.path[0] is the
+    # script's own dir when run as ``python scripts/x.py``; pytest sets
+    # pythonpath=["scripts"]), so the hook modules resolve without any sys.path
+    # manipulation here.
     problems = find_drift(settings)
     for message in problems:
         # The fix lives in the source of truth where the if: predicate is
