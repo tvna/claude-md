@@ -752,10 +752,15 @@ _SKIP_COMMENT_MARKER = "<!-- auto-retro:skip -->"
 # / session policy and out of scope here. SoT entry lives in
 # .github/labels.json; tests/test_auto_retro.py guards the drift.
 # Renamed from "harness:retro-opened" to the ops:* family (#972 renames
-# batch). This value is write-only here (no read-match site), so the live
-# label rename via apply-labels.yml should land with this change; until it
-# does, apply_terminal_label degrades to a non-fatal warning (see below).
+# batch, #2139). apply_terminal_label writes this new name but falls back to
+# the legacy name below when the live label has not been renamed yet, so the
+# terminal signal survives regardless of code-merge vs. live-rename ordering.
 _TERMINAL_LABEL = "ops:retro-opened"
+# Legacy terminal-label name kept only for the migration window: between this
+# code merging and the apply-labels.yml live rename, the repo may still carry
+# only the old name, so POSTing the new name returns HTTP 422. Remove this
+# fallback once the live rename has landed.
+_TERMINAL_LABEL_LEGACY = "harness:retro-opened"
 
 # Sentinel marker for the auto-close comment posted by the retro sentinel
 # workflow (issue #414). Idempotency anchor: a retro carrying this
@@ -863,12 +868,30 @@ def apply_terminal_label(
     is responsible for the fail-soft policy: the retro issue is already
     created by the time this fires, so a failed label add must not roll
     back the audit trail.
+
+    Migration fallback (#2139): GitHub validates label names and returns
+    HTTP 422 when the label does not exist as a repo label. During the
+    window between this code merging and the apply-labels.yml live rename,
+    the repo may still carry only the legacy name, so a POST of the default
+    new name 422s. On that specific case retry once with the legacy name
+    (whichever name exists wins), so the terminal signal survives regardless
+    of rename ordering. Any other error (or a 422 on the legacy retry)
+    propagates to the orchestrator's fail-soft handler unchanged.
     """
-    gh_api(
-        "POST",
-        f"/repos/{repo}/issues/{pr_number}/labels",
-        {"labels": [label]},
-    )
+    try:
+        gh_api(
+            "POST",
+            f"/repos/{repo}/issues/{pr_number}/labels",
+            {"labels": [label]},
+        )
+    except GitHubApiError as exc:
+        if label != _TERMINAL_LABEL or exc.code != 422:
+            raise
+        gh_api(
+            "POST",
+            f"/repos/{repo}/issues/{pr_number}/labels",
+            {"labels": [_TERMINAL_LABEL_LEGACY]},
+        )
 
 
 def post_skip_comment(repo: str, pr_number: int, reason: str) -> str:
