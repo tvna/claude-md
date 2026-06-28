@@ -35,7 +35,8 @@
           {"context": "Portable PR policy / gate"},
           {"context": "Verify dependabot labels / verify"},
           {"context": "Verify design philosophy doc / verify"},
-          {"context": "Verify ruleset sync / gate"}
+          {"context": "Verify ruleset sync / gate"},
+          {"context": "Scan double-hyphen / verify"}
         ]
       }
     }
