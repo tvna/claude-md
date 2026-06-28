@@ -4,8 +4,13 @@ Refs #2138. Verifies that the PreToolUse hook denies a ``git push`` whose
 pushed commits include an unsigned one, allows a push of only signed commits,
 and falls open everywhere a deny would be a guess: a non-remote session, a
 non-Bash tool, a non-push command, an ``# unsigned-ack`` marker, an
-undeterminable range, or a git error. A new branch (all-zeros remote sha) is
-scanned via ``rev-list --not --remotes`` so all of its commits are checked.
+undeterminable range, or a git error. A commit is unsigned when its raw object
+carries no ``gpgsig`` header (the verify-commit false-positive fix).
+
+Codex review on PR #2140 hardened three cases, each covered below: every
+refspec in a multi-refspec push is inspected; a bare refspec resolves its local
+SOURCE ref by name (not ``HEAD``); and a ``git push`` chained after another
+command (``git commit && git push``) is still detected.
 """
 
 from __future__ import annotations
@@ -39,9 +44,11 @@ class _FakeGit:
     """A canned ``git`` runner keyed on the subcommand.
 
     ``rev_parse`` maps a ref to a sha (absent -> non-zero exit, i.e. unresolved).
-    ``rev_list`` is the list returned for any ``rev-list`` call. ``unsigned`` is
-    the set of shas whose ``cat-file commit`` object carries no ``gpgsig``
-    header (the signed shas get one); the gate reads that header presence.
+    ``rev_list`` is the default commit list for any ``rev-list`` call;
+    ``rev_list_map`` overrides it per local sha (the part after ``..`` for a
+    range, or the sole sha for a new-branch scan) so distinct refspecs can ship
+    distinct commits. ``unsigned`` is the set of shas whose ``cat-file commit``
+    object carries no ``gpgsig`` header (the signed shas get one).
     """
 
     def __init__(
@@ -49,12 +56,14 @@ class _FakeGit:
         *,
         rev_parse: dict[str, str] | None = None,
         rev_list: list[str] | None = None,
+        rev_list_map: dict[str, list[str]] | None = None,
         rev_list_rc: int = 0,
         unsigned: set[str] | None = None,
         raise_on: str | None = None,
     ) -> None:
         self.rev_parse = rev_parse or {}
         self.rev_list = rev_list if rev_list is not None else []
+        self.rev_list_map = rev_list_map or {}
         self.rev_list_rc = rev_list_rc
         self.unsigned = unsigned or set()
         self.raise_on = raise_on
@@ -74,7 +83,9 @@ class _FakeGit:
         if sub == "rev-list":
             if self.rev_list_rc != 0:
                 return _cp(returncode=self.rev_list_rc)
-            return _cp(stdout="\n".join(self.rev_list) + "\n")
+            key = args[1].rsplit("..", 1)[-1]
+            commits = self.rev_list_map.get(key, self.rev_list)
+            return _cp(stdout="\n".join(commits) + "\n")
         if sub == "cat-file":
             sha = args[-1]
             headers = "tree 0\nauthor a <a@b> 0 +0000\ncommitter a <a@b> 0 +0000\n"
@@ -85,6 +96,15 @@ class _FakeGit:
                 )
             return _cp(stdout=headers + "\nmessage body mentioning gpgsig\n")
         return _cp()
+
+
+def _existing_branch(branch: str, commits: list[str], unsigned: set[str]) -> _FakeGit:
+    """A fake where *branch* exists on origin and ships *commits* (a bare push)."""
+    return _FakeGit(
+        rev_parse={branch: _LOCAL_SHA, f"refs/remotes/origin/{branch}": _REMOTE_SHA},
+        rev_list=commits,
+        unsigned=unsigned,
+    )
 
 
 @pytest.fixture
@@ -100,7 +120,7 @@ def remote(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_passthrough_when_not_remote(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("CLAUDE_CODE_REMOTE", raising=False)
     monkeypatch.delenv("CODEX_CODE_REMOTE", raising=False)
-    git = _FakeGit(unsigned={_UNSIGNED})
+    git = _existing_branch("feat/x", [_UNSIGNED], {_UNSIGNED})
     assert subject.decide(_bash_event("git push origin feat/x"), runner=git) is None
     assert git.calls == []  # never even shells out
 
@@ -108,34 +128,27 @@ def test_passthrough_when_not_remote(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_codex_remote_signal_activates(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("CLAUDE_CODE_REMOTE", raising=False)
     monkeypatch.setenv("CODEX_CODE_REMOTE", "true")
-    git = _FakeGit(
-        rev_parse={"HEAD": _LOCAL_SHA, "refs/remotes/origin/feat/x": _REMOTE_SHA},
-        rev_list=[_UNSIGNED],
-        unsigned={_UNSIGNED},
-    )
+    git = _existing_branch("feat/x", [_UNSIGNED], {_UNSIGNED})
     result = subject.decide(_bash_event("git push origin feat/x"), runner=git)
     assert result is not None
     assert result["hookSpecificOutput"]["permissionDecision"] == "deny"
 
 
 def test_passthrough_non_bash_tool(remote: None) -> None:
-    git = _FakeGit(unsigned={_UNSIGNED})
+    git = _existing_branch("feat/x", [_UNSIGNED], {_UNSIGNED})
     event = {"tool_name": "Write", "tool_input": {"command": "git push origin feat/x"}}
     assert subject.decide(event, runner=git) is None
 
 
 def test_passthrough_bash_non_push(remote: None) -> None:
-    git = _FakeGit(unsigned={_UNSIGNED})
+    git = _existing_branch("feat/x", [_UNSIGNED], {_UNSIGNED})
     assert subject.decide(_bash_event("git status"), runner=git) is None
     assert subject.decide(_bash_event("git commit -m x"), runner=git) is None
+    assert subject.decide(_bash_event('echo "git push origin feat/x"'), runner=git) is None
 
 
 def test_passthrough_ack_marker(remote: None) -> None:
-    git = _FakeGit(
-        rev_parse={"HEAD": _LOCAL_SHA, "refs/remotes/origin/feat/x": _REMOTE_SHA},
-        rev_list=[_UNSIGNED],
-        unsigned={_UNSIGNED},
-    )
+    git = _existing_branch("feat/x", [_UNSIGNED], {_UNSIGNED})
     cmd = "git push origin feat/x  # unsigned-ack"
     assert subject.decide(_bash_event(cmd), runner=git) is None
 
@@ -146,20 +159,12 @@ def test_passthrough_ack_marker(remote: None) -> None:
 
 
 def test_allows_signed_only_push(remote: None) -> None:
-    git = _FakeGit(
-        rev_parse={"HEAD": _LOCAL_SHA, "refs/remotes/origin/feat/x": _REMOTE_SHA},
-        rev_list=[_SIGNED, _SIGNED],
-        unsigned=set(),
-    )
+    git = _existing_branch("feat/x", [_SIGNED, _SIGNED], set())
     assert subject.decide(_bash_event("git push origin feat/x"), runner=git) is None
 
 
 def test_denies_push_with_unsigned_commit(remote: None) -> None:
-    git = _FakeGit(
-        rev_parse={"HEAD": _LOCAL_SHA, "refs/remotes/origin/feat/x": _REMOTE_SHA},
-        rev_list=[_SIGNED, _UNSIGNED],
-        unsigned={_UNSIGNED},
-    )
+    git = _existing_branch("feat/x", [_SIGNED, _UNSIGNED], {_UNSIGNED})
     result = subject.decide(_bash_event("git push origin feat/x"), runner=git)
     assert result is not None
     reason = result["hookSpecificOutput"]["permissionDecisionReason"]
@@ -169,12 +174,81 @@ def test_denies_push_with_unsigned_commit(remote: None) -> None:
 
 
 def test_denies_push_u_with_unsigned_commit(remote: None) -> None:
+    git = _existing_branch("feat/x", [_UNSIGNED], {_UNSIGNED})
+    result = subject.decide(_bash_event("git push -u origin feat/x"), runner=git)
+    assert result is not None
+    assert result["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+def test_bare_refspec_resolves_source_by_name_not_head(remote: None) -> None:
+    # Codex review #2140: `git push origin other` while HEAD != other pushes the
+    # local `other` ref. The gate must resolve `other`, not HEAD, or it misses an
+    # unsigned commit on the pushed branch when HEAD is clean.
     git = _FakeGit(
-        rev_parse={"HEAD": _LOCAL_SHA, "refs/remotes/origin/feat/x": _REMOTE_SHA},
+        rev_parse={"other": _LOCAL_SHA, "refs/remotes/origin/other": _REMOTE_SHA},
         rev_list=[_UNSIGNED],
         unsigned={_UNSIGNED},
     )
-    result = subject.decide(_bash_event("git push -u origin feat/x"), runner=git)
+    result = subject.decide(_bash_event("git push origin other"), runner=git)
+    assert result is not None
+    assert result["hookSpecificOutput"]["permissionDecision"] == "deny"
+    # The source ref resolved was `other`, never `HEAD`.
+    refs = [c[-1] for c in git.calls if c[0] == "rev-parse"]
+    assert "other" in refs
+    assert "HEAD" not in refs
+
+
+def test_head_colon_refspec_uses_head_source(remote: None) -> None:
+    git = _FakeGit(
+        rev_parse={"HEAD": _LOCAL_SHA, "refs/remotes/origin/dst": _REMOTE_SHA},
+        rev_list=[_UNSIGNED],
+        unsigned={_UNSIGNED},
+    )
+    result = subject.decide(_bash_event("git push origin HEAD:dst"), runner=git)
+    assert result is not None
+    assert result["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+def test_inspects_every_refspec(remote: None) -> None:
+    # Codex review #2140: a multi-refspec push must inspect ALL refspecs; an
+    # unsigned commit on the SECOND must be caught even when the first is clean.
+    git = _FakeGit(
+        rev_parse={
+            "clean": _LOCAL_SHA,
+            "refs/remotes/origin/clean": _REMOTE_SHA,
+            "dirty": _SIGNED,  # distinct local tip sha
+            "refs/remotes/origin/dirty": _REMOTE_SHA,
+        },
+        rev_list_map={_LOCAL_SHA: [_SIGNED], _SIGNED: [_UNSIGNED]},
+        unsigned={_UNSIGNED},
+    )
+    result = subject.decide(_bash_event("git push origin clean dirty"), runner=git)
+    assert result is not None
+    assert _UNSIGNED[:12] in result["hookSpecificOutput"]["permissionDecisionReason"]
+
+
+def test_deletion_refspec_ships_nothing(remote: None) -> None:
+    # `:dst` is a branch deletion; it carries no commit, so it is not flagged.
+    git = _FakeGit(rev_parse={}, rev_list=[_UNSIGNED], unsigned={_UNSIGNED})
+    assert subject.decide(_bash_event("git push origin :dst"), runner=git) is None
+
+
+# ---------------------------------------------------------------------------
+# chained push after a shell operator (Codex review #2140)
+# ---------------------------------------------------------------------------
+
+
+def test_chained_commit_then_push_is_inspected(remote: None) -> None:
+    git = _existing_branch("feat/x", [_UNSIGNED], {_UNSIGNED})
+    cmd = "git commit -m x && git push origin feat/x"
+    result = subject.decide(_bash_event(cmd), runner=git)
+    assert result is not None
+    assert result["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+def test_rtk_rewritten_push_is_checked(remote: None) -> None:
+    git = _existing_branch("feat/x", [_UNSIGNED], {_UNSIGNED})
+    result = subject.decide(_bash_event("rtk git push origin feat/x"), runner=git)
     assert result is not None
     assert result["hookSpecificOutput"]["permissionDecision"] == "deny"
 
@@ -185,10 +259,8 @@ def test_denies_push_u_with_unsigned_commit(remote: None) -> None:
 
 
 def test_new_branch_scans_all_commits_not_on_remote(remote: None) -> None:
-    # The remote-tracking ref does not resolve (new branch): the gate must scan
-    # via ``rev-list <local> --not --remotes`` and still catch an unsigned one.
     git = _FakeGit(
-        rev_parse={"HEAD": _LOCAL_SHA},  # remote ref absent -> unresolved
+        rev_parse={"feat/new": _LOCAL_SHA},  # remote ref absent -> unresolved
         rev_list=[_SIGNED, _UNSIGNED],
         unsigned={_UNSIGNED},
     )
@@ -200,11 +272,7 @@ def test_new_branch_scans_all_commits_not_on_remote(remote: None) -> None:
 
 
 def test_existing_branch_uses_range(remote: None) -> None:
-    git = _FakeGit(
-        rev_parse={"HEAD": _LOCAL_SHA, "refs/remotes/origin/feat/x": _REMOTE_SHA},
-        rev_list=[_SIGNED],
-        unsigned=set(),
-    )
+    git = _existing_branch("feat/x", [_SIGNED], set())
     subject.decide(_bash_event("git push origin feat/x"), runner=git)
     rev_list_calls = [c for c in git.calls if c[0] == "rev-list"]
     assert rev_list_calls == [["rev-list", f"{_REMOTE_SHA}..{_LOCAL_SHA}"]]
@@ -212,7 +280,7 @@ def test_existing_branch_uses_range(remote: None) -> None:
 
 def test_all_zeros_remote_sha_treated_as_new_branch(remote: None) -> None:
     git = _FakeGit(
-        rev_parse={"HEAD": _LOCAL_SHA, "refs/remotes/origin/feat/x": _ALL_ZEROS},
+        rev_parse={"feat/x": _LOCAL_SHA, "refs/remotes/origin/feat/x": _ALL_ZEROS},
         rev_list=[_SIGNED],
         unsigned=set(),
     )
@@ -227,7 +295,7 @@ def test_all_zeros_remote_sha_treated_as_new_branch(remote: None) -> None:
 
 
 def test_passthrough_no_explicit_refspec(remote: None) -> None:
-    git = _FakeGit(unsigned={_UNSIGNED})
+    git = _existing_branch("feat/x", [_UNSIGNED], {_UNSIGNED})
     assert subject.decide(_bash_event("git push"), runner=git) is None
     assert subject.decide(_bash_event("git push origin"), runner=git) is None
 
@@ -238,27 +306,19 @@ def test_passthrough_local_sha_unresolved(remote: None) -> None:
 
 
 def test_passthrough_empty_range(remote: None) -> None:
-    git = _FakeGit(
-        rev_parse={"HEAD": _LOCAL_SHA, "refs/remotes/origin/feat/x": _REMOTE_SHA},
-        rev_list=[],
-        unsigned={_UNSIGNED},
-    )
+    git = _existing_branch("feat/x", [], {_UNSIGNED})
     assert subject.decide(_bash_event("git push origin feat/x"), runner=git) is None
 
 
 def test_passthrough_on_rev_list_error(remote: None) -> None:
-    git = _FakeGit(
-        rev_parse={"HEAD": _LOCAL_SHA, "refs/remotes/origin/feat/x": _REMOTE_SHA},
-        rev_list=[_UNSIGNED],
-        unsigned={_UNSIGNED},
-        raise_on="rev-list",
-    )
+    git = _existing_branch("feat/x", [_UNSIGNED], {_UNSIGNED})
+    git.raise_on = "rev-list"
     assert subject.decide(_bash_event("git push origin feat/x"), runner=git) is None
 
 
 def test_passthrough_on_rev_list_nonzero(remote: None) -> None:
     git = _FakeGit(
-        rev_parse={"HEAD": _LOCAL_SHA, "refs/remotes/origin/feat/x": _REMOTE_SHA},
+        rev_parse={"feat/x": _LOCAL_SHA, "refs/remotes/origin/feat/x": _REMOTE_SHA},
         rev_list_rc=128,
         unsigned={_UNSIGNED},
     )
@@ -266,82 +326,117 @@ def test_passthrough_on_rev_list_nonzero(remote: None) -> None:
 
 
 def test_passthrough_on_rev_parse_error(remote: None) -> None:
-    git = _FakeGit(
-        rev_parse={"HEAD": _LOCAL_SHA, "refs/remotes/origin/feat/x": _REMOTE_SHA},
-        rev_list=[_UNSIGNED],
-        unsigned={_UNSIGNED},
-        raise_on="rev-parse",
-    )
+    git = _existing_branch("feat/x", [_UNSIGNED], {_UNSIGNED})
+    git.raise_on = "rev-parse"
     assert subject.decide(_bash_event("git push origin feat/x"), runner=git) is None
 
 
 def test_cat_file_error_fails_open(remote: None) -> None:
-    # A cat-file subprocess error must not deny (cannot evaluate -> open).
-    git = _FakeGit(
-        rev_parse={"HEAD": _LOCAL_SHA, "refs/remotes/origin/feat/x": _REMOTE_SHA},
-        rev_list=[_UNSIGNED],
-        unsigned={_UNSIGNED},
-        raise_on="cat-file",
-    )
+    git = _existing_branch("feat/x", [_UNSIGNED], {_UNSIGNED})
+    git.raise_on = "cat-file"
     assert subject.decide(_bash_event("git push origin feat/x"), runner=git) is None
 
 
-def test_rtk_rewritten_push_is_checked(remote: None) -> None:
+def test_one_unresolvable_spec_does_not_block_others(remote: None) -> None:
+    # The first refspec cannot be resolved (skipped, fail-open for it); the
+    # second is a determinable unsigned push and is still caught.
     git = _FakeGit(
-        rev_parse={"HEAD": _LOCAL_SHA, "refs/remotes/origin/feat/x": _REMOTE_SHA},
+        rev_parse={"dirty": _LOCAL_SHA, "refs/remotes/origin/dirty": _REMOTE_SHA},
         rev_list=[_UNSIGNED],
         unsigned={_UNSIGNED},
     )
-    result = subject.decide(_bash_event("rtk git push origin feat/x"), runner=git)
+    result = subject.decide(_bash_event("git push origin missing dirty"), runner=git)
     assert result is not None
     assert result["hookSpecificOutput"]["permissionDecision"] == "deny"
 
 
 # ---------------------------------------------------------------------------
-# _parse_push_target() unit tests
+# _iter_push_specs() / _push_args_in_segment() / _specs_from_push_args()
 # ---------------------------------------------------------------------------
 
 
-class TestParsePushTarget:
+class TestIterPushSpecs:
     def test_simple_push(self) -> None:
-        assert subject._parse_push_target("git push origin feat/x") == ("origin", "HEAD", "feat/x")
+        assert subject._iter_push_specs("git push origin feat/x") == [("origin", "feat/x", "feat/x")]
 
     def test_u_flag(self) -> None:
-        assert subject._parse_push_target("git push -u origin feat/x") == ("origin", "HEAD", "feat/x")
+        assert subject._iter_push_specs("git push -u origin feat/x") == [("origin", "feat/x", "feat/x")]
 
     def test_colon_refspec(self) -> None:
-        assert subject._parse_push_target("git push origin a:b") == ("origin", "a", "b")
+        assert subject._iter_push_specs("git push origin a:b") == [("origin", "a", "b")]
 
     def test_head_colon_refspec(self) -> None:
-        assert subject._parse_push_target("git push origin HEAD:b") == ("origin", "HEAD", "b")
+        assert subject._iter_push_specs("git push origin HEAD:b") == [("origin", "HEAD", "b")]
 
     def test_force_prefix_stripped(self) -> None:
-        assert subject._parse_push_target("git push origin +feat/x") == ("origin", "HEAD", "feat/x")
+        assert subject._iter_push_specs("git push origin +feat/x") == [("origin", "feat/x", "feat/x")]
 
-    def test_no_refspec_returns_none(self) -> None:
-        assert subject._parse_push_target("git push") is None
-        assert subject._parse_push_target("git push origin") is None
+    def test_multiple_refspecs(self) -> None:
+        assert subject._iter_push_specs("git push origin a b") == [
+            ("origin", "a", "a"),
+            ("origin", "b", "b"),
+        ]
 
-    def test_no_push_returns_none(self) -> None:
-        assert subject._parse_push_target("echo hello") is None
+    def test_deletion_skipped(self) -> None:
+        assert subject._iter_push_specs("git push origin :b") == []
 
-    def test_malformed_quote_returns_none(self) -> None:
-        assert subject._parse_push_target('git push origin "feat/x') is None
+    def test_empty_remote_side_skipped(self) -> None:
+        assert subject._iter_push_specs("git push origin a:") == []
 
-    def test_empty_remote_side_returns_none(self) -> None:
-        assert subject._parse_push_target("git push origin HEAD:") is None
+    def test_leading_separator_empty_segment_skipped(self) -> None:
+        assert subject._iter_push_specs("; git push origin feat/x") == [("origin", "feat/x", "feat/x")]
+
+    def test_no_refspec_is_empty(self) -> None:
+        assert subject._iter_push_specs("git push") == []
+        assert subject._iter_push_specs("git push origin") == []
+
+    def test_non_push_is_empty(self) -> None:
+        assert subject._iter_push_specs("echo hello") == []
+        assert subject._iter_push_specs("git status") == []
+
+    def test_quoted_mention_is_not_a_push(self) -> None:
+        assert subject._iter_push_specs('echo "git push origin feat/x"') == []
+
+    def test_chained_after_operator(self) -> None:
+        assert subject._iter_push_specs("git commit -m x && git push origin feat/x") == [
+            ("origin", "feat/x", "feat/x")
+        ]
+
+    def test_rtk_prefix(self) -> None:
+        assert subject._iter_push_specs("rtk git push origin feat/x") == [("origin", "feat/x", "feat/x")]
+
+    def test_env_assignment_prefix(self) -> None:
+        assert subject._iter_push_specs("GIT_TRACE=1 git push origin feat/x") == [
+            ("origin", "feat/x", "feat/x")
+        ]
+
+    def test_git_global_option_before_push(self) -> None:
+        assert subject._iter_push_specs("git -c k=v push origin feat/x") == [("origin", "feat/x", "feat/x")]
+        assert subject._iter_push_specs("git -C /repo push origin feat/x") == [
+            ("origin", "feat/x", "feat/x")
+        ]
+
+    def test_absolute_git_path(self) -> None:
+        assert subject._iter_push_specs("/usr/bin/git push origin feat/x") == [
+            ("origin", "feat/x", "feat/x")
+        ]
 
     def test_double_dash_end_of_options(self) -> None:
-        assert subject._parse_push_target("git push origin -- feat/x") == ("origin", "HEAD", "feat/x")  # dh-ok
+        assert subject._iter_push_specs("git push origin -- feat/x") == [("origin", "feat/x", "feat/x")]  # dh-ok
 
     def test_flag_with_value_consumes_token(self) -> None:
-        assert subject._parse_push_target("git push -o ci=skip origin feat/x") == ("origin", "HEAD", "feat/x")
+        assert subject._iter_push_specs("git push -o ci=skip origin feat/x") == [
+            ("origin", "feat/x", "feat/x")
+        ]
 
     def test_unknown_flag_skipped(self) -> None:
-        assert subject._parse_push_target("git push --weird origin feat/x") == ("origin", "HEAD", "feat/x")
+        assert subject._iter_push_specs("git push --weird origin feat/x") == [("origin", "feat/x", "feat/x")]
 
-    def test_stops_at_shell_operator(self) -> None:
-        assert subject._parse_push_target("git push origin feat/x && echo ok") == ("origin", "HEAD", "feat/x")
+    def test_malformed_quote_segment_skipped(self) -> None:
+        assert subject._iter_push_specs('git push origin "feat/x') == []
+
+    def test_git_subcommand_not_push(self) -> None:
+        assert subject._iter_push_specs("git -c k=v status") == []
 
 
 # ---------------------------------------------------------------------------
@@ -374,7 +469,6 @@ class TestIsUnsigned:
         assert subject._is_unsigned(self._runner(body), _UNSIGNED) is True
 
     def test_message_mention_does_not_mask_unsigned(self) -> None:
-        # "gpgsig" only in the message body (after the blank line) is not a header.
         body = "tree 0\ncommitter a <a@b> 0 +0000\n\ngpgsig in the message\n"
         assert subject._is_unsigned(self._runner(body), _UNSIGNED) is True
 
