@@ -65,7 +65,7 @@ if [[ -n "$current_branch" ]]; then
     # verification. The range is limited to default_ref..HEAD so only commits
     # unique to this branch are inspected (see the comment above).
     if [[ "$(git config --type=bool commit.gpgsign 2>/dev/null)" == "true" ]]; then
-      unverifiable=$(git log --format='%h %G? %ce' "$default_ref..HEAD" 2>/dev/null | awk '$2 == "N" || $3 != "noreply@anthropic.com"')
+      unverifiable=$(git log --format='%h %G? %ce' "$default_ref..HEAD" 2>/dev/null | awk '$2 == "N" || ($3 != "" && $3 != "noreply@anthropic.com")')
       if [[ -n "$unverifiable" ]]; then
         echo "There are commit(s) on branch '$current_branch' that GitHub will show as Unverified (missing signature, or committer email is not noreply@anthropic.com):" >&2
         echo "$unverifiable" >&2
@@ -74,13 +74,15 @@ if [[ -n "$current_branch" ]]; then
       fi
     fi
 
-    # Check for unpushed commits unique to this branch. Count commits in
-    # default_ref..HEAD that are not yet on the remote tracking branch (if the
-    # branch has been pushed). Scoping to default_ref..HEAD means a branch that
-    # merely sits on the default branch (no commits of its own) stays silent
-    # instead of being told to push upstream history that is not its own.
+    # Check for unpushed commits. When the branch has a remote tracking ref,
+    # count commits not yet on it (the remote branch to HEAD) so genuinely
+    # unpushed work is reported even when those commits are also reachable from
+    # the default branch. When the branch was never pushed, scope to
+    # default_ref..HEAD so a branch that merely sits on the default branch (no
+    # commits of its own) stays silent instead of being told to push upstream
+    # history that is not its own.
     if git rev-parse --verify --quiet "origin/$current_branch" >/dev/null 2>&1; then
-      unpushed=$(git rev-list "$default_ref..HEAD" --not "origin/$current_branch" --count 2>/dev/null) || unpushed=0
+      unpushed=$(git rev-list "origin/$current_branch..HEAD" --count 2>/dev/null) || unpushed=0
       remote_branch_exists=1
     else
       unpushed=$(git rev-list "$default_ref..HEAD" --count 2>/dev/null) || unpushed=0
