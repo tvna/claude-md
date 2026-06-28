@@ -71,6 +71,17 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def cmd_verify(args: argparse.Namespace) -> int:
+    # Freshness automation boundary (issue #2143, PR #2141 retro repair (b)).
+    # The freshness *observation* is refreshed inside this gate: ``fetch_base``
+    # fetches the live base branch immediately before the ancestry check, so
+    # CLAUDE.md section 3 ("fold the refresh into the gate") is satisfied for the
+    # observation. The freshness *remediation* (``git merge FETCH_HEAD``) is
+    # deliberately NOT auto-applied here: a merge mutates the working tree and
+    # creates a commit, can conflict mid-run, and is outward / effectively
+    # irreversible, so CLAUDE.md section 4 requires it stay an explicit operator
+    # step rather than a silent hook side effect (rebase is also barred, #1854).
+    # The gate therefore prints the exact repair commands and stops; the
+    # mid-stream stop is the safe behaviour, classified external/human timing.
     repo = Path(args.repo_root)
     try:
         base_ref = args.base_ref
