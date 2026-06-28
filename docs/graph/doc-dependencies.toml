@@ -185,6 +185,12 @@ path = "docs/runbooks/TEMPLATE.md"
 type = "runbook"
 description = "Authoring skeleton for new runbooks: Scope, split Why / Why not, Procedure, Verification, required Rollback, References. Refs #2000."
 
+[[nodes]]
+id = "scan_runbook_template_drift"
+path = "scripts/scan_runbook_template_drift.py"
+type = "harness_script"
+description = "CI gate: requires new/changed docs/runbooks/*.md to follow TEMPLATE.md section skeleton (diff-scoped, blocking, PR-body waiver). Refs #2065."
+
 # ---------------------------------------------------------------------------
 # Edges
 # ---------------------------------------------------------------------------
@@ -334,3 +340,14 @@ to = "master_instructions"
 type = "references"
 severity = "advisory"
 note = "Classification rules (R1) reference the universal-text structure; informational only."
+
+# runbook_template is enforced by scan_runbook_template_drift: the gate's
+# REQUIRED_SECTIONS mirror the TEMPLATE.md skeleton, so a change to the
+# template's sections should prompt a review of the gate. Advisory because the
+# gate's internals can change without the template changing.
+[[edges]]
+from = "runbook_template"
+to = "scan_runbook_template_drift"
+type = "enforced_by"
+severity = "advisory"
+note = "scan_runbook_template_drift enforces the TEMPLATE.md section skeleton (REQUIRED_SECTIONS)."
