@@ -101,23 +101,23 @@ def find_drift(hook_levers: frozenset[str], doc_levers: frozenset[str]) -> list[
     the docs still advertise; the fix is to update the runbook to the current
     surface.
     """
+    runbook_rel = RUNBOOK_PATH.relative_to(REPO_ROOT)
+    hook_rel = HOOK_PATH.relative_to(REPO_ROOT)
     problems: list[str] = []
     for lever in sorted(hook_levers - doc_levers):
         problems.append(
-            f"::error file={RUNBOOK_PATH.relative_to(REPO_ROOT)}::{_SCRIPT}: the "
-            f"pre-push hook exposes bypass lever {lever!r} but "
-            f"{RUNBOOK_PATH.relative_to(REPO_ROOT)} does not name it. A change to "
-            f"the documented escape-hatch surface must co-update its runbook "
+            f"::error file={runbook_rel}::{_SCRIPT}: the pre-push hook exposes "
+            f"bypass lever {lever!r} but {runbook_rel} does not name it. A change "
+            f"to the documented escape-hatch surface must co-update its runbook "
             f"(the PR #2134 drift class). Document {lever!r} in the 'Emergency "
             f"bypass' section. Refs #2152."
         )
     for lever in sorted(doc_levers - hook_levers):
         problems.append(
-            f"::error file={RUNBOOK_PATH.relative_to(REPO_ROOT)}::{_SCRIPT}: "
-            f"{RUNBOOK_PATH.relative_to(REPO_ROOT)} documents bypass lever "
-            f"{lever!r} but the pre-push hook no longer references it. Remove the "
-            f"stale lever from the runbook or restore it in "
-            f"{HOOK_PATH.relative_to(REPO_ROOT)}. Refs #2152."
+            f"::error file={runbook_rel}::{_SCRIPT}: {runbook_rel} documents "
+            f"bypass lever {lever!r} but the pre-push hook no longer references "
+            f"it. Remove the stale lever from the runbook or restore it in "
+            f"{hook_rel}. Refs #2152."
         )
     return problems
 
