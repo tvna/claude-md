@@ -26,6 +26,36 @@ pytestmark = pytest.mark.shard_ci_ops
 _CONFORMING = "# Example Runbook\n\n" + "".join(f"## {section}\n\nbody\n\n" for section in gate.REQUIRED_SECTIONS)
 _NON_CONFORMING = "# Example Runbook\n\n## Overview\n\nbody\n\n## Steps\n\nbody\n"
 
+# Standard fence fixtures (issue #2143 repair (c)). The nested-fence and
+# longer-outer-fence cases are promoted out of the one-off extract_h2_headings
+# unit tests into the shared fixtures so the FULL gate path (run_gate / main /
+# check_conformance) exercises them by default; any future change to fence
+# handling is then caught end-to-end, not only in the isolated extractor test.
+# CommonMark 0.30 section 4.5 is the primary source: a closing fence must use
+# the opener's character AND be at least as long, so a shorter inner fence does
+# NOT close a longer outer block.
+
+# Conforming: every REQUIRED_SECTIONS heading is a real H2, AND the body embeds
+# a longer (4-backtick) outer fence wrapping a shorter (3-backtick) inner fence
+# whose '## ...' sample lines must NOT be counted as headings.
+_CONFORMING_WITH_FENCED_SAMPLE = _CONFORMING + (
+    "\nHere is a fenced sample a runbook might include:\n\n"
+    "````markdown\n"
+    "```\n"
+    "## Why\n"
+    "## Procedure\n"
+    "```\n"
+    "````\n"
+)
+
+# Non-conforming: the canonical skeleton appears ONLY inside a longer (4-tilde)
+# outer fence wrapping a shorter (3-tilde) inner fence, so none of the canonical
+# headings are real; the runbook merely illustrates the sections.
+_ONLY_FENCED_SKELETON = (
+    "# Example Runbook\n\nThe sections this runbook would use:\n\n"
+    "~~~~\n~~~\n" + "".join(f"## {s}\n" for s in gate.REQUIRED_SECTIONS) + "~~~\n~~~~\n"
+)
+
 
 def _reader(mapping: dict[str, str]):
     def read(path: str) -> str:
@@ -221,6 +251,29 @@ def test_run_gate_no_changed_runbooks_passes() -> None:
     assert gate.run_gate([], _reader({}), frozenset()) is True
 
 
+def test_run_gate_passes_for_conforming_with_fenced_sample() -> None:
+    # End-to-end (issue #2143 (c)): a conforming runbook that also embeds a
+    # longer-outer/shorter-inner fenced sample must pass; the '## Why' /
+    # '## Procedure' sample lines inside the longer fence are not headings.
+    ok = gate.run_gate(
+        ["docs/runbooks/new.md"],
+        _reader({"docs/runbooks/new.md": _CONFORMING_WITH_FENCED_SAMPLE}),
+        frozenset(),
+    )
+    assert ok is True
+
+
+def test_run_gate_fails_for_only_fenced_skeleton() -> None:
+    # End-to-end (issue #2143 (c)): a runbook whose only canonical headings are
+    # inside a longer (4-tilde) outer fence has no real headings and must fail.
+    ok = gate.run_gate(
+        ["docs/runbooks/new.md"],
+        _reader({"docs/runbooks/new.md": _ONLY_FENCED_SKELETON}),
+        frozenset(),
+    )
+    assert ok is False
+
+
 def test_run_gate_unreadable_file_is_skipped_not_failed() -> None:
     def boom(_path: str) -> str:
         raise OSError("nope")
@@ -319,6 +372,24 @@ def test_main_fail_for_nonconforming() -> None:
     with (
         patch.object(gate, "get_changed_runbooks", return_value=["docs/runbooks/new.md"]),
         patch.object(gate, "_read_text", return_value=_NON_CONFORMING),
+    ):
+        assert gate.main(["verify"]) == 1
+
+
+def test_main_pass_for_conforming_with_fenced_sample() -> None:
+    # Full main() path over the standard fenced-sample fixture (issue #2143 (c)).
+    with (
+        patch.object(gate, "get_changed_runbooks", return_value=["docs/runbooks/new.md"]),
+        patch.object(gate, "_read_text", return_value=_CONFORMING_WITH_FENCED_SAMPLE),
+    ):
+        assert gate.main(["verify"]) == 0
+
+
+def test_main_fail_for_only_fenced_skeleton() -> None:
+    # Full main() path over the longer-outer-fence-only fixture (issue #2143 (c)).
+    with (
+        patch.object(gate, "get_changed_runbooks", return_value=["docs/runbooks/new.md"]),
+        patch.object(gate, "_read_text", return_value=_ONLY_FENCED_SKELETON),
     ):
         assert gate.main(["verify"]) == 1
 
