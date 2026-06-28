@@ -385,6 +385,16 @@
         "hooks": [
           {
             "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/preflight_push_unsigned_commits.py",
+            "statusMessage": "Checking pushed commits are signed"
+          }
+        ]
+      },
+      {
+        "matcher": "^Bash$",
+        "hooks": [
+          {
+            "type": "command",
             "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/preflight_push_base.py",
             "statusMessage": "Checking branch base before push"
           }

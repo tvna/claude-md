@@ -9,6 +9,24 @@ turns off commit signing for that invocation; the agent-Bash-tool sibling of
 ``scan_workflow_unsigned_commit.py`` (which guards the CI-side unsigned
 ``git push`` authoring path). Issue #1713.
 
+Three deterministic gates cover the unsigned-commit category from different
+angles, and they are complementary rather than redundant (CLAUDE.md section 3,
+one category covered end to end):
+
+- This gate blocks a Bash ``git`` command that *disables* signing for an
+  invocation. It is necessary but not sufficient: it cannot see a commit that
+  lands unsigned for a reason other than an explicit bypass flag.
+- ``preflight_push_unsigned_commits.py`` closes that remaining hole at the push
+  boundary by running ``git verify-commit`` on each commit a Bash ``git push``
+  would ship and denying the push when any is unsigned. This catches the Codex
+  Desktop case where the worktree carries no signing key, so a plain
+  ``git commit`` produces an unsigned commit even with ``commit.gpgsign=true``
+  (Issue #2138). That is the agent-Bash-*push* sibling, where this gate is the
+  agent-Bash-*command* sibling.
+- ``scan_workflow_unsigned_commit.py`` guards the third path: a ``git push`` in
+  a CI workflow ``run:`` block (the bot-authoring path). All three honor the
+  same ``# unsigned-ack`` opt-in marker.
+
 This repository configures ``commit.gpgsign=true`` with an ssh signing key, so a
 plain ``git commit`` produces a Verified commit. The only reason to disable
 signing inline is to defeat that requirement, so the gate denies the two
