@@ -168,6 +168,15 @@ STEPS: tuple[Step, ...] = (
         argv=("python3", "scripts/scan_scripts_gh_calls.py", "verify"),
     ),
     Step(
+        # Refs #2143 (PR #2141 retro, repair (a)). Fails when a gate surface
+        # (workflow YAML, .githooks, .pre-commit-config.yaml, or the preflight
+        # manifest) invokes `ruff format`. CI enforces `ruff check` only;
+        # `ruff format` is intentionally not a gate, so reformatting files the
+        # gate set does not format-check only widens the diff (CLAUDE.md S5).
+        name="scan_ruff_format",
+        argv=("python3", "scripts/scan_ruff_format.py", "verify"),
+    ),
+    Step(
         name="scan_workflow_injection",
         argv=("python3", "scripts/scan_workflow_injection.py", "verify"),
     ),
