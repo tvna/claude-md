@@ -444,40 +444,9 @@ class TestIterPushSpecs:
 
 
 # ---------------------------------------------------------------------------
-# _is_unsigned(): header-presence semantics (the verify-commit false-positive
-# fix: a signed-but-locally-unverifiable commit must read as signed)
+# _is_unsigned() header-presence semantics live with the shared definition in
+# tests/test_commit_signing.py; the deny/allow cases above exercise the import.
 # ---------------------------------------------------------------------------
-
-
-class TestIsUnsigned:
-    def _runner(self, stdout: str, returncode: int = 0):
-        def run(_args: list[str]) -> subprocess.CompletedProcess[str]:
-            return _cp(returncode=returncode, stdout=stdout)
-
-        return run
-
-    def test_signed_header_present_reads_signed(self) -> None:
-        body = (
-            "tree 0\nauthor a <a@b> 0 +0000\ncommitter a <a@b> 0 +0000\n"
-            "gpgsig -----BEGIN SSH SIGNATURE-----\n A\n -----END SSH SIGNATURE-----\n"
-            "\nmsg\n"
-        )
-        assert subject._is_unsigned(self._runner(body), _SIGNED) is False
-
-    def test_sha256_signature_header_reads_signed(self) -> None:
-        body = "tree 0\ncommitter a <a@b> 0 +0000\ngpgsig-sha256 sig\n\nmsg\n"
-        assert subject._is_unsigned(self._runner(body), _SIGNED) is False
-
-    def test_no_header_reads_unsigned(self) -> None:
-        body = "tree 0\nauthor a <a@b> 0 +0000\ncommitter a <a@b> 0 +0000\n\nmsg\n"
-        assert subject._is_unsigned(self._runner(body), _UNSIGNED) is True
-
-    def test_message_mention_does_not_mask_unsigned(self) -> None:
-        body = "tree 0\ncommitter a <a@b> 0 +0000\n\ngpgsig in the message\n"
-        assert subject._is_unsigned(self._runner(body), _UNSIGNED) is True
-
-    def test_nonzero_exit_fails_open(self) -> None:
-        assert subject._is_unsigned(self._runner("", returncode=128), _UNSIGNED) is False
 
 
 # ---------------------------------------------------------------------------

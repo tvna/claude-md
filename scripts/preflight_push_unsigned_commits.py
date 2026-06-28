@@ -93,6 +93,7 @@ from collections.abc import Callable
 from pathlib import PurePosixPath
 from typing import Any
 
+from _commit_signing import is_unsigned as _is_unsigned
 from _git import run_git
 from _hook_runtime import build_deny, run_event_hook
 
@@ -329,33 +330,6 @@ def _commits_for_spec(
     if result.returncode != 0:
         return None
     return [line.strip() for line in result.stdout.splitlines() if line.strip()]
-
-
-def _is_unsigned(runner: _Runner, sha: str) -> bool:
-    """Return True when *sha*'s raw object carries no ``gpgsig`` header.
-
-    Reads the commit object with ``git cat-file commit`` and scans only its
-    header section (the lines before the first blank line, which separates the
-    headers from the commit message) for a line beginning ``gpgsig`` (the
-    header git writes when a commit is signed, covering both ``gpgsig`` and the
-    sha-256 ``gpgsig-sha256`` spelling). Stopping at the blank line keeps a
-    commit MESSAGE that merely mentions ``gpgsig`` from masking an unsigned
-    commit. A subprocess error or a non-zero exit is reported as "not unsigned"
-    so an infrastructure failure fails open rather than denying a push it could
-    not actually evaluate (CLAUDE.md section 4).
-    """
-    try:
-        result = runner(["cat-file", "commit", sha])
-    except (RuntimeError, OSError, subprocess.SubprocessError):
-        return False
-    if result.returncode != 0:
-        return False
-    for line in result.stdout.splitlines():
-        if not line:
-            break  # the empty line ends the header section; the message follows
-        if line.startswith("gpgsig"):
-            return False  # a signature header is present
-    return True
 
 
 def _deny(unsigned: list[str]) -> dict[str, Any]:
