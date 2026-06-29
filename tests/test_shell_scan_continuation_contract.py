@@ -80,14 +80,48 @@ GATES: tuple[GateCase, ...] = (
 
 _IMPORTS_SHELL_LINES = re.compile(r"^\s*(?:from|import)\s+_shell_lines\b", re.MULTILINE)
 
+# Shell scanners outside the ``scan_workflow_*`` naming convention that still
+# scan a two-token shell command on a gate surface. Listed explicitly so the
+# scanner surface is not silently narrowed to the workflow family.
+_EXTRA_SCANNERS = ("scan_ruff_format",)
 
-def _modules_importing_shell_lines() -> set[str]:
-    """Return the stems of ``scripts/*.py`` modules importing ``_shell_lines``."""
-    return {
-        path.stem
-        for path in SCRIPTS_DIR.glob("*.py")
-        if _IMPORTS_SHELL_LINES.search(path.read_text(encoding="utf-8"))
-    }
+# ``scan_workflow_*`` modules that do NOT match a two-token shell command, so a
+# backslash continuation cannot apply to them. Each carries a one-line rationale;
+# the ratchet in :func:`test_scanner_surface_is_classified` keeps the set from
+# outliving its modules. Refs #2164, Codex review on PR #2175.
+EXEMPT_SCANNERS: dict[str, str] = {
+    "scan_workflow_action_pins": (
+        "Scans `uses:` action-pin references (SHA/tag), not shell run: command "
+        "tokens; a backslash continuation cannot split an action pin."
+    ),
+    "scan_workflow_injection": (
+        "Scans GitHub ${{ }} template-expression injection, evaluated by Actions "
+        "before the shell; not a two-token shell command split by a continuation."
+    ),
+}
+
+
+def _scanner_surface() -> set[str]:
+    """Return the known shell-command scanner surface, structurally (not by import).
+
+    The surface is every ``scripts/scan_workflow_*.py`` (the naming convention for
+    workflow run: scanners) plus the gate-surface scanners in
+    :data:`_EXTRA_SCANNERS`. Basing the completeness mirror on this surface rather
+    than on who imports ``_shell_lines`` is the point: a new scanner that does a
+    physical-line scan and forgets the shared flattener never imports it, yet still
+    lands in this surface, so the absence is observable (Codex review on PR #2175).
+    A shell scanner added outside the ``scan_workflow_*`` convention must be added
+    to :data:`_EXTRA_SCANNERS`.
+    """
+    surface = {p.stem for p in SCRIPTS_DIR.glob("scan_workflow_*.py")}
+    surface.update(_EXTRA_SCANNERS)
+    return surface
+
+
+def _module_imports_shell_lines(module_name: str) -> bool:
+    """Return True if ``scripts/<module_name>.py`` imports the shared flattener."""
+    source = (SCRIPTS_DIR / f"{module_name}.py").read_text(encoding="utf-8")
+    return _IMPORTS_SHELL_LINES.search(source) is not None
 
 
 @pytest.mark.parametrize("gate", GATES, ids=lambda g: g.module_name)
@@ -114,25 +148,46 @@ def test_gate_catches_continuation_form(gate: GateCase) -> None:
     )
 
 
-def test_registry_covers_shell_lines_importers() -> None:
-    """Every gate importing the shared helper must be registered here.
+def test_scanner_surface_is_classified() -> None:
+    """Every shell-command scanner is registered in GATES or explicitly exempt.
 
-    This is the drift guard that forces a new shell-scanning gate into the
-    continuation contract: importing ``_shell_lines`` without a :data:`GATES`
-    entry fails loudly, mirroring the CONTRACT_REGISTRY mirror tests in
-    tests/test_workflow_cli_contracts.py.
+    The drift guard that forces a new shell-scanning gate into the continuation
+    contract. Unlike an import-based mirror, this is structural: a new scanner that
+    scans run: text with a physical-line regex and forgets the shared flattener
+    never imports ``_shell_lines``, yet still lands in :func:`_scanner_surface`, so
+    its absence from both GATES and :data:`EXEMPT_SCANNERS` fails here, catching
+    the exact regression this contract guards (Codex review on PR #2175).
     """
     registered = {gate.module_name for gate in GATES}
-    importers = _modules_importing_shell_lines()
-    unregistered = sorted(importers - registered)
-    assert not unregistered, (
-        f"scripts modules import _shell_lines but are not in the continuation "
-        f"contract registry: {unregistered}. Add a GateCase entry (with matched "
-        f"single-line and `\\`-continuation samples) so the continuation bypass "
-        f"cannot recur in that gate (issue #2164)."
+    surface = _scanner_surface()
+    unclassified = sorted(surface - registered - set(EXEMPT_SCANNERS))
+    assert not unclassified, (
+        f"shell-command scanner(s) {unclassified} are neither registered in GATES "
+        f"(add a GateCase with single-line and `\\`-continuation samples) nor in "
+        f"EXEMPT_SCANNERS with a rationale. A scanner over shell run: text must "
+        f"flatten continuations via scripts/_shell_lines.flatten_shell_continuations; "
+        f"if it scans something else (action pins, ${{ }} expressions), exempt it "
+        f"explicitly (issue #2164)."
     )
-    stale = sorted(registered - importers)
+    stale = sorted(set(EXEMPT_SCANNERS) - surface)
     assert not stale, (
-        f"GATES registry has entries that no longer import _shell_lines: "
-        f"{stale}. Remove them so the registry stays a true mirror."
+        f"EXEMPT_SCANNERS lists modules no longer in the scanner surface: {stale}. "
+        f"Remove them so the exemption set only shrinks."
+    )
+
+
+def test_registered_gates_use_shared_helper() -> None:
+    """Each registered gate routes through the shared flattener, not a private copy.
+
+    Registration in GATES means the gate delegates continuation handling to the
+    single source of truth; this catches a gate that re-introduces its own
+    ``_logical_lines``-style copy while staying in the registry (issue #2164).
+    """
+    not_importing = sorted(
+        gate.module_name for gate in GATES if not _module_imports_shell_lines(gate.module_name)
+    )
+    assert not not_importing, (
+        f"registered gate(s) {not_importing} no longer import _shell_lines; route "
+        f"them through scripts/_shell_lines.flatten_shell_continuations rather than a "
+        f"private copy (issue #2164)."
     )
