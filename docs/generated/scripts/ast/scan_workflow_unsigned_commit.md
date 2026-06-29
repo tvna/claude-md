@@ -36,7 +36,7 @@ flowchart TD
 flowchart TD
     N001["scan_run_text(...)"]
     N002["hits = []"]
-    N003["for lineno, line in enumerate(run_text.splitlines(), start=1):     if ACK_MARKER in line:         continue     match = _GIT_PUSH.search(line)     if match is not None:         fragment = line[match.start():match.start() + _FRAGMENT_LEN].strip()         hits.append((lineno, fragment))"]
+    N003["for lineno, line in flatten_shell_continuations(run_text):     if ACK_MARKER in line:         continue     match = _GIT_PUSH.search(line)     if match is not None:         fragment = line[match.start():match.start() + _FRAGMENT_LEN].strip()         hits.append((lineno, fragment))"]
     N004["return hits"]
     N001 -->|"start"| N002
     N002 --> N003
