@@ -77,6 +77,22 @@ python3 scripts/verify_apm_checksums.py verify
 
 - **context7 MCP** 在 `apm.yml`（`dependencies.mcp`）中声明，用作一手文档的检索加速器。本主仓库仅声明，使用方通过 `apm install --mcp context7` 将其接入各自的客户端。详见 [`docs/runbooks/context7-mcp.md`](./docs/runbooks/context7-mcp.md)。
 
+## 版本管理
+
+universal text（`.apm/instructions/master.instructions.md` 以及编译产物 `CLAUDE.md` / `AGENTS.md`）采用语义化版本管理。`apm.yml: version` 是唯一可信来源（single source of truth）。这里的“兼容性”指对使用方而言行为上的向后兼容，而非程序化 API：
+
+- **MAJOR** - 破坏向后兼容的变更：删除、反转或弱化既有规则；新增禁止项或强制义务；或破坏稳定引用（重排原则编号、重命名被引用的章节锚点、改变术语含义）。
+- **MINOR** - 向后兼容的新增或澄清（新规则、原则、章节或示例），使既有的合规行为仍然合规。
+- **PATCH** - 非规范性的表层变更（错别字、排版、链接修复、翻译，或保持规则含义的改写）。
+
+涉及 universal text 的 PR 的 bump 步骤：
+
+1. 用且仅用一个 `semver:major` / `semver:minor` / `semver:patch` 标签声明严重程度。
+2. 按声明的分量 bump `apm.yml: version`。如果 universal text 与 `apm.yml: version` 没有一起变更，或 bump 与标签不一致，CI 的 drift gate 会让 PR fail。
+3. 合并时自动创建 `v{version}` tag 并进入 release 发布流程；使用方固定该 tag 来引用（参见[在其他项目中使用](#在其他项目中使用)）。
+
+完整决策记录见 [`docs/prd/semantic-versioning-universal-text.md`](./docs/prd/semantic-versioning-universal-text.md)。
+
 ## 变更策略
 
 - 所有编辑都通过 PR 合入。合并后运行 retrospective（Principle 3）。

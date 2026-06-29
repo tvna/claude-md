@@ -77,6 +77,22 @@ Bump the pinned release tag in the sync workflow in a reviewed PR. The scheduled
 
 - **context7 MCP** is declared in `apm.yml` (`dependencies.mcp`) as a retrieval accelerator for primary-source documentation. This master only declares it; consumers wire it into their own clients via `apm install --mcp context7`. See [`docs/runbooks/context7-mcp.md`](./docs/runbooks/context7-mcp.md).
 
+## Versioning
+
+The universal text (`.apm/instructions/master.instructions.md` and the compiled `CLAUDE.md` / `AGENTS.md`) is versioned with semantic versioning. `apm.yml: version` is the single source of truth. "Compatibility" here is behavioral, for downstream consumers, not a programmatic API:
+
+- **MAJOR** - breaks backward compatibility: removing, reversing, or weakening an existing rule; adding a new prohibition or mandatory obligation; or breaking a stable reference (renumbering principles, renaming a keyed section anchor, changing a term's meaning).
+- **MINOR** - a backward-compatible addition or clarification (a new rule, principle, section, or example) that leaves prior-compliant behavior compliant.
+- **PATCH** - a non-normative surface change (typo, formatting, link fix, translation, or a reword that preserves the rule's meaning).
+
+Bump procedure for a PR that touches the universal text:
+
+1. Declare the severity with exactly one `semver:major` / `semver:minor` / `semver:patch` label.
+2. Bump `apm.yml: version` to match the declared component. A CI drift gate fails the PR if the universal text and `apm.yml: version` do not change together, or if the bump does not match the label.
+3. On merge, a `v{version}` tag is created automatically and feeds the release publish flow; downstream consumers pin that tag (see [Using in other projects](#using-in-other-projects)).
+
+Full decision record: [`docs/prd/semantic-versioning-universal-text.md`](./docs/prd/semantic-versioning-universal-text.md).
+
 ## Change policy
 
 - All edits land via PR. Run a retrospective after merge (Principle 3).
