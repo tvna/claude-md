@@ -77,6 +77,22 @@ python3 scripts/verify_apm_checksums.py verify
 
 - **context7 MCP** 는 일차 정보 문서의 취득을 가속하기 위해 `apm.yml`(`dependencies.mcp`)에서 선언합니다. 본 마스터는 선언만 하며, 사용하는 쪽이 `apm install --mcp context7`로 각자의 클라이언트에 연결합니다. 자세한 내용은 [`docs/runbooks/context7-mcp.md`](./docs/runbooks/context7-mcp.md)를 참조하세요.
 
+## 버전 관리
+
+universal text(`.apm/instructions/master.instructions.md` 와 컴파일된 `CLAUDE.md` / `AGENTS.md`)는 시맨틱 버저닝으로 관리합니다. `apm.yml: version` 이 단일 신뢰 출처(single source of truth)입니다. 여기서 "호환성"은 프로그램적 API가 아니라 사용하는 쪽 입장에서의 동작상 하위 호환성을 가리킵니다.
+
+- **MAJOR** - 하위 호환성을 깨는 변경. 기존 규칙의 삭제·반전·약화, 새로운 금지나 필수 의무의 추가, 안정 참조의 파괴(원칙 번호 재배치, 키로 참조되는 섹션 앵커 개명, 용어 의미 변경).
+- **MINOR** - 하위 호환되는 추가·명확화(새 규칙, 원칙, 섹션, 예시)로, 기존에 준수하던 동작이 그대로 준수 상태로 남는 것.
+- **PATCH** - 규범과 무관한 표층 변경(오타, 서식, 링크 수정, 번역, 규칙의 의미를 보존하는 표현 변경).
+
+universal text를 건드리는 PR의 bump 절차:
+
+1. 정확히 하나의 `semver:major` / `semver:minor` / `semver:patch` 라벨로 심각도를 선언한다.
+2. 선언한 구분에 맞춰 `apm.yml: version` 을 bump한다. universal text와 `apm.yml: version` 이 함께 변경되지 않거나 bump가 라벨과 일치하지 않으면 CI의 drift gate가 PR을 fail시킨다.
+3. 머지 시 `v{version}` 태그가 자동 생성되어 릴리스 발행 플로우로 전달된다. 사용하는 쪽은 그 태그를 고정해 참조한다([다른 프로젝트에서 사용하기](#다른-프로젝트에서-사용하기) 참조).
+
+결정 기록 전문은 [`docs/prd/semantic-versioning-universal-text.md`](./docs/prd/semantic-versioning-universal-text.md) 를 참조하세요.
+
 ## 변경 정책
 
 - 모든 편집은 PR을 통해 들여온다. 머지 후에는 retrospective를 실시한다(Principle 3).

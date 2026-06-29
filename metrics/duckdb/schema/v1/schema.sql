@@ -41,8 +41,10 @@ WHERE NOT EXISTS (SELECT 1 FROM schema_meta WHERE schema_version = '1');
 -- de-duplication: re-recording the same (commit_sha, spec_version) replaces
 -- the row (use INSERT OR REPLACE) instead of double-counting.
 --
--- Reproducibility keys: commit_sha, compiled_source_version (Refs #89; NULL
--- until that scheme lands), spec_version, harness_version, model_id.
+-- Reproducibility keys: commit_sha, compiled_source_version (Refs #89; the
+-- apm.yml: version at the recorded SHA under the semantic-versioning scheme,
+-- which has landed; NULL only for rows recorded before the scheme),
+-- spec_version, harness_version, model_id.
 -- Signals:
 --   - scope_compiled_tokens: scope-of-change signal (deterministic, Refs #61
 --     metric (a): cl100k_base token count of the compiled CLAUDE.md/AGENTS.md).
@@ -61,7 +63,7 @@ WHERE NOT EXISTS (SELECT 1 FROM schema_meta WHERE schema_version = '1');
 CREATE TABLE IF NOT EXISTS change_measurement (
     commit_sha                VARCHAR  NOT NULL,
     spec_version              VARCHAR  NOT NULL,
-    compiled_source_version   VARCHAR,                       -- Refs #89, nullable
+    compiled_source_version   VARCHAR,                       -- Refs #89: apm.yml version at the SHA (nullable for pre-scheme rows)
     harness_version           VARCHAR  NOT NULL,
     model_id                  VARCHAR,                       -- pins the stochastic metric
     measured_at_unix_nano     UBIGINT  NOT NULL,             -- OTLP TimeUnixNano
@@ -165,7 +167,7 @@ ORDER BY measured_at_unix_nano;
 --       quality_agent_pass_rate_min, quality_agent_pass_rate_max,
 --       quality_agent_runs, resource_attributes, notes
 --   ) VALUES (
---       '<40-char-main-sha>', 'v1', NULL, '<harness-sha-or-semver>',
+--       '<40-char-main-sha>', 'v1', '<apm.yml-version-at-sha, e.g. 1.2.0>', '<harness-sha-or-semver>',
 --       '<model-id-or-NULL>',
 --       CAST(epoch_ns(now()) AS UBIGINT), CAST(epoch_ns(now()) AS UBIGINT),
 --       <compiled-token-count>, <median-pass-rate-or-NULL>,
