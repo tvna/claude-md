@@ -105,6 +105,25 @@ class TestScanText:
         )
         assert scan_workflow_pip.scan_text(text) == [1, 3]
 
+    def test_flattens_shell_continuation(self) -> None:
+        # A `pip install` split across a `\` continuation must still be caught,
+        # reported at the first physical line of the command (issue #2164).
+        text = "noop\n  pip \\\n    install requests\ndone\n"
+        assert scan_workflow_pip.scan_text(text) == [2]
+
+    def test_continuation_does_not_false_positive_on_uv_pip(self) -> None:
+        # `uv pip \` then `install` is the supported uv channel and must NOT trip.
+        text = "uv pip \\\n  install requests\n"
+        assert scan_workflow_pip.scan_text(text) == []
+
+    def test_comment_continuation_does_not_hide_following_command(self) -> None:
+        # A `#` comment ending in `\` does NOT continue in real shell, so a real
+        # `pip install` on the next physical line must still be flagged (it is not
+        # absorbed into the comment). Regression for the code-review bypass on
+        # PR #2175.
+        text = "# disabled for now \\\n  pip install evil\n"
+        assert scan_workflow_pip.scan_text(text) == [2]
+
 
 # ---------------------------------------------------------------------------
 # find_violations

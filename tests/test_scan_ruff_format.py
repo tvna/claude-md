@@ -56,6 +56,14 @@ def test_scan_text_continuation_does_not_false_positive_on_ruff_check() -> None:
     assert gate.scan_text(text) == []
 
 
+def test_scan_text_comment_continuation_does_not_hide_following_command() -> None:
+    # A `#` comment ending in `\` does not continue in real shell, so a real
+    # `ruff format` on the next physical line must still be caught (it is not
+    # absorbed into the comment). Regression for the code-review bypass on #2175.
+    text = "# was: \\\n  uv run ruff format scripts\n"
+    assert gate.scan_text(text) == [2]
+
+
 def test_find_text_violations_flags_continued_invocation(tmp_path: Path) -> None:
     repo = _make_repo(tmp_path)
     (repo / ".githooks" / "pre-push").write_text("uv run ruff \\\n  format tests\n", encoding="utf-8")

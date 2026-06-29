@@ -39,12 +39,51 @@ flowchart TD
     N001 -->|"start"| N002
 ```
 
+## _flatten(...)
+
+```mermaid
+flowchart TD
+    N001["_flatten(...)"]
+    N002["return '<str>'.join((text for _, text in flatten_shell_continuations(run_text)))"]
+    N001 -->|"start"| N002
+```
+
+## scan_run_text(...)
+
+```mermaid
+flowchart TD
+    N001["scan_run_text(...)"]
+    N002["flat = _flatten(...)"]
+    N003["out = []"]
+    N004["gh_match = search(...)"]
+    N005["if gh_match is not None"]
+    N006["append(...)"]
+    N007["if _CURL_RE.search(flat) is not None"]
+    N008["api_match = search(...)"]
+    N009["if api_match is not None"]
+    N010["append(...)"]
+    N011["return out"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 --> N004
+    N004 --> N005
+    N005 -->|"true"| N006
+    N006 --> N007
+    N005 -->|"false"| N007
+    N007 -->|"true"| N008
+    N008 --> N009
+    N009 -->|"true"| N010
+    N010 --> N011
+    N009 -->|"false"| N011
+    N007 -->|"false"| N011
+```
+
 ## _iter_matches(...)
 
 ```mermaid
 flowchart TD
     N001["_iter_matches(...)"]
-    N002["for wf_name, job_id, step_name, run_text in _iter_run_steps(workflow_dir):     gh_match = _GH_CLI_RE.search(run_text)     if gh_match is not None:         yield Violation(workflow=wf_name, job=job_id, step=step_name, fragment=_fragment_at(run_text, gh_match.start()), kind='<str>')     if _CURL_RE.search(run_text) is not None:         api_match = _GITHUB_API_HOST_RE.search(run_text)         if api_match is not None:             yield Violation(workflow=wf_name, job=job_id, step=step_name, fragment=_fragment_at(run_text, api_match.start()), kind='<str>')"]
+    N002["for wf_name, job_id, step_name, run_text in _iter_run_steps(workflow_dir):     for kind, fragment in scan_run_text(run_text):         yield Violation(workflow=wf_name, job=job_id, step=step_name, fragment=fragment, kind=kind)"]
     N003["end"]
     N001 -->|"start"| N002
     N002 --> N003
