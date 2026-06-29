@@ -19,34 +19,12 @@ flowchart TD
     N004 -->|"false"| N006
 ```
 
-## _logical_lines(...)
-
-```mermaid
-flowchart TD
-    N001["_logical_lines(...)"]
-    N002["out = []"]
-    N003["pending = []"]
-    N004["start = 0"]
-    N005["for lineno, line in enumerate(text.splitlines(), start=1):     stripped = line.rstrip()     if stripped.endswith('<str>') and (not stripped.endswith('<str>')):         if not pending:             start = lineno         pending.append(stripped[:-1])         continue     if pending:         pending.append(line)         out.append((start, '<str>'.join((part.strip() for part in pending))))         pending = []     else:         out.append((lineno, line))"]
-    N006["if pending"]
-    N007["append(...)"]
-    N008["return out"]
-    N001 -->|"start"| N002
-    N002 --> N003
-    N003 --> N004
-    N004 --> N005
-    N005 --> N006
-    N006 -->|"true"| N007
-    N007 --> N008
-    N006 -->|"false"| N008
-```
-
 ## scan_text(...)
 
 ```mermaid
 flowchart TD
     N001["scan_text(...)"]
-    N002["return [lineno for lineno, logical in _logical_lines(text) if scan_line(logical)]"]
+    N002["return [lineno for lineno, logical in flatten_shell_continuations(text) if scan_line(logical)]"]
     N001 -->|"start"| N002
 ```
 
