@@ -60,3 +60,37 @@ def test_parts_are_whitespace_normalised_at_join() -> None:
 
 def test_empty_text_returns_empty_list() -> None:
     assert flatten_shell_continuations("") == []
+
+
+def test_comment_line_does_not_continue() -> None:
+    # A `#` comment does not continue across a trailing backslash (verified in
+    # sh/bash): the next physical line is a separate command, so it must NOT be
+    # absorbed into the comment, else a gate's comment-skip swallows a real
+    # violation (issue #2164, code-review on PR #2175).
+    text = "# note \\\n  pip install requests\ndone\n"
+    assert flatten_shell_continuations(text) == [
+        (1, "# note \\"),
+        (2, "  pip install requests"),
+        (3, "done"),
+    ]
+
+
+def test_odd_run_of_three_backslashes_continues() -> None:
+    # Real shell continues iff the trailing backslash run is odd. Three trailing
+    # backslashes (escaped backslash + escaping newline) continues.
+    text = "gh \\\\\\\n  api repos/o/r\n"
+    assert flatten_shell_continuations(text) == [(1, "gh \\\\ api repos/o/r")]
+
+
+def test_even_run_of_two_backslashes_does_not_continue() -> None:
+    text = "echo done\\\\\nnext\n"
+    assert flatten_shell_continuations(text) == [(1, "echo done\\\\"), (2, "next")]
+
+
+def test_backslash_then_trailing_whitespace_does_not_continue() -> None:
+    # `\` followed by a space escapes the space, not the newline; no continuation.
+    text = "pip \\ \n  install requests\n"
+    assert flatten_shell_continuations(text) == [
+        (1, "pip \\ "),
+        (2, "  install requests"),
+    ]

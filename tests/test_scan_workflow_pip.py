@@ -116,6 +116,14 @@ class TestScanText:
         text = "uv pip \\\n  install requests\n"
         assert scan_workflow_pip.scan_text(text) == []
 
+    def test_comment_continuation_does_not_hide_following_command(self) -> None:
+        # A `#` comment ending in `\` does NOT continue in real shell, so a real
+        # `pip install` on the next physical line must still be flagged (it is not
+        # absorbed into the comment). Regression for the code-review bypass on
+        # PR #2175.
+        text = "# disabled for now \\\n  pip install evil\n"
+        assert scan_workflow_pip.scan_text(text) == [2]
+
 
 # ---------------------------------------------------------------------------
 # find_violations
