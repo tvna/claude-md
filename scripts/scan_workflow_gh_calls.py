@@ -35,6 +35,7 @@ from pathlib import Path
 from typing import Any, NamedTuple
 
 import yaml
+from _shell_lines import flatten_shell_continuations
 
 WORKFLOW_DIR = Path(".github/workflows")
 
@@ -53,6 +54,14 @@ _CURL_RE = re.compile(r"(?:^|(?<=[\s;|&(`]))curl\b", re.MULTILINE)
 _GITHUB_API_HOST_RE = re.compile(r"\b(?:api|uploads)\.github\.com\b")
 
 _FRAGMENT_LEN = 80
+
+# Result "kind" tags. Defined as module names rather than inline string literals
+# so the ``(_KIND_GH, ...)`` result tuple in :func:`scan_run_text` is not
+# mistaken for a ``["gh", ...]`` argv literal by ``scan_scripts_gh_calls``'s
+# AST heuristic (issue #909); this module classifies findings, it never shells
+# out to the gh CLI.
+_KIND_GH = "gh"
+_KIND_CURL = "curl"
 
 
 class Violation(NamedTuple):
@@ -127,31 +136,51 @@ def _fragment_at(run_text: str, start: int) -> str:
     return run_text[start : start + _FRAGMENT_LEN].strip()
 
 
+def _flatten(run_text: str) -> str:
+    """Return *run_text* with shell backslash continuations joined.
+
+    A ``gh \\`` then ``api`` (or ``curl \\`` then the GitHub API host) split
+    across a POSIX shell ``\\`` continuation would otherwise put whitespace
+    between the two tokens that ``\\s+`` cannot bridge, slipping past the regex
+    (issue #2164). Flattening first joins them onto one logical line so the
+    match is seen. Logical lines are rejoined with ``\\n`` so the per-line
+    anchoring of the regexes is preserved.
+    """
+    return "\n".join(text for _, text in flatten_shell_continuations(run_text))
+
+
+def scan_run_text(run_text: str) -> list[tuple[str, str]]:
+    """Return ``(kind, fragment)`` for each gh CLI call / direct GitHub-API curl.
+
+    *kind* is ``"gh"`` or ``"curl"``. Shell continuations are flattened first so
+    a token split across a ``\\`` continuation is still caught (issue #2164).
+    """
+    flat = _flatten(run_text)
+    out: list[tuple[str, str]] = []
+    gh_match = _GH_CLI_RE.search(flat)
+    if gh_match is not None:
+        out.append((_KIND_GH, _fragment_at(flat, gh_match.start())))
+    if _CURL_RE.search(flat) is not None:
+        api_match = _GITHUB_API_HOST_RE.search(flat)
+        if api_match is not None:
+            out.append((_KIND_CURL, _fragment_at(flat, api_match.start())))
+    return out
+
+
 def _iter_matches(workflow_dir: Path) -> Iterator[Violation]:
     """Yield a Violation for every ``gh`` CLI call and direct GitHub-API ``curl``.
 
     Allowlist filtering is the caller's responsibility; this yields all matches.
     """
     for wf_name, job_id, step_name, run_text in _iter_run_steps(workflow_dir):
-        gh_match = _GH_CLI_RE.search(run_text)
-        if gh_match is not None:
+        for kind, fragment in scan_run_text(run_text):
             yield Violation(
                 workflow=wf_name,
                 job=job_id,
                 step=step_name,
-                fragment=_fragment_at(run_text, gh_match.start()),
-                kind="gh",
+                fragment=fragment,
+                kind=kind,
             )
-        if _CURL_RE.search(run_text) is not None:
-            api_match = _GITHUB_API_HOST_RE.search(run_text)
-            if api_match is not None:
-                yield Violation(
-                    workflow=wf_name,
-                    job=job_id,
-                    step=step_name,
-                    fragment=_fragment_at(run_text, api_match.start()),
-                    kind="curl",
-                )
 
 
 def find_violations(

@@ -56,6 +56,7 @@ from pathlib import Path
 from typing import Any, NamedTuple
 
 import yaml
+from _shell_lines import flatten_shell_continuations
 
 WORKFLOW_DIR = Path(".github/workflows")
 
@@ -118,11 +119,15 @@ def _iter_run_steps(workflow_dir: Path) -> Iterator[tuple[str, str, str, str]]:
 def scan_run_text(run_text: str) -> list[tuple[int, str]]:
     """Return ``(line_number, fragment)`` for each ``git push`` in *run_text*.
 
-    Line numbers are 1-based within *run_text*. Lines carrying :data:`ACK_MARKER`
-    are treated as reviewed exceptions and skipped.
+    Line numbers are 1-based within *run_text* and point at the first physical
+    line of the command. Shell backslash continuations are flattened first (see
+    :func:`_shell_lines.flatten_shell_continuations`) so a ``git push`` split
+    across a ``\\`` continuation (``git \\`` then ``push``) is still caught
+    (issue #2164). Logical lines carrying :data:`ACK_MARKER` are treated as
+    reviewed exceptions and skipped.
     """
     hits: list[tuple[int, str]] = []
-    for lineno, line in enumerate(run_text.splitlines(), start=1):
+    for lineno, line in flatten_shell_continuations(run_text):
         if ACK_MARKER in line:
             continue
         match = _GIT_PUSH.search(line)

@@ -52,6 +52,8 @@ import re
 import sys
 from pathlib import Path
 
+from _shell_lines import flatten_shell_continuations
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 # Lines carrying this marker bypass the scan, for a deliberate and reviewed
@@ -101,47 +103,14 @@ def scan_line(line: str) -> bool:
     return _RUFF_FORMAT.search(line) is not None
 
 
-def _logical_lines(text: str) -> list[tuple[int, str]]:
-    """Join shell backslash-continued physical lines into logical lines.
-
-    Returns ``(start_lineno, joined_text)`` pairs, where *start_lineno* is the
-    1-based number of the first physical line of the logical line. A physical
-    line whose trailing token is a single backslash continues onto the next
-    line (POSIX shell line continuation), so ``uv run ruff \\`` then
-    ``format scripts`` joins to ``uv run ruff format scripts`` and the
-    ``ruff format`` invocation is seen as one token run rather than slipping
-    through the per-physical-line scan (Codex review on #2143).
-    """
-    out: list[tuple[int, str]] = []
-    pending: list[str] = []
-    start = 0
-    for lineno, line in enumerate(text.splitlines(), start=1):
-        stripped = line.rstrip()
-        # A trailing odd backslash is a continuation; a doubled ``\\`` is an
-        # escaped backslash and ends the logical line.
-        if stripped.endswith("\\") and not stripped.endswith("\\\\"):
-            if not pending:
-                start = lineno
-            pending.append(stripped[:-1])
-            continue
-        if pending:
-            pending.append(line)
-            out.append((start, " ".join(part.strip() for part in pending)))
-            pending = []
-        else:
-            out.append((lineno, line))
-    if pending:
-        out.append((start, " ".join(part.strip() for part in pending)))
-    return out
-
-
 def scan_text(text: str) -> list[int]:
     """Return 1-based start line numbers of logical lines invoking ``ruff format``.
 
-    Shell line continuations are flattened first (see :func:`_logical_lines`)
-    so a ``ruff format`` split across a ``\\`` continuation is still caught.
+    Shell line continuations are flattened first (see
+    :func:`_shell_lines.flatten_shell_continuations`) so a ``ruff format`` split
+    across a ``\\`` continuation is still caught.
     """
-    return [lineno for lineno, logical in _logical_lines(text) if scan_line(logical)]
+    return [lineno for lineno, logical in flatten_shell_continuations(text) if scan_line(logical)]
 
 
 def _iter_text_surfaces(repo_root: Path) -> list[Path]:
