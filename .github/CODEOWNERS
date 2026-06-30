@@ -1,6 +1,5 @@
 .github/workflows/apply-rulesets.yml   @tvna
 .github/rulesets/**                    @tvna
 .github/CODEOWNERS                     @tvna
-.github/contributors.toml              @tvna
 docs/runbooks/rulesets.md              @tvna
 docs/graph/**                          @tvna
