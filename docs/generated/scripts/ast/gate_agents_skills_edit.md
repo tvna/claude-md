@@ -340,22 +340,95 @@ flowchart TD
     N001 -->|"start"| N002
 ```
 
-## _superpowers_pin(...)
+## _apm_pins(...)
 
 ```mermaid
 flowchart TD
-    N001["_superpowers_pin(...)"]
+    N001["_apm_pins(...)"]
     N002["try"]
     N003["result = runner(...)"]
     N004["except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError)"]
     N005["return None"]
-    N006["for line in result.stdout.splitlines():     if line.lstrip().startswith('<str>'):         continue     match = _SUPERPOWERS_PIN_RE.search(line)     if match:         return match.group(1)"]
-    N007["return None"]
+    N006["pins = {}"]
+    N007["for line in result.stdout.splitlines():     if line.lstrip().startswith('<str>'):         continue     for match in _APM_PIN_RE.finditer(line):         pins[match.group(1)] = match.group(2)"]
+    N008["return pins"]
     N001 -->|"start"| N002
     N002 -->|"try"| N003
     N002 -->|"raises"| N004
     N004 --> N005
     N003 --> N006
+    N006 --> N007
+    N007 --> N008
+```
+
+## _lock_deployed_files(...)
+
+```mermaid
+flowchart TD
+    N001["_lock_deployed_files(...)"]
+    N002["try"]
+    N003["result = runner(...)"]
+    N004["except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError)"]
+    N005["return None"]
+    N006["try"]
+    N007["data = safe_load(...)"]
+    N008["except yaml.YAMLError"]
+    N009["return None"]
+    N010["if not isinstance(data, dict)"]
+    N011["return None"]
+    N012["dependencies = get(...)"]
+    N013["if not isinstance(dependencies, list)"]
+    N014["return None"]
+    N015["owned = {}"]
+    N016["for dependency in dependencies:     if not isinstance(dependency, dict):         continue     repo_url = dependency.get('<str>')     deployed_files = dependency.get('<str>')     if isinstance(repo_url, str) and isinstance(deployed_files, list):         owned[repo_url] = frozenset((f for f in deployed_files if isinstance(f, str)))"]
+    N017["return owned"]
+    N001 -->|"start"| N002
+    N002 -->|"try"| N003
+    N002 -->|"raises"| N004
+    N004 --> N005
+    N003 --> N006
+    N006 -->|"try"| N007
+    N006 -->|"raises"| N008
+    N008 --> N009
+    N007 --> N010
+    N010 -->|"true"| N011
+    N010 -->|"false"| N012
+    N012 --> N013
+    N013 -->|"true"| N014
+    N013 -->|"false"| N015
+    N015 --> N016
+    N016 --> N017
+```
+
+## _owning_repo_by_path(...)
+
+```mermaid
+flowchart TD
+    N001["_owning_repo_by_path(...)"]
+    N002["owner = {}"]
+    N003["for repo, files in deployed_by_repo.items():     for path in files:         owner[path] = repo"]
+    N004["return owner"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 --> N004
+```
+
+## offending_paths(...)
+
+```mermaid
+flowchart TD
+    N001["offending_paths(...)"]
+    N002["if base_pins is None or head_pins is None"]
+    N003["return managed"]
+    N004["offenders = set(...)"]
+    N005["any_pin_changed = base_pins != head_pins"]
+    N006["for path in managed:     repo = owning_repo.get(path)     if repo is None:         if not any_pin_changed:             offenders.add(path)         continue     if base_pins.get(repo) == head_pins.get(repo):         offenders.add(path)"]
+    N007["return frozenset(offenders)"]
+    N001 -->|"start"| N002
+    N002 -->|"true"| N003
+    N002 -->|"false"| N004
+    N004 --> N005
+    N005 --> N006
     N006 --> N007
 ```
 
@@ -364,7 +437,7 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["evaluate_pr(...)"]
-    N002["if not managed or pin_changed"]
+    N002["if not managed or not offending"]
     N003["return (0, [])"]
     N004["pretty = join(...)"]
     N005["return (1, [f'<str>{pretty}<str>{_PIN_FILE}<str>'])"]
@@ -386,19 +459,20 @@ flowchart TD
     N006["print(...)"]
     N007["return 1"]
     N008["managed = managed_changes(...)"]
-    N009["pin_changed = False"]
+    N009["offending = frozenset(...)"]
     N010["if managed"]
-    N011["base_pin = _superpowers_pin(...)"]
-    N012["head_pin = _superpowers_pin(...)"]
-    N013["pin_changed = base_pin is not None and head_pin is not None and (base_pin != head_pin)"]
-    N014["(code, errors) = evaluate_pr(...)"]
-    N015["if code == 0"]
-    N016["if managed"]
-    N017["print(...)"]
+    N011["base_pins = _apm_pins(...)"]
+    N012["head_pins = _apm_pins(...)"]
+    N013["owning_repo = _owning_repo_by_path(...)"]
+    N014["offending = offending_paths(...)"]
+    N015["(code, errors) = evaluate_pr(...)"]
+    N016["if code == 0"]
+    N017["if managed"]
     N018["print(...)"]
-    N019["return 0"]
-    N020["for line in errors:     print(line, file=sys.stderr)"]
-    N021["return 1"]
+    N019["print(...)"]
+    N020["return 0"]
+    N021["for line in errors:     print(line, file=sys.stderr)"]
+    N022["return 1"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 -->|"try"| N004
@@ -412,15 +486,16 @@ flowchart TD
     N011 --> N012
     N012 --> N013
     N013 --> N014
-    N010 -->|"false"| N014
     N014 --> N015
-    N015 -->|"true"| N016
+    N010 -->|"false"| N015
+    N015 --> N016
     N016 -->|"true"| N017
-    N016 -->|"false"| N018
-    N017 --> N019
-    N018 --> N019
-    N015 -->|"false"| N020
-    N020 --> N021
+    N017 -->|"true"| N018
+    N017 -->|"false"| N019
+    N018 --> N020
+    N019 --> N020
+    N016 -->|"false"| N021
+    N021 --> N022
 ```
 
 ## _parse_verify_args(...)
