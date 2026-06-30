@@ -1,0 +1,17 @@
+# Maps a contributor's git identity to an ISO-639-1 language code, consumed by
+# scripts/plan_language_context.py (SessionStart hook) to pin operator-facing
+# output language to the active contributor (the person driving the current
+# session), not a fixed project owner.
+#
+# Resolution order (first match wins):
+#   1. CLAUDE_MD_OPERATOR_LANGUAGE environment variable (highest precedence).
+#   2. git user.email matched against a key below.
+#   3. git user.name matched against a key below (case-insensitive).
+#   4. No match: the hook emits a portable question handoff; it never silently
+#      defaults to an owner language or to English.
+#
+# Keys are compared after lowercasing both sides, so entries should be written
+# lowercase. CODEOWNERS-gated (see .github/CODEOWNERS): edits land only behind
+# code-owner review. Generalizes the older .github/owners.toml owner-to-language
+# map. Refs #2180.
+"31282861+tvna@users.noreply.github.com" = "ja"

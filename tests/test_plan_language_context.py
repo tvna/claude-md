@@ -4,12 +4,13 @@ The ``scripts/`` directory is added to ``sys.path`` via the ``pythonpath``
 key under ``[tool.pytest.ini_options]`` in ``pyproject.toml``.
 
 Mirrors the table-driven style of ``tests/test_preflight_non_ascii.py``.
-Pure functions get focused unit tests; the file-IO boundary in
-:func:`plan_language_context.main` is exercised by writing fixture
-files into a ``tmp_path`` repo root and pointing the hook at it via
-the ``CLAUDE_PROJECT_DIR`` env var.
+Pure functions get focused unit tests; the file-IO and git-identity
+boundary in :func:`plan_language_context.main` is exercised by writing a
+fixture ``contributors.toml`` into a ``tmp_path`` repo root, pointing the
+hook at it via ``CLAUDE_PROJECT_DIR``, and monkeypatching
+:func:`plan_language_context._git_identity`.
 
-Refs #211, #606.
+Refs #211, #606, #2180.
 """
 
 from __future__ import annotations
@@ -22,104 +23,47 @@ import plan_language_context as plc
 import pytest
 
 pytestmark = pytest.mark.shard_ci_ops
-# ---------------------------------------------------------------------------
-# parse_codeowners
-# ---------------------------------------------------------------------------
 
-
-class TestParseCodeowners:
-    def test_skips_comments_and_blank_lines(self) -> None:
-        text = "\n".join(
-            [
-                "# top comment",
-                "",
-                "   ",
-                "*  @alice",
-                "    # indented comment",
-                "docs/  @bob @alice",
-            ]
-        )
-        assert plc.parse_codeowners(text) == [
-            ("*", ["@alice"]),
-            ("docs/", ["@bob", "@alice"]),
-        ]
-
-    def test_keeps_at_prefix(self) -> None:
-        rules = plc.parse_codeowners("*  @tvna")
-        assert rules == [("*", ["@tvna"])]
-
-    def test_drops_non_at_tokens(self) -> None:
-        # An email-style entry has no leading '@'; CODEOWNERS allows it
-        # but our resolver only matches handle-prefixed entries.
-        rules = plc.parse_codeowners("*  user@example.com @alice")
-        assert rules == [("*", ["@alice"])]
-
-    def test_pattern_without_owners_is_dropped(self) -> None:
-        # CODEOWNERS treats `path/` with no owner as "unset"; for our
-        # purposes there's no handle to count, so the line is skipped.
-        assert plc.parse_codeowners("docs/") == []
-
-    def test_empty_input(self) -> None:
-        assert plc.parse_codeowners("") == []
+# A generic non-human git identity, used to prove the resolver treats an
+# unmapped identity as "ask", never as a silent owner/English default.
+_BOT_EMAIL = "automation@ci.example.invalid"
+_BOT_NAME = "CI Bot"
 
 
 # ---------------------------------------------------------------------------
-# primary_owner
+# load_contributor_languages
 # ---------------------------------------------------------------------------
 
 
-class TestPrimaryOwner:
-    def test_single_owner_repo(self) -> None:
-        rules = [("a", ["@tvna"]), ("b", ["@tvna"])]
-        assert plc.primary_owner(rules) == "@tvna"
-
-    def test_most_frequent_wins(self) -> None:
-        rules = [
-            ("a", ["@alice"]),
-            ("b", ["@bob"]),
-            ("c", ["@alice"]),
-        ]
-        assert plc.primary_owner(rules) == "@alice"
-
-    def test_tie_broken_by_first_appearance(self) -> None:
-        rules = [("a", ["@alice"]), ("b", ["@bob"])]
-        assert plc.primary_owner(rules) == "@alice"
-
-    def test_empty_rules_returns_none(self) -> None:
-        assert plc.primary_owner([]) is None
-
-    def test_multi_owner_line_counted_per_handle(self) -> None:
-        rules = [
-            ("a", ["@alice", "@bob"]),
-            ("b", ["@bob"]),
-        ]
-        assert plc.primary_owner(rules) == "@bob"
-
-
-# ---------------------------------------------------------------------------
-# load_owner_languages
-# ---------------------------------------------------------------------------
-
-
-class TestLoadOwnerLanguages:
+class TestLoadContributorLanguages:
     def test_happy_path(self) -> None:
-        text = '"@tvna" = "ja"\n"@alice" = "en"\n'
-        assert plc.load_owner_languages(text) == {"@tvna": "ja", "@alice": "en"}
+        text = '"alice@example.com" = "en"\n"bob@example.com" = "fr"\n'
+        assert plc.load_contributor_languages(text) == {
+            "alice@example.com": "en",
+            "bob@example.com": "fr",
+        }
+
+    def test_lowercases_keys(self) -> None:
+        # Keys are lowercased so git-identity lookups are case-insensitive.
+        text = '"Alice@Example.COM" = "en"\n"Jane Doe" = "ja"\n'
+        assert plc.load_contributor_languages(text) == {
+            "alice@example.com": "en",
+            "jane doe": "ja",
+        }
 
     def test_empty_text(self) -> None:
-        assert plc.load_owner_languages("") == {}
+        assert plc.load_contributor_languages("") == {}
 
     def test_whitespace_only(self) -> None:
-        assert plc.load_owner_languages("   \n  \n") == {}
+        assert plc.load_contributor_languages("   \n  \n") == {}
 
     def test_drops_non_string_values(self) -> None:
-        # Integer values are dropped; only string values are kept.
-        text = '"@tvna" = "ja"\n"@bot" = 42\n'
-        assert plc.load_owner_languages(text) == {"@tvna": "ja"}
+        text = '"alice@example.com" = "en"\n"count" = 42\n'
+        assert plc.load_contributor_languages(text) == {"alice@example.com": "en"}
 
     def test_comments_are_ignored(self) -> None:
-        text = '# comment\n"@tvna" = "ja"\n'
-        assert plc.load_owner_languages(text) == {"@tvna": "ja"}
+        text = '# comment\n"alice@example.com" = "en"\n'
+        assert plc.load_contributor_languages(text) == {"alice@example.com": "en"}
 
 
 # ---------------------------------------------------------------------------
@@ -128,18 +72,63 @@ class TestLoadOwnerLanguages:
 
 
 class TestResolveLanguage:
-    def test_happy_path(self) -> None:
-        codeowners = "*  @tvna\n"
-        owners = '"@tvna" = "ja"\n'
-        assert plc.resolve_language(codeowners, owners) == ("@tvna", "ja")
+    def test_env_takes_priority(self) -> None:
+        # The env var wins even when the toml would resolve a different code.
+        source, iso = plc.resolve_language(
+            "de", "alice@example.com", "Alice", '"alice@example.com" = "en"\n'
+        )
+        assert (source, iso) == ("env", "de")
 
-    def test_owner_not_in_owners_toml(self) -> None:
-        owner, iso = plc.resolve_language("*  @nobody\n", '"@tvna" = "ja"\n')
-        assert owner == "@nobody"
+    def test_env_whitespace_is_stripped(self) -> None:
+        source, iso = plc.resolve_language("  fr  ", None, None, "")
+        assert (source, iso) == ("env", "fr")
+
+    def test_blank_env_falls_through_to_toml(self) -> None:
+        source, iso = plc.resolve_language(
+            "   ", "alice@example.com", None, '"alice@example.com" = "en"\n'
+        )
+        assert (source, iso) == ("email", "en")
+
+    def test_email_match(self) -> None:
+        source, iso = plc.resolve_language(
+            None, "alice@example.com", "Alice", '"alice@example.com" = "en"\n'
+        )
+        assert (source, iso) == ("email", "en")
+
+    def test_email_match_is_case_insensitive(self) -> None:
+        source, iso = plc.resolve_language(
+            None, "Alice@Example.COM", None, '"alice@example.com" = "en"\n'
+        )
+        assert (source, iso) == ("email", "en")
+
+    def test_name_match_when_email_absent(self) -> None:
+        source, iso = plc.resolve_language(
+            None, None, "Jane Doe", '"jane doe" = "ja"\n'
+        )
+        assert (source, iso) == ("name", "ja")
+
+    def test_name_match_is_case_insensitive(self) -> None:
+        source, iso = plc.resolve_language(
+            None, None, "JANE DOE", '"jane doe" = "ja"\n'
+        )
+        assert (source, iso) == ("name", "ja")
+
+    def test_email_preferred_over_name(self) -> None:
+        toml = '"alice@example.com" = "en"\n"alice" = "fr"\n'
+        source, iso = plc.resolve_language(
+            None, "alice@example.com", "Alice", toml
+        )
+        assert (source, iso) == ("email", "en")
+
+    def test_unmapped_identity_returns_none(self) -> None:
+        source, iso = plc.resolve_language(
+            None, _BOT_EMAIL, _BOT_NAME, '"alice@example.com" = "en"\n'
+        )
+        assert source is None
         assert iso is None
 
-    def test_empty_codeowners(self) -> None:
-        assert plc.resolve_language("", '"@tvna" = "ja"\n') == (None, None)
+    def test_no_identity_and_no_env_returns_none(self) -> None:
+        assert plc.resolve_language(None, None, None, "") == (None, None)
 
 
 # ---------------------------------------------------------------------------
@@ -149,44 +138,77 @@ class TestResolveLanguage:
 
 class TestBuildContextMessage:
     def test_contains_plan_path_and_iso(self) -> None:
-        msg = plc.build_context_message("@tvna", "ja")
+        msg = plc.build_context_message("email", "ja")
         assert "/tmp/claude-plans/" in msg
         assert "'ja'" in msg
-        assert "@tvna" in msg
+
+    def test_names_active_contributor_and_toml_source(self) -> None:
+        msg = plc.build_context_message("email", "ja")
+        assert "active contributor" in msg
+        assert "contributors.toml" in msg
 
     def test_contains_github_carveout(self) -> None:
-        msg = plc.build_context_message("@tvna", "ja")
-        # The carve-out must name the tool prefix AND the ASCII rule so
-        # the model cannot misread the policy as relaxing the ASCII gate.
+        # The carve-out must name the tool prefix AND the ASCII rule so the
+        # model cannot misread the policy as relaxing the ASCII gate.
+        msg = plc.build_context_message("name", "ja")
         assert "mcp__github__" in msg
         assert "ASCII" in msg
         assert "preflight_non_ascii.py" in msg
 
     def test_contains_normative_must(self) -> None:
-        # Refs #269: descriptive "write ... in" wording let agents drift
-        # back to English; the message must read as binding.
-        msg = plc.build_context_message("@tvna", "ja")
+        msg = plc.build_context_message("env", "ja")
         assert "MUST" in msg
 
+    def test_blocks_runtime_freetext_override(self) -> None:
+        # Refs #2180: the policy is authoritative and must resist runtime
+        # free-text override smuggling, not just an English default.
+        msg = plc.build_context_message("email", "ja")
+        assert "MUST NOT" in msg
+        assert "runtime free-text" in msg
+
     def test_contains_self_correction_rule(self) -> None:
-        # Refs #269: mid-output drift must trigger a STOP-and-re-emit,
-        # not a silent continuation in the wrong language.
-        msg = plc.build_context_message("@tvna", "ja")
+        msg = plc.build_context_message("email", "ja")
         assert "STOP" in msg
         assert "drift" in msg
 
-    def test_references_owners_toml(self) -> None:
-        msg = plc.build_context_message("@tvna", "ja")
-        assert "owners.toml" in msg
-
     def test_scope_covers_execution_not_only_plan_mode(self) -> None:
-        # Refs #817: the binding scope must cover operator-facing chat in
-        # every mode (planning AND execution), not plan mode alone; the
-        # plan-mode-only scope was the gap that let execution-turn tool
-        # narration drift back to English.
-        msg = plc.build_context_message("@tvna", "ja")
+        msg = plc.build_context_message("email", "ja")
         assert "every mode" in msg
         assert "execution" in msg
+
+    def test_no_double_hyphen_separator(self) -> None:
+        # Refs #2180: the portability scanner forbids the double-hyphen prose
+        # separator; the message uses ';', ',' or parentheses instead. The
+        # separator is built dynamically so this source stays scan-clean.
+        double_hyphen = " " + "--" + " "
+        assert double_hyphen not in plc.build_context_message("email", "ja")
+
+
+# ---------------------------------------------------------------------------
+# build_handoff_message
+# ---------------------------------------------------------------------------
+
+
+class TestBuildHandoffMessage:
+    def test_directs_askuserquestion(self) -> None:
+        msg = plc.build_handoff_message()
+        assert "AskUserQuestion" in msg
+
+    def test_forbids_silent_default(self) -> None:
+        msg = plc.build_handoff_message()
+        assert "Do NOT silently default" in msg
+
+    def test_carries_github_carveout(self) -> None:
+        msg = plc.build_handoff_message()
+        assert "mcp__github__" in msg
+        assert "ASCII" in msg
+
+    def test_is_ascii(self) -> None:
+        plc.build_handoff_message().encode("ascii")
+
+    def test_no_double_hyphen_separator(self) -> None:
+        double_hyphen = " " + "--" + " "
+        assert double_hyphen not in plc.build_handoff_message()
 
 
 # ---------------------------------------------------------------------------
@@ -195,41 +217,47 @@ class TestBuildContextMessage:
 
 
 class TestDecide:
-    def test_happy_path_emits_session_start_output(self) -> None:
-        out = plc.decide("*  @tvna\n", '"@tvna" = "ja"\n')
-        assert out is not None
+    def test_resolved_emits_context_message(self) -> None:
+        out = plc.decide(
+            None, "alice@example.com", "Alice", '"alice@example.com" = "ja"\n'
+        )
         assert out["hookSpecificOutput"]["hookEventName"] == "SessionStart"
-        assert "ja" in out["hookSpecificOutput"]["additionalContext"]
+        ctx = out["hookSpecificOutput"]["additionalContext"]
+        assert "'ja'" in ctx
+        assert "active contributor" in ctx
 
-    def test_unmapped_owner_returns_none(self) -> None:
-        assert plc.decide("*  @nobody\n", '"@tvna" = "ja"\n') is None
+    def test_env_override_emits_context_message(self) -> None:
+        out = plc.decide("ja", None, None, "")
+        ctx = out["hookSpecificOutput"]["additionalContext"]
+        assert "'ja'" in ctx
 
-    def test_empty_codeowners_returns_none(self) -> None:
-        assert plc.decide("", '"@tvna" = "ja"\n') is None
+    def test_unmapped_identity_emits_handoff(self) -> None:
+        out = plc.decide(None, _BOT_EMAIL, _BOT_NAME, '"alice@example.com" = "en"\n')
+        ctx = out["hookSpecificOutput"]["additionalContext"]
+        assert "AskUserQuestion" in ctx
+        assert "Do NOT silently default" in ctx
 
-    def test_empty_owners_toml_returns_none(self) -> None:
-        assert plc.decide("*  @tvna\n", "") is None
+    def test_no_metadata_emits_handoff(self) -> None:
+        out = plc.decide(None, None, None, "")
+        assert "AskUserQuestion" in out["hookSpecificOutput"]["additionalContext"]
 
 
 # ---------------------------------------------------------------------------
-# main (file-IO boundary)
+# main (file-IO and git-identity boundary)
 # ---------------------------------------------------------------------------
 
 
 class TestMain:
     def _setup_repo(
-        self,
-        tmp_path: Path,
-        codeowners: str | None,
-        owners_toml: str | None,
+        self, tmp_path: Path, contributors_toml: str | None
     ) -> Path:
-        """Build a fake repo root with optional config files."""
+        """Build a fake repo root with an optional contributors.toml."""
         gh = tmp_path / ".github"
         gh.mkdir()
-        if codeowners is not None:
-            (gh / "CODEOWNERS").write_text(codeowners, encoding="utf-8")
-        if owners_toml is not None:
-            (gh / "owners.toml").write_text(owners_toml, encoding="utf-8")
+        if contributors_toml is not None:
+            (gh / "contributors.toml").write_text(
+                contributors_toml, encoding="utf-8"
+            )
         return tmp_path
 
     def _run(
@@ -238,26 +266,32 @@ class TestMain:
         capsys: pytest.CaptureFixture[str],
         root: Path,
         *,
+        email: str | None = None,
+        name: str | None = None,
+        env_lang: str | None = None,
         payload: str = "",
-        use_env: bool = True,
     ) -> tuple[int, str, str]:
-        if use_env:
-            monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(root))
+        monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(root))
+        if env_lang is None:
+            monkeypatch.delenv("CLAUDE_MD_OPERATOR_LANGUAGE", raising=False)
         else:
-            monkeypatch.delenv("CLAUDE_PROJECT_DIR", raising=False)
+            monkeypatch.setenv("CLAUDE_MD_OPERATOR_LANGUAGE", env_lang)
+        monkeypatch.setattr(plc, "_git_identity", lambda _root: (email, name))
         monkeypatch.setattr("sys.stdin", io.StringIO(payload))
         rc = plc.main([])
         captured = capsys.readouterr()
         return rc, captured.out, captured.err
 
-    def test_happy_path_emits_session_start_json(
+    def test_email_match_emits_context_json(
         self,
         monkeypatch: pytest.MonkeyPatch,
         capsys: pytest.CaptureFixture[str],
         tmp_path: Path,
     ) -> None:
-        root = self._setup_repo(tmp_path, "*  @tvna\n", '"@tvna" = "ja"\n')
-        rc, out, err = self._run(monkeypatch, capsys, root)
+        root = self._setup_repo(tmp_path, '"alice@example.com" = "ja"\n')
+        rc, out, err = self._run(
+            monkeypatch, capsys, root, email="alice@example.com"
+        )
         assert rc == 0
         assert err == ""
         decision = json.loads(out)
@@ -266,78 +300,69 @@ class TestMain:
         assert "'ja'" in ctx
         assert "mcp__github__" in ctx
 
-    def test_codex_session_start_uses_cwd_event_when_claude_env_absent(
+    def test_env_override_wins(
         self,
         monkeypatch: pytest.MonkeyPatch,
         capsys: pytest.CaptureFixture[str],
         tmp_path: Path,
     ) -> None:
-        root = self._setup_repo(tmp_path, "*  @tvna\n", '"@tvna" = "ja"\n')
-        payload = json.dumps(
-            {"hook_event_name": "SessionStart", "cwd": str(root), "source": "startup"}
-        )
+        root = self._setup_repo(tmp_path, '"alice@example.com" = "en"\n')
         rc, out, err = self._run(
             monkeypatch,
             capsys,
             root,
-            payload=payload,
-            use_env=False,
+            email="alice@example.com",
+            env_lang="ja",
         )
         assert rc == 0
         assert err == ""
-        decision = json.loads(out)
-        assert decision["hookSpecificOutput"]["hookEventName"] == "SessionStart"
+        ctx = json.loads(out)["hookSpecificOutput"]["additionalContext"]
+        assert "'ja'" in ctx
 
-    def test_claude_project_dir_wins_over_codex_cwd_event(
+    def test_unmapped_identity_emits_handoff(
         self,
         monkeypatch: pytest.MonkeyPatch,
         capsys: pytest.CaptureFixture[str],
         tmp_path: Path,
     ) -> None:
-        (tmp_path / "env-root").mkdir()
-        (tmp_path / "event-root").mkdir()
-        root = self._setup_repo(tmp_path / "env-root", "*  @tvna\n", '"@tvna" = "ja"\n')
-        codex_root = self._setup_repo(
-            tmp_path / "event-root",
-            "*  @nobody\n",
-            '"@nobody" = "en"\n',
+        root = self._setup_repo(tmp_path, '"alice@example.com" = "en"\n')
+        rc, out, err = self._run(
+            monkeypatch, capsys, root, email=_BOT_EMAIL, name=_BOT_NAME
         )
-        payload = json.dumps(
-            {
-                "hook_event_name": "SessionStart",
-                "cwd": str(codex_root),
-                "source": "startup",
-            }
-        )
-        rc, out, err = self._run(monkeypatch, capsys, root, payload=payload)
         assert rc == 0
         assert err == ""
-        assert "'ja'" in json.loads(out)["hookSpecificOutput"]["additionalContext"]
+        ctx = json.loads(out)["hookSpecificOutput"]["additionalContext"]
+        assert "AskUserQuestion" in ctx
 
-    def test_missing_codeowners_fails_open(
+    def test_missing_contributors_toml_emits_handoff(
         self,
         monkeypatch: pytest.MonkeyPatch,
         capsys: pytest.CaptureFixture[str],
         tmp_path: Path,
     ) -> None:
-        root = self._setup_repo(tmp_path, None, '"@tvna" = "ja"\n')
-        rc, out, err = self._run(monkeypatch, capsys, root)
+        # Absence is not an error: with no env value and no toml the hook
+        # still emits the question handoff rather than failing.
+        root = self._setup_repo(tmp_path, None)
+        rc, out, err = self._run(
+            monkeypatch, capsys, root, email="alice@example.com"
+        )
         assert rc == 0
-        assert out == ""
-        assert "::error::" in err
-        assert "cannot read config" in err
+        assert err == ""
+        ctx = json.loads(out)["hookSpecificOutput"]["additionalContext"]
+        assert "AskUserQuestion" in ctx
 
-    def test_missing_owners_toml_fails_open(
+    def test_missing_toml_with_env_emits_context(
         self,
         monkeypatch: pytest.MonkeyPatch,
         capsys: pytest.CaptureFixture[str],
         tmp_path: Path,
     ) -> None:
-        root = self._setup_repo(tmp_path, "*  @tvna\n", None)
-        rc, out, err = self._run(monkeypatch, capsys, root)
+        root = self._setup_repo(tmp_path, None)
+        rc, out, err = self._run(monkeypatch, capsys, root, env_lang="ja")
         assert rc == 0
-        assert out == ""
-        assert "::error::" in err
+        assert err == ""
+        ctx = json.loads(out)["hookSpecificOutput"]["additionalContext"]
+        assert "'ja'" in ctx
 
     def test_malformed_toml_fails_open(
         self,
@@ -345,21 +370,146 @@ class TestMain:
         capsys: pytest.CaptureFixture[str],
         tmp_path: Path,
     ) -> None:
-        root = self._setup_repo(tmp_path, "*  @tvna\n", "[invalid\n")
-        rc, out, err = self._run(monkeypatch, capsys, root)
+        root = self._setup_repo(tmp_path, "[invalid\n")
+        rc, out, err = self._run(
+            monkeypatch, capsys, root, email="alice@example.com"
+        )
         assert rc == 0
         assert out == ""
         assert "::error::" in err
-        assert "cannot parse owners.toml" in err
+        assert "cannot parse contributors.toml" in err
 
-    def test_unmapped_owner_emits_nothing(
+    def test_codex_cwd_event_used_when_claude_env_absent(
         self,
         monkeypatch: pytest.MonkeyPatch,
         capsys: pytest.CaptureFixture[str],
         tmp_path: Path,
     ) -> None:
-        root = self._setup_repo(tmp_path, "*  @nobody\n", '"@tvna" = "ja"\n')
-        rc, out, err = self._run(monkeypatch, capsys, root)
+        root = self._setup_repo(tmp_path, '"alice@example.com" = "ja"\n')
+        monkeypatch.delenv("CLAUDE_PROJECT_DIR", raising=False)
+        monkeypatch.delenv("CLAUDE_MD_OPERATOR_LANGUAGE", raising=False)
+        monkeypatch.setattr(
+            plc, "_git_identity", lambda _root: ("alice@example.com", None)
+        )
+        payload = json.dumps(
+            {"hook_event_name": "SessionStart", "cwd": str(root), "source": "startup"}
+        )
+        monkeypatch.setattr("sys.stdin", io.StringIO(payload))
+        rc = plc.main([])
+        captured = capsys.readouterr()
+        assert rc == 0
+        assert captured.err == ""
+        ctx = json.loads(captured.out)["hookSpecificOutput"]["additionalContext"]
+        assert "'ja'" in ctx
+
+    def test_malformed_stdin_fails_open(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+        tmp_path: Path,
+    ) -> None:
+        root = self._setup_repo(tmp_path, '"alice@example.com" = "ja"\n')
+        rc, out, err = self._run(
+            monkeypatch, capsys, root, email="alice@example.com", payload="{not json"
+        )
         assert rc == 0
         assert out == ""
-        assert err == ""
+        assert "::error::" in err
+        assert "malformed stdin JSON" in err
+
+    def test_nondict_stdin_fails_open(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+        tmp_path: Path,
+    ) -> None:
+        # Valid JSON that is not an object hits the ValueError guard in
+        # _read_event_stdin and fails open with the malformed-stdin diagnostic.
+        root = self._setup_repo(tmp_path, '"alice@example.com" = "ja"\n')
+        rc, out, err = self._run(
+            monkeypatch, capsys, root, email="alice@example.com", payload="[1, 2]"
+        )
+        assert rc == 0
+        assert out == ""
+        assert "malformed stdin JSON" in err
+
+    def test_unreadable_contributors_toml_fails_open(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+        tmp_path: Path,
+    ) -> None:
+        # A contributors.toml that is a directory raises IsADirectoryError (an
+        # OSError) on read; main fails open with the read diagnostic.
+        gh = tmp_path / ".github"
+        gh.mkdir()
+        (gh / "contributors.toml").mkdir()
+        rc, out, err = self._run(monkeypatch, capsys, tmp_path, email="alice@example.com")
+        assert rc == 0
+        assert out == ""
+        assert "cannot read contributors.toml" in err
+
+
+# ---------------------------------------------------------------------------
+# _project_root
+# ---------------------------------------------------------------------------
+
+
+class TestProjectRoot:
+    def test_env_var_wins(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("CLAUDE_PROJECT_DIR", "/tmp/env-root")
+        assert plc._project_root({"cwd": "/tmp/event-root"}) == Path("/tmp/env-root")
+
+    def test_event_cwd_used_when_env_absent(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv("CLAUDE_PROJECT_DIR", raising=False)
+        assert plc._project_root({"cwd": "/tmp/event-root"}) == Path("/tmp/event-root")
+
+    def test_falls_back_to_cwd(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # No env var and no usable event cwd: the resolver falls back to the
+        # process working directory.
+        monkeypatch.delenv("CLAUDE_PROJECT_DIR", raising=False)
+        assert plc._project_root(None) == Path.cwd()
+        assert plc._project_root({"hook_event_name": "SessionStart"}) == Path.cwd()
+
+
+# ---------------------------------------------------------------------------
+# _git_identity (real subprocess boundary)
+# ---------------------------------------------------------------------------
+
+
+class TestGitIdentity:
+    def test_reads_local_git_config(self, tmp_path: Path) -> None:
+        import subprocess
+
+        subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+        subprocess.run(
+            ["git", "-C", str(tmp_path), "config", "user.email", "x@example.com"],
+            check=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(tmp_path), "config", "user.name", "X Y"], check=True
+        )
+        assert plc._git_identity(tmp_path) == ("x@example.com", "X Y")
+
+    def test_missing_value_returns_none(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # A non-zero git exit (e.g. the key is unset) yields None for the field.
+        class _Result:
+            returncode = 1
+            stdout = ""
+
+        monkeypatch.setattr(plc.subprocess, "run", lambda *a, **k: _Result())
+        assert plc._git_identity(Path()) == (None, None)
+
+    def test_subprocess_error_returns_none(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # git not on PATH (OSError) degrades to None rather than raising.
+        def _boom(*_a: object, **_k: object) -> None:
+            raise OSError("git not found")
+
+        monkeypatch.setattr(plc.subprocess, "run", _boom)
+        assert plc._git_identity(Path()) == (None, None)

@@ -133,18 +133,20 @@ universal lane.
 ### 2.4 What "project-local" means here
 
 A project-local rule is anything the downstream consumer must define
-for themselves. The classic example is `.github/owners.yaml` and
+for themselves. The classic example is `.github/contributors.toml` and
 `.github/CODEOWNERS`: this repository defines the schema and the
 harness (`scripts/plan_language_context.py`), but the actual
-ownership-to-language mapping is repository-local and would differ in
+contributor-to-language mapping is repository-local and would differ in
 every consumer.
 
 This repository does not enforce, review, or ship project-local
 material. The universal text simply requires that the consumer set
 it up ("Write operator-facing output; chat responses in every mode
-and plan artifacts; in the primary project owner's native language.
-If the project lacks ownership-language metadata, prepare it before
-relying on this rule.").
+and plan artifacts; in the active contributor's native language: the
+person driving the current session, not a fixed project owner. If the
+contributor's language is unknown, use a portable question handoff to
+ask, then honor the answer. If the project lacks contributor-language
+metadata, prepare it before relying on this rule.").
 
 ### 2.5 Glossary
 
