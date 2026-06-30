@@ -2,53 +2,17 @@
 
 This file is generated from `scripts/plan_language_context.py` by `python3 scripts/script_ast_graph.py all-doc`. Do not edit it by hand: content under `docs/generated/scripts/` is owned by the post-merge automation (refs #1540); update the source script instead.
 
-## parse_codeowners(...)
+## load_contributor_languages(...)
 
 ```mermaid
 flowchart TD
-    N001["parse_codeowners(...)"]
-    N002["rules = []"]
-    N003["for raw in text.splitlines():     line = raw.strip()     if not line or line.startswith('<str>'):         continue     parts = line.split()     if len(parts) < 2:         continue     pattern, handles = (parts[0], [p for p in parts[1:] if p.startswith('<str>')])     if handles:         rules.append((pattern, handles))"]
-    N004["return rules"]
-    N001 -->|"start"| N002
-    N002 --> N003
-    N003 --> N004
-```
-
-## primary_owner(...)
-
-```mermaid
-flowchart TD
-    N001["primary_owner(...)"]
-    N002["counts = {}"]
-    N003["order = []"]
-    N004["for _pattern, handles in rules:     for handle in handles:         if handle not in counts:             order.append(handle)         counts[handle] = counts.get(handle, 0) + 1"]
-    N005["if not counts"]
-    N006["return None"]
-    N007["max_count = max(...)"]
-    N008["for handle in order:     if counts[handle] == max_count:         return handle"]
-    N009["return None"]
-    N001 -->|"start"| N002
-    N002 --> N003
-    N003 --> N004
-    N004 --> N005
-    N005 -->|"true"| N006
-    N005 -->|"false"| N007
-    N007 --> N008
-    N008 --> N009
-```
-
-## load_owner_languages(...)
-
-```mermaid
-flowchart TD
-    N001["load_owner_languages(...)"]
+    N001["load_contributor_languages(...)"]
     N002["if not toml_text.strip()"]
     N003["return {}"]
     N004["import tomllib"]
     N005["data = loads(...)"]
     N006["out = {}"]
-    N007["for key, value in data.items():     if isinstance(key, str) and isinstance(value, str):         out[key] = value"]
+    N007["for key, value in data.items():     if isinstance(key, str) and isinstance(value, str):         out[key.lower()] = value"]
     N008["return out"]
     N001 -->|"start"| N002
     N002 -->|"true"| N003
@@ -64,15 +28,15 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["resolve_language(...)"]
-    N002["owner = primary_owner(...)"]
-    N003["if owner is None"]
-    N004["return (None, None)"]
-    N005["languages = load_owner_languages(...)"]
-    N006["return (owner, languages.get(owner))"]
+    N002["if env_lang and env_lang.strip()"]
+    N003["return ('<str>', env_lang.strip())"]
+    N004["mapping = load_contributor_languages(...)"]
+    N005["for source, identity in (('<str>', git_email), ('<str>', git_name)):     if identity and identity.strip():         iso = mapping.get(identity.strip().lower())         if iso:             return (source, iso)"]
+    N006["return (None, None)"]
     N001 -->|"start"| N002
-    N002 --> N003
-    N003 -->|"true"| N004
-    N003 -->|"false"| N005
+    N002 -->|"true"| N003
+    N002 -->|"false"| N004
+    N004 --> N005
     N005 --> N006
 ```
 
@@ -81,7 +45,16 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["build_context_message(...)"]
-    N002["return f'<str>{owner}<str>{iso}<str>{iso}<str>'"]
+    N002["return f'<str>{source}<str>{iso}<str>{iso}<str>'"]
+    N001 -->|"start"| N002
+```
+
+## build_handoff_message(...)
+
+```mermaid
+flowchart TD
+    N001["build_handoff_message(...)"]
+    N002["return '<str>'"]
     N001 -->|"start"| N002
 ```
 
@@ -90,14 +63,17 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["decide(...)"]
-    N002["(owner, iso) = resolve_language(...)"]
-    N003["if owner is None or iso is None"]
-    N004["return None"]
-    N005["return {'<str>': {'<str>': '<str>', '<str>': build_context_message(owner, iso)}}"]
+    N002["(source, iso) = resolve_language(...)"]
+    N003["if source is not None and iso is not None"]
+    N004["message = build_context_message(...)"]
+    N005["message = build_handoff_message(...)"]
+    N006["return {'<str>': {'<str>': '<str>', '<str>': message}}"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 -->|"true"| N004
     N003 -->|"false"| N005
+    N004 --> N006
+    N005 --> N006
 ```
 
 ## _project_root(...)
@@ -122,6 +98,17 @@ flowchart TD
     N007 -->|"true"| N008
     N007 -->|"false"| N009
     N005 -->|"false"| N009
+```
+
+## _git_identity(...)
+
+```mermaid
+flowchart TD
+    N001["_git_identity(...)"]
+    N002["def _read(key: str) -> str | None:     cmd = ['<str>', '<str>', '<str>', key]     try:         result = subprocess.run(cmd, cwd=str(root), capture_output=True, text=True, timeout=_GIT_TIMEOUT_SECONDS, check=False)     except (OSError, subprocess.SubprocessError):         return None     if result.returncode != 0:         return None     value = result.stdout.strip()     return value or None"]
+    N003["return (_read('<str>'), _read('<str>'))"]
+    N001 -->|"start"| N002
+    N002 --> N003
 ```
 
 ## _read_event_stdin(...)
@@ -157,19 +144,23 @@ flowchart TD
     N006["print(...)"]
     N007["return 0"]
     N008["root = _project_root(...)"]
-    N009["try"]
-    N010["codeowners_text = read_text(...)"]
-    N011["owners_toml_text = read_text(...)"]
-    N012["except OSError"]
-    N013["print(...)"]
-    N014["return 0"]
-    N015["try"]
-    N016["decision = decide(...)"]
-    N017["except Exception"]
-    N018["print(...)"]
-    N019["return 0"]
-    N020["emit_decision(...)"]
-    N021["return 0"]
+    N009["toml_path = root / _CONTRIBUTORS_TOML_PATH"]
+    N010["try"]
+    N011["toml_text = read_text(...)"]
+    N012["except FileNotFoundError"]
+    N013["toml_text = '<str>'"]
+    N014["except OSError"]
+    N015["print(...)"]
+    N016["return 0"]
+    N017["env_lang = get(...)"]
+    N018["(git_email, git_name) = _git_identity(...)"]
+    N019["try"]
+    N020["decision = decide(...)"]
+    N021["except Exception"]
+    N022["print(...)"]
+    N023["return 0"]
+    N024["emit_decision(...)"]
+    N025["return 0"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 -->|"try"| N004
@@ -178,16 +169,21 @@ flowchart TD
     N006 --> N007
     N004 --> N008
     N008 --> N009
-    N009 -->|"try"| N010
-    N010 --> N011
-    N009 -->|"raises"| N012
+    N009 --> N010
+    N010 -->|"try"| N011
+    N010 -->|"raises"| N012
     N012 --> N013
-    N013 --> N014
-    N011 --> N015
-    N015 -->|"try"| N016
-    N015 -->|"raises"| N017
+    N010 -->|"raises"| N014
+    N014 --> N015
+    N015 --> N016
+    N011 --> N017
+    N013 --> N017
     N017 --> N018
     N018 --> N019
-    N016 --> N020
-    N020 --> N021
+    N019 -->|"try"| N020
+    N019 -->|"raises"| N021
+    N021 --> N022
+    N022 --> N023
+    N020 --> N024
+    N024 --> N025
 ```
