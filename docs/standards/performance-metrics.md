@@ -47,12 +47,13 @@ Reading the committed compiled artifacts; rather than recompiling; means metric 
 
 ### What it emits
 
-One JSON record per run. Initial schema (`schema_version: "1"`); Phase 3 may extend additively, but field names already used here are stable.
+One JSON record per run. Current schema is `schema_version: "3"` (history below); Phase 3 may extend additively, but field names already used here are stable.
 
 ```json
 {
-  "schema_version": "1",
+  "schema_version": "3",
   "compiled_source_sha": "<40-char git SHA on main>",
+  "compiled_source_version": "<apm.yml: version at that SHA, e.g. 1.2.0>",
   "benchmark_spec_version": "v0",
   "harness_version": "<sha or semver of the harness script>",
   "run_timestamp_utc": "<ISO 8601, e.g. 2026-05-20T12:34:56Z>",
@@ -77,7 +78,17 @@ One JSON record per run. Initial schema (`schema_version: "1"`); Phase 3 may ext
 }
 ```
 
+`compiled_source_sha` is the canonical immutable reference (a record is keyed by it); `compiled_source_version` is the human-readable companion, the value of `apm.yml: version` at that SHA under the semantic-versioning scheme (see [`docs/prd/semantic-versioning-universal-text.md`](../prd/semantic-versioning-universal-text.md) and the READMEs' *Versioning* section). The SHA stays authoritative because the version label is only as trustworthy as the bump discipline; the version lets a reader cite "v1.2.0 -> v2.0.0" in a before/after instead of two 40-char hashes.
+
 Phase 3's `docs/performance-baseline.md` quotes these fields by name; renames require a `schema_version` bump and a migration note here.
+
+#### Schema version history
+
+`schema_version` is a string. Each bump is additive and recorded here:
+
+- **`"1"`** - initial schema (PR [#86](https://github.com/tvna/claude-md/pull/86)): `compiled_source_sha`-keyed record with `metric_a` / `metric_b` / `environment`.
+- **`"2"`** - *reserved, never shipped.* Allocated to [#88](https://github.com/tvna/claude-md/issues/88) (benchmark-input anonymization) while that work was open; #88 was later closed `not_planned`. The number is intentionally left unused rather than recycled, so a record stamped `"2"` from any draft remains unambiguous and a future revival of that work has a clean slot.
+- **`"3"`** - adds `compiled_source_version` (this change; [#89](https://github.com/tvna/claude-md/issues/89)). The "3" value is the coordinated number recorded in the PRD and #89, deliberately skipping the reserved "2".
 
 ### Reproducibility contract
 

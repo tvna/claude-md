@@ -77,6 +77,22 @@ python3 scripts/verify_apm_checksums.py verify
 
 - **context7 MCP** は一次情報ドキュメントの取得を高速化するため `apm.yml`（`dependencies.mcp`）で宣言しています。本マスターは宣言のみで、利用側が `apm install --mcp context7` で各自のクライアントに配線します。詳細は [`docs/runbooks/context7-mcp.md`](./docs/runbooks/context7-mcp.md) を参照してください。
 
+## バージョニング
+
+universal text（`.apm/instructions/master.instructions.md` とコンパイル後の `CLAUDE.md` / `AGENTS.md`）はセマンティックバージョニングで管理します。`apm.yml: version` を単一の信頼できる情報源（single source of truth）とします。ここでの「互換性」はプログラム上の API ではなく、利用側にとっての振る舞いの後方互換性を指します。
+
+- **MAJOR** - 後方互換性を壊す変更。既存ルールの削除・反転・弱体化、新たな禁止事項や必須義務の追加、安定参照の破壊（原則の番号付け替え、キー参照されるセクションアンカーの改名、用語の意味変更）。
+- **MINOR** - 後方互換な追加・明確化（新しいルール、原則、セクション、例）で、従来準拠の振る舞いが引き続き準拠したままになるもの。
+- **PATCH** - 規範に関わらない表層変更（誤字、書式、リンク修正、翻訳、ルールの意味を保つ言い換え）。
+
+universal text に触れる PR の bump 手順:
+
+1. ちょうど 1 つの `semver:major` / `semver:minor` / `semver:patch` ラベルで重大度を宣言する。
+2. 宣言した区分に合わせて `apm.yml: version` を bump する。universal text と `apm.yml: version` が一緒に変わらない場合、または bump がラベルと一致しない場合は、CI のドリフトゲートが PR を fail させる。
+3. マージ時に `v{version}` タグが自動作成され、リリース公開フローに渡される。利用側はそのタグを固定して参照する（[別プロジェクトから使う](#別プロジェクトから使う) を参照）。
+
+決定記録の全文は [`docs/prd/semantic-versioning-universal-text.md`](./docs/prd/semantic-versioning-universal-text.md) を参照してください。
+
 ## 変更ポリシー
 
 - すべての編集は PR 経由で取り込む。マージ後は retrospective を実施する（Principle 3）。

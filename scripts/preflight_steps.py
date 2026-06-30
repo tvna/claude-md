@@ -168,6 +168,15 @@ STEPS: tuple[Step, ...] = (
         argv=("python3", "scripts/scan_scripts_gh_calls.py", "verify"),
     ),
     Step(
+        # Refs #2143 (PR #2141 retro, repair (a)). Fails when a gate surface
+        # (workflow YAML, .githooks, .pre-commit-config.yaml, or the preflight
+        # manifest) invokes `ruff format`. CI enforces `ruff check` only;
+        # `ruff format` is intentionally not a gate, so reformatting files the
+        # gate set does not format-check only widens the diff (CLAUDE.md S5).
+        name="scan_ruff_format",
+        argv=("python3", "scripts/scan_ruff_format.py", "verify"),
+    ),
+    Step(
         name="scan_workflow_injection",
         argv=("python3", "scripts/scan_workflow_injection.py", "verify"),
     ),
@@ -516,6 +525,18 @@ STEPS: tuple[Step, ...] = (
         # HEAD does not contain it, matching GitHub's out-of-date branch gate.
         name="preflight_branch_base",
         argv=("python3", "scripts/preflight_branch_base.py", "verify"),
+    ),
+    Step(
+        # Refs #1959. Rejects a push whose origin/main..HEAD range carries an
+        # unsigned commit (the Codex Desktop/GUI push that never passes through
+        # the agent Bash tool, so scripts/preflight_push_unsigned_commits.py
+        # (#2138) cannot see it). Both gates share _commit_signing.is_unsigned
+        # (the gpgsig-header model). Runs AFTER preflight_branch_base, which
+        # fetches the live base so origin/main is current. preflight-only (no
+        # pull_request: workflow invokes it; same posture as preflight_branch_base
+        # / preflight_merge_index_budget).
+        name="preflight_signed_commits",
+        argv=("python3", "scripts/preflight_signed_commits.py", "verify"),
     ),
     Step(
         # Refs #2012. Measures docs/INDEX.md in the test-merge of HEAD with the

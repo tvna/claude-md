@@ -89,11 +89,11 @@ import os
 import re
 import shlex
 import subprocess
-from collections.abc import Callable
 from pathlib import PurePosixPath
 from typing import Any
 
-from _git import run_git
+from _commit_signing import is_unsigned as _is_unsigned
+from _git import Runner, commits_to_push, make_runner
 from _hook_runtime import build_deny, run_event_hook
 
 # Both remote signals, mirroring check_commit_signing_ready.py so the gate is
@@ -124,11 +124,6 @@ _ASSIGN_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
 # ``git -C path push``); the token after them is the value, not the subcommand.
 _GIT_VALUE_OPTS: frozenset[str] = frozenset({"-c", "-C"})
 
-# A new-branch push reports an all-zero remote sha in git's pre-push protocol;
-# the same sentinel is produced here when the remote-tracking ref does not
-# resolve. Either 40-hex (sha-1) or 64-hex (sha-256) all-zeros.
-_ALL_ZEROS_RE = re.compile(r"^0{40}(?:0{24})?$")
-
 # Command surface this hook acts on, read by scan_hook_predicate_surface_drift.py
 # to verify the Bash(*git push*) if: predicate admits it (a narrower predicate
 # would silently skip a command the script handles, the PR #2120 class). Refs #2133.
@@ -153,14 +148,10 @@ _FLAGS_WITH_VALUE: frozenset[str] = frozenset({
     "--signed",
 })
 
-# A runner takes a git argv (without the leading ``git``) and returns the
-# completed process, mirroring _git.run_git's signature so it is the default.
-_Runner = Callable[[list[str]], "subprocess.CompletedProcess[str]"]
-
-
-def _default_runner(args: list[str]) -> subprocess.CompletedProcess[str]:
-    """Run ``git <args>`` with a bounded timeout (the production runner)."""
-    return run_git(args, timeout=_GIT_TIMEOUT_SECONDS)
+# The production runner: ``git <args>`` with a bounded timeout, in the process
+# CWD (the agent's repo). Built from the shared _git.make_runner factory so the
+# timeout/cwd policy is not re-implemented per gate.
+_default_runner = make_runner(timeout=_GIT_TIMEOUT_SECONDS)
 
 
 def _is_remote() -> bool:
@@ -280,7 +271,7 @@ def _iter_push_specs(command: str) -> list[tuple[str, str, str]]:
     return specs
 
 
-def _rev_parse(runner: _Runner, ref: str) -> str | None:
+def _rev_parse(runner: Runner, ref: str) -> str | None:
     """Return the resolved sha of *ref*, or None when it does not resolve."""
     try:
         result = runner(["rev-parse", "--verify", "--quiet", ref])
@@ -292,14 +283,14 @@ def _rev_parse(runner: _Runner, ref: str) -> str | None:
 
 
 def _commits_for_spec(
-    runner: _Runner, remote: str, local_ref: str, remote_ref: str
+    runner: Runner, remote: str, local_ref: str, remote_ref: str
 ) -> list[str] | None:
     """Return the shas one refspec would ship, or None when undeterminable.
 
-    Resolves the local SOURCE sha and the remote-tracking sha. When the
-    remote-tracking ref resolves, the range is ``<remote>..<local>``; when it
-    does not (a new branch, all-zeros remote sha) the range is the commits
-    reachable from the local tip but not from the target remote's refs. None signals
+    Resolves the local SOURCE sha and the remote-tracking sha, then delegates the
+    new-or-existing-branch range computation to the shared
+    :func:`_git.commits_to_push` (the same helper the #2162 pre-push step uses, so
+    both gates resolve the all-zeros / new-branch case identically). None signals
     "could not determine" (the caller skips this spec, fail-open); an empty list
     means "nothing new to ship".
     """
@@ -308,54 +299,7 @@ def _commits_for_spec(
         return None
 
     remote_sha = _rev_parse(runner, f"refs/remotes/{remote}/{remote_ref}")
-    if remote_sha is not None and _ALL_ZEROS_RE.match(remote_sha):
-        remote_sha = None
-
-    if remote_sha is not None:
-        rev_args = ["rev-list", f"{remote_sha}..{local_sha}"]
-    else:
-        # New branch: every commit reachable from the local tip that is not
-        # already on the TARGET remote's refs. Scoping to ``--remotes=<remote>``
-        # (not the bare ``--remotes``, which excludes commits on ANY remote)
-        # keeps an unsigned commit that exists on a different remote but is new
-        # to this push's target from being silently skipped, and matches the
-        # target-remote scope of the existing-branch range above.
-        rev_args = ["rev-list", local_sha, "--not", f"--remotes={remote}"]
-
-    try:
-        result = runner(rev_args)
-    except (RuntimeError, OSError, subprocess.SubprocessError):
-        return None
-    if result.returncode != 0:
-        return None
-    return [line.strip() for line in result.stdout.splitlines() if line.strip()]
-
-
-def _is_unsigned(runner: _Runner, sha: str) -> bool:
-    """Return True when *sha*'s raw object carries no ``gpgsig`` header.
-
-    Reads the commit object with ``git cat-file commit`` and scans only its
-    header section (the lines before the first blank line, which separates the
-    headers from the commit message) for a line beginning ``gpgsig`` (the
-    header git writes when a commit is signed, covering both ``gpgsig`` and the
-    sha-256 ``gpgsig-sha256`` spelling). Stopping at the blank line keeps a
-    commit MESSAGE that merely mentions ``gpgsig`` from masking an unsigned
-    commit. A subprocess error or a non-zero exit is reported as "not unsigned"
-    so an infrastructure failure fails open rather than denying a push it could
-    not actually evaluate (CLAUDE.md section 4).
-    """
-    try:
-        result = runner(["cat-file", "commit", sha])
-    except (RuntimeError, OSError, subprocess.SubprocessError):
-        return False
-    if result.returncode != 0:
-        return False
-    for line in result.stdout.splitlines():
-        if not line:
-            break  # the empty line ends the header section; the message follows
-        if line.startswith("gpgsig"):
-            return False  # a signature header is present
-    return True
+    return commits_to_push(runner, local_sha=local_sha, remote_sha=remote_sha, remote=remote)
 
 
 def _deny(unsigned: list[str]) -> dict[str, Any]:
@@ -381,7 +325,7 @@ def _deny(unsigned: list[str]) -> dict[str, Any]:
 def decide(
     event: dict[str, Any],
     *,
-    runner: _Runner = _default_runner,
+    runner: Runner = _default_runner,
 ) -> dict[str, Any] | None:
     """Return a deny dict when a push ships an unsigned commit, else None."""
     if not _is_remote():

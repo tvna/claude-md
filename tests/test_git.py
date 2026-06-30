@@ -66,3 +66,194 @@ class TestRunGit:
         sentinel = subprocess.CompletedProcess(["git"], 1, stdout="", stderr="boom")
         monkeypatch.setattr(_git.subprocess, "run", lambda *a, **k: sentinel)
         assert _git.run_git(["status"]) is sentinel
+
+
+class TestMakeRunner:
+    def test_binds_cwd_and_timeout(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        seen: dict[str, Any] = {}
+        monkeypatch.setattr(_git.shutil, "which", lambda _name: "/usr/bin/git")
+
+        def fake_run(argv: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
+            seen["argv"] = argv
+            seen["kwargs"] = kwargs
+            return subprocess.CompletedProcess(argv, 0, stdout="", stderr="")
+
+        monkeypatch.setattr(_git.subprocess, "run", fake_run)
+        runner = _git.make_runner(cwd=Path("/repo"), timeout=7)
+        runner(["rev-parse", "HEAD"])
+        assert seen["argv"] == ["/usr/bin/git", "rev-parse", "HEAD"]
+        assert seen["kwargs"]["cwd"] == Path("/repo")
+        assert seen["kwargs"]["timeout"] == 7
+
+    def test_defaults_to_no_cwd_no_timeout(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        seen: dict[str, Any] = {}
+        monkeypatch.setattr(_git.shutil, "which", lambda _name: "/usr/bin/git")
+        monkeypatch.setattr(
+            _git.subprocess,
+            "run",
+            lambda argv, **kwargs: seen.update(kwargs)
+            or subprocess.CompletedProcess(argv, 0, stdout="", stderr=""),
+        )
+        _git.make_runner()(["status"])
+        assert seen["cwd"] is None
+        assert seen["timeout"] is None
+
+
+class TestRevList:
+    @staticmethod
+    def _runner(
+        result: subprocess.CompletedProcess[str] | Exception, calls: list[list[str]]
+    ) -> _git.Runner:
+        def run(args: list[str]) -> subprocess.CompletedProcess[str]:
+            calls.append(args)
+            if isinstance(result, Exception):
+                raise result
+            return result
+
+        return run
+
+    def test_prefixes_rev_list_and_strips_blanks(self) -> None:
+        calls: list[list[str]] = []
+        runner = self._runner(
+            subprocess.CompletedProcess(["git"], 0, stdout="a\n\n b \n", stderr=""), calls
+        )
+        assert _git.rev_list(runner, ["base..HEAD"]) == ["a", "b"]
+        assert calls == [["rev-list", "base..HEAD"]]
+
+    def test_empty_output_is_empty_list(self) -> None:
+        runner = self._runner(subprocess.CompletedProcess(["git"], 0, stdout="\n", stderr=""), [])
+        assert _git.rev_list(runner, ["base..HEAD"]) == []
+
+    def test_nonzero_exit_returns_none(self) -> None:
+        runner = self._runner(subprocess.CompletedProcess(["git"], 128, stdout="", stderr="no"), [])
+        assert _git.rev_list(runner, ["bad..HEAD"]) is None
+
+    def test_subprocess_error_returns_none(self) -> None:
+        runner = self._runner(OSError("boom"), [])
+        assert _git.rev_list(runner, ["base..HEAD"]) is None
+
+
+class TestIsAllZeros:
+    def test_sha1_all_zeros(self) -> None:
+        assert _git.is_all_zeros("0" * 40) is True
+
+    def test_sha256_all_zeros(self) -> None:
+        assert _git.is_all_zeros("0" * 64) is True
+
+    def test_real_sha_is_not_all_zeros(self) -> None:
+        assert _git.is_all_zeros("a" * 40) is False
+
+    def test_partial_zeros_is_not_all_zeros(self) -> None:
+        assert _git.is_all_zeros("0" * 39 + "1") is False
+
+
+class TestResolveRemoteName:
+    @staticmethod
+    def _runner(remote_v: str, rc: int = 0) -> _git.Runner:
+        def run(args: list[str]) -> subprocess.CompletedProcess[str]:
+            assert args == ["remote", "-v"]
+            return subprocess.CompletedProcess(["git"], rc, stdout=remote_v, stderr="")
+
+        return run
+
+    _REMOTE_V = (
+        "origin\thttps://example.test/repo.git (fetch)\n"
+        "origin\thttps://example.test/repo.git (push)\n"
+    )
+
+    def test_configured_name_passthrough(self) -> None:
+        assert _git.resolve_remote_name(self._runner(self._REMOTE_V), "origin") == "origin"
+
+    def test_url_maps_to_name(self) -> None:
+        got = _git.resolve_remote_name(self._runner(self._REMOTE_V), "https://example.test/repo.git")
+        assert got == "origin"
+
+    def test_unknown_url_returns_none(self) -> None:
+        assert _git.resolve_remote_name(self._runner(self._REMOTE_V), "https://other/x.git") is None
+
+    def test_empty_remote_returns_none(self) -> None:
+        # No git call needed for an empty remote.
+        assert _git.resolve_remote_name(self._runner("", rc=1), "") is None
+
+    def test_git_error_returns_none(self) -> None:
+        def run(args: list[str]) -> subprocess.CompletedProcess[str]:
+            raise OSError("boom")
+
+        assert _git.resolve_remote_name(run, "origin") is None
+
+    def test_nonzero_exit_returns_none(self) -> None:
+        assert _git.resolve_remote_name(self._runner("", rc=2), "origin") is None
+
+    def test_skips_blank_and_short_lines(self) -> None:
+        # A blank or single-field line in `git remote -v` output is skipped.
+        out = "\nbroken\n" + self._REMOTE_V
+        assert _git.resolve_remote_name(self._runner(out), "origin") == "origin"
+
+
+class TestCommitsToPush:
+    _REMOTE_V = (
+        "origin\thttps://example.test/repo.git (fetch)\n"
+        "origin\thttps://example.test/repo.git (push)\n"
+    )
+
+    def _runner(self, commits: list[str], calls: list[list[str]]) -> _git.Runner:
+        def run(args: list[str]) -> subprocess.CompletedProcess[str]:
+            calls.append(args)
+            if args[0] == "remote":
+                return subprocess.CompletedProcess(["git"], 0, stdout=self._REMOTE_V, stderr="")
+            return subprocess.CompletedProcess(["git"], 0, stdout="\n".join(commits) + "\n", stderr="")
+
+        return run
+
+    @staticmethod
+    def _rev_list(calls: list[list[str]]) -> list[list[str]]:
+        return [c for c in calls if c[0] == "rev-list"]
+
+    def test_existing_branch_uses_range(self) -> None:
+        calls: list[list[str]] = []
+        runner = self._runner(["c1"], calls)
+        result = _git.commits_to_push(runner, local_sha="L", remote_sha="R", remote="origin")
+        assert result == ["c1"]
+        # The existing-branch range needs no remote resolution.
+        assert calls == [["rev-list", "R..L"]]
+
+    def test_new_branch_scopes_to_remote_name(self) -> None:
+        calls: list[list[str]] = []
+        runner = self._runner(["c1", "c2"], calls)
+        result = _git.commits_to_push(runner, local_sha="L", remote_sha=None, remote="origin")
+        assert result == ["c1", "c2"]
+        assert self._rev_list(calls) == [["rev-list", "L", "--not", "--remotes=origin"]]
+
+    def test_new_branch_url_remote_maps_to_name(self) -> None:
+        calls: list[list[str]] = []
+        runner = self._runner(["c1"], calls)
+        _git.commits_to_push(
+            runner, local_sha="L", remote_sha=None, remote="https://example.test/repo.git"
+        )
+        assert self._rev_list(calls) == [["rev-list", "L", "--not", "--remotes=origin"]]
+
+    def test_new_branch_unknown_url_falls_back_to_all_remotes(self) -> None:
+        # The #2162 fix: a URL that matches no configured remote scopes to all
+        # remote-tracking refs, never a bogus --remotes=<url> that scans history.
+        calls: list[list[str]] = []
+        runner = self._runner(["c1"], calls)
+        _git.commits_to_push(runner, local_sha="L", remote_sha=None, remote="https://other/x.git")
+        assert self._rev_list(calls) == [["rev-list", "L", "--not", "--remotes"]]
+
+    def test_new_branch_none_remote_falls_back_to_all_remotes(self) -> None:
+        calls: list[list[str]] = []
+        runner = self._runner(["c1"], calls)
+        _git.commits_to_push(runner, local_sha="L", remote_sha=None, remote=None)
+        assert self._rev_list(calls) == [["rev-list", "L", "--not", "--remotes"]]
+
+    def test_all_zeros_remote_treated_as_new_branch(self) -> None:
+        calls: list[list[str]] = []
+        runner = self._runner(["c1"], calls)
+        _git.commits_to_push(runner, local_sha="L", remote_sha="0" * 40, remote="origin")
+        assert self._rev_list(calls) == [["rev-list", "L", "--not", "--remotes=origin"]]
+
+    def test_undeterminable_propagates_none(self) -> None:
+        def run(args: list[str]) -> subprocess.CompletedProcess[str]:
+            return subprocess.CompletedProcess(["git"], 128, stdout="", stderr="boom")
+
+        assert _git.commits_to_push(run, local_sha="L", remote_sha="R", remote="origin") is None

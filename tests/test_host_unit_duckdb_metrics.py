@@ -97,6 +97,19 @@ class TestSchemaFile:
         text = SCHEMA_PATH.read_text(encoding="utf-8")
         assert "#815" in text
 
+    def test_baseline_template_populates_compiled_source_version(self) -> None:
+        # #89 landed the semantic-versioning scheme, so the baseline INSERT
+        # template fills compiled_source_version (apm.yml: version at the SHA)
+        # instead of the old NULL placeholder.
+        text = SCHEMA_PATH.read_text(encoding="utf-8")
+        assert "apm.yml-version-at-sha" in text
+
+    def test_schema_column_comment_documents_apm_version(self) -> None:
+        # The compiled_source_version column comment names its source now the
+        # #89 scheme landed (apm.yml: version at the SHA), not a NULL deferral.
+        text = SCHEMA_PATH.read_text(encoding="utf-8")
+        assert "apm.yml version at the SHA" in text
+
     def test_schema_documents_duckdb_not_a_repo_dependency(self) -> None:
         text = SCHEMA_PATH.read_text(encoding="utf-8")
         assert "not a repo dependency" in text.lower()
@@ -247,6 +260,15 @@ class TestDesignDoc:
         assert "host.id" in text
         # "MUST NOT" may be line-wrapped; check prohibition by keyword
         assert "raw hostname" in text
+
+    def test_doc_marks_compiled_source_version_scheme_landed(self) -> None:
+        # Refs #89: the column is populated now that the versioning scheme
+        # landed; the prior "NULL until #89" deferral must be gone so the
+        # active contract matches what #89 promises.
+        text = squashed(DOC_PATH.read_text(encoding="utf-8"))
+        assert "compiled_source_version" in text
+        assert "NULL until #89 lands" not in text
+        assert "stays NULL until #89 decides the versioning scheme" not in text
 
     def test_doc_documents_otlp_logs_extension(self) -> None:
         text = DOC_PATH.read_text(encoding="utf-8")

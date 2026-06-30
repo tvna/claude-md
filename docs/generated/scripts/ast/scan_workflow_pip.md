@@ -24,7 +24,7 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["scan_text(...)"]
-    N002["return [lineno for lineno, line in enumerate(text.splitlines(), start=1) if scan_line(line)]"]
+    N002["return [lineno for lineno, line in flatten_shell_continuations(text) if scan_line(line)]"]
     N001 -->|"start"| N002
 ```
 

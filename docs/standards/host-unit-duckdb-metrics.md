@@ -270,7 +270,7 @@ measurement); exactly as OTLP does.
 | Column | Role | Notes |
 |---|---|---|
 | `commit_sha` | reproducibility key | 40-char SHA on `main` |
-| `compiled_source_version` | reproducibility key | Refs #89 human-readable label; NULL until #89 lands |
+| `compiled_source_version` | reproducibility key | Refs #89 human-readable label: `apm.yml: version` at the recorded SHA (semantic-versioning scheme, now landed); NULL only for rows recorded before the scheme |
 | `spec_version` | reproducibility key | measurement spec/schema version (`v1`) |
 | `harness_version` | reproducibility key | sha/semver of the recording procedure |
 | `model_id` | reproducibility key | pins the stochastic metric (model + version suffix) |
@@ -441,8 +441,12 @@ their still-valid requirements are carried into the columns above.
   operator-local, and `duckdb` stays out of the repo dependency set).
 - **The structure-sensitive task signal** (Refs #90/#83): a candidate quality
   input once the schema exists; added additively as a new signal column.
-- **`compiled_source_version` population** (Refs #89): the column exists now and
-  stays NULL until #89 decides the versioning scheme.
+- **`compiled_source_version` population** (Refs #89): resolved. #89 decided the
+  semantic-versioning scheme (`apm.yml: version` as single source of truth), so
+  the column is populated with that version at the recorded SHA; the baseline
+  template above fills it, and it is NULL only for rows recorded before the
+  scheme. The companion benchmark-record schema lives in
+  [`performance-metrics.md`](performance-metrics.md) (`schema_version` "3").
 
 ## Verify
 
@@ -481,7 +485,7 @@ unrelated regression is introduced (`pytest`).
 - [#1326](https://github.com/tvna/claude-md/issues/1326); from-scratch Cloudflare R2 provisioning for the escrow runbook.
 - [#814](https://github.com/tvna/claude-md/issues/814); parent: Section 5 quality-scalability proportionality reframe.
 - [#226](https://github.com/tvna/claude-md/issues/226); CLAUDE.md / AGENTS.md evolution tracker.
-- [#89](https://github.com/tvna/claude-md/issues/89); instruction-source versioning (OPEN; provides `compiled_source_version`).
+- [#89](https://github.com/tvna/claude-md/issues/89); instruction-source versioning (scheme landed; provides `compiled_source_version`).
 - [#61](https://github.com/tvna/claude-md/issues/61), [#62](https://github.com/tvna/claude-md/issues/62), [#88](https://github.com/tvna/claude-md/issues/88), [#90](https://github.com/tvna/claude-md/issues/90); superseded orphan-branch benchmark approach (requirements carried forward).
 - [`docs/standards/performance-metrics.md`](performance-metrics.md); the superseded storage design.
 - [`docs/standards/repo-scope.md`](repo-scope.md); declared repo purpose (2).

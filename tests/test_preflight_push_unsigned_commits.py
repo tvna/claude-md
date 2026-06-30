@@ -59,6 +59,7 @@ class _FakeGit:
         rev_list_map: dict[str, list[str]] | None = None,
         rev_list_rc: int = 0,
         unsigned: set[str] | None = None,
+        remotes: dict[str, str] | None = None,
         raise_on: str | None = None,
     ) -> None:
         self.rev_parse = rev_parse or {}
@@ -66,6 +67,10 @@ class _FakeGit:
         self.rev_list_map = rev_list_map or {}
         self.rev_list_rc = rev_list_rc
         self.unsigned = unsigned or set()
+        # Configured remotes (name -> url) for `git remote -v`, used by
+        # _git.resolve_remote_name on the new-branch path. Defaults to origin so
+        # the existing --remotes=origin expectations hold (#2162).
+        self.remotes = remotes if remotes is not None else {"origin": "https://example.test/repo.git"}
         self.raise_on = raise_on
         self.calls: list[list[str]] = []
 
@@ -74,6 +79,9 @@ class _FakeGit:
         sub = args[0]
         if self.raise_on is not None and sub == self.raise_on:
             raise OSError("boom")
+        if sub == "remote":
+            lines = [f"{name}\t{url} (fetch)\n{name}\t{url} (push)" for name, url in self.remotes.items()]
+            return _cp(stdout="\n".join(lines) + "\n")
         if sub == "rev-parse":
             ref = args[-1]
             sha = self.rev_parse.get(ref)
@@ -444,40 +452,9 @@ class TestIterPushSpecs:
 
 
 # ---------------------------------------------------------------------------
-# _is_unsigned(): header-presence semantics (the verify-commit false-positive
-# fix: a signed-but-locally-unverifiable commit must read as signed)
+# _is_unsigned() header-presence semantics live with the shared definition in
+# tests/test_commit_signing.py; the deny/allow cases above exercise the import.
 # ---------------------------------------------------------------------------
-
-
-class TestIsUnsigned:
-    def _runner(self, stdout: str, returncode: int = 0):
-        def run(_args: list[str]) -> subprocess.CompletedProcess[str]:
-            return _cp(returncode=returncode, stdout=stdout)
-
-        return run
-
-    def test_signed_header_present_reads_signed(self) -> None:
-        body = (
-            "tree 0\nauthor a <a@b> 0 +0000\ncommitter a <a@b> 0 +0000\n"
-            "gpgsig -----BEGIN SSH SIGNATURE-----\n A\n -----END SSH SIGNATURE-----\n"
-            "\nmsg\n"
-        )
-        assert subject._is_unsigned(self._runner(body), _SIGNED) is False
-
-    def test_sha256_signature_header_reads_signed(self) -> None:
-        body = "tree 0\ncommitter a <a@b> 0 +0000\ngpgsig-sha256 sig\n\nmsg\n"
-        assert subject._is_unsigned(self._runner(body), _SIGNED) is False
-
-    def test_no_header_reads_unsigned(self) -> None:
-        body = "tree 0\nauthor a <a@b> 0 +0000\ncommitter a <a@b> 0 +0000\n\nmsg\n"
-        assert subject._is_unsigned(self._runner(body), _UNSIGNED) is True
-
-    def test_message_mention_does_not_mask_unsigned(self) -> None:
-        body = "tree 0\ncommitter a <a@b> 0 +0000\n\ngpgsig in the message\n"
-        assert subject._is_unsigned(self._runner(body), _UNSIGNED) is True
-
-    def test_nonzero_exit_fails_open(self) -> None:
-        assert subject._is_unsigned(self._runner("", returncode=128), _UNSIGNED) is False
 
 
 # ---------------------------------------------------------------------------

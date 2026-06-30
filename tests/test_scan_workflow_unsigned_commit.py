@@ -68,6 +68,19 @@ class TestScanRunText:
         hits = scan.scan_run_text(run_text)
         assert hits[0][1].startswith("git push")
 
+    def test_flattens_shell_continuation(self) -> None:
+        # `git push` split across a `\` continuation must still be caught,
+        # reported at the first physical line of the command (issue #2164).
+        run_text = "set -e\ngit \\\n  push origin main\n"
+        hits = scan.scan_run_text(run_text)
+        assert [lineno for lineno, _ in hits] == [2]
+
+    def test_continuation_ack_marker_on_last_line_suppresses(self) -> None:
+        # The ACK marker on the continuation's final physical line joins into
+        # the logical line and still exempts it.
+        run_text = "git \\\n  push origin main  # unsigned-ack reviewed\n"
+        assert scan.scan_run_text(run_text) == []
+
 
 # ---------------------------------------------------------------------------
 # find_violations

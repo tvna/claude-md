@@ -170,6 +170,31 @@ class TestFindViolations:
         assert len(violations) == 1
         assert violations[0].step == ""
 
+    def test_detects_gh_call_split_across_continuation(self, tmp_path: Path) -> None:
+        # `gh \` then `pr create` splits the command across a `\` continuation;
+        # flattening must rejoin it so the gate still fires (issue #2164).
+        _write_wf(
+            tmp_path,
+            "cont.yml",
+            "jobs:\n  j:\n    steps:\n      - name: Create PR\n"
+            "        run: |\n          gh \\\n            pr create --title foo\n",
+        )
+        violations = swgc.find_violations(tmp_path)
+        assert len(violations) == 1
+        assert violations[0].kind == "gh"
+
+
+class TestScanRunText:
+    def test_gh_continuation_is_caught(self) -> None:
+        assert swgc.scan_run_text("gh \\\n  api repos/o/r")[0][0] == "gh"
+
+    def test_curl_to_api_continuation_is_caught(self) -> None:
+        hits = swgc.scan_run_text("curl \\\n  https://api.github.com/repos/o/r")
+        assert any(kind == "curl" for kind, _ in hits)
+
+    def test_clean_run_text_has_no_hits(self) -> None:
+        assert swgc.scan_run_text("pytest -q\nuv sync --locked") == []
+
     def test_no_violations_in_current_workflows(self) -> None:
         violations = swgc.find_violations(WORKFLOW_DIR)
         assert violations == [], (

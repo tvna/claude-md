@@ -2,15 +2,6 @@
 
 This file is generated from `scripts/preflight_push_unsigned_commits.py` by `python3 scripts/script_ast_graph.py all-doc`. Do not edit it by hand: content under `docs/generated/scripts/` is owned by the post-merge automation (refs #1540); update the source script instead.
 
-## _default_runner(...)
-
-```mermaid
-flowchart TD
-    N001["_default_runner(...)"]
-    N002["return run_git(args, timeout=_GIT_TIMEOUT_SECONDS)"]
-    N001 -->|"start"| N002
-```
-
 ## _is_remote(...)
 
 ```mermaid
@@ -139,59 +130,12 @@ flowchart TD
     N003["if local_sha is None"]
     N004["return None"]
     N005["remote_sha = _rev_parse(...)"]
-    N006["if remote_sha is not None and _ALL_ZEROS_RE.match(remote_sha)"]
-    N007["remote_sha = None"]
-    N008["if remote_sha is not None"]
-    N009["rev_args = ['<str>', f'{remote_sha}<str>{local_sha}']"]
-    N010["rev_args = ['<str>', local_sha, '<str>', f'<str>{remote}']"]
-    N011["try"]
-    N012["result = runner(...)"]
-    N013["except (RuntimeError, OSError, subprocess.SubprocessError)"]
-    N014["return None"]
-    N015["if result.returncode != 0"]
-    N016["return None"]
-    N017["return [line.strip() for line in result.stdout.splitlines() if line.strip()]"]
+    N006["return commits_to_push(runner, local_sha=local_sha, remote_sha=remote_sha, remote=remote)"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 -->|"true"| N004
     N003 -->|"false"| N005
     N005 --> N006
-    N006 -->|"true"| N007
-    N007 --> N008
-    N006 -->|"false"| N008
-    N008 -->|"true"| N009
-    N008 -->|"false"| N010
-    N009 --> N011
-    N010 --> N011
-    N011 -->|"try"| N012
-    N011 -->|"raises"| N013
-    N013 --> N014
-    N012 --> N015
-    N015 -->|"true"| N016
-    N015 -->|"false"| N017
-```
-
-## _is_unsigned(...)
-
-```mermaid
-flowchart TD
-    N001["_is_unsigned(...)"]
-    N002["try"]
-    N003["result = runner(...)"]
-    N004["except (RuntimeError, OSError, subprocess.SubprocessError)"]
-    N005["return False"]
-    N006["if result.returncode != 0"]
-    N007["return False"]
-    N008["for line in result.stdout.splitlines():     if not line:         break     if line.startswith('<str>'):         return False"]
-    N009["return True"]
-    N001 -->|"start"| N002
-    N002 -->|"try"| N003
-    N002 -->|"raises"| N004
-    N004 --> N005
-    N003 --> N006
-    N006 -->|"true"| N007
-    N006 -->|"false"| N008
-    N008 --> N009
 ```
 
 ## _deny(...)

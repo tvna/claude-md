@@ -100,6 +100,7 @@ import scan_quality_standard_drift
 import scan_repo_double_hyphen
 import scan_repo_em_dash
 import scan_retro_followup_drift
+import scan_ruff_format
 import scan_runbook_template_drift
 import scan_scripts_gh_calls
 import scan_secret_runbooks
@@ -268,6 +269,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("scan_retro_followup_drift.py", "run"): "test_scan_retro_followup_drift_run_matches_workflow_env",
     ("scan_secret_runbooks.py", "verify"): "test_scan_secret_runbooks_verify_matches_workflow_args",
     ("scan_secrets.py", "verify"): "test_scan_secrets_verify_matches_workflow_args",
+    ("scan_ruff_format.py", "verify"): "test_scan_ruff_format_verify_matches_workflow_args",
     ("scan_scripts_gh_calls.py", "verify"): "test_scan_scripts_gh_calls_verify_matches_workflow_args",
     ("scan_session_path_drift.py", "verify"): "test_scan_session_path_drift_verify_matches_workflow_args",
     ("scan_test_presence_drift.py", "verify"): "test_scan_test_presence_drift_verify_matches_workflow_args",
@@ -1883,6 +1885,12 @@ def test_scan_workflow_pip_verify_matches_workflow_args() -> None:
     """Mirrors the ``Assert workflows install Python deps via uv only``
     step in ``.github/workflows/verify-agents.yml``."""
     assert scan_workflow_pip.main(["verify", "--repo-root", "."]) == 0
+
+
+def test_scan_ruff_format_verify_matches_workflow_args() -> None:
+    """Mirrors the ``Assert ruff is enforced as check-only`` step in
+    ``.github/workflows/verify-agents.yml`` (issue #2143 repair (a))."""
+    assert scan_ruff_format.main(["verify", "--repo-root", "."]) == 0
 
 
 def test_skill_quality_gate_verify_matches_workflow_args(

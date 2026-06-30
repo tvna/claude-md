@@ -88,6 +88,32 @@ class TestCli:
         captured = capsys.readouterr()
         assert "out-of-date" in captured.err
 
+    def test_verify_refreshes_freshness_before_check(self, tmp_path: Path) -> None:
+        # Issue #2143 (PR #2141 retro (b)): the freshness *observation* refresh
+        # is folded into the gate (CLAUDE.md section 3). The default path must
+        # fetch the live base and feed that fetched ref into the ancestry check,
+        # so the gate never decides on a stale ref. (The *merge* remediation is
+        # intentionally left manual; see cmd_verify's comment.)
+        calls: list[str] = []
+
+        def _fetch(_repo: Path, *, remote: str, base_branch: str) -> str:
+            calls.append("fetch")
+            return "FETCH_HEAD"
+
+        def _check(*, repo: Path, base_ref: str) -> gate.BranchBaseResult:
+            calls.append("check")
+            assert base_ref == "FETCH_HEAD"  # the fetched ref, not a stale local ref
+            return gate.BranchBaseResult(status="pass", detail="HEAD contains FETCH_HEAD")
+
+        with (
+            patch.object(gate, "fetch_base", side_effect=_fetch),
+            patch.object(gate, "check_base_freshness", side_effect=_check),
+        ):
+            exit_code = gate.main(["verify", "--repo-root", str(tmp_path)])
+
+        assert exit_code == 0
+        assert calls == ["fetch", "check"]  # fetch strictly precedes the check
+
     def test_verify_surfaces_runtime_error_on_fetch_failure(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
         repo = _repo_with_stale_feature(tmp_path)
 

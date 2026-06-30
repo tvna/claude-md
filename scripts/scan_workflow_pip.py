@@ -39,6 +39,8 @@ import sys
 from collections.abc import Iterator
 from pathlib import Path
 
+from _shell_lines import flatten_shell_continuations
+
 WORKFLOW_SUBDIR = ".github/workflows"
 
 # Lines carrying this marker bypass the scan. Mirrors the precedent set
@@ -78,10 +80,16 @@ def scan_line(line: str) -> bool:
 
 
 def scan_text(text: str) -> list[int]:
-    """Return 1-based line numbers containing a violation in *text*."""
+    """Return 1-based start line numbers containing a violation in *text*.
+
+    Shell backslash continuations are flattened first (see
+    :func:`_shell_lines.flatten_shell_continuations`) so a ``pip install`` split
+    across a ``\\`` continuation (``pip \\`` then ``install``) is still caught,
+    reported at the first physical line of the command.
+    """
     return [
         lineno
-        for lineno, line in enumerate(text.splitlines(), start=1)
+        for lineno, line in flatten_shell_continuations(text)
         if scan_line(line)
     ]
 
