@@ -9,8 +9,9 @@ fixed project owner. Resolution order (first match wins):
   3. git ``user.name`` looked up in ``.github/contributors.toml``
      (case-insensitive).
   4. No match: emit a portable question handoff telling the model to ask
-     the contributor via AskUserQuestion and honor the answer; never
-     silently default to an owner language or to English.
+     the contributor which language to use and honor the answer; never
+     silently default to an owner language or to English. The handoff
+     names no harness-specific tool so it works under Codex too.
 
 When a language resolves, the hook emits a
 ``hookSpecificOutput.additionalContext`` block telling the model to write
@@ -135,22 +136,26 @@ def build_context_message(source: str, iso: str) -> str:
 def build_handoff_message() -> str:
     """Return the additionalContext string when no language resolves.
 
-    Directs the model to ask the active contributor via AskUserQuestion
-    and honor the answer, and forbids a silent default to an owner
-    language or English. Carries the same ``mcp__github__*`` ASCII
-    carve-out as the resolved-language message so the two paths stay
-    consistent.
+    Directs the model to ask the active contributor which language to use
+    and honor the answer, and forbids a silent default to an owner language
+    or English. The directive names no harness-specific tool: this hook is
+    registered for both Claude and Codex (.codex/hooks.json), and Codex has
+    no AskUserQuestion tool, so the message describes the behavior instead
+    of naming a Claude-only tool (Refs #2180, portability). Carries the same
+    ``mcp__github__*`` ASCII carve-out as the resolved-language message so
+    the two paths stay consistent.
     """
     return (
         "Repository language policy: the active contributor's operator "
         "output language is not yet resolved (no CLAUDE_MD_OPERATOR_LANGUAGE "
         "env value, and no matching entry in .github/contributors.toml for "
         "the current git identity). Before producing operator-facing output, "
-        "you MUST ask the active contributor which language to use via the "
-        "AskUserQuestion tool, then honor that answer for the rest of the "
-        "session. Do NOT silently default to a project-owner language or to "
-        "English. Exception: GitHub posts created via mcp__github__* write "
-        "tools (issues, PRs, comments, reviews) MUST remain ASCII/English; "
+        "you MUST ask the active contributor which language to use, using "
+        "whatever question or elicitation mechanism your harness provides, "
+        "and honor that answer for the rest of the session. Do NOT silently "
+        "default to a project-owner language or to English. Exception: "
+        "GitHub posts created via mcp__github__* write tools (issues, PRs, "
+        "comments, reviews) MUST remain ASCII/English; "
         "scripts/preflight_non_ascii.py will deny non-ASCII bodies there. "
         "Code identifiers, file paths, and command output stay in their "
         "source form."

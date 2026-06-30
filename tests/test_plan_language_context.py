@@ -190,9 +190,18 @@ class TestBuildContextMessage:
 
 
 class TestBuildHandoffMessage:
-    def test_directs_askuserquestion(self) -> None:
+    def test_directs_a_question_to_the_contributor(self) -> None:
         msg = plc.build_handoff_message()
-        assert "AskUserQuestion" in msg
+        assert "ask the active contributor which language to use" in msg
+
+    def test_is_harness_portable(self) -> None:
+        # Refs #2180: this hook runs in Codex too (.codex/hooks.json), and
+        # Codex has no AskUserQuestion tool. The handoff must describe the
+        # behavior, not name a Claude-only tool (FORBIDDEN_HARNESS_TOOLS in
+        # scripts/scan_apm_portability.py).
+        msg = plc.build_handoff_message()
+        assert "AskUserQuestion" not in msg
+        assert "ExitPlanMode" not in msg
 
     def test_forbids_silent_default(self) -> None:
         msg = plc.build_handoff_message()
@@ -234,12 +243,13 @@ class TestDecide:
     def test_unmapped_identity_emits_handoff(self) -> None:
         out = plc.decide(None, _BOT_EMAIL, _BOT_NAME, '"alice@example.com" = "en"\n')
         ctx = out["hookSpecificOutput"]["additionalContext"]
-        assert "AskUserQuestion" in ctx
+        assert "ask the active contributor which language to use" in ctx
         assert "Do NOT silently default" in ctx
 
     def test_no_metadata_emits_handoff(self) -> None:
         out = plc.decide(None, None, None, "")
-        assert "AskUserQuestion" in out["hookSpecificOutput"]["additionalContext"]
+        ctx = out["hookSpecificOutput"]["additionalContext"]
+        assert "ask the active contributor which language to use" in ctx
 
 
 # ---------------------------------------------------------------------------
@@ -332,7 +342,7 @@ class TestMain:
         assert rc == 0
         assert err == ""
         ctx = json.loads(out)["hookSpecificOutput"]["additionalContext"]
-        assert "AskUserQuestion" in ctx
+        assert "ask the active contributor which language to use" in ctx
 
     def test_missing_contributors_toml_emits_handoff(
         self,
@@ -349,7 +359,7 @@ class TestMain:
         assert rc == 0
         assert err == ""
         ctx = json.loads(out)["hookSpecificOutput"]["additionalContext"]
-        assert "AskUserQuestion" in ctx
+        assert "ask the active contributor which language to use" in ctx
 
     def test_missing_toml_with_env_emits_context(
         self,
