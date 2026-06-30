@@ -554,25 +554,29 @@ class TestBashDetectionProperties:
 class TestVerifyMode:
     """CI ``verify`` mode: the post-merge-tree counterpart to the hook (#2098).
 
-    A PR may edit a managed tree only when the obra/superpowers pin actually
-    moved; a managed diff with no pin change is a hand edit and fails.
+    A PR may edit a managed tree path only when the SPECIFIC apm dependency
+    that owns that path (per apm.lock.yaml's deployed_files) actually moved
+    its pin; a different dependency's pin bump does not excuse it (Codex
+    review on #2186/#2185). A managed diff with no owning-pin change is a
+    hand edit and fails.
     """
 
     @pytest.mark.parametrize(
-        "managed,pin_changed,expected_code",
+        "managed,offending,expected_code",
         [
-            (frozenset(), False, 0),  # nothing managed -> pin irrelevant
-            (frozenset(), True, 0),
-            (frozenset({".agents/skills/b/SKILL.md"}), False, 1),  # hand edit
-            (frozenset({".claude/skills/b/SKILL.md"}), False, 1),  # hand edit
-            (frozenset({".agents/skills/b/SKILL.md"}), True, 0),  # pin moved
-            (frozenset({".claude/skills/b/SKILL.md"}), True, 0),  # pin moved
+            (frozenset(), frozenset(), 0),  # nothing managed -> trivially passes
+            (frozenset({".agents/skills/b/SKILL.md"}), frozenset(), 0),  # excused
+            (
+                frozenset({".agents/skills/b/SKILL.md"}),
+                frozenset({".agents/skills/b/SKILL.md"}),
+                1,
+            ),  # hand edit
         ],
     )
     def test_evaluate_pr(
-        self, managed: frozenset[str], pin_changed: bool, expected_code: int
+        self, managed: frozenset[str], offending: frozenset[str], expected_code: int
     ) -> None:
-        code, errors = gase.evaluate_pr(managed, pin_changed)
+        code, errors = gase.evaluate_pr(managed, offending)
         assert code == expected_code
         assert (errors == []) is (expected_code == 0)
 
@@ -584,20 +588,33 @@ class TestVerifyMode:
             {".agents/skills/a", ".claude/skills/b"}
         )
 
-    def test_superpowers_pin_extracts_ref(self) -> None:
+    def test_apm_pins_extracts_ref(self) -> None:
         apm_yml = "dependencies:\n  apm:\n  - obra/superpowers#abc123def\n"
         completed = SimpleNamespace(stdout=apm_yml)
-        assert gase._superpowers_pin("HEAD", runner=lambda *a, **k: completed) == "abc123def"
+        assert gase._apm_pins("HEAD", runner=lambda *a, **k: completed) == {
+            "obra/superpowers": "abc123def"
+        }
 
-    def test_superpowers_pin_none_when_token_absent(self) -> None:
+    def test_apm_pins_extracts_multiple_deps(self) -> None:
+        apm_yml = (
+            "dependencies:\n  apm:\n  - obra/superpowers#abc123def\n"
+            "  - tvna/clairvoyance#deadbeef\n"
+        )
+        completed = SimpleNamespace(stdout=apm_yml)
+        assert gase._apm_pins("HEAD", runner=lambda *a, **k: completed) == {
+            "obra/superpowers": "abc123def",
+            "tvna/clairvoyance": "deadbeef",
+        }
+
+    def test_apm_pins_empty_when_token_absent(self) -> None:
         completed = SimpleNamespace(stdout="dependencies:\n  apm: []\n")
-        assert gase._superpowers_pin("HEAD", runner=lambda *a, **k: completed) is None
+        assert gase._apm_pins("HEAD", runner=lambda *a, **k: completed) == {}
 
-    def test_superpowers_pin_none_on_git_error(self) -> None:
+    def test_apm_pins_none_on_git_error(self) -> None:
         def _boom(*_a: Any, **_k: Any) -> Any:
             raise subprocess.CalledProcessError(128, ["git", "show"])
 
-        assert gase._superpowers_pin("nope", runner=_boom) is None
+        assert gase._apm_pins("nope", runner=_boom) is None
 
     @pytest.mark.parametrize(
         "apm_yml,expected",
@@ -612,11 +629,79 @@ class TestVerifyMode:
             ("#  - obra/superpowers#OLDREF\n  - obra/superpowers#abc123\n", "abc123"),
         ],
     )
-    def test_superpowers_pin_ignores_quotes_and_comments(
-        self, apm_yml: str, expected: str
-    ) -> None:
+    def test_apm_pins_ignores_quotes_and_comments(self, apm_yml: str, expected: str) -> None:
         completed = SimpleNamespace(stdout=apm_yml)
-        assert gase._superpowers_pin("HEAD", runner=lambda *a, **k: completed) == expected
+        assert gase._apm_pins("HEAD", runner=lambda *a, **k: completed) == {
+            "obra/superpowers": expected
+        }
+
+    def test_lock_deployed_files_extracts_per_repo(self) -> None:
+        lock_yaml = (
+            "dependencies:\n"
+            "- repo_url: obra/superpowers\n"
+            "  deployed_files:\n"
+            "  - .agents/skills/a/SKILL.md\n"
+            "- repo_url: tvna/clairvoyance\n"
+            "  deployed_files:\n"
+            "  - .agents/skills/b/SKILL.md\n"
+        )
+        completed = SimpleNamespace(stdout=lock_yaml)
+        assert gase._lock_deployed_files("HEAD", runner=lambda *a, **k: completed) == {
+            "obra/superpowers": frozenset({".agents/skills/a/SKILL.md"}),
+            "tvna/clairvoyance": frozenset({".agents/skills/b/SKILL.md"}),
+        }
+
+    def test_lock_deployed_files_none_on_git_error(self) -> None:
+        def _boom(*_a: Any, **_k: Any) -> Any:
+            raise subprocess.CalledProcessError(128, ["git", "show"])
+
+        assert gase._lock_deployed_files("nope", runner=_boom) is None
+
+    def test_owning_repo_by_path_inverts_mapping(self) -> None:
+        deployed_by_repo = {
+            "obra/superpowers": frozenset({"a", "b"}),
+            "tvna/clairvoyance": frozenset({"c"}),
+        }
+        assert gase._owning_repo_by_path(deployed_by_repo) == {
+            "a": "obra/superpowers",
+            "b": "obra/superpowers",
+            "c": "tvna/clairvoyance",
+        }
+
+    def test_offending_paths_excuses_only_the_owning_dependency(self) -> None:
+        # Codex review on #2186/#2185: bumping tvna/clairvoyance must not
+        # excuse a hand edit under an obra/superpowers-owned path.
+        managed = frozenset({".agents/skills/brainstorming/SKILL.md", ".agents/skills/clairvoyance/SKILL.md"})
+        owning_repo = {
+            ".agents/skills/brainstorming/SKILL.md": "obra/superpowers",
+            ".agents/skills/clairvoyance/SKILL.md": "tvna/clairvoyance",
+        }
+        base_pins = {"obra/superpowers": "old", "tvna/clairvoyance": "old"}
+        head_pins = {"obra/superpowers": "old", "tvna/clairvoyance": "new"}
+        assert gase.offending_paths(managed, owning_repo, base_pins, head_pins) == frozenset(
+            {".agents/skills/brainstorming/SKILL.md"}
+        )
+
+    def test_offending_paths_passes_when_owning_pin_moves(self) -> None:
+        managed = frozenset({".agents/skills/brainstorming/SKILL.md"})
+        owning_repo = {".agents/skills/brainstorming/SKILL.md": "obra/superpowers"}
+        base_pins = {"obra/superpowers": "old"}
+        head_pins = {"obra/superpowers": "new"}
+        assert gase.offending_paths(managed, owning_repo, base_pins, head_pins) == frozenset()
+
+    def test_offending_paths_unattributable_path_falls_back_to_any_pin_changed(self) -> None:
+        managed = frozenset({"some/legacy/path"})
+        base_pins = {"obra/superpowers": "old"}
+        head_pins = {"obra/superpowers": "new"}
+        assert gase.offending_paths(managed, {}, base_pins, head_pins) == frozenset()
+        assert gase.offending_paths(managed, {}, base_pins, base_pins) == frozenset(
+            {"some/legacy/path"}
+        )
+
+    def test_offending_paths_fails_closed_when_pins_unresolvable(self) -> None:
+        managed = frozenset({".agents/skills/x/SKILL.md"})
+        assert gase.offending_paths(managed, {}, None, {"a": "b"}) == managed
+        assert gase.offending_paths(managed, {}, {"a": "b"}, None) == managed
 
     def test_verify_cli_passes_when_no_managed_change(
         self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
@@ -628,11 +713,13 @@ class TestVerifyMode:
     def test_verify_cli_fails_on_hand_edit(
         self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        # Managed tree changed but the pin is identical at base and head.
+        # Managed tree changed but the owning pin is identical at base and head,
+        # and there is no lockfile attribution (falls back to any-pin-changed).
         monkeypatch.setattr(
             gase, "_changed_files", lambda *a, **k: frozenset({".agents/skills/x/SKILL.md"})
         )
-        monkeypatch.setattr(gase, "_superpowers_pin", lambda *a, **k: "samepin")
+        monkeypatch.setattr(gase, "_apm_pins", lambda *a, **k: {"obra/superpowers": "samepin"})
+        monkeypatch.setattr(gase, "_lock_deployed_files", lambda *a, **k: None)
         assert gase.main(["verify", "--base-ref", "origin/main"]) == 1
         err = capsys.readouterr().err
         assert ".agents/skills/x/SKILL.md" in err
@@ -648,23 +735,84 @@ class TestVerifyMode:
             lambda *a, **k: frozenset({".claude/skills/x/SKILL.md", "apm.lock.yaml"}),
         )
         monkeypatch.setattr(
-            gase, "_superpowers_pin", lambda ref, **k: "oldpin" if ref == "origin/main" else "newpin"
+            gase,
+            "_apm_pins",
+            lambda ref, **k: {"obra/superpowers": "oldpin"}
+            if ref == "origin/main"
+            else {"obra/superpowers": "newpin"},
+        )
+        monkeypatch.setattr(gase, "_lock_deployed_files", lambda *a, **k: None)
+        assert gase.main(["verify", "--base-ref", "origin/main"]) == 0
+
+    def test_verify_cli_passes_on_new_dependency_added_for_its_own_paths(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # A wholly new apm dependency (e.g. tvna/clairvoyance) appearing in the
+        # pin set is a legitimate pin change for the paths IT owns (#2185).
+        monkeypatch.setattr(
+            gase,
+            "_changed_files",
+            lambda *a, **k: frozenset({".claude/skills/clairvoyance/SKILL.md", "apm.yml"}),
+        )
+        monkeypatch.setattr(
+            gase,
+            "_apm_pins",
+            lambda ref, **k: {"obra/superpowers": "pin"}
+            if ref == "origin/main"
+            else {"obra/superpowers": "pin", "tvna/clairvoyance": "newpin"},
+        )
+        monkeypatch.setattr(
+            gase,
+            "_lock_deployed_files",
+            lambda *a, **k: {
+                "tvna/clairvoyance": frozenset({".claude/skills/clairvoyance/SKILL.md"})
+            },
         )
         assert gase.main(["verify", "--base-ref", "origin/main"]) == 0
+
+    def test_verify_cli_fails_when_unrelated_dependency_pin_bumped(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        # Codex review on #2186/#2185: bumping tvna/clairvoyance must not excuse
+        # a hand edit under an obra/superpowers-owned path.
+        monkeypatch.setattr(
+            gase,
+            "_changed_files",
+            lambda *a, **k: frozenset({".agents/skills/brainstorming/SKILL.md"}),
+        )
+        monkeypatch.setattr(
+            gase,
+            "_apm_pins",
+            lambda ref, **k: {"obra/superpowers": "pin", "tvna/clairvoyance": "old"}
+            if ref == "origin/main"
+            else {"obra/superpowers": "pin", "tvna/clairvoyance": "new"},
+        )
+        monkeypatch.setattr(
+            gase,
+            "_lock_deployed_files",
+            lambda *a, **k: {
+                "obra/superpowers": frozenset({".agents/skills/brainstorming/SKILL.md"}),
+                "tvna/clairvoyance": frozenset({".agents/skills/clairvoyance/SKILL.md"}),
+            },
+        )
+        assert gase.main(["verify", "--base-ref", "origin/main"]) == 1
+        err = capsys.readouterr().err
+        assert ".agents/skills/brainstorming/SKILL.md" in err
 
     def test_verify_cli_fails_when_apm_yml_touched_but_pin_unchanged(
         self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
     ) -> None:
         # Codex review on #2098: an incidental apm.yml edit (version / MCP config)
-        # with an unchanged superpowers pin must NOT excuse a managed-tree edit.
+        # with an unchanged pin must NOT excuse a managed-tree edit.
         monkeypatch.setattr(
             gase,
             "_changed_files",
             lambda *a, **k: frozenset({".agents/skills/x/SKILL.md", "apm.yml"}),
         )
-        monkeypatch.setattr(gase, "_superpowers_pin", lambda *a, **k: "samepin")
+        monkeypatch.setattr(gase, "_apm_pins", lambda *a, **k: {"obra/superpowers": "samepin"})
+        monkeypatch.setattr(gase, "_lock_deployed_files", lambda *a, **k: None)
         assert gase.main(["verify", "--base-ref", "origin/main"]) == 1
-        assert "without an obra/superpowers pin change" in capsys.readouterr().err
+        assert "without their owning apm dependency's pin changing" in capsys.readouterr().err
 
     def test_verify_cli_fails_loud_on_git_error(
         self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]

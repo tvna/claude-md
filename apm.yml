@@ -7,6 +7,7 @@ target:
 dependencies:
   apm:
   - obra/superpowers#f2cbfbefebbfef77321e4c9abc9e949826bea9d7
+  - tvna/clairvoyance#4df075294c8e6a33b42e6703b54211f66c8a5ca3
   mcp:
   - name: context7
     transport: http
