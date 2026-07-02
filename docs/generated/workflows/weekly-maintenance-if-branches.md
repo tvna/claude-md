@@ -22,7 +22,7 @@ flowchart TD
     J_security_control_drift["security-control-drift"]
     S_J_security_control_drift_0(("Record ruleset detect exit code"))
     S_J_security_control_drift_1(("Record labels plan exit code"))
-    S_J_security_control_drift_2(("Diff CLAUDE.md / AGENTS.md"))
+    S_J_security_control_drift_2(("Diff compiled instruction outputs"))
     S_J_security_control_drift_3(("Record uv drift exit code"))
     S_J_security_control_drift_4(("Record workflow-permissions drift exit code"))
     S_J_security_control_drift_5(("Record uv stale exit code"))
