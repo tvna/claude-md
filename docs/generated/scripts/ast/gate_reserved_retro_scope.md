@@ -34,9 +34,7 @@ flowchart TD
     N008["return None"]
     N009["if not uses_reserved_scope(title)"]
     N010["return None"]
-    N011["if is_canonical_handoff_retro_title(title)"]
-    N012["return None"]
-    N013["return build_deny(build_reason())"]
+    N011["return build_deny(build_reason())"]
     N001 -->|"start"| N002
     N002 -->|"true"| N003
     N002 -->|"false"| N004
@@ -47,8 +45,6 @@ flowchart TD
     N007 -->|"false"| N009
     N009 -->|"true"| N010
     N009 -->|"false"| N011
-    N011 -->|"true"| N012
-    N011 -->|"false"| N013
 ```
 
 ## main(...)
