@@ -155,8 +155,13 @@ class TestWiring:
             )
 
     def test_retire_sweep_is_wired_into_post_merge(self) -> None:
+        # Two wirings, not one: the decision-tree job publishes the deletions
+        # through the drift PR, and the verify-docs-drift job mirrors the
+        # sweep so a tracked orphan already on main (drift PR failed to open
+        # or merge) surfaces as a staged deletion instead of a clean diff
+        # (Codex review on PR #2233).
         post_merge = (REPO_ROOT / ".github" / "workflows" / "post-merge.yml").read_text()
-        assert "verify_generated_docs_ownership.py retire" in post_merge
+        assert post_merge.count("verify_generated_docs_ownership.py retire") >= 2
 
     def test_verify_gate_is_wired_into_preflight(self) -> None:
         import preflight_steps

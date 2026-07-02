@@ -510,6 +510,12 @@ jobs:
           uv run python scripts/script_trigger_map.py all-doc
           uv run python scripts/workflow_diagram.py diagram-doc
           uv run python scripts/doc_graph_viz.py all-doc
+          # Refs #2226: mirror the decision-tree retirement sweep so a tracked
+          # orphan already on main (e.g. the chore/update-generated-docs PR
+          # failed to open or merge after a generator retirement) surfaces as
+          # a staged deletion and fails the drift gate below, instead of the
+          # regeneration-only diff reporting clean.
+          uv run python scripts/verify_generated_docs_ownership.py retire
           # Refs #2013: the module-size snapshot joins the single-producer model
           # (#1540/#1543/#1546). Regenerate it here too so staleness on main
           # surfaces on the next push or the daily schedule.
