@@ -28,14 +28,13 @@
 
 ## 构建
 
-先同步锁定的 uv 环境，再编译本地指令：
+apm 不经由 uv 运行，而是作为 nix 构建的原生二进制文件执行（由 devcontainer，或远程会话的 `scripts/install-apm.sh` 放入 PATH）。编译本地指令：
 
 ```bash
-uv sync --locked
-uv run --with "apm-cli==$(python3 scripts/flake_pin.py version --tool apm)" apm compile --target all
+apm compile --target all
 ```
 
-APM 会读取 `.apm/instructions/*.instructions.md`，写出 `CLAUDE.md`、`AGENTS.md` 和 `GEMINI.md`。`--target all` 会为 flake.nix 锁定版本的 apm-cli（`scripts/flake_pin.py version --tool apm`）支持的每一种工具编译（`copilot, claude, cursor, opencode, codex, gemini, windsurf`）；`apm.yml` 的 `target:` 字段保持更窄的范围（`claude`、`codex`），因为该字段同时决定了 `apm install` 式的 skill 部署范围，本仓库有意将其限制在实际使用的工具内。uv 配置对依赖解析应用了 14 天的 `exclude-newer` 延迟。
+APM 会读取 `.apm/instructions/*.instructions.md`，写出 `CLAUDE.md`、`AGENTS.md` 和 `GEMINI.md`。`--target all` 会为 flake.nix 锁定版本的 apm-cli（`scripts/flake_pin.py version --tool apm`）支持的每一种工具编译（`copilot, claude, cursor, opencode, codex, gemini, windsurf`）；`apm.yml` 的 `target:` 字段保持更窄的范围（`claude`、`codex`），因为该字段同时决定了 `apm install` 式的 skill 部署范围，本仓库有意将其限制在实际使用的工具内。
 
 当有意修改 `.apm/` 源文件时，刷新校验和锁文件：
 

@@ -40,17 +40,14 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
-      - name: Resolve apm-cli version from flake.nix
+      - name: Resolve apm binary from flake.nix
         uses: ./.github/actions/resolve-apm-version
-
-      - name: Set up uv and project environment
-        uses: ./.github/actions/setup-uv
 
       - name: Compile agent instructions
         # --target all: every apm-cli-supported tool, not just claude/codex.
         # Refs #2210. apm.yml's `target:` field stays narrow (install-time
         # skill deployment); this flag governs compile-time text output only.
-        run: uv run --with "apm-cli==${APM_CLI_VERSION}" apm compile --target all
+        run: apm compile --target all
 
       - name: Fail if generated instructions drifted (verify mode)
         if: ${{ inputs.mode == 'verify' }}
@@ -58,7 +55,7 @@ jobs:
           # shellcheck disable=SC2086 # COMPILED_OUTPUT_PATHS is a deliberate
           # space-separated pathspec list, not a single quoted path.
           if [ -n "$(git status --porcelain -- $COMPILED_OUTPUT_PATHS)" ]; then
-            echo "::error::One or more of $COMPILED_OUTPUT_PATHS is out of date. Run 'uv sync --locked && uv run --with \"apm-cli==${APM_CLI_VERSION}\" apm compile --target all' and commit the result."
+            echo "::error::One or more of $COMPILED_OUTPUT_PATHS is out of date. Run 'apm compile --target all' and commit the result."
             exit 1
           fi
 

@@ -28,14 +28,15 @@ See [`CLAUDE.md`](./CLAUDE.md) or [`AGENTS.md`](./AGENTS.md) for the full compil
 
 ## Build
 
-Sync the locked uv environment, then compile the local instructions:
+apm runs as the nix-built native binary (on PATH via the devcontainer or a
+remote session's `scripts/install-apm.sh`), not via uv. Compile the local
+instructions:
 
 ```bash
-uv sync --locked
-uv run --with "apm-cli==$(python3 scripts/flake_pin.py version --tool apm)" apm compile --target all
+apm compile --target all
 ```
 
-APM reads `.apm/instructions/*.instructions.md` and writes `CLAUDE.md`, `AGENTS.md` and `GEMINI.md`. `--target all` compiles for every tool the flake.nix-pinned apm-cli (`scripts/flake_pin.py version --tool apm`) supports (`copilot, claude, cursor, opencode, codex, gemini, windsurf`); `apm.yml`'s `target:` field stays narrower (`claude`, `codex`) because it also scopes `apm install`-style skill deployment, which this repository deliberately keeps limited to the tools actually in use. The uv config applies a 14-day `exclude-newer` lag to dependency resolution.
+APM reads `.apm/instructions/*.instructions.md` and writes `CLAUDE.md`, `AGENTS.md` and `GEMINI.md`. `--target all` compiles for every tool the flake.nix-pinned apm-cli (`scripts/flake_pin.py version --tool apm`) supports (`copilot, claude, cursor, opencode, codex, gemini, windsurf`); `apm.yml`'s `target:` field stays narrower (`claude`, `codex`) because it also scopes `apm install`-style skill deployment, which this repository deliberately keeps limited to the tools actually in use.
 
 When intentionally modifying `.apm/` source files, refresh the checksum lock file:
 

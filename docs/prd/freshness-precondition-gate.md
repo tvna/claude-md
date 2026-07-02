@@ -135,7 +135,7 @@ that prove it are deterministic:
 ```sh
 # Universal artifacts are the verbatim apm compile output and carry no
 # repo-local nouns.
-uv run --with "apm-cli==$(python3 scripts/flake_pin.py version --tool apm)" --exclude-newer "14 days" apm compile
+apm compile
 git diff --exit-code; CLAUDE.md AGENTS.md
 python3 scripts/scan_apm_portability.py verify \
   --path .apm/instructions/master.instructions.md \

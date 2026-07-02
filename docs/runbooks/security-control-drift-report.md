@@ -82,7 +82,7 @@ JST Monday 05:00 trigger to reduce scheduled workflow sprawl.
 |---|---|---|
 | `rulesets` | `scripts/ruleset_drift.py detect` | Requires `RULESETS_PAT` (read-only PAT, same secret as the `ruleset-drift` job). Outputs `drift_count` / `unknown_count`. |
 | `labels` | `scripts/labels_apply.py plan` | Uses `GITHUB_TOKEN` (metadata read suffices). Summary file is parsed for `plan-only` / `report-only` rows. |
-| `apm-instructions` | `apm compile` + `git diff --exit-code CLAUDE.md AGENTS.md` | Compile is pinned via `APM_CLI_VERSION` env (resolved from `flake.nix` by `.github/actions/resolve-apm-version`, see `scripts/flake_pin.py version --tool apm`) and `uv run --with apm-cli==<pin> --exclude-newer "14 days"` to suppress transient drift, mirroring `verify-pr.yml`. |
+| `apm-instructions` | `apm compile` + `git diff --exit-code CLAUDE.md AGENTS.md` | `apm` runs as the nix-built native binary pinned by `flake.nix` (`.github/actions/resolve-apm-version` realizes `.#apm-cli` via `nix build`), not via uv, mirroring `verify-pr.yml`. |
 | `uv-pin-literal` | `scripts/uv_pin.py drift` | Asserts the pin literal lives only in `pyproject.toml`. |
 | `uv-pin-staleness` | `scripts/uv_pin.py stale` | Informational; emits `::warning::` when the pin trails upstream latest. |
 | `owasp-asi-mapping` | `scripts/owasp_asi_mapping.py verify` | Tree-only completeness check that `docs/prd/security-control-inventory.md` carries an ASI01-ASI10 status row per item (peer axis to the ATT&CK mapping). Authoritative enforcement is the PR-time `lint-scripts-static` gate; this weekly row is a redundant visibility signal, so a drift here is unreachable on `main`. |
@@ -125,7 +125,7 @@ it publishes, and act on a row that shows drift.
 |---|---|
 | `rulesets` | Follow the per-family issue filed by the `ruleset-drift` weekly-maintenance job (SoT-vs-live drift or unknown-ruleset). See `docs/runbooks/rulesets.md`. |
 | `labels` | Dispatch `apply-labels.yml` with `dry_run=false` after reviewing the plan summary. See `docs/runbooks/issue-triage.md`. |
-| `apm-instructions` | Locally run `uv run --with "apm-cli==<pin>" --exclude-newer "14 days" apm compile` and commit the regenerated `CLAUDE.md` / `AGENTS.md`. |
+| `apm-instructions` | Locally run `apm compile` (the nix-built native binary, not via uv) and commit the regenerated `CLAUDE.md` / `AGENTS.md`. |
 | `uv-pin-literal` | Remove the offending pin literal outside `pyproject.toml`, or update `pyproject.toml`. See `docs/standards/remote-environment.md`. |
 | `uv-pin-staleness` | Informational. Bump `[tool.uv].required-version` in `pyproject.toml` when ready to adopt the newer uv. |
 | `owasp-asi-mapping` | Restore the dropped ASI01-ASI10 status row in `docs/prd/security-control-inventory.md`. This should be unreachable on `main` (the PR-time `lint-scripts-static` gate blocks an incomplete mapping); a `drift` row here means the gate was bypassed or the detector itself changed. |

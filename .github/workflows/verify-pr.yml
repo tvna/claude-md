@@ -70,7 +70,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Resolve apm-cli version from flake.nix
+      - name: Resolve apm binary from flake.nix
         uses: ./.github/actions/resolve-apm-version
 
       - name: Validate title policy
@@ -225,7 +225,7 @@ jobs:
       - name: Compile agent instructions
         # --target all: every apm-cli-supported tool, not just claude/codex.
         # Refs #2210.
-        run: uv run --with "apm-cli==${APM_CLI_VERSION}" --exclude-newer "14 days" apm compile --target all
+        run: apm compile --target all
 
       - name: Verify compiled instruction outputs drift
         run: |
@@ -237,7 +237,7 @@ jobs:
           if [ -n "$drift" ]; then
             echo "::error::Compiled instruction output drift detected vs .apm/instructions/master.instructions.md:"
             echo "$drift"
-            echo "Run 'uv run --with \"apm-cli==${APM_CLI_VERSION}\" --exclude-newer \"14 days\" apm compile --target all' locally and commit the result."
+            echo "Run 'apm compile --target all' locally and commit the result."
             exit 1
           fi
 

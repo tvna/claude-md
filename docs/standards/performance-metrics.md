@@ -18,7 +18,7 @@ Two metrics are in scope for v1. A third candidate (redundancy / section-overlap
 
 ### (a) Token count of compiled outputs
 
-Token count of `CLAUDE.md` and `AGENTS.md` as produced by `apm compile` (the flake.nix-pinned apm-cli, invoked via `uv run --with "apm-cli==$(python3 scripts/flake_pin.py version --tool apm)" apm compile`; mirrors `.github/workflows/generate-agents.yml`). Deterministic and cheap.
+Token count of `CLAUDE.md` and `AGENTS.md` as produced by `apm compile` (the flake.nix-pinned apm-cli, run as a nix-built native binary, not via uv; mirrors `.github/workflows/generate-agents.yml`). Deterministic and cheap.
 
 - **Tokeniser**: pinned to `tiktoken` encoding `cl100k_base`. Pinned because it is offline, deterministic, and version-locked via `uv.lock`. A model-native tokeniser would be more faithful but introduces an external call and a moving target; record this trade-off explicitly so v2 can revisit.
 - **Unit**: integer token count, reported per file (both `CLAUDE.md` and `AGENTS.md` even though they are byte-identical today; they may diverge if `apm.yml` targets change).
@@ -185,4 +185,4 @@ Explicitly deferred to later phases / sub-issues:
 - [`docs/standards/repo-scope.md`](repo-scope.md); declared repo purpose (the source of "(2) measuring the performance impact")
 - [`docs/runbooks/rulesets.md`](../runbooks/rulesets.md), [`docs/runbooks/issue-triage.md`](../runbooks/issue-triage.md); runbook format precedent
 - [`apm.yml`](../../apm.yml); `target: [claude, codex]`; defines what `apm compile` produces (input to metric (a))
-- [`.github/workflows/generate-agents.yml`](../../.github/workflows/generate-agents.yml); toolchain pin (`apm-cli`, resolved from `flake.nix` via `scripts/flake_pin.py version --tool apm`; `uv`) reused by the harness
+- [`.github/workflows/generate-agents.yml`](../../.github/workflows/generate-agents.yml); toolchain pin (`apm-cli`, the nix-built native binary pinned by `flake.nix`) reused by the harness

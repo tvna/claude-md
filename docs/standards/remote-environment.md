@@ -104,7 +104,7 @@ PIN="$(python3 -c 'import tomllib; print(tomllib.load(open("pyproject.toml","rb"
 uv --version                                           # must print: uv $PIN
 command -v uv                                          # must print: $HOME/.local/bin/uv
 uv sync --locked                                       # must exit 0
-uv run --with "apm-cli==$(python3 scripts/flake_pin.py version --tool apm)" apm compile  # must exit 0
+apm compile  # must exit 0 (apm runs as the nix-built native binary, not via uv)
 git diff --exit-code; CLAUDE.md AGENTS.md            # must exit 0 (no drift vs CI)
 ```
 

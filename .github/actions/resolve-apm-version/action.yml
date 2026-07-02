@@ -1,30 +1,31 @@
 # Security invariant: like .github/actions/setup-uv and egress-firewall, this
 # composite action runs INLINE in the calling job and inherits that job's
 # permissions, env, and secrets. It MUST stay permission-agnostic: it reads NO
-# GITHUB_TOKEN and NO secrets, and touches the network not at all -- it only
-# reads flake.nix, already present in the checked-out working tree, via
-# scripts/flake_pin.py. Do not add a step that reads the token or a secret; if
-# a shared step ever needs its own scope, use a reusable workflow
+# GITHUB_TOKEN and NO secrets. Do not add a step that reads the token or a
+# secret; if a shared step ever needs its own scope, use a reusable workflow
 # (workflow_call, own permissions:) instead of this composite action.
 #
-# flake.nix is the single source of truth for the apm-cli version (mirrors the
-# scripts/flake_pin.py resolve contract already used by scripts/install-apm.sh
-# for the native-binary install path). A workflow that hardcoded its own
-# APM_CLI_VERSION copy would silently diverge the next time the scheduled
-# flake-pin-refresh job bumps flake.nix's apmVersion. Refs #2218.
-name: Resolve apm-cli version
-description: Read the apm-cli version pinned in flake.nix and export it as APM_CLI_VERSION for the rest of the job.
+# apm is NOT installed via uv/PyPI here: it runs as the nix-built native
+# binary, the same artifact `nix build .#apm-cli` produces for the devcontainer
+# (.devcontainer/scripts/configure-agent-runtime.sh's `install_nix_binary
+# apm-cli apm`) and for web/remote sessions (scripts/install-apm.sh). flake.nix
+# is the single source of truth for that binary's version and SHA256; building
+# it directly means there is no separate version string to read or keep in
+# sync; a workflow that reinstalled a same-named PyPI package instead could
+# silently diverge from flake.nix on the next flake-pin-refresh bump. Refs
+# #2218.
+name: Resolve apm binary
+description: Realize the flake.nix-pinned apm-cli derivation via nix and put its binary on PATH.
 
 runs:
   using: composite
   steps:
-    - name: Read apm pin from flake.nix
+    - name: Install nix
+      uses: DeterminateSystems/nix-installer-action@ef8a148080ab6020fd15196c2084a2eea5ff2d25 # v22
+
+    - name: Put the flake.nix-pinned apm binary on PATH
       shell: bash
       run: |
         set -euo pipefail
-        # Assign-then-echo, not `echo "...$(...)"`: set -e does not see a
-        # command substitution's exit code when it is embedded in echo's
-        # argument, so a failing flake_pin.py would otherwise still print
-        # `APM_CLI_VERSION=` and exit 0. Refs #2218 (Codex review).
-        apm_version="$(python3 scripts/flake_pin.py version --tool apm)"
-        echo "APM_CLI_VERSION=${apm_version}" >> "$GITHUB_ENV"
+        out_path="$(nix build --no-link --print-out-paths .#apm-cli)"
+        echo "${out_path}/bin" >> "$GITHUB_PATH"
