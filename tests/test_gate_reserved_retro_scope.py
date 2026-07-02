@@ -68,8 +68,6 @@ class TestUsesReservedScope:
 
 class TestDecide:
     def test_reserved_scope_create_is_denied(self) -> None:
-        # A reserved-scope title that is NOT the canonical handoff retro shape
-        # (Refs #1581 exception) stays denied.
         decision = gate.decide(
             "mcp__github__issue_write",
             _create_input("fix(auto-retro): close retro #5"),
@@ -81,19 +79,21 @@ class TestDecide:
         assert "auto-retro" in reason
         assert "#1395" in reason
 
-    def test_canonical_handoff_retro_title_is_allowed(self) -> None:
-        # Refs #1581 / D1: the pre-merge handoff survey opens the canonical
-        # retro in-session. The single permitted exception is the EXACT
-        # build_retro_title shape; the gate must NOT deny it.
+    def test_canonical_handoff_retro_title_is_now_denied(self) -> None:
+        # The pre-merge handoff survey (and its design-D1 in-session retro path)
+        # was retired, so the former allow-exception is gone: the canonical
+        # handoff title is now denied like every other auto-retro title.
         decision = gate.decide(
             "mcp__github__issue_write",
             _create_input("chore(auto-retro): review PR #5 repair loops"),
         )
-        assert decision is None
+        assert decision is not None
+        assert decision["hookSpecificOutput"]["permissionDecision"] == "deny"
 
-    def test_canonical_exception_aligns_with_build_retro_title(self) -> None:
-        # The allow-list predicate must never drift from the title producer:
-        # whatever build_retro_title emits must pass the gate.
+    def test_build_retro_title_output_is_denied(self) -> None:
+        # Even the exact build_retro_title shape is denied now that no
+        # in-session producer is exempt; the reserved scope is fully closed to
+        # agent tool calls.
         pr = auto_retro.MergedPR(
             number=4242,
             title="fix(x): y",
@@ -105,16 +105,17 @@ class TestDecide:
             html_url="",
         )
         canonical = auto_retro.build_retro_title(pr)
-        assert auto_retro.is_canonical_handoff_retro_title(canonical) is True
-        assert (
-            gate.decide("mcp__github__issue_write", _create_input(canonical))
-            is None
+        decision = gate.decide(
+            "mcp__github__issue_write", _create_input(canonical)
         )
+        assert decision is not None
+        assert decision["hookSpecificOutput"]["permissionDecision"] == "deny"
 
     def test_other_auto_retro_titles_still_denied(self) -> None:
-        # The exception is narrow: every other auto-retro title stays denied,
-        # including the legacy no-colon prefix and a different fix/docs scope.
+        # Every auto-retro title stays denied, including the canonical handoff
+        # shape, the legacy no-colon prefix, and a different fix/docs scope.
         for title in (
+            "chore(auto-retro): review PR #5 repair loops",
             "docs(auto-retro): document retro outcome",
             "chore(auto-retro) review PR #5 repair loops",
             "chore(auto-retro): review PR #5 repair loops extra",
@@ -194,10 +195,11 @@ class TestMain:
         decision = json.loads(stdout)
         assert decision["hookSpecificOutput"]["permissionDecision"] == "deny"
 
-    def test_canonical_handoff_retro_produces_no_output(
+    def test_canonical_handoff_retro_produces_deny(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        # Refs #1581: the permitted handoff retro create yields no decision.
+        # The former allow-exception is gone (survey retired): the canonical
+        # handoff retro create is now denied end-to-end.
         stdout = self._run(
             {
                 "tool_name": "mcp__github__issue_write",
@@ -207,7 +209,8 @@ class TestMain:
             },
             monkeypatch,
         )
-        assert stdout == ""
+        decision = json.loads(stdout)
+        assert decision["hookSpecificOutput"]["permissionDecision"] == "deny"
 
     def test_non_reserved_create_produces_no_output(
         self, monkeypatch: pytest.MonkeyPatch
