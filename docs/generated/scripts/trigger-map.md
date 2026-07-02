@@ -62,7 +62,6 @@ Detection is string-match based:
 | `gate_generated_scripts_manual_edit.py` | workflow | `verify-pr.yml (portable-pr-policy)` |
 | `gate_gh_cli.py` | agent-hook | `claude:PreToolUse` |
 | `gate_gh_cli.py` | agent-hook | `codex:PreToolUse` |
-| `gate_handoff_retro_survey_askuserquestion.py` | agent-hook | `claude:Stop` |
 | `gate_instruction_body_advisory.py` | agent-hook | `claude:PreToolUse` |
 | `gate_instruction_body_advisory.py` | agent-hook | `codex:PreToolUse` |
 | `gate_irreversible_bash.py` | agent-hook | `claude:PreToolUse` |
