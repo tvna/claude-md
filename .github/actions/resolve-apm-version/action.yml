@@ -22,4 +22,9 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
-        echo "APM_CLI_VERSION=$(python3 scripts/flake_pin.py version --tool apm)" >> "$GITHUB_ENV"
+        # Assign-then-echo, not `echo "...$(...)"`: set -e does not see a
+        # command substitution's exit code when it is embedded in echo's
+        # argument, so a failing flake_pin.py would otherwise still print
+        # `APM_CLI_VERSION=` and exit 0. Refs #2218 (Codex review).
+        apm_version="$(python3 scripts/flake_pin.py version --tool apm)"
+        echo "APM_CLI_VERSION=${apm_version}" >> "$GITHUB_ENV"

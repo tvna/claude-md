@@ -63,7 +63,16 @@ jobs:
           persist-credentials: false
 
       - name: Resolve apm-cli version from flake.nix
-        uses: ./.github/actions/resolve-apm-version
+        # Inlined rather than `uses: ./.github/actions/resolve-apm-version`:
+        # this job checks out an arbitrary historical release tag above, and
+        # a tag published before that composite action existed would not
+        # contain it, breaking `workflow_dispatch` republishing of old tags.
+        # scripts/flake_pin.py predates this PR and is not a new dependency.
+        # Refs #2218 (Codex review).
+        run: |
+          set -euo pipefail
+          apm_version="$(python3 scripts/flake_pin.py version --tool apm)"
+          echo "APM_CLI_VERSION=${apm_version}" >> "$GITHUB_ENV"
 
       - name: Set up uv and project environment
         uses: ./.github/actions/setup-uv
