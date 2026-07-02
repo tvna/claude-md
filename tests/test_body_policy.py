@@ -1464,3 +1464,96 @@ class TestVerifySectionSubstantiveContent:
         )
         errors = body_policy.verify_section_substantive_content(body)
         assert any("Related Issue" in e for e in errors)
+
+
+# ---------------------------------------------------------------------------
+# verify_facts_no_ungrounded_time
+# ---------------------------------------------------------------------------
+
+
+class TestVerifyFactsNoUngroundedTime:
+    def _facts(self, content: str) -> str:
+        return f"## Facts\n\n{content}\n\n## Assumptions\n\n- one\n"
+
+    def test_flags_uncited_approx_range(self) -> None:
+        # The recurring defect: an approx CI-startup range in Facts.
+        body = self._facts("- approx 30-60 seconds CI startup")
+        errors = body_policy.verify_facts_no_ungrounded_time(body)
+        assert len(errors) == 1
+        assert "::error::" in errors[0]
+        assert "## Facts" in errors[0]
+        assert "Assumptions" in errors[0]
+
+    def test_flags_uncited_single_value(self) -> None:
+        body = self._facts("- approx 5 seconds in-session creation")
+        assert len(body_policy.verify_facts_no_ungrounded_time(body)) == 1
+
+    def test_flags_tilde_abbreviation(self) -> None:
+        body = self._facts("- ~5s to boot")
+        assert len(body_policy.verify_facts_no_ungrounded_time(body)) == 1
+
+    def test_flags_about_and_around_and_roughly(self) -> None:
+        for hedge in ("about", "around", "roughly", "approximately"):
+            body = self._facts(f"- {hedge} 2 minutes to run")
+            assert (
+                len(body_policy.verify_facts_no_ungrounded_time(body)) == 1
+            ), hedge
+
+    def test_passes_when_cited_with_url(self) -> None:
+        body = self._facts(
+            "- approx 30-60 seconds CI startup "
+            "(https://github.com/o/r/actions/runs/1)"
+        )
+        assert body_policy.verify_facts_no_ungrounded_time(body) == []
+
+    def test_passes_when_measurement_named(self) -> None:
+        body = self._facts("- measured 42 seconds for the suite")
+        assert body_policy.verify_facts_no_ungrounded_time(body) == []
+
+    def test_ignores_figure_in_assumptions(self) -> None:
+        # Section scoping: the identical figure under Assumptions is fine.
+        body = (
+            "## Facts\n\n- a grounded fact\n\n"
+            "## Assumptions\n\n- approx 30-60 seconds CI startup (Speculation)\n"
+        )
+        assert body_policy.verify_facts_no_ungrounded_time(body) == []
+
+    def test_returns_empty_when_facts_absent(self) -> None:
+        assert body_policy.verify_facts_no_ungrounded_time("## Summary\n\n- x\n") == []
+
+    def test_returns_empty_when_facts_blank(self) -> None:
+        assert body_policy.verify_facts_no_ungrounded_time("## Facts\n\n\n") == []
+
+    def test_does_not_flag_number_without_time_unit(self) -> None:
+        body = self._facts("- about 3 files changed")
+        assert body_policy.verify_facts_no_ungrounded_time(body) == []
+
+    def test_does_not_flag_time_unit_without_hedge(self) -> None:
+        body = self._facts("- takes 30 seconds exactly, benchmarked below")
+        assert body_policy.verify_facts_no_ungrounded_time(body) == []
+
+    def test_flags_each_offending_line(self) -> None:
+        body = self._facts(
+            "- approx 5 seconds one thing\n- approx 2 minutes another thing"
+        )
+        assert len(body_policy.verify_facts_no_ungrounded_time(body)) == 2
+
+    def test_canonical_body_passes(self) -> None:
+        # The canonical fixtures carry no timing figures.
+        assert body_policy.verify_facts_no_ungrounded_time(_NEW_SHAPE_PR_BODY) == []
+
+    def test_wired_into_shape_gate(self) -> None:
+        # An uncited figure injected into the new-shape Facts fails _verify.
+        body = _NEW_SHAPE_PR_BODY.replace(
+            "## Facts\n\n- one fact\n",
+            "## Facts\n\n- approx 30-60 seconds CI startup\n",
+        )
+        assert (
+            body_policy._verify(
+                "pull_request",
+                body,
+                created_at="2026-07-02T00:00:00Z",
+                shape_cutoff="2026-05-26T00:00:00Z",
+            )
+            == 1
+        )
