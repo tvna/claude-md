@@ -32,10 +32,10 @@
 
 ```bash
 uv sync --locked
-uv run --with "apm-cli==0.12.1" apm compile --target all
+uv run --with "apm-cli==$(python3 scripts/flake_pin.py version --tool apm)" apm compile --target all
 ```
 
-APM は `.apm/instructions/*.instructions.md` を読み、`CLAUDE.md`、`AGENTS.md`、`GEMINI.md` を書き出します。`--target all` は apm-cli 0.12.1 が対応する全ツール（`copilot, claude, cursor, opencode, codex, gemini, windsurf`）向けにコンパイルします。`apm.yml` の `target:` フィールドはより狭い範囲（`claude`、`codex`）のままにしています。このフィールドは `apm install` 相当の skill 配置範囲も兼ねており、本リポジトリでは実際に使っていないツール向けの配置は意図的に絞っているためです。uv 設定では、依存関係解決に 14 日間の `exclude-newer` 遅延を適用しています。
+APM は `.apm/instructions/*.instructions.md` を読み、`CLAUDE.md`、`AGENTS.md`、`GEMINI.md` を書き出します。`--target all` は flake.nix にピン留めされた apm-cli（`scripts/flake_pin.py version --tool apm`）が対応する全ツール（`copilot, claude, cursor, opencode, codex, gemini, windsurf`）向けにコンパイルします。`apm.yml` の `target:` フィールドはより狭い範囲（`claude`、`codex`）のままにしています。このフィールドは `apm install` 相当の skill 配置範囲も兼ねており、本リポジトリでは実際に使っていないツール向けの配置は意図的に絞っているためです。uv 設定では、依存関係解決に 14 日間の `exclude-newer` 遅延を適用しています。
 
 意図的に `.apm/` のソースファイルを変更したときは、チェックサムのロックファイルを更新します。
 

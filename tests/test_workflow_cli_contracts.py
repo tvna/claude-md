@@ -211,6 +211,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("bot_pr_automerge.py", "merge"): "test_bot_pr_automerge_merge_matches_workflow_args",
     ("flake_pin.py", "asset-url"): "test_flake_pin_workflow_subcommands_match_ci_usage",
     ("flake_pin.py", "bump"): "test_flake_pin_workflow_subcommands_match_ci_usage",
+    ("flake_pin.py", "version"): "test_flake_pin_workflow_subcommands_match_ci_usage",
     ("flake_pin_latest.py", "check"): "test_flake_pin_latest_check_matches_workflow_args",
     ("dependabot_automerge.py", "audit"): "test_dependabot_automerge_audit_matches_workflow_files",
     ("dependabot_automerge.py", "list-files"): "test_dependabot_list_files_matches_workflow_args",
@@ -3058,14 +3059,19 @@ _FLAKE_PIN_FIXTURE = """
 
 
 def test_flake_pin_workflow_subcommands_match_ci_usage(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     """Mirror the ``asset-url`` and ``bump`` argv shapes used by the
     ``Recompute per-system hashes and bump flake.nix`` step in
-    ``.github/workflows/flake-pin-refresh.yml``. Refs #1171."""
+    ``.github/workflows/flake-pin-refresh.yml``, and the ``version`` argv
+    shape used by the ``Read apm pin from flake.nix`` step in
+    ``.github/actions/resolve-apm-version/action.yml``. Refs #1171, #2218."""
     flake = tmp_path / "flake.nix"
     flake.write_text(_FLAKE_PIN_FIXTURE, encoding="utf-8")
     monkeypatch.setattr(flake_pin, "FLAKE_PATH", flake)
+
+    assert flake_pin.main(["version", "--tool", "apm"]) == 0
+    assert capsys.readouterr().out.strip() == "0.12.1"
 
     assert (
         flake_pin.main(

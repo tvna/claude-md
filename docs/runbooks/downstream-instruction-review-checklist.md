@@ -104,7 +104,7 @@ This document and any PR that updates it are subject to the same drift gate it d
 
 ```bash
 uv sync --locked
-uv run --with "apm-cli==0.12.1" apm compile
+uv run --with "apm-cli==$(python3 scripts/flake_pin.py version --tool apm)" apm compile
 git diff --exit-code; CLAUDE.md AGENTS.md
 ```
 

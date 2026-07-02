@@ -24,9 +24,6 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
 
-env:
-  APM_CLI_VERSION: "0.12.1"
-
 jobs:
   publish:
     runs-on: ubuntu-latest
@@ -64,6 +61,9 @@ jobs:
         with:
           ref: ${{ steps.tag.outputs.tag }}
           persist-credentials: false
+
+      - name: Resolve apm-cli version from flake.nix
+        uses: ./.github/actions/resolve-apm-version
 
       - name: Set up uv and project environment
         uses: ./.github/actions/setup-uv

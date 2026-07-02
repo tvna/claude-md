@@ -56,7 +56,6 @@ jobs:
       BODY_POLICY_CUTOFF: "2026-05-26T00:00:00Z"
       BODY_POLICY_SHAPE_CUTOFF: "2026-05-26T00:00:00Z"
       BASE_REF: origin/${{ github.event.pull_request.base.ref }}
-      APM_CLI_VERSION: "0.12.1"
       # Every file `apm compile --target all` can produce (Refs #2210, #2211).
       # git status --porcelain (not git diff) is required: a target file
       # apm compile creates for the first time is untracked, and git diff
@@ -70,6 +69,9 @@ jobs:
           # README translation check can compare <base>..HEAD.
           fetch-depth: 0
           persist-credentials: false
+
+      - name: Resolve apm-cli version from flake.nix
+        uses: ./.github/actions/resolve-apm-version
 
       - name: Validate title policy
         run: |

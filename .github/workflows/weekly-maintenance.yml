@@ -94,7 +94,6 @@ permissions: {}
 
 env:
   REPO: ${{ github.repository }}
-  APM_CLI_VERSION: "0.12.1"
   # Every file `apm compile --target all` can produce (Refs #2210, #2211).
   # git status --porcelain (not git diff) is required: a target file
   # apm compile creates for the first time is untracked, and git diff
@@ -489,6 +488,9 @@ jobs:
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
+
+      - name: Resolve apm-cli version from flake.nix
+        uses: ./.github/actions/resolve-apm-version
 
       - name: Set up uv and project environment
         uses: ./.github/actions/setup-uv

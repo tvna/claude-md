@@ -32,10 +32,10 @@
 
 ```bash
 uv sync --locked
-uv run --with "apm-cli==0.12.1" apm compile --target all
+uv run --with "apm-cli==$(python3 scripts/flake_pin.py version --tool apm)" apm compile --target all
 ```
 
-APM 会读取 `.apm/instructions/*.instructions.md`，写出 `CLAUDE.md`、`AGENTS.md` 和 `GEMINI.md`。`--target all` 会为 apm-cli 0.12.1 支持的每一种工具编译（`copilot, claude, cursor, opencode, codex, gemini, windsurf`）；`apm.yml` 的 `target:` 字段保持更窄的范围（`claude`、`codex`），因为该字段同时决定了 `apm install` 式的 skill 部署范围，本仓库有意将其限制在实际使用的工具内。uv 配置对依赖解析应用了 14 天的 `exclude-newer` 延迟。
+APM 会读取 `.apm/instructions/*.instructions.md`，写出 `CLAUDE.md`、`AGENTS.md` 和 `GEMINI.md`。`--target all` 会为 flake.nix 锁定版本的 apm-cli（`scripts/flake_pin.py version --tool apm`）支持的每一种工具编译（`copilot, claude, cursor, opencode, codex, gemini, windsurf`）；`apm.yml` 的 `target:` 字段保持更窄的范围（`claude`、`codex`），因为该字段同时决定了 `apm install` 式的 skill 部署范围，本仓库有意将其限制在实际使用的工具内。uv 配置对依赖解析应用了 14 天的 `exclude-newer` 延迟。
 
 当有意修改 `.apm/` 源文件时，刷新校验和锁文件：
 
