@@ -9,20 +9,10 @@ Commit scope, the create is denied with a ``permissionDecision: "deny"`` so the
 agent cannot mint an issue that downstream automation mistakes for an
 auto-opened retrospective.
 
-One narrow exception (Refs #1581 / responsibility-separation design D1): the
-pre-merge handoff survey opens the canonical retro IN-SESSION when the operator
-reports a problem the CI detector cannot see (process repairs such as a
-wrong-branch re-placement or a discarded-drift cleanup leave no PR-diff / CI /
-review trace). That single permitted title is exactly the shape
-:func:`auto_retro.build_retro_title` emits --
-``chore(auto-retro): review PR #<N> repair loops``; matched by
-:func:`auto_retro.is_canonical_handoff_retro_title`. Allowing only that exact
-literal keeps every other ``auto-retro`` title denied, and because the
-in-session retro uses the canonical shape, CI dedup
-(:func:`auto_retro.find_existing_retro`) still recognises it and suppresses the
-post-merge duplicate. The standalone retro carries no implementing PR, so it
-does not trip ``verify-no-direct-retro-pr`` (which only fires on a PR that
-links a retro issue).
+Every ``auto-retro``-scoped title is denied without exception. (A former narrow
+allow-exception let the pre-merge handoff survey open the canonical retro
+in-session under design D1; it was removed when that survey was retired, so the
+reserved scope is now fully closed to agent tool calls.)
 
 Why this gate exists (Refs #1395): PR #1394 tripped the
 ``verify-no-direct-retro-pr`` CI gate because an agent-opened tracking issue
@@ -63,7 +53,6 @@ from typing import Any
 
 from _hook_runtime import build_deny, run_tool_hook
 from auto_retro import (
-    is_canonical_handoff_retro_title,
     is_retro_issue_title,
     is_retro_pr,
 )
@@ -107,14 +96,7 @@ def build_reason() -> str:
         "as a direct PR off an un-triaged retro and blocks it (the #1394 "
         "false positive).\n\n"
         "Rename the title to a non-reserved scope; e.g. "
-        "`chore(retro-visibility): ...`; and retry.\n\n"
-        "The ONLY permitted exception is the canonical pre-merge handoff "
-        "retro, whose title must be EXACTLY "
-        "`chore(auto-retro): review PR #<N> repair loops` (the shape "
-        "auto_retro.build_retro_title emits). If you are recording a "
-        "handoff-survey problem, first check for an existing retro for PR "
-        "#<N>: comment on it if one exists, otherwise create it with that "
-        "exact title. Refs #1395. Refs #1581."
+        "`chore(retro-visibility): ...`; and retry. Refs #1395."
     )
 
 
@@ -132,13 +114,6 @@ def decide(
     if not isinstance(title, str):
         return None
     if not uses_reserved_scope(title):
-        return None
-    # Narrow exception (Refs #1581): the pre-merge handoff survey opens the
-    # canonical retro in-session when the operator reports a problem CI cannot
-    # see. Only the exact build_retro_title shape is permitted; every other
-    # ``auto-retro`` title stays denied. The single-source predicate lives in
-    # auto_retro so the allow-list can never drift from the title producer.
-    if is_canonical_handoff_retro_title(title):
         return None
     return build_deny(build_reason())
 

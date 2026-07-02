@@ -42,17 +42,6 @@ reasoning is now encoded in `scripts/refresh_pr_branch.py` and pointed to by
 `check_pr_mergeability.py`, so every agent gets the same deterministic step.
 See `docs/runbooks/refresh-behind-pr.md`.
 
-## Scope note: the handoff survey is a separate concern
-
-The `Stop`-event retro survey
-(`scripts/gate_handoff_retro_survey_askuserquestion.py`) is Claude-only
-because it depends on the `AskUserQuestion` tool, which Codex and Devin do
-not have. That gate captures *retrospective* data at handoff; it is not part
-of reaching merge-readiness, and it is intentionally out of scope for this
-loop. The merge-readiness loop above reaches the just-before-merge state
-identically across agents without it. See
-`docs/runbooks/pre-merge-retro-survey.md` for that separate gate.
-
 ## Verifying agent parity
 
 - `python3 scripts/gen_agent_hooks.py --check`; the generated configs match
