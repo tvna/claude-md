@@ -104,7 +104,7 @@ Notes:
 | Surface | ATT&CK | Existing defense | Evidence | Status | Gap |
 |---|---|---|---|---|---|
 | `.apm/instructions/master.instructions.md` | LM, Persist, Exec | Single APM source. PR gate `verify-pr.yml` recompiles and diffs the output files; PR review on every change; scheduled compile-then-diff drift auto-filed as a per-family issue at the `detect-and-file` floor (`security_drift_report.py file-family-issues`, #178). | `verify-pr.yml`, `generate-agents.yml`, `CLAUDE.md`, `AGENTS.md` | partially covered | #183 (downstream review checklist) |
-| `CLAUDE.md` | LM, Persist | Compiled output; drift-gated by `verify-pr.yml`; not hand-edited (compiled by `apm-cli==0.12.1`). | `verify-pr.yml`, `.apm/instructions/master.instructions.md`, #112 | covered | (none) |
+| `CLAUDE.md` | LM, Persist | Compiled output; drift-gated by `verify-pr.yml`; not hand-edited (compiled by the flake.nix-pinned apm-cli, see `scripts/flake_pin.py version --tool apm`). | `verify-pr.yml`, `.apm/instructions/master.instructions.md`, #112 | covered | (none) |
 | `AGENTS.md` | LM, Persist | Compiled output; drift-gated by `verify-pr.yml`; byte-identical compile to `CLAUDE.md` today. | `verify-pr.yml`, `.apm/instructions/master.instructions.md` | covered | (none) |
 
 ## 5. Dependency files and bump policy

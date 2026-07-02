@@ -67,7 +67,7 @@ on the **Hard block**.
 
 - **Question.** Are `CLAUDE.md` and `AGENTS.md` byte-identical to the output of `apm compile` for the diff's `.apm/instructions/master.instructions.md`?
 - **Evidence.** `verify-pr.yml` runs `apm compile` and `git diff --exit-code; CLAUDE.md AGENTS.md` on every PR. The reviewer confirms the gate is green; no manual diff is required.
-- **Hard block.** `verify-pr.yml` red. The author must regenerate the artifacts (`uv run --with "apm-cli==<pin>" --exclude-newer "14 days" apm compile`) and commit the result. Do not advance to dimensions 3 through 5 until this gate is green.
+- **Hard block.** `verify-pr.yml` red. The author must regenerate the artifacts (`apm compile`, the nix-built native binary, not via uv) and commit the result. Do not advance to dimensions 3 through 5 until this gate is green.
 
 ## 3. Unsafe agent behavior
 
@@ -104,7 +104,7 @@ This document and any PR that updates it are subject to the same drift gate it d
 
 ```bash
 uv sync --locked
-uv run --with "apm-cli==0.12.1" apm compile
+apm compile
 git diff --exit-code; CLAUDE.md AGENTS.md
 ```
 

@@ -28,14 +28,13 @@
 
 ## 빌드
 
-잠긴(locked) uv 환경을 동기화한 뒤, 로컬 지침을 컴파일합니다.
+apm은 uv를 거치지 않고 nix가 빌드한 네이티브 바이너리로 실행됩니다(devcontainer, 또는 원격 세션의 `scripts/install-apm.sh`가 PATH에 배치합니다). 로컬 지침을 컴파일합니다.
 
 ```bash
-uv sync --locked
-uv run --with "apm-cli==0.12.1" apm compile --target all
+apm compile --target all
 ```
 
-APM은 `.apm/instructions/*.instructions.md`를 읽고, `CLAUDE.md`, `AGENTS.md`, `GEMINI.md`를 써냅니다. `--target all`은 apm-cli 0.12.1이 지원하는 모든 도구(`copilot, claude, cursor, opencode, codex, gemini, windsurf`)를 위해 컴파일합니다. `apm.yml`의 `target:` 필드는 더 좁은 범위(`claude`, `codex`)로 유지합니다. 이 필드는 `apm install` 방식의 skill 배치 범위도 겸하고 있어서, 본 저장소가 실제로 사용하지 않는 도구로의 배치는 의도적으로 좁혀 두었기 때문입니다. uv 설정에서는 의존성 해석에 14일간의 `exclude-newer` 지연을 적용합니다.
+APM은 `.apm/instructions/*.instructions.md`를 읽고, `CLAUDE.md`, `AGENTS.md`, `GEMINI.md`를 써냅니다. `--target all`은 flake.nix에 고정된 apm-cli(`scripts/flake_pin.py version --tool apm`)가 지원하는 모든 도구(`copilot, claude, cursor, opencode, codex, gemini, windsurf`)를 위해 컴파일합니다. `apm.yml`의 `target:` 필드는 더 좁은 범위(`claude`, `codex`)로 유지합니다. 이 필드는 `apm install` 방식의 skill 배치 범위도 겸하고 있어서, 본 저장소가 실제로 사용하지 않는 도구로의 배치는 의도적으로 좁혀 두었기 때문입니다.
 
 의도적으로 `.apm/`의 소스 파일을 변경했을 때는, 체크섬 잠금 파일을 갱신합니다.
 

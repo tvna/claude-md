@@ -94,7 +94,6 @@ permissions: {}
 
 env:
   REPO: ${{ github.repository }}
-  APM_CLI_VERSION: "0.12.1"
   # Every file `apm compile --target all` can produce (Refs #2210, #2211).
   # git status --porcelain (not git diff) is required: a target file
   # apm compile creates for the first time is untracked, and git diff
@@ -490,8 +489,8 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Set up uv and project environment
-        uses: ./.github/actions/setup-uv
+      - name: Resolve apm binary from flake.nix
+        uses: ./.github/actions/resolve-apm-version
 
       - name: Detect ruleset drift (read-only)
         id: ruleset
@@ -556,7 +555,7 @@ jobs:
         continue-on-error: true
         # --target all: every apm-cli-supported tool, not just claude/codex.
         # Refs #2210.
-        run: uv run --with "apm-cli==${APM_CLI_VERSION}" --exclude-newer "14 days" apm compile --target all
+        run: apm compile --target all
 
       - name: Diff compiled instruction outputs
         id: apm
