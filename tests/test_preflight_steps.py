@@ -47,6 +47,12 @@ class TestStepsRegistry:
             ("script_trigger_map.py", "all-doc"),
             ("workflow_diagram.py", "diagram-doc"),
             ("doc_graph_viz.py", "all-doc"),
+            # Refs #2226: the retirement sweep deletes docs/generated/ files
+            # no registered producer owns; it is a write-lane command for the
+            # post-merge decision-tree job only, same as the generators above.
+            # The read-only "verify" subcommand of the same script IS a
+            # legitimate preflight step.
+            ("verify_generated_docs_ownership.py", "retire"),
         }
         for step in preflight_steps.STEPS:
             tokens = list(step.argv)
