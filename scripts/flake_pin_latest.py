@@ -14,8 +14,11 @@ is the writer; the refresh workflow recomputes hashes). For a given tool it:
 It prints the adoptable target version to stdout when an update is available
 *and* past cooldown, otherwise prints nothing. Exit code is 0 in both cases so
 the workflow can branch on stdout; it exits non-zero only on a real error
-(unreadable flake, malformed API response, unparseable version), failing loud
-rather than silently skipping a bump (CLAUDE.md section 4).
+(unreadable flake, malformed API response, an unparseable *pinned* version),
+failing loud rather than silently skipping a bump (CLAUDE.md section 4). An
+unparseable *upstream* release tag is not treated as an error: when
+``releases/latest`` points at an unrelated release stream that shares the repo
+(not a CLI ``vX.Y.Z`` tag), it holds like any other "no newer release" case.
 
 The network fetch is injected, so the cooldown/comparison logic is unit-tested
 without hitting GitHub.
@@ -37,7 +40,10 @@ Contract:
         the adopt and hold cases so the workflow branches on stdout.
     Failure policy: fails loud per CLAUDE.md section 4; a non-2xx API status,
         a non-JSON / non-object body, a missing ``tag_name`` / ``published_at``,
-        or an unparseable version exits non-zero rather than silently holding.
+        or an unparseable *pinned* version exits non-zero rather than silently
+        holding. An unparseable *upstream* release tag is the one exception: it
+        holds (exit 0), since ``releases/latest`` can legitimately point at an
+        unrelated release stream sharing the repo.
 """
 
 from __future__ import annotations
@@ -156,9 +162,12 @@ def decide(
 ) -> str | None:
     """Return the adoptable target version, or ``None`` to hold.
 
-    Holds (returns ``None``) when the latest release is not newer than the pin
-    or has not yet aged past the cooldown window. Raises ``LatestPinError`` on
-    any malformed input; never silently treats an error as "hold".
+    Holds (returns ``None``) when the latest release is not newer than the pin,
+    has not yet aged past the cooldown window, or carries a tag that is not a
+    parseable CLI version (an unrelated release stream sharing the repo). Raises
+    ``LatestPinError`` on malformed input from the *pinned* side or the API
+    envelope; only the upstream tag's version-parse failure is downgraded to a
+    hold rather than a raise.
     """
     if now is None:
         now = dt.datetime.now(dt.UTC)
@@ -169,7 +178,25 @@ def decide(
     pinned = flake_pin.current_version(flake_text, tool)
     latest, published = _parse_release(fetcher(spec.github_repo), spec.github_repo)
 
-    if _version_tuple(latest) <= _version_tuple(pinned):
+    # The pinned side comes from flake.nix; an unparseable value there signals a
+    # corrupt repository state and stays fail-loud (CLAUDE.md section 4).
+    pinned_tuple = _version_tuple(pinned)
+    # The latest side comes from an external ``releases/latest`` that may point
+    # at an unrelated release stream sharing the repo (e.g. an azd extension
+    # tagged ``azd-ext-microsoft-azd-waza_0.38.0`` under microsoft/waza). That is
+    # an external condition, not repo corruption, and is equivalent to "no newer
+    # CLI release to adopt": hold rather than crash the refresh job (Refs #2221).
+    try:
+        latest_tuple = _version_tuple(latest)
+    except LatestPinError:
+        print(
+            f"warning: latest release for {spec.github_repo} does not look like "
+            f"a CLI version tag: {latest!r}; holding",
+            file=sys.stderr,
+        )
+        return None
+
+    if latest_tuple <= pinned_tuple:
         return None
 
     age = now - published
