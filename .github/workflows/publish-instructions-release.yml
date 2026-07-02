@@ -61,6 +61,13 @@ jobs:
         with:
           ref: ${{ steps.tag.outputs.tag }}
           persist-credentials: false
+          # Release notes are computed from `git log <prev-v*-tag>..<tag>`, so the
+          # publish step needs the full commit history AND every v* tag reachable,
+          # not just the shallow single-commit default. fetch-depth: 0 fetches all
+          # history; fetch-tags: true guarantees the previous release tags are
+          # present so previous-tag selection can resolve them. Refs #2193.
+          fetch-depth: 0
+          fetch-tags: true
 
       - name: Install nix
         # Inlined rather than `uses: ./.github/actions/resolve-apm-version`:
