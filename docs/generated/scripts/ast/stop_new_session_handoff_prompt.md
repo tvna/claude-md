@@ -79,17 +79,6 @@ flowchart TD
     N003 --> N004
 ```
 
-## _strip_survey_vocab(...)
-
-```mermaid
-flowchart TD
-    N001["_strip_survey_vocab(...)"]
-    N002["for phrase in SURVEY_NEUTRALIZE:     lowered = lowered.replace(phrase.lower(), '<str>')"]
-    N003["return lowered"]
-    N001 -->|"start"| N002
-    N002 --> N003
-```
-
 ## _find_all(...)
 
 ```mermaid
@@ -127,7 +116,7 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["signals_handoff(...)"]
-    N002["lowered = _strip_survey_vocab(...)"]
+    N002["lowered = lower(...)"]
     N003["return _co_occurs_near(lowered, HANDOFF_CUES, HANDOFF_DIRECTIVES, PROXIMITY_WINDOW)"]
     N001 -->|"start"| N002
     N002 --> N003
