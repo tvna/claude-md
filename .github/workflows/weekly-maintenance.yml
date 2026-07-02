@@ -34,6 +34,7 @@ on:
       - "pyproject.toml"
       - "CLAUDE.md"
       - "AGENTS.md"
+      - "GEMINI.md"
       - "docs/prd/security-control-inventory.md"
   workflow_dispatch:
     inputs:
@@ -94,6 +95,11 @@ permissions: {}
 env:
   REPO: ${{ github.repository }}
   APM_CLI_VERSION: "0.12.1"
+  # Every file `apm compile --target all` can produce (Refs #2210, #2211).
+  # git status --porcelain (not git diff) is required: a target file
+  # apm compile creates for the first time is untracked, and git diff
+  # silently ignores untracked paths.
+  COMPILED_OUTPUT_PATHS: "CLAUDE.md AGENTS.md GEMINI.md .github/copilot-instructions.md"
 
 jobs:
   branch-cleanup:
@@ -548,14 +554,20 @@ jobs:
       - name: Compile APM instructions
         id: apm_compile
         continue-on-error: true
-        run: uv run --with "apm-cli==${APM_CLI_VERSION}" --exclude-newer "14 days" apm compile
+        # --target all: every apm-cli-supported tool, not just claude/codex.
+        # Refs #2210.
+        run: uv run --with "apm-cli==${APM_CLI_VERSION}" --exclude-newer "14 days" apm compile --target all
 
-      - name: Diff CLAUDE.md / AGENTS.md
+      - name: Diff compiled instruction outputs
         id: apm
         if: always()
         run: |
           set -euo pipefail
-          if git diff --exit-code -- CLAUDE.md AGENTS.md; then
+          # git status --porcelain (not git diff --exit-code): a target file
+          # apm compile creates for the first time is untracked, and git diff
+          # silently ignores untracked paths. Refs #2211 (Codex review).
+          # shellcheck disable=SC2086
+          if [ -z "$(git status --porcelain -- $COMPILED_OUTPUT_PATHS)" ]; then
             echo "rc=0" >> "$GITHUB_OUTPUT"
           else
             echo "rc=1" >> "$GITHUB_OUTPUT"

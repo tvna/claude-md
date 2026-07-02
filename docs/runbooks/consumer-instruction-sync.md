@@ -3,7 +3,7 @@
 Tracking issue: [#1678](https://github.com/tvna/claude-md/issues/1678)
 
 This runbook is for a downstream project that wants the compiled `CLAUDE.md` /
-`AGENTS.md` from this master repository. It replaces the retracted submodule +
+`AGENTS.md` / `GEMINI.md` from this master repository. It replaces the retracted submodule +
 symlink method (see
 [`docs/proposals/instruction-distribution-mechanism.md`](../proposals/instruction-distribution-mechanism.md)
 for why that method fails on a fresh clone). The result of this procedure is a
@@ -13,8 +13,8 @@ fresh `git clone` such as a Claude Code on the web session.
 ## How it works
 
 1. The master publishes a tagged release (`v*`, the semver tag auto-created
-   when `apm.yml: version` changes; see #89) with three assets:
-   `CLAUDE.md`, `AGENTS.md`, and `SHA256SUMS`.
+   when `apm.yml: version` changes; see #89) with four assets:
+   `CLAUDE.md`, `AGENTS.md`, `GEMINI.md`, and `SHA256SUMS`.
 2. The consumer runs a scheduled workflow that fetches those assets for a
    **pinned tag**, verifies each file against `SHA256SUMS`, writes the result as
    a committed real file, and opens a PR.
@@ -25,8 +25,8 @@ fresh `git clone` such as a Claude Code on the web session.
 ## Where the synced file goes
 
 - **No project-specific delta:** sync `CLAUDE.md` to the repository root
-  `CLAUDE.md` (and `AGENTS.md` to `AGENTS.md`). The whole file is the master
-  copy.
+  `CLAUDE.md` (and `AGENTS.md` to `AGENTS.md`, `GEMINI.md` to `GEMINI.md` if the
+  consumer uses Gemini CLI). The whole file is the master copy.
 - **With a project-specific delta:** sync to a vendored path, e.g.
   `.agents/claude-md-master/CLAUDE.md`, and keep the consumer's own root
   `CLAUDE.md` as a small file that imports it and adds the delta:
@@ -104,16 +104,18 @@ jobs:
           set -euo pipefail
           base="https://github.com/${MASTER_REPO}/releases/download/${INSTRUCTIONS_TAG}"
           tmp="$(mktemp -d)"
-          for f in CLAUDE.md AGENTS.md SHA256SUMS; do
+          for f in CLAUDE.md AGENTS.md GEMINI.md SHA256SUMS; do
             curl -fsSL "${base}/${f}" -o "${tmp}/${f}"
           done
           # Verify every payload file against the release manifest. A mismatch
           # exits non-zero and the job fails before anything is committed.
           ( cd "$tmp" && sha256sum -c SHA256SUMS )
           # Land the verified files as committed real files (no symlink).
-          # No-delta layout: write to the repository root.
+          # No-delta layout: write to the repository root. Drop the GEMINI.md
+          # copy if the consumer does not use Gemini CLI.
           cp "${tmp}/CLAUDE.md" CLAUDE.md
           cp "${tmp}/AGENTS.md" AGENTS.md
+          cp "${tmp}/GEMINI.md" GEMINI.md
           rm -rf "$tmp"
 
       - name: Open a pull request on change
@@ -123,7 +125,7 @@ jobs:
           title: "chore: sync agent instructions from tvna/claude-md"
           commit-message: "chore: sync agent instructions (${{ env.INSTRUCTIONS_TAG }})"
           body: |
-            Syncs CLAUDE.md / AGENTS.md from ${{ env.MASTER_REPO }}
+            Syncs CLAUDE.md / AGENTS.md / GEMINI.md from ${{ env.MASTER_REPO }}
             release ${{ env.INSTRUCTIONS_TAG }}, verified against SHA256SUMS.
 
             Review and merge behind the code-owner gate. Do not auto-merge.

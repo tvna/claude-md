@@ -2175,6 +2175,7 @@ def test_pr_upsert_upsert_files_matches_workflow_args(
         "--body-file", str(body_file),
         "--add", "CLAUDE.md",
         "--add", "AGENTS.md",
+        "--add", "GEMINI.md",
     ]) == 0
 
     # post-merge.yml decision-tree shape: --from-diff over a directory prefix,
@@ -2292,9 +2293,9 @@ def test_publish_instruction_release_publish_matches_workflow_args(
     """publish accepts the --tag/--asset argv used by publish-instructions-release.yml.
 
     The release job calls ``publish_instruction_release.py publish --tag "$TAG"
-    --asset CLAUDE.md --asset AGENTS.md --asset SHA256SUMS``. Monkeypatch the
-    publish boundary so the contract test pins the argv shape without an API
-    call or on-disk asset files. Refs #1678.
+    --asset CLAUDE.md --asset AGENTS.md --asset GEMINI.md --asset SHA256SUMS``.
+    Monkeypatch the publish boundary so the contract test pins the argv shape
+    without an API call or on-disk asset files. Refs #1678, #2210.
     """
     monkeypatch.setenv("GH_TOKEN", "tok")
     monkeypatch.setenv("REPO", "owner/repo")
@@ -2308,6 +2309,8 @@ def test_publish_instruction_release_publish_matches_workflow_args(
             "CLAUDE.md",
             "--asset",
             "AGENTS.md",
+            "--asset",
+            "GEMINI.md",
             "--asset",
             "SHA256SUMS",
         ]

@@ -69,20 +69,26 @@ jobs:
         uses: ./.github/actions/setup-uv
 
       - name: Verify compiled instructions match the APM source at this tag
-        # The release ships the committed CLAUDE.md / AGENTS.md. Re-compile and
-        # fail if they drift, so a tag can never publish stale artifacts.
+        # The release ships the committed CLAUDE.md / AGENTS.md / GEMINI.md.
+        # Re-compile and fail if they drift, so a tag can never publish stale
+        # artifacts. --target all: every apm-cli-supported tool (#2210).
+        # git status --porcelain (not git diff --exit-code): if one of these
+        # three ever became untracked, git diff would silently ignore it.
+        # Refs #2211 (Codex review).
         run: |
           set -euo pipefail
-          uv run --with "apm-cli==${APM_CLI_VERSION}" apm compile
-          if ! git diff --exit-code -- CLAUDE.md AGENTS.md; then
-            echo "::error::CLAUDE.md or AGENTS.md is out of date at this tag. Re-run 'apm compile' and retag."
+          uv run --with "apm-cli==${APM_CLI_VERSION}" apm compile --target all
+          drift="$(git status --porcelain -- CLAUDE.md AGENTS.md GEMINI.md)"
+          if [ -n "$drift" ]; then
+            echo "::error::CLAUDE.md, AGENTS.md or GEMINI.md is out of date at this tag. Re-run 'apm compile --target all' and retag."
+            echo "$drift"
             exit 1
           fi
 
       - name: Build SHA256SUMS manifest
         run: |
           set -euo pipefail
-          sha256sum CLAUDE.md AGENTS.md > SHA256SUMS
+          sha256sum CLAUDE.md AGENTS.md GEMINI.md > SHA256SUMS
           cat SHA256SUMS
 
       - name: Publish release assets
@@ -96,4 +102,5 @@ jobs:
             --tag "$TAG" \
             --asset CLAUDE.md \
             --asset AGENTS.md \
+            --asset GEMINI.md \
             --asset SHA256SUMS
