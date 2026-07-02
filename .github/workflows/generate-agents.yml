@@ -19,6 +19,11 @@ concurrency:
 
 env:
   APM_CLI_VERSION: "0.12.1"
+  # Every file `apm compile --target all` can produce (Refs #2210, #2211).
+  # git status --porcelain (not git diff) is required here: a target file
+  # that apm compile creates for the first time is untracked, and
+  # `git diff` silently ignores untracked paths.
+  COMPILED_OUTPUT_PATHS: "CLAUDE.md AGENTS.md GEMINI.md .github/copilot-instructions.md"
 
 jobs:
   generate:
@@ -48,8 +53,10 @@ jobs:
       - name: Fail if generated instructions drifted (verify mode)
         if: ${{ inputs.mode == 'verify' }}
         run: |
-          if ! git diff --exit-code -- CLAUDE.md AGENTS.md GEMINI.md; then
-            echo "::error::CLAUDE.md, AGENTS.md or GEMINI.md is out of date. Run 'uv sync --locked && uv run --with \"apm-cli==${APM_CLI_VERSION}\" apm compile --target all' and commit the result."
+          # shellcheck disable=SC2086 # COMPILED_OUTPUT_PATHS is a deliberate
+          # space-separated pathspec list, not a single quoted path.
+          if [ -n "$(git status --porcelain -- $COMPILED_OUTPUT_PATHS)" ]; then
+            echo "::error::One or more of $COMPILED_OUTPUT_PATHS is out of date. Run 'uv sync --locked && uv run --with \"apm-cli==${APM_CLI_VERSION}\" apm compile --target all' and commit the result."
             exit 1
           fi
 
@@ -57,8 +64,9 @@ jobs:
         id: drift
         if: ${{ inputs.mode != 'verify' }}
         run: |
-          if git diff --quiet -- CLAUDE.md AGENTS.md GEMINI.md; then
-            echo "CLAUDE.md, AGENTS.md and GEMINI.md are already up to date."
+          # shellcheck disable=SC2086
+          if [ -z "$(git status --porcelain -- $COMPILED_OUTPUT_PATHS)" ]; then
+            echo "$COMPILED_OUTPUT_PATHS are already up to date."
             echo "changed=false" >> "$GITHUB_OUTPUT"
           else
             echo "changed=true" >> "$GITHUB_OUTPUT"
@@ -84,7 +92,7 @@ jobs:
           PR_TITLE: "chore: regenerate agent instructions"
         run: |
           cat > /tmp/pr-body.md <<'EOF'
-          Regenerates `CLAUDE.md`, `AGENTS.md` and `GEMINI.md` from the APM source instructions.
+          Regenerates the apm-compiled agent instructions (CLAUDE.md, AGENTS.md, GEMINI.md, and any newly-eligible apm-cli target output) from the APM source instructions.
 
           This automated update is opened as a pull request to keep generated instruction changes aligned with the repository change policy.
 
@@ -97,16 +105,20 @@ jobs:
           python3 scripts/issue_anchors.py render --file /tmp/pr-body.md
           TRACKING_ISSUE="$(python3 scripts/issue_anchors.py get agents-regen)"
 
-          # Signed, reuse-safe publish: the commit is created server side via
-          # createCommitOnBranch (App-bot author, Verified) and appended onto the
-          # fixed branch, so the all-branches non_fast_forward ruleset is honored
-          # without a force-push. Refs #1437, #1466.
+          # --from-diff (not --add): each compiled path is resolved via
+          # `git status --porcelain`, which reports both a modified tracked
+          # file and one apm compile creates for the first time (untracked).
+          # A fixed --add list only ever commits paths named at write time,
+          # so a newly-eligible apm-cli target (e.g. .github/copilot-
+          # instructions.md, once the source instruction becomes unscoped)
+          # would compile successfully but never land in the PR. --from-diff
+          # also naturally omits any path that did not actually change.
+          # Refs #2210, #2211 (Codex review).
+          # shellcheck disable=SC2046,SC2086
           python3 scripts/pr_upsert.py upsert-files \
             --head "$PR_BRANCH" \
             --base "$GITHUB_REF_NAME" \
             --title "$PR_TITLE" \
             --commit-body "Refs #${TRACKING_ISSUE}" \
             --body-file /tmp/pr-body.md \
-            --add CLAUDE.md \
-            --add AGENTS.md \
-            --add GEMINI.md
+            $(for p in $COMPILED_OUTPUT_PATHS; do printf -- '--from-diff %s ' "$p"; done)

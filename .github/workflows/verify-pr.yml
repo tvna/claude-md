@@ -57,6 +57,11 @@ jobs:
       BODY_POLICY_SHAPE_CUTOFF: "2026-05-26T00:00:00Z"
       BASE_REF: origin/${{ github.event.pull_request.base.ref }}
       APM_CLI_VERSION: "0.12.1"
+      # Every file `apm compile --target all` can produce (Refs #2210, #2211).
+      # git status --porcelain (not git diff) is required: a target file
+      # apm compile creates for the first time is untracked, and git diff
+      # silently ignores untracked paths.
+      COMPILED_OUTPUT_PATHS: "CLAUDE.md AGENTS.md GEMINI.md .github/copilot-instructions.md"
     steps:
       - name: Checkout repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -220,10 +225,16 @@ jobs:
         # Refs #2210.
         run: uv run --with "apm-cli==${APM_CLI_VERSION}" --exclude-newer "14 days" apm compile --target all
 
-      - name: Verify CLAUDE.md / AGENTS.md / GEMINI.md drift
+      - name: Verify compiled instruction outputs drift
         run: |
-          if ! git diff --exit-code -- CLAUDE.md AGENTS.md GEMINI.md; then
-            echo "::error::CLAUDE.md / AGENTS.md / GEMINI.md drift detected vs .apm/instructions/master.instructions.md."
+          # git status --porcelain (not git diff --exit-code): a target file
+          # apm compile creates for the first time is untracked, and git diff
+          # silently ignores untracked paths. Refs #2211 (Codex review).
+          # shellcheck disable=SC2086
+          drift="$(git status --porcelain -- $COMPILED_OUTPUT_PATHS)"
+          if [ -n "$drift" ]; then
+            echo "::error::Compiled instruction output drift detected vs .apm/instructions/master.instructions.md:"
+            echo "$drift"
             echo "Run 'uv run --with \"apm-cli==${APM_CLI_VERSION}\" --exclude-newer \"14 days\" apm compile --target all' locally and commit the result."
             exit 1
           fi

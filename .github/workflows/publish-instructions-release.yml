@@ -72,11 +72,16 @@ jobs:
         # The release ships the committed CLAUDE.md / AGENTS.md / GEMINI.md.
         # Re-compile and fail if they drift, so a tag can never publish stale
         # artifacts. --target all: every apm-cli-supported tool (#2210).
+        # git status --porcelain (not git diff --exit-code): if one of these
+        # three ever became untracked, git diff would silently ignore it.
+        # Refs #2211 (Codex review).
         run: |
           set -euo pipefail
           uv run --with "apm-cli==${APM_CLI_VERSION}" apm compile --target all
-          if ! git diff --exit-code -- CLAUDE.md AGENTS.md GEMINI.md; then
+          drift="$(git status --porcelain -- CLAUDE.md AGENTS.md GEMINI.md)"
+          if [ -n "$drift" ]; then
             echo "::error::CLAUDE.md, AGENTS.md or GEMINI.md is out of date at this tag. Re-run 'apm compile --target all' and retag."
+            echo "$drift"
             exit 1
           fi
 

@@ -65,7 +65,7 @@ FAMILY_ISSUE_SPEC: dict[str, dict[str, str]] = {
     },
     "apm-instructions": {
         "scope": "apm-drift",
-        "detector": "apm compile --target all + git diff --exit-code; CLAUDE.md AGENTS.md GEMINI.md",
+        "detector": "apm compile --target all + git status --porcelain; CLAUDE.md AGENTS.md GEMINI.md .github/copilot-instructions.md",
         "evidence": ".apm/instructions/master.instructions.md",
         "remediation": (
             "Recompile with `uv run --with apm-cli==<pin> --exclude-newer \"14 days\" "
