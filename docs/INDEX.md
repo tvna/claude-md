@@ -50,6 +50,7 @@ mechanism designed in [#1049](https://github.com/tvna/claude-md/issues/1049).
 | [TEMPLATE.md](adr/TEMPLATE.md) | MADR-style authoring skeleton for new ADRs. | #2000 | `docs/adr/0001-hook-manager-prek.md`; `docs/next-session/TEMPLATE.md` |
 | [0001-hook-manager-prek.md](adr/0001-hook-manager-prek.md) | Decision to use prek over pre-commit as the git hook manager: token-efficiency rationale, performance comparison, and rejected alternative. | #408, #1049 | `.pre-commit-config.yaml`; `docs/runbooks/prek.md`; `docs/standards/pre-push-gate-performance.md` |
 | [0002-index-merge-budget.md](adr/0002-index-merge-budget.md) | Merge-time INDEX budget gate; in-repo per-lane split (#2005), not extraction. | #2012 | `scripts/preflight_merge_index_budget.py` |
+| [0003-ruff-check-only.md](adr/0003-ruff-check-only.md) | Decision to enforce ruff as check-only and keep `ruff format` off all gate surfaces: rationale, consequences, and the future-adoption path. | #2224, #2143, #2141 | `scripts/scan_ruff_format.py`; `scripts/preflight_steps.py`; `tests/test_scan_ruff_format.py` |
 
 ## uml/; UML diagram artifacts
 
