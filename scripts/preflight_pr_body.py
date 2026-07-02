@@ -39,6 +39,7 @@ from body_policy import (
     extract_headings,
     missing_sections,
     required_sections,
+    verify_facts_no_ungrounded_time,
     verify_pr_agent_attribution_footer,
     verify_pr_checklist_subsections,
     verify_pr_verification_pairs,
@@ -112,6 +113,9 @@ def evaluate(
 
     # 8. Required sections must have substantive content.
     errors.extend(verify_section_substantive_content(body))
+
+    # 9. Ungrounded approximate time figures in the Facts section.
+    errors.extend(verify_facts_no_ungrounded_time(body))
 
     # 6. Issue reference (only when caller requests it).
     if issue is not None:
