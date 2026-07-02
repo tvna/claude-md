@@ -128,6 +128,7 @@ import validate_json_syntax
 import verify_apm_checksums
 import verify_control_inventory_currency
 import verify_dependabot_author
+import verify_generated_docs_ownership
 import verify_instruction_text_growth
 import verify_linked_issue_titles
 import verify_readme_translation
@@ -296,6 +297,11 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("python_pin.py", "verify"): "test_python_pin_verify_matches_workflow_args",
     ("verify_apm_checksums.py", "verify"): "test_verify_apm_checksums_matches_workflow_args",
     ("verify_dependabot_author.py", "verify"): "test_verify_dependabot_author_verify_matches_workflow_args",
+    # Refs #2226. "verify" is the read-only registry-sanity gate
+    # (verify-agents.yml lint-scripts-static); "retire" is the write-lane
+    # sweep run only by the post-merge decision-tree job.
+    ("verify_generated_docs_ownership.py", "verify"): "test_verify_generated_docs_ownership_verify_matches_workflow_args",
+    ("verify_generated_docs_ownership.py", "retire"): "test_verify_generated_docs_ownership_retire_matches_workflow_args",
     ("verify_linked_issue_titles.py", "verify"): "test_verify_linked_issue_titles_verify_matches_workflow_args",
     ("verify_readme_translation.py", "verify"): "test_verify_readme_translation_matches_workflow_args",
     ("verify_text_delta_section.py", "verify"): "test_verify_text_delta_section_matches_workflow_args",
@@ -1340,6 +1346,37 @@ def test_verify_apm_checksums_matches_workflow_args(tmp_path: Path) -> None:
 
     assert verify_apm_checksums.main(["--root", str(tmp_path), "update"]) == 0
     assert verify_apm_checksums.main(["--root", str(tmp_path), "verify"]) == 0
+
+
+def test_verify_generated_docs_ownership_verify_matches_workflow_args() -> None:
+    """Mirrors the ``Assert generated-docs ownership registry consistency``
+    step in ``.github/workflows/verify-agents.yml`` (issue #2226). Read-only:
+    every producer registered in OWNERSHIP must exist on the real tree."""
+    assert verify_generated_docs_ownership.main(["verify"]) == 0
+
+
+def test_verify_generated_docs_ownership_retire_matches_workflow_args(tmp_path: Path) -> None:
+    """Mirrors the ``Retire orphaned generated docs`` step in the post-merge
+    ``decision-tree`` job (issue #2226). Exercised against a fixture root
+    rather than the checkout: on a retiring branch the real tree legitimately
+    holds orphans that only the post-merge lane may delete, so a bare
+    ``retire`` here would mutate tracked files mid-suite."""
+    for surface in verify_generated_docs_ownership.OWNERSHIP:
+        producer = tmp_path / surface.producer
+        producer.parent.mkdir(parents=True, exist_ok=True)
+        producer.write_text("# producer\n", encoding="utf-8")
+        owned = (
+            tmp_path
+            / Path(verify_generated_docs_ownership.GENERATED_ROOT)
+            / surface.pattern.replace("*", "sample")
+        )
+        owned.parent.mkdir(parents=True, exist_ok=True)
+        owned.write_text("owned\n", encoding="utf-8")
+    orphan = tmp_path / Path(verify_generated_docs_ownership.GENERATED_ROOT) / "stale.md"
+    orphan.write_text("stale\n", encoding="utf-8")
+
+    assert verify_generated_docs_ownership.main(["retire", "--root", str(tmp_path)]) == 0
+    assert not orphan.exists()
 
 
 def test_verify_dependabot_author_verify_matches_workflow_args() -> None:

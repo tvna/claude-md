@@ -36,6 +36,34 @@ updating the generated AST docs), the CI job `verify-generated-docs-drift`
 inside `post-merge.yml` detects the drift and triggers the decision-tree, which
 opens a `chore/update-generated-docs` branch PR automatically.
 
+### Retirement path
+
+`scripts/verify_generated_docs_ownership.py` holds the `OWNERSHIP` registry:
+the single source of truth mapping every `docs/generated/` path pattern to the
+producer script that owns it. Retiring a generator never needs a per-case
+negotiation; the deterministic path is:
+
+1. The retiring PR deletes the generator script AND drops its `OWNERSHIP`
+   entry in the same change. The read-only `verify` subcommand (wired into
+   `preflight_steps.py` and the `lint-scripts-static` job of
+   `verify-agents.yml`) fails whenever a registered producer is missing, so
+   the two edits cannot land separately.
+2. The retiring PR does NOT touch the generated outputs;
+   `gate_generated_scripts_manual_edit.py` forbids that on non-bot branches.
+3. On the next post-merge run, the `retire` subcommand (wired into the
+   `decision-tree` job after all generators) deletes every file under
+   `docs/generated/` that no registry pattern owns and prunes emptied
+   directories; the existing drift detection publishes the deletions through
+   the `chore/update-generated-docs` bot PR.
+
+The same registry makes registration mandatory in the other direction: a new
+generator added to `post-merge.yml` without an `OWNERSHIP` entry will see its
+outputs deleted by the sweep on the next run, loudly (`retired orphaned doc:`
+lines in the job log). Add the registry entry in the PR that wires the
+generator. `tests/test_verify_generated_docs_ownership.py` pins the sweep
+semantics, the registry-to-`post-merge.yml` wiring, and keeps the write-lane
+`retire` subcommand banned from preflight. Refs #2226.
+
 ### Agent workflow implication
 
 When a `verify-generated-docs-drift` CI failure is reported:

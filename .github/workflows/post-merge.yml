@@ -211,6 +211,17 @@ jobs:
         # not regenerate it. Refs #1754.
         run: uv run python scripts/doc_graph_viz.py all-doc
 
+      - name: Retire orphaned generated docs
+        # Deletes files under docs/generated/ that no producer registered in
+        # scripts/verify_generated_docs_ownership.py OWNERSHIP owns. When a
+        # generator is retired its registry entry is dropped in the same PR
+        # (enforced by the preflight/CI "verify" gate), and this sweep
+        # decommissions the orphaned outputs through the drift PR below,
+        # replacing hand-authored deletions and per-case negotiation. Runs
+        # after every generator above so freshly written owned files are
+        # never candidates. Refs #2226.
+        run: uv run python scripts/verify_generated_docs_ownership.py retire
+
       - name: Regenerate script size-distribution snapshot
         # Writes docs/standards/module-size-distribution.toml from the
         # scripts/*.py physical-line distribution. Refs #2013: this snapshot
@@ -257,6 +268,7 @@ jobs:
           - `docs/generated/workflows/*-if-branches.md` from `.github/workflows/*.yml` if-branch analysis.
           - `docs/generated/graph/doc-dependency-graph.md` from `docs/graph/doc-dependencies.toml` (Mermaid dependency diagram).
           - `docs/standards/module-size-distribution.toml` from the `scripts/*.py` physical-line size distribution (single-producer snapshot, #2013).
+          - Deletes `docs/generated/` files whose producer was retired from the ownership registry in `scripts/verify_generated_docs_ownership.py` (retirement sweep, #2226).
 
           ## Related Issue
 
