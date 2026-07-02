@@ -30,6 +30,7 @@ import re
 from pathlib import Path
 from typing import Any, NamedTuple
 
+import _shell_lines
 import analyze_ci_timings
 import attack_review_reminder
 import auto_retro
@@ -318,22 +319,6 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
 }
 
 
-def _flatten_shell_continuations(text: str) -> list[str]:
-    """Join backslash-continued shell lines into single logical lines."""
-    out: list[str] = []
-    buf = ""
-    for raw_line in text.split("\n"):
-        stripped = raw_line.rstrip()
-        if stripped.endswith("\\"):
-            buf += stripped[:-1].rstrip() + " "
-        else:
-            out.append(buf + stripped)
-            buf = ""
-    if buf:
-        out.append(buf)
-    return out
-
-
 def _normalize_subcommand(raw: str | None) -> str | None:
     """Strip shell punctuation around the first token after the script."""
     if raw is None:
@@ -348,7 +333,10 @@ def _emit_invocations_from_run(
     workflow: str, job: str, step: str, run_text: str
 ) -> list[WorkflowInvocation]:
     out: list[WorkflowInvocation] = []
-    for line in _flatten_shell_continuations(run_text):
+    # Route through the shared shell-continuation flattener (single source of
+    # truth, scripts/_shell_lines) so a `\` continuation joins tokens the same
+    # way the real shell does; drop the 1-based start lineno it returns. Refs #2208.
+    for _lineno, line in _shell_lines.flatten_shell_continuations(run_text):
         for match in _PYTHON_SCRIPT_INVOCATION.finditer(line):
             out.append(
                 WorkflowInvocation(
