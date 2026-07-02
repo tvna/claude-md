@@ -38,6 +38,22 @@ opens a `chore/update-generated-docs` branch PR automatically.
 
 ### Retirement path
 
+Retirement has two classes with distinct owners; both are deterministic and
+neither needs per-case negotiation:
+
+- **Source-object retirement** (a `scripts/*.py` or workflow file is deleted
+  while its generator lives): the owning generator's own pruning removes the
+  stale per-object doc on the next post-merge regeneration.
+  `script_ast_graph.py` prunes inside `docs/generated/scripts/ast/` and
+  `workflow_diagram.py` inside `docs/generated/workflows/`; any future
+  multi-file generator MUST ship the same self-pruning, because the registry
+  sweep below intentionally never deletes a file that matches an owned
+  pattern. Validated live by #2229 -> #2232: the survey gate scripts merged
+  out at 13:36 and their AST docs were auto-deleted by the drift PR two
+  minutes later.
+- **Generator retirement** (the producer script itself is deleted): handled
+  by the ownership registry and the post-merge retire sweep described below.
+
 `scripts/verify_generated_docs_ownership.py` holds the `OWNERSHIP` registry:
 the single source of truth mapping every `docs/generated/` path pattern to the
 producer script that owns it. Retiring a generator never needs a per-case
