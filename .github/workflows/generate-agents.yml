@@ -40,13 +40,16 @@ jobs:
         uses: ./.github/actions/setup-uv
 
       - name: Compile agent instructions
-        run: uv run --with "apm-cli==${APM_CLI_VERSION}" apm compile
+        # --target all: every apm-cli-supported tool, not just claude/codex.
+        # Refs #2210. apm.yml's `target:` field stays narrow (install-time
+        # skill deployment); this flag governs compile-time text output only.
+        run: uv run --with "apm-cli==${APM_CLI_VERSION}" apm compile --target all
 
       - name: Fail if generated instructions drifted (verify mode)
         if: ${{ inputs.mode == 'verify' }}
         run: |
-          if ! git diff --exit-code -- CLAUDE.md AGENTS.md; then
-            echo "::error::CLAUDE.md or AGENTS.md is out of date. Run 'uv sync --locked && uv run --with \"apm-cli==${APM_CLI_VERSION}\" apm compile' and commit the result."
+          if ! git diff --exit-code -- CLAUDE.md AGENTS.md GEMINI.md; then
+            echo "::error::CLAUDE.md, AGENTS.md or GEMINI.md is out of date. Run 'uv sync --locked && uv run --with \"apm-cli==${APM_CLI_VERSION}\" apm compile --target all' and commit the result."
             exit 1
           fi
 
@@ -54,8 +57,8 @@ jobs:
         id: drift
         if: ${{ inputs.mode != 'verify' }}
         run: |
-          if git diff --quiet -- CLAUDE.md AGENTS.md; then
-            echo "CLAUDE.md and AGENTS.md are already up to date."
+          if git diff --quiet -- CLAUDE.md AGENTS.md GEMINI.md; then
+            echo "CLAUDE.md, AGENTS.md and GEMINI.md are already up to date."
             echo "changed=false" >> "$GITHUB_OUTPUT"
           else
             echo "changed=true" >> "$GITHUB_OUTPUT"
@@ -81,7 +84,7 @@ jobs:
           PR_TITLE: "chore: regenerate agent instructions"
         run: |
           cat > /tmp/pr-body.md <<'EOF'
-          Regenerates `CLAUDE.md` and `AGENTS.md` from the APM source instructions.
+          Regenerates `CLAUDE.md`, `AGENTS.md` and `GEMINI.md` from the APM source instructions.
 
           This automated update is opened as a pull request to keep generated instruction changes aligned with the repository change policy.
 
@@ -105,4 +108,5 @@ jobs:
             --commit-body "Refs #${TRACKING_ISSUE}" \
             --body-file /tmp/pr-body.md \
             --add CLAUDE.md \
-            --add AGENTS.md
+            --add AGENTS.md \
+            --add GEMINI.md

@@ -34,6 +34,7 @@ on:
       - "pyproject.toml"
       - "CLAUDE.md"
       - "AGENTS.md"
+      - "GEMINI.md"
       - "docs/prd/security-control-inventory.md"
   workflow_dispatch:
     inputs:
@@ -548,14 +549,16 @@ jobs:
       - name: Compile APM instructions
         id: apm_compile
         continue-on-error: true
-        run: uv run --with "apm-cli==${APM_CLI_VERSION}" --exclude-newer "14 days" apm compile
+        # --target all: every apm-cli-supported tool, not just claude/codex.
+        # Refs #2210.
+        run: uv run --with "apm-cli==${APM_CLI_VERSION}" --exclude-newer "14 days" apm compile --target all
 
-      - name: Diff CLAUDE.md / AGENTS.md
+      - name: Diff CLAUDE.md / AGENTS.md / GEMINI.md
         id: apm
         if: always()
         run: |
           set -euo pipefail
-          if git diff --exit-code -- CLAUDE.md AGENTS.md; then
+          if git diff --exit-code -- CLAUDE.md AGENTS.md GEMINI.md; then
             echo "rc=0" >> "$GITHUB_OUTPUT"
           else
             echo "rc=1" >> "$GITHUB_OUTPUT"

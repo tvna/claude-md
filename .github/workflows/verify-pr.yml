@@ -177,14 +177,16 @@ jobs:
           python3 scripts/scan_apm_portability.py verify \
             --path .apm/instructions/master.instructions.md \
             --path CLAUDE.md \
-            --path AGENTS.md
+            --path AGENTS.md \
+            --path GEMINI.md
 
       - name: Scan APM artifacts for non-ASCII characters
         run: |
           python3 scripts/scan_apm_ascii.py verify \
             --path .apm/instructions/master.instructions.md \
             --path CLAUDE.md \
-            --path AGENTS.md
+            --path AGENTS.md \
+            --path GEMINI.md
 
       - name: Scan all tracked files for em-dash (U+2014)
         # Refs #1889: repo-wide gate so no tracked file can regress to U+2014.
@@ -214,13 +216,15 @@ jobs:
         uses: ./.github/actions/setup-uv
 
       - name: Compile agent instructions
-        run: uv run --with "apm-cli==${APM_CLI_VERSION}" --exclude-newer "14 days" apm compile
+        # --target all: every apm-cli-supported tool, not just claude/codex.
+        # Refs #2210.
+        run: uv run --with "apm-cli==${APM_CLI_VERSION}" --exclude-newer "14 days" apm compile --target all
 
-      - name: Verify CLAUDE.md / AGENTS.md drift
+      - name: Verify CLAUDE.md / AGENTS.md / GEMINI.md drift
         run: |
-          if ! git diff --exit-code -- CLAUDE.md AGENTS.md; then
-            echo "::error::CLAUDE.md / AGENTS.md drift detected vs .apm/instructions/master.instructions.md."
-            echo "Run 'uv run --with \"apm-cli==${APM_CLI_VERSION}\" --exclude-newer \"14 days\" apm compile' locally and commit the result."
+          if ! git diff --exit-code -- CLAUDE.md AGENTS.md GEMINI.md; then
+            echo "::error::CLAUDE.md / AGENTS.md / GEMINI.md drift detected vs .apm/instructions/master.instructions.md."
+            echo "Run 'uv run --with \"apm-cli==${APM_CLI_VERSION}\" --exclude-newer \"14 days\" apm compile --target all' locally and commit the result."
             exit 1
           fi
 

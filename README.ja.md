@@ -4,13 +4,13 @@
 
 [English](./README.md) | 日本語 | [简体中文](./README.zh.md) | [한국어](./README.ko.md)
 
-個人用に調整したエージェント指示のマスターリポジトリです。[`microsoft/apm`](https://github.com/microsoft/apm) で [`CLAUDE.md`](./CLAUDE.md) と [`AGENTS.md`](./AGENTS.md) にコンパイルし、他のプロジェクトから参照して使います。
+個人用に調整したエージェント指示のマスターリポジトリです。[`microsoft/apm`](https://github.com/microsoft/apm) で [`CLAUDE.md`](./CLAUDE.md)、[`AGENTS.md`](./AGENTS.md)、[`GEMINI.md`](./GEMINI.md) にコンパイルし、他のプロジェクトから参照して使います。`apm compile --target all` は apm-cli が対応する全ツール分のコンパイル済みテキストを生成します（Claude、Codex、Gemini CLI、および Copilot や `AGENTS.md` を読む各種クライアント）。実際にどのファイルが生成されるかはツールごとのコンパイル形式によります（[ツール別の補足](#ツール別の補足)を参照）。
 
 ## 目的
 
 - AI コーディングエージェントに渡す原則を一箇所に集約し、どのプロジェクトでも一貫した振る舞いにする。
 - ここには **どのプロジェクトでも成り立つ、個人レベルの普遍的なガイドライン** だけを置き、プロジェクト固有のルールは置かない。
-- APM を信頼できる生成ハーネスとして使う。`.apm/instructions/` を編集し、`CLAUDE.md` と `AGENTS.md` をコンパイルする。
+- APM を信頼できる生成ハーネスとして使う。`.apm/instructions/` を編集し、`CLAUDE.md`、`AGENTS.md`、`GEMINI.md` をコンパイルする。
 - 各プロジェクトのローカルなエージェント指示は、このマスターを参照し、差分だけを追加する。
 
 ## 6 つの原則
@@ -32,10 +32,10 @@
 
 ```bash
 uv sync --locked
-uv run --with "apm-cli==0.12.1" apm compile
+uv run --with "apm-cli==0.12.1" apm compile --target all
 ```
 
-APM は `.apm/instructions/*.instructions.md` を読み、`apm.yml` に基づいて `CLAUDE.md` と `AGENTS.md` の両方を書き出します。uv 設定では、依存関係解決に 14 日間の `exclude-newer` 遅延を適用しています。
+APM は `.apm/instructions/*.instructions.md` を読み、`CLAUDE.md`、`AGENTS.md`、`GEMINI.md` を書き出します。`--target all` は apm-cli 0.12.1 が対応する全ツール（`copilot, claude, cursor, opencode, codex, gemini, windsurf`）向けにコンパイルします。`apm.yml` の `target:` フィールドはより狭い範囲（`claude`、`codex`）のままにしています。このフィールドは `apm install` 相当の skill 配置範囲も兼ねており、本リポジトリでは実際に使っていないツール向けの配置は意図的に絞っているためです。uv 設定では、依存関係解決に 14 日間の `exclude-newer` 遅延を適用しています。
 
 意図的に `.apm/` のソースファイルを変更したときは、チェックサムのロックファイルを更新します。
 
@@ -71,7 +71,11 @@ python3 scripts/verify_apm_checksums.py verify
 
 ### ツール別の補足
 
-- **Codex など `AGENTS.md` を読むツール** 向けにも、同じ同期で `AGENTS.md` が `CLAUDE.md` と並ぶコミット済み実ファイルとして配置されます。別の手順は不要です。
+- **Codex、Cursor、OpenCode、Windsurf など `AGENTS.md` を読むツール** 向けにも、同じ同期で `AGENTS.md` が `CLAUDE.md` と並ぶコミット済み実ファイルとして配置されます。これらのツールには専用のコンパイル出力がなく、apm-cli のターゲットレジストリ上は `AGENTS.md` がそのままフォーマットとして扱われます。別の手順は不要です。
+
+- **Gemini CLI** は `GEMINI.md` を `CLAUDE.md` / `AGENTS.md` と同様に同期します。`GEMINI.md` は 1 行の import スタブ（`@./AGENTS.md`）で、Gemini CLI がこの import を解決するため、内容は常に `AGENTS.md` と一致します。
+
+- **GitHub Copilot**: `apm compile --target all` は `.github/copilot-instructions.md` も生成し得ますが、これは *グローバル*（スコープなし）な instruction primitive が存在する場合に限られます。本マスターの唯一の instruction ソースは `applyTo: "**/*"` を宣言しており、apm-cli のコンパイラはこれを「グローバルではなくスコープ付き」として扱うため、現時点ではこのファイルは生成されません。`AGENTS.md` をネイティブに読む Copilot クライアントには影響しません。
 
 - **Devin** は APM が展開した `.agents/skills/` の skills を利用できます。hooks の parity が必要な場合は、リポジトリ指示と一緒に `.devin/hooks.v1.json` を取り込んでください。詳細は [`docs/standards/devin-apm-compatibility.md`](./docs/standards/devin-apm-compatibility.md) を参照してください。
 

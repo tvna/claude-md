@@ -2,15 +2,16 @@
 """Publish compiled agent instructions as tagged GitHub release assets.
 
 Creates a GitHub release for a tag and uploads the compiled ``CLAUDE.md`` /
-``AGENTS.md`` plus a ``SHA256SUMS`` manifest as downloadable assets, so a
-downstream consumer can pin a version and verify the sha256 digest before
-landing the instructions as a committed real file (no submodule, no symlink).
+``AGENTS.md`` / ``GEMINI.md`` plus a ``SHA256SUMS`` manifest as downloadable
+assets, so a downstream consumer can pin a version and verify the sha256
+digest before landing the instructions as a committed real file (no
+submodule, no symlink).
 
 Usage::
 
     python3 scripts/publish_instruction_release.py publish \\
         --tag vX.Y.Z \\
-        --asset CLAUDE.md --asset AGENTS.md --asset SHA256SUMS
+        --asset CLAUDE.md --asset AGENTS.md --asset GEMINI.md --asset SHA256SUMS
 
 Environment variables:
     GH_TOKEN / GITHUB_TOKEN  GitHub token with contents:write scope.
@@ -52,9 +53,9 @@ _CONTENT_TYPES = {".md": "text/markdown"}
 
 _RELEASE_BODY = (
     "Compiled agent instructions for downstream consumers.\n\n"
-    "Assets: CLAUDE.md, AGENTS.md, and SHA256SUMS. Pin this tag and verify the "
-    "sha256 of each file against SHA256SUMS before committing it as a real file "
-    "(do not use a submodule or symlink). See docs/runbooks/"
+    "Assets: CLAUDE.md, AGENTS.md, GEMINI.md, and SHA256SUMS. Pin this tag and "
+    "verify the sha256 of each file against SHA256SUMS before committing it as "
+    "a real file (do not use a submodule or symlink). See docs/runbooks/"
     "consumer-instruction-sync.md in the source repository.\n"
 )
 

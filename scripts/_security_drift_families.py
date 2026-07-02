@@ -65,11 +65,12 @@ FAMILY_ISSUE_SPEC: dict[str, dict[str, str]] = {
     },
     "apm-instructions": {
         "scope": "apm-drift",
-        "detector": "apm compile + git diff --exit-code; CLAUDE.md AGENTS.md",
+        "detector": "apm compile --target all + git diff --exit-code; CLAUDE.md AGENTS.md GEMINI.md",
         "evidence": ".apm/instructions/master.instructions.md",
         "remediation": (
             "Recompile with `uv run --with apm-cli==<pin> --exclude-newer \"14 days\" "
-            "apm compile` and commit the regenerated CLAUDE.md / AGENTS.md."
+            "apm compile --target all` and commit the regenerated CLAUDE.md / "
+            "AGENTS.md / GEMINI.md."
         ),
     },
     "uv-pin-literal": {
