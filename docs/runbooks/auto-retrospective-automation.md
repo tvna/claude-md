@@ -113,8 +113,6 @@ wrongful close is reversible by re-opening.
   the scanner-applied label set the generator consumes as prior information.
 - [`retrospective-noise-flooding-procedure.md`](retrospective-noise-flooding-procedure.md)
  ; spot noise-commit and flooding patterns during the retrospective.
-- [`pre-merge-retro-survey.md`](pre-merge-retro-survey.md); the
-  complementary pre-merge survey Stop hook (a distinct gate).
 - [`docs/standards/pr-subscription-lifecycle.md`](../standards/pr-subscription-lifecycle.md)
  ; terminal-state signal contract after the pipeline opens or reuses the
   retro issue.
