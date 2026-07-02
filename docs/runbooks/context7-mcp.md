@@ -55,9 +55,8 @@ A free API key raises the rate limit. When a downstream project wants one:
 
 ## Downstream wiring
 
-MCP server support landed in apm v0.12.0 (this repository's flake.nix-pinned
-apm-cli, see `scripts/flake_pin.py version --tool apm`, is at or above that
-version). A downstream project that has pulled this master in wires
+MCP server support landed in apm v0.12.0 (this repository pins
+`apm-cli==0.12.1`). A downstream project that has pulled this master in wires
 context7 into its own clients with:
 
 ```bash
@@ -96,7 +95,7 @@ operator running `apm install` by hand. This supersedes the earlier stance
 - `apm.yml` parses and the entry is present:
 
   ```bash
-  uv run --with "apm-cli==$(python3 scripts/flake_pin.py version --tool apm)" apm compile
+  uv run --with 'apm-cli==0.12.1' apm compile
   ```
 
   exits 0 (the `mcp` block does not change `CLAUDE.md` / `AGENTS.md`, but a
