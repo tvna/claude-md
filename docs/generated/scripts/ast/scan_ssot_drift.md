@@ -271,11 +271,12 @@ flowchart TD
     N034["print(...)"]
     N035["return 1"]
     N036["warnings = verify_registry(...)"]
-    N037["for message in warnings:     print(f'<str>{_SCRIPT}<str>{message}', file=sys.stderr)"]
-    N038["if warnings"]
+    N037["if warnings"]
+    N038["for message in warnings:     print(f'<str>{_SCRIPT}<str>{message}', file=sys.stderr)"]
     N039["print(...)"]
-    N040["print(...)"]
-    N041["return 0"]
+    N040["return 1"]
+    N041["print(...)"]
+    N042["return 0"]
     N001 -->|"start"| N002
     N002 -->|"true"| N003
     N003 --> N004
@@ -313,9 +314,9 @@ flowchart TD
     N034 --> N035
     N033 -->|"false"| N036
     N036 --> N037
-    N037 --> N038
-    N038 -->|"true"| N039
-    N038 -->|"false"| N040
-    N039 --> N041
-    N040 --> N041
+    N037 -->|"true"| N038
+    N038 --> N039
+    N039 --> N040
+    N037 -->|"false"| N041
+    N041 --> N042
 ```
