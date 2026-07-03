@@ -203,6 +203,19 @@ repos:
         pass_filenames: false
         files: ^(\.gitapex/.*\.json|scripts/scan_ssot_schema\.py|\.github/labels\.json|\.github/label-policy\.toml)$
 
+      - id: scan-ssot-drift
+        name: scan ssot drift (scripts/scan_ssot_drift.py verify, advisory)
+        # Refs #2256: advisory reconciliation of .gitapex/ssot.json against
+        # the four partial gate manifests (agent_hooks_source.json,
+        # preflight_steps.py STEPS, .pre-commit-config.yaml, rulesets/main.json
+        # native rules and pull_request: workflow scripts). Always exits 0;
+        # divergence is reported as ::warning:: lines only. Mirrors the
+        # scan-ssot-schema wiring on the same three planes.
+        entry: uv run python scripts/scan_ssot_drift.py verify
+        language: system
+        pass_filenames: false
+        files: ^(\.gitapex/.*\.json|scripts/scan_ssot_drift\.py|scripts/agent_hooks_source\.json|scripts/preflight_steps\.py|\.pre-commit-config\.yaml|\.github/rulesets/main\.json|\.github/workflows/.*\.ya?ml)$
+
       - id: scan-doc-graph-registration
         name: scan doc graph registration (scripts/scan_doc_graph_registration.py verify)
         # Refs #1793: gate_doc_graph_pr.py only enforces co-changes for files
