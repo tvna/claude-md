@@ -15,12 +15,12 @@ from pathlib import Path
 from typing import Any, Literal
 from urllib.parse import quote
 
+import _ssot
 from _github_api import GitHubApiError, paginate, rest_json
 
 IssueAction = Literal["create", "append", "close", "silent"]
 
 SECONDS_PER_DAY = 86_400
-ROLLING_ISSUE_LABELS = ("layer:meta", "type:docs")
 
 
 def parse_dry_run(raw: str) -> bool:
@@ -143,10 +143,11 @@ def comment_on_issue(repo: str, issue_number: int, body_file: Path) -> None:
 
 def create_issue(repo: str, title: str, body_file: Path) -> None:
     body = body_file.read_text(encoding="utf-8")
+    labels = list(_ssot.consumer_labels("scripts/branch_cleanup.py"))
     rest_json(
         "POST",
         f"/repos/{repo}/issues",
-        {"title": title, "body": body, "labels": list(ROLLING_ISSUE_LABELS)},
+        {"title": title, "body": body, "labels": labels},
         token=_token(),
     )
 

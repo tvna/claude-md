@@ -228,6 +228,31 @@ class TestSideEffectWrappers:
         )
 
 
+class TestCreateIssue:
+    def test_labels_come_from_the_ssot_registry(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        calls: list[dict[str, Any] | None] = []
+
+        def _fake_rest_json(method: str, path: str, body: dict[str, Any] | None = None, **_kw: object) -> None:
+            calls.append(body)
+
+        monkeypatch.setattr(branch_cleanup, "rest_json", _fake_rest_json)
+        monkeypatch.setattr(
+            branch_cleanup._ssot,
+            "consumer_labels",
+            lambda path: ("area:example", "type:docs"),
+        )
+
+        body_file = tmp_path / "body.md"
+        body_file.write_text("body\n", encoding="utf-8")
+        branch_cleanup.create_issue("o/r", "title", body_file)
+
+        assert calls == [
+            {"title": "title", "body": "body\n", "labels": ["area:example", "type:docs"]}
+        ]
+
+
 def _stub_survey_io(
     monkeypatch: pytest.MonkeyPatch,
     *,
