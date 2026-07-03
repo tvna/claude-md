@@ -236,6 +236,16 @@ STEPS: tuple[Step, ...] = (
         argv=("python3", "scripts/scan_ssot_schema.py", "verify"),
     ),
     Step(
+        # Refs #2256. Advisory reconciliation of .gitapex/ssot.json against
+        # the four partial gate manifests (agent_hooks_source.json,
+        # this STEPS tuple, .pre-commit-config.yaml, rulesets/main.json native
+        # rules and pull_request: workflow scripts). Always exits 0; drift
+        # surfaces as ::warning:: lines only. Mirrors the scan_ssot_schema
+        # step so both gates fire pre-push, not only in CI.
+        name="scan_ssot_drift",
+        argv=("python3", "scripts/scan_ssot_drift.py", "verify"),
+    ),
+    Step(
         # Refs #1325. Fails when a Markdown doc outside docs/archive/ cites a
         # .github/workflows/<name>.yml path that no longer exists; the drift
         # class #1319's workflow consolidation left behind.

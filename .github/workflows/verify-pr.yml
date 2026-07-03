@@ -232,6 +232,16 @@ jobs:
         # pre-commit hook.
         run: uv run python scripts/scan_ssot_schema.py verify
 
+      - name: Report .gitapex/ssot.json drift (advisory)
+        # Refs #2256: advisory reconciliation of the gate registry against the
+        # four partial manifests (agent_hooks_source.json, preflight_steps.py
+        # STEPS, .pre-commit-config.yaml, rulesets/main.json native rules and
+        # pull_request: workflow scripts). Always exits 0; divergence is
+        # reported as ::warning:: lines only. Mirrored pre-push by the
+        # scan_ssot_drift STEP and at commit time by the scan-ssot-drift
+        # pre-commit hook.
+        run: uv run python scripts/scan_ssot_drift.py verify
+
       - name: Compile agent instructions
         # --target all: every apm-cli-supported tool, not just claude/codex.
         # Refs #2210.
