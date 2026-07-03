@@ -664,14 +664,69 @@ class TestBoundaryFunctions:
         import json as _json
         payload = _json.dumps({"items": [{"number": 1, "body": "- [ ] follow #500", "labels": []}]})
         monkeypatch.setattr(srfd, "gh_api", lambda *a, **kw: payload)
+        monkeypatch.setattr(srfd._ssot, "consumer_labels", lambda path: ("type:docs", "layer:meta"))
         result = srfd.search_retro_issues("owner/repo")
         assert len(result) == 1
         assert result[0]["number"] == 1
 
     def test_search_retro_issues_handles_empty_raw(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(srfd, "gh_api", lambda *a, **kw: "  ")
+        monkeypatch.setattr(srfd._ssot, "consumer_labels", lambda path: ("type:docs", "layer:meta"))
         result = srfd.search_retro_issues("owner/repo")
         assert result == []
+
+    def test_search_retro_issues_query_built_from_registry_labels(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        calls: list[tuple[Any, ...]] = []
+
+        def fake_gh_api(method: str, path: str, *a: Any, **kw: Any) -> str:
+            calls.append((method, path))
+            return '{"items":[]}'
+
+        monkeypatch.setattr(srfd, "gh_api", fake_gh_api)
+        monkeypatch.setattr(
+            srfd._ssot,
+            "consumer_labels",
+            lambda path: (
+                "retro:tp",
+                "retro:fp",
+                "retro:fp-candidate",
+                "area:example",
+                "layer:other",
+            ),
+        )
+
+        srfd.search_retro_issues("owner/repo")
+
+        query_path = calls[0][1]
+        assert "label%3Aarea%3Aexample" in query_path
+        assert "label%3Alayer%3Aother" in query_path
+        assert "label%3Aretro%3Atp" not in query_path
+        assert "label%3Aretro%3Afp" not in query_path
+        assert "label%3Aretro%3Afp-candidate" not in query_path
+
+    def test_search_retro_issues_key_error_wrapped_as_runtime_error(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        def _raise_key_error(path: str) -> tuple[str, ...]:
+            raise KeyError(f"no label_consumers entry for path {path!r}")
+
+        monkeypatch.setattr(srfd._ssot, "consumer_labels", _raise_key_error)
+
+        with pytest.raises(RuntimeError, match="retro-followup-drift discovery labels"):
+            srfd.search_retro_issues("owner/repo")
+
+    def test_search_retro_issues_type_error_wrapped_as_runtime_error(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        def _raise_type_error(path: str) -> tuple[str, ...]:
+            raise TypeError(f"non-list labels for path {path!r}")
+
+        monkeypatch.setattr(srfd._ssot, "consumer_labels", _raise_type_error)
+
+        with pytest.raises(RuntimeError, match="retro-followup-drift discovery labels"):
+            srfd.search_retro_issues("owner/repo")
 
     def test_fetch_issue_or_pr_returns_dict(self, monkeypatch: pytest.MonkeyPatch) -> None:
         import json as _json
@@ -775,6 +830,34 @@ class TestMainExceptionHandlers:
         assert rc == 1
         err = capsys.readouterr().err
         assert "invalid config value" in err
+
+    def test_main_catches_runtime_error_from_run(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        def _raise(repo: str, **kw: Any) -> int:
+            raise RuntimeError("retro-followup-drift discovery labels: boom")
+
+        monkeypatch.setattr(srfd, "run", _raise)
+        rc = srfd.main(["run", "--repo", "owner/repo"])
+        assert rc == 1
+        err = capsys.readouterr().err
+        assert "::error::" in err
+        assert "retro-followup-drift discovery labels" in err
+
+    def test_drifted_ssot_registry_fails_cleanly_end_to_end(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """A drifted registry (missing label_consumers entry) must surface
+        via the script's normal ::error::/exit-1 path, not a raw traceback."""
+
+        def _raise_key_error(path: str) -> tuple[str, ...]:
+            raise KeyError(f"no label_consumers entry for path {path!r}")
+
+        monkeypatch.setattr(srfd._ssot, "consumer_labels", _raise_key_error)
+
+        rc = srfd.main(["run", "--repo", "owner/repo"])
+        assert rc == 1
+        assert "::error::" in capsys.readouterr().err
 
     def test_main_block_exits_via_runpy(self, monkeypatch: pytest.MonkeyPatch) -> None:
         import runpy
