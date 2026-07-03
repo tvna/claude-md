@@ -728,6 +728,28 @@ class TestBoundaryFunctions:
         with pytest.raises(RuntimeError, match="retro-followup-drift discovery labels"):
             srfd.search_retro_issues("owner/repo")
 
+    def test_search_retro_issues_all_labels_excluded_raises_runtime_error(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A registry edit that leaves only operator-decision labels must
+        fail loud rather than silently scan every issue titled "retro"."""
+        monkeypatch.setattr(
+            srfd._ssot,
+            "consumer_labels",
+            lambda path: ("retro:tp", "retro:fp", "retro:fp-candidate"),
+        )
+
+        with pytest.raises(RuntimeError, match="retro-followup-drift discovery labels"):
+            srfd.search_retro_issues("owner/repo")
+
+    def test_search_retro_issues_empty_registry_labels_raises_runtime_error(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(srfd._ssot, "consumer_labels", lambda path: ())
+
+        with pytest.raises(RuntimeError, match="retro-followup-drift discovery labels"):
+            srfd.search_retro_issues("owner/repo")
+
     def test_fetch_issue_or_pr_returns_dict(self, monkeypatch: pytest.MonkeyPatch) -> None:
         import json as _json
         payload = _json.dumps({"number": 42, "state": "open", "updated_at": "2026-05-01T00:00:00Z"})

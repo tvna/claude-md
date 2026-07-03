@@ -301,6 +301,18 @@ def search_retro_issues(repo: str) -> list[dict[str, Any]]:
         # module's plain dict/string parsing.
         raise RuntimeError(f"retro-followup-drift discovery labels: {exc}") from exc
     discovery_labels = [label for label in registry_labels if label not in _DISCOVERY_LABEL_EXCLUSIONS]
+    if not discovery_labels:
+        # scan_ssot_schema.py only requires `labels` to be an array, so an
+        # operator edit that removes every non-operator-decision label from
+        # this consumer's registry entry is schema-valid. Without this
+        # check that would silently drop every `label:` qualifier and scan
+        # every issue titled "retro" repo-wide, a widening the old
+        # hardcoded query could never drift into.
+        raise RuntimeError(
+            "retro-followup-drift discovery labels: registry entry for "
+            "scripts/scan_retro_followup_drift.py has no labels left after "
+            "excluding retro:tp/retro:fp/retro:fp-candidate"
+        )
     label_clause = " ".join(f"label:{label}" for label in discovery_labels)
     query = f"repo:{repo} is:issue {label_clause} in:title retro"
     encoded = quote(query, safe="")
