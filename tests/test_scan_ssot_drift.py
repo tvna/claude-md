@@ -375,7 +375,16 @@ class TestVerifyRegistrySynthetic:
 
 
 class TestRealRepository:
-    def test_verify_registry_over_real_repo_is_clean(self) -> None:
+    def test_verify_registry_over_real_repo_runs_without_error(self) -> None:
+        # Advisory gate: do not hard-assert an empty drift report here. The
+        # registry and the four manifests are clean on this branch, but a
+        # later, unrelated manifest-only change is expected to legitimately
+        # drift ahead of a registry update (that is the whole point of
+        # phase 1 being advisory) and must not fail the blocking pytest
+        # suite (verify-agents.yml's shard_preflight matrix leg) over it.
+        # The CLI's exit-0-always contract is covered separately by
+        # test_main_verify_exits_zero below; this test only checks that the
+        # real-repo inputs load and the reconciliation runs without raising.
         registry = json.loads((_REPO_ROOT / ".gitapex/ssot.json").read_text())
         agent_hooks = json.loads((_REPO_ROOT / "scripts/agent_hooks_source.json").read_text())
         pre_commit_config = gate._load_yaml(_REPO_ROOT / ".pre-commit-config.yaml")
@@ -387,7 +396,7 @@ class TestRealRepository:
             rulesets=rulesets,
             workflows_dir=_REPO_ROOT / ".github/workflows",
         )
-        assert warnings == []
+        assert isinstance(warnings, list)
 
     def test_main_verify_exits_zero(self) -> None:
         assert gate.main(["verify"]) == 0
