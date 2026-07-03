@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Advisory CI gate: reconcile .gitapex/ssot.json against the partial manifests.
+"""Blocking CI gate: reconcile .gitapex/ssot.json against the partial manifests.
 
 Phase 1 of the gitapex SSoT migration (docs/prd/gitapex-ssot-gate-registry.md):
 the registry (``.gitapex/ssot.json``) claims which planes each gate fires on,
@@ -20,13 +20,16 @@ names as authoritative for enforcement-plane membership:
   reconciliation into this gate (that stays a separate, still-green check
   until phase 3).
 
-Divergence is reported as ``::warning::`` lines; this gate is advisory and
-always exits 0 on a successful run (promotion to blocking is a separate PR
-per the migration plan). A handful of manifest entries have no scripts/*.py
-backing (third-party pre-commit-hooks entry points, bare toolchain binaries
-such as ruff/mypy/pytest/prek/actionlint, and the preflight_all.py runner
-itself) and are excluded via an inline, rationale-carrying allowlist,
-mirroring the pattern in :mod:`scan_preflight_drift`.
+Divergence is reported as ``::error::`` lines and fails the run (exit 1).
+Phase 1 first landed this gate advisory (warning-only, always exit 0); this
+module completes phase 1 per the migration plan by promoting it to blocking
+now that the report is clean. A ``git revert`` of the promoting commit
+restores the advisory contract. A handful of manifest entries have no
+scripts/*.py backing (third-party pre-commit-hooks entry points, bare
+toolchain binaries such as ruff/mypy/pytest/prek/actionlint, and the
+preflight_all.py runner itself) and are excluded via an inline,
+rationale-carrying allowlist, mirroring the pattern in
+:mod:`scan_preflight_drift`.
 
 Architecture: pure extraction functions per manifest, pure comparison
 functions producing warning strings, a single IO boundary in :func:`main`.
@@ -38,14 +41,13 @@ Contract:
   ``.pre-commit-config.yaml``); ``--rulesets`` (default
   ``.github/rulesets/main.json``); ``--workflows-dir`` (default
   ``.github/workflows``).
-- Outputs: ``::warning::`` annotations on stderr, one per divergence; an
-  ``OK:`` or ``ADVISORY:`` line on stderr summarizing the count.
-- Failure policy: this gate never fails loud on drift (advisory, phase 1 of
-  CLAUDE.md section 3's promotion path); it fails loud (exit 1) only on a
-  hard configuration error, an input file missing or unparseable, not on any
-  divergence found; exit 64 on an unrecognised subcommand.
+- Outputs: ``::error::`` annotations on stderr, one per divergence; an
+  ``OK:`` or ``BLOCKING:`` line on stderr summarizing the count.
+- Failure policy: this gate fails loud (exit 1) on any divergence found, and
+  also fails loud (exit 1) on a hard configuration error, an input file
+  missing or unparseable; exit 64 on an unrecognised subcommand.
 
-Tested by ``tests/test_scan_ssot_drift.py``. Refs #2256, #2246.
+Tested by ``tests/test_scan_ssot_drift.py``. Refs #2256, #2246, #2262.
 """
 
 from __future__ import annotations
@@ -391,7 +393,7 @@ def main(argv: list[str] | None = None) -> int:
         return 64
 
     parser = argparse.ArgumentParser(
-        description="Report drift between .gitapex/ssot.json and the four partial gate manifests (advisory)."
+        description="Report drift between .gitapex/ssot.json and the four partial gate manifests (blocking)."
     )
     parser.add_argument("command", help="Must be 'verify'.")
     parser.add_argument("--registry", default=_REGISTRY_PATH)
@@ -441,13 +443,13 @@ def main(argv: list[str] | None = None) -> int:
         workflows_dir=workflows_dir,
     )
 
-    for message in warnings:
-        print(f"::warning::{_SCRIPT}: {message}", file=sys.stderr)
-
     if warnings:
-        print(f"ADVISORY: {_SCRIPT}: {len(warnings)} divergence(s) reported above.", file=sys.stderr)
-    else:
-        print(f"OK: {_SCRIPT}: registry and manifests agree.", file=sys.stderr)
+        for message in warnings:
+            print(f"::error::{_SCRIPT}: {message}", file=sys.stderr)
+        print(f"BLOCKING: {_SCRIPT}: {len(warnings)} divergence(s) reported above.", file=sys.stderr)
+        return 1
+
+    print(f"OK: {_SCRIPT}: registry and manifests agree.", file=sys.stderr)
     return 0
 
 

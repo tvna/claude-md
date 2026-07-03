@@ -5,7 +5,7 @@ projection helpers, the comparison functions (both drift directions plus the
 no-script allowlists), the real-repo happy path (an empty drift report is
 this phase's acceptance bar), and the ``main`` CLI contract (exit 0/1/64).
 
-Refs #2256, #2246.
+Refs #2256, #2246, #2262.
 """
 
 from __future__ import annotations
@@ -376,15 +376,17 @@ class TestVerifyRegistrySynthetic:
 
 class TestRealRepository:
     def test_verify_registry_over_real_repo_runs_without_error(self) -> None:
-        # Advisory gate: do not hard-assert an empty drift report here. The
-        # registry and the four manifests are clean on this branch, but a
-        # later, unrelated manifest-only change is expected to legitimately
-        # drift ahead of a registry update (that is the whole point of
-        # phase 1 being advisory) and must not fail the blocking pytest
-        # suite (verify-agents.yml's shard_preflight matrix leg) over it.
-        # The CLI's exit-0-always contract is covered separately by
-        # test_main_verify_exits_zero below; this test only checks that the
-        # real-repo inputs load and the reconciliation runs without raising.
+        # Do not hard-assert an empty drift report here. The registry and
+        # the four manifests are clean on this branch, but a later,
+        # unrelated manifest-only change can legitimately drift ahead of a
+        # registry update; that divergence is now caught by main()'s
+        # blocking exit-1 contract (see test_main_verify_exits_zero and
+        # test_verify_prints_error_and_exits_one_on_drift below), not by
+        # this unit test, so hard-asserting emptiness here would duplicate
+        # that gate inside the always-green pytest matrix leg
+        # (verify-agents.yml's shard_preflight). This test only checks that
+        # the real-repo inputs load and the reconciliation runs without
+        # raising.
         registry = json.loads((_REPO_ROOT / ".gitapex/ssot.json").read_text())
         agent_hooks = json.loads((_REPO_ROOT / "scripts/agent_hooks_source.json").read_text())
         pre_commit_config = gate._load_yaml(_REPO_ROOT / ".pre-commit-config.yaml")
@@ -432,14 +434,14 @@ class TestMainCli:
         bad.write_text("[]")
         assert gate.main(["verify", "--registry", str(bad)]) == 1
 
-    def test_verify_prints_warning_and_exits_zero_on_drift(
+    def test_verify_prints_error_and_exits_one_on_drift(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
     ) -> None:
         registry_path = tmp_path / "ssot.json"
         registry_path.write_text(json.dumps({"gates": [], "clusters": []}))
         monkeypatch.chdir(_REPO_ROOT)
         exit_code = gate.main(["verify", "--registry", str(registry_path)])
-        assert exit_code == 0
+        assert exit_code == 1
         captured = capsys.readouterr()
-        assert "::warning::" in captured.err
-        assert "ADVISORY:" in captured.err
+        assert "::error::" in captured.err
+        assert "BLOCKING:" in captured.err
