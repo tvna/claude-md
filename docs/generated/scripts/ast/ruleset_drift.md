@@ -316,12 +316,20 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["file_issue(...)"]
-    N002["body = read_text(...)"]
-    N003["rest_json(...)"]
-    N004["end"]
+    N002["try"]
+    N003["labels = consumer_labels(...)"]
+    N004["except (KeyError, TypeError)"]
+    N005["raise RuntimeError(f'<str>{exc}')"]
+    N006["body = read_text(...)"]
+    N007["rest_json(...)"]
+    N008["end"]
     N001 -->|"start"| N002
-    N002 --> N003
-    N003 --> N004
+    N002 -->|"try"| N003
+    N002 -->|"raises"| N004
+    N004 --> N005
+    N003 --> N006
+    N006 --> N007
+    N007 --> N008
 ```
 
 ## find_rolling_issue(...)
