@@ -1,5 +1,5 @@
 lockfile_version: '1'
-generated_at: '2026-05-29T13:21:52.332119+00:00'
+generated_at: '2026-06-30T19:01:36.160776+00:00'
 apm_version: 0.12.1
 dependencies:
 - repo_url: obra/superpowers
@@ -37,6 +37,29 @@ dependencies:
   - .claude/skills/writing-plans
   - .claude/skills/writing-skills
   content_hash: sha256:fb4f87bfef928a6d68f5d5aaa29e3eba011961c5f03bbf171c3c348d8d161abb
+- repo_url: tvna/clairvoyance
+  host: github.com
+  resolved_commit: 4df075294c8e6a33b42e6703b54211f66c8a5ca3
+  resolved_ref: 4df075294c8e6a33b42e6703b54211f66c8a5ca3
+  package_type: marketplace_plugin
+  deployed_files:
+  - .agents/skills/adaptive-coaching
+  - .agents/skills/architecture-tradeoff
+  - .agents/skills/clairvoyance
+  - .agents/skills/decision-coaching
+  - .agents/skills/human-harness
+  - .agents/skills/review-verdict
+  - .agents/skills/session-handoff
+  - .agents/skills/using-clairvoyance
+  - .claude/skills/adaptive-coaching
+  - .claude/skills/architecture-tradeoff
+  - .claude/skills/clairvoyance
+  - .claude/skills/decision-coaching
+  - .claude/skills/human-harness
+  - .claude/skills/review-verdict
+  - .claude/skills/session-handoff
+  - .claude/skills/using-clairvoyance
+  content_hash: sha256:1f988ed1fa096b98dfa055e560ceb75d9f574b63339b875d9d69a3691aa0594c
 mcp_servers:
 - context7
 - github
@@ -53,4 +76,4 @@ mcp_configs:
 local_deployed_files:
 - .claude/rules/master.md
 local_deployed_file_hashes:
-  .claude/rules/master.md: sha256:e50fe7efeb85ee81eb1a4225b4e6121e5f8f51ea41b0733403c8c182e325f485
+  .claude/rules/master.md: sha256:05de967661c0a91887e29dffbb1c23b471c45855df479fd5b7059b76b2248877

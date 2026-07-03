@@ -288,6 +288,25 @@ flowchart TD
     N004 --> N005
 ```
 
+## verify_facts_no_ungrounded_time(...)
+
+```mermaid
+flowchart TD
+    N001["verify_facts_no_ungrounded_time(...)"]
+    N002["section = extract_section_body(...)"]
+    N003["if not section.strip()"]
+    N004["return []"]
+    N005["errors = []"]
+    N006["for raw in section.splitlines():     line = raw.strip()     if not line or _APPROX_TIME_RE.search(line) is None:         continue     if _TIME_CITATION_RE.search(line) is not None:         continue     errors.append(f'<str>{line!r}<str>')"]
+    N007["return errors"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 -->|"true"| N004
+    N003 -->|"false"| N005
+    N005 --> N006
+    N006 --> N007
+```
+
 ## build_codex_attribution_footer(...)
 
 ```mermaid
@@ -415,7 +434,7 @@ flowchart TD
     N017["for msg in allowlist_errors:     print(msg)"]
     N018["return 1"]
     N019["if kind == 'pull_request' and shape_cutoff and (not created_at or is_within_gate_window(created_at, shape_cutoff))"]
-    N020["shape_errors = verify_pr_verification_pairs(body) + verify_pr_checklist_subsections(body) + verify_pr_agent_attribution_footer(body) + detect_placeholder_tokens(body) + verify_section_substantive_content(body)"]
+    N020["shape_errors = verify_pr_verification_pairs(body) + verify_pr_checklist_subsections(body) + verify_pr_agent_attribution_footer(body) + detect_placeholder_tokens(body) + verify_section_substantive_content(body) + verify_facts_no_ungrounded_time(body)"]
     N021["if shape_errors"]
     N022["for msg in shape_errors:     print(msg)"]
     N023["return 1"]

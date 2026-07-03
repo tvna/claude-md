@@ -4,13 +4,13 @@
 
 [English](./README.md) | [日本語](./README.ja.md) | [简体中文](./README.zh.md) | 한국어
 
-개인용으로 조정한 에이전트 지침의 마스터 저장소입니다. [`microsoft/apm`](https://github.com/microsoft/apm)으로 [`CLAUDE.md`](./CLAUDE.md)와 [`AGENTS.md`](./AGENTS.md)를 컴파일하여, 다른 프로젝트에서 참조해 사용합니다.
+개인용으로 조정한 에이전트 지침의 마스터 저장소입니다. [`microsoft/apm`](https://github.com/microsoft/apm)으로 [`CLAUDE.md`](./CLAUDE.md), [`AGENTS.md`](./AGENTS.md), [`GEMINI.md`](./GEMINI.md)를 컴파일하여, 다른 프로젝트에서 참조해 사용합니다. `apm compile --target all`은 apm-cli가 지원하는 모든 도구(Claude, Codex, Gemini CLI, 그리고 Copilot이나 `AGENTS.md`를 읽는 여러 클라이언트)를 위한 컴파일 결과를 생성합니다. 실제로 어떤 파일이 생성되는지는 각 도구의 컴파일 형식에 따라 다릅니다([도구별 보충](#도구별-보충) 참조).
 
 ## 목적
 
 - AI 코딩 에이전트에게 건네는 원칙을 한곳에 모아, 어느 프로젝트에서나 일관된 동작이 되도록 합니다.
 - 여기에는 **어느 프로젝트에서나 성립하는, 개인 수준의 보편적인 가이드라인** 만 두고, 프로젝트 고유의 규칙은 두지 않습니다.
-- APM을 신뢰할 수 있는 생성 하네스로 사용합니다. `.apm/instructions/`를 편집하고, `CLAUDE.md`와 `AGENTS.md`를 컴파일합니다.
+- APM을 신뢰할 수 있는 생성 하네스로 사용합니다. `.apm/instructions/`를 편집하고, `CLAUDE.md`, `AGENTS.md`, `GEMINI.md`를 컴파일합니다.
 - 각 프로젝트의 로컬 에이전트 지침은 이 마스터를 참조하고, 차이(delta)만 추가합니다.
 
 ## 여섯 가지 원칙
@@ -28,14 +28,13 @@
 
 ## 빌드
 
-잠긴(locked) uv 환경을 동기화한 뒤, 로컬 지침을 컴파일합니다.
+apm은 uv를 거치지 않고 nix가 빌드한 네이티브 바이너리로 실행됩니다(devcontainer, 또는 원격 세션의 `scripts/install-apm.sh`가 PATH에 배치합니다). 로컬 지침을 컴파일합니다.
 
 ```bash
-uv sync --locked
-uv run --with "apm-cli==0.12.1" apm compile
+apm compile --target all
 ```
 
-APM은 `.apm/instructions/*.instructions.md`를 읽고, `apm.yml`에 따라 `CLAUDE.md`와 `AGENTS.md`를 모두 써냅니다. uv 설정에서는 의존성 해석에 14일간의 `exclude-newer` 지연을 적용합니다.
+APM은 `.apm/instructions/*.instructions.md`를 읽고, `CLAUDE.md`, `AGENTS.md`, `GEMINI.md`를 써냅니다. `--target all`은 flake.nix에 고정된 apm-cli(`scripts/flake_pin.py version --tool apm`)가 지원하는 모든 도구(`copilot, claude, cursor, opencode, codex, gemini, windsurf`)를 위해 컴파일합니다. `apm.yml`의 `target:` 필드는 더 좁은 범위(`claude`, `codex`)로 유지합니다. 이 필드는 `apm install` 방식의 skill 배치 범위도 겸하고 있어서, 본 저장소가 실제로 사용하지 않는 도구로의 배치는 의도적으로 좁혀 두었기 때문입니다.
 
 의도적으로 `.apm/`의 소스 파일을 변경했을 때는, 체크섬 잠금 파일을 갱신합니다.
 
@@ -71,7 +70,11 @@ python3 scripts/verify_apm_checksums.py verify
 
 ### 도구별 보충
 
-- **Codex 등 `AGENTS.md`를 읽는 도구** 를 위해서도, 같은 동기화로 `AGENTS.md`가 `CLAUDE.md`와 나란히 커밋된 실제 파일로 배치됩니다. 별도의 절차는 필요 없습니다.
+- **Codex, Cursor, OpenCode, Windsurf 등 `AGENTS.md`를 읽는 도구** 를 위해서도, 같은 동기화로 `AGENTS.md`가 `CLAUDE.md`와 나란히 커밋된 실제 파일로 배치됩니다. 이 도구들에는 전용 컴파일 결과물이 없으며, apm-cli의 타깃 레지스트리에서 `AGENTS.md` 자체가 이들의 포맷으로 취급됩니다. 별도의 절차는 필요 없습니다.
+
+- **Gemini CLI**: `CLAUDE.md` / `AGENTS.md`와 함께 `GEMINI.md`를 동기화하세요. 이 파일은 한 줄짜리 import 스텁(`@./AGENTS.md`)이며, Gemini CLI가 이 import를 해석하므로 내용은 항상 `AGENTS.md`와 일치합니다.
+
+- **GitHub Copilot**: `apm compile --target all`은 `.github/copilot-instructions.md`도 생성할 수 있지만, 이는 진짜 *전역*(범위가 지정되지 않은) instruction primitive가 존재할 때만 해당합니다. 본 마스터의 유일한 instruction 소스는 `applyTo: "**/*"`를 선언하고 있으며, apm-cli의 컴파일러는 이를 "전역"이 아니라 "범위 지정됨"으로 취급하므로, 현재는 이 파일이 생성되지 않습니다. `AGENTS.md`를 네이티브로 읽는 Copilot 클라이언트에는 영향이 없습니다.
 
 - **Devin** 은 APM이 `.agents/skills/`로 전개한 skills를 사용할 수 있습니다. hooks의 parity가 필요한 경우에는, 저장소 지침과 함께 `.devin/hooks.v1.json`을 들여오세요. 자세한 내용은 [`docs/standards/devin-apm-compatibility.md`](./docs/standards/devin-apm-compatibility.md)를 참조하세요.
 

@@ -34,12 +34,10 @@ call):
   a turn that frames the work as complete ("all done", "merged", "no follow-up")
   has nothing to hand off, so an RCA / status report that merely NAMES a handoff
   as a topic word must not trip a block; such a turn no-ops too.
-* The final assistant turn must signal a handoff to a new / follow-up session,
-  AFTER the mandatory pre-merge retro-survey vocabulary is stripped (#1704) --
-  the survey gate names its own event a "session handoff", so merely reporting
-  that REQUIRED survey must not count as a cue. A handoff is signalled only when
-  a cue sits NEAR a forward-continuation directive (#1711): a bare topic mention
-  with no directive (an RCA discussing this very hook) is not a handoff ...
+* The final assistant turn must signal a handoff to a new / follow-up session.
+  A handoff is signalled only when a cue sits NEAR a forward-continuation
+  directive (#1711): a bare topic mention with no directive (an RCA discussing
+  this very hook) is not a handoff ...
 * ... AND must NOT already carry a paste-ready prompt (a fenced code block or
   an explicit paste marker); otherwise the goal is already met.
 
@@ -87,7 +85,7 @@ HANDOFF_CUES: tuple[str, ...] = (
 # FORWARD sits nearby (#1711). Without such a directive, a cue is just a topic
 # word; an RCA of this very hook says "新規セッションのハンドオフプロンプト",
 # naming the session but directing nothing. Listed lowercase (en) / verbatim
-# (ja); matched against the lowercased, survey-stripped turn text. Kept to
+# (ja); matched against the lowercased turn text. Kept to
 # unambiguous forward verbs: completion- or negation-prone tokens (bare "対応",
 # "残り") are deliberately excluded so a completion report is not misread as a
 # directive; terminal-done (below) handles those.
@@ -132,21 +130,6 @@ PROVIDED_MARKERS: tuple[str, ...] = (
     "貼り付け",
     "そのまま貼",
     "貼って",
-)
-
-# The mandatory pre-merge retro-survey gate
-# (gate_handoff_retro_survey_askuserquestion.py) names its own event a "session
-# handoff" / "引き継ぎサーベイ". Reporting compliance with that REQUIRED survey
-# must not, by itself, trip the new-session cue (#1704): the survey compound is
-# surgically removed before cue matching, so only a handoff cue OUTSIDE the
-# survey vocabulary can fire. Listed lowercase (en) / verbatim (ja); matching is
-# done on the lowercased turn text.
-SURVEY_NEUTRALIZE: tuple[str, ...] = (
-    "引き継ぎサーベイ",
-    "ハンドオフサーベイ",
-    "handoff survey",
-    "session handoff survey",
-    "session-handoff survey",
 )
 
 # A turn whose only remaining work is a human/CI terminal action; awaiting a
@@ -266,13 +249,6 @@ def turn_text(turn: list[Any]) -> str:
     return "\n".join(parts)
 
 
-def _strip_survey_vocab(lowered: str) -> str:
-    """Remove retro-survey compounds so reporting the survey is not a cue."""
-    for phrase in SURVEY_NEUTRALIZE:
-        lowered = lowered.replace(phrase.lower(), " ")
-    return lowered
-
-
 def _find_all(text: str, needle: str) -> list[int]:
     """Return every start index of *needle* in *text* (overlapping-safe)."""
     out: list[int] = []
@@ -297,13 +273,11 @@ def _co_occurs_near(
 def signals_handoff(text: str) -> bool:
     """True when *text* DIRECTS a handoff to a new / follow-up session.
 
-    The mandatory pre-merge retro-survey vocabulary is stripped first (#1704)
-    so merely reporting that survey does not, by itself, count as a handoff cue.
-    A handoff cue must also sit near a forward-continuation directive (#1711):
+    A handoff cue must sit near a forward-continuation directive (#1711):
     a bare topic mention with no directive (an RCA discussing this very hook)
     names a session but directs nothing, so it is not a handoff.
     """
-    lowered = _strip_survey_vocab(text.lower())
+    lowered = text.lower()
     return _co_occurs_near(lowered, HANDOFF_CUES, HANDOFF_DIRECTIVES, PROXIMITY_WINDOW)
 
 

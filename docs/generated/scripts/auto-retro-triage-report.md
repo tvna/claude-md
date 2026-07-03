@@ -4,7 +4,7 @@ This file is generated from live GitHub retro-issue labels by `python3 scripts/a
 
 Retros observed: **50**
 
-Open untriaged: **26**
+Open untriaged: **3**
 
 ## Anomalies
 
@@ -27,7 +27,7 @@ pie showData
 | Signal | Fired | Fire rate | FP | FP rate | n | Anomaly |
 | --- | --: | --: | --: | --: | --: | :-: |
 | `inline_review_comments` | 42 | 0.84 | 0 | 0.00 | 42 |  |
-| `fix_typed_title` | 10 | 0.20 | 0 | 0.00 | 10 |  |
+| `fix_typed_title` | 9 | 0.18 | 0 | 0.00 | 9 |  |
 | `multi_commit_pr` | 46 | 0.92 | 0 | 0.00 | 46 |  |
 
 ## False-positive rate trend
@@ -38,13 +38,13 @@ No triaged retros yet (no `retro:tp`/`retro:fp` labels).
 
 | # | State | Status | Title |
 | --: | :-- | :-- | :-- |
-| 2182 | open | untriaged | chore(auto-retro): review PR #2181 repair loops |
-| 2172 | open | untriaged | chore(auto-retro): review PR #2169 repair loops |
-| 2165 | open | untriaged | chore(auto-retro): review PR #2161 repair loops |
-| 2148 | open | untriaged | chore(auto-retro): review PR #2144 repair loops |
-| 2129 | open | untriaged | chore(auto-retro): review PR #2122 repair loops |
-| 2110 | open | untriaged | chore(auto-retro): review PR #2094 repair loops |
-| 2105 | open | untriaged | chore(auto-retro): review PR #2101 repair loops |
-| 2047 | open | untriaged | chore(auto-retro): review PR #2046 repair loops |
-| 2044 | open | untriaged | chore(auto-retro): review PR #2035 repair loops |
-| 2042 | open | untriaged | chore(auto-retro): review PR #2035 repair loops |
+| 2239 | open | untriaged | chore(auto-retro): review PR #2230 repair loops |
+| 2234 | open | untriaged | chore(auto-retro): review PR #2233 repair loops |
+| 2212 | open | untriaged | chore(auto-retro): review PR #2211 repair loops |
+| 2187 | closed | untriaged | chore(auto-retro): review PR #2186 repair loops |
+| 2182 | closed | untriaged | chore(auto-retro): review PR #2181 repair loops |
+| 2172 | closed | untriaged | chore(auto-retro): review PR #2169 repair loops |
+| 2165 | closed | untriaged | chore(auto-retro): review PR #2161 repair loops |
+| 2148 | closed | untriaged | chore(auto-retro): review PR #2144 repair loops |
+| 2129 | closed | untriaged | chore(auto-retro): review PR #2122 repair loops |
+| 2110 | closed | untriaged | chore(auto-retro): review PR #2094 repair loops |

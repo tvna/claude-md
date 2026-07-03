@@ -24,9 +24,6 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
 
-env:
-  APM_CLI_VERSION: "0.12.1"
-
 jobs:
   publish:
     runs-on: ubuntu-latest
@@ -64,25 +61,51 @@ jobs:
         with:
           ref: ${{ steps.tag.outputs.tag }}
           persist-credentials: false
+          # Release notes are computed from `git log <prev-v*-tag>..<tag>`, so the
+          # publish step needs the full commit history AND every v* tag reachable,
+          # not just the shallow single-commit default. fetch-depth: 0 fetches all
+          # history; fetch-tags: true guarantees the previous release tags are
+          # present so previous-tag selection can resolve them. Refs #2193.
+          fetch-depth: 0
+          fetch-tags: true
 
-      - name: Set up uv and project environment
-        uses: ./.github/actions/setup-uv
+      - name: Install nix
+        # Inlined rather than `uses: ./.github/actions/resolve-apm-version`:
+        # this job checks out an arbitrary historical release tag above, and
+        # a tag published before that composite action existed would not
+        # contain it, breaking `workflow_dispatch` republishing of old tags.
+        # DeterminateSystems/nix-installer-action is an external marketplace
+        # action, not a local path, so it works regardless of the checked-out
+        # ref. Refs #2218 (Codex review).
+        uses: DeterminateSystems/nix-installer-action@ef8a148080ab6020fd15196c2084a2eea5ff2d25 # v22
 
-      - name: Verify compiled instructions match the APM source at this tag
-        # The release ships the committed CLAUDE.md / AGENTS.md. Re-compile and
-        # fail if they drift, so a tag can never publish stale artifacts.
+      - name: Put the flake.nix-pinned apm binary on PATH
         run: |
           set -euo pipefail
-          uv run --with "apm-cli==${APM_CLI_VERSION}" apm compile
-          if ! git diff --exit-code -- CLAUDE.md AGENTS.md; then
-            echo "::error::CLAUDE.md or AGENTS.md is out of date at this tag. Re-run 'apm compile' and retag."
+          out_path="$(nix build --no-link --print-out-paths .#apm-cli)"
+          echo "${out_path}/bin" >> "$GITHUB_PATH"
+
+      - name: Verify compiled instructions match the APM source at this tag
+        # The release ships the committed CLAUDE.md / AGENTS.md / GEMINI.md.
+        # Re-compile and fail if they drift, so a tag can never publish stale
+        # artifacts. --target all: every apm-cli-supported tool (#2210).
+        # git status --porcelain (not git diff --exit-code): if one of these
+        # three ever became untracked, git diff would silently ignore it.
+        # Refs #2211 (Codex review).
+        run: |
+          set -euo pipefail
+          apm compile --target all
+          drift="$(git status --porcelain -- CLAUDE.md AGENTS.md GEMINI.md)"
+          if [ -n "$drift" ]; then
+            echo "::error::CLAUDE.md, AGENTS.md or GEMINI.md is out of date at this tag. Re-run 'apm compile --target all' and retag."
+            echo "$drift"
             exit 1
           fi
 
       - name: Build SHA256SUMS manifest
         run: |
           set -euo pipefail
-          sha256sum CLAUDE.md AGENTS.md > SHA256SUMS
+          sha256sum CLAUDE.md AGENTS.md GEMINI.md > SHA256SUMS
           cat SHA256SUMS
 
       - name: Publish release assets
@@ -96,4 +119,5 @@ jobs:
             --tag "$TAG" \
             --asset CLAUDE.md \
             --asset AGENTS.md \
+            --asset GEMINI.md \
             --asset SHA256SUMS

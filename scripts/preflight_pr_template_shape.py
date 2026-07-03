@@ -5,7 +5,8 @@ Bound in ``.claude/settings.json`` to
 ``mcp__github__(create_pull_request|update_pull_request)``. Reads the
 PreToolUse event JSON from stdin and, when the PR body would fail the
 post-2026-05-26 Verification + Checklist + agent-attribution footer
-shape check enforced by ``scripts/body_policy.py``, emits a
+shape check (plus the ungrounded-time-figure heuristic on the ``## Facts``
+section, Refs #2198) enforced by ``scripts/body_policy.py``, emits a
 ``permissionDecision: "deny"`` JSON on stdout so the operator can fix
 the body BEFORE the API call instead of round-tripping through
 ``verify-body-policy.yml``.
@@ -36,6 +37,7 @@ from typing import Any
 from _github_tool_names import canonical_github_tool
 from _hook_runtime import build_deny, run_tool_hook
 from body_policy import (
+    verify_facts_no_ungrounded_time,
     verify_pr_agent_attribution_footer,
     verify_pr_allowed_sections,
     verify_pr_checklist_subsections,
@@ -90,6 +92,7 @@ def evaluate(body: str, *, harness_appends_footer: bool = False) -> list[str]:
         + verify_pr_agent_attribution_footer(
             body, harness_appends_footer=harness_appends_footer
         )
+        + verify_facts_no_ungrounded_time(body)
     )
 
 

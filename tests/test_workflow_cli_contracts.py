@@ -30,6 +30,7 @@ import re
 from pathlib import Path
 from typing import Any, NamedTuple
 
+import _shell_lines
 import analyze_ci_timings
 import attack_review_reminder
 import auto_retro
@@ -127,6 +128,7 @@ import validate_json_syntax
 import verify_apm_checksums
 import verify_control_inventory_currency
 import verify_dependabot_author
+import verify_generated_docs_ownership
 import verify_instruction_text_growth
 import verify_linked_issue_titles
 import verify_readme_translation
@@ -295,6 +297,11 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("python_pin.py", "verify"): "test_python_pin_verify_matches_workflow_args",
     ("verify_apm_checksums.py", "verify"): "test_verify_apm_checksums_matches_workflow_args",
     ("verify_dependabot_author.py", "verify"): "test_verify_dependabot_author_verify_matches_workflow_args",
+    # Refs #2226. "verify" is the read-only registry-sanity gate
+    # (verify-agents.yml lint-scripts-static); "retire" is the write-lane
+    # sweep run only by the post-merge decision-tree job.
+    ("verify_generated_docs_ownership.py", "verify"): "test_verify_generated_docs_ownership_verify_matches_workflow_args",
+    ("verify_generated_docs_ownership.py", "retire"): "test_verify_generated_docs_ownership_retire_matches_workflow_args",
     ("verify_linked_issue_titles.py", "verify"): "test_verify_linked_issue_titles_verify_matches_workflow_args",
     ("verify_readme_translation.py", "verify"): "test_verify_readme_translation_matches_workflow_args",
     ("verify_text_delta_section.py", "verify"): "test_verify_text_delta_section_matches_workflow_args",
@@ -318,22 +325,6 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
 }
 
 
-def _flatten_shell_continuations(text: str) -> list[str]:
-    """Join backslash-continued shell lines into single logical lines."""
-    out: list[str] = []
-    buf = ""
-    for raw_line in text.split("\n"):
-        stripped = raw_line.rstrip()
-        if stripped.endswith("\\"):
-            buf += stripped[:-1].rstrip() + " "
-        else:
-            out.append(buf + stripped)
-            buf = ""
-    if buf:
-        out.append(buf)
-    return out
-
-
 def _normalize_subcommand(raw: str | None) -> str | None:
     """Strip shell punctuation around the first token after the script."""
     if raw is None:
@@ -348,7 +339,10 @@ def _emit_invocations_from_run(
     workflow: str, job: str, step: str, run_text: str
 ) -> list[WorkflowInvocation]:
     out: list[WorkflowInvocation] = []
-    for line in _flatten_shell_continuations(run_text):
+    # Route through the shared shell-continuation flattener (single source of
+    # truth, scripts/_shell_lines) so a `\` continuation joins tokens the same
+    # way the real shell does; drop the 1-based start lineno it returns. Refs #2208.
+    for _lineno, line in _shell_lines.flatten_shell_continuations(run_text):
         for match in _PYTHON_SCRIPT_INVOCATION.finditer(line):
             out.append(
                 WorkflowInvocation(
@@ -1354,6 +1348,37 @@ def test_verify_apm_checksums_matches_workflow_args(tmp_path: Path) -> None:
     assert verify_apm_checksums.main(["--root", str(tmp_path), "verify"]) == 0
 
 
+def test_verify_generated_docs_ownership_verify_matches_workflow_args() -> None:
+    """Mirrors the ``Assert generated-docs ownership registry consistency``
+    step in ``.github/workflows/verify-agents.yml`` (issue #2226). Read-only:
+    every producer registered in OWNERSHIP must exist on the real tree."""
+    assert verify_generated_docs_ownership.main(["verify"]) == 0
+
+
+def test_verify_generated_docs_ownership_retire_matches_workflow_args(tmp_path: Path) -> None:
+    """Mirrors the ``Retire orphaned generated docs`` step in the post-merge
+    ``decision-tree`` job (issue #2226). Exercised against a fixture root
+    rather than the checkout: on a retiring branch the real tree legitimately
+    holds orphans that only the post-merge lane may delete, so a bare
+    ``retire`` here would mutate tracked files mid-suite."""
+    for surface in verify_generated_docs_ownership.OWNERSHIP:
+        producer = tmp_path / surface.producer
+        producer.parent.mkdir(parents=True, exist_ok=True)
+        producer.write_text("# producer\n", encoding="utf-8")
+        owned = (
+            tmp_path
+            / Path(verify_generated_docs_ownership.GENERATED_ROOT)
+            / surface.pattern.replace("*", "sample")
+        )
+        owned.parent.mkdir(parents=True, exist_ok=True)
+        owned.write_text("owned\n", encoding="utf-8")
+    orphan = tmp_path / Path(verify_generated_docs_ownership.GENERATED_ROOT) / "stale.md"
+    orphan.write_text("stale\n", encoding="utf-8")
+
+    assert verify_generated_docs_ownership.main(["retire", "--root", str(tmp_path)]) == 0
+    assert not orphan.exists()
+
+
 def test_verify_dependabot_author_verify_matches_workflow_args() -> None:
     """Mirror the env+argv shape used by issue-pr-triage.yml.
 
@@ -2175,6 +2200,7 @@ def test_pr_upsert_upsert_files_matches_workflow_args(
         "--body-file", str(body_file),
         "--add", "CLAUDE.md",
         "--add", "AGENTS.md",
+        "--add", "GEMINI.md",
     ]) == 0
 
     # post-merge.yml decision-tree shape: --from-diff over a directory prefix,
@@ -2292,9 +2318,9 @@ def test_publish_instruction_release_publish_matches_workflow_args(
     """publish accepts the --tag/--asset argv used by publish-instructions-release.yml.
 
     The release job calls ``publish_instruction_release.py publish --tag "$TAG"
-    --asset CLAUDE.md --asset AGENTS.md --asset SHA256SUMS``. Monkeypatch the
-    publish boundary so the contract test pins the argv shape without an API
-    call or on-disk asset files. Refs #1678.
+    --asset CLAUDE.md --asset AGENTS.md --asset GEMINI.md --asset SHA256SUMS``.
+    Monkeypatch the publish boundary so the contract test pins the argv shape
+    without an API call or on-disk asset files. Refs #1678, #2210.
     """
     monkeypatch.setenv("GH_TOKEN", "tok")
     monkeypatch.setenv("REPO", "owner/repo")
@@ -2308,6 +2334,8 @@ def test_publish_instruction_release_publish_matches_workflow_args(
             "CLAUDE.md",
             "--asset",
             "AGENTS.md",
+            "--asset",
+            "GEMINI.md",
             "--asset",
             "SHA256SUMS",
         ]

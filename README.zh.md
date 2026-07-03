@@ -4,13 +4,13 @@
 
 [English](./README.md) | [日本語](./README.ja.md) | 简体中文 | [한국어](./README.ko.md)
 
-这是一个用于集中管理个人调优后的代理指令的主仓库。它通过 [`microsoft/apm`](https://github.com/microsoft/apm) 编译生成 [`CLAUDE.md`](./CLAUDE.md) 和 [`AGENTS.md`](./AGENTS.md)，供其他项目引用。
+这是一个用于集中管理个人调优后的代理指令的主仓库。它通过 [`microsoft/apm`](https://github.com/microsoft/apm) 编译生成 [`CLAUDE.md`](./CLAUDE.md)、[`AGENTS.md`](./AGENTS.md) 和 [`GEMINI.md`](./GEMINI.md)，供其他项目引用。`apm compile --target all` 会为 apm-cli 支持的每一种工具生成编译产物（Claude、Codex、Gemini CLI，以及读取 Copilot 或 `AGENTS.md` 的各类客户端）；具体生成哪些文件取决于各工具自己的编译格式（参见[工具特定说明](#工具特定说明)）。
 
 ## 目的
 
 - 将我给 AI 编程代理使用的原则集中到一处，让每个项目都保持一致。
 - 这里只保留 **适用于所有项目的、个人层面的通用指南**，不放项目专属规则。
-- 将 APM 作为可信的生成工具链：编辑 `.apm/instructions/`，然后编译 `CLAUDE.md` 和 `AGENTS.md`。
+- 将 APM 作为可信的生成工具链：编辑 `.apm/instructions/`，然后编译 `CLAUDE.md`、`AGENTS.md` 和 `GEMINI.md`。
 - 各项目的本地代理指令引用这个主仓库，并且只添加项目自己的差异部分。
 
 ## 六项原则
@@ -28,14 +28,13 @@
 
 ## 构建
 
-先同步锁定的 uv 环境，再编译本地指令：
+apm 不经由 uv 运行，而是作为 nix 构建的原生二进制文件执行（由 devcontainer，或远程会话的 `scripts/install-apm.sh` 放入 PATH）。编译本地指令：
 
 ```bash
-uv sync --locked
-uv run --with "apm-cli==0.12.1" apm compile
+apm compile --target all
 ```
 
-APM 会读取 `.apm/instructions/*.instructions.md`，并根据 `apm.yml` 写出 `CLAUDE.md` 和 `AGENTS.md`。uv 配置对依赖解析应用了 14 天的 `exclude-newer` 延迟。
+APM 会读取 `.apm/instructions/*.instructions.md`，写出 `CLAUDE.md`、`AGENTS.md` 和 `GEMINI.md`。`--target all` 会为 flake.nix 锁定版本的 apm-cli（`scripts/flake_pin.py version --tool apm`）支持的每一种工具编译（`copilot, claude, cursor, opencode, codex, gemini, windsurf`）；`apm.yml` 的 `target:` 字段保持更窄的范围（`claude`、`codex`），因为该字段同时决定了 `apm install` 式的 skill 部署范围，本仓库有意将其限制在实际使用的工具内。
 
 当有意修改 `.apm/` 源文件时，刷新校验和锁文件：
 
@@ -71,7 +70,11 @@ python3 scripts/verify_apm_checksums.py verify
 
 ### 工具特定说明
 
-- **Codex 或其他读取 `AGENTS.md` 的工具**：同一次同步会把 `AGENTS.md` 与 `CLAUDE.md` 一起落地为已提交的真实文件，无需额外步骤。
+- **Codex、Cursor、OpenCode、Windsurf 或其他读取 `AGENTS.md` 的工具**：同一次同步会把 `AGENTS.md` 与 `CLAUDE.md` 一起落地为已提交的真实文件，无需额外步骤。这些工具没有各自专属的编译产物；在 apm-cli 的目标注册表中，`AGENTS.md` 本身就是它们的格式。
+
+- **Gemini CLI**：与 `CLAUDE.md` / `AGENTS.md` 一起同步 `GEMINI.md`。它只是一行 import 语句（`@./AGENTS.md`），Gemini CLI 会解析该 import，因此其内容始终与 `AGENTS.md` 一致。
+
+- **GitHub Copilot**：`apm compile --target all` 也可能生成 `.github/copilot-instructions.md`，但仅当存在一个真正 *全局*（未限定作用域）的 instruction primitive 时才会生成。本主仓库唯一的指令来源声明了 `applyTo: "**/*"`，apm-cli 的编译器将其视为“限定作用域”而非“全局”，因此目前不会生成该文件；原生读取 `AGENTS.md` 的 Copilot 客户端不受影响。
 
 - **Devin** 可以使用 APM 展开到 `.agents/skills/` 的 skills。需要 hooks parity 时，请把 `.devin/hooks.v1.json` 与仓库指令一起引入。详见 [`docs/standards/devin-apm-compatibility.md`](./docs/standards/devin-apm-compatibility.md)。
 

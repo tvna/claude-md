@@ -18,7 +18,7 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["evaluate(...)"]
-    N002["return verify_pr_verification_pairs(body) + verify_pr_checklist_subsections(body) + verify_pr_allowed_sections(body) + verify_pr_agent_attribution_footer(body, harness_appends_footer=harness_appends_footer)"]
+    N002["return verify_pr_verification_pairs(body) + verify_pr_checklist_subsections(body) + verify_pr_allowed_sections(body) + verify_pr_agent_attribution_footer(body, harness_appends_footer=harness_appends_footer) + verify_facts_no_ungrounded_time(body)"]
     N001 -->|"start"| N002
 ```
 

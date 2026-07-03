@@ -62,7 +62,6 @@ Detection is string-match based:
 | `gate_generated_scripts_manual_edit.py` | workflow | `verify-pr.yml (portable-pr-policy)` |
 | `gate_gh_cli.py` | agent-hook | `claude:PreToolUse` |
 | `gate_gh_cli.py` | agent-hook | `codex:PreToolUse` |
-| `gate_handoff_retro_survey_askuserquestion.py` | agent-hook | `claude:Stop` |
 | `gate_instruction_body_advisory.py` | agent-hook | `claude:PreToolUse` |
 | `gate_instruction_body_advisory.py` | agent-hook | `codex:PreToolUse` |
 | `gate_irreversible_bash.py` | agent-hook | `claude:PreToolUse` |
@@ -274,6 +273,9 @@ Detection is string-match based:
 | `verify_apm_checksums.py` | workflow | `verify-pr.yml (portable-pr-policy)` |
 | `verify_control_inventory_currency.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
 | `verify_dependabot_author.py` | workflow | `issue-pr-triage.yml (dependabot-author)` |
+| `verify_generated_docs_ownership.py` | workflow | `post-merge.yml (decision-tree)` |
+| `verify_generated_docs_ownership.py` | workflow | `post-merge.yml (verify-docs-drift)` |
+| `verify_generated_docs_ownership.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
 | `verify_instruction_text_growth.py` | workflow | `verify-pr.yml (portable-pr-policy)` |
 | `verify_linked_issue_titles.py` | workflow | `verify-pr.yml (portable-pr-policy)` |
 | `verify_readme_translation.py` | workflow | `verify-pr.yml (portable-pr-policy)` |

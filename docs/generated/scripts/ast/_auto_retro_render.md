@@ -11,15 +11,6 @@ flowchart TD
     N001 -->|"start"| N002
 ```
 
-## is_canonical_handoff_retro_title(...)
-
-```mermaid
-flowchart TD
-    N001["is_canonical_handoff_retro_title(...)"]
-    N002["return bool(_CANONICAL_RETRO_TITLE_RE.fullmatch(title.strip()))"]
-    N001 -->|"start"| N002
-```
-
 ## _escape_table_cell(...)
 
 ```mermaid

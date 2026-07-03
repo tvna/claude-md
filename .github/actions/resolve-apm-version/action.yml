@@ -1,0 +1,31 @@
+# Security invariant: like .github/actions/setup-uv and egress-firewall, this
+# composite action runs INLINE in the calling job and inherits that job's
+# permissions, env, and secrets. It MUST stay permission-agnostic: it reads NO
+# GITHUB_TOKEN and NO secrets. Do not add a step that reads the token or a
+# secret; if a shared step ever needs its own scope, use a reusable workflow
+# (workflow_call, own permissions:) instead of this composite action.
+#
+# apm is NOT installed via uv/PyPI here: it runs as the nix-built native
+# binary, the same artifact `nix build .#apm-cli` produces for the devcontainer
+# (.devcontainer/scripts/configure-agent-runtime.sh's `install_nix_binary
+# apm-cli apm`) and for web/remote sessions (scripts/install-apm.sh). flake.nix
+# is the single source of truth for that binary's version and SHA256; building
+# it directly means there is no separate version string to read or keep in
+# sync; a workflow that reinstalled a same-named PyPI package instead could
+# silently diverge from flake.nix on the next flake-pin-refresh bump. Refs
+# #2218.
+name: Resolve apm binary
+description: Realize the flake.nix-pinned apm-cli derivation via nix and put its binary on PATH.
+
+runs:
+  using: composite
+  steps:
+    - name: Install nix
+      uses: DeterminateSystems/nix-installer-action@ef8a148080ab6020fd15196c2084a2eea5ff2d25 # v22
+
+    - name: Put the flake.nix-pinned apm binary on PATH
+      shell: bash
+      run: |
+        set -euo pipefail
+        out_path="$(nix build --no-link --print-out-paths .#apm-cli)"
+        echo "${out_path}/bin" >> "$GITHUB_PATH"

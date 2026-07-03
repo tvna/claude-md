@@ -1,6 +1,6 @@
-"""Contracts for the pinned Superpowers APM dependency.
+"""Contracts for the pinned APM dependencies (Superpowers, Clairvoyance).
 
-Refs #728.
+Refs #728, #2185.
 """
 
 from __future__ import annotations
@@ -32,6 +32,19 @@ SUPERPOWERS_SKILLS = {
     "writing-plans",
     "writing-skills",
 }
+CLAIRVOYANCE_SHA = "4df075294c8e6a33b42e6703b54211f66c8a5ca3"
+CLAIRVOYANCE_DEP = f"tvna/clairvoyance#{CLAIRVOYANCE_SHA}"
+CLAIRVOYANCE_SKILLS = {
+    "adaptive-coaching",
+    "architecture-tradeoff",
+    "clairvoyance",
+    "decision-coaching",
+    "human-harness",
+    "review-verdict",
+    "session-handoff",
+    "using-clairvoyance",
+}
+ALL_APM_SKILLS = SUPERPOWERS_SKILLS | CLAIRVOYANCE_SKILLS
 
 
 def _load_yaml(path: Path) -> dict[str, object]:
@@ -62,18 +75,40 @@ def test_superpowers_lock_matches_declared_pin() -> None:
     assert matches[0]["resolved_commit"] == SUPERPOWERS_SHA
 
 
+def test_clairvoyance_dependency_is_pinned_in_apm_yml() -> None:
+    data = _load_yaml(ROOT / "apm.yml")
+    dependencies = data["dependencies"]
+    assert isinstance(dependencies, dict)
+    apm_dependencies = dependencies["apm"]
+    assert isinstance(apm_dependencies, list)
+    assert CLAIRVOYANCE_DEP in apm_dependencies
+
+
+def test_clairvoyance_lock_matches_declared_pin() -> None:
+    data = _load_yaml(ROOT / "apm.lock.yaml")
+    dependencies = data["dependencies"]
+    assert isinstance(dependencies, list)
+    matches = [
+        dependency
+        for dependency in dependencies
+        if isinstance(dependency, dict) and dependency.get("repo_url") == "tvna/clairvoyance"
+    ]
+    assert len(matches) == 1
+    assert matches[0]["resolved_commit"] == CLAIRVOYANCE_SHA
+
+
 def test_superpowers_agent_skills_are_deployed() -> None:
     skills_root = ROOT / ".agents" / "skills"
     deployed = {
         path.parent.name
         for path in skills_root.glob("*/SKILL.md")
     }
-    assert deployed == SUPERPOWERS_SKILLS
+    assert deployed == ALL_APM_SKILLS
 
 
 def test_superpowers_skills_are_devin_compatible_agent_skills() -> None:
     skills_root = ROOT / ".agents" / "skills"
-    for skill in SUPERPOWERS_SKILLS:
+    for skill in ALL_APM_SKILLS:
         skill_file = skills_root / skill / "SKILL.md"
         assert skill_file.exists()
         text = skill_file.read_text(encoding="utf-8")
@@ -102,7 +137,7 @@ def test_superpowers_claude_skills_are_committed() -> None:
         Path(p).parent.name
         for p in _git_tracked(".claude/skills/*/SKILL.md")
     }
-    assert tracked == SUPERPOWERS_SKILLS
+    assert tracked == ALL_APM_SKILLS
 
 
 def _skill_tree_snapshot(root: Path) -> dict[str, tuple[bytes, bool]]:

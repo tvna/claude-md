@@ -233,6 +233,15 @@ STEPS: tuple[Step, ...] = (
         argv=("python3", "scripts/scan_doc_workflow_refs.py", "verify"),
     ),
     Step(
+        # Refs #2226. Registry sanity for the docs/generated/ ownership map:
+        # fails when a registered producer script is gone, forcing the
+        # retiring PR to drop the registry entry that feeds the post-merge
+        # retire sweep. Read-only; the write lane ("retire") is banned from
+        # STEPS by tests/test_preflight_steps.py.
+        name="verify_generated_docs_ownership",
+        argv=("python3", "scripts/verify_generated_docs_ownership.py", "verify"),
+    ),
+    Step(
         # Refs #1597. Parses every docs/ ```mermaid block via bun (the #1595
         # regression class). soft + required_bin so a no-bun laptop warn-skips,
         # mirroring the pre-commit soft-skip; verify-mermaid.yml is the hard gate.

@@ -95,12 +95,32 @@ def test_missing_published_at_fails_loud() -> None:
         )
 
 
-def test_bad_version_fails_loud() -> None:
+def test_bad_latest_version_holds(capsys: pytest.CaptureFixture[str]) -> None:
+    # An upstream ``releases/latest`` tag that is not a parseable CLI version is
+    # an external condition (an unrelated release stream sharing the repo), not
+    # repo corruption -> hold (None), not raise. A one-line warning goes to
+    # stderr for visibility. Refs #2221.
+    assert _decide("vNOT.A.NUM", "2026-05-01T00:00:00Z") is None
+    err = capsys.readouterr().err
+    assert "does not look like" in err
+    assert "microsoft/waza" in err
+
+
+def test_non_cli_release_tag_holds() -> None:
+    # Regression for #2221: microsoft/waza's ``releases/latest`` returned the
+    # azd extension's tag, which the CLI version parser cannot interpret. The
+    # refresh job must hold (exit 0), not hard-fail the whole matrix leg.
+    assert _decide("azd-ext-microsoft-azd-waza_0.38.0", "2026-05-01T00:00:00Z") is None
+
+
+def test_bad_pinned_version_fails_loud() -> None:
+    # The pinned side (from flake.nix) staying fail-loud: a corrupt pinned value
+    # signals repo-state corruption and must raise, not hold (CLAUDE.md sec 4).
     with pytest.raises(flake_pin_latest.LatestPinError):
         flake_pin_latest.decide(
             "waza",
-            flake_text=_FLAKE,
-            fetcher=_fetcher("vNOT.A.NUM", "2026-05-01T00:00:00Z"),
+            flake_text='wazaVersion = "NOT.A.NUM";\napmVersion = "0.12.1";\n',
+            fetcher=_fetcher("v0.34.0", "2026-05-01T00:00:00Z"),
             cooldown_days=14,
             now=_NOW,
         )

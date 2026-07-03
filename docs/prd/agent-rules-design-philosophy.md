@@ -133,11 +133,10 @@ universal lane.
 ### 2.4 What "project-local" means here
 
 A project-local rule is anything the downstream consumer must define
-for themselves. The classic example is `.github/contributors.toml` and
-`.github/CODEOWNERS`: this repository defines the schema and the
-harness (`scripts/plan_language_context.py`), but the actual
-contributor-to-language mapping is repository-local and would differ in
-every consumer.
+for themselves. The classic example is the operator's own language: this
+repository defines the harness (`scripts/plan_language_context.py`), but
+the actual value of the `CLAUDE_MD_OPERATOR_LANGUAGE` environment
+variable is per-environment and would differ in every consumer.
 
 This repository does not enforce, review, or ship project-local
 material. The universal text simply requires that the consumer set
