@@ -1,0 +1,248 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/tvna/claude-md/.gitapex/ssot.schema.json",
+  "title": "gitapex SSoT gate registry",
+  "description": "Machine-readable registry of the repository's deterministic gates, their enforcement planes, the policy files they read, and the label-based agent routing table. Holds references and routing only, never policy values (the #1984 constraint). Normative schema for .gitapex/ssot.json; see docs/prd/gitapex-ssot-gate-registry.md. The paired validator scripts/scan_ssot_schema.py reads the plane and gate_kind enums from $defs so the two cannot drift, and enforces the referential-integrity rules JSON Schema cannot express.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["meta", "policy_sources", "gates", "clusters", "label_routing", "label_consumers"],
+  "$defs": {
+    "plane": {
+      "description": "Closed enum of enforcement planes a gate can fire on. Read verbatim by scripts/scan_ssot_schema.py; extend here and the validator follows.",
+      "type": "string",
+      "enum": [
+        "pretooluse",
+        "posttooluse",
+        "stop",
+        "sessionstart",
+        "userpromptsubmit",
+        "pre-commit",
+        "pre-push",
+        "ci",
+        "server"
+      ]
+    },
+    "gate_kind": {
+      "description": "Whether the gate is a repository script or a GitHub-side native platform rule. Read verbatim by scripts/scan_ssot_schema.py.",
+      "type": "string",
+      "enum": ["script", "native"]
+    },
+    "body_read": {
+      "description": "How much of an issue/PR an agent may read before acting, per the routing rule. title-only means header labels plus title only.",
+      "type": "string",
+      "enum": ["no", "yes", "title-only"]
+    }
+  },
+  "properties": {
+    "meta": {
+      "description": "Registry metadata. schema_version pins the shape; tracking_issue is the design issue; phase records rollout state so the design doc never has to.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "tracking_issue", "status", "phase"],
+      "properties": {
+        "schema_version": {
+          "description": "Integer schema version; 1 is the phase-0 shape.",
+          "type": "integer"
+        },
+        "tracking_issue": {
+          "description": "Design issue number for the registry (references, not restated values).",
+          "type": "integer"
+        },
+        "status": {
+          "description": "Lifecycle status of the registry design, e.g. adopted-design.",
+          "type": "string"
+        },
+        "phase": {
+          "description": "Migration phase this registry state reflects, e.g. phase-0.",
+          "type": "string"
+        }
+      }
+    },
+    "policy_sources": {
+      "description": "The authoritative policy files the gates read. The registry points at them; each file stays the single source of truth for its own content.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "path", "format", "authority"],
+        "properties": {
+          "id": {
+            "description": "Stable identifier referenced by gates[].policy_refs.",
+            "type": "string"
+          },
+          "path": {
+            "description": "Repository-relative path; must resolve to a tracked file.",
+            "type": "string"
+          },
+          "format": {
+            "description": "Serialization format of the policy file.",
+            "type": "string",
+            "enum": ["toml", "json", "yaml"]
+          },
+          "authority": {
+            "description": "One line naming what this file is authoritative for.",
+            "type": "string"
+          }
+        }
+      }
+    },
+    "gates": {
+      "description": "Every deterministic gate enumerated with its planes, trigger, one-line rule, and policy source references. Phase 0 seeds the PreToolUse plane; other planes land with the phase-1 drift gate.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "kind", "rule", "planes", "trigger", "policy_refs", "cluster", "tracking_issue"],
+        "properties": {
+          "id": {
+            "description": "Unique kebab-case gate identifier.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "script (a tracked scripts/*.py) or native (a GitHub platform rule).",
+            "$ref": "#/$defs/gate_kind"
+          },
+          "script": {
+            "description": "Present iff kind is script: repository-relative path to the gate script; must resolve to a tracked file.",
+            "type": "string"
+          },
+          "native_rule": {
+            "description": "Present iff kind is native: the platform rule type it names, e.g. non_fast_forward.",
+            "type": "string"
+          },
+          "rule": {
+            "description": "One-line statement of what the gate enforces.",
+            "type": "string"
+          },
+          "planes": {
+            "description": "Enforcement planes this gate fires on (at least one).",
+            "type": "array",
+            "minItems": 1,
+            "items": {"$ref": "#/$defs/plane"}
+          },
+          "trigger": {
+            "description": "The operation or tool surface that triggers the gate.",
+            "type": "string"
+          },
+          "policy_refs": {
+            "description": "policy_sources[].id values this gate reads; empty when it reads no registered policy file.",
+            "type": "array",
+            "items": {"type": "string"}
+          },
+          "cluster": {
+            "description": "clusters[].id this gate belongs to, or null when it is not part of a cross-plane cluster.",
+            "type": ["string", "null"]
+          },
+          "tracking_issue": {
+            "description": "Issue number that introduced or governs the gate, or null when unrecorded.",
+            "type": ["integer", "null"]
+          }
+        }
+      }
+    },
+    "clusters": {
+      "description": "Named rules enforced on more than one plane. expected_planes records where the rule is meant to fire; a phase-1 drift gate reconciles that against the gates array.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "rule", "expected_planes"],
+        "properties": {
+          "id": {
+            "description": "Stable cluster identifier referenced by gates[].cluster.",
+            "type": "string"
+          },
+          "rule": {
+            "description": "One-line statement of the shared rule.",
+            "type": "string"
+          },
+          "expected_planes": {
+            "description": "Planes on which this rule is expected to be enforced.",
+            "type": "array",
+            "minItems": 1,
+            "items": {"$ref": "#/$defs/plane"}
+          }
+        }
+      }
+    },
+    "label_routing": {
+      "description": "Machine form of the docs/runbooks/issue-triage.md Agent routing table. First-match-wins, ordered; exactly one default rule and it is last. Every label string resolves against the live catalog .github/labels.json only.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_note", "rules"],
+      "properties": {
+        "source_note": {
+          "description": "Pointer to the prose table this block encodes.",
+          "type": "string"
+        },
+        "rules": {
+          "description": "Ordered routing rules; evaluated top to bottom, first match wins.",
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["action", "body_read"],
+            "properties": {
+              "if_any": {
+                "description": "Rule matches when the issue carries any of these labels.",
+                "type": "array",
+                "items": {"type": "string"}
+              },
+              "if_all": {
+                "description": "Rule matches when the issue carries all of these labels.",
+                "type": "array",
+                "items": {"type": "string"}
+              },
+              "if_none": {
+                "description": "Additional guard: rule matches only when the issue carries none of these labels.",
+                "type": "array",
+                "items": {"type": "string"}
+              },
+              "default": {
+                "description": "Present and true on exactly the final catch-all rule.",
+                "type": "boolean"
+              },
+              "action": {
+                "description": "Routing action the agent takes on a match.",
+                "type": "string"
+              },
+              "body_read": {
+                "description": "Permitted reading depth before acting.",
+                "$ref": "#/$defs/body_read"
+              },
+              "autonomous_pr": {
+                "description": "Whether an autonomous PR is permitted for this route.",
+                "type": "boolean"
+              }
+            }
+          }
+        }
+      }
+    },
+    "label_consumers": {
+      "description": "Files that hardcode label literals (the #1041 inventory). Every label resolves against .github/labels.json unioned with the rename_from and retired tables of .github/label-policy.toml, so a legacy name recorded mid-migration stays detectable.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "labels", "note"],
+        "properties": {
+          "path": {
+            "description": "Repository-relative path of the consumer; must resolve to a tracked file.",
+            "type": "string"
+          },
+          "labels": {
+            "description": "Label literals the consumer hardcodes.",
+            "type": "array",
+            "items": {"type": "string"}
+          },
+          "note": {
+            "description": "One line on what the consumer does with the labels.",
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

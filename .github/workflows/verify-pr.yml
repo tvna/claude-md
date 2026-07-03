@@ -222,6 +222,16 @@ jobs:
       - name: Set up uv and project environment
         uses: ./.github/actions/setup-uv
 
+      - name: Validate .gitapex/ssot.json registry
+        # Refs #2252: validate the gate registry against its JSON Schema and
+        # referential-integrity rules (paths tracked, ids resolve, routing
+        # labels resolve against labels.json, consumer labels resolve against
+        # the label-policy rename/retired union). Runs through uv so tomllib
+        # resolves on the pinned Python. Mirrored pre-push by the
+        # scan_ssot_schema STEP and at commit time by the scan-ssot-schema
+        # pre-commit hook.
+        run: uv run python scripts/scan_ssot_schema.py verify
+
       - name: Compile agent instructions
         # --target all: every apm-cli-supported tool, not just claude/codex.
         # Refs #2210.
