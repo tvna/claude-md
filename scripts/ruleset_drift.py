@@ -408,16 +408,15 @@ def _issue_token() -> str:
     return os.environ.get("GH_TOKEN", "")
 
 
-def file_issue(
-    repo: str,
-    title: str,
-    body_file: Path,
-    labels: tuple[str, ...] | None = None,
-) -> None:
-    # None resolves to the registry's label_consumers entry at call time, not
-    # import time, so importing this module never touches .gitapex/ssot.json.
-    if labels is None:
+def file_issue(repo: str, title: str, body_file: Path) -> None:
+    try:
         labels = _ssot.consumer_labels("scripts/ruleset_drift.py")
+    except (KeyError, TypeError) as exc:
+        # Narrowed to this call site (rather than widening main()'s except
+        # tuple) so a drifted registry fails loud here without also
+        # swallowing unrelated KeyError/TypeError bugs from detect()'s
+        # dict-indexed parsing of SoT files and live ruleset entries.
+        raise RuntimeError(f"ruleset-drift issue labels: {exc}") from exc
     body = body_file.read_text(encoding="utf-8")
     rest_json(
         "POST",
@@ -610,7 +609,6 @@ def reconcile(
     detected: bool,
     body_file: Path,
     close_comment: str,
-    labels: tuple[str, ...] | None = None,
 ) -> ReconcileAction:
     """Maintain a single rolling issue for one drift kind (#1004).
 
@@ -634,7 +632,7 @@ def reconcile(
         detected=detected, existing_issue=existing, content_changed=content_changed
     )
     if action == "create":
-        file_issue(repo, title, body_file, labels)
+        file_issue(repo, title, body_file)
     elif action == "append":
         assert existing is not None  # noqa: S101 -- invariant from decide_issue_action
         comment_on_issue(repo, existing["number"], body_file)
@@ -767,7 +765,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         return args.func(args)
-    except (OSError, json.JSONDecodeError, RuntimeError, ValueError, KeyError, TypeError) as exc:
+    except (OSError, json.JSONDecodeError, RuntimeError, ValueError) as exc:
         print(f"::error::{exc}", file=sys.stderr)
         return 1
 

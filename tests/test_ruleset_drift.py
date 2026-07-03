@@ -411,6 +411,11 @@ class TestFileIssue:
             return {"number": 1}
 
         monkeypatch.setattr(ruleset_drift, "rest_json", fake_rest)
+        monkeypatch.setattr(
+            ruleset_drift._ssot,
+            "consumer_labels",
+            lambda path: ("layer:meta", "type:fix"),
+        )
         body_file = tmp_path / "x.md"
         body_file.write_text("drift body", encoding="utf-8")
 
@@ -452,6 +457,32 @@ class TestFileIssue:
         assert calls == [
             {"title": "title", "body": "drift body", "labels": ["area:example", "type:fix"]}
         ]
+
+    def test_drifted_registry_raises_runtime_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        def _raise_key_error(path: str) -> tuple[str, ...]:
+            raise KeyError(f"no label_consumers entry for path {path!r}")
+
+        monkeypatch.setattr(ruleset_drift._ssot, "consumer_labels", _raise_key_error)
+        body_file = tmp_path / "x.md"
+        body_file.write_text("drift body", encoding="utf-8")
+
+        with pytest.raises(RuntimeError, match="ruleset-drift issue labels"):
+            ruleset_drift.file_issue("owner/repo", "title", body_file)
+
+    def test_malformed_registry_labels_raises_runtime_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        def _raise_type_error(path: str) -> tuple[str, ...]:
+            raise TypeError(f"non-list labels for path {path!r}")
+
+        monkeypatch.setattr(ruleset_drift._ssot, "consumer_labels", _raise_type_error)
+        body_file = tmp_path / "x.md"
+        body_file.write_text("drift body", encoding="utf-8")
+
+        with pytest.raises(RuntimeError, match="ruleset-drift issue labels"):
+            ruleset_drift.file_issue("owner/repo", "title", body_file)
 
 
 # ---------------------------------------------------------------------------
@@ -798,11 +829,11 @@ class TestCli:
     def test_reconcile_with_drifted_ssot_registry_fails_cleanly(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        def _raise_key_error(*_a: object, **_k: object) -> None:
-            raise KeyError("no label_consumers entry for path 'scripts/ruleset_drift.py'")
+        def _raise_key_error(path: str) -> tuple[str, ...]:
+            raise KeyError(f"no label_consumers entry for path {path!r}")
 
         monkeypatch.setattr(ruleset_drift, "find_rolling_issue", lambda *_a, **_k: None)
-        monkeypatch.setattr(ruleset_drift, "file_issue", _raise_key_error)
+        monkeypatch.setattr(ruleset_drift._ssot, "consumer_labels", _raise_key_error)
         body = tmp_path / "sot.md"
         body.write_text("Parent: #30\n", encoding="utf-8")
 
@@ -926,7 +957,7 @@ class TestReconcile:
         )
         monkeypatch.setattr(
             ruleset_drift, "file_issue",
-            lambda r, t, _b, _l: calls["create"].append((r, t)),
+            lambda r, t, _b: calls["create"].append((r, t)),
         )
         monkeypatch.setattr(
             ruleset_drift, "comment_on_issue",
