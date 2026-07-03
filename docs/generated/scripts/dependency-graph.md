@@ -37,6 +37,7 @@ This file is generated from `scripts/*.py` import statements by `python3 scripts
 | `_auto_retro_render` | 1 | `auto_retro` |
 | `_auto_retro_triage` | 1 | `auto_retro` |
 | `_security_drift_issues` | 1 | `security_drift_report` |
+| `_ssot` | 1 | `branch_cleanup` |
 | `check_pr_mergeability` | 1 | `gate_merge_safety` |
 | `gate_pr_body_retro_issue_link` | 1 | `gate_retro_close_keyword_commit` |
 | `generate_devcontainer_arch_overlays` | 1 | `update_devcontainer_image_pins` |
@@ -95,6 +96,7 @@ flowchart TD
     body_policy --> issue_link
     bot_pr_automerge --> _pr_merge
     branch_cleanup --> _github_api
+    branch_cleanup --> _ssot
     check_commit_signing_ready --> _git
     check_commit_signing_ready --> _hook_runtime
     check_hooks_path --> _git
