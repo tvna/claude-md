@@ -23,15 +23,16 @@ This file is generated from `scripts/*.py` import statements by `python3 scripts
 | `auto_retro` | 3 | `gate_pr_body_retro_issue_link`, `gate_reserved_retro_scope`, `gate_retro_close_keyword_commit` |
 | `doc_graph` | 3 | `doc_graph_viz`, `gate_doc_graph_pr`, `scan_doc_graph_registration` |
 | `pr_upsert` | 3 | `_pr_merge`, `auto_retro`, `devcontainer_pin_pr` |
+| `preflight_steps` | 3 | `preflight_all`, `scan_ruff_format`, `scan_ssot_drift` |
 | `_allowlist` | 2 | `scan_allowlist_parser_parity`, `scan_allowlist_rationale` |
 | `_commit_signing` | 2 | `preflight_push_unsigned_commits`, `preflight_signed_commits` |
 | `_pr_commit_batch` | 2 | `devcontainer_pin_pr`, `pr_upsert` |
 | `_pr_merge` | 2 | `bot_pr_automerge`, `devcontainer_pin_pr` |
 | `_secret_patterns` | 2 | `preflight_github_secrets`, `scan_secrets` |
 | `_security_drift_families` | 2 | `_security_drift_issues`, `security_drift_report` |
-| `preflight_steps` | 2 | `preflight_all`, `scan_ruff_format` |
 | `scan_maintainability_metrics` | 2 | `codebase_maturity_summary`, `scan_module_size_distribution` |
 | `scan_non_ascii` | 2 | `preflight_non_ascii`, `preflight_pr_body` |
+| `scan_preflight_drift` | 2 | `scan_input_contract_drift`, `scan_ssot_drift` |
 | `title_policy` | 2 | `preflight_title_policy`, `verify_linked_issue_titles` |
 | `_auto_retro_render` | 1 | `auto_retro` |
 | `_auto_retro_triage` | 1 | `auto_retro` |
@@ -45,7 +46,6 @@ This file is generated from `scripts/*.py` import statements by `python3 scripts
 | `preflight_main_freshness` | 1 | `preflight_session_base_freshness` |
 | `scan_docs_inventory` | 1 | `preflight_merge_index_budget` |
 | `scan_markdown_links` | 1 | `measure_tool_overlap` |
-| `scan_preflight_drift` | 1 | `scan_input_contract_drift` |
 | `scan_secrets` | 1 | `measure_tool_overlap` |
 | `scan_workflow_action_pins` | 1 | `measure_tool_overlap` |
 | `scan_workflow_injection` | 1 | `measure_tool_overlap` |
@@ -261,6 +261,8 @@ flowchart TD
     scan_ruff_format --> preflight_steps
     scan_secrets --> _git
     scan_secrets --> _secret_patterns
+    scan_ssot_drift --> preflight_steps
+    scan_ssot_drift --> scan_preflight_drift
     scan_workflow_gh_calls --> _shell_lines
     scan_workflow_pip --> _shell_lines
     scan_workflow_unsigned_commit --> _shell_lines

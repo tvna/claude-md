@@ -231,6 +231,8 @@ Detection is string-match based:
 | `scan_secrets.py` | pre-commit | `scan-secrets` |
 | `scan_secrets.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
 | `scan_session_path_drift.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
+| `scan_ssot_drift.py` | pre-commit | `scan-ssot-drift` |
+| `scan_ssot_drift.py` | workflow | `verify-pr.yml (portable-pr-policy)` |
 | `scan_ssot_schema.py` | pre-commit | `scan-ssot-schema` |
 | `scan_ssot_schema.py` | workflow | `verify-pr.yml (portable-pr-policy)` |
 | `scan_test_presence_drift.py` | pre-commit | `scan-test-presence-drift` |
