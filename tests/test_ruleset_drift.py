@@ -429,6 +429,30 @@ class TestFileIssue:
             "labels": ["layer:meta", "type:fix"],
         }
 
+    def test_labels_come_from_the_ssot_registry(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        calls: list[dict[str, Any] | None] = []
+
+        def fake_rest(method: str, path: str, payload: Any = None, *, token: str) -> Any:
+            calls.append(payload)
+            return {"number": 1}
+
+        monkeypatch.setattr(ruleset_drift, "rest_json", fake_rest)
+        monkeypatch.setattr(
+            ruleset_drift._ssot,
+            "consumer_labels",
+            lambda path: ("area:example", "type:fix"),
+        )
+
+        body_file = tmp_path / "x.md"
+        body_file.write_text("drift body", encoding="utf-8")
+        ruleset_drift.file_issue("owner/repo", "title", body_file)
+
+        assert calls == [
+            {"title": "title", "body": "drift body", "labels": ["area:example", "type:fix"]}
+        ]
+
 
 # ---------------------------------------------------------------------------
 
@@ -770,6 +794,34 @@ class TestCli:
         assert rc == 0
         assert captured["title"] == ruleset_drift.UNKNOWN_ISSUE_TITLE
         assert captured["detected"] is False
+
+    def test_reconcile_with_drifted_ssot_registry_fails_cleanly(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        def _raise_key_error(*_a: object, **_k: object) -> None:
+            raise KeyError("no label_consumers entry for path 'scripts/ruleset_drift.py'")
+
+        monkeypatch.setattr(ruleset_drift, "find_rolling_issue", lambda *_a, **_k: None)
+        monkeypatch.setattr(ruleset_drift, "file_issue", _raise_key_error)
+        body = tmp_path / "sot.md"
+        body.write_text("Parent: #30\n", encoding="utf-8")
+
+        rc = ruleset_drift.main(
+            [
+                "reconcile",
+                "--repo",
+                "owner/repo",
+                "--kind",
+                "sot",
+                "--detected",
+                "true",
+                "--body-file",
+                str(body),
+            ]
+        )
+
+        assert rc == 1
+        assert "::error::" in capsys.readouterr().err
 
     def test_reconcile_invalid_detected_exits_one(self, tmp_path: Path) -> None:
         rc = ruleset_drift.main(

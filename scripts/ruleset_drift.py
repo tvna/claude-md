@@ -29,11 +29,11 @@ from pathlib import Path
 from typing import Any, Literal
 from urllib.parse import quote
 
+import _ssot
 from _github_api import API_VERSION, rest_json
 
 API_ROOT = "https://api.github.com"
 SOT_PROJECTION_KEYS = ("name", "target", "enforcement", "conditions", "bypass_actors", "rules")
-ISSUE_LABELS = ("layer:meta", "type:fix")
 
 # Stable rolling-issue titles (#1004): ONE open issue per kind, date in the body
 # (not the title), so recurring drift updates one issue instead of stacking
@@ -412,8 +412,12 @@ def file_issue(
     repo: str,
     title: str,
     body_file: Path,
-    labels: tuple[str, ...] = ISSUE_LABELS,
+    labels: tuple[str, ...] | None = None,
 ) -> None:
+    # None resolves to the registry's label_consumers entry at call time, not
+    # import time, so importing this module never touches .gitapex/ssot.json.
+    if labels is None:
+        labels = _ssot.consumer_labels("scripts/ruleset_drift.py")
     body = body_file.read_text(encoding="utf-8")
     rest_json(
         "POST",
@@ -606,7 +610,7 @@ def reconcile(
     detected: bool,
     body_file: Path,
     close_comment: str,
-    labels: tuple[str, ...] = ISSUE_LABELS,
+    labels: tuple[str, ...] | None = None,
 ) -> ReconcileAction:
     """Maintain a single rolling issue for one drift kind (#1004).
 
@@ -763,7 +767,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         return args.func(args)
-    except (OSError, json.JSONDecodeError, RuntimeError, ValueError) as exc:
+    except (OSError, json.JSONDecodeError, RuntimeError, ValueError, KeyError, TypeError) as exc:
         print(f"::error::{exc}", file=sys.stderr)
         return 1
 

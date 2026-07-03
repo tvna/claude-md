@@ -1063,7 +1063,7 @@ def test_ruleset_drift_detect_and_reconcile_match_workflow_args(
         repo: str,
         title: str,
         body_file: Path,
-        labels: tuple[str, ...] = ruleset_drift.ISSUE_LABELS,
+        labels: tuple[str, ...] | None = None,
     ) -> None:
         calls.append(
             {"repo": repo, "title": title, "body_file": body_file, "labels": labels}
