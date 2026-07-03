@@ -77,6 +77,17 @@
       "tracking_issue": null
     },
     {
+      "id": "preflight-codex-github-footer",
+      "kind": "script",
+      "script": "scripts/preflight_codex_github_footer.py",
+      "rule": "Codex-authored GitHub posts carry the required Codex attribution footer",
+      "planes": ["pretooluse"],
+      "trigger": "Codex GitHub write tools",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
       "id": "issue-closure-fast-path",
       "kind": "script",
       "script": "scripts/issue_closure_fast_path.py",

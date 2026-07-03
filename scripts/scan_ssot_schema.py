@@ -5,7 +5,16 @@ The registry (`.gitapex/ssot.json`) is the machine-readable single source of
 truth for the repository's deterministic gates, their enforcement planes, the
 policy files they read, and the label-based agent routing table. This gate
 validates the registry against its JSON Schema (`.gitapex/ssot.schema.json`)
-and enforces the referential-integrity rules the schema alone cannot express:
+and enforces the referential-integrity rules the schema alone cannot express.
+
+Shape validation walks the schema (a draft-2020-12 subset: ``type``, ``enum``,
+``required``, ``properties``, ``additionalProperties``, ``items``, ``minItems``,
+and ``$ref`` into ``$defs``), so the schema is the single source for every
+shape constraint and the validator cannot drift from it. An extra property, a
+wrong scalar type, a non-object array element, or an empty required array is
+therefore rejected.
+
+Referential-integrity checks (which JSON Schema cannot express) then enforce:
 
 - every ``policy_sources[].path``, ``gates[].script``, and
   ``label_consumers[].path`` resolves to a tracked file;
@@ -18,17 +27,11 @@ and enforces the referential-integrity rules the schema alone cannot express:
   unioned with the ``rename_from`` and ``retired_labels`` tables of
   ``.github/label-policy.toml`` (a legacy name may legitimately be recorded
   mid-migration);
-- ``gates[].kind`` is ``script`` (carrying ``script``) or ``native`` (carrying
-  ``native_rule``), never both, never neither;
-- ``label_routing.rules`` is ordered with exactly one ``default`` rule, last;
-- every plane in ``gates[].planes`` and ``clusters[].expected_planes`` is in
-  the closed plane enum.
+- ``gates[].kind`` ``script`` carries ``script`` (and no ``native_rule``),
+  ``native`` carries ``native_rule`` (and no ``script``);
+- ``label_routing.rules`` has exactly one ``default`` rule, last.
 
-The closed ``plane`` and ``gate_kind`` vocabularies and the per-object
-``required`` field lists are read from the schema so the schema stays the
-single source and the validator cannot drift from it.
-
-Architecture: pure functions on top (:func:`extract_schema_vocab`,
+Architecture: pure functions on top (:func:`validate_shape`,
 :func:`verify_registry` and its ``_check_*`` helpers), a single ``git``
 subprocess boundary in :func:`build_tracked_checker`, and a ``main()``
 entrypoint at the bottom.
@@ -55,7 +58,6 @@ import subprocess
 import sys
 import tomllib
 from collections.abc import Callable
-from dataclasses import dataclass
 from pathlib import Path
 
 _SCRIPT = "scan_ssot_schema"
@@ -70,24 +72,8 @@ class SchemaError(Exception):
     """Raised when the schema itself is missing a structure the gate reads."""
 
 
-@dataclass(frozen=True)
-class SchemaVocab:
-    """The enums and required-field lists the validator reads from the schema."""
-
-    planes: frozenset[str]
-    kinds: frozenset[str]
-    body_reads: frozenset[str]
-    top_required: tuple[str, ...]
-    meta_required: tuple[str, ...]
-    policy_source_required: tuple[str, ...]
-    gate_required: tuple[str, ...]
-    cluster_required: tuple[str, ...]
-    rule_required: tuple[str, ...]
-    consumer_required: tuple[str, ...]
-
-
 # ---------------------------------------------------------------------------
-# Loading (pure helpers over already-read text / parsed data)
+# Loading helpers (pure, over already-parsed data)
 # ---------------------------------------------------------------------------
 
 
@@ -122,124 +108,126 @@ def consumer_label_universe(
     return live | frozenset(extra)
 
 
-def extract_schema_vocab(schema: object) -> SchemaVocab:
-    """Return the enums and required-field lists the validator reads.
+def _as_list(value: object) -> list[object]:
+    return value if isinstance(value, list) else []
 
-    Raises :class:`SchemaError` when the schema is missing any structure the
-    gate depends on, so schema drift fails loud rather than silently skipping
-    a check.
+
+# ---------------------------------------------------------------------------
+# Schema-driven shape validation (a draft-2020-12 subset)
+# ---------------------------------------------------------------------------
+
+_TYPE_CHECKS: dict[str, Callable[[object], bool]] = {
+    "object": lambda v: isinstance(v, dict),
+    "array": lambda v: isinstance(v, list),
+    "string": lambda v: isinstance(v, str),
+    # bool is a subclass of int; an integer field must reject True/False.
+    "integer": lambda v: isinstance(v, int) and not isinstance(v, bool),
+    "number": lambda v: isinstance(v, int | float) and not isinstance(v, bool),
+    "boolean": lambda v: isinstance(v, bool),
+    "null": lambda v: v is None,
+}
+
+
+def _assert_schema_shape(schema: object) -> None:
+    """Raise :class:`SchemaError` if the schema lacks structures the gate needs.
+
+    Guards against silently accepting a truncated or empty schema (which would
+    impose no constraints and let malformed registry data pass).
     """
     if not isinstance(schema, dict):
         raise SchemaError("schema root is not a JSON object")
-
-    def navigate(*path: str) -> object:
-        node: object = schema
-        for key in path:
-            if not isinstance(node, dict) or key not in node:
-                raise SchemaError(
-                    "schema is missing the '" + ".".join(path) + "' node"
-                )
-            node = node[key]
-        return node
-
-    def enum_at(*path: str) -> frozenset[str]:
-        node = navigate(*path)
-        if not isinstance(node, list):
-            raise SchemaError("schema enum at '" + ".".join(path) + "' is not a list")
-        return frozenset(str(v) for v in node)
-
-    def required_at(*path: str) -> tuple[str, ...]:
-        node = navigate(*path)
-        if not isinstance(node, list):
-            raise SchemaError(
-                "schema required at '" + ".".join(path) + "' is not a list"
-            )
-        return tuple(str(v) for v in node)
-
-    props = ("properties",)
-    return SchemaVocab(
-        planes=enum_at("$defs", "plane", "enum"),
-        kinds=enum_at("$defs", "gate_kind", "enum"),
-        body_reads=enum_at("$defs", "body_read", "enum"),
-        top_required=required_at("required"),
-        meta_required=required_at(*props, "meta", "required"),
-        policy_source_required=required_at(*props, "policy_sources", "items", "required"),
-        gate_required=required_at(*props, "gates", "items", "required"),
-        cluster_required=required_at(*props, "clusters", "items", "required"),
-        rule_required=required_at(
-            *props, "label_routing", "properties", "rules", "items", "required"
-        ),
-        consumer_required=required_at(*props, "label_consumers", "items", "required"),
-    )
+    defs = schema.get("$defs")
+    props = schema.get("properties")
+    if not isinstance(defs, dict) or not isinstance(props, dict):
+        raise SchemaError("schema is missing '$defs' or 'properties'")
+    for name in ("plane", "gate_kind", "body_read"):
+        node = defs.get(name)
+        if not isinstance(node, dict) or not isinstance(node.get("enum"), list):
+            raise SchemaError(f"schema is missing the '$defs.{name}.enum' list")
+    if not isinstance(schema.get("required"), list):
+        raise SchemaError("schema is missing the top-level 'required' list")
 
 
-# ---------------------------------------------------------------------------
-# Referential-integrity and shape checks (pure)
-# ---------------------------------------------------------------------------
+def _resolve_ref(root: dict[str, object], ref: str) -> dict[str, object]:
+    node: object = root
+    for part in ref.lstrip("#/").split("/"):
+        if not isinstance(node, dict) or part not in node:
+            raise SchemaError(f"schema $ref {ref!r} does not resolve")
+        node = node[part]
+    if not isinstance(node, dict):
+        raise SchemaError(f"schema $ref {ref!r} does not resolve to an object")
+    return node
 
 
-def _missing(obj: dict[str, object], required: tuple[str, ...], ctx: str) -> list[str]:
-    return [f"{ctx}: missing required field '{key}'" for key in required if key not in obj]
+def _type_name(value: object) -> str:
+    return "null" if value is None else type(value).__name__
 
 
-def _check_shape(registry: dict[str, object], vocab: SchemaVocab) -> list[str]:
+def _validate_instance(
+    instance: object,
+    schema: dict[str, object],
+    root: dict[str, object],
+    path: str,
+    errors: list[str],
+) -> None:
+    """Validate *instance* against the *schema* subset, appending violations."""
+    ref = schema.get("$ref")
+    if isinstance(ref, str):
+        schema = _resolve_ref(root, ref)
+
+    declared_type = schema.get("type")
+    if declared_type is not None:
+        types = declared_type if isinstance(declared_type, list) else [declared_type]
+        if not any(_TYPE_CHECKS.get(str(t), lambda _v: True)(instance) for t in types):
+            errors.append(f"{path}: expected type {declared_type}, got {_type_name(instance)}")
+            return
+
+    enum = schema.get("enum")
+    if isinstance(enum, list) and instance not in enum:
+        errors.append(f"{path}: {instance!r} is not one of {enum}")
+
+    if isinstance(instance, dict):
+        properties = schema.get("properties")
+        properties = properties if isinstance(properties, dict) else {}
+        for key in _as_list(schema.get("required")):
+            if key not in instance:
+                errors.append(f"{path}: missing required field {key!r}")
+        if schema.get("additionalProperties") is False:
+            for key in instance:
+                if key not in properties:
+                    errors.append(f"{path}: unexpected property {key!r}")
+        for key, subschema in properties.items():
+            if key in instance and isinstance(subschema, dict):
+                _validate_instance(instance[key], subschema, root, f"{path}.{key}", errors)
+    elif isinstance(instance, list):
+        min_items = schema.get("minItems")
+        if isinstance(min_items, int) and len(instance) < min_items:
+            errors.append(f"{path}: expected at least {min_items} item(s), got {len(instance)}")
+        item_schema = schema.get("items")
+        if isinstance(item_schema, dict):
+            for idx, item in enumerate(instance):
+                _validate_instance(item, item_schema, root, f"{path}[{idx}]", errors)
+
+
+def validate_shape(registry: object, schema: dict[str, object]) -> list[str]:
+    """Return schema-conformance violations for *registry*."""
     errors: list[str] = []
-    errors += _missing(registry, vocab.top_required, "registry")
-
-    meta = registry.get("meta")
-    if isinstance(meta, dict):
-        errors += _missing(meta, vocab.meta_required, "meta")
-
-    for i, ps in enumerate(_as_list(registry.get("policy_sources"))):
-        if isinstance(ps, dict):
-            errors += _missing(ps, vocab.policy_source_required, f"policy_sources[{i}]")
-    for i, gate in enumerate(_as_list(registry.get("gates"))):
-        if isinstance(gate, dict):
-            errors += _missing(gate, vocab.gate_required, f"gates[{i}]")
-    for i, cl in enumerate(_as_list(registry.get("clusters"))):
-        if isinstance(cl, dict):
-            errors += _missing(cl, vocab.cluster_required, f"clusters[{i}]")
-    for i, con in enumerate(_as_list(registry.get("label_consumers"))):
-        if isinstance(con, dict):
-            errors += _missing(con, vocab.consumer_required, f"label_consumers[{i}]")
-
-    routing = registry.get("label_routing")
-    if isinstance(routing, dict):
-        for i, rule in enumerate(_as_list(routing.get("rules"))):
-            if isinstance(rule, dict):
-                errors += _missing(rule, vocab.rule_required, f"label_routing.rules[{i}]")
+    _validate_instance(registry, schema, schema, "registry", errors)
     return errors
 
 
-def _check_planes(registry: dict[str, object], planes: frozenset[str]) -> list[str]:
-    errors: list[str] = []
-    for i, gate in enumerate(_as_list(registry.get("gates"))):
-        if not isinstance(gate, dict):
-            continue
-        for plane in _as_list(gate.get("planes")):
-            if plane not in planes:
-                errors.append(f"gates[{i}] ({gate.get('id')!r}): unknown plane {plane!r}")
-    for i, cl in enumerate(_as_list(registry.get("clusters"))):
-        if not isinstance(cl, dict):
-            continue
-        for plane in _as_list(cl.get("expected_planes")):
-            if plane not in planes:
-                errors.append(
-                    f"clusters[{i}] ({cl.get('id')!r}): unknown expected plane {plane!r}"
-                )
-    return errors
+# ---------------------------------------------------------------------------
+# Referential-integrity checks (pure; JSON Schema cannot express these)
+# ---------------------------------------------------------------------------
 
 
-def _check_gate_kinds(registry: dict[str, object], kinds: frozenset[str]) -> list[str]:
+def _check_gate_kinds(registry: dict[str, object]) -> list[str]:
     errors: list[str] = []
     for i, gate in enumerate(_as_list(registry.get("gates"))):
         if not isinstance(gate, dict):
             continue
         gid = gate.get("id")
         kind = gate.get("kind")
-        if kind not in kinds:
-            errors.append(f"gates[{i}] ({gid!r}): unknown kind {kind!r}")
-            continue
         if kind == "script":
             if not gate.get("script"):
                 errors.append(f"gates[{i}] ({gid!r}): kind 'script' requires a 'script' path")
@@ -307,14 +295,10 @@ def _routing_labels(routing: dict[str, object]) -> list[str]:
     return labels
 
 
-def _check_routing(
-    registry: dict[str, object],
-    live_labels: frozenset[str],
-    body_reads: frozenset[str],
-) -> list[str]:
+def _check_routing(registry: dict[str, object], live_labels: frozenset[str]) -> list[str]:
     routing = registry.get("label_routing")
     if not isinstance(routing, dict):
-        return ["label_routing: missing or not an object"]
+        return []  # shape validation already reported the type mismatch
 
     errors: list[str] = []
     for label in _routing_labels(routing):
@@ -334,12 +318,6 @@ def _check_routing(
         )
     elif default_indexes[0] != len(rules) - 1:
         errors.append("label_routing.rules: the default rule must be last")
-
-    for i, rule in enumerate(rules):
-        if isinstance(rule, dict) and rule.get("body_read") not in body_reads:
-            errors.append(
-                f"label_routing.rules[{i}]: unknown body_read {rule.get('body_read')!r}"
-            )
     return errors
 
 
@@ -368,24 +346,19 @@ def verify_registry(
     consumer_labels: frozenset[str],
 ) -> list[str]:
     """Return the list of violation messages; empty means the registry is valid."""
+    _assert_schema_shape(schema)
+    assert isinstance(schema, dict)  # noqa: S101 -- narrowed by _assert_schema_shape
+
+    errors = validate_shape(registry, schema)
     if not isinstance(registry, dict):
-        return ["registry root is not a JSON object"]
+        return errors  # shape validation reported the root type mismatch
 
-    vocab = extract_schema_vocab(schema)
-
-    errors: list[str] = []
-    errors += _check_shape(registry, vocab)
-    errors += _check_planes(registry, vocab.planes)
-    errors += _check_gate_kinds(registry, vocab.kinds)
+    errors += _check_gate_kinds(registry)
     errors += _check_tracked_paths(registry, is_tracked)
     errors += _check_id_refs(registry)
-    errors += _check_routing(registry, live_labels, vocab.body_reads)
+    errors += _check_routing(registry, live_labels)
     errors += _check_consumers(registry, consumer_labels)
     return errors
-
-
-def _as_list(value: object) -> list[object]:
-    return value if isinstance(value, list) else []
 
 
 # ---------------------------------------------------------------------------
