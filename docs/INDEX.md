@@ -149,6 +149,7 @@ naming convention and the per-30-entries year-folder cutover.
 | File | Territory | Tracking issues | Companion |
 |---|---|---|---|
 | [TEMPLATE.md](next-session/TEMPLATE.md) | Reusable template for session handoff prompts. Uses 4-space-indented code blocks (no fenced blocks) to prevent Markdown renderers from breaking the outer fence when prompts are pasted into a new session. | #1884 | `docs/next-session/` |
+| [gitapex-ssot-phase0.md](next-session/gitapex-ssot-phase0.md) | Handoff prompt for the `.gitapex/ssot.json` phase 0 implementation session (registry, schema, validator gate, CODEOWNERS coverage), scoped by the adopted design PRD. | #2246 | `docs/prd/gitapex-ssot-gate-registry.md` |
 
 ## Navigation aids
 

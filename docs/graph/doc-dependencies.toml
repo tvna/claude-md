@@ -72,6 +72,12 @@ type = "prd"
 description = "Decision record for retrying curl downloads in SessionStart installers via shared scripts/_retry.sh with fail-loud-but-fail-open surfacing."
 
 [[nodes]]
+id = "gitapex_ssot_registry_prd"
+path = "docs/prd/gitapex-ssot-gate-registry.md"
+type = "prd"
+description = "Design PRD for the .gitapex/ssot.json gate-function registry: label routing table, policy-source pointers (references, not values), CODEOWNERS plus validator governance, four-phase migration. Refs #2246."
+
+[[nodes]]
 id = "issue_pr_body_standard"
 path = "docs/standards/issue-pr-body-standard.md"
 type = "standard"
