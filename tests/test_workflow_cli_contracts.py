@@ -1059,15 +1059,8 @@ def test_ruleset_drift_detect_and_reconcile_match_workflow_args(
     )
     calls: list[dict[str, Any]] = []
 
-    def fake_file_issue(
-        repo: str,
-        title: str,
-        body_file: Path,
-        labels: tuple[str, ...] = ruleset_drift.ISSUE_LABELS,
-    ) -> None:
-        calls.append(
-            {"repo": repo, "title": title, "body_file": body_file, "labels": labels}
-        )
+    def fake_file_issue(repo: str, title: str, body_file: Path) -> None:
+        calls.append({"repo": repo, "title": title, "body_file": body_file})
 
     # No open rolling issue + capture create; reconcile must never shell out.
     monkeypatch.setattr(ruleset_drift, "find_rolling_issue", lambda repo, title: None)
