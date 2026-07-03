@@ -67,6 +67,7 @@ jobs:
           python3 scripts/labels_apply.py "$COMMAND" \
             --repo "$REPO" \
             --sot .github/labels.json \
+            --policy .github/label-policy.toml \
             --prune "$INPUT_PRUNE" \
             --dry-run "$INPUT_DRY_RUN" \
             --summary-file "$GITHUB_STEP_SUMMARY"

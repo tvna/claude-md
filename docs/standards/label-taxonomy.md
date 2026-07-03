@@ -33,13 +33,16 @@ after the terminal PR event. That exception does not create `area:retro`.
 | File | Role |
 |---|---|
 | `.github/label-policy.toml` | Adopted design contract and target label policy |
-| `.github/labels.json` | Current live GitHub label apply source until #972 migrates it |
+| `.github/labels.json` | Live GitHub label apply source; the #972 renames batch (#2139) flips its five renamed entries |
 | `docs/standards/label-taxonomy.md` | Human-readable taxonomy standard |
 | `docs/runbooks/issue-triage.md` | Operator procedure and routing runbook |
 
 The TOML policy records target labels, family cardinality, rename sources,
-retired labels, and area-to-path mappings. The JSON catalog must not be
-changed until the migration issue executes the rollout.
+retired labels, and area-to-path mappings. The JSON catalog now carries the
+five final rename names (#972 renames batch, #2139); `labels_apply.py` reads the
+`rename_from` map from this TOML to rename the live labels in place so existing
+assignments are preserved. Retirements and area additions are deferred to later
+#972 batches and must not be applied to the catalog before then.
 
 ## Final Label Families
 

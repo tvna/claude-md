@@ -6,7 +6,7 @@ updates:
       interval: "weekly"
       day: "monday"
     labels:
-      - "dependencies"
+      - "ops:dependencies"
     commit-message:
       prefix: "chore"
       include: "scope"
@@ -22,7 +22,7 @@ updates:
       interval: "weekly"
       day: "monday"
     labels:
-      - "dependencies"
+      - "ops:dependencies"
     commit-message:
       prefix: "chore"
       include: "scope"

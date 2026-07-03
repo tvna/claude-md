@@ -24,7 +24,7 @@ pytestmark = pytest.mark.shard_preflight
 
 _SOT = [
     {"name": "layer:p1-goal-plan", "color": "1d76db", "description": "x"},
-    {"name": "layer:p4-artifact", "color": "fbca04", "description": "x"},
+    {"name": "layer:p4-safety-boundary", "color": "fbca04", "description": "x"},
     {"name": "layer:meta", "color": "c5def5", "description": "x"},
     {"name": "type:feat", "color": "a2eeef", "description": "x"},
     {"name": "type:fix", "color": "d73a4a", "description": "x"},
@@ -48,7 +48,7 @@ class TestLoadAxisLabels:
     def test_groups_names_by_axis_prefix(self, labels_path: Path) -> None:
         axes = gate.load_axis_labels(labels_path)
         assert axes["layer"] == frozenset(
-            {"layer:p1-goal-plan", "layer:p4-artifact", "layer:meta"}
+            {"layer:p1-goal-plan", "layer:p4-safety-boundary", "layer:meta"}
         )
         assert axes["type"] == frozenset({"type:feat", "type:fix"})
 
@@ -67,7 +67,7 @@ class TestLoadAxisLabels:
 class TestMissingAxes:
     def test_both_axes_present_is_empty(self, labels_path: Path) -> None:
         axes = gate.load_axis_labels(labels_path)
-        assert gate.missing_axes(["layer:p4-artifact", "type:fix"], axes) == []
+        assert gate.missing_axes(["layer:p4-safety-boundary", "type:fix"], axes) == []
 
     def test_no_labels_reports_both(self, labels_path: Path) -> None:
         axes = gate.load_axis_labels(labels_path)
@@ -111,7 +111,7 @@ class TestDecide:
     def test_fully_labeled_create_passes(self, labels_path: Path) -> None:
         decision = gate.decide(
             "mcp__github__issue_write",
-            _create_input(["layer:p4-artifact", "type:fix"]),
+            _create_input(["layer:p4-safety-boundary", "type:fix"]),
             labels_path=labels_path,
         )
         assert decision is None
@@ -181,7 +181,7 @@ class TestMain:
         stdout = self._run(
             {
                 "tool_name": "mcp__github__issue_write",
-                "tool_input": _create_input(["layer:p4-artifact", "type:fix"]),
+                "tool_input": _create_input(["layer:p4-safety-boundary", "type:fix"]),
             },
             monkeypatch,
         )

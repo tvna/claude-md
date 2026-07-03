@@ -1153,8 +1153,8 @@ class TestIssueLabels:
         assert out == ["type:docs", "layer:meta", "layer:p3-harness"]
 
     def test_filters_empty_names(self) -> None:
-        out = ar.issue_labels(("", "layer:p4-artifact"))
-        assert out == ["type:docs", "layer:meta", "layer:p4-artifact"]
+        out = ar.issue_labels(("", "layer:p4-safety-boundary"))
+        assert out == ["type:docs", "layer:meta", "layer:p4-safety-boundary"]
 
 
 # ---------------------------------------------------------------------------
@@ -2042,6 +2042,57 @@ class TestApplyTerminalLabel:
         propagate so the orchestrator can decide its fail-soft policy."""
         def fake_api(method, path, body=None, **_kw):
             raise GitHubApiError(500, "GET", "/x", "boom")
+
+        monkeypatch.setattr(ar, "gh_api", fake_api)
+        with pytest.raises(GitHubApiError):
+            ar.apply_terminal_label("o/r", 42)
+
+    def test_falls_back_to_legacy_label_on_422(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Migration window (#2139): the new label may not exist yet (HTTP
+        422). apply_terminal_label retries once with the legacy name so the
+        terminal signal survives regardless of code-merge vs. live-rename
+        ordering."""
+        seen: list[tuple[str, str, Any]] = []
+
+        def fake_api(method, path, body=None, **_kw):
+            seen.append((method, path, body))
+            if body == {"labels": [ar._TERMINAL_LABEL]}:
+                raise GitHubApiError(422, "POST", path, "label does not exist")
+            return ""
+
+        monkeypatch.setattr(ar, "gh_api", fake_api)
+        ar.apply_terminal_label("o/r", 42)
+        assert seen == [
+            ("POST", "/repos/o/r/issues/42/labels", {"labels": [ar._TERMINAL_LABEL]}),
+            ("POST", "/repos/o/r/issues/42/labels", {"labels": [ar._TERMINAL_LABEL_LEGACY]}),
+        ]
+
+    def test_non_422_does_not_fall_back(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A non-422 error is not a missing-label signal; it must propagate
+        without a legacy retry so real failures stay loud."""
+        calls = 0
+
+        def fake_api(method, path, body=None, **_kw):
+            nonlocal calls
+            calls += 1
+            raise GitHubApiError(500, "POST", path, "boom")
+
+        monkeypatch.setattr(ar, "gh_api", fake_api)
+        with pytest.raises(GitHubApiError):
+            ar.apply_terminal_label("o/r", 42)
+        assert calls == 1
+
+    def test_legacy_retry_failure_propagates(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """If neither the new nor the legacy label exists (both 422), the
+        error propagates to the orchestrator's fail-soft handler."""
+        def fake_api(method, path, body=None, **_kw):
+            raise GitHubApiError(422, "POST", path, "label does not exist")
 
         monkeypatch.setattr(ar, "gh_api", fake_api)
         with pytest.raises(GitHubApiError):
@@ -4411,7 +4462,7 @@ class TestSentinelRun:
     def test_does_not_touch_source_pr_label(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Acceptance #414 #5: harness:retro-opened label gate preserved.
+        """Acceptance #414 #5: ops:retro-opened label gate preserved.
 
         The sentinel must never PATCH/POST/DELETE source-PR labels --
         the label was applied at retro-create time and survives the

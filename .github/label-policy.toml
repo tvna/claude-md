@@ -6,8 +6,8 @@ live_catalog = ".github/labels.json"
 apply_workflow = ".github/workflows/apply-labels.yml"
 
 [rollout]
-phase = "documentation-only"
-note = "This file records the final design. Live label mutation is out of scope until issue 972."
+phase = "renames-batch"
+note = "Renames batch (#2139, parent #972) flips labels.json to the final names for the five rename entries and migrates their consumers. labels_apply.py renames live labels in place via the rename_from map below so associations are preserved (no delete+recreate). The status=rename + rename_from entries stay until the operator runs apply-labels.yml; a follow-up then flips them to keep and drops rename_from. Retirements and area additions remain out of scope until later #972 batches."
 pr_requires_scoped_issue = true
 
 [[families]]
