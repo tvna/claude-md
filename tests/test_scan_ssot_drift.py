@@ -370,7 +370,7 @@ class TestVerifyRegistrySynthetic:
 
 
 # ---------------------------------------------------------------------------
-# Real repository (happy path -- this phase's acceptance bar is a clean report)
+# Real repository (happy path; this phase's acceptance bar is a clean report)
 # ---------------------------------------------------------------------------
 
 
