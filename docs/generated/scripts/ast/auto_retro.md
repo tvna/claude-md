@@ -330,10 +330,21 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["apply_terminal_label(...)"]
-    N002["gh_api(...)"]
-    N003["end"]
+    N002["try"]
+    N003["gh_api(...)"]
+    N004["except GitHubApiError"]
+    N005["if label != _TERMINAL_LABEL or exc.code != 422"]
+    N006["raise"]
+    N007["gh_api(...)"]
+    N008["end"]
     N001 -->|"start"| N002
-    N002 --> N003
+    N002 -->|"try"| N003
+    N002 -->|"raises"| N004
+    N004 --> N005
+    N005 -->|"true"| N006
+    N005 -->|"false"| N007
+    N003 --> N008
+    N007 --> N008
 ```
 
 ## post_skip_comment(...)
