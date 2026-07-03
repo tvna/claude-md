@@ -380,6 +380,18 @@ class TestCLIReconcile:
         assert _run_reconcile(tmp_path, candidate_count=1) == 0
         assert calls == ["create"]
 
+    def test_create_with_drifted_ssot_registry_fails_cleanly(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        def _raise_key_error(*_a: object, **_k: object) -> None:
+            raise KeyError("no label_consumers entry for path 'scripts/branch_cleanup.py'")
+
+        monkeypatch.setattr(branch_cleanup, "find_rolling_issue", lambda *_a, **_k: None)
+        monkeypatch.setattr(branch_cleanup, "create_issue", _raise_key_error)
+
+        assert _run_reconcile(tmp_path, candidate_count=1) == 1
+        assert "error:" in capsys.readouterr().err
+
     def test_append(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         calls: list[str] = []
         monkeypatch.setattr(branch_cleanup, "find_rolling_issue", lambda *_a, **_k: {"number": 7})

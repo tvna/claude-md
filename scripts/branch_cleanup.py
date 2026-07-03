@@ -466,7 +466,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         return args.func(args)
-    except (GitHubApiError, ValueError) as exc:
+    except (GitHubApiError, ValueError, KeyError, OSError, TypeError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
 

@@ -9,10 +9,27 @@ Refs #2266, #2246, #1041.
 
 from __future__ import annotations
 
+import json
+from collections.abc import Iterator
+from pathlib import Path
+
 import _ssot
 import pytest
 
 pytestmark = pytest.mark.shard_preflight
+
+
+@pytest.fixture(autouse=True)
+def _reset_ssot_cache() -> Iterator[None]:
+    _ssot._reset_for_tests()
+    yield
+    _ssot._reset_for_tests()
+
+
+def _write_registry(tmp_path: Path, data: object) -> Path:
+    path = tmp_path / "ssot.json"
+    path.write_text(json.dumps(data), encoding="utf-8")
+    return path
 
 
 class TestConsumerLabels:
@@ -26,6 +43,17 @@ class TestConsumerLabels:
         with pytest.raises(KeyError, match="no label_consumers entry"):
             _ssot.consumer_labels("scripts/does_not_exist.py")
 
+    def test_raises_type_error_for_non_list_labels(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        registry = _write_registry(
+            tmp_path,
+            {"label_consumers": [{"path": "scripts/x.py", "labels": "not-a-list"}]},
+        )
+        monkeypatch.setattr(_ssot, "_REGISTRY_PATH", registry)
+        with pytest.raises(TypeError, match="non-list labels"):
+            _ssot.consumer_labels("scripts/x.py")
+
 
 class TestRoutingRules:
     def test_returns_ordered_rules_ending_in_default(self) -> None:
@@ -33,3 +61,35 @@ class TestRoutingRules:
         assert len(rules) > 0
         assert rules[-1].get("default") is True
         assert all(rule.get("default") is not True for rule in rules[:-1])
+
+    def test_raises_type_error_for_missing_label_routing(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        registry = _write_registry(tmp_path, {})
+        monkeypatch.setattr(_ssot, "_REGISTRY_PATH", registry)
+        with pytest.raises(TypeError, match="label_routing is missing"):
+            _ssot.routing_rules()
+
+    def test_raises_type_error_for_non_list_rules(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        registry = _write_registry(tmp_path, {"label_routing": {"rules": "nope"}})
+        monkeypatch.setattr(_ssot, "_REGISTRY_PATH", registry)
+        with pytest.raises(TypeError, match="label_routing.rules is missing"):
+            _ssot.routing_rules()
+
+
+class TestResetForTests:
+    def test_reset_makes_a_monkeypatched_path_take_effect(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _ssot.consumer_labels("scripts/branch_cleanup.py")  # populate the cache
+
+        registry = _write_registry(
+            tmp_path,
+            {"label_consumers": [{"path": "scripts/x.py", "labels": ["area:example"]}]},
+        )
+        monkeypatch.setattr(_ssot, "_REGISTRY_PATH", registry)
+        _ssot._reset_for_tests()
+
+        assert _ssot.consumer_labels("scripts/x.py") == ("area:example",)
