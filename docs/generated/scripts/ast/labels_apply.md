@@ -25,23 +25,31 @@ flowchart TD
     N002["name = str(...)"]
     N003["color = str(...)"]
     N004["description = str(...)"]
-    N005["if live_entry is None"]
-    N006["return {'<str>': '<str>', '<str>': '<str>', '<str>': '<str>', '<str>': {'<str>': name, '<str>': color, '<str>': description}, '<str>': False, '<str>': False}"]
-    N007["color_changed = live_entry.get('<str>') != color"]
-    N008["desc_changed = (live_entry.get('<str>') or '<str>') != description"]
-    N009["if not color_changed and (not desc_changed)"]
-    N010["return {'<str>': '<str>', '<str>': '<str>', '<str>': '<str>', '<str>': None, '<str>': False, '<str>': False}"]
-    N011["return {'<str>': '<str>', '<str>': '<str>', '<str>': f'<str>{urllib.parse.quote(name, safe='<str>')}', '<str>': {'<str>': color, '<str>': description}, '<str>': color_changed, '<str>': desc_changed}"]
+    N005["if rename_from and live_old_entry is not None"]
+    N006["if live_entry is None"]
+    N007["return {'<str>': '<str>', '<str>': '<str>', '<str>': f'<str>{urllib.parse.quote(rename_from, safe='<str>')}', '<str>': {'<str>': name, '<str>': color, '<str>': description}, '<str>': live_old_entry.get('<str>') != color, '<str>': (live_old_entry.get('<str>') or '<str>') != description}"]
+    N008["return {'<str>': '<str>', '<str>': '<str>', '<str>': '<str>', '<str>': None, '<str>': False, '<str>': False}"]
+    N009["if live_entry is None"]
+    N010["return {'<str>': '<str>', '<str>': '<str>', '<str>': '<str>', '<str>': {'<str>': name, '<str>': color, '<str>': description}, '<str>': False, '<str>': False}"]
+    N011["color_changed = live_entry.get('<str>') != color"]
+    N012["desc_changed = (live_entry.get('<str>') or '<str>') != description"]
+    N013["if not color_changed and (not desc_changed)"]
+    N014["return {'<str>': '<str>', '<str>': '<str>', '<str>': '<str>', '<str>': None, '<str>': False, '<str>': False}"]
+    N015["return {'<str>': '<str>', '<str>': '<str>', '<str>': f'<str>{urllib.parse.quote(name, safe='<str>')}', '<str>': {'<str>': color, '<str>': description}, '<str>': color_changed, '<str>': desc_changed}"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 --> N004
     N004 --> N005
     N005 -->|"true"| N006
-    N005 -->|"false"| N007
-    N007 --> N008
-    N008 --> N009
+    N006 -->|"true"| N007
+    N006 -->|"false"| N008
+    N005 -->|"false"| N009
     N009 -->|"true"| N010
     N009 -->|"false"| N011
+    N011 --> N012
+    N012 --> N013
+    N013 -->|"true"| N014
+    N013 -->|"false"| N015
 ```
 
 ## decide_prune_action(...)
@@ -112,6 +120,21 @@ flowchart TD
     N003 --> N004
 ```
 
+## load_rename_map(...)
+
+```mermaid
+flowchart TD
+    N001["load_rename_map(...)"]
+    N002["with policy_path.open('<str>') as handle:     policy = tomllib.load(handle)"]
+    N003["rename_map = {}"]
+    N004["for entry in policy.get('<str>', []):     if not isinstance(entry, dict):         continue     old = entry.get('<str>')     new = entry.get('<str>')     if isinstance(old, str) and old and isinstance(new, str) and new:         rename_map[new] = old"]
+    N005["return rename_map"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 --> N004
+    N004 --> N005
+```
+
 ## run(...)
 
 ```mermaid
@@ -121,12 +144,14 @@ flowchart TD
     N003["live = live_labels if live_labels is not None else fetch_live_labels(repo, token)"]
     N004["live_by_name = {str(entry.get('<str>')): entry for entry in live}"]
     N005["sot_names = {str(entry['<str>']) for entry in sot}"]
-    N006["rows = []"]
-    N007["_write_summary_header(...)"]
-    N008["for entry in sot:     name = str(entry['<str>'])     decision = decide_label_action(sot_entry=entry, live_entry=live_by_name.get(name))     action = str(decision['<str>'])     if action == '<str>':         rows.append(render_action_row(name, '<str>', '<str>', '<str>', '<str>'))         continue     color_changed = _changed_cell(decision['<str>'], is_post=action == '<str>')     desc_changed = _changed_cell(decision['<str>'], is_post=action == '<str>')     if mode == '<str>' or dry_run:         rows.append(render_action_row(name, f'<str>{action}<str>', color_changed, desc_changed, '<str>'))         continue     code, body = apply_call(method=str(decision['<str>']), url=f'{API_ROOT}<str>{repo}{decision['<str>']}', payload=decision['<str>'], token=token)     if not 200 <= code < 300:         _append_rows(summary_file, rows)         _append_error(summary_file, f'<str>{name}<str>{decision['<str>']}<str>{_format_code(code)}<str>', body)         print(f'<str>{decision['<str>']}<str>{name}<str>{_format_code(code)}<str>')         return 1     rows.append(render_action_row(name, f'{action}<str>', color_changed, desc_changed, f'<str>{code}'))"]
-    N009["for live_entry in live:     live_name = str(live_entry.get('<str>'))     prune_action = decide_prune_action(live_name=live_name, in_sot=live_name in sot_names, prune=prune, dry_run=mode == '<str>' or dry_run)     if prune_action == '<str>':         continue     if prune_action == '<str>':         rows.append(render_action_row(live_name, '<str>', '<str>', '<str>', '<str>'))         continue     if prune_action == '<str>':         rows.append(render_action_row(live_name, '<str>', '<str>', '<str>', '<str>'))         continue     code, body = apply_call(method='<str>', url=f'{API_ROOT}<str>{repo}<str>{urllib.parse.quote(live_name, safe='<str>')}', payload=None, token=token)     if not 200 <= code < 300:         _append_rows(summary_file, rows)         _append_error(summary_file, f'<str>{live_name}<str>{_format_code(code)}<str>', body)         print(f'<str>{live_name}<str>{_format_code(code)}<str>')         return 1     rows.append(render_action_row(live_name, '<str>', '<str>', '<str>', f'<str>{code}'))"]
-    N010["_append_rows(...)"]
-    N011["return 0"]
+    N006["rename_map = rename_map or {}"]
+    N007["rename_sources = set(...)"]
+    N008["rows = []"]
+    N009["_write_summary_header(...)"]
+    N010["for entry in sot:     name = str(entry['<str>'])     rename_from = rename_map.get(name)     decision = decide_label_action(sot_entry=entry, live_entry=live_by_name.get(name), rename_from=rename_from, live_old_entry=live_by_name.get(rename_from) if rename_from else None)     action = str(decision['<str>'])     if action == '<str>':         rows.append(render_action_row(name, '<str>', '<str>', '<str>', '<str>'))         continue     if action == '<str>':         _append_rows(summary_file, rows)         _append_error(summary_file, f'<str>{rename_from}<str>{name}<str>', '<str>')         print(f'<str>{rename_from}<str>{name}<str>')         return 1     is_post = action == '<str>'     color_changed = _changed_cell(decision['<str>'], is_post=is_post)     desc_changed = _changed_cell(decision['<str>'], is_post=is_post)     if mode == '<str>' or dry_run:         rows.append(render_action_row(name, f'<str>{action}<str>', color_changed, desc_changed, '<str>'))         continue     code, body = apply_call(method=str(decision['<str>']), url=f'{API_ROOT}<str>{repo}{decision['<str>']}', payload=decision['<str>'], token=token)     if not 200 <= code < 300:         _append_rows(summary_file, rows)         _append_error(summary_file, f'<str>{name}<str>{decision['<str>']}<str>{_format_code(code)}<str>', body)         print(f'<str>{decision['<str>']}<str>{name}<str>{_format_code(code)}<str>')         return 1     rows.append(render_action_row(name, f'{action}<str>', color_changed, desc_changed, f'<str>{code}'))"]
+    N011["for live_entry in live:     live_name = str(live_entry.get('<str>'))     prune_action = decide_prune_action(live_name=live_name, in_sot=live_name in sot_names or live_name in rename_sources, prune=prune, dry_run=mode == '<str>' or dry_run)     if prune_action == '<str>':         continue     if prune_action == '<str>':         rows.append(render_action_row(live_name, '<str>', '<str>', '<str>', '<str>'))         continue     if prune_action == '<str>':         rows.append(render_action_row(live_name, '<str>', '<str>', '<str>', '<str>'))         continue     code, body = apply_call(method='<str>', url=f'{API_ROOT}<str>{repo}<str>{urllib.parse.quote(live_name, safe='<str>')}', payload=None, token=token)     if not 200 <= code < 300:         _append_rows(summary_file, rows)         _append_error(summary_file, f'<str>{live_name}<str>{_format_code(code)}<str>', body)         print(f'<str>{live_name}<str>{_format_code(code)}<str>')         return 1     rows.append(render_action_row(live_name, '<str>', '<str>', '<str>', f'<str>{code}'))"]
+    N012["_append_rows(...)"]
+    N013["return 0"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 --> N004
@@ -137,6 +162,8 @@ flowchart TD
     N008 --> N009
     N009 --> N010
     N010 --> N011
+    N011 --> N012
+    N012 --> N013
 ```
 
 ## main(...)
@@ -158,7 +185,7 @@ flowchart TD
     N013["if not token"]
     N014["print(...)"]
     N015["return 1"]
-    N016["return run(mode=args.command, repo=args.repo, sot_path=args.sot, prune=_parse_bool(args.prune), dry_run=_parse_bool(args.dry_run), summary_file=args.summary_file, token=token)"]
+    N016["return run(mode=args.command, repo=args.repo, sot_path=args.sot, prune=_parse_bool(args.prune), dry_run=_parse_bool(args.dry_run), summary_file=args.summary_file, token=token, rename_map=load_rename_map(args.policy))"]
     N017["except (OSError, json.JSONDecodeError, RuntimeError, ValueError)"]
     N018["print(...)"]
     N019["return 1"]
@@ -192,13 +219,15 @@ flowchart TD
     N004["add_argument(...)"]
     N005["add_argument(...)"]
     N006["add_argument(...)"]
-    N007["end"]
+    N007["add_argument(...)"]
+    N008["end"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 --> N004
     N004 --> N005
     N005 --> N006
     N006 --> N007
+    N007 --> N008
 ```
 
 ## _write_summary_header(...)
