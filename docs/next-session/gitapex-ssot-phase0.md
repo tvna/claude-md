@@ -58,8 +58,11 @@ Deliverables, all in one PR:
   commentary in description fields.
 - `scripts/scan_ssot_schema.py`: verify subcommand; validates shape
   against the schema AND referential integrity (paths tracked, ids
-  resolve, label strings resolve against labels.json unioned with
-  label-policy rename_from and retired tables). Fail loud, exit 1 with
+  resolve; `label_routing` labels resolve against labels.json ONLY,
+  `label_consumers` labels resolve against labels.json unioned with
+  label-policy rename_from and retired tables; `gates[].kind` is
+  script or native, with `script` respectively `native_rule` present
+  per kind). Fail loud, exit 1 with
   `::error` per violation; exit 64 on unknown subcommand. stdlib only if
   feasible; if jsonschema is needed, pin it via the existing uv
   dependency flow.

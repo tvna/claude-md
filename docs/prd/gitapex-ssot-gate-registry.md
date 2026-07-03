@@ -232,11 +232,18 @@ normative schema; the normative schema is `ssot.schema.json`):
           "path": "scripts/agent_hooks_source.json",
           "format": "json",
           "authority": "generation source for agent hook surfaces"
+        },
+        {
+          "id": "rulesets-main",
+          "path": ".github/rulesets/main.json",
+          "format": "json",
+          "authority": "GitHub ruleset: required checks and native branch rules"
         }
       ],
       "gates": [
         {
           "id": "preflight-non-ascii",
+          "kind": "script",
           "script": "scripts/preflight_non_ascii.py",
           "rule": "GitHub-bound bodies are ASCII",
           "planes": ["pretooluse"],
@@ -247,11 +254,23 @@ normative schema; the normative schema is `ssot.schema.json`):
         },
         {
           "id": "gate-issue-classification-labels",
+          "kind": "script",
           "script": "scripts/gate_issue_classification_labels.py",
           "rule": "agent-created issues carry layer:* and type:* labels",
           "planes": ["pretooluse"],
           "trigger": "mcp__github__issue_write create",
           "policy_refs": ["labels-live", "label-policy"],
+          "cluster": null,
+          "tracking_issue": null
+        },
+        {
+          "id": "ruleset-no-force-push",
+          "kind": "native",
+          "native_rule": "non_fast_forward",
+          "rule": "branch history cannot be rewritten",
+          "planes": ["server"],
+          "trigger": "git push (non-fast-forward)",
+          "policy_refs": ["rulesets-main"],
           "cluster": null,
           "tracking_issue": null
         }
@@ -302,12 +321,27 @@ deterministic):
   field resolves to a tracked file.
 - Every `gates[].policy_refs[]` entry names an existing
   `policy_sources[].id`.
-- Every label string in `label_routing` and `label_consumers` resolves
-  against `.github/labels.json` unioned with the `rename_from` and
-  `retired` tables of `.github/label-policy.toml` (so the registry itself
-  can never reference a label that does not exist or is renamed away;
-  this is the deterministic guard #1041 asks for, applied first to the
-  registry and later, in phase 3, to the scripts themselves).
+- Every label string in `label_routing` resolves against the live
+  catalog `.github/labels.json` ONLY. Routing is executable against the
+  labels GitHub applies today; a renamed-away or retired name would
+  validate but never match, silently falling through to the default
+  route, so legacy names are rejected in this block. When the catalog
+  flips a rename, the validator fails the stale routing rule in the same
+  PR, forcing the lockstep edit.
+- Every label string in `label_consumers` resolves against
+  `.github/labels.json` unioned with the `rename_from` and `retired`
+  tables of `.github/label-policy.toml`. The inventory may legitimately
+  record a legacy name mid-migration, and the union is what makes stale
+  consumer references detectable (the deterministic guard #1041 asks
+  for, applied first to the registry and, in phase 3, to the scripts
+  themselves).
+- `gates[].kind` is `script` or `native`. A `script` entry carries
+  `gates[].script` (a tracked path); a `native` entry carries
+  `gates[].native_rule` naming the enforcing platform rule (for example
+  the `non_fast_forward`, `deletion`, `required_signatures`, or
+  pull-request review rule types in `.github/rulesets/main.json`), so
+  GitHub-side enforcement is inventoried first-class instead of being
+  omitted or faked as a script.
 - `label_routing.rules` is an ordered array; exactly one `default` rule,
   and it is last.
 - `gates[].planes[]` values come from the closed enum `pretooluse`,
@@ -342,7 +376,7 @@ file, pass code-owner review, and every consumer follows.
 |---|---|---|
 | Ownership | CODEOWNERS `/.gitapex/ @tvna`; merge requires owner review | 0 |
 | Shape | `ssot.schema.json` validated by `scripts/scan_ssot_schema.py` | 0 |
-| Referential integrity | same validator: paths exist, ids resolve, labels resolve against catalog plus rename/retired tables | 0 |
+| Referential integrity | same validator: paths exist, ids resolve, labels resolve per the split rules (routing: live catalog only; consumers: catalog plus rename/retired tables) | 0 |
 | Reality reconciliation | `scripts/scan_ssot_drift.py`: registry vs `agent_hooks_source.json`, `preflight_steps.py` `STEPS`, `.pre-commit-config.yaml`, `.github/rulesets/main.json` | 1 (advisory), then blocking |
 | Consumption | `scripts/_ssot.py` shared reader; consumers import it | 2 |
 | Anti-regression | literal-label scan over `scripts/*.py`; runbook-table-vs-registry drift gate | 3 |
