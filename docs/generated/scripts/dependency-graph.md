@@ -20,6 +20,7 @@ This file is generated from `scripts/*.py` import statements by `python3 scripts
 | `_shell_lines` | 4 | `scan_ruff_format`, `scan_workflow_gh_calls`, `scan_workflow_pip`, `scan_workflow_unsigned_commit` |
 | `_apm_managed_paths` | 3 | `gate_agents_skills_edit`, `scan_repo_double_hyphen`, `scan_repo_em_dash` |
 | `_auto_retro_parse` | 3 | `_auto_retro_render`, `_auto_retro_triage`, `auto_retro` |
+| `_ssot` | 3 | `branch_cleanup`, `ruleset_drift`, `scan_retro_followup_drift` |
 | `auto_retro` | 3 | `gate_pr_body_retro_issue_link`, `gate_reserved_retro_scope`, `gate_retro_close_keyword_commit` |
 | `doc_graph` | 3 | `doc_graph_viz`, `gate_doc_graph_pr`, `scan_doc_graph_registration` |
 | `pr_upsert` | 3 | `_pr_merge`, `auto_retro`, `devcontainer_pin_pr` |
@@ -30,7 +31,6 @@ This file is generated from `scripts/*.py` import statements by `python3 scripts
 | `_pr_merge` | 2 | `bot_pr_automerge`, `devcontainer_pin_pr` |
 | `_secret_patterns` | 2 | `preflight_github_secrets`, `scan_secrets` |
 | `_security_drift_families` | 2 | `_security_drift_issues`, `security_drift_report` |
-| `_ssot` | 2 | `branch_cleanup`, `ruleset_drift` |
 | `scan_maintainability_metrics` | 2 | `codebase_maturity_summary`, `scan_module_size_distribution` |
 | `scan_non_ascii` | 2 | `preflight_non_ascii`, `preflight_pr_body` |
 | `scan_preflight_drift` | 2 | `scan_input_contract_drift`, `scan_ssot_drift` |
@@ -259,6 +259,7 @@ flowchart TD
     scan_repo_em_dash --> _apm_managed_paths
     scan_retro_followup_drift --> _github_api
     scan_retro_followup_drift --> _retro_labels
+    scan_retro_followup_drift --> _ssot
     scan_retro_followup_drift --> issue_link
     scan_ruff_format --> _shell_lines
     scan_ruff_format --> preflight_steps
