@@ -107,6 +107,7 @@ import scan_scripts_gh_calls
 import scan_secret_runbooks
 import scan_secrets
 import scan_session_path_drift
+import scan_ssot_schema
 import scan_test_presence_drift
 import scan_workflow_action_pins
 import scan_workflow_gh_calls
@@ -271,6 +272,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("scan_retro_followup_drift.py", "run"): "test_scan_retro_followup_drift_run_matches_workflow_env",
     ("scan_secret_runbooks.py", "verify"): "test_scan_secret_runbooks_verify_matches_workflow_args",
     ("scan_secrets.py", "verify"): "test_scan_secrets_verify_matches_workflow_args",
+    ("scan_ssot_schema.py", "verify"): "test_scan_ssot_schema_verify_matches_workflow_args",
     ("scan_ruff_format.py", "verify"): "test_scan_ruff_format_verify_matches_workflow_args",
     ("scan_scripts_gh_calls.py", "verify"): "test_scan_scripts_gh_calls_verify_matches_workflow_args",
     ("scan_session_path_drift.py", "verify"): "test_scan_session_path_drift_verify_matches_workflow_args",
@@ -3244,6 +3246,12 @@ def test_scan_provisioning_hook_serial_verify_matches_workflow_args() -> None:
     """Mirrors the `Verify shared-binary provisioning hooks are serial`
     step in `.github/workflows/verify-agents.yml` (issue #1155)."""
     assert scan_provisioning_hook_serial.main(["verify"]) == 0
+
+
+def test_scan_ssot_schema_verify_matches_workflow_args() -> None:
+    """Mirrors the `Validate .gitapex/ssot.json registry` step in
+    `.github/workflows/verify-pr.yml` (issue #2252)."""
+    assert scan_ssot_schema.main(["verify"]) == 0
 
 
 def test_scan_session_path_drift_verify_matches_workflow_args() -> None:

@@ -1,0 +1,500 @@
+{
+  "meta": {
+    "schema_version": 1,
+    "tracking_issue": 2246,
+    "status": "adopted-design",
+    "phase": "phase-0"
+  },
+  "policy_sources": [
+    {
+      "id": "label-policy",
+      "path": ".github/label-policy.toml",
+      "format": "toml",
+      "authority": "label taxonomy design: families, renames, retirements, area paths"
+    },
+    {
+      "id": "labels-live",
+      "path": ".github/labels.json",
+      "format": "json",
+      "authority": "live label catalog applied to GitHub"
+    },
+    {
+      "id": "agent-hooks-source",
+      "path": "scripts/agent_hooks_source.json",
+      "format": "json",
+      "authority": "generation source for the per-agent hook surfaces"
+    },
+    {
+      "id": "rulesets-main",
+      "path": ".github/rulesets/main.json",
+      "format": "json",
+      "authority": "GitHub ruleset: required checks and native branch rules"
+    }
+  ],
+  "gates": [
+    {
+      "id": "block-sensitive-reads",
+      "kind": "script",
+      "script": "scripts/block_sensitive_reads.py",
+      "rule": "reads of local credential files are blocked",
+      "planes": ["pretooluse"],
+      "trigger": "Read or Bash tool use",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "preflight-non-ascii",
+      "kind": "script",
+      "script": "scripts/preflight_non_ascii.py",
+      "rule": "GitHub-bound text is ASCII",
+      "planes": ["pretooluse"],
+      "trigger": "GitHub MCP write tools",
+      "policy_refs": [],
+      "cluster": "non-ascii",
+      "tracking_issue": null
+    },
+    {
+      "id": "preflight-github-secrets",
+      "kind": "script",
+      "script": "scripts/preflight_github_secrets.py",
+      "rule": "GitHub-bound text carries no secret values",
+      "planes": ["pretooluse"],
+      "trigger": "GitHub MCP write tools",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "preflight-angle-token-drop",
+      "kind": "script",
+      "script": "scripts/preflight_angle_token_drop.py",
+      "rule": "GitHub-bound text has no bare angle-bracket tokens the MCP layer would drop",
+      "planes": ["pretooluse"],
+      "trigger": "GitHub MCP write tools",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "issue-closure-fast-path",
+      "kind": "script",
+      "script": "scripts/issue_closure_fast_path.py",
+      "rule": "issue closure carries closing evidence",
+      "planes": ["pretooluse"],
+      "trigger": "mcp__github__issue_write",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "gate-issue-close-comment",
+      "kind": "script",
+      "script": "scripts/gate_issue_close_comment.py",
+      "rule": "an issue close is preceded by a closing comment",
+      "planes": ["pretooluse"],
+      "trigger": "mcp__github__issue_write",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "gate-issue-classification-labels",
+      "kind": "script",
+      "script": "scripts/gate_issue_classification_labels.py",
+      "rule": "agent-created issues carry layer:* and type:* labels",
+      "planes": ["pretooluse"],
+      "trigger": "mcp__github__issue_write create",
+      "policy_refs": ["labels-live", "label-policy"],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "gate-reserved-retro-scope",
+      "kind": "script",
+      "script": "scripts/gate_reserved_retro_scope.py",
+      "rule": "the reserved auto-retro issue scope is not hand-created",
+      "planes": ["pretooluse"],
+      "trigger": "mcp__github__issue_write",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "preflight-issue-ci-staleness",
+      "kind": "script",
+      "script": "scripts/preflight_issue_ci_staleness.py",
+      "rule": "issue creation checks CI-failure staleness first",
+      "planes": ["pretooluse"],
+      "trigger": "mcp__github__issue_write",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "gate-update-pr-branch",
+      "kind": "script",
+      "script": "scripts/gate_update_pr_branch.py",
+      "rule": "update_pull_request_branch is blocked in favor of the new-branch recovery path",
+      "planes": ["pretooluse"],
+      "trigger": "mcp__github__update_pull_request_branch",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "gate-merge-safety",
+      "kind": "script",
+      "script": "scripts/gate_merge_safety.py",
+      "rule": "a PR merges only when mergeable_state is clean",
+      "planes": ["pretooluse"],
+      "trigger": "mcp__github__merge_pull_request",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "preflight-main-freshness",
+      "kind": "script",
+      "script": "scripts/preflight_main_freshness.py",
+      "rule": "branch creation checks origin/main freshness",
+      "planes": ["pretooluse"],
+      "trigger": "mcp__github__create_branch",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "gate-irreversible-bash",
+      "kind": "script",
+      "script": "scripts/gate_irreversible_bash.py",
+      "rule": "irreversible bash operations are guarded",
+      "planes": ["pretooluse"],
+      "trigger": "Bash tool use",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "gate-gh-cli",
+      "kind": "script",
+      "script": "scripts/gate_gh_cli.py",
+      "rule": "prohibited gh CLI usage is blocked",
+      "planes": ["pretooluse"],
+      "trigger": "Bash tool use",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "gate-unsigned-commit-bash",
+      "kind": "script",
+      "script": "scripts/gate_unsigned_commit_bash.py",
+      "rule": "a commit-signing bypass on a git command is blocked",
+      "planes": ["pretooluse"],
+      "trigger": "Bash git command",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "preflight-push-unsigned-commits",
+      "kind": "script",
+      "script": "scripts/preflight_push_unsigned_commits.py",
+      "rule": "pushed commits are signed",
+      "planes": ["pretooluse"],
+      "trigger": "Bash git push",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "preflight-push-base",
+      "kind": "script",
+      "script": "scripts/preflight_push_base.py",
+      "rule": "the branch base is current before a push",
+      "planes": ["pretooluse"],
+      "trigger": "Bash git push",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "preflight-push-session-branch",
+      "kind": "script",
+      "script": "scripts/preflight_push_session_branch.py",
+      "rule": "a push targets the authorized session branch",
+      "planes": ["pretooluse"],
+      "trigger": "Bash git push",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "preflight-commit-session-branch",
+      "kind": "script",
+      "script": "scripts/preflight_commit_session_branch.py",
+      "rule": "a commit lands on the authorized session branch",
+      "planes": ["pretooluse"],
+      "trigger": "Bash git commit",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "check-commit-signing-ready",
+      "kind": "script",
+      "script": "scripts/check_commit_signing_ready.py",
+      "rule": "commit signing is configured before a git operation",
+      "planes": ["pretooluse"],
+      "trigger": "Bash git command",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "gate-retro-close-keyword-commit",
+      "kind": "script",
+      "script": "scripts/gate_retro_close_keyword_commit.py",
+      "rule": "a commit message carries no retro-issue closing keyword",
+      "planes": ["pretooluse"],
+      "trigger": "Bash git command",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "preflight-session-branch-authz",
+      "kind": "script",
+      "script": "scripts/preflight_session_branch_authz.py",
+      "rule": "a session branch switch or file edit is authorized",
+      "planes": ["pretooluse"],
+      "trigger": "Bash git command or file edit tool use",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "gate-agents-skills-edit",
+      "kind": "script",
+      "script": "scripts/gate_agents_skills_edit.py",
+      "rule": "writes to APM-managed skill paths are blocked",
+      "planes": ["pretooluse"],
+      "trigger": "file edit or Bash tool use",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "preflight-session-base-freshness",
+      "kind": "script",
+      "script": "scripts/preflight_session_base_freshness.py",
+      "rule": "the branch base is fresh before a commit",
+      "planes": ["pretooluse"],
+      "trigger": "Bash git commit",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "gate-instruction-body-advisory",
+      "kind": "script",
+      "script": "scripts/gate_instruction_body_advisory.py",
+      "rule": "instruction-text changes are reminded of their required PR body sections",
+      "planes": ["pretooluse"],
+      "trigger": "Bash git commit",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "preflight-push-nonempty",
+      "kind": "script",
+      "script": "scripts/preflight_push_nonempty.py",
+      "rule": "a push ships new work",
+      "planes": ["pretooluse"],
+      "trigger": "Bash git push",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "preflight-branch-base",
+      "kind": "script",
+      "script": "scripts/preflight_branch_base.py",
+      "rule": "the branch base is current before a PR create or update",
+      "planes": ["pretooluse"],
+      "trigger": "mcp__github__ create or update pull request",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "pr-body-close-keyword-gate",
+      "kind": "script",
+      "script": "scripts/pr_body_close_keyword_gate.py",
+      "rule": "a PR body carries a resolvable issue link",
+      "planes": ["pretooluse"],
+      "trigger": "mcp__github__ create or update pull request",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "gate-pr-body-retro-issue-link",
+      "kind": "script",
+      "script": "scripts/gate_pr_body_retro_issue_link.py",
+      "rule": "a PR body links the correct retrospective issue",
+      "planes": ["pretooluse"],
+      "trigger": "mcp__github__ create or update pull request",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "preflight-coverage",
+      "kind": "script",
+      "script": "scripts/preflight_coverage.py",
+      "rule": "changed public scripts meet the per-file coverage floor",
+      "planes": ["pretooluse"],
+      "trigger": "mcp__github__ create or update pull request",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "preflight-title-policy",
+      "kind": "script",
+      "script": "scripts/preflight_title_policy.py",
+      "rule": "a GitHub title follows the title policy",
+      "planes": ["pretooluse"],
+      "trigger": "mcp__github__ issue or pull request create or update",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "preflight-pr-body-required-sections",
+      "kind": "script",
+      "script": "scripts/preflight_pr_body_required_sections.py",
+      "rule": "a PR body carries the required sections",
+      "planes": ["pretooluse"],
+      "trigger": "mcp__github__ create or update pull request",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "preflight-pr-template-shape",
+      "kind": "script",
+      "script": "scripts/preflight_pr_template_shape.py",
+      "rule": "a PR body matches the template section shape",
+      "planes": ["pretooluse"],
+      "trigger": "mcp__github__ create or update pull request",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "preflight-resolve-review-thread",
+      "kind": "script",
+      "script": "scripts/preflight_resolve_review_thread.py",
+      "rule": "resolve_review_thread is gated on a prior fix push",
+      "planes": ["pretooluse"],
+      "trigger": "mcp__github__resolve_review_thread",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "gate-mcp-github-uncovered",
+      "kind": "script",
+      "script": "scripts/gate_mcp_github_uncovered.py",
+      "rule": "every GitHub MCP write tool is covered by a preflight gate",
+      "planes": ["pretooluse"],
+      "trigger": "any GitHub MCP tool use",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    }
+  ],
+  "clusters": [
+    {
+      "id": "non-ascii",
+      "rule": "outward-facing text is ASCII-only",
+      "expected_planes": ["pretooluse", "pre-push", "ci", "server"]
+    }
+  ],
+  "label_routing": {
+    "source_note": "machine form of docs/runbooks/issue-triage.md section 'Agent routing'; first-match-wins, one default rule last",
+    "rules": [
+      {
+        "if_any": ["state:rfc", "state:parked"],
+        "action": "no-action",
+        "body_read": "no"
+      },
+      {
+        "if_any": ["type:tracking"],
+        "action": "no-action-umbrella",
+        "body_read": "no"
+      },
+      {
+        "if_any": ["severity:security"],
+        "action": "investigate",
+        "body_read": "yes",
+        "autonomous_pr": false
+      },
+      {
+        "if_all": ["type:fix"],
+        "if_none": ["severity:security"],
+        "action": "auto-fix-candidate",
+        "body_read": "yes",
+        "autonomous_pr": true
+      },
+      {
+        "if_any": ["type:docs"],
+        "action": "auto-fix-candidate",
+        "body_read": "yes",
+        "autonomous_pr": true
+      },
+      {
+        "if_any": ["type:feat", "type:refactor"],
+        "action": "investigate",
+        "body_read": "yes",
+        "autonomous_pr": false
+      },
+      {
+        "default": true,
+        "action": "triage-needed",
+        "body_read": "title-only"
+      }
+    ]
+  },
+  "label_consumers": [
+    {
+      "path": "scripts/auto_retro.py",
+      "labels": ["type:docs", "layer:meta", "ops:retro-opened", "harness:retro-opened"],
+      "note": "retrospective issue identity and terminal open-state labels; see #1041"
+    },
+    {
+      "path": "scripts/scan_retro_followup_drift.py",
+      "labels": ["retro:tp", "retro:fp", "retro:fp-candidate", "type:docs", "layer:meta"],
+      "note": "retrospective follow-up true/false-positive labels; see #1041"
+    },
+    {
+      "path": "scripts/branch_cleanup.py",
+      "labels": ["layer:meta", "type:docs"],
+      "note": "labels applied to the maintenance issues it files; see #1041"
+    },
+    {
+      "path": "scripts/ruleset_drift.py",
+      "labels": ["layer:meta", "type:fix"],
+      "note": "labels applied to the ruleset-drift issues it files; see #1041"
+    },
+    {
+      "path": ".github/dependabot.yml",
+      "labels": ["ops:dependencies"],
+      "note": "labels applied to dependency update PRs; see #1041"
+    }
+  ]
+}
