@@ -1142,6 +1142,19 @@
       "tracking_issue": null
     },
     {
+      "id": "scan-review-in-progress-marker",
+      "kind": "script",
+      "script": "scripts/scan_review_in_progress_marker.py",
+      "rule": "block merge while chatgpt-codex-connector[bot]'s 'eyes' reaction (in-progress review marker) is present on the PR",
+      "planes": [
+        "ci"
+      ],
+      "trigger": "CI (pull_request workflow, Portable PR policy / gate job)",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": 2312
+    },
+    {
       "id": "scan-ruff-format",
       "kind": "script",
       "script": "scripts/scan_ruff_format.py",

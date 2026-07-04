@@ -27,3 +27,13 @@ logins = [
     "chatgpt-codex-connector",
     "chatgpt-codex-connector[bot]",
 ]
+
+[review_in_progress_marker]
+# Bots whose "eyes" reaction on a PR marks an automated review as still in
+# progress (scan_review_in_progress_marker.py, #2312). Confirmed live on PR
+# #2319: chatgpt-codex-connector[bot] added an "eyes" reaction 6s after PR
+# creation, then removed it and added "+1" once its review completed 2m6s
+# later (no suggestions case; a review comment starting "### Codex Review"
+# with a leading lightbulb emoji is the completed-with-suggestions case).
+# Same dual-login-form rationale as non_ascii_skip above.
+logins = ["chatgpt-codex-connector", "chatgpt-codex-connector[bot]"]

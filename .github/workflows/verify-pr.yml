@@ -53,6 +53,7 @@ jobs:
       PR_BODY: ${{ github.event.pull_request.body }}
       PR_AUTHOR: ${{ github.event.pull_request.user.login }}
       PR_CREATED_AT: ${{ github.event.pull_request.created_at }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
       BODY_POLICY_CUTOFF: "2026-05-26T00:00:00Z"
       BODY_POLICY_SHAPE_CUTOFF: "2026-05-26T00:00:00Z"
       BASE_REF: origin/${{ github.event.pull_request.base.ref }}
@@ -112,6 +113,13 @@ jobs:
           body_file="$(mktemp)"
           printf '%s' "$PR_BODY" > "$body_file"
           python3 scripts/verify_linked_issue_titles.py verify --repo "$REPO" --body-file "$body_file"
+
+      - name: Block merge while an automated reviewer's in-progress marker is present
+        # Refs #2312: chatgpt-codex-connector[bot] adds an "eyes" reaction to the
+        # PR while its review is running, then replaces it with a "+1" reaction
+        # or a review comment once done. Blocks only while that reaction is
+        # present, so a PR Codex never reviews is never blocked by this gate.
+        run: python3 scripts/scan_review_in_progress_marker.py verify
 
       - name: Validate README translation parity
         run: |

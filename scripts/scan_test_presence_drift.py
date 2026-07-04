@@ -155,6 +155,7 @@ GITHUB_API_SCRIPTS: frozenset[str] = frozenset(
         "sanitize_history",
         "scan_non_ascii",
         "scan_retro_followup_drift",
+        "scan_review_in_progress_marker",
         "security_drift_report",
         "uv_pin",
         "verify_linked_issue_titles",
