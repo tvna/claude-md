@@ -20,13 +20,22 @@ Architecture mirrors :mod:`preflight_pr_template_shape` and
 :mod:`issue_closure_fast_path`: pure functions on top, a single stdin/stdout
 boundary at the bottom (:func:`main` via :func:`_hook_runtime.run_tool_hook`).
 
+The required axes are not hardcoded: they are cardinality-driven, resolved from
+the ``.github/label-policy.toml`` ``[[families]]`` via
+``_ssot.required_issue_axes`` (the ``label-policy`` registry pointer in
+``.gitapex/ssot.json``), so a future family/cardinality change adds or drops a
+required axis through the registry, not an edit here. Today this yields exactly
+the ``layer`` and ``type`` axes. A ``tests/`` pin-test asserts that derivation so
+any silent drift fails deterministically.
+
 Failure modes (fail-open per CLAUDE.md section 4): off-target tool name, a
 non-``create`` method, malformed stdin JSON, an unreadable or malformed
-``.github/labels.json``, or an axis with no valid labels defined; all exit 0
-with no decision so a hook bug or a missing SoT never wedges the session. The
-server-side triage workflow and review remain as backstops.
+``.github/labels.json``, a missing or malformed ``label-policy`` registry pointer
+or families, or an axis with no valid labels defined; all exit 0 with no decision
+so a hook bug or a missing SoT never wedges the session. The pin-test, the
+server-side triage workflow, and review remain as backstops.
 
-Refs #1246.
+Refs #1246, #2292.
 """
 
 from __future__ import annotations
@@ -37,42 +46,54 @@ from collections.abc import Iterable, Mapping
 from pathlib import Path
 from typing import Any
 
+import _ssot
 from _hook_runtime import build_deny, run_tool_hook
 
 _TARGET_TOOL = "mcp__github__issue_write"
 _CREATE_METHOD = "create"
 
-# Ordered so the deny message names axes deterministically (layer before type).
-# Each axis is satisfied by a label whose name carries the given prefix AND is a
-# registered name in .github/labels.json.
-_AXIS_PREFIXES: tuple[tuple[str, str], ...] = (
-    ("layer", "layer:"),
-    ("type", "type:"),
-)
-
 _DEFAULT_LABELS_PATH = Path(__file__).resolve().parent.parent / ".github" / "labels.json"
+
+
+def axis_prefixes() -> tuple[tuple[str, str], ...]:
+    """Return the ``(axis, prefix)`` pairs a create must satisfy, in policy order.
+
+    The required axes are cardinality-driven, resolved from the label-policy
+    ``[[families]]`` via :func:`_ssot.required_issue_axes` rather than hardcoded,
+    so a future family/cardinality change flows through the registry instead of
+    an edit here. Each axis is satisfied by a label whose name carries the derived
+    ``"<axis>:"`` prefix AND is a registered name in ``.github/labels.json``.
+    Order follows the policy's family declaration order, so the deny message names
+    axes deterministically (today: ``layer`` before ``type``).
+
+    Propagates ``_ssot``'s loud drift errors (``KeyError`` / ``TypeError`` /
+    ``RuntimeError``); the caller in :func:`decide` turns those into fail-open.
+    """
+    return tuple((axis, f"{axis}:") for axis in _ssot.required_issue_axes())
 
 
 def load_axis_labels(path: Path) -> dict[str, frozenset[str]]:
     """Return the valid label names for each axis, keyed by axis name.
 
     Reads the labels source of truth (a JSON array of ``{"name": ...}`` objects)
-    and groups the names by axis prefix. Names that match no axis prefix are
-    ignored. Raises ``OSError`` / ``json.JSONDecodeError`` / ``ValueError`` on a
-    missing or malformed file; the caller turns those into fail-open.
+    and groups the names by the axis prefixes from :func:`axis_prefixes`. Names
+    that match no axis prefix are ignored. Raises ``OSError`` /
+    ``json.JSONDecodeError`` / ``ValueError`` on a missing or malformed labels
+    file, or the reader's drift errors from :func:`axis_prefixes`; the caller
+    turns those into fail-open.
     """
     raw = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(raw, list):
         raise ValueError("labels SoT must be a JSON array")
     names = [entry["name"] for entry in raw if isinstance(entry, dict) and isinstance(entry.get("name"), str)]
     axes: dict[str, frozenset[str]] = {}
-    for axis, prefix in _AXIS_PREFIXES:
+    for axis, prefix in axis_prefixes():
         axes[axis] = frozenset(name for name in names if name.startswith(prefix))
     return axes
 
 
 def missing_axes(labels: Iterable[str], axes: Mapping[str, frozenset[str]]) -> list[str]:
-    """Return the axes (in :data:`_AXIS_PREFIXES` order) not covered by *labels*.
+    """Return the axes (in *axes* insertion / policy order) not covered by *labels*.
 
     An axis whose valid-label set is empty is skipped (never reported missing):
     a malformed or stripped SoT must not block every create. Only labels that
@@ -81,8 +102,7 @@ def missing_axes(labels: Iterable[str], axes: Mapping[str, frozenset[str]]) -> l
     """
     present = {label for label in labels if isinstance(label, str)}
     missing: list[str] = []
-    for axis, _prefix in _AXIS_PREFIXES:
-        valid = axes.get(axis) or frozenset()
+    for axis, valid in axes.items():
         if not valid:
             continue
         if not (present & valid):
@@ -122,9 +142,9 @@ def decide(
 
     try:
         axes = load_axis_labels(labels_path)
-    except (OSError, json.JSONDecodeError, ValueError) as exc:
+    except (OSError, ValueError, LookupError, TypeError, RuntimeError) as exc:
         print(
-            f"::warning::gate_issue_classification_labels: cannot read labels SoT: {exc}",
+            f"::warning::gate_issue_classification_labels: cannot derive axis labels: {exc}",
             file=sys.stderr,
         )
         return None

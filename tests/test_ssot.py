@@ -79,6 +79,96 @@ class TestRoutingRules:
             _ssot.routing_rules()
 
 
+class TestPolicySourcePath:
+    def test_resolves_label_policy_to_repo_relative_path(self) -> None:
+        path = _ssot.policy_source_path("label-policy")
+        assert path == _ssot._REPO_ROOT / ".github" / "label-policy.toml"
+        assert path.is_file()
+
+    def test_raises_key_error_for_unknown_id(self) -> None:
+        with pytest.raises(KeyError, match="no policy_sources entry"):
+            _ssot.policy_source_path("does-not-exist")
+
+    def test_raises_type_error_for_non_string_path(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        registry = _write_registry(tmp_path, {"policy_sources": [{"id": "x", "path": 123}]})
+        monkeypatch.setattr(_ssot, "_REGISTRY_PATH", registry)
+        with pytest.raises(TypeError, match="non-string path"):
+            _ssot.policy_source_path("x")
+
+
+class TestRequiredIssueAxes:
+    def test_pins_layer_and_type_in_policy_order(self) -> None:
+        # PIN-TEST: the required axes are cardinality-driven from the live
+        # .github/label-policy.toml families. Today that must be exactly
+        # {layer, type}. A future family/cardinality change that would silently
+        # add or drop a required axis fails here deterministically.
+        axes = _ssot.required_issue_axes()
+        assert axes == ("layer", "type")
+        assert set(axes) == {"layer", "type"}
+
+    def _registry_pointing_at(self, tmp_path: Path, toml_text: str) -> Path:
+        policy = tmp_path / "label-policy.toml"
+        policy.write_text(toml_text, encoding="utf-8")
+        # An absolute path in policy_sources resolves independently of _REPO_ROOT
+        # (Path("/root") / "/abs" == Path("/abs")), so the reader reads this file.
+        return _write_registry(
+            tmp_path,
+            {"policy_sources": [{"id": "label-policy", "path": str(policy)}]},
+        )
+
+    def test_selects_mandatory_cardinalities_only(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        toml_text = (
+            '[[families]]\nname = "layer"\ncardinality = "one_or_more"\n'
+            '[[families]]\nname = "type"\ncardinality = "exactly_one_for_normal_issues"\n'
+            '[[families]]\nname = "state"\ncardinality = "zero_or_one"\n'
+            '[[families]]\nname = "area"\ncardinality = "one_or_more_for_active_implementation"\n'
+        )
+        monkeypatch.setattr(_ssot, "_REGISTRY_PATH", self._registry_pointing_at(tmp_path, toml_text))
+        assert _ssot.required_issue_axes() == ("layer", "type")
+
+    def test_raises_runtime_error_when_no_mandatory_family(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        toml_text = '[[families]]\nname = "state"\ncardinality = "zero_or_one"\n'
+        monkeypatch.setattr(_ssot, "_REGISTRY_PATH", self._registry_pointing_at(tmp_path, toml_text))
+        with pytest.raises(RuntimeError, match="no mandatory-at-create family"):
+            _ssot.required_issue_axes()
+
+    def test_raises_type_error_for_missing_families(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(_ssot, "_REGISTRY_PATH", self._registry_pointing_at(tmp_path, 'title = "x"\n'))
+        with pytest.raises(TypeError, match="non-list"):
+            _ssot.required_issue_axes()
+
+    def test_raises_type_error_for_non_string_cardinality(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        toml_text = '[[families]]\nname = "layer"\ncardinality = 1\n'
+        monkeypatch.setattr(_ssot, "_REGISTRY_PATH", self._registry_pointing_at(tmp_path, toml_text))
+        with pytest.raises(TypeError, match="non-string name/cardinality"):
+            _ssot.required_issue_axes()
+
+    def test_raises_runtime_error_for_invalid_toml(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(_ssot, "_REGISTRY_PATH", self._registry_pointing_at(tmp_path, "not = valid = toml"))
+        with pytest.raises(RuntimeError, match="not valid TOML"):
+            _ssot.required_issue_axes()
+
+    def test_raises_key_error_for_missing_pointer(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        registry = _write_registry(tmp_path, {"policy_sources": []})
+        monkeypatch.setattr(_ssot, "_REGISTRY_PATH", registry)
+        with pytest.raises(KeyError, match="no policy_sources entry"):
+            _ssot.required_issue_axes()
+
+
 class TestResetForTests:
     def test_reset_makes_a_monkeypatched_path_take_effect(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

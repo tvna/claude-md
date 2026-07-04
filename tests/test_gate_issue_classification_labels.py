@@ -44,6 +44,16 @@ def _create_input(labels: object) -> dict[str, object]:
     return {"method": "create", "owner": "o", "repo": "r", "title": "t", "labels": labels}
 
 
+class TestAxisPrefixes:
+    def test_pins_layer_and_type_prefixes_from_policy(self) -> None:
+        # PIN-TEST: the gate's required axes are cardinality-driven from the live
+        # label-policy families via _ssot.required_issue_axes(). Today that must
+        # derive exactly the layer:/type: prefixes, in that order (so the deny
+        # message stays deterministic). A family/cardinality change that would
+        # silently add or drop a required axis fails here.
+        assert gate.axis_prefixes() == (("layer", "layer:"), ("type", "type:"))
+
+
 class TestLoadAxisLabels:
     def test_groups_names_by_axis_prefix(self, labels_path: Path) -> None:
         axes = gate.load_axis_labels(labels_path)
