@@ -117,11 +117,18 @@ def compute_fingerprint(
 
     The digest folds in, in a fixed order:
 
-    * each tracked input file's repo-relative POSIX path and the SHA-256 of its
-      on-disk bytes (working-tree state, so uncommitted edits bust the cache);
+    * each tracked input file's repo-relative POSIX path, its executable bit,
+      and the SHA-256 of its on-disk bytes (working-tree state, so uncommitted
+      edits bust the cache);
     * each token in *extra* (the pytest argv), so changing the command; e.g.
       adding ``-n auto``; forces a fresh run rather than reusing a digest
       recorded under the old command.
+
+    The executable bit is folded in separately from the byte hash because a
+    ``chmod +x`` with no content change would otherwise leave the digest
+    unchanged: ``tests/test_superpowers_apm_install.py`` asserts executable-bit
+    parity between ``.agents/skills`` and ``.claude/skills``, so a mode-only
+    skills change must still bust the cache (Refs #2321 review).
 
     Raises ``subprocess.CalledProcessError`` / ``OSError`` when git or a file is
     unavailable; callers treat that as "no cache" and run the full suite.
@@ -131,6 +138,8 @@ def compute_fingerprint(
         rel = path.relative_to(repo_root).as_posix()
         digest.update(rel.encode("utf-8"))
         digest.update(b"\0")
+        is_executable = bool(path.stat().st_mode & 0o111)
+        digest.update(b"\x01" if is_executable else b"\x00")
         digest.update(hashlib.sha256(path.read_bytes()).digest())
         digest.update(b"\0")
     digest.update(b"\0extra\0")

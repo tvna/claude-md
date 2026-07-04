@@ -89,6 +89,18 @@ class TestComputeFingerprint:
         skill.write_text("# demo (edited)\n", encoding="utf-8")
         assert pc.compute_fingerprint(tmp_path) != before
 
+    def test_changes_when_tracked_file_mode_changes(self, tmp_path: Path) -> None:
+        # Review finding on #2321: a mode-only change (chmod +x, no byte change)
+        # must still bust the cache, because
+        # tests/test_superpowers_apm_install.py asserts executable-bit parity
+        # between .agents/skills and .claude/skills; a mode-only skills commit
+        # must not reuse a cached green.
+        _init_repo(tmp_path)
+        before = pc.compute_fingerprint(tmp_path)
+        skill = tmp_path / ".agents" / "skills" / "demo" / "SKILL.md"
+        skill.chmod(skill.stat().st_mode | 0o111)
+        assert pc.compute_fingerprint(tmp_path) != before
+
     def test_excluded_pathspec_is_dropped_from_fingerprint(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
