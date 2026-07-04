@@ -32,7 +32,6 @@ from pathlib import Path
 from typing import Any
 
 _REGISTRY_PATH = Path(__file__).resolve().parent.parent / ".gitapex" / "ssot.json"
-_REPO_ROOT = _REGISTRY_PATH.parent.parent
 
 # The label-policy family cardinalities that oblige every normal agent-created
 # issue to carry at least one label of that family. Derived from the
@@ -102,6 +101,9 @@ def policy_source_path(source_id: str) -> Path:
     Resolves the registry-relative ``path`` of the matching entry against the
     repository root, so a consumer names a policy file by its stable registry id
     (e.g. ``"label-policy"``) instead of hardcoding ``.github/label-policy.toml``.
+    The repository root is derived from ``_REGISTRY_PATH`` at call time (not a
+    frozen module constant), so a test that monkeypatches ``_REGISTRY_PATH``
+    moves the resolution base with it consistently.
 
     Raises ``KeyError`` when no entry has that id: a missing pointer means the
     registry and its consumer have drifted apart, which must fail loud rather
@@ -119,7 +121,7 @@ def policy_source_path(source_id: str) -> Path:
                     f"_ssot: policy_sources entry {source_id!r} has non-string "
                     f"path {path!r} in {_REGISTRY_PATH}"
                 )
-            return _REPO_ROOT / path
+            return _REGISTRY_PATH.parent.parent / path
     raise KeyError(f"_ssot: no policy_sources entry with id {source_id!r} in {_REGISTRY_PATH}")
 
 
@@ -138,7 +140,8 @@ def required_issue_axes() -> tuple[str, ...]:
 
     - ``KeyError`` / ``TypeError`` propagate from :func:`policy_source_path` when
       the ``label-policy`` pointer is missing or malformed.
-    - ``RuntimeError`` when the policy file is unreadable or not valid TOML.
+    - ``RuntimeError`` when the policy file is unreadable, not decodable as UTF-8,
+      or not valid TOML.
     - ``TypeError`` when ``[[families]]`` is missing, not an array of tables, or
       an entry lacks a string ``name`` / ``cardinality``.
     - ``RuntimeError`` when no family carries a mandatory-at-create cardinality,
@@ -147,7 +150,7 @@ def required_issue_axes() -> tuple[str, ...]:
     policy_path = policy_source_path("label-policy")
     try:
         policy = tomllib.loads(policy_path.read_text(encoding="utf-8"))
-    except OSError as exc:
+    except (OSError, UnicodeDecodeError) as exc:
         raise RuntimeError(f"_ssot: cannot read label-policy at {policy_path}: {exc}") from exc
     except tomllib.TOMLDecodeError as exc:
         raise RuntimeError(f"_ssot: label-policy at {policy_path} is not valid TOML: {exc}") from exc

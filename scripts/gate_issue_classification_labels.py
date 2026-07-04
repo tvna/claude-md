@@ -146,6 +146,14 @@ def decide(
     try:
         axes = load_axis_labels(labels_path)
     except (OSError, ValueError, LookupError, TypeError, RuntimeError) as exc:
+        # Deliberately broad fail-open (CLAUDE.md section 4): this is a PreToolUse
+        # gate, so any failure to derive the axes; a missing/malformed labels SoT,
+        # a drifted label-policy pointer or families, even an unexpected bug in the
+        # derivation; must not wedge issue creation. Letting the exception escape
+        # would block the tool call on a hook problem, which is worse than not
+        # enforcing. Drift that this masks at runtime is caught loudly in CI by the
+        # tests/ pin-tests (required axes, order, and per-axis live labels), so a
+        # real regression fails there rather than silently disabling the gate.
         print(
             f"::warning::gate_issue_classification_labels: cannot derive axis labels: {exc}",
             file=sys.stderr,
