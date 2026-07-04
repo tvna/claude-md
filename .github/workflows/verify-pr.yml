@@ -242,6 +242,16 @@ jobs:
         # pre-commit hook.
         run: uv run python scripts/scan_ssot_drift.py verify
 
+      - name: Reject hardcoded label literals in scripts
+        # Refs #2299: anti-regression gate for SSoT phase 3. Fails when a frozen
+        # family:name GitHub label literal appears in scripts/*.py outside the
+        # sanctioned single sources (_retro_labels.py, _ssot.py, and the
+        # rationale-carrying LITERAL_ALLOWLIST). Runs through uv so tomllib
+        # resolves on the pinned Python. Mirrored pre-push by the
+        # scan_hardcoded_label_literals STEP and at commit time by the
+        # scan-hardcoded-label-literals pre-commit hook.
+        run: uv run python scripts/scan_hardcoded_label_literals.py verify
+
       - name: Compile agent instructions
         # --target all: every apm-cli-supported tool, not just claude/codex.
         # Refs #2210.
