@@ -3,8 +3,9 @@
 
 Bound in ``.claude/settings.json`` (and mirrored in ``.codex/hooks.json``)
 to ``mcp__github__issue_write``. When the call is a ``create`` it must carry
-at least one ``layer:*`` and one ``type:*`` label, validated by name against
-``.github/labels.json``. A create that is missing either axis is denied with a
+at least one label for each required classification axis (today ``layer:*``
+and ``type:*``, derived as described below), validated by name against
+``.github/labels.json``. A create that is missing an axis is denied with a
 ``permissionDecision: "deny"`` message naming the missing axis, so the
 label-classification step is a deterministic harness gate (CLAUDE.md section 3)
 instead of an agent-remembered step. This closes the omission that required a
@@ -122,9 +123,11 @@ def build_reason(missing: list[str], axes: Mapping[str, frozenset[str]]) -> str:
         f"`{_TARGET_TOOL}` create is missing a required classification label.\n\n"
         f"Add at least one label for each missing axis: {needed}.\n\n"
         "Per CLAUDE.md section 3, agent-created issues must carry at least one "
-        "`layer:*` and one `type:*` label (validated against .github/labels.json) "
-        "so classification is a deterministic harness gate, not a remembered "
-        "step. Pass the labels in the `labels` argument and retry. Refs #1246."
+        "label for each required classification axis (the axes listed above, "
+        "derived from the label-policy families and validated against "
+        ".github/labels.json) so classification is a deterministic harness gate, "
+        "not a remembered step. Pass the labels in the `labels` argument and "
+        "retry. Refs #1246, #2292."
     )
 
 
