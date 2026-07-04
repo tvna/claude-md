@@ -1,10 +1,12 @@
 """Tests for ``scripts/scan_review_in_progress_marker.py``.
 
-Covers :func:`has_in_progress_marker`, :func:`run_verify`, and :func:`main`.
-All tests are hermetic: the GitHub REST call is patched via
-``scan_review_in_progress_marker.rest_json``; no real network call is made.
+Covers :func:`has_in_progress_marker`, :func:`fetch_reactions`,
+:func:`run_verify`, and :func:`main`. All tests are hermetic: the GitHub
+REST call is patched via ``scan_review_in_progress_marker.paginate`` (or,
+for ``run_verify``/``main``, the higher-level ``fetch_reactions``); no real
+network call is made.
 
-Refs #2312.
+Refs #2312, #2320 (review comment: paginate the reactions call).
 """
 
 from __future__ import annotations
@@ -69,6 +71,32 @@ class TestHasInProgressMarker:
             {"content": "eyes", "user": {"login": 123}},
         ]
         assert gate.has_in_progress_marker(reactions) is None
+
+
+# ---------------------------------------------------------------------------
+# fetch_reactions
+# ---------------------------------------------------------------------------
+
+
+class TestFetchReactions:
+    def test_walks_beyond_the_first_page(self) -> None:
+        # #2320 review comment: a single rest_json call defaults to GitHub's
+        # 30-per-page limit and could miss an "eyes" reaction that only
+        # appears once the reaction count spills onto a later page.
+        many_reactions = [_reaction("heart", "someone") for _ in range(30)] + [
+            _reaction("eyes", _CODEX_LOGIN)
+        ]
+        with patch.object(gate, "paginate", return_value=many_reactions) as mocked:
+            result = gate.fetch_reactions("tvna/claude-md", "2320", token="tok")
+
+        assert result == many_reactions
+        mocked.assert_called_once_with("/repos/tvna/claude-md/issues/2320/reactions", token="tok")
+
+    def test_non_dict_items_are_dropped(self) -> None:
+        with patch.object(gate, "paginate", return_value=["not-a-dict", _reaction("eyes", _CODEX_LOGIN)]):
+            result = gate.fetch_reactions("tvna/claude-md", "1", token="tok")
+
+        assert result == [_reaction("eyes", _CODEX_LOGIN)]
 
 
 # ---------------------------------------------------------------------------

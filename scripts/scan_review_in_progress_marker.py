@@ -50,7 +50,7 @@ from pathlib import Path
 from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _github_api import GitHubApiError, rest_json
+from _github_api import GitHubApiError, paginate
 from _trusted_bots import _REVIEW_MARKER_LOGINS
 
 _SCRIPT = "scan_review_in_progress_marker"
@@ -88,9 +88,13 @@ def fetch_reactions(
     *,
     token: str,
 ) -> list[dict[str, Any]]:
-    """Return the PR's issue-level reactions via the GitHub REST API."""
-    data = rest_json("GET", f"/repos/{repo}/issues/{pr_number}/reactions", token=token)
-    return data if isinstance(data, list) else []
+    """Return every one of the PR's issue-level reactions via the GitHub REST API.
+
+    Paginated (GitHub defaults to 30 results per page, #2320 review comment):
+    a PR with more than one page of reactions could otherwise leave an active
+    "eyes" marker on a later page undetected, false-passing the gate.
+    """
+    return [item for item in paginate(f"/repos/{repo}/issues/{pr_number}/reactions", token=token) if isinstance(item, dict)]
 
 
 def _warn_fail_open(message: str) -> int:
