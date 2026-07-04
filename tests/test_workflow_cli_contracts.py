@@ -2188,6 +2188,9 @@ def test_pr_upsert_upsert_files_matches_workflow_args(
     body_file.write_text("body content", encoding="utf-8")
     monkeypatch.setattr(pr_upsert, "_collect_worktree_changes", lambda **kw: ([("CLAUDE.md", b"x\n")], []))
     monkeypatch.setattr(pr_upsert, "upsert_files_pr", lambda **kw: "created:99")
+    # The base-currency guard (#2315) makes a contents-API call; this contract test
+    # only exercises arg-shape acceptance, so stub it out (its own suite covers it).
+    monkeypatch.setattr(pr_upsert, "_verify_base_currency", lambda **kw: None)
 
     # generate-agents.yml shape: explicit --add files.
     assert pr_upsert.main([
