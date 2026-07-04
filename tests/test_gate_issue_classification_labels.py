@@ -14,12 +14,25 @@ from __future__ import annotations
 
 import io
 import json
+from collections.abc import Iterator
 from pathlib import Path
 
+import _ssot
 import gate_issue_classification_labels as gate
 import pytest
 
 pytestmark = pytest.mark.shard_preflight
+
+
+@pytest.fixture(autouse=True)
+def _reset_ssot_cache() -> Iterator[None]:
+    # gate.axis_prefixes() reads the module-global _ssot registry cache. Reset it
+    # around every test so a future test that monkeypatches _ssot._REGISTRY_PATH
+    # cannot leak a stale cached registry into another test in this module (this
+    # file must not depend on test_ssot.py's fixture running first).
+    _ssot._reset_for_tests()
+    yield
+    _ssot._reset_for_tests()
 
 
 _SOT = [
@@ -44,6 +57,16 @@ def _create_input(labels: object) -> dict[str, object]:
     return {"method": "create", "owner": "o", "repo": "r", "title": "t", "labels": labels}
 
 
+class TestAxisPrefixes:
+    def test_pins_layer_and_type_prefixes_from_policy(self) -> None:
+        # PIN-TEST: the gate's required axes are cardinality-driven from the live
+        # label-policy families via _ssot.required_issue_axes(). Today that must
+        # derive exactly the layer:/type: prefixes, in that order (so the deny
+        # message stays deterministic). A family/cardinality change that would
+        # silently add or drop a required axis fails here.
+        assert gate.axis_prefixes() == (("layer", "layer:"), ("type", "type:"))
+
+
 class TestLoadAxisLabels:
     def test_groups_names_by_axis_prefix(self, labels_path: Path) -> None:
         axes = gate.load_axis_labels(labels_path)
@@ -58,10 +81,17 @@ class TestLoadAxisLabels:
         with pytest.raises(ValueError, match="JSON array"):
             gate.load_axis_labels(path)
 
-    def test_real_repo_sot_defines_both_axes(self) -> None:
+    def test_every_required_axis_has_live_labels(self) -> None:
+        # DRIFT GUARD (#3): the gate assumes each required axis's labels use the
+        # "<axis>:" prefix. If a future label-policy family were made create-
+        # mandatory but its labels used another naming convention (or had no
+        # labels defined in labels.json yet), load_axis_labels would return an
+        # empty valid set, missing_axes would silently skip it, and that axis
+        # would go unenforced. Assert every derived required axis resolves to at
+        # least one live label so such drift fails deterministically here.
         axes = gate.load_axis_labels(gate._DEFAULT_LABELS_PATH)
-        assert axes["layer"]
-        assert axes["type"]
+        for axis, _prefix in gate.axis_prefixes():
+            assert axes.get(axis), f"required axis {axis!r} has no valid labels in the live SoT"
 
 
 class TestMissingAxes:
