@@ -11,16 +11,17 @@ flowchart TD
     N003["text = read_text(...)"]
     N004["except OSError"]
     N005["print(...)"]
-    N006["return (_DEFAULT_GENERAL, _DEFAULT_NON_ASCII_SKIP)"]
+    N006["return (_DEFAULT_GENERAL, _DEFAULT_NON_ASCII_SKIP, _DEFAULT_REVIEW_MARKER)"]
     N007["try"]
     N008["import tomllib"]
     N009["data = loads(...)"]
     N010["except Exception"]
     N011["print(...)"]
-    N012["return (_DEFAULT_GENERAL, _DEFAULT_NON_ASCII_SKIP)"]
+    N012["return (_DEFAULT_GENERAL, _DEFAULT_NON_ASCII_SKIP, _DEFAULT_REVIEW_MARKER)"]
     N013["general = frozenset(...)"]
     N014["non_ascii_skip = frozenset(...)"]
-    N015["return (general or _DEFAULT_GENERAL, non_ascii_skip or _DEFAULT_NON_ASCII_SKIP)"]
+    N015["review_marker = frozenset(...)"]
+    N016["return (general or _DEFAULT_GENERAL, non_ascii_skip or _DEFAULT_NON_ASCII_SKIP, review_marker or _DEFAULT_REVIEW_MARKER)"]
     N001 -->|"start"| N002
     N002 -->|"try"| N003
     N002 -->|"raises"| N004
@@ -35,4 +36,5 @@ flowchart TD
     N009 --> N013
     N013 --> N014
     N014 --> N015
+    N015 --> N016
 ```
