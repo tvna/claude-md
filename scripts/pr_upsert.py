@@ -36,6 +36,11 @@ from _git import run_git
 from _github_api import apply_call as _github_apply_call
 from _github_api import graphql_call as _github_graphql_call
 
+# The base-currency guard that blocks committing a file whose local base blob
+# differs from the real remote base (the #2311 unintended-revert class) lives in
+# a sibling module to keep this one within the script size budget. Refs #2315.
+from _pr_base_currency import verify_base_currency as _verify_base_currency
+
 # Signed commit creation (createCommitOnBranch) and the payload batching that
 # keeps a large backlog from overflowing the mutation live in a sibling module
 # to keep this one within the script size budget. Refs #1437, #1578.
@@ -684,6 +689,14 @@ def _cmd_upsert_files(args: argparse.Namespace) -> int:
     if not additions and not deletions:
         print("No file changes to publish; skipping PR upsert.", file=sys.stderr)
         return 0
+    if not args.allow_stale_base:
+        try:
+            _verify_base_currency(
+                repo=repo, base=args.base, additions=additions, deletions=deletions, token=token
+            )
+        except RuntimeError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
     try:
         result = upsert_files_pr(
             repo=repo,
@@ -749,6 +762,17 @@ def main(argv: list[str] | None = None) -> int:
             "for a fixed bot branch that can fall far behind base (the "
             "createCommitOnBranch append then fails); mirrors the triage-report "
             "refresh path (Refs #1560)."
+        ),
+    )
+    files_p.add_argument(
+        "--allow-stale-base",
+        action="store_true",
+        dest="allow_stale_base",
+        help=(
+            "Skip the base-currency check that blocks committing a file whose local "
+            "base blob differs from the real remote base (an unintended-revert guard, "
+            "Refs #2315). Use only after rebuilding each file on top of the real base "
+            "and confirming the diff by hand."
         ),
     )
 
