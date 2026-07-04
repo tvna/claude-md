@@ -12,10 +12,18 @@ This module preserves *strict* coverage parity with CI; the same full suite
 runs, never a subset; while skipping a re-run only when the inputs that can
 affect the suite outcome are byte-for-byte unchanged since the last recorded
 green run. The fingerprint covers the working-tree contents (not the index) of
-the test-relevant path set (``scripts/``, ``tests/``, ``pyproject.toml``,
-``uv.lock``) plus an opaque ``extra`` token list (the pytest argv). Any edit,
-dependency bump, or command change busts the cache and forces a full run, so a
-stale skip is impossible short of a SHA-256 collision.
+*every tracked file* minus an explicit denylist (:data:`EXCLUDED_PATHSPECS`),
+plus an opaque ``extra`` token list (the pytest argv). Covering every tracked
+file by default is deliberate: repo-wide scanner tests (secret scans, non-ASCII
+sweeps, markdown-link checks, README-translation parity) read essentially any
+file in the tree, so a narrow allowlist of "test-relevant" paths silently drifts
+stale the moment a test reads a newly added data directory. That is exactly the
+failure #2195 fixed: the prior allowlist (``scripts``, ``tests``,
+``pyproject.toml``, ``uv.lock``) missed ``.agents/skills`` /``.claude/skills``,
+so a skills-only commit reused a cached green and the failure surfaced only in
+CI (retro #1577). Any edit, dependency bump, or command change now busts the
+cache and forces a full run, so a stale skip is impossible short of a SHA-256
+collision.
 
 The cache lives at ``<git-dir>/preflight_heavy_cache.json``; per-clone,
 untracked, and naturally absent on a fresh clone, so the first run in any
@@ -43,16 +51,21 @@ from _git import run_git
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
-# Tracked path globs whose working-tree contents determine the pytest outcome.
-# Kept deliberately narrow: a docs-only change cannot change a script test, so
-# excluding docs/ avoids needless cache busts while staying provably sufficient
-# (the suite imports only from ``scripts/`` and reads only these config files).
-INPUT_PATHSPECS: tuple[str, ...] = (
-    "scripts",
-    "tests",
-    "pyproject.toml",
-    "uv.lock",
-)
+# Tracked paths to EXCLUDE from the fingerprint: a denylist, not an allowlist.
+# The fingerprint covers every tracked file by default (see the module
+# docstring); a path belongs here only if it is *provably* read by no test and
+# can never affect a test outcome. To register such a path: add its git
+# pathspec below AND cite the proof (which scanner tests were checked, and that
+# none read it) in the commit that adds it. An over-broad entry silently
+# reintroduces the stale-skip bug this design replaced (#2195), so the bar is
+# high.
+#
+# The bar is currently met by nothing, so the denylist is empty: repo-wide
+# scanner tests (e.g. tests/test_scan_secrets.py, tests/test_scan_non_ascii.py,
+# tests/test_scan_markdown_links.py, tests/test_verify_readme_translation.py)
+# read essentially every tracked file, including READMEs, lockfiles, and config.
+# Entries, when added, are git pathspecs applied via ``:(exclude)``.
+EXCLUDED_PATHSPECS: tuple[str, ...] = ()
 
 _ENV_DISABLE = "PREFLIGHT_NO_CACHE"
 _CACHE_BASENAME = "preflight_heavy_cache.json"
@@ -78,13 +91,16 @@ def cache_path(repo_root: Path = REPO_ROOT) -> Path:
 
 
 def _tracked_input_files(repo_root: Path) -> list[Path]:
-    """Return tracked files under :data:`INPUT_PATHSPECS`, sorted by path.
+    """Return every tracked file minus :data:`EXCLUDED_PATHSPECS`, sorted by path.
 
     Uses ``git ls-files`` so untracked scratch files never enter the
     fingerprint (they cannot affect a committed test run) and the set is
-    deterministic across machines.
+    deterministic across machines. ``.`` selects the whole tree; each denylist
+    entry is subtracted with a git ``:(exclude)`` pathspec, so an empty denylist
+    fingerprints every tracked file.
     """
-    out = run_git(["ls-files", "-z", "--", *INPUT_PATHSPECS], cwd=repo_root, check=True).stdout
+    pathspecs = [".", *(f":(exclude){spec}" for spec in EXCLUDED_PATHSPECS)]
+    out = run_git(["ls-files", "-z", "--", *pathspecs], cwd=repo_root, check=True).stdout
     rels = [chunk for chunk in out.split("\0") if chunk]
     files = [repo_root / rel for rel in rels]
     # ``git ls-files`` can list a path whose blob was removed from the working

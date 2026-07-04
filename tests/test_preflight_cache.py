@@ -22,7 +22,7 @@ pytestmark = pytest.mark.shard_preflight
 
 
 def _init_repo(root: Path) -> None:
-    """Initialise a minimal git repo with the fingerprint input paths."""
+    """Initialise a minimal git repo covering the fingerprint input paths."""
     subprocess.run(["git", "init", "-q"], cwd=root, check=True)
     subprocess.run(["git", "config", "user.email", "t@example.com"], cwd=root, check=True)
     subprocess.run(["git", "config", "user.name", "t"], cwd=root, check=True)
@@ -35,7 +35,11 @@ def _init_repo(root: Path) -> None:
     (root / "tests" / "test_a.py").write_text("def test_a():\n    assert True\n", encoding="utf-8")
     (root / "pyproject.toml").write_text("[tool.pytest.ini_options]\n", encoding="utf-8")
     (root / "uv.lock").write_text("version = 1\n", encoding="utf-8")
-    (root / "docs.md").write_text("# docs\n", encoding="utf-8")  # outside the input set
+    (root / "docs.md").write_text("# docs\n", encoding="utf-8")  # tracked non-source data
+    # A test-read data directory outside the old narrow allowlist. #2195: a
+    # change here must bust the fingerprint because a test asserts its contents.
+    (root / ".agents" / "skills" / "demo").mkdir(parents=True)
+    (root / ".agents" / "skills" / "demo" / "SKILL.md").write_text("# demo\n", encoding="utf-8")
     subprocess.run(["git", "add", "-A"], cwd=root, check=True)
     subprocess.run(["git", "commit", "-qm", "init"], cwd=root, check=True)
 
@@ -57,12 +61,45 @@ class TestComputeFingerprint:
         # No commit needed: the fingerprint hashes working-tree bytes.
         assert pc.compute_fingerprint(tmp_path) != before
 
-    def test_stable_when_untracked_outside_input_set_changes(self, tmp_path: Path) -> None:
+    def test_stable_when_untracked_file_changes(self, tmp_path: Path) -> None:
         _init_repo(tmp_path)
         before = pc.compute_fingerprint(tmp_path)
-        # A docs change and an untracked scratch file must not bust the cache.
-        (tmp_path / "docs.md").write_text("# changed\n", encoding="utf-8")
+        # An untracked scratch file cannot affect a committed test run, so it
+        # must not bust the cache (git ls-files never lists it).
         (tmp_path / "scratch.tmp").write_text("junk\n", encoding="utf-8")
+        assert pc.compute_fingerprint(tmp_path) == before
+
+    def test_changes_when_tracked_data_file_changes(self, tmp_path: Path) -> None:
+        # #2195 regression guard: a tracked data file outside the old allowlist
+        # (scripts/tests/pyproject.toml/uv.lock), here a docs page, must bust the
+        # fingerprint, because tests read such files and assert their bytes.
+        _init_repo(tmp_path)
+        before = pc.compute_fingerprint(tmp_path)
+        (tmp_path / "docs.md").write_text("# changed\n", encoding="utf-8")
+        assert pc.compute_fingerprint(tmp_path) != before
+
+    def test_changes_when_skills_data_file_changes(self, tmp_path: Path) -> None:
+        # Acceptance criterion #2195: editing a file under .agents/skills/ must
+        # invalidate the cached green. Under the old narrow allowlist this path
+        # was invisible to the fingerprint, so a skills-only commit reused a
+        # cached pass and the failure surfaced only in CI (retro #1577).
+        _init_repo(tmp_path)
+        before = pc.compute_fingerprint(tmp_path)
+        skill = tmp_path / ".agents" / "skills" / "demo" / "SKILL.md"
+        skill.write_text("# demo (edited)\n", encoding="utf-8")
+        assert pc.compute_fingerprint(tmp_path) != before
+
+    def test_excluded_pathspec_is_dropped_from_fingerprint(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # The denylist mechanism (EXCLUDED_PATHSPECS) must subtract a path from
+        # the fingerprint so a change under it no longer busts the cache. The
+        # shipped denylist is empty (nothing is provably test-irrelevant); this
+        # exercises the :(exclude) plumbing that a future entry would rely on.
+        _init_repo(tmp_path)
+        monkeypatch.setattr(pc, "EXCLUDED_PATHSPECS", ("docs.md",))
+        before = pc.compute_fingerprint(tmp_path)
+        (tmp_path / "docs.md").write_text("# changed\n", encoding="utf-8")
         assert pc.compute_fingerprint(tmp_path) == before
 
     def test_extra_tokens_affect_digest(self, tmp_path: Path) -> None:
@@ -74,9 +111,7 @@ class TestComputeFingerprint:
     def test_path_rename_changes_digest(self, tmp_path: Path) -> None:
         _init_repo(tmp_path)
         before = pc.compute_fingerprint(tmp_path)
-        subprocess.run(
-            ["git", "mv", "scripts/a.py", "scripts/renamed.py"], cwd=tmp_path, check=True
-        )
+        subprocess.run(["git", "mv", "scripts/a.py", "scripts/renamed.py"], cwd=tmp_path, check=True)
         assert pc.compute_fingerprint(tmp_path) != before
 
     def test_skips_listed_but_deleted_file(self, tmp_path: Path) -> None:
@@ -151,9 +186,7 @@ class TestRecord:
         assert "recorded_at" in loaded
         assert pc.is_fresh(loaded, "deadbeef") is True
 
-    def test_write_failure_is_swallowed(
-        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
-    ) -> None:
+    def test_write_failure_is_swallowed(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
         # A directory path cannot be written as a file -> OSError, swallowed.
         target = tmp_path / "adir"
         target.mkdir()
