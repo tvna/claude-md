@@ -50,6 +50,54 @@ flowchart TD
     N006 -->|"false"| N008
 ```
 
+## policy_source_path(...)
+
+```mermaid
+flowchart TD
+    N001["policy_source_path(...)"]
+    N002["for entry in _load().get('<str>', []):     if isinstance(entry, dict) and entry.get('<str>') == source_id:         path = entry.get('<str>')         if not isinstance(path, str):             raise TypeError(f'<str>{source_id!r}<str>{path!r}<str>{_REGISTRY_PATH}')         return _REGISTRY_PATH.parent.parent / path"]
+    N003["raise KeyError(f'<str>{source_id!r}<str>{_REGISTRY_PATH}')"]
+    N001 -->|"start"| N002
+    N002 --> N003
+```
+
+## required_issue_axes(...)
+
+```mermaid
+flowchart TD
+    N001["required_issue_axes(...)"]
+    N002["policy_path = policy_source_path(...)"]
+    N003["try"]
+    N004["policy = loads(...)"]
+    N005["except (OSError, UnicodeDecodeError)"]
+    N006["raise RuntimeError(f'<str>{policy_path}<str>{exc}')"]
+    N007["except tomllib.TOMLDecodeError"]
+    N008["raise RuntimeError(f'<str>{policy_path}<str>{exc}')"]
+    N009["families = get(...)"]
+    N010["if not isinstance(families, list)"]
+    N011["raise TypeError(f'<str>{policy_path}<str>')"]
+    N012["axes = []"]
+    N013["for family in families:     if not isinstance(family, dict):         raise TypeError(f'<str>{family!r}')     name = family.get('<str>')     cardinality = family.get('<str>')     if not isinstance(name, str) or not isinstance(cardinality, str):         raise TypeError(f'<str>{family!r}')     if cardinality in _MANDATORY_AT_CREATE_CARDINALITIES:         axes.append(name)"]
+    N014["if not axes"]
+    N015["raise RuntimeError(f'<str>{policy_path}<str>{sorted(_MANDATORY_AT_CREATE_CARDINALITIES)}<str>')"]
+    N016["return tuple(axes)"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 -->|"try"| N004
+    N003 -->|"raises"| N005
+    N005 --> N006
+    N003 -->|"raises"| N007
+    N007 --> N008
+    N004 --> N009
+    N009 --> N010
+    N010 -->|"true"| N011
+    N010 -->|"false"| N012
+    N012 --> N013
+    N013 --> N014
+    N014 -->|"true"| N015
+    N014 -->|"false"| N016
+```
+
 ## _reset_for_tests(...)
 
 ```mermaid

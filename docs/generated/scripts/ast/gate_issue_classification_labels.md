@@ -2,6 +2,15 @@
 
 This file is generated from `scripts/gate_issue_classification_labels.py` by `python3 scripts/script_ast_graph.py all-doc`. Do not edit it by hand: content under `docs/generated/scripts/` is owned by the post-merge automation (refs #1540); update the source script instead.
 
+## axis_prefixes(...)
+
+```mermaid
+flowchart TD
+    N001["axis_prefixes(...)"]
+    N002["return tuple(((axis, f'{axis}<str>') for axis in _ssot.required_issue_axes()))"]
+    N001 -->|"start"| N002
+```
+
 ## load_axis_labels(...)
 
 ```mermaid
@@ -12,7 +21,7 @@ flowchart TD
     N004["raise ValueError('<str>')"]
     N005["names = [entry['<str>'] for entry in raw if isinstance(entry, dict) and isinstance(entry.get('<str>'), str)]"]
     N006["axes = {}"]
-    N007["for axis, prefix in _AXIS_PREFIXES:     axes[axis] = frozenset((name for name in names if name.startswith(prefix)))"]
+    N007["for axis, prefix in axis_prefixes():     axes[axis] = frozenset((name for name in names if name.startswith(prefix)))"]
     N008["return axes"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -30,7 +39,7 @@ flowchart TD
     N001["missing_axes(...)"]
     N002["present = {label for label in labels if isinstance(label, str)}"]
     N003["missing = []"]
-    N004["for axis, _prefix in _AXIS_PREFIXES:     valid = axes.get(axis) or frozenset()     if not valid:         continue     if not present & valid:         missing.append(axis)"]
+    N004["for axis, valid in axes.items():     if not valid:         continue     if not present & valid:         missing.append(axis)"]
     N005["return missing"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -64,7 +73,7 @@ flowchart TD
     N005["return None"]
     N006["try"]
     N007["axes = load_axis_labels(...)"]
-    N008["except (OSError, json.JSONDecodeError, ValueError)"]
+    N008["except (OSError, ValueError, LookupError, TypeError, RuntimeError)"]
     N009["print(...)"]
     N010["return None"]
     N011["raw_labels = get(...)"]
