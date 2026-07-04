@@ -5,9 +5,17 @@ governed single source of truth for gate topology, policy-file references,
 and label-based agent routing. This module is the phase-2 "consume" layer:
 it loads the registry and exposes narrow lookups for consumers, so a label
 rename in the registry becomes a one-file edit instead of a scripts/*.py
-edit. It carries no validation logic; shape and referential-integrity
-checks stay solely in ``scripts/scan_ssot_schema.py``, which is the gate
-that keeps this reader's assumptions about the registry's shape honest.
+edit. It carries no validation of the registry's own shape; registry shape
+and referential-integrity checks stay solely in
+``scripts/scan_ssot_schema.py``, which is the gate that keeps this reader's
+assumptions about the registry's shape honest.
+
+The one exception is external policy files the registry merely points at:
+``required_issue_axes`` resolves and parses ``.github/label-policy.toml``,
+whose ``[[families]]`` shape no gate validates. That reader therefore checks
+its own external input at read time and fails loud (``TypeError`` /
+``RuntimeError``) rather than trusting an unchecked file; the boundary stays
+narrow (only what that one reader consumes), not a general validation layer.
 
 The load is lazy (deferred to first call, not import time) so importing
 this module never touches disk, and a load failure surfaces only to the
