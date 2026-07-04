@@ -199,6 +199,8 @@ Detection is string-match based:
 | `scan_docs_inventory.py` | pre-commit | `scan-docs-inventory` |
 | `scan_docs_inventory.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
 | `scan_flake_pin_drift.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
+| `scan_hardcoded_label_literals.py` | pre-commit | `scan-hardcoded-label-literals` |
+| `scan_hardcoded_label_literals.py` | workflow | `verify-pr.yml (portable-pr-policy)` |
 | `scan_harness_doc_coverage.py` | pre-commit | `scan-harness-doc-coverage` |
 | `scan_harness_doc_coverage.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
 | `scan_hook_coverage_drift.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
