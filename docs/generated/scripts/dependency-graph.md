@@ -18,9 +18,9 @@ This file is generated from `scripts/*.py` import statements by `python3 scripts
 | `_retro_labels` | 4 | `_auto_retro_render`, `_auto_retro_triage`, `auto_retro`, `scan_retro_followup_drift` |
 | `_session_branches` | 4 | `check_session_branch`, `preflight_commit_session_branch`, `preflight_push_session_branch`, `preflight_session_branch_authz` |
 | `_shell_lines` | 4 | `scan_ruff_format`, `scan_workflow_gh_calls`, `scan_workflow_pip`, `scan_workflow_unsigned_commit` |
+| `_ssot` | 4 | `auto_retro`, `branch_cleanup`, `ruleset_drift`, `scan_retro_followup_drift` |
 | `_apm_managed_paths` | 3 | `gate_agents_skills_edit`, `scan_repo_double_hyphen`, `scan_repo_em_dash` |
 | `_auto_retro_parse` | 3 | `_auto_retro_render`, `_auto_retro_triage`, `auto_retro` |
-| `_ssot` | 3 | `branch_cleanup`, `ruleset_drift`, `scan_retro_followup_drift` |
 | `auto_retro` | 3 | `gate_pr_body_retro_issue_link`, `gate_reserved_retro_scope`, `gate_retro_close_keyword_commit` |
 | `doc_graph` | 3 | `doc_graph_viz`, `gate_doc_graph_pr`, `scan_doc_graph_registration` |
 | `pr_upsert` | 3 | `_pr_merge`, `auto_retro`, `devcontainer_pin_pr` |
@@ -85,6 +85,7 @@ flowchart TD
     auto_retro --> _auto_retro_triage
     auto_retro --> _github_api
     auto_retro --> _retro_labels
+    auto_retro --> _ssot
     auto_retro --> _trusted_bots
     auto_retro --> issue_link
     auto_retro --> pr_upsert
