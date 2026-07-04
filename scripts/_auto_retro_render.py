@@ -24,6 +24,7 @@ and tests keep working unchanged.
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from typing import Any
 
@@ -752,18 +753,22 @@ def is_retro_age_exceeded(
 
 
 def issue_labels(
-    layer_labels: tuple[str, ...], *, tentative: bool = False
+    layer_labels: tuple[str, ...],
+    base_labels: Sequence[str],
+    *,
+    tentative: bool = False,
 ) -> list[str]:
     """Return the label list for the retro issue.
 
-    Always ``type:docs`` + ``layer:meta``; appends any additional
-    ``layer:*`` labels inherited from the source PR. Deduplicates while
-    preserving order. When ``tentative`` is True, appends
-    ``retro:tentative`` so operators see at triage time that the
-    label-derived prior placed the retro in the uncertain band
-    (refs #582).
+    Starts from *base_labels* (the retro's identity labels, resolved from the
+    ``.gitapex/ssot.json`` registry by the IO layer and injected here so this
+    pure renderer neither reads the registry nor hardcodes the label literals),
+    then appends any additional ``layer:*`` labels inherited from the source
+    PR. Deduplicates while preserving order. When ``tentative`` is
+    True, appends ``retro:tentative`` so operators see at triage time that the
+    label-derived prior placed the retro in the uncertain band (refs #582).
     """
-    labels = ["type:docs", "layer:meta"]
+    labels = list(base_labels)
     for lbl in layer_labels:
         if lbl and lbl not in labels:
             labels.append(lbl)

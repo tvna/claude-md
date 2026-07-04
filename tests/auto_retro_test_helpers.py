@@ -9,6 +9,24 @@ import auto_retro as ar
 import pytest
 from _github_api import GitHubApiError
 
+# The label set the .gitapex/ssot.json registry entry for scripts/auto_retro.py
+# carries, mirrored here so orchestrator tests inject a known set via
+# _ssot.consumer_labels instead of depending on (or asserting against) the
+# live registry file. REGISTRY_LABELS is the full entry (registry order);
+# TERMINAL_PRIMARY / TERMINAL_LEGACY are the terminal open-state labels the code
+# derives from it. Derivation-specific tests override the mock with synthetic
+# labels to prove the code reads the registry rather than a hardcoded literal.
+REGISTRY_LABELS = ("type:docs", "layer:meta", "ops:retro-opened", "harness:retro-opened")
+TERMINAL_PRIMARY = "ops:retro-opened"
+TERMINAL_LEGACY = "harness:retro-opened"
+
+
+def stub_registry_labels(
+    monkeypatch: pytest.MonkeyPatch, labels: tuple[str, ...] = REGISTRY_LABELS
+) -> None:
+    """Point ar._ssot.consumer_labels at a fixed label set for the test."""
+    monkeypatch.setattr(ar._ssot, "consumer_labels", lambda path: labels)
+
 
 def merged_event(**overrides: Any) -> dict[str, Any]:
     pr: dict[str, Any] = {
@@ -111,5 +129,6 @@ def orchestrator_recorder(
             return json.dumps(created_response)
         return ""
 
+    stub_registry_labels(monkeypatch)
     monkeypatch.setattr(ar, "gh_api", fake_api)
     return seen
