@@ -1,0 +1,242 @@
+# Loop-engineering achievement audit -- stored, re-auditable checklist.
+#
+# Purpose: record honestly how far this repository realizes the framework in
+# "Loop Engineering - The Anthropic Playbook" (HuaShu, 2026). This file is the
+# single source of truth; the human browses it and re-audits with:
+#
+#     uv run python scripts/audit_loop_engineering.py run
+#
+# The reporter re-derives present/absent for every ``machine_checkable`` item
+# from the working tree and flags DRIFT when a recorded status no longer
+# matches reality (e.g. once #2269 adds the token-cap policy, that item flips
+# to present and this file must be updated). Judgment items are human-audited
+# and print their recorded status plus an evidence pointer.
+#
+# Honesty policy: this is an audit, not a scorecard. Status is recorded as the
+# repository actually is, including deliberately-declined loop features. No
+# machine asserts "achieved" on a judgment item; a mechanical verdict on a
+# subjective question would be false precision (the risk the repo declined for
+# the skill LLM-judge in #1099).
+#
+# Status vocabulary:
+#   present  -- the artifact/capability exists.
+#   partial  -- exists but incompletely (deterministic-only, or gap tracked).
+#   absent   -- not present (may be a real gap or a not-yet-built precondition).
+#   declined -- intentionally not built (documented design stance).
+#   guarded / unguarded -- for the four costs: whether a standing guard exists.
+#
+# Refs #2294 (this artifact), #2268 (gap-analysis umbrella).
+
+[meta]
+schema_version = 1
+source = "Loop Engineering - The Anthropic Playbook (HuaShu, 2026)"
+audit_umbrella = "#2268"
+last_reviewed = "2026-07-04"
+
+# ---------------------------------------------------------------------------
+# Five moves of one turn (judgment items)
+# ---------------------------------------------------------------------------
+
+[[items]]
+id = "move.discovery"
+dimension = "five-moves"
+title = "発見: そのターンの仕事を自ら見つける"
+status = "partial"
+machine_checkable = false
+evidence = "cron 保守ループが CI/脅威/ドリフトを自律発見。ただし仕事発見スキルは不在 (#2273)"
+
+[[items]]
+id = "move.handoff"
+dimension = "five-moves"
+title = "受け渡し: 隔離してエージェントへ渡す"
+status = "present"
+machine_checkable = false
+evidence = ".claude/skills/using-git-worktrees; docs/runbooks/parallel-agent-dispatch.md"
+
+[[items]]
+id = "move.verification"
+dimension = "five-moves"
+title = "検証: ノーと言える第2の存在"
+status = "partial"
+machine_checkable = false
+evidence = "決定論ゲートは厚いが、強制された独立評価器は不在 (G1; #2272 証拠ゲート, #2271 RFC)"
+
+[[items]]
+id = "move.persistence"
+dimension = "five-moves"
+title = "永続化: 結果を会話の外へ残す"
+status = "present"
+machine_checkable = false
+evidence = "GitHub issue, git 履歴, auto-retro (scripts/auto_retro.py)"
+
+[[items]]
+id = "move.scheduling"
+dimension = "five-moves"
+title = "スケジューリング: 1ターンをループにする"
+status = "partial"
+machine_checkable = false
+evidence = "保守ループは定刻起動するが、エージェントを起動するスケジュールは無い (loop.agentic_trigger 参照)"
+
+# ---------------------------------------------------------------------------
+# Six parts (machine-checkable artifacts)
+# ---------------------------------------------------------------------------
+
+[[items]]
+id = "part.automations"
+dimension = "six-parts"
+title = "自動化: スケジュール/トリガ"
+status = "present"
+machine_checkable = true
+evidence = ".github/workflows/*.yml の cron スケジュール群"
+check = { kind = "grep_in_glob", glob = ".github/workflows/*.yml", pattern = "cron:" }
+
+[[items]]
+id = "part.worktrees"
+dimension = "six-parts"
+title = "ワークツリー: 並列エージェントの隔離"
+status = "present"
+machine_checkable = true
+evidence = ".claude/skills/using-git-worktrees/SKILL.md (ネイティブ EnterWorktree に委譲)"
+check = { kind = "path_exists", target = ".claude/skills/using-git-worktrees/SKILL.md" }
+
+[[items]]
+id = "part.skills"
+dimension = "six-parts"
+title = "スキル: プロジェクト知識の恒久化"
+status = "present"
+machine_checkable = true
+evidence = ".claude/skills/*/SKILL.md (APM ピン留め・チェックサム固定)"
+check = { kind = "glob_exists", target = ".claude/skills/*/SKILL.md" }
+
+[[items]]
+id = "part.connectors_mcp"
+dimension = "six-parts"
+title = "コネクタ: 外部システムへの MCP 接続"
+status = "present"
+machine_checkable = true
+evidence = "scripts/gen_mcp_json.py が apm.yml から .mcp.json を SessionStart 生成"
+check = { kind = "path_exists", target = "scripts/gen_mcp_json.py" }
+
+[[items]]
+id = "part.subagents"
+dimension = "six-parts"
+title = "サブエージェント: 生成器と審判の分離"
+status = "present"
+machine_checkable = true
+evidence = ".claude/skills/dispatching-parallel-agents, subagent-driven-development"
+check = { kind = "path_exists", target = ".claude/skills/dispatching-parallel-agents/SKILL.md" }
+
+[[items]]
+id = "part.memory"
+dimension = "six-parts"
+title = "メモリ: ディスク上の永続状態"
+status = "present"
+machine_checkable = true
+evidence = "scripts/stop_new_session_handoff_prompt.py + docs/next-session (プロンプト持ち越し)"
+check = { kind = "path_exists", target = "scripts/stop_new_session_handoff_prompt.py" }
+
+# ---------------------------------------------------------------------------
+# First-loop checklist (paper section XII)
+# ---------------------------------------------------------------------------
+
+[[items]]
+id = "firstloop.discovery_source"
+dimension = "first-loop"
+title = "発見源が存在する"
+status = "present"
+machine_checkable = true
+evidence = "cron 保守ワークフローが発見源として稼働"
+check = { kind = "grep_in_glob", glob = ".github/workflows/*.yml", pattern = "cron:" }
+
+[[items]]
+id = "firstloop.state_file"
+dimension = "first-loop"
+title = "状態ファイル (結果をチャット外へ)"
+status = "partial"
+machine_checkable = false
+evidence = "issue/git は永続だが、機械可読な作業状態ファイルは不在 (#2270)"
+
+[[items]]
+id = "firstloop.evaluator"
+dimension = "first-loop"
+title = "評価器 (独立した『ノー』) -- 最重要・最も省かれやすい"
+status = "partial"
+machine_checkable = false
+evidence = "決定論ゲート+人間 PR レビューは在るが、強制された独立評価器は不在 (G1)"
+
+[[items]]
+id = "firstloop.isolation"
+dimension = "first-loop"
+title = "隔離 (エージェントごとに worktree)"
+status = "present"
+machine_checkable = true
+evidence = ".claude/skills/using-git-worktrees/SKILL.md"
+check = { kind = "path_exists", target = ".claude/skills/using-git-worktrees/SKILL.md" }
+
+[[items]]
+id = "firstloop.token_cap"
+dimension = "first-loop"
+title = "トークン上限 (出荷前のサーキットブレーカー)"
+status = "absent"
+machine_checkable = true
+evidence = "トークン/コスト上限は未設置 (#2269 で追加予定; 追加時 present へ DRIFT する)"
+check = { kind = "path_exists", target = ".github/llm-budget-policy.toml" }
+
+[[items]]
+id = "firstloop.human_review"
+dimension = "first-loop"
+title = "人間のレビュー点 (最低1つのドアを開けておく)"
+status = "present"
+machine_checkable = true
+evidence = ".github/rulesets/main.json (ブランチ保護・必須レビュー)"
+check = { kind = "path_exists", target = ".github/rulesets/main.json" }
+
+# ---------------------------------------------------------------------------
+# Loop layer (three-verb test: runs on a timer / spawns helpers / feeds itself,
+# at the agentic level)
+# ---------------------------------------------------------------------------
+
+[[items]]
+id = "loop.agentic_trigger"
+dimension = "loop-layer"
+title = "スケジュールがエージェントを起動する (エージェント的ループ)"
+status = "absent"
+machine_checkable = true
+evidence = "エージェントを起動するワークフローは無い; 3動詞テストは不成立 (意図的 gap; #2271 RFC)"
+check = { kind = "grep_in_glob", glob = ".github/workflows/*.yml", pattern = "claude-code-action" }
+
+# ---------------------------------------------------------------------------
+# Four silent costs (judgment items; guarded / partial / unguarded)
+# ---------------------------------------------------------------------------
+
+[[items]]
+id = "cost.verification_debt"
+dimension = "four-costs"
+title = "検証負債"
+status = "partial"
+machine_checkable = false
+evidence = "決定論ゲートは形を守るが、意味的検証は人間レビュー頼み (G1)"
+
+[[items]]
+id = "cost.comprehension_rot"
+dimension = "four-costs"
+title = "理解の腐食"
+status = "guarded"
+machine_checkable = false
+evidence = "auto-retro triage レポート + docs/generated の意思決定木 = サンプルを読むガード"
+
+[[items]]
+id = "cost.cognitive_surrender"
+dimension = "four-costs"
+title = "認知の明け渡し"
+status = "guarded"
+machine_checkable = false
+evidence = "人間 PR レビューのドアを維持; 自律ディスパッチは不採用 (parallel-agent-dispatch.md)"
+
+[[items]]
+id = "cost.token_blowout"
+dimension = "four-costs"
+title = "トークン暴発"
+status = "unguarded"
+machine_checkable = false
+evidence = "トークン/コスト上限なし (#2269; firstloop.token_cap と対応)"
