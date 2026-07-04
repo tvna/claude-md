@@ -96,6 +96,12 @@ type = "standard"
 description = "Enforcement registry for PR body content-quality defect classes; verified by scan_pr_body_quality_drift.py."
 
 [[nodes]]
+id = "loop_engineering_audit"
+path = "docs/standards/loop-engineering-audit.toml"
+type = "standard"
+description = "Stored, re-auditable checklist of loop-engineering achievement status; reported by scripts/audit_loop_engineering.py."
+
+[[nodes]]
 id = "doc_dependency_runbook"
 path = "docs/runbooks/doc-dependency-graph.md"
 type = "runbook"
