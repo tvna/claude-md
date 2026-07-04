@@ -1261,6 +1261,23 @@
       "tracking_issue": null
     },
     {
+      "id": "scan-hardcoded-label-literals",
+      "kind": "script",
+      "script": "scripts/scan_hardcoded_label_literals.py",
+      "rule": "CI gate: reject hardcoded family:name GitHub label literals in scripts/*.py outside the sanctioned SSoT homes",
+      "planes": [
+        "pre-commit",
+        "pre-push",
+        "ci"
+      ],
+      "trigger": "git commit or push (prek / scripts/preflight_all.py) and CI (pull_request workflow)",
+      "policy_refs": [
+        "label-policy"
+      ],
+      "cluster": null,
+      "tracking_issue": 2299
+    },
+    {
       "id": "scan-test-presence-drift",
       "kind": "script",
       "script": "scripts/scan_test_presence_drift.py",

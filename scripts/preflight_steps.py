@@ -246,6 +246,16 @@ STEPS: tuple[Step, ...] = (
         argv=("python3", "scripts/scan_ssot_drift.py", "verify"),
     ),
     Step(
+        # Refs #2299. Anti-regression gate for SSoT phase 3: rejects a frozen
+        # family:name GitHub label literal in scripts/*.py outside the
+        # sanctioned single sources (_retro_labels.py, _ssot.py, and the
+        # rationale-carrying LITERAL_ALLOWLIST). Static working-tree read;
+        # mirrors the verify-pr.yml step so the gate fires pre-push, not only
+        # in CI.
+        name="scan_hardcoded_label_literals",
+        argv=("python3", "scripts/scan_hardcoded_label_literals.py", "verify"),
+    ),
+    Step(
         # Refs #1325. Fails when a Markdown doc outside docs/archive/ cites a
         # .github/workflows/<name>.yml path that no longer exists; the drift
         # class #1319's workflow consolidation left behind.

@@ -83,6 +83,7 @@ import scan_devcontainer_tool_drift
 import scan_doc_workflow_refs
 import scan_docs_inventory
 import scan_flake_pin_drift
+import scan_hardcoded_label_literals
 import scan_harness_doc_coverage
 import scan_hook_coverage_drift
 import scan_hook_predicate_surface_drift
@@ -275,6 +276,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("scan_secrets.py", "verify"): "test_scan_secrets_verify_matches_workflow_args",
     ("scan_ssot_drift.py", "verify"): "test_scan_ssot_drift_verify_matches_workflow_args",
     ("scan_ssot_schema.py", "verify"): "test_scan_ssot_schema_verify_matches_workflow_args",
+    ("scan_hardcoded_label_literals.py", "verify"): "test_scan_hardcoded_label_literals_verify_matches_workflow_args",
     ("scan_ruff_format.py", "verify"): "test_scan_ruff_format_verify_matches_workflow_args",
     ("scan_scripts_gh_calls.py", "verify"): "test_scan_scripts_gh_calls_verify_matches_workflow_args",
     ("scan_session_path_drift.py", "verify"): "test_scan_session_path_drift_verify_matches_workflow_args",
@@ -3253,6 +3255,12 @@ def test_scan_ssot_drift_verify_matches_workflow_args() -> None:
     """Mirrors the `Report .gitapex/ssot.json drift (advisory)` step in
     `.github/workflows/verify-pr.yml` (issue #2256)."""
     assert scan_ssot_drift.main(["verify"]) == 0
+
+
+def test_scan_hardcoded_label_literals_verify_matches_workflow_args() -> None:
+    """Mirrors the `Reject hardcoded label literals in scripts` step in
+    `.github/workflows/verify-pr.yml` (issue #2299)."""
+    assert scan_hardcoded_label_literals.main(["verify"]) == 0
 
 
 def test_scan_session_path_drift_verify_matches_workflow_args() -> None:
