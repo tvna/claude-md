@@ -130,6 +130,23 @@ class TestRequiredIssueAxes:
         monkeypatch.setattr(_ssot, "_REGISTRY_PATH", self._registry_pointing_at(tmp_path, toml_text))
         assert _ssot.required_issue_axes() == ("layer", "type")
 
+    def test_preserves_policy_declaration_order(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # The live policy declares "layer" before "type", which is also
+        # alphabetical order, so the pin-tests above cannot distinguish an
+        # order-preserving implementation from a sorted()/set-based one. This
+        # synthetic policy declares "type" before "layer" (reverse alphabetical),
+        # with a non-mandatory "state" family interleaved between them, so only
+        # an implementation that follows file declaration order passes.
+        toml_text = (
+            '[[families]]\nname = "type"\ncardinality = "exactly_one_for_normal_issues"\n'
+            '[[families]]\nname = "state"\ncardinality = "zero_or_one"\n'
+            '[[families]]\nname = "layer"\ncardinality = "one_or_more"\n'
+        )
+        monkeypatch.setattr(_ssot, "_REGISTRY_PATH", self._registry_pointing_at(tmp_path, toml_text))
+        assert _ssot.required_issue_axes() == ("type", "layer")
+
     def test_raises_runtime_error_when_no_mandatory_family(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
