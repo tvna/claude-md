@@ -4,7 +4,11 @@ from pathlib import Path
 
 import auto_retro as ar
 import pytest
-from auto_retro_test_helpers import merged_event, orchestrator_recorder
+from auto_retro_test_helpers import (
+    TERMINAL_PRIMARY,
+    merged_event,
+    orchestrator_recorder,
+)
 
 pytestmark = pytest.mark.shard_ci_ops_auto_retro_create
 
@@ -235,7 +239,7 @@ class TestRunCreate:
         assert back_link_idx < label_idx, (
             "terminal label must be POSTed after the back-link comment"
         )
-        assert seen[label_idx][2] == {"labels": [ar._TERMINAL_LABEL]}
+        assert seen[label_idx][2] == {"labels": [TERMINAL_PRIMARY]}
 
     def test_back_link_disabled_by_default_label_still_applied(
         self, monkeypatch: pytest.MonkeyPatch

@@ -48,6 +48,8 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
+import _ssot
+
 # Pure layers extracted into sibling helper modules (Refs #1725, a
 # precondition for #1702). auto_retro.py retains the GitHub IO fetchers and
 # the run / sentinel / post-merge-rescan orchestration; the parser, triage,
@@ -290,6 +292,81 @@ __all__ = [
     "should_skip_by_prior",
     "verify_retro_repair_completeness",
 ]
+
+# ---------------------------------------------------------------------------
+# SSoT registry label resolution (phase 2, consumer 4; refs #2287, #2265, #2246)
+# ---------------------------------------------------------------------------
+#
+# The label literals this script used to hardcode (the retro-issue identity /
+# discovery labels and the terminal open-state labels) now live solely in the
+# ``.gitapex/ssot.json`` ``label_consumers`` entry for ``scripts/auto_retro.py``,
+# so a future label rename (e.g. #1041's still-open meta-layer successor
+# decision, or the #972 rename batch) is a registry-only edit. The helpers below
+# resolve that entry once and split it into the identity family (labels that do
+# NOT end in ``retro-opened``) and the terminal family (labels that DO), keyed by
+# their ``ops:``/``harness:`` prefix. No label literal is transcribed here.
+
+
+def _resolve_registry_labels() -> tuple[str, ...]:
+    """Return this script's registered labels from the SSoT registry.
+
+    Wraps :func:`_ssot.consumer_labels`' ``KeyError``/``TypeError`` (a drifted
+    or malformed registry entry) as ``RuntimeError`` at this single boundary so
+    every consumer below surfaces a drift via ``main()``'s ``::error::``/exit-1
+    path, without widening ``main()``'s except tuple around unrelated dict/JSON
+    parsing elsewhere in the module (mirrors #2278/#2283).
+    """
+    try:
+        return _ssot.consumer_labels("scripts/auto_retro.py")
+    except (KeyError, TypeError) as exc:
+        raise RuntimeError(f"auto-retro registry labels: {exc}") from exc
+
+
+def _identity_labels() -> list[str]:
+    """Return the retro-issue identity / discovery labels, in registry order.
+
+    These are the resolved labels that are NOT the terminal ``*retro-opened``
+    signals; the labels every auto-opened retro carries and both discovery
+    searches filter on. ``scan_ssot_schema.py`` only requires ``labels`` to be
+    an array, so a registry edit that leaves only the terminal labels is
+    schema-valid; without the emptiness guard the discovery query would drop
+    every ``label:`` qualifier and scan every issue titled ``retro`` repo-wide,
+    a widening the old hardcoded query could never drift into (mirrors #2283).
+    """
+    identity = [
+        label for label in _resolve_registry_labels()
+        if not label.endswith("retro-opened")
+    ]
+    if not identity:
+        raise RuntimeError(
+            "auto-retro registry labels: registry entry for scripts/auto_retro.py "
+            "has no identity labels left after excluding the terminal "
+            "*retro-opened labels"
+        )
+    return identity
+
+
+def _terminal_labels() -> tuple[str, str]:
+    """Return the ``(primary, legacy)`` terminal open-state labels.
+
+    Both end in ``retro-opened``; the primary is the ``ops:`` label written on
+    the happy path, the legacy is the ``harness:`` label retried on an HTTP 422
+    during the live-rename migration window (#972, #2139). A registry that is
+    missing either family fails loud here rather than POSTing a ``None`` label.
+    """
+    terminal = [
+        label for label in _resolve_registry_labels()
+        if label.endswith("retro-opened")
+    ]
+    primary = next((label for label in terminal if label.startswith("ops:")), None)
+    legacy = next((label for label in terminal if label.startswith("harness:")), None)
+    if primary is None or legacy is None:
+        raise RuntimeError(
+            "auto-retro registry labels: registry entry for scripts/auto_retro.py "
+            "is missing the ops:/harness: *retro-opened terminal labels"
+        )
+    return primary, legacy
+
 
 _TRIAGE_REPORT_DOC_PATH = Path("docs/generated/scripts/auto-retro-triage-report.md")
 
@@ -546,12 +623,14 @@ def fetch_past_retro_labels(
     """Return up to *limit* past retros as :class:`PastRetro` records.
 
     Uses a single search query matching the
-    ``auto_retro.issue_labels`` convention (``type:docs`` +
-    ``layer:meta`` + title contains ``retro``), then parses each
-    item's body for the ``- Signals fired:`` line. Soft-fails on
-    search errors and on per-item JSON shape errors; the prior
-    degrades to empty (no skip, no tentative) rather than aborting
-    the retro flow.
+    ``auto_retro.issue_labels`` convention (the retro-issue identity
+    labels resolved from the SSoT registry via :func:`_identity_labels`
+    + title contains ``retro``), then parses each item's body for the
+    ``- Signals fired:`` line. Soft-fails on search errors and on
+    per-item JSON shape errors; the prior degrades to empty (no skip,
+    no tentative) rather than aborting the retro flow. A drifted
+    registry is a config error, not a transient search error, so it
+    propagates loud via ``main()`` rather than degrading to empty.
 
     The query mirrors
     :func:`scripts.scan_retro_followup_drift.search_retro_issues`
@@ -559,10 +638,8 @@ def fetch_past_retro_labels(
     retro population.
     Refs #582.
     """
-    query = (
-        f"repo:{repo} is:issue label:type:docs "
-        f"label:layer:meta in:title retro"
-    )
+    label_clause = " ".join(f"label:{label}" for label in _identity_labels())
+    query = f"repo:{repo} is:issue {label_clause} in:title retro"
     encoded = quote(query, safe="")
     per_page = min(max(limit, 1), 100)
     try:
@@ -740,23 +817,19 @@ _BACK_LINK_MARKER = "<!-- auto-retro:back-link -->"
 # stacking duplicates (same convention as _BACK_LINK_MARKER).
 _SKIP_COMMENT_MARKER = "<!-- auto-retro:skip -->"
 
-# Label applied to the source PR after the retro issue is opened and
-# the back-link comment is posted. Emission is the harness contract --
-# subscribed Claude sessions and operators read it as the signal that
-# the PR has reached terminal state and no further session attention
-# is required. Consumption (e.g. unsubscribe_pr_activity) is platform
-# / session policy and out of scope here. SoT entry lives in
-# .github/labels.json; tests/test_auto_retro.py guards the drift.
-# Renamed from "harness:retro-opened" to the ops:* family (#972 renames
-# batch, #2139). apply_terminal_label writes this new name but falls back to
-# the legacy name below when the live label has not been renamed yet, so the
-# terminal signal survives regardless of code-merge vs. live-rename ordering.
-_TERMINAL_LABEL = "ops:retro-opened"
-# Legacy terminal-label name kept only for the migration window: between this
-# code merging and the apply-labels.yml live rename, the repo may still carry
-# only the old name, so POSTing the new name returns HTTP 422. Remove this
-# fallback once the live rename has landed.
-_TERMINAL_LABEL_LEGACY = "harness:retro-opened"
+# The terminal open-state label applied to the source PR after the retro issue
+# is opened and the back-link comment is posted. Emission is the harness
+# contract; subscribed Claude sessions and operators read it as the signal
+# that the PR has reached terminal state and no further session attention is
+# required. Consumption (e.g. unsubscribe_pr_activity) is platform / session
+# policy and out of scope here. The label literals live solely in the
+# ``.gitapex/ssot.json`` registry now (see :func:`_terminal_labels`), which
+# points its ``ops:`` primary and ``harness:`` legacy fallback at the same
+# names ``.github/labels.json`` reconciles onto the repo; the two SoTs are
+# guarded by tests/test_auto_retro.py. apply_terminal_label writes the primary
+# and falls back to the legacy name on an HTTP 422 during the live-rename
+# window, so the terminal signal survives regardless of code-merge vs.
+# live-rename ordering (#972 renames batch, #2139).
 
 # Sentinel marker for the auto-close comment posted by the retro sentinel
 # workflow (issue #414). Idempotency anchor: a retro carrying this
@@ -855,9 +928,14 @@ def post_back_link_comment(
 
 
 def apply_terminal_label(
-    repo: str, pr_number: int, label: str = _TERMINAL_LABEL
+    repo: str, pr_number: int, label: str | None = None
 ) -> None:
     """POST *label* to the source PR's labels endpoint.
+
+    *label* defaults to the primary terminal label resolved from the SSoT
+    registry (:func:`_terminal_labels`); the default is resolved inside the
+    body rather than as a module-level argument default so the label literals
+    live solely in the registry and a rename is a registry-only edit.
 
     GitHub's labels endpoint is naturally idempotent (re-adding an
     existing label is a no-op), so no pre-check is needed. The orchestrator
@@ -874,6 +952,9 @@ def apply_terminal_label(
     of rename ordering. Any other error (or a 422 on the legacy retry)
     propagates to the orchestrator's fail-soft handler unchanged.
     """
+    primary, legacy = _terminal_labels()
+    if label is None:
+        label = primary
     try:
         gh_api(
             "POST",
@@ -881,12 +962,12 @@ def apply_terminal_label(
             {"labels": [label]},
         )
     except GitHubApiError as exc:
-        if label != _TERMINAL_LABEL or exc.code != 422:
+        if label != primary or exc.code != 422:
             raise
         gh_api(
             "POST",
             f"/repos/{repo}/issues/{pr_number}/labels",
-            {"labels": [_TERMINAL_LABEL_LEGACY]},
+            {"labels": [legacy]},
         )
 
 
@@ -948,20 +1029,19 @@ def _post_skip_comment_soft(repo: str, pr_number: int, reason: str) -> None:
 def search_open_retro_issues(repo: str) -> list[dict[str, Any]]:
     """Return open retro issues for *repo* (paginated to one page).
 
-    Filter: ``layer:meta`` + ``type:docs`` labels (the two labels every
-    auto-opened retro carries per :func:`issue_labels`) AND a retro issue
-    title (see :func:`is_retro_issue_title`), filtered client-side because
-    the GitHub search API does not honor leading parens in ``in:title``.
+    Filter: the retro-issue identity labels every auto-opened retro carries
+    (resolved from the SSoT registry via :func:`_identity_labels`, the same
+    set :func:`issue_labels` applies) AND a retro issue title (see
+    :func:`is_retro_issue_title`), filtered client-side because the GitHub
+    search API does not honor leading parens in ``in:title``.
 
     The per-page cap (:data:`_SENTINEL_SEARCH_PAGE_SIZE`) is a soft
     ceiling; if it overflows the next cron tick processes the
     remainder. Returns the raw search items so the caller can read
     ``number``, ``title``, ``created_at``, and ``body``.
     """
-    query = (
-        f"repo:{repo} is:issue is:open in:title retro "
-        "label:layer:meta label:type:docs"
-    )
+    label_clause = " ".join(f"label:{label}" for label in _identity_labels())
+    query = f"repo:{repo} is:issue is:open in:title retro {label_clause}"
     encoded = quote(query, safe="")
     raw = gh_api(
         "GET",
@@ -1275,7 +1355,7 @@ def run(event: dict[str, Any], repo: str) -> int:
         verification_pairs,
         signals=signals,
     )
-    labels = issue_labels(pr.layer_labels, tentative=tentative)
+    labels = issue_labels(pr.layer_labels, _identity_labels(), tentative=tentative)
 
     created = create_issue(repo, title, body, labels)
     new_number = created.get("number")
@@ -1319,7 +1399,8 @@ def run(event: dict[str, Any], repo: str) -> int:
             print(
                 f"::warning::apply_terminal_label failed "
                 f"(HTTP {exc.code}); retro issue #{new_number} created "
-                f"but source PR was not labeled {_TERMINAL_LABEL!r}",
+                "but source PR was not labeled with the terminal retro-opened "
+                "label",
                 file=sys.stderr,
             )
             terminal_label_status = "failed"
@@ -2345,14 +2426,19 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         return args.func(args)
-    except ValueError as exc:
-        print(f"::error::{exc}", file=sys.stderr)
-        return 1
     except GitHubApiError as exc:
+        # Caught before the RuntimeError arm below because GitHubApiError is a
+        # RuntimeError subclass and needs its own HTTP-specific message.
         print(
             f"::error::GitHub API failed (HTTP {exc.code}): {exc.body}",
             file=sys.stderr,
         )
+        return 1
+    except (ValueError, RuntimeError) as exc:
+        # RuntimeError covers a drifted/malformed SSoT registry surfaced by the
+        # label-resolution helpers, so it exits via the script's normal
+        # ::error::/exit-1 path instead of a raw traceback (mirrors #2283).
+        print(f"::error::{exc}", file=sys.stderr)
         return 1
 
 
