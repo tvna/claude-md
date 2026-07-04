@@ -76,6 +76,12 @@ ALLOWLIST: dict[str, str] = {
         "issue cannot be checked without network access and a valid token. "
         "Tracked by #941."
     ),
+    "scan_review_in_progress_marker": (
+        "Input is a live PR's reaction state via a GitHub API call that "
+        "requires GH_TOKEN and a real PR number. No local equivalent: there "
+        "is no PR to react to before one is opened, so this gate is CI-only. "
+        "Refs #2312."
+    ),
     "uv_pin": (
         "Used twice: ``uv_pin read`` is an output helper (no gate), "
         "``uv_pin drift`` IS a gate and is mirrored as a preflight step."

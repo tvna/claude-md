@@ -6,11 +6,13 @@ byte-for-byte on which bot authors get carve-outs from harness gates.
 The non-goal stated in umbrella issue #136 was duplication of the bot
 login between scripts; this module prevents that drift.
 
-Two exported sets:
+Three exported sets:
 - ``_TRUSTED_BOT_LOGINS``: shared across issue-link, body-policy, and
   non-ASCII scanner (advisory demotion).
 - ``_NON_ASCII_SKIP_LOGINS``: non-ASCII scan only; bots whose generated
   content with non-ASCII is fully exempt (action = "none").
+- ``_REVIEW_MARKER_LOGINS``: scan_review_in_progress_marker.py only; bots
+  whose "eyes" reaction on a PR marks an automated review as in progress.
 
 Exact-match only; no wildcards. Extend deliberately via the TOML file.
 
@@ -32,9 +34,12 @@ _DEFAULT_NON_ASCII_SKIP: frozenset[str] = frozenset({
     "codecov", "codecov[bot]", "devin-ai-integration[bot]", "devin[bot]",
     "chatgpt-codex-connector", "chatgpt-codex-connector[bot]",
 })
+_DEFAULT_REVIEW_MARKER: frozenset[str] = frozenset({
+    "chatgpt-codex-connector", "chatgpt-codex-connector[bot]",
+})
 
 
-def _load() -> tuple[frozenset[str], frozenset[str]]:
+def _load() -> tuple[frozenset[str], frozenset[str], frozenset[str]]:
     try:
         text = _TOML_PATH.read_text(encoding="utf-8")
     except OSError as exc:
@@ -43,7 +48,7 @@ def _load() -> tuple[frozenset[str], frozenset[str]]:
             "using hardcoded defaults",
             file=sys.stderr,
         )
-        return _DEFAULT_GENERAL, _DEFAULT_NON_ASCII_SKIP
+        return _DEFAULT_GENERAL, _DEFAULT_NON_ASCII_SKIP, _DEFAULT_REVIEW_MARKER
 
     try:
         import tomllib
@@ -54,7 +59,7 @@ def _load() -> tuple[frozenset[str], frozenset[str]]:
             "using hardcoded defaults",
             file=sys.stderr,
         )
-        return _DEFAULT_GENERAL, _DEFAULT_NON_ASCII_SKIP
+        return _DEFAULT_GENERAL, _DEFAULT_NON_ASCII_SKIP, _DEFAULT_REVIEW_MARKER
 
     general = frozenset(
         login
@@ -66,7 +71,16 @@ def _load() -> tuple[frozenset[str], frozenset[str]]:
         for login in data.get("non_ascii_skip", {}).get("logins", [])
         if isinstance(login, str)
     )
-    return general or _DEFAULT_GENERAL, non_ascii_skip or _DEFAULT_NON_ASCII_SKIP
+    review_marker = frozenset(
+        login
+        for login in data.get("review_in_progress_marker", {}).get("logins", [])
+        if isinstance(login, str)
+    )
+    return (
+        general or _DEFAULT_GENERAL,
+        non_ascii_skip or _DEFAULT_NON_ASCII_SKIP,
+        review_marker or _DEFAULT_REVIEW_MARKER,
+    )
 
 
-_TRUSTED_BOT_LOGINS, _NON_ASCII_SKIP_LOGINS = _load()
+_TRUSTED_BOT_LOGINS, _NON_ASCII_SKIP_LOGINS, _REVIEW_MARKER_LOGINS = _load()

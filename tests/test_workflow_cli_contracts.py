@@ -102,6 +102,7 @@ import scan_quality_standard_drift
 import scan_repo_double_hyphen
 import scan_repo_em_dash
 import scan_retro_followup_drift
+import scan_review_in_progress_marker
 import scan_ruff_format
 import scan_runbook_template_drift
 import scan_scripts_gh_calls
@@ -272,6 +273,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("scan_pr_body_quality_drift.py", "verify"): "test_scan_pr_body_quality_drift_verify_matches_workflow_args",
     ("scan_quality_standard_drift.py", "verify"): "test_scan_quality_standard_drift_verify_matches_workflow_args",
     ("scan_retro_followup_drift.py", "run"): "test_scan_retro_followup_drift_run_matches_workflow_env",
+    ("scan_review_in_progress_marker.py", "verify"): "test_scan_review_in_progress_marker_verify_matches_workflow_args",
     ("scan_secret_runbooks.py", "verify"): "test_scan_secret_runbooks_verify_matches_workflow_args",
     ("scan_secrets.py", "verify"): "test_scan_secrets_verify_matches_workflow_args",
     ("scan_ssot_drift.py", "verify"): "test_scan_ssot_drift_verify_matches_workflow_args",
@@ -1433,6 +1435,24 @@ def test_verify_linked_issue_titles_verify_matches_workflow_args(
             str(body_file),
         ]
     ) == 0
+
+
+def test_scan_review_in_progress_marker_verify_matches_workflow_args(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Mirror the env+argv shape used by portable-pr-policy.yml.
+
+    The workflow shells to ``python3 scripts/scan_review_in_progress_marker.py
+    verify`` with ``REPO``, ``PR_NUMBER``, and ``GH_TOKEN`` set as job env.
+    Exercise the same shape with ``fetch_reactions`` stubbed so the test stays
+    hermetic (no GH_TOKEN or network required). Refs #2312.
+    """
+    monkeypatch.setenv("REPO", REPO)
+    monkeypatch.setenv("PR_NUMBER", "2319")
+    monkeypatch.setenv("GH_TOKEN", "test-token")
+    monkeypatch.setattr(scan_review_in_progress_marker, "fetch_reactions", lambda *a, **k: [])
+
+    assert scan_review_in_progress_marker.main(["verify"]) == 0
 
 
 def test_verify_readme_translation_matches_workflow_args(
