@@ -571,13 +571,19 @@ flowchart TD
     N020["if not additions and (not deletions)"]
     N021["print(...)"]
     N022["return 0"]
-    N023["try"]
-    N024["result = upsert_files_pr(...)"]
-    N025["except RuntimeError"]
-    N026["print(...)"]
-    N027["return 1"]
-    N028["print(...)"]
-    N029["return 0"]
+    N023["if not args.allow_stale_base"]
+    N024["try"]
+    N025["_verify_base_currency(...)"]
+    N026["except RuntimeError"]
+    N027["print(...)"]
+    N028["return 1"]
+    N029["try"]
+    N030["result = upsert_files_pr(...)"]
+    N031["except RuntimeError"]
+    N032["print(...)"]
+    N033["return 1"]
+    N034["print(...)"]
+    N035["return 0"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 -->|"true"| N004
@@ -600,12 +606,19 @@ flowchart TD
     N020 -->|"true"| N021
     N021 --> N022
     N020 -->|"false"| N023
-    N023 -->|"try"| N024
-    N023 -->|"raises"| N025
-    N025 --> N026
+    N023 -->|"true"| N024
+    N024 -->|"try"| N025
+    N024 -->|"raises"| N026
     N026 --> N027
-    N024 --> N028
-    N028 --> N029
+    N027 --> N028
+    N025 --> N029
+    N023 -->|"false"| N029
+    N029 -->|"try"| N030
+    N029 -->|"raises"| N031
+    N031 --> N032
+    N032 --> N033
+    N030 --> N034
+    N034 --> N035
 ```
 
 ## main(...)
@@ -632,14 +645,15 @@ flowchart TD
     N018["add_argument(...)"]
     N019["add_argument(...)"]
     N020["add_argument(...)"]
-    N021["args = parse_args(...)"]
-    N022["if args.cmd == 'upsert'"]
-    N023["return _cmd_upsert(args)"]
-    N024["if args.cmd == 'find'"]
-    N025["return _cmd_find(args)"]
-    N026["if args.cmd == 'upsert-files'"]
-    N027["return _cmd_upsert_files(args)"]
-    N028["return 0"]
+    N021["add_argument(...)"]
+    N022["args = parse_args(...)"]
+    N023["if args.cmd == 'upsert'"]
+    N024["return _cmd_upsert(args)"]
+    N025["if args.cmd == 'find'"]
+    N026["return _cmd_find(args)"]
+    N027["if args.cmd == 'upsert-files'"]
+    N028["return _cmd_upsert_files(args)"]
+    N029["return 0"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 --> N004
@@ -661,10 +675,11 @@ flowchart TD
     N019 --> N020
     N020 --> N021
     N021 --> N022
-    N022 -->|"true"| N023
-    N022 -->|"false"| N024
-    N024 -->|"true"| N025
-    N024 -->|"false"| N026
-    N026 -->|"true"| N027
-    N026 -->|"false"| N028
+    N022 --> N023
+    N023 -->|"true"| N024
+    N023 -->|"false"| N025
+    N025 -->|"true"| N026
+    N025 -->|"false"| N027
+    N027 -->|"true"| N028
+    N027 -->|"false"| N029
 ```

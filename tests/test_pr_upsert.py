@@ -1261,6 +1261,7 @@ class TestCmdUpsertFiles:
         body_file = tmp_path / "body.md"
         body_file.write_text("PR body", encoding="utf-8")
         monkeypatch.setattr(pu, "_collect_worktree_changes", lambda **kw: ([("CLAUDE.md", b"x\n")], []))
+        monkeypatch.setattr(pu, "_verify_base_currency", lambda **kw: None)
         captured: dict[str, Any] = {}
 
         def fake_upsert(**kw: Any) -> str:
@@ -1289,6 +1290,7 @@ class TestCmdUpsertFiles:
         body_file = tmp_path / "body.md"
         body_file.write_text("PR body", encoding="utf-8")
         monkeypatch.setattr(pu, "_collect_worktree_changes", lambda **kw: ([("CLAUDE.md", b"x\n")], []))
+        monkeypatch.setattr(pu, "_verify_base_currency", lambda **kw: None)
         captured: dict[str, Any] = {}
 
         def fake_upsert(**kw: Any) -> str:
@@ -1352,3 +1354,55 @@ class TestCmdUpsertFiles:
         ])
         assert rc == 1
         assert "body" in capsys.readouterr().err.lower()
+
+    def test_stale_base_blocks_and_skips_upsert(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        # A stale local base must block the commit before any branch is touched,
+        # so the #2311 unintended-revert cannot ship.
+        monkeypatch.setenv("GH_TOKEN", "tok")
+        monkeypatch.setenv("REPO", "owner/repo")
+        body_file = tmp_path / "body.md"
+        body_file.write_text("PR body", encoding="utf-8")
+        monkeypatch.setattr(pu, "_collect_worktree_changes", lambda **kw: ([(".github/dependabot.yml", b"x\n")], []))
+
+        def raise_stale(**kw: Any) -> None:
+            raise RuntimeError("Local base is stale for: .github/dependabot.yml. ...")
+
+        monkeypatch.setattr(pu, "_verify_base_currency", raise_stale)
+        called = {"n": 0}
+
+        def count_upsert(**kw: Any) -> str:
+            called["n"] += 1
+            return "x"
+
+        monkeypatch.setattr(pu, "upsert_files_pr", count_upsert)
+        rc = pu.main([
+            "upsert-files", "--head", "chore/x", "--base", "main", "--title", "t",
+            "--body-file", str(body_file), "--add", ".github/dependabot.yml",
+        ])
+        assert rc == 1
+        assert called["n"] == 0
+        assert "stale" in capsys.readouterr().err.lower()
+
+    def test_allow_stale_base_flag_skips_check(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # With --allow-stale-base the check is not consulted at all; the operator
+        # has reconciled the file against the real base by hand.
+        monkeypatch.setenv("GH_TOKEN", "tok")
+        monkeypatch.setenv("REPO", "owner/repo")
+        body_file = tmp_path / "body.md"
+        body_file.write_text("PR body", encoding="utf-8")
+        monkeypatch.setattr(pu, "_collect_worktree_changes", lambda **kw: ([("CLAUDE.md", b"x\n")], []))
+
+        def fail_if_called(**kw: Any) -> None:
+            raise AssertionError("_verify_base_currency must not run under --allow-stale-base")
+
+        monkeypatch.setattr(pu, "_verify_base_currency", fail_if_called)
+        monkeypatch.setattr(pu, "upsert_files_pr", lambda **kw: "created:9")
+        rc = pu.main([
+            "upsert-files", "--head", "chore/x", "--base", "main", "--title", "t",
+            "--body-file", str(body_file), "--add", "CLAUDE.md", "--allow-stale-base",
+        ])
+        assert rc == 0
