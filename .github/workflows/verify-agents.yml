@@ -101,6 +101,13 @@ jobs:
         # bare filenames are repaired by hand and not gated.
         run: uv run python scripts/scan_doc_workflow_refs.py verify
 
+      - name: Assert generated-docs ownership registry consistency
+        # Refs #2226: fails when a producer registered in the docs/generated/
+        # ownership map no longer exists under scripts/; the retiring PR must
+        # drop the registry entry so the post-merge retire sweep can
+        # decommission the orphaned outputs.
+        run: uv run python scripts/verify_generated_docs_ownership.py verify
+
       - name: Assert script maintainability metrics
         run: uv run python scripts/scan_maintainability_metrics.py verify
 

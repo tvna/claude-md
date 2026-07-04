@@ -39,10 +39,10 @@ Slug names are stable historical layer keys; descriptions track the current `mas
 | Label | § | Meaning |
 |---|---|---|
 | `layer:p1-goal-plan` | §1 | Goal & plan structure |
-| `layer:p2-precode` | §2 | Input and pre-code reasoning; untrusted text, facts, assumptions, ambiguity |
+| `layer:p2-input-boundary` | §2 | Input and pre-code reasoning; untrusted text, facts, assumptions, ambiguity |
 | `layer:p3-harness` | §3 | Delivery harness; issues, CI, hooks, deps, PR loop |
-| `layer:p4-artifact` | §4 | Safety boundary; simplicity, tool scope, secret exposure |
-| `layer:p5-scope-split` | §5 | Change scope & agent split |
+| `layer:p4-safety-boundary` | §4 | Safety boundary; simplicity, tool scope, secret exposure |
+| `layer:p5-scale-quality` | §5 | Change scope, agent split, and quality proportional to scale |
 | `layer:p6-handoff` | §6 | Handoff & communication |
 | `layer:meta` | (none) | Repo infrastructure governing the meta-document itself (labels, rulesets, workflows). NOT a CLAUDE.md principle. |
 

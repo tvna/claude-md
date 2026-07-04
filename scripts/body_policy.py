@@ -595,6 +595,68 @@ def verify_section_substantive_content(body: str) -> list[str]:
     return errors
 
 
+_FACTS_HEADING = "Facts"
+# A time unit that follows a number: whole words plus common abbreviations.
+# Bare ``m`` is intentionally excluded (it collides with meters and is
+# covered by ``min``); ``min`` / ``s`` / ``h`` carry the timing cases the
+# recurring defect produced (retro #1954 repair 5, PR #1928 finding B1).
+_TIME_UNIT = (
+    r"(?:ms|milliseconds?|s|sec|secs|seconds?|min|mins|minutes?"
+    r"|h|hr|hrs|hours?|days?)"
+)
+# An approximate time figure: a hedge word (approx/about/around/roughly) or a
+# leading ``~`` immediately followed by a number (optionally a range) and a
+# time unit. Case-insensitive. Matches "approx 30-60 seconds" and "~5s".
+_APPROX_TIME_RE = re.compile(
+    r"(?:\b(?:approx(?:imately)?|about|around|roughly)\b\.?|~)\s*"
+    r"\d+(?:\s*[-\u2013]\s*\d+)?\s*" + _TIME_UNIT + r"\b",
+    re.IGNORECASE,
+)
+# A line "carries a citation" when it links a source (any URL, which covers a
+# CI run link) or names a measurement. This is the grounding that lets a
+# timing figure stay in Facts rather than move to Assumptions.
+_TIME_CITATION_RE = re.compile(
+    r"https?://|\b(?:measured|benchmark(?:ed)?|profiled|timed|observed)\b",
+    re.IGNORECASE,
+)
+
+
+def verify_facts_no_ungrounded_time(body: str) -> list[str]:
+    """Return ``::error::`` strings for uncited time figures in ``## Facts``.
+
+    The ``## Facts`` section is for grounded, verifiable statements. An
+    approximate time figure (``approx 30-60 seconds``, ``~5s``) presented
+    there without a citation is speculation wearing a fact's clothes: the
+    structural gates pass it and only the semantic review agent catches it,
+    a defect class that recurred twice within PR #1928 (finding B1). This
+    heuristic is defense in depth, not a proof; the code-review agent stays
+    the semantic backstop.
+
+    A flagged line is exempt when it carries a citation (a URL / run link or
+    a measurement keyword). The section scoping is strict: only the ``##
+    Facts`` slice is inspected, so an identical figure under ``##
+    Assumptions`` is not flagged. Returns ``[]`` when Facts is absent, empty,
+    or free of ungrounded time figures. Refs #2198, #1954, PR #1928.
+    """
+    section = extract_section_body(body, _FACTS_HEADING)
+    if not section.strip():
+        return []
+    errors: list[str] = []
+    for raw in section.splitlines():
+        line = raw.strip()
+        if not line or _APPROX_TIME_RE.search(line) is None:
+            continue
+        if _TIME_CITATION_RE.search(line) is not None:
+            continue
+        errors.append(
+            f"::error::PR body ## Facts section has an ungrounded approximate "
+            f"time figure: {line!r}. Cite a source (URL, run link, or "
+            "measurement reference), or move the line to ## Assumptions with a "
+            "Speculation tag."
+        )
+    return errors
+
+
 def build_codex_attribution_footer(model: str) -> str:
     """Return the canonical Codex GitHub provenance footer."""
     normalized = model.strip()
@@ -722,7 +784,9 @@ def _verify(
             body
         ) + detect_placeholder_tokens(
             body
-        ) + verify_section_substantive_content(body)
+        ) + verify_section_substantive_content(
+            body
+        ) + verify_facts_no_ungrounded_time(body)
         if shape_errors:
             for msg in shape_errors:
                 print(msg)

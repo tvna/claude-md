@@ -56,7 +56,11 @@ jobs:
       BODY_POLICY_CUTOFF: "2026-05-26T00:00:00Z"
       BODY_POLICY_SHAPE_CUTOFF: "2026-05-26T00:00:00Z"
       BASE_REF: origin/${{ github.event.pull_request.base.ref }}
-      APM_CLI_VERSION: "0.12.1"
+      # Every file `apm compile --target all` can produce (Refs #2210, #2211).
+      # git status --porcelain (not git diff) is required: a target file
+      # apm compile creates for the first time is untracked, and git diff
+      # silently ignores untracked paths.
+      COMPILED_OUTPUT_PATHS: "CLAUDE.md AGENTS.md GEMINI.md .github/copilot-instructions.md"
     steps:
       - name: Checkout repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -65,6 +69,9 @@ jobs:
           # README translation check can compare <base>..HEAD.
           fetch-depth: 0
           persist-credentials: false
+
+      - name: Resolve apm binary from flake.nix
+        uses: ./.github/actions/resolve-apm-version
 
       - name: Validate title policy
         run: |
@@ -177,14 +184,16 @@ jobs:
           python3 scripts/scan_apm_portability.py verify \
             --path .apm/instructions/master.instructions.md \
             --path CLAUDE.md \
-            --path AGENTS.md
+            --path AGENTS.md \
+            --path GEMINI.md
 
       - name: Scan APM artifacts for non-ASCII characters
         run: |
           python3 scripts/scan_apm_ascii.py verify \
             --path .apm/instructions/master.instructions.md \
             --path CLAUDE.md \
-            --path AGENTS.md
+            --path AGENTS.md \
+            --path GEMINI.md
 
       - name: Scan all tracked files for em-dash (U+2014)
         # Refs #1889: repo-wide gate so no tracked file can regress to U+2014.
@@ -213,14 +222,52 @@ jobs:
       - name: Set up uv and project environment
         uses: ./.github/actions/setup-uv
 
-      - name: Compile agent instructions
-        run: uv run --with "apm-cli==${APM_CLI_VERSION}" --exclude-newer "14 days" apm compile
+      - name: Validate .gitapex/ssot.json registry
+        # Refs #2252: validate the gate registry against its JSON Schema and
+        # referential-integrity rules (paths tracked, ids resolve, routing
+        # labels resolve against labels.json, consumer labels resolve against
+        # the label-policy rename/retired union). Runs through uv so tomllib
+        # resolves on the pinned Python. Mirrored pre-push by the
+        # scan_ssot_schema STEP and at commit time by the scan-ssot-schema
+        # pre-commit hook.
+        run: uv run python scripts/scan_ssot_schema.py verify
 
-      - name: Verify CLAUDE.md / AGENTS.md drift
+      - name: Report .gitapex/ssot.json drift (advisory)
+        # Refs #2256: advisory reconciliation of the gate registry against the
+        # four partial manifests (agent_hooks_source.json, preflight_steps.py
+        # STEPS, .pre-commit-config.yaml, rulesets/main.json native rules and
+        # pull_request: workflow scripts). Always exits 0; divergence is
+        # reported as ::warning:: lines only. Mirrored pre-push by the
+        # scan_ssot_drift STEP and at commit time by the scan-ssot-drift
+        # pre-commit hook.
+        run: uv run python scripts/scan_ssot_drift.py verify
+
+      - name: Reject hardcoded label literals in scripts
+        # Refs #2299: anti-regression gate for SSoT phase 3. Fails when a frozen
+        # family:name GitHub label literal appears in scripts/*.py outside the
+        # sanctioned single sources (_retro_labels.py, _ssot.py, and the
+        # rationale-carrying LITERAL_ALLOWLIST). Runs through uv so tomllib
+        # resolves on the pinned Python. Mirrored pre-push by the
+        # scan_hardcoded_label_literals STEP and at commit time by the
+        # scan-hardcoded-label-literals pre-commit hook.
+        run: uv run python scripts/scan_hardcoded_label_literals.py verify
+
+      - name: Compile agent instructions
+        # --target all: every apm-cli-supported tool, not just claude/codex.
+        # Refs #2210.
+        run: apm compile --target all
+
+      - name: Verify compiled instruction outputs drift
         run: |
-          if ! git diff --exit-code -- CLAUDE.md AGENTS.md; then
-            echo "::error::CLAUDE.md / AGENTS.md drift detected vs .apm/instructions/master.instructions.md."
-            echo "Run 'uv run --with \"apm-cli==${APM_CLI_VERSION}\" --exclude-newer \"14 days\" apm compile' locally and commit the result."
+          # git status --porcelain (not git diff --exit-code): a target file
+          # apm compile creates for the first time is untracked, and git diff
+          # silently ignores untracked paths. Refs #2211 (Codex review).
+          # shellcheck disable=SC2086
+          drift="$(git status --porcelain -- $COMPILED_OUTPUT_PATHS)"
+          if [ -n "$drift" ]; then
+            echo "::error::Compiled instruction output drift detected vs .apm/instructions/master.instructions.md:"
+            echo "$drift"
+            echo "Run 'apm compile --target all' locally and commit the result."
             exit 1
           fi
 

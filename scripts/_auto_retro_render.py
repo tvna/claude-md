@@ -24,6 +24,7 @@ and tests keep working unchanged.
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from typing import Any
 
@@ -63,34 +64,6 @@ def build_retro_title(pr: MergedPR) -> str:
     section.
     """
     return f"chore(auto-retro): review PR #{pr.number} repair loops"
-
-
-# Exact canonical retro-title shape produced by :func:`build_retro_title`.
-# Anchored and fully literal so the match is the *single* title an agent is
-# permitted to mint under the otherwise-reserved ``auto-retro`` scope (the
-# pre-merge handoff survey opens this retro in-session when a problem is
-# found; Refs #1581 / D1). Kept deliberately narrow: only the colon form
-# ``chore(auto-retro): review PR #<N> repair loops`` matches, so every other
-# ``auto-retro``-scoped title stays denied by gate_reserved_retro_scope, and
-# CI dedup (:func:`find_existing_retro`) still recognises the in-session retro
-# to suppress the post-merge duplicate. The alignment with build_retro_title
-# is asserted by tests so the predicate can never drift from the producer.
-_CANONICAL_RETRO_TITLE_RE = re.compile(
-    r"^chore\(auto-retro\): review PR #\d+ repair loops$"
-)
-
-
-def is_canonical_handoff_retro_title(title: str) -> bool:
-    """True iff *title* is exactly the canonical auto-retro retro title.
-
-    The match is exact (anchored, literal) against the shape
-    :func:`build_retro_title` emits, so it is the one permitted exception to
-    the reserved-``auto-retro``-scope deny in
-    :mod:`gate_reserved_retro_scope`. Surrounding whitespace is tolerated;
-    the legacy no-colon prefix and any other ``auto-retro`` title do NOT
-    match. Refs #1581.
-    """
-    return bool(_CANONICAL_RETRO_TITLE_RE.fullmatch(title.strip()))
 
 
 # check_run conclusion values that count as a repair signal. Excludes
@@ -780,18 +753,22 @@ def is_retro_age_exceeded(
 
 
 def issue_labels(
-    layer_labels: tuple[str, ...], *, tentative: bool = False
+    layer_labels: tuple[str, ...],
+    base_labels: Sequence[str],
+    *,
+    tentative: bool = False,
 ) -> list[str]:
     """Return the label list for the retro issue.
 
-    Always ``type:docs`` + ``layer:meta``; appends any additional
-    ``layer:*`` labels inherited from the source PR. Deduplicates while
-    preserving order. When ``tentative`` is True, appends
-    ``retro:tentative`` so operators see at triage time that the
-    label-derived prior placed the retro in the uncertain band
-    (refs #582).
+    Starts from *base_labels* (the retro's identity labels, resolved from the
+    ``.gitapex/ssot.json`` registry by the IO layer and injected here so this
+    pure renderer neither reads the registry nor hardcodes the label literals),
+    then appends any additional ``layer:*`` labels inherited from the source
+    PR. Deduplicates while preserving order. When ``tentative`` is
+    True, appends ``retro:tentative`` so operators see at triage time that the
+    label-derived prior placed the retro in the uncertain band (refs #582).
     """
-    labels = ["type:docs", "layer:meta"]
+    labels = list(base_labels)
     for lbl in layer_labels:
         if lbl and lbl not in labels:
             labels.append(lbl)

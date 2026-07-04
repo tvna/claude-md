@@ -11,15 +11,6 @@ flowchart TD
     N001 -->|"start"| N002
 ```
 
-## is_canonical_handoff_retro_title(...)
-
-```mermaid
-flowchart TD
-    N001["is_canonical_handoff_retro_title(...)"]
-    N002["return bool(_CANONICAL_RETRO_TITLE_RE.fullmatch(title.strip()))"]
-    N001 -->|"start"| N002
-```
-
 ## _escape_table_cell(...)
 
 ```mermaid
@@ -324,7 +315,7 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["issue_labels(...)"]
-    N002["labels = ['<str>', '<str>']"]
+    N002["labels = list(...)"]
     N003["for lbl in layer_labels:     if lbl and lbl not in labels:         labels.append(lbl)"]
     N004["if tentative and RETRO_TENTATIVE not in labels"]
     N005["append(...)"]

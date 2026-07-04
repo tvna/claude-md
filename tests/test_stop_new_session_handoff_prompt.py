@@ -56,21 +56,6 @@ class TestSignalsHandoff:
     def test_empty_does_not_match(self) -> None:
         assert not hook.signals_handoff("")
 
-    def test_survey_report_alone_does_not_match(self) -> None:
-        # #1704: reporting the mandatory pre-merge retro survey ("引き継ぎサーベイ")
-        # must not, by itself, count as a new-session handoff cue.
-        assert not hook.signals_handoff("セッション引き継ぎサーベイ記録済み (repair-free)。")
-
-    def test_english_handoff_survey_report_alone_does_not_match(self) -> None:
-        assert not hook.signals_handoff("Session handoff survey recorded for this PR.")
-
-    def test_real_handoff_survives_survey_strip(self) -> None:
-        # A turn that reports the survey AND genuinely hands parked work to a new
-        # session still matches: the surviving "別セッション" cue fires.
-        assert hook.signals_handoff(
-            "引き継ぎサーベイは記録済み。残りは別セッションで対応してください。"
-        )
-
     def test_topic_mention_without_directive_does_not_match(self) -> None:
         # #1711: an RCA that NAMES a handoff as a topic word but directs no
         # continuation must not count; the cue has no nearby directive.
@@ -215,22 +200,6 @@ class TestEvaluate:
         # #1704: a pre-merge human-merge wait has no agent work to hand off.
         entries = self._entries(_text("PR はマージ直前です。GitHub UI でのマージはお任せします。"))
         assert hook.evaluate({}, entries) is None
-
-    def test_survey_report_only_is_noop(self) -> None:
-        # #1704: the survey-report cue alone must not block.
-        entries = self._entries(_text("セッション引き継ぎサーベイ記録済み。ブランチは origin と同期済み。"))
-        assert hook.evaluate({}, entries) is None
-
-    def test_pr1694_regression_turn_is_noop(self) -> None:
-        # #1704 regression: the exact shape that false-fired on PR #1694; a
-        # survey report plus a pre-merge wait, with no fenced prompt.
-        turn = (
-            "## まとめ\n"
-            "- PR #1694 はマージ直前 (必須 CI 全グリーン)。GitHub UI 上でのマージはあなたにお任せします。\n"
-            "- セッション引き継ぎサーベイ記録済み (repair-free)。\n"
-            "- ブランチは origin と同期、作業ツリーはクリーン。\n"
-        )
-        assert hook.evaluate({}, self._entries(_text(turn))) is None
 
     def test_genuine_parked_work_handoff_still_blocks(self) -> None:
         # Guard the real signal: parked work continued in a new session with no

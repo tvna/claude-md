@@ -2,6 +2,108 @@
 
 This file is generated from `scripts/publish_instruction_release.py` by `python3 scripts/script_ast_graph.py all-doc`. Do not edit it by hand: content under `docs/generated/scripts/` is owned by the post-merge automation (refs #1540); update the source script instead.
 
+## _semver_key(...)
+
+```mermaid
+flowchart TD
+    N001["_semver_key(...)"]
+    N002["match = match(...)"]
+    N003["if match is None"]
+    N004["return None"]
+    N005["(major, minor, patch) = groups(...)"]
+    N006["return (int(major), int(minor), int(patch))"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 -->|"true"| N004
+    N003 -->|"false"| N005
+    N005 --> N006
+```
+
+## _list_semver_tags(...)
+
+```mermaid
+flowchart TD
+    N001["_list_semver_tags(...)"]
+    N002["result = run(...)"]
+    N003["if result.returncode != 0"]
+    N004["raise RuntimeError(f'<str>{result.stderr.strip()[:200]}')"]
+    N005["return [tag for line in result.stdout.splitlines() if (tag := line.strip()) and _semver_key(tag) is not None]"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 -->|"true"| N004
+    N003 -->|"false"| N005
+```
+
+## _previous_tag(...)
+
+```mermaid
+flowchart TD
+    N001["_previous_tag(...)"]
+    N002["current = _semver_key(...)"]
+    N003["if current is None"]
+    N004["return None"]
+    N005["lesser = [(key, candidate) for candidate in tags if (key := _semver_key(candidate)) is not None and key < current]"]
+    N006["if not lesser"]
+    N007["return None"]
+    N008["return max(lesser)[1]"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 -->|"true"| N004
+    N003 -->|"false"| N005
+    N005 --> N006
+    N006 -->|"true"| N007
+    N006 -->|"false"| N008
+```
+
+## _log_subjects(...)
+
+```mermaid
+flowchart TD
+    N001["_log_subjects(...)"]
+    N002["result = run(...)"]
+    N003["if result.returncode != 0"]
+    N004["raise RuntimeError(f'<str>{previous_tag}<str>{tag}<str>{result.stderr.strip()[:200]}')"]
+    N005["return [subject for line in result.stdout.splitlines() if (subject := line.strip())]"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 -->|"true"| N004
+    N003 -->|"false"| N005
+```
+
+## _release_notes(...)
+
+```mermaid
+flowchart TD
+    N001["_release_notes(...)"]
+    N002["if previous_tag is None"]
+    N003["return _INITIAL_RELEASE_NOTE"]
+    N004["if not subjects"]
+    N005["return f'<str>{previous_tag}<str>'"]
+    N006["return '<str>'.join((f'<str>{subject}' for subject in subjects))"]
+    N001 -->|"start"| N002
+    N002 -->|"true"| N003
+    N002 -->|"false"| N004
+    N004 -->|"true"| N005
+    N004 -->|"false"| N006
+```
+
+## build_release_body(...)
+
+```mermaid
+flowchart TD
+    N001["build_release_body(...)"]
+    N002["run = run or make_runner()"]
+    N003["previous_tag = _previous_tag(...)"]
+    N004["subjects = _log_subjects(previous_tag, tag, run) if previous_tag is not None else []"]
+    N005["notes = _release_notes(...)"]
+    N006["return f'{_RELEASE_BODY}<str>{_RELEASE_NOTES_HEADER}<str>{notes}<str>'"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 --> N004
+    N004 --> N005
+    N005 --> N006
+```
+
 ## _content_type(...)
 
 ```mermaid
@@ -17,7 +119,7 @@ flowchart TD
 flowchart TD
     N001["_create_release(...)"]
     N002["url = f'{_API_ROOT}<str>{repo}<str>'"]
-    N003["payload = {'<str>': tag, '<str>': tag, '<str>': _RELEASE_BODY, '<str>': False, '<str>': False}"]
+    N003["payload = {'<str>': tag, '<str>': tag, '<str>': body, '<str>': False, '<str>': False}"]
     N004["(code, resp) = apply_call(...)"]
     N005["if not 200 <= code < 300"]
     N006["raise RuntimeError(f'<str>{code or '<str>'}<str>{resp[:200]}')"]
@@ -52,9 +154,10 @@ flowchart TD
     N004["if not asset_paths"]
     N005["raise RuntimeError('<str>')"]
     N006["for path in asset_paths:     if not Path(path).is_file():         raise RuntimeError(f'<str>{path}')"]
-    N007["(release_id, html_url) = _create_release(...)"]
-    N008["for path in asset_paths:     name = Path(path).name     content = Path(path).read_bytes()     code, resp = upload_asset(repo=repo, release_id=release_id, name=name, content=content, content_type=_content_type(name), token=token)     if not 200 <= code < 300:         raise RuntimeError(f'<str>{name}<str>{code or '<str>'}<str>{resp[:200]}')"]
-    N009["return html_url"]
+    N007["body = build_release_body(...)"]
+    N008["(release_id, html_url) = _create_release(...)"]
+    N009["for path in asset_paths:     name = Path(path).name     content = Path(path).read_bytes()     code, resp = upload_asset(repo=repo, release_id=release_id, name=name, content=content, content_type=_content_type(name), token=token)     if not 200 <= code < 300:         raise RuntimeError(f'<str>{name}<str>{code or '<str>'}<str>{resp[:200]}')"]
+    N010["return html_url"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 --> N004
@@ -63,6 +166,7 @@ flowchart TD
     N006 --> N007
     N007 --> N008
     N008 --> N009
+    N009 --> N010
 ```
 
 ## _cmd_publish(...)

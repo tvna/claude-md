@@ -167,11 +167,13 @@ flowchart TD
 flowchart TD
     N001["create_issue(...)"]
     N002["body = read_text(...)"]
-    N003["rest_json(...)"]
-    N004["end"]
+    N003["labels = list(...)"]
+    N004["rest_json(...)"]
+    N005["end"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 --> N004
+    N004 --> N005
 ```
 
 ## close_issue_with_comment(...)
@@ -466,7 +468,7 @@ flowchart TD
     N022["args = parse_args(...)"]
     N023["try"]
     N024["return args.func(args)"]
-    N025["except (GitHubApiError, ValueError)"]
+    N025["except (GitHubApiError, ValueError, KeyError, OSError, TypeError)"]
     N026["print(...)"]
     N027["return 1"]
     N001 -->|"start"| N002

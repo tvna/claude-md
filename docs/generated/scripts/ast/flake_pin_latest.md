@@ -125,12 +125,18 @@ flowchart TD
     N006["spec = tool_spec(...)"]
     N007["pinned = current_version(...)"]
     N008["(latest, published) = _parse_release(...)"]
-    N009["if _version_tuple(latest) <= _version_tuple(pinned)"]
-    N010["return None"]
-    N011["age = now - published"]
-    N012["if age < dt.timedelta(days=cooldown_days)"]
-    N013["return None"]
-    N014["return latest"]
+    N009["pinned_tuple = _version_tuple(...)"]
+    N010["try"]
+    N011["latest_tuple = _version_tuple(...)"]
+    N012["except LatestPinError"]
+    N013["print(...)"]
+    N014["return None"]
+    N015["if latest_tuple <= pinned_tuple"]
+    N016["return None"]
+    N017["age = now - published"]
+    N018["if age < dt.timedelta(days=cooldown_days)"]
+    N019["return None"]
+    N020["return latest"]
     N001 -->|"start"| N002
     N002 -->|"true"| N003
     N003 --> N004
@@ -140,11 +146,17 @@ flowchart TD
     N006 --> N007
     N007 --> N008
     N008 --> N009
-    N009 -->|"true"| N010
-    N009 -->|"false"| N011
-    N011 --> N012
-    N012 -->|"true"| N013
-    N012 -->|"false"| N014
+    N009 --> N010
+    N010 -->|"try"| N011
+    N010 -->|"raises"| N012
+    N012 --> N013
+    N013 --> N014
+    N011 --> N015
+    N015 -->|"true"| N016
+    N015 -->|"false"| N017
+    N017 --> N018
+    N018 -->|"true"| N019
+    N018 -->|"false"| N020
 ```
 
 ## _cmd_check(...)

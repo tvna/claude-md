@@ -3,3 +3,4 @@
 .github/CODEOWNERS                     @tvna
 docs/runbooks/rulesets.md              @tvna
 docs/graph/**                          @tvna
+/.gitapex/                             @tvna

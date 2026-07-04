@@ -1,0 +1,242 @@
+# Loop-engineering achievement audit -- stored, re-auditable checklist.
+#
+# Purpose: record honestly how far this repository realizes the framework in
+# "Loop Engineering - The Anthropic Playbook" (HuaShu, 2026). This file is the
+# single source of truth; the human browses it and re-audits with:
+#
+#     uv run python scripts/audit_loop_engineering.py run
+#
+# The reporter re-derives present/absent for every ``machine_checkable`` item
+# from the working tree and flags DRIFT when a recorded status no longer
+# matches reality (e.g. once #2269 adds the token-cap policy, that item flips
+# to present and this file must be updated). Judgment items are human-audited
+# and print their recorded status plus an evidence pointer.
+#
+# Honesty policy: this is an audit, not a scorecard. Status is recorded as the
+# repository actually is, including deliberately-declined loop features. No
+# machine asserts "achieved" on a judgment item; a mechanical verdict on a
+# subjective question would be false precision (the risk the repo declined for
+# the skill LLM-judge in #1099).
+#
+# Status vocabulary:
+#   present  -- the artifact/capability exists.
+#   partial  -- exists but incompletely (deterministic-only, or gap tracked).
+#   absent   -- not present (may be a real gap or a not-yet-built precondition).
+#   declined -- intentionally not built (documented design stance).
+#   guarded / unguarded -- for the four costs: whether a standing guard exists.
+#
+# Refs #2294 (this artifact), #2268 (gap-analysis umbrella).
+
+[meta]
+schema_version = 1
+source = "Loop Engineering - The Anthropic Playbook (HuaShu, 2026)"
+audit_umbrella = "#2268"
+last_reviewed = "2026-07-04"
+
+# ---------------------------------------------------------------------------
+# Five moves of one turn (judgment items)
+# ---------------------------------------------------------------------------
+
+[[items]]
+id = "move.discovery"
+dimension = "five-moves"
+title = "Discovery: find this turn's work on its own"
+status = "partial"
+machine_checkable = false
+evidence = "cron maintenance loops discover CI/threat/drift autonomously; no work-finding skill yet (#2273)"
+
+[[items]]
+id = "move.handoff"
+dimension = "five-moves"
+title = "Handoff: hand the task to an isolated agent"
+status = "present"
+machine_checkable = false
+evidence = ".claude/skills/using-git-worktrees; docs/runbooks/parallel-agent-dispatch.md"
+
+[[items]]
+id = "move.verification"
+dimension = "five-moves"
+title = "Verification: a second actor that can say no"
+status = "partial"
+machine_checkable = false
+evidence = "deterministic gates are strong, but an enforced independent evaluator is absent (G1; #2272 evidence gate, #2271 RFC)"
+
+[[items]]
+id = "move.persistence"
+dimension = "five-moves"
+title = "Persistence: land results outside the conversation"
+status = "present"
+machine_checkable = false
+evidence = "GitHub issues, git history, auto-retro (scripts/auto_retro.py)"
+
+[[items]]
+id = "move.scheduling"
+dimension = "five-moves"
+title = "Scheduling: turn one turn into a loop"
+status = "partial"
+machine_checkable = false
+evidence = "maintenance loops run on a timer, but no schedule wakes an agent (see loop.agentic_trigger)"
+
+# ---------------------------------------------------------------------------
+# Six parts (machine-checkable artifacts)
+# ---------------------------------------------------------------------------
+
+[[items]]
+id = "part.automations"
+dimension = "six-parts"
+title = "Automations: a schedule or trigger"
+status = "present"
+machine_checkable = true
+evidence = "cron schedules across .github/workflows/*.yml"
+check = { kind = "grep_in_glob", glob = ".github/workflows/*.yml", pattern = "cron:" }
+
+[[items]]
+id = "part.worktrees"
+dimension = "six-parts"
+title = "Worktrees: isolate parallel agents"
+status = "present"
+machine_checkable = true
+evidence = ".claude/skills/using-git-worktrees/SKILL.md (defers to native EnterWorktree)"
+check = { kind = "path_exists", target = ".claude/skills/using-git-worktrees/SKILL.md" }
+
+[[items]]
+id = "part.skills"
+dimension = "six-parts"
+title = "Skills: project knowledge made permanent"
+status = "present"
+machine_checkable = true
+evidence = ".claude/skills/*/SKILL.md (APM-pinned, checksum-locked)"
+check = { kind = "glob_exists", target = ".claude/skills/*/SKILL.md" }
+
+[[items]]
+id = "part.connectors_mcp"
+dimension = "six-parts"
+title = "Connectors: MCP links to external systems"
+status = "present"
+machine_checkable = true
+evidence = "scripts/gen_mcp_json.py renders .mcp.json from apm.yml at SessionStart"
+check = { kind = "path_exists", target = "scripts/gen_mcp_json.py" }
+
+[[items]]
+id = "part.subagents"
+dimension = "six-parts"
+title = "Sub-agents: separate the generator from the judge"
+status = "present"
+machine_checkable = true
+evidence = ".claude/skills/dispatching-parallel-agents, subagent-driven-development"
+check = { kind = "path_exists", target = ".claude/skills/dispatching-parallel-agents/SKILL.md" }
+
+[[items]]
+id = "part.memory"
+dimension = "six-parts"
+title = "Memory: persistent state on disk"
+status = "present"
+machine_checkable = true
+evidence = "scripts/stop_new_session_handoff_prompt.py + docs/next-session (prompt carried across sessions)"
+check = { kind = "path_exists", target = "scripts/stop_new_session_handoff_prompt.py" }
+
+# ---------------------------------------------------------------------------
+# First-loop checklist (paper section XII)
+# ---------------------------------------------------------------------------
+
+[[items]]
+id = "firstloop.discovery_source"
+dimension = "first-loop"
+title = "A discovery source exists"
+status = "present"
+machine_checkable = true
+evidence = "cron maintenance workflows act as the discovery source"
+check = { kind = "grep_in_glob", glob = ".github/workflows/*.yml", pattern = "cron:" }
+
+[[items]]
+id = "firstloop.state_file"
+dimension = "first-loop"
+title = "State file (results outside the chat)"
+status = "partial"
+machine_checkable = false
+evidence = "issues/git persist, but no machine-readable work-state file (#2270)"
+
+[[items]]
+id = "firstloop.evaluator"
+dimension = "first-loop"
+title = "Evaluator (an independent no); most critical, easiest to skip"
+status = "partial"
+machine_checkable = false
+evidence = "deterministic gates and human PR review exist, but an enforced independent evaluator is absent (G1)"
+
+[[items]]
+id = "firstloop.isolation"
+dimension = "first-loop"
+title = "Isolation (a worktree per agent)"
+status = "present"
+machine_checkable = true
+evidence = ".claude/skills/using-git-worktrees/SKILL.md"
+check = { kind = "path_exists", target = ".claude/skills/using-git-worktrees/SKILL.md" }
+
+[[items]]
+id = "firstloop.token_cap"
+dimension = "first-loop"
+title = "Token cap (a circuit breaker before shipping)"
+status = "absent"
+machine_checkable = true
+evidence = "no token/cost cap yet (#2269 will add it; flips to present as DRIFT on merge)"
+check = { kind = "path_exists", target = ".github/llm-budget-policy.toml" }
+
+[[items]]
+id = "firstloop.human_review"
+dimension = "first-loop"
+title = "Human-review point (keep one door open)"
+status = "present"
+machine_checkable = true
+evidence = ".github/rulesets/main.json (branch protection, required review)"
+check = { kind = "path_exists", target = ".github/rulesets/main.json" }
+
+# ---------------------------------------------------------------------------
+# Loop layer (three-verb test: runs on a timer / spawns helpers / feeds itself,
+# at the agentic level)
+# ---------------------------------------------------------------------------
+
+[[items]]
+id = "loop.agentic_trigger"
+dimension = "loop-layer"
+title = "A schedule wakes an agent (agentic loop)"
+status = "absent"
+machine_checkable = true
+evidence = "no workflow wakes an agent; the three-verb test fails (deliberate gap; #2271 RFC)"
+check = { kind = "grep_in_glob", glob = ".github/workflows/*.yml", pattern = "claude-code-action" }
+
+# ---------------------------------------------------------------------------
+# Four silent costs (judgment items; guarded / partial / unguarded)
+# ---------------------------------------------------------------------------
+
+[[items]]
+id = "cost.verification_debt"
+dimension = "four-costs"
+title = "Verification debt"
+status = "partial"
+machine_checkable = false
+evidence = "deterministic gates guard shape; semantic verification leans on human review (G1)"
+
+[[items]]
+id = "cost.comprehension_rot"
+dimension = "four-costs"
+title = "Comprehension rot"
+status = "guarded"
+machine_checkable = false
+evidence = "auto-retro triage report + docs/generated decision trees act as read-a-sample guards"
+
+[[items]]
+id = "cost.cognitive_surrender"
+dimension = "four-costs"
+title = "Cognitive surrender"
+status = "guarded"
+machine_checkable = false
+evidence = "human PR-review door retained; autonomous dispatch declined (parallel-agent-dispatch.md)"
+
+[[items]]
+id = "cost.token_blowout"
+dimension = "four-costs"
+title = "Token blowout"
+status = "unguarded"
+machine_checkable = false
+evidence = "no token/cost cap (#2269; pairs with firstloop.token_cap)"

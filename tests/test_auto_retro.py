@@ -24,6 +24,32 @@ from hypothesis import given
 from hypothesis import strategies as st
 
 pytestmark = pytest.mark.shard_ci_ops_2
+
+# The label set the .gitapex/ssot.json registry entry for scripts/auto_retro.py
+# carries (registry order): the two identity labels followed by the ops:/harness:
+# terminal open-state labels. Mirrored here so every consumer resolves a known
+# set via a mocked _ssot.consumer_labels rather than reading (or asserting
+# against) the live registry file. Derivation-specific tests below override the
+# mock with synthetic labels to prove the code reads the registry.
+_REGISTRY_LABELS = ("type:docs", "layer:meta", "ops:retro-opened", "harness:retro-opened")
+_TERMINAL_PRIMARY = "ops:retro-opened"
+_TERMINAL_LEGACY = "harness:retro-opened"
+
+
+@pytest.fixture(autouse=True)
+def _stub_registry_labels(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Inject a known label set for scripts/auto_retro.py so every consumer
+    (issue_labels' base labels, both discovery-search queries, the terminal
+    label) resolves deterministically without reading the live registry. Tests
+    that exercise the registry-derivation or drift paths override this with
+    their own monkeypatch.setattr, which wins because it runs inside the test
+    body after this fixture.
+    """
+    monkeypatch.setattr(
+        ar._ssot, "consumer_labels", lambda path: _REGISTRY_LABELS
+    )
+
+
 # ---------------------------------------------------------------------------
 # Alignment: required sections must match body_policy
 # ---------------------------------------------------------------------------
@@ -1141,20 +1167,32 @@ class TestRetroDedupAutoRetroInvariant:
 
 
 class TestIssueLabels:
+    # issue_labels is the pure renderer: it starts from the caller-injected
+    # base (identity) labels and merges the inherited layer labels. The base is
+    # passed explicitly here (not read from the registry) so these tests stay
+    # self-contained; the IO layer's registry wiring is covered separately.
+    _BASE: ClassVar[list[str]] = ["type:docs", "layer:meta"]
+
     def test_no_inherited_labels(self) -> None:
-        assert ar.issue_labels(()) == ["type:docs", "layer:meta"]
+        assert ar.issue_labels((), self._BASE) == ["type:docs", "layer:meta"]
 
     def test_dedupes_layer_meta(self) -> None:
-        out = ar.issue_labels(("layer:meta",))
+        out = ar.issue_labels(("layer:meta",), self._BASE)
         assert out == ["type:docs", "layer:meta"]
 
     def test_appends_extra_layer_labels(self) -> None:
-        out = ar.issue_labels(("layer:p3-harness", "layer:meta"))
+        out = ar.issue_labels(("layer:p3-harness", "layer:meta"), self._BASE)
         assert out == ["type:docs", "layer:meta", "layer:p3-harness"]
 
     def test_filters_empty_names(self) -> None:
-        out = ar.issue_labels(("", "layer:p4-artifact"))
-        assert out == ["type:docs", "layer:meta", "layer:p4-artifact"]
+        out = ar.issue_labels(("", "layer:p4-safety-boundary"), self._BASE)
+        assert out == ["type:docs", "layer:meta", "layer:p4-safety-boundary"]
+
+    def test_base_labels_are_injected_not_hardcoded(self) -> None:
+        # The base labels come from the caller, not a literal inside the pure
+        # renderer: a synthetic base flows straight through, deduped/ordered.
+        out = ar.issue_labels(("layer:x",), ["id:a", "id:b"])
+        assert out == ["id:a", "id:b", "layer:x"]
 
 
 # ---------------------------------------------------------------------------
@@ -2031,7 +2069,38 @@ class TestApplyTerminalLabel:
             (
                 "POST",
                 "/repos/o/r/issues/42/labels",
-                {"labels": [ar._TERMINAL_LABEL]},
+                {"labels": [_TERMINAL_PRIMARY]},
+            )
+        ]
+
+    def test_terminal_label_derived_from_registry_not_hardcoded(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The primary/legacy labels come from _ssot.consumer_labels, not a
+        hardcoded literal: a synthetic registry set is POSTed verbatim."""
+        seen: list[tuple[str, str, Any]] = []
+
+        def fake_api(method, path, body=None, **_kw):
+            seen.append((method, path, body))
+            return ""
+
+        monkeypatch.setattr(
+            ar._ssot,
+            "consumer_labels",
+            lambda path: (
+                "id:a",
+                "id:b",
+                "ops:test-retro-opened",
+                "harness:test-retro-opened",
+            ),
+        )
+        monkeypatch.setattr(ar, "gh_api", fake_api)
+        ar.apply_terminal_label("o/r", 42)
+        assert seen == [
+            (
+                "POST",
+                "/repos/o/r/issues/42/labels",
+                {"labels": ["ops:test-retro-opened"]},
             )
         ]
 
@@ -2047,19 +2116,135 @@ class TestApplyTerminalLabel:
         with pytest.raises(GitHubApiError):
             ar.apply_terminal_label("o/r", 42)
 
+    def test_falls_back_to_legacy_label_on_422(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Migration window (#2139): the new label may not exist yet (HTTP
+        422). apply_terminal_label retries once with the legacy name so the
+        terminal signal survives regardless of code-merge vs. live-rename
+        ordering."""
+        seen: list[tuple[str, str, Any]] = []
 
-def test_terminal_label_aligned_with_labels_json() -> None:
-    """``_TERMINAL_LABEL`` must exist as a ``name`` entry in the declarative
-    ``.github/labels.json`` SoT so ``apply-labels.yml`` reconciles it onto
-    the repository before any merge fires ``apply_terminal_label``.
+        def fake_api(method, path, body=None, **_kw):
+            seen.append((method, path, body))
+            if body == {"labels": [_TERMINAL_PRIMARY]}:
+                raise GitHubApiError(422, "POST", path, "label does not exist")
+            return ""
+
+        monkeypatch.setattr(ar, "gh_api", fake_api)
+        ar.apply_terminal_label("o/r", 42)
+        assert seen == [
+            ("POST", "/repos/o/r/issues/42/labels", {"labels": [_TERMINAL_PRIMARY]}),
+            ("POST", "/repos/o/r/issues/42/labels", {"labels": [_TERMINAL_LEGACY]}),
+        ]
+
+    def test_non_422_does_not_fall_back(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A non-422 error is not a missing-label signal; it must propagate
+        without a legacy retry so real failures stay loud."""
+        calls = 0
+
+        def fake_api(method, path, body=None, **_kw):
+            nonlocal calls
+            calls += 1
+            raise GitHubApiError(500, "POST", path, "boom")
+
+        monkeypatch.setattr(ar, "gh_api", fake_api)
+        with pytest.raises(GitHubApiError):
+            ar.apply_terminal_label("o/r", 42)
+        assert calls == 1
+
+    def test_legacy_retry_failure_propagates(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """If neither the new nor the legacy label exists (both 422), the
+        error propagates to the orchestrator's fail-soft handler."""
+        def fake_api(method, path, body=None, **_kw):
+            raise GitHubApiError(422, "POST", path, "label does not exist")
+
+        monkeypatch.setattr(ar, "gh_api", fake_api)
+        with pytest.raises(GitHubApiError):
+            ar.apply_terminal_label("o/r", 42)
+
+    def test_drifted_registry_missing_terminal_labels_raises_runtime_error(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A registry entry that carries only identity labels (no ops:/harness:
+        *retro-opened) is schema-valid but must fail loud rather than POST a
+        None label."""
+        monkeypatch.setattr(
+            ar._ssot, "consumer_labels", lambda path: ("type:docs", "layer:meta")
+        )
+        monkeypatch.setattr(ar, "gh_api", lambda *a, **kw: "")
+        with pytest.raises(RuntimeError, match="auto-retro registry labels"):
+            ar.apply_terminal_label("o/r", 42)
+
+    def test_drifted_registry_key_error_wrapped_as_runtime_error(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        def _raise_key_error(path: str) -> tuple[str, ...]:
+            raise KeyError(f"no label_consumers entry for path {path!r}")
+
+        monkeypatch.setattr(ar._ssot, "consumer_labels", _raise_key_error)
+        monkeypatch.setattr(ar, "gh_api", lambda *a, **kw: "")
+        with pytest.raises(RuntimeError, match="auto-retro registry labels"):
+            ar.apply_terminal_label("o/r", 42)
+
+
+def test_terminal_primary_label_aligned_with_labels_json() -> None:
+    """The registry's ``ops:`` terminal label must exist as a ``name`` entry in
+    the declarative ``.github/labels.json`` SoT so ``apply-labels.yml``
+    reconciles it onto the repository before any merge fires
+    ``apply_terminal_label``.
+
+    Reads both SoT files directly (not through the autouse-mocked
+    ``ar._ssot``) so it is a genuine cross-registry drift guard: it derives the
+    label value from the live registry rather than asserting a hardcoded
+    literal.
     """
     repo_root = Path(__file__).resolve().parent.parent
-    sot = json.loads(
+    registry = json.loads(
+        (repo_root / ".gitapex" / "ssot.json").read_text(encoding="utf-8")
+    )
+    entry = next(
+        e
+        for e in registry["label_consumers"]
+        if e.get("path") == "scripts/auto_retro.py"
+    )
+    primary = next(
+        label
+        for label in entry["labels"]
+        if label.endswith("retro-opened") and label.startswith("ops:")
+    )
+    labels_sot = json.loads(
         (repo_root / ".github" / "labels.json").read_text(encoding="utf-8")
     )
-    assert any(entry.get("name") == ar._TERMINAL_LABEL for entry in sot), (
-        f"_TERMINAL_LABEL {ar._TERMINAL_LABEL!r} missing from .github/labels.json"
+    assert any(lbl.get("name") == primary for lbl in labels_sot), (
+        f"terminal label {primary!r} missing from .github/labels.json"
     )
+
+
+def test_main_maps_runtime_error_to_error_exit(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Any, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A RuntimeError (e.g. a drifted SSoT registry surfaced by the label
+    resolution helpers) routes through main()'s ::error::/exit-1 path rather
+    than a raw traceback. GitHubApiError, a RuntimeError subclass, keeps its
+    own HTTP-specific arm ahead of this one.
+    """
+    event_file = tmp_path / "event.json"
+    event_file.write_text(json.dumps(_merged_event()), encoding="utf-8")
+
+    def _raise(event: dict[str, Any], repo: str) -> int:
+        raise RuntimeError("auto-retro registry labels: boom")
+
+    monkeypatch.setattr(ar, "run", _raise)
+    rc = ar.main(["run", "--repo", "o/r", "--event-file", str(event_file)])
+    assert rc == 1
+    err = capsys.readouterr().err
+    assert "::error::" in err
+    assert "auto-retro registry labels" in err
 
 
 # ---------------------------------------------------------------------------
@@ -4190,6 +4375,43 @@ def _open_retro(
     }
 
 
+class TestSearchOpenRetroIssues:
+    """The sentinel discovery query is built from the registry identity labels,
+    mirroring :func:`auto_retro.fetch_past_retro_labels`."""
+
+    def test_query_built_from_registry_identity_labels(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        captured: list[str] = []
+
+        def fake(method: str, path: str, *_a: Any, **_kw: Any) -> str:
+            captured.append(path)
+            return json.dumps({"items": []})
+
+        monkeypatch.setattr(ar, "gh_api", fake)
+        ar.search_open_retro_issues("o/r")
+        assert len(captured) == 1
+        path = captured[0]
+        assert path.startswith("/search/issues?q=")
+        assert "label%3Atype%3Adocs" in path
+        assert "label%3Alayer%3Ameta" in path
+        assert "retro-opened" not in path
+        assert "is%3Aopen" in path
+
+    def test_drifted_registry_raises_runtime_error(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        def _raise_key_error(path: str) -> tuple[str, ...]:
+            raise KeyError(f"no label_consumers entry for path {path!r}")
+
+        monkeypatch.setattr(ar._ssot, "consumer_labels", _raise_key_error)
+        monkeypatch.setattr(
+            ar, "gh_api", lambda *_a, **_kw: json.dumps({"items": []})
+        )
+        with pytest.raises(RuntimeError, match="auto-retro registry labels"):
+            ar.search_open_retro_issues("o/r")
+
+
 class TestSentinelRun:
     def test_closes_untouched_retro_past_threshold(
         self, monkeypatch: pytest.MonkeyPatch
@@ -4411,7 +4633,7 @@ class TestSentinelRun:
     def test_does_not_touch_source_pr_label(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Acceptance #414 #5: harness:retro-opened label gate preserved.
+        """Acceptance #414 #5: ops:retro-opened label gate preserved.
 
         The sentinel must never PATCH/POST/DELETE source-PR labels --
         the label was applied at retro-create time and survives the
@@ -4983,19 +5205,21 @@ class TestIsTentativeByPrior:
 class TestIssueLabelsTentative:
     """``retro:tentative`` is added only when explicitly requested."""
 
+    _BASE: ClassVar[list[str]] = ["type:docs", "layer:meta"]
+
     def test_default_no_tentative_label(self) -> None:
-        labels = ar.issue_labels(())
+        labels = ar.issue_labels((), self._BASE)
         assert rl.RETRO_TENTATIVE not in labels
 
     def test_tentative_true_appends_label(self) -> None:
-        labels = ar.issue_labels((), tentative=True)
+        labels = ar.issue_labels((), self._BASE, tentative=True)
         assert rl.RETRO_TENTATIVE in labels
         # Required labels still present in declared order.
         assert labels[0] == "type:docs"
         assert labels[1] == "layer:meta"
 
     def test_tentative_true_with_layer_labels(self) -> None:
-        labels = ar.issue_labels(("layer:python",), tentative=True)
+        labels = ar.issue_labels(("layer:python",), self._BASE, tentative=True)
         assert "layer:python" in labels
         assert rl.RETRO_TENTATIVE in labels
 
@@ -5066,11 +5290,69 @@ class TestFetchPastRetroLabels:
         assert len(captured) == 1
         path = captured[0]
         assert path.startswith("/search/issues?q=")
-        # The query must include type:docs and layer:meta labels so
-        # PR1's scanner and PR2's prior populate from the same set.
+        # The query must include the identity labels so PR1's scanner and PR2's
+        # prior populate from the same set, and must NOT include the terminal
+        # *retro-opened labels (those are excluded from the discovery query).
         assert "label%3Atype%3Adocs" in path
         assert "label%3Alayer%3Ameta" in path
+        assert "retro-opened" not in path
         assert "retro" in path
+
+    def test_search_query_built_from_registry_labels(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The label: clauses are derived from _ssot.consumer_labels (identity
+        family only), not hardcoded: a synthetic registry set flows into the
+        query and the *retro-opened terminal labels are dropped."""
+        captured: list[str] = []
+
+        def fake(method: str, path: str, *_a: Any, **_kw: Any) -> str:
+            captured.append(path)
+            return json.dumps({"items": []})
+
+        monkeypatch.setattr(
+            ar._ssot,
+            "consumer_labels",
+            lambda path: (
+                "id:a",
+                "layer:other",
+                "ops:custom-retro-opened",
+                "harness:custom-retro-opened",
+            ),
+        )
+        monkeypatch.setattr(ar, "gh_api", fake)
+        ar.fetch_past_retro_labels("o/r")
+        path = captured[0]
+        assert "label%3Aid%3Aa" in path
+        assert "label%3Alayer%3Aother" in path
+        assert "retro-opened" not in path
+
+    def test_drifted_registry_raises_runtime_error(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A drifted registry is a config error, not a transient search error:
+        it propagates loud rather than soft-failing to an empty prior."""
+        def _raise_key_error(path: str) -> tuple[str, ...]:
+            raise KeyError(f"no label_consumers entry for path {path!r}")
+
+        monkeypatch.setattr(ar._ssot, "consumer_labels", _raise_key_error)
+        monkeypatch.setattr(ar, "gh_api", lambda *_a, **_kw: json.dumps({"items": []}))
+        with pytest.raises(RuntimeError, match="auto-retro registry labels"):
+            ar.fetch_past_retro_labels("o/r")
+
+    def test_all_labels_terminal_raises_runtime_error(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A registry that leaves only terminal labels must fail loud rather
+        than drop every label: clause and scan every issue titled retro."""
+        monkeypatch.setattr(
+            ar._ssot,
+            "consumer_labels",
+            lambda path: ("ops:retro-opened", "harness:retro-opened"),
+        )
+        monkeypatch.setattr(ar, "gh_api", lambda *_a, **_kw: json.dumps({"items": []}))
+        with pytest.raises(RuntimeError, match="auto-retro registry labels"):
+            ar.fetch_past_retro_labels("o/r")
 
     def test_parses_items_into_past_retro_records(
         self, monkeypatch: pytest.MonkeyPatch

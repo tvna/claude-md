@@ -295,7 +295,7 @@ def test_live_gate_flags_broken_ast_block(tmp_path: Path) -> None:
 @_INTEGRATION
 def test_live_gate_passes_real_uml_sequences() -> None:
     blocks = []
-    for name in ("survey-followup-timing.sequence.md", "survey-followup-timing.sequence.ja.md"):
+    for name in ("branch-local-remote.state.md", "branch-local-remote.state.ja.md"):
         path = REPO_ROOT / "docs" / "uml" / name
         blocks += scan_mermaid_syntax.extract_blocks(path, path.read_text(encoding="utf-8"))
     assert blocks, "expected the committed UML sequence blocks to exist"

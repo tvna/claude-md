@@ -1,0 +1,457 @@
+#!/usr/bin/env python3
+"""Blocking CI gate: reconcile .gitapex/ssot.json against the partial manifests.
+
+Phase 1 of the gitapex SSoT migration (docs/prd/gitapex-ssot-gate-registry.md):
+the registry (``.gitapex/ssot.json``) claims which planes each gate fires on,
+but nothing yet checks that claim against reality. This module compares the
+registry's ``gates`` and ``clusters`` against the four manifests the design
+names as authoritative for enforcement-plane membership:
+
+- ``scripts/agent_hooks_source.json`` (PreToolUse plane script references,
+  ``claude`` target only; the other agent-hook event planes are out of scope
+  for this phase, matching #2256's scoped ask);
+- ``scripts/preflight_steps.py`` ``STEPS`` (pre-push plane);
+- ``.pre-commit-config.yaml`` local repo hooks (pre-commit plane);
+- ``.github/rulesets/main.json`` ``rules`` (server plane, native rule types)
+  and the ``pull_request:``-triggered workflow scripts under
+  ``.github/workflows/`` (ci plane, reusing
+  :func:`scan_preflight_drift.collect_workflow_refs`; this is read-only reuse
+  of a tested pure helper, not folding scan_preflight_drift's own STEPS-vs-CI
+  reconciliation into this gate (that stays a separate, still-green check
+  until phase 3).
+
+Divergence is reported as ``::error::`` lines and fails the run (exit 1).
+Phase 1 first landed this gate advisory (warning-only, always exit 0); this
+module completes phase 1 per the migration plan by promoting it to blocking
+now that the report is clean. A ``git revert`` of the promoting commit
+restores the advisory contract. A handful of manifest entries have no
+scripts/*.py backing (third-party pre-commit-hooks entry points, bare
+toolchain binaries such as ruff/mypy/pytest/prek/actionlint, and the
+preflight_all.py runner itself) and are excluded via an inline,
+rationale-carrying allowlist, mirroring the pattern in
+:mod:`scan_preflight_drift`.
+
+Architecture: pure extraction functions per manifest, pure comparison
+functions producing warning strings, a single IO boundary in :func:`main`.
+
+Contract:
+- Inputs: the ``verify`` subcommand; ``--registry`` (default
+  ``.gitapex/ssot.json``); ``--agent-hooks`` (default
+  ``scripts/agent_hooks_source.json``); ``--pre-commit-config`` (default
+  ``.pre-commit-config.yaml``); ``--rulesets`` (default
+  ``.github/rulesets/main.json``); ``--workflows-dir`` (default
+  ``.github/workflows``).
+- Outputs: ``::error::`` annotations on stderr, one per divergence; an
+  ``OK:`` or ``BLOCKING:`` line on stderr summarizing the count.
+- Failure policy: this gate fails loud (exit 1) on any divergence found, and
+  also fails loud (exit 1) on a hard configuration error, an input file
+  missing or unparseable; exit 64 on an unrecognised subcommand.
+
+Tested by ``tests/test_scan_ssot_drift.py``. Refs #2256, #2246, #2262.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import re
+import sys
+from pathlib import Path
+
+import scan_preflight_drift as _preflight_drift
+import yaml
+from preflight_steps import STEPS, Step
+
+_SCRIPT = "scan_ssot_drift"
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+_REGISTRY_PATH = ".gitapex/ssot.json"
+_AGENT_HOOKS_PATH = "scripts/agent_hooks_source.json"
+_PRE_COMMIT_CONFIG_PATH = ".pre-commit-config.yaml"
+_RULESETS_PATH = ".github/rulesets/main.json"
+_WORKFLOWS_DIR = ".github/workflows"
+
+_SCRIPT_REF = re.compile(r"\bscripts/([a-zA-Z][\w]*)\.py\b")
+
+# STEPS entries with no scripts/*.py token in their argv: bare toolchain
+# binaries the repository does not own as a gate script. Each carries its
+# exclusion rationale so the allowlist stays auditable (scan_preflight_drift
+# precedent).
+STEPS_NO_SCRIPT_ALLOWLIST: dict[str, str] = {
+    "actionlint": "toolchain binary (actionlint), not a scripts/*.py gate.",
+    "ruff": "toolchain binary (ruff), not a scripts/*.py gate.",
+    "mypy": "toolchain binary (mypy), not a scripts/*.py gate.",
+    "pytest": "toolchain binary (pytest), not a scripts/*.py gate.",
+    "prek": "toolchain binary (prek), not a scripts/*.py gate.",
+}
+
+# .pre-commit-config.yaml local hooks with no scripts/*.py token in their
+# entry/args: third-party pre-commit-hooks entry points or bare toolchain
+# binaries, same rationale class as STEPS_NO_SCRIPT_ALLOWLIST above.
+PRE_COMMIT_NO_SCRIPT_ALLOWLIST: dict[str, str] = {
+    "trailing-whitespace": "third-party pre-commit-hooks entry point, not a scripts/*.py gate.",
+    "end-of-file-fixer": "third-party pre-commit-hooks entry point, not a scripts/*.py gate.",
+    "check-yaml": "third-party pre-commit-hooks entry point, not a scripts/*.py gate.",
+    "check-merge-conflict": "third-party pre-commit-hooks entry point, not a scripts/*.py gate.",
+    "actionlint": "toolchain binary (actionlint), not a scripts/*.py gate.",
+    "uv-mypy": "toolchain binary (mypy) invoked via uv, not a scripts/*.py gate.",
+}
+
+# scripts/preflight_all.py is the STEPS/collect_workflow_refs runner itself;
+# mirroring it as a gate would recurse. Excluded from the ci-plane manifest
+# only (it is not a STEPS or pre-commit entry either).
+CI_RUNNER_EXCLUDE = frozenset({"preflight_all"})
+
+
+def _as_list(value: object) -> list[object]:
+    return value if isinstance(value, list) else []
+
+
+def _as_dict(value: object) -> dict[str, object]:
+    return value if isinstance(value, dict) else {}
+
+
+# ---------------------------------------------------------------------------
+# Manifest extraction (pure functions over already-parsed data)
+# ---------------------------------------------------------------------------
+
+
+def pretooluse_manifest(agent_hooks: object) -> frozenset[str]:
+    """Return script basenames any agent target's PreToolUse hooks invoke.
+
+    Unions every target with a ``config`` block (``claude``, ``codex``; the
+    ``devin`` target has no own config, it mirrors ``codex``) rather than
+    scoping to ``claude`` alone: registry gates carry no agent dimension, so
+    a script wired for codex only (for example
+    ``preflight_codex_github_footer.py``) is still a real pretooluse-plane
+    gate the registry must account for.
+    """
+    names: set[str] = set()
+    for target in _as_list(_as_dict(agent_hooks).get("targets")):
+        target_d = _as_dict(target)
+        hooks = _as_dict(_as_dict(target_d.get("config")).get("hooks"))
+        for group in _as_list(hooks.get("PreToolUse")):
+            for hook in _as_list(_as_dict(group).get("hooks")):
+                command = _as_dict(hook).get("command")
+                if isinstance(command, str):
+                    names.update(_SCRIPT_REF.findall(command))
+    return frozenset(names)
+
+
+def steps_manifest(
+    steps: tuple[Step, ...] = STEPS,
+) -> tuple[frozenset[str], frozenset[str]]:
+    """Return (script basenames, unmapped step names) from ``preflight_steps.STEPS``."""
+    scripts: set[str] = set()
+    unmapped: set[str] = set()
+    for step in steps:
+        matched = None
+        for token in step.argv:
+            m = _SCRIPT_REF.search(token)
+            if m:
+                matched = m.group(1)
+                break
+        if matched:
+            scripts.add(matched)
+        elif step.name not in STEPS_NO_SCRIPT_ALLOWLIST:
+            unmapped.add(step.name)
+    return frozenset(scripts), frozenset(unmapped)
+
+
+def pre_commit_manifest(pre_commit_config: object) -> tuple[frozenset[str], frozenset[str]]:
+    """Return (script basenames, unmapped hook ids) from the local pre-commit hooks."""
+    scripts: set[str] = set()
+    unmapped: set[str] = set()
+    repos = _as_list(_as_dict(pre_commit_config).get("repos"))
+    for repo in repos:
+        for hook in _as_list(_as_dict(repo).get("hooks")):
+            hook_d = _as_dict(hook)
+            hook_id = hook_d.get("id")
+            text = str(hook_d.get("entry", "")) + " " + " ".join(
+                str(a) for a in _as_list(hook_d.get("args"))
+            )
+            found = _SCRIPT_REF.findall(text)
+            if found:
+                scripts.update(found)
+            elif isinstance(hook_id, str) and hook_id not in PRE_COMMIT_NO_SCRIPT_ALLOWLIST:
+                unmapped.add(hook_id)
+    return frozenset(scripts), frozenset(unmapped)
+
+
+def ci_manifest(workflows_dir: Path) -> frozenset[str]:
+    """Return script basenames referenced by ``pull_request:``-triggered workflows."""
+    refs = _preflight_drift.collect_workflow_refs(workflows_dir)
+    return frozenset({r.script for r in refs} - CI_RUNNER_EXCLUDE)
+
+
+def server_native_rules(rulesets: object) -> frozenset[str]:
+    """Return the native rule ``type`` values declared in the ruleset."""
+    return frozenset(
+        rule["type"]
+        for rule in _as_list(_as_dict(rulesets).get("rules"))
+        if isinstance(rule, dict) and isinstance(rule.get("type"), str)
+    )
+
+
+# ---------------------------------------------------------------------------
+# Registry projections
+# ---------------------------------------------------------------------------
+
+
+def registry_scripts_for_plane(registry: dict[str, object], plane: str) -> dict[str, str]:
+    """Return {script basename: gate id} for script-kind gates firing on *plane*."""
+    result: dict[str, str] = {}
+    for gate in _as_list(registry.get("gates")):
+        gate_d = _as_dict(gate)
+        if gate_d.get("kind") != "script":
+            continue
+        script = gate_d.get("script")
+        gate_id = gate_d.get("id")
+        planes = _as_list(gate_d.get("planes"))
+        if isinstance(script, str) and isinstance(gate_id, str) and plane in planes:
+            result[script.removeprefix("scripts/").removesuffix(".py")] = gate_id
+    return result
+
+
+def registry_native_rules_for_plane(registry: dict[str, object], plane: str) -> dict[str, str]:
+    """Return {native_rule: gate id} for native-kind gates firing on *plane*."""
+    result: dict[str, str] = {}
+    for gate in _as_list(registry.get("gates")):
+        gate_d = _as_dict(gate)
+        if gate_d.get("kind") != "native":
+            continue
+        native_rule = gate_d.get("native_rule")
+        gate_id = gate_d.get("id")
+        planes = _as_list(gate_d.get("planes"))
+        if isinstance(native_rule, str) and isinstance(gate_id, str) and plane in planes:
+            result[native_rule] = gate_id
+    return result
+
+
+def registry_cluster_planes(registry: dict[str, object]) -> dict[str, set[str]]:
+    """Return {cluster id: union of planes of gates carrying that cluster}."""
+    result: dict[str, set[str]] = {}
+    for gate in _as_list(registry.get("gates")):
+        gate_d = _as_dict(gate)
+        cluster = gate_d.get("cluster")
+        if isinstance(cluster, str):
+            result.setdefault(cluster, set()).update(
+                p for p in _as_list(gate_d.get("planes")) if isinstance(p, str)
+            )
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Comparison (pure; returns ``::warning::``-ready message bodies)
+# ---------------------------------------------------------------------------
+
+
+def diff_plane(
+    manifest_scripts: frozenset[str],
+    registry_scripts: dict[str, str],
+    *,
+    manifest_label: str,
+    plane: str,
+) -> list[str]:
+    """Return warnings for scripts each side has that the other lacks."""
+    warnings: list[str] = []
+    for script in sorted(manifest_scripts - registry_scripts.keys()):
+        warnings.append(
+            f"{manifest_label} references 'scripts/{script}.py' with no registry gate "
+            f"on the '{plane}' plane."
+        )
+    for script in sorted(registry_scripts.keys() - manifest_scripts):
+        warnings.append(
+            f"registry gate {registry_scripts[script]!r} claims the '{plane}' plane for "
+            f"'scripts/{script}.py' but {manifest_label} does not reference it."
+        )
+    return warnings
+
+
+def diff_native(
+    manifest_rules: frozenset[str], registry_rules: dict[str, str]
+) -> list[str]:
+    """Return warnings for native rule types each side has that the other lacks."""
+    warnings: list[str] = []
+    for rule in sorted(manifest_rules - registry_rules.keys()):
+        warnings.append(
+            f"{_RULESETS_PATH} declares native rule {rule!r} with no registry gate "
+            f"on the 'server' plane."
+        )
+    for rule in sorted(registry_rules.keys() - manifest_rules):
+        warnings.append(
+            f"registry gate {registry_rules[rule]!r} claims native rule {rule!r} but "
+            f"{_RULESETS_PATH} does not declare it."
+        )
+    return warnings
+
+
+def diff_clusters(registry: dict[str, object]) -> list[str]:
+    """Return warnings for a cluster's expected_planes not covered by any of its gates."""
+    warnings: list[str] = []
+    achieved = registry_cluster_planes(registry)
+    for cluster in _as_list(registry.get("clusters")):
+        cluster_d = _as_dict(cluster)
+        cluster_id = cluster_d.get("id")
+        if not isinstance(cluster_id, str):
+            continue
+        expected = {p for p in _as_list(cluster_d.get("expected_planes")) if isinstance(p, str)}
+        missing = expected - achieved.get(cluster_id, set())
+        for plane in sorted(missing):
+            warnings.append(
+                f"cluster {cluster_id!r} expects the {plane!r} plane but no gate with "
+                f"cluster={cluster_id!r} declares it."
+            )
+    return warnings
+
+
+def diff_unmapped(unmapped: frozenset[str], *, manifest_label: str) -> list[str]:
+    """Return warnings for manifest entries with no scripts/*.py mapping and no allowlist entry."""
+    return [
+        f"{manifest_label} entry {name!r} has no 'scripts/<name>.py' reference and is not "
+        f"in the no-script allowlist."
+        for name in sorted(unmapped)
+    ]
+
+
+def verify_registry(
+    registry: dict[str, object],
+    *,
+    agent_hooks: object,
+    pre_commit_config: object,
+    rulesets: object,
+    workflows_dir: Path,
+) -> list[str]:
+    """Return every drift warning between *registry* and the four manifests."""
+    warnings: list[str] = []
+
+    pretooluse_scripts = pretooluse_manifest(agent_hooks)
+    warnings += diff_plane(
+        pretooluse_scripts,
+        registry_scripts_for_plane(registry, "pretooluse"),
+        manifest_label=_AGENT_HOOKS_PATH,
+        plane="pretooluse",
+    )
+
+    push_scripts, push_unmapped = steps_manifest()
+    warnings += diff_plane(
+        push_scripts,
+        registry_scripts_for_plane(registry, "pre-push"),
+        manifest_label="preflight_steps.STEPS",
+        plane="pre-push",
+    )
+    warnings += diff_unmapped(push_unmapped, manifest_label="preflight_steps.STEPS")
+
+    commit_scripts, commit_unmapped = pre_commit_manifest(pre_commit_config)
+    warnings += diff_plane(
+        commit_scripts,
+        registry_scripts_for_plane(registry, "pre-commit"),
+        manifest_label=_PRE_COMMIT_CONFIG_PATH,
+        plane="pre-commit",
+    )
+    warnings += diff_unmapped(commit_unmapped, manifest_label=_PRE_COMMIT_CONFIG_PATH)
+
+    ci_scripts = ci_manifest(workflows_dir)
+    warnings += diff_plane(
+        ci_scripts,
+        registry_scripts_for_plane(registry, "ci"),
+        manifest_label="pull_request: workflow scripts",
+        plane="ci",
+    )
+
+    warnings += diff_native(
+        server_native_rules(rulesets), registry_native_rules_for_plane(registry, "server")
+    )
+
+    warnings += diff_clusters(registry)
+
+    return warnings
+
+
+# ---------------------------------------------------------------------------
+# IO boundary
+# ---------------------------------------------------------------------------
+
+
+def _load_json(path: Path) -> object:
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _load_yaml(path: Path) -> object:
+    return yaml.safe_load(path.read_text(encoding="utf-8"))
+
+
+def main(argv: list[str] | None = None) -> int:
+    if argv is None:
+        argv = sys.argv[1:]
+
+    command = argv[0] if argv else None
+    if command != "verify":
+        print(
+            f"::error::{_SCRIPT}: unknown subcommand {command!r}; expected 'verify'.",
+            file=sys.stderr,
+        )
+        return 64
+
+    parser = argparse.ArgumentParser(
+        description="Report drift between .gitapex/ssot.json and the four partial gate manifests (blocking)."
+    )
+    parser.add_argument("command", help="Must be 'verify'.")
+    parser.add_argument("--registry", default=_REGISTRY_PATH)
+    parser.add_argument("--agent-hooks", default=_AGENT_HOOKS_PATH)
+    parser.add_argument("--pre-commit-config", default=_PRE_COMMIT_CONFIG_PATH)
+    parser.add_argument("--rulesets", default=_RULESETS_PATH)
+    parser.add_argument("--workflows-dir", default=_WORKFLOWS_DIR)
+    args = parser.parse_args(argv)
+
+    registry_path = _REPO_ROOT / args.registry
+    agent_hooks_path = _REPO_ROOT / args.agent_hooks
+    pre_commit_path = _REPO_ROOT / args.pre_commit_config
+    rulesets_path = _REPO_ROOT / args.rulesets
+    workflows_dir = _REPO_ROOT / args.workflows_dir
+
+    for label, path in (
+        ("registry", registry_path),
+        ("agent-hooks", agent_hooks_path),
+        ("pre-commit-config", pre_commit_path),
+        ("rulesets", rulesets_path),
+    ):
+        if not path.exists():
+            print(f"::error::{_SCRIPT}: {label} file not found at {path}.", file=sys.stderr)
+            return 1
+    if not workflows_dir.is_dir():
+        print(f"::error::{_SCRIPT}: workflows directory not found at {workflows_dir}.", file=sys.stderr)
+        return 1
+
+    try:
+        registry = _load_json(registry_path)
+        agent_hooks = _load_json(agent_hooks_path)
+        pre_commit_config = _load_yaml(pre_commit_path)
+        rulesets = _load_json(rulesets_path)
+    except (OSError, ValueError, yaml.YAMLError) as exc:
+        print(f"::error::{_SCRIPT}: cannot parse an input file: {exc}", file=sys.stderr)
+        return 1
+
+    if not isinstance(registry, dict):
+        print(f"::error::{_SCRIPT}: {args.registry} root is not a JSON object.", file=sys.stderr)
+        return 1
+
+    warnings = verify_registry(
+        registry,
+        agent_hooks=agent_hooks,
+        pre_commit_config=pre_commit_config,
+        rulesets=rulesets,
+        workflows_dir=workflows_dir,
+    )
+
+    if warnings:
+        for message in warnings:
+            print(f"::error::{_SCRIPT}: {message}", file=sys.stderr)
+        print(f"BLOCKING: {_SCRIPT}: {len(warnings)} divergence(s) reported above.", file=sys.stderr)
+        return 1
+
+    print(f"OK: {_SCRIPT}: registry and manifests agree.", file=sys.stderr)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

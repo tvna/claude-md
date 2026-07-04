@@ -1,0 +1,1846 @@
+{
+  "meta": {
+    "schema_version": 1,
+    "tracking_issue": 2246,
+    "status": "adopted-design",
+    "phase": "phase-1"
+  },
+  "policy_sources": [
+    {
+      "id": "label-policy",
+      "path": ".github/label-policy.toml",
+      "format": "toml",
+      "authority": "label taxonomy design: families, renames, retirements, area paths"
+    },
+    {
+      "id": "labels-live",
+      "path": ".github/labels.json",
+      "format": "json",
+      "authority": "live label catalog applied to GitHub"
+    },
+    {
+      "id": "agent-hooks-source",
+      "path": "scripts/agent_hooks_source.json",
+      "format": "json",
+      "authority": "generation source for the per-agent hook surfaces"
+    },
+    {
+      "id": "rulesets-main",
+      "path": ".github/rulesets/main.json",
+      "format": "json",
+      "authority": "GitHub ruleset: required checks and native branch rules"
+    }
+  ],
+  "gates": [
+    {
+      "id": "block-sensitive-reads",
+      "kind": "script",
+      "script": "scripts/block_sensitive_reads.py",
+      "rule": "reads of local credential files are blocked",
+      "planes": [
+        "pretooluse"
+      ],
+      "trigger": "Read or Bash tool use",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "preflight-non-ascii",
+      "kind": "script",
+      "script": "scripts/preflight_non_ascii.py",
+      "rule": "GitHub-bound text is ASCII",
+      "planes": [
+        "pretooluse"
+      ],
+      "trigger": "GitHub MCP write tools",
+      "policy_refs": [],
+      "cluster": "non-ascii",
+      "tracking_issue": null
+    },
+    {
+      "id": "preflight-github-secrets",
+      "kind": "script",
+      "script": "scripts/preflight_github_secrets.py",
+      "rule": "GitHub-bound text carries no secret values",
+      "planes": [
+        "pretooluse"
+      ],
+      "trigger": "GitHub MCP write tools",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "preflight-angle-token-drop",
+      "kind": "script",
+      "script": "scripts/preflight_angle_token_drop.py",
+      "rule": "GitHub-bound text has no bare angle-bracket tokens the MCP layer would drop",
+      "planes": [
+        "pretooluse"
+      ],
+      "trigger": "GitHub MCP write tools",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "preflight-codex-github-footer",
+      "kind": "script",
+      "script": "scripts/preflight_codex_github_footer.py",
+      "rule": "Codex-authored GitHub posts carry the required Codex attribution footer",
+      "planes": [
+        "pretooluse"
+      ],
+      "trigger": "Codex GitHub write tools",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "issue-closure-fast-path",
+      "kind": "script",
+      "script": "scripts/issue_closure_fast_path.py",
+      "rule": "issue closure carries closing evidence",
+      "planes": [
+        "pretooluse"
+      ],
+      "trigger": "mcp__github__issue_write",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "gate-issue-close-comment",
+      "kind": "script",
+      "script": "scripts/gate_issue_close_comment.py",
+      "rule": "an issue close is preceded by a closing comment",
+      "planes": [
+        "pretooluse"
+      ],
+      "trigger": "mcp__github__issue_write",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "gate-issue-classification-labels",
+      "kind": "script",
+      "script": "scripts/gate_issue_classification_labels.py",
+      "rule": "agent-created issues carry layer:* and type:* labels",
+      "planes": [
+        "pretooluse"
+      ],
+      "trigger": "mcp__github__issue_write create",
+      "policy_refs": [
+        "labels-live",
+        "label-policy"
+      ],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "gate-reserved-retro-scope",
+      "kind": "script",
+      "script": "scripts/gate_reserved_retro_scope.py",
+      "rule": "the reserved auto-retro issue scope is not hand-created",
+      "planes": [
+        "pretooluse"
+      ],
+      "trigger": "mcp__github__issue_write",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "preflight-issue-ci-staleness",
+      "kind": "script",
+      "script": "scripts/preflight_issue_ci_staleness.py",
+      "rule": "issue creation checks CI-failure staleness first",
+      "planes": [
+        "pretooluse"
+      ],
+      "trigger": "mcp__github__issue_write",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "gate-update-pr-branch",
+      "kind": "script",
+      "script": "scripts/gate_update_pr_branch.py",
+      "rule": "update_pull_request_branch is blocked in favor of the new-branch recovery path",
+      "planes": [
+        "pretooluse"
+      ],
+      "trigger": "mcp__github__update_pull_request_branch",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "gate-merge-safety",
+      "kind": "script",
+      "script": "scripts/gate_merge_safety.py",
+      "rule": "a PR merges only when mergeable_state is clean",
+      "planes": [
+        "pretooluse"
+      ],
+      "trigger": "mcp__github__merge_pull_request",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "preflight-main-freshness",
+      "kind": "script",
+      "script": "scripts/preflight_main_freshness.py",
+      "rule": "branch creation checks origin/main freshness",
+      "planes": [
+        "pretooluse"
+      ],
+      "trigger": "mcp__github__create_branch",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "gate-irreversible-bash",
+      "kind": "script",
+      "script": "scripts/gate_irreversible_bash.py",
+      "rule": "irreversible bash operations are guarded",
+      "planes": [
+        "pretooluse"
+      ],
+      "trigger": "Bash tool use",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "gate-gh-cli",
+      "kind": "script",
+      "script": "scripts/gate_gh_cli.py",
+      "rule": "prohibited gh CLI usage is blocked",
+      "planes": [
+        "pretooluse"
+      ],
+      "trigger": "Bash tool use",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "gate-unsigned-commit-bash",
+      "kind": "script",
+      "script": "scripts/gate_unsigned_commit_bash.py",
+      "rule": "a commit-signing bypass on a git command is blocked",
+      "planes": [
+        "pretooluse"
+      ],
+      "trigger": "Bash git command",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "preflight-push-unsigned-commits",
+      "kind": "script",
+      "script": "scripts/preflight_push_unsigned_commits.py",
+      "rule": "pushed commits are signed",
+      "planes": [
+        "pretooluse"
+      ],
+      "trigger": "Bash git push",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "preflight-push-base",
+      "kind": "script",
+      "script": "scripts/preflight_push_base.py",
+      "rule": "the branch base is current before a push",
+      "planes": [
+        "pretooluse"
+      ],
+      "trigger": "Bash git push",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "preflight-push-session-branch",
+      "kind": "script",
+      "script": "scripts/preflight_push_session_branch.py",
+      "rule": "a push targets the authorized session branch",
+      "planes": [
+        "pretooluse"
+      ],
+      "trigger": "Bash git push",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "preflight-commit-session-branch",
+      "kind": "script",
+      "script": "scripts/preflight_commit_session_branch.py",
+      "rule": "a commit lands on the authorized session branch",
+      "planes": [
+        "pretooluse"
+      ],
+      "trigger": "Bash git commit",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "check-commit-signing-ready",
+      "kind": "script",
+      "script": "scripts/check_commit_signing_ready.py",
+      "rule": "commit signing is configured before a git operation",
+      "planes": [
+        "pretooluse"
+      ],
+      "trigger": "Bash git command",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "gate-retro-close-keyword-commit",
+      "kind": "script",
+      "script": "scripts/gate_retro_close_keyword_commit.py",
+      "rule": "a commit message carries no retro-issue closing keyword",
+      "planes": [
+        "pretooluse"
+      ],
+      "trigger": "Bash git command",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "preflight-session-branch-authz",
+      "kind": "script",
+      "script": "scripts/preflight_session_branch_authz.py",
+      "rule": "a session branch switch or file edit is authorized",
+      "planes": [
+        "pretooluse"
+      ],
+      "trigger": "Bash git command or file edit tool use",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "gate-agents-skills-edit",
+      "kind": "script",
+      "script": "scripts/gate_agents_skills_edit.py",
+      "rule": "writes to APM-managed skill paths are blocked",
+      "planes": [
+        "pretooluse",
+        "pre-push",
+        "ci"
+      ],
+      "trigger": "file edit or Bash tool use",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "preflight-session-base-freshness",
+      "kind": "script",
+      "script": "scripts/preflight_session_base_freshness.py",
+      "rule": "the branch base is fresh before a commit",
+      "planes": [
+        "pretooluse"
+      ],
+      "trigger": "Bash git commit",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "gate-instruction-body-advisory",
+      "kind": "script",
+      "script": "scripts/gate_instruction_body_advisory.py",
+      "rule": "instruction-text changes are reminded of their required PR body sections",
+      "planes": [
+        "pretooluse"
+      ],
+      "trigger": "Bash git commit",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "preflight-push-nonempty",
+      "kind": "script",
+      "script": "scripts/preflight_push_nonempty.py",
+      "rule": "a push ships new work",
+      "planes": [
+        "pretooluse"
+      ],
+      "trigger": "Bash git push",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "preflight-branch-base",
+      "kind": "script",
+      "script": "scripts/preflight_branch_base.py",
+      "rule": "the branch base is current before a PR create or update",
+      "planes": [
+        "pretooluse",
+        "pre-commit",
+        "pre-push"
+      ],
+      "trigger": "mcp__github__ create or update pull request",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "pr-body-close-keyword-gate",
+      "kind": "script",
+      "script": "scripts/pr_body_close_keyword_gate.py",
+      "rule": "a PR body carries a resolvable issue link",
+      "planes": [
+        "pretooluse"
+      ],
+      "trigger": "mcp__github__ create or update pull request",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "gate-pr-body-retro-issue-link",
+      "kind": "script",
+      "script": "scripts/gate_pr_body_retro_issue_link.py",
+      "rule": "a PR body links the correct retrospective issue",
+      "planes": [
+        "pretooluse"
+      ],
+      "trigger": "mcp__github__ create or update pull request",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "preflight-coverage",
+      "kind": "script",
+      "script": "scripts/preflight_coverage.py",
+      "rule": "changed public scripts meet the per-file coverage floor",
+      "planes": [
+        "pretooluse",
+        "pre-commit",
+        "pre-push",
+        "ci"
+      ],
+      "trigger": "mcp__github__ create or update pull request",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "preflight-title-policy",
+      "kind": "script",
+      "script": "scripts/preflight_title_policy.py",
+      "rule": "a GitHub title follows the title policy",
+      "planes": [
+        "pretooluse"
+      ],
+      "trigger": "mcp__github__ issue or pull request create or update",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "preflight-pr-body-required-sections",
+      "kind": "script",
+      "script": "scripts/preflight_pr_body_required_sections.py",
+      "rule": "a PR body carries the required sections",
+      "planes": [
+        "pretooluse"
+      ],
+      "trigger": "mcp__github__ create or update pull request",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "preflight-pr-template-shape",
+      "kind": "script",
+      "script": "scripts/preflight_pr_template_shape.py",
+      "rule": "a PR body matches the template section shape",
+      "planes": [
+        "pretooluse"
+      ],
+      "trigger": "mcp__github__ create or update pull request",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "preflight-resolve-review-thread",
+      "kind": "script",
+      "script": "scripts/preflight_resolve_review_thread.py",
+      "rule": "resolve_review_thread is gated on a prior fix push",
+      "planes": [
+        "pretooluse"
+      ],
+      "trigger": "mcp__github__resolve_review_thread",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "gate-mcp-github-uncovered",
+      "kind": "script",
+      "script": "scripts/gate_mcp_github_uncovered.py",
+      "rule": "every GitHub MCP write tool is covered by a preflight gate",
+      "planes": [
+        "pretooluse"
+      ],
+      "trigger": "any GitHub MCP tool use",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "auto-retro",
+      "kind": "script",
+      "script": "scripts/auto_retro.py",
+      "rule": "scripts/auto_retro.py stays invocable for CI's decision-tree preview compatibility check",
+      "planes": [
+        "pre-push",
+        "ci"
+      ],
+      "trigger": "git push (scripts/preflight_all.py) and CI (pull_request workflow)",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "body-policy",
+      "kind": "script",
+      "script": "scripts/body_policy.py",
+      "rule": "verify that issue and PR bodies contain their template's required sections",
+      "planes": [
+        "ci"
+      ],
+      "trigger": "CI (pull_request workflow)",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "dependabot-labels",
+      "kind": "script",
+      "script": "scripts/dependabot_labels.py",
+      "rule": "verify every label string in .github/dependabot.yml is defined in .github/labels.json (the labels source of truth)",
+      "planes": [
+        "pre-push",
+        "ci"
+      ],
+      "trigger": "git push (scripts/preflight_all.py) and CI (pull_request workflow)",
+      "policy_refs": [
+        "labels-live"
+      ],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "gate-doc-graph-pr",
+      "kind": "script",
+      "script": "scripts/gate_doc_graph_pr.py",
+      "rule": "CI gate: validate document dependency co-changes using the typed graph",
+      "planes": [
+        "pre-push",
+        "ci"
+      ],
+      "trigger": "git push (scripts/preflight_all.py) and CI (pull_request workflow)",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "gate-generated-scripts-manual-edit",
+      "kind": "script",
+      "script": "scripts/gate_generated_scripts_manual_edit.py",
+      "rule": "deterministic gate: forbid hand edits to post-merge-owned generated artifacts",
+      "planes": [
+        "pre-push",
+        "ci"
+      ],
+      "trigger": "git push (scripts/preflight_all.py) and CI (pull_request workflow)",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "gen-agent-hooks",
+      "kind": "script",
+      "script": "scripts/gen_agent_hooks.py",
+      "rule": "the generated per-agent hook configs (.claude/settings.json, .codex/hooks.json, .devin/hooks.v1.json) match scripts/agent_hooks_source.json",
+      "planes": [
+        "pre-commit"
+      ],
+      "trigger": "git commit (prek)",
+      "policy_refs": [
+        "agent-hooks-source"
+      ],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "generate-devcontainer-arch-overlays",
+      "kind": "script",
+      "script": "scripts/generate_devcontainer_arch_overlays.py",
+      "rule": "generate per-architecture devcontainer entrypoint overlays from the base configs",
+      "planes": [
+        "pre-push"
+      ],
+      "trigger": "git push (scripts/preflight_all.py)",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "issue-link",
+      "kind": "script",
+      "script": "scripts/issue_link.py",
+      "rule": "verify that a PR body references at least one existing issue/PR",
+      "planes": [
+        "ci"
+      ],
+      "trigger": "CI (pull_request workflow)",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "nixpkgs-cooldown",
+      "kind": "script",
+      "script": "scripts/nixpkgs_cooldown.py",
+      "rule": "verify that the pinned nixpkgs input respects uv's cooldown window",
+      "planes": [
+        "pre-push",
+        "ci"
+      ],
+      "trigger": "git push (scripts/preflight_all.py) and CI (pull_request workflow)",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "owasp-asi-mapping",
+      "kind": "script",
+      "script": "scripts/owasp_asi_mapping.py",
+      "rule": "deterministic gate: the OWASP Agentic Top 10 (ASI01-ASI10) mapping stays complete",
+      "planes": [
+        "pre-push",
+        "ci"
+      ],
+      "trigger": "git push (scripts/preflight_all.py) and CI (pull_request workflow)",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "preflight-hook-event-keys",
+      "kind": "script",
+      "script": "scripts/preflight_hook_event_keys.py",
+      "rule": "reject non-PascalCase hook event keys in the agent hook configs",
+      "planes": [
+        "pre-commit"
+      ],
+      "trigger": "git commit (prek)",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "preflight-merge-index-budget",
+      "kind": "script",
+      "script": "scripts/preflight_merge_index_budget.py",
+      "rule": "fail before push when the test-merge of HEAD with the live base overflows the docs/INDEX.md navigation budget",
+      "planes": [
+        "pre-push"
+      ],
+      "trigger": "git push (scripts/preflight_all.py)",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "preflight-signed-commits",
+      "kind": "script",
+      "script": "scripts/preflight_signed_commits.py",
+      "rule": "fail before push when a commit in the push range is unsigned",
+      "planes": [
+        "pre-push"
+      ],
+      "trigger": "git push (scripts/preflight_all.py)",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "preflight-uv-version",
+      "kind": "script",
+      "script": "scripts/preflight_uv_version.py",
+      "rule": "fail loudly when uv --version does not match [tool.uv].required-version",
+      "planes": [
+        "pre-push",
+        "ci"
+      ],
+      "trigger": "git push (scripts/preflight_all.py) and CI (pull_request workflow)",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "python-pin",
+      "kind": "script",
+      "script": "scripts/python_pin.py",
+      "rule": ".python-version is an exact patch release whose minor matches requires-python, ruff, mypy, and flake.nix",
+      "planes": [
+        "pre-push",
+        "ci"
+      ],
+      "trigger": "git push (scripts/preflight_all.py) and CI (pull_request workflow)",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "scan-allowlist-parser-parity",
+      "kind": "script",
+      "script": "scripts/scan_allowlist_parser_parity.py",
+      "rule": "deterministic gate: the bash and Python allowlist parsers agree",
+      "planes": [
+        "pre-push",
+        "ci"
+      ],
+      "trigger": "git push (scripts/preflight_all.py) and CI (pull_request workflow)",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "scan-allowlist-rationale",
+      "kind": "script",
+      "script": "scripts/scan_allowlist_rationale.py",
+      "rule": "fail when a devcontainer egress allowlist host has no triage rationale",
+      "planes": [
+        "pre-push",
+        "ci"
+      ],
+      "trigger": "git push (scripts/preflight_all.py) and CI (pull_request workflow)",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "scan-apm-ascii",
+      "kind": "script",
+      "script": "scripts/scan_apm_ascii.py",
+      "rule": "verify APM agent-rule artifacts stay ASCII except a reviewed allowlist",
+      "planes": [
+        "pre-push",
+        "ci"
+      ],
+      "trigger": "git push (scripts/preflight_all.py) and CI (pull_request workflow)",
+      "policy_refs": [],
+      "cluster": "non-ascii",
+      "tracking_issue": null
+    },
+    {
+      "id": "scan-apm-lock-drift",
+      "kind": "script",
+      "script": "scripts/scan_apm_lock_drift.py",
+      "rule": "fail when apm.lock.yaml does not lock the MCP deps declared in apm.yml",
+      "planes": [
+        "pre-push",
+        "ci"
+      ],
+      "trigger": "git push (scripts/preflight_all.py) and CI (pull_request workflow)",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "scan-apm-portability",
+      "kind": "script",
+      "script": "scripts/scan_apm_portability.py",
+      "rule": "verify APM agent-rule artifacts do not contain repo-local references",
+      "planes": [
+        "pre-push",
+        "ci"
+      ],
+      "trigger": "git push (scripts/preflight_all.py) and CI (pull_request workflow)",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "scan-bypass-lever-doc-drift",
+      "kind": "script",
+      "script": "scripts/scan_bypass_lever_doc_drift.py",
+      "rule": "detect drift between the pre-push hook's bypass levers and its runbook",
+      "planes": [
+        "pre-push",
+        "ci"
+      ],
+      "trigger": "git push (scripts/preflight_all.py) and CI (pull_request workflow)",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "scan-commit-type-label-drift",
+      "kind": "script",
+      "script": "scripts/scan_commit_type_label_drift.py",
+      "rule": "deterministic gate: type:* labels stay aligned with title-policy commit types",
+      "planes": [
+        "pre-push",
+        "ci"
+      ],
+      "trigger": "git push (scripts/preflight_all.py) and CI (pull_request workflow)",
+      "policy_refs": [
+        "label-policy"
+      ],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "scan-compile-from-source",
+      "kind": "script",
+      "script": "scripts/scan_compile_from_source.py",
+      "rule": "fail when a tool is compiled from source on the CI hot path",
+      "planes": [
+        "pre-push",
+        "ci"
+      ],
+      "trigger": "git push (scripts/preflight_all.py) and CI (pull_request workflow)",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "scan-design-philosophy-drift",
+      "kind": "script",
+      "script": "scripts/scan_design_philosophy_drift.py",
+      "rule": "verify the design-philosophy responsibility matrix tracks the master",
+      "planes": [
+        "pre-push",
+        "ci"
+      ],
+      "trigger": "git push (scripts/preflight_all.py) and CI (pull_request workflow)",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "scan-devcontainer-tool-drift",
+      "kind": "script",
+      "script": "scripts/scan_devcontainer_tool_drift.py",
+      "rule": "fail when a gate-required CLI is not provisioned in the devcontainer flake",
+      "planes": [
+        "pre-push",
+        "ci"
+      ],
+      "trigger": "git push (scripts/preflight_all.py) and CI (pull_request workflow)",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "scan-doc-graph-registration",
+      "kind": "script",
+      "script": "scripts/scan_doc_graph_registration.py",
+      "rule": "CI gate: require new governed files to register in the doc dependency graph",
+      "planes": [
+        "pre-commit"
+      ],
+      "trigger": "git commit (prek)",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "scan-doc-workflow-refs",
+      "kind": "script",
+      "script": "scripts/scan_doc_workflow_refs.py",
+      "rule": "fail when a Markdown doc cites a .github/workflows/<name>.yml that is gone",
+      "planes": [
+        "pre-push",
+        "ci"
+      ],
+      "trigger": "git push (scripts/preflight_all.py) and CI (pull_request workflow)",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "scan-docs-inventory",
+      "kind": "script",
+      "script": "scripts/scan_docs_inventory.py",
+      "rule": "verify docs lane inventory and top-level placement",
+      "planes": [
+        "pre-commit",
+        "pre-push",
+        "ci"
+      ],
+      "trigger": "git commit or push (prek / scripts/preflight_all.py) and CI (pull_request workflow)",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "scan-flake-pin-drift",
+      "kind": "script",
+      "script": "scripts/scan_flake_pin_drift.py",
+      "rule": "fail when a pinned binary's flake.nix SHA256 is hardcoded elsewhere",
+      "planes": [
+        "pre-push",
+        "ci"
+      ],
+      "trigger": "git push (scripts/preflight_all.py) and CI (pull_request workflow)",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "scan-harness-doc-coverage",
+      "kind": "script",
+      "script": "scripts/scan_harness_doc_coverage.py",
+      "rule": "gate: every public scripts/*.py and .github/workflows/*.yml has specific area coverage",
+      "planes": [
+        "pre-commit",
+        "pre-push",
+        "ci"
+      ],
+      "trigger": "git commit or push (prek / scripts/preflight_all.py) and CI (pull_request workflow)",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "scan-hook-coverage-drift",
+      "kind": "script",
+      "script": "scripts/scan_hook_coverage_drift.py",
+      "rule": "detect drift between Claude and Codex hook coverage",
+      "planes": [
+        "pre-push",
+        "ci"
+      ],
+      "trigger": "git push (scripts/preflight_all.py) and CI (pull_request workflow)",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "scan-hook-predicate-surface-drift",
+      "kind": "script",
+      "script": "scripts/scan_hook_predicate_surface_drift.py",
+      "rule": "detect drift between a git hook's if: predicate and its command surface",
+      "planes": [
+        "pre-push",
+        "ci"
+      ],
+      "trigger": "git push (scripts/preflight_all.py) and CI (pull_request workflow)",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "scan-input-contract-drift",
+      "kind": "script",
+      "script": "scripts/scan_input_contract_drift.py",
+      "rule": "deterministic gate: every workflow-called script declares its input Contract",
+      "planes": [
+        "pre-push",
+        "ci"
+      ],
+      "trigger": "git push (scripts/preflight_all.py) and CI (pull_request workflow)",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "scan-install-curl-retry-drift",
+      "kind": "script",
+      "script": "scripts/scan_install_curl_retry_drift.py",
+      "rule": "drift gate: SessionStart installers must download via retry_download (#2038)",
+      "planes": [
+        "pre-commit"
+      ],
+      "trigger": "git commit (prek)",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "scan-issue-anchor-drift",
+      "kind": "script",
+      "script": "scripts/scan_issue_anchor_drift.py",
+      "rule": "deterministic gate: tracking-issue numbers stay in .github/tracking-issues.toml",
+      "planes": [
+        "pre-push",
+        "ci"
+      ],
+      "trigger": "git push (scripts/preflight_all.py) and CI (pull_request workflow)",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "scan-maintainability-metrics",
+      "kind": "script",
+      "script": "scripts/scan_maintainability_metrics.py",
+      "rule": "pilot maintainability metrics for workflow script modules",
+      "planes": [
+        "pre-commit",
+        "pre-push",
+        "ci"
+      ],
+      "trigger": "git commit or push (prek / scripts/preflight_all.py) and CI (pull_request workflow)",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "scan-markdown-links",
+      "kind": "script",
+      "script": "scripts/scan_markdown_links.py",
+      "rule": "verify repository-local Markdown links resolve without network access",
+      "planes": [
+        "pre-push",
+        "ci"
+      ],
+      "trigger": "git push (scripts/preflight_all.py) and CI (pull_request workflow)",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "scan-mermaid-syntax",
+      "kind": "script",
+      "script": "scripts/scan_mermaid_syntax.py",
+      "rule": "verify that every Mermaid block under docs/ parses before it renders",
+      "planes": [
+        "pre-commit",
+        "pre-push",
+        "ci"
+      ],
+      "trigger": "git commit or push (prek / scripts/preflight_all.py) and CI (pull_request workflow)",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "scan-nonexhaustive-invariant-drift",
+      "kind": "script",
+      "script": "scripts/scan_nonexhaustive_invariant_drift.py",
+      "rule": "deterministic gate: the section 2/4 safety enumerations stay non-exhaustive",
+      "planes": [
+        "pre-push",
+        "ci"
+      ],
+      "trigger": "git push (scripts/preflight_all.py) and CI (pull_request workflow)",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "scan-pr-body-quality-drift",
+      "kind": "script",
+      "script": "scripts/scan_pr_body_quality_drift.py",
+      "rule": "deterministic gate: the PR body content-quality enforcement registry stays current",
+      "planes": [
+        "pre-push",
+        "ci"
+      ],
+      "trigger": "git push (scripts/preflight_all.py) and CI (pull_request workflow)",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "scan-preflight-drift",
+      "kind": "script",
+      "script": "scripts/scan_preflight_drift.py",
+      "rule": "diff the local preflight set against the scripts CI's PR gates run",
+      "planes": [
+        "pre-push",
+        "ci"
+      ],
+      "trigger": "git push (scripts/preflight_all.py) and CI (pull_request workflow)",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "scan-provisioning-hook-serial",
+      "kind": "script",
+      "script": "scripts/scan_provisioning_hook_serial.py",
+      "rule": "require pre-commit hooks that provision a shared binary to be serial",
+      "planes": [
+        "pre-push",
+        "ci"
+      ],
+      "trigger": "git push (scripts/preflight_all.py) and CI (pull_request workflow)",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "scan-quality-standard-drift",
+      "kind": "script",
+      "script": "scripts/scan_quality_standard_drift.py",
+      "rule": "deterministic gate: the workflow-script-quality standard stays enforcement-mapped",
+      "planes": [
+        "pre-push",
+        "ci"
+      ],
+      "trigger": "git push (scripts/preflight_all.py) and CI (pull_request workflow)",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "scan-repo-double-hyphen",
+      "kind": "script",
+      "script": "scripts/scan_repo_double_hyphen.py",
+      "rule": "verify no prose double-hyphen separator appears in tracked repository files",
+      "planes": [
+        "pre-push",
+        "ci"
+      ],
+      "trigger": "git push (scripts/preflight_all.py) and CI (pull_request workflow)",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "scan-repo-em-dash",
+      "kind": "script",
+      "script": "scripts/scan_repo_em_dash.py",
+      "rule": "verify no em-dash (U+2014) character appears in tracked repository files",
+      "planes": [
+        "pre-push",
+        "ci"
+      ],
+      "trigger": "git push (scripts/preflight_all.py) and CI (pull_request workflow)",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "scan-ruff-format",
+      "kind": "script",
+      "script": "scripts/scan_ruff_format.py",
+      "rule": "keep ruff format out of the repository's gate surfaces",
+      "planes": [
+        "pre-push",
+        "ci"
+      ],
+      "trigger": "git push (scripts/preflight_all.py) and CI (pull_request workflow)",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "scan-runbook-template-drift",
+      "kind": "script",
+      "script": "scripts/scan_runbook_template_drift.py",
+      "rule": "CI gate: require new/changed runbooks to follow docs/runbooks/TEMPLATE.md",
+      "planes": [
+        "pre-push",
+        "ci"
+      ],
+      "trigger": "git push (scripts/preflight_all.py) and CI (pull_request workflow)",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "scan-scripts-gh-calls",
+      "kind": "script",
+      "script": "scripts/scan_scripts_gh_calls.py",
+      "rule": "scan scripts/*.py for direct gh CLI subprocess calls",
+      "planes": [
+        "pre-commit",
+        "pre-push",
+        "ci"
+      ],
+      "trigger": "git commit or push (prek / scripts/preflight_all.py) and CI (pull_request workflow)",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "scan-secret-runbooks",
+      "kind": "script",
+      "script": "scripts/scan_secret_runbooks.py",
+      "rule": "verify named workflow secrets have concrete runbook issuance steps",
+      "planes": [
+        "pre-push",
+        "ci"
+      ],
+      "trigger": "git push (scripts/preflight_all.py) and CI (pull_request workflow)",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "scan-secrets",
+      "kind": "script",
+      "script": "scripts/scan_secrets.py",
+      "rule": "scan tracked non-Python files for high-confidence hardcoded secrets",
+      "planes": [
+        "pre-commit",
+        "pre-push",
+        "ci"
+      ],
+      "trigger": "git commit or push (prek / scripts/preflight_all.py) and CI (pull_request workflow)",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "scan-session-path-drift",
+      "kind": "script",
+      "script": "scripts/scan_session_path_drift.py",
+      "rule": "keep $CLAUDE_ENV_FILE PATH persistence centralized in one helper",
+      "planes": [
+        "pre-push",
+        "ci"
+      ],
+      "trigger": "git push (scripts/preflight_all.py) and CI (pull_request workflow)",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "scan-ssot-drift",
+      "kind": "script",
+      "script": "scripts/scan_ssot_drift.py",
+      "rule": "advisory: report drift between the .gitapex/ssot.json gate registry and its four partial manifests",
+      "planes": [
+        "pre-commit",
+        "pre-push",
+        "ci"
+      ],
+      "trigger": "git commit or push (prek / scripts/preflight_all.py) and CI (pull_request workflow)",
+      "policy_refs": [
+        "agent-hooks-source",
+        "rulesets-main"
+      ],
+      "cluster": null,
+      "tracking_issue": 2256
+    },
+    {
+      "id": "scan-ssot-schema",
+      "kind": "script",
+      "script": "scripts/scan_ssot_schema.py",
+      "rule": "CI gate: validate the .gitapex/ssot.json gate registry",
+      "planes": [
+        "pre-commit",
+        "pre-push",
+        "ci"
+      ],
+      "trigger": "git commit or push (prek / scripts/preflight_all.py) and CI (pull_request workflow)",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "scan-hardcoded-label-literals",
+      "kind": "script",
+      "script": "scripts/scan_hardcoded_label_literals.py",
+      "rule": "CI gate: reject hardcoded family:name GitHub label literals in scripts/*.py outside the sanctioned SSoT homes",
+      "planes": [
+        "pre-commit",
+        "pre-push",
+        "ci"
+      ],
+      "trigger": "git commit or push (prek / scripts/preflight_all.py) and CI (pull_request workflow)",
+      "policy_refs": [
+        "label-policy"
+      ],
+      "cluster": null,
+      "tracking_issue": 2299
+    },
+    {
+      "id": "scan-test-presence-drift",
+      "kind": "script",
+      "script": "scripts/scan_test_presence_drift.py",
+      "rule": "deterministic gate: every script under scripts/ ships its required tests",
+      "planes": [
+        "pre-commit",
+        "pre-push",
+        "ci"
+      ],
+      "trigger": "git commit or push (prek / scripts/preflight_all.py) and CI (pull_request workflow)",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "scan-workflow-action-pins",
+      "kind": "script",
+      "script": "scripts/scan_workflow_action_pins.py",
+      "rule": "verify every workflow uses: entry is SHA-pinned with a tag comment",
+      "planes": [
+        "pre-push",
+        "ci"
+      ],
+      "trigger": "git push (scripts/preflight_all.py) and CI (pull_request workflow)",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "scan-workflow-gh-calls",
+      "kind": "script",
+      "script": "scripts/scan_workflow_gh_calls.py",
+      "rule": "scan .github/workflows/*.yml for unallowlisted direct GitHub API calls",
+      "planes": [
+        "pre-push",
+        "ci"
+      ],
+      "trigger": "git push (scripts/preflight_all.py) and CI (pull_request workflow)",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "scan-workflow-injection",
+      "kind": "script",
+      "script": "scripts/scan_workflow_injection.py",
+      "rule": "flag untrusted GitHub context interpolated directly into workflow run: blocks",
+      "planes": [
+        "pre-commit",
+        "pre-push",
+        "ci"
+      ],
+      "trigger": "git commit or push (prek / scripts/preflight_all.py) and CI (pull_request workflow)",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "scan-workflow-pip",
+      "kind": "script",
+      "script": "scripts/scan_workflow_pip.py",
+      "rule": "ban direct pip install invocations in workflow YAML",
+      "planes": [
+        "pre-commit",
+        "pre-push",
+        "ci"
+      ],
+      "trigger": "git commit or push (prek / scripts/preflight_all.py) and CI (pull_request workflow)",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "scan-workflow-unsigned-commit",
+      "kind": "script",
+      "script": "scripts/scan_workflow_unsigned_commit.py",
+      "rule": "flag git push in workflow run: blocks; the unsigned-commit authoring path",
+      "planes": [
+        "pre-commit",
+        "pre-push",
+        "ci"
+      ],
+      "trigger": "git commit or push (prek / scripts/preflight_all.py) and CI (pull_request workflow)",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "skill-quality-gate",
+      "kind": "script",
+      "script": "scripts/skill_quality_gate.py",
+      "rule": "deterministic skill quality gate built on waza check",
+      "planes": [
+        "pre-commit",
+        "pre-push",
+        "ci"
+      ],
+      "trigger": "git commit or push (prek / scripts/preflight_all.py) and CI (pull_request workflow)",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "threat-intel-triage",
+      "kind": "script",
+      "script": "scripts/threat_intel_triage.py",
+      "rule": "collect threat intelligence and classify repository response needs",
+      "planes": [
+        "pre-commit",
+        "pre-push"
+      ],
+      "trigger": "git commit or push (prek / scripts/preflight_all.py)",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "title-policy",
+      "kind": "script",
+      "script": "scripts/title_policy.py",
+      "rule": "validate issue and PR titles before they enter repository metadata",
+      "planes": [
+        "ci"
+      ],
+      "trigger": "CI (pull_request workflow)",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "uv-pin",
+      "kind": "script",
+      "script": "scripts/uv_pin.py",
+      "rule": "the uv version pin in pyproject.toml is an exact PEP440 specifier with no drift",
+      "planes": [
+        "pre-commit",
+        "pre-push",
+        "ci"
+      ],
+      "trigger": "git commit or push (prek / scripts/preflight_all.py) and CI (pull_request workflow)",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "validate-falco-rules",
+      "kind": "script",
+      "script": "scripts/validate_falco_rules.py",
+      "rule": "validate Falco rules YAML files for structural correctness",
+      "planes": [
+        "pre-push",
+        "ci"
+      ],
+      "trigger": "git push (scripts/preflight_all.py) and CI (pull_request workflow)",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "verify-apm-checksums",
+      "kind": "script",
+      "script": "scripts/verify_apm_checksums.py",
+      "rule": "maintain the committed checksum lock for APM source files",
+      "planes": [
+        "pre-push",
+        "ci"
+      ],
+      "trigger": "git push (scripts/preflight_all.py) and CI (pull_request workflow)",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "verify-control-inventory-currency",
+      "kind": "script",
+      "script": "scripts/verify_control_inventory_currency.py",
+      "rule": "deterministic gate: the security-control inventory stays current with the tree",
+      "planes": [
+        "pre-push",
+        "ci"
+      ],
+      "trigger": "git push (scripts/preflight_all.py) and CI (pull_request workflow)",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "verify-generated-docs-ownership",
+      "kind": "script",
+      "script": "scripts/verify_generated_docs_ownership.py",
+      "rule": "ownership registry and retirement sweep for docs/generated/ artifacts",
+      "planes": [
+        "pre-push",
+        "ci"
+      ],
+      "trigger": "git push (scripts/preflight_all.py) and CI (pull_request workflow)",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "verify-instruction-text-growth",
+      "kind": "script",
+      "script": "scripts/verify_instruction_text_growth.py",
+      "rule": "deterministic gate: net-positive instruction-text PRs declare a reason",
+      "planes": [
+        "pre-push",
+        "ci"
+      ],
+      "trigger": "git push (scripts/preflight_all.py) and CI (pull_request workflow)",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "verify-linked-issue-titles",
+      "kind": "script",
+      "script": "scripts/verify_linked_issue_titles.py",
+      "rule": "verify that linked issue titles satisfy the repository title policy",
+      "planes": [
+        "ci"
+      ],
+      "trigger": "CI (pull_request workflow)",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "verify-readme-translation",
+      "kind": "script",
+      "script": "scripts/verify_readme_translation.py",
+      "rule": "deterministic gate: README.md edits land alongside translations",
+      "planes": [
+        "pre-push",
+        "ci"
+      ],
+      "trigger": "git push (scripts/preflight_all.py) and CI (pull_request workflow)",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "verify-required-check-contexts",
+      "kind": "script",
+      "script": "scripts/verify_required_check_contexts.py",
+      "rule": "static gate: every SoT required_status_check context must be produced by a workflow job",
+      "planes": [
+        "pre-push",
+        "ci"
+      ],
+      "trigger": "git push (scripts/preflight_all.py) and CI (pull_request workflow)",
+      "policy_refs": [
+        "rulesets-main"
+      ],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "verify-ruleset-sync",
+      "kind": "script",
+      "script": "scripts/verify_ruleset_sync.py",
+      "rule": "PR-time gate: live required_status_checks must contain every context the base-ref SoT declares",
+      "planes": [
+        "pre-push",
+        "ci"
+      ],
+      "trigger": "git push (scripts/preflight_all.py) and CI (pull_request workflow)",
+      "policy_refs": [
+        "rulesets-main"
+      ],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "verify-security-control-floor",
+      "kind": "script",
+      "script": "scripts/verify_security_control_floor.py",
+      "rule": "deterministic gate: every scheduled control family meets the auto-file floor",
+      "planes": [
+        "pre-push",
+        "ci"
+      ],
+      "trigger": "git push (scripts/preflight_all.py) and CI (pull_request workflow)",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "verify-shard-coverage",
+      "kind": "script",
+      "script": "scripts/verify_shard_coverage.py",
+      "rule": "completeness gate for the marker-bucketed pytest matrix",
+      "planes": [
+        "ci"
+      ],
+      "trigger": "CI (pull_request workflow)",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "verify-source-version-bump",
+      "kind": "script",
+      "script": "scripts/verify_source_version_bump.py",
+      "rule": "bidirectional drift gate: universal text changes iff apm.yml version bumps",
+      "planes": [
+        "pre-push",
+        "ci"
+      ],
+      "trigger": "git push (scripts/preflight_all.py) and CI (pull_request workflow)",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "verify-test-shard-markers",
+      "kind": "script",
+      "script": "scripts/verify_test_shard_markers.py",
+      "rule": "static check that every tests/test_*.py carries exactly one shard marker",
+      "planes": [
+        "pre-push",
+        "ci"
+      ],
+      "trigger": "git push (scripts/preflight_all.py) and CI (pull_request workflow)",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "verify-text-delta-section",
+      "kind": "script",
+      "script": "scripts/verify_text_delta_section.py",
+      "rule": "deterministic gate: instruction-text PRs declare their character delta",
+      "planes": [
+        "pre-push",
+        "ci"
+      ],
+      "trigger": "git push (scripts/preflight_all.py) and CI (pull_request workflow)",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "scan-non-ascii",
+      "kind": "script",
+      "script": "scripts/scan_non_ascii.py",
+      "rule": "non-ASCII content on issues, PRs, and comments is scanned and actioned",
+      "planes": [
+        "server"
+      ],
+      "trigger": "server-side automation (.github/workflows/issue-pr-triage.yml)",
+      "policy_refs": [],
+      "cluster": "non-ascii",
+      "tracking_issue": null
+    },
+    {
+      "id": "ruleset-no-deletion",
+      "kind": "native",
+      "native_rule": "deletion",
+      "rule": "the default branch cannot be deleted",
+      "planes": [
+        "server"
+      ],
+      "trigger": "git push (branch deletion)",
+      "policy_refs": [
+        "rulesets-main"
+      ],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "ruleset-no-force-push",
+      "kind": "native",
+      "native_rule": "non_fast_forward",
+      "rule": "branch history cannot be rewritten by a non-fast-forward push",
+      "planes": [
+        "server"
+      ],
+      "trigger": "git push (force-push)",
+      "policy_refs": [
+        "rulesets-main"
+      ],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "ruleset-linear-history",
+      "kind": "native",
+      "native_rule": "required_linear_history",
+      "rule": "merge commits are rejected; history stays linear",
+      "planes": [
+        "server"
+      ],
+      "trigger": "git push / PR merge",
+      "policy_refs": [
+        "rulesets-main"
+      ],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "ruleset-required-signatures",
+      "kind": "native",
+      "native_rule": "required_signatures",
+      "rule": "every commit on the default branch must carry a valid signature",
+      "planes": [
+        "server"
+      ],
+      "trigger": "git push / PR merge",
+      "policy_refs": [
+        "rulesets-main"
+      ],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "ruleset-pull-request-review",
+      "kind": "native",
+      "native_rule": "pull_request",
+      "rule": "a PR requires code-owner review, resolved review threads, and a squash-only merge",
+      "planes": [
+        "server"
+      ],
+      "trigger": "PR merge",
+      "policy_refs": [
+        "rulesets-main"
+      ],
+      "cluster": null,
+      "tracking_issue": null
+    },
+    {
+      "id": "ruleset-required-status-checks",
+      "kind": "native",
+      "native_rule": "required_status_checks",
+      "rule": "a PR merges only when every required CI check context reports success",
+      "planes": [
+        "server"
+      ],
+      "trigger": "PR merge",
+      "policy_refs": [
+        "rulesets-main"
+      ],
+      "cluster": null,
+      "tracking_issue": null
+    }
+  ],
+  "clusters": [
+    {
+      "id": "non-ascii",
+      "rule": "outward-facing text is ASCII-only",
+      "expected_planes": [
+        "pretooluse",
+        "pre-push",
+        "ci",
+        "server"
+      ]
+    }
+  ],
+  "label_routing": {
+    "source_note": "machine form of docs/runbooks/issue-triage.md section 'Agent routing'; first-match-wins, one default rule last",
+    "rules": [
+      {
+        "if_any": [
+          "state:rfc",
+          "state:parked"
+        ],
+        "action": "no-action",
+        "body_read": "no"
+      },
+      {
+        "if_any": [
+          "type:tracking"
+        ],
+        "action": "no-action-umbrella",
+        "body_read": "no"
+      },
+      {
+        "if_any": [
+          "severity:security"
+        ],
+        "action": "investigate",
+        "body_read": "yes",
+        "autonomous_pr": false
+      },
+      {
+        "if_all": [
+          "type:fix"
+        ],
+        "if_none": [
+          "severity:security"
+        ],
+        "action": "auto-fix-candidate",
+        "body_read": "yes",
+        "autonomous_pr": true
+      },
+      {
+        "if_any": [
+          "type:docs"
+        ],
+        "action": "auto-fix-candidate",
+        "body_read": "yes",
+        "autonomous_pr": true
+      },
+      {
+        "if_any": [
+          "type:feat",
+          "type:refactor"
+        ],
+        "action": "investigate",
+        "body_read": "yes",
+        "autonomous_pr": false
+      },
+      {
+        "default": true,
+        "action": "triage-needed",
+        "body_read": "title-only"
+      }
+    ]
+  },
+  "label_consumers": [
+    {
+      "path": "scripts/auto_retro.py",
+      "labels": [
+        "type:docs",
+        "layer:meta",
+        "ops:retro-opened",
+        "harness:retro-opened"
+      ],
+      "note": "retrospective issue identity and terminal open-state labels; see #1041"
+    },
+    {
+      "path": "scripts/scan_retro_followup_drift.py",
+      "labels": [
+        "retro:tp",
+        "retro:fp",
+        "retro:fp-candidate",
+        "type:docs",
+        "layer:meta"
+      ],
+      "note": "retrospective follow-up true/false-positive labels; see #1041"
+    },
+    {
+      "path": "scripts/branch_cleanup.py",
+      "labels": [
+        "layer:meta",
+        "type:docs"
+      ],
+      "note": "labels applied to the maintenance issues it files; see #1041"
+    },
+    {
+      "path": "scripts/ruleset_drift.py",
+      "labels": [
+        "layer:meta",
+        "type:fix"
+      ],
+      "note": "labels applied to the ruleset-drift issues it files; see #1041"
+    },
+    {
+      "path": ".github/dependabot.yml",
+      "labels": [
+        "ops:dependencies"
+      ],
+      "note": "labels applied to dependency update PRs; see #1041"
+    }
+  ]
+}

@@ -72,10 +72,10 @@ body:
       multiple: true
       options:
         - "layer:p1-goal-plan"
-        - "layer:p2-precode"
+        - "layer:p2-input-boundary"
         - "layer:p3-harness"
-        - "layer:p4-artifact"
-        - "layer:p5-scope-split"
+        - "layer:p4-safety-boundary"
+        - "layer:p5-scale-quality"
         - "layer:p6-handoff"
         - "layer:meta"
     validations:

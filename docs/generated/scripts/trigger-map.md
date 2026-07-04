@@ -62,7 +62,6 @@ Detection is string-match based:
 | `gate_generated_scripts_manual_edit.py` | workflow | `verify-pr.yml (portable-pr-policy)` |
 | `gate_gh_cli.py` | agent-hook | `claude:PreToolUse` |
 | `gate_gh_cli.py` | agent-hook | `codex:PreToolUse` |
-| `gate_handoff_retro_survey_askuserquestion.py` | agent-hook | `claude:Stop` |
 | `gate_instruction_body_advisory.py` | agent-hook | `claude:PreToolUse` |
 | `gate_instruction_body_advisory.py` | agent-hook | `codex:PreToolUse` |
 | `gate_irreversible_bash.py` | agent-hook | `claude:PreToolUse` |
@@ -200,6 +199,8 @@ Detection is string-match based:
 | `scan_docs_inventory.py` | pre-commit | `scan-docs-inventory` |
 | `scan_docs_inventory.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
 | `scan_flake_pin_drift.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
+| `scan_hardcoded_label_literals.py` | pre-commit | `scan-hardcoded-label-literals` |
+| `scan_hardcoded_label_literals.py` | workflow | `verify-pr.yml (portable-pr-policy)` |
 | `scan_harness_doc_coverage.py` | pre-commit | `scan-harness-doc-coverage` |
 | `scan_harness_doc_coverage.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
 | `scan_hook_coverage_drift.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
@@ -232,6 +233,10 @@ Detection is string-match based:
 | `scan_secrets.py` | pre-commit | `scan-secrets` |
 | `scan_secrets.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
 | `scan_session_path_drift.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
+| `scan_ssot_drift.py` | pre-commit | `scan-ssot-drift` |
+| `scan_ssot_drift.py` | workflow | `verify-pr.yml (portable-pr-policy)` |
+| `scan_ssot_schema.py` | pre-commit | `scan-ssot-schema` |
+| `scan_ssot_schema.py` | workflow | `verify-pr.yml (portable-pr-policy)` |
 | `scan_test_presence_drift.py` | pre-commit | `scan-test-presence-drift` |
 | `scan_test_presence_drift.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
 | `scan_workflow_action_pins.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
@@ -274,6 +279,9 @@ Detection is string-match based:
 | `verify_apm_checksums.py` | workflow | `verify-pr.yml (portable-pr-policy)` |
 | `verify_control_inventory_currency.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
 | `verify_dependabot_author.py` | workflow | `issue-pr-triage.yml (dependabot-author)` |
+| `verify_generated_docs_ownership.py` | workflow | `post-merge.yml (decision-tree)` |
+| `verify_generated_docs_ownership.py` | workflow | `post-merge.yml (verify-docs-drift)` |
+| `verify_generated_docs_ownership.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
 | `verify_instruction_text_growth.py` | workflow | `verify-pr.yml (portable-pr-policy)` |
 | `verify_linked_issue_titles.py` | workflow | `verify-pr.yml (portable-pr-policy)` |
 | `verify_readme_translation.py` | workflow | `verify-pr.yml (portable-pr-policy)` |
@@ -289,6 +297,6 @@ Detection is string-match based:
 
 ## Unreferenced scripts (dead script candidates)
 
-45 script(s) are referenced by no scanned launch source (see the detection caveats above before treating one as dead):
+47 script(s) are referenced by no scanned launch source (see the detection caveats above before treating one as dead):
 
-`_allowlist.py`, `_apm_managed_paths.py`, `_auto_retro_parse.py`, `_auto_retro_render.py`, `_auto_retro_triage.py`, `_ci_watch.py`, `_commit_signing.py`, `_git.py`, `_github_api.py`, `_github_tool_names.py`, `_hook_runtime.py`, `_pr_commit_batch.py`, `_pr_merge.py`, `_ref_classifier.py`, `_retro_labels.py`, `_secret_patterns.py`, `_security_drift_families.py`, `_security_drift_issues.py`, `_session_branches.py`, `_shell_lines.py`, `_trusted_bots.py`, `backup_non_ascii.py`, `ccusage_pin.py`, `compare_cache_regimes.py`, `doc_graph.py`, `generate_devcontainer_arch_overlays.py`, `github_api.py`, `measure_prefix_tokens.py`, `mint_github_app_token.py`, `np_strategy_tracking.py`, `pr_body_builder.py`, `preflight_all.py`, `preflight_cache.py`, `preflight_merge_index_budget.py`, `preflight_pr_body.py`, `preflight_push_prek.py`, `preflight_replacement_pr.py`, `preflight_signed_commits.py`, `preflight_steps.py`, `refresh_pr_branch.py`, `sanitize_history.py`, `scan_area_path_coverage.py`, `session_cost_structure.py`, `uv_download_checksum.py`, `waza_pin.py`
+`_allowlist.py`, `_apm_managed_paths.py`, `_auto_retro_parse.py`, `_auto_retro_render.py`, `_auto_retro_triage.py`, `_ci_watch.py`, `_commit_signing.py`, `_git.py`, `_github_api.py`, `_github_tool_names.py`, `_hook_runtime.py`, `_pr_commit_batch.py`, `_pr_merge.py`, `_ref_classifier.py`, `_retro_labels.py`, `_secret_patterns.py`, `_security_drift_families.py`, `_security_drift_issues.py`, `_session_branches.py`, `_shell_lines.py`, `_ssot.py`, `_trusted_bots.py`, `audit_loop_engineering.py`, `backup_non_ascii.py`, `ccusage_pin.py`, `compare_cache_regimes.py`, `doc_graph.py`, `generate_devcontainer_arch_overlays.py`, `github_api.py`, `measure_prefix_tokens.py`, `mint_github_app_token.py`, `np_strategy_tracking.py`, `pr_body_builder.py`, `preflight_all.py`, `preflight_cache.py`, `preflight_merge_index_budget.py`, `preflight_pr_body.py`, `preflight_push_prek.py`, `preflight_replacement_pr.py`, `preflight_signed_commits.py`, `preflight_steps.py`, `refresh_pr_branch.py`, `sanitize_history.py`, `scan_area_path_coverage.py`, `session_cost_structure.py`, `uv_download_checksum.py`, `waza_pin.py`

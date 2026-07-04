@@ -107,6 +107,32 @@ class TestEvaluate:
         errors = shape.evaluate(body)
         assert any("multiple agent-attribution footers" in e for e in errors)
 
+    def test_ungrounded_facts_time_returns_error(self) -> None:
+        # An uncited approx time figure in ## Facts is denied client-side so
+        # MCP-created PRs are blocked pre-create, not after CI. Refs #2198.
+        body = (
+            "## Facts\n\n- approx 30-60 seconds CI startup\n\n"
+            + _VERIFICATION_OK
+            + "\n"
+            + _CHECKLIST_OK
+            + "\n"
+            + _FOOTER_OK
+        )
+        errors = shape.evaluate(body)
+        assert any("ungrounded approximate time figure" in e for e in errors)
+
+    def test_cited_facts_time_passes(self) -> None:
+        body = (
+            "## Facts\n\n- approx 30s startup "
+            "(https://github.com/o/r/actions/runs/1)\n\n"
+            + _VERIFICATION_OK
+            + "\n"
+            + _CHECKLIST_OK
+            + "\n"
+            + _FOOTER_OK
+        )
+        assert shape.evaluate(body) == []
+
     def test_unknown_h2_returns_allowlist_error(self) -> None:
         # An H2 outside the allowlist is rejected client-side. Refs #1396.
         body = (

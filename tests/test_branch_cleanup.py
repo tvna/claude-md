@@ -228,6 +228,31 @@ class TestSideEffectWrappers:
         )
 
 
+class TestCreateIssue:
+    def test_labels_come_from_the_ssot_registry(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        calls: list[dict[str, Any] | None] = []
+
+        def _fake_rest_json(method: str, path: str, body: dict[str, Any] | None = None, **_kw: object) -> None:
+            calls.append(body)
+
+        monkeypatch.setattr(branch_cleanup, "rest_json", _fake_rest_json)
+        monkeypatch.setattr(
+            branch_cleanup._ssot,
+            "consumer_labels",
+            lambda path: ("area:example", "type:docs"),
+        )
+
+        body_file = tmp_path / "body.md"
+        body_file.write_text("body\n", encoding="utf-8")
+        branch_cleanup.create_issue("o/r", "title", body_file)
+
+        assert calls == [
+            {"title": "title", "body": "body\n", "labels": ["area:example", "type:docs"]}
+        ]
+
+
 def _stub_survey_io(
     monkeypatch: pytest.MonkeyPatch,
     *,
@@ -354,6 +379,18 @@ class TestCLIReconcile:
         monkeypatch.setattr(branch_cleanup, "create_issue", lambda *_a, **_k: calls.append("create"))
         assert _run_reconcile(tmp_path, candidate_count=1) == 0
         assert calls == ["create"]
+
+    def test_create_with_drifted_ssot_registry_fails_cleanly(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        def _raise_key_error(*_a: object, **_k: object) -> None:
+            raise KeyError("no label_consumers entry for path 'scripts/branch_cleanup.py'")
+
+        monkeypatch.setattr(branch_cleanup, "find_rolling_issue", lambda *_a, **_k: None)
+        monkeypatch.setattr(branch_cleanup, "create_issue", _raise_key_error)
+
+        assert _run_reconcile(tmp_path, candidate_count=1) == 1
+        assert "error:" in capsys.readouterr().err
 
     def test_append(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         calls: list[str] = []

@@ -4,13 +4,13 @@
 
 [English](./README.md) | [日本語](./README.ja.md) | [简体中文](./README.zh.md) | [한국어](./README.ko.md)
 
-This is the master repository for personally tuned agent instructions. It compiles [`CLAUDE.md`](./CLAUDE.md) and [`AGENTS.md`](./AGENTS.md) via [`microsoft/apm`](https://github.com/microsoft/apm) for reference in other projects.
+This is the master repository for personally tuned agent instructions. It compiles [`CLAUDE.md`](./CLAUDE.md), [`AGENTS.md`](./AGENTS.md) and [`GEMINI.md`](./GEMINI.md) via [`microsoft/apm`](https://github.com/microsoft/apm) for reference in other projects. `apm compile --target all` produces the compiled text for every tool apm-cli supports (Claude, Codex, Gemini CLI, and any Copilot/`AGENTS.md`-reading client); which files actually land depends on each tool's compile format (see [Tool-specific notes](#tool-specific-notes)).
 
 ## Purpose
 
 - Centralize the principles I hand to AI coding agents so every project behaves consistently.
 - Keep only **universal, personal-level guidelines that hold for every project** here, not project-specific rules.
-- Use APM as the trusted generation harness: edit `.apm/instructions/`, then compile `CLAUDE.md` and `AGENTS.md`.
+- Use APM as the trusted generation harness: edit `.apm/instructions/`, then compile `CLAUDE.md`, `AGENTS.md` and `GEMINI.md`.
 - Each project's local agent instructions reference this master and add only their own delta.
 
 ## Six Principles
@@ -28,14 +28,15 @@ See [`CLAUDE.md`](./CLAUDE.md) or [`AGENTS.md`](./AGENTS.md) for the full compil
 
 ## Build
 
-Sync the locked uv environment, then compile the local instructions:
+apm runs as the nix-built native binary (on PATH via the devcontainer or a
+remote session's `scripts/install-apm.sh`), not via uv. Compile the local
+instructions:
 
 ```bash
-uv sync --locked
-uv run --with "apm-cli==0.12.1" apm compile
+apm compile --target all
 ```
 
-APM reads `.apm/instructions/*.instructions.md` and writes both `CLAUDE.md` and `AGENTS.md` based on `apm.yml`. The uv config applies a 14-day `exclude-newer` lag to dependency resolution.
+APM reads `.apm/instructions/*.instructions.md` and writes `CLAUDE.md`, `AGENTS.md` and `GEMINI.md`. `--target all` compiles for every tool the flake.nix-pinned apm-cli (`scripts/flake_pin.py version --tool apm`) supports (`copilot, claude, cursor, opencode, codex, gemini, windsurf`); `apm.yml`'s `target:` field stays narrower (`claude`, `codex`) because it also scopes `apm install`-style skill deployment, which this repository deliberately keeps limited to the tools actually in use.
 
 When intentionally modifying `.apm/` source files, refresh the checksum lock file:
 
@@ -71,7 +72,11 @@ Bump the pinned release tag in the sync workflow in a reviewed PR. The scheduled
 
 ### Tool-specific notes
 
-- **Codex or other tools that read `AGENTS.md`**: the same sync lands `AGENTS.md` alongside `CLAUDE.md` as a committed real file; no extra steps needed.
+- **Codex, Cursor, OpenCode, Windsurf, or other tools that read `AGENTS.md`**: the same sync lands `AGENTS.md` alongside `CLAUDE.md` as a committed real file; no extra steps needed. These tools have no dedicated compile output of their own; `apm compile` (per apm-cli's target registry) treats `AGENTS.md` as their format.
+
+- **Gemini CLI**: sync `GEMINI.md` alongside `CLAUDE.md` / `AGENTS.md`. It is a one-line import stub (`@./AGENTS.md`); Gemini CLI resolves the import, so its content always matches `AGENTS.md`.
+
+- **GitHub Copilot**: `apm compile --target all` also emits `.github/copilot-instructions.md`, but only when a *global* (non-scoped) instruction primitive exists. This master's sole instruction source declares `applyTo: "**/*"`, which apm-cli's compiler treats as scoped rather than global, so that file is not produced today; Copilot clients that read `AGENTS.md` natively are unaffected.
 
 - **Devin** can use skills that APM expands to `.agents/skills/`. When you need hooks parity, bring in `.devin/hooks.v1.json` alongside the repo instructions. See [`docs/standards/devin-apm-compatibility.md`](./docs/standards/devin-apm-compatibility.md).
 

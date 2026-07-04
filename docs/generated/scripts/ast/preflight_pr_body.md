@@ -29,15 +29,16 @@ flowchart TD
     N010["append(...)"]
     N011["extend(...)"]
     N012["extend(...)"]
-    N013["if issue is not None"]
-    N014["cleaned = strip_html_comments(...)"]
-    N015["refs = classify_refs(...)"]
-    N016["if not refs"]
-    N017["append(...)"]
-    N018["if not any((n == issue for _, n in refs))"]
-    N019["found = join(...)"]
-    N020["append(...)"]
-    N021["return errors"]
+    N013["extend(...)"]
+    N014["if issue is not None"]
+    N015["cleaned = strip_html_comments(...)"]
+    N016["refs = classify_refs(...)"]
+    N017["if not refs"]
+    N018["append(...)"]
+    N019["if not any((n == issue for _, n in refs))"]
+    N020["found = join(...)"]
+    N021["append(...)"]
+    N022["return errors"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 --> N004
@@ -51,17 +52,18 @@ flowchart TD
     N009 -->|"false"| N011
     N011 --> N012
     N012 --> N013
-    N013 -->|"true"| N014
-    N014 --> N015
+    N013 --> N014
+    N014 -->|"true"| N015
     N015 --> N016
-    N016 -->|"true"| N017
-    N016 -->|"false"| N018
-    N018 -->|"true"| N019
-    N019 --> N020
-    N017 --> N021
+    N016 --> N017
+    N017 -->|"true"| N018
+    N017 -->|"false"| N019
+    N019 -->|"true"| N020
     N020 --> N021
-    N018 -->|"false"| N021
-    N013 -->|"false"| N021
+    N018 --> N022
+    N021 --> N022
+    N019 -->|"false"| N022
+    N014 -->|"false"| N022
 ```
 
 ## main(...)

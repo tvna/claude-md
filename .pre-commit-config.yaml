@@ -191,6 +191,44 @@ repos:
         pass_filenames: false
         files: ^docs/.*\.md$
 
+      - id: scan-ssot-schema
+        name: scan ssot schema (scripts/scan_ssot_schema.py verify)
+        # Refs #2252: validates .gitapex/ssot.json (the gate registry) against
+        # its JSON Schema and referential-integrity rules. Fires when the
+        # registry, its schema, the validator, or a policy source it resolves
+        # labels against changes. Mirrors the verify-pr.yml portable-pr-policy
+        # step and the preflight STEPS entry so drift surfaces at commit time.
+        entry: uv run python scripts/scan_ssot_schema.py verify
+        language: system
+        pass_filenames: false
+        files: ^(\.gitapex/.*\.json|scripts/scan_ssot_schema\.py|\.github/labels\.json|\.github/label-policy\.toml)$
+
+      - id: scan-ssot-drift
+        name: scan ssot drift (scripts/scan_ssot_drift.py verify, advisory)
+        # Refs #2256: advisory reconciliation of .gitapex/ssot.json against
+        # the four partial gate manifests (agent_hooks_source.json,
+        # preflight_steps.py STEPS, .pre-commit-config.yaml, rulesets/main.json
+        # native rules and pull_request: workflow scripts). Always exits 0;
+        # divergence is reported as ::warning:: lines only. Mirrors the
+        # scan-ssot-schema wiring on the same three planes.
+        entry: uv run python scripts/scan_ssot_drift.py verify
+        language: system
+        pass_filenames: false
+        files: ^(\.gitapex/.*\.json|scripts/scan_ssot_drift\.py|scripts/agent_hooks_source\.json|scripts/preflight_steps\.py|\.pre-commit-config\.yaml|\.github/rulesets/main\.json|\.github/workflows/.*\.ya?ml)$
+
+      - id: scan-hardcoded-label-literals
+        name: scan hardcoded label literals (scripts/scan_hardcoded_label_literals.py verify)
+        # Refs #2299: anti-regression gate for SSoT phase 3. Rejects a frozen
+        # family:name GitHub label literal in scripts/*.py outside the
+        # sanctioned single sources (_retro_labels.py, _ssot.py, and the
+        # rationale-carrying LITERAL_ALLOWLIST). Fires when any scanned script,
+        # the gate itself, or the label-policy family set changes. Mirrors the
+        # scan-ssot-schema wiring on the same three planes.
+        entry: uv run python scripts/scan_hardcoded_label_literals.py verify
+        language: system
+        pass_filenames: false
+        files: ^(scripts/.*\.py|\.github/label-policy\.toml)$
+
       - id: scan-doc-graph-registration
         name: scan doc graph registration (scripts/scan_doc_graph_registration.py verify)
         # Refs #1793: gate_doc_graph_pr.py only enforces co-changes for files

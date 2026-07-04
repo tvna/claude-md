@@ -72,6 +72,12 @@ type = "prd"
 description = "Decision record for retrying curl downloads in SessionStart installers via shared scripts/_retry.sh with fail-loud-but-fail-open surfacing."
 
 [[nodes]]
+id = "gitapex_ssot_registry_prd"
+path = "docs/prd/gitapex-ssot-gate-registry.md"
+type = "prd"
+description = "Design PRD for the .gitapex/ssot.json gate-function registry: label routing table, policy-source pointers (references, not values), CODEOWNERS plus validator governance, four-phase migration. Refs #2246."
+
+[[nodes]]
 id = "issue_pr_body_standard"
 path = "docs/standards/issue-pr-body-standard.md"
 type = "standard"
@@ -88,6 +94,12 @@ id = "pr_body_quality_enforcement"
 path = "docs/standards/pr-body-quality.enforcement.toml"
 type = "standard"
 description = "Enforcement registry for PR body content-quality defect classes; verified by scan_pr_body_quality_drift.py."
+
+[[nodes]]
+id = "loop_engineering_audit"
+path = "docs/standards/loop-engineering-audit.toml"
+type = "standard"
+description = "Stored, re-auditable checklist of loop-engineering achievement status; reported by scripts/audit_loop_engineering.py."
 
 [[nodes]]
 id = "doc_dependency_runbook"

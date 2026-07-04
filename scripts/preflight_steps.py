@@ -226,11 +226,50 @@ STEPS: tuple[Step, ...] = (
         argv=("python3", "scripts/scan_docs_inventory.py", "verify"),
     ),
     Step(
+        # Refs #2252. Validates .gitapex/ssot.json (the gate registry) against
+        # its JSON Schema and referential-integrity rules: paths tracked, ids
+        # resolve, routing labels resolve against labels.json, consumer labels
+        # resolve against labels.json plus the label-policy rename/retired
+        # tables. Static working-tree read; mirrors the verify-pr.yml step so
+        # the gate fires pre-push, not only in CI.
+        name="scan_ssot_schema",
+        argv=("python3", "scripts/scan_ssot_schema.py", "verify"),
+    ),
+    Step(
+        # Refs #2256. Advisory reconciliation of .gitapex/ssot.json against
+        # the four partial gate manifests (agent_hooks_source.json,
+        # this STEPS tuple, .pre-commit-config.yaml, rulesets/main.json native
+        # rules and pull_request: workflow scripts). Always exits 0; drift
+        # surfaces as ::warning:: lines only. Mirrors the scan_ssot_schema
+        # step so both gates fire pre-push, not only in CI.
+        name="scan_ssot_drift",
+        argv=("python3", "scripts/scan_ssot_drift.py", "verify"),
+    ),
+    Step(
+        # Refs #2299. Anti-regression gate for SSoT phase 3: rejects a frozen
+        # family:name GitHub label literal in scripts/*.py outside the
+        # sanctioned single sources (_retro_labels.py, _ssot.py, and the
+        # rationale-carrying LITERAL_ALLOWLIST). Static working-tree read;
+        # mirrors the verify-pr.yml step so the gate fires pre-push, not only
+        # in CI.
+        name="scan_hardcoded_label_literals",
+        argv=("python3", "scripts/scan_hardcoded_label_literals.py", "verify"),
+    ),
+    Step(
         # Refs #1325. Fails when a Markdown doc outside docs/archive/ cites a
         # .github/workflows/<name>.yml path that no longer exists; the drift
         # class #1319's workflow consolidation left behind.
         name="scan_doc_workflow_refs",
         argv=("python3", "scripts/scan_doc_workflow_refs.py", "verify"),
+    ),
+    Step(
+        # Refs #2226. Registry sanity for the docs/generated/ ownership map:
+        # fails when a registered producer script is gone, forcing the
+        # retiring PR to drop the registry entry that feeds the post-merge
+        # retire sweep. Read-only; the write lane ("retire") is banned from
+        # STEPS by tests/test_preflight_steps.py.
+        name="verify_generated_docs_ownership",
+        argv=("python3", "scripts/verify_generated_docs_ownership.py", "verify"),
     ),
     Step(
         # Refs #1597. Parses every docs/ ```mermaid block via bun (the #1595

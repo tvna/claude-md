@@ -4,7 +4,11 @@ from pathlib import Path
 
 import auto_retro as ar
 import pytest
-from auto_retro_test_helpers import merged_event, orchestrator_recorder
+from auto_retro_test_helpers import (
+    TERMINAL_PRIMARY,
+    merged_event,
+    orchestrator_recorder,
+)
 
 pytestmark = pytest.mark.shard_ci_ops_auto_retro_create
 
@@ -235,7 +239,7 @@ class TestRunCreate:
         assert back_link_idx < label_idx, (
             "terminal label must be POSTed after the back-link comment"
         )
-        assert seen[label_idx][2] == {"labels": [ar._TERMINAL_LABEL]}
+        assert seen[label_idx][2] == {"labels": [TERMINAL_PRIMARY]}
 
     def test_back_link_disabled_by_default_label_still_applied(
         self, monkeypatch: pytest.MonkeyPatch
@@ -266,4 +270,32 @@ class TestRunCreate:
         assert any(
             m == "POST" and p == "/repos/o/r/issues/42/labels"
             for m, p, _b in seen
+        )
+
+    def test_missing_terminal_labels_fail_before_create_issue(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Registry drift that drops the ops:/harness: terminal family must
+        fail before create_issue POSTs the retro (#2288 review): otherwise the
+        retro would be created, apply_terminal_label would raise, and a rerun
+        would hit the existing-retro skip and never apply the terminal signal.
+        """
+        seen = orchestrator_recorder(
+            monkeypatch,
+            created_response={"number": 777, "html_url": "https://x/i/777"},
+            commits=[
+                {"commit": {"message": "feat(harness): step one"}},
+                {"commit": {"message": "fixup! step one"}},
+            ],
+        )
+        # Schema-valid drift: identity labels present, terminal family dropped.
+        monkeypatch.setattr(
+            ar._ssot, "consumer_labels", lambda path: ("type:docs", "layer:meta")
+        )
+        with pytest.raises(RuntimeError, match="auto-retro registry labels"):
+            ar.run(merged_event(number=42, commits=2), "o/r")
+        # The failure preceded the side effect: no retro issue was POSTed, so a
+        # rerun after the registry fix is not blocked by a partial retro.
+        assert not any(
+            m == "POST" and p == "/repos/o/r/issues" for m, p, _b in seen
         )

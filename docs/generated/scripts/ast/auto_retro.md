@@ -2,6 +2,55 @@
 
 This file is generated from `scripts/auto_retro.py` by `python3 scripts/script_ast_graph.py all-doc`. Do not edit it by hand: content under `docs/generated/scripts/` is owned by the post-merge automation (refs #1540); update the source script instead.
 
+## _resolve_registry_labels(...)
+
+```mermaid
+flowchart TD
+    N001["_resolve_registry_labels(...)"]
+    N002["try"]
+    N003["return _ssot.consumer_labels('<str>')"]
+    N004["except (KeyError, TypeError)"]
+    N005["raise RuntimeError(f'<str>{exc}')"]
+    N001 -->|"start"| N002
+    N002 -->|"try"| N003
+    N002 -->|"raises"| N004
+    N004 --> N005
+```
+
+## _identity_labels(...)
+
+```mermaid
+flowchart TD
+    N001["_identity_labels(...)"]
+    N002["identity = [label for label in _resolve_registry_labels() if not label.endswith('<str>')]"]
+    N003["if not identity"]
+    N004["raise RuntimeError('<str>')"]
+    N005["return identity"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 -->|"true"| N004
+    N003 -->|"false"| N005
+```
+
+## _terminal_labels(...)
+
+```mermaid
+flowchart TD
+    N001["_terminal_labels(...)"]
+    N002["terminal = [label for label in _resolve_registry_labels() if label.endswith('<str>')]"]
+    N003["primary = next(...)"]
+    N004["legacy = next(...)"]
+    N005["if primary is None or legacy is None"]
+    N006["raise RuntimeError('<str>')"]
+    N007["return (primary, legacy)"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 --> N004
+    N004 --> N005
+    N005 -->|"true"| N006
+    N005 -->|"false"| N007
+```
+
 ## auto_retro_decision_tree(...)
 
 ```mermaid
@@ -146,38 +195,40 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["fetch_past_retro_labels(...)"]
-    N002["query = f'<str>{repo}<str>'"]
-    N003["encoded = quote(...)"]
-    N004["per_page = min(...)"]
-    N005["try"]
-    N006["raw = gh_api(...)"]
-    N007["except GitHubApiError"]
-    N008["print(...)"]
-    N009["return []"]
-    N010["try"]
-    N011["data = json.loads(raw) if raw.strip() else {}"]
-    N012["except json.JSONDecodeError"]
-    N013["return []"]
-    N014["items = list(data.get('<str>') or [])[:limit]"]
-    N015["out = []"]
-    N016["for item in items:     if not isinstance(item, dict):         continue     number = item.get('<str>')     if not isinstance(number, int):         continue     labels_raw = item.get('<str>') or []     names: set[str] = set()     for lbl in labels_raw:         if isinstance(lbl, dict):             name = lbl.get('<str>')             if isinstance(name, str) and name:                 names.add(name)     body = item.get('<str>')     if not isinstance(body, str) or not body:         body = '<str>'     signals = parse_signals_from_retro_body(body)     state = item.get('<str>')     state = state if isinstance(state, str) and state else '<str>'     title = item.get('<str>')     title = title if isinstance(title, str) else '<str>'     out.append(PastRetro(number=number, signals=signals, labels=frozenset(names), state=state, title=title))"]
-    N017["return out"]
+    N002["label_clause = join(...)"]
+    N003["query = f'<str>{repo}<str>{label_clause}<str>'"]
+    N004["encoded = quote(...)"]
+    N005["per_page = min(...)"]
+    N006["try"]
+    N007["raw = gh_api(...)"]
+    N008["except GitHubApiError"]
+    N009["print(...)"]
+    N010["return []"]
+    N011["try"]
+    N012["data = json.loads(raw) if raw.strip() else {}"]
+    N013["except json.JSONDecodeError"]
+    N014["return []"]
+    N015["items = list(data.get('<str>') or [])[:limit]"]
+    N016["out = []"]
+    N017["for item in items:     if not isinstance(item, dict):         continue     number = item.get('<str>')     if not isinstance(number, int):         continue     labels_raw = item.get('<str>') or []     names: set[str] = set()     for lbl in labels_raw:         if isinstance(lbl, dict):             name = lbl.get('<str>')             if isinstance(name, str) and name:                 names.add(name)     body = item.get('<str>')     if not isinstance(body, str) or not body:         body = '<str>'     signals = parse_signals_from_retro_body(body)     state = item.get('<str>')     state = state if isinstance(state, str) and state else '<str>'     title = item.get('<str>')     title = title if isinstance(title, str) else '<str>'     out.append(PastRetro(number=number, signals=signals, labels=frozenset(names), state=state, title=title))"]
+    N018["return out"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 --> N004
     N004 --> N005
-    N005 -->|"try"| N006
-    N005 -->|"raises"| N007
-    N007 --> N008
+    N005 --> N006
+    N006 -->|"try"| N007
+    N006 -->|"raises"| N008
     N008 --> N009
-    N006 --> N010
-    N010 -->|"try"| N011
-    N010 -->|"raises"| N012
-    N012 --> N013
-    N011 --> N014
-    N014 --> N015
+    N009 --> N010
+    N007 --> N011
+    N011 -->|"try"| N012
+    N011 -->|"raises"| N013
+    N013 --> N014
+    N012 --> N015
     N015 --> N016
     N016 --> N017
+    N017 --> N018
 ```
 
 ## has_review_comments(...)
@@ -330,10 +381,28 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["apply_terminal_label(...)"]
-    N002["gh_api(...)"]
-    N003["end"]
+    N002["(primary, legacy) = _terminal_labels(...)"]
+    N003["if label is None"]
+    N004["label = primary"]
+    N005["try"]
+    N006["gh_api(...)"]
+    N007["except GitHubApiError"]
+    N008["if label != primary or exc.code != 422"]
+    N009["raise"]
+    N010["gh_api(...)"]
+    N011["end"]
     N001 -->|"start"| N002
     N002 --> N003
+    N003 -->|"true"| N004
+    N004 --> N005
+    N003 -->|"false"| N005
+    N005 -->|"try"| N006
+    N005 -->|"raises"| N007
+    N007 --> N008
+    N008 -->|"true"| N009
+    N008 -->|"false"| N010
+    N006 --> N011
+    N010 --> N011
 ```
 
 ## post_skip_comment(...)
@@ -384,14 +453,15 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["search_open_retro_issues(...)"]
-    N002["query = f'<str>{repo}<str>'"]
-    N003["encoded = quote(...)"]
-    N004["raw = gh_api(...)"]
-    N005["data = json.loads(raw) if raw.strip() else {}"]
-    N006["items = list(...)"]
-    N007["out = []"]
-    N008["for item in items:     title = item.get('<str>') or '<str>'     if is_retro_issue_title(title):         out.append(item)"]
-    N009["return out"]
+    N002["label_clause = join(...)"]
+    N003["query = f'<str>{repo}<str>{label_clause}'"]
+    N004["encoded = quote(...)"]
+    N005["raw = gh_api(...)"]
+    N006["data = json.loads(raw) if raw.strip() else {}"]
+    N007["items = list(...)"]
+    N008["out = []"]
+    N009["for item in items:     title = item.get('<str>') or '<str>'     if is_retro_issue_title(title):         out.append(item)"]
+    N010["return out"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 --> N004
@@ -400,6 +470,7 @@ flowchart TD
     N006 --> N007
     N007 --> N008
     N008 --> N009
+    N009 --> N010
 ```
 
 ## fetch_issue_comments(...)
@@ -604,29 +675,30 @@ flowchart TD
     N090["title = build_retro_title(...)"]
     N091["body = build_retro_body(...)"]
     N092["labels = issue_labels(...)"]
-    N093["created = create_issue(...)"]
-    N094["new_number = get(...)"]
-    N095["new_url = created.get('<str>') or '<str>'"]
-    N096["back_link_status = '<str>'"]
-    N097["terminal_label_status = '<str>'"]
-    N098["if isinstance(new_number, int)"]
-    N099["if not _pr_comments_enabled()"]
-    N100["back_link_status = '<str>'"]
-    N101["try"]
-    N102["back_link_status = post_back_link_comment(...)"]
-    N103["except GitHubApiError"]
-    N104["print(...)"]
-    N105["back_link_status = '<str>'"]
-    N106["try"]
-    N107["apply_terminal_label(...)"]
-    N108["terminal_label_status = '<str>'"]
-    N109["except GitHubApiError"]
-    N110["print(...)"]
-    N111["terminal_label_status = '<str>'"]
-    N112["msg = f'<str>{new_number}<str>{new_url}<str>{back_link_status}<str>{terminal_label_status}'"]
-    N113["print(...)"]
-    N114["_append_summary(...)"]
-    N115["return 0"]
+    N093["_terminal_labels(...)"]
+    N094["created = create_issue(...)"]
+    N095["new_number = get(...)"]
+    N096["new_url = created.get('<str>') or '<str>'"]
+    N097["back_link_status = '<str>'"]
+    N098["terminal_label_status = '<str>'"]
+    N099["if isinstance(new_number, int)"]
+    N100["if not _pr_comments_enabled()"]
+    N101["back_link_status = '<str>'"]
+    N102["try"]
+    N103["back_link_status = post_back_link_comment(...)"]
+    N104["except GitHubApiError"]
+    N105["print(...)"]
+    N106["back_link_status = '<str>'"]
+    N107["try"]
+    N108["apply_terminal_label(...)"]
+    N109["terminal_label_status = '<str>'"]
+    N110["except GitHubApiError"]
+    N111["print(...)"]
+    N112["terminal_label_status = '<str>'"]
+    N113["msg = f'<str>{new_number}<str>{new_url}<str>{back_link_status}<str>{terminal_label_status}'"]
+    N114["print(...)"]
+    N115["_append_summary(...)"]
+    N116["return 0"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 -->|"true"| N004
@@ -733,27 +805,28 @@ flowchart TD
     N095 --> N096
     N096 --> N097
     N097 --> N098
-    N098 -->|"true"| N099
+    N098 --> N099
     N099 -->|"true"| N100
-    N099 -->|"false"| N101
-    N101 -->|"try"| N102
-    N101 -->|"raises"| N103
-    N103 --> N104
+    N100 -->|"true"| N101
+    N100 -->|"false"| N102
+    N102 -->|"try"| N103
+    N102 -->|"raises"| N104
     N104 --> N105
-    N100 --> N106
-    N102 --> N106
     N105 --> N106
-    N106 -->|"try"| N107
-    N107 --> N108
-    N106 -->|"raises"| N109
-    N109 --> N110
+    N101 --> N107
+    N103 --> N107
+    N106 --> N107
+    N107 -->|"try"| N108
+    N108 --> N109
+    N107 -->|"raises"| N110
     N110 --> N111
-    N108 --> N112
     N111 --> N112
-    N098 -->|"false"| N112
+    N109 --> N113
     N112 --> N113
+    N099 -->|"false"| N113
     N113 --> N114
     N114 --> N115
+    N115 --> N116
 ```
 
 ## _now_utc_iso(...)
@@ -1374,10 +1447,10 @@ flowchart TD
     N038["args = parse_args(...)"]
     N039["try"]
     N040["return args.func(args)"]
-    N041["except ValueError"]
+    N041["except GitHubApiError"]
     N042["print(...)"]
     N043["return 1"]
-    N044["except GitHubApiError"]
+    N044["except (ValueError, RuntimeError)"]
     N045["print(...)"]
     N046["return 1"]
     N001 -->|"start"| N002

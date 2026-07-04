@@ -6,8 +6,8 @@ live_catalog = ".github/labels.json"
 apply_workflow = ".github/workflows/apply-labels.yml"
 
 [rollout]
-phase = "documentation-only"
-note = "This file records the final design. Live label mutation is out of scope until issue 972."
+phase = "renames-batch"
+note = "Renames batch (#2139, parent #972) flips labels.json to the final names for the five rename entries and migrates their consumers. labels_apply.py renames live labels in place via the rename_from map below so associations are preserved (no delete+recreate). The status=rename + rename_from entries stay until the operator runs apply-labels.yml; a follow-up then flips them to keep and drops rename_from. Retirements and area additions remain out of scope until later #972 batches."
 pr_requires_scoped_issue = true
 
 [[families]]
@@ -366,6 +366,7 @@ paths = [
   "scripts/plan_approval_gate.py", "scripts/plan_language_context.py",
   "scripts/prompt_context7_gate.py", "scripts/pr_body_close_keyword_gate.py",
   "scripts/issue_link.py", "scripts/session_set_origin_head.py",
+  "scripts/audit_loop_engineering.py",
   "docs/runbooks/preflight.md", "docs/runbooks/replacement-pr-preflight.md",
   ".github/workflows/verify-agents.yml", ".github/workflows/verify-pr.yml",
   ".github/workflows/verify-actionlint.yml",
@@ -507,6 +508,6 @@ paths = [
   "scripts/doc_graph.py", "scripts/doc_graph_viz.py",
   "scripts/script_ast_graph.py", "scripts/script_dependency_graph.py",
   "scripts/script_trigger_map.py", "scripts/workflow_diagram.py",
-  "docs/graph/**",
+  "docs/graph/**", ".gitapex/**",
   ".github/workflows/validate-doc-graph.yml",
 ]

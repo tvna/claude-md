@@ -56,6 +56,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
+import _ssot
 from _github_api import GitHubApiError, rest_text
 from _retro_labels import (
     RETRO_FP,
@@ -272,16 +273,48 @@ def is_404_error(exc: GitHubApiError) -> bool:
     return exc.code == 404
 
 
+_DISCOVERY_LABEL_EXCLUSIONS = frozenset({RETRO_TP, RETRO_FP, RETRO_FP_CANDIDATE})
+
+
 def search_retro_issues(repo: str) -> list[dict[str, Any]]:
     """Search open + closed retro issues in *repo*.
 
-    Filters by the two labels ``auto_retro.issue_labels`` always applies:
-    ``type:docs`` and ``layer:meta``. The combination is narrow enough to
-    avoid scanning the whole repo's issue list. ``per_page=100`` is the
-    GitHub Search API maximum; this is sufficient for the repo's current
-    retro volume (well under 100 in the lifetime of the framework).
+    Filters by the labels ``auto_retro.issue_labels`` always applies to a
+    retro issue, resolved from the ``.gitapex/ssot.json`` ``label_consumers``
+    entry for this script via :func:`_ssot.consumer_labels` rather than
+    hardcoded literals, so a future label rename (e.g. #1041's still-open
+    successor-label decision) is a registry-only edit. That entry also
+    carries the three operator-decision labels (``retro:tp``/``retro:fp``/
+    ``retro:fp-candidate``) this script uses elsewhere for label-state
+    decisions, not issue discovery, so they are excluded here. The
+    combination is narrow enough to avoid scanning the whole repo's issue
+    list. ``per_page=100`` is the GitHub Search API maximum; this is
+    sufficient for the repo's current retro volume (well under 100 in the
+    lifetime of the framework).
     """
-    query = f"repo:{repo} is:issue label:type:docs label:layer:meta in:title retro"
+    try:
+        registry_labels = _ssot.consumer_labels("scripts/scan_retro_followup_drift.py")
+    except (KeyError, TypeError) as exc:
+        # Narrowed to this call site (rather than widening main()'s except
+        # tuple) so a drifted registry fails loud here without also
+        # swallowing unrelated KeyError/TypeError bugs elsewhere in the
+        # module's plain dict/string parsing.
+        raise RuntimeError(f"retro-followup-drift discovery labels: {exc}") from exc
+    discovery_labels = [label for label in registry_labels if label not in _DISCOVERY_LABEL_EXCLUSIONS]
+    if not discovery_labels:
+        # scan_ssot_schema.py only requires `labels` to be an array, so an
+        # operator edit that removes every non-operator-decision label from
+        # this consumer's registry entry is schema-valid. Without this
+        # check that would silently drop every `label:` qualifier and scan
+        # every issue titled "retro" repo-wide, a widening the old
+        # hardcoded query could never drift into.
+        raise RuntimeError(
+            "retro-followup-drift discovery labels: registry entry for "
+            "scripts/scan_retro_followup_drift.py has no labels left after "
+            "excluding retro:tp/retro:fp/retro:fp-candidate"
+        )
+    label_clause = " ".join(f"label:{label}" for label in discovery_labels)
+    query = f"repo:{repo} is:issue {label_clause} in:title retro"
     encoded = quote(query, safe="")
     raw = gh_api("GET", f"/search/issues?q={encoded}&per_page=100")
     data = json.loads(raw) if raw.strip() else {}
@@ -490,14 +523,14 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         return args.func(args)
-    except ValueError as exc:
-        print(f"::error::{exc}", file=sys.stderr)
-        return 1
     except GitHubApiError as exc:
         print(
             f"::error::GitHub API failed (HTTP {exc.code}): {exc.body}",
             file=sys.stderr,
         )
+        return 1
+    except (ValueError, RuntimeError) as exc:
+        print(f"::error::{exc}", file=sys.stderr)
         return 1
 
 

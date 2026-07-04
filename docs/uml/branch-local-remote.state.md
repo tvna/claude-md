@@ -11,8 +11,7 @@ English | [日本語](./branch-local-remote.state.ja.md)
 This document models the branch lifecycle the agent drives inside one remote
 execution session, split into the two state machines that actually diverge:
 the **local** working branch inside the ephemeral container, and the **remote**
-branch on GitHub. A state diagram is the right lens here (the existing
-`survey-followup-timing.sequence.md` already covers per-hook message ordering)
+branch on GitHub. A state diagram is the right lens here
 because the defect class is *state divergence across the container boundary*:
 which states a branch can occupy, which transitions a deterministic gate guards,
 and which transitions have no gate at all.

@@ -252,6 +252,33 @@ class TestPlaceholderAndSubstantiveContentGates:
         assert any("Assumptions" in e for e in errors), errors
 
 
+class TestUngroundedFactsTimeGate:
+    """Check #9 (ungrounded time figures in Facts) in evaluate(). Refs #2198."""
+
+    def test_uncited_time_figure_in_facts_flagged(self) -> None:
+        body = _GOOD_BODY.replace(
+            "## Facts\n\n- Fact: x\n\n",
+            "## Facts\n\n- approx 30-60 seconds CI startup\n\n",
+        )
+        errors = prb.evaluate(body)
+        assert any("ungrounded approximate time figure" in e for e in errors), errors
+
+    def test_cited_time_figure_in_facts_passes(self) -> None:
+        body = _GOOD_BODY.replace(
+            "## Facts\n\n- Fact: x\n\n",
+            "## Facts\n\n- approx 30s startup "
+            "(https://github.com/o/r/actions/runs/1)\n\n",
+        )
+        assert prb.evaluate(body) == []
+
+    def test_time_figure_in_assumptions_not_flagged(self) -> None:
+        body = _GOOD_BODY.replace(
+            "## Assumptions\n\n- speculation: y\n\n",
+            "## Assumptions\n\n- approx 5s in-session creation (Speculation)\n\n",
+        )
+        assert prb.evaluate(body) == []
+
+
 class TestHarnessEnvResolution:
     """main() resolves the relaxation from CLAUDE_CODE_REMOTE (#1025)."""
 

@@ -30,6 +30,7 @@ import re
 from pathlib import Path
 from typing import Any, NamedTuple
 
+import _shell_lines
 import analyze_ci_timings
 import attack_review_reminder
 import auto_retro
@@ -82,6 +83,7 @@ import scan_devcontainer_tool_drift
 import scan_doc_workflow_refs
 import scan_docs_inventory
 import scan_flake_pin_drift
+import scan_hardcoded_label_literals
 import scan_harness_doc_coverage
 import scan_hook_coverage_drift
 import scan_hook_predicate_surface_drift
@@ -106,6 +108,8 @@ import scan_scripts_gh_calls
 import scan_secret_runbooks
 import scan_secrets
 import scan_session_path_drift
+import scan_ssot_drift
+import scan_ssot_schema
 import scan_test_presence_drift
 import scan_workflow_action_pins
 import scan_workflow_gh_calls
@@ -127,6 +131,7 @@ import validate_json_syntax
 import verify_apm_checksums
 import verify_control_inventory_currency
 import verify_dependabot_author
+import verify_generated_docs_ownership
 import verify_instruction_text_growth
 import verify_linked_issue_titles
 import verify_readme_translation
@@ -269,6 +274,9 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("scan_retro_followup_drift.py", "run"): "test_scan_retro_followup_drift_run_matches_workflow_env",
     ("scan_secret_runbooks.py", "verify"): "test_scan_secret_runbooks_verify_matches_workflow_args",
     ("scan_secrets.py", "verify"): "test_scan_secrets_verify_matches_workflow_args",
+    ("scan_ssot_drift.py", "verify"): "test_scan_ssot_drift_verify_matches_workflow_args",
+    ("scan_ssot_schema.py", "verify"): "test_scan_ssot_schema_verify_matches_workflow_args",
+    ("scan_hardcoded_label_literals.py", "verify"): "test_scan_hardcoded_label_literals_verify_matches_workflow_args",
     ("scan_ruff_format.py", "verify"): "test_scan_ruff_format_verify_matches_workflow_args",
     ("scan_scripts_gh_calls.py", "verify"): "test_scan_scripts_gh_calls_verify_matches_workflow_args",
     ("scan_session_path_drift.py", "verify"): "test_scan_session_path_drift_verify_matches_workflow_args",
@@ -295,6 +303,11 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("python_pin.py", "verify"): "test_python_pin_verify_matches_workflow_args",
     ("verify_apm_checksums.py", "verify"): "test_verify_apm_checksums_matches_workflow_args",
     ("verify_dependabot_author.py", "verify"): "test_verify_dependabot_author_verify_matches_workflow_args",
+    # Refs #2226. "verify" is the read-only registry-sanity gate
+    # (verify-agents.yml lint-scripts-static); "retire" is the write-lane
+    # sweep run only by the post-merge decision-tree job.
+    ("verify_generated_docs_ownership.py", "verify"): "test_verify_generated_docs_ownership_verify_matches_workflow_args",
+    ("verify_generated_docs_ownership.py", "retire"): "test_verify_generated_docs_ownership_retire_matches_workflow_args",
     ("verify_linked_issue_titles.py", "verify"): "test_verify_linked_issue_titles_verify_matches_workflow_args",
     ("verify_readme_translation.py", "verify"): "test_verify_readme_translation_matches_workflow_args",
     ("verify_text_delta_section.py", "verify"): "test_verify_text_delta_section_matches_workflow_args",
@@ -318,22 +331,6 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
 }
 
 
-def _flatten_shell_continuations(text: str) -> list[str]:
-    """Join backslash-continued shell lines into single logical lines."""
-    out: list[str] = []
-    buf = ""
-    for raw_line in text.split("\n"):
-        stripped = raw_line.rstrip()
-        if stripped.endswith("\\"):
-            buf += stripped[:-1].rstrip() + " "
-        else:
-            out.append(buf + stripped)
-            buf = ""
-    if buf:
-        out.append(buf)
-    return out
-
-
 def _normalize_subcommand(raw: str | None) -> str | None:
     """Strip shell punctuation around the first token after the script."""
     if raw is None:
@@ -348,7 +345,10 @@ def _emit_invocations_from_run(
     workflow: str, job: str, step: str, run_text: str
 ) -> list[WorkflowInvocation]:
     out: list[WorkflowInvocation] = []
-    for line in _flatten_shell_continuations(run_text):
+    # Route through the shared shell-continuation flattener (single source of
+    # truth, scripts/_shell_lines) so a `\` continuation joins tokens the same
+    # way the real shell does; drop the 1-based start lineno it returns. Refs #2208.
+    for _lineno, line in _shell_lines.flatten_shell_continuations(run_text):
         for match in _PYTHON_SCRIPT_INVOCATION.finditer(line):
             out.append(
                 WorkflowInvocation(
@@ -1061,15 +1061,8 @@ def test_ruleset_drift_detect_and_reconcile_match_workflow_args(
     )
     calls: list[dict[str, Any]] = []
 
-    def fake_file_issue(
-        repo: str,
-        title: str,
-        body_file: Path,
-        labels: tuple[str, ...] = ruleset_drift.ISSUE_LABELS,
-    ) -> None:
-        calls.append(
-            {"repo": repo, "title": title, "body_file": body_file, "labels": labels}
-        )
+    def fake_file_issue(repo: str, title: str, body_file: Path) -> None:
+        calls.append({"repo": repo, "title": title, "body_file": body_file})
 
     # No open rolling issue + capture create; reconcile must never shell out.
     monkeypatch.setattr(ruleset_drift, "find_rolling_issue", lambda repo, title: None)
@@ -1352,6 +1345,37 @@ def test_verify_apm_checksums_matches_workflow_args(tmp_path: Path) -> None:
 
     assert verify_apm_checksums.main(["--root", str(tmp_path), "update"]) == 0
     assert verify_apm_checksums.main(["--root", str(tmp_path), "verify"]) == 0
+
+
+def test_verify_generated_docs_ownership_verify_matches_workflow_args() -> None:
+    """Mirrors the ``Assert generated-docs ownership registry consistency``
+    step in ``.github/workflows/verify-agents.yml`` (issue #2226). Read-only:
+    every producer registered in OWNERSHIP must exist on the real tree."""
+    assert verify_generated_docs_ownership.main(["verify"]) == 0
+
+
+def test_verify_generated_docs_ownership_retire_matches_workflow_args(tmp_path: Path) -> None:
+    """Mirrors the ``Retire orphaned generated docs`` step in the post-merge
+    ``decision-tree`` job (issue #2226). Exercised against a fixture root
+    rather than the checkout: on a retiring branch the real tree legitimately
+    holds orphans that only the post-merge lane may delete, so a bare
+    ``retire`` here would mutate tracked files mid-suite."""
+    for surface in verify_generated_docs_ownership.OWNERSHIP:
+        producer = tmp_path / surface.producer
+        producer.parent.mkdir(parents=True, exist_ok=True)
+        producer.write_text("# producer\n", encoding="utf-8")
+        owned = (
+            tmp_path
+            / Path(verify_generated_docs_ownership.GENERATED_ROOT)
+            / surface.pattern.replace("*", "sample")
+        )
+        owned.parent.mkdir(parents=True, exist_ok=True)
+        owned.write_text("owned\n", encoding="utf-8")
+    orphan = tmp_path / Path(verify_generated_docs_ownership.GENERATED_ROOT) / "stale.md"
+    orphan.write_text("stale\n", encoding="utf-8")
+
+    assert verify_generated_docs_ownership.main(["retire", "--root", str(tmp_path)]) == 0
+    assert not orphan.exists()
 
 
 def test_verify_dependabot_author_verify_matches_workflow_args() -> None:
@@ -2175,6 +2199,7 @@ def test_pr_upsert_upsert_files_matches_workflow_args(
         "--body-file", str(body_file),
         "--add", "CLAUDE.md",
         "--add", "AGENTS.md",
+        "--add", "GEMINI.md",
     ]) == 0
 
     # post-merge.yml decision-tree shape: --from-diff over a directory prefix,
@@ -2292,9 +2317,9 @@ def test_publish_instruction_release_publish_matches_workflow_args(
     """publish accepts the --tag/--asset argv used by publish-instructions-release.yml.
 
     The release job calls ``publish_instruction_release.py publish --tag "$TAG"
-    --asset CLAUDE.md --asset AGENTS.md --asset SHA256SUMS``. Monkeypatch the
-    publish boundary so the contract test pins the argv shape without an API
-    call or on-disk asset files. Refs #1678.
+    --asset CLAUDE.md --asset AGENTS.md --asset GEMINI.md --asset SHA256SUMS``.
+    Monkeypatch the publish boundary so the contract test pins the argv shape
+    without an API call or on-disk asset files. Refs #1678, #2210.
     """
     monkeypatch.setenv("GH_TOKEN", "tok")
     monkeypatch.setenv("REPO", "owner/repo")
@@ -2308,6 +2333,8 @@ def test_publish_instruction_release_publish_matches_workflow_args(
             "CLAUDE.md",
             "--asset",
             "AGENTS.md",
+            "--asset",
+            "GEMINI.md",
             "--asset",
             "SHA256SUMS",
         ]
@@ -3216,6 +3243,24 @@ def test_scan_provisioning_hook_serial_verify_matches_workflow_args() -> None:
     """Mirrors the `Verify shared-binary provisioning hooks are serial`
     step in `.github/workflows/verify-agents.yml` (issue #1155)."""
     assert scan_provisioning_hook_serial.main(["verify"]) == 0
+
+
+def test_scan_ssot_schema_verify_matches_workflow_args() -> None:
+    """Mirrors the `Validate .gitapex/ssot.json registry` step in
+    `.github/workflows/verify-pr.yml` (issue #2252)."""
+    assert scan_ssot_schema.main(["verify"]) == 0
+
+
+def test_scan_ssot_drift_verify_matches_workflow_args() -> None:
+    """Mirrors the `Report .gitapex/ssot.json drift (advisory)` step in
+    `.github/workflows/verify-pr.yml` (issue #2256)."""
+    assert scan_ssot_drift.main(["verify"]) == 0
+
+
+def test_scan_hardcoded_label_literals_verify_matches_workflow_args() -> None:
+    """Mirrors the `Reject hardcoded label literals in scripts` step in
+    `.github/workflows/verify-pr.yml` (issue #2299)."""
+    assert scan_hardcoded_label_literals.main(["verify"]) == 0
 
 
 def test_scan_session_path_drift_verify_matches_workflow_args() -> None:

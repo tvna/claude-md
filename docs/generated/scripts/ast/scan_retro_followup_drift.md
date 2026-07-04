@@ -193,16 +193,32 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["search_retro_issues(...)"]
-    N002["query = f'<str>{repo}<str>'"]
-    N003["encoded = quote(...)"]
-    N004["raw = gh_api(...)"]
-    N005["data = json.loads(raw) if raw.strip() else {}"]
-    N006["return list(data.get('<str>') or [])"]
+    N002["try"]
+    N003["registry_labels = consumer_labels(...)"]
+    N004["except (KeyError, TypeError)"]
+    N005["raise RuntimeError(f'<str>{exc}')"]
+    N006["discovery_labels = [label for label in registry_labels if label not in _DISCOVERY_LABEL_EXCLUSIONS]"]
+    N007["if not discovery_labels"]
+    N008["raise RuntimeError('<str>')"]
+    N009["label_clause = join(...)"]
+    N010["query = f'<str>{repo}<str>{label_clause}<str>'"]
+    N011["encoded = quote(...)"]
+    N012["raw = gh_api(...)"]
+    N013["data = json.loads(raw) if raw.strip() else {}"]
+    N014["return list(data.get('<str>') or [])"]
     N001 -->|"start"| N002
-    N002 --> N003
-    N003 --> N004
+    N002 -->|"try"| N003
+    N002 -->|"raises"| N004
     N004 --> N005
-    N005 --> N006
+    N003 --> N006
+    N006 --> N007
+    N007 -->|"true"| N008
+    N007 -->|"false"| N009
+    N009 --> N010
+    N010 --> N011
+    N011 --> N012
+    N012 --> N013
+    N013 --> N014
 ```
 
 ## fetch_issue_or_pr(...)
@@ -365,10 +381,10 @@ flowchart TD
     N009["args = parse_args(...)"]
     N010["try"]
     N011["return args.func(args)"]
-    N012["except ValueError"]
+    N012["except GitHubApiError"]
     N013["print(...)"]
     N014["return 1"]
-    N015["except GitHubApiError"]
+    N015["except (ValueError, RuntimeError)"]
     N016["print(...)"]
     N017["return 1"]
     N001 -->|"start"| N002

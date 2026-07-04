@@ -5,8 +5,8 @@
     "color": "1d76db"
   },
   {
-    "name": "layer:p2-precode",
-    "description": "CLAUDE.md §2 -- Input and pre-code reasoning (untrusted text, facts, assumptions).",
+    "name": "layer:p2-input-boundary",
+    "description": "CLAUDE.md §2 -- Trusted inputs, unknowns, facts, assumptions, and ambiguity.",
     "color": "5319e7"
   },
   {
@@ -15,13 +15,13 @@
     "color": "0e8a16"
   },
   {
-    "name": "layer:p4-artifact",
-    "description": "CLAUDE.md §4 -- Safety boundary (simplicity, tool scope, secret exposure).",
+    "name": "layer:p4-safety-boundary",
+    "description": "CLAUDE.md §4 -- Simplicity bounded by safety, tool scope, and secret exposure.",
     "color": "fbca04"
   },
   {
-    "name": "layer:p5-scope-split",
-    "description": "CLAUDE.md §5 -- Change scope & agent split.",
+    "name": "layer:p5-scale-quality",
+    "description": "CLAUDE.md §5 -- Change scope, agent split, and quality proportional to scale.",
     "color": "d93f0b"
   },
   {
@@ -81,27 +81,27 @@
   },
   {
     "name": "semver:major",
-    "description": "Universal-text change breaks backward compatibility (removes/weakens a rule, tightens a constraint, or breaks a stable reference); bumps apm.yml MAJOR. See docs/prd/semantic-versioning-universal-text.md R1.",
+    "description": "Universal-text change breaks backward compatibility; bumps apm.yml MAJOR.",
     "color": "006b75"
   },
   {
     "name": "semver:minor",
-    "description": "Universal-text change is a backward-compatible addition or clarification; bumps apm.yml MINOR. See docs/prd/semantic-versioning-universal-text.md R1.",
+    "description": "Universal-text change is a backward-compatible addition or clarification; bumps apm.yml MINOR.",
     "color": "006b75"
   },
   {
     "name": "semver:patch",
-    "description": "Universal-text change is non-normative surface only (typo, whitespace, formatting, link fix, meaning-preserving reword); bumps apm.yml PATCH. See docs/prd/semantic-versioning-universal-text.md R1.",
+    "description": "Universal-text change is non-normative surface only; bumps apm.yml PATCH.",
     "color": "006b75"
   },
   {
-    "name": "dependencies",
-    "description": "Dependency bump (Dependabot or manual).",
+    "name": "ops:dependencies",
+    "description": "Dependency update workflow state from Dependabot or equivalent automation.",
     "color": "0366d6"
   },
   {
-    "name": "harness:retro-opened",
-    "description": "auto-retro harness opened a retrospective issue; PR is at terminal state.",
+    "name": "ops:retro-opened",
+    "description": "auto-retro opened or reused the retrospective for a terminal PR.",
     "color": "0e8a16"
   },
   {
