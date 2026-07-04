@@ -315,7 +315,7 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["issue_labels(...)"]
-    N002["labels = ['<str>', '<str>']"]
+    N002["labels = list(...)"]
     N003["for lbl in layer_labels:     if lbl and lbl not in labels:         labels.append(lbl)"]
     N004["if tentative and RETRO_TENTATIVE not in labels"]
     N005["append(...)"]
