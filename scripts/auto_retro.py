@@ -1357,6 +1357,15 @@ def run(event: dict[str, Any], repo: str) -> int:
     )
     labels = issue_labels(pr.layer_labels, _identity_labels(), tentative=tentative)
 
+    # Resolve the terminal labels before the create_issue side effect so a
+    # registry that is schema-valid but missing the ops:/harness: terminal
+    # family fails here rather than after the retro is POSTed. apply_terminal_label
+    # runs only after create_issue, and the existing-retro skip above returns
+    # early on a rerun, so a terminal-label drift discovered there would leave a
+    # created retro whose reruns never apply the terminal signal. Failing before
+    # any side effect keeps the rerun-after-fix path whole. Refs #2288 review.
+    _terminal_labels()
+
     created = create_issue(repo, title, body, labels)
     new_number = created.get("number")
     new_url = created.get("html_url") or ""
