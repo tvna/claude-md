@@ -1,15 +1,18 @@
 """Tests for ``scripts/scan_hardcoded_label_literals.py``.
 
-Covers the pure detector (full-value match; family-prefix, search-fragment,
-HTML-marker, and docstring non-matches), the two-tier allowlist, the
-family-coverage drift guard, the real-repo happy path (a clean tree is this
-gate's acceptance bar), and the ``main`` CLI contract (exit 0/1/64).
+Covers the derived known-family set (live + retired + runtime-only), the pure
+detector (full-value match; family-prefix, search-fragment, HTML-marker, and
+docstring non-matches), the count-bound allowlist (a second copy of an
+allowlisted literal is still rejected), the real-repo happy path (a clean tree
+is this gate's acceptance bar), and the ``main`` CLI contract (exit 0/1/64).
 
 Refs #2299, #2298, #2246, #1041.
 """
 
 from __future__ import annotations
 
+import re
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -20,6 +23,54 @@ pytestmark = pytest.mark.shard_preflight
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
+def _live_policy() -> dict[str, object]:
+    return tomllib.loads((_REPO_ROOT / gate._LABEL_POLICY_PATH).read_text(encoding="utf-8"))
+
+
+def _live_label_re() -> re.Pattern[str]:
+    return gate.build_label_re(gate.known_families(_live_policy()))
+
+
+# ---------------------------------------------------------------------------
+# Known families (derived from label-policy)
+# ---------------------------------------------------------------------------
+
+
+class TestKnownFamilies:
+    def test_policy_family_names(self) -> None:
+        policy = {"families": [{"name": "layer"}, {"name": "area"}, {"bad": 1}]}
+        assert gate.policy_family_names(policy) == frozenset({"layer", "area"})
+
+    def test_retired_family_names_extracts_prefix(self) -> None:
+        policy = {
+            "retired_labels": [
+                {"name": "threat:intel-needed"},
+                {"name": "agent:*"},
+                {"name": "layer:meta"},
+                {"name": "bug"},  # bare name, no family
+            ]
+        }
+        assert gate.retired_family_names(policy) == frozenset({"threat", "agent", "layer"})
+
+    def test_known_families_unions_live_retired_runtime(self) -> None:
+        policy = {
+            "families": [{"name": "layer"}, {"name": "type"}],
+            "retired_labels": [{"name": "threat:x"}, {"name": "agent:y"}],
+        }
+        assert gate.known_families(policy) == frozenset({"layer", "type", "threat", "agent", "retro"})
+
+    def test_live_policy_covers_retired_threat_and_agent(self) -> None:
+        """Regression guard for the Codex review: retired families are scanned.
+
+        The retired threat:* / agent:* families must be in the derived set so a
+        hardcoded reference to a retired label is caught (#1041 AC#3).
+        """
+        fams = gate.known_families(_live_policy())
+        assert {"threat", "agent", "retro"} <= fams
+        # And a retired threat literal actually matches the built regex.
+        assert _live_label_re().match("threat:response-needed")
+
+
 # ---------------------------------------------------------------------------
 # Detector: iter_label_literals
 # ---------------------------------------------------------------------------
@@ -27,113 +78,90 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 
 class TestIterLabelLiterals:
     def test_flags_full_value_label_constant(self) -> None:
-        src = 'BAD = "layer:meta"\n'
-        assert gate.iter_label_literals(src) == [(1, "layer:meta")]
+        assert gate.iter_label_literals('BAD = "layer:meta"\n', _live_label_re()) == [(1, "layer:meta")]
 
-    def test_flags_each_family(self) -> None:
-        src = "\n".join(f'X{i} = "{fam}:name"' for i, fam in enumerate(gate.KNOWN_FAMILIES))
-        found = {lit for _ln, lit in gate.iter_label_literals(src)}
-        assert found == {f"{fam}:name" for fam in gate.KNOWN_FAMILIES}
+    def test_flags_retired_threat_literal(self) -> None:
+        assert gate.iter_label_literals('X = "threat:response-needed"\n', _live_label_re()) == [
+            (1, "threat:response-needed")
+        ]
 
     def test_ignores_family_prefix_without_name_segment(self) -> None:
         # The migration-safe pattern: label.startswith("severity:").
-        src = 'if label.startswith("severity:"):\n    pass\n'
-        assert gate.iter_label_literals(src) == []
+        assert gate.iter_label_literals('if label.startswith("severity:"):\n    pass\n', _live_label_re()) == []
 
     def test_ignores_search_query_fragment_substring(self) -> None:
-        src = 'Q = " type:pr is:merged merged:>=2024"\n'
-        assert gate.iter_label_literals(src) == []
+        assert gate.iter_label_literals('Q = " type:pr is:merged merged:>=2024"\n', _live_label_re()) == []
 
     def test_ignores_html_marker_substring(self) -> None:
         # "<!-- auto-retro:back-link -->" contains "retro:back-link" as a
         # substring but is not a whole-value label token.
-        src = 'MARKER = "<!-- auto-retro:back-link -->"\n'
-        assert gate.iter_label_literals(src) == []
+        assert gate.iter_label_literals('MARKER = "<!-- auto-retro:back-link -->"\n', _live_label_re()) == []
 
     def test_ignores_docstring_prose(self) -> None:
-        src = '"""Applies type:tracking and layer:p3-harness to the issue."""\n'
-        assert gate.iter_label_literals(src) == []
+        assert (
+            gate.iter_label_literals(
+                '"""Applies type:tracking and layer:p3-harness to the issue."""\n',
+                _live_label_re(),
+            )
+            == []
+        )
 
     def test_ignores_unknown_family(self) -> None:
-        src = 'X = "threat:intel-needed"\n'  # retired family, not in KNOWN_FAMILIES
-        assert gate.iter_label_literals(src) == []
-
-    def test_reports_lineno(self) -> None:
-        src = "A = 1\n\nB = 2\nC = 'type:fix'\n"
-        assert gate.iter_label_literals(src) == [(4, "type:fix")]
+        # "colour" is not a known family, live or retired.
+        assert gate.iter_label_literals('X = "colour:blue"\n', _live_label_re()) == []
 
     def test_syntax_error_propagates(self) -> None:
         with pytest.raises(SyntaxError):
-            gate.iter_label_literals("def (:\n")
+            gate.iter_label_literals("def (:\n", _live_label_re())
 
 
 # ---------------------------------------------------------------------------
-# Allowlist and scan_file
+# Allowlist and scan_file (count-bound)
 # ---------------------------------------------------------------------------
 
 
 class TestScanFile:
     def test_flags_literal_in_non_allowlisted_file(self) -> None:
-        errors = gate.scan_file("scripts/some_new_gate.py", 'X = "layer:meta"\n')
+        errors = gate.scan_file("scripts/some_new_gate.py", 'X = "layer:meta"\n', _live_label_re())
         assert len(errors) == 1
         assert "scripts/some_new_gate.py,line=1" in errors[0]
         assert "layer:meta" in errors[0]
 
     def test_ssot_home_file_is_wholly_exempt(self) -> None:
-        # _retro_labels.py may hold any retro:* literal; whole file exempt.
         src = 'RETRO_TP = "retro:tp"\nRETRO_FP = "retro:new-one"\n'
-        assert gate.scan_file("scripts/_retro_labels.py", src) == []
+        assert gate.scan_file("scripts/_retro_labels.py", src, _live_label_re()) == []
 
-    def test_literal_allowlist_exempts_exact_pair_only(self) -> None:
-        # The allowlisted exact literal passes...
-        ok = gate.scan_file("scripts/_ref_classifier.py", 'TRACKING = "type:tracking"\n')
-        assert ok == []
-        # ...but a different literal in the same file is still rejected.
-        bad = gate.scan_file("scripts/_ref_classifier.py", 'OTHER = "layer:meta"\n')
-        assert len(bad) == 1
-        assert "layer:meta" in bad[0]
+    def test_allowlisted_literal_first_occurrence_passes(self) -> None:
+        assert (
+            gate.scan_file(
+                "scripts/_ref_classifier.py",
+                'TRACKING = "type:tracking"\n',
+                _live_label_re(),
+            )
+            == []
+        )
+
+    def test_second_copy_of_allowlisted_literal_is_rejected(self) -> None:
+        """Codex review: bind the exemption to the sanctioned occurrence only."""
+        src = 'A = "type:tracking"\nB = "type:tracking"\n'
+        errors = gate.scan_file("scripts/_ref_classifier.py", src, _live_label_re())
+        assert len(errors) == 1
+        assert "line=2" in errors[0]
+        assert "exceeds the 1 allowlisted" in errors[0]
+
+    def test_different_literal_in_allowlisted_file_is_rejected(self) -> None:
+        errors = gate.scan_file("scripts/_ref_classifier.py", 'OTHER = "layer:meta"\n', _live_label_re())
+        assert len(errors) == 1
+        assert "layer:meta" in errors[0]
 
     def test_parse_failure_is_a_loud_error(self) -> None:
-        errors = gate.scan_file("scripts/broken.py", "def (:\n")
+        errors = gate.scan_file("scripts/broken.py", "def (:\n", _live_label_re())
         assert len(errors) == 1
         assert "cannot parse" in errors[0]
 
-    def test_is_allowlisted(self) -> None:
-        assert gate.is_allowlisted("scripts/_ssot.py", "type:feat")
-        assert gate.is_allowlisted("scripts/_ref_classifier.py", "type:tracking")
-        assert not gate.is_allowlisted("scripts/_ref_classifier.py", "type:feat")
-        assert not gate.is_allowlisted("scripts/other.py", "type:tracking")
-
-
-# ---------------------------------------------------------------------------
-# Family-coverage drift guard
-# ---------------------------------------------------------------------------
-
-
-class TestFamilyCoverage:
-    def test_policy_family_names(self) -> None:
-        policy = {"families": [{"name": "layer"}, {"name": "area"}, {"bad": 1}]}
-        assert gate.policy_family_names(policy) == frozenset({"layer", "area"})
-
-    def test_uncovered_families_empty_when_covered(self) -> None:
-        policy = {"families": [{"name": "layer"}, {"name": "type"}]}
-        assert gate.uncovered_families(policy) == frozenset()
-
-    def test_uncovered_families_flags_new_family(self) -> None:
-        policy = {"families": [{"name": "brandnew"}]}
-        assert gate.uncovered_families(policy) == frozenset({"brandnew"})
-
-    def test_known_families_superset_of_live_label_policy(self) -> None:
-        """Drift guard: every governed family must be covered by the gate.
-
-        Shipped in the same change as the gate (CLAUDE.md section 3): adding a
-        family to .github/label-policy.toml without teaching KNOWN_FAMILIES
-        fails here, forcing the gate to learn the new family's literals.
-        """
-        import tomllib
-
-        policy = tomllib.loads((_REPO_ROOT / gate._LABEL_POLICY_PATH).read_text(encoding="utf-8"))
-        assert gate.uncovered_families(policy) == frozenset()
+    def test_allowed_occurrences(self) -> None:
+        assert gate.allowed_occurrences("scripts/_ref_classifier.py", "type:tracking") == 1
+        assert gate.allowed_occurrences("scripts/other.py", "type:tracking") == 0
 
 
 # ---------------------------------------------------------------------------
@@ -142,19 +170,28 @@ class TestFamilyCoverage:
 
 
 class TestAllowlistHygiene:
-    def test_literal_allowlist_entries_are_live(self) -> None:
-        """Every LITERAL_ALLOWLIST (path, literal) must still exist in the tree.
+    def test_literal_allowlist_entries_are_live_and_counted(self) -> None:
+        """Every LITERAL_ALLOWLIST entry must match its file's actual count.
 
-        A stale entry (the literal was removed or the file deleted) would
-        silently widen the exemption; this keeps the allowlist a true mirror.
+        A stale entry (literal removed, file deleted) or a wrong count would
+        silently widen or misstate the exemption; this keeps it a true mirror.
         """
-        for (path, literal), rationale in gate.LITERAL_ALLOWLIST.items():
+        label_re = _live_label_re()
+        for (path, literal), (count, rationale) in gate.LITERAL_ALLOWLIST.items():
             file_path = _REPO_ROOT / path
             assert file_path.is_file(), f"allowlisted path {path} is gone"
-            found = {lit for _ln, lit in gate.iter_label_literals(file_path.read_text(encoding="utf-8"))}
-            assert literal in found, (
+            actual = [
+                lit
+                for _ln, lit in gate.iter_label_literals(file_path.read_text(encoding="utf-8"), label_re)
+                if lit == literal
+            ]
+            assert actual, (
                 f"allowlisted literal {literal!r} no longer appears in {path}; "
                 f"drop the stale LITERAL_ALLOWLIST entry"
+            )
+            assert len(actual) == count, (
+                f"{path}: {literal!r} appears {len(actual)} time(s) but the "
+                f"allowlist expects {count}; update the count"
             )
             assert rationale.strip(), f"empty rationale for ({path}, {literal})"
 
@@ -171,10 +208,12 @@ class TestAllowlistHygiene:
 class TestRealRepoAndCli:
     def test_verify_clean_tree(self) -> None:
         """The tree that introduces the gate carries no unsanctioned literal."""
-        import tomllib
+        assert gate.verify(_REPO_ROOT, "scripts", _live_policy()) == []
 
-        policy = tomllib.loads((_REPO_ROOT / gate._LABEL_POLICY_PATH).read_text(encoding="utf-8"))
-        assert gate.verify(_REPO_ROOT, "scripts", policy) == []
+    def test_verify_empty_policy_is_loud_error(self) -> None:
+        errors = gate.verify(_REPO_ROOT, "scripts", {"families": []})
+        assert len(errors) == 1
+        assert "no [[families]]" in errors[0]
 
     def test_main_verify_exit_zero(self) -> None:
         assert gate.main(["verify"]) == 0
@@ -190,14 +229,10 @@ class TestRealRepoAndCli:
         scripts = tmp_path / "scripts"
         scripts.mkdir()
         (scripts / "offender.py").write_text('X = "layer:meta"\n', encoding="utf-8")
-        # A minimal label-policy so the family-coverage guard passes and the
-        # exit-1 comes from the injected literal, not a missing policy file.
         (tmp_path / "label-policy.toml").write_text(
             '[[families]]\nname = "layer"\ncardinality = "one_or_more"\n',
             encoding="utf-8",
         )
-        # tmp_path is not a git repo, so list_script_files falls back to the
-        # on-disk glob under the (redirected) repo root.
         monkeypatch.setattr(gate, "_REPO_ROOT", tmp_path)
         assert (
             gate.main(
@@ -217,11 +252,6 @@ class TestRealRepoAndCli:
         assert gate.main(["verify", "--label-policy", "nope.toml"]) == 1
 
 
-# ---------------------------------------------------------------------------
-# list_script_files
-# ---------------------------------------------------------------------------
-
-
 def test_list_script_files_fallback_globs_on_disk(tmp_path: Path) -> None:
     scripts = tmp_path / "scripts"
     scripts.mkdir()
@@ -229,5 +259,4 @@ def test_list_script_files_fallback_globs_on_disk(tmp_path: Path) -> None:
     (scripts / "b.py").write_text("y = 2\n", encoding="utf-8")
     (scripts / "notpy.txt").write_text("z\n", encoding="utf-8")
     # tmp_path is not a git repo; git ls-files returns nonzero -> on-disk glob.
-    result = gate.list_script_files(tmp_path, "scripts")
-    assert result == ["scripts/a.py", "scripts/b.py"]
+    assert gate.list_script_files(tmp_path, "scripts") == ["scripts/a.py", "scripts/b.py"]
