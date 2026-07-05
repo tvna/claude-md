@@ -286,19 +286,22 @@ def upsert_files_pr(
       (``expectedHeadOid`` = the branch head). If the tip already carries the same
       additions/deletions, no commit is made; the open PR (if any) is reconciled.
 
-    When *recreate* is true and there is drift, the existing *branch* ref is
-    deleted first (``_delete_branch``) so the run always lands on the branch-absent
-    path: a fresh branch off *base* carrying a single signed commit. A delete is
-    not a force-push, so the all-branches ``non_fast_forward`` ruleset is still
-    honored; unlike the append path it leaves no accumulated ancestry on the reused
-    branch, which is what lets an unsigned legacy ancestor permanently violate the
-    main ``required_signatures`` rule (Refs #1560). Default false preserves the
-    append semantics for every other caller.
+    When *recreate* is true, there is drift, and no PR is currently open on
+    *branch*, the existing *branch* ref is deleted first (``_delete_branch``) so
+    the run lands on the branch-absent path: a fresh branch off *base* carrying a
+    single signed commit. A delete is not a force-push, so the all-branches
+    ``non_fast_forward`` ruleset holds; unlike the append path it leaves no
+    accumulated ancestry, which is what lets an unsigned legacy ancestor
+    permanently violate ``required_signatures`` (Refs #1560). When a PR is
+    already open on *branch*, the delete is skipped instead: deleting it would
+    auto-close that PR on GitHub and start a fresh PR number, starving the series
+    of ever merging if *base* advances faster than the open PR can be merged
+    (Refs #2382). Default false preserves append semantics for every other caller.
 
     Returns ``"up-to-date"``, or ``"<verb>:<pr_number>"`` where *verb* is
-    ``created`` (new branch; always the verb under *recreate*), ``committed``
-    (appended onto an existing branch), or ``branch-current`` (branch tip already
-    matched, PR reconciled only).
+    ``created`` (new branch cut off base), ``committed`` (appended onto an
+    existing branch, including a *recreate* call that found an open PR), or
+    ``branch-current`` (branch tip already matched, PR reconciled only).
     """
     if not additions and not deletions:
         return "up-to-date"
@@ -314,11 +317,12 @@ def upsert_files_pr(
 
     api_additions = [{"path": path, "contents": base64.b64encode(content).decode("ascii")} for path, content in additions]
     api_deletions = [{"path": path} for path in deletions]
-    if recreate:
+    if recreate and not _list_open_prs(repo=repo, head=branch, token=token, apply_call=apply_call):
         # Drop the reused branch's accumulated ancestry so the commit lands on a
         # fresh branch off base (single signed commit, no legacy unsigned
         # ancestor). Delete is not a force-push -> non_fast_forward is honored.
-        # Refs #1560.
+        # Refs #1560. Skipped when a PR is already open on this branch: deleting
+        # it would auto-close that PR (Refs #2382); see the docstring above.
         _delete_branch(repo=repo, branch=branch, token=token, apply_call=apply_call)
     head_oid = _get_branch_head_oid(repo=repo, branch=branch, token=token, apply_call=apply_call)
     if head_oid is None:
@@ -757,9 +761,11 @@ def main(argv: list[str] | None = None) -> int:
         "--recreate",
         action="store_true",
         help=(
-            "On drift, delete the fixed head branch and recreate it off --base "
-            "with a single signed commit instead of appending onto its tip. Use "
-            "for a fixed bot branch that can fall far behind base (the "
+            "On drift, when no PR is open on the fixed head branch, delete it "
+            "and recreate it off --base with a single signed commit instead of "
+            "appending onto its tip (an open PR falls through to the append "
+            "path instead, so it is never auto-closed by the delete). Use for a "
+            "fixed bot branch that can fall far behind base (the "
             "createCommitOnBranch append then fails); mirrors the triage-report "
             "refresh path (Refs #1560)."
         ),

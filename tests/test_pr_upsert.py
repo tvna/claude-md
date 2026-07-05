@@ -918,17 +918,49 @@ class TestUpsertSingleFilePr:
         assert gql.calls == []
 
     def test_recreate_deletes_branch_and_recommits_off_base(self) -> None:
-        # #1560: with recreate=True and drift, the reused branch is deleted and
-        # the commit lands on a fresh branch cut off base (a single signed commit
-        # anchored to the base sha -> no inherited unsigned ancestor). A delete is
-        # not a force-push, so the all-branches non_fast_forward ruleset holds.
+        # #1560: with recreate=True, drift, and no PR open on the branch, the
+        # reused branch is deleted and the commit lands on a fresh branch cut off
+        # base (a single signed commit anchored to the base sha -> no inherited
+        # unsigned ancestor). A delete is not a force-push, so the all-branches
+        # non_fast_forward ruleset holds.
         router = _Router([
             ("GET", "/contents/docs/r.md?ref=main", 200, _contents_response(b"# stale main\n")),
+            ("GET", "/pulls?", 200, []),
             ("DELETE", "/git/refs/heads/chore/refresh", 200, {}),
             ("GET", "/git/ref/heads/chore/refresh", 404, {"message": "Not Found"}),
             ("GET", "/git/ref/heads/main", 200, {"object": {"sha": "basesha"}}),
             ("POST", "/git/refs", 201, {}),
+            ("POST", "/pulls", 201, {"number": 9}),
+        ])
+        gql = _RecordingGraphql()
+        result = pu.upsert_single_file_pr(
+            repo="o/r", path="docs/r.md", content=self._CONTENT, base="main",
+            branch="chore/refresh", title="t", body="b",
+            commit_subject="s", commit_body="Refs #1", token="tok",
+            recreate=True, apply_call=router.apply_call, graphql_call=gql.graphql_call,
+        )
+        assert result == "created:9"
+        # The reused branch ref was deleted before the fresh commit.
+        assert any(m == "DELETE" and "/git/refs/heads/chore/refresh" in u for m, u, _ in router.log)
+        # The commit anchors to the base sha, not a stale branch tip.
+        assert gql.calls[0]["input"]["expectedHeadOid"] == "basesha"
+        # A fresh branch ref was cut off base.
+        assert any(m == "POST" and "/git/refs" in u for m, u, _ in router.log)
+
+    def test_recreate_skipped_when_pr_already_open(self) -> None:
+        # #2382: with recreate=True, drift, but an open PR already exists for the
+        # branch, the delete must be skipped -- deleting the branch out from
+        # under an open PR auto-closes it on GitHub, and the next PR opened for
+        # the recreated branch gets a new number instead of reusing the closed
+        # one. If base keeps advancing faster than the open PR can be merged,
+        # that cycle repeats forever and no PR in the series ever merges. The
+        # commit must instead append onto the existing branch tip and reconcile
+        # the same open PR.
+        router = _Router([
+            ("GET", "/contents/docs/r.md?ref=main", 200, _contents_response(b"# stale main\n")),
             ("GET", "/pulls?", 200, [{"number": 7}]),
+            ("GET", "/git/ref/heads/chore/refresh", 200, {"object": {"sha": "branchtip"}}),
+            ("GET", "/contents/docs/r.md?ref=chore/refresh", 200, _contents_response(b"# stale branch\n")),
             ("PATCH", "/pulls/7", 200, {"number": 7}),
         ])
         gql = _RecordingGraphql()
@@ -938,13 +970,13 @@ class TestUpsertSingleFilePr:
             commit_subject="s", commit_body="Refs #1", token="tok",
             recreate=True, apply_call=router.apply_call, graphql_call=gql.graphql_call,
         )
-        assert result == "created:7"
-        # The reused branch ref was deleted before the fresh commit.
-        assert any(m == "DELETE" and "/git/refs/heads/chore/refresh" in u for m, u, _ in router.log)
-        # The commit anchors to the base sha, not a stale branch tip.
-        assert gql.calls[0]["input"]["expectedHeadOid"] == "basesha"
-        # A fresh branch ref was cut off base.
-        assert any(m == "POST" and "/git/refs" in u for m, u, _ in router.log)
+        assert result == "committed:7"
+        # The branch was never deleted; the open PR stays alive across the run.
+        assert not any(m == "DELETE" for m, _u, _ in router.log)
+        # The commit appends onto the existing branch tip, not a fresh base cut.
+        assert gql.calls[0]["input"]["expectedHeadOid"] == "branchtip"
+        # No new branch ref was created.
+        assert not any(m == "POST" and "/git/refs" in u for m, u, _ in router.log)
 
     def test_recreate_no_drift_is_noop_and_keeps_branch(self) -> None:
         # No drift vs base: short-circuit before any delete, so recreate never
