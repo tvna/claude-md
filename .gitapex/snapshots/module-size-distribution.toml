@@ -8,18 +8,18 @@ max_module_lines = 800
 warn_module_lines = 640
 
 [summary]
-total_modules = 216
-in_warn_band = 11
+total_modules = 219
+in_warn_band = 12
 exactly_at_limit = 1
 over_budget = 3
 
 # Module counts by inclusive physical-line range.
 [histogram]
-"1-160" = 62
-"161-320" = 100
+"1-160" = 64
+"161-320" = 101
 "321-480" = 31
-"481-640" = 9
-"641-800" = 11
+"481-640" = 8
+"641-800" = 12
 "801+" = 3
 
 # warn_band: passing modules in [warn_module_lines, max_module_lines].
@@ -37,6 +37,7 @@ warn_band = [
     "scripts/ruleset_drift.py",
     "scripts/rulesets_apply.py",
     "scripts/scan_design_philosophy_drift.py",
+    "scripts/scan_ssot_drift.py",
     "scripts/security_drift_report.py",
 ]
 over_budget = [

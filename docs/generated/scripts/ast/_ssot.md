@@ -98,6 +98,54 @@ flowchart TD
     N014 -->|"false"| N016
 ```
 
+## retired_label_names(...)
+
+```mermaid
+flowchart TD
+    N001["retired_label_names(...)"]
+    N002["policy_path = policy_source_path(...)"]
+    N003["try"]
+    N004["policy = loads(...)"]
+    N005["except (OSError, UnicodeDecodeError)"]
+    N006["raise RuntimeError(f'<str>{policy_path}<str>{exc}')"]
+    N007["except tomllib.TOMLDecodeError"]
+    N008["raise RuntimeError(f'<str>{policy_path}<str>{exc}')"]
+    N009["retired = get(...)"]
+    N010["if not isinstance(retired, list)"]
+    N011["raise TypeError(f'<str>{policy_path}<str>')"]
+    N012["names = set(...)"]
+    N013["for entry in retired:     if not isinstance(entry, dict):         raise TypeError(f'<str>{entry!r}')     name = entry.get('<str>')     if not isinstance(name, str):         raise TypeError(f'<str>{entry!r}')     if '<str>' not in name:         names.add(name)"]
+    N014["return frozenset(names)"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 -->|"try"| N004
+    N003 -->|"raises"| N005
+    N005 --> N006
+    N003 -->|"raises"| N007
+    N007 --> N008
+    N004 --> N009
+    N009 --> N010
+    N010 -->|"true"| N011
+    N010 -->|"false"| N012
+    N012 --> N013
+    N013 --> N014
+```
+
+## group_labels_by_family(...)
+
+```mermaid
+flowchart TD
+    N001["group_labels_by_family(...)"]
+    N002["order = []"]
+    N003["groups = {}"]
+    N004["for label in labels:     family = label.split('<str>', 1)[0]     if family not in groups:         groups[family] = []         order.append(family)     groups[family].append(label)"]
+    N005["return ['<str>'.join(groups[family]) for family in order]"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 --> N004
+    N004 --> N005
+```
+
 ## _reset_for_tests(...)
 
 ```mermaid
