@@ -92,6 +92,17 @@ class TestExtractTableLines:
         with pytest.raises(gate.TableParseError, match="no data rows"):
             gate.extract_table_lines(text)
 
+    def test_missing_separator_raises_instead_of_swallowing_first_row(self) -> None:
+        """A deleted |---|---| separator must not silently eat the first data row."""
+        text = (
+            "## Agent routing\n\n"
+            "| Condition | Agent action | Body read? |\n"
+            "| `state:rfc` OR `state:parked` | no-action | no |\n"
+            "| `type:tracking` | no-action on umbrella; act on sub-issues only | no |\n"
+        )
+        with pytest.raises(gate.TableParseError, match="separator row"):
+            gate.extract_table_lines(text)
+
 
 class TestSplitRow:
     def test_wrong_cell_count_raises(self) -> None:
@@ -134,6 +145,33 @@ class TestParseCondition:
     def test_multi_label_bare_juxtaposition_raises(self) -> None:
         with pytest.raises(gate.TableParseError, match="not joined by ' OR '"):
             gate.parse_condition("`state:rfc` `state:parked`")
+
+    def test_if_any_tolerates_trailing_parenthetical(self) -> None:
+        """A harmless clarifying aside (the single-token rows' own style) must still parse."""
+        assert gate.parse_condition("`type:feat` OR `type:refactor` (either kind of change)") == {
+            "if_any": ["type:feat", "type:refactor"]
+        }
+
+    def test_and_not_before_clause_with_wrong_combinator_raises(self) -> None:
+        """Codex review follow-up: the if_all side of AND NOT needs the same OR-join guard."""
+        with pytest.raises(gate.TableParseError, match="not joined by ' OR '"):
+            gate.parse_condition("`type:feat` AND `type:refactor` AND NOT `severity:security`")
+
+    def test_and_not_before_clause_with_correct_or_still_works(self) -> None:
+        assert gate.parse_condition("`type:feat` OR `type:refactor` AND NOT `severity:security`") == {
+            "if_all": ["type:feat", "type:refactor"],
+            "if_none": ["severity:security"],
+        }
+
+    def test_default_row_tolerates_extra_label_mention(self) -> None:
+        """A clarifying second label mention in the catch-all row must not defeat detection."""
+        assert gate.parse_condition("No `type:*` yet (see `type:tracking` for reference)") == {
+            "default": True
+        }
+
+    def test_bare_negation_outside_and_not_raises(self) -> None:
+        with pytest.raises(gate.TableParseError, match="negates a label outside an 'AND NOT' clause"):
+            gate.parse_condition("NOT `type:archived`")
 
 
 class TestParseAction:
@@ -282,6 +320,52 @@ class TestRealRepoAndCli:
         errors = gate.verify(runbook_path)
         assert len(errors) == 1
         assert "cannot read label_routing.rules" in errors[0]
+
+    def test_registry_json_decode_error_is_a_loud_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A corrupted .gitapex/ssot.json must fail loud, not crash with a raw traceback."""
+        import json
+
+        def _raise() -> tuple[dict[str, object], ...]:
+            return json.loads("{not valid json")
+
+        runbook_path = tmp_path / "issue-triage.md"
+        runbook_path.write_text(_RUNBOOK, encoding="utf-8")
+        monkeypatch.setattr(gate._ssot, "routing_rules", _raise)
+        errors = gate.verify(runbook_path)
+        assert len(errors) == 1
+        assert "cannot read label_routing.rules" in errors[0]
+
+    def test_registry_missing_file_is_a_loud_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        def _raise() -> tuple[dict[str, object], ...]:
+            raise FileNotFoundError("no such file: .gitapex/ssot.json")
+
+        runbook_path = tmp_path / "issue-triage.md"
+        runbook_path.write_text(_RUNBOOK, encoding="utf-8")
+        monkeypatch.setattr(gate._ssot, "routing_rules", _raise)
+        errors = gate.verify(runbook_path)
+        assert len(errors) == 1
+        assert "cannot read label_routing.rules" in errors[0]
+
+    def test_non_utf8_runbook_is_a_loud_error(self, tmp_path: Path) -> None:
+        """A non-UTF-8 runbook must fail loud, not crash with an unhandled UnicodeDecodeError."""
+        runbook_path = tmp_path / "issue-triage.md"
+        runbook_path.write_bytes(b"## Agent routing\n\n\xff\xfe not valid utf-8")
+        errors = gate.verify(runbook_path)
+        assert len(errors) == 1
+        assert "cannot parse" in errors[0]
+
+    def test_error_annotation_names_the_actual_runbook_path(self, tmp_path: Path) -> None:
+        """The file= field must name the path actually read, not the module's default constant."""
+        custom_path = tmp_path / "custom-runbook.md"
+        custom_path.write_text("no agent routing heading here", encoding="utf-8")
+        errors = gate.verify(custom_path)
+        assert len(errors) == 1
+        assert str(custom_path) in errors[0]
+        assert gate._RUNBOOK_PATH not in errors[0]
 
     def test_main_exit_one_on_mismatch(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         mutated = _RUNBOOK.replace(

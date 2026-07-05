@@ -234,12 +234,13 @@ repos:
         # Refs #2300: anti-drift gate for SSoT phase 3. Rejects a mismatch
         # between the issue-triage runbook's Agent routing table and the
         # registry's label_routing.rules, in either direction. Fires when the
-        # runbook, the gate itself, or the registry changes. Mirrors the
-        # scan-ssot-schema wiring on the same three planes.
+        # runbook, the gate itself, the registry, or the shared _ssot.py
+        # reader changes. Mirrors the scan-ssot-schema wiring on the same
+        # three planes.
         entry: uv run python scripts/scan_routing_table_drift.py verify
         language: system
         pass_filenames: false
-        files: ^(docs/runbooks/issue-triage\.md|scripts/scan_routing_table_drift\.py|\.gitapex/ssot\.json)$
+        files: ^(docs/runbooks/issue-triage\.md|scripts/scan_routing_table_drift\.py|scripts/_ssot\.py|\.gitapex/ssot\.json)$
 
       - id: scan-doc-graph-registration
         name: scan doc graph registration (scripts/scan_doc_graph_registration.py verify)
