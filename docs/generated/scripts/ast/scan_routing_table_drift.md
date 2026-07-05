@@ -17,12 +17,15 @@ flowchart TD
     N009["header_idx = next(...)"]
     N010["except StopIteration"]
     N011["raise TableParseError('<str>')"]
-    N012["data_start = header_idx + 2"]
-    N013["rows = []"]
-    N014["for line in body[data_start:]:     if not _TABLE_ROW_RE.match(line):         break     rows.append(line)"]
-    N015["if not rows"]
-    N016["raise TableParseError('<str>')"]
-    N017["return rows"]
+    N012["separator_idx = header_idx + 1"]
+    N013["if separator_idx >= len(body) or not _SEPARATOR_ROW_RE.match(body[separator_idx].strip())"]
+    N014["raise TableParseError('<str>')"]
+    N015["data_start = separator_idx + 1"]
+    N016["rows = []"]
+    N017["for line in body[data_start:]:     if not _TABLE_ROW_RE.match(line):         break     rows.append(line)"]
+    N018["if not rows"]
+    N019["raise TableParseError('<str>')"]
+    N020["return rows"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 -->|"try"| N004
@@ -35,10 +38,13 @@ flowchart TD
     N010 --> N011
     N009 --> N012
     N012 --> N013
-    N013 --> N014
-    N014 --> N015
-    N015 -->|"true"| N016
-    N015 -->|"false"| N017
+    N013 -->|"true"| N014
+    N013 -->|"false"| N015
+    N015 --> N016
+    N016 --> N017
+    N017 --> N018
+    N018 -->|"true"| N019
+    N018 -->|"false"| N020
 ```
 
 ## split_row(...)
@@ -56,31 +62,53 @@ flowchart TD
     N003 -->|"false"| N005
 ```
 
+## _require_combinator_join(...)
+
+```mermaid
+flowchart TD
+    N001["_require_combinator_join(...)"]
+    N002["if len(tokens) <= 1"]
+    N003["return"]
+    N004["stripped = strip(...)"]
+    N005["expected = join(...)"]
+    N006["if stripped != expected"]
+    N007["raise TableParseError(f'<str>{len(tokens)}<str>{combinator}<str>{expected!r}<str>{cell!r}')"]
+    N008["end"]
+    N001 -->|"start"| N002
+    N002 -->|"true"| N003
+    N002 -->|"false"| N004
+    N004 --> N005
+    N005 --> N006
+    N006 -->|"true"| N007
+    N006 -->|"false"| N008
+```
+
 ## parse_condition(...)
 
 ```mermaid
 flowchart TD
     N001["parse_condition(...)"]
     N002["tokens = findall(...)"]
-    N003["if tokens == [_WILDCARD_TYPE_MARKER]"]
+    N003["if _WILDCARD_TYPE_MARKER in tokens"]
     N004["return {'<str>': True}"]
     N005["if 'AND NOT' in cell"]
     N006["(before, _, after) = partition(...)"]
-    N007["result = {}"]
-    N008["before_tokens = findall(...)"]
-    N009["after_tokens = findall(...)"]
-    N010["if before_tokens"]
-    N011["result['<str>'] = before_tokens"]
-    N012["if after_tokens"]
-    N013["result['<str>'] = after_tokens"]
-    N014["return result"]
-    N015["if not tokens"]
-    N016["raise TableParseError(f'<str>{cell!r}')"]
-    N017["if len(tokens) > 1"]
-    N018["expected = join(...)"]
-    N019["if cell.strip() != expected"]
-    N020["raise TableParseError(f'<str>{len(tokens)}<str>{expected!r}<str>{cell!r}')"]
-    N021["return {'<str>': tokens}"]
+    N007["before_tokens = findall(...)"]
+    N008["after_tokens = findall(...)"]
+    N009["_require_combinator_join(...)"]
+    N010["_require_combinator_join(...)"]
+    N011["result = {}"]
+    N012["if before_tokens"]
+    N013["result['<str>'] = before_tokens"]
+    N014["if after_tokens"]
+    N015["result['<str>'] = after_tokens"]
+    N016["return result"]
+    N017["if not tokens"]
+    N018["raise TableParseError(f'<str>{cell!r}')"]
+    N019["if _BARE_NEGATION_RE.search(cell)"]
+    N020["raise TableParseError(f'<str>{cell!r}')"]
+    N021["_require_combinator_join(...)"]
+    N022["return {'<str>': tokens}"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 -->|"true"| N004
@@ -90,20 +118,20 @@ flowchart TD
     N007 --> N008
     N008 --> N009
     N009 --> N010
-    N010 -->|"true"| N011
+    N010 --> N011
     N011 --> N012
-    N010 -->|"false"| N012
     N012 -->|"true"| N013
     N013 --> N014
     N012 -->|"false"| N014
-    N005 -->|"false"| N015
-    N015 -->|"true"| N016
-    N015 -->|"false"| N017
+    N014 -->|"true"| N015
+    N015 --> N016
+    N014 -->|"false"| N016
+    N005 -->|"false"| N017
     N017 -->|"true"| N018
-    N018 --> N019
+    N017 -->|"false"| N019
     N019 -->|"true"| N020
     N019 -->|"false"| N021
-    N017 -->|"false"| N021
+    N021 --> N022
 ```
 
 ## parse_action(...)
@@ -171,37 +199,54 @@ flowchart TD
     N004 --> N005
 ```
 
+## _display_path(...)
+
+```mermaid
+flowchart TD
+    N001["_display_path(...)"]
+    N002["try"]
+    N003["return path.relative_to(_REPO_ROOT).as_posix()"]
+    N004["except ValueError"]
+    N005["return str(path)"]
+    N001 -->|"start"| N002
+    N002 -->|"try"| N003
+    N002 -->|"raises"| N004
+    N004 --> N005
+```
+
 ## verify(...)
 
 ```mermaid
 flowchart TD
     N001["verify(...)"]
-    N002["try"]
-    N003["runbook_text = read_text(...)"]
-    N004["runbook_rules = parse_runbook_rules(...)"]
-    N005["except (OSError, TableParseError)"]
-    N006["return [f'<str>{_RUNBOOK_PATH}<str>{_SCRIPT}<str>{exc}']"]
-    N007["try"]
-    N008["registry_rules = normalize_registry_rules(...)"]
-    N009["except TypeError"]
-    N010["return [f'<str>{_SCRIPT}<str>{exc}']"]
-    N011["mismatch = diff_rules(...)"]
-    N012["if mismatch is not None"]
-    N013["return [f'<str>{_RUNBOOK_PATH}<str>{_SCRIPT}<str>{mismatch}']"]
-    N014["return []"]
+    N002["display_path = _display_path(...)"]
+    N003["try"]
+    N004["runbook_text = read_text(...)"]
+    N005["runbook_rules = parse_runbook_rules(...)"]
+    N006["except (OSError, UnicodeDecodeError, TableParseError)"]
+    N007["return [f'<str>{display_path}<str>{_SCRIPT}<str>{exc}']"]
+    N008["try"]
+    N009["registry_rules = normalize_registry_rules(...)"]
+    N010["except (TypeError, ValueError, OSError)"]
+    N011["return [f'<str>{_SCRIPT}<str>{exc}']"]
+    N012["mismatch = diff_rules(...)"]
+    N013["if mismatch is not None"]
+    N014["return [f'<str>{display_path}<str>{_SCRIPT}<str>{mismatch}']"]
+    N015["return []"]
     N001 -->|"start"| N002
-    N002 -->|"try"| N003
-    N003 --> N004
-    N002 -->|"raises"| N005
-    N005 --> N006
-    N004 --> N007
-    N007 -->|"try"| N008
-    N007 -->|"raises"| N009
-    N009 --> N010
-    N008 --> N011
-    N011 --> N012
-    N012 -->|"true"| N013
-    N012 -->|"false"| N014
+    N002 --> N003
+    N003 -->|"try"| N004
+    N004 --> N005
+    N003 -->|"raises"| N006
+    N006 --> N007
+    N005 --> N008
+    N008 -->|"try"| N009
+    N008 -->|"raises"| N010
+    N010 --> N011
+    N009 --> N012
+    N012 --> N013
+    N013 -->|"true"| N014
+    N013 -->|"false"| N015
 ```
 
 ## main(...)
