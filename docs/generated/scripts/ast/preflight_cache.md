@@ -34,14 +34,16 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["_tracked_input_files(...)"]
-    N002["out = run_git(['<str>', '<str>', '<str>', *INPUT_PATHSPECS], cwd=repo_root, check=True).stdout"]
-    N003["rels = [chunk for chunk in out.split('<str>') if chunk]"]
-    N004["files = [repo_root / rel for rel in rels]"]
-    N005["return sorted((p for p in files if p.is_file()), key=lambda p: p.as_posix())"]
+    N002["pathspecs = ['<str>', *(f'<str>{spec}' for spec in EXCLUDED_PATHSPECS)]"]
+    N003["out = run_git(['<str>', '<str>', '<str>', *pathspecs], cwd=repo_root, check=True).stdout"]
+    N004["rels = [chunk for chunk in out.split('<str>') if chunk]"]
+    N005["files = [repo_root / rel for rel in rels]"]
+    N006["return sorted((p for p in files if p.is_file()), key=lambda p: p.as_posix())"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 --> N004
     N004 --> N005
+    N005 --> N006
 ```
 
 ## compute_fingerprint(...)
@@ -50,7 +52,7 @@ flowchart TD
 flowchart TD
     N001["compute_fingerprint(...)"]
     N002["digest = sha256(...)"]
-    N003["for path in _tracked_input_files(repo_root):     rel = path.relative_to(repo_root).as_posix()     digest.update(rel.encode('<str>'))     digest.update(b'\x00')     digest.update(hashlib.sha256(path.read_bytes()).digest())     digest.update(b'\x00')"]
+    N003["for path in _tracked_input_files(repo_root):     rel = path.relative_to(repo_root).as_posix()     digest.update(rel.encode('<str>'))     digest.update(b'\x00')     is_executable = bool(path.stat().st_mode & 73)     digest.update(b'\x01' if is_executable else b'\x00')     digest.update(hashlib.sha256(path.read_bytes()).digest())     digest.update(b'\x00')"]
     N004["update(...)"]
     N005["for token in extra:     digest.update(token.encode('<str>'))     digest.update(b'\x00')"]
     N006["return digest.hexdigest()"]
