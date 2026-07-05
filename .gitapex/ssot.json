@@ -1906,10 +1906,11 @@
         "type:docs",
         "layer:p3-harness",
         "area:ci-ops",
+        "layer:meta",
         "ops:retro-opened",
         "harness:retro-opened"
       ],
-      "note": "retrospective issue identity and terminal open-state labels; layer:meta successor decided at #1041 comment 4882932274; see #1041, #2313"
+      "note": "retrospective issue identity and terminal open-state labels; layer:meta successor decided at #1041 comment 4882932274; layer:meta is kept here (excluded from _identity_labels, the create-time set) only so _discovery_labels can still find pre-migration retros via a family-grouped OR; drop it once no open retro carries it. See #1041, #2313"
     },
     {
       "path": "scripts/scan_retro_followup_drift.py",

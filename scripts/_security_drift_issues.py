@@ -102,13 +102,24 @@ def list_open_family_issues(
 ) -> list[tuple[int, str]] | None:
     """Return open ``(number, title)`` pairs labelled like the rolling issues.
 
-    Filters on :func:`issue_labels` so the set is small, and drops pull requests
-    (the issues endpoint returns both). Returns ``None`` on a failed GET so the
-    caller fails loud rather than reconciling against a partial view. A single
-    100-item page is read; the open meta-fix issue set is far smaller in practice.
+    Filters on only the ``type:*`` label from :func:`issue_labels`, not the
+    full set: this endpoint (``GET /repos/{repo}/issues``) treats its
+    ``labels`` parameter as AND-only (unlike the Search API's comma-OR), so
+    requiring every label :func:`issue_labels` returns would make an
+    already-open issue undiscoverable across a layer/area label rename or
+    retirement; exactly what the successor migration decided at #1041
+    comment 4882932274 did (#2313). ``type:*`` is stable across that
+    migration and shared by every target family, so it is still small
+    enough that title matching (:func:`is_family_issue_title`) can narrow
+    precisely to the right family from this broader candidate set. Drops
+    pull requests (the issues endpoint returns both). Returns ``None`` on a
+    failed GET so the caller fails loud rather than reconciling against a
+    partial view. A single 100-item page is read; the open meta-fix issue
+    set is far smaller in practice.
     """
+    type_labels = [label for label in issue_labels() if label.startswith("type:")]
     query = urllib.parse.urlencode(
-        {"state": "open", "labels": ",".join(issue_labels()), "per_page": "100"}
+        {"state": "open", "labels": ",".join(type_labels), "per_page": "100"}
     )
     code, response = apply(
         method="GET",

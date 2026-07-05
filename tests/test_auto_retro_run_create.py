@@ -46,8 +46,12 @@ class TestRunCreate:
         )
         assert "feat(harness): step one" in payload["body"]
         assert "fix(harness): step two" in payload["body"]
+        # The retired layer:meta the source PR still carries must NOT be
+        # resurrected onto the new retro issue (#2313); only the create-time
+        # identity labels apply, with the PR's non-retired inherited layer
+        # label (layer:p3-harness) already present in the identity set.
         assert payload["labels"] == [
-            "type:docs", "layer:meta", "layer:p3-harness"
+            "type:docs", "layer:p3-harness", "area:ci-ops"
         ]
 
     def test_step_summary_written_on_create(

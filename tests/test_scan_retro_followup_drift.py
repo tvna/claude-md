@@ -654,32 +654,6 @@ class TestGhApi:
 
 
 # ---------------------------------------------------------------------------
-# _group_discovery_labels_by_family()
-# ---------------------------------------------------------------------------
-
-
-class TestGroupDiscoveryLabelsByFamily:
-    def test_distinct_families_stay_separate(self) -> None:
-        assert srfd._group_discovery_labels_by_family(["type:docs", "area:example"]) == [
-            "type:docs",
-            "area:example",
-        ]
-
-    def test_same_family_labels_are_comma_joined(self) -> None:
-        assert srfd._group_discovery_labels_by_family(
-            ["type:docs", "layer:meta", "layer:p3-harness"]
-        ) == ["type:docs", "layer:meta,layer:p3-harness"]
-
-    def test_preserves_first_appearance_order(self) -> None:
-        assert srfd._group_discovery_labels_by_family(
-            ["layer:meta", "type:docs", "layer:p3-harness"]
-        ) == ["layer:meta,layer:p3-harness", "type:docs"]
-
-    def test_empty_input_returns_empty_list(self) -> None:
-        assert srfd._group_discovery_labels_by_family([]) == []
-
-
-# ---------------------------------------------------------------------------
 # search_retro_issues() / fetch_issue_or_pr() / fetch_pr_merged() / apply_label()
 #; mock gh_api (lines 316-320, 330-336, 349-351, 356)
 # ---------------------------------------------------------------------------

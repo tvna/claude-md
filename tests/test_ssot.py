@@ -241,6 +241,73 @@ class TestRequiredIssueAxes:
         assert _ssot._MANDATORY_AT_CREATE_CARDINALITIES.issubset(vocabulary)
 
 
+class TestRetiredLabelNames:
+    def _registry_pointing_at(self, tmp_path: Path, toml_text: str) -> Path:
+        policy = tmp_path / "label-policy.toml"
+        policy.write_text(toml_text, encoding="utf-8")
+        return _write_registry(
+            tmp_path,
+            {"policy_sources": [{"id": "label-policy", "path": str(policy)}]},
+        )
+
+    def test_returns_exact_retired_names(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        toml_text = (
+            '[[retired_labels]]\nname = "layer:meta"\nreason = "x"\n'
+            '[[retired_labels]]\nname = "bug"\nreason = "y"\n'
+        )
+        monkeypatch.setattr(_ssot, "_REGISTRY_PATH", self._registry_pointing_at(tmp_path, toml_text))
+        assert _ssot.retired_label_names() == frozenset({"layer:meta", "bug"})
+
+    def test_excludes_glob_entries(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        toml_text = (
+            '[[retired_labels]]\nname = "agent:*"\nreason = "x"\n'
+            '[[retired_labels]]\nname = "layer:meta"\nreason = "y"\n'
+        )
+        monkeypatch.setattr(_ssot, "_REGISTRY_PATH", self._registry_pointing_at(tmp_path, toml_text))
+        assert _ssot.retired_label_names() == frozenset({"layer:meta"})
+
+    def test_raises_type_error_for_missing_retired_labels(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(_ssot, "_REGISTRY_PATH", self._registry_pointing_at(tmp_path, 'title = "x"\n'))
+        with pytest.raises(TypeError, match="non-list"):
+            _ssot.retired_label_names()
+
+    def test_raises_type_error_for_non_string_name(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        toml_text = "[[retired_labels]]\nname = 1\nreason = \"x\"\n"
+        monkeypatch.setattr(_ssot, "_REGISTRY_PATH", self._registry_pointing_at(tmp_path, toml_text))
+        with pytest.raises(TypeError, match="non-string name"):
+            _ssot.retired_label_names()
+
+    def test_live_layer_meta_is_retired(self) -> None:
+        # PIN-TEST: this PR's transition-safe discovery fixes (auto_retro.py,
+        # scan_retro_followup_drift.py) depend on layer:meta appearing here.
+        assert "layer:meta" in _ssot.retired_label_names()
+
+
+class TestGroupLabelsByFamily:
+    def test_distinct_families_stay_separate(self) -> None:
+        assert _ssot.group_labels_by_family(["type:docs", "area:example"]) == [
+            "type:docs",
+            "area:example",
+        ]
+
+    def test_same_family_labels_are_comma_joined(self) -> None:
+        assert _ssot.group_labels_by_family(
+            ["type:docs", "layer:meta", "layer:p3-harness"]
+        ) == ["type:docs", "layer:meta,layer:p3-harness"]
+
+    def test_preserves_first_appearance_order(self) -> None:
+        assert _ssot.group_labels_by_family(
+            ["layer:meta", "type:docs", "layer:p3-harness"]
+        ) == ["layer:meta,layer:p3-harness", "type:docs"]
+
+    def test_empty_input_returns_empty_list(self) -> None:
+        assert _ssot.group_labels_by_family([]) == []
+
+
 class TestResetForTests:
     def test_reset_makes_a_monkeypatched_path_take_effect(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

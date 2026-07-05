@@ -26,12 +26,20 @@ from hypothesis import strategies as st
 pytestmark = pytest.mark.shard_ci_ops_2
 
 # The label set the .gitapex/ssot.json registry entry for scripts/auto_retro.py
-# carries (registry order): the two identity labels followed by the ops:/harness:
+# carries (registry order): the create-time identity labels, the retired
+# layer:meta kept only for discovery (#1041, #2313), then the ops:/harness:
 # terminal open-state labels. Mirrored here so every consumer resolves a known
 # set via a mocked _ssot.consumer_labels rather than reading (or asserting
 # against) the live registry file. Derivation-specific tests below override the
 # mock with synthetic labels to prove the code reads the registry.
-_REGISTRY_LABELS = ("type:docs", "layer:meta", "ops:retro-opened", "harness:retro-opened")
+_REGISTRY_LABELS = (
+    "type:docs",
+    "layer:p3-harness",
+    "area:ci-ops",
+    "layer:meta",
+    "ops:retro-opened",
+    "harness:retro-opened",
+)
 _TERMINAL_PRIMARY = "ops:retro-opened"
 _TERMINAL_LEGACY = "harness:retro-opened"
 
@@ -4394,7 +4402,12 @@ class TestSearchOpenRetroIssues:
         path = captured[0]
         assert path.startswith("/search/issues?q=")
         assert "label%3Atype%3Adocs" in path
-        assert "label%3Alayer%3Ameta" in path
+        # layer:p3-harness and the retired layer:meta OR together (comma-joined
+        # within one label: qualifier) so retros from either era are found;
+        # area:ci-ops is excluded from discovery (new-era-only, no old
+        # counterpart; see _discovery_labels).
+        assert "label%3Alayer%3Ap3-harness%2Clayer%3Ameta" in path
+        assert "area%3Aci-ops" not in path
         assert "retro-opened" not in path
         assert "is%3Aopen" in path
 
@@ -5294,7 +5307,10 @@ class TestFetchPastRetroLabels:
         # prior populate from the same set, and must NOT include the terminal
         # *retro-opened labels (those are excluded from the discovery query).
         assert "label%3Atype%3Adocs" in path
-        assert "label%3Alayer%3Ameta" in path
+        # layer:p3-harness and the retired layer:meta OR together; area:ci-ops
+        # is excluded from discovery (new-era-only; see _discovery_labels).
+        assert "label%3Alayer%3Ap3-harness%2Clayer%3Ameta" in path
+        assert "area%3Aci-ops" not in path
         assert "retro-opened" not in path
         assert "retro" in path
 
