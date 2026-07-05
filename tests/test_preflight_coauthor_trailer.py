@@ -234,6 +234,17 @@ def test_self_redundant_first_of_two_bracketed_coauthors_on_one_line_is_detected
     assert violations[0].trailer_email == _CLAUDE_EMAIL
 
 
+def test_bare_self_email_detected_alongside_a_bracketed_coauthor() -> None:
+    # Code-review regression (PR #2344): a bracketed non-self co-author must
+    # not shadow a bare self-email later on the same line; both must be
+    # checked against the author, not only the bracketed one.
+    body = f"fix: x\n\nCo-authored-by: Jane <{_HUMAN_EMAIL}>, Claude {_CLAUDE_EMAIL}\n"
+    git = _FakeGit(commits={_SHA_A: (_CLAUDE_EMAIL, body)})
+    violations = subject.find_redundant_trailers(git, [_SHA_A])
+    assert len(violations) == 1
+    assert violations[0].trailer_email == _CLAUDE_EMAIL
+
+
 def test_multiple_trailers_only_self_redundant_one_reported() -> None:
     body = (
         f"fix: x\n\nCo-authored-by: Jane Dev <{_HUMAN_EMAIL}>\n"

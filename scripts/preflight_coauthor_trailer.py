@@ -141,9 +141,15 @@ def find_redundant_trailers(runner: Runner, shas: list[str]) -> list[Violation]:
         for line_match in _TRAILER_LINE_RE.finditer(body):
             rest = line_match.group("rest")
             angle_emails = [m.group("email").strip() for m in _EMAIL_ANGLE_RE.finditer(rest)]
-            trailer_emails = angle_emails or [
-                m.group("email") for m in _EMAIL_BARE_RE.finditer(rest)
-            ]
+            # A bare email can appear alongside a bracketed one on the same
+            # line (e.g. a bracketed co-author followed by a bare self
+            # email); scanning only the text outside `<...>` spans finds it
+            # without re-matching an email already captured by the angle
+            # branch (the bracket contents would otherwise also satisfy the
+            # bare pattern, double-counting the same address).
+            rest_outside_brackets = _EMAIL_ANGLE_RE.sub(" ", rest)
+            bare_emails = [m.group("email") for m in _EMAIL_BARE_RE.finditer(rest_outside_brackets)]
+            trailer_emails = angle_emails + bare_emails
             for trailer_email in trailer_emails:
                 if trailer_email and trailer_email.casefold() == author_email.casefold():
                     violations.append(
