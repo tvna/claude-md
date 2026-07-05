@@ -29,6 +29,36 @@
       "path": ".github/rulesets/main.json",
       "format": "json",
       "authority": "GitHub ruleset: required checks and native branch rules"
+    },
+    {
+      "id": "doc-dependencies",
+      "path": ".gitapex/doc-dependencies.toml",
+      "format": "toml",
+      "authority": "typed document dependency graph for PR governance co-change enforcement"
+    },
+    {
+      "id": "loop-engineering-audit",
+      "path": ".gitapex/loop-engineering-audit.toml",
+      "format": "toml",
+      "authority": "loop-engineering achievement audit checklist"
+    },
+    {
+      "id": "module-size-distribution",
+      "path": ".gitapex/module-size-distribution.toml",
+      "format": "toml",
+      "authority": "scripts/*.py physical-line size distribution snapshot"
+    },
+    {
+      "id": "pr-body-quality-enforcement",
+      "path": ".gitapex/pr-body-quality.enforcement.toml",
+      "format": "toml",
+      "authority": "PR body content-quality defect-class enforcement registry"
+    },
+    {
+      "id": "workflow-script-quality-enforcement",
+      "path": ".gitapex/workflow-script-quality.enforcement.toml",
+      "format": "toml",
+      "authority": "workflow-script-quality standard must-have enforcement registry"
     }
   ],
   "gates": [
@@ -690,6 +720,19 @@
       "tracking_issue": null
     },
     {
+      "id": "preflight-coauthor-trailer",
+      "kind": "script",
+      "script": "scripts/preflight_coauthor_trailer.py",
+      "rule": "reject a commit whose Co-authored-by trailer names its own author",
+      "planes": [
+        "pre-push"
+      ],
+      "trigger": "git push (scripts/preflight_all.py)",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": 2307
+    },
+    {
       "id": "preflight-uv-version",
       "kind": "script",
       "script": "scripts/preflight_uv_version.py",
@@ -1072,20 +1115,6 @@
       "tracking_issue": null
     },
     {
-      "id": "scan-preflight-drift",
-      "kind": "script",
-      "script": "scripts/scan_preflight_drift.py",
-      "rule": "diff the local preflight set against the scripts CI's PR gates run",
-      "planes": [
-        "pre-push",
-        "ci"
-      ],
-      "trigger": "git push (scripts/preflight_all.py) and CI (pull_request workflow)",
-      "policy_refs": [],
-      "cluster": null,
-      "tracking_issue": null
-    },
-    {
       "id": "scan-provisioning-hook-serial",
       "kind": "script",
       "script": "scripts/scan_provisioning_hook_serial.py",
@@ -1244,7 +1273,7 @@
       "id": "scan-ssot-drift",
       "kind": "script",
       "script": "scripts/scan_ssot_drift.py",
-      "rule": "advisory: report drift between the .gitapex/ssot.json gate registry and its four partial manifests",
+      "rule": "reconcile the .gitapex/ssot.json gate registry against its four partial manifests, plus the STEPS-vs-workflow reconciliation folded in from scan_preflight_drift.py (refs #2301)",
       "planes": [
         "pre-commit",
         "pre-push",
@@ -1274,6 +1303,27 @@
       "tracking_issue": null
     },
     {
+      "id": "scan-gitapex-schema",
+      "kind": "script",
+      "script": "scripts/scan_gitapex_schema.py",
+      "rule": "CI gate: every .gitapex/*.toml validates against its sibling .gitapex/NAME.schema.json",
+      "planes": [
+        "pre-commit",
+        "pre-push",
+        "ci"
+      ],
+      "trigger": "git commit or push (prek / scripts/preflight_all.py) and CI (pull_request workflow)",
+      "policy_refs": [
+        "doc-dependencies",
+        "loop-engineering-audit",
+        "module-size-distribution",
+        "pr-body-quality-enforcement",
+        "workflow-script-quality-enforcement"
+      ],
+      "cluster": null,
+      "tracking_issue": 2342
+    },
+    {
       "id": "scan-hardcoded-label-literals",
       "kind": "script",
       "script": "scripts/scan_hardcoded_label_literals.py",
@@ -1289,6 +1339,21 @@
       ],
       "cluster": null,
       "tracking_issue": 2299
+    },
+    {
+      "id": "scan-routing-table-drift",
+      "kind": "script",
+      "script": "scripts/scan_routing_table_drift.py",
+      "rule": "CI gate: reject drift between the issue-triage runbook Agent routing table and the registry label_routing.rules",
+      "planes": [
+        "pre-commit",
+        "pre-push",
+        "ci"
+      ],
+      "trigger": "git commit or push (prek / scripts/preflight_all.py) and CI (pull_request workflow)",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": 2300
     },
     {
       "id": "scan-test-presence-drift",

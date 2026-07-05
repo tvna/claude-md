@@ -291,6 +291,20 @@ repository is confirmed by the operator before enforcement: dispatch
 confirm the resulting `main` commit shows `Verified`. Only then apply
 with `dry_run=false`. See [`docs/runbooks/rulesets.md`](../runbooks/rulesets.md).
 
+## Commit-message convention: no self-redundant Co-authored-by trailer
+
+Because the git author of an agent commit is already `Claude
+<noreply@anthropic.com>`, a `Co-authored-by:` trailer naming that same
+identity adds no attribution the author line does not already carry, and
+GitHub squash-merge duplicates it (one inline copy per concatenated commit
+body, plus one aggregated trailer block; see
+[#2307](https://github.com/tvna/claude-md/issues/2307),
+[#2302](https://github.com/tvna/claude-md/issues/2302)). Agent commits
+therefore omit a `Co-authored-by:` trailer naming their own author identity;
+`scripts/preflight_coauthor_trailer.py` (wired into
+`scripts/preflight_steps.py` `STEPS`) rejects one before push. A trailer
+naming a genuinely different co-author is unaffected.
+
 ## Scope notes
 
 - `github-actions[bot]` commits are GitHub-signed only when GitHub creates

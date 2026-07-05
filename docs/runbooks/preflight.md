@@ -48,9 +48,9 @@ the MCP PreToolUse hooks:
 | `body_policy`         | `scripts/preflight_pr_body_required_sections.py`       |
 | `issue_link`          | `scripts/pr_body_close_keyword_gate.py`                |
 
-The drift gate (`scripts/scan_preflight_drift.py`) tracks this allowlist
+The drift gate (`scripts/scan_ssot_drift.py`) tracks this allowlist
 explicitly. Adding a new CI script without a matching preflight step
-fails the drift gate at `verify-agents.yml / lint-scripts-static`.
+fails the drift gate at `verify-pr.yml`'s `scan_ssot_drift.py verify` step.
 
 ## Local pre-push defense-in-depth
 
@@ -127,9 +127,10 @@ either permanently in your shell rc.
 ## Wiring summary
 
 * `scripts/preflight_all.py`; the single entrypoint.
-* `scripts/scan_preflight_drift.py`; CI gate that diffs the local
-  set against `pull_request:` workflow scripts. Fails CI when CI
-  adds a gate that preflight does not mirror.
+* `scripts/scan_ssot_drift.py`; gate that diffs the local STEPS set
+  against `pull_request:` workflow scripts (folded in from the former
+  `scan_preflight_drift.py`, refs #2301), alongside its registry-vs-manifest
+  reconciliation. Fails when CI adds a gate that preflight does not mirror.
 * `scripts/scan_docs_inventory.py`; docs inventory and lane-placement
   gate mirrored from `verify-agents.yml`.
 * `.githooks/pre-push`; broad local gate, opt-in via `core.hooksPath`;
@@ -137,6 +138,5 @@ either permanently in your shell rc.
 * `.pre-commit-config.yaml` `stages: [pre-push]`; targeted local gate
   for environments without `core.hooksPath` set; opt-in via
   `pre-commit install --hook-type pre-push`.
-* `.github/workflows/verify-agents.yml`; runs the drift gate in
-  the `lint-scripts-static` job so silent drift fails CI before it
-  reaches main.
+* `.github/workflows/verify-pr.yml`; runs the drift gate so silent
+  drift fails CI before it reaches main.

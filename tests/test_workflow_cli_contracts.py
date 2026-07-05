@@ -83,6 +83,7 @@ import scan_devcontainer_tool_drift
 import scan_doc_workflow_refs
 import scan_docs_inventory
 import scan_flake_pin_drift
+import scan_gitapex_schema
 import scan_hardcoded_label_literals
 import scan_harness_doc_coverage
 import scan_hook_coverage_drift
@@ -96,13 +97,13 @@ import scan_module_size_distribution
 import scan_non_ascii
 import scan_nonexhaustive_invariant_drift
 import scan_pr_body_quality_drift
-import scan_preflight_drift
 import scan_provisioning_hook_serial
 import scan_quality_standard_drift
 import scan_repo_double_hyphen
 import scan_repo_em_dash
 import scan_retro_followup_drift
 import scan_review_in_progress_marker
+import scan_routing_table_drift
 import scan_ruff_format
 import scan_runbook_template_drift
 import scan_scripts_gh_calls
@@ -268,7 +269,6 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("scan_bypass_lever_doc_drift.py", "verify"): "test_scan_bypass_lever_doc_drift_verify_matches_workflow_args",
     ("scan_input_contract_drift.py", "verify"): "test_scan_input_contract_drift_verify_matches_workflow_args",
     ("scan_issue_anchor_drift.py", "verify"): "test_scan_issue_anchor_drift_verify_matches_workflow_args",
-    ("scan_preflight_drift.py", "verify"): "test_scan_preflight_drift_verify_matches_workflow_args",
     ("scan_provisioning_hook_serial.py", "verify"): "test_scan_provisioning_hook_serial_verify_matches_workflow_args",
     ("scan_pr_body_quality_drift.py", "verify"): "test_scan_pr_body_quality_drift_verify_matches_workflow_args",
     ("scan_quality_standard_drift.py", "verify"): "test_scan_quality_standard_drift_verify_matches_workflow_args",
@@ -278,7 +278,9 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("scan_secrets.py", "verify"): "test_scan_secrets_verify_matches_workflow_args",
     ("scan_ssot_drift.py", "verify"): "test_scan_ssot_drift_verify_matches_workflow_args",
     ("scan_ssot_schema.py", "verify"): "test_scan_ssot_schema_verify_matches_workflow_args",
+    ("scan_gitapex_schema.py", "verify"): "test_scan_gitapex_schema_verify_matches_workflow_args",
     ("scan_hardcoded_label_literals.py", "verify"): "test_scan_hardcoded_label_literals_verify_matches_workflow_args",
+    ("scan_routing_table_drift.py", "verify"): "test_scan_routing_table_drift_verify_matches_workflow_args",
     ("scan_ruff_format.py", "verify"): "test_scan_ruff_format_verify_matches_workflow_args",
     ("scan_scripts_gh_calls.py", "verify"): "test_scan_scripts_gh_calls_verify_matches_workflow_args",
     ("scan_session_path_drift.py", "verify"): "test_scan_session_path_drift_verify_matches_workflow_args",
@@ -3256,12 +3258,6 @@ def test_scan_hook_coverage_drift_verify_matches_workflow_args() -> None:
     assert scan_hook_coverage_drift.main(["verify"]) == 0
 
 
-def test_scan_preflight_drift_verify_matches_workflow_args() -> None:
-    """Mirrors the `Verify preflight set matches CI script invocations`
-    step in `.github/workflows/verify-agents.yml` (issue #493)."""
-    assert scan_preflight_drift.main(["verify"]) == 0
-
-
 def test_scan_provisioning_hook_serial_verify_matches_workflow_args() -> None:
     """Mirrors the `Verify shared-binary provisioning hooks are serial`
     step in `.github/workflows/verify-agents.yml` (issue #1155)."""
@@ -3274,6 +3270,12 @@ def test_scan_ssot_schema_verify_matches_workflow_args() -> None:
     assert scan_ssot_schema.main(["verify"]) == 0
 
 
+def test_scan_gitapex_schema_verify_matches_workflow_args() -> None:
+    """Mirrors the `Validate .gitapex/*.toml against their sibling schemas`
+    step in `.github/workflows/verify-pr.yml` (issue #2342)."""
+    assert scan_gitapex_schema.main(["verify"]) == 0
+
+
 def test_scan_ssot_drift_verify_matches_workflow_args() -> None:
     """Mirrors the `Report .gitapex/ssot.json drift (advisory)` step in
     `.github/workflows/verify-pr.yml` (issue #2256)."""
@@ -3284,6 +3286,12 @@ def test_scan_hardcoded_label_literals_verify_matches_workflow_args() -> None:
     """Mirrors the `Reject hardcoded label literals in scripts` step in
     `.github/workflows/verify-pr.yml` (issue #2299)."""
     assert scan_hardcoded_label_literals.main(["verify"]) == 0
+
+
+def test_scan_routing_table_drift_verify_matches_workflow_args() -> None:
+    """Mirrors the `Reject routing table drift against the registry` step in
+    `.github/workflows/verify-pr.yml` (issue #2300)."""
+    assert scan_routing_table_drift.main(["verify"]) == 0
 
 
 def test_scan_session_path_drift_verify_matches_workflow_args() -> None:

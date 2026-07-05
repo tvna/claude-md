@@ -18,8 +18,8 @@
 # Severity: blocking = co-change required; advisory = informational note only.
 #
 # Maintained by: docs/runbooks/doc-dependency-graph.md
-# CODEOWNERS-protected: .github/CODEOWNERS (docs/graph/ @tvna)
-# Refs #1754.
+# CODEOWNERS-protected: .github/CODEOWNERS (.gitapex/ @tvna)
+# Refs #1754, #2342.
 
 [meta]
 schema_version = 1
@@ -91,13 +91,13 @@ description = "Quality gates M1 through M9 for Python scripts invoked from workf
 
 [[nodes]]
 id = "pr_body_quality_enforcement"
-path = "docs/standards/pr-body-quality.enforcement.toml"
+path = ".gitapex/pr-body-quality.enforcement.toml"
 type = "standard"
 description = "Enforcement registry for PR body content-quality defect classes; verified by scan_pr_body_quality_drift.py."
 
 [[nodes]]
 id = "loop_engineering_audit"
-path = "docs/standards/loop-engineering-audit.toml"
+path = ".gitapex/loop-engineering-audit.toml"
 type = "standard"
 description = "Stored, re-auditable checklist of loop-engineering achievement status; reported by scripts/audit_loop_engineering.py."
 

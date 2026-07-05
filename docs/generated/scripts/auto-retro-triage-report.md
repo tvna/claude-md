@@ -4,7 +4,7 @@ This file is generated from live GitHub retro-issue labels by `python3 scripts/a
 
 Retros observed: **50**
 
-Open untriaged: **13**
+Open untriaged: **16**
 
 ## Anomalies
 
@@ -27,7 +27,7 @@ pie showData
 | Signal | Fired | Fire rate | FP | FP rate | n | Anomaly |
 | --- | --: | --: | --: | --: | --: | :-: |
 | `inline_review_comments` | 40 | 0.80 | 0 | 0.00 | 40 |  |
-| `fix_typed_title` | 8 | 0.16 | 0 | 0.00 | 8 |  |
+| `fix_typed_title` | 10 | 0.20 | 0 | 0.00 | 10 |  |
 | `multi_commit_pr` | 46 | 0.92 | 0 | 0.00 | 46 |  |
 
 ## False-positive rate trend
@@ -38,6 +38,9 @@ No triaged retros yet (no `retro:tp`/`retro:fp` labels).
 
 | # | State | Status | Title |
 | --: | :-- | :-- | :-- |
+| 2335 | open | untriaged | chore(auto-retro): review PR #2333 repair loops |
+| 2330 | open | untriaged | chore(auto-retro): review PR #2329 repair loops |
+| 2326 | open | untriaged | chore(auto-retro): review PR #2325 repair loops |
 | 2322 | open | untriaged | chore(auto-retro): review PR #2320 repair loops |
 | 2305 | open | untriaged | chore(auto-retro): review PR #2302 repair loops |
 | 2295 | open | untriaged | chore(auto-retro): review PR #2293 repair loops |
@@ -45,6 +48,3 @@ No triaged retros yet (no `retro:tp`/`retro:fp` labels).
 | 2284 | open | untriaged | chore(auto-retro): review PR #2283 repair loops |
 | 2279 | open | untriaged | chore(auto-retro): review PR #2278 repair loops |
 | 2274 | open | untriaged | chore(auto-retro): review PR #2267 repair loops |
-| 2259 | open | untriaged | chore(auto-retro): review PR #2258 repair loops |
-| 2254 | open | untriaged | chore(auto-retro): review PR #2253 repair loops |
-| 2249 | open | untriaged | chore(auto-retro): review PR #2247 repair loops |

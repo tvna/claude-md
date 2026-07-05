@@ -130,7 +130,7 @@ jobs:
             --body-file "$body_file"
 
       - name: Forbid hand edits to generated script docs
-        # docs/generated/ and the docs/standards/module-size-distribution.toml
+        # docs/generated/ and the .gitapex/module-size-distribution.toml
         # size snapshot are owned by the post-merge automation (#1540, #2013).
         # This gate fails a non-bot PR whose diff touches them. The post-merge
         # bot branch (chore/update-generated-docs) is exempt; it is resolved
@@ -240,14 +240,23 @@ jobs:
         # pre-commit hook.
         run: uv run python scripts/scan_ssot_schema.py verify
 
+      - name: Validate .gitapex/*.toml against their sibling schemas
+        # Refs #2342: every .gitapex/*.toml is required to have a sibling
+        # .gitapex/NAME.schema.json and validate against it (shape only;
+        # referential/semantic checks stay with each file's own normative
+        # validator). Mirrored pre-push by the scan_gitapex_schema STEP and at
+        # commit time by the scan-gitapex-schema pre-commit hook.
+        run: uv run python scripts/scan_gitapex_schema.py verify
+
       - name: Report .gitapex/ssot.json drift (advisory)
-        # Refs #2256: advisory reconciliation of the gate registry against the
+        # Refs #2256: blocking reconciliation of the gate registry against the
         # four partial manifests (agent_hooks_source.json, preflight_steps.py
         # STEPS, .pre-commit-config.yaml, rulesets/main.json native rules and
-        # pull_request: workflow scripts). Always exits 0; divergence is
-        # reported as ::warning:: lines only. Mirrored pre-push by the
-        # scan_ssot_drift STEP and at commit time by the scan-ssot-drift
-        # pre-commit hook.
+        # pull_request: workflow scripts), plus (refs #2301, phase 3 child 3c)
+        # the STEPS-vs-workflow reconciliation folded in from the former
+        # scan_preflight_drift.py. Divergence is reported as ::error:: lines
+        # and fails the run. Mirrored pre-push by the scan_ssot_drift STEP and
+        # at commit time by the scan-ssot-drift pre-commit hook.
         run: uv run python scripts/scan_ssot_drift.py verify
 
       - name: Reject hardcoded label literals in scripts
@@ -259,6 +268,15 @@ jobs:
         # scan_hardcoded_label_literals STEP and at commit time by the
         # scan-hardcoded-label-literals pre-commit hook.
         run: uv run python scripts/scan_hardcoded_label_literals.py verify
+
+      - name: Reject routing table drift against the registry
+        # Refs #2300: anti-drift gate for SSoT phase 3. Fails when the
+        # issue-triage runbook's Agent routing table and the registry's
+        # label_routing.rules diverge, in either direction. Runs through uv
+        # so the .gitapex/ssot.json reader resolves on the pinned Python.
+        # Mirrored pre-push by the scan_routing_table_drift STEP and at
+        # commit time by the scan-routing-table-drift pre-commit hook.
+        run: uv run python scripts/scan_routing_table_drift.py verify
 
       - name: Compile agent instructions
         # --target all: every apm-cli-supported tool, not just claude/codex.

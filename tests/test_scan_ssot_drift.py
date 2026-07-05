@@ -171,6 +171,210 @@ class TestCiManifest:
         assert gate.ci_manifest(workflows) == frozenset({"foo"})
 
 
+# ---------------------------------------------------------------------------
+# STEPS-vs-workflow reconciliation (folded in from scan_preflight_drift, #2301)
+# ---------------------------------------------------------------------------
+
+
+class TestWorkflowTargetsPullRequest:
+    def test_mapping_form(self) -> None:
+        yaml = textwrap.dedent(
+            """\
+            on:
+              pull_request:
+                types: [opened, edited]
+            jobs: {}
+            """
+        )
+        assert gate.workflow_targets_pull_request(yaml) is True
+
+    def test_list_form(self) -> None:
+        yaml = "on: [pull_request, push]\njobs: {}\n"
+        assert gate.workflow_targets_pull_request(yaml) is True
+
+    def test_pull_request_target_excluded(self) -> None:
+        yaml = textwrap.dedent(
+            """\
+            on:
+              pull_request_target:
+                types: [opened]
+            jobs: {}
+            """
+        )
+        assert gate.workflow_targets_pull_request(yaml) is False
+
+    def test_schedule_only_excluded(self) -> None:
+        yaml = 'on:\n  schedule:\n    - cron: "0 0 * * 0"\n'
+        assert gate.workflow_targets_pull_request(yaml) is False
+
+    def test_issues_only_excluded(self) -> None:
+        yaml = "on:\n  issues:\n    types: [opened]\n"
+        assert gate.workflow_targets_pull_request(yaml) is False
+
+    def test_mixed_triggers_keeps_pull_request(self) -> None:
+        yaml = textwrap.dedent(
+            """\
+            on:
+              issues:
+                types: [opened]
+              pull_request:
+                types: [opened]
+            """
+        )
+        assert gate.workflow_targets_pull_request(yaml) is True
+
+
+class TestExtractScriptRefs:
+    def test_basic(self) -> None:
+        text = "run: python3 scripts/foo.py verify\n"
+        assert gate.extract_script_refs(text) == {"foo"}
+
+    def test_multiple(self) -> None:
+        text = "scripts/foo.py\nscripts/bar.py\nscripts/foo.py\n"
+        assert gate.extract_script_refs(text) == {"foo", "bar"}
+
+    def test_ignores_private_helpers(self) -> None:
+        # Helpers prefixed with '_' are imports, not CLI gates.
+        text = "scripts/_github_api.py\nscripts/foo.py\n"
+        assert gate.extract_script_refs(text) == {"foo"}
+
+    def test_underscored_name_allowed(self) -> None:
+        text = "scripts/preflight_all.py --list\n"
+        assert gate.extract_script_refs(text) == {"preflight_all"}
+
+
+class TestCollectWorkflowRefs:
+    def test_collects_only_pull_request_workflows(self, tmp_path: Path) -> None:
+        workflows = tmp_path / "workflows"
+        workflows.mkdir()
+        (workflows / "pr.yml").write_text(
+            textwrap.dedent(
+                """\
+                on:
+                  pull_request:
+                jobs:
+                  gate:
+                    runs-on: ubuntu-latest
+                    steps:
+                      - run: python3 scripts/foo.py verify
+                """
+            ),
+            encoding="utf-8",
+        )
+        (workflows / "schedule.yml").write_text(
+            textwrap.dedent(
+                """\
+                on:
+                  schedule:
+                    - cron: "0 0 * * 0"
+                jobs:
+                  gate:
+                    runs-on: ubuntu-latest
+                    steps:
+                      - run: python3 scripts/bar.py verify
+                """
+            ),
+            encoding="utf-8",
+        )
+        refs = gate.collect_workflow_refs(workflows)
+        assert refs == [gate.WorkflowReference(workflow="pr.yml", script="foo")]
+
+
+class TestDiffStepsVsWorkflows:
+    def test_no_drift(self) -> None:
+        refs = [gate.WorkflowReference(workflow="pr.yml", script="foo")]
+        missing, extra = gate.diff_steps_vs_workflows(refs, declared=frozenset({"foo"}), allowlist={})
+        assert missing == []
+        assert extra == frozenset()
+
+    def test_ci_extra_is_missing_in_steps(self) -> None:
+        refs = [
+            gate.WorkflowReference(workflow="pr.yml", script="foo"),
+            gate.WorkflowReference(workflow="pr.yml", script="bar"),
+        ]
+        missing, extra = gate.diff_steps_vs_workflows(refs, declared=frozenset({"foo"}), allowlist={})
+        assert missing == [gate.WorkflowReference(workflow="pr.yml", script="bar")]
+        assert extra == frozenset()
+
+    def test_allowlist_silences_missing(self) -> None:
+        refs = [gate.WorkflowReference(workflow="pr.yml", script="title_policy")]
+        missing, extra = gate.diff_steps_vs_workflows(
+            refs,
+            declared=frozenset(),
+            allowlist={"title_policy": "webhook input only"},
+        )
+        assert missing == []
+        assert extra == frozenset()
+
+    def test_steps_extra_is_advisory(self) -> None:
+        refs = [gate.WorkflowReference(workflow="pr.yml", script="foo")]
+        missing, extra = gate.diff_steps_vs_workflows(
+            refs, declared=frozenset({"foo", "future"}), allowlist={}
+        )
+        assert missing == []
+        assert extra == frozenset({"future"})
+
+
+class TestMainVerifyReportsStepsVsWorkflowDrift:
+    """CLI-level integration: main() folds STEPS-vs-workflow drift into exit 1.
+
+    Isolates the assertion from the registry-vs-manifest checks by pointing
+    every other manifest at empty/matching real-repo inputs and monkeypatching
+    ``steps_manifest`` so only the new reconciliation can fire.
+    """
+
+    def test_missing_step_for_ci_script_exits_one(
+        self,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setattr(gate, "steps_manifest", lambda: (frozenset(), frozenset()))
+        workflows = tmp_path / "workflows"
+        workflows.mkdir()
+        (workflows / "pr.yml").write_text(
+            textwrap.dedent(
+                """\
+                on:
+                  pull_request:
+                jobs:
+                  gate:
+                    runs-on: ubuntu-latest
+                    steps:
+                      - run: python3 scripts/new_gate.py verify
+                """
+            ),
+            encoding="utf-8",
+        )
+        registry_path = tmp_path / "ssot.json"
+        registry_path.write_text(json.dumps({"gates": [], "clusters": []}))
+        agent_hooks_path = tmp_path / "agent_hooks.json"
+        agent_hooks_path.write_text(json.dumps({"targets": []}))
+        pre_commit_path = tmp_path / "pre-commit.yaml"
+        pre_commit_path.write_text("repos: []\n")
+        rulesets_path = tmp_path / "rulesets.json"
+        rulesets_path.write_text(json.dumps({"rules": []}))
+
+        exit_code = gate.main(
+            [
+                "verify",
+                "--registry",
+                str(registry_path),
+                "--agent-hooks",
+                str(agent_hooks_path),
+                "--pre-commit-config",
+                str(pre_commit_path),
+                "--rulesets",
+                str(rulesets_path),
+                "--workflows-dir",
+                str(workflows),
+            ]
+        )
+        assert exit_code == 1
+        captured = capsys.readouterr()
+        assert "new_gate" in captured.err
+
+
 class TestServerNativeRules:
     def test_extracts_rule_types(self) -> None:
         rulesets = {"rules": [{"type": "deletion"}, {"type": "non_fast_forward"}, "stray"]}

@@ -28,7 +28,7 @@ time.
 
 ## 2. Solution: typed document dependency graph
 
-A TOML file (`docs/graph/doc-dependencies.toml`) declares all document
+A TOML file (`.gitapex/doc-dependencies.toml`) declares all document
 dependency relationships as a typed, directed graph. Nodes are documents,
 compiled artifacts, scripts, and workflows. Edges are typed, directed
 relationships between them.
@@ -123,7 +123,7 @@ New gates in this repository follow the selection mechanism documented in
 
 | File | Role |
 |---|---|
-| `docs/graph/doc-dependencies.toml` | Graph declaration (harness-lane data file) |
+| `.gitapex/doc-dependencies.toml` | Graph declaration (harness-lane data file) |
 | `scripts/doc_graph.py` | Core library: load, query, render |
 | `scripts/gate_doc_graph_pr.py` | CI gate runner |
 | `scripts/doc_graph_viz.py` | Mermaid diagram generator |
@@ -146,7 +146,7 @@ To add a new document relationship:
 
 1. Open a sub-issue of [#1754](https://github.com/tvna/claude-md/issues/1754)
    describing the new edge (from, to, type, severity, rationale).
-2. Add the TOML `[[edges]]` block to `docs/graph/doc-dependencies.toml`.
+2. Add the TOML `[[edges]]` block to `.gitapex/doc-dependencies.toml`.
 3. If the source or target node is not yet declared, add its `[[nodes]]` block.
 4. Run `python3 scripts/gate_doc_graph_pr.py` locally to confirm the new edge
    behaves as expected.

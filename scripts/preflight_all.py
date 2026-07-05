@@ -11,8 +11,8 @@ contract, and reports per-step pass / fail / skip.
 The set of steps lives in :data:`STEPS`. Each step declares:
 
 * ``name``; a short identifier used in annotations and the
-  ``--list`` machine-readable manifest consumed by
-  :mod:`scan_preflight_drift`.
+  ``--list`` machine-readable manifest consumed by tests and tooling
+  that verify the declared step set (e.g. ``tests/test_scan_session_path_drift.py``).
 * ``argv``; the exact command line CI runs.
 * ``required_env``; environment variables that must be set for the
   step to be meaningful (e.g. ``RULESETS_PAT`` for the live ruleset
@@ -29,7 +29,7 @@ client-side equivalents are the MCP PreToolUse hooks
 ``scripts/preflight_pr_body_required_sections.py`` /
 ``scripts/pr_body_close_keyword_gate.py``, which gate the data at the
 write-tool boundary instead of the working tree. The drift gate
-(``scripts/scan_preflight_drift.py``) tracks this allowlist explicitly so
+(``scripts/scan_ssot_drift.py``) tracks this allowlist explicitly so
 silent CI-vs-local drift is still detected.
 
 Exit codes:
@@ -354,7 +354,7 @@ def partition_skips(
 def list_manifest() -> list[dict[str, object]]:
     """Return :data:`STEPS` as a JSON-serializable manifest.
 
-    Consumed by :mod:`scan_preflight_drift` to diff the local set
+    Consumed by tests and tooling that verify the declared step set
     against the script names invoked by ``.github/workflows/*.yml``.
     """
     return [

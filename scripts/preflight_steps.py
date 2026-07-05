@@ -8,7 +8,7 @@ pushed the entrypoint over budget. The data and its :class:`Step` schema
 live here so the executor module stays well under budget and the budget
 gate keeps protecting both files. :mod:`preflight_all` re-exports
 ``STEPS`` and ``Step`` so existing ``preflight_all.STEPS`` /
-``preflight_all.Step`` references (scan_preflight_drift.py,
+``preflight_all.Step`` references (scan_ssot_drift.py,
 scan_devcontainer_tool_drift.py, tests) resolve unchanged.
 
 This module is pure data plus a frozen dataclass; it imports nothing
@@ -236,12 +236,23 @@ STEPS: tuple[Step, ...] = (
         argv=("python3", "scripts/scan_ssot_schema.py", "verify"),
     ),
     Step(
-        # Refs #2256. Advisory reconciliation of .gitapex/ssot.json against
+        # Refs #2342. Validates every .gitapex/*.toml against its sibling
+        # .gitapex/NAME.schema.json (shape only; referential/semantic checks
+        # stay with each file's own normative validator: doc_graph.load_graph,
+        # scan_pr_body_quality_drift.py, scan_quality_standard_drift.py,
+        # audit_loop_engineering.py). Static working-tree read; mirrors the
+        # verify-pr.yml step so the gate fires pre-push, not only in CI.
+        name="scan_gitapex_schema",
+        argv=("python3", "scripts/scan_gitapex_schema.py", "verify"),
+    ),
+    Step(
+        # Refs #2256. Blocking reconciliation of .gitapex/ssot.json against
         # the four partial gate manifests (agent_hooks_source.json,
         # this STEPS tuple, .pre-commit-config.yaml, rulesets/main.json native
-        # rules and pull_request: workflow scripts). Always exits 0; drift
-        # surfaces as ::warning:: lines only. Mirrors the scan_ssot_schema
-        # step so both gates fire pre-push, not only in CI.
+        # rules and pull_request: workflow scripts), plus (refs #2301, phase 3
+        # child 3c) the STEPS-vs-workflow reconciliation folded in from the
+        # former scan_preflight_drift.py. Mirrors the scan_ssot_schema step so
+        # both gates fire pre-push, not only in CI.
         name="scan_ssot_drift",
         argv=("python3", "scripts/scan_ssot_drift.py", "verify"),
     ),
@@ -254,6 +265,15 @@ STEPS: tuple[Step, ...] = (
         # in CI.
         name="scan_hardcoded_label_literals",
         argv=("python3", "scripts/scan_hardcoded_label_literals.py", "verify"),
+    ),
+    Step(
+        # Refs #2300. Anti-drift gate for SSoT phase 3: rejects a mismatch
+        # between the issue-triage runbook's Agent routing table and the
+        # registry's label_routing.rules, in either direction. Static
+        # working-tree read; mirrors the verify-pr.yml step so the gate fires
+        # pre-push, not only in CI.
+        name="scan_routing_table_drift",
+        argv=("python3", "scripts/scan_routing_table_drift.py", "verify"),
     ),
     Step(
         # Refs #1325. Fails when a Markdown doc outside docs/archive/ cites a
@@ -351,21 +371,6 @@ STEPS: tuple[Step, ...] = (
         argv=("python3", "scripts/gate_agents_skills_edit.py", "verify"),
     ),
     Step(
-        # Refs #1771. docs/generated/workflows/ is owned by the post-merge
-        # automation, same single-producer model as docs/generated/scripts/
-        # (#1540/#1543/#1546). The pre-push gate no longer regenerates the
-        # workflow if-branch diagrams: the post-merge decision-tree job
-        # generates them, verify-docs-drift drift-checks them, and
-        # gate_generated_scripts_manual_edit forbids hand edits. Generating
-        # here left a perpetually-untracked diagram for any workflow whose
-        # generated doc had not yet landed on main, tripping the untracked-file
-        # stop hook (the #1764 item-2 false-fire). The
-        # test_no_step_generates_docs_generated gate keeps a generator from
-        # re-entering this lane.
-        name="scan_preflight_drift",
-        argv=("python3", "scripts/scan_preflight_drift.py", "verify"),
-    ),
-    Step(
         # Refs #1087. Static gate enforcing M4 (boundary validation) and M9
         # (fail-loud/open) by requiring every workflow-called script to declare
         # a Contract: docstring block. Baseline debt lives in the script's
@@ -382,7 +387,7 @@ STEPS: tuple[Step, ...] = (
     ),
     Step(
         # Refs #1828. Fails when an `enforced`/`partial` row in
-        # docs/standards/pr-body-quality.enforcement.toml names a backing gate
+        # .gitapex/pr-body-quality.enforcement.toml names a backing gate
         # that does not exist, or an orphaned defect class is present.
         name="scan_pr_body_quality_drift",
         argv=("python3", "scripts/scan_pr_body_quality_drift.py", "verify"),
@@ -578,6 +583,17 @@ STEPS: tuple[Step, ...] = (
         argv=("python3", "scripts/preflight_signed_commits.py", "verify"),
     ),
     Step(
+        # Refs #2307. Rejects a commit in origin/main..HEAD whose Co-authored-by
+        # trailer names the same identity as the commit's own author; the
+        # redundant footer that squash-merge duplicated on PR #2302 (2 inline
+        # copies from body concatenation + 1 GitHub-aggregated trailer). Runs
+        # after preflight_branch_base, which fetches the live base. preflight-only
+        # (no pull_request: workflow invokes it; same posture as
+        # preflight_branch_base / preflight_signed_commits).
+        name="preflight_coauthor_trailer",
+        argv=("python3", "scripts/preflight_coauthor_trailer.py", "verify"),
+    ),
+    Step(
         # Refs #2012. Measures docs/INDEX.md in the test-merge of HEAD with the
         # freshly fetched live base (git merge-tree --write-tree, no working-tree
         # mutation), catching additive merge-time budget overflow (the #2007
@@ -642,7 +658,7 @@ STEPS: tuple[Step, ...] = (
         # push rather than only in validate-doc-graph.yml CI (the #1989
         # first-head failure class). Base-ref shape mirrors the CI workflow;
         # reads origin/main fetched by preflight_branch_base. Was previously
-        # CI-only via the scan_preflight_drift ALLOWLIST; promotion per #2011.
+        # CI-only via the scan_ssot_drift STEPS_VS_WORKFLOW_ALLOWLIST; promotion per #2011.
         name="gate_doc_graph_pr",
         argv=(
             "python3",

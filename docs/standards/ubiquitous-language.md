@@ -98,7 +98,7 @@ required entry has been removed or renamed. Refs #1901.
   keeps true. Both producer jobs live in `.github/workflows/post-merge.yml`:
   the `decision-tree` job produces the rest of `docs/generated/` (per-script
   AST docs, workflow if-branch diagrams, and the dependency graph) plus the
-  `docs/standards/module-size-distribution.toml` snapshot, while the
+  `.gitapex/module-size-distribution.toml` snapshot, while the
   `triage-report` job produces the single file
   `docs/generated/scripts/auto-retro-triage-report.md` that sits under the
   shared `docs/generated/scripts/` tree. Master section 3 (an "only here"

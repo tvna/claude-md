@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Read-only reporter for the loop-engineering achievement audit.
 
-Reads ``docs/standards/loop-engineering-audit.toml`` (the stored checklist and
+Reads ``.gitapex/loop-engineering-audit.toml`` (the stored checklist and
 single source of truth) and prints a status table. For items flagged
 ``machine_checkable`` it re-derives ``present`` / ``absent`` from the working
 tree and flags ``DRIFT`` when the recorded status disagrees with the tree;
@@ -17,6 +17,8 @@ Contract:
 - Outputs: a status table on stdout; always exit 0.
 - Architecture: pure functions on top; a single filesystem boundary in
   :func:`detect`, monkeypatched in tests.
+
+Refs #2294, #2268, #2342.
 """
 
 from __future__ import annotations
@@ -27,7 +29,7 @@ from pathlib import Path
 from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_DATA = REPO_ROOT / "docs" / "standards" / "loop-engineering-audit.toml"
+DEFAULT_DATA = REPO_ROOT / ".gitapex" / "loop-engineering-audit.toml"
 
 # An audit item or its embedded check: heterogeneous TOML records read as-is.
 Item = dict[str, Any]

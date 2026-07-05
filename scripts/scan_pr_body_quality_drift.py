@@ -7,7 +7,7 @@ defects (placeholder-residue, empty-section, missing-good-bad-examples,
 retro-feedback-loop) being doc-only: only reviewer memory prevented regression,
 which violates CLAUDE.md section 3.
 
-`docs/standards/pr-body-quality.enforcement.toml` is the registry mapping each
+`.gitapex/pr-body-quality.enforcement.toml` is the registry mapping each
 known defect class to a `status` (`enforced` / `partial` / `doc-only`) and the
 deterministic `backing` that sustains it. This gate proves the registry is
 internally consistent:
@@ -31,7 +31,7 @@ Contract:
 - Failure policy: fails loud per CLAUDE.md section 4; exit 1 on any drift or
   unresolved backing.
 
-Tested by `tests/test_scan_pr_body_quality_drift.py`. Refs #1828.
+Tested by `tests/test_scan_pr_body_quality_drift.py`. Refs #1828, #2342.
 """
 from __future__ import annotations
 
@@ -41,7 +41,7 @@ import tomllib
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-REGISTRY = REPO_ROOT / "docs" / "standards" / "pr-body-quality.enforcement.toml"
+REGISTRY = REPO_ROOT / ".gitapex" / "pr-body-quality.enforcement.toml"
 
 _VALID_STATUS = frozenset({"enforced", "partial", "doc-only"})
 
@@ -142,7 +142,7 @@ def cmd_verify(args: argparse.Namespace) -> int:
     defects = find_drift(registry, repo_root)
     for defect in defects:
         print(
-            f"::error file=docs/standards/pr-body-quality.enforcement.toml::{defect}.",
+            f"::error file=.gitapex/pr-body-quality.enforcement.toml::{defect}.",
             file=sys.stderr,
         )
     if defects:

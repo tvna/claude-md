@@ -508,6 +508,6 @@ paths = [
   "scripts/doc_graph.py", "scripts/doc_graph_viz.py",
   "scripts/script_ast_graph.py", "scripts/script_dependency_graph.py",
   "scripts/script_trigger_map.py", "scripts/workflow_diagram.py",
-  "docs/graph/**", ".gitapex/**",
+  ".gitapex/**",
   ".github/workflows/validate-doc-graph.yml",
 ]

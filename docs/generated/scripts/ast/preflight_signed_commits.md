@@ -43,61 +43,27 @@ flowchart TD
     N006 -->|"false"| N008
 ```
 
-## parse_push_refs(...)
-
-```mermaid
-flowchart TD
-    N001["parse_push_refs(...)"]
-    N002["refs = []"]
-    N003["for line in value.splitlines():     fields = line.split()     if len(fields) != 4:         continue     refs.append(PushRef(*fields))"]
-    N004["return refs"]
-    N001 -->|"start"| N002
-    N002 --> N003
-    N003 --> N004
-```
-
-## read_push_refs(...)
-
-```mermaid
-flowchart TD
-    N001["read_push_refs(...)"]
-    N002["source = os.environ if env is None else env"]
-    N003["refs = parse_push_refs(...)"]
-    N004["remote = source.get(_PUSH_REMOTE_ENV_VAR, '<str>') or _DEFAULT_REMOTE"]
-    N005["return (refs, remote)"]
-    N001 -->|"start"| N002
-    N002 --> N003
-    N003 --> N004
-    N004 --> N005
-```
-
 ## check_pushed_refs(...)
 
 ```mermaid
 flowchart TD
     N001["check_pushed_refs(...)"]
-    N002["seen = set(...)"]
-    N003["unsigned = []"]
-    N004["inspected = 0"]
-    N005["undeterminable = False"]
-    N006["for ref in refs:     if is_all_zeros(ref.local_oid):         continue     remote_oid = None if is_all_zeros(ref.remote_oid) else ref.remote_oid     commits = commits_to_push(runner, local_sha=ref.local_oid, remote_sha=remote_oid, remote=remote)     if commits is None:         undeterminable = True         continue     for sha in commits:         if sha in seen:             continue         seen.add(sha)         inspected += 1         if is_unsigned(runner, sha):             unsigned.append(sha)"]
-    N007["scope = f'{inspected}<str>{len(refs)}<str>'"]
-    N008["if unsigned"]
-    N009["return SignedCommitsResult(status='<str>', detail=f'{len(unsigned)}<str>{scope}<str>', unsigned=tuple(unsigned))"]
-    N010["if inspected == 0 and undeterminable"]
-    N011["return SignedCommitsResult(status='<str>', detail=f'<str>{len(refs)}<str>')"]
-    N012["return SignedCommitsResult(status='<str>', detail=f'<str>{scope}<str>')"]
+    N002["(commits, undeterminable) = commits_for_pushed_refs(...)"]
+    N003["unsigned = [sha for sha in commits if is_unsigned(runner, sha)]"]
+    N004["scope = f'{len(commits)}<str>{len(refs)}<str>'"]
+    N005["if unsigned"]
+    N006["return SignedCommitsResult(status='<str>', detail=f'{len(unsigned)}<str>{scope}<str>', unsigned=tuple(unsigned))"]
+    N007["if not commits and undeterminable"]
+    N008["return SignedCommitsResult(status='<str>', detail=f'<str>{len(refs)}<str>')"]
+    N009["return SignedCommitsResult(status='<str>', detail=f'<str>{scope}<str>')"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 --> N004
     N004 --> N005
-    N005 --> N006
-    N006 --> N007
-    N007 --> N008
-    N008 -->|"true"| N009
-    N008 -->|"false"| N010
-    N010 -->|"true"| N011
-    N010 -->|"false"| N012
+    N005 -->|"true"| N006
+    N005 -->|"false"| N007
+    N007 -->|"true"| N008
+    N007 -->|"false"| N009
 ```
 
 ## _build_parser(...)
