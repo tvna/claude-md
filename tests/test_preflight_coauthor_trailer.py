@@ -2,7 +2,7 @@
 
 Refs #2307, #2302. The pre-push gate inspects ``origin/main..HEAD`` and
 rejects a commit whose ``Co-authored-by:``/``Co-Authored-By:`` trailer names
-the same identity (email, case-insensitive) as the commit's own author -- the
+the same identity (email, case-insensitive) as the commit's own author; the
 redundant footer that squash-merge duplicated on PR #2302. Covered: a clean
 range passes, a redundant self-trailer fails loud, a legitimate
 different-author trailer is allowed, a duplicated-across-commits trailer that

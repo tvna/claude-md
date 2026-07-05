@@ -588,7 +588,7 @@ STEPS: tuple[Step, ...] = (
     ),
     Step(
         # Refs #2307. Rejects a commit in origin/main..HEAD whose Co-authored-by
-        # trailer names the same identity as the commit's own author -- the
+        # trailer names the same identity as the commit's own author; the
         # redundant footer that squash-merge duplicated on PR #2302 (2 inline
         # copies from body concatenation + 1 GitHub-aggregated trailer). Runs
         # after preflight_branch_base, which fetches the live base. preflight-only
