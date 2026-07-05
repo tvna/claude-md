@@ -2,6 +2,58 @@
 
 This file is generated from `scripts/scan_ssot_drift.py` by `python3 scripts/script_ast_graph.py all-doc`. Do not edit it by hand: content under `docs/generated/scripts/` is owned by the post-merge automation (refs #1540); update the source script instead.
 
+## workflow_targets_pull_request(...)
+
+```mermaid
+flowchart TD
+    N001["workflow_targets_pull_request(...)"]
+    N002["in_on_block = False"]
+    N003["on_block_indent = -1"]
+    N004["for raw_line in yaml_text.splitlines():     stripped = raw_line.lstrip()     indent = len(raw_line) - len(stripped)     if not stripped or stripped.startswith('<str>'):         continue     if not in_on_block:         if stripped.startswith('<str>'):             tail = stripped[3:].strip()             if tail.startswith('<str>') and '<str>' in tail and ('<str>' not in tail.replace('<str>', '<str>')):                 tokens = re.findall('<str>', tail)                 if '<str>' in tokens:                     return True             in_on_block = True             on_block_indent = indent         continue     if indent <= on_block_indent:         return False     head = stripped.split('<str>', 1)[0]     if head == '<str>':         return True"]
+    N005["return False"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 --> N004
+    N004 --> N005
+```
+
+## extract_script_refs(...)
+
+```mermaid
+flowchart TD
+    N001["extract_script_refs(...)"]
+    N002["return set(_SCRIPT_REF.findall(yaml_text))"]
+    N001 -->|"start"| N002
+```
+
+## collect_workflow_refs(...)
+
+```mermaid
+flowchart TD
+    N001["collect_workflow_refs(...)"]
+    N002["refs = []"]
+    N003["for path in sorted(workflows_dir.glob('<str>')):     text = path.read_text(encoding='<str>')     if not workflow_targets_pull_request(text):         continue     for script in sorted(extract_script_refs(text)):         refs.append(WorkflowReference(workflow=path.name, script=script))"]
+    N004["return refs"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 --> N004
+```
+
+## diff_steps_vs_workflows(...)
+
+```mermaid
+flowchart TD
+    N001["diff_steps_vs_workflows(...)"]
+    N002["ci_scripts = {ref.script for ref in workflow_refs}"]
+    N003["missing = [ref for ref in workflow_refs if ref.script not in declared and ref.script not in allowlist]"]
+    N004["extra = frozenset(declared) - ci_scripts"]
+    N005["return (missing, extra)"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 --> N004
+    N004 --> N005
+```
+
 ## _as_list(...)
 
 ```mermaid
@@ -271,12 +323,17 @@ flowchart TD
     N034["print(...)"]
     N035["return 1"]
     N036["warnings = verify_registry(...)"]
-    N037["if warnings"]
-    N038["for message in warnings:     print(f'<str>{_SCRIPT}<str>{message}', file=sys.stderr)"]
-    N039["print(...)"]
-    N040["return 1"]
-    N041["print(...)"]
-    N042["return 0"]
+    N037["workflow_refs = collect_workflow_refs(...)"]
+    N038["(push_scripts, _) = steps_manifest(...)"]
+    N039["(missing_steps, extra_declared) = diff_steps_vs_workflows(...)"]
+    N040["warnings += [f'<str>{ref.script}<str>{ref.workflow!r}<str>' for ref in missing_steps]"]
+    N041["for name in sorted(extra_declared):     print(f'<str>{_SCRIPT}<str>{name!r}<str>{name}<str>', file=sys.stderr)"]
+    N042["if warnings"]
+    N043["for message in warnings:     print(f'<str>{_SCRIPT}<str>{message}', file=sys.stderr)"]
+    N044["print(...)"]
+    N045["return 1"]
+    N046["print(...)"]
+    N047["return 0"]
     N001 -->|"start"| N002
     N002 -->|"true"| N003
     N003 --> N004
@@ -314,9 +371,14 @@ flowchart TD
     N034 --> N035
     N033 -->|"false"| N036
     N036 --> N037
-    N037 -->|"true"| N038
+    N037 --> N038
     N038 --> N039
     N039 --> N040
-    N037 -->|"false"| N041
+    N040 --> N041
     N041 --> N042
+    N042 -->|"true"| N043
+    N043 --> N044
+    N044 --> N045
+    N042 -->|"false"| N046
+    N046 --> N047
 ```
