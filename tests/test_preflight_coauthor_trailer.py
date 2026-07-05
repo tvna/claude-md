@@ -51,11 +51,13 @@ class _FakeGit:
         self,
         *,
         rev_list: list[str] | None = None,
+        rev_list_map: dict[str, list[str]] | None = None,
         commits: dict[str, tuple[str, str]] | None = None,
         rev_list_rc: int = 0,
         raise_on: str | None = None,
     ) -> None:
         self.rev_list = rev_list if rev_list is not None else []
+        self.rev_list_map = rev_list_map or {}
         self.commits = commits or {}
         self.rev_list_rc = rev_list_rc
         self.raise_on = raise_on
@@ -66,9 +68,18 @@ class _FakeGit:
         sub = args[0]
         if self.raise_on is not None and sub == self.raise_on:
             raise OSError("boom")
+        if sub == "remote":
+            return _cp(
+                stdout="origin\thttps://example.test/repo.git (fetch)\n"
+                "origin\thttps://example.test/repo.git (push)\n"
+            )
         if sub == "rev-list":
             if self.rev_list_rc != 0:
                 return _cp(returncode=self.rev_list_rc)
+            if self.rev_list_map:
+                key = args[1].rsplit("..", 1)[-1]
+                commits = self.rev_list_map.get(key, [])
+                return _cp(stdout="\n".join(commits) + "\n")
             return _cp(stdout="\n".join(self.rev_list) + "\n")
         if sub == "log":
             sha = args[-1]
@@ -79,8 +90,20 @@ class _FakeGit:
         return _cp()
 
 
+@pytest.fixture(autouse=True)
+def _no_pushed_refs(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Default every test to no pushed-ref payload (the base-ref fallback)."""
+    monkeypatch.delenv("PREFLIGHT_PUSH_REFS", raising=False)
+    monkeypatch.delenv("PREFLIGHT_PUSH_REMOTE", raising=False)
+
+
 def _args(base_ref: str = "origin/main") -> argparse.Namespace:
     return argparse.Namespace(command="verify", repo_root=".", base_ref=base_ref)
+
+
+_OTHER_TIP = "3333333333333333333333333333333333333333"
+_REMOTE_OID = "4444444444444444444444444444444444444444"
+_ZEROS = "0" * 40
 
 
 # ---------------------------------------------------------------------------
@@ -197,6 +220,119 @@ def test_multiple_trailers_only_self_redundant_one_reported() -> None:
     violations = subject.find_redundant_trailers(git, [_SHA_A])
     assert len(violations) == 1
     assert violations[0].trailer_email == _CLAUDE_EMAIL
+
+
+# ---------------------------------------------------------------------------
+# check_pushed_refs(): inspect the commits each pushed ref ships (#2333 review)
+# ---------------------------------------------------------------------------
+
+
+def _ref(local_oid: str, remote_oid: str, name: str = "refs/heads/feat") -> subject.PushRef:
+    return subject.PushRef(name, local_oid, name, remote_oid)
+
+
+def test_pushed_existing_branch_uses_range() -> None:
+    git = _FakeGit(
+        rev_list_map={_OTHER_TIP: [_SHA_A]},
+        commits={_SHA_A: (_CLAUDE_EMAIL, _PLAIN_BODY)},
+    )
+    result = subject.check_pushed_refs(
+        runner=git, refs=[_ref(_OTHER_TIP, _REMOTE_OID)], remote="origin"
+    )
+    assert result.status == "pass"
+    rev_list_calls = [c for c in git.calls if c[0] == "rev-list"]
+    assert rev_list_calls == [["rev-list", f"{_REMOTE_OID}..{_OTHER_TIP}"]]
+
+
+def test_pushed_self_redundant_trailer_fails() -> None:
+    git = _FakeGit(
+        rev_list_map={_OTHER_TIP: [_SHA_A]},
+        commits={_SHA_A: (_CLAUDE_EMAIL, _SELF_REDUNDANT_BODY)},
+    )
+    result = subject.check_pushed_refs(
+        runner=git, refs=[_ref(_OTHER_TIP, _REMOTE_OID)], remote="origin"
+    )
+    assert result.status == "fail"
+    assert result.violations[0].sha == _SHA_A
+
+
+def test_pushed_new_branch_scopes_to_remote() -> None:
+    git = _FakeGit(
+        rev_list_map={_OTHER_TIP: [_SHA_A]},
+        commits={_SHA_A: (_CLAUDE_EMAIL, _PLAIN_BODY)},
+    )
+    subject.check_pushed_refs(runner=git, refs=[_ref(_OTHER_TIP, _ZEROS)], remote="origin")
+    rev_list_calls = [c for c in git.calls if c[0] == "rev-list"]
+    assert rev_list_calls == [["rev-list", _OTHER_TIP, "--not", "--remotes=origin"]]
+
+
+def test_pushed_delete_refspec_ships_nothing() -> None:
+    git = _FakeGit(rev_list=[_SHA_A], commits={_SHA_A: (_CLAUDE_EMAIL, _SELF_REDUNDANT_BODY)})
+    result = subject.check_pushed_refs(
+        runner=git, refs=[_ref(_ZEROS, _REMOTE_OID)], remote="origin"
+    )
+    assert result.status == "pass"
+    assert [c for c in git.calls if c[0] == "rev-list"] == []
+
+
+def test_pushed_all_undeterminable_is_skip() -> None:
+    git = _FakeGit(rev_list_rc=128)
+    result = subject.check_pushed_refs(
+        runner=git, refs=[_ref(_OTHER_TIP, _REMOTE_OID)], remote="origin"
+    )
+    assert result.status == "skip"
+
+
+# ---------------------------------------------------------------------------
+# cmd_verify(): pushed-ref payload vs base-ref fallback (#2333 review)
+# ---------------------------------------------------------------------------
+
+
+def test_cmd_verify_inspects_pushed_branch_not_head(monkeypatch: pytest.MonkeyPatch) -> None:
+    # HEAD is on a clean branch (the fallback range would pass), but a push of
+    # other-branch ships a self-redundant trailer; the gate must inspect the
+    # pushed ref, not the fixed origin/main..HEAD range.
+    monkeypatch.setenv(
+        "PREFLIGHT_PUSH_REFS",
+        f"refs/heads/other {_OTHER_TIP} refs/heads/other {_REMOTE_OID}",
+    )
+    git = _FakeGit(
+        rev_list=[_SHA_A],
+        rev_list_map={_OTHER_TIP: [_SHA_B]},
+        commits={
+            _SHA_A: (_CLAUDE_EMAIL, _PLAIN_BODY),
+            _SHA_B: (_CLAUDE_EMAIL, _SELF_REDUNDANT_BODY),
+        },
+    )
+    assert subject.cmd_verify(_args(), runner=git) == 1
+
+
+def test_cmd_verify_tag_push_not_blocked_by_head_redundant_trailer(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A non-HEAD ref push (a tag) ships a clean commit; a self-redundant
+    # trailer reachable only from HEAD (the fallback range) must NOT block it.
+    monkeypatch.setenv(
+        "PREFLIGHT_PUSH_REFS",
+        f"refs/tags/v1 {_OTHER_TIP} refs/tags/v1 {_REMOTE_OID}",
+    )
+    git = _FakeGit(
+        rev_list=[_SHA_A],
+        rev_list_map={_OTHER_TIP: [_SHA_B]},
+        commits={
+            _SHA_A: (_CLAUDE_EMAIL, _SELF_REDUNDANT_BODY),
+            _SHA_B: (_CLAUDE_EMAIL, _PLAIN_BODY),
+        },
+    )
+    assert subject.cmd_verify(_args(), runner=git) == 0
+
+
+def test_cmd_verify_falls_back_to_head_range_without_payload() -> None:
+    # No PREFLIGHT_PUSH_REFS (cleared by the autouse fixture): the origin/main..
+    # HEAD fallback runs, preserving the manual-invocation behaviour.
+    git = _FakeGit(rev_list=[_SHA_A], commits={_SHA_A: (_CLAUDE_EMAIL, _SELF_REDUNDANT_BODY)})
+    assert subject.cmd_verify(_args(), runner=git) == 1
+    assert git.calls[0] == ["rev-list", "origin/main..HEAD"]
 
 
 # ---------------------------------------------------------------------------

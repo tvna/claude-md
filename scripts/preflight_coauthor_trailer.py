@@ -17,14 +17,22 @@ multiplies. This gate rejects exactly that redundant case: a
 -insensitively) the email of the commit that carries it. A trailer naming a
 genuinely different co-author is unaffected.
 
-Range. Mirrors ``preflight_signed_commits.py``: the commits inspected are
-``<base-ref>..HEAD`` (default ``origin/main``, overridable with
-``--base-ref``), read after ``preflight_branch_base`` has fetched the live
-base so the remote-tracking ref is current.
+Range. Mirrors ``preflight_signed_commits.py`` (#2162): when the pre-push hook
+bridges the actual to-be-updated refs through the environment
+(``PREFLIGHT_PUSH_REFS`` / ``PREFLIGHT_PUSH_REMOTE``), the commits inspected
+are exactly those the push would ship (via the shared
+``_git.commits_for_pushed_refs``), so a non-HEAD branch push is checked and an
+unrelated tag/non-HEAD push is not falsely blocked by a redundant trailer
+reachable only from HEAD. With no such payload (a direct CLI ``verify`` run)
+the range falls back to ``<base-ref>..HEAD`` (default ``origin/main``,
+overridable with ``--base-ref``), read after ``preflight_branch_base`` has
+fetched the live base so the remote-tracking ref is current.
 
 Contract:
 - Inputs: ``verify`` subcommand with optional ``--repo-root`` and
-  ``--base-ref`` (default ``origin/main``).
+  ``--base-ref`` (default ``origin/main``). Reads ``PREFLIGHT_PUSH_REFS`` /
+  ``PREFLIGHT_PUSH_REMOTE`` (the pushed refs the pre-push hook bridged from
+  stdin; absent for a direct CLI run).
 - Outputs: an ``OK:`` line and exit 0 when no commit in range carries a
   self-redundant trailer, or when the range cannot be resolved (skip, the
   same fail-open posture as ``preflight_signed_commits.py``); ``::error::``
@@ -47,7 +55,14 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-from _git import Runner, make_runner, rev_list
+from _git import (
+    PushRef,
+    Runner,
+    commits_for_pushed_refs,
+    make_runner,
+    read_push_refs,
+    rev_list,
+)
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -147,6 +162,35 @@ def check_coauthor_trailers(*, runner: Runner, base_ref: str) -> CoauthorTrailer
     )
 
 
+def check_pushed_refs(*, runner: Runner, refs: list[PushRef], remote: str) -> CoauthorTrailerResult:
+    """Inspect the commits each pushed ref ships and report self-redundant trailers.
+
+    Delegates the pushed-commit collection to the shared
+    :func:`_git.commits_for_pushed_refs` (the same helper
+    ``preflight_signed_commits.py`` uses for #2162), so a non-HEAD branch push
+    is checked and an unrelated tag/non-HEAD push is not falsely blocked by a
+    redundant trailer reachable only from HEAD.
+    """
+    commits, undeterminable = commits_for_pushed_refs(runner, refs, remote)
+    if not commits and undeterminable:
+        return CoauthorTrailerResult(
+            status="skip",
+            detail=f"no pushed ref range across {len(refs)} ref(s) could be resolved",
+        )
+    violations = find_redundant_trailers(runner, commits)
+    scope = f"{len(commits)} pushed commit(s) across {len(refs)} ref(s)"
+    if violations:
+        return CoauthorTrailerResult(
+            status="fail",
+            detail=f"{len(violations)} of {scope} carry a Co-authored-by trailer naming their own author",
+            violations=tuple(violations),
+        )
+    return CoauthorTrailerResult(
+        status="pass",
+        detail=f"no self-redundant Co-authored-by trailer in {scope}",
+    )
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -162,7 +206,17 @@ def cmd_verify(args: argparse.Namespace, *, runner: Runner | None = None) -> int
     if runner is None:
         runner = make_runner(cwd=Path(args.repo_root), timeout=_GIT_TIMEOUT_SECONDS)
 
-    result = check_coauthor_trailers(runner=runner, base_ref=args.base_ref)
+    # When the pre-push hook bridged the actual to-be-updated refs through the
+    # environment, inspect exactly those refs (issue #2333 review: a non-HEAD
+    # branch push must be checked, and a tag/non-HEAD push must not be blocked
+    # by a redundant trailer reachable only from HEAD). With no such payload (a
+    # direct CLI ``verify``, not invoked via the hook) fall back to the
+    # base-ref range so the manual invocation keeps working.
+    refs, remote = read_push_refs()
+    if refs:
+        result = check_pushed_refs(runner=runner, refs=refs, remote=remote)
+    else:
+        result = check_coauthor_trailers(runner=runner, base_ref=args.base_ref)
 
     if result.status == "pass":
         print(f"OK: {result.detail}")

@@ -233,56 +233,17 @@ def test_cmd_verify_ack_does_not_bypass_a_clean_range(
 
 
 # ---------------------------------------------------------------------------
-# parse_push_refs() / read_push_refs(): pre-push stdin payload
+# check_pushed_refs(): inspect the commits each pushed ref ships
+#
+# parse_push_refs()/read_push_refs() are canonically defined in _git.py and
+# covered by tests/test_git.py (TestParsePushRefs/TestReadPushRefs); this
+# module re-exports them (subject.parse_push_refs, subject.PushRef) for
+# backwards compatibility, not tested again here.
 # ---------------------------------------------------------------------------
 
 _OTHER_TIP = "3333333333333333333333333333333333333333"
 _REMOTE_OID = "4444444444444444444444444444444444444444"
 _ZEROS = "0" * 40
-
-
-def test_parse_push_refs_reads_four_fields() -> None:
-    payload = f"refs/heads/feat {_OTHER_TIP} refs/heads/feat {_REMOTE_OID}\n"
-    refs = subject.parse_push_refs(payload)
-    assert refs == [subject.PushRef("refs/heads/feat", _OTHER_TIP, "refs/heads/feat", _REMOTE_OID)]
-
-
-def test_parse_push_refs_skips_blank_and_malformed() -> None:
-    payload = f"\nnot enough fields\nrefs/heads/a {_OTHER_TIP} refs/heads/a {_REMOTE_OID}\n   \n"
-    refs = subject.parse_push_refs(payload)
-    assert [r.local_ref for r in refs] == ["refs/heads/a"]
-
-
-def test_parse_push_refs_delete_line() -> None:
-    # A deletion line is "(delete) <zeros> <remote-ref> <remote-oid>": four fields.
-    refs = subject.parse_push_refs(f"(delete) {_ZEROS} refs/heads/old {_REMOTE_OID}")
-    assert refs == [subject.PushRef("(delete)", _ZEROS, "refs/heads/old", _REMOTE_OID)]
-
-
-def test_read_push_refs_defaults_remote_to_origin() -> None:
-    env = {subject._PUSH_REFS_ENV_VAR: f"refs/heads/a {_OTHER_TIP} refs/heads/a {_REMOTE_OID}"}
-    refs, remote = subject.read_push_refs(env)
-    assert len(refs) == 1
-    assert remote == "origin"
-
-
-def test_read_push_refs_uses_named_remote() -> None:
-    env = {
-        subject._PUSH_REFS_ENV_VAR: f"refs/heads/a {_OTHER_TIP} refs/heads/a {_REMOTE_OID}",
-        subject._PUSH_REMOTE_ENV_VAR: "upstream",
-    }
-    _refs, remote = subject.read_push_refs(env)
-    assert remote == "upstream"
-
-
-def test_read_push_refs_empty_when_unset() -> None:
-    refs, _remote = subject.read_push_refs({})
-    assert refs == []
-
-
-# ---------------------------------------------------------------------------
-# check_pushed_refs(): inspect the commits each pushed ref ships
-# ---------------------------------------------------------------------------
 
 
 def _ref(local_oid: str, remote_oid: str, name: str = "refs/heads/feat") -> subject.PushRef:
