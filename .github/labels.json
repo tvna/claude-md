@@ -95,6 +95,21 @@
     "color": "006b75"
   },
   {
+    "name": "area:ci-ops",
+    "description": "CI automation scripts, issue/PR operation utilities, and maintenance workflows.",
+    "color": "0e8a16"
+  },
+  {
+    "name": "area:governance",
+    "description": "Repo structure analysis, document dependency graph, and governance tooling.",
+    "color": "5319e7"
+  },
+  {
+    "name": "area:security-intel",
+    "description": "Threat triage, security drift, non-ASCII defense, and security runbooks.",
+    "color": "ee0701"
+  },
+  {
     "name": "ops:dependencies",
     "description": "Dependency update workflow state from Dependabot or equivalent automation.",
     "color": "0366d6"
