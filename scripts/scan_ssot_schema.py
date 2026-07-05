@@ -31,10 +31,11 @@ Referential-integrity checks (which JSON Schema cannot express) then enforce:
   ``native`` carries ``native_rule`` (and no ``script``);
 - ``label_routing.rules`` has exactly one ``default`` rule, last.
 
-Architecture: pure functions on top (:func:`validate_shape`,
-:func:`verify_registry` and its ``_check_*`` helpers), a single ``git``
-subprocess boundary in :func:`build_tracked_checker`, and a ``main()``
-entrypoint at the bottom.
+Architecture: pure functions on top (:func:`verify_registry` and its
+``_check_*`` helpers), a single ``git`` subprocess boundary in
+:func:`build_tracked_checker`, and a ``main()`` entrypoint at the bottom. The
+draft-2020-12 subset engine (schema-shape validation) lives in the shared
+``scripts/_json_schema_subset.py`` (#2342), reused by ``scan_gitapex_schema.py``.
 
 Contract:
 - Inputs: the ``verify`` subcommand; ``--registry`` (default
@@ -60,16 +61,15 @@ import tomllib
 from collections.abc import Callable
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _json_schema_subset import SchemaError, validate_shape
+
 _SCRIPT = "scan_ssot_schema"
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _REGISTRY_PATH = ".gitapex/ssot.json"
 _SCHEMA_PATH = ".gitapex/ssot.schema.json"
 _LABELS_PATH = ".github/labels.json"
 _LABEL_POLICY_PATH = ".github/label-policy.toml"
-
-
-class SchemaError(Exception):
-    """Raised when the schema itself is missing a structure the gate reads."""
 
 
 # ---------------------------------------------------------------------------
@@ -113,19 +113,9 @@ def _as_list(value: object) -> list[object]:
 
 
 # ---------------------------------------------------------------------------
-# Schema-driven shape validation (a draft-2020-12 subset)
+# Schema-shape precondition (registry-specific; the subset engine itself is
+# shared, see scripts/_json_schema_subset.py)
 # ---------------------------------------------------------------------------
-
-_TYPE_CHECKS: dict[str, Callable[[object], bool]] = {
-    "object": lambda v: isinstance(v, dict),
-    "array": lambda v: isinstance(v, list),
-    "string": lambda v: isinstance(v, str),
-    # bool is a subclass of int; an integer field must reject True/False.
-    "integer": lambda v: isinstance(v, int) and not isinstance(v, bool),
-    "number": lambda v: isinstance(v, int | float) and not isinstance(v, bool),
-    "boolean": lambda v: isinstance(v, bool),
-    "null": lambda v: v is None,
-}
 
 
 def _assert_schema_shape(schema: object) -> None:
@@ -146,74 +136,6 @@ def _assert_schema_shape(schema: object) -> None:
             raise SchemaError(f"schema is missing the '$defs.{name}.enum' list")
     if not isinstance(schema.get("required"), list):
         raise SchemaError("schema is missing the top-level 'required' list")
-
-
-def _resolve_ref(root: dict[str, object], ref: str) -> dict[str, object]:
-    node: object = root
-    for part in ref.lstrip("#/").split("/"):
-        if not isinstance(node, dict) or part not in node:
-            raise SchemaError(f"schema $ref {ref!r} does not resolve")
-        node = node[part]
-    if not isinstance(node, dict):
-        raise SchemaError(f"schema $ref {ref!r} does not resolve to an object")
-    return node
-
-
-def _type_name(value: object) -> str:
-    return "null" if value is None else type(value).__name__
-
-
-def _validate_instance(
-    instance: object,
-    schema: dict[str, object],
-    root: dict[str, object],
-    path: str,
-    errors: list[str],
-) -> None:
-    """Validate *instance* against the *schema* subset, appending violations."""
-    ref = schema.get("$ref")
-    if isinstance(ref, str):
-        schema = _resolve_ref(root, ref)
-
-    declared_type = schema.get("type")
-    if declared_type is not None:
-        types = declared_type if isinstance(declared_type, list) else [declared_type]
-        if not any(_TYPE_CHECKS.get(str(t), lambda _v: True)(instance) for t in types):
-            errors.append(f"{path}: expected type {declared_type}, got {_type_name(instance)}")
-            return
-
-    enum = schema.get("enum")
-    if isinstance(enum, list) and instance not in enum:
-        errors.append(f"{path}: {instance!r} is not one of {enum}")
-
-    if isinstance(instance, dict):
-        properties = schema.get("properties")
-        properties = properties if isinstance(properties, dict) else {}
-        for key in _as_list(schema.get("required")):
-            if key not in instance:
-                errors.append(f"{path}: missing required field {key!r}")
-        if schema.get("additionalProperties") is False:
-            for key in instance:
-                if key not in properties:
-                    errors.append(f"{path}: unexpected property {key!r}")
-        for key, subschema in properties.items():
-            if key in instance and isinstance(subschema, dict):
-                _validate_instance(instance[key], subschema, root, f"{path}.{key}", errors)
-    elif isinstance(instance, list):
-        min_items = schema.get("minItems")
-        if isinstance(min_items, int) and len(instance) < min_items:
-            errors.append(f"{path}: expected at least {min_items} item(s), got {len(instance)}")
-        item_schema = schema.get("items")
-        if isinstance(item_schema, dict):
-            for idx, item in enumerate(instance):
-                _validate_instance(item, item_schema, root, f"{path}[{idx}]", errors)
-
-
-def validate_shape(registry: object, schema: dict[str, object]) -> list[str]:
-    """Return schema-conformance violations for *registry*."""
-    errors: list[str] = []
-    _validate_instance(registry, schema, schema, "registry", errors)
-    return errors
 
 
 # ---------------------------------------------------------------------------
@@ -349,7 +271,7 @@ def verify_registry(
     _assert_schema_shape(schema)
     assert isinstance(schema, dict)  # noqa: S101 -- narrowed by _assert_schema_shape
 
-    errors = validate_shape(registry, schema)
+    errors = validate_shape(registry, schema, root_path="registry")
     if not isinstance(registry, dict):
         return errors  # shape validation reported the root type mismatch
 

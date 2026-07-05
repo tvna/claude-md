@@ -7,7 +7,7 @@ name: Validate document dependency graph
 # Promotion criteria: two consecutive sprints at FP rate < 5%.
 #
 # Companion to: scripts/gate_doc_graph_pr.py (the gate script)
-#               docs/graph/doc-dependencies.toml (the graph declaration)
+#               .gitapex/doc-dependencies.toml (the graph declaration)
 #               docs/runbooks/doc-dependency-graph.md (the design rationale)
 #
 # Mirrored in preflight_all.STEPS (step `gate_doc_graph_pr`, --base-ref

@@ -130,7 +130,7 @@ jobs:
             --body-file "$body_file"
 
       - name: Forbid hand edits to generated script docs
-        # docs/generated/ and the docs/standards/module-size-distribution.toml
+        # docs/generated/ and the .gitapex/module-size-distribution.toml
         # size snapshot are owned by the post-merge automation (#1540, #2013).
         # This gate fails a non-bot PR whose diff touches them. The post-merge
         # bot branch (chore/update-generated-docs) is exempt; it is resolved
@@ -239,6 +239,14 @@ jobs:
         # scan_ssot_schema STEP and at commit time by the scan-ssot-schema
         # pre-commit hook.
         run: uv run python scripts/scan_ssot_schema.py verify
+
+      - name: Validate .gitapex/*.toml against their sibling schemas
+        # Refs #2342: every .gitapex/*.toml is required to have a sibling
+        # .gitapex/NAME.schema.json and validate against it (shape only;
+        # referential/semantic checks stay with each file's own normative
+        # validator). Mirrored pre-push by the scan_gitapex_schema STEP and at
+        # commit time by the scan-gitapex-schema pre-commit hook.
+        run: uv run python scripts/scan_gitapex_schema.py verify
 
       - name: Report .gitapex/ssot.json drift (advisory)
         # Refs #2256: blocking reconciliation of the gate registry against the

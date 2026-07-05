@@ -3,7 +3,7 @@
 
 When a PR adds a file whose path matches a managed path pattern, this gate
 requires that the file is either declared as a node in
-``docs/graph/doc-dependencies.toml`` or carries an explicit
+``.gitapex/doc-dependencies.toml`` or carries an explicit
 ``doc-graph-registration-waiver: <FILE_PATH>; <reason>`` line in the PR body.
 
 Managed path patterns and their severity:
@@ -29,7 +29,7 @@ the bottom.
 
 Contract:
 - Inputs: the ``verify`` subcommand; ``--graph`` (default
-  ``docs/graph/doc-dependencies.toml``); ``--base-ref`` (default: ``BASE_REF``
+  ``.gitapex/doc-dependencies.toml``); ``--base-ref`` (default: ``BASE_REF``
   env var, then ``origin/main``); ``--body-file`` (PR body path) or
   ``PR_BODY`` env var.
 - Outputs: ``::error file=<path>::`` annotations on stderr for unregistered
@@ -41,7 +41,7 @@ Contract:
   CLAUDE.md section 4; fails open (exit 0) when the git diff is unavailable
   so the gate skips rather than blocks on a missing diff.
 
-Tested by ``tests/test_scan_doc_graph_registration.py``. Refs #1793.
+Tested by ``tests/test_scan_doc_graph_registration.py``. Refs #1793, #2342.
 """
 
 from __future__ import annotations
@@ -56,7 +56,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from doc_graph import DocGraph, GraphValidationError, load_graph
 
-_GRAPH_PATH = Path("docs/graph/doc-dependencies.toml")
+_GRAPH_PATH = Path(".gitapex/doc-dependencies.toml")
 _SCRIPT = "scan_doc_graph_registration"
 
 # Waiver marker: optional leading whitespace, the key, whitespace, the file
@@ -188,9 +188,9 @@ def run_gate(
             print(
                 f"::error file={file_path}::{_SCRIPT}: "
                 f"{file_path!r} is a new governed file but is not registered "
-                f"in docs/graph/doc-dependencies.toml. "
+                f"in .gitapex/doc-dependencies.toml. "
                 f"Add a [[nodes]] entry with path = {file_path!r} to "
-                f"docs/graph/doc-dependencies.toml, or add "
+                f".gitapex/doc-dependencies.toml, or add "
                 f"'doc-graph-registration-waiver: {file_path}; <reason>' "
                 f"to the PR body. Refs #1793.",
                 file=sys.stderr,
@@ -200,7 +200,7 @@ def run_gate(
             print(
                 f"::warning::{_SCRIPT}: "
                 f"{file_path!r} is a new governed file but is not registered "
-                f"in docs/graph/doc-dependencies.toml. "
+                f"in .gitapex/doc-dependencies.toml. "
                 f"Consider adding a [[nodes]] entry or add "
                 f"'doc-graph-registration-waiver: {file_path}; <reason>' "
                 f"to the PR body. Refs #1793.",
@@ -246,7 +246,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--graph",
         default=str(_GRAPH_PATH),
-        help="Path to doc-dependencies.toml (default: %(default)s).",
+        help="Path to .gitapex/doc-dependencies.toml (default: %(default)s).",
     )
     parser.add_argument(
         "--base-ref",

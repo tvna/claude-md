@@ -93,33 +93,33 @@ def test_changed_generated_docs_protects_module_size_snapshot() -> None:
     # a non-bot branch hand-editing it (or stale-conflict-resolving it) must be
     # surfaced by the same inverse gate that protects docs/generated/.
     stdout = (
-        "docs/standards/module-size-distribution.toml\n"
-        "docs/standards/some-other-standard.md\n"
+        ".gitapex/module-size-distribution.toml\n"
+        ".gitapex/some-other-file.toml\n"
         "scripts/auto_retro.py\n"
     )
     changed = gate.changed_generated_docs(
         "origin/main", runner=_fake_runner(stdout)
     )
-    # Only the snapshot is protected; sibling docs/standards/ files and source
-    # files are not (exact-path match, not a docs/standards/ prefix).
-    assert changed == frozenset({"docs/standards/module-size-distribution.toml"})
+    # Only the snapshot is protected; sibling .gitapex/ files and source
+    # files are not (exact-path match, not a .gitapex/ prefix).
+    assert changed == frozenset({".gitapex/module-size-distribution.toml"})
 
 
 def test_evaluate_fails_for_nonbot_snapshot_edit() -> None:
     code, errors = gate.evaluate(
-        frozenset({"docs/standards/module-size-distribution.toml"}), "feature/x"
+        frozenset({".gitapex/module-size-distribution.toml"}), "feature/x"
     )
     assert code == 1
     assert len(errors) == 1
     assert "must not be edited by hand" in errors[0]
-    assert "docs/standards/module-size-distribution.toml" in errors[0]
+    assert ".gitapex/module-size-distribution.toml" in errors[0]
 
 
 def test_evaluate_passes_snapshot_edit_for_exempt_branch() -> None:
     # The post-merge decision-tree job folds the snapshot into the same
     # chore/update-generated-docs PR, so that bot branch stays exempt for it.
     code, errors = gate.evaluate(
-        frozenset({"docs/standards/module-size-distribution.toml"}),
+        frozenset({".gitapex/module-size-distribution.toml"}),
         "chore/update-generated-docs",
     )
     assert code == 0
