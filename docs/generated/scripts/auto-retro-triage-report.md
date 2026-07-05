@@ -4,7 +4,7 @@ This file is generated from live GitHub retro-issue labels by `python3 scripts/a
 
 Retros observed: **50**
 
-Open untriaged: **24**
+Open untriaged: **25**
 
 ## Anomalies
 
