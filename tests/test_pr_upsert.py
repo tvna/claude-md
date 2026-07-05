@@ -948,20 +948,20 @@ class TestUpsertSingleFilePr:
         assert any(m == "POST" and "/git/refs" in u for m, u, _ in router.log)
 
     def test_recreate_skipped_when_pr_already_open(self) -> None:
-        # #2382: with recreate=True, drift, but an open PR already exists for the
-        # branch, the delete must be skipped. Deleting the branch out from under
-        # an open PR auto-closes it on GitHub, and the next PR opened for the
-        # recreated branch gets a new number instead of reusing the closed one.
-        # If base keeps advancing faster than the open PR can be merged, that
-        # cycle repeats forever and no PR in the series ever merges. The commit
-        # must instead append onto the existing branch tip and reconcile the
-        # same open PR.
+        # #2382: with recreate=True and drift, but an open PR already exists for
+        # the branch, the whole publish must be skipped. Deleting would auto-close
+        # that PR on GitHub and start a fresh number, repeating forever if base
+        # advances faster than the merge keeper catches it. Appending onto the
+        # untouched tip is no better: this repo's branch ruleset sets
+        # strict_required_status_checks_policy, and update_pull_request_branch
+        # (the rebase-style fix for a behind branch) is denied outright
+        # (gate_update_pr_branch.py), so an appended-but-unrebased branch could
+        # never reach mergeable_state=clean either. Leaving the branch and its
+        # open PR untouched is the only safe option; the next drift run after it
+        # resolves gets a clean recreate.
         router = _Router([
             ("GET", "/contents/docs/r.md?ref=main", 200, _contents_response(b"# stale main\n")),
             ("GET", "/pulls?", 200, [{"number": 7}]),
-            ("GET", "/git/ref/heads/chore/refresh", 200, {"object": {"sha": "branchtip"}}),
-            ("GET", "/contents/docs/r.md?ref=chore/refresh", 200, _contents_response(b"# stale branch\n")),
-            ("PATCH", "/pulls/7", 200, {"number": 7}),
         ])
         gql = _RecordingGraphql()
         result = pu.upsert_single_file_pr(
@@ -970,13 +970,12 @@ class TestUpsertSingleFilePr:
             commit_subject="s", commit_body="Refs #1", token="tok",
             recreate=True, apply_call=router.apply_call, graphql_call=gql.graphql_call,
         )
-        assert result == "committed:7"
-        # The branch was never deleted; the open PR stays alive across the run.
+        assert result == "open-pr-pending:7"
+        # Neither the branch nor the PR were touched.
         assert not any(m == "DELETE" for m, _u, _ in router.log)
-        # The commit appends onto the existing branch tip, not a fresh base cut.
-        assert gql.calls[0]["input"]["expectedHeadOid"] == "branchtip"
-        # No new branch ref was created.
         assert not any(m == "POST" and "/git/refs" in u for m, u, _ in router.log)
+        assert not any(m == "PATCH" for m, _u, _ in router.log)
+        assert gql.calls == []
 
     def test_recreate_no_drift_is_noop_and_keeps_branch(self) -> None:
         # No drift vs base: short-circuit before any delete, so recreate never
