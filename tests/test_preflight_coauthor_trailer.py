@@ -211,6 +211,98 @@ def test_mention_in_prose_is_not_a_trailer() -> None:
     assert violations == []
 
 
+def test_trailing_annotation_after_email_is_still_detected() -> None:
+    # Issue #2339: a bare email followed by trailing text (e.g. "(paired)")
+    # must not make the whole trailer line fail to match.
+    body = f"fix: x\n\nCo-Authored-By: Claude {_CLAUDE_EMAIL} (paired)\n"
+    git = _FakeGit(commits={_SHA_A: (_CLAUDE_EMAIL, body)})
+    violations = subject.find_redundant_trailers(git, [_SHA_A])
+    assert len(violations) == 1
+    assert violations[0].trailer_email == _CLAUDE_EMAIL
+
+
+def test_self_redundant_first_of_two_bracketed_coauthors_on_one_line_is_detected() -> None:
+    # Issue #2339: a single line listing two bracketed co-authors,
+    # comma-separated, with the self-redundant identity written FIRST. The old
+    # greedy angle-bracket match only ever captured the last bracketed email.
+    body = (
+        f"fix: x\n\nCo-authored-by: Claude <{_CLAUDE_EMAIL}>, Jane Dev <{_HUMAN_EMAIL}>\n"
+    )
+    git = _FakeGit(commits={_SHA_A: (_CLAUDE_EMAIL, body)})
+    violations = subject.find_redundant_trailers(git, [_SHA_A])
+    assert len(violations) == 1
+    assert violations[0].trailer_email == _CLAUDE_EMAIL
+
+
+def test_bare_self_email_detected_alongside_a_bracketed_coauthor() -> None:
+    # Code-review regression (PR #2344): a bracketed non-self co-author must
+    # not shadow a bare self-email later on the same line; both must be
+    # checked against the author, not only the bracketed one.
+    body = f"fix: x\n\nCo-authored-by: Jane <{_HUMAN_EMAIL}>, Claude {_CLAUDE_EMAIL}\n"
+    git = _FakeGit(commits={_SHA_A: (_CLAUDE_EMAIL, body)})
+    violations = subject.find_redundant_trailers(git, [_SHA_A])
+    assert len(violations) == 1
+
+
+def test_multiple_addresses_in_one_bracket_are_each_checked() -> None:
+    # Code-review regression: a single bracket listing more than one address
+    # (comma-separated inside the "<...>") must still surface the
+    # self-redundant one, not be treated as one opaque non-matching string.
+    body = f"fix: x\n\nCo-authored-by: Claude <{_CLAUDE_EMAIL}, other@x.com>\n"
+    git = _FakeGit(commits={_SHA_A: (_CLAUDE_EMAIL, body)})
+    violations = subject.find_redundant_trailers(git, [_SHA_A])
+    assert len(violations) == 1
+    assert violations[0].trailer_email == _CLAUDE_EMAIL
+
+
+def test_bare_email_directly_followed_by_a_period_is_still_detected() -> None:
+    # Code-review regression: a sentence-ending period with no space after
+    # the email (e.g. "...com.") must not be folded into the matched
+    # address, which would make it fail the equality check against the
+    # author's email.
+    body = f"fix: x\n\nCo-Authored-By: Claude {_CLAUDE_EMAIL}.\n"
+    git = _FakeGit(commits={_SHA_A: (_CLAUDE_EMAIL, body)})
+    violations = subject.find_redundant_trailers(git, [_SHA_A])
+    assert len(violations) == 1
+    assert violations[0].trailer_email == _CLAUDE_EMAIL
+
+
+def test_same_email_bracketed_and_bare_on_one_line_is_one_violation_not_two() -> None:
+    # Code-review regression: the same self-redundant address appearing both
+    # bracketed and bare on one (comma-less) line must be reported once, not
+    # once per occurrence.
+    body = f"fix: x\n\nCo-authored-by: Claude <{_CLAUDE_EMAIL}> {_CLAUDE_EMAIL}\n"
+    git = _FakeGit(commits={_SHA_A: (_CLAUDE_EMAIL, body)})
+    violations = subject.find_redundant_trailers(git, [_SHA_A])
+    assert len(violations) == 1
+
+
+def test_bare_email_in_free_prose_after_a_bracketed_coauthor_is_not_a_trailer() -> None:
+    # Code-review regression: a bracketed non-self co-author followed, in the
+    # same comma-less segment, by an unrelated bare email mentioned in free
+    # prose (e.g. a reviewer credit) must NOT be treated as a second
+    # trailer identity; only a separate comma-delimited segment names one.
+    body = (
+        f"fix: x\n\nCo-authored-by: Bob Smith <{_HUMAN_EMAIL}> - thanks to "
+        f"{_CLAUDE_EMAIL} for reviewing\n"
+    )
+    git = _FakeGit(commits={_SHA_A: (_CLAUDE_EMAIL, body)})
+    violations = subject.find_redundant_trailers(git, [_SHA_A])
+    assert violations == []
+
+
+def test_second_bracket_in_free_prose_after_a_bracketed_coauthor_is_not_a_trailer() -> None:
+    # Code-review regression: same as above, but the unrelated mention is
+    # itself bracketed rather than bare.
+    body = (
+        f"fix: x\n\nCo-authored-by: Bob Smith <{_HUMAN_EMAIL}> see also "
+        f"<{_CLAUDE_EMAIL}> in log\n"
+    )
+    git = _FakeGit(commits={_SHA_A: (_CLAUDE_EMAIL, body)})
+    violations = subject.find_redundant_trailers(git, [_SHA_A])
+    assert violations == []
+
+
 def test_multiple_trailers_only_self_redundant_one_reported() -> None:
     body = (
         f"fix: x\n\nCo-authored-by: Jane Dev <{_HUMAN_EMAIL}>\n"
@@ -378,6 +470,17 @@ def test_main_unknown_subcommand_exits_64(capsys: pytest.CaptureFixture[str]) ->
 
 def test_main_no_subcommand_exits_64() -> None:
     assert subject.main([]) == 64
+
+
+def test_main_help_shows_argparse_help_and_exits_zero(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # Issue #2339: -h/--help must defer to argparse instead of being rejected
+    # as an unknown subcommand before parsing (the sibling gate's behavior).
+    with pytest.raises(SystemExit) as exc_info:
+        subject.main(["-h"])
+    assert exc_info.value.code == 0
+    assert "usage" in capsys.readouterr().out.lower()
 
 
 def test_main_block_exits_via_runpy(monkeypatch: pytest.MonkeyPatch) -> None:
