@@ -33,7 +33,6 @@ This file is generated from `scripts/*.py` import statements by `python3 scripts
 | `_security_drift_families` | 2 | `_security_drift_issues`, `security_drift_report` |
 | `scan_maintainability_metrics` | 2 | `codebase_maturity_summary`, `scan_module_size_distribution` |
 | `scan_non_ascii` | 2 | `preflight_non_ascii`, `preflight_pr_body` |
-| `scan_preflight_drift` | 2 | `scan_input_contract_drift`, `scan_ssot_drift` |
 | `title_policy` | 2 | `preflight_title_policy`, `verify_linked_issue_titles` |
 | `_auto_retro_render` | 1 | `auto_retro` |
 | `_auto_retro_triage` | 1 | `auto_retro` |
@@ -49,6 +48,7 @@ This file is generated from `scripts/*.py` import statements by `python3 scripts
 | `scan_docs_inventory` | 1 | `preflight_merge_index_budget` |
 | `scan_markdown_links` | 1 | `measure_tool_overlap` |
 | `scan_secrets` | 1 | `measure_tool_overlap` |
+| `scan_ssot_drift` | 1 | `scan_input_contract_drift` |
 | `scan_workflow_action_pins` | 1 | `measure_tool_overlap` |
 | `scan_workflow_injection` | 1 | `measure_tool_overlap` |
 | `script_ast_graph` | 1 | `auto_retro` |
@@ -257,7 +257,7 @@ flowchart TD
     scan_area_path_coverage --> _git
     scan_devcontainer_tool_drift --> preflight_all
     scan_doc_graph_registration --> doc_graph
-    scan_input_contract_drift --> scan_preflight_drift
+    scan_input_contract_drift --> scan_ssot_drift
     scan_issue_anchor_drift --> issue_anchors
     scan_module_size_distribution --> scan_maintainability_metrics
     scan_non_ascii --> _github_api
@@ -276,7 +276,6 @@ flowchart TD
     scan_secrets --> _git
     scan_secrets --> _secret_patterns
     scan_ssot_drift --> preflight_steps
-    scan_ssot_drift --> scan_preflight_drift
     scan_workflow_gh_calls --> _shell_lines
     scan_workflow_pip --> _shell_lines
     scan_workflow_unsigned_commit --> _shell_lines
