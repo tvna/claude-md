@@ -142,7 +142,7 @@ def _require_combinator_join(tokens: list[str], fragment: str, cell: str, combin
     correct wording (``` `a` AND `b` ```) and accepts the semantically wrong
     one (``` `a` OR `b` ```) right before storing it as ``if_all``, which
     blesses a table that reads "any of a, b" while the registry enforces
-    "both a and b" -- reintroducing the exact drift this gate exists to catch.
+    "both a and b", reintroducing the exact drift this gate exists to catch.
 
     A single token needs no combinator and always passes. A trailing
     parenthetical aside (matching the style already used on single-token
