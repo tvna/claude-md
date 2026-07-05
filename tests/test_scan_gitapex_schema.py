@@ -11,10 +11,12 @@ Refs #2342, #2252.
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from pathlib import Path
 
 import pytest
 import scan_gitapex_schema as gate
+from _json_schema_subset import validate_shape
 
 pytestmark = pytest.mark.shard_preflight
 
@@ -92,6 +94,82 @@ class TestRealGitapexFiles:
                 gate.verify_file(toml_path, display=f".gitapex/{toml_path.name}")
             )
         assert errors == []
+
+
+class TestLoopEngineeringAuditCheckSubschema:
+    """Refs #2355: the ``check`` subschema must reject unknown fields.
+
+    ``.gitapex/loop-engineering-audit.toml`` uses ``check.target`` (for
+    ``kind = "path_exists"``/``"glob_exists"``) and ``check.glob``/
+    ``check.pattern`` (for ``kind = "grep_in_glob"``); TestRealGitapexFiles
+    above already proves the real file still validates. This class proves
+    the schema is not so loose that a typo'd field name silently passes.
+    """
+
+    def _schema(self) -> dict[str, object]:
+        schema_path = _REPO_ROOT / ".gitapex" / "loop-engineering-audit.schema.json"
+        return json.loads(schema_path.read_text(encoding="utf-8"))
+
+    def _minimal_item(self, check: Mapping[str, object]) -> dict[str, object]:
+        return {
+            "id": "x",
+            "dimension": "d",
+            "title": "t",
+            "status": "present",
+            "machine_checkable": True,
+            "evidence": "e",
+            "check": check,
+        }
+
+    def _instance(self, check: Mapping[str, object]) -> dict[str, object]:
+        return {
+            "meta": {
+                "schema_version": 1,
+                "source": "s",
+                "audit_umbrella": "#1",
+                "last_reviewed": "2026-07-05",
+            },
+            "items": [self._minimal_item(check)],
+        }
+
+    def test_known_check_fields_pass(self) -> None:
+        schema = self._schema()
+        for check in (
+            {"kind": "path_exists", "target": "x"},
+            {"kind": "glob_exists", "target": "x"},
+            {"kind": "grep_in_glob", "glob": "x", "pattern": "y"},
+        ):
+            errors = validate_shape(self._instance(check), schema, root_path="root")
+            assert errors == []
+
+    def test_typo_field_is_rejected(self) -> None:
+        schema = self._schema()
+        errors = validate_shape(
+            self._instance({"kind": "path_exists", "taget": "x"}), schema, root_path="root"
+        )
+        assert any("taget" in e for e in errors)
+
+
+class TestCmdVerifyErrorAccumulation:
+    def test_earlier_violation_survives_later_schema_error(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        # Refs #2355: a real shape violation in an earlier (sorted) file must
+        # still be reported even when a later file's schema itself is broken
+        # (raises SchemaError). Wrapping the whole loop in one try/except
+        # dropped the earlier violation; wrapping per-file must not.
+        _write(tmp_path / "a-bad-value.toml", "a = 1\n")
+        _write(
+            tmp_path / "a-bad-value.schema.json",
+            json.dumps({"type": "object", "properties": {"a": {"type": "string"}}}),
+        )
+        _write(tmp_path / "b-broken-schema.toml", "a = 1\n")
+        _write(tmp_path / "b-broken-schema.schema.json", json.dumps(["not", "an", "object"]))
+
+        assert gate.main(["verify", "--gitapex-dir", str(tmp_path)]) == 1
+        stderr = capsys.readouterr().err
+        assert "expected type string" in stderr
+        assert "schema root is not a JSON object" in stderr
 
 
 class TestMainCli:

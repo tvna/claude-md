@@ -101,14 +101,13 @@ def cmd_verify(args: argparse.Namespace) -> int:
 
     toml_files = discover_toml_files(gitapex_dir)
     errors: list[str] = []
-    try:
-        for toml_path in toml_files:
+    for toml_path in toml_files:
+        try:
             errors.extend(
                 verify_file(toml_path, display=f"{args.gitapex_dir}/{toml_path.name}")
             )
-    except SchemaError as exc:
-        print(f"::error::{_SCRIPT}: {exc}", file=sys.stderr)
-        return 1
+        except SchemaError as exc:
+            errors.append(str(exc))
 
     if errors:
         for message in errors:
