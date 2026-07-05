@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/tvna/claude-md/.gitapex/llm-budget-policy.schema.json",
+  "title": "LLM invocation token/cost budget policy",
+  "description": "Machine-readable marker list and per-workflow budget requirements read by scripts/scan_workflow_llm_budget.py. additionalProperties is false throughout so a typo'd key fails loud instead of being silently ignored. The 'at least one of max_tokens_per_run / max_cost_usd_per_run' rule is not expressible in this schema subset (no oneOf/anyOf); it is enforced as a bespoke check in the scanner itself, same class as scan_ssot_schema.py's kind/script XOR rule. Refs #2269.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["meta", "markers", "budgets"],
+  "properties": {
+    "meta": {
+      "description": "Registry metadata.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "tracking_issue"],
+      "properties": {
+        "schema_version": {
+          "description": "Integer schema version; 1 is the initial shape.",
+          "type": "integer"
+        },
+        "tracking_issue": {
+          "description": "Issue number that introduced this policy file.",
+          "type": "integer"
+        }
+      }
+    },
+    "markers": {
+      "description": "Substrings that identify an LLM-invoking workflow step.",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["pattern"],
+        "properties": {
+          "pattern": {
+            "description": "A literal substring matched against each logical workflow-YAML line.",
+            "type": "string"
+          }
+        }
+      }
+    },
+    "budgets": {
+      "description": "Per-workflow budget declarations. May be empty when no workflow matches a marker.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["workflow", "max_runs_per_day", "max_retries"],
+        "properties": {
+          "workflow": {
+            "description": "Workflow file basename, e.g. 'some-llm-workflow.yml'.",
+            "type": "string"
+          },
+          "max_tokens_per_run": {
+            "description": "Maximum tokens permitted in a single run. At least one of this or max_cost_usd_per_run is required (enforced by the scanner, not this schema).",
+            "type": "integer"
+          },
+          "max_cost_usd_per_run": {
+            "description": "Maximum USD cost permitted in a single run. At least one of this or max_tokens_per_run is required (enforced by the scanner, not this schema).",
+            "type": "number"
+          },
+          "max_runs_per_day": {
+            "description": "Maximum number of runs permitted per day.",
+            "type": "integer"
+          },
+          "max_retries": {
+            "description": "Maximum number of retries permitted per run.",
+            "type": "integer"
+          }
+        }
+      }
+    }
+  }
+}

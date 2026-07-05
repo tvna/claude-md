@@ -116,6 +116,7 @@ import scan_test_presence_drift
 import scan_workflow_action_pins
 import scan_workflow_gh_calls
 import scan_workflow_injection
+import scan_workflow_llm_budget
 import scan_workflow_pip
 import scan_workflow_unsigned_commit
 import script_ast_graph
@@ -288,6 +289,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("scan_workflow_action_pins.py", "verify"): "test_scan_workflow_action_pins_verify_matches_workflow_args",
     ("scan_workflow_gh_calls.py", "verify"): "test_scan_workflow_gh_calls_verify_matches_workflow_args",
     ("scan_workflow_injection.py", "verify"): "test_scan_workflow_injection_verify_matches_workflow_args",
+    ("scan_workflow_llm_budget.py", "verify"): "test_scan_workflow_llm_budget_verify_matches_workflow_args",
     ("scan_workflow_unsigned_commit.py", "verify"): "test_scan_workflow_unsigned_commit_verify_matches_workflow_args",
     ("scan_workflow_pip.py", "verify"): "test_scan_workflow_pip_verify_matches_workflow_args",
     ("security_drift_report.py", "aggregate"): "test_security_drift_report_aggregate_and_post_comment_match_workflow_args",
@@ -1931,6 +1933,12 @@ def test_scan_workflow_pip_verify_matches_workflow_args() -> None:
     """Mirrors the ``Assert workflows install Python deps via uv only``
     step in ``.github/workflows/verify-agents.yml``."""
     assert scan_workflow_pip.main(["verify", "--repo-root", "."]) == 0
+
+
+def test_scan_workflow_llm_budget_verify_matches_workflow_args() -> None:
+    """Mirrors the ``Assert LLM-invoking workflow steps declare a token/cost
+    budget`` step in ``.github/workflows/verify-agents.yml``. Refs #2269."""
+    assert scan_workflow_llm_budget.main(["verify", "--repo-root", "."]) == 0
 
 
 def test_scan_ruff_format_verify_matches_workflow_args() -> None:

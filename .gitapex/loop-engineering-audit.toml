@@ -177,10 +177,10 @@ check = { kind = "path_exists", target = ".claude/skills/using-git-worktrees/SKI
 id = "firstloop.token_cap"
 dimension = "first-loop"
 title = "Token cap (a circuit breaker before shipping)"
-status = "absent"
+status = "present"
 machine_checkable = true
-evidence = "no token/cost cap yet (#2269 will add it; flips to present as DRIFT on merge)"
-check = { kind = "path_exists", target = ".github/llm-budget-policy.toml" }
+evidence = ".gitapex/llm-budget-policy.toml + scripts/scan_workflow_llm_budget.py (#2269)"
+check = { kind = "path_exists", target = ".gitapex/llm-budget-policy.toml" }
 
 [[items]]
 id = "firstloop.human_review"
@@ -237,6 +237,6 @@ evidence = "human PR-review door retained; autonomous dispatch declined (paralle
 id = "cost.token_blowout"
 dimension = "four-costs"
 title = "Token blowout"
-status = "unguarded"
+status = "guarded"
 machine_checkable = false
-evidence = "no token/cost cap (#2269; pairs with firstloop.token_cap)"
+evidence = ".gitapex/llm-budget-policy.toml requires a per-workflow token/cost budget before an LLM-invoking workflow step enters CI (#2269; pairs with firstloop.token_cap)"

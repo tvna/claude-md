@@ -80,6 +80,15 @@ jobs:
         # upsert-files); this gate is the regression guard against git push.
         run: uv run python scripts/scan_workflow_unsigned_commit.py verify
 
+      - name: Assert LLM-invoking workflow steps declare a token/cost budget
+        # Refs #2269: fails when a workflow step matches an LLM-invoking
+        # marker (.gitapex/llm-budget-policy.toml) with no declared budget for
+        # that workflow. Mirrors the .pre-commit-config.yaml wiring so the
+        # ci plane is satisfied directly (scan_ssot_drift.py's ci_manifest
+        # only credits a literal scripts/*.py reference inside a
+        # pull_request: workflow, not one reached transitively via prek).
+        run: uv run python scripts/scan_workflow_llm_budget.py verify
+
       - name: Assert workflow secrets have concrete runbooks
         run: uv run python scripts/scan_secret_runbooks.py verify
 
