@@ -949,13 +949,13 @@ class TestUpsertSingleFilePr:
 
     def test_recreate_skipped_when_pr_already_open(self) -> None:
         # #2382: with recreate=True, drift, but an open PR already exists for the
-        # branch, the delete must be skipped -- deleting the branch out from
-        # under an open PR auto-closes it on GitHub, and the next PR opened for
-        # the recreated branch gets a new number instead of reusing the closed
-        # one. If base keeps advancing faster than the open PR can be merged,
-        # that cycle repeats forever and no PR in the series ever merges. The
-        # commit must instead append onto the existing branch tip and reconcile
-        # the same open PR.
+        # branch, the delete must be skipped. Deleting the branch out from under
+        # an open PR auto-closes it on GitHub, and the next PR opened for the
+        # recreated branch gets a new number instead of reusing the closed one.
+        # If base keeps advancing faster than the open PR can be merged, that
+        # cycle repeats forever and no PR in the series ever merges. The commit
+        # must instead append onto the existing branch tip and reconcile the
+        # same open PR.
         router = _Router([
             ("GET", "/contents/docs/r.md?ref=main", 200, _contents_response(b"# stale main\n")),
             ("GET", "/pulls?", 200, [{"number": 7}]),
