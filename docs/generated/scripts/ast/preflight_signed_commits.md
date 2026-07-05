@@ -13,15 +13,6 @@ flowchart TD
     N002 --> N003
 ```
 
-## commits_in_range(...)
-
-```mermaid
-flowchart TD
-    N001["commits_in_range(...)"]
-    N002["return rev_list(runner, [f'{base_ref}<str>'])"]
-    N001 -->|"start"| N002
-```
-
 ## check_signed_commits(...)
 
 ```mermaid
