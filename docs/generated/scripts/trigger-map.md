@@ -226,6 +226,8 @@ Detection is string-match based:
 | `scan_repo_em_dash.py` | workflow | `verify-pr.yml (portable-pr-policy)` |
 | `scan_retro_followup_drift.py` | workflow | `daily-maintenance.yml (scan)` |
 | `scan_review_in_progress_marker.py` | workflow | `verify-pr.yml (portable-pr-policy)` |
+| `scan_routing_table_drift.py` | pre-commit | `scan-routing-table-drift` |
+| `scan_routing_table_drift.py` | workflow | `verify-pr.yml (portable-pr-policy)` |
 | `scan_ruff_format.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
 | `scan_runbook_template_drift.py` | workflow | `verify-pr.yml (portable-pr-policy)` |
 | `scan_scripts_gh_calls.py` | pre-commit | `scan-scripts-gh-calls` |
