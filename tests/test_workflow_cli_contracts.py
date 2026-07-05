@@ -2664,24 +2664,28 @@ def test_devcontainer_pin_pr_refresh_matches_workflow_args(
 
 
 def test_tvna_bot_automerge_workflow_contract() -> None:
-    """The unified tvna-bot keeper triggers on workflow_run + schedule, uses an App token.
+    """The unified tvna-bot keeper triggers on push + workflow_run + schedule, uses an App token.
 
     The repository-level "Allow auto-merge" toggle is intentionally OFF, so every
     PR authored by the App bot (``tvna-bot[bot]``) is completed by this single
     keeper instead of native auto-merge. The earlier per-flow pin keeper is
     consolidated here. ``check_suite: completed`` never fires for Actions-created
-    suites (recursion suppression), so the keeper is driven by ``workflow_run``
-    on the workflows that own the required status checks, plus a ``schedule``
-    safety net. The merge subcommand filters by author and clean state, so unlike
-    the old pin keeper the job is not branch-prefix-gated; it runs on any
-    successful run and no-ops when nothing is eligible. Refs #1539, #1352, #1363,
-    #1401.
+    suites (recursion suppression), so the keeper is driven by ``push`` to main
+    (an immediate merge attempt right after any other PR lands, shrinking the
+    window a recreate-managed bot branch, Refs #2382, can go stale before the
+    keeper reaches it; Refs #2391), ``workflow_run`` on the workflows that own
+    the required status checks, plus a ``schedule`` safety net. The merge
+    subcommand filters by author and clean state, so unlike the old pin keeper
+    the job is not branch-prefix-gated; it runs on any successful run and no-ops
+    when nothing is eligible. Refs #1539, #1352, #1363, #1401.
     """
     workflow = yaml.safe_load((_WORKFLOWS_DIR / "tvna-bot-automerge.yml").read_text(encoding="utf-8"))
     # ``on`` may parse to the truthy bool key True under YAML 1.1; tolerate both.
     triggers = workflow.get("on", workflow.get(True))
     # check_suite is suppressed for Actions-created suites, so it must be gone.
     assert "check_suite" not in triggers
+    # push gives a clean bot PR an immediate merge attempt after any main push.
+    assert triggers["push"]["branches"] == ["main"]
     # workflow_run fires off the workflows that own the required status checks.
     assert triggers["workflow_run"]["types"] == ["completed"]
     assert triggers["workflow_run"]["workflows"] == ["Verify PR", "Verify repository scripts"]
@@ -2693,6 +2697,7 @@ def test_tvna_bot_automerge_workflow_contract() -> None:
     assert job["permissions"] == {"contents": "write", "pull-requests": "write"}
     # The job is no longer branch-prefix-gated; it gates on a successful run and
     # the merge subcommand filters to tvna-bot[bot] authors.
+    assert "github.event_name == 'push'" in job["if"]
     assert "github.event.workflow_run.conclusion == 'success'" in job["if"]
     assert "workflow_dispatch" in job["if"]
     assert "schedule" in job["if"]

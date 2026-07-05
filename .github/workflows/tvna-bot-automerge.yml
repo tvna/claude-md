@@ -17,6 +17,14 @@ name: Auto-merge tvna-bot PRs
 # Triggers (mirrors the previous pin keeper -- #1363): a check_suite:completed
 # trigger never fires for Actions-created suites (GitHub recursion prevention),
 # so the keeper is driven instead by:
+#   * push to main, so a clean bot PR gets an immediate merge attempt right
+#     after any other PR lands, instead of waiting on that PR's own
+#     workflow_run or the schedule fallback below. This shrinks the window in
+#     which a fast-moving main leaves a recreate-managed bot branch (Refs
+#     #2382) sitting stale before the keeper gets to it. The merge push this
+#     job itself makes also re-fires this trigger; the merge subcommand is a
+#     no-op once no clean bot PR remains, so this is safe self-recursion, not
+#     an infinite loop. Refs #2391.
 #   * workflow_run on the two workflows that own the required status checks
 #     completing successfully (pull_request-triggered, so not subject to the
 #     Actions-suite suppression).
@@ -27,6 +35,8 @@ name: Auto-merge tvna-bot PRs
 # Refs #1539, #696, #1137, #1352, #1363, #1401, #1437.
 
 on:
+  push:
+    branches: [main]
   workflow_run:
     workflows: ["Verify PR", "Verify repository scripts"]
     types: [completed]
@@ -45,9 +55,10 @@ jobs:
     name: Merge clean tvna-bot PRs
     # For workflow_run, gate on a successful run; the merge subcommand filters to
     # tvna-bot[bot] authors and clean PRs, so an unrelated success is a no-op.
-    # schedule and workflow_dispatch carry no workflow_run payload, so allow them
-    # through unconditionally.
+    # push, schedule, and workflow_dispatch carry no workflow_run payload, so
+    # allow them through unconditionally (Refs #2391).
     if: >-
+      github.event_name == 'push' ||
       github.event_name == 'workflow_dispatch' ||
       github.event_name == 'schedule' ||
       (github.event_name == 'workflow_run' &&
