@@ -28,6 +28,7 @@ from typing import NamedTuple
 import pytest
 import scan_ruff_format
 import scan_workflow_gh_calls
+import scan_workflow_llm_budget
 import scan_workflow_pip
 import scan_workflow_unsigned_commit
 
@@ -63,6 +64,12 @@ GATES: tuple[GateCase, ...] = (
         lambda t: bool(scan_workflow_pip.scan_text(t)),
         "pip install requests",
         "pip \\\n  install requests",
+    ),
+    GateCase(
+        "scan_workflow_llm_budget",
+        lambda t: bool(scan_workflow_llm_budget.scan_text(t, ["claude -p"])),
+        "claude -p 'do the thing'",
+        "claude \\\n  -p 'do the thing'",
     ),
     GateCase(
         "scan_workflow_gh_calls",

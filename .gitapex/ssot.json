@@ -59,6 +59,12 @@
       "path": ".gitapex/workflow-script-quality.enforcement.toml",
       "format": "toml",
       "authority": "workflow-script-quality standard must-have enforcement registry"
+    },
+    {
+      "id": "llm-budget-policy",
+      "path": ".gitapex/llm-budget-policy.toml",
+      "format": "toml",
+      "authority": "LLM invocation marker list and per-workflow token/cost budget requirements"
     }
   ],
   "gates": [
@@ -1315,6 +1321,7 @@
       "trigger": "git commit or push (prek / scripts/preflight_all.py) and CI (pull_request workflow)",
       "policy_refs": [
         "doc-dependencies",
+        "llm-budget-policy",
         "loop-engineering-audit",
         "module-size-distribution",
         "pr-body-quality-enforcement",
@@ -1412,6 +1419,23 @@
       "policy_refs": [],
       "cluster": null,
       "tracking_issue": null
+    },
+    {
+      "id": "scan-workflow-llm-budget",
+      "kind": "script",
+      "script": "scripts/scan_workflow_llm_budget.py",
+      "rule": "require a declared token/cost budget before any LLM-invoking workflow step enters CI",
+      "planes": [
+        "pre-commit",
+        "pre-push",
+        "ci"
+      ],
+      "trigger": "git commit or push (prek / scripts/preflight_all.py) and CI (pull_request workflow, verify-agents.yml)",
+      "policy_refs": [
+        "llm-budget-policy"
+      ],
+      "cluster": null,
+      "tracking_issue": 2269
     },
     {
       "id": "scan-workflow-pip",

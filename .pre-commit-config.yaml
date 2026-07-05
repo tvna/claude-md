@@ -75,6 +75,17 @@ repos:
         language: system
         pass_filenames: false
         files: ^\.github/workflows/.*\.ya?ml$
+      - id: scan-workflow-llm-budget
+        name: scan workflow llm budget (scripts/scan_workflow_llm_budget.py verify)
+        # Refs #2269: fails when a workflow step matches an LLM-invoking
+        # marker (.gitapex/llm-budget-policy.toml) with no declared token/cost
+        # budget for that workflow. Also fires on an edit to the policy or its
+        # schema so a broken or emptied budget is caught even without a
+        # workflow change.
+        entry: uv run python scripts/scan_workflow_llm_budget.py verify
+        language: system
+        pass_filenames: false
+        files: ^(\.github/workflows/.*\.ya?ml|\.gitapex/llm-budget-policy(\.schema)?\.(toml|json))$
       - id: threat-intel-coords
         name: threat-intel OSV coordinate validation (scripts/threat_intel_triage.py verify)
         # Offline PR-head mirror of the pull_request_target triage scan (#1519):

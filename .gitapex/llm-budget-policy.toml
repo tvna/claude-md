@@ -1,0 +1,44 @@
+# LLM invocation token/cost budget policy.
+#
+# Single source of truth for scripts/scan_workflow_llm_budget.py: the marker
+# patterns that identify an LLM-invoking workflow step, and the per-workflow
+# budget every marker-matched workflow must declare (max_tokens_per_run or
+# max_cost_usd_per_run, plus max_runs_per_day and max_retries).
+#
+# Placement: .gitapex/ (not .github/) because this is an externally-independent,
+# repository-specific setting, matching the .gitapex/ssot.json precedent.
+#
+# Refs #2269 (loop-engineering gap G3: token blowout guard).
+#
+# budgets must stay a top-level key declared here, above [meta]: once a
+# `[table]` or `[[table]]` header opens, every following bare `key = value`
+# line belongs to that table, not the document root, so a later `budgets =
+# []` would silently attach to [meta] or the last [[markers]] entry instead.
+#
+# No workflow invokes an LLM today (#2269 fact); this stays empty until a
+# future workflow adds one. Each entry requires: workflow (basename),
+# max_runs_per_day, max_retries, and at least one of max_tokens_per_run /
+# max_cost_usd_per_run.
+budgets = []
+
+[meta]
+schema_version = 1
+tracking_issue = 2269
+
+# Substrings (not regexes) that identify an LLM-invoking workflow step.
+# Matched against each logical line of .github/workflows/*.yml after shell
+# continuations are flattened; comment lines are skipped.
+[[markers]]
+pattern = "uses: anthropics/claude-code-action"
+
+[[markers]]
+pattern = "claude -p"
+
+[[markers]]
+pattern = "codex exec"
+
+[[markers]]
+pattern = "api.anthropic.com"
+
+[[markers]]
+pattern = "api.openai.com"
