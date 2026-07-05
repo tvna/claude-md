@@ -4,7 +4,7 @@ This file is generated from live GitHub retro-issue labels by `python3 scripts/a
 
 Retros observed: **50**
 
-Open untriaged: **13**
+Open untriaged: **14**
 
 ## Anomalies
 
@@ -38,6 +38,7 @@ No triaged retros yet (no `retro:tp`/`retro:fp` labels).
 
 | # | State | Status | Title |
 | --: | :-- | :-- | :-- |
+| 2326 | open | untriaged | chore(auto-retro): review PR #2325 repair loops |
 | 2322 | open | untriaged | chore(auto-retro): review PR #2320 repair loops |
 | 2305 | open | untriaged | chore(auto-retro): review PR #2302 repair loops |
 | 2295 | open | untriaged | chore(auto-retro): review PR #2293 repair loops |
@@ -47,4 +48,3 @@ No triaged retros yet (no `retro:tp`/`retro:fp` labels).
 | 2274 | open | untriaged | chore(auto-retro): review PR #2267 repair loops |
 | 2259 | open | untriaged | chore(auto-retro): review PR #2258 repair loops |
 | 2254 | open | untriaged | chore(auto-retro): review PR #2253 repair loops |
-| 2249 | open | untriaged | chore(auto-retro): review PR #2247 repair loops |
