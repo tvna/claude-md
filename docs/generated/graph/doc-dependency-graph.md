@@ -1,6 +1,6 @@
 # Document Dependency Graph
 
-Auto-generated from `docs/graph/doc-dependencies.toml`. Do not edit manually.
+Auto-generated from `.gitapex/doc-dependencies.toml`. Do not edit manually.
 Source: `python3 scripts/doc_graph_viz.py all-doc`.
 
 Nodes: 31 | Edges: 21 (10 blocking, 11 advisory)
