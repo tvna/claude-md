@@ -153,14 +153,25 @@ class TestParseCondition:
         }
 
     def test_and_not_before_clause_with_wrong_combinator_raises(self) -> None:
-        """Codex review follow-up: the if_all side of AND NOT needs the same OR-join guard."""
-        with pytest.raises(gate.TableParseError, match="not joined by ' OR '"):
-            gate.parse_condition("`type:feat` AND `type:refactor` AND NOT `severity:security`")
+        """Codex review (#2329): if_all means AND semantics, so OR prose must be rejected."""
+        with pytest.raises(gate.TableParseError, match="not joined by ' AND '"):
+            gate.parse_condition("`type:feat` OR `type:refactor` AND NOT `severity:security`")
 
-    def test_and_not_before_clause_with_correct_or_still_works(self) -> None:
-        assert gate.parse_condition("`type:feat` OR `type:refactor` AND NOT `severity:security`") == {
+    def test_and_not_before_clause_with_correct_and_still_works(self) -> None:
+        assert gate.parse_condition("`type:feat` AND `type:refactor` AND NOT `severity:security`") == {
             "if_all": ["type:feat", "type:refactor"],
             "if_none": ["severity:security"],
+        }
+
+    def test_and_not_after_clause_with_wrong_combinator_raises(self) -> None:
+        """if_none is also AND semantics (each label independently excluded), not OR."""
+        with pytest.raises(gate.TableParseError, match="not joined by ' AND '"):
+            gate.parse_condition("`type:fix` AND NOT `severity:security` OR `layer:meta`")
+
+    def test_and_not_after_clause_with_correct_and_still_works(self) -> None:
+        assert gate.parse_condition("`type:fix` AND NOT `severity:security` AND `layer:meta`") == {
+            "if_all": ["type:fix"],
+            "if_none": ["severity:security", "layer:meta"],
         }
 
     def test_default_row_tolerates_extra_label_mention(self) -> None:
