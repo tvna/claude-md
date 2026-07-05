@@ -19,6 +19,14 @@ and diagrams, ``chore/refresh-auto-retro-triage-report`` for the triage-report
 snapshot) are exempt: they are the legitimate producers, and their diffs are
 exactly the regenerated content.
 
+A byte-identical (100%-similarity) rename INTO a protected prefix from a path
+that was not itself protected is also let through: it is a one-time
+infrastructure relocation of the artifact's tracked path (e.g. #2342 moving
+the module-size snapshot to ``.gitapex/``), not an edit of its content, so it
+is not the drift class this gate exists to prevent. Any content change during
+the move (git then reports it as a plain add, not a rename), or a rename
+between two already-protected paths, still fails loud.
+
 Architecture: pure functions on top (:func:`resolve_base`,
 :func:`changed_generated_docs`, :func:`evaluate`), a single subprocess
 boundary at the bottom (:func:`_run`).
@@ -117,13 +125,36 @@ def changed_generated_docs(
     #1703 (repair 4). Three-dot is anchored at the merge-base, so base-only
     commits never appear; a genuine hand-edit on the branch still does.
 
-    Uses ``git diff --name-only`` so renames and deletes also surface.
+    Uses ``git diff --name-status -M100%`` (not ``--name-only``) so a
+    byte-identical rename is distinguishable from an add/modify/delete: at the
+    ``100%`` similarity threshold, git reports a rename only when the content
+    is unchanged, so a rename from a not-yet-protected path into a protected
+    one is excluded (a one-time relocation, refs #2342), while a rename with
+    any content change falls back to a plain add at the new path and still
+    surfaces here.
     """
     result = _run(
-        ["git", "diff", "--name-only", f"{base_ref}...{head}"], runner=runner
+        ["git", "diff", "--name-status", "-M100%", f"{base_ref}...{head}"],
+        runner=runner,
     )
-    touched = {line.strip() for line in result.stdout.splitlines() if line.strip()}
-    return frozenset(path for path in touched if path.startswith(PROTECTED_PREFIXES))
+    touched: set[str] = set()
+    for line in result.stdout.splitlines():
+        if not line.strip():
+            continue
+        parts = line.split("\t")
+        status = parts[0]
+        if status.startswith("R") and len(parts) == 3:
+            old_path, new_path = parts[1], parts[2]
+            if not old_path.startswith(PROTECTED_PREFIXES) and new_path.startswith(
+                PROTECTED_PREFIXES
+            ):
+                continue
+            touched.update(p for p in (old_path, new_path) if p.startswith(PROTECTED_PREFIXES))
+        elif len(parts) == 2:
+            path = parts[1]
+            if path.startswith(PROTECTED_PREFIXES):
+                touched.add(path)
+    return frozenset(touched)
 
 
 def is_exempt(branch: str) -> bool:

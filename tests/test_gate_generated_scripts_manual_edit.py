@@ -69,10 +69,10 @@ def test_resolve_branch_uses_github_head_ref(monkeypatch: pytest.MonkeyPatch) ->
 
 def test_changed_generated_docs_filters_prefixes() -> None:
     stdout = (
-        "docs/generated/scripts/ast/auto_retro.md\n"
-        "docs/generated/workflows/post-merge-if-branches.md\n"
-        "scripts/auto_retro.py\n"
-        "docs/generated/scripts/auto-retro-triage-report.md\n"
+        "M\tdocs/generated/scripts/ast/auto_retro.md\n"
+        "M\tdocs/generated/workflows/post-merge-if-branches.md\n"
+        "M\tscripts/auto_retro.py\n"
+        "A\tdocs/generated/scripts/auto-retro-triage-report.md\n"
     )
     changed = gate.changed_generated_docs(
         "origin/main", runner=_fake_runner(stdout)
@@ -93,9 +93,9 @@ def test_changed_generated_docs_protects_module_size_snapshot() -> None:
     # a non-bot branch hand-editing it (or stale-conflict-resolving it) must be
     # surfaced by the same inverse gate that protects docs/generated/.
     stdout = (
-        ".gitapex/module-size-distribution.toml\n"
-        ".gitapex/some-other-file.toml\n"
-        "scripts/auto_retro.py\n"
+        "M\t.gitapex/module-size-distribution.toml\n"
+        "M\t.gitapex/some-other-file.toml\n"
+        "M\tscripts/auto_retro.py\n"
     )
     changed = gate.changed_generated_docs(
         "origin/main", runner=_fake_runner(stdout)
@@ -103,6 +103,26 @@ def test_changed_generated_docs_protects_module_size_snapshot() -> None:
     # Only the snapshot is protected; sibling .gitapex/ files and source
     # files are not (exact-path match, not a .gitapex/ prefix).
     assert changed == frozenset({".gitapex/module-size-distribution.toml"})
+
+
+def test_changed_generated_docs_exempts_pure_rename_into_protected_path() -> None:
+    # Refs #2342: a git-mv relocation (byte-identical, so git reports it as a
+    # rename at the -M100% threshold) from a not-yet-protected path into a
+    # protected one is a one-time infrastructure move, not a hand-edit of the
+    # single-producer content.
+    stdout = "R100\tdocs/standards/module-size-distribution.toml\t.gitapex/module-size-distribution.toml\n"
+    changed = gate.changed_generated_docs("origin/main", runner=_fake_runner(stdout))
+    assert changed == frozenset()
+
+
+def test_changed_generated_docs_flags_rename_between_protected_paths() -> None:
+    # A rename that starts AND ends inside protected territory is still a
+    # hand-edit of the managed tree's shape, not a first-time relocation.
+    stdout = "R100\tdocs/generated/scripts/ast/old.md\tdocs/generated/scripts/ast/new.md\n"
+    changed = gate.changed_generated_docs("origin/main", runner=_fake_runner(stdout))
+    assert changed == frozenset(
+        {"docs/generated/scripts/ast/old.md", "docs/generated/scripts/ast/new.md"}
+    )
 
 
 def test_evaluate_fails_for_nonbot_snapshot_edit() -> None:
@@ -285,3 +305,28 @@ def test_real_branch_edit_still_flagged_under_three_dot(tmp_path: Path) -> None:
         "main", head="feature", runner=_cwd_runner(tmp_path)
     )
     assert "docs/generated/scripts/x.md" in changed
+
+
+def test_real_git_mv_of_snapshot_into_protected_path_is_exempt(tmp_path: Path) -> None:
+    # End-to-end regression for #2342: `git mv` a not-yet-protected file to a
+    # path this branch's own PROTECTED_PREFIXES now covers must not read as a
+    # hand-edit; it is the exact shape of the docs/ -> .gitapex/ migration.
+    _git(tmp_path, "init", "-q", "-b", "main")
+    _git(tmp_path, "config", "user.email", "t@example.com")
+    _git(tmp_path, "config", "user.name", "t")
+    _git(tmp_path, "config", "commit.gpgsign", "false")
+    old = tmp_path / "docs" / "standards" / "module-size-distribution.toml"
+    old.parent.mkdir(parents=True)
+    old.write_text("[budget]\nmax_module_lines = 800\n", encoding="utf-8")
+    _git(tmp_path, "add", "-A")
+    _git(tmp_path, "commit", "-q", "-m", "base")
+
+    _git(tmp_path, "switch", "-q", "-c", "migrate")
+    (tmp_path / ".gitapex").mkdir()
+    _git(tmp_path, "mv", str(old), ".gitapex/module-size-distribution.toml")
+    _git(tmp_path, "commit", "-q", "-m", "migrate: move snapshot to .gitapex/")
+
+    changed = gate.changed_generated_docs(
+        "main", head="migrate", runner=_cwd_runner(tmp_path)
+    )
+    assert changed == frozenset()
