@@ -116,7 +116,7 @@ class TestReconcile:
         # families with no open issue trigger no calls.
         assert len(gets) == 1
         assert len(creates) == 2
-        assert creates[0]["payload"]["labels"] == list(sdi.ISSUE_LABELS)
+        assert creates[0]["payload"]["labels"] == list(sdi.issue_labels())
         assert creates[0]["payload"]["title"] == (
             "fix(labels-drift): scheduled drift detected"
         )
@@ -206,3 +206,18 @@ class TestListOpenFamilyIssues:
     def test_returns_none_on_failed_get(self) -> None:
         fake, _calls = _fake_apply([], get_code=500)
         assert sdi.list_open_family_issues(fake, "owner/repo", "tkn") is None
+
+    def test_query_filters_on_type_label_only(self) -> None:
+        # Regression: the classic issues-list `labels` param is AND-only, so
+        # filtering on the full issue_labels() set (layer + area + type) would
+        # make an issue filed under an older label set (e.g. before the
+        # #1041/#2313 successor migration) undiscoverable, causing a
+        # duplicate to be filed. Only the stable `type:*` label narrows this
+        # query; is_family_issue_title does the real per-family narrowing.
+        fake, calls = _fake_apply([])
+        sdi.list_open_family_issues(fake, "owner/repo", "tkn")
+        assert len(calls) == 1
+        url = calls[0]["url"]
+        assert "labels=type%3Afix" in url
+        assert "layer" not in url
+        assert "area" not in url

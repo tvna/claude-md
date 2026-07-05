@@ -50,6 +50,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
+import _ssot
 import issue_anchors
 from _github_api import apply_call as github_apply_call
 
@@ -60,12 +61,27 @@ API_ROOT = "https://api.github.com"
 # this script owns from any human-filed look-alike.
 ISSUE_MARKER = "<!-- ci-budget-breach-issue -->"
 ISSUE_TITLE = "ci(timings): verify-agents job over soft wall-time budget"
-ISSUE_LABELS = ("type:tracking", "layer:p3-harness")
 # Resolved from the declarative anchor table so a renumbering stays a
 # one-file diff (#1640).
 PARENT_ISSUE = issue_anchors.resolve("ci-budget-parent")
 
 ApplyCall = Callable[..., tuple[int, str]]
+
+
+def issue_labels() -> tuple[str, ...]:
+    """Return the rolling CI-budget tracking issue labels.
+
+    Resolved from the ``.gitapex/ssot.json`` registry (mirrors
+    scripts/branch_cleanup.py, scripts/ruleset_drift.py) rather than frozen
+    here, so a label rename or retirement is a registry-only edit. Wraps
+    :func:`_ssot.consumer_labels`'s ``KeyError``/``TypeError`` (a drifted
+    registry entry) as ``RuntimeError`` so callers fail loud at this single
+    boundary. Refs #2313, #1041.
+    """
+    try:
+        return _ssot.consumer_labels("scripts/ci_budget_issue.py")
+    except (KeyError, TypeError) as exc:
+        raise RuntimeError(f"ci-budget-issue registry labels: {exc}") from exc
 
 
 def parse_dry_run(raw: str) -> bool:
@@ -217,7 +233,7 @@ def open_or_update_issue(
         payload={
             "title": ISSUE_TITLE,
             "body": render_issue_body(budget_seconds, breaches, run_url=run_url),
-            "labels": list(ISSUE_LABELS),
+            "labels": list(issue_labels()),
         },
         token=token,
     )

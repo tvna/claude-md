@@ -123,13 +123,10 @@ SSOT_HOME_FILES: dict[str, str] = {
 # defense-in-depth guard for the retired threat:* labels; it must stay frozen
 # (see its rationale).
 #
-# The last group is consumers phase 2 did not migrate. They are exempted so the
-# gate is green on the tree that introduces it (its job is anti-regression, not
-# a same-PR migration), but NOT silently: each names the follow-up. In
-# particular ``_security_drift_families.py`` still references the RETIRED
-# ``layer:meta`` (exactly #1041 AC#3's target), but its successor (AC#2) is an
-# undecided owner decision, so it is exempted pending that decision rather than
-# hidden. Tracked under the phase-3 umbrella #2298.
+# scripts/ci_budget_issue.py and scripts/_security_drift_families.py (the two
+# consumers phase 2 did not migrate, and the retired-meta-layer successor
+# decision tracked under #2298/#1041 AC#2) are migrated onto
+# _ssot.consumer_labels as of #2313, so no entries for them remain here.
 LITERAL_ALLOWLIST: dict[tuple[str, str], tuple[int, str]] = {
     ("scripts/_ref_classifier.py", "type:tracking"): (
         1,
@@ -163,31 +160,6 @@ LITERAL_ALLOWLIST: dict[tuple[str, str], tuple[int, str]] = {
     ("scripts/threat_intel_triage.py", "severity:security"): (
         1,
         "SSoT constant for the security severity label (#1041 inventory: " "migration-safe today).",
-    ),
-    ("scripts/ci_budget_issue.py", "type:tracking"): (
-        1,
-        "Rolling CI-budget issue label constant; both labels are live. Phase 2 "
-        "did not migrate this consumer to _ssot resolution; follow-up under "
-        "#2298.",
-    ),
-    ("scripts/ci_budget_issue.py", "layer:p3-harness"): (
-        1,
-        "Rolling CI-budget issue label constant; both labels are live. Phase 2 "
-        "did not migrate this consumer to _ssot resolution; follow-up under "
-        "#2298.",
-    ),
-    ("scripts/_security_drift_families.py", "type:fix"): (
-        1,
-        "Per-family drift issue label constant; phase 2 did not migrate this "
-        "consumer to _ssot resolution. Follow-up under #2298.",
-    ),
-    ("scripts/_security_drift_families.py", "layer:meta"): (
-        1,
-        "RETIRED label still referenced by the security-drift meta-fix lane "
-        "(exactly #1041 AC#3's target), but its successor (#1041 AC#2) is an "
-        "undecided owner decision, so it is exempted pending that decision "
-        "rather than hidden. Migrate and successor tracked under #2298; tighten "
-        "this entry once the successor lands.",
     ),
 }
 

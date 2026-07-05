@@ -12,6 +12,8 @@ from __future__ import annotations
 
 import dataclasses
 
+import _ssot
+
 STATUS_COVERED = "covered"
 STATUS_DRIFT = "drift"
 STATUS_PENDING = "pending"
@@ -35,9 +37,21 @@ class FamilyRow:
             )
 
 
-# Labels applied to every auto-filed per-family drift issue (mirrors
-# scripts/ruleset_drift.py so the meta-fix lane stays uniform).
-ISSUE_LABELS: tuple[str, ...] = ("layer:meta", "type:fix")
+def issue_labels() -> tuple[str, ...]:
+    """Return the labels applied to every auto-filed per-family drift issue.
+
+    Resolved from the ``.gitapex/ssot.json`` registry (mirrors
+    scripts/branch_cleanup.py, scripts/ruleset_drift.py) rather than frozen
+    here, so a label rename or retirement (e.g. the retired-meta-layer
+    successor decided at #1041 comment 4882932274) is a registry-only edit. Wraps
+    :func:`_ssot.consumer_labels`'s ``KeyError``/``TypeError`` (a drifted
+    registry entry) as ``RuntimeError`` so callers fail loud at this single
+    boundary. Refs #2313, #1041.
+    """
+    try:
+        return _ssot.consumer_labels("scripts/_security_drift_families.py")
+    except (KeyError, TypeError) as exc:
+        raise RuntimeError(f"security-drift-families registry labels: {exc}") from exc
 
 # Families this aggregator auto-files an issue for when they drift, raising them
 # to the `detect-and-file` floor (.github/security-control-floor.toml). The

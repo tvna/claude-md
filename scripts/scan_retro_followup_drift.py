@@ -282,9 +282,9 @@ def search_retro_issues(repo: str) -> list[dict[str, Any]]:
     Filters by the labels ``auto_retro.issue_labels`` always applies to a
     retro issue, resolved from the ``.gitapex/ssot.json`` ``label_consumers``
     entry for this script via :func:`_ssot.consumer_labels` rather than
-    hardcoded literals, so a future label rename (e.g. #1041's still-open
-    successor-label decision) is a registry-only edit. That entry also
-    carries the three operator-decision labels (``retro:tp``/``retro:fp``/
+    hardcoded literals, so a future label rename (e.g. the successor
+    decided at #1041 comment 4882932274) is a registry-only edit. That entry
+    also carries the three operator-decision labels (``retro:tp``/``retro:fp``/
     ``retro:fp-candidate``) this script uses elsewhere for label-state
     decisions, not issue discovery, so they are excluded here. The
     combination is narrow enough to avoid scanning the whole repo's issue
@@ -313,7 +313,7 @@ def search_retro_issues(repo: str) -> list[dict[str, Any]]:
             "scripts/scan_retro_followup_drift.py has no labels left after "
             "excluding retro:tp/retro:fp/retro:fp-candidate"
         )
-    label_clause = " ".join(f"label:{label}" for label in discovery_labels)
+    label_clause = " ".join(f"label:{group}" for group in _ssot.group_labels_by_family(discovery_labels))
     query = f"repo:{repo} is:issue {label_clause} in:title retro"
     encoded = quote(query, safe="")
     raw = gh_api("GET", f"/search/issues?q={encoded}&per_page=100")
