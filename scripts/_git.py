@@ -18,10 +18,12 @@ Refs #1005.
 
 from __future__ import annotations
 
+import os
 import re
 import shutil
 import subprocess
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass
 from pathlib import Path
 
 # A git object name is the all-zeros sentinel in two places this matters: git's
@@ -178,3 +180,93 @@ def commits_to_push(
         else:
             rev_args = [local_sha, "--not", "--remotes"]
     return rev_list(runner, rev_args)
+
+
+# The pre-push ref lines and remote name, bridged from ``.githooks/pre-push``
+# through the environment (a preflight ``verify`` step is dispatched with a
+# fixed argv and no stdin routed to it, so the refs travel through the
+# environment instead). ``PREFLIGHT_PUSH_REFS`` carries git's pre-push stdin
+# verbatim (one line per updated ref: ``<local-ref> <local-oid> <remote-ref>
+# <remote-oid>``); ``PREFLIGHT_PUSH_REMOTE`` carries the remote name git passes
+# the hook as its first argument, needed to scope a new-branch range to that
+# remote. Shared by every pre-push gate that must inspect the commits actually
+# being pushed rather than a fixed ``origin/main..HEAD`` range (#2162, #2307).
+_PUSH_REFS_ENV_VAR = "PREFLIGHT_PUSH_REFS"
+_PUSH_REMOTE_ENV_VAR = "PREFLIGHT_PUSH_REMOTE"
+_DEFAULT_REMOTE = "origin"
+
+
+@dataclass(frozen=True)
+class PushRef:
+    """One updated ref from git's pre-push stdin (four space-separated fields)."""
+
+    local_ref: str
+    local_oid: str
+    remote_ref: str
+    remote_oid: str
+
+
+def parse_push_refs(value: str) -> list[PushRef]:
+    """Return the :class:`PushRef` rows parsed from a pre-push stdin payload.
+
+    Git feeds the pre-push hook one line per updated ref, each ``<local-ref>
+    <local-oid> <remote-ref> <remote-oid>``. A blank line or any line that does
+    not split into exactly four fields is skipped (it cannot be a ref update), so
+    a malformed or empty payload yields an empty list and the caller falls back
+    to a fixed base-ref range.
+    """
+    refs: list[PushRef] = []
+    for line in value.splitlines():
+        fields = line.split()
+        if len(fields) != 4:
+            continue
+        refs.append(PushRef(*fields))
+    return refs
+
+
+def read_push_refs(env: Mapping[str, str] | None = None) -> tuple[list[PushRef], str]:
+    """Return the parsed pushed refs and the remote name from the environment.
+
+    Reads ``PREFLIGHT_PUSH_REFS`` / ``PREFLIGHT_PUSH_REMOTE`` (set by
+    ``.githooks/pre-push``). The remote defaults to ``origin`` when unset, so a
+    new-branch range can still be scoped. An empty/absent refs payload yields an
+    empty list, the signal for a caller's fixed-range fallback.
+    """
+    source = os.environ if env is None else env
+    refs = parse_push_refs(source.get(_PUSH_REFS_ENV_VAR, ""))
+    remote = source.get(_PUSH_REMOTE_ENV_VAR, "") or _DEFAULT_REMOTE
+    return refs, remote
+
+
+def commits_for_pushed_refs(
+    runner: Runner, refs: list[PushRef], remote: str
+) -> tuple[list[str], bool]:
+    """Return the deduplicated shas every pushed *refs* entry would ship.
+
+    For each ref the range is computed by :func:`commits_to_push`
+    (``remote-oid..local-oid`` for an existing branch, or the new-branch scan
+    when ``remote-oid`` is the all-zeros sentinel); a delete refspec
+    (``local-oid`` all-zeros) ships nothing and is skipped. Commits shared
+    across refs are returned once, in first-seen order. The second element is
+    True when at least one ref's range could not be resolved (fail-open for
+    that ref, matching the #2138 union model); a caller treats an empty result
+    with this flag set as "undeterminable" (skip), and an empty result with the
+    flag clear as "nothing to inspect" (pass). Shared by every pre-push gate
+    that inspects the commits actually being pushed (#2162, #2307).
+    """
+    seen: set[str] = set()
+    commits: list[str] = []
+    undeterminable = False
+    for ref in refs:
+        if is_all_zeros(ref.local_oid):
+            continue  # deletion: ships no commit
+        remote_oid = None if is_all_zeros(ref.remote_oid) else ref.remote_oid
+        shas = commits_to_push(runner, local_sha=ref.local_oid, remote_sha=remote_oid, remote=remote)
+        if shas is None:
+            undeterminable = True
+            continue
+        for sha in shas:
+            if sha not in seen:
+                seen.add(sha)
+                commits.append(sha)
+    return commits, undeterminable

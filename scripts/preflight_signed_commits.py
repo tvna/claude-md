@@ -90,7 +90,15 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from _commit_signing import is_unsigned
-from _git import Runner, commits_to_push, is_all_zeros, make_runner, rev_list
+from _git import (
+    PushRef,
+    Runner,
+    commits_for_pushed_refs,
+    make_runner,
+    parse_push_refs,  # noqa: F401  re-exported for callers/tests
+    read_push_refs,
+    rev_list,
+)
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -103,15 +111,12 @@ _GIT_TIMEOUT_SECONDS = 30
 _ACK_ENV_VAR = "PREFLIGHT_SIGNED_COMMITS_ACK"
 _ACK_MARKER_RE = re.compile(r"(?m)^# unsigned-ack\r?$")
 
-# The pre-push ref lines and remote name, bridged from the hook through the
-# environment (see the module docstring's Range section for why env, not stdin).
-# ``PREFLIGHT_PUSH_REFS`` carries git's pre-push stdin verbatim (one line per
-# updated ref: ``<local-ref> <local-oid> <remote-ref> <remote-oid>``);
-# ``PREFLIGHT_PUSH_REMOTE`` carries the remote name git passes the hook as its
-# first argument, needed to scope a new-branch range to that remote. Refs #2162.
+# Re-exported so ``preflight_signed_commits.PushRef`` / ``.parse_push_refs`` /
+# ``.read_push_refs`` keep resolving for existing callers and tests; the
+# canonical definitions and the env var names live in ``_git`` (shared with
+# every pre-push gate that inspects the commits actually being pushed, #2307).
 _PUSH_REFS_ENV_VAR = "PREFLIGHT_PUSH_REFS"
 _PUSH_REMOTE_ENV_VAR = "PREFLIGHT_PUSH_REMOTE"
-_DEFAULT_REMOTE = "origin"
 
 
 @dataclass(frozen=True)
@@ -166,95 +171,30 @@ def check_signed_commits(*, runner: Runner, base_ref: str) -> SignedCommitsResul
     )
 
 
-@dataclass(frozen=True)
-class PushRef:
-    """One updated ref from git's pre-push stdin (four space-separated fields)."""
-
-    local_ref: str
-    local_oid: str
-    remote_ref: str
-    remote_oid: str
-
-
-def parse_push_refs(value: str) -> list[PushRef]:
-    """Return the :class:`PushRef` rows parsed from a pre-push stdin payload.
-
-    Git feeds the pre-push hook one line per updated ref, each ``<local-ref>
-    <local-oid> <remote-ref> <remote-oid>``. A blank line or any line that does
-    not split into exactly four fields is skipped (it cannot be a ref update), so
-    a malformed or empty payload yields an empty list and the caller falls back
-    to the ``origin/main..HEAD`` range.
-    """
-    refs: list[PushRef] = []
-    for line in value.splitlines():
-        fields = line.split()
-        if len(fields) != 4:
-            continue
-        refs.append(PushRef(*fields))
-    return refs
-
-
-def read_push_refs(
-    env: Mapping[str, str] | None = None,
-) -> tuple[list[PushRef], str]:
-    """Return the parsed pushed refs and the remote name from the environment.
-
-    Reads ``PREFLIGHT_PUSH_REFS`` / ``PREFLIGHT_PUSH_REMOTE`` (set by
-    ``.githooks/pre-push``). The remote defaults to ``origin`` when unset, so a
-    new-branch range can still be scoped. An empty/absent refs payload yields an
-    empty list, the signal for the ``origin/main..HEAD`` fallback.
-    """
-    source = os.environ if env is None else env
-    refs = parse_push_refs(source.get(_PUSH_REFS_ENV_VAR, ""))
-    remote = source.get(_PUSH_REMOTE_ENV_VAR, "") or _DEFAULT_REMOTE
-    return refs, remote
-
-
 def check_pushed_refs(
     *, runner: Runner, refs: list[PushRef], remote: str
 ) -> SignedCommitsResult:
     """Inspect the commits each pushed ref ships and report unsigned ones.
 
-    For every ref the range is the commits the update would actually ship,
-    computed by the shared :func:`_git.commits_to_push`: ``remote-oid..local-oid``
-    for an existing branch, or the new-branch scan when ``remote-oid`` is the
-    all-zeros sentinel. A delete refspec (``local-oid`` all-zeros) ships nothing
-    and is skipped. Commits shared across refs are inspected once. A ref whose
-    range cannot be resolved is skipped (fail-open for that ref) rather than
-    failing the whole push, matching the #2138 union model; if NO ref range could
-    be resolved the result is a skip so a transient git error defers to the
-    server-side ruleset instead of wedging the push.
+    Delegates the pushed-commit collection to the shared
+    :func:`_git.commits_for_pushed_refs` (the same helper #2307's coauthor-
+    trailer gate uses), then classifies each collected commit as signed or not.
+    A ref whose range cannot be resolved is skipped (fail-open for that ref)
+    rather than failing the whole push, matching the #2138 union model; if NO
+    ref range could be resolved the result is a skip so a transient git error
+    defers to the server-side ruleset instead of wedging the push.
     """
-    seen: set[str] = set()
-    unsigned: list[str] = []
-    inspected = 0
-    undeterminable = False
-    for ref in refs:
-        if is_all_zeros(ref.local_oid):
-            continue  # deletion: ships no commit
-        remote_oid = None if is_all_zeros(ref.remote_oid) else ref.remote_oid
-        commits = commits_to_push(
-            runner, local_sha=ref.local_oid, remote_sha=remote_oid, remote=remote
-        )
-        if commits is None:
-            undeterminable = True
-            continue
-        for sha in commits:
-            if sha in seen:
-                continue
-            seen.add(sha)
-            inspected += 1
-            if is_unsigned(runner, sha):
-                unsigned.append(sha)
+    commits, undeterminable = commits_for_pushed_refs(runner, refs, remote)
+    unsigned = [sha for sha in commits if is_unsigned(runner, sha)]
 
-    scope = f"{inspected} pushed commit(s) across {len(refs)} ref(s)"
+    scope = f"{len(commits)} pushed commit(s) across {len(refs)} ref(s)"
     if unsigned:
         return SignedCommitsResult(
             status="fail",
             detail=f"{len(unsigned)} of {scope} are unsigned",
             unsigned=tuple(unsigned),
         )
-    if inspected == 0 and undeterminable:
+    if not commits and undeterminable:
         return SignedCommitsResult(
             status="skip",
             detail=f"no pushed ref range across {len(refs)} ref(s) could be resolved",

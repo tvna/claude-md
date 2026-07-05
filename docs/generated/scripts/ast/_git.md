@@ -120,3 +120,48 @@ flowchart TD
     N008 --> N010
     N009 --> N010
 ```
+
+## parse_push_refs(...)
+
+```mermaid
+flowchart TD
+    N001["parse_push_refs(...)"]
+    N002["refs = []"]
+    N003["for line in value.splitlines():     fields = line.split()     if len(fields) != 4:         continue     refs.append(PushRef(*fields))"]
+    N004["return refs"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 --> N004
+```
+
+## read_push_refs(...)
+
+```mermaid
+flowchart TD
+    N001["read_push_refs(...)"]
+    N002["source = os.environ if env is None else env"]
+    N003["refs = parse_push_refs(...)"]
+    N004["remote = source.get(_PUSH_REMOTE_ENV_VAR, '<str>') or _DEFAULT_REMOTE"]
+    N005["return (refs, remote)"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 --> N004
+    N004 --> N005
+```
+
+## commits_for_pushed_refs(...)
+
+```mermaid
+flowchart TD
+    N001["commits_for_pushed_refs(...)"]
+    N002["seen = set(...)"]
+    N003["commits = []"]
+    N004["undeterminable = False"]
+    N005["for ref in refs:     if is_all_zeros(ref.local_oid):         continue     remote_oid = None if is_all_zeros(ref.remote_oid) else ref.remote_oid     shas = commits_to_push(runner, local_sha=ref.local_oid, remote_sha=remote_oid, remote=remote)     if shas is None:         undeterminable = True         continue     for sha in shas:         if sha not in seen:             seen.add(sha)             commits.append(sha)"]
+    N006["return (commits, undeterminable)"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 --> N004
+    N004 --> N005
+    N005 --> N006
+```
