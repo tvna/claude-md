@@ -1291,6 +1291,21 @@
       "tracking_issue": 2299
     },
     {
+      "id": "scan-routing-table-drift",
+      "kind": "script",
+      "script": "scripts/scan_routing_table_drift.py",
+      "rule": "CI gate: reject drift between the issue-triage runbook Agent routing table and the registry label_routing.rules",
+      "planes": [
+        "pre-commit",
+        "pre-push",
+        "ci"
+      ],
+      "trigger": "git commit or push (prek / scripts/preflight_all.py) and CI (pull_request workflow)",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": 2300
+    },
+    {
       "id": "scan-test-presence-drift",
       "kind": "script",
       "script": "scripts/scan_test_presence_drift.py",

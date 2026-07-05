@@ -103,6 +103,7 @@ import scan_repo_double_hyphen
 import scan_repo_em_dash
 import scan_retro_followup_drift
 import scan_review_in_progress_marker
+import scan_routing_table_drift
 import scan_ruff_format
 import scan_runbook_template_drift
 import scan_scripts_gh_calls
@@ -279,6 +280,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("scan_ssot_drift.py", "verify"): "test_scan_ssot_drift_verify_matches_workflow_args",
     ("scan_ssot_schema.py", "verify"): "test_scan_ssot_schema_verify_matches_workflow_args",
     ("scan_hardcoded_label_literals.py", "verify"): "test_scan_hardcoded_label_literals_verify_matches_workflow_args",
+    ("scan_routing_table_drift.py", "verify"): "test_scan_routing_table_drift_verify_matches_workflow_args",
     ("scan_ruff_format.py", "verify"): "test_scan_ruff_format_verify_matches_workflow_args",
     ("scan_scripts_gh_calls.py", "verify"): "test_scan_scripts_gh_calls_verify_matches_workflow_args",
     ("scan_session_path_drift.py", "verify"): "test_scan_session_path_drift_verify_matches_workflow_args",
@@ -3284,6 +3286,12 @@ def test_scan_hardcoded_label_literals_verify_matches_workflow_args() -> None:
     """Mirrors the `Reject hardcoded label literals in scripts` step in
     `.github/workflows/verify-pr.yml` (issue #2299)."""
     assert scan_hardcoded_label_literals.main(["verify"]) == 0
+
+
+def test_scan_routing_table_drift_verify_matches_workflow_args() -> None:
+    """Mirrors the `Reject routing table drift against the registry` step in
+    `.github/workflows/verify-pr.yml` (issue #2300)."""
+    assert scan_routing_table_drift.main(["verify"]) == 0
 
 
 def test_scan_session_path_drift_verify_matches_workflow_args() -> None:

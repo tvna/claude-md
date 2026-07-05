@@ -229,6 +229,18 @@ repos:
         pass_filenames: false
         files: ^(scripts/.*\.py|\.github/label-policy\.toml)$
 
+      - id: scan-routing-table-drift
+        name: scan routing table drift (scripts/scan_routing_table_drift.py verify)
+        # Refs #2300: anti-drift gate for SSoT phase 3. Rejects a mismatch
+        # between the issue-triage runbook's Agent routing table and the
+        # registry's label_routing.rules, in either direction. Fires when the
+        # runbook, the gate itself, or the registry changes. Mirrors the
+        # scan-ssot-schema wiring on the same three planes.
+        entry: uv run python scripts/scan_routing_table_drift.py verify
+        language: system
+        pass_filenames: false
+        files: ^(docs/runbooks/issue-triage\.md|scripts/scan_routing_table_drift\.py|\.gitapex/ssot\.json)$
+
       - id: scan-doc-graph-registration
         name: scan doc graph registration (scripts/scan_doc_graph_registration.py verify)
         # Refs #1793: gate_doc_graph_pr.py only enforces co-changes for files
