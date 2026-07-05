@@ -690,6 +690,19 @@
       "tracking_issue": null
     },
     {
+      "id": "preflight-coauthor-trailer",
+      "kind": "script",
+      "script": "scripts/preflight_coauthor_trailer.py",
+      "rule": "reject a commit whose Co-authored-by trailer names its own author",
+      "planes": [
+        "pre-push"
+      ],
+      "trigger": "git push (scripts/preflight_all.py)",
+      "policy_refs": [],
+      "cluster": null,
+      "tracking_issue": 2307
+    },
+    {
       "id": "preflight-uv-version",
       "kind": "script",
       "script": "scripts/preflight_uv_version.py",

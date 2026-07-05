@@ -587,6 +587,17 @@ STEPS: tuple[Step, ...] = (
         argv=("python3", "scripts/preflight_signed_commits.py", "verify"),
     ),
     Step(
+        # Refs #2307. Rejects a commit in origin/main..HEAD whose Co-authored-by
+        # trailer names the same identity as the commit's own author -- the
+        # redundant footer that squash-merge duplicated on PR #2302 (2 inline
+        # copies from body concatenation + 1 GitHub-aggregated trailer). Runs
+        # after preflight_branch_base, which fetches the live base. preflight-only
+        # (no pull_request: workflow invokes it; same posture as
+        # preflight_branch_base / preflight_signed_commits).
+        name="preflight_coauthor_trailer",
+        argv=("python3", "scripts/preflight_coauthor_trailer.py", "verify"),
+    ),
+    Step(
         # Refs #2012. Measures docs/INDEX.md in the test-merge of HEAD with the
         # freshly fetched live base (git merge-tree --write-tree, no working-tree
         # mutation), catching additive merge-time budget overflow (the #2007
