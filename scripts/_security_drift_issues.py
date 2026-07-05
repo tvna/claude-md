@@ -22,7 +22,7 @@ import urllib.parse
 from collections.abc import Callable
 
 import issue_anchors
-from _security_drift_families import FAMILY_ISSUE_SPEC, ISSUE_LABELS, TARGET_FAMILIES
+from _security_drift_families import FAMILY_ISSUE_SPEC, TARGET_FAMILIES, issue_labels
 
 API_ROOT = "https://api.github.com"
 # Anchor table (#1640): a renumbering is a one-file diff to the TOML.
@@ -102,13 +102,13 @@ def list_open_family_issues(
 ) -> list[tuple[int, str]] | None:
     """Return open ``(number, title)`` pairs labelled like the rolling issues.
 
-    Filters on :data:`ISSUE_LABELS` so the set is small, and drops pull requests
+    Filters on :func:`issue_labels` so the set is small, and drops pull requests
     (the issues endpoint returns both). Returns ``None`` on a failed GET so the
     caller fails loud rather than reconciling against a partial view. A single
     100-item page is read; the open meta-fix issue set is far smaller in practice.
     """
     query = urllib.parse.urlencode(
-        {"state": "open", "labels": ",".join(ISSUE_LABELS), "per_page": "100"}
+        {"state": "open", "labels": ",".join(issue_labels()), "per_page": "100"}
     )
     code, response = apply(
         method="GET",
@@ -191,7 +191,7 @@ def create_family_issue(
     payload = {
         "title": render_family_issue_title(family),
         "body": render_family_issue_body(family, run_url=run_url, run_date=run_date),
-        "labels": list(ISSUE_LABELS),
+        "labels": list(issue_labels()),
     }
     code, response = apply(
         method="POST",

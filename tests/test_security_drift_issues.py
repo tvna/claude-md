@@ -116,7 +116,7 @@ class TestReconcile:
         # families with no open issue trigger no calls.
         assert len(gets) == 1
         assert len(creates) == 2
-        assert creates[0]["payload"]["labels"] == list(sdi.ISSUE_LABELS)
+        assert creates[0]["payload"]["labels"] == list(sdi.issue_labels())
         assert creates[0]["payload"]["title"] == (
             "fix(labels-drift): scheduled drift detected"
         )

@@ -1904,11 +1904,12 @@
       "path": "scripts/auto_retro.py",
       "labels": [
         "type:docs",
-        "layer:meta",
+        "layer:p3-harness",
+        "area:ci-ops",
         "ops:retro-opened",
         "harness:retro-opened"
       ],
-      "note": "retrospective issue identity and terminal open-state labels; see #1041"
+      "note": "retrospective issue identity and terminal open-state labels; layer:meta successor decided at #1041 comment 4882932274; see #1041, #2313"
     },
     {
       "path": "scripts/scan_retro_followup_drift.py",
@@ -1924,18 +1925,37 @@
     {
       "path": "scripts/branch_cleanup.py",
       "labels": [
-        "layer:meta",
+        "layer:p3-harness",
+        "area:ci-ops",
         "type:docs"
       ],
-      "note": "labels applied to the maintenance issues it files; see #1041"
+      "note": "labels applied to the maintenance issues it files; layer:meta successor decided at #1041 comment 4882932274; see #1041, #2313"
     },
     {
       "path": "scripts/ruleset_drift.py",
       "labels": [
-        "layer:meta",
+        "layer:p3-harness",
+        "area:governance",
         "type:fix"
       ],
-      "note": "labels applied to the ruleset-drift issues it files; see #1041"
+      "note": "labels applied to the ruleset-drift issues it files; layer:meta successor decided at #1041 comment 4882932274; see #1041, #2313"
+    },
+    {
+      "path": "scripts/_security_drift_families.py",
+      "labels": [
+        "layer:p3-harness",
+        "area:security-intel",
+        "type:fix"
+      ],
+      "note": "labels applied to the per-family security-drift issues it files; migrated off the hardcoded ISSUE_LABELS constant and onto the layer:meta successor decided at #1041 comment 4882932274; see #1041, #2313"
+    },
+    {
+      "path": "scripts/ci_budget_issue.py",
+      "labels": [
+        "type:tracking",
+        "layer:p3-harness"
+      ],
+      "note": "labels applied to the rolling CI wall-time budget tracking issue; migrated off the hardcoded ISSUE_LABELS constant; see #1041, #2313"
     },
     {
       "path": ".github/dependabot.yml",

@@ -8,8 +8,22 @@ import pytest
 pytestmark = pytest.mark.shard_ci_ops
 
 
-def test_issue_labels_are_the_meta_fix_lane() -> None:
-    assert fam.ISSUE_LABELS == ("layer:meta", "type:fix")
+def test_issue_labels_resolve_from_the_ssot_registry(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        fam._ssot,
+        "consumer_labels",
+        lambda path: ("layer:p3-harness", "area:security-intel", "type:fix"),
+    )
+    assert fam.issue_labels() == ("layer:p3-harness", "area:security-intel", "type:fix")
+
+
+def test_issue_labels_wraps_drifted_registry_as_runtime_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    def _raise_key_error(path: str) -> tuple[str, ...]:
+        raise KeyError(f"no label_consumers entry for path {path!r}")
+
+    monkeypatch.setattr(fam._ssot, "consumer_labels", _raise_key_error)
+    with pytest.raises(RuntimeError, match="security-drift-families registry labels"):
+        fam.issue_labels()
 
 
 def test_target_families_are_unique_and_include_workflow_permissions() -> None:

@@ -36,7 +36,8 @@ def _write_registry(tmp_path: Path, data: object) -> Path:
 class TestConsumerLabels:
     def test_returns_registered_labels_for_branch_cleanup(self) -> None:
         assert _ssot.consumer_labels("scripts/branch_cleanup.py") == (
-            "layer:meta",
+            "layer:p3-harness",
+            "area:ci-ops",
             "type:docs",
         )
 
