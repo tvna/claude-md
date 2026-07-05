@@ -115,6 +115,17 @@ def test_changed_generated_docs_exempts_pure_rename_into_protected_path() -> Non
     assert changed == frozenset()
 
 
+def test_changed_generated_docs_flags_rename_into_folder_prefix() -> None:
+    # Codex review on PR #2347: a byte-identical rename from an unprotected
+    # path into a FOLDER-prefix entry (as opposed to the one exact-file entry
+    # the #2342 exemption targets) must still be flagged; otherwise a
+    # hand-authored `git mv docs/foo.md docs/generated/scripts/foo.md` would
+    # bypass the single-producer gate entirely.
+    stdout = "R100\tdocs/foo.md\tdocs/generated/scripts/foo.md\n"
+    changed = gate.changed_generated_docs("origin/main", runner=_fake_runner(stdout))
+    assert changed == frozenset({"docs/generated/scripts/foo.md"})
+
+
 def test_changed_generated_docs_flags_rename_between_protected_paths() -> None:
     # A rename that starts AND ends inside protected territory is still a
     # hand-edit of the managed tree's shape, not a first-time relocation.
