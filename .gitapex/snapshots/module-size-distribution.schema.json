@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/tvna/claude-md/.gitapex/module-size-distribution.schema.json",
+  "$id": "https://github.com/tvna/claude-md/.gitapex/snapshots/module-size-distribution.schema.json",
   "title": "scripts/*.py module-size distribution snapshot",
-  "description": "Shape-only schema for the generated .gitapex/module-size-distribution.toml (single-producer: scripts/scan_module_size_distribution.py write; verified by its verify subcommand). Refs #200, #1700, #1701, #2342.",
+  "description": "Shape-only schema for the generated .gitapex/snapshots/module-size-distribution.toml (single-producer: scripts/scan_module_size_distribution.py write; verified by its verify subcommand). Refs #200, #1700, #1701, #2342.",
   "type": "object",
   "additionalProperties": false,
   "required": ["budget", "summary", "histogram", "modules"],

@@ -223,7 +223,7 @@ jobs:
         run: uv run python scripts/verify_generated_docs_ownership.py retire
 
       - name: Regenerate script size-distribution snapshot
-        # Writes .gitapex/module-size-distribution.toml from the
+        # Writes .gitapex/snapshots/module-size-distribution.toml from the
         # scripts/*.py physical-line distribution. Refs #2013: this snapshot
         # joins the single-producer model of docs/generated/ (#1540/#1543/#1546)
         # -- the PR and pre-push gates no longer regenerate it, so feature
@@ -234,7 +234,7 @@ jobs:
       - name: Detect generated-doc drift
         id: drift
         run: |
-          if git diff --quiet -- docs/generated/ .gitapex/module-size-distribution.toml; then
+          if git diff --quiet -- docs/generated/ .gitapex/snapshots/module-size-distribution.toml; then
             echo "All generated docs are already up to date."
             echo "changed=false" >> "$GITHUB_OUTPUT"
           else
@@ -267,7 +267,7 @@ jobs:
           - `docs/generated/scripts/trigger-map.md` from the four `scripts/*.py` launch sources.
           - `docs/generated/workflows/*-if-branches.md` from `.github/workflows/*.yml` if-branch analysis.
           - `docs/generated/graph/doc-dependency-graph.md` from `.gitapex/doc-dependencies.toml` (Mermaid dependency diagram).
-          - `.gitapex/module-size-distribution.toml` from the `scripts/*.py` physical-line size distribution (single-producer snapshot, #2013).
+          - `.gitapex/snapshots/module-size-distribution.toml` from the `scripts/*.py` physical-line size distribution (single-producer snapshot, #2013).
           - Deletes `docs/generated/` files whose producer was retired from the ownership registry in `scripts/verify_generated_docs_ownership.py` (retirement sweep, #2226).
 
           ## Related Issue
@@ -353,7 +353,7 @@ jobs:
             --commit-body "Refs #${TRACKING_ISSUE}" \
             --body-file /tmp/pr-body.md \
             --from-diff docs/generated/ \
-            --from-diff .gitapex/module-size-distribution.toml \
+            --from-diff .gitapex/snapshots/module-size-distribution.toml \
             --recreate
 
   # Moved here from weekly-maintenance.yml (#1386) so the triage-report
@@ -528,14 +528,14 @@ jobs:
           # that a plain `git diff` would miss. No commit is made. The
           # module-size snapshot (#2013) is staged and diffed alongside
           # docs/generated/ so its drift fails the same gate.
-          git add -A docs/generated/ .gitapex/module-size-distribution.toml
-          if ! git diff --cached --quiet -- docs/generated/ .gitapex/module-size-distribution.toml; then
+          git add -A docs/generated/ .gitapex/snapshots/module-size-distribution.toml
+          if ! git diff --cached --quiet -- docs/generated/ .gitapex/snapshots/module-size-distribution.toml; then
             # Keep the literal "docs/generated/ is stale" substring: it is one of
             # the _CI_KEYWORDS the preflight_issue_ci_staleness hook matches to
             # block stale post-merge CI issues, so the snapshot drift wording must
             # not split it. Refs #2013.
-            echo "::error::docs/generated/ is stale (or .gitapex/module-size-distribution.toml drifted): regenerating with the pinned interpreter produced changes. The post-merge decision-tree job should have opened chore/update-generated-docs; check that it merged. Drift:"
-            git diff --cached --stat -- docs/generated/ .gitapex/module-size-distribution.toml >&2
+            echo "::error::docs/generated/ is stale (or .gitapex/snapshots/module-size-distribution.toml drifted): regenerating with the pinned interpreter produced changes. The post-merge decision-tree job should have opened chore/update-generated-docs; check that it merged. Drift:"
+            git diff --cached --stat -- docs/generated/ .gitapex/snapshots/module-size-distribution.toml >&2
             exit 1
           fi
           echo "OK: docs/generated/ and the module-size snapshot match the pinned-interpreter regeneration."

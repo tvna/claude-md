@@ -44,7 +44,7 @@
     },
     {
       "id": "module-size-distribution",
-      "path": ".gitapex/module-size-distribution.toml",
+      "path": ".gitapex/snapshots/module-size-distribution.toml",
       "format": "toml",
       "authority": "scripts/*.py physical-line size distribution snapshot"
     },

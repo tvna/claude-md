@@ -7,7 +7,7 @@ Refs #1701. The module-size gate (``scripts/scan_maintainability_metrics.py``,
 *distribution* so clustering near the budget is observable across git history
 rather than only inside a single CI run.
 
-``.gitapex/module-size-distribution.toml`` is the committed snapshot: an
+``.gitapex/snapshots/module-size-distribution.toml`` is the committed snapshot: an
 aggregate histogram plus warn-band and over-budget membership. It holds counts
 and module names, not per-module line counts, so an edit that does not cross a
 bucket or band boundary leaves it unchanged (low churn) while a module entering
@@ -16,7 +16,7 @@ reviewable diff. The git history of this one file is the time series.
 
 The snapshot is generated, never hand-written:
 
-- ``write`` regenerates ``.gitapex/module-size-distribution.toml``.
+- ``write`` regenerates ``.gitapex/snapshots/module-size-distribution.toml``.
 - ``verify`` regenerates in memory and compares; exit 1 on drift with an
   ``::error`` annotation telling the author to run ``write`` and commit.
 
@@ -57,7 +57,7 @@ from scan_maintainability_metrics import (
     find_module_sizes,
 )
 
-SNAPSHOT_PATH = Path(".gitapex/module-size-distribution.toml")
+SNAPSHOT_PATH = Path(".gitapex/snapshots/module-size-distribution.toml")
 
 # Histogram bucket upper edges (inclusive). A module's line_count lands in the
 # first bucket whose edge it does not exceed; counts above the last edge fall in

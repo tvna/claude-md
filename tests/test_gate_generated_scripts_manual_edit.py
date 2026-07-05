@@ -93,35 +93,36 @@ def test_changed_generated_docs_protects_module_size_snapshot() -> None:
     # a non-bot branch hand-editing it (or stale-conflict-resolving it) must be
     # surfaced by the same inverse gate that protects docs/generated/.
     stdout = (
-        "M\t.gitapex/module-size-distribution.toml\n"
-        "M\t.gitapex/some-other-file.toml\n"
+        "M\t.gitapex/snapshots/module-size-distribution.toml\n"
+        "M\t.gitapex/snapshots/some-other-file.toml\n"
         "M\tscripts/auto_retro.py\n"
     )
     changed = gate.changed_generated_docs(
         "origin/main", runner=_fake_runner(stdout)
     )
-    # Only the snapshot is protected; sibling .gitapex/ files and source
-    # files are not (exact-path match, not a .gitapex/ prefix).
-    assert changed == frozenset({".gitapex/module-size-distribution.toml"})
+    # Only the snapshot is protected; sibling snapshots/ files and source
+    # files are not (exact-path match, not a .gitapex/snapshots/ prefix).
+    assert changed == frozenset({".gitapex/snapshots/module-size-distribution.toml"})
 
 
 def test_changed_generated_docs_ignores_suffixed_sibling_of_exact_file() -> None:
     # A plain startswith() on the exact-file entry has no path boundary, so
-    # ``.gitapex/module-size-distribution.toml.bak`` would otherwise also
-    # match startswith(".gitapex/module-size-distribution.toml") and be
-    # misclassified as a hand-edit of the protected snapshot. It must not be:
-    # it is a distinct, unprotected file that merely shares a prefix.
-    stdout = "M\t.gitapex/module-size-distribution.toml.bak\n"
+    # ``.gitapex/snapshots/module-size-distribution.toml.bak`` would otherwise
+    # also match startswith(".gitapex/snapshots/module-size-distribution.toml")
+    # and be misclassified as a hand-edit of the protected snapshot. It must not
+    # be: it is a distinct, unprotected file that merely shares a prefix.
+    stdout = "M\t.gitapex/snapshots/module-size-distribution.toml.bak\n"
     changed = gate.changed_generated_docs("origin/main", runner=_fake_runner(stdout))
     assert changed == frozenset()
 
 
 def test_changed_generated_docs_exempts_pure_rename_into_protected_path() -> None:
-    # Refs #2342: a git-mv relocation (byte-identical, so git reports it as a
-    # rename at the -M100% threshold) from a not-yet-protected path into a
+    # Refs #2342, #2364: a git-mv relocation (byte-identical, so git reports it
+    # as a rename at the -M100% threshold) from a not-yet-protected path into a
     # protected one is a one-time infrastructure move, not a hand-edit of the
-    # single-producer content.
-    stdout = "R100\tdocs/standards/module-size-distribution.toml\t.gitapex/module-size-distribution.toml\n"
+    # single-producer content. #2364 moves the snapshot from .gitapex/ root
+    # (no longer in this branch's PROTECTED_PREFIXES) into .gitapex/snapshots/.
+    stdout = "R100\t.gitapex/module-size-distribution.toml\t.gitapex/snapshots/module-size-distribution.toml\n"
     changed = gate.changed_generated_docs("origin/main", runner=_fake_runner(stdout))
     assert changed == frozenset()
 
@@ -149,19 +150,19 @@ def test_changed_generated_docs_flags_rename_between_protected_paths() -> None:
 
 def test_evaluate_fails_for_nonbot_snapshot_edit() -> None:
     code, errors = gate.evaluate(
-        frozenset({".gitapex/module-size-distribution.toml"}), "feature/x"
+        frozenset({".gitapex/snapshots/module-size-distribution.toml"}), "feature/x"
     )
     assert code == 1
     assert len(errors) == 1
     assert "must not be edited by hand" in errors[0]
-    assert ".gitapex/module-size-distribution.toml" in errors[0]
+    assert ".gitapex/snapshots/module-size-distribution.toml" in errors[0]
 
 
 def test_evaluate_passes_snapshot_edit_for_exempt_branch() -> None:
     # The post-merge decision-tree job folds the snapshot into the same
     # chore/update-generated-docs PR, so that bot branch stays exempt for it.
     code, errors = gate.evaluate(
-        frozenset({".gitapex/module-size-distribution.toml"}),
+        frozenset({".gitapex/snapshots/module-size-distribution.toml"}),
         "chore/update-generated-docs",
     )
     assert code == 0
@@ -330,23 +331,24 @@ def test_real_branch_edit_still_flagged_under_three_dot(tmp_path: Path) -> None:
 
 
 def test_real_git_mv_of_snapshot_into_protected_path_is_exempt(tmp_path: Path) -> None:
-    # End-to-end regression for #2342: `git mv` a not-yet-protected file to a
-    # path this branch's own PROTECTED_PREFIXES now covers must not read as a
-    # hand-edit; it is the exact shape of the docs/ -> .gitapex/ migration.
+    # End-to-end regression for #2342, #2364: `git mv` a not-yet-protected file
+    # to a path this branch's own PROTECTED_PREFIXES now covers must not read as
+    # a hand-edit; it is the exact shape of the .gitapex/ -> .gitapex/snapshots/
+    # relocation (the old root path is no longer protected on this branch).
     _git(tmp_path, "init", "-q", "-b", "main")
     _git(tmp_path, "config", "user.email", "t@example.com")
     _git(tmp_path, "config", "user.name", "t")
     _git(tmp_path, "config", "commit.gpgsign", "false")
-    old = tmp_path / "docs" / "standards" / "module-size-distribution.toml"
+    old = tmp_path / ".gitapex" / "module-size-distribution.toml"
     old.parent.mkdir(parents=True)
     old.write_text("[budget]\nmax_module_lines = 800\n", encoding="utf-8")
     _git(tmp_path, "add", "-A")
     _git(tmp_path, "commit", "-q", "-m", "base")
 
     _git(tmp_path, "switch", "-q", "-c", "migrate")
-    (tmp_path / ".gitapex").mkdir()
-    _git(tmp_path, "mv", str(old), ".gitapex/module-size-distribution.toml")
-    _git(tmp_path, "commit", "-q", "-m", "migrate: move snapshot to .gitapex/")
+    (tmp_path / ".gitapex" / "snapshots").mkdir()
+    _git(tmp_path, "mv", str(old), ".gitapex/snapshots/module-size-distribution.toml")
+    _git(tmp_path, "commit", "-q", "-m", "migrate: move snapshot to .gitapex/snapshots/")
 
     changed = gate.changed_generated_docs(
         "main", head="migrate", runner=_cwd_runner(tmp_path)
